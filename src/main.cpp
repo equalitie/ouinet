@@ -27,6 +27,8 @@ public:
             return;
         }
 
+        _acceptor.set_option(boost::asio::socket_base::reuse_address(true));
+
         // Bind to the server address
         _acceptor.bind(endpoint, ec);
         if(ec) {
