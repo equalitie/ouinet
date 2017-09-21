@@ -5,7 +5,7 @@ include(ExternalProject)
 set(SANITIZE "-fsanitize=address")
 ################################################################################
 externalproject_add(beast
-  GIT_REPOSITORY https://github.com/boostorg/beast
+  GIT_REPOSITORY https://github.com/inetic/beast
   UPDATE_COMMAND ""
   CONFIGURE_COMMAND ""
   INSTALL_COMMAND ""
