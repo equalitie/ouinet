@@ -31,8 +31,7 @@ void ProxySession::on_read(boost::system::error_code ec)
     handle_request(move(client), move(_req));
 }
 
-template<class Req>
-void ProxySession::handle_request(shared_ptr<Client> c, Req&& req)
+void ProxySession::handle_request(shared_ptr<Client> c, Request&& req)
 {
     // Make sure we can handle the method
     if( req.method() != http::verb::get && req.method() != http::verb::head) {

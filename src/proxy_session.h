@@ -38,7 +38,7 @@ private:
 
     void on_read(boost::system::error_code);
 
-    template<class Req> void handle_request(std::shared_ptr<Client>, Req&&);
+    void handle_request(std::shared_ptr<Client>, Request&&);
     template<class Res> void send_response(Res&&);
 
 private:
