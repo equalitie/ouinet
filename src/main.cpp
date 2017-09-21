@@ -4,9 +4,10 @@
 using namespace ouinet;
 using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
 namespace http = boost::beast::http;    // from <boost/beast/http.hpp>
+using namespace std;
 
 // Accepts incoming connections and launches the proxy sessions
-class Listener : public std::enable_shared_from_this<Listener>
+class Listener : public enable_shared_from_this<Listener>
 {
     tcp::acceptor _acceptor;
     tcp::socket _socket;
@@ -59,7 +60,7 @@ private:
                     return;
                 }
 
-                std::make_shared<ProxySession>(std::move(_socket))->run();
+                make_shared<ProxySession>(move(_socket))->run();
 
                 do_accept();
             });
@@ -73,7 +74,7 @@ int main(int argc, char* argv[])
     // Check command line arguments.
     if (argc != 3)
     {
-        std::cerr <<
+        cerr <<
             "Usage: http-server-async <address> <port>\n" <<
             "Example:\n" <<
             "    http-server-async 0.0.0.0 8080\n";
@@ -81,13 +82,13 @@ int main(int argc, char* argv[])
     }
 
     auto const address = boost::asio::ip::address::from_string(argv[1]);
-    auto const port = static_cast<unsigned short>(std::atoi(argv[2]));
+    auto const port = static_cast<unsigned short>(atoi(argv[2]));
 
     // The io_service is required for all I/O
     boost::asio::io_service ios;
 
     // Create and launch a listening port
-    std::make_shared<Listener>(
+    make_shared<Listener>(
         ios,
         tcp::endpoint{address, port})->run();
 

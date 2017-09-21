@@ -5,6 +5,7 @@
 using namespace ouinet;
 
 namespace http = boost::beast::http;
+using namespace std;
 
 void ProxySession::do_read()
 {
@@ -24,14 +25,14 @@ void ProxySession::on_read(boost::system::error_code ec)
     if(ec)
         return fail(ec, "read");
 
-    auto client = std::make_shared<Client>(_socket.get_io_service());
+    auto client = make_shared<Client>(_socket.get_io_service());
 
     // Send the response
-    handle_request(std::move(client), std::move(_req));
+    handle_request(move(client), move(_req));
 }
 
 template<class Req>
-void ProxySession::handle_request(std::shared_ptr<Client> c, Req&& req)
+void ProxySession::handle_request(shared_ptr<Client> c, Req&& req)
 {
     // Make sure we can handle the method
     if( req.method() != http::verb::get && req.method() != http::verb::head) {
@@ -41,7 +42,7 @@ void ProxySession::handle_request(std::shared_ptr<Client> c, Req&& req)
         res.keep_alive(req.keep_alive());
         res.body() = "Unknown HTTP-method";
         res.prepare_payload();
-        send_response(std::move(res));
+        send_response(move(res));
         return;
     }
 
@@ -49,7 +50,7 @@ void ProxySession::handle_request(std::shared_ptr<Client> c, Req&& req)
     // XXX Port?
     c->run(req["host"].to_string(), "80", req,
         [self = shared_from_this()](Error error, auto res) {
-            return self->send_response(std::move(res));
+            return self->send_response(move(res));
         });
 }
 
@@ -59,7 +60,7 @@ void ProxySession::send_response(Res&& res)
     // The lifetime of the message has to extend
     // for the duration of the async operation so
     // we use a shared_ptr to manage it.
-    auto sr = std::make_shared<Res>(std::move(res));
+    auto sr = make_shared<Res>(move(res));
 
     http::async_write(
         _socket,
