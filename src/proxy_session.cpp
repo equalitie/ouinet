@@ -45,10 +45,16 @@ void ProxySession::handle_request(shared_ptr<Client> c, Request&& req)
         return;
     }
 
+
     // Forward the request
     // XXX Port?
     c->run(req["host"].to_string(), "80", req,
-        [self = shared_from_this()](Error error, auto res) {
+        [self = shared_from_this(), req](Error error, auto res) {
+            auto h = static_cast<const typename decltype(res)::header_type&>(res);
+            cerr << "=======================================\n";
+            cerr << "Request\n" << req << "\n" << endl;
+            cerr << "Response\n" << h << "\n" << endl;
+            cerr << "=======================================\n";
             return self->send_response(move(res));
         });
 }

@@ -82,9 +82,6 @@ private:
 
     void on_read()
     {
-        // Write the message to standard out
-        std::cout << _res << std::endl;
-
         // Gracefully close the socket
         Error ec;
         _socket.shutdown(tcp::socket::shutdown_both, ec);
