@@ -14,9 +14,13 @@
 
 namespace ouinet {
 
+class Client;
+
 class ProxySession : public std::enable_shared_from_this<ProxySession>
 {
     using tcp = boost::asio::ip::tcp;
+    using Error = boost::system::error_code;
+    using Request = boost::beast::http::request<boost::beast::http::string_body>;
 
 public:
     // Take ownership of the socket
@@ -33,18 +37,14 @@ private:
     void do_close();
 
     void on_read(boost::system::error_code);
-    void on_write(boost::system::error_code);
 
-    template<class Body, class Allocator, class Send>
-    void handle_request(boost::beast::http::request
-                            < Body
-                            , boost::beast::http::basic_fields<Allocator>>&& req
-                            , Send&& send);
+    template<class Req> void handle_request(std::shared_ptr<Client>, Req&&);
+    template<class Res> void send_response(Res&&);
 
 private:
     tcp::socket _socket;
     boost::beast::flat_buffer _buffer;
-    boost::beast::http::request<boost::beast::http::string_body> _req;
+    Request _req;
 };
 
 } // ouinet namespace

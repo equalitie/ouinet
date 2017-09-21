@@ -24,46 +24,14 @@ void ProxySession::on_read(boost::system::error_code ec)
     if(ec)
         return fail(ec, "read");
 
-    std::cout << "Request: " << _req << std::endl;
+    auto client = std::make_shared<Client>(_socket.get_io_service());
+
     // Send the response
-    handle_request(std::move(_req), [this](auto&& msg) {
-            // The lifetime of the message has to extend
-            // for the duration of the async operation so
-            // we use a shared_ptr to manage it.
-            auto sp = std::make_shared<std::decay_t<decltype(msg)>>(std::move(msg));
-
-            http::async_write(
-                _socket,
-                *sp,
-                [sp, self = this->shared_from_this()]
-                (auto ec, auto bytes_transferred) {
-                    boost::ignore_unused(bytes_transferred);
-                    self->on_write(ec);
-                });
-        });
+    handle_request(std::move(client), std::move(_req));
 }
 
-void ProxySession::on_write(boost::system::error_code ec)
-{
-    if(ec == http::error::end_of_stream) {
-        // This means we should close the connection, usually because
-        // the response indicated the "Connection: close" semantic.
-        return do_close();
-    }
-
-    if(ec)
-        return fail(ec, "write");
-
-    // Read another request
-    do_read();
-}
-
-template<
-    class Body, class Allocator,
-    class Send>
-void ProxySession::handle_request(
-    http::request<Body, http::basic_fields<Allocator>>&& req,
-    Send&& send)
+template<class Req>
+void ProxySession::handle_request(std::shared_ptr<Client> c, Req&& req)
 {
     // Make sure we can handle the method
     if( req.method() != http::verb::get && req.method() != http::verb::head) {
@@ -73,35 +41,42 @@ void ProxySession::handle_request(
         res.keep_alive(req.keep_alive());
         res.body() = "Unknown HTTP-method";
         res.prepare_payload();
-        send(res);
+        send_response(std::move(res));
         return;
     }
 
-    auto mime_type = "text/plain";
-    std::string body = "Client requested " + req.target().to_string() + "\n";
+    // Forward the request
+    // XXX Port?
+    c->run(req["host"].to_string(), "80", req,
+        [self = shared_from_this()](Error error, auto res) {
+            return self->send_response(std::move(res));
+        });
+}
 
-    // Respond to HEAD request
-    if(req.method() == http::verb::head) {
-        http::response<http::empty_body> res{http::status::ok, req.version()};
-        res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-        res.set(http::field::content_type, mime_type);
-        res.content_length(body.size());
-        res.keep_alive(req.keep_alive());
-        return send(std::move(res));
-    }
+template<class Res>
+void ProxySession::send_response(Res&& res)
+{
+    // The lifetime of the message has to extend
+    // for the duration of the async operation so
+    // we use a shared_ptr to manage it.
+    auto sr = std::make_shared<Res>(std::move(res));
 
-    // Respond to GET request
-    http::response<http::string_body> res{
-        std::piecewise_construct,
-        std::make_tuple(body),
-        std::make_tuple(http::status::ok, req.version())};
+    http::async_write(
+        _socket,
+        *sr,
+        [this, sr, self = shared_from_this()] (Error ec, size_t) {
+            if(ec == http::error::end_of_stream) {
+                // This means we should close the connection, usually because
+                // the response indicated the "Connection: close" semantic.
+                return do_close();
+            }
 
-    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-    res.set(http::field::content_type, mime_type);
-    res.content_length(body.size());
-    res.keep_alive(req.keep_alive());
+            if(ec)
+                return fail(ec, "write");
 
-    return send(std::move(res));
+            // Read another request
+            do_read();
+        });
 }
 
 void ProxySession::do_close()

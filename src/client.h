@@ -8,7 +8,12 @@ namespace ouinet {
 // Performs an HTTP GET and prints the response
 class Client : public std::enable_shared_from_this<Client>
 {
+public:
     using tcp = boost::asio::ip::tcp;
+    using Request  = boost::beast::http::request <boost::beast::http::string_body>;
+    using Response = boost::beast::http::response<boost::beast::http::string_body>;
+    using Error = boost::system::error_code;
+    using Handler = std::function<void(Error, Response)>;
 
 public:
     // Resolver and socket require an io_service
@@ -20,24 +25,21 @@ public:
     }
 
     // Start the asynchronous operation
-    void run( char const* host
-            , char const* port
-            , char const* target)
+    void run( std::string host
+            , std::string port
+            , Request req
+            , Handler handler)
     {
         namespace http = boost::beast::http;
 
-        // Set up an HTTP GET request message
-        _req.version(11);
-        _req.method(http::verb::get);
-        _req.target(target);
-        _req.set(http::field::host, host);
-        _req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+        _req = std::move(req);
+        _handler = std::move(handler);
 
         // Look up the domain name
         _resolver.async_resolve({host, port},
             [this, self = shared_from_this()] (auto ec, auto result) {
                 if (ec) {
-                    return fail(ec, "resolve");
+                    return this->finish(ec, "resolve");
                 }
 
                 // Connect
@@ -49,7 +51,7 @@ public:
     }
 
 private:
-    void on_connect(boost::system::error_code ec)
+    void on_connect(Error ec)
     {
         namespace http = boost::beast::http;
 
@@ -60,7 +62,7 @@ private:
         http::async_write(_socket, _req,
             [self = shared_from_this()](auto ec, auto bytes_transferred) {
                 boost::ignore_unused(bytes_transferred);
-                if (ec) return fail(ec, "write");
+                if (ec) return self->finish(ec, "write");
                 self->on_write();
             });
     }
@@ -73,7 +75,7 @@ private:
         http::async_read(_socket, _buffer, _res,
             [self = shared_from_this()](auto ec, auto bytes_transferred) {
                 boost::ignore_unused(bytes_transferred);
-                if(ec) return fail(ec, "read");
+                if(ec) return self->finish(ec, "read");
                 self->on_read();
             });
     }
@@ -84,22 +86,27 @@ private:
         std::cout << _res << std::endl;
 
         // Gracefully close the socket
-        boost::system::error_code ec;
+        Error ec;
         _socket.shutdown(tcp::socket::shutdown_both, ec);
 
-        // not_connected happens sometimes so don't bother reporting it.
-        if(ec && ec != boost::system::errc::not_connected)
-            return fail(ec, "shutdown");
+        finish(Error(), "on_read");
 
         // If we get here then the connection is closed gracefully
+    }
+
+    void finish(Error ec, const char* msg)
+    {
+        if (ec) fail(ec, msg);
+        _handler(ec, _res);
     }
 
 private:
     tcp::resolver _resolver;
     tcp::socket _socket;
     boost::beast::flat_buffer _buffer;
-    boost::beast::http::request<boost::beast::http::dynamic_body> _req;
-    boost::beast::http::response<boost::beast::http::string_body> _res;
+    Request _req;
+    Response _res;
+    Handler _handler;
 };
 
 } // ouinet namespace

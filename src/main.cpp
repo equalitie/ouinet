@@ -12,9 +12,8 @@ class Listener : public std::enable_shared_from_this<Listener>
     tcp::socket _socket;
 
 public:
-    Listener(
-        boost::asio::io_service& ios,
-        tcp::endpoint endpoint)
+    Listener( boost::asio::io_service& ios
+            , tcp::endpoint endpoint)
         : _acceptor(ios)
         , _socket(ios)
     {
@@ -35,9 +34,7 @@ public:
         }
 
         // Start listening for connections
-        _acceptor.listen(
-            boost::asio::socket_base::max_connections, ec);
-
+        _acceptor.listen(boost::asio::socket_base::max_connections, ec);
         if(ec) {
             fail(ec, "listen");
             return;
@@ -51,6 +48,7 @@ public:
         do_accept();
     }
 
+private:
     void do_accept()
     {
         _acceptor.async_accept(
@@ -66,7 +64,6 @@ public:
                 do_accept();
             });
     }
-
 };
 
 //------------------------------------------------------------------------------
