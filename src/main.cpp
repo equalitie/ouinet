@@ -2,7 +2,6 @@
 #include <boost/beast/http.hpp>
 #include <boost/beast/version.hpp>
 #include <boost/asio/ip/tcp.hpp>
-#include <boost/asio/strand.hpp>
 #include <boost/config.hpp>
 #include <algorithm>
 #include <cstdlib>
@@ -10,8 +9,6 @@
 #include <iostream>
 #include <memory>
 #include <string>
-#include <thread>
-#include <vector>
 
 using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
 namespace http = boost::beast::http;    // from <boost/beast/http.hpp>
@@ -80,7 +77,6 @@ fail(boost::system::error_code ec, char const* what)
 class session : public std::enable_shared_from_this<session>
 {
     tcp::socket _socket;
-    boost::asio::io_service::strand _strand;
     boost::beast::flat_buffer _buffer;
     http::request<http::string_body> _req;
 
@@ -89,7 +85,6 @@ public:
     explicit
     session(tcp::socket socket)
         : _socket(std::move(socket))
-        , _strand(_socket.get_io_service())
     {
     }
 
@@ -105,10 +100,9 @@ public:
     {
         // Read a request
         http::async_read(_socket, _buffer, _req,
-            _strand.wrap([self = shared_from_this()]
-                         (auto _1, auto _2) {
-                             self->on_read(_1, _2);
-                         }));
+            [self = shared_from_this()] (auto _1, auto _2) {
+                self->on_read(_1, _2);
+            });
     }
 
     void
@@ -135,10 +129,10 @@ public:
                 http::async_write(
                     _socket,
                     *sp,
-                    _strand.wrap([sp, self = this->shared_from_this()]
-                                 (auto ec, auto transferred) {
-                                     self->on_write(ec, transferred);
-                                 }));
+                    [sp, self = this->shared_from_this()]
+                    (auto ec, auto transferred) {
+                        self->on_write(ec, transferred);
+                    });
             });
     }
 
@@ -244,37 +238,26 @@ public:
 int main(int argc, char* argv[])
 {
     // Check command line arguments.
-    if (argc != 4)
+    if (argc != 3)
     {
         std::cerr <<
-            "Usage: http-server-async <address> <port> <threads>\n" <<
+            "Usage: http-server-async <address> <port>\n" <<
             "Example:\n" <<
-            "    http-server-async 0.0.0.0 8080 . 1\n";
+            "    http-server-async 0.0.0.0 8080\n";
         return EXIT_FAILURE;
     }
 
     auto const address = boost::asio::ip::address::from_string(argv[1]);
     auto const port = static_cast<unsigned short>(std::atoi(argv[2]));
-    auto const threads = std::max<std::size_t>(1, std::atoi(argv[3]));
 
     // The io_service is required for all I/O
-    boost::asio::io_service ios{threads};
+    boost::asio::io_service ios;
 
     // Create and launch a listening port
     std::make_shared<listener>(
         ios,
         tcp::endpoint{address, port})->run();
 
-    // Run the I/O service on the requested number of threads
-    std::vector<std::thread> v;
-    v.reserve(threads - 1);
-
-    for(auto i = threads - 1; i > 0; --i)
-        v.emplace_back(
-        [&ios]
-        {
-            ios.run();
-        });
     ios.run();
 
     return EXIT_SUCCESS;
