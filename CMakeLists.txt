@@ -17,7 +17,7 @@ set(BEAST_DIR "${CMAKE_BINARY_DIR}/beast/src/beast")
 ################################################################################
 project(ouinet)
 
-find_package(Boost ${BOOST_VERSION} COMPONENTS system unit_test_framework REQUIRED)
+find_package(Boost ${BOOST_VERSION} COMPONENTS coroutine system REQUIRED)
 find_package(Threads)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -Wall -ggdb ${SANITIZE}")
