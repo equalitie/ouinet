@@ -38,26 +38,18 @@ void ProxySession::on_read(boost::system::error_code ec)
     if(ec)
         return fail(ec, "read");
 
-    auto client = make_shared<Client>(_socket.get_io_service());
-
     // Send the response
-    handle_request(move(client), move(_req));
+    handle_request(move(_req));
 }
 
-void ProxySession::handle_request(shared_ptr<Client> c, Request req)
+void ProxySession::handle_request(Request req)
 {
     // Make sure we can handle the method
-    if( req.method() != http::verb::get && req.method() != http::verb::head) {
-        http::response<http::string_body> res{http::status::bad_request, req.version()};
-        res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-        res.set(http::field::content_type, "text/html");
-        res.keep_alive(req.keep_alive());
-        res.body() = "Unknown HTTP-method";
-        res.prepare_payload();
-        send_response(move(res));
-        return;
+    if (req.method() != http::verb::get && req.method() != http::verb::head) {
+        return handle_bad_request(req);
     }
 
+    auto c = make_shared<Client>(_socket.get_io_service());
 
     auto host_port = split_host_port(req["host"]);
 
@@ -68,6 +60,17 @@ void ProxySession::handle_request(shared_ptr<Client> c, Request req)
           , [self = shared_from_this(), req](Error error, auto res) {
                 return self->send_response(move(res));
             });
+}
+
+void ProxySession::handle_bad_request(const Request& req)
+{
+    http::response<http::string_body> res{http::status::bad_request, req.version()};
+    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
+    res.set(http::field::content_type, "text/html");
+    res.keep_alive(req.keep_alive());
+    res.body() = "Unknown HTTP-method";
+    res.prepare_payload();
+    send_response(move(res));
 }
 
 template<class Res>
