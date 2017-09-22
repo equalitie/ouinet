@@ -25,8 +25,8 @@ public:
     }
 
     // Start the asynchronous operation
-    void run( std::string host
-            , std::string port
+    void run( boost::beast::string_view host
+            , boost::beast::string_view port
             , Request req
             , Handler handler)
     {
@@ -36,7 +36,7 @@ public:
         _handler = std::move(handler);
 
         // Look up the domain name
-        _resolver.async_resolve({host, port},
+        _resolver.async_resolve({host.to_string(), port.to_string()},
             [this, self = shared_from_this()] (auto ec, auto result) {
                 if (ec) {
                     return this->finish(ec, "resolve");

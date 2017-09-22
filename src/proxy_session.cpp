@@ -6,6 +6,19 @@ using namespace ouinet;
 
 namespace http = boost::beast::http;
 using namespace std;
+using string_view = boost::beast::string_view;
+
+static
+pair<string_view, string_view> split_host_port(const string_view& hp)
+{
+    auto pos = hp.find(':');
+
+    if (pos == string::npos) {
+        return make_pair(hp, "80");
+    }
+
+    return make_pair(hp.substr(0, pos), hp.substr(pos+1));
+}
 
 void ProxySession::do_read()
 {
@@ -31,7 +44,7 @@ void ProxySession::on_read(boost::system::error_code ec)
     handle_request(move(client), move(_req));
 }
 
-void ProxySession::handle_request(shared_ptr<Client> c, Request&& req)
+void ProxySession::handle_request(shared_ptr<Client> c, Request req)
 {
     // Make sure we can handle the method
     if( req.method() != http::verb::get && req.method() != http::verb::head) {
@@ -46,17 +59,15 @@ void ProxySession::handle_request(shared_ptr<Client> c, Request&& req)
     }
 
 
+    auto host_port = split_host_port(req["host"]);
+
     // Forward the request
-    // XXX Port?
-    c->run(req["host"].to_string(), "80", req,
-        [self = shared_from_this(), req](Error error, auto res) {
-            auto h = static_cast<const typename decltype(res)::header_type&>(res);
-            cerr << "=======================================\n";
-            cerr << "Request\n" << req << "\n" << endl;
-            cerr << "Response\n" << h << "\n" << endl;
-            cerr << "=======================================\n";
-            return self->send_response(move(res));
-        });
+    c->run( host_port.first
+          , host_port.second
+          , req
+          , [self = shared_from_this(), req](Error error, auto res) {
+                return self->send_response(move(res));
+            });
 }
 
 template<class Res>
