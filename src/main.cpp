@@ -11,17 +11,18 @@ using namespace std;
 namespace beast = boost::beast;
 namespace http  = beast::http;
 namespace asio  = boost::asio;
+namespace sys   = boost::system;
 
-using tcp         = boost::asio::ip::tcp;
+using tcp         = asio::ip::tcp;
 using string_view = beast::string_view;
 using Request     = http::request<http::string_body>;
 
 //------------------------------------------------------------------------------
 // Report a failure
 static
-void fail(boost::system::error_code ec, char const* what)
+void fail(sys::error_code ec, char const* what)
 {
-    std::cerr << what << ": " << ec.message() << "\n";
+    cerr << what << ": " << ec.message() << "\n";
 }
 
 //------------------------------------------------------------------------------
@@ -41,7 +42,7 @@ pair<string_view, string_view> split_host_port(const string_view& hp)
 static
 tcp::socket connect( asio::io_service& ios
                    , string_view host_and_port
-                   , boost::system::error_code& ec
+                   , sys::error_code& ec
                    , asio::yield_context yield)
 {
     auto hp = split_host_port(host_and_port);
@@ -56,7 +57,6 @@ tcp::socket connect( asio::io_service& ios
         return move(socket);
     };
 
-    // These objects perform our I/O
     tcp::resolver resolver{ios};
 
     // Look up the domain name
@@ -64,7 +64,7 @@ tcp::socket connect( asio::io_service& ios
     if (ec) return finish(ec, "resolve");
 
     // Make the connection on the IP address we get from a lookup
-    boost::asio::async_connect(socket, lookup, yield[ec]);
+    asio::async_connect(socket, lookup, yield[ec]);
     if (ec) return finish(ec, "connect");
 
     return socket;
@@ -73,11 +73,10 @@ tcp::socket connect( asio::io_service& ios
 //------------------------------------------------------------------------------
 static
 http::response<http::dynamic_body>
-fetch_http_page( boost::asio::io_service& ios
-               , string_view host
+fetch_http_page( asio::io_service& ios
                , Request req
-               , boost::system::error_code& ec
-               , boost::asio::yield_context yield)
+               , sys::error_code& ec
+               , asio::yield_context yield)
 {
     http::response<http::dynamic_body> res;
 
@@ -86,7 +85,7 @@ fetch_http_page( boost::asio::io_service& ios
         return res;
     };
 
-    tcp::socket socket = connect(ios, host, ec, yield);
+    tcp::socket socket = connect(ios, req["host"], ec, yield);
     if (ec) return finish(ec, "resolve");
 
     // Send the HTTP request to the remote host
@@ -94,9 +93,7 @@ fetch_http_page( boost::asio::io_service& ios
     if (ec) return finish(ec, "write");
 
     // This buffer is used for reading and must be persisted
-    boost::beast::flat_buffer b;
-
-    // Declare a container to hold the response
+    beast::flat_buffer b;
 
     // Receive the HTTP response
     http::async_read(socket, b, res, yield[ec]);
@@ -107,20 +104,16 @@ fetch_http_page( boost::asio::io_service& ios
 
     // not_connected happens sometimes
     // so don't bother reporting it.
-    //
-    if(ec && ec != boost::system::errc::not_connected)
+    if(ec && ec != sys::errc::not_connected)
         return finish(ec, "shutdown");
 
-    // If we get here then the connection is closed gracefully
-    
     return res;
 }
 
 //------------------------------------------------------------------------------
-template<class Req>
 static
 void handle_bad_request( tcp::socket& socket
-                       , const Req& req
+                       , const Request& req
                        , asio::yield_context yield)
 {
     http::response<http::string_body> res{http::status::bad_request, req.version()};
@@ -131,7 +124,7 @@ void handle_bad_request( tcp::socket& socket
     res.body() = "Unknown HTTP-method";
     res.prepare_payload();
 
-    boost::system::error_code ec;
+    sys::error_code ec;
     http::async_write(socket, res, yield[ec]);
 }
 
@@ -139,8 +132,8 @@ void handle_bad_request( tcp::socket& socket
 static
 void forward(tcp::socket& in, tcp::socket& out, asio::yield_context yield)
 {
-    boost::system::error_code ec;
-    std::array<uint8_t, 2048> data;
+    sys::error_code ec;
+    array<uint8_t, 2048> data;
 
     for (;;) {
         size_t length = in.async_read_some(asio::buffer(data), yield[ec]);
@@ -152,13 +145,12 @@ void forward(tcp::socket& in, tcp::socket& out, asio::yield_context yield)
 }
 
 //------------------------------------------------------------------------------
-template<class Req>
 static
 void handle_connect_request( tcp::socket& client_s
-                           , const Req& req
+                           , const Request& req
                            , asio::yield_context yield)
 {
-    boost::system::error_code ec;
+    sys::error_code ec;
     asio::io_service& ios = client_s.get_io_service();
 
     tcp::socket origin_s = connect(ios, req["host"], ec, yield);
@@ -166,6 +158,8 @@ void handle_connect_request( tcp::socket& client_s
 
     http::response<http::empty_body> res{http::status::ok, req.version()};
 
+    // Send the client an OK message indicating that the tunnel
+    // has been established. TODO: Reply with an error otherwise.
     http::async_write(client_s, res, yield[ec]);
     if (ec) return fail(ec, "sending connect response");
 
@@ -190,9 +184,9 @@ void handle_connect_request( tcp::socket& client_s
 
 //------------------------------------------------------------------------------
 static
-void start_http_forwarding(tcp::socket socket, boost::asio::yield_context yield)
+void start_http_forwarding(tcp::socket socket, asio::yield_context yield)
 {
-    boost::system::error_code ec;
+    sys::error_code ec;
     beast::flat_buffer buffer;
 
     for (;;) {
@@ -212,14 +206,10 @@ void start_http_forwarding(tcp::socket socket, boost::asio::yield_context yield)
         }
 
         // Forward the request
-        auto res = fetch_http_page( socket.get_io_service()
-                                  , req["host"]
-                                  , req
-                                  , ec
-                                  , yield);
-            
+        auto res = fetch_http_page(socket.get_io_service(), req, ec, yield);
         if (ec) return fail(ec, "fetch_http_page");
 
+        // Forward back the response
         http::async_write(socket, res, yield[ec]);
         if (ec) return fail(ec, "write");
     }
@@ -228,11 +218,11 @@ void start_http_forwarding(tcp::socket socket, boost::asio::yield_context yield)
 }
 
 //------------------------------------------------------------------------------
-void do_listen( boost::asio::io_service& ios
+void do_listen( asio::io_service& ios
               , tcp::endpoint endpoint
               , asio::yield_context yield)
 {
-    boost::system::error_code ec;
+    sys::error_code ec;
 
     // Open the acceptor
     tcp::acceptor acceptor(ios);
@@ -247,7 +237,7 @@ void do_listen( boost::asio::io_service& ios
     if (ec) return fail(ec, "bind");
 
     // Start listening for connections
-    acceptor.listen(boost::asio::socket_base::max_connections, ec);
+    acceptor.listen(asio::socket_base::max_connections, ec);
     if (ec) return fail(ec, "listen");
 
     for(;;)
@@ -273,21 +263,22 @@ int main(int argc, char* argv[])
     if (argc != 3)
     {
         cerr <<
-            "Usage: http-server-async <address> <port>\n" <<
-            "Example:\n" <<
+            "Usage: http-server-async <address> <port>\n"
+            "Example:\n"
             "    http-server-async 0.0.0.0 8080\n";
+
         return EXIT_FAILURE;
     }
 
-    auto const address = boost::asio::ip::address::from_string(argv[1]);
+    auto const address = asio::ip::address::from_string(argv[1]);
     auto const port = static_cast<unsigned short>(atoi(argv[2]));
 
     // The io_service is required for all I/O
-    boost::asio::io_service ios;
+    asio::io_service ios;
 
-    boost::asio::spawn
+    asio::spawn
         ( ios
-        , [&](boost::asio::yield_context yield) {
+        , [&](asio::yield_context yield) {
               do_listen( ios
                        , tcp::endpoint{address, port}
                        , yield);
