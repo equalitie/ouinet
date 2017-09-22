@@ -92,11 +92,10 @@ fetch_http_page( asio::io_service& ios
     http::async_write(socket, req, yield[ec]);
     if (ec) return finish(ec, "write");
 
-    // This buffer is used for reading and must be persisted
-    beast::flat_buffer b;
+    beast::flat_buffer buffer;
 
     // Receive the HTTP response
-    http::async_read(socket, b, res, yield[ec]);
+    http::async_read(socket, buffer, res, yield[ec]);
     if (ec) return finish(ec, "read");
 
     // Gracefully close the socket
