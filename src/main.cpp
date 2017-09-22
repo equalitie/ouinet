@@ -138,6 +138,59 @@ void handle_bad_request( tcp::socket& socket
 
 //------------------------------------------------------------------------------
 static
+void forward(tcp::socket& in, tcp::socket& out, asio::yield_context yield)
+{
+    boost::system::error_code ec;
+    std::array<uint8_t, 2048> data;
+
+    for (;;) {
+        size_t length = in.async_read_some(asio::buffer(data), yield[ec]);
+        if (ec) break;
+
+        asio::async_write(out, asio::buffer(data, length), yield[ec]);
+        if (ec) break;
+    }
+}
+
+//------------------------------------------------------------------------------
+template<class Req>
+static
+void handle_connect_request( tcp::socket& client_s
+                           , const Req& req
+                           , asio::yield_context yield)
+{
+    boost::system::error_code ec;
+    asio::io_service& ios = client_s.get_io_service();
+
+    tcp::socket origin_s = connect(ios, req["host"], ec, yield);
+    if (ec) return fail(ec, "connect");
+
+    http::response<http::empty_body> res{http::status::ok, req.version()};
+
+    http::async_write(client_s, res, yield[ec]);
+    if (ec) return fail(ec, "sending connect response");
+
+    struct State {
+        tcp::socket client_s, origin_s;
+    };
+
+    auto s = make_shared<State>(State{move(client_s), move(origin_s)});
+
+    asio::spawn
+        ( yield
+        , [s](asio::yield_context yield) {
+              forward(s->client_s, s->origin_s, yield);
+          });
+
+    asio::spawn
+        ( yield
+        , [s](asio::yield_context yield) {
+              forward(s->origin_s, s->client_s, yield);
+          });
+}
+
+//------------------------------------------------------------------------------
+static
 void start_http_forwarding(tcp::socket socket, boost::asio::yield_context yield)
 {
     boost::system::error_code ec;
@@ -148,10 +201,12 @@ void start_http_forwarding(tcp::socket socket, boost::asio::yield_context yield)
 
         http::async_read(socket, buffer, req, yield[ec]);
 
-        if (ec == http::error::end_of_stream)
-            break;
-
+        if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "read");
+
+        if (req.method() == http::verb::connect) {
+            return handle_connect_request(socket, req, yield);
+        }
 
         if (req.method() != http::verb::get && req.method() != http::verb::head) {
             return handle_bad_request(socket, req, yield);
