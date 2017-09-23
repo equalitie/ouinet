@@ -30,6 +30,7 @@ file(GLOB sources
     "${CMAKE_SOURCE_DIR}/src/*.cpp")
 
 add_executable(ouinet ${sources})
+add_dependencies(ouinet beast)
 
 target_link_libraries(ouinet ${Boost_LIBRARIES})
 
