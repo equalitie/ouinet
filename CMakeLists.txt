@@ -15,12 +15,14 @@ externalproject_add(beast
 set(BEAST_DIR "${CMAKE_BINARY_DIR}/beast/src/beast")
 
 ################################################################################
-externalproject_add(ipfs-cache
-    URL ${CMAKE_SOURCE_DIR}/modules/ipfs-cache
-    INSTALL_COMMAND ""
-    PREFIX "ipfs-cache")
+set(IPFS_CACHE_SRC_DIR "${CMAKE_SOURCE_DIR}/modules/ipfs-cache")
+set(IPFS_CACHE_BIN_DIR "${CMAKE_BINARY_DIR}/ipfs-cache-prefix/src/ipfs-cache-build")
 
-set(IPFS_CACHE_DIR "${CMAKE_BINARY_DIR}/ipfs-cache/src/ipfs-cache-build")
+externalproject_add(ipfs-cache
+    SOURCE_DIR ${IPFS_CACHE_SRC_DIR}
+    BUILD_ALWAYS 1
+    DOWNLOAD_COMMAND ""
+    INSTALL_COMMAND "")
 
 ################################################################################
 project(ouinet)
@@ -33,7 +35,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -Wall -ggdb ${SANITI
 include_directories(
     "${Boost_INCLUDE_DIR}"
     "${BEAST_DIR}/include"
-    "${IPFS_CACHE_DIR}/include")
+    "${IPFS_CACHE_SRC_DIR}/include")
 
 file(GLOB sources
     "${CMAKE_SOURCE_DIR}/src/*.cpp")
@@ -43,6 +45,6 @@ add_dependencies(ouinet beast ipfs-cache)
 
 target_link_libraries(ouinet
     ${Boost_LIBRARIES}
-    ${IPFS_CACHE_DIR}/libipfs-cache.a)
+    ${IPFS_CACHE_BIN_DIR}/libipfs-cache.a)
 
 ################################################################################
