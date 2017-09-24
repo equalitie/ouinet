@@ -16,7 +16,7 @@ set(BEAST_DIR "${CMAKE_BINARY_DIR}/beast/src/beast")
 
 ################################################################################
 externalproject_add(ipfs-cache
-    GIT_REPOSITORY ${CMAKE_SOURCE_DIR}/modules/ipfs-cache
+    URL ${CMAKE_SOURCE_DIR}/modules/ipfs-cache
     INSTALL_COMMAND ""
     PREFIX "ipfs-cache")
 
