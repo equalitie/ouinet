@@ -25,7 +25,7 @@ externalproject_add(ipfs-cache
     INSTALL_COMMAND "")
 
 ################################################################################
-project(ouinet)
+project(client)
 
 find_package(Boost ${BOOST_VERSION} COMPONENTS coroutine system REQUIRED)
 find_package(Threads)
@@ -38,12 +38,35 @@ include_directories(
     "${IPFS_CACHE_SRC_DIR}/include")
 
 file(GLOB sources
-    "${CMAKE_SOURCE_DIR}/src/*.cpp")
+    "${CMAKE_SOURCE_DIR}/src/client.cpp")
 
-add_executable(ouinet ${sources})
-add_dependencies(ouinet beast ipfs-cache)
+add_executable(client ${sources})
+add_dependencies(client beast ipfs-cache)
 
-target_link_libraries(ouinet
+target_link_libraries(client
+    ${Boost_LIBRARIES}
+    ${IPFS_CACHE_BIN_DIR}/libipfs-cache.a)
+
+################################################################################
+project(injector)
+
+find_package(Boost ${BOOST_VERSION} COMPONENTS coroutine system REQUIRED)
+find_package(Threads)
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -Wall -ggdb ${SANITIZE}")
+
+include_directories(
+    "${Boost_INCLUDE_DIR}"
+    "${BEAST_DIR}/include"
+    "${IPFS_CACHE_SRC_DIR}/include")
+
+file(GLOB sources
+    "${CMAKE_SOURCE_DIR}/src/injector.cpp")
+
+add_executable(injector ${sources})
+add_dependencies(injector beast ipfs-cache)
+
+target_link_libraries(injector
     ${Boost_LIBRARIES}
     ${IPFS_CACHE_BIN_DIR}/libipfs-cache.a)
 

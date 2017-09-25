@@ -2,9 +2,9 @@
 
 set -e
 
-HTTP_OK=200
-
 function do_curl {
+    local HTTP_OK=200
+
     local code=$(curl $1 -o /dev/null -w "%{http_code}" --silent --show-error "${@:3}")
     if [ $code != $HTTP_OK ]; then
         echo "Expected HTTP response $2 but received $code"
@@ -14,16 +14,16 @@ function do_curl {
 }
 
 if [ ! -f "$1" -o ! -x "$1" ]; then
-    echo "First argument must point to the ouinet executable"
+    echo "First argument must point to the client executable"
     exit 1
 fi
 
-ouinet=$1
+client=$1
 
 trap 'kill -SIGTERM $(jobs -pr) 2>/dev/null || true; exit' HUP INT TERM EXIT
 
 # Start the proxy
-./$ouinet 0.0.0.0 8080 &
+./$client 0.0.0.0 8080 &
 p=$!
 
 sleep 0.5

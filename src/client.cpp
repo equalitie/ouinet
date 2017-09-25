@@ -2,112 +2,22 @@
 #include <boost/beast/http.hpp>
 #include <boost/beast/version.hpp>
 #include <boost/asio/ip/tcp.hpp>
-#include <boost/asio/connect.hpp>
 #include <boost/asio/spawn.hpp>
 #include <iostream>
 
-using namespace std;
+#include <ipfs_cache/client.h>
 
-namespace beast = boost::beast;
-namespace http  = beast::http;
-namespace asio  = boost::asio;
-namespace sys   = boost::system;
+#include "namespaces.h"
+#include "connect_to_host.h"
+#include "fetch_http_page.h"
+
+using namespace std;
+using namespace ouinet;
 
 using tcp         = asio::ip::tcp;
 using string_view = beast::string_view;
 using Request     = http::request<http::string_body>;
-
-//------------------------------------------------------------------------------
-// Report a failure
-static
-void fail(sys::error_code ec, char const* what)
-{
-    cerr << what << ": " << ec.message() << "\n";
-}
-
-//------------------------------------------------------------------------------
-static
-pair<string_view, string_view> split_host_port(const string_view& hp)
-{
-    auto pos = hp.find(':');
-
-    if (pos == string::npos) {
-        return make_pair(hp, "80");
-    }
-
-    return make_pair(hp.substr(0, pos), hp.substr(pos+1));
-}
-
-//------------------------------------------------------------------------------
-static
-tcp::socket connect( asio::io_service& ios
-                   , string_view host_and_port
-                   , sys::error_code& ec
-                   , asio::yield_context yield)
-{
-    auto hp = split_host_port(host_and_port);
-
-    string host = hp.first .to_string();
-    string port = hp.second.to_string();
-
-    tcp::socket socket(ios);
-
-    auto finish = [&socket] (auto ec, auto where) {
-        fail(ec, where);
-        return move(socket);
-    };
-
-    tcp::resolver resolver{ios};
-
-    // Look up the domain name
-    auto const lookup = resolver.async_resolve({host, port}, yield[ec]);
-    if (ec) return finish(ec, "resolve");
-
-    // Make the connection on the IP address we get from a lookup
-    asio::async_connect(socket, lookup, yield[ec]);
-    if (ec) return finish(ec, "connect");
-
-    return socket;
-}
-
-//------------------------------------------------------------------------------
-static
-http::response<http::dynamic_body>
-fetch_http_page( asio::io_service& ios
-               , Request req
-               , sys::error_code& ec
-               , asio::yield_context yield)
-{
-    http::response<http::dynamic_body> res;
-
-    auto finish = [&res](auto ec, auto what) {
-        fail(ec, what);
-        return res;
-    };
-
-    tcp::socket socket = connect(ios, req["host"], ec, yield);
-    if (ec) return finish(ec, "resolve");
-
-    // Send the HTTP request to the remote host
-    http::async_write(socket, req, yield[ec]);
-    if (ec) return finish(ec, "write");
-
-    beast::flat_buffer buffer;
-
-    // Receive the HTTP response
-    http::async_read(socket, buffer, res, yield[ec]);
-    if (ec) return finish(ec, "read");
-
-    // Gracefully close the socket
-    socket.shutdown(tcp::socket::shutdown_both, ec);
-
-    // not_connected happens sometimes
-    // so don't bother reporting it.
-    if(ec && ec != sys::errc::not_connected)
-        return finish(ec, "shutdown");
-
-    return res;
-}
+template<class T> using optional = boost::optional<T>;
 
 //------------------------------------------------------------------------------
 static
@@ -152,7 +62,7 @@ void handle_connect_request( tcp::socket& client_s
     sys::error_code ec;
     asio::io_service& ios = client_s.get_io_service();
 
-    tcp::socket origin_s = connect(ios, req["host"], ec, yield);
+    tcp::socket origin_s = connect_to_host(ios, req["host"], ec, yield);
     if (ec) return fail(ec, "connect");
 
     http::response<http::empty_body> res{http::status::ok, req.version()};
@@ -183,7 +93,9 @@ void handle_connect_request( tcp::socket& client_s
 
 //------------------------------------------------------------------------------
 static
-void start_http_forwarding(tcp::socket socket, asio::yield_context yield)
+void start_http_forwarding( tcp::socket socket
+                          , shared_ptr<ipfs_cache::Client> cache_client
+                          , asio::yield_context yield)
 {
     sys::error_code ec;
     beast::flat_buffer buffer;
@@ -204,13 +116,33 @@ void start_http_forwarding(tcp::socket socket, asio::yield_context yield)
             return handle_bad_request(socket, req, yield);
         }
 
-        // Forward the request
-        auto res = fetch_http_page(socket.get_io_service(), req, ec, yield);
-        if (ec) return fail(ec, "fetch_http_page");
+        if (cache_client) {
+            // Get the content from cache
+            string content = cache_client->get_content(req.target().to_string(), yield);
 
-        // Forward back the response
-        http::async_write(socket, res, yield[ec]);
-        if (ec) return fail(ec, "write");
+            cout << "Fetched " << req.target() << " " << content.length() << endl;
+
+            // TODO: cache_client should give us an error code by which we'll
+            //       decide whether to send an error or the content (which could,
+            //       in theory, be an empty string).
+            if (content.size()) {
+                asio::async_write(socket, asio::buffer(content), yield[ec]);
+                if (ec) return fail(ec, "async_write");
+                return;
+            }
+            else {
+                return handle_bad_request(socket, req, yield);
+            }
+        }
+        else {
+            // Forward the request to the origin
+            auto res = fetch_http_page(socket.get_io_service(), req, ec, yield);
+            if (ec) return fail(ec, "fetch_http_page");
+
+            // Forward back the response
+            http::async_write(socket, res, yield[ec]);
+            if (ec) return fail(ec, "write");
+        }
     }
 
     socket.shutdown(tcp::socket::shutdown_send, ec);
@@ -219,6 +151,7 @@ void start_http_forwarding(tcp::socket socket, asio::yield_context yield)
 //------------------------------------------------------------------------------
 void do_listen( asio::io_service& ios
               , tcp::endpoint endpoint
+              , string ipns
               , asio::yield_context yield)
 {
     sys::error_code ec;
@@ -239,6 +172,12 @@ void do_listen( asio::io_service& ios
     acceptor.listen(asio::socket_base::max_connections, ec);
     if (ec) return fail(ec, "listen");
 
+    shared_ptr<ipfs_cache::Client> ipfs_cache_client;
+
+    if (ipns.size()) {
+        ipfs_cache_client = make_shared<ipfs_cache::Client>(ios, ipns, "client_repo");
+    }
+
     for(;;)
     {
         tcp::socket socket(ios);
@@ -248,8 +187,12 @@ void do_listen( asio::io_service& ios
         }
         else {
             asio::spawn( ios
-                       , [s = move(socket)](asio::yield_context yield) mutable {
-                             start_http_forwarding(move(s), yield);
+                       , [ s = move(socket)
+                         , ipfs_cache_client
+                         ](asio::yield_context yield) mutable {
+                             start_http_forwarding( move(s)
+                                                  , move(ipfs_cache_client)
+                                                  , yield);
                          });
         }
     }
@@ -259,18 +202,23 @@ void do_listen( asio::io_service& ios
 int main(int argc, char* argv[])
 {
     // Check command line arguments.
-    if (argc != 3)
+    if (argc != 3 && argc != 4)
     {
         cerr <<
-            "Usage: http-server-async <address> <port>\n"
-            "Example:\n"
-            "    http-server-async 0.0.0.0 8080\n";
+            "Usage: client <address> <port> [<ipns>]\n"
+            "Examples:\n"
+            "    client 0.0.0.0 8080\n"
+            "    client 0.0.0.0 8080 Qm...\n"
+            "\n"
+            "If <ipns> argument isn't used, the content\n"
+            "is fetched directly from the origin.\n";
 
         return EXIT_FAILURE;
     }
 
-    auto const address = asio::ip::address::from_string(argv[1]);
-    auto const port = static_cast<unsigned short>(atoi(argv[2]));
+    auto const   address = asio::ip::address::from_string(argv[1]);
+    auto const   port    = static_cast<unsigned short>(atoi(argv[2]));
+    const string ipns    = (argc >= 4) ? argv[3] : "";
 
     // The io_service is required for all I/O
     asio::io_service ios;
@@ -280,6 +228,7 @@ int main(int argc, char* argv[])
         , [&](asio::yield_context yield) {
               do_listen( ios
                        , tcp::endpoint{address, port}
+                       , ipns
                        , yield);
           });
 

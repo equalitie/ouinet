@@ -55,6 +55,6 @@ $ make
 ## Test
 
 ```
-$ <PROJECT ROOT>/test.sh <BUILD DIR>/ouinet
+$ <PROJECT ROOT>/test.sh <BUILD DIR>/client
 ```
 
