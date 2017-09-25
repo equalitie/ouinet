@@ -23,6 +23,7 @@ template<class T> using optional = boost::optional<T>;
 static
 void handle_bad_request( tcp::socket& socket
                        , const Request& req
+                       , const char* message
                        , asio::yield_context yield)
 {
     http::response<http::string_body> res{http::status::bad_request, req.version()};
@@ -30,7 +31,7 @@ void handle_bad_request( tcp::socket& socket
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
     res.set(http::field::content_type, "text/html");
     res.keep_alive(req.keep_alive());
-    res.body() = "Unknown HTTP-method";
+    res.body() = message;
     res.prepare_payload();
 
     sys::error_code ec;
@@ -113,7 +114,7 @@ void start_http_forwarding( tcp::socket socket
         }
 
         if (req.method() != http::verb::get && req.method() != http::verb::head) {
-            return handle_bad_request(socket, req, yield);
+            return handle_bad_request(socket, req, "Bad request", yield);
         }
 
         if (cache_client) {
@@ -131,7 +132,7 @@ void start_http_forwarding( tcp::socket socket
                 return;
             }
             else {
-                return handle_bad_request(socket, req, yield);
+                return handle_bad_request(socket, req, "Not cached", yield);
             }
         }
         else {
