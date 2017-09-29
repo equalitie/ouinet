@@ -5,8 +5,9 @@
 * `cmake` 3.5+
 * `g++` capable of C++14
 * The [Boost library](http://www.boost.org/)
-* IPFS
-* The Go language
+
+Note: The Go language and the IPFS project will be downloaded automatically
+throuout the build process.
 
 ## Clone
 
