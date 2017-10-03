@@ -7,11 +7,11 @@
 * The [Boost library](http://www.boost.org/)
 
 Note: The Go language and the IPFS project will be downloaded automatically
-throuout the build process.
+during the build process.
 
 ## Clone
 
-Ouinet uses git submodules, thus to properly clone it, use
+Ouinet uses Git submodules, thus to properly clone it, use
 
 ```
 $ git clone --recursive git@github.com:equalitie/ouinet.git
@@ -43,10 +43,10 @@ $ make
 
 ### Browser
 
-Start the injector and make note of the `<DB_IPNS>` string in the output
+Start the injector and make note of the `<DB_IPNS>` string in the output:
 
 ```
-$./injector 0.0.0.0 8080
+$ ./injector 0.0.0.0 8080
 Swarm listening on /ip4/127.0.0.1/tcp/4001
 Swarm listening on /ip4/192.168.0.136/tcp/4001
 Swarm listening on /ip6/::1/tcp/4001
@@ -54,10 +54,10 @@ IPNS DB: <DB_IPNS>
 ```
 
 Now - while injector is still running - start the client and pass
-it the `<DB_IPNS>` string from above.
+it the `<DB_IPNS>` string from above:
 
 ```
-$./client 0.0.0.0 7070 <DB_IPNS>
+$ ./client 0.0.0.0 7070 <DB_IPNS>
 ```
 
 At this point, the ipfs-cache should be empty. You can test this by [setting up
@@ -70,7 +70,7 @@ injector (i.e. `localhost:8080`) and type in some **non secure** HTTP URL into
 it. While the page is being rendered into the browser, the injector is also
 pushing it into the ipfs-cache. Note that a page appearing on the screen
 doesn't necessarily mean it's already in the cache.  That might take from a few
-seconds up to a ~2 minutes.
+seconds to up to a ~2 minutes.
 
 To see the cache content, set your proxy to point to the client again
 (`localhost:7070`) and then try to open the same URL as you did in the above
