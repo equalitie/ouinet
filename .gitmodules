@@ -1,4 +1,4 @@
 [submodule "modules/ipfs-cache"]
 	path = modules/ipfs-cache
-	url = git@github.com:equalitie/ipfs-cache.git
+	url = https://github.com/equalitie/ipfs-cache.git
 	branch = asio
