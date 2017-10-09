@@ -23,7 +23,7 @@ template<class T> using optional = boost::optional<T>;
 static
 void handle_bad_request( tcp::socket& socket
                        , const Request& req
-                       , const char* message
+                       , string message
                        , asio::yield_context yield)
 {
     http::response<http::string_body> res{http::status::bad_request, req.version()};
@@ -119,21 +119,17 @@ void start_http_forwarding( tcp::socket socket
 
         if (cache_client) {
             // Get the content from cache
-            string content = cache_client->get_content(req.target().to_string(), yield);
+            string content = cache_client->get_content(req.target().to_string(), yield[ec]);
+
+            if (ec) {
+                cerr << "Failed to fetch from cache: " << ec.message() << endl;
+                return handle_bad_request(socket, req, ec.message(), yield);
+            }
 
             cout << "Fetched " << req.target() << " " << content.length() << endl;
 
-            // TODO: cache_client should give us an error code by which we'll
-            //       decide whether to send an error or the content (which could,
-            //       in theory, be an empty string).
-            if (content.size()) {
-                asio::async_write(socket, asio::buffer(content), yield[ec]);
-                if (ec) return fail(ec, "async_write");
-                return;
-            }
-            else {
-                return handle_bad_request(socket, req, "Not cached", yield);
-            }
+            asio::async_write(socket, asio::buffer(content), yield[ec]);
+            if (ec) return fail(ec, "async_write");
         }
         else {
             // Forward the request to the origin
