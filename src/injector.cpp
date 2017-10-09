@@ -53,11 +53,6 @@ void serve( tcp::socket socket
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "read");
 
-        // Currently, we only allow content injection requests from localhost.
-        if (!socket.remote_endpoint().address().is_loopback()) {
-            return handle_bad_request(socket, req, yield);
-        }
-
         // Fetch the content from origin
         auto res = fetch_http_page(socket.get_io_service(), req, ec, yield);
         if (ec) return fail(ec, "fetch_http_page");

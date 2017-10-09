@@ -12,6 +12,7 @@ template<class RequestType>
 inline
 http::response<http::dynamic_body>
 fetch_http_page( asio::io_service& ios
+               , const std::string& host
                , RequestType req
                , sys::error_code& ec
                , asio::yield_context yield)
@@ -25,7 +26,7 @@ fetch_http_page( asio::io_service& ios
         return res;
     };
 
-    tcp::socket socket = connect_to_host(ios, req["host"], ec, yield);
+    tcp::socket socket = connect_to_host(ios, host, ec, yield);
     if (ec) return finish(ec, "fetch_http_page::resolve");
 
     // Send the HTTP request to the remote host
@@ -47,6 +48,18 @@ fetch_http_page( asio::io_service& ios
         return finish(ec, "fetch_http_page::shutdown");
 
     return res;
+}
+
+template<class RequestType>
+inline
+http::response<http::dynamic_body>
+fetch_http_page( asio::io_service& ios
+               , RequestType req
+               , sys::error_code& ec
+               , asio::yield_context yield)
+{
+    auto host = req["host"].to_string();
+    return fetch_http_page(ios, host, std::move(req), ec, yield);
 }
 
 }

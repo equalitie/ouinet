@@ -119,27 +119,29 @@ void start_http_forwarding( tcp::socket socket
 
         if (cache_client) {
             // Get the content from cache
-            string content = cache_client->get_content(req.target().to_string(), yield[ec]);
+            auto key = req.target();
+            string content = cache_client->get_content(key.to_string(), yield[ec]);
 
-            if (ec) {
-                cerr << "Failed to fetch from cache: " << ec.message() << endl;
-                return handle_bad_request(socket, req, ec.message(), yield);
+            if (!ec) {
+                cout << "Fetched DB " << key << endl;
+                asio::async_write(socket, asio::buffer(content), yield[ec]);
+                if (ec) return fail(ec, "async_write");
+                continue;
             }
-
-            cout << "Fetched " << req.target() << " " << content.length() << endl;
-
-            asio::async_write(socket, asio::buffer(content), yield[ec]);
-            if (ec) return fail(ec, "async_write");
         }
-        else {
-            // Forward the request to the origin
-            auto res = fetch_http_page(socket.get_io_service(), req, ec, yield);
-            if (ec) return fail(ec, "fetch_http_page");
 
-            // Forward back the response
-            http::async_write(socket, res, yield[ec]);
-            if (ec) return fail(ec, "write");
-        }
+        //handle_bad_request( socket , req , "DB failed" , yield);
+
+        // XXX Hardcoded injector
+        // Forward the request to the origin
+        auto res = fetch_http_page(socket.get_io_service(), "localhost:8080", req, ec, yield);
+        if (ec) return fail(ec, "fetch_http_page");
+
+        cout << "Fetched In " << req.target() << endl;
+
+        // Forward back the response
+        http::async_write(socket, res, yield[ec]);
+        if (ec) return fail(ec, "write");
     }
 
     socket.shutdown(tcp::socket::shutdown_send, ec);
@@ -174,6 +176,8 @@ void do_listen( asio::io_service& ios
     if (ipns.size()) {
         ipfs_cache_client = make_shared<ipfs_cache::Client>(ios, ipns, "client_repo");
     }
+
+    cout << "Client accepting on " << acceptor.local_endpoint() << endl;
 
     for(;;)
     {
