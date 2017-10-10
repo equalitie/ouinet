@@ -3,6 +3,7 @@
 #include <boost/beast/version.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/spawn.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <iostream>
 
 #include <ipfs_cache/client.h>
@@ -196,6 +197,17 @@ void start_http_forwarding( tcp::socket socket
 }
 
 //------------------------------------------------------------------------------
+static void async_sleep( asio::io_service& ios
+                       , asio::steady_timer::duration duration
+                       , asio::yield_context yield)
+{
+    asio::steady_timer timer(ios);
+    timer.expires_from_now(duration);
+    sys::error_code ec;
+    timer.async_wait(yield[ec]);
+}
+
+//------------------------------------------------------------------------------
 void do_listen( asio::io_service& ios
               , tcp::endpoint endpoint
               , string ipns
@@ -233,6 +245,7 @@ void do_listen( asio::io_service& ios
         acceptor.async_accept(socket, yield[ec]);
         if(ec) {
             fail(ec, "accept");
+            async_sleep(ios, chrono::seconds(1), yield);
         }
         else {
             asio::spawn( ios
