@@ -58,6 +58,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -Wall -ggdb ${SANITI
 include_directories(
     "${Boost_INCLUDE_DIR}"
     "${BEAST_DIR}/include"
+    "${IPFS_CACHE_BIN_DIR}/json/src/json/src"
     "${IPFS_CACHE_SRC_DIR}/include")
 
 file(GLOB sources

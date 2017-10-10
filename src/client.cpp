@@ -93,6 +93,43 @@ void handle_connect_request( tcp::socket& client_s
 }
 
 //------------------------------------------------------------------------------
+static bool try_serve_client_control( tcp::socket& socket
+                                    , const Request& req
+                                    , const shared_ptr<ipfs_cache::Client>& cache_client
+                                    , asio::yield_context yield)
+{
+    auto host = req["Host"].to_string();
+
+    if (host.substr(0, sizeof("localhost")) != "localhost") {
+        return false;
+    }
+
+    http::response<http::string_body> res{http::status::ok, req.version()};
+
+    stringstream ss;
+    ss << "<!DOCTYPE html>\n"
+          "<html>\n"
+          "    <body>\n"
+          "        Database:\n"
+          "        <pre>\n";
+    ss << cache_client->json_db().dump(4);
+    ss << "        </pre>\n"
+          "    </body>\n"
+          "</html>\n";
+
+    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
+    res.set(http::field::content_type, "text/html");
+    res.keep_alive(false);
+    res.body() = ss.str();
+    res.prepare_payload();
+
+    sys::error_code ec;
+    http::async_write(socket, res, yield[ec]);
+
+    return true;
+}
+
+//------------------------------------------------------------------------------
 static
 void start_http_forwarding( tcp::socket socket
                           , shared_ptr<ipfs_cache::Client> cache_client
@@ -111,6 +148,10 @@ void start_http_forwarding( tcp::socket socket
 
         if (req.method() == http::verb::connect) {
             return handle_connect_request(socket, req, yield);
+        }
+
+        if (try_serve_client_control(socket, req, cache_client, yield)) {
+            return;
         }
 
         if (req.method() != http::verb::get && req.method() != http::verb::head) {
