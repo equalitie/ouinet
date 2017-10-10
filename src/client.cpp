@@ -141,6 +141,7 @@ void start_http_forwarding( tcp::socket socket
 
         // Forward back the response
         http::async_write(socket, res, yield[ec]);
+        if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "write");
     }
 

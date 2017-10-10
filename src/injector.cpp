@@ -59,15 +59,16 @@ void serve( tcp::socket socket
 
         stringstream ss;
         ss << res;
+        auto key = req.target().to_string();
 
-        asio::spawn( yield
-                   , [ s = ss.str()
-                     , t = req.target().to_string()
-                     , injector
-                     ] (auto yield) {
-                         injector->insert_content(t, s, yield);
-                         cerr << "Injected " << t << endl;
-                     });
+        injector->insert_content(key , ss.str(), [key] (sys::error_code ec, auto) {
+                if (!ec) {
+                    cout << "*Inserted " << key << endl;
+                }
+                else {
+                    cout << "!Inserted " << key << " " << ec.message() << endl;
+                }
+            });
 
         // Forward back the response
         http::async_write(socket, res, yield[ec]);
