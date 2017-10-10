@@ -21,24 +21,6 @@ using Request     = http::request<http::dynamic_body>;
 
 //------------------------------------------------------------------------------
 static
-void handle_bad_request( tcp::socket& socket
-                       , const Request& req
-                       , asio::yield_context yield)
-{
-    http::response<http::string_body> res{http::status::bad_request, req.version()};
-
-    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-    res.set(http::field::content_type, "text/html");
-    res.keep_alive(req.keep_alive());
-    res.body() = "Not local";
-    res.prepare_payload();
-
-    sys::error_code ec;
-    http::async_write(socket, res, yield[ec]);
-}
-
-//------------------------------------------------------------------------------
-static
 void serve( tcp::socket socket
           , shared_ptr<ipfs_cache::Injector> injector
           , asio::yield_context yield)
