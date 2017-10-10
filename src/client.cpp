@@ -109,12 +109,18 @@ static bool try_serve_client_control( tcp::socket& socket
     stringstream ss;
     ss << "<!DOCTYPE html>\n"
           "<html>\n"
-          "    <body>\n"
-          "        Database:\n"
-          "        <pre>\n";
-    ss << cache_client->json_db().dump(4);
-    ss << "        </pre>\n"
-          "    </body>\n"
+          "    <body>\n";
+
+    if (cache_client) {
+        ss << "        Database:<br>\n";
+        ss << "        IPNS: " << cache_client->ipns() << "<br>\n";
+        ss << "        IPFS: " << cache_client->ipfs() << "<br>\n";
+        ss << "        <pre>\n";
+        ss << cache_client->json_db().dump(4);
+        ss << "        </pre>\n";
+    }
+
+    ss << "    </body>\n"
           "</html>\n";
 
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
