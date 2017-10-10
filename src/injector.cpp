@@ -4,6 +4,7 @@
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/connect.hpp>
 #include <boost/asio/spawn.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <iostream>
 
 #include <ipfs_cache/injector.h>
@@ -111,6 +112,10 @@ void start( asio::io_service& ios
         acceptor.async_accept(socket, yield[ec]);
         if(ec) {
             fail(ec, "accept");
+            // Wait one second before we start accepting again.
+            asio::steady_timer timer(ios);
+            timer.expires_from_now(chrono::seconds(1));
+            timer.async_wait(yield[ec]);
         }
         else {
             asio::spawn( ios
