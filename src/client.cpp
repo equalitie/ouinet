@@ -139,6 +139,7 @@ static bool try_serve_client_control( tcp::socket& socket
 //------------------------------------------------------------------------------
 static
 void start_http_forwarding( tcp::socket socket
+                          , string injector
                           , shared_ptr<ipfs_cache::Client> cache_client
                           , asio::yield_context yield)
 {
@@ -180,9 +181,8 @@ void start_http_forwarding( tcp::socket socket
 
         //handle_bad_request( socket , req , "DB failed" , yield);
 
-        // XXX Hardcoded injector
-        // Forward the request to the origin
-        auto res = fetch_http_page(socket.get_io_service(), "localhost:8080", req, ec, yield);
+        // Forward the request to the injector
+        auto res = fetch_http_page(socket.get_io_service(), injector, req, ec, yield);
         if (ec) return fail(ec, "fetch_http_page");
 
         cout << "Fetched In " << req.target() << endl;
@@ -209,7 +209,8 @@ static void async_sleep( asio::io_service& ios
 
 //------------------------------------------------------------------------------
 void do_listen( asio::io_service& ios
-              , tcp::endpoint endpoint
+              , tcp::endpoint local_endpoint
+              , string injector
               , string ipns
               , asio::yield_context yield)
 {
@@ -218,13 +219,13 @@ void do_listen( asio::io_service& ios
     // Open the acceptor
     tcp::acceptor acceptor(ios);
 
-    acceptor.open(endpoint.protocol(), ec);
+    acceptor.open(local_endpoint.protocol(), ec);
     if (ec) return fail(ec, "open");
 
     acceptor.set_option(asio::socket_base::reuse_address(true));
 
     // Bind to the server address
-    acceptor.bind(endpoint, ec);
+    acceptor.bind(local_endpoint, ec);
     if (ec) return fail(ec, "bind");
 
     // Start listening for connections
@@ -251,8 +252,10 @@ void do_listen( asio::io_service& ios
             asio::spawn( ios
                        , [ s = move(socket)
                          , ipfs_cache_client
+                         , injector
                          ](asio::yield_context yield) mutable {
                              start_http_forwarding( move(s)
+                                                  , move(injector)
                                                   , move(ipfs_cache_client)
                                                   , yield);
                          });
@@ -303,10 +306,10 @@ int main(int argc, char* argv[])
     if (argc != 3 && argc != 4)
     {
         cerr <<
-            "Usage: client <address> <port> [<ipns>]\n"
+            "Usage: client <address>:<port> <injector-addr>:<injector-port> [<ipns>]\n"
             "Examples:\n"
-            "    client 0.0.0.0 8080\n"
-            "    client 0.0.0.0 8080 Qm...\n"
+            "    client 0.0.0.0:8080 0.0.0.0:7070\n"
+            "    client 0.0.0.0:8080 0.0.0.0:7070 Qm...\n"
             "\n"
             "If <ipns> argument isn't used, the content\n"
             "is fetched directly from the origin.\n";
@@ -316,9 +319,9 @@ int main(int argc, char* argv[])
 
     bump_file_limit(2048);
 
-    auto const   address = asio::ip::address::from_string(argv[1]);
-    auto const   port    = static_cast<unsigned short>(atoi(argv[2]));
-    const string ipns    = (argc >= 4) ? argv[3] : "";
+    auto const local_ep = util::parse_endpoint(argv[1]);
+    auto const injector = argv[2];
+    const string ipns   = (argc >= 4) ? argv[3] : "";
 
     // The io_service is required for all I/O
     asio::io_service ios;
@@ -327,7 +330,8 @@ int main(int argc, char* argv[])
         ( ios
         , [&](asio::yield_context yield) {
               do_listen( ios
-                       , tcp::endpoint{address, port}
+                       , local_ep
+                       , injector
                        , ipns
                        , yield);
           });

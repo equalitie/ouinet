@@ -6,25 +6,9 @@
 
 #include "namespaces.h"
 #include "fail.h"
+#include "util.h"
 
 namespace ouinet {
-
-inline
-std::pair< boost::beast::string_view
-         , boost::beast::string_view
-         >
-split_host_port(const boost::beast::string_view& hp)
-{
-    using namespace std;
-
-    auto pos = hp.find(':');
-
-    if (pos == string::npos) {
-        return make_pair(hp, "80");
-    }
-
-    return make_pair(hp.substr(0, pos), hp.substr(pos+1));
-}
 
 inline
 asio::ip::tcp::socket
@@ -36,7 +20,7 @@ connect_to_host( asio::io_service& ios
     using namespace std;
     using tcp = asio::ip::tcp;
 
-    auto hp = split_host_port(host_and_port);
+    auto hp = util::split_host_port(host_and_port);
 
     string host = hp.first .to_string();
     string port = hp.second.to_string();
