@@ -20,6 +20,8 @@ using string_view = beast::string_view;
 using Request     = http::request<http::string_body>;
 template<class T> using optional = boost::optional<T>;
 
+bool injector_proxy_enabled = true;
+
 //------------------------------------------------------------------------------
 static
 void handle_bad_request( tcp::socket& socket
@@ -107,10 +109,22 @@ static bool try_serve_client_control( tcp::socket& socket
 
     http::response<http::string_body> res{http::status::ok, req.version()};
 
+    // XXX: Super primitive post value parsing
+    if (req.body() == "injector_proxy=enable") {
+        injector_proxy_enabled = true;
+    }
+    else if (req.body() == "injector_proxy=disable") {
+        injector_proxy_enabled = false;
+    }
+
     stringstream ss;
     ss << "<!DOCTYPE html>\n"
           "<html>\n"
-          "    <body>\n";
+          "    <body>\n"
+          "        <form method=\"post\">\n"
+          "            Injector proxy: <input type=\"submit\" name=\"injector_proxy\" value=\""
+       << (injector_proxy_enabled ? "disable" : "enable") << "\"/>\n"
+          "        </form>\n";
 
     if (cache_client) {
         ss << "        Database:<br>\n";
@@ -179,7 +193,9 @@ void start_http_forwarding( tcp::socket socket
             }
         }
 
-        //handle_bad_request( socket , req , "DB failed" , yield);
+        if (!injector_proxy_enabled) {
+            return handle_bad_request( socket , req , "Not cached" , yield);
+        }
 
         // Forward the request to the injector
         auto res = fetch_http_page(socket.get_io_service(), injector, req, ec, yield);
