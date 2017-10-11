@@ -46,35 +46,56 @@ $ make
 Start the injector and make note of the `<DB_IPNS>` string in the output:
 
 ```
-$ ./injector 0.0.0.0 8080
+$ ./injector 0.0.0.0:8080
 Swarm listening on /ip4/127.0.0.1/tcp/4001
 Swarm listening on /ip4/192.168.0.136/tcp/4001
 Swarm listening on /ip6/::1/tcp/4001
 IPNS DB: <DB_IPNS>
 ```
 
-Now - while injector is still running - start the client and pass
-it the `<DB_IPNS>` string from above:
+Now - while injector is still running - start the client in another terminal
+and pass it the injector's address and the `<DB_IPNS>` string from above:
 
 ```
-$ ./client 0.0.0.0 7070 <DB_IPNS>
+$ ./client 0.0.0.0:7070 0.0.0.0:8080 <DB_IPNS>
 ```
 
-At this point, the ipfs-cache should be empty. You can test this by [setting up
-your browser proxy](http://www.wikihow.com/Enter-Proxy-Settings-in-Firefox) to
-point to `localhost:7070` (i.e. it will try to get the data through the client)
-and it should respond with an error message.
+Now set [modify the settings of your
+browser](http://www.wikihow.com/Enter-Proxy-Settings-in-Firefox) to make the
+client its proxy. Once done, you can enter `localhost:7070` into your browser
+and it should show you what database of sites the client is currently using.
 
-To inject content into the ipfs-cache, set up your browser to point to the
-injector (i.e. `localhost:8080`) and type in some **non secure** HTTP URL into
-it. While the page is being rendered into the browser, the injector is also
-pushing it into the ipfs-cache. Note that a page appearing on the screen
-doesn't necessarily mean it's already in the cache.  That might take from a few
-seconds to up to a ~2 minutes.
+It is likely that at first the database shall be `nill` which indicates that
+no database has been dowloaded from IPFS yet. This may take from a couple of
+seconds up to about three minutes. The page refreshes itself regurarly so
+one the client downloads the database, it should display automatically.
 
-To see the cache content, set your proxy to point to the client again
-(`localhost:7070`) and then try to open the same URL as you did in the above
-paragraph.
+In the mean time, notice also the small form at the top of page looking
+something like:
+
+```
+Injector proxy: disable
+```
+
+This means that proxing to injector is currently `enabled`, which in turn
+means that if one points the browser to a non secure http page and the page
+isn't yet in the IPFS database, then the client shall forward the HTTP
+request to the injector. On success, injector will (A) send the content
+back and (B) upload the content to the IPFS database.
+
+Each time the injector updates the database it prints out a message:
+
+```
+Published DB: Qm...
+```
+
+Once published, it will take some time for the client to download it
+(up to three minutes from experience) and once it does so, it will be shown
+on client's frontend.
+
+At that point one can disable the proxying through injector, clear
+browser's cached data and try to point the browser to the same non secured
+HTTP page.
 
 ### Unit
 
