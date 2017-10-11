@@ -96,6 +96,30 @@ void handle_connect_request( tcp::socket& client_s
 }
 
 //------------------------------------------------------------------------------
+static void redirect_back( tcp::socket& socket
+                         , const Request& req
+                         , asio::yield_context yield)
+{
+    http::response<http::string_body> res{http::status::ok, req.version()};
+
+    stringstream ss;
+    ss << "<!DOCTYPE html>\n"
+          "<html>\n"
+          "    <head>\n"
+          "        <meta http-equiv=\"refresh\" content=\"0; url=http://localhost\"/>\n"
+          "    </head>\n"
+          "</html>\n";
+
+    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
+    res.set(http::field::content_type, "text/html");
+    res.keep_alive(false);
+    res.body() = ss.str();
+    res.prepare_payload();
+
+    sys::error_code ec;
+    http::async_write(socket, res, yield[ec]);
+}
+
 static bool try_serve_client_control( tcp::socket& socket
                                     , const Request& req
                                     , const shared_ptr<ipfs_cache::Client>& cache_client
@@ -109,19 +133,28 @@ static bool try_serve_client_control( tcp::socket& socket
 
     http::response<http::string_body> res{http::status::ok, req.version()};
 
-    // XXX: Super primitive post value parsing
-    if (req.body() == "injector_proxy=enable") {
-        injector_proxy_enabled = true;
-    }
-    else if (req.body() == "injector_proxy=disable") {
-        injector_proxy_enabled = false;
+    auto target = req.target();
+
+    if (target.find('?') != string::npos) {
+        // XXX: Extra primitive value parsing.
+        if (target.find("?injector_proxy=enable") != string::npos) {
+            injector_proxy_enabled = true;
+        }
+        else if (target.find("?injector_proxy=disable") != string::npos) {
+            injector_proxy_enabled = false;
+        }
+        redirect_back(socket, req, yield);
+        return true;
     }
 
     stringstream ss;
     ss << "<!DOCTYPE html>\n"
           "<html>\n"
+          "    <head>\n"
+          "        <meta http-equiv=\"refresh\" content=\"1\"/>\n"
+          "    </head>\n"
           "    <body>\n"
-          "        <form method=\"post\">\n"
+          "        <form method=\"get\">\n"
           "            Injector proxy: <input type=\"submit\" name=\"injector_proxy\" value=\""
        << (injector_proxy_enabled ? "disable" : "enable") << "\"/>\n"
           "        </form>\n";
@@ -186,7 +219,6 @@ void start_http_forwarding( tcp::socket socket
             string content = cache_client->get_content(key.to_string(), yield[ec]);
 
             if (!ec) {
-                cout << "Fetched DB " << key << endl;
                 asio::async_write(socket, asio::buffer(content), yield[ec]);
                 if (ec) return fail(ec, "async_write");
                 continue;
@@ -194,14 +226,13 @@ void start_http_forwarding( tcp::socket socket
         }
 
         if (!injector_proxy_enabled) {
+            cout << "Failed to fetch " << req.target() << endl;
             return handle_bad_request( socket , req , "Not cached" , yield);
         }
 
         // Forward the request to the injector
         auto res = fetch_http_page(socket.get_io_service(), injector, req, ec, yield);
         if (ec) return fail(ec, "fetch_http_page");
-
-        cout << "Fetched In " << req.target() << endl;
 
         // Forward back the response
         http::async_write(socket, res, yield[ec]);

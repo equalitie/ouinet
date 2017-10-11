@@ -45,11 +45,8 @@ void serve( tcp::socket socket
         auto key = req.target().to_string();
 
         injector->insert_content(key , ss.str(), [key] (sys::error_code ec, auto) {
-                if (!ec) {
-                    cout << "*Inserted " << key << endl;
-                }
-                else {
-                    cout << "!Inserted " << key << " " << ec.message() << endl;
+                if (ec) {
+                    cout << "!Insert failed: " << key << " " << ec.message() << endl;
                 }
             });
 
