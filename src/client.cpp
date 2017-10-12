@@ -133,6 +133,7 @@ static void serve_request( tcp::socket socket
             return front_end->serve(socket, req, cache_client, yield);
         }
 
+        // TODO: We're not handling HEAD requests correctly.
         if (req.method() != http::verb::get && req.method() != http::verb::head) {
             return handle_bad_request(socket, req, "Bad request", yield);
         }

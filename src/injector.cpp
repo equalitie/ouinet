@@ -20,6 +20,65 @@ using string_view = beast::string_view;
 using Request     = http::request<http::dynamic_body>;
 
 //------------------------------------------------------------------------------
+template<class Fields>
+static bool ok_to_cache(const http::response_header<Fields>& hdr)
+{
+    using string_view = beast::string_view;
+
+    auto cc_i = hdr.find(http::field::cache_control);
+
+    if (cc_i == hdr.end()) return true;
+
+    auto trim_whitespace = [](string_view& v) {
+        while (v.starts_with(' ')) v.remove_prefix(1);
+        while (v.ends_with  (' ')) v.remove_suffix(1);
+    };
+
+    auto key_val = [&trim_whitespace](string_view v) {
+        auto eq = v.find('=');
+
+        if (eq == string_view::npos) {
+            trim_whitespace(v);
+            return make_pair(v, string_view("", 0));
+        }
+
+        auto key = v.substr(0, eq);
+        auto val = v.substr(eq + 1, v.size());
+
+        trim_whitespace(key);
+        trim_whitespace(val);
+
+        return make_pair(key, val);
+    };
+
+    auto for_each = [&key_val] (string_view v, auto can_cache) {
+        while (true) {
+            auto comma = v.find(',');
+
+            if (comma == string_view::npos) {
+                if (v.size()) {
+                    if (!can_cache(key_val(v))) return false;
+                }
+                break;
+            }
+
+            if (!can_cache(key_val(v.substr(0, comma)))) return false;
+            v.remove_prefix(comma + 1);
+        }
+
+        return true;
+    };
+
+    return for_each(cc_i->value(), [] (auto kv) {
+        auto key = kv.first;
+        auto val = kv.second;
+        if (key == "no-cache")              return false;
+        if (key == "max-age" && val == "0") return false;
+        return true;
+    });
+}
+
+//------------------------------------------------------------------------------
 static
 void serve( tcp::socket socket
           , shared_ptr<ipfs_cache::Injector> injector
@@ -42,15 +101,17 @@ void serve( tcp::socket socket
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "fetch_http_page");
 
-        stringstream ss;
-        ss << res;
-        auto key = req.target().to_string();
+        if (ok_to_cache(res)) {
+            stringstream ss;
+            ss << res;
+            auto key = req.target().to_string();
 
-        injector->insert_content(key , ss.str(), [key] (sys::error_code ec, auto) {
-                if (ec) {
-                    cout << "!Insert failed: " << key << " " << ec.message() << endl;
-                }
-            });
+            injector->insert_content(key , ss.str(), [key] (sys::error_code ec, auto) {
+                    if (ec) {
+                        cout << "!Insert failed: " << key << " " << ec.message() << endl;
+                    }
+                });
+        }
 
         // Forward back the response
         http::async_write(socket, res, yield[ec]);
