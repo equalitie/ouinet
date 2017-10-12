@@ -73,6 +73,7 @@ static bool ok_to_cache(const http::response_header<Fields>& hdr)
         auto key = kv.first;
         auto val = kv.second;
         if (key == "no-cache")              return false;
+        if (key == "no-store")              return false;
         if (key == "max-age" && val == "0") return false;
         return true;
     });
