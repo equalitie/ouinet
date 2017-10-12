@@ -38,7 +38,8 @@ include_directories(
     "${IPFS_CACHE_SRC_DIR}/include")
 
 file(GLOB sources
-    "${CMAKE_SOURCE_DIR}/src/client.cpp")
+    "${CMAKE_SOURCE_DIR}/src/client.cpp"
+    "${CMAKE_SOURCE_DIR}/src/client_front_end.cpp")
 
 add_executable(client ${sources})
 add_dependencies(client beast ipfs-cache)

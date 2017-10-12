@@ -3,6 +3,7 @@
 namespace boost {
     namespace asio  {}
     namespace beast { namespace http {} }
+    namespace system {};
 }
 
 namespace ouinet {

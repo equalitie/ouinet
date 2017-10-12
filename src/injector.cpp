@@ -38,6 +38,8 @@ void serve( tcp::socket socket
 
         // Fetch the content from origin
         auto res = fetch_http_page(socket.get_io_service(), req, ec, yield);
+
+        if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "fetch_http_page");
 
         stringstream ss;

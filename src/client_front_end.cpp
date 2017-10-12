@@ -1,0 +1,102 @@
+#include "client_front_end.h"
+#include <ipfs_cache/client.h>
+
+using namespace std;
+using namespace ouinet;
+
+using tcp = asio::ip::tcp;
+using Request = http::request<http::string_body>;
+
+static void redirect_back( tcp::socket& socket
+                         , const Request& req
+                         , asio::yield_context yield)
+{
+    http::response<http::string_body> res{http::status::ok, req.version()};
+
+    stringstream ss;
+    ss << "<!DOCTYPE html>\n"
+          "<html>\n"
+          "    <head>\n"
+          "        <meta http-equiv=\"refresh\" content=\"0; url=http://localhost\"/>\n"
+          "    </head>\n"
+          "</html>\n";
+
+    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
+    res.set(http::field::content_type, "text/html");
+    res.keep_alive(false);
+    res.body() = ss.str();
+    res.prepare_payload();
+
+    sys::error_code ec;
+    http::async_write(socket, res, yield[ec]);
+}
+
+void ClientFrontEnd::serve( asio::ip::tcp::socket& socket
+                          , const Request& req
+                          , std::shared_ptr<ipfs_cache::Client>& cache_client
+                          , asio::yield_context yield)
+{
+    http::response<http::string_body> res{http::status::ok, req.version()};
+
+    auto target = req.target();
+
+    if (target.find('?') != string::npos) {
+        // XXX: Extra primitive value parsing.
+        if (target.find("?injector_proxy=enable") != string::npos) {
+            _injector_proxying_enabled = true;
+        }
+        else if (target.find("?injector_proxy=disable") != string::npos) {
+            _injector_proxying_enabled = false;
+        }
+        else if (target.find("?auto_refresh=enable") != string::npos) {
+            _auto_refresh_enabled = true;
+        }
+        else if (target.find("?auto_refresh=disable") != string::npos) {
+            _auto_refresh_enabled = false;
+        }
+        redirect_back(socket, req, yield);
+        return;
+    }
+
+    stringstream ss;
+    ss << "<!DOCTYPE html>\n"
+          "<html>\n";
+    if (_auto_refresh_enabled) {
+          ss << "    <head>\n"
+                "        <meta http-equiv=\"refresh\" content=\"1\"/>\n"
+                "    </head>\n";
+    }
+    ss << "    <body>\n"
+          "        <form method=\"get\">\n"
+          "            Auto refresh: <input type=\"submit\" name=\"auto_refresh\" value=\""
+                       << (_auto_refresh_enabled ? "disable" : "enable")
+                       << "\"/>\n"
+          "        </form>\n"
+          "        <form method=\"get\">\n"
+          "            Injector proxy: <input type=\"submit\" name=\"injector_proxy\" value=\""
+                       << (_injector_proxying_enabled ? "disable" : "enable")
+                       << "\"/>\n"
+          "        </form>\n";
+
+    if (cache_client) {
+        ss << "        Database:<br>\n";
+        ss << "        IPNS: " << cache_client->ipns() << "<br>\n";
+        ss << "        IPFS: " << cache_client->ipfs() << "<br>\n";
+        ss << "        <pre>\n";
+        ss << cache_client->json_db().dump(4);
+        ss << "        </pre>\n";
+    }
+
+    ss << "    </body>\n"
+          "</html>\n";
+
+    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
+    res.set(http::field::content_type, "text/html");
+    res.keep_alive(false);
+    res.body() = ss.str();
+    res.prepare_payload();
+
+    sys::error_code ec;
+    http::async_write(socket, res, yield[ec]);
+}
+

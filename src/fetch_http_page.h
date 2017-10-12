@@ -37,6 +37,10 @@ fetch_http_page( asio::io_service& ios
 
     // Receive the HTTP response
     http::async_read(socket, buffer, res, yield[ec]);
+
+    if (ec == asio::error::connection_reset) return res;
+    if (ec == http::error::end_of_stream)    return res;
+
     if (ec) return finish(ec, "fetch_http_page::read");
 
     // Gracefully close the socket

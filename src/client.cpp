@@ -7,10 +7,12 @@
 #include <iostream>
 
 #include <ipfs_cache/client.h>
+#include <ipfs_cache/error.h>
 
 #include "namespaces.h"
 #include "connect_to_host.h"
 #include "fetch_http_page.h"
+#include "client_front_end.h"
 
 using namespace std;
 using namespace ouinet;
@@ -19,8 +21,6 @@ using tcp         = asio::ip::tcp;
 using string_view = beast::string_view;
 using Request     = http::request<http::string_body>;
 template<class T> using optional = boost::optional<T>;
-
-bool injector_proxy_enabled = true;
 
 //------------------------------------------------------------------------------
 static
@@ -96,34 +96,7 @@ void handle_connect_request( tcp::socket& client_s
 }
 
 //------------------------------------------------------------------------------
-static void redirect_back( tcp::socket& socket
-                         , const Request& req
-                         , asio::yield_context yield)
-{
-    http::response<http::string_body> res{http::status::ok, req.version()};
-
-    stringstream ss;
-    ss << "<!DOCTYPE html>\n"
-          "<html>\n"
-          "    <head>\n"
-          "        <meta http-equiv=\"refresh\" content=\"0; url=http://localhost\"/>\n"
-          "    </head>\n"
-          "</html>\n";
-
-    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-    res.set(http::field::content_type, "text/html");
-    res.keep_alive(false);
-    res.body() = ss.str();
-    res.prepare_payload();
-
-    sys::error_code ec;
-    http::async_write(socket, res, yield[ec]);
-}
-
-static bool try_serve_client_control( tcp::socket& socket
-                                    , const Request& req
-                                    , const shared_ptr<ipfs_cache::Client>& cache_client
-                                    , asio::yield_context yield)
+static bool is_front_end_request(const Request& req)
 {
     auto host = req["Host"].to_string();
 
@@ -131,64 +104,15 @@ static bool try_serve_client_control( tcp::socket& socket
         return false;
     }
 
-    http::response<http::string_body> res{http::status::ok, req.version()};
-
-    auto target = req.target();
-
-    if (target.find('?') != string::npos) {
-        // XXX: Extra primitive value parsing.
-        if (target.find("?injector_proxy=enable") != string::npos) {
-            injector_proxy_enabled = true;
-        }
-        else if (target.find("?injector_proxy=disable") != string::npos) {
-            injector_proxy_enabled = false;
-        }
-        redirect_back(socket, req, yield);
-        return true;
-    }
-
-    stringstream ss;
-    ss << "<!DOCTYPE html>\n"
-          "<html>\n"
-          "    <head>\n"
-          "        <meta http-equiv=\"refresh\" content=\"1\"/>\n"
-          "    </head>\n"
-          "    <body>\n"
-          "        <form method=\"get\">\n"
-          "            Injector proxy: <input type=\"submit\" name=\"injector_proxy\" value=\""
-       << (injector_proxy_enabled ? "disable" : "enable") << "\"/>\n"
-          "        </form>\n";
-
-    if (cache_client) {
-        ss << "        Database:<br>\n";
-        ss << "        IPNS: " << cache_client->ipns() << "<br>\n";
-        ss << "        IPFS: " << cache_client->ipfs() << "<br>\n";
-        ss << "        <pre>\n";
-        ss << cache_client->json_db().dump(4);
-        ss << "        </pre>\n";
-    }
-
-    ss << "    </body>\n"
-          "</html>\n";
-
-    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-    res.set(http::field::content_type, "text/html");
-    res.keep_alive(false);
-    res.body() = ss.str();
-    res.prepare_payload();
-
-    sys::error_code ec;
-    http::async_write(socket, res, yield[ec]);
-
     return true;
 }
 
 //------------------------------------------------------------------------------
-static
-void start_http_forwarding( tcp::socket socket
-                          , string injector
-                          , shared_ptr<ipfs_cache::Client> cache_client
-                          , asio::yield_context yield)
+static void serve_request( tcp::socket socket
+                         , string injector
+                         , shared_ptr<ipfs_cache::Client> cache_client
+                         , shared_ptr<ClientFrontEnd> front_end
+                         , asio::yield_context yield)
 {
     sys::error_code ec;
     beast::flat_buffer buffer;
@@ -205,8 +129,8 @@ void start_http_forwarding( tcp::socket socket
             return handle_connect_request(socket, req, yield);
         }
 
-        if (try_serve_client_control(socket, req, cache_client, yield)) {
-            return;
+        if (is_front_end_request(req)) {
+            return front_end->serve(socket, req, cache_client, yield);
         }
 
         if (req.method() != http::verb::get && req.method() != http::verb::head) {
@@ -223,10 +147,14 @@ void start_http_forwarding( tcp::socket socket
                 if (ec) return fail(ec, "async_write");
                 continue;
             }
+
+            if (ec != ipfs_cache::error::key_not_found) {
+                cout << "Failed to fetch from DB " << ec.message()
+                     << " " << req.target() << endl;
+            }
         }
 
-        if (!injector_proxy_enabled) {
-            cout << "Failed to fetch " << req.target() << endl;
+        if (!front_end->is_injector_proxying_enabled()) {
             return handle_bad_request( socket , req , "Not cached" , yield);
         }
 
@@ -287,6 +215,8 @@ void do_listen( asio::io_service& ios
 
     cout << "Client accepting on " << acceptor.local_endpoint() << endl;
 
+    auto front_end = make_shared<ClientFrontEnd>();
+
     for(;;)
     {
         tcp::socket socket(ios);
@@ -300,11 +230,13 @@ void do_listen( asio::io_service& ios
                        , [ s = move(socket)
                          , ipfs_cache_client
                          , injector
+                         , front_end
                          ](asio::yield_context yield) mutable {
-                             start_http_forwarding( move(s)
-                                                  , move(injector)
-                                                  , move(ipfs_cache_client)
-                                                  , yield);
+                             serve_request( move(s)
+                                          , move(injector)
+                                          , move(ipfs_cache_client)
+                                          , move(front_end)
+                                          , yield);
                          });
         }
     }
