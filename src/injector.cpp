@@ -102,7 +102,10 @@ void serve( tcp::socket socket
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "fetch_http_page");
 
-        if (ok_to_cache(res)) {
+        // XXX: Disabling caching logic for a moment because it seems that even
+        // if some pages contain "Cache-Control: no-cache", we still want/need
+        // to cache them.
+        { // if (ok_to_cache(res)) {
             stringstream ss;
             ss << res;
             auto key = req.target().to_string();
