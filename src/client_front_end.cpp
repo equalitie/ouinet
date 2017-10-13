@@ -39,11 +39,12 @@ struct ToggleInput {
 };
 
 ostream& operator<<(ostream& os, const ToggleInput& i) {
+    auto cur_value  = i.current_value ? "enabled" : "disabled";
     auto next_value = i.current_value ? "disable" : "enable";
 
     return os <<
           "<form method=\"get\">\n"
-          "    " << i.text << ": "
+          "    " << i.text << ": " << cur_value << "&nbsp;"
                     "<input type=\"submit\" "
                            "name=\""  << i.name << "\" "
                            "value=\"" << next_value << "\"/>\n"
@@ -98,7 +99,7 @@ void ClientFrontEnd::serve( asio::ip::tcp::socket& socket
     ss << ToggleInput{"IPFS Cache",     "ipfs_cache",     _ipfs_cache_enabled};
 
     if (cache_client) {
-        ss << "        Database:<br>\n";
+        ss << "        <h2>Database</h2>\n";
         ss << "        IPNS: " << cache_client->ipns() << "<br>\n";
         ss << "        IPFS: " << cache_client->ipfs() << "<br>\n";
         ss << "        <pre>\n";
