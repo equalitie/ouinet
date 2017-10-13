@@ -8,6 +8,7 @@
 
 #include <ipfs_cache/client.h>
 #include <ipfs_cache/error.h>
+#include <ipfs_cache/timer.h>
 
 #include "namespaces.h"
 #include "connect_to_host.h"
@@ -138,10 +139,21 @@ static void serve_request( tcp::socket socket
             return handle_bad_request(socket, req, "Bad request", yield);
         }
 
-        if (cache_client) {
+        if (cache_client && front_end->is_ipfs_cache_enabled()) {
             // Get the content from cache
             auto key = req.target();
+
+            //// When debugging, this should let us know when an ipfs_cache
+            //// query hasn't finished.
+            //ipfs_cache::Timer debug_timer(socket.get_io_service());
+            //debug_timer.start(chrono::minutes(5), [key] {
+            //        cerr << "TIMEOUT FOR: " << key << endl;
+            //        assert(0);
+            //    });
+
             string content = cache_client->get_content(key.to_string(), yield[ec]);
+
+            //debug_timer.stop();
 
             if (!ec) {
                 asio::async_write(socket, asio::buffer(content), yield[ec]);
@@ -156,7 +168,7 @@ static void serve_request( tcp::socket socket
         }
 
         if (!front_end->is_injector_proxying_enabled()) {
-            return handle_bad_request( socket , req , "Not cached" , yield);
+            return handle_bad_request(socket , req , "Not cached" , yield);
         }
 
         // Forward the request to the injector

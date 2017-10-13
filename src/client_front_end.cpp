@@ -6,6 +6,7 @@ using namespace ouinet;
 
 using tcp = asio::ip::tcp;
 using Request = http::request<http::string_body>;
+using string_view = beast::string_view;
 
 static void redirect_back( tcp::socket& socket
                          , const Request& req
@@ -13,22 +14,40 @@ static void redirect_back( tcp::socket& socket
 {
     http::response<http::string_body> res{http::status::ok, req.version()};
 
-    stringstream ss;
-    ss << "<!DOCTYPE html>\n"
-          "<html>\n"
-          "    <head>\n"
-          "        <meta http-equiv=\"refresh\" content=\"0; url=http://localhost\"/>\n"
-          "    </head>\n"
-          "</html>\n";
+    auto body =
+        "<!DOCTYPE html>\n"
+        "<html>\n"
+        "    <head>\n"
+        "        <meta http-equiv=\"refresh\" content=\"0; url=http://localhost\"/>\n"
+        "    </head>\n"
+        "</html>\n";
 
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
     res.set(http::field::content_type, "text/html");
     res.keep_alive(false);
-    res.body() = ss.str();
+    res.body() = body;
     res.prepare_payload();
 
     sys::error_code ec;
     http::async_write(socket, res, yield[ec]);
+}
+
+struct ToggleInput {
+    string_view text;
+    string_view name;
+    bool current_value;
+};
+
+ostream& operator<<(ostream& os, const ToggleInput& i) {
+    auto next_value = i.current_value ? "disable" : "enable";
+
+    return os <<
+          "<form method=\"get\">\n"
+          "    " << i.text << ": "
+                    "<input type=\"submit\" "
+                           "name=\""  << i.name << "\" "
+                           "value=\"" << next_value << "\"/>\n"
+          "</form>\n";
 }
 
 void ClientFrontEnd::serve( asio::ip::tcp::socket& socket
@@ -54,6 +73,12 @@ void ClientFrontEnd::serve( asio::ip::tcp::socket& socket
         else if (target.find("?auto_refresh=disable") != string::npos) {
             _auto_refresh_enabled = false;
         }
+        else if (target.find("?ipfs_cache=enable") != string::npos) {
+            _ipfs_cache_enabled = true;
+        }
+        else if (target.find("?ipfs_cache=disable") != string::npos) {
+            _ipfs_cache_enabled = false;
+        }
         redirect_back(socket, req, yield);
         return;
     }
@@ -66,17 +91,11 @@ void ClientFrontEnd::serve( asio::ip::tcp::socket& socket
                 "        <meta http-equiv=\"refresh\" content=\"1\"/>\n"
                 "    </head>\n";
     }
-    ss << "    <body>\n"
-          "        <form method=\"get\">\n"
-          "            Auto refresh: <input type=\"submit\" name=\"auto_refresh\" value=\""
-                       << (_auto_refresh_enabled ? "disable" : "enable")
-                       << "\"/>\n"
-          "        </form>\n"
-          "        <form method=\"get\">\n"
-          "            Injector proxy: <input type=\"submit\" name=\"injector_proxy\" value=\""
-                       << (_injector_proxying_enabled ? "disable" : "enable")
-                       << "\"/>\n"
-          "        </form>\n";
+    ss << "    <body>\n";
+
+    ss << ToggleInput{"Auto refresh",   "auto_refresh",   _auto_refresh_enabled};
+    ss << ToggleInput{"Injector proxy", "injector_proxy", _injector_proxying_enabled};
+    ss << ToggleInput{"IPFS Cache",     "ipfs_cache",     _ipfs_cache_enabled};
 
     if (cache_client) {
         ss << "        Database:<br>\n";

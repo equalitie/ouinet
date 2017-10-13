@@ -21,9 +21,15 @@ public:
         return _injector_proxying_enabled;
     }
 
+    bool is_ipfs_cache_enabled() const
+    {
+        return _ipfs_cache_enabled;
+    }
+
 private:
     bool _auto_refresh_enabled = true;
     bool _injector_proxying_enabled = true;
+    bool _ipfs_cache_enabled = true;
 };
 
 } // ouinet namespace
