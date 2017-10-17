@@ -46,7 +46,7 @@ $ make
 Start the injector and make note of the `<DB_IPNS>` string in the output:
 
 ```
-$ ./injector 0.0.0.0:8080
+$ ./injector 0.0.0.0 8080
 Swarm listening on /ip4/127.0.0.1/tcp/4001
 Swarm listening on /ip4/192.168.0.136/tcp/4001
 Swarm listening on /ip6/::1/tcp/4001
@@ -60,21 +60,22 @@ and pass it the injector's address and the `<DB_IPNS>` string from above:
 $ ./client 0.0.0.0:7070 0.0.0.0:8080 <DB_IPNS>
 ```
 
-Now set [modify the settings of your
+Now [modify the settings of your
 browser](http://www.wikihow.com/Enter-Proxy-Settings-in-Firefox) to make the
-client its proxy. Once done, you can enter `localhost:7070` into your browser
-and it should show you what database of sites the client is currently using.
+client its proxy, and make sure 'localhost' is not listed in the "No Proxy for"
+field. Once done, you can enter `localhost:7070` into your browser and it
+should show you what database of sites the client is currently using.
 
 It is likely that at first the database shall be `nill` which indicates that
 no database has been dowloaded from IPFS yet. This may take from a couple of
 seconds up to about three minutes. The page refreshes itself regurarly so
 one the client downloads the database, it should display automatically.
 
-In the mean time, notice also the small form at the top of page looking
-something like:
+In the mean time, notice also the small form at the top of the page looking
+something like this:
 
 ```
-Injector proxy: disable
+Injector proxy: enabled [disable
 ```
 
 This means that proxing to injector is currently `enabled`, which in turn
