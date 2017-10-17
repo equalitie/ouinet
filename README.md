@@ -90,10 +90,11 @@ IPNS DB: <DB_IPNS>
 ```
 
 Now - while injector is still running - start the client in another terminal
-and pass it the injector's address and the `<DB_IPNS>` string from above:
+and pass it the injector's address (`192.168.0.136` in the example above) and
+the `<DB_IPNS>` string from above:
 
 ```
-$ ./client 0.0.0.0:7070 0.0.0.0:8080 <DB_IPNS>
+$ ./client 0.0.0.0:7070 <INJECTOR_ADDRESS>:8080 <DB_IPNS>
 ```
 
 Now [modify the settings of your
