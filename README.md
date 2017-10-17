@@ -41,6 +41,42 @@ $ make
 
 ## Test
 
+### Important setup step if you're running the injector and the client on the same PC
+
+If you're running both applications on the same PC you need to set up
+one of them to use different port. In what follows, we'll do this change
+on the injector.
+
+First we need to create the default config file by running the injector
+and then closing it soon after:
+
+```
+$ ./injector 0.0.0.0 8080 # Then Ctrl-C after ~10 seconds
+```
+
+Then open injector's config file `injector_repo/config` and modify the part
+
+```
+  "Addresses": {
+    "Swarm": [
+      "/ip4/0.0.0.0/tcp/4001",
+      "/ip6/::/tcp/4001"
+    ],
+```
+
+By replacing the port `4001` with `0` as so:
+
+```
+  "Addresses": {
+    "Swarm": [
+      "/ip4/0.0.0.0/tcp/0",
+      "/ip6/::/tcp/0"
+    ],
+```
+
+This will ensure that the injector will always start to listen on a random
+available port.
+
 ### Browser
 
 Start the injector and make note of the `<DB_IPNS>` string in the output:
@@ -75,7 +111,7 @@ In the mean time, notice also the small form at the top of the page looking
 something like this:
 
 ```
-Injector proxy: enabled [disable
+Injector proxy: enabled [disable]
 ```
 
 This means that proxing to injector is currently `enabled`, which in turn
