@@ -300,8 +300,8 @@ int main(int argc, char* argv[])
         cerr <<
             "Usage: client <address>:<port> <injector-addr>:<injector-port> [<ipns>]\n"
             "Examples:\n"
-            "    client 0.0.0.0:8080 0.0.0.0:7070\n"
-            "    client 0.0.0.0:8080 0.0.0.0:7070 Qm...\n"
+            "    client 0.0.0.0:7070 127.0.0.1:8080\n"
+            "    client 0.0.0.0:7070 192.0.2.1:8080 Qm...\n"
             "\n"
             "If <ipns> argument isn't used, the content\n"
             "is fetched directly from the origin.\n";
