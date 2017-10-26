@@ -2,3 +2,6 @@
 	path = modules/ipfs-cache
 	url = https://github.com/equalitie/ipfs-cache.git
 	branch = asio
+[submodule "modules/gnunet-channels"]
+	path = modules/gnunet-channels
+	url = https://github.com/equalitie/gnunet-channels
