@@ -71,7 +71,7 @@ static bool ok_to_cache(const http::response_header<Fields>& hdr)
 
     return for_each(cc_i->value(), [] (auto kv) {
         auto key = kv.first;
-        auto val = kv.second;
+        //auto val = kv.second;
         // https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/http-caching
         if (key == "no-store")              return false;
         //if (key == "no-cache")              return false;
