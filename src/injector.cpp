@@ -72,9 +72,10 @@ static bool ok_to_cache(const http::response_header<Fields>& hdr)
     return for_each(cc_i->value(), [] (auto kv) {
         auto key = kv.first;
         auto val = kv.second;
-        if (key == "no-cache")              return false;
+        // https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/http-caching
         if (key == "no-store")              return false;
-        if (key == "max-age" && val == "0") return false;
+        //if (key == "no-cache")              return false;
+        //if (key == "max-age" && val == "0") return false;
         return true;
     });
 }
@@ -102,10 +103,7 @@ void serve( tcp::socket socket
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "fetch_http_page");
 
-        // XXX: Disabling caching logic for a moment because it seems that even
-        // if some pages contain "Cache-Control: no-cache", we still want/need
-        // to cache them.
-        { // if (ok_to_cache(res)) {
+        if (ok_to_cache(res)) {
             stringstream ss;
             ss << res;
             auto key = req.target().to_string();
