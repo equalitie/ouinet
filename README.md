@@ -51,7 +51,7 @@ First we need to create the default config file by running the injector
 and then closing it soon after:
 
 ```
-$ ./injector 0.0.0.0 8080 # Then Ctrl-C after ~10 seconds
+$ ./injector 0.0.0.0:8080 # Then Ctrl-C after ~10 seconds
 ```
 
 Then open injector's config file `injector_repo/config` and modify the part
@@ -82,7 +82,7 @@ available port.
 Start the injector and make note of the `<DB_IPNS>` string in the output:
 
 ```
-$ ./injector 0.0.0.0 8080
+$ ./injector 0.0.0.0:8080
 Swarm listening on /ip4/127.0.0.1/tcp/4001
 Swarm listening on /ip4/192.168.0.136/tcp/4001
 Swarm listening on /ip6/::1/tcp/4001

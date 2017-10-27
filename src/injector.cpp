@@ -176,18 +176,17 @@ void start( asio::io_service& ios
 int main(int argc, char* argv[])
 {
     // Check command line arguments.
-    if (argc != 3)
+    if (argc != 2)
     {
         cerr <<
-            "Usage: injector <address> <port>\n"
+            "Usage: injector <address>:<port>\n"
             "Example:\n"
-            "    injector 0.0.0.0 8080\n";
+            "    injector 0.0.0.0:8080\n";
 
         return EXIT_FAILURE;
     }
 
-    auto const address = asio::ip::address::from_string(argv[1]);
-    auto const port = static_cast<unsigned short>(atoi(argv[2]));
+    auto const injector_ep = util::parse_endpoint(argv[1]);
 
     // The io_service is required for all I/O
     asio::io_service ios;
@@ -195,7 +194,7 @@ int main(int argc, char* argv[])
     asio::spawn
         ( ios
         , [&](asio::yield_context yield) {
-              start(ios , tcp::endpoint{address, port}, yield);
+              start(ios , injector_ep, yield);
           });
 
     ios.run();
