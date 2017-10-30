@@ -25,6 +25,18 @@ externalproject_add(ipfs-cache
     INSTALL_COMMAND "")
 
 ################################################################################
+set(GNUNET_CHANNELS_SRC_DIR "${CMAKE_SOURCE_DIR}/modules/gnunet-channels")
+set(GNUNET_CHANNELS_ROOT    "${CMAKE_BINARY_DIR}/gnunet-channels/src/gnunet-channels-build")
+set(GNUNET_LIB_DIR          "${GNUNET_CHANNELS_ROOT}/gnunet/lib")
+
+externalproject_add(gnunet-channels
+    SOURCE_DIR ${GNUNET_CHANNELS_SRC_DIR}
+    BUILD_ALWAYS 1
+    DOWNLOAD_COMMAND ""
+    INSTALL_COMMAND ""
+    PREFIX "gnunet-channels")
+
+################################################################################
 project(client)
 
 find_package(Boost ${BOOST_VERSION} COMPONENTS coroutine system REQUIRED)
@@ -35,18 +47,24 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -Wall -ggdb ${SANITI
 include_directories(
     "${Boost_INCLUDE_DIR}"
     "${BEAST_DIR}/include"
-    "${IPFS_CACHE_SRC_DIR}/include")
+    "${IPFS_CACHE_SRC_DIR}/include"
+    "${GNUNET_CHANNELS_SRC_DIR}/include")
 
 file(GLOB sources
     "${CMAKE_SOURCE_DIR}/src/client.cpp"
     "${CMAKE_SOURCE_DIR}/src/client_front_end.cpp")
 
 add_executable(client ${sources})
-add_dependencies(client beast ipfs-cache)
+add_dependencies(client beast ipfs-cache gnunet-channels)
 
 target_link_libraries(client
     ${Boost_LIBRARIES}
-    ${IPFS_CACHE_BIN_DIR}/libipfs-cache.a)
+    ${IPFS_CACHE_BIN_DIR}/libipfs-cache.a
+    ${GNUNET_CHANNELS_ROOT}/libgnunet-channels.a
+    ${GNUNET_LIB_DIR}/libgnunethello.so
+    ${GNUNET_LIB_DIR}/libgnunettransport.so
+    ${GNUNET_LIB_DIR}/libgnunetutil.so
+    ${GNUNET_LIB_DIR}/libgnunetcadet.so)
 
 ################################################################################
 project(injector)
