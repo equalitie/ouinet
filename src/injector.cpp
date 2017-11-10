@@ -11,6 +11,7 @@
 
 #include "namespaces.h"
 #include "fetch_http_page.h"
+#include "generic_connection.h"
 
 using namespace std;
 using namespace ouinet;
@@ -82,7 +83,7 @@ static bool ok_to_cache(const http::response_header<Fields>& hdr)
 
 //------------------------------------------------------------------------------
 static
-void serve( tcp::socket socket
+void serve( shared_ptr<GenericConnection> con
           , shared_ptr<ipfs_cache::Injector> injector
           , asio::yield_context yield)
 {
@@ -92,13 +93,13 @@ void serve( tcp::socket socket
     for (;;) {
         Request req;
 
-        http::async_read(socket, buffer, req, yield[ec]);
+        http::async_read(*con, buffer, req, yield[ec]);
 
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "read");
 
         // Fetch the content from origin
-        auto res = fetch_http_page(socket.get_io_service(), req, ec, yield);
+        auto res = fetch_http_page(con->get_io_service(), req, ec, yield);
 
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "fetch_http_page");
@@ -116,11 +117,9 @@ void serve( tcp::socket socket
         }
 
         // Forward back the response
-        http::async_write(socket, res, yield[ec]);
+        http::async_write(*con, res, yield[ec]);
         if (ec) return fail(ec, "write");
     }
-
-    socket.shutdown(tcp::socket::shutdown_send, ec);
 }
 
 //------------------------------------------------------------------------------
@@ -166,7 +165,13 @@ void start( asio::io_service& ios
                        , [ s = move(socket)
                          , ipfs_cache_injector
                          ](asio::yield_context yield) mutable {
-                             serve(move(s), ipfs_cache_injector, yield);
+                             using Con = GenericConnectionImpl<tcp::socket>;
+
+                             auto con = make_shared<Con>(move(s));
+                             serve(con, ipfs_cache_injector, yield);
+
+                             sys::error_code ec;
+                             con->get_impl().shutdown(tcp::socket::shutdown_send, ec);
                          });
         }
     }
