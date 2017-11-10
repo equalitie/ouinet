@@ -9,9 +9,11 @@ namespace ipfs_cache { class Client; }
 
 namespace ouinet {
 
+class GenericConnection;
+
 class ClientFrontEnd {
 public:
-    void serve( asio::ip::tcp::socket&
+    void serve( GenericConnection&
               , const http::request<http::string_body>&
               , std::shared_ptr<ipfs_cache::Client>&
               , boost::asio::yield_context);

@@ -1,14 +1,15 @@
 #include "client_front_end.h"
+#include "generic_connection.h"
 #include <ipfs_cache/client.h>
+
 
 using namespace std;
 using namespace ouinet;
 
-using tcp = asio::ip::tcp;
 using Request = http::request<http::string_body>;
 using string_view = beast::string_view;
 
-static void redirect_back( tcp::socket& socket
+static void redirect_back( GenericConnection& con
                          , const Request& req
                          , asio::yield_context yield)
 {
@@ -29,7 +30,7 @@ static void redirect_back( tcp::socket& socket
     res.prepare_payload();
 
     sys::error_code ec;
-    http::async_write(socket, res, yield[ec]);
+    http::async_write(con, res, yield[ec]);
 }
 
 struct ToggleInput {
@@ -51,7 +52,7 @@ ostream& operator<<(ostream& os, const ToggleInput& i) {
           "</form>\n";
 }
 
-void ClientFrontEnd::serve( asio::ip::tcp::socket& socket
+void ClientFrontEnd::serve( GenericConnection& con
                           , const Request& req
                           , std::shared_ptr<ipfs_cache::Client>& cache_client
                           , asio::yield_context yield)
@@ -80,7 +81,7 @@ void ClientFrontEnd::serve( asio::ip::tcp::socket& socket
         else if (target.find("?ipfs_cache=disable") != string::npos) {
             _ipfs_cache_enabled = false;
         }
-        redirect_back(socket, req, yield);
+        redirect_back(con, req, yield);
         return;
     }
 
@@ -117,6 +118,6 @@ void ClientFrontEnd::serve( asio::ip::tcp::socket& socket
     res.prepare_payload();
 
     sys::error_code ec;
-    http::async_write(socket, res, yield[ec]);
+    http::async_write(con, res, yield[ec]);
 }
 

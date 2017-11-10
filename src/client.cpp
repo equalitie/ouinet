@@ -14,6 +14,7 @@
 #include "connect_to_host.h"
 #include "fetch_http_page.h"
 #include "client_front_end.h"
+#include "generic_connection.h"
 
 using namespace std;
 using namespace ouinet;
@@ -25,7 +26,7 @@ template<class T> using optional = boost::optional<T>;
 
 //------------------------------------------------------------------------------
 static
-void handle_bad_request( tcp::socket& socket
+void handle_bad_request( GenericConnection& con
                        , const Request& req
                        , string message
                        , asio::yield_context yield)
@@ -39,12 +40,12 @@ void handle_bad_request( tcp::socket& socket
     res.prepare_payload();
 
     sys::error_code ec;
-    http::async_write(socket, res, yield[ec]);
+    http::async_write(con, res, yield[ec]);
 }
 
 //------------------------------------------------------------------------------
 static
-void forward(tcp::socket& in, tcp::socket& out, asio::yield_context yield)
+void forward(GenericConnection& in, GenericConnection& out, asio::yield_context yield)
 {
     sys::error_code ec;
     array<uint8_t, 2048> data;
@@ -60,12 +61,12 @@ void forward(tcp::socket& in, tcp::socket& out, asio::yield_context yield)
 
 //------------------------------------------------------------------------------
 static
-void handle_connect_request( tcp::socket& client_s
+void handle_connect_request( const shared_ptr<GenericConnection>& client_s
                            , const Request& req
                            , asio::yield_context yield)
 {
     sys::error_code ec;
-    asio::io_service& ios = client_s.get_io_service();
+    asio::io_service& ios = client_s->get_io_service();
 
     tcp::socket origin_s = connect_to_host(ios, req["host"], ec, yield);
     if (ec) return fail(ec, "connect");
@@ -74,25 +75,28 @@ void handle_connect_request( tcp::socket& client_s
 
     // Send the client an OK message indicating that the tunnel
     // has been established. TODO: Reply with an error otherwise.
-    http::async_write(client_s, res, yield[ec]);
+    http::async_write(*client_s, res, yield[ec]);
     if (ec) return fail(ec, "sending connect response");
 
     struct State {
-        tcp::socket client_s, origin_s;
+        shared_ptr<GenericConnection> client_s, origin_s;
     };
 
-    auto s = make_shared<State>(State{move(client_s), move(origin_s)});
+    using TcpCon = GenericConnectionImpl<tcp::socket>;
+
+    auto s = make_shared<State>(State{ client_s
+                                     , make_shared<TcpCon>(move(origin_s))});
 
     asio::spawn
         ( yield
         , [s](asio::yield_context yield) {
-              forward(s->client_s, s->origin_s, yield);
+              forward(*s->client_s, *s->origin_s, yield);
           });
 
     asio::spawn
         ( yield
         , [s](asio::yield_context yield) {
-              forward(s->origin_s, s->client_s, yield);
+              forward(*s->origin_s, *s->client_s, yield);
           });
 }
 
@@ -109,7 +113,7 @@ static bool is_front_end_request(const Request& req)
 }
 
 //------------------------------------------------------------------------------
-static void serve_request( tcp::socket socket
+static void serve_request( shared_ptr<GenericConnection> con
                          , string injector
                          , shared_ptr<ipfs_cache::Client> cache_client
                          , shared_ptr<ClientFrontEnd> front_end
@@ -121,42 +125,32 @@ static void serve_request( tcp::socket socket
     for (;;) {
         Request req;
 
-        http::async_read(socket, buffer, req, yield[ec]);
+        http::async_read(*con, buffer, req, yield[ec]);
 
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "read");
 
         if (req.method() == http::verb::connect) {
-            return handle_connect_request(socket, req, yield);
+            return handle_connect_request(con, req, yield);
         }
 
         if (is_front_end_request(req)) {
-            return front_end->serve(socket, req, cache_client, yield);
+            return front_end->serve(*con, req, cache_client, yield);
         }
 
         // TODO: We're not handling HEAD requests correctly.
         if (req.method() != http::verb::get && req.method() != http::verb::head) {
-            return handle_bad_request(socket, req, "Bad request", yield);
+            return handle_bad_request(*con, req, "Bad request", yield);
         }
 
         if (cache_client && front_end->is_ipfs_cache_enabled()) {
             // Get the content from cache
             auto key = req.target();
 
-            //// When debugging, this should let us know when an ipfs_cache
-            //// query hasn't finished.
-            //ipfs_cache::Timer debug_timer(socket.get_io_service());
-            //debug_timer.start(chrono::minutes(5), [key] {
-            //        cerr << "TIMEOUT FOR: " << key << endl;
-            //        assert(0);
-            //    });
-
             string content = cache_client->get_content(key.to_string(), yield[ec]);
 
-            //debug_timer.stop();
-
             if (!ec) {
-                asio::async_write(socket, asio::buffer(content), yield[ec]);
+                asio::async_write(*con, asio::buffer(content), yield[ec]);
                 if (ec) return fail(ec, "async_write");
                 continue;
             }
@@ -168,20 +162,19 @@ static void serve_request( tcp::socket socket
         }
 
         if (!front_end->is_injector_proxying_enabled()) {
-            return handle_bad_request(socket , req , "Not cached" , yield);
+            return handle_bad_request(*con , req , "Not cached" , yield);
         }
 
         // Forward the request to the injector
-        auto res = fetch_http_page(socket.get_io_service(), injector, req, ec, yield);
+        auto res = fetch_http_page(con->get_io_service(), injector, req, ec, yield);
         if (ec) return fail(ec, "fetch_http_page");
 
         // Forward back the response
-        http::async_write(socket, res, yield[ec]);
+        http::async_write(*con, res, yield[ec]);
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "write");
     }
 
-    socket.shutdown(tcp::socket::shutdown_send, ec);
 }
 
 //------------------------------------------------------------------------------
@@ -245,11 +238,17 @@ void do_listen( asio::io_service& ios
                          , injector
                          , front_end
                          ](asio::yield_context yield) mutable {
-                             serve_request( move(s)
+                             using Con = GenericConnectionImpl<tcp::socket>;
+                             auto con = make_shared<Con>(move(s));
+
+                             serve_request( con
                                           , move(injector)
                                           , move(ipfs_cache_client)
                                           , move(front_end)
                                           , yield);
+
+                             sys::error_code ec;
+                             con->get_impl().shutdown(tcp::socket::shutdown_send, ec);
                          });
         }
     }
