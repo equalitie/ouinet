@@ -61,42 +61,39 @@ void forward(GenericConnection& in, GenericConnection& out, asio::yield_context 
 
 //------------------------------------------------------------------------------
 static
-void handle_connect_request( const shared_ptr<GenericConnection>& client_s
+void handle_connect_request( const shared_ptr<GenericConnection>& client_c
                            , const Request& req
                            , asio::yield_context yield)
 {
     sys::error_code ec;
-    asio::io_service& ios = client_s->get_io_service();
+    asio::io_service& ios = client_c->get_io_service();
 
-    tcp::socket origin_s = connect_to_host(ios, req["host"], ec, yield);
+    auto origin_c = connect_to_host(ios, req["host"], ec, yield);
     if (ec) return fail(ec, "connect");
 
     http::response<http::empty_body> res{http::status::ok, req.version()};
 
     // Send the client an OK message indicating that the tunnel
     // has been established. TODO: Reply with an error otherwise.
-    http::async_write(*client_s, res, yield[ec]);
+    http::async_write(*client_c, res, yield[ec]);
     if (ec) return fail(ec, "sending connect response");
 
     struct State {
-        shared_ptr<GenericConnection> client_s, origin_s;
+        shared_ptr<GenericConnection> client_c, origin_c;
     };
 
-    using TcpCon = GenericConnectionImpl<tcp::socket>;
-
-    auto s = make_shared<State>(State{ client_s
-                                     , make_shared<TcpCon>(move(origin_s))});
+    auto s = make_shared<State>(State{client_c, move(origin_c)});
 
     asio::spawn
         ( yield
         , [s](asio::yield_context yield) {
-              forward(*s->client_s, *s->origin_s, yield);
+              forward(*s->client_c, *s->origin_c, yield);
           });
 
     asio::spawn
         ( yield
         , [s](asio::yield_context yield) {
-              forward(*s->origin_s, *s->client_s, yield);
+              forward(*s->origin_c, *s->client_c, yield);
           });
 }
 

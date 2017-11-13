@@ -7,11 +7,12 @@
 #include "namespaces.h"
 #include "fail.h"
 #include "util.h"
+#include "generic_connection.h"
 
 namespace ouinet {
 
 inline
-asio::ip::tcp::socket
+std::unique_ptr<GenericConnection>
 connect_to_host( asio::io_service& ios
                , beast::string_view host_and_port
                , sys::error_code& ec
@@ -19,6 +20,7 @@ connect_to_host( asio::io_service& ios
 {
     using namespace std;
     using tcp = asio::ip::tcp;
+    using Con = GenericConnectionImpl<tcp::socket>;
 
     auto hp = util::split_host_port(host_and_port);
 
@@ -29,7 +31,7 @@ connect_to_host( asio::io_service& ios
 
     auto finish = [&socket] (auto ec, auto where) {
         fail(ec, where);
-        return move(socket);
+        return make_unique<Con>(move(socket));
     };
 
     tcp::resolver resolver{ios};
@@ -42,7 +44,7 @@ connect_to_host( asio::io_service& ios
     asio::async_connect(socket, lookup, yield[ec]);
     if (ec) return finish(ec, "connect");
 
-    return socket;
+    return make_unique<Con>(move(socket));
 }
 
 } // ouinet namespace

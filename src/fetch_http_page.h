@@ -17,8 +17,6 @@ fetch_http_page( asio::io_service& ios
                , sys::error_code& ec
                , asio::yield_context yield)
 {
-    using tcp = asio::ip::tcp;
-
     http::response<http::dynamic_body> res;
 
     auto finish = [&res](auto ec, auto what) {
@@ -26,25 +24,22 @@ fetch_http_page( asio::io_service& ios
         return res;
     };
 
-    tcp::socket socket = connect_to_host(ios, host, ec, yield);
+    auto con = connect_to_host(ios, host, ec, yield);
     if (ec) return finish(ec, "fetch_http_page::resolve");
 
     // Send the HTTP request to the remote host
-    http::async_write(socket, req, yield[ec]);
+    http::async_write(*con, req, yield[ec]);
     if (ec) return finish(ec, "fetch_http_page::write");
 
     beast::flat_buffer buffer;
 
     // Receive the HTTP response
-    http::async_read(socket, buffer, res, yield[ec]);
+    http::async_read(*con, buffer, res, yield[ec]);
 
     if (ec == asio::error::connection_reset) return res;
     if (ec == http::error::end_of_stream)    return res;
 
     if (ec) return finish(ec, "fetch_http_page::read");
-
-    // Gracefully close the socket
-    socket.shutdown(tcp::socket::shutdown_both, ec);
 
     // not_connected happens sometimes
     // so don't bother reporting it.
