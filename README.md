@@ -41,48 +41,12 @@ $ make
 
 ## Test
 
-### Important setup step if you're running the injector and the client on the same PC
-
-If you're running both applications on the same PC you need to set up
-one of them to use different port. In what follows, we'll do this change
-on the injector.
-
-First we need to create the default config file by running the injector
-and then closing it soon after:
-
-```
-$ ./injector 0.0.0.0:8080 # Then Ctrl-C after ~10 seconds
-```
-
-Then open injector's config file `injector_repo/config` and modify the part
-
-```
-  "Addresses": {
-    "Swarm": [
-      "/ip4/0.0.0.0/tcp/4001",
-      "/ip6/::/tcp/4001"
-    ],
-```
-
-By replacing the port `4001` with `0` as so:
-
-```
-  "Addresses": {
-    "Swarm": [
-      "/ip4/0.0.0.0/tcp/0",
-      "/ip6/::/tcp/0"
-    ],
-```
-
-This will ensure that the injector will always start to listen on a random
-available port.
-
 ### Browser
 
 Start the injector and make note of the `<DB_IPNS>` string in the output:
 
 ```
-$ ./injector 0.0.0.0:8080
+$ ./injector --repo ../repo/injector
 Swarm listening on /ip4/127.0.0.1/tcp/4001
 Swarm listening on /ip4/192.168.0.136/tcp/4001
 Swarm listening on /ip6/::1/tcp/4001
@@ -95,13 +59,13 @@ and pass it the injector's address (`192.168.0.136` in the example above,
 `<DB_IPNS>` string from above:
 
 ```
-$ ./client 0.0.0.0:7070 <INJECTOR_ADDRESS>:8080 <DB_IPNS>
+$ ./client --repo ../repo/client --injector-ipns <DB_IPNS>
 ```
 
 Now [modify the settings of your
 browser](http://www.wikihow.com/Enter-Proxy-Settings-in-Firefox) to make the
 client its proxy, and make sure 'localhost' is not listed in the "No Proxy for"
-field. Once done, you can enter `localhost:7070` into your browser and it
+field. Once done, you can enter `localhost` into your browser and it
 should show you what database of sites the client is currently using.
 
 It is likely that at first the database shall be `nill` which indicates that
