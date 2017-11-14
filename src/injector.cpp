@@ -5,7 +5,9 @@
 #include <boost/asio/connect.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/steady_timer.hpp>
+#include <boost/program_options.hpp>
 #include <iostream>
+#include <fstream>
 
 #include <ipfs_cache/injector.h>
 
@@ -19,6 +21,8 @@ using namespace ouinet;
 using tcp         = asio::ip::tcp;
 using string_view = beast::string_view;
 using Request     = http::request<http::dynamic_body>;
+
+static string REPO_ROOT;
 
 //------------------------------------------------------------------------------
 template<class Fields>
@@ -145,7 +149,7 @@ void start( asio::io_service& ios
     acceptor.listen(asio::socket_base::max_connections, ec);
     if (ec) return fail(ec, "listen");
 
-    auto ipfs_cache_injector = make_shared<ipfs_cache::Injector>(ios, "injector_repo");
+    auto ipfs_cache_injector = make_shared<ipfs_cache::Injector>(ios, REPO_ROOT + "/ipfs");
 
     std::cout << "IPNS DB: " << ipfs_cache_injector->ipns_id() << endl;
 
@@ -180,18 +184,48 @@ void start( asio::io_service& ios
 //------------------------------------------------------------------------------
 int main(int argc, char* argv[])
 {
-    // Check command line arguments.
-    if (argc != 2)
-    {
-        cerr <<
-            "Usage: injector <address>:<port>\n"
-            "Example:\n"
-            "    injector 0.0.0.0:8080\n";
+    namespace po = boost::program_options;
 
-        return EXIT_FAILURE;
+    po::options_description desc("\nOptions");
+
+    desc.add_options()
+        ("help", "Produce this help message")
+        ("repo", po::value<string>(), "Path to the repository root")
+        ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen")
+        ("listen-on-gnunet", po::value<string>(), "GNUnet port on which we'll listen")
+        ;
+
+    po::variables_map vm;
+    po::store(po::parse_command_line(argc, argv, desc), vm);
+    po::notify(vm);
+
+    if (vm.count("help")) {
+        cout << desc << endl;
+        return 0;
     }
 
-    auto const injector_ep = util::parse_endpoint(argv[1]);
+    if (!vm.count("repo")) {
+        cerr << "The 'repo' argument is missing" << endl;
+        cerr << desc << endl;
+        return 1;
+    }
+
+    REPO_ROOT = vm["repo"].as<string>();
+
+    ifstream ouinet_conf(REPO_ROOT + "/ouinet.conf");
+
+    po::store(po::parse_config_file(ouinet_conf, desc), vm);
+    po::notify(vm);
+
+    if (!vm.count("listen-on-tcp") && !vm.count("listen-on-gnunet")) {
+        cerr << "Either 'listen-on-tcp' or 'listen-on-gnunet' (or both)"
+             << " arguments must be specified" << endl;
+        cerr << desc << endl;
+        return 1;
+    }
+
+    auto const injector_ep
+        = util::parse_endpoint(vm["listen-on-tcp"].as<string>());
 
     // The io_service is required for all I/O
     asio::io_service ios;

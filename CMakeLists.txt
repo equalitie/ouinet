@@ -39,7 +39,7 @@ externalproject_add(gnunet-channels
 ################################################################################
 project(client)
 
-find_package(Boost ${BOOST_VERSION} COMPONENTS coroutine system REQUIRED)
+find_package(Boost ${BOOST_VERSION} COMPONENTS program_options coroutine system REQUIRED)
 find_package(Threads)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -Wall -ggdb ${SANITIZE}")
@@ -69,7 +69,7 @@ target_link_libraries(client
 ################################################################################
 project(injector)
 
-find_package(Boost ${BOOST_VERSION} COMPONENTS coroutine system REQUIRED)
+find_package(Boost ${BOOST_VERSION} COMPONENTS program_options coroutine system REQUIRED)
 find_package(Threads)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -Wall -ggdb ${SANITIZE}")

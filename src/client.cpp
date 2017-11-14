@@ -4,7 +4,9 @@
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/steady_timer.hpp>
+#include <boost/program_options.hpp>
 #include <iostream>
+#include <fstream>
 
 #include <ipfs_cache/client.h>
 #include <ipfs_cache/error.h>
@@ -22,7 +24,8 @@ using namespace ouinet;
 using tcp         = asio::ip::tcp;
 using string_view = beast::string_view;
 using Request     = http::request<http::string_body>;
-template<class T> using optional = boost::optional<T>;
+
+static string REPO_ROOT;
 
 //------------------------------------------------------------------------------
 static
@@ -213,7 +216,7 @@ void do_listen( asio::io_service& ios
     shared_ptr<ipfs_cache::Client> ipfs_cache_client;
 
     if (ipns.size()) {
-        ipfs_cache_client = make_shared<ipfs_cache::Client>(ios, ipns, "client_repo");
+        ipfs_cache_client = make_shared<ipfs_cache::Client>(ios, ipns, REPO_ROOT + "/ipfs");
     }
 
     cout << "Client accepting on " << acceptor.local_endpoint() << endl;
@@ -290,26 +293,64 @@ void bump_file_limit(rlim_t new_value)
 //------------------------------------------------------------------------------
 int main(int argc, char* argv[])
 {
-    // Check command line arguments.
-    if (argc != 3 && argc != 4)
-    {
-        cerr <<
-            "Usage: client <address>:<port> <injector-addr>:<injector-port> [<ipns>]\n"
-            "Examples:\n"
-            "    client 0.0.0.0:7070 127.0.0.1:8080\n"
-            "    client 0.0.0.0:7070 192.0.2.1:8080 Qm...\n"
-            "\n"
-            "If <ipns> argument isn't used, the content\n"
-            "is fetched directly from the origin.\n";
+    namespace po = boost::program_options;
 
-        return EXIT_FAILURE;
+    po::options_description desc("\nOptions");
+
+    desc.add_options()
+        ("help", "Produce this help message")
+        ("repo", po::value<string>(), "Path to the repository root")
+        ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen")
+        ("injector-tcp", po::value<string>(), "Injector's IP:PORT endpoint")
+        ("injector-ipns"
+         , po::value<string>()->default_value("")
+         , "IPNS of the injector's database")
+        ("open-file-limit"
+         , po::value<unsigned int>()
+         , "To increase the number of open files")
+        ;
+
+    po::variables_map vm;
+    po::store(po::parse_command_line(argc, argv, desc), vm);
+    po::notify(vm);
+
+    if (!vm.count("repo")) {
+        cerr << "The 'repo' argument is missing" << endl;
+        cerr << desc << endl;
+        return 1;
     }
 
-    bump_file_limit(2048);
+    REPO_ROOT = vm["repo"].as<string>();
 
-    auto const local_ep = util::parse_endpoint(argv[1]);
-    auto const injector = argv[2];
-    const string ipns   = (argc >= 4) ? argv[3] : "";
+    ifstream ouinet_conf(REPO_ROOT + "/ouinet.conf");
+
+    po::store(po::parse_config_file(ouinet_conf, desc), vm);
+    po::notify(vm);
+
+    if (vm.count("open-file-limit")) {
+        bump_file_limit(vm["open-file-limit"].as<unsigned int>());
+    }
+
+    if (!vm.count("listen-on-tcp")) {
+        cerr << "The parameter 'listen-on-tcp' is missing" << endl;
+        cerr << desc << endl;
+        return 1;
+    }
+
+    if (!vm.count("injector-tcp")) {
+        cerr << "The parameter 'injector-tcp' is missing" << endl;
+        cerr << desc << endl;
+        return 1;
+    }
+
+    auto const local_ep = util::parse_endpoint(vm["listen-on-tcp"].as<string>());
+    auto const injector = vm["injector-tcp"].as<string>();
+
+    string ipns;
+
+    if (vm.count("injector-ipns")) {
+        ipns = vm["injector-ipns"].as<string>();
+    }
 
     // The io_service is required for all I/O
     asio::io_service ios;
