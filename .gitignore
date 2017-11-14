@@ -1,2 +1,7 @@
 repo/client/ipfs/
+repo/client/gnunet/.config/
+repo/client/gnunet/.local/
+
 repo/injector/ipfs/
+repo/injector/gnunet/.config/
+repo/injector/gnunet/.local/
