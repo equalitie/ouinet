@@ -210,9 +210,7 @@ void listen_gnunet( asio::io_service& ios
 
     while (true) {
         gc::Channel channel(service);
-        cout << "Opening GNUnet port \"" << port_str << "\"" << endl;
         port.open(channel, port_str, yield[ec]);
-        cout << "Accepted GNUnet connection" << endl;
 
         if (ec) {
             cerr << "Failed to accept: " << ec.message() << endl;
@@ -220,10 +218,16 @@ void listen_gnunet( asio::io_service& ios
             return;
         }
 
-        // TODO: Spawn a new coroutine for this.
-        using Con = GenericConnectionImpl<gnunet_channels::Channel>;
-        auto con = make_shared<Con>(move(channel));
-        serve(con, ipfs_cache_injector, yield);
+        asio::spawn( ios
+                   , [ channel = move(channel)
+                     , &ipfs_cache_injector
+                     ](auto yield) mutable {
+                        using Con = GenericConnectionImpl<gnunet_channels::Channel>;
+
+                        serve( make_shared<Con>(move(channel))
+                             , ipfs_cache_injector
+                             , yield);
+                     });
     }
 }
 
