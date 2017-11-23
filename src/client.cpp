@@ -424,10 +424,6 @@ int main(int argc, char* argv[])
 
               sys::error_code ec;
 
-              // TODO: There seems to be a bug in gnunet_channels because doing
-              // this async_setup doesn't add work to ios, and so the
-              // io_service::run function exits before this action finishes.
-              asio::io_service::work w(ios);
               service.async_setup(yield[ec]);
 
               if (ec) {
