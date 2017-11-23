@@ -176,27 +176,33 @@ static void serve_request( shared_ptr<GenericConnection> con
     for (;;) {
         Request req;
 
+        // Read the (clear-text) HTTP request
         http::async_read(*con, buffer, req, yield[ec]);
 
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "read");
 
+        // Attempt connection to origin for CONNECT requests
         if (req.method() == http::verb::connect) {
             return handle_connect_request(*con, req, yield);
         }
 
+        // At this point we have access to the plain text HTTP proxy request.
+
+        // Serve requests targeted to the client front end
         if (is_front_end_request(req)) {
             return front_end->serve(*con, req, cache_client, yield);
         }
 
+        // Discard non-GET/HEAD requests
         // TODO: We're not handling HEAD requests correctly.
         if (req.method() != http::verb::get && req.method() != http::verb::head) {
             return handle_bad_request(*con, req, "Bad request", yield);
         }
 
+        // Get the content from cache (if available and enabled)
         if (cache_client && front_end->is_ipfs_cache_enabled()) {
-            // Get the content from cache
-            auto key = req.target();
+            auto key = req.target();  // use request absolute URI as key
 
             string content = cache_client->get_content(key.to_string(), yield[ec]);
 
@@ -212,6 +218,7 @@ static void serve_request( shared_ptr<GenericConnection> con
             }
         }
 
+        // Get the content from injector (if enabled) as a last resort
         if (!front_end->is_injector_proxying_enabled()) {
             return handle_bad_request(*con , req , "Not cached" , yield);
         }
