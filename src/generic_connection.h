@@ -1,5 +1,16 @@
 #pragma once
 
+#include "namespaces.h"
+
+#include <boost/system/error_code.hpp>
+#include <boost/asio/buffer.hpp>
+#include <boost/asio/io_service.hpp>
+#include <boost/asio/async_result.hpp>
+#include <boost/asio/spawn.hpp>
+#include <functional>
+#include <vector>
+#include <iostream>
+
 namespace ouinet {
 
 class GenericConnection {

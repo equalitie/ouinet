@@ -12,7 +12,7 @@ template<class RequestType>
 inline
 http::response<http::dynamic_body>
 fetch_http_page( asio::io_service& ios
-               , const std::string& host
+               , GenericConnection& con
                , RequestType req
                , sys::error_code& ec
                , asio::yield_context yield)
@@ -24,17 +24,14 @@ fetch_http_page( asio::io_service& ios
         return res;
     };
 
-    auto con = connect_to_host(ios, host, ec, yield);
-    if (ec) return finish(ec, "fetch_http_page::resolve");
-
     // Send the HTTP request to the remote host
-    http::async_write(*con, req, yield[ec]);
+    http::async_write(con, req, yield[ec]);
     if (ec) return finish(ec, "fetch_http_page::write");
 
     beast::flat_buffer buffer;
 
     // Receive the HTTP response
-    http::async_read(*con, buffer, res, yield[ec]);
+    http::async_read(con, buffer, res, yield[ec]);
 
     if (ec == asio::error::connection_reset) return res;
     if (ec == http::error::end_of_stream)    return res;
@@ -47,6 +44,25 @@ fetch_http_page( asio::io_service& ios
         return finish(ec, "fetch_http_page::shutdown");
 
     return res;
+}
+
+template<class RequestType>
+inline
+http::response<http::dynamic_body>
+fetch_http_page( asio::io_service& ios
+               , const std::string& host
+               , RequestType req
+               , sys::error_code& ec
+               , asio::yield_context yield)
+{
+    auto con = connect_to_host(ios, host, ec, yield);
+
+    if (ec) {
+        fail(ec, "fetch_http_page::connect");
+        return http::response<http::dynamic_body>();
+    }
+
+    return fetch_http_page(ios, *con, std::move(req), ec, yield);
 }
 
 template<class RequestType>

@@ -10,8 +10,12 @@
 #include <fstream>
 
 #include <ipfs_cache/injector.h>
+#include <gnunet_channels/channel.h>
+#include <gnunet_channels/cadet_port.h>
+#include <gnunet_channels/service.h>
 
 #include "namespaces.h"
+#include "util.h"
 #include "fetch_http_page.h"
 #include "generic_connection.h"
 
@@ -88,7 +92,7 @@ static bool ok_to_cache(const http::response_header<Fields>& hdr)
 //------------------------------------------------------------------------------
 static
 void serve( shared_ptr<GenericConnection> con
-          , shared_ptr<ipfs_cache::Injector> injector
+          , ipfs_cache::Injector& injector
           , asio::yield_context yield)
 {
     sys::error_code ec;
@@ -113,7 +117,8 @@ void serve( shared_ptr<GenericConnection> con
             ss << res;
             auto key = req.target().to_string();
 
-            injector->insert_content(key , ss.str(), [key] (sys::error_code ec, auto) {
+            injector.insert_content(key, ss.str(),
+                [key] (sys::error_code ec, auto) {
                     if (ec) {
                         cout << "!Insert failed: " << key << " " << ec.message() << endl;
                     }
@@ -127,9 +132,11 @@ void serve( shared_ptr<GenericConnection> con
 }
 
 //------------------------------------------------------------------------------
-void start( asio::io_service& ios
-          , tcp::endpoint endpoint
-          , asio::yield_context yield)
+static
+void listen_tcp( asio::io_service& ios
+               , tcp::endpoint endpoint
+               , ipfs_cache::Injector& ipfs_cache_injector
+               , asio::yield_context yield)
 {
     sys::error_code ec;
 
@@ -149,10 +156,6 @@ void start( asio::io_service& ios
     acceptor.listen(asio::socket_base::max_connections, ec);
     if (ec) return fail(ec, "listen");
 
-    auto ipfs_cache_injector = make_shared<ipfs_cache::Injector>(ios, REPO_ROOT + "/ipfs");
-
-    std::cout << "IPNS DB: " << ipfs_cache_injector->ipns_id() << endl;
-
     for(;;)
     {
         tcp::socket socket(ios);
@@ -167,7 +170,7 @@ void start( asio::io_service& ios
         else {
             asio::spawn( ios
                        , [ s = move(socket)
-                         , ipfs_cache_injector
+                         , &ipfs_cache_injector
                          ](asio::yield_context yield) mutable {
                              using Con = GenericConnectionImpl<tcp::socket>;
 
@@ -178,6 +181,49 @@ void start( asio::io_service& ios
                              con->get_impl().shutdown(tcp::socket::shutdown_send, ec);
                          });
         }
+    }
+}
+
+//------------------------------------------------------------------------------
+static
+void listen_gnunet( asio::io_service& ios
+                  , string port_str
+                  , ipfs_cache::Injector& ipfs_cache_injector
+                  , asio::yield_context yield)
+{
+    namespace gc = gnunet_channels;
+
+    gc::Service service(REPO_ROOT + "/gnunet/peer.conf", ios);
+
+    sys::error_code ec;
+
+    service.async_setup(yield[ec]);
+
+    if (ec) {
+        cerr << "Failed to setup GNUnet service: " << ec.message() << endl;
+        return;
+    }
+
+    cout << "GNUnet ID: " << service.identity() << endl;
+
+    gc::CadetPort port(service);
+
+    while (true) {
+        gc::Channel channel(service);
+        cout << "Opening GNUnet port \"" << port_str << "\"" << endl;
+        port.open(channel, port_str, yield[ec]);
+        cout << "Accepted GNUnet connection" << endl;
+
+        if (ec) {
+            cerr << "Failed to accept: " << ec.message() << endl;
+            // TODO: Don't return, sleep a little and then retry.
+            return;
+        }
+
+        // TODO: Spawn a new coroutine for this.
+        using Con = GenericConnectionImpl<gnunet_channels::Channel>;
+        auto con = make_shared<Con>(move(channel));
+        serve(con, ipfs_cache_injector, yield);
     }
 }
 
@@ -230,11 +276,26 @@ int main(int argc, char* argv[])
     // The io_service is required for all I/O
     asio::io_service ios;
 
-    asio::spawn
-        ( ios
-        , [&](asio::yield_context yield) {
-              start(ios , injector_ep, yield);
-          });
+    ipfs_cache::Injector ipfs_cache_injector(ios, REPO_ROOT + "/ipfs");
+
+    std::cout << "IPNS DB: " << ipfs_cache_injector.ipns_id() << endl;
+
+    if (vm.count("listen-on-tcp")) {
+        asio::spawn
+            ( ios
+            , [&](asio::yield_context yield) {
+                  listen_tcp(ios, injector_ep, ipfs_cache_injector, yield);
+              });
+    }
+
+    if (vm.count("listen-on-gnunet")) {
+        asio::spawn
+            ( ios
+            , [&](asio::yield_context yield) {
+                  string port = vm["listen-on-gnunet"].as<string>();
+                  listen_gnunet(ios, port, ipfs_cache_injector, yield);
+              });
+    }
 
     ios.run();
 

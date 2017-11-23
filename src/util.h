@@ -2,6 +2,8 @@
 
 #include "namespaces.h"
 
+#include <boost/asio/ip/tcp.hpp>
+
 namespace ouinet { namespace util {
 
 inline

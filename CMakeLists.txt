@@ -52,6 +52,7 @@ include_directories(
 
 file(GLOB sources
     "${CMAKE_SOURCE_DIR}/src/client.cpp"
+    "${CMAKE_SOURCE_DIR}/src/connect_to_host.cpp"
     "${CMAKE_SOURCE_DIR}/src/client_front_end.cpp")
 
 add_executable(client ${sources})
@@ -81,13 +82,19 @@ include_directories(
     "${IPFS_CACHE_SRC_DIR}/include")
 
 file(GLOB sources
-    "${CMAKE_SOURCE_DIR}/src/injector.cpp")
+    "${CMAKE_SOURCE_DIR}/src/injector.cpp"
+    "${CMAKE_SOURCE_DIR}/src/connect_to_host.cpp")
 
 add_executable(injector ${sources})
 add_dependencies(injector beast ipfs-cache)
 
 target_link_libraries(injector
     ${Boost_LIBRARIES}
-    ${IPFS_CACHE_BIN_DIR}/libipfs-cache.a)
+    ${IPFS_CACHE_BIN_DIR}/libipfs-cache.a
+    ${GNUNET_CHANNELS_ROOT}/libgnunet-channels.a
+    ${GNUNET_LIB_DIR}/libgnunethello.so
+    ${GNUNET_LIB_DIR}/libgnunettransport.so
+    ${GNUNET_LIB_DIR}/libgnunetutil.so
+    ${GNUNET_LIB_DIR}/libgnunetcadet.so)
 
 ################################################################################

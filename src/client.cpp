@@ -4,6 +4,7 @@
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/steady_timer.hpp>
+#include <boost/asio/connect.hpp>
 #include <boost/program_options.hpp>
 #include <iostream>
 #include <fstream>
@@ -12,11 +13,16 @@
 #include <ipfs_cache/error.h>
 #include <ipfs_cache/timer.h>
 
+#include <gnunet_channels/channel.h>
+#include <gnunet_channels/service.h>
+
 #include "namespaces.h"
 #include "connect_to_host.h"
 #include "fetch_http_page.h"
 #include "client_front_end.h"
 #include "generic_connection.h"
+#include "util.h"
+#include "result.h"
 
 using namespace std;
 using namespace ouinet;
@@ -113,10 +119,56 @@ static bool is_front_end_request(const Request& req)
 }
 
 //------------------------------------------------------------------------------
+static
+Result<unique_ptr<GenericConnection>>
+connect_to_injector( string endpoint
+                   , gnunet_channels::Service& service
+                   , asio::yield_context yield)
+{
+    auto as_tcp_endpoint = []( string_view host
+                             , string_view port
+                             ) -> Result<tcp::endpoint> {
+        sys::error_code ec;
+        auto ip = asio::ip::address::from_string(host.to_string(), ec);
+        if (ec) return ec;
+        return tcp::endpoint(ip, strtol(port.data(), 0, 10));
+    };
+
+    sys::error_code ec;
+
+    string_view host;
+    string_view port;
+
+    std::tie(host, port) = util::split_host_port(endpoint);
+
+    // TODO: Currently this code only recognizes as host an IP address (v4 or
+    // v6) and GNUnet's hash. Would be nice to support standard web hosts of
+    // type "foobar.com" as well.
+    if (auto ep = as_tcp_endpoint(host, port)) {
+        tcp::socket socket(service.get_io_service());
+        socket.async_connect(*ep, yield[ec]);
+
+        if (ec) return ec;
+        return make_unique<GenericConnectionImpl<tcp::socket>>(move(socket));
+    }
+    else {
+        // Interpret as gnunet endpoint
+        using Channel = gnunet_channels::Channel;
+
+        Channel ch(service);
+        ch.connect(host.to_string(), port.to_string(), yield[ec]);
+
+        if (ec) return ec;
+        return make_unique<GenericConnectionImpl<Channel>>(move(ch));
+    }
+}
+
+//------------------------------------------------------------------------------
 static void serve_request( shared_ptr<GenericConnection> con
                          , string injector
                          , shared_ptr<ipfs_cache::Client> cache_client
                          , shared_ptr<ClientFrontEnd> front_end
+                         , gnunet_channels::Service& gnunet_service
                          , asio::yield_context yield)
 {
     sys::error_code ec;
@@ -165,8 +217,12 @@ static void serve_request( shared_ptr<GenericConnection> con
             return handle_bad_request(*con , req , "Not cached" , yield);
         }
 
+        auto inj_con = connect_to_injector(injector, gnunet_service, yield);
+
+        if (inj_con.is_error()) return fail(inj_con.get_error(), "channel connect");
+
         // Forward the request to the injector
-        auto res = fetch_http_page(con->get_io_service(), injector, req, ec, yield);
+        auto res = fetch_http_page(con->get_io_service(), **inj_con, req, ec, yield);
         if (ec) return fail(ec, "fetch_http_page");
 
         // Forward back the response
@@ -174,7 +230,6 @@ static void serve_request( shared_ptr<GenericConnection> con
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "write");
     }
-
 }
 
 //------------------------------------------------------------------------------
@@ -190,6 +245,7 @@ static void async_sleep( asio::io_service& ios
 
 //------------------------------------------------------------------------------
 void do_listen( asio::io_service& ios
+              , gnunet_channels::Service& gnunet_service
               , tcp::endpoint local_endpoint
               , string injector
               , string ipns
@@ -237,6 +293,7 @@ void do_listen( asio::io_service& ios
                          , ipfs_cache_client
                          , injector
                          , front_end
+                         , &gnunet_service
                          ](asio::yield_context yield) mutable {
                              using Con = GenericConnectionImpl<tcp::socket>;
                              auto con = make_shared<Con>(move(s));
@@ -245,6 +302,7 @@ void do_listen( asio::io_service& ios
                                           , move(injector)
                                           , move(ipfs_cache_client)
                                           , move(front_end)
+                                          , gnunet_service
                                           , yield);
 
                              sys::error_code ec;
@@ -301,7 +359,9 @@ int main(int argc, char* argv[])
         ("help", "Produce this help message")
         ("repo", po::value<string>(), "Path to the repository root")
         ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen")
-        ("injector-tcp", po::value<string>(), "Injector's IP:PORT endpoint")
+        ("injector-ep"
+         , po::value<string>()
+         , "Injector's endpoint (either <IP>:<PORT> or <GNUnet's ID>:<GNUnet's PORT>")
         ("injector-ipns"
          , po::value<string>()->default_value("")
          , "IPNS of the injector's database")
@@ -337,14 +397,14 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    if (!vm.count("injector-tcp")) {
-        cerr << "The parameter 'injector-tcp' is missing" << endl;
+    if (!vm.count("injector-ep")) {
+        cerr << "The parameter 'injector-ep' is missing" << endl;
         cerr << desc << endl;
         return 1;
     }
 
     auto const local_ep = util::parse_endpoint(vm["listen-on-tcp"].as<string>());
-    auto const injector = vm["injector-tcp"].as<string>();
+    auto const injector = vm["injector-ep"].as<string>();
 
     string ipns;
 
@@ -358,7 +418,27 @@ int main(int argc, char* argv[])
     asio::spawn
         ( ios
         , [&](asio::yield_context yield) {
+              namespace gc = gnunet_channels;
+
+              gc::Service service(REPO_ROOT + "/gnunet/peer.conf", ios);
+
+              sys::error_code ec;
+
+              // TODO: There seems to be a bug in gnunet_channels because doing
+              // this async_setup doesn't add work to ios, and so the
+              // io_service::run function exits before this action finishes.
+              asio::io_service::work w(ios);
+              service.async_setup(yield[ec]);
+
+              if (ec) {
+                  cerr << "Failed to setup GNUnet service: " << ec.message() << endl;
+                  return;
+              }
+
+              cout << "GNUnet ID: " << service.identity() << endl;
+
               do_listen( ios
+                       , service
                        , local_ep
                        , injector
                        , ipns
