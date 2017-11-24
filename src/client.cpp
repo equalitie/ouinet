@@ -382,7 +382,7 @@ int main(int argc, char* argv[])
 
     REPO_ROOT = vm["repo"].as<string>();
 
-    ifstream ouinet_conf(REPO_ROOT + "/ouinet.conf");
+    ifstream ouinet_conf(REPO_ROOT + "/ouinet-client.conf");
 
     po::store(po::parse_config_file(ouinet_conf, desc), vm);
     po::notify(vm);
