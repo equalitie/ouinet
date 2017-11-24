@@ -178,8 +178,10 @@ static void serve_request( shared_ptr<GenericConnection> con
 
         // At this point we have access to the plain text HTTP proxy request.
         // Decide where to route this request to.
-        // TODO: Check routing error.
         auto req_mech = route_request(req, ec);
+        if (ec) {
+            return handle_bad_request(*con, req, ec.message(), yield);
+        }
 
         // Serve requests targeted to the client front end
         if (req_mech == request_mechanism::_front_end) {
