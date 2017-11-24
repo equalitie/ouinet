@@ -23,8 +23,14 @@ ouinet::route_request( const Request& req
 {
     ec = sys::error_code();
 
+    // Send front-end requests to the front end
     if (is_front_end_request(req)) {
         return request_mechanism::_front_end;
+    }
+
+    // Send non-safe HTTP method requests to the origin server
+    if (req.method() != http::verb::get && req.method() != http::verb::head) {
+        return request_mechanism::origin;
     }
 
     return request_mechanism::origin;

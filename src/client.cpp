@@ -186,10 +186,11 @@ static void serve_request( shared_ptr<GenericConnection> con
             return front_end->serve(*con, req, cache_client, yield);
         }
 
-        // Discard non-GET/HEAD requests
+        // Requests going to the origin are not supported
+        // (this includes non-safe HTTP requests like POST).
         // TODO: We're not handling HEAD requests correctly.
-        if (req.method() != http::verb::get && req.method() != http::verb::head) {
-            return handle_bad_request(*con, req, "Bad request", yield);
+        if (req_mech == request_mechanism::origin) {
+            return handle_bad_request(*con, req, "Unsupported request", yield);
         }
 
         // Get the content from cache (if available and enabled)
