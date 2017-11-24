@@ -53,7 +53,8 @@ include_directories(
 file(GLOB sources
     "${CMAKE_SOURCE_DIR}/src/client.cpp"
     "${CMAKE_SOURCE_DIR}/src/connect_to_host.cpp"
-    "${CMAKE_SOURCE_DIR}/src/client_front_end.cpp")
+    "${CMAKE_SOURCE_DIR}/src/client_front_end.cpp"
+    "${CMAKE_SOURCE_DIR}/src/request_routing.cpp")
 
 add_executable(client ${sources})
 add_dependencies(client beast ipfs-cache gnunet-channels)
