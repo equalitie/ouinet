@@ -41,9 +41,15 @@ $ make
 
 ## Test
 
-### Browser
+Before everything else, we need to start GNUnet services. To do that
+open a new terminal window and execute:
 
-Start the injector and make note of the `<DB_IPNS>` string in the output:
+```
+$ ./scripts/start-gnunet-services.sh
+```
+
+Leave that script running and start another terminal window where we'll start
+the injector:
 
 ```
 $ ./injector --repo ../repo/injector
@@ -51,27 +57,35 @@ Swarm listening on /ip4/127.0.0.1/tcp/4001
 Swarm listening on /ip4/192.168.0.136/tcp/4001
 Swarm listening on /ip6/::1/tcp/4001
 IPNS DB: <DB_IPNS>
+...
+GNUnet ID: <GNUNET_ID>
+...
 ```
 
-Now - while injector is still running - start the client in another terminal
-and pass it the injector's address (`192.168.0.136` in the example above,
-`127.0.0.1` if the client will run on the same PC as the injector) and the
-`<DB_IPNS>` string from above:
+Make note of the `<DB_IPNS>` and `<GNUNET_ID>` strings in the above output,
+we'll need to pass them as arguments to the client.
+
+While injector is still running, start the client in yet another terminal
+window and pass it the injector's `<GNUNET_ID>` and `<DB_IPNS>` strings from
+above:
 
 ```
-$ ./client --repo ../repo/client --injector-ipns <DB_IPNS>
+$ ./client --repo ../repo/client \
+           --injector-ipns <DB_IPNS> \
+           --injector-ep <GNUNET_ID>:injector-main-port
 ```
 
 Now [modify the settings of your
 browser](http://www.wikihow.com/Enter-Proxy-Settings-in-Firefox) to make the
-client its proxy, and make sure 'localhost' is not listed in the "No Proxy for"
-field. Once done, you can enter `localhost` into your browser and it
-should show you what database of sites the client is currently using.
+client - which runs on port localhost:7070 - it's proxy. Also **make sure
+'localhost' is not listed in the `"No Proxy for"` field**. Once done, you can
+enter `localhost` into your browser and it should show you what database of
+sites the client is currently using.
 
 It is likely that at first the database shall be `nill` which indicates that
 no database has been dowloaded from IPFS yet. This may take from a couple of
 seconds up to about three minutes. The page refreshes itself regurarly so
-one the client downloads the database, it should display automatically.
+once the client downloads the database, it should display automatically.
 
 In the mean time, notice also the small form at the top of the page looking
 something like this:
@@ -99,10 +113,6 @@ on client's frontend.
 At that point one can disable the proxying through injector, clear
 browser's cached data and try to point the browser to the same non secured
 HTTP page.
-
-### Unit
-
-Currently only test to see if forwarding to injector works
 
 ```
 $ ./test.sh <BUILD DIR>/client
