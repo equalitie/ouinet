@@ -20,6 +20,6 @@ enum request_mechanism {
 };
 
 enum request_mechanism
-route_request(http::request<http::string_body>, sys::error_code&);
+route_request(const http::request<http::string_body>&, sys::error_code&);
 
 } // ouinet namespace

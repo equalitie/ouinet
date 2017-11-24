@@ -2,7 +2,7 @@
 
 using namespace ouinet;
 
-enum request_mechanism route_request( http::request<http::string_body> req
+enum request_mechanism route_request( const http::request<http::string_body>& req
                                     , sys::error_code& ec)
 {
     ec = sys::error_code();
