@@ -24,6 +24,7 @@
 #include "util.h"
 #include "result.h"
 #include "blocker.h"
+#include "request_routing.h"
 
 using namespace std;
 using namespace ouinet;
@@ -106,18 +107,6 @@ void handle_connect_request( GenericConnection& client_c
 }
 
 //------------------------------------------------------------------------------
-static bool is_front_end_request(const Request& req)
-{
-    auto host = req["Host"].to_string();
-
-    if (host.substr(0, sizeof("localhost")) != "localhost") {
-        return false;
-    }
-
-    return true;
-}
-
-//------------------------------------------------------------------------------
 static
 Result<unique_ptr<GenericConnection>>
 connect_to_injector( string endpoint
@@ -188,9 +177,12 @@ static void serve_request( shared_ptr<GenericConnection> con
         }
 
         // At this point we have access to the plain text HTTP proxy request.
+        // Decide where to route this request to.
+        // TODO: Check routing error.
+        auto req_mech = route_request(req, ec);
 
         // Serve requests targeted to the client front end
-        if (is_front_end_request(req)) {
+        if (req_mech == request_mechanism::_front_end) {
             return front_end->serve(*con, req, cache_client, yield);
         }
 
