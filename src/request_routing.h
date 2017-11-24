@@ -19,6 +19,25 @@ enum request_mechanism {
     _front_end,  // handle the request internally
 };
 
+// These hard-wired access mechanisms are attempted in order for all normal requests.
+const enum request_mechanism default_request_mechanisms[] = {
+    request_mechanism::cache,
+    request_mechanism::injector,
+};
+
+class RoutingContext {
+    friend
+    enum request_mechanism
+    route_request(const http::request<http::string_body>&, sys::error_code&);
+
+private:
+    const enum request_mechanism* next_req_mech;
+    bool more_req_mechs() const { return next_req_mech != std::end(default_request_mechanisms); }
+
+public:
+    RoutingContext() : next_req_mech(std::begin(default_request_mechanisms)) { }
+};
+
 // Decide which access mechanism to use for the given request.
 enum request_mechanism
 route_request(const http::request<http::string_body>&, sys::error_code&);
