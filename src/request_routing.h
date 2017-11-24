@@ -19,6 +19,7 @@ enum request_mechanism {
     _front_end,  // handle the request internally
 };
 
+// Decide which access mechanism to use for the given request.
 enum request_mechanism
 route_request(const http::request<http::string_body>&, sys::error_code&);
 
