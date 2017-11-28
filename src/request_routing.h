@@ -28,7 +28,7 @@ const enum request_mechanism default_request_mechanisms[] = {
 class RoutingContext {
     friend
     enum request_mechanism
-    route_request(const http::request<http::string_body>&, sys::error_code&);
+    route_request(const http::request<http::string_body>&, RoutingContext&, sys::error_code&);
 
 private:
     const enum request_mechanism* next_req_mech;
@@ -40,6 +40,6 @@ public:
 
 // Decide which access mechanism to use for the given request.
 enum request_mechanism
-route_request(const http::request<http::string_body>&, sys::error_code&);
+route_request(const http::request<http::string_body>&, RoutingContext&, sys::error_code&);
 
 } // ouinet namespace
