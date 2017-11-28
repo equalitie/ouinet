@@ -19,14 +19,12 @@ static bool is_front_end_request(const Request& req)
 
 //------------------------------------------------------------------------------
 enum request_mechanism
-ouinet::route_request( const Request& req
-                     , RoutingContext& rctx
-                     , sys::error_code& ec)
+RequestRouter::get_next_mechanism(sys::error_code& ec)
 {
     ec = sys::error_code();
 
     // Check whether possible routing mechanisms have been exhausted.
-    if (!rctx.more_req_mechs()) {
+    if (req_mech == std::end(default_request_mechanisms)) {
         ec = error::make_error_code(error::no_more_routes);
         return request_mechanism::_unknown;
     }
@@ -42,5 +40,5 @@ ouinet::route_request( const Request& req
     }
 
     // Use the following configured mechanism and prepare for the next one.
-    return *(rctx.req_mech++);
+    return *(req_mech++);
 }

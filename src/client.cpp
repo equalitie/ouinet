@@ -165,7 +165,7 @@ static void serve_request( shared_ptr<GenericConnection> con
     // Process the different requests that may come over the same connection.
     for (;;) {
         Request req;
-        RoutingContext rctx;
+        RequestRouter router(req);
 
         // Read the (clear-text) HTTP request
         http::async_read(*con, buffer, req, yield[ec]);
@@ -180,7 +180,7 @@ static void serve_request( shared_ptr<GenericConnection> con
 
         // At this point we have access to the plain text HTTP proxy request.
         // Decide where to route this request to.
-        auto req_mech = route_request(req, rctx, ec);
+        auto req_mech = router.get_next_mechanism(ec);
         if (ec) {
             return handle_bad_request(*con, req, ec.message(), yield);
         }

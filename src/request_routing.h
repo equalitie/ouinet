@@ -25,21 +25,17 @@ const enum request_mechanism default_request_mechanisms[] = {
     request_mechanism::injector,
 };
 
-class RoutingContext {
-    friend
-    enum request_mechanism
-    route_request(const http::request<http::string_body>&, RoutingContext&, sys::error_code&);
+class RequestRouter {
+    private:
+        const http::request<http::string_body> req;
+        const enum request_mechanism* req_mech;
 
-private:
-    const enum request_mechanism* req_mech;
-    bool more_req_mechs() const { return req_mech != std::end(default_request_mechanisms); }
+    public:
+        RequestRouter(const http::request<http::string_body>& r) : req(r), req_mech(std::begin(default_request_mechanisms)) { }
 
-public:
-    RoutingContext() : req_mech(std::begin(default_request_mechanisms)) { }
+        // Decide which access mechanism to use for the given request,
+        // given previous attempts.
+        enum request_mechanism get_next_mechanism(sys::error_code&);
 };
-
-// Decide which access mechanism to use for the given request.
-enum request_mechanism
-route_request(const http::request<http::string_body>&, RoutingContext&, sys::error_code&);
 
 } // ouinet namespace
