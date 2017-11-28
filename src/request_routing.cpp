@@ -41,6 +41,6 @@ ouinet::route_request( const Request& req
         return request_mechanism::origin;
     }
 
-    // Use the following configured mechanism and proceed to the next one.
-    return *(rctx.next_req_mech++);
+    // Use the following configured mechanism and prepare for the next one.
+    return *(rctx.req_mech++);
 }

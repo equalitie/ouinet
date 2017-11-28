@@ -31,11 +31,11 @@ class RoutingContext {
     route_request(const http::request<http::string_body>&, RoutingContext&, sys::error_code&);
 
 private:
-    const enum request_mechanism* next_req_mech;
-    bool more_req_mechs() const { return next_req_mech != std::end(default_request_mechanisms); }
+    const enum request_mechanism* req_mech;
+    bool more_req_mechs() const { return req_mech != std::end(default_request_mechanisms); }
 
 public:
-    RoutingContext() : next_req_mech(std::begin(default_request_mechanisms)) { }
+    RoutingContext() : req_mech(std::begin(default_request_mechanisms)) { }
 };
 
 // Decide which access mechanism to use for the given request.
