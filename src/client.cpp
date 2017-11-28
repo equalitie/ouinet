@@ -162,6 +162,7 @@ static void serve_request( shared_ptr<GenericConnection> con
     sys::error_code ec;
     beast::flat_buffer buffer;
 
+    // Process the different requests that may come over the same connection.
     for (;;) {
         Request req;
         RoutingContext rctx;
