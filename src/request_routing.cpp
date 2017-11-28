@@ -1,4 +1,5 @@
 #include "request_routing.h"
+#include "error.h"
 
 using namespace ouinet;
 
@@ -23,6 +24,12 @@ ouinet::route_request( const Request& req
                      , sys::error_code& ec)
 {
     ec = sys::error_code();
+
+    // Check whether possible routing mechanisms have been exhausted.
+    if (!rctx.more_req_mechs()) {
+        ec = error::make_error_code(error::no_more_routes);
+        return request_mechanism::_unknown;
+    }
 
     // Send front-end requests to the front end
     if (is_front_end_request(req)) {
