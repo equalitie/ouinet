@@ -185,6 +185,8 @@ static void serve_request( shared_ptr<GenericConnection> con
             if (ec) {
                 return handle_bad_request(*con, req, ec.message(), yield);
             }
+            // cout << "Attempt " << req.method_string() << ' ' << req.target()
+            //      << " via mechanism #" << req_mech << endl;
 
             // Serve requests targeted to the client front end
             if (req_mech == request_mechanism::_front_end) {
