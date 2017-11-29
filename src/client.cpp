@@ -165,7 +165,6 @@ static void serve_request( shared_ptr<GenericConnection> con
     // Process the different requests that may come over the same connection.
     for (;;) {  // continue for next request; break for no more requests
         Request req;
-        unique_ptr<RequestRouter> router = make_unique<DefaultRequestRouter>(req);
 
         // Read the (clear-text) HTTP request
         http::async_read(*con, buffer, req, yield[ec]);
@@ -180,6 +179,7 @@ static void serve_request( shared_ptr<GenericConnection> con
 
         // At this point we have access to the plain text HTTP proxy request.
         // Attempt the different mechanisms provided by the routing component.
+        unique_ptr<RequestRouter> router = make_unique<DefaultRequestRouter>(req);
         for (;;) {  // continue for next mechanism; break for next request
             auto req_mech = router->get_next_mechanism(ec);
             if (ec) {
