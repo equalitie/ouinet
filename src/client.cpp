@@ -23,6 +23,7 @@
 #include "generic_connection.h"
 #include "util.h"
 #include "result.h"
+#include "blocker.h"
 
 using namespace std;
 using namespace ouinet;
@@ -70,12 +71,12 @@ void forward(GenericConnection& in, GenericConnection& out, asio::yield_context 
 
 //------------------------------------------------------------------------------
 static
-void handle_connect_request( const shared_ptr<GenericConnection>& client_c
+void handle_connect_request( GenericConnection& client_c
                            , const Request& req
                            , asio::yield_context yield)
 {
     sys::error_code ec;
-    asio::io_service& ios = client_c->get_io_service();
+    asio::io_service& ios = client_c.get_io_service();
 
     auto origin_c = connect_to_host(ios, req["host"], ec, yield);
     if (ec) return fail(ec, "connect");
@@ -84,26 +85,24 @@ void handle_connect_request( const shared_ptr<GenericConnection>& client_c
 
     // Send the client an OK message indicating that the tunnel
     // has been established. TODO: Reply with an error otherwise.
-    http::async_write(*client_c, res, yield[ec]);
+    http::async_write(client_c, res, yield[ec]);
     if (ec) return fail(ec, "sending connect response");
 
-    struct State {
-        shared_ptr<GenericConnection> client_c, origin_c;
-    };
-
-    auto s = make_shared<State>(State{client_c, move(origin_c)});
+    Blocker blocker(ios);
 
     asio::spawn
         ( yield
-        , [s](asio::yield_context yield) {
-              forward(*s->client_c, *s->origin_c, yield);
+        , [&, b = blocker.make_block()](asio::yield_context yield) {
+              forward(client_c, *origin_c, yield);
           });
 
     asio::spawn
         ( yield
-        , [s](asio::yield_context yield) {
-              forward(*s->origin_c, *s->client_c, yield);
+        , [&, b = blocker.make_block()](asio::yield_context yield) {
+              forward(*origin_c, client_c, yield);
           });
+
+    blocker.wait(yield);
 }
 
 //------------------------------------------------------------------------------
@@ -183,7 +182,7 @@ static void serve_request( shared_ptr<GenericConnection> con
         if (ec) return fail(ec, "read");
 
         if (req.method() == http::verb::connect) {
-            return handle_connect_request(con, req, yield);
+            return handle_connect_request(*con, req, yield);
         }
 
         if (is_front_end_request(req)) {
