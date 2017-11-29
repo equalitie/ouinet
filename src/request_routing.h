@@ -31,7 +31,8 @@ class RequestRouter {
         const enum request_mechanism* req_mech;
 
     public:
-        RequestRouter(const http::request<http::string_body>& r) : req(r), req_mech(std::begin(default_request_mechanisms)) { }
+        RequestRouter(const http::request<http::string_body>& r)
+            : req(r), req_mech(std::begin(default_request_mechanisms)) { }
 
         // Decide which access mechanism to use for the given request,
         // given previous attempts.
