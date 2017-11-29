@@ -163,7 +163,7 @@ static void serve_request( shared_ptr<GenericConnection> con
     beast::flat_buffer buffer;
 
     // Process the different requests that may come over the same connection.
-    for (;;) {
+    for (;;) {  // continue for next request; break for no more requests
         Request req;
         RequestRouter router(req);
 
@@ -179,59 +179,66 @@ static void serve_request( shared_ptr<GenericConnection> con
         }
 
         // At this point we have access to the plain text HTTP proxy request.
-        // Decide where to route this request to.
-        auto req_mech = router.get_next_mechanism(ec);
-        if (ec) {
-            return handle_bad_request(*con, req, ec.message(), yield);
-        }
+        // Attempt the different mechanisms provided by the routing component.
+        for (;;) {  // continue for next mechanism; break for next request
+            auto req_mech = router.get_next_mechanism(ec);
+            if (ec) {
+                return handle_bad_request(*con, req, ec.message(), yield);
+            }
 
-        // Serve requests targeted to the client front end
-        if (req_mech == request_mechanism::_front_end) {
-            return front_end->serve(*con, req, cache_client, yield);
-        }
+            // Serve requests targeted to the client front end
+            if (req_mech == request_mechanism::_front_end) {
+                return front_end->serve(*con, req, cache_client, yield);
+            }
 
-        // Requests going to the origin are not supported
-        // (this includes non-safe HTTP requests like POST).
-        // TODO: We're not handling HEAD requests correctly.
-        if (req_mech == request_mechanism::origin) {
-            return handle_bad_request(*con, req, "Unsupported request", yield);
-        }
+            // Get the content from cache (if available and enabled)
+            if (req_mech == request_mechanism::cache) {
+                if (!cache_client || !front_end->is_ipfs_cache_enabled()) {
+                    continue;  // next mechanism
+                }
 
-        // Get the content from cache (if available and enabled)
-        if (cache_client && front_end->is_ipfs_cache_enabled()) {
-            auto key = req.target();  // use request absolute URI as key
+                auto key = req.target();  // use request absolute URI as key
 
-            string content = cache_client->get_content(key.to_string(), yield[ec]);
+                string content = cache_client->get_content(key.to_string(), yield[ec]);
 
-            if (!ec) {
+                if (ec) {
+                    if (ec != ipfs_cache::error::key_not_found) {
+                        cout << "Failed to fetch from DB " << ec.message()
+                             << " " << req.target() << endl;
+                    }
+                    continue;  // next mechanism
+                }
+
                 asio::async_write(*con, asio::buffer(content), yield[ec]);
                 if (ec) return fail(ec, "async_write");
-                continue;
+                break;  // next request
             }
 
-            if (ec != ipfs_cache::error::key_not_found) {
-                cout << "Failed to fetch from DB " << ec.message()
-                     << " " << req.target() << endl;
+            // Get the content from injector (if enabled)
+            if (req_mech == request_mechanism::injector) {
+                if (!front_end->is_injector_proxying_enabled()) {
+                    continue;  // next mechanism
+                }
+
+                auto inj_con = connect_to_injector(injector, gnunet_service, yield);
+
+                if (inj_con.is_error()) return fail(inj_con.get_error(), "channel connect");
+
+                // Forward the request to the injector
+                auto res = fetch_http_page(con->get_io_service(), **inj_con, req, ec, yield);
+                if (ec) return fail(ec, "fetch_http_page");
+
+                // Forward back the response
+                http::async_write(*con, res, yield[ec]);
+                if (ec && ec != http::error::end_of_stream) return fail(ec, "write");
+                break;  // next request
             }
+
+            // Requests going to the origin are not supported
+            // (this includes non-safe HTTP requests like POST).
+            // TODO: We're not handling HEAD requests correctly.
+            return handle_bad_request(*con, req, "Unsupported request mechanism", yield);
         }
-
-        // Get the content from injector (if enabled) as a last resort
-        if (!front_end->is_injector_proxying_enabled()) {
-            return handle_bad_request(*con , req , "Not cached" , yield);
-        }
-
-        auto inj_con = connect_to_injector(injector, gnunet_service, yield);
-
-        if (inj_con.is_error()) return fail(inj_con.get_error(), "channel connect");
-
-        // Forward the request to the injector
-        auto res = fetch_http_page(con->get_io_service(), **inj_con, req, ec, yield);
-        if (ec) return fail(ec, "fetch_http_page");
-
-        // Forward back the response
-        http::async_write(*con, res, yield[ec]);
-        if (ec == http::error::end_of_stream) break;
-        if (ec) return fail(ec, "write");
     }
 }
 
