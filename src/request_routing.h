@@ -19,24 +19,31 @@ enum request_mechanism {
     _front_end,  // handle the request internally
 };
 
+class RequestRouter {
+    public:
+        virtual ~RequestRouter() { }
+
+        // Decide which access mechanism to use for the given request,
+        // given previous attempts.
+        virtual enum request_mechanism get_next_mechanism(sys::error_code&) = 0;
+};
+
 // These hard-wired access mechanisms are attempted in order for all normal requests.
 const enum request_mechanism default_request_mechanisms[] = {
     request_mechanism::cache,
     request_mechanism::injector,
 };
 
-class RequestRouter {
+class DefaultRequestRouter : public RequestRouter {
     private:
         const http::request<http::string_body> req;
         const enum request_mechanism* req_mech;
 
     public:
-        RequestRouter(const http::request<http::string_body>& r)
+        DefaultRequestRouter(const http::request<http::string_body>& r)
             : req(r), req_mech(std::begin(default_request_mechanisms)) { }
 
-        // Decide which access mechanism to use for the given request,
-        // given previous attempts.
-        enum request_mechanism get_next_mechanism(sys::error_code&);
+        enum request_mechanism get_next_mechanism(sys::error_code&) override;
 };
 
 } // ouinet namespace

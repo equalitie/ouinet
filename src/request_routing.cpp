@@ -19,7 +19,7 @@ static bool is_front_end_request(const Request& req)
 
 //------------------------------------------------------------------------------
 enum request_mechanism
-RequestRouter::get_next_mechanism(sys::error_code& ec)
+DefaultRequestRouter::get_next_mechanism(sys::error_code& ec)
 {
     ec = sys::error_code();
 
