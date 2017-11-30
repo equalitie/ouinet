@@ -181,7 +181,7 @@ static void serve_request( shared_ptr<GenericConnection> con
 
         // At this point we have access to the plain text HTTP proxy request.
         // Attempt the different mechanisms provided by the routing component.
-        unique_ptr<RequestRouter> router = make_unique<DefaultRequestRouter>(req, req_mechs);
+        unique_ptr<RequestRouter> router = make_unique<SimpleRequestRouter>(req, req_mechs);
         for (;;) {  // continue for next mechanism; break for next request
             auto req_mech = router->get_next_mechanism(ec);
             if (ec) {
