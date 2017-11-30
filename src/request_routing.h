@@ -44,7 +44,7 @@ class SimpleRequestRouter : public RequestRouter {
 
     public:
         SimpleRequestRouter( const http::request<http::string_body>& r
-                            , const std::vector<enum request_mechanism>& rmechs)
+                           , const std::vector<enum request_mechanism>& rmechs)
             : req(r), req_mechs(rmechs), req_mech(std::begin(req_mechs)) { }
 
         enum request_mechanism get_next_mechanism(sys::error_code&) override;
