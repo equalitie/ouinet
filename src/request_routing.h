@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 #include <boost/beast/http.hpp>
 
 #include "namespaces.h"
@@ -28,20 +30,16 @@ class RequestRouter {
         virtual enum request_mechanism get_next_mechanism(sys::error_code&) = 0;
 };
 
-// These hard-wired access mechanisms are attempted in order for all normal requests.
-const enum request_mechanism default_request_mechanisms[] = {
-    request_mechanism::cache,
-    request_mechanism::injector,
-};
-
 class DefaultRequestRouter : public RequestRouter {
     private:
         const http::request<http::string_body> req;
-        const enum request_mechanism* req_mech;
+        const std::vector<enum request_mechanism>& req_mechs;
+        std::vector<enum request_mechanism>::const_iterator req_mech;
 
     public:
-        DefaultRequestRouter(const http::request<http::string_body>& r)
-            : req(r), req_mech(std::begin(default_request_mechanisms)) { }
+        DefaultRequestRouter( const http::request<http::string_body>& r
+                            , const std::vector<enum request_mechanism>& rmechs)
+            : req(r), req_mechs(rmechs), req_mech(std::begin(req_mechs)) { }
 
         enum request_mechanism get_next_mechanism(sys::error_code&) override;
 };

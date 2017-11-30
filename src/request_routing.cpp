@@ -24,7 +24,7 @@ DefaultRequestRouter::get_next_mechanism(sys::error_code& ec)
     ec = sys::error_code();
 
     // Check whether possible routing mechanisms have been exhausted.
-    if (req_mech == std::end(default_request_mechanisms)) {
+    if (req_mech == std::end(req_mechs)) {
         ec = error::make_error_code(error::no_more_routes);
         return request_mechanism::_unknown;
     }
