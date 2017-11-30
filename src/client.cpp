@@ -163,6 +163,10 @@ static void serve_request( shared_ptr<GenericConnection> con
     beast::flat_buffer buffer;
     // These hard-wired access mechanisms are attempted in order for all normal requests.
     const vector<enum request_mechanism> req_mechs({request_mechanism::cache, request_mechanism::injector});
+    // These are only attempted if their targets match the regular expressions:
+    ////const vector<enum request_mechanism> match_rmechs({request_mechanism::cache});
+    // Regular expressions for matching request targets:
+    ////const vector<boost::regex> target_rxs({boost::regex("https?://example.com/.*")});
 
     // Process the different requests that may come over the same connection.
     for (;;) {  // continue for next request; break for no more requests
@@ -182,6 +186,7 @@ static void serve_request( shared_ptr<GenericConnection> con
         // At this point we have access to the plain text HTTP proxy request.
         // Attempt the different mechanisms provided by the routing component.
         unique_ptr<RequestRouter> router = make_unique<SimpleRequestRouter>(req, req_mechs);
+        ////unique_ptr<RequestRouter> router = make_unique<MatchTargetRequestRouter>(req, target_rxs, match_rmechs, req_mechs);
         for (;;) {  // continue for next mechanism; break for next request
             auto req_mech = router->get_next_mechanism(ec);
             if (ec) {
