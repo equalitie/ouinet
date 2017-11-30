@@ -3,6 +3,7 @@
 #include <vector>
 
 #include <boost/beast/http.hpp>
+#include <boost/regex.hpp>
 
 #include "namespaces.h"
 
@@ -47,6 +48,38 @@ class DefaultRequestRouter : public RequestRouter {
             : req(r), req_mechs(rmechs), req_mech(std::begin(req_mechs)) { }
 
         enum request_mechanism get_next_mechanism(sys::error_code&) override;
+};
+
+// Route the provided request according to the given list of match mechanisms
+// if the request target matches one of the given regular expressions,
+// otherwise route it according to the given list of default mechanisms.
+class MatchTargetRequestRouter : public RequestRouter {
+    private:
+        std::unique_ptr<DefaultRequestRouter> rr;  // delegate to this
+
+    public:
+        MatchTargetRequestRouter( const http::request<http::string_body>& req
+                                , const std::vector<boost::regex>& target_rxs
+                                , const std::vector<enum request_mechanism>& match_rmechs
+                                , const std::vector<enum request_mechanism>& def_rmechs)
+        {
+            // Delegate to a default router
+            // with `match_rmechs` if the target matches any of the given regexes,
+            // or with `def_rmechs` if it does not.
+            auto target = req.target().to_string();
+            for (auto rxit = target_rxs.begin(); rxit != target_rxs.end(); ++rxit) {
+                if (boost::regex_match(target, *rxit)) {
+                    rr = std::make_unique<DefaultRequestRouter>(req, match_rmechs);
+                    return;
+                }
+            }
+            rr = std::make_unique<DefaultRequestRouter>(req, def_rmechs);
+        }
+
+        enum request_mechanism get_next_mechanism(sys::error_code& ec) override
+        {
+            return rr->get_next_mechanism(ec);
+        }
 };
 
 } // ouinet namespace
