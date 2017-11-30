@@ -21,15 +21,20 @@ enum request_mechanism {
     _front_end,  // handle the request internally
 };
 
+// Holds the context and rules to decide the different mechanisms
+// a request should be routed to until it finally succeeds,
+// considering previous attempts.
 class RequestRouter {
     public:
         virtual ~RequestRouter() { }
 
-        // Decide which access mechanism to use for the given request,
-        // given previous attempts.
+        // Decide which access mechanism to use for the given request.
+        // If no more mechanisms can be attempted, return `request_mechanism::unknown`
+        // and set the error code to `error::no_more_routes`.
         virtual enum request_mechanism get_next_mechanism(sys::error_code&) = 0;
 };
 
+// Route the provided request according to the given list of default mechanisms.
 class DefaultRequestRouter : public RequestRouter {
     private:
         const http::request<http::string_body> req;
