@@ -86,7 +86,7 @@ file(GLOB sources
     "${CMAKE_SOURCE_DIR}/src/connect_to_host.cpp")
 
 add_executable(injector ${sources})
-add_dependencies(injector beast ipfs-cache)
+add_dependencies(injector beast ipfs-cache gnunet-channels)
 
 target_link_libraries(injector
     ${Boost_LIBRARIES}
