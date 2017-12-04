@@ -166,7 +166,7 @@ static void serve_request( shared_ptr<GenericConnection> con
     // These are only attempted if their targets match the regular expressions:
     const vector<enum request_mechanism> match_rmechs({request_mechanism::cache});
     // Regular expressions for matching request targets:
-    const vector<boost::regex> target_rxs({boost::regex("https?://example.com/.*")});
+    const vector<boost::regex> target_rxs({boost::regex("https?://(www\\.)?example.com/.*")});
 
     // Process the different requests that may come over the same connection.
     for (;;) {  // continue for next request; break for no more requests
