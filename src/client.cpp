@@ -185,9 +185,13 @@ static void serve_request( shared_ptr<GenericConnection> con
 
         // At this point we have access to the plain text HTTP proxy request.
         // Attempt the different mechanisms provided by the routing component.
-        //unique_ptr<RequestRouter> router = make_unique<SimpleRequestRouter>(req, req_mechs);
         // NOTE: We need to use the 'std::' prefix here due to ADL
         //       (http://en.cppreference.com/w/cpp/language/adl)
+
+        // This uses the same list of mechanisms for all requests.
+        //unique_ptr<RequestRouter> router = std::make_unique<SimpleRequestRouter>(req, req_mechs);
+        // This uses one list of mechanisms for requests matching one of a list or regular expressions,
+        // or a default list for the ones that do not.
         unique_ptr<RequestRouter> router = std::make_unique<MatchTargetRequestRouter>(req, target_rxs, match_rmechs, req_mechs);
         for (;;) {  // continue for next mechanism; break for next request
             auto req_mech = router->get_next_mechanism(ec);
