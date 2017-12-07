@@ -49,6 +49,10 @@ class RegexRequestMatch : public RequestMatch {
         bool match(const http::request<http::string_body>& req) const {
             return boost::regex_match(get_field(req).to_string(), regexp);
         }
+
+        RegexRequestMatch( const field_getter& gf
+                         , const std::string& rx)
+            : RegexRequestMatch(gf, boost::regex(rx)) { };
 };
 
 // Holds the context and rules to decide the different mechanisms

@@ -166,9 +166,9 @@ static void serve_request( shared_ptr<GenericConnection> con
     // Matches/mechanisms to test the request against.
     using Match = pair<const RequestMatch&, const vector<enum request_mechanism>&>;
     const vector<Match> matches({
-        Match( RegexRequestMatch([](const Request& r) {return r["Host"];}, boost::regex("https?://(www\\.)?example.com/.*"))
+        Match( RegexRequestMatch([](const Request& r) {return r["Host"];}, "https?://(www\\.)?example.com/.*")
              , {request_mechanism::cache}),
-        Match( RegexRequestMatch([](const Request& r) {return r["Host"];}, boost::regex("https?://(www\\.)?example.net/.*"))
+        Match( RegexRequestMatch([](const Request& r) {return r["Host"];}, "https?://(www\\.)?example.net/.*")
              , {request_mechanism::cache, request_mechanism::injector, request_mechanism::origin}),
     });
 
