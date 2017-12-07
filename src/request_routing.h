@@ -1,8 +1,10 @@
 #pragma once
 
+#include <functional>
 #include <utility>
 #include <vector>
 
+#include <boost/beast/core/string.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/regex.hpp>
 
@@ -21,6 +23,32 @@ enum request_mechanism {
     // The following entries are for internal use only.
     _unknown,    // used e.g. in case of errors
     _front_end,  // handle the request internally
+};
+
+// XXXX
+class RequestMatch {
+    public:
+        virtual ~RequestMatch() { }
+
+        virtual bool match(const http::request<http::string_body>&) const = 0;
+};
+
+class RegexRequestMatch : public RequestMatch {
+    public:
+        typedef typename std::function<beast::string_view (const http::request<http::string_body>&)> field_getter;
+
+    private:
+        const field_getter& get_field;
+        const boost::regex regexp;
+
+    public:
+        RegexRequestMatch( const field_getter& gf
+                         , const boost::regex& rx)
+            : get_field(gf), regexp(rx) { };
+
+        bool match(const http::request<http::string_body>& req) const {
+            return boost::regex_match(get_field(req).to_string(), regexp);
+        }
 };
 
 // Holds the context and rules to decide the different mechanisms
