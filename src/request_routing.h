@@ -58,6 +58,9 @@ class RegexRequestMatch : public RequestMatch {
             : RegexRequestMatch(gf, boost::regex(rx)) { };
 };
 
+// TODO class TrueRequestMatch()  // for defaults
+// TODO class AllRequestMatch(vector<RequestMatch>)
+
 // Holds the context and rules to decide the different mechanisms
 // a request should be routed to until it finally succeeds,
 // considering previous attempts.
