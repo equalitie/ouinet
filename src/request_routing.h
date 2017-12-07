@@ -120,7 +120,7 @@ class MultiMatchRequestRouter : public RequestRouter {
 
     public:
         MultiMatchRequestRouter( const http::request<http::string_body>& req
-                               , const std::vector<std::pair<const RequestMatch&, std::vector<enum request_mechanism>>>& matches
+                               , const std::vector<std::pair<const RequestMatch&, const std::vector<enum request_mechanism>&>>& matches
                                , const std::vector<enum request_mechanism>& def_rmechs)
         {
             // Delegate to a simple router
