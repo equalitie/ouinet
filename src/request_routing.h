@@ -112,23 +112,22 @@ class MatchTargetRequestRouter : public RequestRouter {
 };
 
 // Route the provided request according to the list of mechanisms associated
-// with the first matching (anchored) regular expression in the given list,
+// with the first successful match in the given list,
 // otherwise route it according to the given list of default mechanisms.
-class MultiMatchTargetRequestRouter : public RequestRouter {
+class MultiMatchRequestRouter : public RequestRouter {
     private:
         std::unique_ptr<SimpleRequestRouter> rr;  // delegate to this
 
     public:
-        MultiMatchTargetRequestRouter( const http::request<http::string_body>& req
-                                     , const std::vector<std::pair<boost::regex, std::vector<enum request_mechanism>>>& matches
-                                     , const std::vector<enum request_mechanism>& def_rmechs)
+        MultiMatchRequestRouter( const http::request<http::string_body>& req
+                               , const std::vector<std::pair<const RequestMatch&, std::vector<enum request_mechanism>>>& matches
+                               , const std::vector<enum request_mechanism>& def_rmechs)
         {
             // Delegate to a simple router
-            // with the mechanisms associated with the regex that matches the target (if any),
+            // with the mechanisms associated with the successful match (if any),
             // or with `def_rmechs` if none does.
-            auto target = req.target().to_string();
             for (auto mit = matches.begin(); mit != matches.end(); ++mit) {
-                if (boost::regex_match(target, mit->first)) {
+                if (mit->first.match(req)) {
                     rr = std::make_unique<SimpleRequestRouter>(req, mit->second);
                     return;
                 }

@@ -168,10 +168,12 @@ static void serve_request( shared_ptr<GenericConnection> con
     // Regular expressions for matching request targets:
     //const vector<boost::regex> target_rxs({boost::regex("https?://(www\\.)?example.com/.*")});
     // Regex/mechanisms to test the request against.
-    using Match = pair<boost::regex, vector<enum request_mechanism>>;
+    using Match = pair<const RequestMatch&, vector<enum request_mechanism>>;
     const vector<Match> matches({
-        Match("https?://(www\\.)?example.com/.*", {request_mechanism::cache}),
-        Match("https?://(www\\.)?example.net/.*", {request_mechanism::cache, request_mechanism::injector, request_mechanism::origin}),
+        Match( RegexRequestMatch([](const Request& r) {return r["Host"];}, boost::regex("https?://(www\\.)?example.com/.*"))
+             , {request_mechanism::cache}),
+        Match( RegexRequestMatch([](const Request& r) {return r["Host"];}, boost::regex("https?://(www\\.)?example.net/.*"))
+             , {request_mechanism::cache, request_mechanism::injector, request_mechanism::origin}),
     });
 
     // Process the different requests that may come over the same connection.
@@ -202,7 +204,7 @@ static void serve_request( shared_ptr<GenericConnection> con
         //unique_ptr<RequestRouter> router = std::make_unique<MatchTargetRequestRouter>(req, target_rxs, match_rmechs, req_mechs);
         // This uses a different list of mechanisms for each regular expression that the request may match,
         // or a default list for the ones that do not.
-        unique_ptr<RequestRouter> router = std::make_unique<MultiMatchTargetRequestRouter>(req, matches, req_mechs);
+        unique_ptr<RequestRouter> router = std::make_unique<MultiMatchRequestRouter>(req, matches, req_mechs);
 
         for (;;) {  // continue for next mechanism; break for next request
             auto req_mech = router->get_next_mechanism(ec);
