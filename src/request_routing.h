@@ -36,6 +36,9 @@ class RequestMatch {
 class RegexRequestMatch : public RequestMatch {
     public:
         typedef typename std::function<beast::string_view (const http::request<http::string_body>&)> field_getter;
+        static field_getter target_getter() {
+            return [](const http::request<http::string_body>& r) {return r.target();};
+        }
         static field_getter header_getter(const std::string& h) {
             return [=](const http::request<http::string_body>& r) {return r[h];};  // TODO check capture mode
         }
