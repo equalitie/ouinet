@@ -167,7 +167,7 @@ static void serve_request( shared_ptr<GenericConnection> con
     //const vector<enum request_mechanism> match_rmechs({request_mechanism::cache});
     // Regular expressions for matching request targets:
     //const vector<boost::regex> target_rxs({boost::regex("https?://(www\\.)?example.com/.*")});
-    // Regex/mechanisms to test the request against.
+    // Matches/mechanisms to test the request against.
     using Match = pair<const RequestMatch&, const vector<enum request_mechanism>&>;
     const vector<Match> matches({
         Match( RegexRequestMatch([](const Request& r) {return r["Host"];}, boost::regex("https?://(www\\.)?example.com/.*"))
