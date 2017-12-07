@@ -202,8 +202,8 @@ static void serve_request( shared_ptr<GenericConnection> con
         // This uses one list of mechanisms for requests matching one of a list or regular expressions,
         // or a default list for the ones that do not.
         //unique_ptr<RequestRouter> router = std::make_unique<MatchTargetRequestRouter>(req, target_rxs, match_rmechs, req_mechs);
-        // This uses a different list of mechanisms for each regular expression that the request may match,
-        // or a default list for the ones that do not.
+        // This uses a different list of mechanisms for each possible match of the request,
+        // or a default list if there is no successful match.
         unique_ptr<RequestRouter> router = std::make_unique<MultiMatchRequestRouter>(req, matches, req_mechs);
 
         for (;;) {  // continue for next mechanism; break for next request
