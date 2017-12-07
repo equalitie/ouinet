@@ -163,10 +163,6 @@ static void serve_request( shared_ptr<GenericConnection> con
     beast::flat_buffer buffer;
     // These hard-wired access mechanisms are attempted in order for all normal requests.
     const vector<enum request_mechanism> req_mechs({request_mechanism::cache, request_mechanism::injector});
-    // These are only attempted if their targets match the regular expressions:
-    //const vector<enum request_mechanism> match_rmechs({request_mechanism::cache});
-    // Regular expressions for matching request targets:
-    //const vector<boost::regex> target_rxs({boost::regex("https?://(www\\.)?example.com/.*")});
     // Matches/mechanisms to test the request against.
     using Match = pair<const RequestMatch&, const vector<enum request_mechanism>&>;
     const vector<Match> matches({
@@ -199,9 +195,6 @@ static void serve_request( shared_ptr<GenericConnection> con
 
         // This uses the same list of mechanisms for all requests.
         //unique_ptr<RequestRouter> router = std::make_unique<SimpleRequestRouter>(req, req_mechs);
-        // This uses one list of mechanisms for requests matching one of a list or regular expressions,
-        // or a default list for the ones that do not.
-        //unique_ptr<RequestRouter> router = std::make_unique<MatchTargetRequestRouter>(req, target_rxs, match_rmechs, req_mechs);
         // This uses a different list of mechanisms for each possible match of the request,
         // or a default list if there is no successful match.
         unique_ptr<RequestRouter> router = std::make_unique<MultiMatchRequestRouter>(req, matches, req_mechs);

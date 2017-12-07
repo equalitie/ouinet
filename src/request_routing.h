@@ -79,38 +79,6 @@ class SimpleRequestRouter : public RequestRouter {
         enum request_mechanism get_next_mechanism(sys::error_code&) override;
 };
 
-// Route the provided request according to the given list of mechanisms if the
-// request target matches one of the given (anchored) regular expressions,
-// otherwise route it according to the given list of default mechanisms.
-class MatchTargetRequestRouter : public RequestRouter {
-    private:
-        std::unique_ptr<SimpleRequestRouter> rr;  // delegate to this
-
-    public:
-        MatchTargetRequestRouter( const http::request<http::string_body>& req
-                                , const std::vector<boost::regex>& target_rxs
-                                , const std::vector<enum request_mechanism>& match_rmechs
-                                , const std::vector<enum request_mechanism>& def_rmechs)
-        {
-            // Delegate to a simple router
-            // with `match_rmechs` if the target matches any of the given regexes,
-            // or with `def_rmechs` if it does not.
-            auto target = req.target().to_string();
-            for (auto rxit = target_rxs.begin(); rxit != target_rxs.end(); ++rxit) {
-                if (boost::regex_match(target, *rxit)) {
-                    rr = std::make_unique<SimpleRequestRouter>(req, match_rmechs);
-                    return;
-                }
-            }
-            rr = std::make_unique<SimpleRequestRouter>(req, def_rmechs);
-        }
-
-        enum request_mechanism get_next_mechanism(sys::error_code& ec) override
-        {
-            return rr->get_next_mechanism(ec);
-        }
-};
-
 // Route the provided request according to the list of mechanisms associated
 // with the first successful match in the given list,
 // otherwise route it according to the given list of default mechanisms.
