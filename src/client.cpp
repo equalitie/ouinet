@@ -165,10 +165,11 @@ static void serve_request( shared_ptr<GenericConnection> con
     const vector<enum request_mechanism> req_mechs({request_mechanism::cache, request_mechanism::injector});
     // Matches/mechanisms to test the request against.
     using Match = pair<const RequestMatch&, const vector<enum request_mechanism>&>;
+    auto host_getter([](const Request& r) {return r["Host"];});
     const vector<Match> matches({
-        Match( RegexRequestMatch([](const Request& r) {return r["Host"];}, "https?://(www\\.)?example.com/.*")
+        Match( RegexRequestMatch(RegexRequestMatch::header_getter("Host"), "https?://(www\\.)?example.com/.*")
              , {request_mechanism::cache}),
-        Match( RegexRequestMatch([](const Request& r) {return r["Host"];}, "https?://(www\\.)?example.net/.*")
+        Match( RegexRequestMatch(host_getter, "https?://(www\\.)?example.net/.*")
              , {request_mechanism::cache, request_mechanism::injector, request_mechanism::origin}),
     });
 
