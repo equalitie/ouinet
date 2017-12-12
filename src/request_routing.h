@@ -42,6 +42,9 @@ class RegexRequestMatch : public RequestMatch {
         static field_getter header_getter(const std::string& h) {
             return [=](const http::request<http::string_body>& r) {return r[h];};  // TODO check capture mode
         }
+        static field_getter method_getter() {
+            return [](const http::request<http::string_body>& r) {return r.method_string();};
+        }
 
     private:
         const field_getter& get_field;
