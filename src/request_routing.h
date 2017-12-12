@@ -64,8 +64,64 @@ class RegexRequestMatch : public RequestMatch {
             : RegexRequestMatch(gf, boost::regex(rx)) { };
 };
 
-// TODO class TrueRequestMatch()  // for defaults
-// TODO class AllRequestMatch(vector<RequestMatch>)
+class TrueRequestMatch : public RequestMatch {
+        bool match(const http::request<http::string_body>& req) const {
+            return true;
+        }
+};
+
+class FalseRequestMatch : public RequestMatch {
+        bool match(const http::request<http::string_body>& req) const {
+            return false;
+        }
+};
+
+class NotRequestMatch : public RequestMatch {
+    private:
+        const RequestMatch& child;
+
+    public:
+        bool match(const http::request<http::string_body>& req) const {
+            return !(child.match(req));
+        }
+
+        NotRequestMatch(const RequestMatch& sub)
+            : child(sub) { }
+};
+
+class AllRequestMatch : public RequestMatch {  // a shortcut logical AND of all submatches
+    private:
+        const std::vector<const RequestMatch&>& children;
+
+    public:
+        bool match(const http::request<http::string_body>& req) const {
+            // Just an attempt, does not build (forms pointer from reference).
+            //for (auto cit = children.cbegin(); cit != children.cend(); ++cit)
+            //  if (!(cit->match(req)))
+            //    return false;
+            return true;
+        }
+
+        AllRequestMatch(const std::vector<const RequestMatch&>& subs)
+            : children(subs) { }
+};
+
+class AnyRequestMatch : public RequestMatch {  // a shortcut logical OR of all submatches
+    private:
+        const std::vector<const RequestMatch&>& children;
+
+    public:
+        bool match(const http::request<http::string_body>& req) const {
+            // Just an attempt, does not build (forms pointer from reference).
+            //for (auto cit = children.cbegin(); cit != children.cend(); ++cit)
+            //  if (cit->match(req))
+            //    return true;
+            return false;
+        }
+
+        AnyRequestMatch(const std::vector<const RequestMatch&>& subs)
+            : children(subs) { }
+};
 
 // Holds the context and rules to decide the different mechanisms
 // a request should be routed to until it finally succeeds,
