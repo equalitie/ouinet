@@ -167,6 +167,8 @@ static void serve_request( shared_ptr<GenericConnection> con
     using Match = pair<const ReqExpr&, const vector<enum request_mechanism>&>;
     auto target_getter([](const Request& r) {return r.target();});
     const vector<Match> matches({
+        Match( RegexReqExpr(RegexReqExpr::header_getter("Host"), "localhost"),
+             , {request_mechanism::_front_end} ),
         Match( RegexReqExpr(RegexReqExpr::target_getter(), "https?://(www\\.)?example.com/.*")
              , {request_mechanism::cache}),
         Match( RegexReqExpr(target_getter, "https?://(www\\.)?example.net/.*")

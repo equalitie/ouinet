@@ -5,18 +5,6 @@ using namespace ouinet;
 
 using Request = http::request<http::string_body>;
 
-//------------------------------------------------------------------------------
-static bool is_front_end_request(const Request& req)
-{
-    auto host = req["Host"].to_string();
-
-    if (host.substr(0, sizeof("localhost")) != "localhost") {
-        return false;
-    }
-
-    return true;
-}
-
 // Route the provided request according to the given list of mechanisms.
 class SimpleRequestRouter : public RequestRouter {
     private:
@@ -42,11 +30,6 @@ SimpleRequestRouter::get_next_mechanism(sys::error_code& ec)
     if (req_mech == std::end(req_mechs)) {
         ec = error::make_error_code(error::no_more_routes);
         return request_mechanism::_unknown;
-    }
-
-    // Send front-end requests to the front end
-    if (is_front_end_request(req)) {
-        return request_mechanism::_front_end;
     }
 
     // Send non-safe HTTP method requests to the origin server
