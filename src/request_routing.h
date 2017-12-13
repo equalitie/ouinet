@@ -58,12 +58,12 @@ class RegexReqExpr : public ReqExpr {  // can match a request field against a re
         RegexReqExpr(const field_getter& gf, const boost::regex& rx)
             : get_field(gf), regexp(rx) { };
 
+        RegexReqExpr(const field_getter& gf, const std::string& rx)
+            : RegexReqExpr(gf, boost::regex(rx)) { };
+
         bool match(const http::request<http::string_body>& req) const {
             return boost::regex_match(get_field(req).to_string(), regexp);
         }
-
-        RegexReqExpr(const field_getter& gf, const std::string& rx)
-            : RegexReqExpr(gf, boost::regex(rx)) { };
 };
 
 class TrueReqExpr : public ReqExpr {  // matches all requests
@@ -83,12 +83,12 @@ class NotReqExpr : public ReqExpr {  // negates match of subexpr
         const std::shared_ptr<ReqExpr> child;
 
     public:
+        NotReqExpr(const std::shared_ptr<ReqExpr> sub)
+            : child(sub) { }
+
         bool match(const http::request<http::string_body>& req) const {
             return !(child->match(req));
         }
-
-        NotReqExpr(const std::shared_ptr<ReqExpr> sub)
-            : child(sub) { }
 };
 
 class AllReqExpr : public ReqExpr {  // a shortcut logical AND of all subexprs
@@ -96,15 +96,15 @@ class AllReqExpr : public ReqExpr {  // a shortcut logical AND of all subexprs
         const std::vector<std::shared_ptr<ReqExpr>> children;
 
     public:
+        AllReqExpr(const std::vector<std::shared_ptr<ReqExpr>>& subs)
+            : children(subs.begin(), subs.end()) { }
+
         bool match(const http::request<http::string_body>& req) const {
             for (auto cit = children.cbegin(); cit != children.cend(); ++cit)
               if (!((*cit)->match(req)))
                 return false;
             return true;
         }
-
-        AllReqExpr(const std::vector<std::shared_ptr<ReqExpr>>& subs)
-            : children(subs.begin(), subs.end()) { }
 };
 
 class AnyReqExpr : public ReqExpr {  // a shortcut logical OR of all subexprs
@@ -112,15 +112,15 @@ class AnyReqExpr : public ReqExpr {  // a shortcut logical OR of all subexprs
         const std::vector<std::shared_ptr<ReqExpr>> children;
 
     public:
+        AnyReqExpr(const std::vector<std::shared_ptr<ReqExpr>>& subs)
+            : children(subs.begin(), subs.end()) { }
+
         bool match(const http::request<http::string_body>& req) const {
             for (auto cit = children.cbegin(); cit != children.cend(); ++cit)
               if ((*cit)->match(req))
                 return true;
             return false;
         }
-
-        AnyReqExpr(const std::vector<std::shared_ptr<ReqExpr>>& subs)
-            : children(subs.begin(), subs.end()) { }
 };
 
 // A request router holds the context and rules to decide the different mechanisms
