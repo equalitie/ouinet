@@ -123,8 +123,7 @@ class AnyReqExpr : public ReqExpr {  // a shortcut logical OR of all subexprs
             : children(subs.begin(), subs.end()) { }
 };
 
-
-// Holds the context and rules to decide the different mechanisms
+// A request router holds the context and rules to decide the different mechanisms
 // a request should be routed to until it finally succeeds,
 // considering previous attempts.
 class RequestRouter {
