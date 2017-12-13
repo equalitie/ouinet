@@ -10,6 +10,7 @@
 
 #include "namespaces.h"
 
+
 namespace ouinet {
 
 // The different mechanisms an HTTP request can be routed over.
@@ -25,7 +26,8 @@ enum request_mechanism {
     _front_end,  // handle the request internally
 };
 
-// XXXX
+// Request expressions can tell whether they match a given request
+// (much like regular expressions match strings).
 class ReqExpr {
     public:
         virtual ~ReqExpr() { }
@@ -33,9 +35,11 @@ class ReqExpr {
         virtual bool match(const http::request<http::string_body>&) const = 0;
 };
 
-class RegexReqExpr : public ReqExpr {
+class RegexReqExpr : public ReqExpr {  // can match a request field against a regular expression
     public:
+        // The type of functions that retrieve a given field from a request.
         typedef typename std::function<beast::string_view (const http::request<http::string_body>&)> field_getter;
+
         static field_getter target_getter() {
             return [](const http::request<http::string_body>& r) {return r.target();};
         }
@@ -62,19 +66,19 @@ class RegexReqExpr : public ReqExpr {
             : RegexReqExpr(gf, boost::regex(rx)) { };
 };
 
-class TrueReqExpr : public ReqExpr {
+class TrueReqExpr : public ReqExpr {  // matches all requests
         bool match(const http::request<http::string_body>& req) const {
             return true;
         }
 };
 
-class FalseReqExpr : public ReqExpr {
+class FalseReqExpr : public ReqExpr {  // matches no request
         bool match(const http::request<http::string_body>& req) const {
             return false;
         }
 };
 
-class NotReqExpr : public ReqExpr {
+class NotReqExpr : public ReqExpr {  // negates match of subexpr
     private:
         const std::shared_ptr<ReqExpr> child;
 
@@ -118,6 +122,7 @@ class AnyReqExpr : public ReqExpr {  // a shortcut logical OR of all subexprs
         AnyReqExpr(const std::vector<std::shared_ptr<ReqExpr>>& subs)
             : children(subs.begin(), subs.end()) { }
 };
+
 
 // Holds the context and rules to decide the different mechanisms
 // a request should be routed to until it finally succeeds,
