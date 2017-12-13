@@ -163,13 +163,13 @@ static void serve_request( shared_ptr<GenericConnection> con
     beast::flat_buffer buffer;
     // These hard-wired access mechanisms are attempted in order for all normal requests.
     const vector<enum request_mechanism> req_mechs({request_mechanism::cache, request_mechanism::injector});
-    // Matches/mechanisms to test the request against.
-    using Match = pair<const RequestMatch&, const vector<enum request_mechanism>&>;
+    // Expressions/mechanisms to test the request against.
+    using Match = pair<const ReqExpr&, const vector<enum request_mechanism>&>;
     auto target_getter([](const Request& r) {return r.target();});
     const vector<Match> matches({
-        Match( RegexRequestMatch(RegexRequestMatch::target_getter(), "https?://(www\\.)?example.com/.*")
+        Match( RegexReqExpr(RegexReqExpr::target_getter(), "https?://(www\\.)?example.com/.*")
              , {request_mechanism::cache}),
-        Match( RegexRequestMatch(target_getter, "https?://(www\\.)?example.net/.*")
+        Match( RegexReqExpr(target_getter, "https?://(www\\.)?example.net/.*")
              , {request_mechanism::cache, request_mechanism::injector, request_mechanism::origin}),
     });
 

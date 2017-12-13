@@ -26,14 +26,14 @@ enum request_mechanism {
 };
 
 // XXXX
-class RequestMatch {
+class ReqExpr {
     public:
-        virtual ~RequestMatch() { }
+        virtual ~ReqExpr() { }
 
         virtual bool match(const http::request<http::string_body>&) const = 0;
 };
 
-class RegexRequestMatch : public RequestMatch {
+class RegexReqExpr : public ReqExpr {
     public:
         typedef typename std::function<beast::string_view (const http::request<http::string_body>&)> field_getter;
         static field_getter target_getter() {
@@ -51,47 +51,45 @@ class RegexRequestMatch : public RequestMatch {
         const boost::regex regexp;
 
     public:
-        RegexRequestMatch( const field_getter& gf
-                         , const boost::regex& rx)
+        RegexReqExpr(const field_getter& gf, const boost::regex& rx)
             : get_field(gf), regexp(rx) { };
 
         bool match(const http::request<http::string_body>& req) const {
             return boost::regex_match(get_field(req).to_string(), regexp);
         }
 
-        RegexRequestMatch( const field_getter& gf
-                         , const std::string& rx)
-            : RegexRequestMatch(gf, boost::regex(rx)) { };
+        RegexReqExpr(const field_getter& gf, const std::string& rx)
+            : RegexReqExpr(gf, boost::regex(rx)) { };
 };
 
-class TrueRequestMatch : public RequestMatch {
+class TrueReqExpr : public ReqExpr {
         bool match(const http::request<http::string_body>& req) const {
             return true;
         }
 };
 
-class FalseRequestMatch : public RequestMatch {
+class FalseReqExpr : public ReqExpr {
         bool match(const http::request<http::string_body>& req) const {
             return false;
         }
 };
 
-class NotRequestMatch : public RequestMatch {
+class NotReqExpr : public ReqExpr {
     private:
-        const std::shared_ptr<RequestMatch> child;
+        const std::shared_ptr<ReqExpr> child;
 
     public:
         bool match(const http::request<http::string_body>& req) const {
             return !(child->match(req));
         }
 
-        NotRequestMatch(const std::shared_ptr<RequestMatch> sub)
+        NotReqExpr(const std::shared_ptr<ReqExpr> sub)
             : child(sub) { }
 };
 
-class AllRequestMatch : public RequestMatch {  // a shortcut logical AND of all submatches
+class AllReqExpr : public ReqExpr {  // a shortcut logical AND of all subexprs
     private:
-        const std::vector<std::shared_ptr<RequestMatch>> children;
+        const std::vector<std::shared_ptr<ReqExpr>> children;
 
     public:
         bool match(const http::request<http::string_body>& req) const {
@@ -101,13 +99,13 @@ class AllRequestMatch : public RequestMatch {  // a shortcut logical AND of all 
             return true;
         }
 
-        AllRequestMatch(const std::vector<std::shared_ptr<RequestMatch>>& subs)
+        AllReqExpr(const std::vector<std::shared_ptr<ReqExpr>>& subs)
             : children(subs.begin(), subs.end()) { }
 };
 
-class AnyRequestMatch : public RequestMatch {  // a shortcut logical OR of all submatches
+class AnyReqExpr : public ReqExpr {  // a shortcut logical OR of all subexprs
     private:
-        const std::vector<std::shared_ptr<RequestMatch>> children;
+        const std::vector<std::shared_ptr<ReqExpr>> children;
 
     public:
         bool match(const http::request<http::string_body>& req) const {
@@ -117,7 +115,7 @@ class AnyRequestMatch : public RequestMatch {  // a shortcut logical OR of all s
             return false;
         }
 
-        AnyRequestMatch(const std::vector<std::shared_ptr<RequestMatch>>& subs)
+        AnyReqExpr(const std::vector<std::shared_ptr<ReqExpr>>& subs)
             : children(subs.begin(), subs.end()) { }
 };
 
@@ -150,7 +148,7 @@ class SimpleRequestRouter : public RequestRouter {
 };
 
 // Route the provided request according to the list of mechanisms associated
-// with the first successful match in the given list,
+// with the first matching expression in the given list,
 // otherwise route it according to the given list of default mechanisms.
 class MultiMatchRequestRouter : public RequestRouter {
     private:
@@ -158,11 +156,11 @@ class MultiMatchRequestRouter : public RequestRouter {
 
     public:
         MultiMatchRequestRouter( const http::request<http::string_body>& req
-                               , const std::vector<std::pair<const RequestMatch&, const std::vector<enum request_mechanism>&>>& matches
+                               , const std::vector<std::pair<const ReqExpr&, const std::vector<enum request_mechanism>&>>& matches
                                , const std::vector<enum request_mechanism>& def_rmechs)
         {
             // Delegate to a simple router
-            // with the mechanisms associated with the successful match (if any),
+            // with the mechanisms associated with the matching expression (if any),
             // or with `def_rmechs` if none does.
             for (auto mit = matches.begin(); mit != matches.end(); ++mit) {
                 if (mit->first.match(req)) {
