@@ -137,21 +137,6 @@ class RequestRouter {
 };
 
 // Route the provided request according to the given list of mechanisms.
-class SimpleRequestRouter : public RequestRouter {
-    private:
-        const http::request<http::string_body> req;
-        const std::vector<enum request_mechanism>& req_mechs;
-        std::vector<enum request_mechanism>::const_iterator req_mech;
-
-    public:
-        SimpleRequestRouter( const http::request<http::string_body>& r
-                           , const std::vector<enum request_mechanism>& rmechs)
-            : req(r), req_mechs(rmechs), req_mech(std::begin(req_mechs)) { }
-
-        enum request_mechanism get_next_mechanism(sys::error_code&) override;
-};
-
-// Route the provided request according to the given list of mechanisms.
 std::unique_ptr<RequestRouter>
 route( const http::request<http::string_body>& req
      , const std::vector<enum request_mechanism>& rmechs);

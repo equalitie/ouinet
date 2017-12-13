@@ -17,6 +17,21 @@ static bool is_front_end_request(const Request& req)
     return true;
 }
 
+// Route the provided request according to the given list of mechanisms.
+class SimpleRequestRouter : public RequestRouter {
+    private:
+        const Request req;
+        const std::vector<enum request_mechanism>& req_mechs;
+        std::vector<enum request_mechanism>::const_iterator req_mech;
+
+    public:
+        SimpleRequestRouter( const Request& r
+                           , const std::vector<enum request_mechanism>& rmechs)
+            : req(r), req_mechs(rmechs), req_mech(std::begin(req_mechs)) { }
+
+        enum request_mechanism get_next_mechanism(sys::error_code&) override;
+};
+
 //------------------------------------------------------------------------------
 enum request_mechanism
 SimpleRequestRouter::get_next_mechanism(sys::error_code& ec)
