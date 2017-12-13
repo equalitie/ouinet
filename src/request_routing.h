@@ -177,4 +177,17 @@ class MultiMatchRequestRouter : public RequestRouter {
         }
 };
 
+// Route the provided request according to the given list of mechanisms.
+std::unique_ptr<RequestRouter>
+route( const http::request<http::string_body>& req
+     , const std::vector<enum request_mechanism>& rmechs);
+
+// Route the provided request according to the list of mechanisms associated
+// with the first matching expression in the given list,
+// otherwise route it according to the given list of default mechanisms.
+std::unique_ptr<RequestRouter>
+route( const http::request<http::string_body>& req
+     , const std::vector<std::pair<const ReqExpr&, const std::vector<enum request_mechanism>&>>& matches
+     , const std::vector<enum request_mechanism>& def_rmechs );
+
 } // ouinet namespace

@@ -42,3 +42,31 @@ SimpleRequestRouter::get_next_mechanism(sys::error_code& ec)
     // Use the following configured mechanism and prepare for the next one.
     return *(req_mech++);
 }
+
+
+namespace ouinet {
+
+//------------------------------------------------------------------------------
+std::unique_ptr<RequestRouter>
+route( const http::request<http::string_body>& req
+     , const std::vector<enum request_mechanism>& rmechs)
+{
+    return std::make_unique<SimpleRequestRouter>(req, rmechs);
+}
+
+//------------------------------------------------------------------------------
+std::unique_ptr<RequestRouter>
+route( const http::request<http::string_body>& req
+     , const std::vector<std::pair<const ReqExpr&, const std::vector<enum request_mechanism>&>>& matches
+     , const std::vector<enum request_mechanism>& def_rmechs )
+{
+    // Delegate to a simple router
+    // with the mechanisms associated with the matching expression (if any),
+    // or with `def_rmechs` if none does.
+    for (auto mit = matches.begin(); mit != matches.end(); ++mit)
+        if (mit->first.match(req))
+            return std::make_unique<SimpleRequestRouter>(req, mit->second);
+    return std::make_unique<SimpleRequestRouter>(req, def_rmechs);
+}
+
+} // ouinet namespace

@@ -195,10 +195,10 @@ static void serve_request( shared_ptr<GenericConnection> con
         //       (http://en.cppreference.com/w/cpp/language/adl)
 
         // This uses the same list of mechanisms for all requests.
-        //unique_ptr<RequestRouter> router = std::make_unique<SimpleRequestRouter>(req, req_mechs);
+        //unique_ptr<RequestRouter> router = route(req, req_mechs);
         // This uses a different list of mechanisms for each possible match of the request,
         // or a default list if there is no successful match.
-        unique_ptr<RequestRouter> router = std::make_unique<MultiMatchRequestRouter>(req, matches, req_mechs);
+        unique_ptr<RequestRouter> router = route(req, matches, req_mechs);
 
         for (;;) {  // continue for next mechanism; break for next request
             auto req_mech = router->get_next_mechanism(ec);
