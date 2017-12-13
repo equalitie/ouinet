@@ -147,36 +147,6 @@ class SimpleRequestRouter : public RequestRouter {
         enum request_mechanism get_next_mechanism(sys::error_code&) override;
 };
 
-// Route the provided request according to the list of mechanisms associated
-// with the first matching expression in the given list,
-// otherwise route it according to the given list of default mechanisms.
-class MultiMatchRequestRouter : public RequestRouter {
-    private:
-        std::unique_ptr<SimpleRequestRouter> rr;  // delegate to this
-
-    public:
-        MultiMatchRequestRouter( const http::request<http::string_body>& req
-                               , const std::vector<std::pair<const ReqExpr&, const std::vector<enum request_mechanism>&>>& matches
-                               , const std::vector<enum request_mechanism>& def_rmechs)
-        {
-            // Delegate to a simple router
-            // with the mechanisms associated with the matching expression (if any),
-            // or with `def_rmechs` if none does.
-            for (auto mit = matches.begin(); mit != matches.end(); ++mit) {
-                if (mit->first.match(req)) {
-                    rr = std::make_unique<SimpleRequestRouter>(req, mit->second);
-                    return;
-                }
-            }
-            rr = std::make_unique<SimpleRequestRouter>(req, def_rmechs);
-        }
-
-        enum request_mechanism get_next_mechanism(sys::error_code& ec) override
-        {
-            return rr->get_next_mechanism(ec);
-        }
-};
-
 // Route the provided request according to the given list of mechanisms.
 std::unique_ptr<RequestRouter>
 route( const http::request<http::string_body>& req
