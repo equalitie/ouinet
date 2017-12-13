@@ -78,14 +78,14 @@ class FalseRequestMatch : public RequestMatch {
 
 class NotRequestMatch : public RequestMatch {
     private:
-        const RequestMatch& child;
+        const std::shared_ptr<RequestMatch> child;
 
     public:
         bool match(const http::request<http::string_body>& req) const {
-            return !(child.match(req));
+            return !(child->match(req));
         }
 
-        NotRequestMatch(const RequestMatch& sub)
+        NotRequestMatch(const std::shared_ptr<RequestMatch> sub)
             : child(sub) { }
 };
 
