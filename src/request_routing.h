@@ -91,36 +91,34 @@ class NotRequestMatch : public RequestMatch {
 
 class AllRequestMatch : public RequestMatch {  // a shortcut logical AND of all submatches
     private:
-        const std::vector<const RequestMatch&>& children;
+        const std::vector<std::shared_ptr<RequestMatch>> children;
 
     public:
         bool match(const http::request<http::string_body>& req) const {
-            // Just an attempt, does not build (forms pointer from reference).
-            //for (auto cit = children.cbegin(); cit != children.cend(); ++cit)
-            //  if (!(cit->match(req)))
-            //    return false;
+            for (auto cit = children.cbegin(); cit != children.cend(); ++cit)
+              if (!((*cit)->match(req)))
+                return false;
             return true;
         }
 
-        AllRequestMatch(const std::vector<const RequestMatch&>& subs)
-            : children(subs) { }
+        AllRequestMatch(const std::vector<std::shared_ptr<RequestMatch>>& subs)
+            : children(subs.begin(), subs.end()) { }
 };
 
 class AnyRequestMatch : public RequestMatch {  // a shortcut logical OR of all submatches
     private:
-        const std::vector<const RequestMatch&>& children;
+        const std::vector<std::shared_ptr<RequestMatch>> children;
 
     public:
         bool match(const http::request<http::string_body>& req) const {
-            // Just an attempt, does not build (forms pointer from reference).
-            //for (auto cit = children.cbegin(); cit != children.cend(); ++cit)
-            //  if (cit->match(req))
-            //    return true;
+            for (auto cit = children.cbegin(); cit != children.cend(); ++cit)
+              if ((*cit)->match(req))
+                return true;
             return false;
         }
 
-        AnyRequestMatch(const std::vector<const RequestMatch&>& subs)
-            : children(subs) { }
+        AnyRequestMatch(const std::vector<std::shared_ptr<RequestMatch>>& subs)
+            : children(subs.begin(), subs.end()) { }
 };
 
 // Holds the context and rules to decide the different mechanisms
