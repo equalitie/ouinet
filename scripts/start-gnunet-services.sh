@@ -14,19 +14,19 @@ GNUNET_ROOT=$BUILD/gnunet-channels/src/gnunet-channels-build
 
 export PATH=$GNUNET_ROOT/gnunet/bin:$PATH
 
-CH=$ROOT/repos/client/gnunet
-IH=$ROOT/repos/injector/gnunet
+CLIENT_HOME=$ROOT/repos/client/gnunet
+INJECTOR_HOME=$ROOT/repos/injector/gnunet
 
-export CLIENT_CFG=$CH/peer.conf
-export INJECTOR_CFG=$IH/peer.conf
+export CLIENT_CFG=$CLIENT_HOME/peer.conf
+export INJECTOR_CFG=$INJECTOR_HOME/peer.conf
 
-rm -rf $ROOT/repos/client/gnunet/.local/share/gnunet/peerinfo/hosts
-rm -rf $ROOT/repos/injector/gnunet/.local/share/gnunet/peerinfo/hosts
+rm -rf $CLIENT_HOME/.local/share/gnunet/peerinfo/hosts
+rm -rf $INJECTOR_HOME/.local/share/gnunet/peerinfo/hosts
 
 trap "pkill 'gnunet-*' -9 || true" INT EXIT
 
-GNUNET_TEST_HOME=$CH gnunet-arm -s -c $CLIENT_CFG &
-GNUNET_TEST_HOME=$IH gnunet-arm -s -c $INJECTOR_CFG &
+GNUNET_TEST_HOME=$CLIENT_HOME   gnunet-arm -s -c $CLIENT_CFG &
+GNUNET_TEST_HOME=$INJECTOR_HOME gnunet-arm -s -c $INJECTOR_CFG &
 
 sleep 1
 
