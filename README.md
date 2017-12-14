@@ -52,7 +52,7 @@ Leave that script running and start another terminal window where we'll start
 the injector:
 
 ```
-$ ./injector --repo ../repo/injector
+$ ./injector --repo ../repos/injector
 Swarm listening on /ip4/127.0.0.1/tcp/4001
 Swarm listening on /ip4/192.168.0.136/tcp/4001
 Swarm listening on /ip6/::1/tcp/4001
@@ -70,7 +70,7 @@ window and pass it the injector's `<GNUNET_ID>` and `<DB_IPNS>` strings from
 above:
 
 ```
-$ ./client --repo ../repo/client \
+$ ./client --repo ../repos/client \
            --injector-ipns <DB_IPNS> \
            --injector-ep <GNUNET_ID>:injector-main-port
 ```
