@@ -16,9 +16,9 @@ distributed cache (like [IPFS][]), and if not available, it contacts a trusted
 [I2P][]) and asks it to fetch the page and store it in the distributed cache
 to speed up future accesses.
 
-[IPFS]: https://ipfs.io/
-[GNUnet]: https://gnunet.org/
-[I2P]: https://geti2p.net/
+[IPFS]: https://ipfs.io/ "InterPlanetary File System"
+[GNUnet]: https://gnunet.org/ "GNU's Framework for Secure Peer-to-Peer Networking"
+[I2P]: https://geti2p.net/ "Invisible Internet Project"
 
 **Warning:** Ouinet is still highly experimental.  Some features (like
 peer-to-peer routing) may or may not not work smoothly depending on the
