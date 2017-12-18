@@ -36,7 +36,8 @@ After installing missing packages you can run the script again:
 
 You may need to repeat this until the script succeeds and reports instructions
 on how to run the client or injector tools.  The whole process takes a few
-minutes and requires around 2 GB of storage.
+minutes and requires around 2 GB of storage.  After that, you may jump
+straight to the [Test](#test) section below.
 
 ## Requirements
 
