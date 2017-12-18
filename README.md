@@ -1,5 +1,33 @@
 # Ouinet
 
+Ouinet is a peer-to-peer, distributed technology which allows web requests to
+be served with the help of an entire network of cooperating nodes using
+peer-to-peer routing and distributed caching of responses.  This helps
+mitigate the Web's characteristic single point of failure due to a client app
+not being able to connect to a particular server.
+
+The typical Ouinet client setup consists of a web browser (or other HTTP
+client) which uses a special HTTP proxy running on the local machine and
+provided by the Ouinet `client` program.  Web requests performed by the
+browser are sent to the local Ouinet `client`, which attempts to retrieve the
+resource using several mechanisms.  The client tries to fetch the page from a
+distributed cache (like [IPFS][]), and if not available, it contacts a trusted
+*injector* server over a peer-to-peer routing system (like [GNUnet][] or
+[I2P][]) and asks it to fetch the page and store it in the distributed cache
+to speed up future accesses.
+
+[IPFS]: https://ipfs.io/
+[GNUnet]: https://gnunet.org/
+[I2P]: https://geti2p.net/
+
+**Warning:** Ouinet is still highly experimental.  Some features (like
+peer-to-peer routing) may or may not not work smoothly depending on the
+different back end technologies.  Information about your browsing might be
+leaked to other participants in the network.  Running some components (like
+injector code) may turn your computer into an open web proxy, and other
+security or privacy-affecting issues might exist.  Please keep this in mind
+when using this software.
+
 **Note:** The steps described below have only been tested to work on GNU/Linux
 on AMD64 platforms.
 
