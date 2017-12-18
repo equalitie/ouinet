@@ -6,6 +6,7 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/program_options.hpp>
+#include <boost/filesystem.hpp>
 #include <iostream>
 #include <fstream>
 
@@ -22,11 +23,14 @@
 using namespace std;
 using namespace ouinet;
 
+namespace fs = boost::filesystem;
+
 using tcp         = asio::ip::tcp;
 using string_view = beast::string_view;
 using Request     = http::request<http::dynamic_body>;
 
-static string REPO_ROOT;
+static fs::path REPO_ROOT;
+static const fs::path OUINET_CONF_FILE = "ouinet-injector.conf";
 
 //------------------------------------------------------------------------------
 template<class Fields>
@@ -212,7 +216,7 @@ void listen_gnunet( asio::io_service& ios
 {
     namespace gc = gnunet_channels;
 
-    gc::Service service(REPO_ROOT + "/gnunet/peer.conf", ios);
+    gc::Service service((REPO_ROOT/"gnunet"/"peer.conf").native(), ios);
 
     sys::error_code ec;
 
@@ -281,7 +285,23 @@ int main(int argc, char* argv[])
 
     REPO_ROOT = vm["repo"].as<string>();
 
-    ifstream ouinet_conf(REPO_ROOT + "/ouinet-injector.conf");
+    if (!exists(REPO_ROOT) || !is_directory(REPO_ROOT)) {
+        cerr << "The path " << REPO_ROOT << " either doesn't exist or"
+             << " is not a directory." << endl;
+        cerr << desc << endl;
+        return 1;
+    }
+
+    fs::path ouinet_conf_path = REPO_ROOT/OUINET_CONF_FILE;
+
+    if (!fs::is_regular_file(ouinet_conf_path)) {
+        cerr << "The path " << REPO_ROOT << " does not contain the "
+             << OUINET_CONF_FILE << " configuration file." << endl;
+        cerr << desc << endl;
+        return 1;
+    }
+
+    ifstream ouinet_conf(ouinet_conf_path.native());
 
     po::store(po::parse_config_file(ouinet_conf, desc), vm);
     po::notify(vm);
@@ -299,7 +319,7 @@ int main(int argc, char* argv[])
     // The io_service is required for all I/O
     asio::io_service ios;
 
-    ipfs_cache::Injector ipfs_cache_injector(ios, REPO_ROOT + "/ipfs");
+    ipfs_cache::Injector ipfs_cache_injector(ios, (REPO_ROOT/"ipfs").native());
 
     std::cout << "IPNS DB: " << ipfs_cache_injector.ipns_id() << endl;
 

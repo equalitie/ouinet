@@ -6,6 +6,7 @@
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/connect.hpp>
 #include <boost/program_options.hpp>
+#include <boost/filesystem.hpp>
 #include <iostream>
 #include <fstream>
 
@@ -28,11 +29,14 @@
 using namespace std;
 using namespace ouinet;
 
+namespace fs = boost::filesystem;
+
 using tcp         = asio::ip::tcp;
 using string_view = beast::string_view;
 using Request     = http::request<http::string_body>;
 
-static string REPO_ROOT;
+static fs::path REPO_ROOT;
+static const fs::path OUINET_CONF_FILE = "ouinet-client.conf";
 
 //------------------------------------------------------------------------------
 static
@@ -271,7 +275,8 @@ void do_listen( asio::io_service& ios
     shared_ptr<ipfs_cache::Client> ipfs_cache_client;
 
     if (ipns.size()) {
-        ipfs_cache_client = make_shared<ipfs_cache::Client>(ios, ipns, REPO_ROOT + "/ipfs");
+        ipfs_cache_client = make_shared<ipfs_cache::Client>
+            (ios, ipns, (REPO_ROOT/"ipfs").native());
     }
 
     cout << "Client accepting on " << acceptor.local_endpoint() << endl;
@@ -379,9 +384,30 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    REPO_ROOT = vm["repo"].as<string>();
+    REPO_ROOT = fs::path(vm["repo"].as<string>());
 
-    ifstream ouinet_conf(REPO_ROOT + "/ouinet-client.conf");
+    if (!fs::exists(REPO_ROOT)) {
+        cerr << "Directory " << REPO_ROOT << " does not exist." << endl;
+        cerr << desc << endl;
+        return 1;
+    }
+
+    if (!fs::is_directory(REPO_ROOT)) {
+        cerr << "The path " << REPO_ROOT << " is not a directory." << endl;
+        cerr << desc << endl;
+        return 1;
+    }
+
+    fs::path ouinet_conf_path = REPO_ROOT/OUINET_CONF_FILE;
+
+    if (!fs::is_regular_file(ouinet_conf_path)) {
+        cerr << "The path " << REPO_ROOT << " does not contain "
+             << "the " << OUINET_CONF_FILE << " configuration file." << endl;
+        cerr << desc << endl;
+        return 1;
+    }
+
+    ifstream ouinet_conf(ouinet_conf_path.native());
 
     po::store(po::parse_config_file(ouinet_conf, desc), vm);
     po::notify(vm);
@@ -419,7 +445,7 @@ int main(int argc, char* argv[])
         , [&](asio::yield_context yield) {
               namespace gc = gnunet_channels;
 
-              gc::Service service(REPO_ROOT + "/gnunet/peer.conf", ios);
+              gc::Service service((REPO_ROOT/"gnunet"/"peer.conf").native(), ios);
 
               sys::error_code ec;
 
