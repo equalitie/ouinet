@@ -33,11 +33,6 @@ SimpleRequestRouter::get_next_mechanism(sys::error_code& ec)
         return request_mechanism::_unknown;
     }
 
-    // Send non-safe HTTP method requests to the origin server
-    if (req.method() != http::verb::get && req.method() != http::verb::head) {
-        return request_mechanism::origin;
-    }
-
     // Use the following configured mechanism and prepare for the next one.
     return *(req_mech++);
 }
