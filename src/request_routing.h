@@ -106,22 +106,6 @@ class AndReqExpr : public ReqExpr {  // a shortcircuit logical AND of two subexp
         }
 };
 
-class AllReqExpr : public ReqExpr {  // a shortcut logical AND of all subexprs
-    private:
-        const std::vector<std::shared_ptr<ReqExpr>> children;
-
-    public:
-        AllReqExpr(const std::vector<std::shared_ptr<ReqExpr>>& subs)
-            : children(subs.begin(), subs.end()) { }
-
-        bool match(const http::request<http::string_body>& req) const {
-            for (auto cit = children.cbegin(); cit != children.cend(); ++cit)
-              if (!((*cit)->match(req)))
-                return false;
-            return true;
-        }
-};
-
 class OrReqExpr : public ReqExpr {  // a shortcircuit logical OR of two subexprs
     private:
         const std::shared_ptr<ReqExpr> left, right;
@@ -134,22 +118,6 @@ class OrReqExpr : public ReqExpr {  // a shortcircuit logical OR of two subexprs
             if (left->match(req))
                 return true;
             return right->match(req);
-        }
-};
-
-class AnyReqExpr : public ReqExpr {  // a shortcut logical OR of all subexprs
-    private:
-        const std::vector<std::shared_ptr<ReqExpr>> children;
-
-    public:
-        AnyReqExpr(const std::vector<std::shared_ptr<ReqExpr>>& subs)
-            : children(subs.begin(), subs.end()) { }
-
-        bool match(const http::request<http::string_body>& req) const {
-            for (auto cit = children.cbegin(); cit != children.cend(); ++cit)
-              if ((*cit)->match(req))
-                return true;
-            return false;
         }
 };
 
