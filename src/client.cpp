@@ -164,14 +164,15 @@ static void serve_request( shared_ptr<GenericConnection> con
     // These hard-wired access mechanisms are attempted in order for all normal requests.
     const vector<enum request_mechanism> req_mechs({request_mechanism::cache, request_mechanism::injector});
     // Expressions/mechanisms to test the request against.
-    using Match = pair<const ReqExpr&, const vector<enum request_mechanism>&>;
+    using Match = pair<const reqexpr::ReqExpr2&, const vector<enum request_mechanism>&>;
+    auto host_getter([](const Request& r) {return r["Host"];});
     auto target_getter([](const Request& r) {return r.target();});
     const vector<Match> matches({
-        Match( RegexReqExpr(RegexReqExpr::header_getter("Host"), "localhost")
+        Match( reqexpr::from_regex(host_getter, "localhost")
              , {request_mechanism::_front_end} ),
-        Match( RegexReqExpr(RegexReqExpr::target_getter(), "https?://(www\\.)?example.com/.*")
+        Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example.com/.*")
              , {request_mechanism::cache}),
-        Match( RegexReqExpr(target_getter, "https?://(www\\.)?example.net/.*")
+        Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example.net/.*")
              , {request_mechanism::cache, request_mechanism::injector, request_mechanism::origin}),
     });
 
