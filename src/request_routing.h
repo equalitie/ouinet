@@ -26,106 +26,18 @@ enum request_mechanism {
     _front_end,  // handle the request internally
 };
 
-// Request expressions can tell whether they match a given request
-// (much like regular expressions match strings).
-class ReqExpr {
-    public:
-        virtual ~ReqExpr() { }
-
-        virtual bool match(const http::request<http::string_body>&) const = 0;
-};
-
-class RegexReqExpr : public ReqExpr {  // can match a request field against a regular expression
-    public:
-        // The type of functions that retrieve a given field from a request.
-        typedef typename std::function<beast::string_view (const http::request<http::string_body>&)> field_getter;
-
-        static field_getter target_getter() {
-            return [](const http::request<http::string_body>& r) {return r.target();};
-        }
-        static field_getter header_getter(const std::string& h) {
-            return [=](const http::request<http::string_body>& r) {return r[h];};  // TODO check capture mode
-        }
-        static field_getter method_getter() {
-            return [](const http::request<http::string_body>& r) {return r.method_string();};
-        }
-
-    private:
-        const field_getter& get_field;
-        const boost::regex regexp;
-
-    public:
-        RegexReqExpr(const field_getter& gf, const boost::regex& rx)
-            : get_field(gf), regexp(rx) { };
-
-        RegexReqExpr(const field_getter& gf, const std::string& rx)
-            : RegexReqExpr(gf, boost::regex(rx)) { };
-
-        bool match(const http::request<http::string_body>& req) const {
-            return boost::regex_match(get_field(req).to_string(), regexp);
-        }
-};
-
-class TrueReqExpr : public ReqExpr {  // matches all requests
-        bool match(const http::request<http::string_body>& req) const {
-            return true;
-        }
-};
-
-class FalseReqExpr : public ReqExpr {  // matches no request
-        bool match(const http::request<http::string_body>& req) const {
-            return false;
-        }
-};
-
-class NotReqExpr : public ReqExpr {  // negates match of subexpr
-    private:
-        const std::shared_ptr<ReqExpr> child;
-
-    public:
-        NotReqExpr(const std::shared_ptr<ReqExpr> sub)
-            : child(sub) { }
-
-        bool match(const http::request<http::string_body>& req) const {
-            return !(child->match(req));
-        }
-};
-
-class AndReqExpr : public ReqExpr {  // a shortcircuit logical AND of two subexprs
-    private:
-        const std::shared_ptr<ReqExpr> left, right;
-
-    public:
-        AndReqExpr(const std::shared_ptr<ReqExpr> left_, const std::shared_ptr<ReqExpr> right_)
-            : left(left_), right(right_) { }
-
-        bool match(const http::request<http::string_body>& req) const {
-            if (left->match(req))
-              return right->match(req);
-            return false;
-        }
-};
-
-class OrReqExpr : public ReqExpr {  // a shortcircuit logical OR of two subexprs
-    private:
-        const std::shared_ptr<ReqExpr> left, right;
-
-    public:
-        OrReqExpr(const std::shared_ptr<ReqExpr> left_, const std::shared_ptr<ReqExpr> right_)
-            : left(left_), right(right_) { }
-
-        bool match(const http::request<http::string_body>& req) const {
-            if (left->match(req))
-                return true;
-            return right->match(req);
-        }
-};
+class ReqExpr;
 
 namespace reqexpr {
+// The type of functions that retrieve a given field from a request.
+typedef typename std::function<beast::string_view (const http::request<http::string_body>&)> field_getter;
+
+// Request expressions can tell whether they match a given request
+// (much like regular expressions match strings).
 class ReqExpr2 {
     friend ReqExpr2 true_();
     friend ReqExpr2 false_();
-    friend ReqExpr2 from_regex(const RegexReqExpr::field_getter&, const boost::regex&);
+    friend ReqExpr2 from_regex(const field_getter&, const boost::regex&);
     friend ReqExpr2 operator!(const ReqExpr2&);
     friend ReqExpr2 operator&&(const ReqExpr2&, const ReqExpr2&);
     friend ReqExpr2 operator||(const ReqExpr2&, const ReqExpr2&);
@@ -135,15 +47,13 @@ class ReqExpr2 {
         ReqExpr2(const std::shared_ptr<ReqExpr> impl_) : impl(impl_) { }
 
     public:
-        bool match(const http::request<http::string_body>& req) const {
-            return impl->match(req);
-        }
+        bool match(const http::request<http::string_body>& req) const;
 };
 
 ReqExpr2 true_();
 ReqExpr2 false_();
-ReqExpr2 from_regex(const RegexReqExpr::field_getter&, const boost::regex&);
-ReqExpr2 from_regex(const RegexReqExpr::field_getter&, const std::string&);
+ReqExpr2 from_regex(const field_getter&, const boost::regex&);
+ReqExpr2 from_regex(const field_getter&, const std::string&);
 
 ReqExpr2 operator!(const ReqExpr2&);
 
