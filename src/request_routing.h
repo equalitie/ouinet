@@ -91,6 +91,21 @@ class NotReqExpr : public ReqExpr {  // negates match of subexpr
         }
 };
 
+class AndReqExpr : public ReqExpr {  // a shortcircuit logical AND of two subexprs
+    private:
+        const std::shared_ptr<ReqExpr> left, right;
+
+    public:
+        AndReqExpr(const std::shared_ptr<ReqExpr> left_, const std::shared_ptr<ReqExpr> right_)
+            : left(left_), right(right_) { }
+
+        bool match(const http::request<http::string_body>& req) const {
+            if (left->match(req))
+              return right->match(req);
+            return false;
+        }
+};
+
 class AllReqExpr : public ReqExpr {  // a shortcut logical AND of all subexprs
     private:
         const std::vector<std::shared_ptr<ReqExpr>> children;
@@ -104,6 +119,21 @@ class AllReqExpr : public ReqExpr {  // a shortcut logical AND of all subexprs
               if (!((*cit)->match(req)))
                 return false;
             return true;
+        }
+};
+
+class OrReqExpr : public ReqExpr {  // a shortcircuit logical OR of two subexprs
+    private:
+        const std::shared_ptr<ReqExpr> left, right;
+
+    public:
+        OrReqExpr(const std::shared_ptr<ReqExpr> left_, const std::shared_ptr<ReqExpr> right_)
+            : left(left_), right(right_) { }
+
+        bool match(const http::request<http::string_body>& req) const {
+            if (left->match(req))
+                return true;
+            return right->match(req);
         }
 };
 
@@ -122,6 +152,36 @@ class AnyReqExpr : public ReqExpr {  // a shortcut logical OR of all subexprs
             return false;
         }
 };
+
+namespace reqexpr {
+class ReqExpr2 {
+    friend ReqExpr2 true_();
+    friend ReqExpr2 false_();
+    friend ReqExpr2 from_regex(const RegexReqExpr::field_getter&, const boost::regex&);
+    friend ReqExpr2 operator!(const ReqExpr2&);
+    friend ReqExpr2 operator&&(const ReqExpr2&, const ReqExpr2&);
+    friend ReqExpr2 operator||(const ReqExpr2&, const ReqExpr2&);
+
+    private:
+        const std::shared_ptr<ReqExpr> impl;
+        ReqExpr2(const std::shared_ptr<ReqExpr> impl_) : impl(impl_) { }
+
+    public:
+        bool match(const http::request<http::string_body>& req) const {
+            return impl->match(req);
+        }
+};
+
+ReqExpr2 true_();
+ReqExpr2 false_();
+ReqExpr2 from_regex(const RegexReqExpr::field_getter&, const boost::regex&);
+ReqExpr2 from_regex(const RegexReqExpr::field_getter&, const std::string&);
+
+ReqExpr2 operator!(const ReqExpr2&);
+
+ReqExpr2 operator&&(const ReqExpr2&, const ReqExpr2&);
+ReqExpr2 operator||(const ReqExpr2&, const ReqExpr2&);
+} // ouinet::reqexpr namespace
 
 // A request router holds the context and rules to decide the different mechanisms
 // a request should be routed to until it finally succeeds,

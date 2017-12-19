@@ -67,4 +67,50 @@ route( const http::request<http::string_body>& req
     return std::make_unique<SimpleRequestRouter>(req, def_rmechs);
 }
 
+namespace reqexpr {
+
+ReqExpr2
+true_()
+{
+    return ReqExpr2(std::make_shared<TrueReqExpr>());
+}
+
+ReqExpr2
+false_()
+{
+    return ReqExpr2(std::make_shared<FalseReqExpr>());
+}
+
+ReqExpr2
+from_regex(const RegexReqExpr::field_getter& gf, const boost::regex& rx)
+{
+    return ReqExpr2(std::make_shared<RegexReqExpr>(gf, rx));
+}
+
+ReqExpr2
+from_regex(const RegexReqExpr::field_getter& gf, const std::string& rx)
+{
+    return from_regex(gf, boost::regex(rx));
+}
+
+ReqExpr2
+operator!(const ReqExpr2& sub)
+{
+    return ReqExpr2(std::make_shared<NotReqExpr>(sub.impl));
+}
+
+ReqExpr2
+operator&&(const ReqExpr2& left, const ReqExpr2& right)
+{
+    return ReqExpr2(std::make_shared<AndReqExpr>(left.impl, right.impl));
+}
+
+ReqExpr2
+operator||(const ReqExpr2& left, const ReqExpr2& right)
+{
+    return ReqExpr2(std::make_shared<OrReqExpr>(left.impl, right.impl));
+}
+
+} // ouinet::reqexpr namespace
+
 } // ouinet namespace
