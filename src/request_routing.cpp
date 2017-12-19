@@ -55,7 +55,7 @@ route( const http::request<http::string_body>& req
 //------------------------------------------------------------------------------
 std::unique_ptr<RequestRouter>
 route( const http::request<http::string_body>& req
-     , const std::vector<std::pair<const ReqExpr&, const std::vector<enum request_mechanism>&>>& matches
+     , const std::vector<std::pair<const reqexpr::ReqExpr2&, const std::vector<enum request_mechanism>&>>& matches
      , const std::vector<enum request_mechanism>& def_rmechs )
 {
     // Delegate to a simple router
