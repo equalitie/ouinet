@@ -34,7 +34,7 @@ enum request_mechanism {
 namespace reqexpr {
 class ReqExpr;
 
-// The type of functions that retrieve a given field from a request.
+// The type of functions that retrieve a given field (as a string) from a request.
 typedef typename std::function<beast::string_view (const http::request<http::string_body>&)> field_getter;
 
 class reqex {
@@ -50,16 +50,26 @@ class reqex {
         reqex(const std::shared_ptr<ReqExpr> impl_) : impl(impl_) { }
 
     public:
+        // True when the request matches this expression.
         bool match(const http::request<http::string_body>& req) const;
 };
 
+// Use the following functions to create request expressions,
+// then call the ``match()`` method of the resulting object
+// with the request that you want to check.
+
+// Always matches, regardless of request content.
 reqex true_();
+// Never matches, regardless of request content.
 reqex false_();
+// Only matches when the extracted field matches the given (anchored) regular expression.
 reqex from_regex(const field_getter&, const boost::regex&);
 reqex from_regex(const field_getter&, const std::string&);
 
+// Negates the matching of the given expression.
 reqex operator!(const reqex&);
 
+// Short-circuit AND and OR operations on the given expressions.
 reqex operator&&(const reqex&, const reqex&);
 reqex operator||(const reqex&, const reqex&);
 } // ouinet::reqexpr namespace
