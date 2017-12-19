@@ -5,6 +5,7 @@ using namespace ouinet;
 
 using Request = http::request<http::string_body>;
 
+//------------------------------------------------------------------------------
 // Route the provided request according to the given list of mechanisms.
 class SimpleRequestRouter : public RequestRouter {
     private:
@@ -42,6 +43,7 @@ SimpleRequestRouter::get_next_mechanism(sys::error_code& ec)
 }
 
 
+//------------------------------------------------------------------------------
 namespace ouinet {
 
 namespace reqexpr {
