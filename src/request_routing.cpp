@@ -62,9 +62,6 @@ class RegexReqExpr : public ReqExpr {  // can match a request field against a re
         RegexReqExpr(const field_getter& gf, const boost::regex& rx)
             : get_field(gf), regexp(rx) { };
 
-        RegexReqExpr(const field_getter& gf, const std::string& rx)
-            : RegexReqExpr(gf, boost::regex(rx)) { };
-
         bool match(const http::request<http::string_body>& req) const {
             return boost::regex_match(get_field(req).to_string(), regexp);
         }
