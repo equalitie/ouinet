@@ -13,6 +13,7 @@
 
 namespace ouinet {
 
+//------------------------------------------------------------------------------
 // The different mechanisms an HTTP request can be routed over.
 enum request_mechanism {
     // These mechanisms may be configured by the user.
@@ -26,14 +27,16 @@ enum request_mechanism {
     _front_end,  // handle the request internally
 };
 
+
+//------------------------------------------------------------------------------
+// Request expressions can tell whether they match a given request
+// (much like regular expressions match strings).
 namespace reqexpr {
 class ReqExpr;
 
 // The type of functions that retrieve a given field from a request.
 typedef typename std::function<beast::string_view (const http::request<http::string_body>&)> field_getter;
 
-// Request expressions can tell whether they match a given request
-// (much like regular expressions match strings).
 class reqex {
     friend reqex true_();
     friend reqex false_();
@@ -61,6 +64,8 @@ reqex operator&&(const reqex&, const reqex&);
 reqex operator||(const reqex&, const reqex&);
 } // ouinet::reqexpr namespace
 
+
+//------------------------------------------------------------------------------
 // A request router holds the context and rules to decide the different mechanisms
 // a request should be routed to until it finally succeeds,
 // considering previous attempts.
