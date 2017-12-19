@@ -68,12 +68,14 @@ class RegexReqExpr : public ReqExpr {  // can match a request field against a re
 };
 
 class TrueReqExpr : public ReqExpr {  // matches all requests
+    public:
         bool match(const http::request<http::string_body>& req) const {
             return true;
         }
 };
 
 class FalseReqExpr : public ReqExpr {  // matches no request
+    public:
         bool match(const http::request<http::string_body>& req) const {
             return false;
         }
