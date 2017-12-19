@@ -26,9 +26,9 @@ enum request_mechanism {
     _front_end,  // handle the request internally
 };
 
+namespace reqexpr {
 class ReqExpr;
 
-namespace reqexpr {
 // The type of functions that retrieve a given field from a request.
 typedef typename std::function<beast::string_view (const http::request<http::string_body>&)> field_getter;
 

@@ -44,6 +44,8 @@ SimpleRequestRouter::get_next_mechanism(sys::error_code& ec)
 
 namespace ouinet {
 
+namespace reqexpr {
+
 class ReqExpr {
     public:
         virtual ~ReqExpr() { }
@@ -52,20 +54,6 @@ class ReqExpr {
 };
 
 class RegexReqExpr : public ReqExpr {  // can match a request field against a regular expression
-    public:
-        // The type of functions that retrieve a given field from a request.
-        typedef typename std::function<beast::string_view (const http::request<http::string_body>&)> field_getter;
-
-        static field_getter target_getter() {
-            return [](const http::request<http::string_body>& r) {return r.target();};
-        }
-        static field_getter header_getter(const std::string& h) {
-            return [=](const http::request<http::string_body>& r) {return r[h];};  // TODO check capture mode
-        }
-        static field_getter method_getter() {
-            return [](const http::request<http::string_body>& r) {return r.method_string();};
-        }
-
     private:
         const field_getter& get_field;
         const boost::regex regexp;
@@ -137,31 +125,6 @@ class OrReqExpr : public ReqExpr {  // a shortcircuit logical OR of two subexprs
         }
 };
 
-//------------------------------------------------------------------------------
-std::unique_ptr<RequestRouter>
-route( const http::request<http::string_body>& req
-     , const std::vector<enum request_mechanism>& rmechs)
-{
-    return std::make_unique<SimpleRequestRouter>(req, rmechs);
-}
-
-//------------------------------------------------------------------------------
-std::unique_ptr<RequestRouter>
-route( const http::request<http::string_body>& req
-     , const std::vector<std::pair<const reqexpr::ReqExpr2&, const std::vector<enum request_mechanism>&>>& matches
-     , const std::vector<enum request_mechanism>& def_rmechs )
-{
-    // Delegate to a simple router
-    // with the mechanisms associated with the matching expression (if any),
-    // or with `def_rmechs` if none does.
-    for (auto mit = matches.begin(); mit != matches.end(); ++mit)
-        if (mit->first.match(req))
-            return std::make_unique<SimpleRequestRouter>(req, mit->second);
-    return std::make_unique<SimpleRequestRouter>(req, def_rmechs);
-}
-
-namespace reqexpr {
-
 bool
 ReqExpr2::match(const http::request<http::string_body>& req) const {
     return impl->match(req);
@@ -210,5 +173,28 @@ operator||(const ReqExpr2& left, const ReqExpr2& right)
 }
 
 } // ouinet::reqexpr namespace
+
+//------------------------------------------------------------------------------
+std::unique_ptr<RequestRouter>
+route( const http::request<http::string_body>& req
+     , const std::vector<enum request_mechanism>& rmechs)
+{
+    return std::make_unique<SimpleRequestRouter>(req, rmechs);
+}
+
+//------------------------------------------------------------------------------
+std::unique_ptr<RequestRouter>
+route( const http::request<http::string_body>& req
+     , const std::vector<std::pair<const reqexpr::ReqExpr2&, const std::vector<enum request_mechanism>&>>& matches
+     , const std::vector<enum request_mechanism>& def_rmechs )
+{
+    // Delegate to a simple router
+    // with the mechanisms associated with the matching expression (if any),
+    // or with `def_rmechs` if none does.
+    for (auto mit = matches.begin(); mit != matches.end(); ++mit)
+        if (mit->first.match(req))
+            return std::make_unique<SimpleRequestRouter>(req, mit->second);
+    return std::make_unique<SimpleRequestRouter>(req, def_rmechs);
+}
 
 } // ouinet namespace
