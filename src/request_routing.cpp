@@ -126,50 +126,50 @@ class OrReqExpr : public ReqExpr {  // a shortcircuit logical OR of two subexprs
 };
 
 bool
-ReqExpr2::match(const http::request<http::string_body>& req) const {
+reqex::match(const http::request<http::string_body>& req) const {
     return impl->match(req);
 }
 
-ReqExpr2
+reqex
 true_()
 {
-    return ReqExpr2(std::make_shared<TrueReqExpr>());
+    return reqex(std::make_shared<TrueReqExpr>());
 }
 
-ReqExpr2
+reqex
 false_()
 {
-    return ReqExpr2(std::make_shared<FalseReqExpr>());
+    return reqex(std::make_shared<FalseReqExpr>());
 }
 
-ReqExpr2
+reqex
 from_regex(const field_getter& gf, const boost::regex& rx)
 {
-    return ReqExpr2(std::make_shared<RegexReqExpr>(gf, rx));
+    return reqex(std::make_shared<RegexReqExpr>(gf, rx));
 }
 
-ReqExpr2
+reqex
 from_regex(const field_getter& gf, const std::string& rx)
 {
     return from_regex(gf, boost::regex(rx));
 }
 
-ReqExpr2
-operator!(const ReqExpr2& sub)
+reqex
+operator!(const reqex& sub)
 {
-    return ReqExpr2(std::make_shared<NotReqExpr>(sub.impl));
+    return reqex(std::make_shared<NotReqExpr>(sub.impl));
 }
 
-ReqExpr2
-operator&&(const ReqExpr2& left, const ReqExpr2& right)
+reqex
+operator&&(const reqex& left, const reqex& right)
 {
-    return ReqExpr2(std::make_shared<AndReqExpr>(left.impl, right.impl));
+    return reqex(std::make_shared<AndReqExpr>(left.impl, right.impl));
 }
 
-ReqExpr2
-operator||(const ReqExpr2& left, const ReqExpr2& right)
+reqex
+operator||(const reqex& left, const reqex& right)
 {
-    return ReqExpr2(std::make_shared<OrReqExpr>(left.impl, right.impl));
+    return reqex(std::make_shared<OrReqExpr>(left.impl, right.impl));
 }
 
 } // ouinet::reqexpr namespace
@@ -185,7 +185,7 @@ route( const http::request<http::string_body>& req
 //------------------------------------------------------------------------------
 std::unique_ptr<RequestRouter>
 route( const http::request<http::string_body>& req
-     , const std::vector<std::pair<const reqexpr::ReqExpr2&, const std::vector<enum request_mechanism>&>>& matches
+     , const std::vector<std::pair<const reqexpr::reqex&, const std::vector<enum request_mechanism>&>>& matches
      , const std::vector<enum request_mechanism>& def_rmechs )
 {
     // Delegate to a simple router

@@ -164,7 +164,7 @@ static void serve_request( shared_ptr<GenericConnection> con
     // These hard-wired access mechanisms are attempted in order for all normal requests.
     const vector<enum request_mechanism> req_mechs({request_mechanism::cache, request_mechanism::injector});
     // Expressions/mechanisms to test the request against.
-    using Match = pair<const reqexpr::ReqExpr2&, const vector<enum request_mechanism>&>;
+    using Match = pair<const reqexpr::reqex&, const vector<enum request_mechanism>&>;
     auto host_getter([](const Request& r) {return r["Host"];});
     auto target_getter([](const Request& r) {return r.target();});
     const vector<Match> matches({

@@ -34,31 +34,31 @@ typedef typename std::function<beast::string_view (const http::request<http::str
 
 // Request expressions can tell whether they match a given request
 // (much like regular expressions match strings).
-class ReqExpr2 {
-    friend ReqExpr2 true_();
-    friend ReqExpr2 false_();
-    friend ReqExpr2 from_regex(const field_getter&, const boost::regex&);
-    friend ReqExpr2 operator!(const ReqExpr2&);
-    friend ReqExpr2 operator&&(const ReqExpr2&, const ReqExpr2&);
-    friend ReqExpr2 operator||(const ReqExpr2&, const ReqExpr2&);
+class reqex {
+    friend reqex true_();
+    friend reqex false_();
+    friend reqex from_regex(const field_getter&, const boost::regex&);
+    friend reqex operator!(const reqex&);
+    friend reqex operator&&(const reqex&, const reqex&);
+    friend reqex operator||(const reqex&, const reqex&);
 
     private:
         const std::shared_ptr<ReqExpr> impl;
-        ReqExpr2(const std::shared_ptr<ReqExpr> impl_) : impl(impl_) { }
+        reqex(const std::shared_ptr<ReqExpr> impl_) : impl(impl_) { }
 
     public:
         bool match(const http::request<http::string_body>& req) const;
 };
 
-ReqExpr2 true_();
-ReqExpr2 false_();
-ReqExpr2 from_regex(const field_getter&, const boost::regex&);
-ReqExpr2 from_regex(const field_getter&, const std::string&);
+reqex true_();
+reqex false_();
+reqex from_regex(const field_getter&, const boost::regex&);
+reqex from_regex(const field_getter&, const std::string&);
 
-ReqExpr2 operator!(const ReqExpr2&);
+reqex operator!(const reqex&);
 
-ReqExpr2 operator&&(const ReqExpr2&, const ReqExpr2&);
-ReqExpr2 operator||(const ReqExpr2&, const ReqExpr2&);
+reqex operator&&(const reqex&, const reqex&);
+reqex operator||(const reqex&, const reqex&);
 } // ouinet::reqexpr namespace
 
 // A request router holds the context and rules to decide the different mechanisms
@@ -84,7 +84,7 @@ route( const http::request<http::string_body>& req
 // otherwise route it according to the given list of default mechanisms.
 std::unique_ptr<RequestRouter>
 route( const http::request<http::string_body>& req
-     , const std::vector<std::pair<const reqexpr::ReqExpr2&, const std::vector<enum request_mechanism>&>>& matches
+     , const std::vector<std::pair<const reqexpr::reqex&, const std::vector<enum request_mechanism>&>>& matches
      , const std::vector<enum request_mechanism>& def_rmechs );
 
 } // ouinet namespace
