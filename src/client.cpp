@@ -86,11 +86,11 @@ void handle_connect_request( GenericConnection& client_c
     auto origin_c = connect_to_host(ios, req["host"], ec, yield);
     if (ec) return fail(ec, "connect");
 
-    http::response<http::empty_body> res{http::status::ok, req.version()};
-
     // Send the client an OK message indicating that the tunnel
     // has been established. TODO: Reply with an error otherwise.
+    http::response<http::empty_body> res{http::status::ok, req.version()};
     http::async_write(client_c, res, yield[ec]);
+
     if (ec) return fail(ec, "sending connect response");
 
     Blocker blocker(ios);
@@ -316,8 +316,6 @@ void do_listen( asio::io_service& ios
         }
     }
 }
-
-//------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
 int main(int argc, char* argv[])
