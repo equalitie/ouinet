@@ -3,7 +3,6 @@
 #include <boost/beast/version.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/spawn.hpp>
-#include <boost/asio/steady_timer.hpp>
 #include <boost/asio/connect.hpp>
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
@@ -12,7 +11,6 @@
 
 #include <ipfs_cache/client.h>
 #include <ipfs_cache/error.h>
-#include <ipfs_cache/timer.h>
 
 #include <gnunet_channels/channel.h>
 #include <gnunet_channels/service.h>
@@ -25,6 +23,7 @@
 #include "util.h"
 #include "result.h"
 #include "blocker.h"
+#include "async_sleep.h"
 #include "increase_open_file_limit.h"
 
 using namespace std;
@@ -234,17 +233,6 @@ static void serve_request( shared_ptr<GenericConnection> con
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "write");
     }
-}
-
-//------------------------------------------------------------------------------
-static void async_sleep( asio::io_service& ios
-                       , asio::steady_timer::duration duration
-                       , asio::yield_context yield)
-{
-    asio::steady_timer timer(ios);
-    timer.expires_from_now(duration);
-    sys::error_code ec;
-    timer.async_wait(yield[ec]);
 }
 
 //------------------------------------------------------------------------------

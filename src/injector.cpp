@@ -4,7 +4,6 @@
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/connect.hpp>
 #include <boost/asio/spawn.hpp>
-#include <boost/asio/steady_timer.hpp>
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
 #include <iostream>
@@ -20,6 +19,7 @@
 #include "fetch_http_page.h"
 #include "generic_connection.h"
 #include "split_string.h"
+#include "async_sleep.h"
 #include "increase_open_file_limit.h"
 
 using namespace std;
@@ -171,9 +171,7 @@ void listen_tcp( asio::io_service& ios
         if(ec) {
             fail(ec, "accept");
             // Wait one second before we start accepting again.
-            asio::steady_timer timer(ios);
-            timer.expires_from_now(chrono::seconds(1));
-            timer.async_wait(yield[ec]);
+            async_sleep(ios, chrono::seconds(1), yield);
         }
         else {
             asio::spawn( ios
@@ -222,8 +220,8 @@ void listen_gnunet( asio::io_service& ios
 
         if (ec) {
             cerr << "Failed to accept: " << ec.message() << endl;
-            // TODO: Don't return, sleep a little and then retry.
-            return;
+            async_sleep(ios, chrono::milliseconds(100), yield);
+            continue;
         }
 
         asio::spawn( ios
