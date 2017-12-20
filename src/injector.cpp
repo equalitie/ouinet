@@ -78,18 +78,18 @@ static bool ok_to_cache( const http::request_header<http::fields>&  request
 }
 
 //------------------------------------------------------------------------------
-template<class Req, class Res>
-static void try_to_cache( ipfs_cache::Injector& injector
-                        , const Req& req
-                        , const Res& res)
+static
+void try_to_cache( ipfs_cache::Injector& injector
+                 , const http::request_header<http::fields>& request
+                 , const http::response_header<http::fields>& response)
 {
-    if (!ok_to_cache(req, res)) {
+    if (!ok_to_cache(request, response)) {
         return;
     }
 
     stringstream ss;
-    ss << res;
-    auto key = req.target().to_string();
+    ss << response;
+    auto key = request.target().to_string();
 
     injector.insert_content(key, ss.str(),
         [key] (sys::error_code ec, auto) {
