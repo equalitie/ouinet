@@ -19,6 +19,7 @@
 #include "util.h"
 #include "fetch_http_page.h"
 #include "generic_connection.h"
+#include "split_string.h"
 
 using namespace std;
 using namespace ouinet;
@@ -36,61 +37,22 @@ static const fs::path OUINET_CONF_FILE = "ouinet-injector.conf";
 template<class Fields>
 static bool ok_to_cache(const http::response_header<Fields>& hdr)
 {
-    using string_view = beast::string_view;
+    auto cache_control_i = hdr.find(http::field::cache_control);
 
-    auto cc_i = hdr.find(http::field::cache_control);
+    if (cache_control_i == hdr.end()) return true;
 
-    if (cc_i == hdr.end()) return true;
+    for (auto kv : SplitString(cache_control_i->value(), ','))
+    {
+        beast::string_view key, val;
+        std::tie(key, val) = split_string_pair(kv, '=');
 
-    auto trim_whitespace = [](string_view& v) {
-        while (v.starts_with(' ')) v.remove_prefix(1);
-        while (v.ends_with  (' ')) v.remove_suffix(1);
-    };
-
-    auto key_val = [&trim_whitespace](string_view v) {
-        auto eq = v.find('=');
-
-        if (eq == string_view::npos) {
-            trim_whitespace(v);
-            return make_pair(v, string_view("", 0));
-        }
-
-        auto key = v.substr(0, eq);
-        auto val = v.substr(eq + 1, v.size());
-
-        trim_whitespace(key);
-        trim_whitespace(val);
-
-        return make_pair(key, val);
-    };
-
-    auto for_each = [&key_val] (string_view v, auto can_cache) {
-        while (true) {
-            auto comma = v.find(',');
-
-            if (comma == string_view::npos) {
-                if (v.size()) {
-                    if (!can_cache(key_val(v))) return false;
-                }
-                break;
-            }
-
-            if (!can_cache(key_val(v.substr(0, comma)))) return false;
-            v.remove_prefix(comma + 1);
-        }
-
-        return true;
-    };
-
-    return for_each(cc_i->value(), [] (auto kv) {
-        auto key = kv.first;
-        //auto val = kv.second;
         // https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/http-caching
-        if (key == "no-store")              return false;
+        if (key == "no-store") return false;
         //if (key == "no-cache")              return false;
         //if (key == "max-age" && val == "0") return false;
-        return true;
-    });
+    }
+
+    return true;
 }
 
 //------------------------------------------------------------------------------
