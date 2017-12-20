@@ -34,22 +34,43 @@ static fs::path REPO_ROOT;
 static const fs::path OUINET_CONF_FILE = "ouinet-injector.conf";
 
 //------------------------------------------------------------------------------
-template<class Fields>
-static bool ok_to_cache(const http::response_header<Fields>& hdr)
+// Cache control:
+// https://tools.ietf.org/html/rfc7234
+// https://tools.ietf.org/html/rfc5861
+// https://tools.ietf.org/html/rfc8246
+//
+// For a less dry reading:
+// https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/http-caching
+//
+// TODO: This function is incomplete.
+static bool ok_to_cache( const http::request_header<http::fields>&  request
+                       , const http::response_header<http::fields>& response)
 {
-    auto cache_control_i = hdr.find(http::field::cache_control);
+    auto cache_control_i = response.find(http::field::cache_control);
 
-    if (cache_control_i == hdr.end()) return true;
+    // https://tools.ietf.org/html/rfc7234#section-3 (bullet #5)
+    if (request.count(http::field::authorization)) {
+        // https://tools.ietf.org/html/rfc7234#section-3.2
+        if (cache_control_i == response.end()) return false;
+
+        for (auto v : SplitString(cache_control_i->value(), ',')) {
+            if (v == "must-revalidate") return true;
+            if (v == "public")          return true;
+            if (v == "s-maxage")        return true;
+        }
+    }
+
+    if (cache_control_i == response.end()) return true;
 
     for (auto kv : SplitString(cache_control_i->value(), ','))
     {
         beast::string_view key, val;
         std::tie(key, val) = split_string_pair(kv, '=');
 
-        // https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/http-caching
+        // https://tools.ietf.org/html/rfc7234#section-3 (bullet #3)
         if (key == "no-store") return false;
-        //if (key == "no-cache")              return false;
-        //if (key == "max-age" && val == "0") return false;
+        // https://tools.ietf.org/html/rfc7234#section-3 (bullet #4)
+        if (key == "private")  return false;
     }
 
     return true;
@@ -61,7 +82,7 @@ static void try_to_cache( ipfs_cache::Injector& injector
                         , const Req& req
                         , const Res& res)
 {
-    if (!ok_to_cache(res)) {
+    if (!ok_to_cache(req, res)) {
         return;
     }
 
