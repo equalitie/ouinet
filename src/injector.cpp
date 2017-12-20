@@ -123,6 +123,7 @@ void serve( shared_ptr<GenericConnection> con
 
         switch (res.result()) {
             case http::status::ok:
+            case http::status::moved_permanently:
                 try_to_cache(injector, req, res);
                 break;
             // TODO: Other response codes
