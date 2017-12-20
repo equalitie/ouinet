@@ -20,6 +20,7 @@
 #include "fetch_http_page.h"
 #include "generic_connection.h"
 #include "split_string.h"
+#include "increase_open_file_limit.h"
 
 using namespace std;
 using namespace ouinet;
@@ -250,6 +251,9 @@ int main(int argc, char* argv[])
         ("repo", po::value<string>(), "Path to the repository root")
         ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen")
         ("listen-on-gnunet", po::value<string>(), "GNUnet port on which we'll listen")
+        ("open-file-limit"
+         , po::value<unsigned int>()
+         , "To increase the maximum number of open files")
         ;
 
     po::variables_map vm;
@@ -299,6 +303,10 @@ int main(int argc, char* argv[])
 
     auto const injector_ep
         = util::parse_endpoint(vm["listen-on-tcp"].as<string>());
+
+    if (vm.count("open-file-limit")) {
+        increase_open_file_limit(vm["open-file-limit"].as<unsigned int>());
+    }
 
     // The io_service is required for all I/O
     asio::io_service ios;

@@ -25,6 +25,7 @@
 #include "util.h"
 #include "result.h"
 #include "blocker.h"
+#include "increase_open_file_limit.h"
 
 using namespace std;
 using namespace ouinet;
@@ -317,40 +318,6 @@ void do_listen( asio::io_service& ios
 }
 
 //------------------------------------------------------------------------------
-#include <sys/resource.h>
-// Temporary, until this is merged https://github.com/ipfs/go-ipfs/pull/4288
-// into IPFS.
-void bump_file_limit(rlim_t new_value)
-{
-   struct rlimit rl;
-
-   int r = getrlimit(RLIMIT_NOFILE, &rl);
-
-   if (r != 0) {
-       cerr << "Failed to get the current RLIMIT_NOFILE value" << endl;
-       return;
-   }
-
-   cout << "Default RLIMIT_NOFILE value is: " << rl.rlim_cur << endl;
-
-   if (rl.rlim_cur >= new_value) {
-       cout << "Leaving RLIMIT_NOFILE value unchanged." << endl;
-       return;
-   }
-
-   rl.rlim_cur = new_value;
-
-   r = setrlimit(RLIMIT_NOFILE, &rl);
-
-   if (r != 0) {
-       cerr << "Failed to set the RLIMIT_NOFILE value to " << rl.rlim_cur << endl;
-       return;
-   }
-
-   r = getrlimit(RLIMIT_NOFILE, &rl);
-   assert(r == 0);
-   cout << "RLIMIT_NOFILE value changed to: " << rl.rlim_cur << endl;
-}
 
 //------------------------------------------------------------------------------
 int main(int argc, char* argv[])
@@ -371,7 +338,7 @@ int main(int argc, char* argv[])
          , "IPNS of the injector's database")
         ("open-file-limit"
          , po::value<unsigned int>()
-         , "To increase the number of open files")
+         , "To increase the maximum number of open files")
         ;
 
     po::variables_map vm;
@@ -413,7 +380,7 @@ int main(int argc, char* argv[])
     po::notify(vm);
 
     if (vm.count("open-file-limit")) {
-        bump_file_limit(vm["open-file-limit"].as<unsigned int>());
+        increase_open_file_limit(vm["open-file-limit"].as<unsigned int>());
     }
 
     if (!vm.count("listen-on-tcp")) {
