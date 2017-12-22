@@ -81,7 +81,7 @@ static bool ok_to_cache( const http::request_header<http::fields>&  request
 static
 void try_to_cache( ipfs_cache::Injector& injector
                  , const http::request_header<http::fields>& request
-                 , const http::response_header<http::fields>& response)
+                 , const http::response<http::dynamic_body>& response)
 {
     if (!ok_to_cache(request, response)) {
         return;
