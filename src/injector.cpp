@@ -44,8 +44,8 @@ static const fs::path OUINET_CONF_FILE = "ouinet-injector.conf";
 // https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/http-caching
 //
 // TODO: This function is incomplete.
-static bool ok_to_cache( const http::request_header<http::fields>&  request
-                       , const http::response_header<http::fields>& response)
+static bool ok_to_cache( const http::request_header<>&  request
+                       , const http::response_header<>& response)
 {
     auto cache_control_i = response.find(http::field::cache_control);
 
@@ -80,7 +80,7 @@ static bool ok_to_cache( const http::request_header<http::fields>&  request
 //------------------------------------------------------------------------------
 static
 void try_to_cache( ipfs_cache::Injector& injector
-                 , const http::request_header<http::fields>& request
+                 , const http::request_header<>& request
                  , const http::response<http::dynamic_body>& response)
 {
     if (!ok_to_cache(request, response)) {
