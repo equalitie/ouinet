@@ -86,7 +86,23 @@ with those of your injector:
 
 All the steps above only need to be done once.
 
-TODO run client and browser
+To start the Ouinet client, run:
+
+    ouinet-build/client --repo client-repo
+
+It can be stopped by hitting Ctrl+C.
+
+The client opens a web proxy on port 7070 (see option `listen-on-tcp` in its
+configuration file).  If you have Firefox installed, you can create a new
+profile (stored under the `ff-profile` directory in the example below) which
+uses the Ouinet client as a proxy by executing:
+
+    mkdir -p ff-profile
+    env http_proxy='http://localhost:7070/' firefox --no-remote --profile ff-profile
+
+When you access the web using this browser, your requests will go through your
+local Ouinet client, which will attempt several mechanisms supported by Ouinet
+to retrieve the resource.
 
 ## Requirements
 
