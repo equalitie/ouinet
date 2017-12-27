@@ -64,8 +64,29 @@ After installing missing packages you can run the script again:
 
 You may need to repeat this until the script succeeds and reports instructions
 on how to run the client or injector tools.  The whole process takes a few
-minutes and requires around 2 GB of storage.  After that, you may jump
-straight to the [Test](#test) section below.
+minutes and requires around 2 GB of storage.
+
+### Testing
+
+To perform some tests using the just-built Ouinet client you first need to
+create a repository for it and configure it with an *injector endpoint* and a
+*distributed cache name*, which you need to know beforehand.  Just copy the
+repository template contained in Ouinet's source and edit the included
+configuration file:
+
+    cp -r ouinet/repos/client client-repo
+    edit client-repo/ouinet-client.conf
+
+Add options for the injector endpoint (an IP address and PORT) and the
+distributed cache name (an IPNS identifier).  Remember to replace the values
+with those of your injector:
+
+    injector-ep = 192.0.2.1:1234
+    injector-ipns = Qm0123456789abcdefghijklmnopqrstuvwxyzABCDEFGI
+
+All the steps above only need to be done once.
+
+TODO run client and browser
 
 ## Requirements
 
