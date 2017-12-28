@@ -98,7 +98,8 @@ Then to start the Ouinet client, run:
 The client opens a web proxy on local port 7070 (see option `listen-on-tcp` in
 its configuration file).  If you have Firefox installed, you can create a new
 profile (stored under the `ff-profile` directory in the example below) which
-uses the Ouinet client as a proxy by executing:
+uses the Ouinet client as a proxy by executing the following commands on
+another shell:
 
     mkdir -p ff-profile
     env http_proxy='http://localhost:7070/' firefox --no-remote --profile ff-profile
