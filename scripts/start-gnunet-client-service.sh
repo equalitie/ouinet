@@ -5,16 +5,19 @@ set -e
 export SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
 
 # Note, this script assumes that you built `ouinet` in the
-# `${CMAKE_SOURCE_DIR}/build` directory. If not, modify
-# the BUILD variable below.
+# `${CMAKE_SOURCE_DIR}/build` directory and that client and injector repos sit
+# under `${CMAKE_SOURCE_DIR}/repos`. If not, modify the BUILD and REPOS
+# variables below.
 
 ROOT=$SCRIPT_DIR/..
-BUILD=$ROOT/build
+BUILD=${BUILD:-$ROOT/build}
+REPOS=${REPOS:-$ROOT/repos}
+
 GNUNET_ROOT=$BUILD/gnunet-channels/src/gnunet-channels-build
 
 export PATH=$GNUNET_ROOT/gnunet/bin:$PATH
 
-CLIENT_HOME=$ROOT/repos/client/gnunet
+CLIENT_HOME=$REPOS/client/gnunet
 
 export CLIENT_CFG=$CLIENT_HOME/peer.conf
 
