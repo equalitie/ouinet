@@ -86,7 +86,14 @@ with those of your injector:
 
 All the steps above only need to be done once.
 
-To start the Ouinet client, run:
+Before you start the Ouinet client, you must run some local GNUnet services.
+Open a different shell in the same temporary directory and run:
+
+    env BUILD=ouinet-build REPOS=ouinet-repos ouinet/scripts/start-gnunet-services.sh
+
+These services can be stopped just by hitting Enter.
+
+To start the Ouinet client, at the previous shell run:
 
     ouinet-build/client --repo ouinet-repos/client
 
@@ -103,6 +110,9 @@ uses the Ouinet client as a proxy by executing:
 When you access the web using this browser, your requests will go through your
 local Ouinet client, which will attempt several mechanisms supported by Ouinet
 to retrieve the resource.
+
+When you are done testing the Ouinet client, just shut the browser, the client
+and finally the GNUnet services.
 
 ## Requirements
 
