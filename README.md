@@ -91,7 +91,7 @@ Open a different shell in the same temporary directory and run:
 
     env BUILD=ouinet-build REPOS=ouinet-repos ouinet/scripts/start-gnunet-client-service.sh
 
-These services can be stopped just by hitting Enter.
+These services can be stopped just by hitting Ctrl+C.
 
 To start the Ouinet client, at the previous shell run:
 
