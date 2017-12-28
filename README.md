@@ -89,7 +89,7 @@ All the steps above only need to be done once.
 Before you start the Ouinet client, you must run some local GNUnet services.
 Open a different shell in the same temporary directory and run:
 
-    env BUILD=ouinet-build REPOS=ouinet-repos ouinet/scripts/start-gnunet-services.sh
+    env BUILD=ouinet-build REPOS=ouinet-repos ouinet/scripts/start-gnunet-client-service.sh
 
 These services can be stopped just by hitting Enter.
 
