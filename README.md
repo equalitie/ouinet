@@ -74,8 +74,8 @@ create a repository for it and configure it with an *injector endpoint* and a
 repository template contained in Ouinet's source and edit the included
 configuration file:
 
-    cp -r ouinet/repos/client client-repo
-    edit client-repo/ouinet-client.conf
+    cp -r ouinet/repos ouinet-repos
+    edit ouinet-repos/client/ouinet-client.conf
 
 Add options for the injector endpoint (an IP address and PORT) and the
 distributed cache name (an IPNS identifier).  Remember to replace the values
@@ -88,7 +88,7 @@ All the steps above only need to be done once.
 
 To start the Ouinet client, run:
 
-    ouinet-build/client --repo client-repo
+    ouinet-build/client --repo ouinet-repos/client
 
 It can be stopped by hitting Ctrl+C.
 
