@@ -20,16 +20,21 @@ export PATH=$GNUNET_ROOT/gnunet/bin:$PATH
 CLIENT_HOME=$REPOS/client/gnunet
 INJECTOR_HOME=$REPOS/injector/gnunet
 
-export CLIENT_CFG=$CLIENT_HOME/peer.conf
-export INJECTOR_CFG=$INJECTOR_HOME/peer.conf
+CLIENT_CFG=$CLIENT_HOME/peer.conf
+INJECTOR_CFG=$INJECTOR_HOME/peer.conf
 
 rm -rf $CLIENT_HOME/.local/share/gnunet/peerinfo/hosts
 rm -rf $INJECTOR_HOME/.local/share/gnunet/peerinfo/hosts
 
-trap "pkill 'gnunet-*' -9 || true" INT EXIT
 
-GNUNET_TEST_HOME=$CLIENT_HOME   gnunet-arm -s -c $CLIENT_CFG &
-GNUNET_TEST_HOME=$INJECTOR_HOME gnunet-arm -s -c $INJECTOR_CFG &
+stop_gnunet() {
+    GNUNET_TEST_HOME=$CLIENT_HOME   gnunet-arm -e -c $CLIENT_CFG -T 2s
+    GNUNET_TEST_HOME=$INJECTOR_HOME gnunet-arm -e -c $INJECTOR_CFG -T 2s
+}
+
+GNUNET_TEST_HOME=$CLIENT_HOME   gnunet-arm -s -c $CLIENT_CFG
+GNUNET_TEST_HOME=$INJECTOR_HOME gnunet-arm -s -c $INJECTOR_CFG
+trap stop_gnunet INT EXIT
 
 sleep 1
 
@@ -41,8 +46,7 @@ gnunet-peerinfo -s -c $INJECTOR_CFG
 # This is not necessary, but it makes developing easier/faster.
 echo "Interconnecting the two..."
 gnunet-peerinfo -c $CLIENT_CFG -p `gnunet-peerinfo -c $INJECTOR_CFG -g`
-
 echo "Done"
-echo "Press Enter to stop services and exit."
 
-read
+# Monitor GNUnet until the user cancels it (any service will do).
+gnunet-arm -m -c $CLIENT_CFG

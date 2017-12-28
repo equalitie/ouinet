@@ -19,19 +19,22 @@ export PATH=$GNUNET_ROOT/gnunet/bin:$PATH
 
 CLIENT_HOME=$REPOS/client/gnunet
 
-export CLIENT_CFG=$CLIENT_HOME/peer.conf
+CLIENT_CFG=$CLIENT_HOME/peer.conf
 
 rm -rf $CLIENT_HOME/.local/share/gnunet/peerinfo/hosts
 
-trap "pkill 'gnunet-*' -9 || true" INT EXIT
 
-GNUNET_TEST_HOME=$CLIENT_HOME   gnunet-arm -s -c $CLIENT_CFG &
+stop_gnunet() {
+    GNUNET_TEST_HOME=$CLIENT_HOME   gnunet-arm -e -c $CLIENT_CFG -T 2s
+}
+
+GNUNET_TEST_HOME=$CLIENT_HOME   gnunet-arm -s -c $CLIENT_CFG
+trap stop_gnunet INT EXIT
 
 sleep 1
 
 echo "* Client's info"
 gnunet-peerinfo -s -c $CLIENT_CFG
 
-echo "Press Enter to stop services and exit."
-
-read
+# Monitor GNUnet until the user cancels it.
+gnunet-arm -m -c $CLIENT_CFG
