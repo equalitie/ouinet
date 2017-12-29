@@ -74,14 +74,12 @@ cache name*.  These use to be an IP address and PORT, and an IPNS identifier,
 respectively (although the injector endpoint may also be a GNUnet peer
 identity and service name).
 
-You need to create a repository for the Ouinet client and configure it with
-the aforementioned parameters.  Just copy the repository template contained in
-Ouinet's source and edit the included configuration file:
+You need to configure the Ouinet client to use the aforementioned parameters.
+Edit the included configuration file:
 
-    cp -r ouinet/repos ouinet-repos
     edit ouinet-repos/client/ouinet-client.conf
 
-Add options for the injector endpoint and the distributed cache name.
+Add options there for the injector endpoint and the distributed cache name.
 Remember to replace the values with your own:
 
     injector-ep = 192.0.2.1:1234

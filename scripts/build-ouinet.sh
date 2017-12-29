@@ -170,9 +170,15 @@ else
 	cd ..
 fi
 
+if [ ! -d ouinet-repos ]; then
+	cp -r ouinet/repos ouinet-repos
+fi
+
 echo "\
 Now run:
-  ouinet-build/injector <parameters>
+  env BUILD=ouinet-build REPOS=ouinet-repos ouinet/scripts/start-gnunet-services.sh &
+Then:
+  ouinet-build/injector --repo ouinet-repos/injector <other parameters>
 Or:
-  ouinet-build/client <parameters>
+  ouinet-build/client --repo ouinet-repos/client <other parameters>
 "
