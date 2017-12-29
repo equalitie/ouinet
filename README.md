@@ -68,18 +68,21 @@ minutes and requires around 2 GB of storage.
 
 ### Testing
 
-To perform some tests using the just-built Ouinet client you first need to
-create a repository for it and configure it with an *injector endpoint* and a
-*distributed cache name*, which you need to know beforehand.  Just copy the
-repository template contained in Ouinet's source and edit the included
-configuration file:
+To perform some tests using the just-built Ouinet client and an existing
+injector, you first need to know the *injector endpoint* and a *distributed
+cache name*.  These use to be an IP address and PORT, and an IPNS identifier,
+respectively (although the injector endpoint may also be a GNUnet peer
+identity and service name).
+
+You need to create a repository for the Ouinet client and configure it with
+the aforementioned parameters.  Just copy the repository template contained in
+Ouinet's source and edit the included configuration file:
 
     cp -r ouinet/repos ouinet-repos
     edit ouinet-repos/client/ouinet-client.conf
 
-Add options for the injector endpoint (an IP address and PORT) and the
-distributed cache name (an IPNS identifier).  Remember to replace the values
-with those of your injector:
+Add options for the injector endpoint and the distributed cache name.
+Remember to replace the values with your own:
 
     injector-ep = 192.0.2.1:1234
     injector-ipns = Qm0123456789abcdefghijklmnopqrstuvwxyzABCDEFGI
@@ -91,7 +94,7 @@ Execute the following command:
 
     env BUILD=ouinet-build REPOS=ouinet-repos ouinet/scripts/start-gnunet-client-service.sh & gn=$!
 
-Then to start the Ouinet client, run:
+Give it a few seconds and start the Ouinet client by running:
 
     ouinet-build/client --repo ouinet-repos/client
 
