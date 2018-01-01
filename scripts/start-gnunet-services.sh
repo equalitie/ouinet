@@ -28,8 +28,8 @@ rm -rf $INJECTOR_HOME/.local/share/gnunet/peerinfo/hosts
 
 
 stop_gnunet() {
-    GNUNET_TEST_HOME=$CLIENT_HOME   gnunet-arm -e -c $CLIENT_CFG -T 2s
-    GNUNET_TEST_HOME=$INJECTOR_HOME gnunet-arm -e -c $INJECTOR_CFG -T 2s
+    gnunet-arm -e -c $CLIENT_CFG -T 2s
+    gnunet-arm -e -c $INJECTOR_CFG -T 2s
 }
 
 GNUNET_TEST_HOME=$CLIENT_HOME   gnunet-arm -s -c $CLIENT_CFG
