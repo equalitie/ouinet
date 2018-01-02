@@ -169,8 +169,10 @@ static void serve_request( shared_ptr<GenericConnection> con
     auto host_getter([](const Request& r) {return r["Host"];});
     auto target_getter([](const Request& r) {return r.target();});
     const vector<Match> matches({
-        Match( !reqexpr::from_regex(method_getter, "(GET|HEAD|OPTIONS)")
+        Match( !reqexpr::from_regex(method_getter, "(GET|HEAD|OPTIONS|TRACE)")
              , {request_mechanism::origin} ),  // send non-safe HTTP method requests to the origin server
+        Match( reqexpr::from_regex(method_getter, "(OPTIONS|TRACE)")
+             , {request_mechanism::injector, request_mechanism::origin} ),  // do not use cache for safe but non-cacheable HTTP method requests
         Match( reqexpr::from_regex(host_getter, "localhost")
              , {request_mechanism::_front_end} ),
         Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example.com/.*")
