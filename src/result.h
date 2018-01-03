@@ -23,6 +23,8 @@ public:
 
     operator bool() const;
 
+    static Result<Value> make_error(const sys::error_code&);
+
 private:
     boost::variant<Value, sys::error_code> _result;
 };
@@ -34,6 +36,12 @@ Result<V>::Result(T&& r)
     : _result(std::forward<T>(r))
 {}
 
+
+template<class V>
+Result<V> Result<V>::make_error(const sys::error_code& ec)
+{
+    return Result<V>{ec};
+}
 
 template<class V> bool Result<V>::is_error() const
 {

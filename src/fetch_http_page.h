@@ -62,7 +62,7 @@ fetch_http_page( asio::io_service& ios
         return http::response<http::dynamic_body>();
     }
 
-    return fetch_http_page(ios, *con, std::move(req), ec, yield);
+    return fetch_http_page(ios, con, std::move(req), ec, yield);
 }
 
 template<class RequestType>

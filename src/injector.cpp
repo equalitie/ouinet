@@ -101,7 +101,7 @@ void try_to_cache( ipfs_cache::Injector& injector
 
 //------------------------------------------------------------------------------
 static
-void serve( shared_ptr<GenericConnection> con
+void serve( GenericConnection con
           , ipfs_cache::Injector& injector
           , asio::yield_context yield)
 {
@@ -111,13 +111,13 @@ void serve( shared_ptr<GenericConnection> con
     for (;;) {
         Request req;
 
-        http::async_read(*con, buffer, req, yield[ec]);
+        http::async_read(con, buffer, req, yield[ec]);
 
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "read");
 
         // Fetch the content from origin
-        auto res = fetch_http_page(con->get_io_service(), req, ec, yield);
+        auto res = fetch_http_page(con.get_io_service(), req, ec, yield);
 
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "fetch_http_page");
@@ -134,7 +134,7 @@ void serve( shared_ptr<GenericConnection> con
         }
 
         // Forward back the response
-        http::async_write(*con, res, yield[ec]);
+        http::async_write(con, res, yield[ec]);
         if (ec) return fail(ec, "write");
     }
 }
@@ -178,13 +178,9 @@ void listen_tcp( asio::io_service& ios
                        , [ s = move(socket)
                          , &ipfs_cache_injector
                          ](asio::yield_context yield) mutable {
-                             using Con = GenericConnectionImpl<tcp::socket>;
-
-                             auto con = make_shared<Con>(move(s));
-                             serve(con, ipfs_cache_injector, yield);
-
-                             sys::error_code ec;
-                             con->get_impl().shutdown(tcp::socket::shutdown_send, ec);
+                             serve( GenericConnection(move(s))
+                                  , ipfs_cache_injector
+                                  , yield);
                          });
         }
     }
@@ -228,9 +224,7 @@ void listen_gnunet( asio::io_service& ios
                    , [ channel = move(channel)
                      , &ipfs_cache_injector
                      ](auto yield) mutable {
-                        using Con = GenericConnectionImpl<gnunet_channels::Channel>;
-
-                        serve( make_shared<Con>(move(channel))
+                        serve( GenericConnection(move(channel))
                              , ipfs_cache_injector
                              , yield);
                      });

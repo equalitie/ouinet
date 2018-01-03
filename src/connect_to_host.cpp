@@ -10,7 +10,7 @@
 using namespace std;
 using namespace ouinet;
 
-std::unique_ptr<GenericConnection>
+GenericConnection
 ouinet::connect_to_host( asio::io_service& ios
                        , beast::string_view host_and_port
                        , sys::error_code& ec
@@ -18,7 +18,6 @@ ouinet::connect_to_host( asio::io_service& ios
 {
     using namespace std;
     using tcp = asio::ip::tcp;
-    using Con = GenericConnectionImpl<tcp::socket>;
 
     auto hp = util::split_host_port(host_and_port);
 
@@ -29,7 +28,7 @@ ouinet::connect_to_host( asio::io_service& ios
 
     auto finish = [&socket] (auto ec, auto where) {
         fail(ec, where);
-        return make_unique<Con>(move(socket));
+        return GenericConnection(move(socket));
     };
 
     tcp::resolver resolver{ios};
@@ -42,5 +41,5 @@ ouinet::connect_to_host( asio::io_service& ios
     asio::async_connect(socket, lookup, yield[ec]);
     if (ec) return finish(ec, "connect");
 
-    return make_unique<Con>(move(socket));
+    return GenericConnection(move(socket));
 }

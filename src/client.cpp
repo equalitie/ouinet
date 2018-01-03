@@ -106,13 +106,13 @@ void handle_connect_request( GenericConnection& client_c
     asio::spawn
         ( yield
         , [&, b = blocker.make_block()](asio::yield_context yield) {
-              forward(client_c, *origin_c, yield);
+              forward(client_c, origin_c, yield);
           });
 
     asio::spawn
         ( yield
         , [&, b = blocker.make_block()](asio::yield_context yield) {
-              forward(*origin_c, client_c, yield);
+              forward(origin_c, client_c, yield);
           });
 
     blocker.wait(yield);
@@ -132,13 +132,13 @@ static bool is_front_end_request(const Request& req)
 
 //------------------------------------------------------------------------------
 static
-Result<unique_ptr<GenericConnection>>
+Result<GenericConnection>
 connect_to_injector( Endpoint endpoint
                    , Client& client
                    , asio::yield_context yield)
 {
     struct Visitor {
-        using Ret = Result<unique_ptr<GenericConnection>>;
+        using Ret = Result<GenericConnection>;
 
         sys::error_code ec;
         Client& client;
@@ -152,21 +152,21 @@ connect_to_injector( Endpoint endpoint
             socket.async_connect(ep, yield[ec]);
 
             if (ec) return ec;
-            return make_unique<GenericConnectionImpl<tcp::socket>>(move(socket));
+            return GenericConnection(move(socket));
         }
 
         Ret operator()(const GnunetEndpoint& ep) {
             using Channel = gnunet_channels::Channel;
 
             if (!client.gnunet_service) {
-                return asio::error::no_protocol_option;
+                return Ret::make_error(asio::error::no_protocol_option);
             }
 
             Channel ch(*client.gnunet_service);
             ch.connect(ep.host, ep.port, yield[ec]);
 
             if (ec) return ec;
-            return make_unique<GenericConnectionImpl<Channel>>(move(ch));
+            return GenericConnection(move(ch));
         }
     };
 
@@ -176,7 +176,7 @@ connect_to_injector( Endpoint endpoint
 }
 
 //------------------------------------------------------------------------------
-static void serve_request( shared_ptr<GenericConnection> con
+static void serve_request( GenericConnection con
                          , Endpoint injector_ep
                          , shared_ptr<ipfs_cache::Client> cache_client
                          , shared_ptr<ClientFrontEnd> front_end
@@ -189,22 +189,22 @@ static void serve_request( shared_ptr<GenericConnection> con
     for (;;) {
         Request req;
 
-        http::async_read(*con, buffer, req, yield[ec]);
+        http::async_read(con, buffer, req, yield[ec]);
 
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "read");
 
         if (req.method() == http::verb::connect) {
-            return handle_connect_request(*con, req, yield);
+            return handle_connect_request(con, req, yield);
         }
 
         if (is_front_end_request(req)) {
-            return front_end->serve(*con, req, cache_client, yield);
+            return front_end->serve(con, req, cache_client, yield);
         }
 
         // TODO: We're not handling HEAD requests correctly.
         if (req.method() != http::verb::get && req.method() != http::verb::head) {
-            return handle_bad_request(*con, req, "Bad request", yield);
+            return handle_bad_request(con, req, "Bad request", yield);
         }
 
         if (cache_client && front_end->is_ipfs_cache_enabled()) {
@@ -214,7 +214,7 @@ static void serve_request( shared_ptr<GenericConnection> con
             string content = cache_client->get_content(key.to_string(), yield[ec]);
 
             if (!ec) {
-                asio::async_write(*con, asio::buffer(content), yield[ec]);
+                asio::async_write(con, asio::buffer(content), yield[ec]);
                 if (ec) return fail(ec, "async_write");
                 continue;
             }
@@ -226,7 +226,7 @@ static void serve_request( shared_ptr<GenericConnection> con
         }
 
         if (!front_end->is_injector_proxying_enabled()) {
-            return handle_bad_request(*con , req , "Not cached" , yield);
+            return handle_bad_request(con , req , "Not cached" , yield);
         }
 
         auto inj_con = connect_to_injector(injector_ep, client, yield);
@@ -234,11 +234,11 @@ static void serve_request( shared_ptr<GenericConnection> con
         if (inj_con.is_error()) return fail(inj_con.get_error(), "channel connect");
 
         // Forward the request to the injector
-        auto res = fetch_http_page(con->get_io_service(), **inj_con, req, ec, yield);
+        auto res = fetch_http_page(con.get_io_service(), *inj_con, req, ec, yield);
         if (ec) return fail(ec, "fetch_http_page");
 
         // Forward back the response
-        http::async_write(*con, res, yield[ec]);
+        http::async_write(con, res, yield[ec]);
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "write");
     }
@@ -298,18 +298,12 @@ void do_listen( Client& client
                          , front_end
                          , &client
                          ](asio::yield_context yield) mutable {
-                             using Con = GenericConnectionImpl<tcp::socket>;
-                             auto con = make_shared<Con>(move(s));
-
-                             serve_request( con
+                             serve_request( GenericConnection(move(s))
                                           , std::move(injector)
                                           , move(ipfs_cache_client)
                                           , move(front_end)
                                           , client
                                           , yield);
-
-                             sys::error_code ec;
-                             con->get_impl().shutdown(tcp::socket::shutdown_send, ec);
                          });
         }
     }
