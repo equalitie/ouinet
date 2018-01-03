@@ -1,5 +1,7 @@
 #pragma once
 
+#include "split_string.h"
+
 namespace ouinet {
 
 struct GnunetEndpoint {
@@ -31,12 +33,16 @@ boost::optional<Endpoint> parse_endpoint(beast::string_view endpoint)
     string_view host;
     string_view port;
 
-    std::tie(host, port) = util::split_host_port(endpoint);
+    std::tie(host, port) = split_string_pair(endpoint, ':');
+
+    if (port.empty()) {
+        return boost::none;
+    }
 
     if (auto ep = as_tcp_endpoint(host, port)) {
         return Endpoint{*ep};
     }
-    else {
+    else if (host.size() == 52 /*GNUNET_CRYPTO_PKEY_ASCII_LENGTH*/) {
         return Endpoint{GnunetEndpoint{host.to_string(), port.to_string()}};
     }
 
