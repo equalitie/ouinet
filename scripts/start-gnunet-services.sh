@@ -26,27 +26,56 @@ INJECTOR_CFG=$INJECTOR_HOME/peer.conf
 rm -rf $CLIENT_HOME/.local/share/gnunet/peerinfo/hosts
 rm -rf $INJECTOR_HOME/.local/share/gnunet/peerinfo/hosts
 
+RUN_CLIENT=n
+RUN_INJECTOR=n
+
+for arg in "$@"; do
+	case $arg in
+	client)
+		RUN_CLIENT=y
+		;;
+	injector)
+		RUN_INJECTOR=y
+		;;
+	*)
+		echo "Invalid argument \"$arg\""
+		;;
+	esac
+done
+
+if [ $RUN_CLIENT = n -a $RUN_INJECTOR = n ]; then
+	RUN_CLIENT=y
+	RUN_INJECTOR=y
+fi
 
 stop_gnunet() {
-    gnunet-arm -e -c $CLIENT_CFG -T 2s
-    gnunet-arm -e -c $INJECTOR_CFG -T 2s
+    [ $RUN_CLIENT = y ]   && gnunet-arm -e -c $CLIENT_CFG -T 2s
+    [ $RUN_INJECTOR = y ] && gnunet-arm -e -c $INJECTOR_CFG -T 2s
 }
 
-GNUNET_TEST_HOME=$CLIENT_HOME   gnunet-arm -s -c $CLIENT_CFG
-GNUNET_TEST_HOME=$INJECTOR_HOME gnunet-arm -s -c $INJECTOR_CFG
+[ $RUN_CLIENT = y ]   && GNUNET_TEST_HOME=$CLIENT_HOME   gnunet-arm -s -c $CLIENT_CFG
+[ $RUN_INJECTOR = y ] && GNUNET_TEST_HOME=$INJECTOR_HOME gnunet-arm -s -c $INJECTOR_CFG
+
+if [ $RUN_CLIENT = y ]; then
+	echo "* Client's info"
+	gnunet-peerinfo -s -c $CLIENT_CFG
+fi
+
+if [ $RUN_INJECTOR = y ]; then
+	echo "* Injector's info"
+	gnunet-peerinfo -s -c $INJECTOR_CFG
+fi
+
 trap stop_gnunet INT EXIT
 
 sleep 1
 
-echo "* Client's info"
-gnunet-peerinfo -s -c $CLIENT_CFG
-echo "* Injector's info"
-gnunet-peerinfo -s -c $INJECTOR_CFG
-
-# This is not necessary, but it makes developing easier/faster.
-echo "Interconnecting the two..."
-gnunet-peerinfo -c $CLIENT_CFG -p `gnunet-peerinfo -c $INJECTOR_CFG -g`
-echo "Done"
+if [ $RUN_CLIENT = y -a $RUN_INJECTOR = y ]; then
+	# This is not necessary, but it makes developing easier/faster.
+	echo "Interconnecting the two..."
+	gnunet-peerinfo -c $CLIENT_CFG -p `gnunet-peerinfo -c $INJECTOR_CFG -g`
+	echo "Done"
+fi
 
 # Monitor GNUnet until the user cancels it (any service will do).
 gnunet-arm -m -c $CLIENT_CFG

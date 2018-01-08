@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+# Setup GNUnet environment
 
 export SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
 
@@ -18,23 +18,19 @@ GNUNET_ROOT=$BUILD/gnunet-channels/src/gnunet-channels-build
 export PATH=$GNUNET_ROOT/gnunet/bin:$PATH
 
 CLIENT_HOME=$REPOS/client/gnunet
+INJECTOR_HOME=$REPOS/injector/gnunet
 
 CLIENT_CFG=$CLIENT_HOME/peer.conf
+INJECTOR_CFG=$INJECTOR_HOME/peer.conf
 
-rm -rf $CLIENT_HOME/.local/share/gnunet/peerinfo/hosts
-
-
-stop_gnunet() {
-    gnunet-arm -e -c $CLIENT_CFG -T 2s
+function get_id {
+	gnunet-peerinfo -s -c $1 | sed "s/I am peer \`\(.*\)'\./\1/"
 }
 
-GNUNET_TEST_HOME=$CLIENT_HOME   gnunet-arm -s -c $CLIENT_CFG
-trap stop_gnunet INT EXIT
+function client_id {
+	get_id $CLIENT_CFG
+}
 
-sleep 1
-
-echo "* Client's info"
-gnunet-peerinfo -s -c $CLIENT_CFG
-
-# Monitor GNUnet until the user cancels it.
-gnunet-arm -m -c $CLIENT_CFG
+function injector_id {
+	get_id $INJECTOR_CFG
+}
