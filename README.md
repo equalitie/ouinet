@@ -90,7 +90,7 @@ All the steps above only need to be done once.
 Before you start the Ouinet client, you must run some local GNUnet services.
 Execute the following command:
 
-    env BUILD=ouinet-build REPOS=ouinet-repos ouinet/scripts/start-gnunet-client-service.sh & gn=$!
+    env BUILD=ouinet-build REPOS=ouinet-repos ouinet/scripts/start-gnunet-services.sh client & gn=$!
 
 Give it a few seconds and start the Ouinet client by running:
 

@@ -176,7 +176,7 @@ fi
 
 echo "\
 Now run:
-  env BUILD=ouinet-build REPOS=ouinet-repos ouinet/scripts/start-gnunet-services.sh &
+  env BUILD=ouinet-build REPOS=ouinet-repos ouinet/scripts/start-gnunet-services.sh client injector &
 Then:
   ouinet-build/injector --repo ouinet-repos/injector <other parameters>
 Or:
