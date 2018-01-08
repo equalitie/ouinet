@@ -35,6 +35,7 @@ namespace fs = boost::filesystem;
 using tcp         = asio::ip::tcp;
 using string_view = beast::string_view;
 using Request     = http::request<http::string_body>;
+using Json        = ipfs_cache::Json;
 
 static fs::path REPO_ROOT;
 static const fs::path OUINET_CONF_FILE = "ouinet-client.conf";
@@ -176,6 +177,28 @@ connect_to_injector( Endpoint endpoint
 }
 
 //------------------------------------------------------------------------------
+static string get_content_from_cache( const Request& request
+                                    , ipfs_cache::Client& cache_client
+                                    , sys::error_code& ec
+                                    , asio::yield_context yield)
+{
+    // Get the content from cache
+    auto key = request.target();
+
+    Json content = cache_client.get_content(key.to_string(), yield[ec]);
+
+    if (!ec && !content.is_string()) {
+        ec = ipfs_cache::error::key_not_found;
+    }
+
+    if (ec) {
+        return string();
+    }
+
+    return content;
+}
+
+//------------------------------------------------------------------------------
 static void serve_request( GenericConnection con
                          , Endpoint injector_ep
                          , shared_ptr<ipfs_cache::Client> cache_client
@@ -208,10 +231,7 @@ static void serve_request( GenericConnection con
         }
 
         if (cache_client && front_end->is_ipfs_cache_enabled()) {
-            // Get the content from cache
-            auto key = req.target();
-
-            string content = cache_client->get_content(key.to_string(), yield[ec]);
+            auto content = get_content_from_cache(req, *cache_client, ec, yield);
 
             if (!ec) {
                 asio::async_write(con, asio::buffer(content), yield[ec]);
