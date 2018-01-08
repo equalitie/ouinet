@@ -1,6 +1,10 @@
 #pragma once
 
+#include <boost/variant.hpp>
+#include <boost/asio/ip/tcp.hpp>
+#include <boost/optional.hpp>
 #include "split_string.h"
+#include "result.h"
 
 namespace ouinet {
 
@@ -53,5 +57,8 @@ inline
 bool is_gnunet_endpoint(const Endpoint& ep) {
     return boost::get<GnunetEndpoint>(&ep) ? true : false;
 }
+
+std::ostream& operator<<(std::ostream& os, const GnunetEndpoint& ep);
+std::ostream& operator<<(std::ostream& os, const Endpoint& ep);
 
 } // ouinet namespace

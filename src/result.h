@@ -1,6 +1,7 @@
 #pragma once
 
 #include <boost/variant.hpp>
+#include <boost/system/error_code.hpp>
 #include "namespaces.h"
 
 namespace ouinet {

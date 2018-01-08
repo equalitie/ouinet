@@ -53,6 +53,7 @@ ostream& operator<<(ostream& os, const ToggleInput& i) {
 }
 
 void ClientFrontEnd::serve( GenericConnection& con
+                          , const Endpoint& injector_ep
                           , const Request& req
                           , std::shared_ptr<ipfs_cache::Client>& cache_client
                           , asio::yield_context yield)
@@ -98,6 +99,9 @@ void ClientFrontEnd::serve( GenericConnection& con
     ss << ToggleInput{"Auto refresh",   "auto_refresh",   _auto_refresh_enabled};
     ss << ToggleInput{"Injector proxy", "injector_proxy", _injector_proxying_enabled};
     ss << ToggleInput{"IPFS Cache",     "ipfs_cache",     _ipfs_cache_enabled};
+
+    ss << "<br>\n";
+    ss << "Injector endpoint: " << injector_ep << "<br>\n";
 
     if (cache_client) {
         ss << "        <h2>Database</h2>\n";

@@ -199,7 +199,7 @@ static void serve_request( GenericConnection con
         }
 
         if (is_front_end_request(req)) {
-            return front_end->serve(con, req, cache_client, yield);
+            return front_end->serve(con, injector_ep, req, cache_client, yield);
         }
 
         // TODO: We're not handling HEAD requests correctly.

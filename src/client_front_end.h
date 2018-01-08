@@ -4,6 +4,7 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/beast.hpp>
 #include "namespaces.h"
+#include "endpoint.h"
 
 namespace ipfs_cache { class Client; }
 
@@ -14,6 +15,7 @@ class GenericConnection;
 class ClientFrontEnd {
 public:
     void serve( GenericConnection&
+              , const Endpoint& injector_ep
               , const http::request<http::string_body>&
               , std::shared_ptr<ipfs_cache::Client>&
               , boost::asio::yield_context);
