@@ -199,6 +199,7 @@ void listen_gnunet( asio::io_service& ios
 
     sys::error_code ec;
 
+    cout << "Setting up GNUnet..." << endl;
     service.async_setup(yield[ec]);
 
     if (ec) {
@@ -293,9 +294,6 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    auto const injector_ep
-        = util::parse_endpoint(vm["listen-on-tcp"].as<string>());
-
     if (vm.count("open-file-limit")) {
         increase_open_file_limit(vm["open-file-limit"].as<unsigned int>());
     }
@@ -308,6 +306,9 @@ int main(int argc, char* argv[])
     std::cout << "IPNS DB: " << ipfs_cache_injector.ipns_id() << endl;
 
     if (vm.count("listen-on-tcp")) {
+        auto const injector_ep
+            = util::parse_endpoint(vm["listen-on-tcp"].as<string>());
+
         asio::spawn
             ( ios
             , [&](asio::yield_context yield) {
