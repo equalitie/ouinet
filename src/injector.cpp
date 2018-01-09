@@ -1,6 +1,7 @@
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/beast/version.hpp>
+#include <boost/beast/core/detail/base64.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/connect.hpp>
 #include <boost/asio/spawn.hpp>
@@ -30,6 +31,7 @@ namespace fs = boost::filesystem;
 using tcp         = asio::ip::tcp;
 using string_view = beast::string_view;
 using Request     = http::request<http::dynamic_body>;
+using Json        = ipfs_cache::Json;
 
 static fs::path REPO_ROOT;
 static const fs::path OUINET_CONF_FILE = "ouinet-injector.conf";
@@ -91,7 +93,11 @@ void try_to_cache( ipfs_cache::Injector& injector
     ss << response;
     auto key = request.target().to_string();
 
-    injector.insert_content(key, ss.str(),
+    Json entry = {
+        { "response", beast::detail::base64_encode(ss.str()) }
+    };
+
+    injector.insert_content(key, entry,
         [key] (sys::error_code ec, auto) {
             if (ec) {
                 cout << "!Insert failed: " << key << " " << ec.message() << endl;

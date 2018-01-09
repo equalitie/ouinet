@@ -1,4 +1,5 @@
 #include <boost/beast/core.hpp>
+#include <boost/beast/core/detail/base64.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/beast/version.hpp>
 #include <boost/asio/ip/tcp.hpp>
@@ -187,7 +188,7 @@ static string get_content_from_cache( const Request& request
 
     Json content = cache_client.get_content(key.to_string(), yield[ec]);
 
-    if (!ec && !content.is_string()) {
+    if (!ec && !content.is_object()) {
         ec = ipfs_cache::error::key_not_found;
     }
 
@@ -195,7 +196,12 @@ static string get_content_from_cache( const Request& request
         return string();
     }
 
-    return content;
+    if (!content["response"].is_string()) {
+        ec = ipfs_cache::error::key_not_found;
+        return string();
+    }
+
+    return beast::detail::base64_decode(content["response"]);
 }
 
 //------------------------------------------------------------------------------
