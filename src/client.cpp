@@ -16,6 +16,8 @@
 #include <gnunet_channels/channel.h>
 #include <gnunet_channels/service.h>
 
+#include <i2poui.h>
+
 #include "namespaces.h"
 #include "connect_to_host.h"
 #include "fetch_http_page.h"

@@ -37,6 +37,9 @@ externalproject_add(gnunet-channels
     PREFIX "gnunet-channels")
 
 ################################################################################
+add_subdirectory(${CMAKE_SOURCE_DIR}/modules/i2pouiservice)
+
+################################################################################
 project(client)
 
 find_package(Boost ${BOOST_VERSION} COMPONENTS filesystem
@@ -52,7 +55,8 @@ include_directories(
     "${Boost_INCLUDE_DIR}"
     "${BEAST_DIR}/include"
     "${IPFS_CACHE_SRC_DIR}/include"
-    "${GNUNET_CHANNELS_SRC_DIR}/include")
+    "${GNUNET_CHANNELS_SRC_DIR}/include"
+    "${I2POUI_INCLUDE_DIR}")
 
 file(GLOB sources
     "${CMAKE_SOURCE_DIR}/src/client.cpp"
@@ -61,7 +65,7 @@ file(GLOB sources
     "${CMAKE_SOURCE_DIR}/src/endpoint.cpp")
 
 add_executable(client ${sources})
-add_dependencies(client beast ipfs-cache gnunet-channels)
+add_dependencies(client beast ipfs-cache gnunet-channels i2poui)
 
 target_link_libraries(client
     ${Boost_LIBRARIES}
@@ -88,14 +92,15 @@ include_directories(
     "${Boost_INCLUDE_DIR}"
     "${BEAST_DIR}/include"
     "${IPFS_CACHE_BIN_DIR}/json/src/json/src"
-    "${IPFS_CACHE_SRC_DIR}/include")
+    "${IPFS_CACHE_SRC_DIR}/include"
+    "${I2POUI_INCLUDE_DIR}")
 
 file(GLOB sources
     "${CMAKE_SOURCE_DIR}/src/injector.cpp"
     "${CMAKE_SOURCE_DIR}/src/connect_to_host.cpp")
 
 add_executable(injector ${sources})
-add_dependencies(injector beast ipfs-cache gnunet-channels)
+add_dependencies(injector beast ipfs-cache gnunet-channels i2poui)
 
 target_link_libraries(injector
     ${Boost_LIBRARIES}
