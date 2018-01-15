@@ -7,4 +7,4 @@
 	url = https://github.com/equalitie/gnunet-channels
 [submodule "modules/i2pouiservice"]
 	path = modules/i2pouiservice
-	url = https://github.com/inetic/i2pouiservice
+	url = https://github.com/equalitie/i2pouiservice
