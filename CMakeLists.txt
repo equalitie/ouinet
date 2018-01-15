@@ -68,6 +68,7 @@ add_executable(client ${sources})
 add_dependencies(client beast ipfs-cache gnunet-channels i2poui)
 
 target_link_libraries(client
+    i2poui
     ${Boost_LIBRARIES}
     ${IPFS_CACHE_BIN_DIR}/libipfs-cache.a
     ${GNUNET_CHANNELS_ROOT}/libgnunet-channels.a
@@ -103,6 +104,7 @@ add_executable(injector ${sources})
 add_dependencies(injector beast ipfs-cache gnunet-channels i2poui)
 
 target_link_libraries(injector
+    i2poui
     ${Boost_LIBRARIES}
     ${IPFS_CACHE_BIN_DIR}/libipfs-cache.a
     ${GNUNET_CHANNELS_ROOT}/libgnunet-channels.a

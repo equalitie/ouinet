@@ -45,8 +45,14 @@ static const fs::path OUINET_CONF_FILE = "ouinet-client.conf";
 
 //------------------------------------------------------------------------------
 struct Client {
+    struct I2P {
+        i2poui::Service service;
+        i2poui::Connector connector;
+    };
+
     asio::io_service& ios;
     unique_ptr<gnunet_channels::Service> gnunet_service;
+    unique_ptr<I2P> i2p;
 
     Client(asio::io_service& ios) : ios(ios) {}
 };
@@ -168,6 +174,18 @@ connect_to_injector( Endpoint endpoint
 
             Channel ch(*client.gnunet_service);
             ch.connect(ep.host, ep.port, yield[ec]);
+
+            if (ec) return ec;
+            return GenericConnection(move(ch));
+        }
+
+        Ret operator()(const I2PEndpoint&) {
+            if (!client.i2p) {
+                return Ret::make_error(asio::error::no_protocol_option);
+            }
+
+            i2poui::Channel ch(client.i2p->service);
+            ch.connect(client.i2p->connector, yield[ec]);
 
             if (ec) return ec;
             return GenericConnection(move(ch));
@@ -453,6 +471,23 @@ int main(int argc, char* argv[])
 
                   client.gnunet_service = move(service);
               }
+              else if (is_i2p_endpoint(injector_ep)) {
+                  auto ep = boost::get<I2PEndpoint>(injector_ep).pubkey;
+
+                  i2poui::Service service((REPO_ROOT/"i2p").native(), ios);
+                  sys::error_code ec;
+                  i2poui::Connector connector = service.build_connector(ep, yield[ec]);
+
+                  if (ec) {
+                      cerr << "Failed to setup I2Poui service: "
+                           << ec.message() << endl;
+                      return;
+                  }
+
+                  client.i2p =
+                      make_unique<Client::I2P>(Client::I2P{move(service),
+                              move(connector)});
+              }
 
               do_listen( client
                        , local_ep
@@ -461,6 +496,8 @@ int main(int argc, char* argv[])
                        , yield);
           });
 
+    // TODO: A bug in I2Poui (or I2P?) is not keeping io_service bussy.
+    asio::io_service::work work(ios);
     ios.run();
 
     return EXIT_SUCCESS;

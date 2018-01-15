@@ -14,6 +14,7 @@
 #include <gnunet_channels/channel.h>
 #include <gnunet_channels/cadet_port.h>
 #include <gnunet_channels/service.h>
+#include <i2poui.h>
 
 #include "namespaces.h"
 #include "util.h"
@@ -239,6 +240,50 @@ void listen_gnunet( asio::io_service& ios
 }
 
 //------------------------------------------------------------------------------
+static
+void listen_i2p( asio::io_service& ios
+               , ipfs_cache::Injector& ipfs_cache_injector
+               , asio::yield_context yield)
+{
+    i2poui::Service service((REPO_ROOT/"i2p").native(), ios);
+
+    sys::error_code ec;
+
+    cout << "Setting up I2Poui service..." << endl;
+    i2poui::Acceptor acceptor = service.build_acceptor(yield[ec]);
+
+    if (ec) {
+        cerr << "Failed to setup I2Poui service: " << ec.message() << endl;
+        return;
+    }
+
+    cout << "I2P Public ID: " << service.public_identity() << endl;
+
+
+    while (true) {
+        i2poui::Channel channel(service);
+        acceptor.accept(channel, yield[ec]);
+
+        if (ec) {
+            cerr << "Failed to accept: " << ec.message() << endl;
+            async_sleep(ios, chrono::milliseconds(100), yield);
+            continue;
+        }
+
+        cerr << "accepted connection" << endl;
+
+        asio::spawn( ios
+                   , [ channel = move(channel)
+                     , &ipfs_cache_injector
+                     ](auto yield) mutable {
+                        serve( GenericConnection(move(channel))
+                             , ipfs_cache_injector
+                             , yield);
+                     });
+    }
+}
+
+//------------------------------------------------------------------------------
 int main(int argc, char* argv[])
 {
     namespace po = boost::program_options;
@@ -250,6 +295,9 @@ int main(int argc, char* argv[])
         ("repo", po::value<string>(), "Path to the repository root")
         ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen")
         ("listen-on-gnunet", po::value<string>(), "GNUnet port on which we'll listen")
+        ("listen-on-i2p",
+         po::value<string>(),
+         "Whether we should be listening on I2P (true/false)")
         ("open-file-limit"
          , po::value<unsigned int>()
          , "To increase the maximum number of open files")
@@ -293,15 +341,32 @@ int main(int argc, char* argv[])
     po::store(po::parse_config_file(ouinet_conf, desc), vm);
     po::notify(vm);
 
-    if (!vm.count("listen-on-tcp") && !vm.count("listen-on-gnunet")) {
-        cerr << "Either 'listen-on-tcp' or 'listen-on-gnunet' (or both)"
-             << " arguments must be specified" << endl;
+    if (!vm.count("listen-on-tcp") && !vm.count("listen-on-gnunet") && !vm.count("listen-on-i2p")) {
+        cerr << "One or more of {listen-on-tcp,listen-on-gnunet,listen-on-i2p}"
+             << " must be provided." << endl;
         cerr << desc << endl;
         return 1;
     }
 
     if (vm.count("open-file-limit")) {
         increase_open_file_limit(vm["open-file-limit"].as<unsigned int>());
+    }
+
+    bool listen_on_i2p = false;
+
+    // Unfortunately, Boost.ProgramOptions doesn't support arguments without
+    // values in config files. Thus we need to force the 'listen-on-i2p' arg
+    // to have one of the strings values "true" or "false".
+    if (vm.count("listen-on-i2p")) {
+        auto value = vm["listen-on-i2p"].as<string>();
+
+        if (value != "" && value != "true" && value != "false") {
+            cerr << "The listen-on-i2p parameter may be either 'true' or 'false'"
+                 << endl;
+            return 1;
+        }
+
+        listen_on_i2p = value == "true";
     }
 
     // The io_service is required for all I/O
@@ -331,6 +396,16 @@ int main(int argc, char* argv[])
               });
     }
 
+    if (listen_on_i2p) {
+        asio::spawn
+            ( ios
+            , [&](asio::yield_context yield) {
+                  listen_i2p(ios, ipfs_cache_injector, yield);
+              });
+    }
+
+    // TODO: A bug in I2Poui (or I2P?) is not keeping io_service bussy.
+    asio::io_service::work work(ios);
     ios.run();
 
     return EXIT_SUCCESS;
