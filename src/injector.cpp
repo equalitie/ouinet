@@ -270,8 +270,6 @@ void listen_i2p( asio::io_service& ios
             continue;
         }
 
-        cerr << "accepted connection" << endl;
-
         asio::spawn( ios
                    , [ channel = move(channel)
                      , &ipfs_cache_injector
