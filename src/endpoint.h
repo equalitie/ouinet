@@ -13,8 +13,13 @@ struct GnunetEndpoint {
     std::string port;
 };
 
+struct I2PEndpoint {
+    std::string pubkey;
+};
+
 using Endpoint = boost::variant< asio::ip::tcp::endpoint
-                               , GnunetEndpoint >;
+                               , GnunetEndpoint
+                               , I2PEndpoint>;
 
 inline
 boost::optional<Endpoint> parse_endpoint(beast::string_view endpoint)
@@ -40,7 +45,7 @@ boost::optional<Endpoint> parse_endpoint(beast::string_view endpoint)
     std::tie(host, port) = split_string_pair(endpoint, ':');
 
     if (port.empty()) {
-        return boost::none;
+        return Endpoint{I2PEndpoint{endpoint.to_string()}};
     }
 
     if (auto ep = as_tcp_endpoint(host, port)) {
@@ -58,7 +63,13 @@ bool is_gnunet_endpoint(const Endpoint& ep) {
     return boost::get<GnunetEndpoint>(&ep) ? true : false;
 }
 
-std::ostream& operator<<(std::ostream& os, const GnunetEndpoint& ep);
-std::ostream& operator<<(std::ostream& os, const Endpoint& ep);
+inline
+bool is_i2p_endpoint(const Endpoint& ep) {
+    return boost::get<I2PEndpoint>(&ep) ? true : false;
+}
+
+std::ostream& operator<<(std::ostream& os, const GnunetEndpoint&);
+std::ostream& operator<<(std::ostream& os, const I2PEndpoint&);
+std::ostream& operator<<(std::ostream& os, const Endpoint&);
 
 } // ouinet namespace

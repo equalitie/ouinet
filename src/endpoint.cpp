@@ -7,6 +7,11 @@ std::ostream& operator<<(std::ostream& os, const GnunetEndpoint& ep)
     return os << ep.host << ":" << ep.port;
 }
 
+std::ostream& operator<<(std::ostream& os, const I2PEndpoint& ep)
+{
+    return os << ep.pubkey;
+}
+
 std::ostream& operator<<(std::ostream& os, const Endpoint& ep)
 {
     struct Visitor {
@@ -17,6 +22,10 @@ std::ostream& operator<<(std::ostream& os, const Endpoint& ep)
         }
 
         void operator()(const GnunetEndpoint& ep) {
+            os << ep;
+        }
+
+        void operator()(const I2PEndpoint& ep) {
             os << ep;
         }
     };
