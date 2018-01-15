@@ -496,8 +496,6 @@ int main(int argc, char* argv[])
                        , yield);
           });
 
-    // TODO: A bug in I2Poui (or I2P?) is not keeping io_service bussy.
-    asio::io_service::work work(ios);
     ios.run();
 
     return EXIT_SUCCESS;
