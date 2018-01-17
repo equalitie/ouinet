@@ -27,6 +27,8 @@ externalproject_add(gnunet-channels
     PREFIX "gnunet-channels")
 
 ################################################################################
+option(IPFS_CACHE_WITH_EXAMPLE_BINARIES "" OFF)
+
 add_subdirectory(./modules/i2pouiservice)
 add_subdirectory(./modules/ipfs-cache)
 
