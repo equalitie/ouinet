@@ -1,3 +1,5 @@
+[![CircleCI](https://circleci.com/gh/equalitie/ouinet/tree/master.svg?style=shield)](https://circleci.com/gh/equalitie/ouinet/tree/master)
+
 # Ouinet
 
 Ouinet is a peer-to-peer, distributed technology which allows web requests to
