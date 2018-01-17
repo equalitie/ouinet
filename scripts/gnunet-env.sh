@@ -13,9 +13,9 @@ ROOT=$SCRIPT_DIR/..
 BUILD=${BUILD:-$ROOT/build}
 REPOS=${REPOS:-$ROOT/repos}
 
-GNUNET_ROOT=$BUILD/gnunet-channels/src/gnunet-channels-build
+GNUNET_ROOT=$BUILD/modules/gnunet-channels/gnunet-bin
 
-export PATH=$GNUNET_ROOT/gnunet/bin:$PATH
+export PATH=$GNUNET_ROOT/bin:$PATH
 
 CLIENT_HOME=$REPOS/client/gnunet
 INJECTOR_HOME=$REPOS/injector/gnunet
