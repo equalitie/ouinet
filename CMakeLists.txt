@@ -15,16 +15,6 @@ externalproject_add(beast
 set(BEAST_DIR "${CMAKE_BINARY_DIR}/beast/src/beast")
 
 ################################################################################
-set(IPFS_CACHE_SRC_DIR "${CMAKE_SOURCE_DIR}/modules/ipfs-cache")
-set(IPFS_CACHE_BIN_DIR "${CMAKE_BINARY_DIR}/ipfs-cache-prefix/src/ipfs-cache-build")
-
-externalproject_add(ipfs-cache
-    SOURCE_DIR ${IPFS_CACHE_SRC_DIR}
-    BUILD_ALWAYS 1
-    DOWNLOAD_COMMAND ""
-    INSTALL_COMMAND "")
-
-################################################################################
 set(GNUNET_CHANNELS_SRC_DIR "${CMAKE_SOURCE_DIR}/modules/gnunet-channels")
 set(GNUNET_CHANNELS_ROOT    "${CMAKE_BINARY_DIR}/gnunet-channels/src/gnunet-channels-build")
 set(GNUNET_LIB_DIR          "${GNUNET_CHANNELS_ROOT}/gnunet/lib")
@@ -37,7 +27,8 @@ externalproject_add(gnunet-channels
     PREFIX "gnunet-channels")
 
 ################################################################################
-add_subdirectory(${CMAKE_SOURCE_DIR}/modules/i2pouiservice)
+add_subdirectory(./modules/i2pouiservice)
+add_subdirectory(./modules/ipfs-cache)
 
 ################################################################################
 project(client)
@@ -70,7 +61,7 @@ add_dependencies(client beast ipfs-cache gnunet-channels i2poui)
 target_link_libraries(client
     i2poui
     ${Boost_LIBRARIES}
-    ${IPFS_CACHE_BIN_DIR}/libipfs-cache.a
+    ${IPFS_CACHE_LIBRARY}
     ${GNUNET_CHANNELS_ROOT}/libgnunet-channels.a
     ${GNUNET_LIB_DIR}/libgnunethello.so
     ${GNUNET_LIB_DIR}/libgnunettransport.so
@@ -92,8 +83,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -Wall -ggdb ${SANITI
 include_directories(
     "${Boost_INCLUDE_DIR}"
     "${BEAST_DIR}/include"
-    "${IPFS_CACHE_BIN_DIR}/json/src/json/src"
-    "${IPFS_CACHE_SRC_DIR}/include"
+    "${IPFS_CACHE_JSON_INCLUDE_DIR}"
+    "${IPFS_CACHE_INCLUDE_DIR}"
     "${I2POUI_INCLUDE_DIR}")
 
 file(GLOB sources
@@ -106,7 +97,7 @@ add_dependencies(injector beast ipfs-cache gnunet-channels i2poui)
 target_link_libraries(injector
     i2poui
     ${Boost_LIBRARIES}
-    ${IPFS_CACHE_BIN_DIR}/libipfs-cache.a
+    ${IPFS_CACHE_LIBRARY}
     ${GNUNET_CHANNELS_ROOT}/libgnunet-channels.a
     ${GNUNET_LIB_DIR}/libgnunethello.so
     ${GNUNET_LIB_DIR}/libgnunettransport.so
