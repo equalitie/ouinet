@@ -39,6 +39,8 @@ struct ToggleInput {
     bool current_value;
 };
 
+namespace ouinet { // Need namespace here for argument-dependent-lookups to work
+
 ostream& operator<<(ostream& os, const ToggleInput& i) {
     auto cur_value  = i.current_value ? "enabled" : "disabled";
     auto next_value = i.current_value ? "disable" : "enable";
@@ -51,6 +53,27 @@ ostream& operator<<(ostream& os, const ToggleInput& i) {
                            "value=\"" << next_value << "\"/>\n"
           "</form>\n";
 }
+
+static ostream& operator<<(ostream& os, const std::chrono::steady_clock::duration& d) {
+    using namespace chrono;
+
+    unsigned int secs = duration_cast<seconds>(d).count();
+
+    unsigned int hours   = secs / (60*60);   secs -= hours*60*60;
+    unsigned int minutes = secs / 60;        secs -= minutes*60;
+
+    if (hours)   { os << hours   << "h"; }
+    if (minutes) { os << minutes << "m"; }
+
+    return os << secs << "s";
+}
+
+static ostream& operator<<(ostream& os, const ClientFrontEnd::Task& task) {
+
+    return os << task.id() << "| " << task.duration() << " | " << task.name();
+}
+
+} // ouinet namespace
 
 void ClientFrontEnd::serve( GenericConnection& con
                           , const Endpoint& injector_ep
@@ -91,7 +114,13 @@ void ClientFrontEnd::serve( GenericConnection& con
           "<html>\n";
     if (_auto_refresh_enabled) {
           ss << "    <head>\n"
-                "        <meta http-equiv=\"refresh\" content=\"1\"/>\n"
+                "      <meta http-equiv=\"refresh\" content=\"1\"/>\n"
+                "      <style>\n"
+                "        * {\n"
+                "            font-family: \"Courier New\";\n"
+                "            font-size: 10pt; }\n"
+                "          }\n"
+                "      </style>\n"
                 "    </head>\n";
     }
     ss << "    <body>\n";
@@ -102,6 +131,13 @@ void ClientFrontEnd::serve( GenericConnection& con
 
     ss << "<br>\n";
     ss << "Injector endpoint: " << injector_ep << "<br>\n";
+
+    ss << "        <h2>Pending tasks " << _pending_tasks.size() << "</h2>\n";
+    ss << "        <ul>\n";
+    for (auto& task : _pending_tasks) {
+        ss << "            <li><pre>" << task << "</pre></li>\n";
+    }
+    ss << "        </ul>\n";
 
     if (cache_client) {
         ss << "        <h2>Database</h2>\n";

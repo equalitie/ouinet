@@ -43,6 +43,12 @@ static fs::path REPO_ROOT;
 static const fs::path OUINET_CONF_FILE = "ouinet-client.conf";
 
 //------------------------------------------------------------------------------
+#define ASYNC_DEBUG(code, ...) [&] {\
+    auto task = front_end->notify_task(util::str(__VA_ARGS__));\
+    return code;\
+}()
+
+//------------------------------------------------------------------------------
 struct Client {
     struct I2P {
         i2poui::Service service;
@@ -228,29 +234,30 @@ static void serve_request( GenericConnection con
     for (;;) {
         Request req;
 
-        http::async_read(con, buffer, req, yield[ec]);
+        ASYNC_DEBUG(http::async_read(con, buffer, req, yield[ec]), "Read request");
 
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "read");
 
         if (req.method() == http::verb::connect) {
-            return handle_connect_request(con, req, yield);
+            return ASYNC_DEBUG(handle_connect_request(con, req, yield), "Connect");
         }
 
         if (is_front_end_request(req)) {
-            return front_end->serve(con, injector_ep, req, cache_client, yield);
+            return ASYNC_DEBUG(front_end->serve(con, injector_ep, req, cache_client, yield), "Frontend");
         }
 
         // TODO: We're not handling HEAD requests correctly.
         if (req.method() != http::verb::get && req.method() != http::verb::head) {
-            return handle_bad_request(con, req, "Bad request", yield);
+            return ASYNC_DEBUG(handle_bad_request(con, req, "Bad request", yield), "Bad request");
         }
 
         if (cache_client && front_end->is_ipfs_cache_enabled()) {
-            auto content = get_content_from_cache(req, *cache_client, ec, yield);
+            // Get the content from cache
+            auto content = ASYNC_DEBUG(get_content_from_cache(req, *cache_client, ec, yield), "Cache read ", req.target());
 
             if (!ec) {
-                asio::async_write(con, asio::buffer(content), yield[ec]);
+                ASYNC_DEBUG(asio::async_write(con, asio::buffer(content), yield[ec]), "Write from cache ", req.target());
                 if (ec) return fail(ec, "async_write");
                 continue;
             }
@@ -265,16 +272,23 @@ static void serve_request( GenericConnection con
             return handle_bad_request(con , req , "Not cached" , yield);
         }
 
-        auto inj_con = connect_to_injector(injector_ep, client, yield);
+        auto inj_con = ASYNC_DEBUG(connect_to_injector(injector_ep, client, yield), "Connect ", req.target());
 
         if (inj_con.is_error()) return fail(inj_con.get_error(), "channel connect");
 
         // Forward the request to the injector
-        auto res = fetch_http_page(con.get_io_service(), *inj_con, req, ec, yield);
+        auto res = ASYNC_DEBUG(fetch_http_page( con.get_io_service()
+                                              , *inj_con
+                                              , req
+                                              , ec
+                                              , yield)
+                              , "Fetch "
+                              , req.target());
+
         if (ec) return fail(ec, "fetch_http_page");
 
         // Forward back the response
-        http::async_write(con, res, yield[ec]);
+        ASYNC_DEBUG(http::async_write(con, res, yield[ec]), "Write response ", req.target());
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "write");
     }
@@ -321,10 +335,10 @@ void do_listen( Client& client
     for(;;)
     {
         tcp::socket socket(ios);
-        acceptor.async_accept(socket, yield[ec]);
+        ASYNC_DEBUG(acceptor.async_accept(socket, yield[ec]), "Accept");
         if(ec) {
             fail(ec, "accept");
-            async_sleep(ios, chrono::seconds(1), yield);
+            ASYNC_DEBUG(async_sleep(ios, chrono::seconds(1), yield), "Sleep");
         }
         else {
             asio::spawn( ios
