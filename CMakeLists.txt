@@ -1,5 +1,5 @@
 cmake_minimum_required (VERSION 3.5)
-set(GLOB BOOST_VERSION 1.55)
+set(BOOST_VERSION 1.65.1)
 include(ExternalProject)
 ################################################################################
 # NOTE: https://stackoverflow.com/questions/37603238/fsanitize-not-using-gold-linker-in-gcc-6-1
@@ -26,11 +26,11 @@ add_subdirectory(./modules/gnunet-channels)
 ################################################################################
 project(client)
 
-find_package(Boost ${BOOST_VERSION} COMPONENTS filesystem
-                                               program_options
-                                               coroutine
-                                               system
-                                               REQUIRED)
+find_package(Boost ${BOOST_VERSION} EXACT REQUIRED COMPONENTS filesystem
+                                                              program_options
+                                                              coroutine
+                                                              date_time
+                                                              system)
 find_package(Threads)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -Wall -ggdb ${SANITIZE}")
@@ -60,11 +60,11 @@ target_link_libraries(client
 ################################################################################
 project(injector)
 
-find_package(Boost ${BOOST_VERSION} COMPONENTS filesystem
+find_package(Boost ${BOOST_VERSION} EXACT REQUIRED COMPONENTS filesystem
                                                program_options
                                                coroutine
-                                               system
-                                               REQUIRED)
+                                               date_time
+                                               system)
 find_package(Threads)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -Wall -ggdb ${SANITIZE}")
