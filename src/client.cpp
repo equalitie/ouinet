@@ -223,8 +223,11 @@ static string get_content_from_cache( const Request& request
     assert(!content.ts.is_not_a_date_time());
 
     // Discard expired cache entries.
+    static boost::posix_time::time_duration always_expired = boost::posix_time::seconds(0);
+    static boost::posix_time::time_duration never_expired = boost::posix_time::seconds(-1);
     auto now = boost::posix_time::second_clock::universal_time();
-    if (now - content.ts > MAX_CACHED_AGE) {
+    if ( MAX_CACHED_AGE != never_expired
+         && (MAX_CACHED_AGE == always_expired || now - content.ts > MAX_CACHED_AGE) ) {
         // We reuse this error for the moment.
         cout << "Found expired content for " << key.to_string() << endl;
         ec = ipfs_cache::error::key_not_found;
@@ -391,8 +394,8 @@ int main(int argc, char* argv[])
          , po::value<string>()->default_value("")
          , "IPNS of the injector's database")
         ("max-cached-age"
-         , po::value<unsigned int>()->default_value(MAX_CACHED_AGE.total_seconds())
-         , "Discard cached content older than this many seconds")
+         , po::value<int>()->default_value(MAX_CACHED_AGE.total_seconds())
+         , "Discard cached content older than this many seconds (0: discard all; -1: discard none)")
         ("open-file-limit"
          , po::value<unsigned int>()
          , "To increase the maximum number of open files")
@@ -441,7 +444,7 @@ int main(int argc, char* argv[])
     }
 
     if (vm.count("max-cached-age")) {
-        MAX_CACHED_AGE = boost::posix_time::seconds(vm["max-cached-age"].as<unsigned int>());
+        MAX_CACHED_AGE = boost::posix_time::seconds(vm["max-cached-age"].as<int>());
     }
 
     if (!vm.count("listen-on-tcp")) {
