@@ -216,6 +216,10 @@ static string get_content_from_cache( const Request& request
         return string();
     }
 
+    // If the content does not have a meaningful time stamp,
+    // an error should have been reported.
+    assert(!content.ts.is_not_a_date_time());
+
     return content.data;
 }
 
