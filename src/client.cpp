@@ -223,11 +223,9 @@ static string get_content_from_cache( const Request& request
     assert(!content.ts.is_not_a_date_time());
 
     // Discard expired cache entries.
-    static boost::posix_time::time_duration always_expired = boost::posix_time::seconds(0);
     static boost::posix_time::time_duration never_expired = boost::posix_time::seconds(-1);
     auto now = boost::posix_time::second_clock::universal_time();
-    if ( MAX_CACHED_AGE != never_expired
-         && (MAX_CACHED_AGE == always_expired || now - content.ts > MAX_CACHED_AGE) ) {
+    if (MAX_CACHED_AGE != never_expired && now - content.ts > MAX_CACHED_AGE) {
         // We reuse this error for the moment.
         cout << "Found expired content for " << key.to_string() << endl;
         ec = ipfs_cache::error::key_not_found;
