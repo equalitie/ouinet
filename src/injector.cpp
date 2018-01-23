@@ -144,6 +144,22 @@ void serve( GenericConnection con
 }
 
 //------------------------------------------------------------------------------
+template<class Connection>
+static
+void spawn_and_serve( Connection&& connection
+                    , ipfs_cache::Injector& ipfs_cache_injector)
+{
+    auto& ios = connection.get_io_service();
+
+    asio::spawn( ios
+               , [ c = GenericConnection(move(connection))
+                 , &ipfs_cache_injector
+                 ](asio::yield_context yield) mutable {
+                     serve(move(c), ipfs_cache_injector, yield);
+                 });
+}
+
+//------------------------------------------------------------------------------
 static
 void listen_tcp( asio::io_service& ios
                , tcp::endpoint endpoint
@@ -178,14 +194,7 @@ void listen_tcp( asio::io_service& ios
             async_sleep(ios, chrono::seconds(1), yield);
         }
         else {
-            asio::spawn( ios
-                       , [ s = move(socket)
-                         , &ipfs_cache_injector
-                         ](asio::yield_context yield) mutable {
-                             serve( GenericConnection(move(s))
-                                  , ipfs_cache_injector
-                                  , yield);
-                         });
+            spawn_and_serve(move(socket), ipfs_cache_injector);
         }
     }
 }
@@ -225,14 +234,7 @@ void listen_gnunet( asio::io_service& ios
             continue;
         }
 
-        asio::spawn( ios
-                   , [ channel = move(channel)
-                     , &ipfs_cache_injector
-                     ](auto yield) mutable {
-                        serve( GenericConnection(move(channel))
-                             , ipfs_cache_injector
-                             , yield);
-                     });
+        spawn_and_serve(move(channel), ipfs_cache_injector);
     }
 }
 
@@ -267,14 +269,7 @@ void listen_i2p( asio::io_service& ios
             continue;
         }
 
-        asio::spawn( ios
-                   , [ channel = move(channel)
-                     , &ipfs_cache_injector
-                     ](auto yield) mutable {
-                        serve( GenericConnection(move(channel))
-                             , ipfs_cache_injector
-                             , yield);
-                     });
+        spawn_and_serve(move(channel), ipfs_cache_injector);
     }
 }
 
