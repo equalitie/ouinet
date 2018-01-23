@@ -6,6 +6,7 @@
 #include <boost/asio/connect.hpp>
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/date_time/posix_time/posix_time.hpp>
 #include <iostream>
 #include <fstream>
 
@@ -40,6 +41,7 @@ using Request     = http::request<http::string_body>;
 
 static fs::path REPO_ROOT;
 static const fs::path OUINET_CONF_FILE = "ouinet-client.conf";
+static boost::posix_time::time_duration MAX_CACHED_AGE = boost::posix_time::hours(7*24);  // one week
 
 //------------------------------------------------------------------------------
 #define ASYNC_DEBUG(code, ...) [&] {\
@@ -379,6 +381,9 @@ int main(int argc, char* argv[])
         ("injector-ipns"
          , po::value<string>()->default_value("")
          , "IPNS of the injector's database")
+        ("max-cached-age"
+         , po::value<unsigned int>()->default_value(MAX_CACHED_AGE.total_seconds())
+         , "Discard cached content older than this many seconds")
         ("open-file-limit"
          , po::value<unsigned int>()
          , "To increase the maximum number of open files")
@@ -424,6 +429,10 @@ int main(int argc, char* argv[])
 
     if (vm.count("open-file-limit")) {
         increase_open_file_limit(vm["open-file-limit"].as<unsigned int>());
+    }
+
+    if (vm.count("max-cached-age")) {
+        MAX_CACHED_AGE = boost::posix_time::seconds(vm["max-cached-age"].as<unsigned int>());
     }
 
     if (!vm.count("listen-on-tcp")) {
