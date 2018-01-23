@@ -1,7 +1,6 @@
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/beast/version.hpp>
-#include <boost/beast/core/detail/base64.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/connect.hpp>
 #include <boost/asio/spawn.hpp>
@@ -149,8 +148,6 @@ void try_to_cache( ipfs_cache::Injector& injector
                  , const http::request_header<>& request
                  , const http::response<http::dynamic_body>& response)
 {
-    using beast::detail::base64_encode;
-
     bool do_cache = ok_to_cache(request, response);
 
     //{
@@ -169,7 +166,7 @@ void try_to_cache( ipfs_cache::Injector& injector
     ss << response;
     auto key = request.target().to_string();
 
-    injector.insert_content(key, base64_encode(ss.str()),
+    injector.insert_content(key, ss.str(),
         [key] (sys::error_code ec, auto) {
             if (ec) {
                 cout << "!Insert failed: " << key << " " << ec.message() << endl;
