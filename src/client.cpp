@@ -6,6 +6,7 @@
 #include <boost/asio/connect.hpp>
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/date_time/posix_time/posix_time.hpp>
 #include <iostream>
 #include <fstream>
 
@@ -40,6 +41,7 @@ using Request     = http::request<http::string_body>;
 
 static fs::path REPO_ROOT;
 static const fs::path OUINET_CONF_FILE = "ouinet-client.conf";
+static boost::posix_time::time_duration MAX_CACHED_AGE = boost::posix_time::hours(7*24);  // one week
 
 //------------------------------------------------------------------------------
 #define ASYNC_DEBUG(code, ...) [&] {\
@@ -216,6 +218,20 @@ static string get_content_from_cache( const Request& request
         return string();
     }
 
+    // If the content does not have a meaningful time stamp,
+    // an error should have been reported.
+    assert(!content.ts.is_not_a_date_time());
+
+    // Discard expired cache entries.
+    static boost::posix_time::time_duration never_expired = boost::posix_time::seconds(-1);
+    auto now = boost::posix_time::second_clock::universal_time();
+    if (MAX_CACHED_AGE != never_expired && now - content.ts > MAX_CACHED_AGE) {
+        // We reuse this error for the moment.
+        cout << "Found expired content for " << key.to_string() << endl;
+        ec = ipfs_cache::error::key_not_found;
+        return string();
+    }
+
     return content.data;
 }
 
@@ -375,6 +391,9 @@ int main(int argc, char* argv[])
         ("injector-ipns"
          , po::value<string>()->default_value("")
          , "IPNS of the injector's database")
+        ("max-cached-age"
+         , po::value<int>()->default_value(MAX_CACHED_AGE.total_seconds())
+         , "Discard cached content older than this many seconds (0: discard all; -1: discard none)")
         ("open-file-limit"
          , po::value<unsigned int>()
          , "To increase the maximum number of open files")
@@ -420,6 +439,10 @@ int main(int argc, char* argv[])
 
     if (vm.count("open-file-limit")) {
         increase_open_file_limit(vm["open-file-limit"].as<unsigned int>());
+    }
+
+    if (vm.count("max-cached-age")) {
+        MAX_CACHED_AGE = boost::posix_time::seconds(vm["max-cached-age"].as<int>());
     }
 
     if (!vm.count("listen-on-tcp")) {
