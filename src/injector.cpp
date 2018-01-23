@@ -32,7 +32,6 @@ namespace fs = boost::filesystem;
 using tcp         = asio::ip::tcp;
 using string_view = beast::string_view;
 using Request     = http::request<http::dynamic_body>;
-using Json        = ipfs_cache::Json;
 
 static fs::path REPO_ROOT;
 static const fs::path OUINET_CONF_FILE = "ouinet-injector.conf";
@@ -86,6 +85,8 @@ void try_to_cache( ipfs_cache::Injector& injector
                  , const http::request_header<>& request
                  , const http::response<http::dynamic_body>& response)
 {
+    using beast::detail::base64_encode;
+
     if (!ok_to_cache(request, response)) {
         return;
     }
@@ -94,11 +95,7 @@ void try_to_cache( ipfs_cache::Injector& injector
     ss << response;
     auto key = request.target().to_string();
 
-    Json entry = {
-        { "response", beast::detail::base64_encode(ss.str()) }
-    };
-
-    injector.insert_content(key, entry,
+    injector.insert_content(key, base64_encode(ss.str()),
         [key] (sys::error_code ec, auto) {
             if (ec) {
                 cout << "!Insert failed: " << key << " " << ec.message() << endl;

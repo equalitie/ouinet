@@ -38,7 +38,6 @@ namespace fs = boost::filesystem;
 using tcp         = asio::ip::tcp;
 using string_view = beast::string_view;
 using Request     = http::request<http::string_body>;
-using Json        = ipfs_cache::Json;
 
 static fs::path REPO_ROOT;
 static const fs::path OUINET_CONF_FILE = "ouinet-client.conf";
@@ -206,22 +205,13 @@ static string get_content_from_cache( const Request& request
     // Get the content from cache
     auto key = request.target();
 
-    Json content = cache_client.get_content(key.to_string(), yield[ec]);
-
-    if (!ec && !content.is_object()) {
-        ec = ipfs_cache::error::key_not_found;
-    }
+    auto content = cache_client.get_content(key.to_string(), yield[ec]);
 
     if (ec) {
         return string();
     }
 
-    if (!content["response"].is_string()) {
-        ec = ipfs_cache::error::key_not_found;
-        return string();
-    }
-
-    return beast::detail::base64_decode(content["response"]);
+    return beast::detail::base64_decode(content.data);
 }
 
 //------------------------------------------------------------------------------
