@@ -37,6 +37,46 @@ static fs::path REPO_ROOT;
 static const fs::path OUINET_CONF_FILE = "ouinet-injector.conf";
 
 //------------------------------------------------------------------------------
+static bool contains_private_data(const http::request_header<>& request)
+{
+    auto is_private = [](const http::fields::value_type& f) {
+        static const vector<http::field> public_request_fields
+            { http::field::host
+            , http::field::user_agent
+            , http::field::accept
+            , http::field::accept_language
+            , http::field::accept_encoding
+            , http::field::keep_alive
+            , http::field::connection
+            , http::field::referer
+            };
+
+        for (auto f_ : public_request_fields) { if (f_ == f.name()) return false; }
+
+        // Non standard W3C recommendation.
+        // https://www.w3.org/TR/upgrade-insecure-requests/
+        if (f.name_string() == "Upgrade-Insecure-Requests") return false;
+
+        return true;
+    };
+
+    for (auto& field : request) {
+        if (is_private(field)) { return true; }
+    }
+
+    // TODO: This may be a bit too agressive.
+    if (request.method() != http::verb::get) {
+        return true;
+    }
+
+    if (split_string_pair(request.target(), '?').second.size()) {
+        return true;
+    }
+
+    return false;
+}
+
+//------------------------------------------------------------------------------
 // Cache control:
 // https://tools.ietf.org/html/rfc7234
 // https://tools.ietf.org/html/rfc5861
@@ -49,6 +89,15 @@ static const fs::path OUINET_CONF_FILE = "ouinet-injector.conf";
 static bool ok_to_cache( const http::request_header<>&  request
                        , const http::response_header<>& response)
 {
+    switch (response.result()) {
+        case http::status::ok:
+        case http::status::moved_permanently:
+            break;
+        // TODO: Other response codes
+        default:
+            return false;
+    }
+
     auto cache_control_i = response.find(http::field::cache_control);
 
     // https://tools.ietf.org/html/rfc7234#section-3 (bullet #5)
@@ -73,7 +122,22 @@ static bool ok_to_cache( const http::request_header<>&  request
         // https://tools.ietf.org/html/rfc7234#section-3 (bullet #3)
         if (key == "no-store") return false;
         // https://tools.ietf.org/html/rfc7234#section-3 (bullet #4)
-        if (key == "private")  return false;
+        if (key == "private")  {
+            // NOTE: This decision based on the request having private data is
+            // our extension (NOT part of RFC). Some servers (e.g.
+            // www.bbc.com/) sometimes respond with 'Cache-Control: private'
+            // even though the request doesn't contain any private data (e.g.
+            // Cookies, {GET,POST,...} variables,...).  We believe this happens
+            // when the server serves different content depending on the
+            // client's geo location. While we don't necessarily want to break
+            // this intent, we believe serving _some_ content is better than
+            // none. As such, the client should always check for presence of
+            // this 'private' field when fetching from distributed cache and
+            // - if present - re-fetch from origin if possible.
+            if (contains_private_data(request)) {
+                return false;
+            }
+        }
     }
 
     return true;
@@ -87,9 +151,19 @@ void try_to_cache( ipfs_cache::Injector& injector
 {
     using beast::detail::base64_encode;
 
-    if (!ok_to_cache(request, response)) {
-        return;
-    }
+    bool do_cache = ok_to_cache(request, response);
+
+    //{
+    //    cerr << "-----------------------------------------" << endl;
+    //    cerr << (do_cache ? "Caching " : "Not caching ")
+    //         << "\"" << request.target() << "\"" << endl;
+    //    cerr << endl;
+    //    cerr << request;
+    //    cerr << response.base();
+    //    cerr << "-----------------------------------------" << endl;
+    //}
+
+    if (!do_cache) return;
 
     stringstream ss;
     ss << response;
@@ -126,16 +200,7 @@ void serve( GenericConnection con
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "fetch_http_page");
 
-        switch (res.result()) {
-            case http::status::ok:
-            case http::status::moved_permanently:
-                try_to_cache(injector, req, res);
-                break;
-            // TODO: Other response codes
-            default:
-                cerr << "Warning: not handling: " << res.result()
-                     << " HTTP response in terms of cache" << endl;
-        }
+        try_to_cache(injector, req, res);
 
         // Forward back the response
         http::async_write(con, res, yield[ec]);
