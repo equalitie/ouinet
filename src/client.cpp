@@ -1,5 +1,4 @@
 #include <boost/beast/core.hpp>
-#include <boost/beast/core/detail/base64.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/beast/version.hpp>
 #include <boost/asio/ip/tcp.hpp>
@@ -217,7 +216,7 @@ static string get_content_from_cache( const Request& request
         return string();
     }
 
-    return beast::detail::base64_decode(content.data);
+    return content.data;
 }
 
 //------------------------------------------------------------------------------
