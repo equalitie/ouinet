@@ -46,7 +46,8 @@ file(GLOB sources
     "./src/client.cpp"
     "./src/connect_to_host.cpp"
     "./src/client_front_end.cpp"
-    "./src/endpoint.cpp")
+    "./src/endpoint.cpp"
+    "./src/cache_control.cpp")
 
 add_executable(client ${sources})
 add_dependencies(client beast ipfs-cache gnunet-channels i2poui)
