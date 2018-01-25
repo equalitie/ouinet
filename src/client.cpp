@@ -63,6 +63,8 @@ struct Client {
     asio::io_service& ios;
     unique_ptr<gnunet_channels::Service> gnunet_service;
     unique_ptr<I2P> i2p;
+    unique_ptr<ipfs_cache::Client> ipfs_cache;
+
     ClientFrontEnd front_end;
 
     Client(asio::io_service& ios) : ios(ios) {}
@@ -212,7 +214,7 @@ connect_to_injector( Endpoint endpoint
 static
 CacheControl::CacheEntry
 get_content_from_cache( const Request& request
-                      , ipfs_cache::Client& cache_client
+                      , ipfs_cache::Client& cache
                       , asio::yield_context yield)
 {
     using CacheEntry = CacheControl::CacheEntry;
@@ -221,7 +223,7 @@ get_content_from_cache( const Request& request
     // Get the content from cache
     auto key = request.target();
 
-    auto content = cache_client.get_content(key.to_string(), yield[ec]);
+    auto content = cache.get_content(key.to_string(), yield[ec]);
 
     // We need this remapping because CacheControl doesn't know
     // anything about ipfs_cache.
@@ -252,14 +254,13 @@ get_content_from_cache( const Request& request
 static
 CacheControl build_cache_control( asio::io_service& ios
                                 , const Endpoint& injector_ep
-                                , const shared_ptr<ipfs_cache::Client>& cache_client
                                 , Client& client)
 {
     CacheControl cache_control;
 
     cache_control.fetch_from_cache =
         [&] (const Request& request, asio::yield_context yield) {
-            if (!cache_client || !client.front_end.is_ipfs_cache_enabled()) {
+            if (!client.ipfs_cache || !client.front_end.is_ipfs_cache_enabled()) {
                 return or_throw<CacheControl::CacheEntry>( yield ,
                         asio::error::operation_not_supported);
             }
@@ -267,7 +268,7 @@ CacheControl build_cache_control( asio::io_service& ios
 
             // Get the content from cache
             return ASYNC_DEBUG( get_content_from_cache( request
-                                                      , *cache_client
+                                                      , *client.ipfs_cache
                                                       , yield)
                               , "Cache read "
                               , request.target());
@@ -307,13 +308,11 @@ CacheControl build_cache_control( asio::io_service& ios
 //------------------------------------------------------------------------------
 static void serve_request( GenericConnection con
                          , Endpoint injector_ep
-                         , shared_ptr<ipfs_cache::Client> cache_client
                          , Client& client
                          , asio::yield_context yield)
 {
     CacheControl cache_control = build_cache_control( con.get_io_service()
                                                     , injector_ep
-                                                    , cache_client
                                                     , client);
 
     sys::error_code ec;
@@ -332,8 +331,12 @@ static void serve_request( GenericConnection con
         }
 
         if (is_front_end_request(req)) {
-            return ASYNC_DEBUG(client.front_end.serve(con, injector_ep, req,
-                        cache_client, yield), "Frontend");
+            return ASYNC_DEBUG(client.front_end.serve( con
+                                                     , injector_ep
+                                                     , req
+                                                     , client.ipfs_cache.get()
+                                                     , yield)
+                              , "Frontend");
         }
 
         // TODO: We're not handling HEAD requests correctly.
@@ -394,11 +397,9 @@ void do_listen( Client& client
     acceptor.listen(asio::socket_base::max_connections, ec);
     if (ec) return fail(ec, "listen");
 
-    shared_ptr<ipfs_cache::Client> ipfs_cache_client;
-
     if (ipns.size()) {
-        ipfs_cache_client = make_shared<ipfs_cache::Client>
-            (ios, ipns, (REPO_ROOT/"ipfs").native());
+        ipfs_cache::Client cache(ios, ipns, (REPO_ROOT/"ipfs").native());
+        client.ipfs_cache = make_unique<ipfs_cache::Client>(move(cache));
     }
 
     cout << "Client accepting on " << acceptor.local_endpoint() << endl;
@@ -414,13 +415,11 @@ void do_listen( Client& client
         else {
             asio::spawn( ios
                        , [ s = move(socket)
-                         , ipfs_cache_client
                          , injector
                          , &client
                          ](asio::yield_context yield) mutable {
                              serve_request( GenericConnection(move(s))
                                           , std::move(injector)
-                                          , move(ipfs_cache_client)
                                           , client
                                           , yield);
                          });

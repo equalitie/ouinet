@@ -46,7 +46,7 @@ public:
     void serve( GenericConnection&
               , const Endpoint& injector_ep
               , const http::request<http::string_body>&
-              , std::shared_ptr<ipfs_cache::Client>&
+              , ipfs_cache::Client*
               , boost::asio::yield_context);
 
     bool is_injector_proxying_enabled() const
