@@ -434,7 +434,7 @@ int main(int argc, char* argv[])
 
         asio::spawn
             ( ios
-            , [&](asio::yield_context yield) {
+            , [&, injector_ep](asio::yield_context yield) {
                   listen_tcp(ios, injector_ep, ipfs_cache_injector, yield);
               });
     }
