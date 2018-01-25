@@ -49,7 +49,7 @@ static posix_time::time_duration MAX_CACHED_AGE = posix_time::hours(7*24);  // o
 
 //------------------------------------------------------------------------------
 #define ASYNC_DEBUG(code, ...) [&] () mutable {\
-    auto task = front_end->notify_task(util::str(__VA_ARGS__));\
+    auto task = client.front_end.notify_task(util::str(__VA_ARGS__));\
     return code;\
 }()
 
@@ -63,6 +63,7 @@ struct Client {
     asio::io_service& ios;
     unique_ptr<gnunet_channels::Service> gnunet_service;
     unique_ptr<I2P> i2p;
+    ClientFrontEnd front_end;
 
     Client(asio::io_service& ios) : ios(ios) {}
 };
@@ -252,14 +253,13 @@ static
 CacheControl build_cache_control( asio::io_service& ios
                                 , const Endpoint& injector_ep
                                 , const shared_ptr<ipfs_cache::Client>& cache_client
-                                , ClientFrontEnd* front_end
                                 , Client& client)
 {
     CacheControl cache_control;
 
     cache_control.fetch_from_cache =
         [&] (const Request& request, asio::yield_context yield) {
-            if (!cache_client || !front_end->is_ipfs_cache_enabled()) {
+            if (!cache_client || !client.front_end.is_ipfs_cache_enabled()) {
                 return or_throw<CacheControl::CacheEntry>( yield ,
                         asio::error::operation_not_supported);
             }
@@ -275,7 +275,7 @@ CacheControl build_cache_control( asio::io_service& ios
 
     cache_control.fetch_from_origin =
         [&] (const Request& request, asio::yield_context yield) {
-            if (!front_end->is_injector_proxying_enabled()) {
+            if (!client.front_end.is_injector_proxying_enabled()) {
                 return or_throw<Response>( yield
                                          , asio::error::operation_not_supported);
             }
@@ -308,14 +308,12 @@ CacheControl build_cache_control( asio::io_service& ios
 static void serve_request( GenericConnection con
                          , Endpoint injector_ep
                          , shared_ptr<ipfs_cache::Client> cache_client
-                         , shared_ptr<ClientFrontEnd> front_end
                          , Client& client
                          , asio::yield_context yield)
 {
     CacheControl cache_control = build_cache_control( con.get_io_service()
                                                     , injector_ep
                                                     , cache_client
-                                                    , front_end.get()
                                                     , client);
 
     sys::error_code ec;
@@ -334,7 +332,8 @@ static void serve_request( GenericConnection con
         }
 
         if (is_front_end_request(req)) {
-            return ASYNC_DEBUG(front_end->serve(con, injector_ep, req, cache_client, yield), "Frontend");
+            return ASYNC_DEBUG(client.front_end.serve(con, injector_ep, req,
+                        cache_client, yield), "Frontend");
         }
 
         // TODO: We're not handling HEAD requests correctly.
@@ -404,8 +403,6 @@ void do_listen( Client& client
 
     cout << "Client accepting on " << acceptor.local_endpoint() << endl;
 
-    auto front_end = make_shared<ClientFrontEnd>();
-
     for(;;)
     {
         tcp::socket socket(ios);
@@ -419,13 +416,11 @@ void do_listen( Client& client
                        , [ s = move(socket)
                          , ipfs_cache_client
                          , injector
-                         , front_end
                          , &client
                          ](asio::yield_context yield) mutable {
                              serve_request( GenericConnection(move(s))
                                           , std::move(injector)
                                           , move(ipfs_cache_client)
-                                          , move(front_end)
                                           , client
                                           , yield);
                          });
