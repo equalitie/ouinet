@@ -55,6 +55,8 @@ static bool contains_private_data(const http::request_header<>& request)
         // Non standard W3C recommendation.
         // https://www.w3.org/TR/upgrade-insecure-requests/
         if (f.name_string() == "Upgrade-Insecure-Requests") return false;
+        // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/DNT
+        if (f.name_string() == "DNT") return false;
 
         return true;
     };
