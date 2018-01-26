@@ -17,20 +17,28 @@ using Entry    = CacheControl::CacheEntry;
 using Request  = CacheControl::Request;
 using Response = CacheControl::Response;
 
-static posix_time::ptime now() {
+static posix_time::ptime current_time() {
     return posix_time::second_clock::universal_time();
 }
 
-BOOST_AUTO_TEST_CASE(test1)
+template<class F> static void run_spawned(F&& f) {
+    asio::io_service ios;
+    asio::spawn(ios, forward<F>(f));
+    ios.run();
+}
+
+BOOST_AUTO_TEST_CASE(test_cache_no_origin)
 {
     CacheControl cc;
 
     bool checked_cache = false;
 
     cc.fetch_from_cache = [&](auto rq, auto y) {
-        Response rs{http::status::ok, rq.version()};
         checked_cache = true;
-        return or_throw(y, sys::error_code(), Entry{now(), rs});
+        Response rs{http::status::ok, rq.version()};
+        return or_throw( y
+                       , sys::error_code()
+                       , Entry{current_time(), rs});
     };
 
     cc.fetch_from_origin = [&](auto rq, auto y) {
@@ -38,18 +46,89 @@ BOOST_AUTO_TEST_CASE(test1)
         return or_throw<Response>(y, sys::error_code());
     };
 
-    asio::io_service ios;
-
-    asio::spawn(ios, [&](auto yield) {
+    run_spawned([&](auto yield) {
             Request req{http::verb::get, "foo", 11};
             sys::error_code ec;
             cc.fetch(req, yield[ec]);
             BOOST_CHECK(!ec);
         });
 
-    ios.run();
-
     BOOST_CHECK(checked_cache);
+}
+
+BOOST_AUTO_TEST_CASE(test_max_cached_age_old)
+{
+    CacheControl cc;
+
+    size_t cache_check = 0;
+    size_t origin_check = 0;
+
+    cc.fetch_from_cache = [&](auto rq, auto y) {
+        cache_check++;
+
+        Response rs{http::status::ok, rq.version()};
+
+        auto created = current_time()
+                     - cc.max_cached_age()
+                     - posix_time::seconds(5);
+
+        return or_throw( y
+                       , sys::error_code()
+                       , Entry{created, rs});
+    };
+
+    cc.fetch_from_origin = [&](auto rq, auto y) {
+        origin_check++;
+        BOOST_CHECK_EQUAL(rq.target(), "old");
+        return or_throw<Response>(y, sys::error_code());
+    };
+
+    run_spawned([&](auto yield) {
+            Request req{http::verb::get, "old", 11};
+            sys::error_code ec;
+            cc.fetch(req, yield[ec]);
+            BOOST_CHECK(!ec);
+        });
+
+    BOOST_CHECK_EQUAL(cache_check, size_t(1));
+    BOOST_CHECK_EQUAL(origin_check, size_t(1));
+}
+
+BOOST_AUTO_TEST_CASE(test_max_cached_age_new)
+{
+    CacheControl cc;
+
+    size_t cache_check = 0;
+    size_t origin_check = 0;
+
+    cc.fetch_from_cache = [&](auto rq, auto y) {
+        cache_check++;
+
+        Response rs{http::status::ok, rq.version()};
+
+        auto created = current_time()
+                     - cc.max_cached_age()
+                     + posix_time::seconds(5);
+
+        return or_throw( y
+                       , sys::error_code()
+                       , Entry{created, rs});
+    };
+
+    cc.fetch_from_origin = [&](auto rq, auto y) {
+        BOOST_CHECK(false);
+        return or_throw<Response>(y, sys::error_code());
+    };
+
+    run_spawned([&](auto yield) {
+            Request req{http::verb::get, "new", 11};
+            sys::error_code ec;
+            cc.fetch(req, yield[ec]);
+            BOOST_CHECK(!ec);
+        });
+
+    BOOST_CHECK_EQUAL(cache_check, size_t(1));
+    BOOST_CHECK_EQUAL(origin_check, size_t(0));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
