@@ -34,7 +34,7 @@ boost::optional<unsigned> get_max_age(const Response& response)
 
     auto cache_control_i = response.find(http::field::cache_control);
 
-    if (cache_control_i == response.end()) return false;
+    if (cache_control_i == response.end()) return boost::none;
 
     optional<unsigned> max_age;
     optional<unsigned> s_maxage;
