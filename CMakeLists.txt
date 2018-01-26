@@ -28,6 +28,7 @@ add_subdirectory(./modules/gnunet-channels)
 project(ouinet)
 
 find_package(Boost ${BOOST_VERSION} EXACT REQUIRED COMPONENTS filesystem
+                                                              unit_test_framework
                                                               program_options
                                                               coroutine
                                                               date_time
@@ -82,4 +83,7 @@ target_link_libraries(injector
     ${IPFS_CACHE_LIBRARY}
     ${GNUNET_CHANNELS_LIBRARIES})
 
+################################################################################
+# Tests
+add_subdirectory(test)
 ################################################################################
