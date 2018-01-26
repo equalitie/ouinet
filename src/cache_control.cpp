@@ -43,7 +43,10 @@ boost::optional<unsigned> get_max_age(const Response& response)
         unsigned delta;
 
         // TODO: What does RFC say about malformed entries?
-        try { delta = std::stoi(value.data()); }
+        // TODO: It's inefficient to convert to_string here
+        //   but the stoi function expects a null terminated
+        //   char array (or string).
+        try { delta = std::stoi(value.to_string()); }
         catch (...) { return; }
 
         if (!max_age || *max_age < delta) {
@@ -59,7 +62,7 @@ boost::optional<unsigned> get_max_age(const Response& response)
             update_max_age(s_maxage, val);
         }
 
-        if (boost::iequals(key, "max_age")) {
+        if (boost::iequals(key, "max-age")) {
             update_max_age(max_age, val);
         }
     }
