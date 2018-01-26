@@ -49,3 +49,10 @@ stages:
           export PATH="$CMAKE_PATH:$PATH"
           cmake .. -DBOOST_ROOT=~/boost_${BOOST_MAJOR}_${BOOST_MINOR}_${BOOST_PATCH}
           make -j `nproc`
+
+      - type: shell
+        name: Test
+        command: |
+          boost_root=${HOME}/boost_${BOOST_MAJOR}_${BOOST_MINOR}_${BOOST_PATCH}
+          export LD_LIBRARY_PATH=${boost_root}/stage/lib:$LD_LIBRARY_PATH
+          ./build/test/test-ouinet --log_level=test_suite
