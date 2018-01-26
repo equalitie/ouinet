@@ -5,6 +5,7 @@ include(ExternalProject)
 # NOTE: https://stackoverflow.com/questions/37603238/fsanitize-not-using-gold-linker-in-gcc-6-1
 set(SANITIZE "-fsanitize=address -fuse-ld=gold")
 add_definitions(-DBOOST_COROUTINES_NO_DEPRECATION_WARNING)
+
 ################################################################################
 externalproject_add(beast
     GIT_REPOSITORY https://github.com/inetic/beast
@@ -24,7 +25,7 @@ add_subdirectory(./modules/ipfs-cache)
 add_subdirectory(./modules/gnunet-channels)
 
 ################################################################################
-project(client)
+project(ouinet)
 
 find_package(Boost ${BOOST_VERSION} EXACT REQUIRED COMPONENTS filesystem
                                                               program_options
@@ -35,6 +36,7 @@ find_package(Threads)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -Wall -ggdb ${SANITIZE}")
 
+################################################################################
 include_directories(
     "${Boost_INCLUDE_DIR}"
     "${BEAST_DIR}/include"
@@ -42,14 +44,14 @@ include_directories(
     "${GNUNET_CHANNELS_INCLUDE_DIR}"
     "${I2POUI_INCLUDE_DIR}")
 
-file(GLOB sources
+file(GLOB client_sources
     "./src/client.cpp"
     "./src/connect_to_host.cpp"
     "./src/client_front_end.cpp"
     "./src/endpoint.cpp"
     "./src/cache_control.cpp")
 
-add_executable(client ${sources})
+add_executable(client ${client_sources})
 add_dependencies(client beast ipfs-cache gnunet-channels i2poui)
 
 target_link_libraries(client
@@ -59,17 +61,6 @@ target_link_libraries(client
     ${GNUNET_CHANNELS_LIBRARIES})
 
 ################################################################################
-project(injector)
-
-find_package(Boost ${BOOST_VERSION} EXACT REQUIRED COMPONENTS filesystem
-                                               program_options
-                                               coroutine
-                                               date_time
-                                               system)
-find_package(Threads)
-
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -Wall -ggdb ${SANITIZE}")
-
 include_directories(
     "${Boost_INCLUDE_DIR}"
     "${BEAST_DIR}/include"
@@ -78,11 +69,11 @@ include_directories(
     "${GNUNET_CHANNELS_INCLUDE_DIR}"
     "${I2POUI_INCLUDE_DIR}")
 
-file(GLOB sources
+file(GLOB injector_sources
     "./src/injector.cpp"
     "./src/connect_to_host.cpp")
 
-add_executable(injector ${sources})
+add_executable(injector ${injector_sources})
 add_dependencies(injector beast ipfs-cache gnunet-channels i2poui)
 
 target_link_libraries(injector
