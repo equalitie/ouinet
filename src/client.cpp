@@ -29,23 +29,27 @@
 #include "async_sleep.h"
 #include "increase_open_file_limit.h"
 #include "endpoint.h"
+#include "cache_control.h"
+#include "or_throw.h"
 
 using namespace std;
 using namespace ouinet;
 
 namespace fs = boost::filesystem;
+namespace posix_time = boost::posix_time;
 
 using tcp         = asio::ip::tcp;
 using string_view = beast::string_view;
 using Request     = http::request<http::string_body>;
+using Response    = http::response<http::dynamic_body>;
 
 static fs::path REPO_ROOT;
 static const fs::path OUINET_CONF_FILE = "ouinet-client.conf";
-static boost::posix_time::time_duration MAX_CACHED_AGE = boost::posix_time::hours(7*24);  // one week
+static posix_time::time_duration MAX_CACHED_AGE = posix_time::hours(7*24);  // one week
 
 //------------------------------------------------------------------------------
-#define ASYNC_DEBUG(code, ...) [&] {\
-    auto task = front_end->notify_task(util::str(__VA_ARGS__));\
+#define ASYNC_DEBUG(code, ...) [&] () mutable {\
+    auto task = client.front_end.notify_task(util::str(__VA_ARGS__));\
     return code;\
 }()
 
@@ -59,6 +63,9 @@ struct Client {
     asio::io_service& ios;
     unique_ptr<gnunet_channels::Service> gnunet_service;
     unique_ptr<I2P> i2p;
+    unique_ptr<ipfs_cache::Client> ipfs_cache;
+
+    ClientFrontEnd front_end;
 
     Client(asio::io_service& ios) : ios(ios) {}
 };
@@ -204,45 +211,110 @@ connect_to_injector( Endpoint endpoint
 }
 
 //------------------------------------------------------------------------------
-static string get_content_from_cache( const Request& request
-                                    , ipfs_cache::Client& cache_client
-                                    , sys::error_code& ec
-                                    , asio::yield_context yield)
+static
+CacheControl::CacheEntry
+get_content_from_cache( const Request& request
+                      , ipfs_cache::Client& cache
+                      , asio::yield_context yield)
 {
+    using CacheEntry = CacheControl::CacheEntry;
+
+    sys::error_code ec;
     // Get the content from cache
     auto key = request.target();
 
-    auto content = cache_client.get_content(key.to_string(), yield[ec]);
+    auto content = cache.get_content(key.to_string(), yield[ec]);
 
-    if (ec) {
-        return string();
+    // We need this remapping because CacheControl doesn't know
+    // anything about ipfs_cache.
+    // TODO: Make ipfs_cache return asio::error::not_found instead.
+    if (ec == ipfs_cache::error::key_not_found) {
+        ec = asio::error::not_found;
     }
+
+    if (ec) return or_throw<CacheEntry>(yield, ec);
 
     // If the content does not have a meaningful time stamp,
     // an error should have been reported.
     assert(!content.ts.is_not_a_date_time());
 
-    // Discard expired cache entries.
-    static boost::posix_time::time_duration never_expired = boost::posix_time::seconds(-1);
-    auto now = boost::posix_time::second_clock::universal_time();
-    if (MAX_CACHED_AGE != never_expired && now - content.ts > MAX_CACHED_AGE) {
-        // We reuse this error for the moment.
-        cout << "Found expired content for " << key.to_string() << endl;
-        ec = ipfs_cache::error::key_not_found;
-        return string();
-    }
+    http::response_parser<Response::body_type> parser;
+    parser.eager(true);
+    parser.put(asio::buffer(content.data), ec);
 
-    return content.data;
+    assert(!ec && "Malformed cache entry");
+    assert(parser.is_done());
+
+    if (ec) return or_throw<CacheEntry>(yield, ec);
+
+    return CacheEntry{content.ts, parser.release()};
+}
+
+//------------------------------------------------------------------------------
+static
+CacheControl build_cache_control( asio::io_service& ios
+                                , const Endpoint& injector_ep
+                                , Client& client)
+{
+    CacheControl cache_control;
+
+    cache_control.fetch_from_cache =
+        [&] (const Request& request, asio::yield_context yield) {
+            if (!client.ipfs_cache || !client.front_end.is_ipfs_cache_enabled()) {
+                return or_throw<CacheControl::CacheEntry>( yield ,
+                        asio::error::operation_not_supported);
+            }
+
+
+            // Get the content from cache
+            return ASYNC_DEBUG( get_content_from_cache( request
+                                                      , *client.ipfs_cache
+                                                      , yield)
+                              , "Cache read "
+                              , request.target());
+        };
+
+    cache_control.fetch_from_origin =
+        [&] (const Request& request, asio::yield_context yield) {
+            if (!client.front_end.is_injector_proxying_enabled()) {
+                return or_throw<Response>( yield
+                                         , asio::error::operation_not_supported);
+            }
+
+            auto inj_con = ASYNC_DEBUG(connect_to_injector( injector_ep
+                                                          , client
+                                                          , yield)
+                                      , "Connect "
+                                      , request.target());
+
+            if (inj_con.is_error()) {
+                return or_throw<Response>(yield, inj_con.get_error());
+            }
+
+            // Forward the request to the injector
+            return ASYNC_DEBUG( fetch_http_page( ios
+                                               , *inj_con
+                                               , request
+                                               , yield)
+                              , "Fetch "
+                              , request.target());
+        };
+
+    cache_control.max_cached_age(MAX_CACHED_AGE);
+
+    return cache_control;
 }
 
 //------------------------------------------------------------------------------
 static void serve_request( GenericConnection con
                          , Endpoint injector_ep
-                         , shared_ptr<ipfs_cache::Client> cache_client
-                         , shared_ptr<ClientFrontEnd> front_end
                          , Client& client
                          , asio::yield_context yield)
 {
+    CacheControl cache_control = build_cache_control( con.get_io_service()
+                                                    , injector_ep
+                                                    , client);
+
     sys::error_code ec;
     beast::flat_buffer buffer;
 
@@ -259,7 +331,12 @@ static void serve_request( GenericConnection con
         }
 
         if (is_front_end_request(req)) {
-            return ASYNC_DEBUG(front_end->serve(con, injector_ep, req, cache_client, yield), "Frontend");
+            return ASYNC_DEBUG(client.front_end.serve( con
+                                                     , injector_ep
+                                                     , req
+                                                     , client.ipfs_cache.get()
+                                                     , yield)
+                              , "Frontend");
         }
 
         // TODO: We're not handling HEAD requests correctly.
@@ -267,42 +344,26 @@ static void serve_request( GenericConnection con
             return ASYNC_DEBUG(handle_bad_request(con, req, "Bad request", yield), "Bad request");
         }
 
-        if (cache_client && front_end->is_ipfs_cache_enabled()) {
-            // Get the content from cache
-            auto content = ASYNC_DEBUG(get_content_from_cache(req, *cache_client, ec, yield), "Cache read ", req.target());
-
-            if (!ec) {
-                ASYNC_DEBUG(asio::async_write(con, asio::buffer(content), yield[ec]), "Write from cache ", req.target());
-                if (ec) return fail(ec, "async_write");
-                continue;
-            }
-
-            if (ec != ipfs_cache::error::key_not_found) {
-                cout << "Failed to fetch from DB " << ec.message()
-                     << " " << req.target() << endl;
-            }
-        }
-
-        if (!front_end->is_injector_proxying_enabled()) {
-            return handle_bad_request(con , req , "Not cached" , yield);
-        }
-
-        auto inj_con = ASYNC_DEBUG(connect_to_injector(injector_ep, client, yield), "Connect ", req.target());
-
-        if (inj_con.is_error()) return fail(inj_con.get_error(), "channel connect");
-
-        // Forward the request to the injector
-        auto res = ASYNC_DEBUG(fetch_http_page( con.get_io_service()
-                                              , *inj_con
-                                              , req
-                                              , ec
-                                              , yield)
-                              , "Fetch "
+        auto res = ASYNC_DEBUG( cache_control.fetch(req, yield[ec])
+                              , "CacheControl::fetch "
                               , req.target());
 
-        if (ec) return fail(ec, "fetch_http_page");
+        if (ec) {
+            ASYNC_DEBUG(handle_bad_request(con, req, "Not cached", yield), "Send error");
+            if (req.keep_alive()) continue;
+            else return;
+        }
 
-        // Forward back the response
+        //{
+        //    cerr << "------------ Client::serve_request --------------" << endl;
+        //    cerr << "0>> " << req.target() << endl;
+        //    cerr << res.base() << endl;
+        //    cerr << "1>> " << res[http::field::content_length] << endl;
+        //    cerr << "2>> " << res.body().size() << endl;
+        //    cerr << "-------------------------------------------------" << endl;
+        //}
+
+        // Forward the response back
         ASYNC_DEBUG(http::async_write(con, res, yield[ec]), "Write response ", req.target());
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "write");
@@ -336,16 +397,12 @@ void do_listen( Client& client
     acceptor.listen(asio::socket_base::max_connections, ec);
     if (ec) return fail(ec, "listen");
 
-    shared_ptr<ipfs_cache::Client> ipfs_cache_client;
-
     if (ipns.size()) {
-        ipfs_cache_client = make_shared<ipfs_cache::Client>
-            (ios, ipns, (REPO_ROOT/"ipfs").native());
+        ipfs_cache::Client cache(ios, ipns, (REPO_ROOT/"ipfs").native());
+        client.ipfs_cache = make_unique<ipfs_cache::Client>(move(cache));
     }
 
     cout << "Client accepting on " << acceptor.local_endpoint() << endl;
-
-    auto front_end = make_shared<ClientFrontEnd>();
 
     for(;;)
     {
@@ -358,15 +415,11 @@ void do_listen( Client& client
         else {
             asio::spawn( ios
                        , [ s = move(socket)
-                         , ipfs_cache_client
                          , injector
-                         , front_end
                          , &client
                          ](asio::yield_context yield) mutable {
                              serve_request( GenericConnection(move(s))
                                           , std::move(injector)
-                                          , move(ipfs_cache_client)
-                                          , move(front_end)
                                           , client
                                           , yield);
                          });

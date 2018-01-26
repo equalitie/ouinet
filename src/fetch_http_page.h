@@ -5,6 +5,7 @@
 
 #include "fail.h"
 #include "connect_to_host.h"
+#include "or_throw.h"
 
 namespace ouinet {
 
@@ -14,36 +15,22 @@ http::response<http::dynamic_body>
 fetch_http_page( asio::io_service& ios
                , GenericConnection& con
                , RequestType req
-               , sys::error_code& ec
                , asio::yield_context yield)
 {
     http::response<http::dynamic_body> res;
 
-    auto finish = [&res](auto ec, auto what) {
-        fail(ec, what);
-        return res;
-    };
+    sys::error_code ec;
 
     // Send the HTTP request to the remote host
     http::async_write(con, req, yield[ec]);
-    if (ec) return finish(ec, "fetch_http_page::write");
+    if (ec) return or_throw(yield, ec, move(res));
 
     beast::flat_buffer buffer;
 
     // Receive the HTTP response
     http::async_read(con, buffer, res, yield[ec]);
 
-    if (ec == asio::error::connection_reset) return res;
-    if (ec == http::error::end_of_stream)    return res;
-
-    if (ec) return finish(ec, "fetch_http_page::read");
-
-    // not_connected happens sometimes
-    // so don't bother reporting it.
-    if(ec && ec != sys::errc::not_connected)
-        return finish(ec, "fetch_http_page::shutdown");
-
-    return res;
+    return or_throw(yield, ec, move(res));
 }
 
 template<class RequestType>
@@ -62,7 +49,7 @@ fetch_http_page( asio::io_service& ios
         return http::response<http::dynamic_body>();
     }
 
-    return fetch_http_page(ios, con, std::move(req), ec, yield);
+    return fetch_http_page(ios, con, std::move(req), yield[ec]);
 }
 
 template<class RequestType>

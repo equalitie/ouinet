@@ -78,7 +78,7 @@ static ostream& operator<<(ostream& os, const ClientFrontEnd::Task& task) {
 void ClientFrontEnd::serve( GenericConnection& con
                           , const Endpoint& injector_ep
                           , const Request& req
-                          , std::shared_ptr<ipfs_cache::Client>& cache_client
+                          , ipfs_cache::Client* cache_client
                           , asio::yield_context yield)
 {
     http::response<http::string_body> res{http::status::ok, req.version()};
