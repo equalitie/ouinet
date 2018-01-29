@@ -69,12 +69,12 @@ BOOST_AUTO_TEST_CASE(test_cache_origin_fail)
     BOOST_CHECK_EQUAL(origin_check, 1u);
 }
 
-BOOST_AUTO_TEST_CASE(test_max_cached_age_old)
+BOOST_AUTO_TEST_CASE(test_max_cached_age)
 {
     CacheControl cc;
 
-    size_t cache_check = 0;
-    size_t origin_check = 0;
+    unsigned cache_check = 0;
+    unsigned origin_check = 0;
 
     cc.fetch_from_cache = [&](auto rq, auto y) {
         cache_check++;
@@ -83,69 +83,37 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age_old)
         rs.set( http::field::cache_control
               , str("max-age=", (cc.max_cached_age().seconds() + 10)));
 
-        auto created = current_time()
-                     - cc.max_cached_age()
-                     - posix_time::seconds(5);
+        auto created = current_time() - cc.max_cached_age();
 
-        return or_throw( y
-                       , sys::error_code()
-                       , Entry{created, rs});
+        if (rq.target() == "old") created -= seconds(5);
+        else                      created += seconds(5);
+
+        return Entry{created, rs};
     };
 
     cc.fetch_from_origin = [&](auto rq, auto y) {
         origin_check++;
         BOOST_CHECK_EQUAL(rq.target(), "old");
-        return or_throw<Response>(y, sys::error_code());
+        return Response{};
     };
 
     run_spawned([&](auto yield) {
-            Request req{http::verb::get, "old", 11};
-            sys::error_code ec;
-            cc.fetch(req, yield[ec]);
-            BOOST_CHECK(!ec);
+            {
+                Request req{http::verb::get, "old", 11};
+                sys::error_code ec;
+                cc.fetch(req, yield[ec]);
+                BOOST_CHECK(!ec);
+            }
+            {
+                Request req{http::verb::get, "new", 11};
+                sys::error_code ec;
+                cc.fetch(req, yield[ec]);
+                BOOST_CHECK(!ec);
+            }
         });
 
-    BOOST_CHECK_EQUAL(cache_check, size_t(1));
-    BOOST_CHECK_EQUAL(origin_check, size_t(1));
-}
-
-BOOST_AUTO_TEST_CASE(test_max_cached_age_new)
-{
-    CacheControl cc;
-
-    size_t cache_check = 0;
-    size_t origin_check = 0;
-
-    cc.fetch_from_cache = [&](auto rq, auto y) {
-        cache_check++;
-
-        Response rs{http::status::ok, rq.version()};
-        rs.set( http::field::cache_control
-              , str("max-age=", (cc.max_cached_age().seconds() + 10)));
-
-        auto created = current_time()
-                     - cc.max_cached_age()
-                     + seconds(5);
-
-        return or_throw( y
-                       , sys::error_code()
-                       , Entry{created, rs});
-    };
-
-    cc.fetch_from_origin = [&](auto rq, auto y) {
-        BOOST_CHECK(false);
-        return or_throw<Response>(y, sys::error_code());
-    };
-
-    run_spawned([&](auto yield) {
-            Request req{http::verb::get, "new", 11};
-            sys::error_code ec;
-            cc.fetch(req, yield[ec]);
-            BOOST_CHECK(!ec);
-        });
-
-    BOOST_CHECK_EQUAL(cache_check, size_t(1));
-    BOOST_CHECK_EQUAL(origin_check, size_t(0));
+    BOOST_CHECK_EQUAL(cache_check, 2u);
+    BOOST_CHECK_EQUAL(origin_check, 1u);
 }
 
 BOOST_AUTO_TEST_CASE(test_maxage)
