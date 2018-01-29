@@ -53,7 +53,7 @@ Ret or_throw( asio::yield_context yield
     if (!ec) return std::forward<Ret>(ret);
     if (yield.ec_) { *yield.ec_ = ec; }
     else { throw sys::system_error(ec); }
-    return {}; // Dead code, but avoids warnings.
+    return std::forward<Ret>(ret);
 }
 
 inline
