@@ -81,7 +81,7 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age)
 
         Response rs{http::status::ok, rq.version()};
         rs.set( http::field::cache_control
-              , str("max-age=", (cc.max_cached_age().seconds() + 10)));
+              , str("max-age=", (cc.max_cached_age().total_seconds() + 10)));
 
         auto created = current_time() - cc.max_cached_age();
 
@@ -183,7 +183,7 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
         rs.set(http::field::etag, "123");
         rs.set("X-Test", "from-cache");
 
-        return Entry{current_time() + seconds(20), rs};
+        return Entry{current_time() - seconds(20), rs};
     };
 
     cc.fetch_from_origin = [&](auto rq, auto y) {
@@ -192,24 +192,41 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
         auto etag = get(rq, http::field::if_none_match);
         BOOST_REQUIRE(etag);
 
-        Response rs{http::status::found, rq.version()};
-        rs.set("X-Test", "from-origin");
+        if (*etag == "123") {
+            Response rs{http::status::found, rq.version()};
+            rs.set("X-Test", "from-origin-found");
+            return rs;
+        }
 
-        return or_throw(y, sys::error_code(), rs);
+        Response rs{http::status::ok, rq.version()};
+        rs.set("X-Test", "from-origin-ok");
+        return rs;
     };
 
     run_spawned([&](auto yield) {
-            Request req{http::verb::get, "mypage", 11};
             sys::error_code ec;
-            auto rs = cc.fetch(req, yield[ec]);
-            BOOST_CHECK(!ec);
 
-            BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
-            BOOST_CHECK_EQUAL(rs["X-Test"], "from-cache");
+            {
+                Request rq{http::verb::get, "mypage", 11};
+                auto rs = cc.fetch(rq, yield[ec]);
+                BOOST_CHECK(!ec);
+                BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
+                BOOST_CHECK_EQUAL(rs["X-Test"], "from-cache");
+            }
+            {
+                // In this test, the user agent provides its own etag.
+                Request rq{http::verb::get, "mypage", 11};
+                rq.set(http::field::if_none_match, "abc");
+
+                auto rs = cc.fetch(rq, yield[ec]);
+                BOOST_CHECK(!ec);
+                BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
+                BOOST_CHECK_EQUAL(rs["X-Test"], "from-origin-ok");
+            }
         });
 
-    BOOST_CHECK_EQUAL(cache_check, size_t(1));
-    BOOST_CHECK_EQUAL(origin_check, size_t(1));
+    BOOST_CHECK_EQUAL(cache_check, 2u);
+    BOOST_CHECK_EQUAL(origin_check, 2u);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
