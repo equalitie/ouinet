@@ -1,5 +1,5 @@
 cmake_minimum_required (VERSION 3.5)
-set(BOOST_VERSION 1.65.1)
+set(BOOST_VERSION 1.62)
 include(ExternalProject)
 ################################################################################
 # NOTE: https://stackoverflow.com/questions/37603238/fsanitize-not-using-gold-linker-in-gcc-6-1
@@ -27,7 +27,7 @@ add_subdirectory(./modules/gnunet-channels)
 ################################################################################
 project(ouinet)
 
-find_package(Boost ${BOOST_VERSION} EXACT REQUIRED COMPONENTS filesystem
+find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS filesystem
                                                               unit_test_framework
                                                               program_options
                                                               coroutine
