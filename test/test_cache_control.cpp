@@ -200,4 +200,48 @@ BOOST_AUTO_TEST_CASE(test_maxage)
     BOOST_CHECK_EQUAL(origin_check, size_t(1));
 }
 
+BOOST_AUTO_TEST_CASE(test_if_none_match)
+{
+    CacheControl cc;
+
+    size_t cache_check = 0;
+    size_t origin_check = 0;
+
+    cc.fetch_from_cache = [&](auto rq, auto y) {
+        cache_check++;
+
+        Response rs{http::status::ok, rq.version()};
+        rs.set(http::field::cache_control, "max-age=10");
+        rs.set(http::field::etag, "123");
+        rs.set("X-Test", "from-cache");
+
+        return Entry{current_time() + seconds(20), rs};
+    };
+
+    cc.fetch_from_origin = [&](auto rq, auto y) {
+        origin_check++;
+
+        auto etag = get(rq, http::field::if_none_match);
+        BOOST_REQUIRE(etag);
+
+        Response rs{http::status::found, rq.version()};
+        rs.set("X-Test", "from-origin");
+
+        return or_throw(y, sys::error_code(), rs);
+    };
+
+    run_spawned([&](auto yield) {
+            Request req{http::verb::get, "mypage", 11};
+            sys::error_code ec;
+            auto rs = cc.fetch(req, yield[ec]);
+            BOOST_CHECK(!ec);
+
+            BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
+            BOOST_CHECK_EQUAL(rs["X-Test"], "from-cache");
+        });
+
+    BOOST_CHECK_EQUAL(cache_check, size_t(1));
+    BOOST_CHECK_EQUAL(origin_check, size_t(1));
+}
+
 BOOST_AUTO_TEST_SUITE_END()
