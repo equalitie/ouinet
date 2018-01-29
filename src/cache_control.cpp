@@ -95,7 +95,7 @@ bool is_expired(const CacheControl::CacheEntry& entry)
 
     auto now = posix_time::second_clock::universal_time();
 
-    return now <= entry.time_stamp + posix_time::seconds(*max_age);
+    return now > entry.time_stamp + posix_time::seconds(*max_age);
 }
 
 bool
@@ -150,12 +150,29 @@ CacheControl::fetch(const Request& request, asio::yield_context yield)
         return cache_entry.response;
     }
 
+    auto cache_etag  = get(cache_entry.response, http::field::etag);
+    auto rq_etag = get(request, http::field::if_none_match);
+
+    if (cache_etag && !rq_etag) {
+        auto rq = request; // Make a copy because `request` is const&.
+        rq.set(http::field::if_none_match, *cache_etag);
+
+        auto response = fetch_from_origin(rq, yield[ec]);
+        if (ec) return or_throw(yield, ec, move(response));
+
+        if (response.result() == http::status::found) {
+            return move(cache_entry.response);
+        }
+
+        return move(response);
+    }
+
     auto response = fetch_from_origin(request, yield[ec]);
 
     return ec
          ? add_warning( move(cache_entry.response)
                       , "110 Ouinet 'Response is stale'")
-         : cache_entry.response;
+         : response;
 }
 
 void CacheControl::max_cached_age(const posix_time::time_duration& d)
