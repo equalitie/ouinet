@@ -109,6 +109,7 @@ testcxxversion "c++14" || DEPS="${DEPS} c++14-support"
 type git >/dev/null 2>/dev/null || DEPS="${DEPS} git"
 type wget >/dev/null 2>/dev/null || DEPS="${DEPS} wget"
 type cmake >/dev/null 2>/dev/null || DEPS="${DEPS} cmake"
+type rsync >/dev/null 2>/dev/null || DEPS="${DEPS} rsync"
 type libtoolize >/dev/null 2>/dev/null || DEPS="${DEPS} libtool"
 type autoconf >/dev/null 2>/dev/null || DEPS="${DEPS} autoconf"
 type automake >/dev/null 2>/dev/null || DEPS="${DEPS} automake"
@@ -124,6 +125,7 @@ testlib boost_filesystem || DEPS="${DEPS} libboost-filesystem-dev"
 testlib boost_date_time || DEPS="${DEPS} libboost-date-time-dev"
 testheader gcrypt.h || DEPS="${DEPS} libgcrypt-dev"
 testheader idna.h || DEPS="${DEPS} libidn11-dev"
+testheader openssl/ssl.h || DEPS="${DEPS} libssl-dev"
 testheader unistr.h || DEPS="${DEPS} libunistring-dev"
 testheader zlib.h || DEPS="${DEPS} zlib1g-dev"
 
@@ -143,19 +145,15 @@ fi
 
 
 
+BUILD=false
 if [ ! -d ouinet ]; then
-	rm -rf ouinet ouinet-build
+	rm -rf ouinet
 	git clone https://github.com/equalitie/ouinet.git ouinet
 	cd ouinet
 	git checkout "${BRANCH}"
 	git submodule update --init --recursive --checkout
 	cd ..
-	mkdir ouinet-build
-	cd ouinet-build
-	cmake ../ouinet -DCMAKE_INSTALL_PREFIX="${WORKDIR}"/bin -DCMAKE_BUILD_TYPE=Debug
-	make #${MAKEOPTS}
-	# make install
-	cd ..
+	BUILD=true
 else
 	cd ouinet
 	git remote update
@@ -163,13 +161,27 @@ else
 		git checkout "${BRANCH}"
 		git pull origin "${BRANCH}"
 		git submodule update --init --recursive --checkout
-		cd ..
-		cd ouinet-build
-		make #${MAKEOPTS}
-		# make install
+		BUILD=true
 	fi
 	cd ..
 fi
+
+if ${BUILD} || [ ! -d ouinet-build/fixme ]; then
+	if [ ! -e ouinet-build/Makefile ]; then
+		rm -rf ouinet-build
+		mkdir ouinet-build
+		cd ouinet-build
+		cmake ../ouinet -DCMAKE_INSTALL_PREFIX="${WORKDIR}"/bin -DCMAKE_BUILD_TYPE=Debug
+		cd ..
+	fi
+	
+	cd ouinet-build
+	make VERBOSE=1 #${MAKEOPTS}
+	# make install
+	cd ..
+fi
+
+
 
 if [ ! -d ouinet-repos ]; then
 	cp -r ouinet/repos ouinet-repos
