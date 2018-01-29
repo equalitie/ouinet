@@ -1,9 +1,10 @@
 #define BOOST_TEST_MODULE cache_control
 #include <boost/test/included/unit_test.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include <boost/optional.hpp>
 
 #include <cache_control.h>
-#include <namespaces.h>
+#include <util.h>
 #include <or_throw.h>
 #include <iostream>
 
@@ -16,9 +17,20 @@ namespace posix_time = boost::posix_time;
 using Entry    = CacheControl::CacheEntry;
 using Request  = CacheControl::Request;
 using Response = CacheControl::Response;
+using posix_time::seconds;
+using boost::optional;
+using beast::string_view;
+using ouinet::util::str;
 
 static posix_time::ptime current_time() {
     return posix_time::second_clock::universal_time();
+}
+
+static optional<string_view> get(const Request& rq, http::field f)
+{
+    auto i = rq.find(f);
+    if (i == rq.end()) return boost::none;
+    return i->value();
 }
 
 template<class F> static void run_spawned(F&& f) {
@@ -27,33 +39,34 @@ template<class F> static void run_spawned(F&& f) {
     ios.run();
 }
 
-BOOST_AUTO_TEST_CASE(test_cache_no_origin)
+BOOST_AUTO_TEST_CASE(test_cache_origin_fail)
 {
     CacheControl cc;
 
-    bool checked_cache = false;
+    size_t cache_check = 0;
+    size_t origin_check = 0;
 
     cc.fetch_from_cache = [&](auto rq, auto y) {
-        checked_cache = true;
+        cache_check++;
         Response rs{http::status::ok, rq.version()};
-        return or_throw( y
-                       , sys::error_code()
-                       , Entry{current_time(), rs});
+        return Entry{current_time(), rs};
     };
 
     cc.fetch_from_origin = [&](auto rq, auto y) {
-        BOOST_CHECK(false);
-        return or_throw<Response>(y, sys::error_code());
+        origin_check++;
+        return or_throw<Response>(y, asio::error::connection_reset);
     };
 
     run_spawned([&](auto yield) {
             Request req{http::verb::get, "foo", 11};
             sys::error_code ec;
-            cc.fetch(req, yield[ec]);
+            auto rs = cc.fetch(req, yield[ec]);
             BOOST_CHECK(!ec);
+            BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
         });
 
-    BOOST_CHECK(checked_cache);
+    BOOST_CHECK_EQUAL(cache_check, 1u);
+    BOOST_CHECK_EQUAL(origin_check, 1u);
 }
 
 BOOST_AUTO_TEST_CASE(test_max_cached_age_old)
@@ -67,6 +80,8 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age_old)
         cache_check++;
 
         Response rs{http::status::ok, rq.version()};
+        rs.set( http::field::cache_control
+              , str("max-age=", (cc.max_cached_age().seconds() + 10)));
 
         auto created = current_time()
                      - cc.max_cached_age()
@@ -105,10 +120,12 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age_new)
         cache_check++;
 
         Response rs{http::status::ok, rq.version()};
+        rs.set( http::field::cache_control
+              , str("max-age=", (cc.max_cached_age().seconds() + 10)));
 
         auto created = current_time()
                      - cc.max_cached_age()
-                     + posix_time::seconds(5);
+                     + seconds(5);
 
         return or_throw( y
                        , sys::error_code()
@@ -147,10 +164,10 @@ BOOST_AUTO_TEST_CASE(test_maxage)
         auto created = current_time();
 
         if (rq.target() == "old") {
-            created -= posix_time::seconds(120);
+            created -= seconds(120);
         }
         else {
-            created -= posix_time::seconds(30);
+            created -= seconds(30);
             BOOST_CHECK(rq.target() == "new");
         }
 

@@ -27,14 +27,18 @@ bool has_private_cache_control(const Response& response)
     return false;
 }
 
+template<class R>
+static optional<string_view> get(const R& r, http::field f)
+{
+    auto i = r.find(f);
+    if (i == r.end()) return boost::none;
+    return i->value();
+}
+
 static
-boost::optional<unsigned> get_max_age(const Response& response)
+optional<unsigned> get_max_age(const string_view& cache_control_value)
 {
     using boost::optional;
-
-    auto cache_control_i = response.find(http::field::cache_control);
-
-    if (cache_control_i == response.end()) return boost::none;
 
     optional<unsigned> max_age;
     optional<unsigned> s_maxage;
@@ -54,7 +58,7 @@ boost::optional<unsigned> get_max_age(const Response& response)
         }
     };
 
-    for (auto kv : SplitString(cache_control_i->value(), ',')) {
+    for (auto kv : SplitString(cache_control_value, ',')) {
         beast::string_view key, val;
         std::tie(key, val) = split_string_pair(kv, '=');
 
@@ -80,8 +84,14 @@ bool is_expired(const CacheControl::CacheEntry& entry)
 
     // TODO: Also check the HTTP/1.0 'Expires' header field.
 
-    optional<unsigned> max_age = get_max_age(entry.response);
-    if (!max_age) return false;
+    auto cache_control_value = get(entry.response, http::field::cache_control);
+
+    if (!cache_control_value) {
+        return true;
+    }
+
+    optional<unsigned> max_age = get_max_age(*cache_control_value);
+    if (!max_age) return true;
 
     auto now = posix_time::second_clock::universal_time();
 
