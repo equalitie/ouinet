@@ -168,6 +168,46 @@ BOOST_AUTO_TEST_CASE(test_maxage)
     BOOST_CHECK_EQUAL(origin_check, size_t(1));
 }
 
+BOOST_AUTO_TEST_CASE(test_no_etag_override)
+{
+    CacheControl cc;
+
+    unsigned cache_check = 0;
+    unsigned origin_check = 0;
+
+    cc.fetch_from_cache = [&](auto rq, auto y) {
+        cache_check++;
+
+        Response rs{http::status::ok, rq.version()};
+        rs.set(http::field::etag, "cache-etag");
+
+        return Entry{current_time() - seconds(10), rs};
+    };
+
+    cc.fetch_from_origin = [&](auto rq, auto y) {
+        origin_check++;
+
+        auto etag = get(rq, http::field::if_none_match);
+        BOOST_CHECK(etag);
+        BOOST_CHECK_EQUAL(*etag, "origin-etag");
+
+        return Response{};
+    };
+
+    run_spawned([&](auto yield) {
+            sys::error_code ec;
+
+            // In this test, the user agent provides its own etag.
+            Request rq{http::verb::get, "mypage", 11};
+            rq.set(http::field::if_none_match, "origin-etag");
+            cc.fetch(rq, yield[ec]);
+            BOOST_CHECK(!ec);
+        });
+
+    BOOST_CHECK_EQUAL(cache_check, 1u);
+    BOOST_CHECK_EQUAL(origin_check, 1u);
+}
+
 BOOST_AUTO_TEST_CASE(test_if_none_match)
 {
     CacheControl cc;
