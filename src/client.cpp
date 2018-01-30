@@ -61,13 +61,17 @@ struct Client {
     };
 
     asio::io_service& ios;
+    Endpoint injector_ep;
     unique_ptr<gnunet_channels::Service> gnunet_service;
     unique_ptr<I2P> i2p;
     unique_ptr<ipfs_cache::Client> ipfs_cache;
 
     ClientFrontEnd front_end;
 
-    Client(asio::io_service& ios) : ios(ios) {}
+    Client(asio::io_service& ios, const Endpoint& injector_ep)
+        : ios(ios)
+        , injector_ep(injector_ep)
+    {}
 };
 
 //------------------------------------------------------------------------------
@@ -156,9 +160,7 @@ static bool is_front_end_request(const Request& req)
 //------------------------------------------------------------------------------
 static
 Result<GenericConnection>
-connect_to_injector( Endpoint endpoint
-                   , Client& client
-                   , asio::yield_context yield)
+connect_to_injector(Client& client, asio::yield_context yield)
 {
     struct Visitor {
         using Ret = Result<GenericConnection>;
@@ -207,23 +209,28 @@ connect_to_injector( Endpoint endpoint
 
     Visitor visitor(client, yield);
 
-    return boost::apply_visitor(visitor, endpoint);
+    return boost::apply_visitor(visitor, client.injector_ep);
 }
 
 //------------------------------------------------------------------------------
 static
 CacheControl::CacheEntry
-get_content_from_cache( const Request& request
-                      , ipfs_cache::Client& cache
-                      , asio::yield_context yield)
+fetch_from_cache( const Request& request
+                , Client& client
+                , asio::yield_context yield)
 {
     using CacheEntry = CacheControl::CacheEntry;
+
+    if (!client.ipfs_cache || !client.front_end.is_ipfs_cache_enabled()) {
+        return or_throw<CacheControl::CacheEntry>( yield ,
+                asio::error::operation_not_supported);
+    }
 
     sys::error_code ec;
     // Get the content from cache
     auto key = request.target();
 
-    auto content = cache.get_content(key.to_string(), yield[ec]);
+    auto content = client.ipfs_cache->get_content(key.to_string(), yield[ec]);
 
     // We need this remapping because CacheControl doesn't know
     // anything about ipfs_cache.
@@ -252,52 +259,42 @@ get_content_from_cache( const Request& request
 
 //------------------------------------------------------------------------------
 static
+Response
+fetch_from_origin( const Request& request
+                 , Client& client
+                 , asio::yield_context yield)
+{
+    if (!client.front_end.is_injector_proxying_enabled()) {
+        return or_throw<Response>(yield, asio::error::operation_not_supported);
+    }
+
+    auto inj_con = connect_to_injector(client, yield);
+
+    if (inj_con.is_error()) {
+        return or_throw<Response>(yield, inj_con.get_error());
+    }
+
+    // Forward the request to the injector
+    return fetch_http_page(client.ios, *inj_con, request, yield);
+}
+
+//------------------------------------------------------------------------------
+static
 CacheControl build_cache_control( asio::io_service& ios
-                                , const Endpoint& injector_ep
                                 , Client& client)
 {
     CacheControl cache_control;
 
     cache_control.fetch_from_cache =
         [&] (const Request& request, asio::yield_context yield) {
-            if (!client.ipfs_cache || !client.front_end.is_ipfs_cache_enabled()) {
-                return or_throw<CacheControl::CacheEntry>( yield ,
-                        asio::error::operation_not_supported);
-            }
-
-
-            // Get the content from cache
-            return ASYNC_DEBUG( get_content_from_cache( request
-                                                      , *client.ipfs_cache
-                                                      , yield)
-                              , "Cache read "
-                              , request.target());
+            return ASYNC_DEBUG( fetch_from_cache(request, client, yield)
+                              , "Fetch from cache: " , request.target());
         };
 
     cache_control.fetch_from_origin =
         [&] (const Request& request, asio::yield_context yield) {
-            if (!client.front_end.is_injector_proxying_enabled()) {
-                return or_throw<Response>( yield
-                                         , asio::error::operation_not_supported);
-            }
-
-            auto inj_con = ASYNC_DEBUG(connect_to_injector( injector_ep
-                                                          , client
-                                                          , yield)
-                                      , "Connect "
-                                      , request.target());
-
-            if (inj_con.is_error()) {
-                return or_throw<Response>(yield, inj_con.get_error());
-            }
-
-            // Forward the request to the injector
-            return ASYNC_DEBUG( fetch_http_page( ios
-                                               , *inj_con
-                                               , request
-                                               , yield)
-                              , "Fetch "
-                              , request.target());
+            return ASYNC_DEBUG( fetch_from_origin(request, client, yield)
+                              , "Fetch from origin: ", request.target());
         };
 
     cache_control.max_cached_age(MAX_CACHED_AGE);
@@ -307,12 +304,10 @@ CacheControl build_cache_control( asio::io_service& ios
 
 //------------------------------------------------------------------------------
 static void serve_request( GenericConnection con
-                         , Endpoint injector_ep
                          , Client& client
                          , asio::yield_context yield)
 {
     CacheControl cache_control = build_cache_control( con.get_io_service()
-                                                    , injector_ep
                                                     , client);
 
     sys::error_code ec;
@@ -332,7 +327,7 @@ static void serve_request( GenericConnection con
 
         if (is_front_end_request(req)) {
             return ASYNC_DEBUG(client.front_end.serve( con
-                                                     , injector_ep
+                                                     , client.injector_ep
                                                      , req
                                                      , client.ipfs_cache.get()
                                                      , yield)
@@ -354,15 +349,6 @@ static void serve_request( GenericConnection con
             else return;
         }
 
-        //{
-        //    cerr << "------------ Client::serve_request --------------" << endl;
-        //    cerr << "0>> " << req.target() << endl;
-        //    cerr << res.base() << endl;
-        //    cerr << "1>> " << res[http::field::content_length] << endl;
-        //    cerr << "2>> " << res.body().size() << endl;
-        //    cerr << "-------------------------------------------------" << endl;
-        //}
-
         // Forward the response back
         ASYNC_DEBUG(http::async_write(con, res, yield[ec]), "Write response ", req.target());
         if (ec == http::error::end_of_stream) break;
@@ -373,7 +359,6 @@ static void serve_request( GenericConnection con
 //------------------------------------------------------------------------------
 void do_listen( Client& client
               , tcp::endpoint local_endpoint
-              , Endpoint injector
               , string ipns
               , asio::yield_context yield)
 {
@@ -415,11 +400,9 @@ void do_listen( Client& client
         else {
             asio::spawn( ios
                        , [ s = move(socket)
-                         , injector
                          , &client
                          ](asio::yield_context yield) mutable {
                              serve_request( GenericConnection(move(s))
-                                          , std::move(injector)
                                           , client
                                           , yield);
                          });
@@ -526,7 +509,7 @@ int main(int argc, char* argv[])
         ( ios
         , [&](asio::yield_context yield) {
 
-              Client client(ios);
+              Client client(ios, injector_ep);
 
               if (is_gnunet_endpoint(injector_ep)) {
                   namespace gc = gnunet_channels;
@@ -570,7 +553,6 @@ int main(int argc, char* argv[])
 
               do_listen( client
                        , local_ep
-                       , injector_ep
                        , ipns
                        , yield);
           });

@@ -114,8 +114,15 @@ CacheControl::is_older_than_max_cache_age(const posix_time::ptime& time_stamp) c
 static
 Response add_warning(Response response, const char* value)
 {
-    response[http::field::warning] = value;
+    response.set(http::field::warning, value);
     return response;
+}
+
+static
+Response add_stale_warning(Response response)
+{
+    return add_warning( move(response)
+                      , "110 Ouinet 'Response is stale'");
 }
 
 // TODO: This function is heavily unfinished.
@@ -141,8 +148,7 @@ CacheControl::fetch(const Request& request, asio::yield_context yield)
         if (!ec) return response;
 
         return is_expired(cache_entry)
-             ? add_warning( move(cache_entry.response)
-                          , "110 Ouinet 'Response is stale'")
+             ? add_stale_warning(move(cache_entry.response))
              : cache_entry.response;
     }
 
@@ -155,23 +161,26 @@ CacheControl::fetch(const Request& request, asio::yield_context yield)
 
     if (cache_etag && !rq_etag) {
         auto rq = request; // Make a copy because `request` is const&.
+
         rq.set(http::field::if_none_match, *cache_etag);
 
         auto response = fetch_from_origin(rq, yield[ec]);
-        if (ec) return or_throw(yield, ec, move(response));
+
+        if (ec) {
+            return add_stale_warning(move(cache_entry.response));
+        }
 
         if (response.result() == http::status::found) {
             return move(cache_entry.response);
         }
 
-        return move(response);
+        return response;
     }
 
     auto response = fetch_from_origin(request, yield[ec]);
 
     return ec
-         ? add_warning( move(cache_entry.response)
-                      , "110 Ouinet 'Response is stale'")
+         ? add_stale_warning(move(cache_entry.response))
          : response;
 }
 
