@@ -114,7 +114,7 @@ CacheControl::is_older_than_max_cache_age(const posix_time::ptime& time_stamp) c
 static
 Response add_warning(Response response, const char* value)
 {
-    response[http::field::warning] = value;
+    response.set(http::field::warning, value);
     return response;
 }
 
