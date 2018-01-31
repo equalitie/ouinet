@@ -111,19 +111,19 @@ void ClientFrontEnd::serve( GenericConnection& con
 
     stringstream ss;
     ss << "<!DOCTYPE html>\n"
-          "<html>\n";
+          "<html>\n"
+          "    <head>\n";
     if (_auto_refresh_enabled) {
-          ss << "    <head>\n"
-                "      <meta http-equiv=\"refresh\" content=\"1\"/>\n"
-                "      <style>\n"
-                "        * {\n"
-                "            font-family: \"Courier New\";\n"
-                "            font-size: 10pt; }\n"
-                "          }\n"
-                "      </style>\n"
-                "    </head>\n";
+        ss << "      <meta http-equiv=\"refresh\" content=\"1\"/>\n";
     }
-    ss << "    <body>\n";
+    ss << "      <style>\n"
+          "        * {\n"
+          "            font-family: \"Courier New\";\n"
+          "            font-size: 10pt; }\n"
+          "          }\n"
+          "      </style>\n"
+          "    </head>\n"
+          "    <body>\n";
 
     ss << ToggleInput{"Auto refresh",   "auto_refresh",   _auto_refresh_enabled};
     ss << ToggleInput{"Injector proxy", "injector_proxy", _injector_proxying_enabled};
