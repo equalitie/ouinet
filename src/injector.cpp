@@ -38,31 +38,22 @@ static const fs::path OUINET_CONF_FILE = "ouinet-injector.conf";
 //------------------------------------------------------------------------------
 static bool contains_private_data(const http::request_header<>& request)
 {
-    auto is_private = [](const http::fields::value_type& f) {
-        static const vector<http::field> public_request_fields
-            { http::field::host
-            , http::field::user_agent
-            , http::field::accept
-            , http::field::accept_language
-            , http::field::accept_encoding
-            , http::field::keep_alive
-            , http::field::connection
-            , http::field::referer
-            };
-
-        for (auto f_ : public_request_fields) { if (f_ == f.name()) return false; }
-
-        // Non standard W3C recommendation.
-        // https://www.w3.org/TR/upgrade-insecure-requests/
-        if (f.name_string() == "Upgrade-Insecure-Requests") return false;
-        // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/DNT
-        if (f.name_string() == "DNT") return false;
-
-        return true;
-    };
-
     for (auto& field : request) {
-        if (is_private(field)) { return true; }
+        if(!util::field_is_one_of(field
+                , http::field::host
+                , http::field::user_agent
+                , http::field::accept
+                , http::field::accept_language
+                , http::field::accept_encoding
+                , http::field::keep_alive
+                , http::field::connection
+                , http::field::referer
+                // https://www.w3.org/TR/upgrade-insecure-requests/
+                , "Upgrade-Insecure-Requests"
+                // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/DNT
+                , "DNT")) {
+            return true;
+        }
     }
 
     // TODO: This may be a bit too agressive.
