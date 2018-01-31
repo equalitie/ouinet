@@ -259,4 +259,56 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
     BOOST_CHECK_EQUAL(origin_check, 2u);
 }
 
+BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
+{
+    CacheControl cc;
+
+    unsigned cache_check = 0;
+    unsigned origin_check = 0;
+
+    cc.fetch_from_cache = [&](auto rq, auto y) {
+        cache_check++;
+        Response rs{http::status::ok, rq.version()};
+        // Return a fresh cached version.
+        rs.set(http::field::cache_control, "max-age=3600");
+        rs.set("X-Test", "from-cache");
+        return Entry{current_time(), rs};
+    };
+
+    cc.fetch_from_origin = [&](auto rq, auto y) {
+        origin_check++;
+        // Force using version from origin instead of validated version from cache
+        // (i.e. not returning "304 Not Modified" here).
+        Response rs{http::status::ok, rq.version()};
+        rs.set("X-Test", "from-origin");
+        return rs;
+    };
+
+    run_spawned([&](auto yield) {
+            {
+                // Cached resources requested without "no-cache" should come from the cache
+                // since the cached version is fresh enough.
+                Request req{http::verb::get, "foo", 11};
+                auto rs = cc.fetch(req, yield);
+                BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
+                BOOST_CHECK_EQUAL(rs["X-Test"], "from-cache");
+            }
+            {
+                // Cached resources requested without "no-cache" should come from or be validated by the origin.
+                // In this test we know it will be the origin.
+                Request req{http::verb::get, "foo", 11};
+                req.set(http::field::cache_control, "no-cache");
+                auto rs = cc.fetch(req, yield);
+                BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
+                BOOST_CHECK_EQUAL(rs["X-Test"], "from-origin");
+            }
+        });
+
+    // Cache should have been checked without "no-cache",
+    // it may or may not have been checked with "no-cache".
+    BOOST_CHECK(1u <= cache_check && cache_check < 3u);
+    // Origin should have only been checked with "no-cache".
+    BOOST_CHECK_EQUAL(origin_check, 1u);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
