@@ -4,6 +4,7 @@
 #include "cache_control.h"
 #include "or_throw.h"
 #include "split_string.h"
+#include "util.h"
 
 using namespace std;
 using namespace ouinet;
@@ -44,14 +45,10 @@ optional<unsigned> get_max_age(const string_view& cache_control_value)
     optional<unsigned> s_maxage;
 
     auto update_max_age = [] (optional<unsigned>& max_age, string_view value) {
-        unsigned delta;
+        unsigned delta = util::parse_num<unsigned>(value, unsigned(-1));
 
         // TODO: What does RFC say about malformed entries?
-        // TODO: It's inefficient to convert to_string here
-        //   but the stoi function expects a null terminated
-        //   char array (or string).
-        try { delta = std::stoi(value.to_string()); }
-        catch (...) { return; }
+        if (delta == unsigned(-1)) return;
 
         if (!max_age || *max_age < delta) {
             max_age = delta;

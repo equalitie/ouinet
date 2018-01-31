@@ -3,6 +3,7 @@
 #include "namespaces.h"
 
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/lexical_cast.hpp>
 
 namespace ouinet { namespace util {
 
@@ -81,6 +82,17 @@ inline
 std::string str(Args&&... args) {
     std::stringstream ss;
     return detail::str_impl(ss, std::forward<Args>(args)...);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+template<class Num>
+Num parse_num(beast::string_view s, Num default_value) {
+    try {
+        return boost::lexical_cast<Num>(s);
+    }
+    catch (...) {
+        return default_value;
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
