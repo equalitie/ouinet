@@ -11,6 +11,7 @@ using namespace ouinet;
 
 using string_view = beast::string_view;
 using Response = CacheControl::Response;
+using Request = CacheControl::Request;
 using boost::optional;
 
 namespace posix_time = boost::posix_time;
@@ -122,9 +123,35 @@ Response add_stale_warning(Response response)
                       , "110 Ouinet 'Response is stale'");
 }
 
-// TODO: This function is heavily unfinished.
+static bool is_chunked(const Response& rs)
+{
+    auto i = rs.find(http::field::transfer_encoding);
+    if (i == rs.end()) return false;
+    return boost::iequals(i->value(), "chunked");
+}
+
+static bool has_correct_content_length(const Response& rs)
+{
+    // Relevant RFC https://tools.ietf.org/html/rfc7230#section-3.3.2
+    auto opt_length = get(rs, http::field::content_length);
+    if (!opt_length) return true;
+    auto length = util::parse_num<size_t>(*opt_length, size_t(-1));
+    if (length == size_t(-1)) return false;
+    return rs.body().size() == length;
+}
+
 Response
 CacheControl::fetch(const Request& request, asio::yield_context yield)
+{
+    sys::error_code ec;
+    auto response = do_fetch(request, yield[ec]);
+    assert(ec || has_correct_content_length(response));
+    return or_throw(yield, ec, move(response));
+}
+
+// TODO: This function is unfinished.
+Response
+CacheControl::do_fetch(const Request& request, asio::yield_context yield)
 {
     sys::error_code ec;
     auto cache_entry = fetch_from_cache(request, yield[ec]);
