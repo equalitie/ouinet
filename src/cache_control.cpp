@@ -10,20 +10,25 @@ using namespace std;
 using namespace ouinet;
 
 using string_view = beast::string_view;
+using Request = CacheControl::Request;
 using Response = CacheControl::Response;
 using Request = CacheControl::Request;
 using boost::optional;
 
 namespace posix_time = boost::posix_time;
 
+// Look for a literal directive (like "no-cache" but not "max-age=N")
+// in the "Cache-Control" header field
+// of a request or response.
+template <bool isRequest, class Body>
 static
-bool has_private_cache_control(const Response& response)
+bool has_cache_control_directive(const http::message<isRequest, Body>& request, const string& directive)
 {
-    auto cache_control_i = response.find(http::field::cache_control);
-    if (cache_control_i == response.end()) return false;
+    auto cache_control_i = request.find(http::field::cache_control);
+    if (cache_control_i == request.end()) return false;
 
     for (auto kv : SplitString(cache_control_i->value(), ',')) {
-        if (boost::iequals(kv, "private")) return true;
+        if (boost::iequals(kv, directive)) return true;
     }
 
     return false;
@@ -153,6 +158,13 @@ Response
 CacheControl::do_fetch(const Request& request, asio::yield_context yield)
 {
     sys::error_code ec;
+
+    // We could attempt retrieval from cache and then validation against the origin,
+    // but for the moment we go straight to the origin (RFC7234#5.2.1.4).
+    if (has_cache_control_directive(request, "no-cache")) {
+        return fetch_from_origin(request, yield);
+    }
+
     auto cache_entry = fetch_from_cache(request, yield[ec]);
 
     if (ec && ec != asio::error::operation_not_supported
@@ -164,7 +176,7 @@ CacheControl::do_fetch(const Request& request, asio::yield_context yield)
         return fetch_from_origin(request, yield);
     }
 
-    if (has_private_cache_control(cache_entry.response)
+    if (has_cache_control_directive(cache_entry.response, "private")
         || is_older_than_max_cache_age(cache_entry.time_stamp)) {
         auto response = fetch_from_origin(request, yield[ec]);
 
