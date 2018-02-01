@@ -143,20 +143,41 @@ void try_to_cache( ipfs_cache::Injector& injector
 {
     bool do_cache = ok_to_cache(request, response);
 
-    //{
-    //    cerr << "-----------------------------------------" << endl;
-    //    cerr << (do_cache ? "Caching " : "Not caching ")
-    //         << "\"" << request.target() << "\"" << endl;
-    //    cerr << endl;
-    //    cerr << request;
-    //    cerr << response.base();
-    //    cerr << "-----------------------------------------" << endl;
-    //}
-
     if (!do_cache) return;
 
+    // TODO: This list was created by going through some 100 responses from
+    // bbc.com. Careful selection from all possible (standard) fields is
+    // needed.
+    auto filtered_response =
+        util::filter_fields( response
+                           , http::field::server
+                           , http::field::retry_after
+                           , http::field::content_length
+                           , http::field::content_type
+                           , http::field::content_encoding
+                           , http::field::content_language
+                           , http::field::accept_ranges
+                           , http::field::etag
+                           , http::field::age
+                           , http::field::date
+                           , http::field::expires
+                           , http::field::via
+                           , http::field::vary
+                           , http::field::connection
+                           , http::field::location
+                           , http::field::cache_control
+                           , http::field::warning
+                           , http::field::last_modified
+                           // Not sure about these
+                           , http::field::access_control_allow_origin
+                           , http::field::access_control_allow_headers
+                           , http::field::access_control_allow_methods
+                           , http::field::access_control_allow_credentials
+                           , http::field::access_control_max_age
+                           );
+
     stringstream ss;
-    ss << response;
+    ss << filtered_response;
     auto key = request.target().to_string();
 
     injector.insert_content(key, ss.str(),

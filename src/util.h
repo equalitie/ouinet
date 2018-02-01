@@ -149,5 +149,24 @@ bool field_is_one_of(const http::fields::value_type& e,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Remove all fields that are not listed in `keep_fields`.
+template<class Message, class... Fields>
+static Message filter_fields(const Message& message, const Fields&... keep_fields)
+{
+    // TODO: Instead creating a copy of the headers here, use the
+    // erase function that uses iterators (for efficiency). It was broken
+    // in Boost.Beast but should be fixed in new versions.
+    auto copy = message;
+
+    for (auto& f : message) {
+        if (!field_is_one_of(f, keep_fields...)) {
+            copy.erase(f.name_string());
+        }
+    }
+
+    return copy;
+}
+
+///////////////////////////////////////////////////////////////////////////////
 
 }} // ouinet::util namespace
