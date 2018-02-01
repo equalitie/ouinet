@@ -9,6 +9,7 @@ using namespace std;
 using namespace ouinet;
 
 using string_view = beast::string_view;
+using Request = CacheControl::Request;
 using Response = CacheControl::Response;
 using boost::optional;
 
@@ -22,6 +23,19 @@ bool has_private_cache_control(const Response& response)
 
     for (auto kv : SplitString(cache_control_i->value(), ',')) {
         if (boost::iequals(kv, "private")) return true;
+    }
+
+    return false;
+}
+
+static
+bool has_no_cache_cache_control(const Request& request)
+{
+    auto cache_control_i = request.find(http::field::cache_control);
+    if (cache_control_i == request.end()) return false;
+
+    for (auto kv : SplitString(cache_control_i->value(), ',')) {
+        if (boost::iequals(kv, "no-cache")) return true;
     }
 
     return false;
@@ -130,6 +144,13 @@ Response
 CacheControl::fetch(const Request& request, asio::yield_context yield)
 {
     sys::error_code ec;
+
+    // We could attempt retrieval from cache and then validation against the origin,
+    // but for the moment we go straight to the origin (RFC7234#5.2.1.4).
+    if (has_no_cache_cache_control(request)) {
+        return fetch_from_origin(request, yield);
+    }
+
     auto cache_entry = fetch_from_cache(request, yield[ec]);
 
     if (ec && ec != asio::error::operation_not_supported
