@@ -3,18 +3,20 @@
 #include <boost/beast/version.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/spawn.hpp>
-#include <boost/asio/steady_timer.hpp>
 #include <boost/asio/connect.hpp>
 #include <boost/program_options.hpp>
+#include <boost/filesystem.hpp>
+#include <boost/date_time/posix_time/posix_time.hpp>
 #include <iostream>
 #include <fstream>
 
 #include <ipfs_cache/client.h>
 #include <ipfs_cache/error.h>
-#include <ipfs_cache/timer.h>
 
 #include <gnunet_channels/channel.h>
 #include <gnunet_channels/service.h>
+
+#include <i2poui.h>
 
 #include "namespaces.h"
 #include "connect_to_host.h"
@@ -24,16 +26,54 @@
 #include "util.h"
 #include "result.h"
 #include "blocker.h"
+#include "async_sleep.h"
+#include "increase_open_file_limit.h"
+#include "endpoint.h"
+#include "cache_control.h"
+#include "or_throw.h"
 #include "request_routing.h"
 
 using namespace std;
 using namespace ouinet;
 
+namespace fs = boost::filesystem;
+namespace posix_time = boost::posix_time;
+
 using tcp         = asio::ip::tcp;
 using string_view = beast::string_view;
 using Request     = http::request<http::string_body>;
+using Response    = http::response<http::dynamic_body>;
 
-static string REPO_ROOT;
+static fs::path REPO_ROOT;
+static const fs::path OUINET_CONF_FILE = "ouinet-client.conf";
+static posix_time::time_duration MAX_CACHED_AGE = posix_time::hours(7*24);  // one week
+
+//------------------------------------------------------------------------------
+#define ASYNC_DEBUG(code, ...) [&] () mutable {\
+    auto task = client.front_end.notify_task(util::str(__VA_ARGS__));\
+    return code;\
+}()
+
+//------------------------------------------------------------------------------
+struct Client {
+    struct I2P {
+        i2poui::Service service;
+        i2poui::Connector connector;
+    };
+
+    asio::io_service& ios;
+    Endpoint injector_ep;
+    unique_ptr<gnunet_channels::Service> gnunet_service;
+    unique_ptr<I2P> i2p;
+    unique_ptr<ipfs_cache::Client> ipfs_cache;
+
+    ClientFrontEnd front_end;
+
+    Client(asio::io_service& ios, const Endpoint& injector_ep)
+        : ios(ios)
+        , injector_ep(injector_ep)
+    {}
+};
 
 //------------------------------------------------------------------------------
 static
@@ -82,11 +122,11 @@ void handle_connect_request( GenericConnection& client_c
     auto origin_c = connect_to_host(ios, req["host"], ec, yield);
     if (ec) return fail(ec, "connect");
 
-    http::response<http::empty_body> res{http::status::ok, req.version()};
-
     // Send the client an OK message indicating that the tunnel
     // has been established. TODO: Reply with an error otherwise.
+    http::response<http::empty_body> res{http::status::ok, req.version()};
     http::async_write(client_c, res, yield[ec]);
+
     if (ec) return fail(ec, "sending connect response");
 
     Blocker blocker(ios);
@@ -94,13 +134,13 @@ void handle_connect_request( GenericConnection& client_c
     asio::spawn
         ( yield
         , [&, b = blocker.make_block()](asio::yield_context yield) {
-              forward(client_c, *origin_c, yield);
+              forward(client_c, origin_c, yield);
           });
 
     asio::spawn
         ( yield
         , [&, b = blocker.make_block()](asio::yield_context yield) {
-              forward(*origin_c, client_c, yield);
+              forward(origin_c, client_c, yield);
           });
 
     blocker.wait(yield);
@@ -108,77 +148,239 @@ void handle_connect_request( GenericConnection& client_c
 
 //------------------------------------------------------------------------------
 static
-Result<unique_ptr<GenericConnection>>
-connect_to_injector( string endpoint
-                   , gnunet_channels::Service& service
-                   , asio::yield_context yield)
+Result<GenericConnection>
+connect_to_injector(Client& client, asio::yield_context yield)
 {
-    auto as_tcp_endpoint = []( string_view host
-                             , string_view port
-                             ) -> Result<tcp::endpoint> {
+    struct Visitor {
+        using Ret = Result<GenericConnection>;
+
         sys::error_code ec;
-        auto ip = asio::ip::address::from_string(host.to_string(), ec);
-        if (ec) return ec;
-        return tcp::endpoint(ip, strtol(port.data(), 0, 10));
+        Client& client;
+        asio::yield_context yield;
+
+        Visitor(Client& client, asio::yield_context yield)
+            : client(client), yield(yield) {}
+
+        Ret operator()(const tcp::endpoint& ep) {
+            tcp::socket socket(client.ios);
+            socket.async_connect(ep, yield[ec]);
+
+            if (ec) return ec;
+            return GenericConnection(move(socket));
+        }
+
+        Ret operator()(const GnunetEndpoint& ep) {
+            using Channel = gnunet_channels::Channel;
+
+            if (!client.gnunet_service) {
+                return Ret::make_error(asio::error::no_protocol_option);
+            }
+
+            Channel ch(*client.gnunet_service);
+            ch.connect(ep.host, ep.port, yield[ec]);
+
+            if (ec) return ec;
+            return GenericConnection(move(ch));
+        }
+
+        Ret operator()(const I2PEndpoint&) {
+            if (!client.i2p) {
+                return Ret::make_error(asio::error::no_protocol_option);
+            }
+
+            i2poui::Channel ch(client.i2p->service);
+            ch.connect(client.i2p->connector, yield[ec]);
+
+            if (ec) return ec;
+            return GenericConnection(move(ch));
+        }
     };
 
-    sys::error_code ec;
+    Visitor visitor(client, yield);
 
-    string_view host;
-    string_view port;
-
-    std::tie(host, port) = util::split_host_port(endpoint);
-
-    // TODO: Currently this code only recognizes as host an IP address (v4 or
-    // v6) and GNUnet's hash. Would be nice to support standard web hosts of
-    // type "foobar.com" as well.
-    if (auto ep = as_tcp_endpoint(host, port)) {
-        tcp::socket socket(service.get_io_service());
-        socket.async_connect(*ep, yield[ec]);
-
-        if (ec) return ec;
-        return make_unique<GenericConnectionImpl<tcp::socket>>(move(socket));
-    }
-    else {
-        // Interpret as gnunet endpoint
-        using Channel = gnunet_channels::Channel;
-
-        Channel ch(service);
-        ch.connect(host.to_string(), port.to_string(), yield[ec]);
-
-        if (ec) return ec;
-        return make_unique<GenericConnectionImpl<Channel>>(move(ch));
-    }
+    return boost::apply_visitor(visitor, client.injector_ep);
 }
 
 //------------------------------------------------------------------------------
-static void serve_request( shared_ptr<GenericConnection> con
-                         , string injector
-                         , shared_ptr<ipfs_cache::Client> cache_client
-                         , shared_ptr<ClientFrontEnd> front_end
-                         , gnunet_channels::Service& gnunet_service
+static
+CacheControl::CacheEntry
+fetch_from_cache( const Request& request
+                , request_route::Config& request_config
+                , Client& client
+                , asio::yield_context yield)
+{
+    using CacheEntry = CacheControl::CacheEntry;
+
+    const bool cache_is_disabled
+        = !request_config.enable_cache
+       || !client.ipfs_cache
+       || !client.front_end.is_ipfs_cache_enabled();
+
+    if (cache_is_disabled) {
+        return or_throw<CacheControl::CacheEntry>( yield ,
+                asio::error::operation_not_supported);
+    }
+
+    sys::error_code ec;
+    // Get the content from cache
+    auto key = request.target();
+
+    auto content = client.ipfs_cache->get_content(key.to_string(), yield[ec]);
+
+    // We need this remapping because CacheControl doesn't know
+    // anything about ipfs_cache.
+    // TODO: Make ipfs_cache return asio::error::not_found instead.
+    if (ec == ipfs_cache::error::key_not_found) {
+        ec = asio::error::not_found;
+    }
+
+    if (ec) return or_throw<CacheEntry>(yield, ec);
+
+    // If the content does not have a meaningful time stamp,
+    // an error should have been reported.
+    assert(!content.ts.is_not_a_date_time());
+
+    http::response_parser<Response::body_type> parser;
+    parser.eager(true);
+    parser.put(asio::buffer(content.data), ec);
+
+    assert(!ec && "Malformed cache entry");
+
+    if (!parser.is_done()) {
+        cerr << "------- WARNING: Unfinished message in cache --------" << endl;
+        cerr << request << parser.get() << endl;
+        cerr << "-----------------------------------------------------" << endl;
+        ec = asio::error::not_found;
+    }
+
+    if (ec) return or_throw<CacheEntry>(yield, ec);
+
+    return CacheEntry{content.ts, parser.release()};
+}
+
+//------------------------------------------------------------------------------
+static
+Response
+fetch_from_origin( const Request& request
+                 , request_route::Config& request_config
+                 , Client& client
+                 , asio::yield_context yield)
+{
+    using namespace asio::error;
+    using request_route::responder;
+
+    sys::error_code last_error = operation_not_supported;
+
+    while (!request_config.responders.empty()) {
+        auto r = request_config.responders.front();
+        request_config.responders.pop();
+
+        switch (r) {
+            case responder::origin: {
+                assert(0 && "TODO");
+                continue;
+            }
+            case responder::proxy: {
+                assert(0 && "TODO");
+                continue;
+            }
+            case responder::injector: {
+                if (!client.front_end.is_injector_proxying_enabled()) {
+                    continue;
+                }
+                auto inj_con = connect_to_injector(client, yield);
+                if (inj_con.is_error()) {
+                    last_error = inj_con.get_error();
+                    continue;
+                }
+                sys::error_code ec;
+                // Forward the request to the injector
+                auto res = fetch_http_page(client.ios, *inj_con, request, yield[ec]);
+                if (!ec) return res;
+                last_error = ec;
+                continue;
+            }
+            case responder::_front_end: {
+                return client.front_end.serve( client.injector_ep
+                                             , request
+                                             , client.ipfs_cache.get());
+            }
+        }
+    }
+
+    return or_throw<Response>(yield, last_error);
+}
+
+//------------------------------------------------------------------------------
+static
+CacheControl build_cache_control( asio::io_service& ios
+                                , request_route::Config& request_config
+                                , Client& client)
+{
+    CacheControl cache_control;
+
+    cache_control.fetch_from_cache =
+        [&] (const Request& request, asio::yield_context yield) {
+            return ASYNC_DEBUG( fetch_from_cache(request, request_config, client, yield)
+                              , "Fetch from cache: " , request.target());
+        };
+
+    cache_control.fetch_from_origin =
+        [&] (const Request& request, asio::yield_context yield) {
+            return ASYNC_DEBUG( fetch_from_origin(request, request_config, client, yield)
+                              , "Fetch from origin: ", request.target());
+        };
+
+    cache_control.max_cached_age(MAX_CACHED_AGE);
+
+    return cache_control;
+}
+
+//------------------------------------------------------------------------------
+static void serve_request( GenericConnection con
+                         , Client& client
                          , asio::yield_context yield)
 {
+    namespace rr = request_route;
+    using rr::responder;
+
+    const rr::Config default_request_config
+        { true
+        , queue<responder>({responder::injector})};
+
+    rr::Config request_config;
+
+    CacheControl cache_control = build_cache_control( con.get_io_service()
+                                                    , request_config
+                                                    , client);
+
     sys::error_code ec;
     beast::flat_buffer buffer;
+
     // These hard-wired access mechanisms are attempted in order for all normal requests.
-    const vector<enum request_mechanism> req_mechs({request_mechanism::cache, request_mechanism::injector});
     // Expressions/mechanisms to test the request against.
-    using Match = pair<const reqexpr::reqex&, const vector<enum request_mechanism>&>;
+    using Match = pair<const ouinet::reqexpr::reqex, const rr::Config>;
+
     auto method_getter([](const Request& r) {return r.method_string();});
     auto host_getter([](const Request& r) {return r["Host"];});
     auto target_getter([](const Request& r) {return r.target();});
+
     const vector<Match> matches({
-        Match( !reqexpr::from_regex(method_getter, "(GET|HEAD|OPTIONS|TRACE)")
-             , {request_mechanism::origin} ),  // send non-safe HTTP method requests to the origin server
-        Match( reqexpr::from_regex(method_getter, "(OPTIONS|TRACE)")
-             , {request_mechanism::injector, request_mechanism::origin} ),  // do not use cache for safe but non-cacheable HTTP method requests
         Match( reqexpr::from_regex(host_getter, "localhost")
-             , {request_mechanism::_front_end} ),
+             , {false, queue<responder>({responder::_front_end})} ),
+        // Send non-safe HTTP method requests to the origin server
+        // NOTE: The cache needs not be disabled as it should know not to
+        // fetch requests in these cases.
+        Match( reqexpr::from_regex(method_getter, "(HEAD|OPTIONS|TRACE)")
+             , {false, queue<responder>({responder::origin})} ),
+        // Do not use cache for safe but non-cacheable HTTP method requests
+        // NOTE: same as above.
+        Match( reqexpr::from_regex(method_getter, "(OPTIONS|TRACE)")
+             , {false, queue<responder>({responder::injector, responder::origin})} ),
         Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example.com/.*")
-             , {request_mechanism::cache}),
+             , {true, queue<responder>()} ),
         Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example.net/.*")
-             , {request_mechanism::cache, request_mechanism::injector, request_mechanism::origin}),
+             , {true, queue<responder>({responder::injector, responder::origin})} ),
     });
 
     // Process the different requests that may come over the same connection.
@@ -186,111 +388,49 @@ static void serve_request( shared_ptr<GenericConnection> con
         Request req;
 
         // Read the (clear-text) HTTP request
-        http::async_read(*con, buffer, req, yield[ec]);
+        ASYNC_DEBUG(http::async_read(con, buffer, req, yield[ec]), "Read request");
 
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "read");
 
         // Attempt connection to origin for CONNECT requests
         if (req.method() == http::verb::connect) {
-            return handle_connect_request(*con, req, yield);
+            return ASYNC_DEBUG(handle_connect_request(con, req, yield), "Connect");
         }
 
-        // At this point we have access to the plain text HTTP proxy request.
-        // Attempt the different mechanisms provided by the routing component.
+        request_config = route_choose_config(req, matches, default_request_config);
 
-        // NOTE: We need to use the 'std::' prefix here due to ADL
-        //       (http://en.cppreference.com/w/cpp/language/adl)
+        auto res = ASYNC_DEBUG( cache_control.fetch(req, yield[ec])
+                              , "CacheControl::fetch "
+                              , req.target());
 
-        // This uses the same list of mechanisms for all requests.
-        //unique_ptr<RequestRouter> router = route(req, req_mechs);
-        // This uses a different list of mechanisms for each possible match of the request,
-        // or a default list if there is no successful match.
-        unique_ptr<RequestRouter> router = route(req, matches, req_mechs);
+        if (ec) {
+            cerr << "----- WARNING: Error fetching --------" << endl;
+            cerr << "Error Code: " << ec.message() << endl;
+            cerr << req << res.base() << endl;
+            cerr << "--------------------------------------" << endl;
 
-        for (;;) {  // continue for next mechanism; break for next request
-            auto req_mech = router->get_next_mechanism(ec);
-            if (ec) {
-                return handle_bad_request(*con, req, ec.message(), yield);
-            }
-            // cout << "Attempt " << req.method_string() << ' ' << req.target()
-            //      << " via mechanism #" << req_mech << endl;
-
-            // Serve requests targeted to the client front end
-            if (req_mech == request_mechanism::_front_end) {
-                return front_end->serve(*con, req, cache_client, yield);
-            }
-
-            // Get the content from cache (if available and enabled)
-            if (req_mech == request_mechanism::cache) {
-                if (!cache_client || !front_end->is_ipfs_cache_enabled()) {
-                    continue;  // next mechanism
-                }
-
-                auto key = req.target();  // use request absolute URI as key
-
-                string content = cache_client->get_content(key.to_string(), yield[ec]);
-
-                if (ec) {
-                    if (ec != ipfs_cache::error::key_not_found) {
-                        cout << "Failed to fetch from DB " << ec.message()
-                             << " " << req.target() << endl;
-                    }
-                    continue;  // next mechanism
-                }
-
-                asio::async_write(*con, asio::buffer(content), yield[ec]);
-                if (ec) return fail(ec, "async_write");
-                break;  // next request
-            }
-
-            // Get the content from injector (if enabled)
-            if (req_mech == request_mechanism::injector) {
-                if (!front_end->is_injector_proxying_enabled()) {
-                    continue;  // next mechanism
-                }
-
-                auto inj_con = connect_to_injector(injector, gnunet_service, yield);
-
-                if (inj_con.is_error()) return fail(inj_con.get_error(), "channel connect");
-
-                // Forward the request to the injector
-                auto res = fetch_http_page(con->get_io_service(), **inj_con, req, ec, yield);
-                if (ec) return fail(ec, "fetch_http_page");
-
-                // Forward back the response
-                http::async_write(*con, res, yield[ec]);
-                if (ec && ec != http::error::end_of_stream) return fail(ec, "write");
-                break;  // next request
-            }
-
-            // Requests going to the origin are not supported
-            // (this includes non-safe HTTP requests like POST).
-            // TODO: We're not handling HEAD and OPTIONS requests correctly.
-            return handle_bad_request(*con, req, "Unsupported request mechanism", yield);
+            // TODO: Better error message.
+            ASYNC_DEBUG(handle_bad_request(con, req, "Not cached", yield), "Send error");
+            if (req.keep_alive()) continue;
+            else return;
         }
+
+        // Forward the response back
+        ASYNC_DEBUG(http::async_write(con, res, yield[ec]), "Write response ", req.target());
+        if (ec == http::error::end_of_stream) break;
+        if (ec) return fail(ec, "write");
     }
 }
 
 //------------------------------------------------------------------------------
-static void async_sleep( asio::io_service& ios
-                       , asio::steady_timer::duration duration
-                       , asio::yield_context yield)
-{
-    asio::steady_timer timer(ios);
-    timer.expires_from_now(duration);
-    sys::error_code ec;
-    timer.async_wait(yield[ec]);
-}
-
-//------------------------------------------------------------------------------
-void do_listen( asio::io_service& ios
-              , gnunet_channels::Service& gnunet_service
+void do_listen( Client& client
               , tcp::endpoint local_endpoint
-              , string injector
               , string ipns
               , asio::yield_context yield)
 {
+    auto& ios = client.ios;
+
     sys::error_code ec;
 
     // Open the acceptor
@@ -309,83 +449,32 @@ void do_listen( asio::io_service& ios
     acceptor.listen(asio::socket_base::max_connections, ec);
     if (ec) return fail(ec, "listen");
 
-    shared_ptr<ipfs_cache::Client> ipfs_cache_client;
-
     if (ipns.size()) {
-        ipfs_cache_client = make_shared<ipfs_cache::Client>(ios, ipns, REPO_ROOT + "/ipfs");
+        ipfs_cache::Client cache(ios, ipns, (REPO_ROOT/"ipfs").native());
+        client.ipfs_cache = make_unique<ipfs_cache::Client>(move(cache));
     }
 
     cout << "Client accepting on " << acceptor.local_endpoint() << endl;
 
-    auto front_end = make_shared<ClientFrontEnd>();
-
     for(;;)
     {
         tcp::socket socket(ios);
-        acceptor.async_accept(socket, yield[ec]);
+        ASYNC_DEBUG(acceptor.async_accept(socket, yield[ec]), "Accept");
         if(ec) {
             fail(ec, "accept");
-            async_sleep(ios, chrono::seconds(1), yield);
+            ASYNC_DEBUG(async_sleep(ios, chrono::seconds(1), yield), "Sleep");
         }
         else {
             asio::spawn( ios
                        , [ s = move(socket)
-                         , ipfs_cache_client
-                         , injector
-                         , front_end
-                         , &gnunet_service
+                         , &client
                          ](asio::yield_context yield) mutable {
-                             using Con = GenericConnectionImpl<tcp::socket>;
-                             auto con = make_shared<Con>(move(s));
-
-                             serve_request( con
-                                          , move(injector)
-                                          , move(ipfs_cache_client)
-                                          , move(front_end)
-                                          , gnunet_service
+                             serve_request( GenericConnection(move(s))
+                                          , client
                                           , yield);
-
-                             sys::error_code ec;
-                             con->get_impl().shutdown(tcp::socket::shutdown_send, ec);
                          });
         }
     }
-}
-
-//------------------------------------------------------------------------------
-#include <sys/resource.h>
-// Temporary, until this is merged https://github.com/ipfs/go-ipfs/pull/4288
-// into IPFS.
-void bump_file_limit(rlim_t new_value)
-{
-   struct rlimit rl;
-
-   int r = getrlimit(RLIMIT_NOFILE, &rl);
-
-   if (r != 0) {
-       cerr << "Failed to get the current RLIMIT_NOFILE value" << endl;
-       return;
-   }
-
-   cout << "Default RLIMIT_NOFILE value is: " << rl.rlim_cur << endl;
-
-   if (rl.rlim_cur >= new_value) {
-       cout << "Leaving RLIMIT_NOFILE value unchanged." << endl;
-       return;
-   }
-
-   rl.rlim_cur = new_value;
-
-   r = setrlimit(RLIMIT_NOFILE, &rl);
-
-   if (r != 0) {
-       cerr << "Failed to set the RLIMIT_NOFILE value to " << rl.rlim_cur << endl;
-       return;
-   }
-
-   r = getrlimit(RLIMIT_NOFILE, &rl);
-   assert(r == 0);
-   cout << "RLIMIT_NOFILE value changed to: " << rl.rlim_cur << endl;
 }
 
 //------------------------------------------------------------------------------
@@ -405,9 +494,12 @@ int main(int argc, char* argv[])
         ("injector-ipns"
          , po::value<string>()->default_value("")
          , "IPNS of the injector's database")
+        ("max-cached-age"
+         , po::value<int>()->default_value(MAX_CACHED_AGE.total_seconds())
+         , "Discard cached content older than this many seconds (0: discard all; -1: discard none)")
         ("open-file-limit"
          , po::value<unsigned int>()
-         , "To increase the number of open files")
+         , "To increase the maximum number of open files")
         ;
 
     po::variables_map vm;
@@ -420,15 +512,40 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    REPO_ROOT = vm["repo"].as<string>();
+    REPO_ROOT = fs::path(vm["repo"].as<string>());
 
-    ifstream ouinet_conf(REPO_ROOT + "/ouinet-client.conf");
+    if (!fs::exists(REPO_ROOT)) {
+        cerr << "Directory " << REPO_ROOT << " does not exist." << endl;
+        cerr << desc << endl;
+        return 1;
+    }
+
+    if (!fs::is_directory(REPO_ROOT)) {
+        cerr << "The path " << REPO_ROOT << " is not a directory." << endl;
+        cerr << desc << endl;
+        return 1;
+    }
+
+    fs::path ouinet_conf_path = REPO_ROOT/OUINET_CONF_FILE;
+
+    if (!fs::is_regular_file(ouinet_conf_path)) {
+        cerr << "The path " << REPO_ROOT << " does not contain "
+             << "the " << OUINET_CONF_FILE << " configuration file." << endl;
+        cerr << desc << endl;
+        return 1;
+    }
+
+    ifstream ouinet_conf(ouinet_conf_path.native());
 
     po::store(po::parse_config_file(ouinet_conf, desc), vm);
     po::notify(vm);
 
     if (vm.count("open-file-limit")) {
-        bump_file_limit(vm["open-file-limit"].as<unsigned int>());
+        increase_open_file_limit(vm["open-file-limit"].as<unsigned int>());
+    }
+
+    if (vm.count("max-cached-age")) {
+        MAX_CACHED_AGE = boost::posix_time::seconds(vm["max-cached-age"].as<int>());
     }
 
     if (!vm.count("listen-on-tcp")) {
@@ -444,7 +561,7 @@ int main(int argc, char* argv[])
     }
 
     auto const local_ep = util::parse_endpoint(vm["listen-on-tcp"].as<string>());
-    auto const injector = vm["injector-ep"].as<string>();
+    auto const injector_ep = *parse_endpoint(vm["injector-ep"].as<string>());
 
     string ipns;
 
@@ -458,25 +575,51 @@ int main(int argc, char* argv[])
     asio::spawn
         ( ios
         , [&](asio::yield_context yield) {
-              namespace gc = gnunet_channels;
 
-              gc::Service service(REPO_ROOT + "/gnunet/peer.conf", ios);
+              Client client(ios, injector_ep);
 
-              sys::error_code ec;
+              if (is_gnunet_endpoint(injector_ep)) {
+                  namespace gc = gnunet_channels;
 
-              service.async_setup(yield[ec]);
+                  string config = (REPO_ROOT/"gnunet"/"peer.conf").native();
 
-              if (ec) {
-                  cerr << "Failed to setup GNUnet service: " << ec.message() << endl;
-                  return;
+                  auto service = make_unique<gc::Service>(config, ios);
+
+                  sys::error_code ec;
+
+                  cout << "Setting up GNUnet ..." << endl;
+                  service->async_setup(yield[ec]);
+
+                  if (ec) {
+                      cerr << "Failed to setup GNUnet service: "
+                           << ec.message() << endl;
+                      return;
+                  }
+
+                  cout << "GNUnet ID: " << service->identity() << endl;
+
+                  client.gnunet_service = move(service);
+              }
+              else if (is_i2p_endpoint(injector_ep)) {
+                  auto ep = boost::get<I2PEndpoint>(injector_ep).pubkey;
+
+                  i2poui::Service service((REPO_ROOT/"i2p").native(), ios);
+                  sys::error_code ec;
+                  i2poui::Connector connector = service.build_connector(ep, yield[ec]);
+
+                  if (ec) {
+                      cerr << "Failed to setup I2Poui service: "
+                           << ec.message() << endl;
+                      return;
+                  }
+
+                  client.i2p =
+                      make_unique<Client::I2P>(Client::I2P{move(service),
+                              move(connector)});
               }
 
-              cout << "GNUnet ID: " << service.identity() << endl;
-
-              do_listen( ios
-                       , service
+              do_listen( client
                        , local_ep
-                       , injector
                        , ipns
                        , yield);
           });

@@ -3,6 +3,7 @@
 #include <functional>
 #include <utility>
 #include <vector>
+#include <queue>
 
 #include <boost/beast/core/string.hpp>
 #include <boost/beast/http.hpp>
@@ -14,20 +15,21 @@
 namespace ouinet {
 
 //------------------------------------------------------------------------------
-// The different mechanisms an HTTP request can be routed over.
-enum request_mechanism {
+namespace request_route {
+// TODO: Better name?
+enum class responder {
     // These mechanisms may be configured by the user.
     origin,      // send request to the origin HTTP server
     proxy,       // send request to proxy ouiservice
     injector,    // send request to injector ouiservice
-    cache,       // retrieve resource from the cache
-
-    // The following entries are for internal use only.
-    _unknown,    // used e.g. in case of errors
     _front_end,  // handle the request internally
 };
 
-
+struct Config {
+    bool enable_cache = true;
+    std::queue<responder> responders;
+};
+} // request_route namespace
 //------------------------------------------------------------------------------
 // Request expressions can tell whether they match a given request
 // (much like regular expressions match strings).
@@ -76,30 +78,15 @@ reqex operator||(const reqex&, const reqex&);
 
 
 //------------------------------------------------------------------------------
-// A request router holds the context and rules to decide the different mechanisms
-// a request should be routed to until it finally succeeds,
-// considering previous attempts.
-class RequestRouter {
-    public:
-        virtual ~RequestRouter() { }
-
-        // Decide which access mechanism to use for the given request.
-        // If no more mechanisms can be attempted, return `request_mechanism::unknown`
-        // and set the error code to `error::no_more_routes`.
-        virtual enum request_mechanism get_next_mechanism(sys::error_code&) = 0;
-};
-
-// Route the provided request according to the given list of mechanisms.
-std::unique_ptr<RequestRouter>
-route( const http::request<http::string_body>& req
-     , const std::vector<enum request_mechanism>& rmechs);
-
+namespace request_route {
 // Route the provided request according to the list of mechanisms associated
 // with the first matching expression in the given list,
 // otherwise route it according to the given list of default mechanisms.
-std::unique_ptr<RequestRouter>
-route( const http::request<http::string_body>& req
-     , const std::vector<std::pair<const reqexpr::reqex&, const std::vector<enum request_mechanism>&>>& matches
-     , const std::vector<enum request_mechanism>& def_rmechs );
+const Config&
+route_choose_config( const http::request<http::string_body>& req
+                   , const std::vector<std::pair<const reqexpr::reqex, const Config>>& matches
+                   , const Config& default_config );
+} // request_route namespace
+//------------------------------------------------------------------------------
 
 } // ouinet namespace

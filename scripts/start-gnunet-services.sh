@@ -5,41 +5,77 @@ set -e
 export SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
 
 # Note, this script assumes that you built `ouinet` in the
-# `${CMAKE_SOURCE_DIR}/build` directory. If not, modify
-# the BUILD variable below.
+# `${CMAKE_SOURCE_DIR}/build` directory and that client and injector repos sit
+# under `${CMAKE_SOURCE_DIR}/repos`. If not, modify the BUILD and REPOS
+# variables below.
 
 ROOT=$SCRIPT_DIR/..
-BUILD=$ROOT/build
-GNUNET_ROOT=$BUILD/gnunet-channels/src/gnunet-channels-build
+BUILD=${BUILD:-$ROOT/build}
+REPOS=${REPOS:-$ROOT/repos}
 
-export PATH=$GNUNET_ROOT/gnunet/bin:$PATH
+GNUNET_ROOT=$BUILD/modules/gnunet-channels/gnunet-bin
 
-CH=$ROOT/repos/client/gnunet
-IH=$ROOT/repos/injector/gnunet
+export PATH=$GNUNET_ROOT/bin:$PATH
 
-export CLIENT_CFG=$CH/peer.conf
-export INJECTOR_CFG=$IH/peer.conf
+CLIENT_HOME=$REPOS/client/gnunet
+INJECTOR_HOME=$REPOS/injector/gnunet
 
-rm -rf $ROOT/repos/client/gnunet/.local/share/gnunet/peerinfo/hosts
-rm -rf $ROOT/repos/injector/gnunet/.local/share/gnunet/peerinfo/hosts
+CLIENT_CFG=$CLIENT_HOME/peer.conf
+INJECTOR_CFG=$INJECTOR_HOME/peer.conf
 
-trap "pkill 'gnunet-*' -9 || true" INT EXIT
+rm -rf $CLIENT_HOME/.local/share/gnunet/peerinfo/hosts
+rm -rf $INJECTOR_HOME/.local/share/gnunet/peerinfo/hosts
 
-GNUNET_TEST_HOME=$CH gnunet-arm -s -c $CLIENT_CFG &
-GNUNET_TEST_HOME=$IH gnunet-arm -s -c $INJECTOR_CFG &
+RUN_CLIENT=n
+RUN_INJECTOR=n
+
+for arg in "$@"; do
+	case $arg in
+	client)
+		RUN_CLIENT=y
+		;;
+	injector)
+		RUN_INJECTOR=y
+		;;
+	*)
+		echo "Invalid argument \"$arg\""
+		;;
+	esac
+done
+
+if [ $RUN_CLIENT = n -a $RUN_INJECTOR = n ]; then
+	RUN_CLIENT=y
+	RUN_INJECTOR=y
+fi
+
+stop_gnunet() {
+    [ $RUN_CLIENT = y ]   && gnunet-arm -e -c $CLIENT_CFG -T 2s
+    [ $RUN_INJECTOR = y ] && gnunet-arm -e -c $INJECTOR_CFG -T 2s
+}
+
+[ $RUN_CLIENT = y ]   && GNUNET_TEST_HOME=$CLIENT_HOME   gnunet-arm -s -c $CLIENT_CFG
+[ $RUN_INJECTOR = y ] && GNUNET_TEST_HOME=$INJECTOR_HOME gnunet-arm -s -c $INJECTOR_CFG
+
+if [ $RUN_CLIENT = y ]; then
+	echo "* Client's info"
+	gnunet-peerinfo -s -c $CLIENT_CFG
+fi
+
+if [ $RUN_INJECTOR = y ]; then
+	echo "* Injector's info"
+	gnunet-peerinfo -s -c $INJECTOR_CFG
+fi
+
+trap stop_gnunet INT EXIT
 
 sleep 1
 
-echo "* Client's info"
-gnunet-peerinfo -s -c $CLIENT_CFG
-echo "* Injector's info"
-gnunet-peerinfo -s -c $INJECTOR_CFG
+if [ $RUN_CLIENT = y -a $RUN_INJECTOR = y ]; then
+	# This is not necessary, but it makes developing easier/faster.
+	echo "Interconnecting the two..."
+	gnunet-peerinfo -c $CLIENT_CFG -p `gnunet-peerinfo -c $INJECTOR_CFG -g`
+	echo "Done"
+fi
 
-# This is not necessary, but it makes developing easier/faster.
-echo "Interconnecting the two..."
-gnunet-peerinfo -c $CLIENT_CFG -p `gnunet-peerinfo -c $INJECTOR_CFG -g`
-
-echo "Done"
-echo "Press Enter to stop services and exit."
-
-read
+# Monitor GNUnet until the user cancels it (any service will do).
+gnunet-arm -m -c $CLIENT_CFG

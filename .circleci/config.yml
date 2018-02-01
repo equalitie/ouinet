@@ -1,0 +1,58 @@
+version: 2
+executorType: machine
+
+stages:
+  build:
+    environment:
+      - CMAKE_PATH: "/home/circleci/cmake-3.10.0-Linux-x86_64/bin"
+      - BOOST_MAJOR: "1"
+      - BOOST_MINOR: "65"
+      - BOOST_PATCH: "1"
+
+    steps:
+      - type: checkout
+
+      - type: shell
+        name: Install cmake
+        command: |
+          cd ~
+          wget --quiet https://cmake.org/files/v3.10/cmake-3.10.0-Linux-x86_64.tar.gz
+          tar -xf cmake-3.10.0-Linux-x86_64.tar.gz
+
+      - type: shell
+        name: Install other dependencies
+        command: |
+          sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
+          sudo apt-get update
+          sudo apt-get install g++-5 dh-autoreconf autopoint libtool libunistring-dev libsqlite3-dev libgcrypt20-dev libidn11-dev zlib1g-dev texinfo libssl-dev
+
+      - type: shell
+        name: Install Boost
+        command: |
+          cd ~
+          boost=boost_${BOOST_MAJOR}_${BOOST_MINOR}_${BOOST_PATCH}
+          wget http://downloads.sourceforge.net/project/boost/boost/${BOOST_MAJOR}.${BOOST_MINOR}.${BOOST_PATCH}/${boost}.tar.bz2
+          tar xf ${boost}.tar.bz2
+          cd ${boost}
+          ./bootstrap.sh
+          ./b2 -j `nproc` -d+0 --link=shared --with-system --with-program_options --with-test --with-coroutine --with-filesystem --with-date_time --with-regex
+
+      - type: shell
+        name: Build
+        command: |
+          git submodule sync --recursive
+          git submodule update --recursive --init
+          mkdir build
+          cd build
+          export CXX=g++-5
+          export CC=gcc-5
+          export PATH="$CMAKE_PATH:$PATH"
+          cmake .. -DBOOST_ROOT=~/boost_${BOOST_MAJOR}_${BOOST_MINOR}_${BOOST_PATCH}
+          make -j `nproc`
+
+      - type: shell
+        name: Test
+        command: |
+          boost_root=${HOME}/boost_${BOOST_MAJOR}_${BOOST_MINOR}_${BOOST_PATCH}
+          export LD_LIBRARY_PATH=${boost_root}/stage/lib:$LD_LIBRARY_PATH
+          ./build/test/test-ouinet --log_level=test_suite

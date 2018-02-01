@@ -7,15 +7,14 @@ using namespace std;
 using namespace ouinet;
 
 using Request = http::request<http::string_body>;
+using Response = ClientFrontEnd::Response;
 using string_view = beast::string_view;
 
-static void redirect_back( GenericConnection& con
-                         , const Request& req
-                         , asio::yield_context yield)
+static Response redirect_back(const Request& req)
 {
-    http::response<http::string_body> res{http::status::ok, req.version()};
+    http::response<http::dynamic_body> res{http::status::ok, req.version()};
 
-    auto body =
+    string_view body =
         "<!DOCTYPE html>\n"
         "<html>\n"
         "    <head>\n"
@@ -26,11 +25,13 @@ static void redirect_back( GenericConnection& con
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
     res.set(http::field::content_type, "text/html");
     res.keep_alive(false);
-    res.body() = body;
+    http::dynamic_body::writer writer(res);
+    sys::error_code ec;
+    writer.put(asio::const_buffer(body.data(), body.size()), ec);
+    assert(!ec);
     res.prepare_payload();
 
-    sys::error_code ec;
-    http::async_write(con, res, yield[ec]);
+    return res;
 }
 
 struct ToggleInput {
@@ -38,6 +39,8 @@ struct ToggleInput {
     string_view name;
     bool current_value;
 };
+
+namespace ouinet { // Need namespace here for argument-dependent-lookups to work
 
 ostream& operator<<(ostream& os, const ToggleInput& i) {
     auto cur_value  = i.current_value ? "enabled" : "disabled";
@@ -52,12 +55,32 @@ ostream& operator<<(ostream& os, const ToggleInput& i) {
           "</form>\n";
 }
 
-void ClientFrontEnd::serve( GenericConnection& con
-                          , const Request& req
-                          , std::shared_ptr<ipfs_cache::Client>& cache_client
-                          , asio::yield_context yield)
+static ostream& operator<<(ostream& os, const std::chrono::steady_clock::duration& d) {
+    using namespace chrono;
+
+    unsigned int secs = duration_cast<seconds>(d).count();
+
+    unsigned int hours   = secs / (60*60);   secs -= hours*60*60;
+    unsigned int minutes = secs / 60;        secs -= minutes*60;
+
+    if (hours)   { os << hours   << "h"; }
+    if (minutes) { os << minutes << "m"; }
+
+    return os << secs << "s";
+}
+
+static ostream& operator<<(ostream& os, const ClientFrontEnd::Task& task) {
+
+    return os << task.id() << "| " << task.duration() << " | " << task.name();
+}
+
+} // ouinet namespace
+
+Response ClientFrontEnd::serve( const Endpoint& injector_ep
+                              , const Request& req
+                              , ipfs_cache::Client* cache_client)
 {
-    http::response<http::string_body> res{http::status::ok, req.version()};
+    Response res{http::status::ok, req.version()};
 
     auto target = req.target();
 
@@ -81,23 +104,38 @@ void ClientFrontEnd::serve( GenericConnection& con
         else if (target.find("?ipfs_cache=disable") != string::npos) {
             _ipfs_cache_enabled = false;
         }
-        redirect_back(con, req, yield);
-        return;
+        return redirect_back(req);
     }
 
     stringstream ss;
     ss << "<!DOCTYPE html>\n"
-          "<html>\n";
+          "<html>\n"
+          "    <head>\n";
     if (_auto_refresh_enabled) {
-          ss << "    <head>\n"
-                "        <meta http-equiv=\"refresh\" content=\"1\"/>\n"
-                "    </head>\n";
+        ss << "      <meta http-equiv=\"refresh\" content=\"1\"/>\n";
     }
-    ss << "    <body>\n";
+    ss << "      <style>\n"
+          "        * {\n"
+          "            font-family: \"Courier New\";\n"
+          "            font-size: 10pt; }\n"
+          "          }\n"
+          "      </style>\n"
+          "    </head>\n"
+          "    <body>\n";
 
     ss << ToggleInput{"Auto refresh",   "auto_refresh",   _auto_refresh_enabled};
     ss << ToggleInput{"Injector proxy", "injector_proxy", _injector_proxying_enabled};
     ss << ToggleInput{"IPFS Cache",     "ipfs_cache",     _ipfs_cache_enabled};
+
+    ss << "<br>\n";
+    ss << "Injector endpoint: " << injector_ep << "<br>\n";
+
+    ss << "        <h2>Pending tasks " << _pending_tasks.size() << "</h2>\n";
+    ss << "        <ul>\n";
+    for (auto& task : _pending_tasks) {
+        ss << "            <li><pre>" << task << "</pre></li>\n";
+    }
+    ss << "        </ul>\n";
 
     if (cache_client) {
         ss << "        <h2>Database</h2>\n";
@@ -114,10 +152,14 @@ void ClientFrontEnd::serve( GenericConnection& con
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
     res.set(http::field::content_type, "text/html");
     res.keep_alive(false);
-    res.body() = ss.str();
+
+    Response::body_type::writer writer(res);
+    sys::error_code ec;
+    writer.put(asio::buffer(ss.str()), ec);
+    assert(!ec);
+
     res.prepare_payload();
 
-    sys::error_code ec;
-    http::async_write(con, res, yield[ec]);
+    return res;
 }
 

@@ -1,8 +1,11 @@
 cmake_minimum_required (VERSION 3.5)
-set(GLOB BOOST_VERSION 1.55)
+set(BOOST_VERSION 1.62)
 include(ExternalProject)
 ################################################################################
-set(SANITIZE "-fsanitize=address")
+# NOTE: https://stackoverflow.com/questions/37603238/fsanitize-not-using-gold-linker-in-gcc-6-1
+set(SANITIZE "-fsanitize=address -fuse-ld=gold")
+add_definitions(-DBOOST_COROUTINES_NO_DEPRECATION_WARNING)
+
 ################################################################################
 externalproject_add(beast
     GIT_REPOSITORY https://github.com/inetic/beast
@@ -15,87 +18,74 @@ externalproject_add(beast
 set(BEAST_DIR "${CMAKE_BINARY_DIR}/beast/src/beast")
 
 ################################################################################
-set(IPFS_CACHE_SRC_DIR "${CMAKE_SOURCE_DIR}/modules/ipfs-cache")
-set(IPFS_CACHE_BIN_DIR "${CMAKE_BINARY_DIR}/ipfs-cache-prefix/src/ipfs-cache-build")
+option(IPFS_CACHE_WITH_EXAMPLE_BINARIES "" OFF)
 
-externalproject_add(ipfs-cache
-    SOURCE_DIR ${IPFS_CACHE_SRC_DIR}
-    BUILD_ALWAYS 1
-    DOWNLOAD_COMMAND ""
-    INSTALL_COMMAND "")
+add_subdirectory(./modules/i2pouiservice)
+add_subdirectory(./modules/ipfs-cache)
+add_subdirectory(./modules/gnunet-channels)
 
 ################################################################################
-set(GNUNET_CHANNELS_SRC_DIR "${CMAKE_SOURCE_DIR}/modules/gnunet-channels")
-set(GNUNET_CHANNELS_ROOT    "${CMAKE_BINARY_DIR}/gnunet-channels/src/gnunet-channels-build")
-set(GNUNET_LIB_DIR          "${GNUNET_CHANNELS_ROOT}/gnunet/lib")
+project(ouinet)
 
-externalproject_add(gnunet-channels
-    SOURCE_DIR ${GNUNET_CHANNELS_SRC_DIR}
-    BUILD_ALWAYS 1
-    DOWNLOAD_COMMAND ""
-    INSTALL_COMMAND ""
-    PREFIX "gnunet-channels")
-
-################################################################################
-project(client)
-
-find_package(Boost ${BOOST_VERSION} COMPONENTS program_options regex coroutine system REQUIRED)
+find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS filesystem
+                                                        regex
+                                                        unit_test_framework
+                                                        program_options
+                                                        coroutine
+                                                        date_time
+                                                        system)
 find_package(Threads)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -Wall -ggdb ${SANITIZE}")
 
+################################################################################
 include_directories(
     "${Boost_INCLUDE_DIR}"
     "${BEAST_DIR}/include"
-    "${IPFS_CACHE_SRC_DIR}/include"
-    "${GNUNET_CHANNELS_SRC_DIR}/include")
+    "${IPFS_CACHE_INCLUDE_DIR}"
+    "${GNUNET_CHANNELS_INCLUDE_DIR}"
+    "${I2POUI_INCLUDE_DIR}")
 
-file(GLOB sources
-    "${CMAKE_SOURCE_DIR}/src/client.cpp"
-    "${CMAKE_SOURCE_DIR}/src/connect_to_host.cpp"
-    "${CMAKE_SOURCE_DIR}/src/client_front_end.cpp"
-    "${CMAKE_SOURCE_DIR}/src/request_routing.cpp")
+file(GLOB client_sources
+    "./src/client.cpp"
+    "./src/connect_to_host.cpp"
+    "./src/client_front_end.cpp"
+    "./src/endpoint.cpp"
+    "./src/cache_control.cpp"
+    "./src/request_routing.cpp")
 
-add_executable(client ${sources})
-add_dependencies(client beast ipfs-cache gnunet-channels)
+add_executable(client ${client_sources})
+add_dependencies(client beast ipfs-cache gnunet-channels i2poui)
 
 target_link_libraries(client
+    i2poui
     ${Boost_LIBRARIES}
-    ${IPFS_CACHE_BIN_DIR}/libipfs-cache.a
-    ${GNUNET_CHANNELS_ROOT}/libgnunet-channels.a
-    ${GNUNET_LIB_DIR}/libgnunethello.so
-    ${GNUNET_LIB_DIR}/libgnunettransport.so
-    ${GNUNET_LIB_DIR}/libgnunetutil.so
-    ${GNUNET_LIB_DIR}/libgnunetcadet.so)
+    ${IPFS_CACHE_LIBRARY}
+    ${GNUNET_CHANNELS_LIBRARIES})
 
 ################################################################################
-project(injector)
-
-find_package(Boost ${BOOST_VERSION} COMPONENTS program_options coroutine system REQUIRED)
-find_package(Threads)
-
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -Wall -ggdb ${SANITIZE}")
-
 include_directories(
     "${Boost_INCLUDE_DIR}"
     "${BEAST_DIR}/include"
-    "${IPFS_CACHE_BIN_DIR}/json/src/json/src"
-    "${IPFS_CACHE_SRC_DIR}/include")
+    "${IPFS_CACHE_INCLUDE_DIR}"
+    "${IPFS_CACHE_JSON_INCLUDE_DIR}"
+    "${GNUNET_CHANNELS_INCLUDE_DIR}"
+    "${I2POUI_INCLUDE_DIR}")
 
-file(GLOB sources
-    "${CMAKE_SOURCE_DIR}/src/injector.cpp"
-    "${CMAKE_SOURCE_DIR}/src/connect_to_host.cpp")
+file(GLOB injector_sources
+    "./src/injector.cpp"
+    "./src/connect_to_host.cpp")
 
-add_executable(injector ${sources})
-add_dependencies(injector beast ipfs-cache)
+add_executable(injector ${injector_sources})
+add_dependencies(injector beast ipfs-cache gnunet-channels i2poui)
 
 target_link_libraries(injector
+    i2poui
     ${Boost_LIBRARIES}
-    ${IPFS_CACHE_BIN_DIR}/libipfs-cache.a
-    ${GNUNET_CHANNELS_ROOT}/libgnunet-channels.a
-    ${GNUNET_LIB_DIR}/libgnunethello.so
-    ${GNUNET_LIB_DIR}/libgnunettransport.so
-    ${GNUNET_LIB_DIR}/libgnunetutil.so
-    ${GNUNET_LIB_DIR}/libgnunetcadet.so)
+    ${IPFS_CACHE_LIBRARY}
+    ${GNUNET_CHANNELS_LIBRARIES})
 
+################################################################################
+# Tests
+add_subdirectory(test)
 ################################################################################

@@ -4,8 +4,8 @@
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/connect.hpp>
 #include <boost/asio/spawn.hpp>
-#include <boost/asio/steady_timer.hpp>
 #include <boost/program_options.hpp>
+#include <boost/filesystem.hpp>
 #include <iostream>
 #include <fstream>
 
@@ -13,85 +13,184 @@
 #include <gnunet_channels/channel.h>
 #include <gnunet_channels/cadet_port.h>
 #include <gnunet_channels/service.h>
+#include <i2poui.h>
 
 #include "namespaces.h"
 #include "util.h"
 #include "fetch_http_page.h"
 #include "generic_connection.h"
+#include "split_string.h"
+#include "async_sleep.h"
+#include "increase_open_file_limit.h"
 
 using namespace std;
 using namespace ouinet;
+
+namespace fs = boost::filesystem;
 
 using tcp         = asio::ip::tcp;
 using string_view = beast::string_view;
 using Request     = http::request<http::dynamic_body>;
 
-static string REPO_ROOT;
+static fs::path REPO_ROOT;
+static const fs::path OUINET_CONF_FILE = "ouinet-injector.conf";
 
 //------------------------------------------------------------------------------
-template<class Fields>
-static bool ok_to_cache(const http::response_header<Fields>& hdr)
+static bool contains_private_data(const http::request_header<>& request)
 {
-    using string_view = beast::string_view;
-
-    auto cc_i = hdr.find(http::field::cache_control);
-
-    if (cc_i == hdr.end()) return true;
-
-    auto trim_whitespace = [](string_view& v) {
-        while (v.starts_with(' ')) v.remove_prefix(1);
-        while (v.ends_with  (' ')) v.remove_suffix(1);
-    };
-
-    auto key_val = [&trim_whitespace](string_view v) {
-        auto eq = v.find('=');
-
-        if (eq == string_view::npos) {
-            trim_whitespace(v);
-            return make_pair(v, string_view("", 0));
+    for (auto& field : request) {
+        if(!util::field_is_one_of(field
+                , http::field::host
+                , http::field::user_agent
+                , http::field::accept
+                , http::field::accept_language
+                , http::field::accept_encoding
+                , http::field::keep_alive
+                , http::field::connection
+                , http::field::referer
+                // https://www.w3.org/TR/upgrade-insecure-requests/
+                , "Upgrade-Insecure-Requests"
+                // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/DNT
+                , "DNT")) {
+            return true;
         }
+    }
 
-        auto key = v.substr(0, eq);
-        auto val = v.substr(eq + 1, v.size());
+    // TODO: This may be a bit too agressive.
+    if (request.method() != http::verb::get) {
+        return true;
+    }
 
-        trim_whitespace(key);
-        trim_whitespace(val);
+    if (split_string_pair(request.target(), '?').second.size()) {
+        return true;
+    }
 
-        return make_pair(key, val);
-    };
+    return false;
+}
 
-    auto for_each = [&key_val] (string_view v, auto can_cache) {
-        while (true) {
-            auto comma = v.find(',');
+//------------------------------------------------------------------------------
+// Cache control:
+// https://tools.ietf.org/html/rfc7234
+// https://tools.ietf.org/html/rfc5861
+// https://tools.ietf.org/html/rfc8246
+//
+// For a less dry reading:
+// https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/http-caching
+//
+// TODO: This function is incomplete.
+static bool ok_to_cache( const http::request_header<>&  request
+                       , const http::response_header<>& response)
+{
+    switch (response.result()) {
+        case http::status::ok:
+        case http::status::moved_permanently:
+            break;
+        // TODO: Other response codes
+        default:
+            return false;
+    }
 
-            if (comma == string_view::npos) {
-                if (v.size()) {
-                    if (!can_cache(key_val(v))) return false;
-                }
-                break;
+    auto cache_control_i = response.find(http::field::cache_control);
+
+    // https://tools.ietf.org/html/rfc7234#section-3 (bullet #5)
+    if (request.count(http::field::authorization)) {
+        // https://tools.ietf.org/html/rfc7234#section-3.2
+        if (cache_control_i == response.end()) return false;
+
+        for (auto v : SplitString(cache_control_i->value(), ',')) {
+            if (v == "must-revalidate") return true;
+            if (v == "public")          return true;
+            if (v == "s-maxage")        return true;
+        }
+    }
+
+    if (cache_control_i == response.end()) return true;
+
+    for (auto kv : SplitString(cache_control_i->value(), ','))
+    {
+        beast::string_view key, val;
+        std::tie(key, val) = split_string_pair(kv, '=');
+
+        // https://tools.ietf.org/html/rfc7234#section-3 (bullet #3)
+        if (key == "no-store") return false;
+        // https://tools.ietf.org/html/rfc7234#section-3 (bullet #4)
+        if (key == "private")  {
+            // NOTE: This decision based on the request having private data is
+            // our extension (NOT part of RFC). Some servers (e.g.
+            // www.bbc.com/) sometimes respond with 'Cache-Control: private'
+            // even though the request doesn't contain any private data (e.g.
+            // Cookies, {GET,POST,...} variables,...).  We believe this happens
+            // when the server serves different content depending on the
+            // client's geo location. While we don't necessarily want to break
+            // this intent, we believe serving _some_ content is better than
+            // none. As such, the client should always check for presence of
+            // this 'private' field when fetching from distributed cache and
+            // - if present - re-fetch from origin if possible.
+            if (contains_private_data(request)) {
+                return false;
             }
-
-            if (!can_cache(key_val(v.substr(0, comma)))) return false;
-            v.remove_prefix(comma + 1);
         }
+    }
 
-        return true;
-    };
-
-    return for_each(cc_i->value(), [] (auto kv) {
-        auto key = kv.first;
-        //auto val = kv.second;
-        // https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/http-caching
-        if (key == "no-store")              return false;
-        //if (key == "no-cache")              return false;
-        //if (key == "max-age" && val == "0") return false;
-        return true;
-    });
+    return true;
 }
 
 //------------------------------------------------------------------------------
 static
-void serve( shared_ptr<GenericConnection> con
+void try_to_cache( ipfs_cache::Injector& injector
+                 , const http::request_header<>& request
+                 , const http::response<http::dynamic_body>& response)
+{
+    bool do_cache = ok_to_cache(request, response);
+
+    if (!do_cache) return;
+
+    // TODO: This list was created by going through some 100 responses from
+    // bbc.com. Careful selection from all possible (standard) fields is
+    // needed.
+    auto filtered_response =
+        util::filter_fields( response
+                           , http::field::server
+                           , http::field::retry_after
+                           , http::field::content_length
+                           , http::field::content_type
+                           , http::field::content_encoding
+                           , http::field::content_language
+                           , http::field::accept_ranges
+                           , http::field::etag
+                           , http::field::age
+                           , http::field::date
+                           , http::field::expires
+                           , http::field::via
+                           , http::field::vary
+                           , http::field::connection
+                           , http::field::location
+                           , http::field::cache_control
+                           , http::field::warning
+                           , http::field::last_modified
+                           // Not sure about these
+                           , http::field::access_control_allow_origin
+                           , http::field::access_control_allow_headers
+                           , http::field::access_control_allow_methods
+                           , http::field::access_control_allow_credentials
+                           , http::field::access_control_max_age
+                           );
+
+    stringstream ss;
+    ss << filtered_response;
+    auto key = request.target().to_string();
+
+    injector.insert_content(key, ss.str(),
+        [key] (sys::error_code ec, auto) {
+            if (ec) {
+                cout << "!Insert failed: " << key << " " << ec.message() << endl;
+            }
+        });
+}
+
+//------------------------------------------------------------------------------
+static
+void serve( GenericConnection con
           , ipfs_cache::Injector& injector
           , asio::yield_context yield)
 {
@@ -101,34 +200,39 @@ void serve( shared_ptr<GenericConnection> con
     for (;;) {
         Request req;
 
-        http::async_read(*con, buffer, req, yield[ec]);
+        http::async_read(con, buffer, req, yield[ec]);
 
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "read");
 
         // Fetch the content from origin
-        auto res = fetch_http_page(con->get_io_service(), req, ec, yield);
+        auto res = fetch_http_page(con.get_io_service(), req, ec, yield);
 
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "fetch_http_page");
 
-        if (ok_to_cache(res)) {
-            stringstream ss;
-            ss << res;
-            auto key = req.target().to_string();
-
-            injector.insert_content(key, ss.str(),
-                [key] (sys::error_code ec, auto) {
-                    if (ec) {
-                        cout << "!Insert failed: " << key << " " << ec.message() << endl;
-                    }
-                });
-        }
+        try_to_cache(injector, req, res);
 
         // Forward back the response
-        http::async_write(*con, res, yield[ec]);
+        http::async_write(con, res, yield[ec]);
         if (ec) return fail(ec, "write");
     }
+}
+
+//------------------------------------------------------------------------------
+template<class Connection>
+static
+void spawn_and_serve( Connection&& connection
+                    , ipfs_cache::Injector& ipfs_cache_injector)
+{
+    auto& ios = connection.get_io_service();
+
+    asio::spawn( ios
+               , [ c = GenericConnection(move(connection))
+                 , &ipfs_cache_injector
+                 ](asio::yield_context yield) mutable {
+                     serve(move(c), ipfs_cache_injector, yield);
+                 });
 }
 
 //------------------------------------------------------------------------------
@@ -163,23 +267,10 @@ void listen_tcp( asio::io_service& ios
         if(ec) {
             fail(ec, "accept");
             // Wait one second before we start accepting again.
-            asio::steady_timer timer(ios);
-            timer.expires_from_now(chrono::seconds(1));
-            timer.async_wait(yield[ec]);
+            async_sleep(ios, chrono::seconds(1), yield);
         }
         else {
-            asio::spawn( ios
-                       , [ s = move(socket)
-                         , &ipfs_cache_injector
-                         ](asio::yield_context yield) mutable {
-                             using Con = GenericConnectionImpl<tcp::socket>;
-
-                             auto con = make_shared<Con>(move(s));
-                             serve(con, ipfs_cache_injector, yield);
-
-                             sys::error_code ec;
-                             con->get_impl().shutdown(tcp::socket::shutdown_send, ec);
-                         });
+            spawn_and_serve(move(socket), ipfs_cache_injector);
         }
     }
 }
@@ -193,10 +284,11 @@ void listen_gnunet( asio::io_service& ios
 {
     namespace gc = gnunet_channels;
 
-    gc::Service service(REPO_ROOT + "/gnunet/peer.conf", ios);
+    gc::Service service((REPO_ROOT/"gnunet"/"peer.conf").native(), ios);
 
     sys::error_code ec;
 
+    cout << "Setting up GNUnet..." << endl;
     service.async_setup(yield[ec]);
 
     if (ec) {
@@ -214,20 +306,46 @@ void listen_gnunet( asio::io_service& ios
 
         if (ec) {
             cerr << "Failed to accept: " << ec.message() << endl;
-            // TODO: Don't return, sleep a little and then retry.
-            return;
+            async_sleep(ios, chrono::milliseconds(100), yield);
+            continue;
         }
 
-        asio::spawn( ios
-                   , [ channel = move(channel)
-                     , &ipfs_cache_injector
-                     ](auto yield) mutable {
-                        using Con = GenericConnectionImpl<gnunet_channels::Channel>;
+        spawn_and_serve(move(channel), ipfs_cache_injector);
+    }
+}
 
-                        serve( make_shared<Con>(move(channel))
-                             , ipfs_cache_injector
-                             , yield);
-                     });
+//------------------------------------------------------------------------------
+static
+void listen_i2p( asio::io_service& ios
+               , ipfs_cache::Injector& ipfs_cache_injector
+               , asio::yield_context yield)
+{
+    i2poui::Service service((REPO_ROOT/"i2p").native(), ios);
+
+    sys::error_code ec;
+
+    cout << "Setting up I2Poui service..." << endl;
+    i2poui::Acceptor acceptor = service.build_acceptor(yield[ec]);
+
+    if (ec) {
+        cerr << "Failed to setup I2Poui service: " << ec.message() << endl;
+        return;
+    }
+
+    cout << "I2P Public ID: " << service.public_identity() << endl;
+
+
+    while (true) {
+        i2poui::Channel channel(service);
+        acceptor.accept(channel, yield[ec]);
+
+        if (ec) {
+            cerr << "Failed to accept: " << ec.message() << endl;
+            async_sleep(ios, chrono::milliseconds(100), yield);
+            continue;
+        }
+
+        spawn_and_serve(move(channel), ipfs_cache_injector);
     }
 }
 
@@ -243,6 +361,12 @@ int main(int argc, char* argv[])
         ("repo", po::value<string>(), "Path to the repository root")
         ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen")
         ("listen-on-gnunet", po::value<string>(), "GNUnet port on which we'll listen")
+        ("listen-on-i2p",
+         po::value<string>(),
+         "Whether we should be listening on I2P (true/false)")
+        ("open-file-limit"
+         , po::value<unsigned int>()
+         , "To increase the maximum number of open files")
         ;
 
     po::variables_map vm;
@@ -262,32 +386,69 @@ int main(int argc, char* argv[])
 
     REPO_ROOT = vm["repo"].as<string>();
 
-    ifstream ouinet_conf(REPO_ROOT + "/ouinet-injector.conf");
-
-    po::store(po::parse_config_file(ouinet_conf, desc), vm);
-    po::notify(vm);
-
-    if (!vm.count("listen-on-tcp") && !vm.count("listen-on-gnunet")) {
-        cerr << "Either 'listen-on-tcp' or 'listen-on-gnunet' (or both)"
-             << " arguments must be specified" << endl;
+    if (!exists(REPO_ROOT) || !is_directory(REPO_ROOT)) {
+        cerr << "The path " << REPO_ROOT << " either doesn't exist or"
+             << " is not a directory." << endl;
         cerr << desc << endl;
         return 1;
     }
 
-    auto const injector_ep
-        = util::parse_endpoint(vm["listen-on-tcp"].as<string>());
+    fs::path ouinet_conf_path = REPO_ROOT/OUINET_CONF_FILE;
+
+    if (!fs::is_regular_file(ouinet_conf_path)) {
+        cerr << "The path " << REPO_ROOT << " does not contain the "
+             << OUINET_CONF_FILE << " configuration file." << endl;
+        cerr << desc << endl;
+        return 1;
+    }
+
+    ifstream ouinet_conf(ouinet_conf_path.native());
+
+    po::store(po::parse_config_file(ouinet_conf, desc), vm);
+    po::notify(vm);
+
+    if (!vm.count("listen-on-tcp") && !vm.count("listen-on-gnunet") && !vm.count("listen-on-i2p")) {
+        cerr << "One or more of {listen-on-tcp,listen-on-gnunet,listen-on-i2p}"
+             << " must be provided." << endl;
+        cerr << desc << endl;
+        return 1;
+    }
+
+    if (vm.count("open-file-limit")) {
+        increase_open_file_limit(vm["open-file-limit"].as<unsigned int>());
+    }
+
+    bool listen_on_i2p = false;
+
+    // Unfortunately, Boost.ProgramOptions doesn't support arguments without
+    // values in config files. Thus we need to force the 'listen-on-i2p' arg
+    // to have one of the strings values "true" or "false".
+    if (vm.count("listen-on-i2p")) {
+        auto value = vm["listen-on-i2p"].as<string>();
+
+        if (value != "" && value != "true" && value != "false") {
+            cerr << "The listen-on-i2p parameter may be either 'true' or 'false'"
+                 << endl;
+            return 1;
+        }
+
+        listen_on_i2p = value == "true";
+    }
 
     // The io_service is required for all I/O
     asio::io_service ios;
 
-    ipfs_cache::Injector ipfs_cache_injector(ios, REPO_ROOT + "/ipfs");
+    ipfs_cache::Injector ipfs_cache_injector(ios, (REPO_ROOT/"ipfs").native());
 
     std::cout << "IPNS DB: " << ipfs_cache_injector.ipns_id() << endl;
 
     if (vm.count("listen-on-tcp")) {
+        auto const injector_ep
+            = util::parse_endpoint(vm["listen-on-tcp"].as<string>());
+
         asio::spawn
             ( ios
-            , [&](asio::yield_context yield) {
+            , [&, injector_ep](asio::yield_context yield) {
                   listen_tcp(ios, injector_ep, ipfs_cache_injector, yield);
               });
     }
@@ -298,6 +459,14 @@ int main(int argc, char* argv[])
             , [&](asio::yield_context yield) {
                   string port = vm["listen-on-gnunet"].as<string>();
                   listen_gnunet(ios, port, ipfs_cache_injector, yield);
+              });
+    }
+
+    if (listen_on_i2p) {
+        asio::spawn
+            ( ios
+            , [&](asio::yield_context yield) {
+                  listen_i2p(ios, ipfs_cache_injector, yield);
               });
     }
 

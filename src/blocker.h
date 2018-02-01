@@ -80,7 +80,7 @@ class Blocker
         Block(Block&&);
         Block& operator=(Block&&);
 
-        void release();
+        void release() const;
 
         ~Block();
         
@@ -189,7 +189,7 @@ Blocker::Block& Blocker::Block::operator=(Block&& other)
 
 
 inline
-void Blocker::Block::release()
+void Blocker::Block::release() const
 {
     if (_round != _blocker->_round) return;
 

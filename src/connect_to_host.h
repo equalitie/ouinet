@@ -7,7 +7,7 @@
 
 namespace ouinet {
 
-std::unique_ptr<GenericConnection>
+GenericConnection
 connect_to_host( asio::io_service& ios
                , beast::string_view host_and_port
                , sys::error_code& ec
