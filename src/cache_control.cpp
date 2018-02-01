@@ -123,13 +123,6 @@ Response add_stale_warning(Response response)
                       , "110 Ouinet 'Response is stale'");
 }
 
-static bool is_chunked(const Response& rs)
-{
-    auto i = rs.find(http::field::transfer_encoding);
-    if (i == rs.end()) return false;
-    return boost::iequals(i->value(), "chunked");
-}
-
 static bool has_correct_content_length(const Response& rs)
 {
     // Relevant RFC https://tools.ietf.org/html/rfc7230#section-3.3.2
@@ -145,7 +138,13 @@ CacheControl::fetch(const Request& request, asio::yield_context yield)
 {
     sys::error_code ec;
     auto response = do_fetch(request, yield[ec]);
-    assert(ec || has_correct_content_length(response));
+
+    if(!ec && !has_correct_content_length(response)) {
+        cerr << "----- WARNING: Incorrect content length ----" << endl;
+        cerr << request << response;
+        cerr << "--------------------------------------------" << endl;
+    }
+
     return or_throw(yield, ec, move(response));
 }
 
