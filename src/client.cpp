@@ -250,7 +250,13 @@ fetch_from_cache( const Request& request
     parser.put(asio::buffer(content.data), ec);
 
     assert(!ec && "Malformed cache entry");
-    assert(parser.is_done());
+
+    if (!parser.is_done()) {
+        cerr << "------- WARNING: Unfinished message in cache --------" << endl;
+        cerr << request << parser.get() << endl;
+        cerr << "-----------------------------------------------------" << endl;
+        ec = asio::error::not_found;
+    }
 
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
@@ -344,6 +350,11 @@ static void serve_request( GenericConnection con
                               , req.target());
 
         if (ec) {
+            cerr << "----- WARNING: Error fetching --------" << endl;
+            cerr << "Error Code: " << ec.message() << endl;
+            cerr << req << res.base() << endl;
+            cerr << "--------------------------------------" << endl;
+
             ASYNC_DEBUG(handle_bad_request(con, req, "Not cached", yield), "Send error");
             if (req.keep_alive()) continue;
             else return;

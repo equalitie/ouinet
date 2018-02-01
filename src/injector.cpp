@@ -38,31 +38,22 @@ static const fs::path OUINET_CONF_FILE = "ouinet-injector.conf";
 //------------------------------------------------------------------------------
 static bool contains_private_data(const http::request_header<>& request)
 {
-    auto is_private = [](const http::fields::value_type& f) {
-        static const vector<http::field> public_request_fields
-            { http::field::host
-            , http::field::user_agent
-            , http::field::accept
-            , http::field::accept_language
-            , http::field::accept_encoding
-            , http::field::keep_alive
-            , http::field::connection
-            , http::field::referer
-            };
-
-        for (auto f_ : public_request_fields) { if (f_ == f.name()) return false; }
-
-        // Non standard W3C recommendation.
-        // https://www.w3.org/TR/upgrade-insecure-requests/
-        if (f.name_string() == "Upgrade-Insecure-Requests") return false;
-        // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/DNT
-        if (f.name_string() == "DNT") return false;
-
-        return true;
-    };
-
     for (auto& field : request) {
-        if (is_private(field)) { return true; }
+        if(!util::field_is_one_of(field
+                , http::field::host
+                , http::field::user_agent
+                , http::field::accept
+                , http::field::accept_language
+                , http::field::accept_encoding
+                , http::field::keep_alive
+                , http::field::connection
+                , http::field::referer
+                // https://www.w3.org/TR/upgrade-insecure-requests/
+                , "Upgrade-Insecure-Requests"
+                // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/DNT
+                , "DNT")) {
+            return true;
+        }
     }
 
     // TODO: This may be a bit too agressive.
@@ -152,20 +143,41 @@ void try_to_cache( ipfs_cache::Injector& injector
 {
     bool do_cache = ok_to_cache(request, response);
 
-    //{
-    //    cerr << "-----------------------------------------" << endl;
-    //    cerr << (do_cache ? "Caching " : "Not caching ")
-    //         << "\"" << request.target() << "\"" << endl;
-    //    cerr << endl;
-    //    cerr << request;
-    //    cerr << response.base();
-    //    cerr << "-----------------------------------------" << endl;
-    //}
-
     if (!do_cache) return;
 
+    // TODO: This list was created by going through some 100 responses from
+    // bbc.com. Careful selection from all possible (standard) fields is
+    // needed.
+    auto filtered_response =
+        util::filter_fields( response
+                           , http::field::server
+                           , http::field::retry_after
+                           , http::field::content_length
+                           , http::field::content_type
+                           , http::field::content_encoding
+                           , http::field::content_language
+                           , http::field::accept_ranges
+                           , http::field::etag
+                           , http::field::age
+                           , http::field::date
+                           , http::field::expires
+                           , http::field::via
+                           , http::field::vary
+                           , http::field::connection
+                           , http::field::location
+                           , http::field::cache_control
+                           , http::field::warning
+                           , http::field::last_modified
+                           // Not sure about these
+                           , http::field::access_control_allow_origin
+                           , http::field::access_control_allow_headers
+                           , http::field::access_control_allow_methods
+                           , http::field::access_control_allow_credentials
+                           , http::field::access_control_max_age
+                           );
+
     stringstream ss;
-    ss << response;
+    ss << filtered_response;
     auto key = request.target().to_string();
 
     injector.insert_content(key, ss.str(),

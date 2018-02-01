@@ -99,7 +99,7 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age)
     cc.fetch_from_origin = [&](auto rq, auto y) {
         origin_check++;
         BOOST_CHECK_EQUAL(rq.target(), "old");
-        return Response{};
+        return Response{http::status::ok, rq.version()};
     };
 
     run_spawned([&](auto yield) {
@@ -147,7 +147,8 @@ BOOST_AUTO_TEST_CASE(test_maxage)
 
     cc.fetch_from_origin = [&](auto rq, auto y) {
         origin_check++;
-        return or_throw<Response>(y, sys::error_code());
+        Response rs{http::status::ok, rq.version()};
+        return rs;
     };
 
     run_spawned([&](auto yield) {
@@ -188,7 +189,7 @@ BOOST_AUTO_TEST_CASE(test_no_etag_override)
         BOOST_CHECK(etag);
         BOOST_CHECK_EQUAL(*etag, "origin-etag");
 
-        return Response{};
+        return Response{http::status::ok, rq.version()};
     };
 
     run_spawned([&](auto yield) {
@@ -234,6 +235,7 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
 
         Response rs{http::status::ok, rq.version()};
         rs.set("X-Test", "from-origin-ok");
+
         return rs;
     };
 

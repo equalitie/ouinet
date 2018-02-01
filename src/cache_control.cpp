@@ -4,12 +4,14 @@
 #include "cache_control.h"
 #include "or_throw.h"
 #include "split_string.h"
+#include "util.h"
 
 using namespace std;
 using namespace ouinet;
 
 using string_view = beast::string_view;
 using Response = CacheControl::Response;
+using Request = CacheControl::Request;
 using boost::optional;
 
 namespace posix_time = boost::posix_time;
@@ -44,14 +46,10 @@ optional<unsigned> get_max_age(const string_view& cache_control_value)
     optional<unsigned> s_maxage;
 
     auto update_max_age = [] (optional<unsigned>& max_age, string_view value) {
-        unsigned delta;
+        unsigned delta = util::parse_num<unsigned>(value, unsigned(-1));
 
         // TODO: What does RFC say about malformed entries?
-        // TODO: It's inefficient to convert to_string here
-        //   but the stoi function expects a null terminated
-        //   char array (or string).
-        try { delta = std::stoi(value.to_string()); }
-        catch (...) { return; }
+        if (delta == unsigned(-1)) return;
 
         if (!max_age || *max_age < delta) {
             max_age = delta;
@@ -125,9 +123,34 @@ Response add_stale_warning(Response response)
                       , "110 Ouinet 'Response is stale'");
 }
 
-// TODO: This function is heavily unfinished.
+static bool has_correct_content_length(const Response& rs)
+{
+    // Relevant RFC https://tools.ietf.org/html/rfc7230#section-3.3.2
+    auto opt_length = get(rs, http::field::content_length);
+    if (!opt_length) return true;
+    auto length = util::parse_num<size_t>(*opt_length, size_t(-1));
+    if (length == size_t(-1)) return false;
+    return rs.body().size() == length;
+}
+
 Response
 CacheControl::fetch(const Request& request, asio::yield_context yield)
+{
+    sys::error_code ec;
+    auto response = do_fetch(request, yield[ec]);
+
+    if(!ec && !has_correct_content_length(response)) {
+        cerr << "----- WARNING: Incorrect content length ----" << endl;
+        cerr << request << response;
+        cerr << "--------------------------------------------" << endl;
+    }
+
+    return or_throw(yield, ec, move(response));
+}
+
+// TODO: This function is unfinished.
+Response
+CacheControl::do_fetch(const Request& request, asio::yield_context yield)
 {
     sys::error_code ec;
     auto cache_entry = fetch_from_cache(request, yield[ec]);

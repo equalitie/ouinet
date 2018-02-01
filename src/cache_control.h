@@ -33,6 +33,8 @@ public:
     boost::posix_time::time_duration max_cached_age() const;
 
 private:
+    Response do_fetch(const Request&, asio::yield_context);
+
     bool is_stale( const boost::posix_time::ptime& time_stamp
                  , const Response&) const;
 
