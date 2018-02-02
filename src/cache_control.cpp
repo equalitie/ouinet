@@ -162,10 +162,10 @@ CacheControl::do_fetch(const Request& request, asio::yield_context yield)
     // We could attempt retrieval from cache and then validation against the origin,
     // but for the moment we go straight to the origin (RFC7234#5.2.1.4).
     if (has_cache_control_directive(request, "no-cache")) {
-        return fetch_from_origin(request, yield);
+        return do_fetch_fresh(request, yield);
     }
 
-    auto cache_entry = fetch_from_cache(request, yield[ec]);
+    auto cache_entry = do_fetch_stored(request, yield[ec]);
 
     if (ec && ec != asio::error::operation_not_supported
            && ec != asio::error::not_found) {
@@ -173,12 +173,12 @@ CacheControl::do_fetch(const Request& request, asio::yield_context yield)
     }
 
     if (ec) {
-        return fetch_from_origin(request, yield);
+        return do_fetch_fresh(request, yield);
     }
 
     if (has_cache_control_directive(cache_entry.response, "private")
         || is_older_than_max_cache_age(cache_entry.time_stamp)) {
-        auto response = fetch_from_origin(request, yield[ec]);
+        auto response = do_fetch_fresh(request, yield[ec]);
 
         if (!ec) return response;
 
@@ -199,7 +199,7 @@ CacheControl::do_fetch(const Request& request, asio::yield_context yield)
 
         rq.set(http::field::if_none_match, *cache_etag);
 
-        auto response = fetch_from_origin(rq, yield[ec]);
+        auto response = do_fetch_fresh(rq, yield[ec]);
 
         if (ec) {
             return add_stale_warning(move(cache_entry.response));
@@ -212,7 +212,7 @@ CacheControl::do_fetch(const Request& request, asio::yield_context yield)
         return response;
     }
 
-    auto response = fetch_from_origin(request, yield[ec]);
+    auto response = do_fetch_fresh(request, yield[ec]);
 
     return ec
          ? add_stale_warning(move(cache_entry.response))
@@ -227,4 +227,22 @@ void CacheControl::max_cached_age(const posix_time::time_duration& d)
 posix_time::time_duration CacheControl::max_cached_age() const
 {
     return _max_cached_age;
+}
+
+Response
+CacheControl::do_fetch_fresh(const Request& rq, asio::yield_context yield)
+{
+    if (fetch_fresh) {
+        return fetch_fresh(rq, yield);
+    }
+    return or_throw<Response>(yield, asio::error::operation_not_supported);
+}
+
+CacheControl::CacheEntry
+CacheControl::do_fetch_stored(const Request& rq, asio::yield_context yield)
+{
+    if (fetch_stored) {
+        return fetch_stored(rq, yield);
+    }
+    return or_throw<CacheEntry>(yield, asio::error::operation_not_supported);
 }

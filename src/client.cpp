@@ -215,9 +215,7 @@ connect_to_injector(Client& client, asio::yield_context yield)
 //------------------------------------------------------------------------------
 static
 CacheControl::CacheEntry
-fetch_from_cache( const Request& request
-                , Client& client
-                , asio::yield_context yield)
+fetch_stored(const Request& request, Client& client, asio::yield_context yield)
 {
     using CacheEntry = CacheControl::CacheEntry;
 
@@ -266,9 +264,7 @@ fetch_from_cache( const Request& request
 //------------------------------------------------------------------------------
 static
 Response
-fetch_from_origin( const Request& request
-                 , Client& client
-                 , asio::yield_context yield)
+fetch_fresh(const Request& request, Client& client, asio::yield_context yield)
 {
     if (!client.front_end.is_injector_proxying_enabled()) {
         return or_throw<Response>(yield, asio::error::operation_not_supported);
@@ -291,15 +287,15 @@ CacheControl build_cache_control( asio::io_service& ios
 {
     CacheControl cache_control;
 
-    cache_control.fetch_from_cache =
+    cache_control.fetch_stored =
         [&] (const Request& request, asio::yield_context yield) {
-            return ASYNC_DEBUG( fetch_from_cache(request, client, yield)
+            return ASYNC_DEBUG( fetch_stored(request, client, yield)
                               , "Fetch from cache: " , request.target());
         };
 
-    cache_control.fetch_from_origin =
+    cache_control.fetch_fresh =
         [&] (const Request& request, asio::yield_context yield) {
-            return ASYNC_DEBUG( fetch_from_origin(request, client, yield)
+            return ASYNC_DEBUG( fetch_fresh(request, client, yield)
                               , "Fetch from origin: ", request.target());
         };
 
