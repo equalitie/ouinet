@@ -17,23 +17,25 @@ public:
         Response response;
     };
 
-    using FetchCache = std::function<CacheEntry(const Request&,
+    using FetchStored = std::function<CacheEntry(const Request&,
             asio::yield_context)>;
 
-    using FetchOrigin = std::function<Response(const Request&,
+    using FetchFresh = std::function<Response(const Request&,
             asio::yield_context)>;
 
 public:
     Response fetch(const Request&, asio::yield_context);
 
-    FetchCache  fetch_from_cache;
-    FetchOrigin fetch_from_origin;
+    FetchStored  fetch_stored;
+    FetchFresh   fetch_fresh;
 
     void max_cached_age(const boost::posix_time::time_duration&);
     boost::posix_time::time_duration max_cached_age() const;
 
 private:
     Response do_fetch(const Request&, asio::yield_context);
+    Response do_fetch_fresh(const Request&, asio::yield_context);
+    CacheEntry do_fetch_stored(const Request&, asio::yield_context);
 
     bool is_stale( const boost::posix_time::ptime& time_stamp
                  , const Response&) const;

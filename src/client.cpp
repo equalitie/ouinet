@@ -204,10 +204,10 @@ connect_to_injector(Client& client, asio::yield_context yield)
 //------------------------------------------------------------------------------
 static
 CacheControl::CacheEntry
-fetch_from_cache( const Request& request
-                , request_route::Config& request_config
-                , Client& client
-                , asio::yield_context yield)
+fetch_stored( const Request& request
+            , request_route::Config& request_config
+            , Client& client
+            , asio::yield_context yield)
 {
     using CacheEntry = CacheControl::CacheEntry;
 
@@ -261,10 +261,10 @@ fetch_from_cache( const Request& request
 //------------------------------------------------------------------------------
 static
 Response
-fetch_from_origin( const Request& request
-                 , request_route::Config& request_config
-                 , Client& client
-                 , asio::yield_context yield)
+fetch_fresh( const Request& request
+           , request_route::Config& request_config
+           , Client& client
+           , asio::yield_context yield)
 {
     using namespace asio::error;
     using request_route::responder;
@@ -319,15 +319,15 @@ CacheControl build_cache_control( asio::io_service& ios
 {
     CacheControl cache_control;
 
-    cache_control.fetch_from_cache =
+    cache_control.fetch_stored =
         [&] (const Request& request, asio::yield_context yield) {
-            return ASYNC_DEBUG( fetch_from_cache(request, request_config, client, yield)
+            return ASYNC_DEBUG( fetch_stored(request, request_config, client, yield)
                               , "Fetch from cache: " , request.target());
         };
 
-    cache_control.fetch_from_origin =
+    cache_control.fetch_fresh =
         [&] (const Request& request, asio::yield_context yield) {
-            return ASYNC_DEBUG( fetch_from_origin(request, request_config, client, yield)
+            return ASYNC_DEBUG( fetch_fresh(request, request_config, client, yield)
                               , "Fetch from origin: ", request.target());
         };
 

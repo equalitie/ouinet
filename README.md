@@ -192,11 +192,14 @@ $ ./client --repo ../repos/client \
 ```
 
 Now [modify the settings of your
-browser](http://www.wikihow.com/Enter-Proxy-Settings-in-Firefox) to make the
-client - which runs on port localhost:7070 - it's proxy. Also **make sure
-'localhost' is not listed in the `"No Proxy for"` field**. Once done, you can
-enter `localhost` into your browser and it should show you what database of
-sites the client is currently using.
+browser](http://www.wikihow.com/Enter-Proxy-Settings-in-Firefox) to:
+
+* Make the client - which runs on port localhost:7070 - it's proxy, AND
+* **make sure 'localhost' is not listed in the `"No Proxy for"` field**, AND
+* the `"Use this proxy for all protocols"` is checked (mostly for SSL).
+
+Once done, you can enter `localhost` into your browser and it should show you
+what database of sites the client is currently using.
 
 It is likely that at first the database shall be `nill` which indicates that
 no database has been dowloaded from IPFS yet. This may take from a couple of
