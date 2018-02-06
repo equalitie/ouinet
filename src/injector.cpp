@@ -22,6 +22,7 @@
 #include "split_string.h"
 #include "async_sleep.h"
 #include "increase_open_file_limit.h"
+#include "full_duplex_forward.h"
 
 using namespace std;
 using namespace ouinet;
@@ -34,6 +35,25 @@ using Request     = http::request<http::dynamic_body>;
 
 static fs::path REPO_ROOT;
 static const fs::path OUINET_CONF_FILE = "ouinet-injector.conf";
+
+//------------------------------------------------------------------------------
+static
+void handle_bad_request( GenericConnection& con
+                       , const Request& req
+                       , string message
+                       , asio::yield_context yield)
+{
+    http::response<http::string_body> res{http::status::bad_request, req.version()};
+
+    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
+    res.set(http::field::content_type, "text/html");
+    res.keep_alive(req.keep_alive());
+    res.body() = message;
+    res.prepare_payload();
+
+    sys::error_code ec;
+    http::async_write(con, res, yield[ec]);
+}
 
 //------------------------------------------------------------------------------
 static bool contains_private_data(const http::request_header<>& request)
@@ -190,6 +210,37 @@ void try_to_cache( ipfs_cache::Injector& injector
 
 //------------------------------------------------------------------------------
 static
+void handle_connect_request( GenericConnection& client_c
+                           , const Request& req
+                           , asio::yield_context yield)
+{
+    sys::error_code ec;
+
+    asio::io_service& ios = client_c.get_io_service();
+
+    auto origin_c = connect_to_host(ios, req["host"], ec, yield);
+
+    if (ec) {
+        return handle_bad_request( client_c
+                                 , req
+                                 , "Connect: can't connect to the origin"
+                                 , yield[ec]);
+    }
+
+    // Send the client an OK message indicating that the tunnel
+    // has been established.
+    http::response<http::empty_body> res{http::status::ok, req.version()};
+    res.prepare_payload();
+
+    http::async_write(client_c, res, yield[ec]);
+
+    if (ec) return fail(ec, "sending connect response");
+
+    full_duplex(client_c, origin_c, yield);
+}
+
+//------------------------------------------------------------------------------
+static
 void serve( GenericConnection con
           , ipfs_cache::Injector& injector
           , asio::yield_context yield)
@@ -205,6 +256,9 @@ void serve( GenericConnection con
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "read");
 
+        if (req.method() == http::verb::connect) {
+            return handle_connect_request(con, req, yield);
+        }
         // Fetch the content from origin
         auto res = fetch_http_page(con.get_io_service(), req, ec, yield);
 

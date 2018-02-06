@@ -19,7 +19,6 @@
 #include <i2poui.h>
 
 #include "namespaces.h"
-#include "connect_to_host.h"
 #include "fetch_http_page.h"
 #include "client_front_end.h"
 #include "generic_connection.h"
@@ -31,6 +30,7 @@
 #include "endpoint.h"
 #include "cache_control.h"
 #include "or_throw.h"
+#include "full_duplex_forward.h"
 
 using namespace std;
 using namespace ouinet;
@@ -91,58 +91,6 @@ void handle_bad_request( GenericConnection& con
 
     sys::error_code ec;
     http::async_write(con, res, yield[ec]);
-}
-
-//------------------------------------------------------------------------------
-static
-void forward(GenericConnection& in, GenericConnection& out, asio::yield_context yield)
-{
-    sys::error_code ec;
-    array<uint8_t, 2048> data;
-
-    for (;;) {
-        size_t length = in.async_read_some(asio::buffer(data), yield[ec]);
-        if (ec) break;
-
-        asio::async_write(out, asio::buffer(data, length), yield[ec]);
-        if (ec) break;
-    }
-}
-
-//------------------------------------------------------------------------------
-static
-void handle_connect_request( GenericConnection& client_c
-                           , const Request& req
-                           , asio::yield_context yield)
-{
-    sys::error_code ec;
-    asio::io_service& ios = client_c.get_io_service();
-
-    auto origin_c = connect_to_host(ios, req["host"], ec, yield);
-    if (ec) return fail(ec, "connect");
-
-    // Send the client an OK message indicating that the tunnel
-    // has been established. TODO: Reply with an error otherwise.
-    http::response<http::empty_body> res{http::status::ok, req.version()};
-    http::async_write(client_c, res, yield[ec]);
-
-    if (ec) return fail(ec, "sending connect response");
-
-    Blocker blocker(ios);
-
-    asio::spawn
-        ( yield
-        , [&, b = blocker.make_block()](asio::yield_context yield) {
-              forward(client_c, origin_c, yield);
-          });
-
-    asio::spawn
-        ( yield
-        , [&, b = blocker.make_block()](asio::yield_context yield) {
-              forward(origin_c, client_c, yield);
-          });
-
-    blocker.wait(yield);
 }
 
 //------------------------------------------------------------------------------
@@ -210,6 +158,59 @@ connect_to_injector(Client& client, asio::yield_context yield)
     Visitor visitor(client, yield);
 
     return boost::apply_visitor(visitor, client.injector_ep);
+}
+
+//------------------------------------------------------------------------------
+static
+void handle_connect_request( GenericConnection& client_c
+                           , const Request& req
+                           , Client& client
+                           , asio::yield_context yield)
+{
+    // https://tools.ietf.org/html/rfc2817#section-5.2
+
+    sys::error_code ec;
+
+    if (!client.front_end.is_injector_proxying_enabled()) {
+        return ASYNC_DEBUG( handle_bad_request( client_c
+                                              , req
+                                              , "Forwarding disabled"
+                                              , yield[ec])
+                          , "Forwarding disabled");
+    }
+
+    auto injector_c = connect_to_injector(client, yield[ec]);
+
+    if (ec) {
+        // TODO: Does an RFC dicate a particular HTTP status code?
+        return handle_bad_request(client_c, req, "Can't connect to injector", yield[ec]);
+    }
+
+    http::async_write(*injector_c, const_cast<Request&>(req), yield[ec]);
+
+    if (ec) {
+        // TODO: Does an RFC dicate a particular HTTP status code?
+        return handle_bad_request(client_c, req, "Can't contact the injector", yield[ec]);
+    }
+
+    beast::flat_buffer buffer;
+    Response res;
+    http::async_read(*injector_c, buffer, res, yield[ec]);
+
+    if (ec) {
+        // TODO: Does an RFC dicate a particular HTTP status code?
+        return handle_bad_request(client_c, req, "Can't contact the injector", yield[ec]);
+    }
+
+    http::async_write(client_c, res, yield[ec]);
+
+    if (ec) return fail(ec, "sending connect response");
+
+    if (!(200 <= unsigned(res.result()) && unsigned(res.result()) < 300)) {
+        return;
+    }
+
+    full_duplex(client_c, *injector_c, yield);
 }
 
 //------------------------------------------------------------------------------
@@ -324,7 +325,8 @@ static void serve_request( GenericConnection con
         if (ec) return fail(ec, "read");
 
         if (req.method() == http::verb::connect) {
-            return ASYNC_DEBUG(handle_connect_request(con, req, yield), "Connect");
+            return ASYNC_DEBUG( handle_connect_request(con, req, client, yield)
+                              , "Connect");
         }
 
         if (is_front_end_request(req)) {
