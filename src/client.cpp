@@ -344,6 +344,7 @@ static void serve_request( GenericConnection con
     namespace rr = request_route;
     using rr::responder;
 
+    // These access mechanisms are attempted in order for requests by default.
     const rr::Config default_request_config
         { true
         , queue<responder>({responder::injector})};
@@ -357,8 +358,7 @@ static void serve_request( GenericConnection con
     sys::error_code ec;
     beast::flat_buffer buffer;
 
-    // These hard-wired access mechanisms are attempted in order for all normal requests.
-    // Expressions/mechanisms to test the request against.
+    // Expressions to test the request against and mechanisms to be used.
     using Match = pair<const ouinet::reqexpr::reqex, const rr::Config>;
 
     auto method_getter([](const Request& r) {return r.method_string();});
@@ -368,12 +368,12 @@ static void serve_request( GenericConnection con
     const vector<Match> matches({
         Match( reqexpr::from_regex(host_getter, "localhost")
              , {false, queue<responder>({responder::_front_end})} ),
-        // Send non-safe HTTP method requests to the origin server
-        // NOTE: The cache needs not be disabled as it should know not to
+        // Send non-safe HTTP method requests (and validation HEADs) to the origin server.
+        // NOTE: The cache need not be disabled as it should know not to
         // fetch requests in these cases.
         Match( reqexpr::from_regex(method_getter, "(HEAD|OPTIONS|TRACE)")
              , {false, queue<responder>({responder::origin})} ),
-        // Do not use cache for safe but non-cacheable HTTP method requests
+        // Do not use cache for safe but non-cacheable HTTP method requests.
         // NOTE: same as above.
         Match( reqexpr::from_regex(method_getter, "(OPTIONS|TRACE)")
              , {false, queue<responder>({responder::injector, responder::origin})} ),
