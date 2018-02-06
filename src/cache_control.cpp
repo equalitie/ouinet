@@ -22,7 +22,8 @@ namespace posix_time = boost::posix_time;
 // of a request or response.
 template <bool isRequest, class Body>
 static
-bool has_cache_control_directive(const http::message<isRequest, Body>& request, const string& directive)
+bool has_cache_control_directive( const http::message<isRequest, Body>& request
+                                , const string_view& directive)
 {
     auto cache_control_i = request.find(http::field::cache_control);
     if (cache_control_i == request.end()) return false;
