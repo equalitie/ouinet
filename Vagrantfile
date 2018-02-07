@@ -82,7 +82,7 @@ Vagrant.configure("2") do |config|
 
   config.vm.synced_folder ".", "/vagrant", mount_options: ["ro"]
 
-  config.ssh.x11_forward = true
+  config.ssh.forward_x11 = true
 
   config.vm.provision "shell", inline: <<-SHELL
     apt-get update
