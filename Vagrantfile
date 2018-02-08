@@ -98,6 +98,7 @@ Vagrant.configure("2") do |config|
       automake \
       autopoint \
       texinfo \
+      gettext \
       libboost-dev \
       libboost-coroutine-dev \
       libboost-program-options-dev \
