@@ -53,7 +53,7 @@
 # the local ouinet proxy, but for now this is a TODO item.
 #
 # Alternatively, the ouinet proxy port inside the virtual machine can be mapped
-# to a post on the host machine. To enable this, uncomment the "forwarded_port"
+# to a port on the host machine. To enable this, uncomment the "forwarded_port"
 # line below.
 #
 
