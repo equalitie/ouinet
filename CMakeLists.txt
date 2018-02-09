@@ -84,6 +84,32 @@ target_link_libraries(injector
     ${GNUNET_CHANNELS_LIBRARIES})
 
 ################################################################################
+# Config file directory
+
+set(config_files
+    "repos/client/ouinet-client.conf"
+    "repos/client/gnunet/peer.conf"
+    "repos/injector/ouinet-injector.conf"
+    "repos/injector/gnunet/peer.conf"
+)
+set(config_targets )
+
+if(NOT ${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
+    add_custom_target(config ALL DEPENDS test)
+    foreach(config_file ${config_files})
+        get_filename_component(config_dir ${config_file} DIRECTORY)
+        add_custom_command(
+            OUTPUT ${CMAKE_BINARY_DIR}/${config_file}
+            MAIN_DEPENDENCY ${CMAKE_SOURCE_DIR}/${config_file}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/${config_dir}
+            COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/${config_file} ${CMAKE_BINARY_DIR}/${config_file}
+        )
+        set(config_targets ${config_targets} ${CMAKE_BINARY_DIR}/${config_file})
+    endforeach()
+    add_custom_target(appel ALL DEPENDS ${config_targets})
+endif()
+
+################################################################################
 # Tests
 add_subdirectory(test)
 ################################################################################
