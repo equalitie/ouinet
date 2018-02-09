@@ -55,12 +55,12 @@ file(GLOB client_sources
     "./src/request_routing.cpp")
 
 add_executable(client ${client_sources})
-add_dependencies(client beast ipfs-cache gnunet-channels i2poui)
+add_dependencies(client beast ${IPFS_CACHE_TARGET} gnunet-channels i2poui)
 
 target_link_libraries(client
     i2poui
     ${Boost_LIBRARIES}
-    ${IPFS_CACHE_LIBRARY}
+    ${IPFS_CACHE_LIBRARIES}
     ${GNUNET_CHANNELS_LIBRARIES})
 
 ################################################################################
@@ -77,12 +77,12 @@ file(GLOB injector_sources
     "./src/connect_to_host.cpp")
 
 add_executable(injector ${injector_sources})
-add_dependencies(injector beast ipfs-cache gnunet-channels i2poui)
+add_dependencies(injector beast ${IPFS_CACHE_TARGET} gnunet-channels i2poui)
 
 target_link_libraries(injector
     i2poui
     ${Boost_LIBRARIES}
-    ${IPFS_CACHE_LIBRARY}
+    ${IPFS_CACHE_LIBRARIES}
     ${GNUNET_CHANNELS_LIBRARIES})
 
 ################################################################################
