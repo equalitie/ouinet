@@ -18,6 +18,7 @@ NDK_TOOLCHAIN_DIR=${DIR}/${NDK}-toolchain-android$NDK_PLATFORM-$NDK_ARCH-$NDK_ST
 BOOST_V=1_65_1
 BOOST_V_DOT=${BOOST_V//_/.} # 1.65.1
 
+# https://developer.android.com/ndk/guides/abis.html
 ABI=armeabi-v7a
 
 ######################################################################
@@ -67,15 +68,14 @@ cd build-ipfs-cache
 
 cmake \
     -DBoost_COMPILER="-clang" \
+    -DCMAKE_ANDROID_NDK_TOOLCHAIN_VERSION=clang \
     -DCMAKE_SYSTEM_NAME=Android \
     -DCMAKE_SYSTEM_VERSION=${NDK_PLATFORM} \
+    -DCMAKE_ANDROID_STANDALONE_TOOLCHAIN=${NDK_TOOLCHAIN_DIR} \
     -DCMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR} \
     -DCMAKE_ANDROID_ARCH_ABI=${ABI} \
-    -DCMAKE_ANDROID_STANDALONE_TOOLCHAIN=${NDK_TOOLCHAIN_DIR} \
     -DBOOST_INCLUDEDIR=${DIR}/Boost-for-Android/build/out/${ABI}/include/boost-${BOOST_V} \
     -DBOOST_LIBRARYDIR=${DIR}/Boost-for-Android/build/out/${ABI}/lib \
-    -DCMAKE_C_COMPILER=${NDK_TOOLCHAIN_DIR}/bin/clang \
-    -DCMAKE_CXX_COMPILER=${NDK_TOOLCHAIN_DIR}/bin/clang++ \
     ${ROOT}/modules/ipfs-cache
 
 make
