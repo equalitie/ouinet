@@ -124,7 +124,8 @@ Vagrant.configure("2") do |config|
   SHELL
 
   config.vm.provision "shell", inline: <<-SHELL
-    ln -s /vagrant/scripts/build-ouinet-local.sh /home/vagrant/build-ouinet-local.sh
-    ln -s /vagrant/scripts/build-ouinet-git.sh /home/vagrant/build-ouinet-git.sh
+    ln -s /vagrant/scripts/build-ouinet-local.sh /home/vagrant/
+    ln -s /vagrant/scripts/build-ouinet-git.sh /home/vagrant/
+    ln -s /vagrant/scripts/firefox-proxy.sh /home/vagrant/
   SHELL
 end
