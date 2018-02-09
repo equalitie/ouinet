@@ -124,7 +124,7 @@ Vagrant.configure("2") do |config|
   SHELL
 
   config.vm.provision "shell", inline: <<-SHELL
-    ln -s /vagrant/scripts/vagrant-build-local.sh /home/vagrant/build-local.sh
+    ln -s /vagrant/scripts/build-ouinet-local.sh /home/vagrant/build-ouinet-local.sh
     ln -s /vagrant/scripts/vagrant-build-upstream.sh /home/vagrant/build-upstream.sh
   SHELL
 end
