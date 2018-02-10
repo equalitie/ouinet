@@ -75,7 +75,7 @@ Vagrant.configure("2") do |config|
   end
 
   # Uncomment this line to forward port 8081 on the host machine to port 8080 in the VM, so that you can access the VM ouinet-client from your local browser.
-  #config.vm.network "forwarded_port", guest: 8080, host: 8081
+  #config.vm.network "forwarded_port", guest: 8080, host: 8081, guest_ip: "127.0.0.1"
 
   config.vm.synced_folder ".", "/vagrant", mount_options: ["ro", "noac"]
   config.vm.synced_folder ".", "/vagrant-rw", mount_options: ["rw", "noac"]
