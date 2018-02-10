@@ -59,9 +59,6 @@
 
 #
 # TODO:
-# - Automatically setup a firefox profile that refers to the local proxy
-# - Setup writable cache directory, and possibly configs
-# - Improve the build scripts to do something more incremental
 # - Consider VM resource allocation, this is overkill
 #
 
@@ -80,7 +77,8 @@ Vagrant.configure("2") do |config|
   # Uncomment this line to forward port 8081 on the host machine to port 8080 in the VM, so that you can access the VM ouinet-client from your local browser.
   #config.vm.network "forwarded_port", guest: 8080, host: 8081
 
-  config.vm.synced_folder ".", "/vagrant", mount_options: ["ro"]
+  config.vm.synced_folder ".", "/vagrant", mount_options: ["ro", "noac"]
+  config.vm.synced_folder ".", "/vagrant-rw", mount_options: ["rw", "noac"]
 
   config.ssh.forward_x11 = true
 
