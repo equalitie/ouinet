@@ -60,70 +60,97 @@
 #
 # TODO:
 # - Consider VM resource allocation, this is overkill
+# - Make an android machine with extra disk space
 #
 
 Vagrant.configure("2") do |config|
-  config.vm.box = "debian/testing64"
+  def basic_setup(vm)
+    vm.vm.box = "debian/testing64"
 
-  config.vm.provider "libvirt" do |v|
-    v.memory = 4096
-    v.cpus = 4
+    vm.vm.provider "libvirt" do |v|
+      v.memory = 4096
+      v.cpus = 4
+    end
+    vm.vm.provider "virtualbox" do |v|
+      v.memory = 4096
+      v.cpus = 4
+    end
+
+    vm.vm.synced_folder ".", "/vagrant", mount_options: ["ro", "noac"]
+    vm.vm.synced_folder ".", "/vagrant-rw", mount_options: ["rw", "noac"]
+
+    vm.vm.provision "shell", inline: <<-SHELL
+      apt-get update
+      apt-get install -y \
+        git \
+        wget \
+        locales \
+        aptitude \
+        net-tools \
+        top \
+        htop \
+        iftop
+
+        # Stop all kinds of tools from warning on missing locales
+        echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
+        locale-gen
+    SHELL
   end
-  config.vm.provider "virtualbox" do |v|
-    v.memory = 4096
-    v.cpus = 4
+
+  config.vm.define "linux", primary: true do |vm|
+    basic_setup(vm)
+
+    # Uncomment this line to forward port 8081 on the host machine to port 8080 in the VM, so that you can access the VM ouinet-client from your local browser.
+    #vm.vm.network "forwarded_port", guest: 8080, host: 8081, guest_ip: "127.0.0.1"
+
+    vm.ssh.forward_x11 = true
+
+    vm.vm.provision "shell", inline: <<-SHELL
+      # Install toolchain and dependencies
+      apt-get install -y \
+        build-essential \
+        pkg-config \
+        wget \
+        cmake \
+        rsync \
+        libtool \
+        autoconf \
+        automake \
+        autopoint \
+        texinfo \
+        gettext \
+        libboost-dev \
+        libboost-coroutine-dev \
+        libboost-program-options-dev \
+        libboost-system-dev \
+        libboost-test-dev \
+        libboost-thread-dev \
+        libboost-filesystem-dev \
+        libboost-date-time-dev \
+        libgcrypt-dev \
+        libidn11-dev \
+        libssl-dev \
+        libunistring-dev \
+        zlib1g-dev
+
+      # Install testing tools
+      DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        firefox-esr \
+        wireshark \
+        xauth
+    SHELL
+
+    vm.vm.provision "shell", inline: <<-SHELL
+      ln -s /vagrant/scripts/build-ouinet-local.sh /home/vagrant/
+      ln -s /vagrant/scripts/build-ouinet-git.sh /home/vagrant/
+      ln -s /vagrant/scripts/firefox-proxy.sh /home/vagrant/
+    SHELL
   end
 
-  # Uncomment this line to forward port 8081 on the host machine to port 8080 in the VM, so that you can access the VM ouinet-client from your local browser.
-  #config.vm.network "forwarded_port", guest: 8080, host: 8081, guest_ip: "127.0.0.1"
+  config.vm.define "android", autostart: false do |vm|
+    basic_setup(vm)
 
-  config.vm.synced_folder ".", "/vagrant", mount_options: ["ro", "noac"]
-  config.vm.synced_folder ".", "/vagrant-rw", mount_options: ["rw", "noac"]
+    # This VM needs extra disk space, figure out how to do this
+  end
 
-  config.ssh.forward_x11 = true
-
-  config.vm.provision "shell", inline: <<-SHELL
-    apt-get update
-    apt-get install -y \
-      build-essential \
-      pkg-config \
-      git \
-      wget \
-      cmake \
-      rsync \
-      libtool \
-      autoconf \
-      automake \
-      autopoint \
-      texinfo \
-      gettext \
-      libboost-dev \
-      libboost-coroutine-dev \
-      libboost-program-options-dev \
-      libboost-system-dev \
-      libboost-test-dev \
-      libboost-thread-dev \
-      libboost-filesystem-dev \
-      libboost-date-time-dev \
-      libgcrypt-dev \
-      libidn11-dev \
-      libssl-dev \
-      libunistring-dev \
-      zlib1g-dev \
-      locales \
-      aptitude \
-      firefox-esr \
-      xauth
-
-    # Stop all kinds of tools from warning on missing locales
-    echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
-    locale-gen
-
-  SHELL
-
-  config.vm.provision "shell", inline: <<-SHELL
-    ln -s /vagrant/scripts/build-ouinet-local.sh /home/vagrant/
-    ln -s /vagrant/scripts/build-ouinet-git.sh /home/vagrant/
-    ln -s /vagrant/scripts/firefox-proxy.sh /home/vagrant/
-  SHELL
 end
