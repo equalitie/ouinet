@@ -120,23 +120,27 @@ static bool ok_to_cache( const http::request_header<>&  request
         }
     }
 
-    auto cache_control_i = response.find(http::field::cache_control);
+    auto res_cache_control_i = response.find(http::field::cache_control);
 
     // https://tools.ietf.org/html/rfc7234#section-3 (bullet #5)
     if (request.count(http::field::authorization)) {
         // https://tools.ietf.org/html/rfc7234#section-3.2
-        if (cache_control_i == response.end()) return false;
+        if (res_cache_control_i == response.end()) return false;
 
-        for (auto v : SplitString(cache_control_i->value(), ',')) {
-            if (v == "must-revalidate") return true;
-            if (v == "public")          return true;
-            if (v == "s-maxage")        return true;
+        bool allowed = false;
+
+        for (auto v : SplitString(res_cache_control_i->value(), ',')) {
+            if (v == "must-revalidate") { allowed = true; break; }
+            if (v == "public")          { allowed = true; break; }
+            if (v == "s-maxage")        { allowed = true; break; }
         }
+
+        if (!allowed) return false;
     }
 
-    if (cache_control_i == response.end()) return true;
+    if (res_cache_control_i == response.end()) return true;
 
-    for (auto kv : SplitString(cache_control_i->value(), ','))
+    for (auto kv : SplitString(res_cache_control_i->value(), ','))
     {
         beast::string_view key, val;
         std::tie(key, val) = split_string_pair(kv, '=');
