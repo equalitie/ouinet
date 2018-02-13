@@ -130,9 +130,9 @@ static bool ok_to_cache( const http::request_header<>&  request
         bool allowed = false;
 
         for (auto v : SplitString(res_cache_control_i->value(), ',')) {
-            if (v == "must-revalidate") { allowed = true; break; }
-            if (v == "public")          { allowed = true; break; }
-            if (v == "s-maxage")        { allowed = true; break; }
+            if (iequals(v,"must-revalidate")) { allowed = true; break; }
+            if (iequals(v,"public"))          { allowed = true; break; }
+            if (iequals(v,"s-maxage"))        { allowed = true; break; }
         }
 
         if (!allowed) return false;
@@ -146,9 +146,9 @@ static bool ok_to_cache( const http::request_header<>&  request
         std::tie(key, val) = split_string_pair(kv, '=');
 
         // https://tools.ietf.org/html/rfc7234#section-3 (bullet #3)
-        if (key == "no-store") return false;
+        if (iequals(key, "no-store")) return false;
         // https://tools.ietf.org/html/rfc7234#section-3 (bullet #4)
-        if (key == "private")  {
+        if (iequals(key, "private"))  {
             // NOTE: This decision based on the request having private data is
             // our extension (NOT part of RFC). Some servers (e.g.
             // www.bbc.com/) sometimes respond with 'Cache-Control: private'
