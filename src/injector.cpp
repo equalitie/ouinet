@@ -101,6 +101,8 @@ static bool contains_private_data(const http::request_header<>& request)
 static bool ok_to_cache( const http::request_header<>&  request
                        , const http::response_header<>& response)
 {
+    using boost::iequals;
+
     switch (response.result()) {
         case http::status::ok:
         case http::status::moved_permanently:
@@ -108,6 +110,14 @@ static bool ok_to_cache( const http::request_header<>&  request
         // TODO: Other response codes
         default:
             return false;
+    }
+
+    auto req_cache_control_i = request.find(http::field::cache_control);
+
+    if (req_cache_control_i != request.end()) {
+        for (auto v : SplitString(req_cache_control_i->value(), ',')) {
+            if (iequals(v, "no-store")) return false;
+        }
     }
 
     auto cache_control_i = response.find(http::field::cache_control);
