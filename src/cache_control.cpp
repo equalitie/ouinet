@@ -234,7 +234,10 @@ Response
 CacheControl::do_fetch_fresh(const Request& rq, asio::yield_context yield)
 {
     if (fetch_fresh) {
-        return fetch_fresh(rq, yield);
+        sys::error_code ec;
+        auto rs = fetch_fresh(rq, yield[ec]);
+        if (!ec) { try_to_cache(rq, rs); }
+        return or_throw(yield, ec, move(rs));
     }
     return or_throw<Response>(yield, asio::error::operation_not_supported);
 }
@@ -247,3 +250,161 @@ CacheControl::do_fetch_stored(const Request& rq, asio::yield_context yield)
     }
     return or_throw<CacheEntry>(yield, asio::error::operation_not_supported);
 }
+
+//------------------------------------------------------------------------------
+static bool contains_private_data(const http::request_header<>& request)
+{
+    for (auto& field : request) {
+        if(!util::field_is_one_of(field
+                , http::field::host
+                , http::field::user_agent
+                , http::field::accept
+                , http::field::accept_language
+                , http::field::accept_encoding
+                , http::field::keep_alive
+                , http::field::connection
+                , http::field::referer
+                // https://www.w3.org/TR/upgrade-insecure-requests/
+                , "Upgrade-Insecure-Requests"
+                // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/DNT
+                , "DNT")) {
+            return true;
+        }
+    }
+
+    // TODO: This may be a bit too agressive.
+    if (request.method() != http::verb::get) {
+        return true;
+    }
+
+    if (split_string_pair(request.target(), '?').second.size()) {
+        return true;
+    }
+
+    return false;
+}
+
+//------------------------------------------------------------------------------
+// Cache control:
+// https://tools.ietf.org/html/rfc7234
+// https://tools.ietf.org/html/rfc5861
+// https://tools.ietf.org/html/rfc8246
+//
+// For a less dry reading:
+// https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/http-caching
+//
+// TODO: This function is incomplete.
+static bool ok_to_cache( const http::request_header<>&  request
+                       , const http::response_header<>& response)
+{
+    using boost::iequals;
+
+    switch (response.result()) {
+        case http::status::ok:
+        case http::status::moved_permanently:
+            break;
+        // TODO: Other response codes
+        default:
+            return false;
+    }
+
+    auto req_cache_control_i = request.find(http::field::cache_control);
+
+    if (req_cache_control_i != request.end()) {
+        for (auto v : SplitString(req_cache_control_i->value(), ',')) {
+            if (iequals(v, "no-store")) return false;
+        }
+    }
+
+    auto res_cache_control_i = response.find(http::field::cache_control);
+
+    // https://tools.ietf.org/html/rfc7234#section-3 (bullet #5)
+    if (request.count(http::field::authorization)) {
+        // https://tools.ietf.org/html/rfc7234#section-3.2
+        if (res_cache_control_i == response.end()) return false;
+
+        bool allowed = false;
+
+        for (auto v : SplitString(res_cache_control_i->value(), ',')) {
+            if (iequals(v,"must-revalidate")) { allowed = true; break; }
+            if (iequals(v,"public"))          { allowed = true; break; }
+            if (iequals(v,"s-maxage"))        { allowed = true; break; }
+        }
+
+        if (!allowed) return false;
+    }
+
+    if (res_cache_control_i == response.end()) return true;
+
+    for (auto kv : SplitString(res_cache_control_i->value(), ','))
+    {
+        beast::string_view key, val;
+        std::tie(key, val) = split_string_pair(kv, '=');
+
+        // https://tools.ietf.org/html/rfc7234#section-3 (bullet #3)
+        if (iequals(key, "no-store")) return false;
+        // https://tools.ietf.org/html/rfc7234#section-3 (bullet #4)
+        if (iequals(key, "private"))  {
+            // NOTE: This decision based on the request having private data is
+            // our extension (NOT part of RFC). Some servers (e.g.
+            // www.bbc.com/) sometimes respond with 'Cache-Control: private'
+            // even though the request doesn't contain any private data (e.g.
+            // Cookies, {GET,POST,...} variables,...).  We believe this happens
+            // when the server serves different content depending on the
+            // client's geo location. While we don't necessarily want to break
+            // this intent, we believe serving _some_ content is better than
+            // none. As such, the client should always check for presence of
+            // this 'private' field when fetching from distributed cache and
+            // - if present - re-fetch from origin if possible.
+            if (contains_private_data(request)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+//------------------------------------------------------------------------------
+void
+CacheControl::try_to_cache( const Request& request
+                          , const Response& response) const
+{
+    if (!store) return;
+    if (!ok_to_cache(request, response)) return;
+
+    // TODO: This list was created by going through some 100 responses from
+    // bbc.com. Careful selection from all possible (standard) fields is
+    // needed.
+    auto filtered_response =
+        util::filter_fields( response
+                           , http::field::server
+                           , http::field::retry_after
+                           , http::field::content_length
+                           , http::field::content_type
+                           , http::field::content_encoding
+                           , http::field::content_language
+                           , http::field::accept_ranges
+                           , http::field::etag
+                           , http::field::age
+                           , http::field::date
+                           , http::field::expires
+                           , http::field::via
+                           , http::field::vary
+                           , http::field::connection
+                           , http::field::location
+                           , http::field::cache_control
+                           , http::field::warning
+                           , http::field::last_modified
+                           // Not sure about these
+                           , http::field::access_control_allow_origin
+                           , http::field::access_control_allow_headers
+                           , http::field::access_control_allow_methods
+                           , http::field::access_control_allow_credentials
+                           , http::field::access_control_max_age
+                           );
+
+    // TODO: Apply similar filter to the request.
+    store(request, filtered_response);
+}
+

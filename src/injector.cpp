@@ -18,6 +18,7 @@
 #include "namespaces.h"
 #include "util.h"
 #include "fetch_http_page.h"
+#include "cache_control.h"
 #include "generic_connection.h"
 #include "split_string.h"
 #include "async_sleep.h"
@@ -31,7 +32,8 @@ namespace fs = boost::filesystem;
 
 using tcp         = asio::ip::tcp;
 using string_view = beast::string_view;
-using Request     = http::request<http::dynamic_body>;
+using Request     = http::request<http::string_body>;
+using Response    = http::response<http::dynamic_body>;
 
 static fs::path REPO_ROOT;
 static const fs::path OUINET_CONF_FILE = "ouinet-injector.conf";
@@ -53,159 +55,6 @@ void handle_bad_request( GenericConnection& con
 
     sys::error_code ec;
     http::async_write(con, res, yield[ec]);
-}
-
-//------------------------------------------------------------------------------
-static bool contains_private_data(const http::request_header<>& request)
-{
-    for (auto& field : request) {
-        if(!util::field_is_one_of(field
-                , http::field::host
-                , http::field::user_agent
-                , http::field::accept
-                , http::field::accept_language
-                , http::field::accept_encoding
-                , http::field::keep_alive
-                , http::field::connection
-                , http::field::referer
-                // https://www.w3.org/TR/upgrade-insecure-requests/
-                , "Upgrade-Insecure-Requests"
-                // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/DNT
-                , "DNT")) {
-            return true;
-        }
-    }
-
-    // TODO: This may be a bit too agressive.
-    if (request.method() != http::verb::get) {
-        return true;
-    }
-
-    if (split_string_pair(request.target(), '?').second.size()) {
-        return true;
-    }
-
-    return false;
-}
-
-//------------------------------------------------------------------------------
-// Cache control:
-// https://tools.ietf.org/html/rfc7234
-// https://tools.ietf.org/html/rfc5861
-// https://tools.ietf.org/html/rfc8246
-//
-// For a less dry reading:
-// https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/http-caching
-//
-// TODO: This function is incomplete.
-static bool ok_to_cache( const http::request_header<>&  request
-                       , const http::response_header<>& response)
-{
-    switch (response.result()) {
-        case http::status::ok:
-        case http::status::moved_permanently:
-            break;
-        // TODO: Other response codes
-        default:
-            return false;
-    }
-
-    auto cache_control_i = response.find(http::field::cache_control);
-
-    // https://tools.ietf.org/html/rfc7234#section-3 (bullet #5)
-    if (request.count(http::field::authorization)) {
-        // https://tools.ietf.org/html/rfc7234#section-3.2
-        if (cache_control_i == response.end()) return false;
-
-        for (auto v : SplitString(cache_control_i->value(), ',')) {
-            if (v == "must-revalidate") return true;
-            if (v == "public")          return true;
-            if (v == "s-maxage")        return true;
-        }
-    }
-
-    if (cache_control_i == response.end()) return true;
-
-    for (auto kv : SplitString(cache_control_i->value(), ','))
-    {
-        beast::string_view key, val;
-        std::tie(key, val) = split_string_pair(kv, '=');
-
-        // https://tools.ietf.org/html/rfc7234#section-3 (bullet #3)
-        if (key == "no-store") return false;
-        // https://tools.ietf.org/html/rfc7234#section-3 (bullet #4)
-        if (key == "private")  {
-            // NOTE: This decision based on the request having private data is
-            // our extension (NOT part of RFC). Some servers (e.g.
-            // www.bbc.com/) sometimes respond with 'Cache-Control: private'
-            // even though the request doesn't contain any private data (e.g.
-            // Cookies, {GET,POST,...} variables,...).  We believe this happens
-            // when the server serves different content depending on the
-            // client's geo location. While we don't necessarily want to break
-            // this intent, we believe serving _some_ content is better than
-            // none. As such, the client should always check for presence of
-            // this 'private' field when fetching from distributed cache and
-            // - if present - re-fetch from origin if possible.
-            if (contains_private_data(request)) {
-                return false;
-            }
-        }
-    }
-
-    return true;
-}
-
-//------------------------------------------------------------------------------
-static
-void try_to_cache( ipfs_cache::Injector& injector
-                 , const http::request_header<>& request
-                 , const http::response<http::dynamic_body>& response)
-{
-    bool do_cache = ok_to_cache(request, response);
-
-    if (!do_cache) return;
-
-    // TODO: This list was created by going through some 100 responses from
-    // bbc.com. Careful selection from all possible (standard) fields is
-    // needed.
-    auto filtered_response =
-        util::filter_fields( response
-                           , http::field::server
-                           , http::field::retry_after
-                           , http::field::content_length
-                           , http::field::content_type
-                           , http::field::content_encoding
-                           , http::field::content_language
-                           , http::field::accept_ranges
-                           , http::field::etag
-                           , http::field::age
-                           , http::field::date
-                           , http::field::expires
-                           , http::field::via
-                           , http::field::vary
-                           , http::field::connection
-                           , http::field::location
-                           , http::field::cache_control
-                           , http::field::warning
-                           , http::field::last_modified
-                           // Not sure about these
-                           , http::field::access_control_allow_origin
-                           , http::field::access_control_allow_headers
-                           , http::field::access_control_allow_methods
-                           , http::field::access_control_allow_credentials
-                           , http::field::access_control_max_age
-                           );
-
-    stringstream ss;
-    ss << filtered_response;
-    auto key = request.target().to_string();
-
-    injector.insert_content(key, ss.str(),
-        [key] (sys::error_code ec, auto) {
-            if (ec) {
-                cout << "!Insert failed: " << key << " " << ec.message() << endl;
-            }
-        });
 }
 
 //------------------------------------------------------------------------------
@@ -240,6 +89,50 @@ void handle_connect_request( GenericConnection& client_c
 }
 
 //------------------------------------------------------------------------------
+struct InjectorCacheControl {
+public:
+    InjectorCacheControl(asio::io_service& ios, ipfs_cache::Injector& injector)
+        : ios(ios)
+        , injector(injector)
+    {
+        cc.fetch_fresh = [this](const Request& rq, asio::yield_context yield) {
+            sys::error_code ec;
+            auto rs = fetch_http_page(this->ios, rq, ec, yield);
+            return or_throw(yield, ec, move(rs));
+        };
+
+        cc.store = [this](const Request& rq, const Response& rs) {
+            this->insert_content(rq, rs);
+        };
+    }
+
+    Response fetch(const Request& rq, asio::yield_context yield)
+    {
+        return cc.fetch(rq, yield);
+    }
+
+private:
+    void insert_content(const Request& rq, const Response& rs) {
+        stringstream ss;
+        ss << rs;
+        auto key = rq.target().to_string();
+
+        injector.insert_content(key, ss.str(),
+            [key] (const sys::error_code& ec, auto) {
+                if (ec) {
+                    cout << "!Insert failed: " << key
+                         << " " << ec.message() << endl;
+                }
+            });
+    }
+
+private:
+    asio::io_service& ios;
+    ipfs_cache::Injector& injector;
+    CacheControl cc;
+};
+
+//------------------------------------------------------------------------------
 static
 void serve( GenericConnection con
           , ipfs_cache::Injector& injector
@@ -249,6 +142,8 @@ void serve( GenericConnection con
     beast::flat_buffer buffer;
 
     for (;;) {
+        InjectorCacheControl cc(con.get_io_service(), injector);
+
         Request req;
 
         http::async_read(con, buffer, req, yield[ec]);
@@ -259,13 +154,11 @@ void serve( GenericConnection con
         if (req.method() == http::verb::connect) {
             return handle_connect_request(con, req, yield);
         }
-        // Fetch the content from origin
-        auto res = fetch_http_page(con.get_io_service(), req, ec, yield);
+
+        auto res = cc.fetch(req, yield[ec]);
 
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "fetch_http_page");
-
-        try_to_cache(injector, req, res);
 
         // Forward back the response
         http::async_write(con, res, yield[ec]);

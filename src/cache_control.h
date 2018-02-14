@@ -17,17 +17,18 @@ public:
         Response response;
     };
 
-    using FetchStored = std::function<CacheEntry(const Request&,
-            asio::yield_context)>;
-
-    using FetchFresh = std::function<Response(const Request&,
-            asio::yield_context)>;
+    using FetchStored = std::function<CacheEntry(const Request&, asio::yield_context)>;
+    using FetchFresh  = std::function<Response(const Request&, asio::yield_context)>;
+    using Store       = std::function<void(const Request&, const Response&)>;
 
 public:
     Response fetch(const Request&, asio::yield_context);
 
     FetchStored  fetch_stored;
     FetchFresh   fetch_fresh;
+    Store        store;
+
+    void try_to_cache(const Request&, const Response&) const;
 
     void max_cached_age(const boost::posix_time::time_duration&);
     boost::posix_time::time_duration max_cached_age() const;
