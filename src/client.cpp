@@ -30,6 +30,7 @@
 #include "endpoint.h"
 #include "cache_control.h"
 #include "or_throw.h"
+#include "request_routing.h"
 #include "full_duplex_forward.h"
 
 using namespace std;
@@ -216,11 +217,19 @@ void handle_connect_request( GenericConnection& client_c
 //------------------------------------------------------------------------------
 static
 CacheControl::CacheEntry
-fetch_stored(const Request& request, Client& client, asio::yield_context yield)
+fetch_stored( const Request& request
+            , request_route::Config& request_config
+            , Client& client
+            , asio::yield_context yield)
 {
     using CacheEntry = CacheControl::CacheEntry;
 
-    if (!client.ipfs_cache || !client.front_end.is_ipfs_cache_enabled()) {
+    const bool cache_is_disabled
+        = !request_config.enable_cache
+       || !client.ipfs_cache
+       || !client.front_end.is_ipfs_cache_enabled();
+
+    if (cache_is_disabled) {
         return or_throw<CacheControl::CacheEntry>( yield ,
                 asio::error::operation_not_supported);
     }
@@ -265,38 +274,73 @@ fetch_stored(const Request& request, Client& client, asio::yield_context yield)
 //------------------------------------------------------------------------------
 static
 Response
-fetch_fresh(const Request& request, Client& client, asio::yield_context yield)
+fetch_fresh( const Request& request
+           , request_route::Config& request_config
+           , Client& client
+           , asio::yield_context yield)
 {
-    if (!client.front_end.is_injector_proxying_enabled()) {
-        return or_throw<Response>(yield, asio::error::operation_not_supported);
+    using namespace asio::error;
+    using request_route::responder;
+
+    sys::error_code last_error = operation_not_supported;
+
+    while (!request_config.responders.empty()) {
+        auto r = request_config.responders.front();
+        request_config.responders.pop();
+
+        switch (r) {
+            case responder::origin: {
+                assert(0 && "TODO");
+                continue;
+            }
+            case responder::proxy: {
+                assert(0 && "TODO");
+                continue;
+            }
+            case responder::injector: {
+                if (!client.front_end.is_injector_proxying_enabled()) {
+                    continue;
+                }
+                auto inj_con = connect_to_injector(client, yield);
+                if (inj_con.is_error()) {
+                    last_error = inj_con.get_error();
+                    continue;
+                }
+                sys::error_code ec;
+                // Forward the request to the injector
+                auto res = fetch_http_page(client.ios, *inj_con, request, yield[ec]);
+                if (!ec) return res;
+                last_error = ec;
+                continue;
+            }
+            case responder::_front_end: {
+                return client.front_end.serve( client.injector_ep
+                                             , request
+                                             , client.ipfs_cache.get());
+            }
+        }
     }
 
-    auto inj_con = connect_to_injector(client, yield);
-
-    if (inj_con.is_error()) {
-        return or_throw<Response>(yield, inj_con.get_error());
-    }
-
-    // Forward the request to the injector
-    return fetch_http_page(client.ios, *inj_con, request, yield);
+    return or_throw<Response>(yield, last_error);
 }
 
 //------------------------------------------------------------------------------
 static
 CacheControl build_cache_control( asio::io_service& ios
+                                , request_route::Config& request_config
                                 , Client& client)
 {
     CacheControl cache_control;
 
     cache_control.fetch_stored =
         [&] (const Request& request, asio::yield_context yield) {
-            return ASYNC_DEBUG( fetch_stored(request, client, yield)
+            return ASYNC_DEBUG( fetch_stored(request, request_config, client, yield)
                               , "Fetch from cache: " , request.target());
         };
 
     cache_control.fetch_fresh =
         [&] (const Request& request, asio::yield_context yield) {
-            return ASYNC_DEBUG( fetch_fresh(request, client, yield)
+            return ASYNC_DEBUG( fetch_fresh(request, request_config, client, yield)
                               , "Fetch from origin: ", request.target());
         };
 
@@ -310,38 +354,78 @@ static void serve_request( GenericConnection con
                          , Client& client
                          , asio::yield_context yield)
 {
+    namespace rr = request_route;
+    using rr::responder;
+
+    // These access mechanisms are attempted in order for requests by default.
+    const rr::Config default_request_config
+        { true
+        , queue<responder>({responder::injector})};
+
+    rr::Config request_config;
+
     CacheControl cache_control = build_cache_control( con.get_io_service()
+                                                    , request_config
                                                     , client);
 
     sys::error_code ec;
     beast::flat_buffer buffer;
 
-    for (;;) {
+    // Expressions to test the request against and mechanisms to be used.
+    // TODO: Create once and reuse.
+    using Match = pair<const ouinet::reqexpr::reqex, const rr::Config>;
+
+    auto method_getter([](const Request& r) {return r.method_string();});
+    auto host_getter([](const Request& r) {return r["Host"];});
+    auto target_getter([](const Request& r) {return r.target();});
+
+    const vector<Match> matches({
+        // Handle requests to <http://localhost/> internally.
+        Match( reqexpr::from_regex(host_getter, "localhost")
+             , {false, queue<responder>({responder::_front_end})} ),
+
+        // NOTE: The matching of HTTP methods below can be simplified,
+        // leaving expanded for readability.
+
+        // Send unsafe HTTP method requests to the origin server
+        // (or the proxy if that does not work).
+        // NOTE: The cache need not be disabled as it should know not to
+        // fetch requests in these cases.
+        Match( !reqexpr::from_regex(method_getter, "(GET|HEAD|OPTIONS|TRACE)")
+             , {false, queue<responder>({responder::origin, responder::proxy})} ),
+        // Do not use cache for safe but uncacheable HTTP method requests.
+        // NOTE: same as above.
+        Match( reqexpr::from_regex(method_getter, "(OPTIONS|TRACE)")
+             , {false, queue<responder>({responder::origin, responder::proxy})} ),
+        // Do not use cache for validation HEADs.
+        // Caching these is not yet supported.
+        Match( reqexpr::from_regex(method_getter, "HEAD")
+             , {false, queue<responder>({responder::origin, responder::proxy})} ),
+        // Force cache and default mechanisms for this site.
+        Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example.com/.*")
+             , {true, queue<responder>()} ),
+        // Force cache and particular mechanisms for this site.
+        Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example.net/.*")
+             , {true, queue<responder>({responder::injector})} ),
+    });
+
+    // Process the different requests that may come over the same connection.
+    for (;;) {  // continue for next request; break for no more requests
         Request req;
 
+        // Read the (clear-text) HTTP request
         ASYNC_DEBUG(http::async_read(con, buffer, req, yield[ec]), "Read request");
 
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "read");
 
+        // Attempt connection to origin for CONNECT requests
         if (req.method() == http::verb::connect) {
             return ASYNC_DEBUG( handle_connect_request(con, req, client, yield)
                               , "Connect");
         }
 
-        if (is_front_end_request(req)) {
-            return ASYNC_DEBUG(client.front_end.serve( con
-                                                     , client.injector_ep
-                                                     , req
-                                                     , client.ipfs_cache.get()
-                                                     , yield)
-                              , "Frontend");
-        }
-
-        // TODO: We're not handling HEAD requests correctly.
-        if (req.method() != http::verb::get && req.method() != http::verb::head) {
-            return ASYNC_DEBUG(handle_bad_request(con, req, "Bad request", yield), "Bad request");
-        }
+        request_config = route_choose_config(req, matches, default_request_config);
 
         auto res = ASYNC_DEBUG( cache_control.fetch(req, yield[ec])
                               , "CacheControl::fetch "
@@ -353,6 +437,7 @@ static void serve_request( GenericConnection con
             cerr << req << res.base() << endl;
             cerr << "--------------------------------------" << endl;
 
+            // TODO: Better error message.
             ASYNC_DEBUG(handle_bad_request(con, req, "Not cached", yield), "Send error");
             if (req.keep_alive()) continue;
             else return;

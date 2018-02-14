@@ -7,15 +7,14 @@ using namespace std;
 using namespace ouinet;
 
 using Request = http::request<http::string_body>;
+using Response = ClientFrontEnd::Response;
 using string_view = beast::string_view;
 
-static void redirect_back( GenericConnection& con
-                         , const Request& req
-                         , asio::yield_context yield)
+static Response redirect_back(const Request& req)
 {
-    http::response<http::string_body> res{http::status::ok, req.version()};
+    http::response<http::dynamic_body> res{http::status::ok, req.version()};
 
-    auto body =
+    string_view body =
         "<!DOCTYPE html>\n"
         "<html>\n"
         "    <head>\n"
@@ -26,11 +25,13 @@ static void redirect_back( GenericConnection& con
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
     res.set(http::field::content_type, "text/html");
     res.keep_alive(false);
-    res.body() = body;
+    http::dynamic_body::writer writer(res);
+    sys::error_code ec;
+    writer.put(asio::const_buffer(body.data(), body.size()), ec);
+    assert(!ec);
     res.prepare_payload();
 
-    sys::error_code ec;
-    http::async_write(con, res, yield[ec]);
+    return res;
 }
 
 struct ToggleInput {
@@ -75,13 +76,11 @@ static ostream& operator<<(ostream& os, const ClientFrontEnd::Task& task) {
 
 } // ouinet namespace
 
-void ClientFrontEnd::serve( GenericConnection& con
-                          , const Endpoint& injector_ep
-                          , const Request& req
-                          , ipfs_cache::Client* cache_client
-                          , asio::yield_context yield)
+Response ClientFrontEnd::serve( const Endpoint& injector_ep
+                              , const Request& req
+                              , ipfs_cache::Client* cache_client)
 {
-    http::response<http::string_body> res{http::status::ok, req.version()};
+    Response res{http::status::ok, req.version()};
 
     auto target = req.target();
 
@@ -105,8 +104,7 @@ void ClientFrontEnd::serve( GenericConnection& con
         else if (target.find("?ipfs_cache=disable") != string::npos) {
             _ipfs_cache_enabled = false;
         }
-        redirect_back(con, req, yield);
-        return;
+        return redirect_back(req);
     }
 
     stringstream ss;
@@ -154,10 +152,14 @@ void ClientFrontEnd::serve( GenericConnection& con
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
     res.set(http::field::content_type, "text/html");
     res.keep_alive(false);
-    res.body() = ss.str();
+
+    Response::body_type::writer writer(res);
+    sys::error_code ec;
+    writer.put(asio::buffer(ss.str()), ec);
+    assert(!ec);
+
     res.prepare_payload();
 
-    sys::error_code ec;
-    http::async_write(con, res, yield[ec]);
+    return res;
 }
 

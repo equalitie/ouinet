@@ -22,6 +22,9 @@ class ClientFrontEnd {
             <boost::intrusive::link_mode
                 <boost::intrusive::auto_unlink>>;
 public:
+    using Response = http::response<http::dynamic_body>;
+
+public:
     class Task : public TaskHook {
     public:
         Task(const std::string& name)
@@ -43,11 +46,9 @@ public:
     };
 
 public:
-    void serve( GenericConnection&
-              , const Endpoint& injector_ep
-              , const http::request<http::string_body>&
-              , ipfs_cache::Client*
-              , boost::asio::yield_context);
+    Response serve( const Endpoint& injector_ep
+                  , const http::request<http::string_body>&
+                  , ipfs_cache::Client*);
 
     bool is_injector_proxying_enabled() const
     {

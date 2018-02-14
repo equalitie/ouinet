@@ -28,11 +28,12 @@ add_subdirectory(./modules/gnunet-channels)
 project(ouinet)
 
 find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS filesystem
-                                                              unit_test_framework
-                                                              program_options
-                                                              coroutine
-                                                              date_time
-                                                              system)
+                                                        regex
+                                                        unit_test_framework
+                                                        program_options
+                                                        coroutine
+                                                        date_time
+                                                        system)
 find_package(Threads)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -Wall -ggdb ${SANITIZE}")
@@ -50,7 +51,8 @@ file(GLOB client_sources
     "./src/connect_to_host.cpp"
     "./src/client_front_end.cpp"
     "./src/endpoint.cpp"
-    "./src/cache_control.cpp")
+    "./src/cache_control.cpp"
+    "./src/request_routing.cpp")
 
 add_executable(client ${client_sources})
 add_dependencies(client beast ${IPFS_CACHE_TARGET} gnunet-channels i2poui)
