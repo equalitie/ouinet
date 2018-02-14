@@ -234,7 +234,10 @@ Response
 CacheControl::do_fetch_fresh(const Request& rq, asio::yield_context yield)
 {
     if (fetch_fresh) {
-        return fetch_fresh(rq, yield);
+        sys::error_code ec;
+        auto rs = fetch_fresh(rq, yield[ec]);
+        if (!ec) { try_to_cache(rq, rs); }
+        return or_throw(yield, ec, move(rs));
     }
     return or_throw<Response>(yield, asio::error::operation_not_supported);
 }

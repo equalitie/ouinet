@@ -90,19 +90,28 @@ void handle_connect_request( GenericConnection& client_c
 
 //------------------------------------------------------------------------------
 struct InjectorCacheControl {
-    InjectorCacheControl(ipfs_cache::Injector& injector)
-        : injector(injector)
+public:
+    InjectorCacheControl(asio::io_service& ios, ipfs_cache::Injector& injector)
+        : ios(ios)
+        , injector(injector)
     {
+        cc.fetch_fresh = [this](const Request& rq, asio::yield_context yield) {
+            sys::error_code ec;
+            auto rs = fetch_http_page(this->ios, rq, ec, yield);
+            return or_throw(yield, ec, move(rs));
+        };
+
         cc.store = [this](const Request& rq, const Response& rs) {
             this->insert_content(rq, rs);
         };
     }
 
-    void try_to_cache(const Request& req, const Response& res) const
+    Response fetch(const Request& rq, asio::yield_context yield)
     {
-        cc.try_to_cache(req, res);
+        return cc.fetch(rq, yield);
     }
 
+private:
     void insert_content(const Request& rq, const Response& rs) {
         stringstream ss;
         ss << rs;
@@ -117,6 +126,8 @@ struct InjectorCacheControl {
             });
     }
 
+private:
+    asio::io_service& ios;
     ipfs_cache::Injector& injector;
     CacheControl cc;
 };
@@ -131,7 +142,7 @@ void serve( GenericConnection con
     beast::flat_buffer buffer;
 
     for (;;) {
-        InjectorCacheControl cc(injector);
+        InjectorCacheControl cc(con.get_io_service(), injector);
 
         Request req;
 
@@ -143,13 +154,11 @@ void serve( GenericConnection con
         if (req.method() == http::verb::connect) {
             return handle_connect_request(con, req, yield);
         }
-        // Fetch the content from origin
-        auto res = fetch_http_page(con.get_io_service(), req, ec, yield);
+
+        auto res = cc.fetch(req, yield[ec]);
 
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "fetch_http_page");
-
-        cc.try_to_cache(req, res);
 
         // Forward back the response
         http::async_write(con, res, yield[ec]);
