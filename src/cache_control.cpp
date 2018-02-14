@@ -396,9 +396,8 @@ CacheControl::try_to_cache( const Request& request
                            , http::field::cache_control
                            , http::field::warning
                            , http::field::last_modified
-                           // CORS response headers (following <https://fetch.spec.whatwg.org/#http-responses>):
+                           // # CORS response headers (following <https://fetch.spec.whatwg.org/#http-responses>)
                            , http::field::access_control_allow_origin  // origins the response may be shared with
-                           , http::field::access_control_expose_headers  // headers of response to be exposed
                            // A request which caused a response with ``Access-Control-Allow-Credentials: true``
                            // probably carried authentication tokens and it should not have been cached anyway,
                            // however a server may erroneously include it for requests not using credentials,
@@ -412,6 +411,8 @@ CacheControl::try_to_cache( const Request& request
                            , http::field::access_control_allow_methods  // methods allowed in CORS request
                            , http::field::access_control_allow_headers  // headers allowed in CORS request
                            , http::field::access_control_max_age  // expiration of pre-flight response info
+                           //
+                           , http::field::access_control_expose_headers  // headers of response to be exposed
                            );
 
     // TODO: Apply similar filter to the request.
