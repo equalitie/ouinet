@@ -372,6 +372,7 @@ static void serve_request( GenericConnection con
     beast::flat_buffer buffer;
 
     // Expressions to test the request against and mechanisms to be used.
+    // TODO: Create once and reuse.
     using Match = pair<const ouinet::reqexpr::reqex, const rr::Config>;
 
     auto method_getter([](const Request& r) {return r.method_string();});
@@ -379,21 +380,33 @@ static void serve_request( GenericConnection con
     auto target_getter([](const Request& r) {return r.target();});
 
     const vector<Match> matches({
+        // Handle requests to <http://localhost/> internally.
         Match( reqexpr::from_regex(host_getter, "localhost")
              , {false, queue<responder>({responder::_front_end})} ),
-        // Send non-safe HTTP method requests (and validation HEADs) to the origin server.
+
+        // NOTE: The matching of HTTP methods below can be simplified,
+        // leaving expanded for readability.
+
+        // Send unsafe HTTP method requests to the origin server
+        // (or the proxy if that does not work).
         // NOTE: The cache need not be disabled as it should know not to
         // fetch requests in these cases.
-        Match( reqexpr::from_regex(method_getter, "(HEAD|OPTIONS|TRACE)")
-             , {false, queue<responder>({responder::origin})} ),
-        // Do not use cache for safe but non-cacheable HTTP method requests.
+        Match( !reqexpr::from_regex(method_getter, "(GET|HEAD|OPTIONS|TRACE)")
+             , {false, queue<responder>({responder::origin, responder::proxy})} ),
+        // Do not use cache for safe but uncacheable HTTP method requests.
         // NOTE: same as above.
         Match( reqexpr::from_regex(method_getter, "(OPTIONS|TRACE)")
-             , {false, queue<responder>({responder::injector, responder::origin})} ),
+             , {false, queue<responder>({responder::origin, responder::proxy})} ),
+        // Do not use cache for validation HEADs.
+        // Caching these is not yet supported.
+        Match( reqexpr::from_regex(method_getter, "HEAD")
+             , {false, queue<responder>({responder::origin, responder::proxy})} ),
+        // Force cache and default mechanisms for this site.
         Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example.com/.*")
              , {true, queue<responder>()} ),
+        // Force cache and particular mechanisms for this site.
         Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example.net/.*")
-             , {true, queue<responder>({responder::injector, responder::origin})} ),
+             , {true, queue<responder>({responder::injector})} ),
     });
 
     // Process the different requests that may come over the same connection.
