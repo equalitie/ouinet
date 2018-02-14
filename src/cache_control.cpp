@@ -412,7 +412,7 @@ CacheControl::try_to_cache( const Request& request
                            , http::field::access_control_allow_headers  // headers allowed in CORS request
                            , http::field::access_control_max_age  // expiration of pre-flight response info
                            //
-                           , http::field::access_control_expose_headers  // headers of response to be exposed
+                           , "Access-Control-Expose-Headers"  // headers of response to be exposed
                            );
 
     // TODO: Apply similar filter to the request.
