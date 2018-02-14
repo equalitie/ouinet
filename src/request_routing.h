@@ -17,6 +17,14 @@ namespace ouinet {
 //------------------------------------------------------------------------------
 namespace request_route {
 // TODO: Better name?
+//
+// TODO: It may make sense to split private/dynamic/non-cached mechanisms (origin, proxy)
+// from public/static/cached mechanisms (cache/injector)
+// so that mechanisms of different types cannot be mixed,
+// i.e. it makes no sense to attempt a request which was considered private
+// over a public mechanism like cache or injector,
+// and similarly sending a public request to the origin
+// misses the opportunity to use the cache for it.
 enum class responder {
     // These mechanisms may be configured by the user.
     origin,      // send request to the origin HTTP server
