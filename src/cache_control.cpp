@@ -396,14 +396,17 @@ CacheControl::try_to_cache( const Request& request
                            , http::field::cache_control
                            , http::field::warning
                            , http::field::last_modified
-                           // CORS response headers:
+                           // CORS response headers (following <https://fetch.spec.whatwg.org/#http-responses>):
                            , http::field::access_control_allow_origin  // origins the response may be shared with
                            , http::field::access_control_expose_headers  // headers of response to be exposed
                            // The rest of ``Access-Control-*`` response headers should only appear in
                            // responses to pre-flight (OPTIONS) requests, which should not be cached.
-                           // ``Access-Control-Allow-Credentials`` is also dropped since we do not want to reuse
-                           // any credentials possibly leaked to the cache (we assume that its absence means "false"
-                           // although the spec does not say). TODO: Force it to be "false".
+                           // A request which caused a response with ``Access-Control-Allow-Credentials: true``
+                           // probably carried authentication tokens and it should not have been cached anyway,
+                           // however a server may erroneously include it for requests not using credentials,
+                           // and we do not want to block them.
+                           // See <https://stackoverflow.com/a/24689738> for an explanation of the header.
+                           , http::field::access_control_allow_credentials  // resp to req w/credentials may be shared
                            );
 
     // TODO: Apply similar filter to the request.
