@@ -60,7 +60,6 @@
 #
 # TODO:
 # - Consider VM resource allocation, this is overkill
-# - Make an android machine with extra disk space
 #
 
 Vagrant.configure("2") do |config|
@@ -71,13 +70,9 @@ Vagrant.configure("2") do |config|
       v.memory = 4096
       v.cpus = 4
     end
-    vm.vm.provider "virtualbox" do |v|
-      v.memory = 4096
-      v.cpus = 4
-    end
 
-    vm.vm.synced_folder ".", "/vagrant", mount_options: ["ro", "noac"]
-    vm.vm.synced_folder ".", "/vagrant-rw", mount_options: ["rw", "noac"]
+    vm.vm.synced_folder ".", "/vagrant", type: "nfs", mount_options: ["ro", "noac"]
+    vm.vm.synced_folder ".", "/vagrant-rw", type: "nfs", mount_options: ["rw", "noac"]
 
     vm.vm.provision "shell", inline: <<-SHELL
       apt-get update
@@ -87,7 +82,6 @@ Vagrant.configure("2") do |config|
         locales \
         aptitude \
         net-tools \
-        top \
         htop \
         iftop
 
@@ -150,7 +144,7 @@ Vagrant.configure("2") do |config|
   config.vm.define "android", autostart: false do |vm|
     basic_setup(vm)
 
-    # This VM needs extra disk space, figure out how to do this
+    # TODO: Setup android environment
   end
 
 end
