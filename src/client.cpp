@@ -95,18 +95,6 @@ void handle_bad_request( GenericConnection& con
 }
 
 //------------------------------------------------------------------------------
-static bool is_front_end_request(const Request& req)
-{
-    auto host = req["Host"].to_string();
-
-    if (host.substr(0, sizeof("localhost")) != "localhost") {
-        return false;
-    }
-
-    return true;
-}
-
-//------------------------------------------------------------------------------
 static
 Result<GenericConnection>
 connect_to_injector(Client& client, asio::yield_context yield)

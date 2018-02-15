@@ -1,6 +1,5 @@
 #include "connect_to_host.h"
 
-#include "fail.h"
 #include "util.h"
 
 #include <boost/asio/io_service.hpp>
