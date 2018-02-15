@@ -39,6 +39,16 @@ static fs::path REPO_ROOT;
 static const fs::path OUINET_CONF_FILE = "ouinet-injector.conf";
 
 //------------------------------------------------------------------------------
+// Write a file in the repository root containing the injector endpoint `ep` for the given `backend`.
+static
+void create_ep_file(const string& backend, const string& ep) {
+    auto id_path = REPO_ROOT/("endpoint-"+backend);
+    fstream id_file(id_path.native(), fstream::out | fstream::trunc);
+    id_file << ep << endl;
+    id_file.close();
+}
+
+//------------------------------------------------------------------------------
 static
 void handle_bad_request( GenericConnection& con
                        , const Request& req
@@ -243,7 +253,9 @@ void listen_gnunet( asio::io_service& ios
         return;
     }
 
-    cout << "GNUnet ID: " << service.identity() << endl;
+    auto ep = service.identity();
+    cout << "GNUnet ID: " << ep << endl;
+    create_ep_file("gnunet", ep);
 
     gc::CadetPort port(service);
 
@@ -279,8 +291,9 @@ void listen_i2p( asio::io_service& ios
         return;
     }
 
-    cout << "I2P Public ID: " << service.public_identity() << endl;
-
+    auto ep = service.public_identity();
+    cout << "I2P Public ID: " << ep << endl;
+    create_ep_file("i2p", ep);
 
     while (true) {
         i2poui::Channel channel(service);
