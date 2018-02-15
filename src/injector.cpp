@@ -40,12 +40,13 @@ static fs::path REPO_ROOT;
 static const fs::path OUINET_CONF_FILE = "ouinet-injector.conf";
 
 //------------------------------------------------------------------------------
-// Write a file in the repository root containing the injector endpoint `ep` for the given `backend`.
+// Write a small file in the repository root with the given `name` and `line` of content.
+// If existing, truncate it.
 static
-void create_ep_file(const string& backend, const string& ep) {
-    auto id_path = REPO_ROOT/("endpoint-"+backend);
+void create_state_file(const string& name, const string& line) {
+    auto id_path = REPO_ROOT/name;
     fstream id_file(id_path.native(), fstream::out | fstream::trunc);
-    id_file << ep << endl;
+    id_file << line << endl;
     id_file.close();
 }
 
@@ -220,7 +221,7 @@ void listen_tcp( asio::io_service& ios
 
     string ep = endpoint.address().to_string() + ":" + to_string(endpoint.port());
     cout << "TCP Address: " << ep << endl;
-    create_ep_file("tcp", ep);
+    create_state_file("endpoint-tcp", ep);
 
     for(;;)
     {
@@ -260,7 +261,7 @@ void listen_gnunet( asio::io_service& ios
 
     auto ep = service.identity();
     cout << "GNUnet ID: " << ep << endl;
-    create_ep_file("gnunet", ep);
+    create_state_file("endpoint-gnunet", ep);
 
     gc::CadetPort port(service);
 
@@ -298,7 +299,7 @@ void listen_i2p( asio::io_service& ios
 
     auto ep = service.public_identity();
     cout << "I2P Public ID: " << ep << endl;
-    create_ep_file("i2p", ep);
+    create_state_file("endpoint-i2p", ep);
 
     while (true) {
         i2poui::Channel channel(service);
@@ -405,7 +406,11 @@ int main(int argc, char* argv[])
 
     ipfs_cache::Injector ipfs_cache_injector(ios, (REPO_ROOT/"ipfs").native());
 
-    std::cout << "IPNS DB: " << ipfs_cache_injector.ipns_id() << endl;
+    // Although the IPNS ID is already in IPFS's config file,
+    // this just helps put all info relevant to the user right in the repo root.
+    auto ipns_id = ipfs_cache_injector.ipns_id();
+    std::cout << "IPNS DB: " << ipns_id << endl;
+    create_state_file("cache-ipns", ipns_id);
 
     if (vm.count("listen-on-tcp")) {
         auto const injector_ep
