@@ -69,6 +69,19 @@ Vagrant.configure("2") do |config|
     vm.vm.provider "libvirt" do |v|
       v.memory = 4096
       v.cpus = 4
+
+      v.storage :file, :size => '50G', :device => 'vdb'
+
+      vm.vm.provision "shell", inline: <<-SHELL
+        # Vagrant sometimes tries to run this whole script twice, for some reason. Bail out on repeated runs.
+        [ -e /scratch ] && exit 0
+        mkfs.ext4 /dev/vdb
+        mkdir /scratch
+        echo "/dev/vdb /scratch ext4 defaults 0 2" >> /etc/fstab
+        mount /scratch
+        mv /home/vagrant /scratch
+        ln -s /scratch/vagrant /home/vagrant
+      SHELL
     end
 
     vm.vm.synced_folder ".", "/vagrant", type: "nfs", mount_options: ["ro", "noac"]
