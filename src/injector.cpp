@@ -67,7 +67,7 @@ void handle_connect_request( GenericConnection& client_c
 
     asio::io_service& ios = client_c.get_io_service();
 
-    auto origin_c = connect_to_host(ios, req["host"], ec, yield);
+    auto origin_c = connect_to_host(ios, req["host"], yield[ec]);
 
     if (ec) {
         return handle_bad_request( client_c
@@ -96,10 +96,10 @@ public:
         , injector(injector)
     {
         cc.fetch_fresh = [this](const Request& rq, asio::yield_context yield) {
-            sys::error_code ec;
-            auto rs = fetch_http_page(this->ios, rq, ec, yield);
-            return or_throw(yield, ec, move(rs));
+            return fetch_http_page(this->ios, rq, yield);
         };
+
+        // TODO: cc.fetch_stored
 
         cc.store = [this](const Request& rq, const Response& rs) {
             this->insert_content(rq, rs);
@@ -158,7 +158,7 @@ void serve( GenericConnection con
         auto res = cc.fetch(req, yield[ec]);
 
         if (ec == http::error::end_of_stream) break;
-        if (ec) return fail(ec, "fetch_http_page");
+        if (ec) return fail(ec, "fetch");
 
         // Forward back the response
         http::async_write(con, res, yield[ec]);

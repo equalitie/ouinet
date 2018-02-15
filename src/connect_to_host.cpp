@@ -13,7 +13,6 @@ using namespace ouinet;
 GenericConnection
 ouinet::connect_to_host( asio::io_service& ios
                        , beast::string_view host_and_port
-                       , sys::error_code& ec
                        , asio::yield_context yield)
 {
     using namespace std;
@@ -25,21 +24,17 @@ ouinet::connect_to_host( asio::io_service& ios
     string port = hp.second.to_string();
 
     tcp::socket socket(ios);
-
-    auto finish = [&socket] (auto ec, auto where) {
-        fail(ec, where);
-        return GenericConnection(move(socket));
-    };
+    sys::error_code ec;
 
     tcp::resolver resolver{ios};
 
     // Look up the domain name
     auto const lookup = resolver.async_resolve({host, port}, yield[ec]);
-    if (ec) return finish(ec, "resolve");
+    if (ec) return or_throw(yield, ec, GenericConnection(move(socket)));
 
     // Make the connection on the IP address we get from a lookup
     asio::async_connect(socket, lookup, yield[ec]);
-    if (ec) return finish(ec, "connect");
+    if (ec) return or_throw(yield, ec, GenericConnection(move(socket)));
 
     return GenericConnection(move(socket));
 }
