@@ -134,6 +134,7 @@ Vagrant.configure("2") do |config|
         libboost-thread-dev \
         libboost-filesystem-dev \
         libboost-date-time-dev \
+        libboost-regex-dev \
         libgcrypt-dev \
         libidn11-dev \
         libssl-dev \
