@@ -8,6 +8,7 @@
 #include <boost/filesystem.hpp>
 #include <iostream>
 #include <fstream>
+#include <string>
 
 #include <ipfs_cache/injector.h>
 #include <gnunet_channels/channel.h>
@@ -216,6 +217,10 @@ void listen_tcp( asio::io_service& ios
     // Start listening for connections
     acceptor.listen(asio::socket_base::max_connections, ec);
     if (ec) return fail(ec, "listen");
+
+    string ep = endpoint.address().to_string() + ":" + to_string(endpoint.port());
+    cout << "TCP Address: " << ep << endl;
+    create_ep_file("tcp", ep);
 
     for(;;)
     {
