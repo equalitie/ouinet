@@ -160,6 +160,19 @@ CacheControl::do_fetch(const Request& request, asio::yield_context yield)
 {
     sys::error_code ec;
 
+    if (get(request, http::field::if_none_match)) {
+        sys::error_code ec1, ec2;
+
+        auto res = do_fetch_fresh(request, yield[ec1]);
+        if (!ec1) return res;
+
+        auto cache_entry = do_fetch_stored(request, yield[ec2]);
+        if (!ec2) return add_warning( move(cache_entry.response)
+                                    , "111 Ouinet \"Revalidation Failed\"");
+
+        return or_throw(yield, ec1, move(res));
+    }
+
     // We could attempt retrieval from cache and then validation against the origin,
     // but for the moment we go straight to the origin (RFC7234#5.2.1.4).
     if (has_cache_control_directive(request, "no-cache")) {
@@ -277,7 +290,7 @@ static bool contains_private_data(const http::request_header<>& request)
         return true;
     }
 
-    if (split_string_pair(request.target(), '?').second.size()) {
+    if (!split_string_pair(request.target(), '?').second.empty()) {
         return true;
     }
 
@@ -312,6 +325,7 @@ static bool ok_to_cache( const http::request_header<>&  request
 
     if (req_cache_control_i != request.end()) {
         for (auto v : SplitString(req_cache_control_i->value(), ',')) {
+            // https://tools.ietf.org/html/rfc7234#section-3 (bullet #3)
             if (iequals(v, "no-store")) return false;
         }
     }
