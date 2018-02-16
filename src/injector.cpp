@@ -411,11 +411,12 @@ int main(int argc, char* argv[])
         }
     );
 
-    ipfs_cache::Injector ipfs_cache_injector(ios, (REPO_ROOT/"ipfs").native());
+    // Allocate dynamically so that we can destroy it explicityly (see bottom).
+    auto ipfs_cache_injector = make_unique<ipfs_cache::Injector>(ios, (REPO_ROOT/"ipfs").native());
 
     // Although the IPNS ID is already in IPFS's config file,
     // this just helps put all info relevant to the user right in the repo root.
-    auto ipns_id = ipfs_cache_injector.ipns_id();
+    auto ipns_id = ipfs_cache_injector->ipns_id();
     std::cout << "IPNS DB: " << ipns_id << endl;
     util::create_state_file(REPO_ROOT/"cache-ipns", ipns_id);
 
@@ -426,7 +427,7 @@ int main(int argc, char* argv[])
         asio::spawn
             ( ios
             , [&, injector_ep](asio::yield_context yield) {
-                  listen_tcp(ios, injector_ep, ipfs_cache_injector, yield);
+                  listen_tcp(ios, injector_ep, *ipfs_cache_injector, yield);
               });
     }
 
@@ -435,7 +436,7 @@ int main(int argc, char* argv[])
             ( ios
             , [&](asio::yield_context yield) {
                   string port = vm["listen-on-gnunet"].as<string>();
-                  listen_gnunet(ios, port, ipfs_cache_injector, yield);
+                  listen_gnunet(ios, port, *ipfs_cache_injector, yield);
               });
     }
 
@@ -443,11 +444,15 @@ int main(int argc, char* argv[])
         asio::spawn
             ( ios
             , [&](asio::yield_context yield) {
-                  listen_i2p(ios, ipfs_cache_injector, yield);
+                  listen_i2p(ios, *ipfs_cache_injector, yield);
               });
     }
 
     ios.run();
+
+    // We need to ensure that the injector is destroyed before the I/O service,
+    // otherwise the former may try to use the later after it has been destroyed.
+    ipfs_cache_injector = nullptr;
 
     return EXIT_SUCCESS;
 }
