@@ -1,8 +1,12 @@
+repos/client/pid
 repos/client/ipfs/
 repos/client/i2p/
 repos/client/gnunet/.config/
 repos/client/gnunet/.local/
 
+repos/injector/pid
+repos/injector/cache-*
+repos/injector/endpoint-*
 repos/injector/ipfs/
 repos/injector/i2p/
 repos/injector/gnunet/.config/
