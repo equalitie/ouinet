@@ -1,3 +1,5 @@
+.vagrant/
+
 repos/client/ipfs/
 repos/client/i2p/
 repos/client/gnunet/.config/
