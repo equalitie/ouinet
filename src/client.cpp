@@ -599,12 +599,19 @@ int main(int argc, char* argv[])
     // The io_service is required for all I/O
     asio::io_service ios;
 
+    // Trap interruptions so as to proceed to normal cleanup and exit.
+    asio::signal_set signals(ios, SIGINT, SIGTERM);
+    signals.async_wait([&](const sys::error_code& ec, int sn) {
+            if (!ec)
+                ios.stop();
+        }
+    );
+
+    auto client = std::make_unique<Client>(ios, injector_ep);
+
     asio::spawn
         ( ios
         , [&](asio::yield_context yield) {
-
-              Client client(ios, injector_ep);
-
               if (is_gnunet_endpoint(injector_ep)) {
                   namespace gc = gnunet_channels;
 
@@ -625,7 +632,7 @@ int main(int argc, char* argv[])
 
                   cout << "GNUnet ID: " << service->identity() << endl;
 
-                  client.gnunet_service = move(service);
+                  client->gnunet_service = move(service);
               }
               else if (is_i2p_endpoint(injector_ep)) {
                   auto ep = boost::get<I2PEndpoint>(injector_ep).pubkey;
@@ -640,18 +647,22 @@ int main(int argc, char* argv[])
                       return;
                   }
 
-                  client.i2p =
+                  client->i2p =
                       make_unique<Client::I2P>(Client::I2P{move(service),
                               move(connector)});
               }
 
-              do_listen( client
+              do_listen( *client
                        , local_ep
                        , ipns
                        , yield);
           });
 
     ios.run();
+
+    // We need to ensure that the client is destroyed before the I/O service,
+    // otherwise the former may try to use the later after it has been destroyed.
+    client = nullptr;
 
     return EXIT_SUCCESS;
 }
