@@ -38,6 +38,7 @@ using Response    = http::response<http::dynamic_body>;
 
 static fs::path REPO_ROOT;
 static const fs::path OUINET_CONF_FILE = "ouinet-injector.conf";
+static const fs::path OUINET_PID_FILE = "pid";
 
 //------------------------------------------------------------------------------
 // Write a small file in the repository root with the given `name` and `line` of content.
@@ -400,6 +401,15 @@ int main(int argc, char* argv[])
 
         listen_on_i2p = value == "true";
     }
+
+    if (exists(REPO_ROOT/OUINET_PID_FILE)) {
+        cerr << "Existing PID file " << REPO_ROOT/OUINET_PID_FILE
+             << "; another injector process may be running"
+             << ", otherwise please remove the file." << endl;
+        return 1;
+    }
+    // Acquire a PID file for the life of the process
+    util::PidFile pid_file(REPO_ROOT/OUINET_PID_FILE);
 
     // The io_service is required for all I/O
     asio::io_service ios;

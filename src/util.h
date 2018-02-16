@@ -2,10 +2,17 @@
 
 #include "namespaces.h"
 
+#include <unistd.h>  // for getpid()
+#include <fstream>
+#include <string>
+
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/beast/http/fields.hpp>
+#include <boost/filesystem.hpp>
+// Only available in Boost >= 1.64.0.
+////#include <boost/process/environment.hpp>
 
 namespace ouinet { namespace util {
 
@@ -166,6 +173,29 @@ static Message filter_fields(const Message& message, const Fields&... keep_field
 
     return copy;
 }
+
+///////////////////////////////////////////////////////////////////////////////
+class PidFile {
+    public:
+        PidFile(boost::filesystem::path path) : pid_path(path) {
+            std::fstream fs(pid_path.native(), std::fstream::out | std::fstream::trunc);
+            // Only available in Boost >= 1.64.0.
+            ////auto pid = boost::this_process::get_pid();
+            // TODO: Check if this works under Windows (it is declared obsolete).
+            auto pid = ::getpid();
+            fs << std::to_string(pid);
+            fs.close();
+        }
+
+        ~PidFile() {
+            try {
+                remove(pid_path);
+            } catch (...) {
+            }
+        }
+    private:
+        boost::filesystem::path pid_path;
+};
 
 ///////////////////////////////////////////////////////////////////////////////
 
