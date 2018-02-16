@@ -228,13 +228,6 @@ fetch_stored( const Request& request
 
     auto content = client.ipfs_cache->get_content(key.to_string(), yield[ec]);
 
-    // We need this remapping because CacheControl doesn't know
-    // anything about ipfs_cache.
-    // TODO: Make ipfs_cache return asio::error::not_found instead.
-    if (ec == ipfs_cache::error::key_not_found) {
-        ec = asio::error::not_found;
-    }
-
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
     // If the content does not have a meaningful time stamp,
