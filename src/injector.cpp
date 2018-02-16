@@ -41,17 +41,6 @@ static const fs::path OUINET_CONF_FILE = "ouinet-injector.conf";
 static const fs::path OUINET_PID_FILE = "pid";
 
 //------------------------------------------------------------------------------
-// Write a small file in the repository root with the given `name` and `line` of content.
-// If existing, truncate it.
-static
-void create_state_file(const string& name, const string& line) {
-    auto id_path = REPO_ROOT/name;
-    fstream id_file(id_path.native(), fstream::out | fstream::trunc);
-    id_file << line << endl;
-    id_file.close();
-}
-
-//------------------------------------------------------------------------------
 static
 void handle_bad_request( GenericConnection& con
                        , const Request& req
@@ -222,7 +211,7 @@ void listen_tcp( asio::io_service& ios
 
     string ep = endpoint.address().to_string() + ":" + to_string(endpoint.port());
     cout << "TCP Address: " << ep << endl;
-    create_state_file("endpoint-tcp", ep);
+    util::create_state_file(REPO_ROOT/"endpoint-tcp", ep);
 
     for(;;)
     {
@@ -262,7 +251,7 @@ void listen_gnunet( asio::io_service& ios
 
     auto ep = service.identity();
     cout << "GNUnet ID: " << ep << endl;
-    create_state_file("endpoint-gnunet", ep);
+    util::create_state_file(REPO_ROOT/"endpoint-gnunet", ep);
 
     gc::CadetPort port(service);
 
@@ -300,7 +289,7 @@ void listen_i2p( asio::io_service& ios
 
     auto ep = service.public_identity();
     cout << "I2P Public ID: " << ep << endl;
-    create_state_file("endpoint-i2p", ep);
+    util::create_state_file(REPO_ROOT/"endpoint-i2p", ep);
 
     while (true) {
         i2poui::Channel channel(service);
@@ -420,7 +409,7 @@ int main(int argc, char* argv[])
     // this just helps put all info relevant to the user right in the repo root.
     auto ipns_id = ipfs_cache_injector.ipns_id();
     std::cout << "IPNS DB: " << ipns_id << endl;
-    create_state_file("cache-ipns", ipns_id);
+    util::create_state_file(REPO_ROOT/"cache-ipns", ipns_id);
 
     if (vm.count("listen-on-tcp")) {
         auto const injector_ep

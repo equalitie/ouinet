@@ -105,6 +105,16 @@ Num parse_num(beast::string_view s, Num default_value) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Write a small file at the given `path` with a `line` of content.
+// If existing, truncate it.
+inline
+void create_state_file(const boost::filesystem::path& path, const std::string& line) {
+    std::fstream fs(path.native(), std::fstream::out | std::fstream::trunc);
+    fs << line << std::endl;
+    fs.close();
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Utility function to check whether an HTTP field belongs to a set. Where
 // the set is defined by second, third, fourth,... arguments.
 // E.g.:
@@ -177,14 +187,12 @@ static Message filter_fields(const Message& message, const Fields&... keep_field
 ///////////////////////////////////////////////////////////////////////////////
 class PidFile {
     public:
-        PidFile(boost::filesystem::path path) : pid_path(path) {
-            std::fstream fs(pid_path.native(), std::fstream::out | std::fstream::trunc);
+        PidFile(const boost::filesystem::path& path) : pid_path(path) {
             // Only available in Boost >= 1.64.0.
             ////auto pid = boost::this_process::get_pid();
             // TODO: Check if this works under Windows (it is declared obsolete).
             auto pid = ::getpid();
-            fs << std::to_string(pid);
-            fs.close();
+            create_state_file(pid_path, std::to_string(pid));
         }
 
         ~PidFile() {
