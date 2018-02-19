@@ -4,7 +4,10 @@ include(ExternalProject)
 ################################################################################
 # NOTE: https://stackoverflow.com/questions/37603238/fsanitize-not-using-gold-linker-in-gcc-6-1
 set(SANITIZE "-fsanitize=address -fuse-ld=gold")
+
+# For some reason we need to define both of these
 add_definitions(-DBOOST_COROUTINES_NO_DEPRECATION_WARNING)
+add_definitions(-DBOOST_COROUTINE_NO_DEPRECATION_WARNING)
 
 ################################################################################
 externalproject_add(beast
