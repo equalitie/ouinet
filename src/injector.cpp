@@ -67,7 +67,7 @@ void handle_connect_request( GenericConnection& client_c
 
     asio::io_service& ios = client_c.get_io_service();
 
-    auto origin_c = connect_to_host(ios, req["host"], ec, yield);
+    auto origin_c = connect_to_host(ios, req["host"], yield[ec]);
 
     if (ec) {
         return handle_bad_request( client_c
@@ -96,9 +96,11 @@ public:
         , injector(injector)
     {
         cc.fetch_fresh = [this](const Request& rq, asio::yield_context yield) {
-            sys::error_code ec;
-            auto rs = fetch_http_page(this->ios, rq, ec, yield);
-            return or_throw(yield, ec, move(rs));
+            return fetch_http_page(this->ios, rq, yield);
+        };
+
+        cc.fetch_stored = [this](const Request& rq, asio::yield_context yield) {
+            return this->fetch_stored(rq, yield);
         };
 
         cc.store = [this](const Request& rq, const Response& rs) {
@@ -112,7 +114,8 @@ public:
     }
 
 private:
-    void insert_content(const Request& rq, const Response& rs) {
+    void insert_content(const Request& rq, const Response& rs)
+    {
         stringstream ss;
         ss << rs;
         auto key = rq.target().to_string();
@@ -124,6 +127,32 @@ private:
                          << " " << ec.message() << endl;
                 }
             });
+    }
+
+    CacheControl::CacheEntry
+    fetch_stored(const Request& rq, asio::yield_context yield)
+    {
+        using CacheEntry = CacheControl::CacheEntry;
+
+        sys::error_code ec;
+
+        auto content = injector.get_content(rq.target().to_string(), yield[ec]);
+
+        if (ec) return or_throw<CacheEntry>(yield, ec);
+
+        http::response_parser<Response::body_type> parser;
+        parser.eager(true);
+        parser.put(asio::buffer(content.data), ec);
+        assert(!ec && "Malformed cache entry");
+
+        if (!parser.is_done()) {
+            cerr << "------- WARNING: Unfinished message in cache --------" << endl;
+            cerr << rq << parser.get() << endl;
+            cerr << "-----------------------------------------------------" << endl;
+            ec = asio::error::not_found;
+        }
+
+        return or_throw(yield, ec, CacheEntry{content.ts, parser.release()});
     }
 
 private:
@@ -158,7 +187,7 @@ void serve( GenericConnection con
         auto res = cc.fetch(req, yield[ec]);
 
         if (ec == http::error::end_of_stream) break;
-        if (ec) return fail(ec, "fetch_http_page");
+        if (ec) return fail(ec, "fetch");
 
         // Forward back the response
         http::async_write(con, res, yield[ec]);

@@ -140,9 +140,7 @@ BOOST_AUTO_TEST_CASE(test_maxage)
             BOOST_CHECK(rq.target() == "new");
         }
 
-        return or_throw( y
-                       , sys::error_code()
-                       , Entry{created, rs});
+        return Entry{created, rs};
     };
 
     cc.fetch_fresh = [&](auto rq, auto y) {
@@ -166,20 +164,43 @@ BOOST_AUTO_TEST_CASE(test_maxage)
     BOOST_CHECK_EQUAL(origin_check, 1u);
 }
 
+BOOST_AUTO_TEST_CASE(test_dont_load_cache_when_If_None_Match)
+{
+    CacheControl cc;
+
+    unsigned origin_check = 0;
+
+    cc.fetch_stored = [&](auto rq, auto y) {
+        BOOST_ERROR("Shouldn't go to cache");
+        return Entry{current_time(), Response{}};
+    };
+
+    cc.fetch_fresh = [&](auto rq, auto y) {
+        origin_check++;
+        Response rs{http::status::ok, rq.version()};
+        rs.set("X-Test", "from-origin");
+        return rs;
+    };
+
+    run_spawned([&](auto yield) {
+            Request req{http::verb::get, "foo", 11};
+            req.set(http::field::if_none_match, "abc");
+            auto rs = cc.fetch(req, yield);
+            BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
+        });
+
+    BOOST_CHECK_EQUAL(origin_check, 1u);
+}
+
 BOOST_AUTO_TEST_CASE(test_no_etag_override)
 {
     CacheControl cc;
 
-    unsigned cache_check = 0;
     unsigned origin_check = 0;
 
     cc.fetch_stored = [&](auto rq, auto y) {
-        cache_check++;
-
-        Response rs{http::status::ok, rq.version()};
-        rs.set(http::field::etag, "cache-etag");
-
-        return Entry{current_time() - seconds(10), rs};
+        BOOST_ERROR("Shouldn't go to cache");
+        return Entry{current_time(), Response{}};
     };
 
     cc.fetch_fresh = [&](auto rq, auto y) {
@@ -199,7 +220,30 @@ BOOST_AUTO_TEST_CASE(test_no_etag_override)
             cc.fetch(rq, yield);
         });
 
-    BOOST_CHECK_EQUAL(cache_check, 1u);
+    BOOST_CHECK_EQUAL(origin_check, 1u);
+}
+
+BOOST_AUTO_TEST_CASE(test_request_no_store)
+{
+    CacheControl cc;
+
+    unsigned origin_check = 0;
+
+    cc.fetch_fresh = [&](auto rq, auto y) {
+        origin_check++;
+        return Response{http::status::ok, rq.version()};
+    };
+
+    cc.store = [&](auto rq, auto rs) {
+        BOOST_ERROR("Shouldn't store");
+    };
+
+    run_spawned([&](auto yield) {
+            Request rq{http::verb::get, "mypage", 11};
+            rq.set(http::field::cache_control, "no-store");
+            cc.fetch(rq, yield);
+        });
+
     BOOST_CHECK_EQUAL(origin_check, 1u);
 }
 
@@ -257,7 +301,7 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
             }
         });
 
-    BOOST_CHECK_EQUAL(cache_check, 2u);
+    BOOST_CHECK_EQUAL(cache_check, 1u);
     BOOST_CHECK_EQUAL(origin_check, 2u);
 }
 

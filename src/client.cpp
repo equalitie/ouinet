@@ -95,18 +95,6 @@ void handle_bad_request( GenericConnection& con
 }
 
 //------------------------------------------------------------------------------
-static bool is_front_end_request(const Request& req)
-{
-    auto host = req["Host"].to_string();
-
-    if (host.substr(0, sizeof("localhost")) != "localhost") {
-        return false;
-    }
-
-    return true;
-}
-
-//------------------------------------------------------------------------------
 static
 Result<GenericConnection>
 connect_to_injector(Client& client, asio::yield_context yield)
@@ -239,13 +227,6 @@ fetch_stored( const Request& request
     auto key = request.target();
 
     auto content = client.ipfs_cache->get_content(key.to_string(), yield[ec]);
-
-    // We need this remapping because CacheControl doesn't know
-    // anything about ipfs_cache.
-    // TODO: Make ipfs_cache return asio::error::not_found instead.
-    if (ec == ipfs_cache::error::key_not_found) {
-        ec = asio::error::not_found;
-    }
 
     if (ec) return or_throw<CacheEntry>(yield, ec);
 

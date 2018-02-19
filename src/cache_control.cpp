@@ -43,6 +43,11 @@ static optional<string_view> get(const R& r, http::field f)
     return i->value();
 }
 
+inline void trim_quotes(beast::string_view& v) {
+    while (v.starts_with('"')) v.remove_prefix(1);
+    while (v.ends_with  ('"')) v.remove_suffix(1);
+};
+
 static
 optional<unsigned> get_max_age(const string_view& cache_control_value)
 {
@@ -52,6 +57,8 @@ optional<unsigned> get_max_age(const string_view& cache_control_value)
     optional<unsigned> s_maxage;
 
     auto update_max_age = [] (optional<unsigned>& max_age, string_view value) {
+        trim_quotes(value);
+
         unsigned delta = util::parse_num<unsigned>(value, unsigned(-1));
 
         // TODO: What does RFC say about malformed entries?
@@ -66,6 +73,7 @@ optional<unsigned> get_max_age(const string_view& cache_control_value)
         beast::string_view key, val;
         std::tie(key, val) = split_string_pair(kv, '=');
 
+        // FIXME: Only if the cache is shared.
         if (boost::iequals(key, "s-maxage")) {
             update_max_age(s_maxage, val);
         }
@@ -154,16 +162,46 @@ CacheControl::fetch(const Request& request, asio::yield_context yield)
     return or_throw(yield, ec, move(response));
 }
 
+static bool must_revalidate(const Request& request)
+{
+    if (get(request, http::field::if_none_match))
+        return true;
+
+    auto cache_control = get(request, http::field::cache_control);
+
+    if (cache_control) {
+        auto max_age = get_max_age(*cache_control);
+
+        if (max_age && *max_age == 0) {
+            return true;
+        }
+
+        for (auto kv : SplitString(*cache_control, ',')) {
+            if (boost::iequals(kv, "no-cache")) return true;
+            if (boost::iequals(kv, "no-store")) return true;
+        }
+    }
+
+    return false;
+}
+
 // TODO: This function is unfinished.
 Response
 CacheControl::do_fetch(const Request& request, asio::yield_context yield)
 {
     sys::error_code ec;
 
-    // We could attempt retrieval from cache and then validation against the origin,
-    // but for the moment we go straight to the origin (RFC7234#5.2.1.4).
-    if (has_cache_control_directive(request, "no-cache")) {
-        return do_fetch_fresh(request, yield);
+    if (must_revalidate(request)) {
+        sys::error_code ec1, ec2;
+
+        auto res = do_fetch_fresh(request, yield[ec1]);
+        if (!ec1) return res;
+
+        auto cache_entry = do_fetch_stored(request, yield[ec2]);
+        if (!ec2) return add_warning( move(cache_entry.response)
+                                    , "111 Ouinet \"Revalidation Failed\"");
+
+        return or_throw(yield, ec1, move(res));
     }
 
     auto cache_entry = do_fetch_stored(request, yield[ec]);
@@ -277,7 +315,7 @@ static bool contains_private_data(const http::request_header<>& request)
         return true;
     }
 
-    if (split_string_pair(request.target(), '?').second.size()) {
+    if (!split_string_pair(request.target(), '?').second.empty()) {
         return true;
     }
 
@@ -312,6 +350,7 @@ static bool ok_to_cache( const http::request_header<>&  request
 
     if (req_cache_control_i != request.end()) {
         for (auto v : SplitString(req_cache_control_i->value(), ',')) {
+            // https://tools.ietf.org/html/rfc7234#section-3 (bullet #3)
             if (iequals(v, "no-store")) return false;
         }
     }
@@ -326,6 +365,7 @@ static bool ok_to_cache( const http::request_header<>&  request
         bool allowed = false;
 
         for (auto v : SplitString(res_cache_control_i->value(), ',')) {
+            // FIXME: s-maxage contains '='
             if (iequals(v,"must-revalidate")) { allowed = true; break; }
             if (iequals(v,"public"))          { allowed = true; break; }
             if (iequals(v,"s-maxage"))        { allowed = true; break; }
