@@ -422,7 +422,7 @@ static void serve_request( GenericConnection con
 #ifndef NDEBUG
             cerr << "----- WARNING: Error fetching --------" << endl;
             cerr << "Error Code: " << ec.message() << endl;
-            cerr << req << res.base() << endl;
+            cerr << req.base() << res.base() << endl;
             cerr << "--------------------------------------" << endl;
 #endif
 
