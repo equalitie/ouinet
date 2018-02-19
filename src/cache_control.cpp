@@ -154,9 +154,11 @@ CacheControl::fetch(const Request& request, asio::yield_context yield)
     auto response = do_fetch(request, yield[ec]);
 
     if(!ec && !has_correct_content_length(response)) {
-        cerr << "----- WARNING: Incorrect content length ----" << endl;
+#ifndef NDEBUG
+        cerr << "::::: CacheControl WARNING Incorrect content length :::::" << endl;
         cerr << request << response;
-        cerr << "--------------------------------------------" << endl;
+        cerr << ":::::::::::::::::::::::::::::::::::::::::::::::::::::::::" << endl;
+#endif
     }
 
     return or_throw(yield, ec, move(response));
@@ -411,7 +413,14 @@ CacheControl::try_to_cache( const Request& request
                           , const Response& response) const
 {
     if (!store) return;
-    if (!ok_to_cache(request, response)) return;
+    if (!ok_to_cache(request, response)) {
+#ifndef NDEBUG
+        cerr << "::::: CacheControl: NOT CACHING :::::" << endl;
+        cerr << request.base() << response.base() << endl;
+        cerr << ":::::::::::::::::::::::::::::::::::::" << endl;
+#endif
+        return;
+    }
 
     // TODO: This list was created by going through some 100 responses from
     // bbc.com. Careful selection from all possible (standard) fields is

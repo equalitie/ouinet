@@ -241,9 +241,11 @@ fetch_stored( const Request& request
     assert(!ec && "Malformed cache entry");
 
     if (!parser.is_done()) {
+#ifndef NDEBUG
         cerr << "------- WARNING: Unfinished message in cache --------" << endl;
         cerr << request << parser.get() << endl;
         cerr << "-----------------------------------------------------" << endl;
+#endif
         ec = asio::error::not_found;
     }
 
@@ -407,20 +409,22 @@ static void serve_request( GenericConnection con
         // Attempt connection to origin for CONNECT requests
         if (req.method() == http::verb::connect) {
             return ASYNC_DEBUG( handle_connect_request(con, req, client, yield)
-                              , "Connect");
+                              , "Connect ", req.target());
         }
 
         request_config = route_choose_config(req, matches, default_request_config);
 
         auto res = ASYNC_DEBUG( cache_control.fetch(req, yield[ec])
-                              , "CacheControl::fetch "
+                              , "Fetch "
                               , req.target());
 
         if (ec) {
+#ifndef NDEBUG
             cerr << "----- WARNING: Error fetching --------" << endl;
             cerr << "Error Code: " << ec.message() << endl;
             cerr << req << res.base() << endl;
             cerr << "--------------------------------------" << endl;
+#endif
 
             // TODO: Better error message.
             ASYNC_DEBUG(handle_bad_request(con, req, "Not cached", yield), "Send error");
