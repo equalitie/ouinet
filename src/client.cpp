@@ -368,24 +368,24 @@ static void serve_request( GenericConnection con
         // NOTE: The matching of HTTP methods below can be simplified,
         // leaving expanded for readability.
 
-        // NOTE: The injector mechanism (when marked as "tmp") is temporarily inserted
-        // at the beginning in some places since the mechanisms following it
-        // are not implemented yet.
+        // NOTE: The injector mechanism is temporarily used in some matches
+        // instead of the mechanisms following it (commented out)
+        // since the later are not implemented yet.
 
         // Send unsafe HTTP method requests to the origin server
         // (or the proxy if that does not work).
         // NOTE: The cache need not be disabled as it should know not to
         // fetch requests in these cases.
         Match( !reqexpr::from_regex(method_getter, "(GET|HEAD|OPTIONS|TRACE)")
-             , {false, queue<responder>({responder::injector /*tmp*/, responder::origin, responder::proxy})} ),
+             , {false, queue<responder>({responder::injector/*responder::origin, responder::proxy*/})} ),
         // Do not use cache for safe but uncacheable HTTP method requests.
         // NOTE: same as above.
         Match( reqexpr::from_regex(method_getter, "(OPTIONS|TRACE)")
-             , {false, queue<responder>({responder::injector /*tmp*/, responder::origin, responder::proxy})} ),
+             , {false, queue<responder>({responder::injector/*responder::origin, responder::proxy*/})} ),
         // Do not use cache for validation HEADs.
         // Caching these is not yet supported.
         Match( reqexpr::from_regex(method_getter, "HEAD")
-             , {false, queue<responder>({responder::injector /*tmp*/, responder::origin, responder::proxy})} ),
+             , {false, queue<responder>({responder::injector})} ),
         // Force cache and default mechanisms for this site.
         Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example.com/.*")
              , {true, queue<responder>()} ),
