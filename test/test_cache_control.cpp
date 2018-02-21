@@ -180,6 +180,65 @@ BOOST_AUTO_TEST_CASE(test_maxage)
     BOOST_CHECK_EQUAL(origin_check, 1u);
 }
 
+BOOST_AUTO_TEST_CASE(test_http10_expires)
+{
+    CacheControl cc;
+
+    unsigned cache_check = 0;
+    unsigned origin_check = 0;
+
+    const auto format_time = [](posix_time::ptime t) {
+        using namespace boost::posix_time;
+        static const locale loc( locale::classic()
+                               , new time_facet("%a, %d %b %Y %H:%M:%S"));
+
+        stringstream ss;
+        ss.imbue(loc);
+        ss << t;
+        return ss.str();
+    };
+
+    cc.fetch_stored = [&](auto rq, auto y) {
+        cache_check++;
+
+        Response rs{http::status::ok, rq.version()};
+
+        auto created = current_time();
+
+        if (rq.target() == "old") {
+            rs.set( http::field::expires
+                  , format_time(current_time() - posix_time::seconds(10)));
+        }
+        else {
+            BOOST_CHECK(rq.target() == "new");
+            rs.set( http::field::expires
+                  , format_time(current_time() + posix_time::seconds(10)));
+        }
+
+        return Entry{created, rs};
+    };
+
+    cc.fetch_fresh = [&](auto rq, auto y) {
+        origin_check++;
+        Response rs{http::status::ok, rq.version()};
+        return rs;
+    };
+
+    run_spawned([&](auto yield) {
+            {
+                Request req{http::verb::get, "old", 11};
+                cc.fetch(req, yield);
+            }
+            {
+                Request req{http::verb::get, "new", 11};
+                cc.fetch(req, yield);
+            }
+        });
+
+    BOOST_CHECK_EQUAL(cache_check, 2u);
+    BOOST_CHECK_EQUAL(origin_check, 1u);
+}
+
 BOOST_AUTO_TEST_CASE(test_dont_load_cache_when_If_None_Match)
 {
     CacheControl cc;
