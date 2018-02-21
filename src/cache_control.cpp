@@ -75,9 +75,24 @@ posix_time::ptime CacheControl::parse_date(beast::string_view s)
 
     bt::ptime pt;
 
+    // https://stackoverflow.com/a/13059195/273348
+    struct membuf: std::streambuf {
+        membuf(char const* base, size_t size) {
+            char* p(const_cast<char*>(base));
+            this->setg(p, p, p + size);
+        }
+    };
+
+    struct imemstream: virtual membuf, std::istream {
+        imemstream(beast::string_view s)
+            : membuf(s.data(), s.size())
+            , std::istream(static_cast<std::streambuf*>(this)) {
+        }
+    };
+
     for(size_t i=0; i<formats_n; ++i) {
-        std::istringstream is(s.to_string());
-        is.imbue(formats[i]);
+        imemstream is(s);
+        is.istream::imbue(formats[i]);
         is >> pt;
         if(pt != bt::ptime()) return pt;
     }
