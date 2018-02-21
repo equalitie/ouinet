@@ -46,6 +46,22 @@ template<class F> static void run_spawned(F&& f) {
     ios.run();
 }
 
+BOOST_AUTO_TEST_CASE(test_parse_date)
+{
+    const auto p = [](const char* s) {
+        auto date = CacheControl::parse_date(s);
+        stringstream ss;
+        ss << date;
+        return ss.str();
+    };
+
+    // https://tools.ietf.org/html/rfc7234#section-5.3
+    BOOST_CHECK_EQUAL(p("Sun, 06 Nov 1994 08:49:37 GMT"),   "1994-Nov-06 08:49:37");
+    BOOST_CHECK_EQUAL(p("\" Sun, 06 Nov 1994 08:49:37 GMT"),"1994-Nov-06 08:49:37");
+    BOOST_CHECK_EQUAL(p("Sunday, 06-Nov-94 08:49:37 GMT"),  "2094-Nov-06 08:49:37");
+    BOOST_CHECK_EQUAL(p(" Sunday, 06-Nov-94 08:49:37 GMT"), "2094-Nov-06 08:49:37");
+}
+
 BOOST_AUTO_TEST_CASE(test_cache_origin_fail)
 {
     CacheControl cc;
