@@ -48,58 +48,6 @@ inline void trim_quotes(beast::string_view& v) {
     while (v.ends_with  ('"')) v.remove_suffix(1);
 };
 
-posix_time::ptime CacheControl::parse_date(beast::string_view s)
-{
-    // Trim quotes from the beginning
-    while (s.starts_with('"')) s.remove_prefix(1);
-
-    namespace bt = boost::posix_time;
-
-    static const auto format = [](const char* fmt) {
-        using std::locale;
-        return locale(locale::classic(), new bt::time_input_facet(fmt));
-    };
-
-    // https://www.w3.org/Protocols/rfc2616/rfc2616-sec3.html#sec3.3
-
-    // Format spec:
-    // http://www.boost.org/doc/libs/1_60_0/doc/html/date_time/date_time_io.html
-    static const std::locale formats[] = {
-        format("%a, %d %b %Y %H:%M:%S"),
-        format("%A, %d-%b-%y %H:%M:%S"),
-        // TODO: ANSI C's format not done yet because Boost doesn't seem
-        // to support parsing days of month in 1-digit format.
-    };
-
-    const size_t formats_n = sizeof(formats)/sizeof(formats[0]);
-
-    bt::ptime pt;
-
-    // https://stackoverflow.com/a/13059195/273348
-    struct membuf: std::streambuf {
-        membuf(char const* base, size_t size) {
-            char* p(const_cast<char*>(base));
-            this->setg(p, p, p + size);
-        }
-    };
-
-    struct imemstream: virtual membuf, std::istream {
-        imemstream(beast::string_view s)
-            : membuf(s.data(), s.size())
-            , std::istream(static_cast<std::streambuf*>(this)) {
-        }
-    };
-
-    for(size_t i=0; i<formats_n; ++i) {
-        imemstream is(s);
-        is.istream::imbue(formats[i]);
-        is >> pt;
-        if(pt != bt::ptime()) return pt;
-    }
-
-    return pt;
-}
-
 static
 optional<unsigned> get_max_age(const string_view& cache_control_value)
 {
@@ -142,35 +90,24 @@ optional<unsigned> get_max_age(const string_view& cache_control_value)
 static
 bool is_expired(const CacheControl::CacheEntry& entry)
 {
+    using boost::optional;
+
     // RFC2616: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.9.3
 
-    static const auto now = [] {
-        return posix_time::second_clock::universal_time();
-    };
-
-    static const auto http10_is_expired = [](const auto& entry) {
-        auto expires = get(entry.response, http::field::expires);
-
-        if (expires) {
-            auto exp_date = CacheControl::parse_date(*expires);
-            if (exp_date != posix_time::ptime()) {
-                return exp_date < now();
-            }
-        }
-
-        return true;
-    };
+    // TODO: Also check the HTTP/1.0 'Expires' header field.
 
     auto cache_control_value = get(entry.response, http::field::cache_control);
 
     if (!cache_control_value) {
-        return http10_is_expired(entry);
+        return true;
     }
 
     optional<unsigned> max_age = get_max_age(*cache_control_value);
-    if (!max_age) return http10_is_expired(entry);
+    if (!max_age) return true;
 
-    return now() > entry.time_stamp + posix_time::seconds(*max_age);
+    auto now = posix_time::second_clock::universal_time();
+
+    return now > entry.time_stamp + posix_time::seconds(*max_age);
 }
 
 bool

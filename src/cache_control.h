@@ -33,9 +33,6 @@ public:
     void max_cached_age(const boost::posix_time::time_duration&);
     boost::posix_time::time_duration max_cached_age() const;
 
-    // Returns ptime() if parsing fails.
-    static boost::posix_time::ptime parse_date(beast::string_view);
-
 private:
     Response do_fetch(const Request&, asio::yield_context);
     Response do_fetch_fresh(const Request&, asio::yield_context);
