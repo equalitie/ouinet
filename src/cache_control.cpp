@@ -210,6 +210,15 @@ static bool has_correct_content_length(const Response& rs)
     return rs.body().size() == length;
 }
 
+static
+Response bad_gateway(const Request& req)
+{
+    Response res{http::status::bad_gateway, req.version()};
+    res.set(http::field::server, "Ouinet");
+    res.keep_alive(req.keep_alive());
+    return res;
+}
+
 Response
 CacheControl::fetch(const Request& request, asio::yield_context yield)
 {
@@ -254,6 +263,8 @@ static bool must_revalidate(const Request& request)
 Response
 CacheControl::do_fetch(const Request& request, asio::yield_context yield)
 {
+    namespace err = asio::error;
+
     sys::error_code ec;
 
     if (must_revalidate(request)) {
@@ -266,19 +277,37 @@ CacheControl::do_fetch(const Request& request, asio::yield_context yield)
         if (!ec2) return add_warning( move(cache_entry.response)
                                     , "111 Ouinet \"Revalidation Failed\"");
 
-        return or_throw(yield, ec1, move(res));
+        if (ec1 == err::operation_aborted || ec2 == err::operation_aborted) {
+            return or_throw(yield, err::operation_aborted, move(res));
+        }
+
+        return bad_gateway(request);
     }
 
     auto cache_entry = do_fetch_stored(request, yield[ec]);
 
-    if (ec && ec != asio::error::operation_not_supported
-           && ec != asio::error::not_found) {
+    if (ec && ec != err::operation_not_supported
+           && ec != err::not_found) {
         return or_throw<Response>(yield, ec);
     }
 
     if (ec) {
-        return do_fetch_fresh(request, yield);
+        // Retrieving from cache failed.
+        sys::error_code fetch_ec;
+
+        auto res = do_fetch_fresh(request, yield[fetch_ec]);
+
+        if (!fetch_ec) return res;
+
+        if (fetch_ec == err::operation_aborted) {
+            return or_throw<Response>(yield, ec);
+        }
+
+        return bad_gateway(request);
     }
+
+    // If we're here that means that we were able to retrieve something
+    // from the cache.
 
     if (has_cache_control_directive(cache_entry.response, "private")
         || is_older_than_max_cache_age(cache_entry.time_stamp)) {
