@@ -3,7 +3,11 @@ set(BOOST_VERSION 1.62)
 include(ExternalProject)
 ################################################################################
 # NOTE: https://stackoverflow.com/questions/37603238/fsanitize-not-using-gold-linker-in-gcc-6-1
-set(SANITIZE "-fsanitize=address -fuse-ld=gold")
+# NOTE2: Need to disable ASan until Boost.Asio switches to Boost.Coroutine2
+#        because trowing (and catching) exceptions inside a coroutine confuses
+#        ASan. More info:
+#        https://github.com/boostorg/coroutine/issues/30#issuecomment-325574878
+#set(SANITIZE "-fsanitize=address -fuse-ld=gold")
 
 # For some reason we need to define both of these
 add_definitions(-DBOOST_COROUTINES_NO_DEPRECATION_WARNING)
@@ -61,7 +65,7 @@ add_executable(client ${client_sources})
 add_dependencies(client beast ${IPFS_CACHE_TARGET} gnunet-channels i2poui)
 
 target_link_libraries(client
-    i2poui
+    i2poui i2pdclient libi2pd
     ${Boost_LIBRARIES}
     ${IPFS_CACHE_LIBRARIES}
     ${GNUNET_CHANNELS_LIBRARIES})
@@ -84,7 +88,7 @@ add_executable(injector ${injector_sources})
 add_dependencies(injector beast ${IPFS_CACHE_TARGET} gnunet-channels i2poui)
 
 target_link_libraries(injector
-    i2poui
+    i2poui i2pdclient libi2pd
     ${Boost_LIBRARIES}
     ${IPFS_CACHE_LIBRARIES}
     ${GNUNET_CHANNELS_LIBRARIES})
