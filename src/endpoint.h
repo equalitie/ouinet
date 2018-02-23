@@ -4,7 +4,6 @@
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/optional.hpp>
 #include "split_string.h"
-#include "result.h"
 
 namespace ouinet {
 
@@ -30,10 +29,10 @@ boost::optional<Endpoint> parse_endpoint(beast::string_view endpoint)
 
     auto as_tcp_endpoint = []( string_view host
                              , string_view port
-                             ) -> Result<tcp::endpoint> {
+                             ) -> boost::optional<tcp::endpoint> {
         sys::error_code ec;
         auto ip = asio::ip::address::from_string(host.to_string(), ec);
-        if (ec) return ec;
+        if (ec) return boost::none;
         return tcp::endpoint(ip, strtol(port.data(), 0, 10));
     };
 

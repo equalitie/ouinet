@@ -67,6 +67,8 @@ private:
     };
 
 public:
+    GenericConnection() {}
+
     template<class AsyncRWStream>
     GenericConnection(AsyncRWStream&& impl)
         : _impl(new Wrapper<AsyncRWStream>(std::forward<AsyncRWStream>(impl)))
