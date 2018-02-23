@@ -1,11 +1,1 @@
 .vagrant/
-
-repos/client/ipfs/
-repos/client/i2p/
-repos/client/gnunet/.config/
-repos/client/gnunet/.local/
-
-repos/injector/ipfs/
-repos/injector/i2p/
-repos/injector/gnunet/.config/
-repos/injector/gnunet/.local/
