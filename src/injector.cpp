@@ -95,8 +95,12 @@ public:
         : ios(ios)
         , injector(injector)
     {
-        cc.fetch_fresh = [this](const Request& rq, asio::yield_context yield) {
-            return fetch_http_page(this->ios, rq, yield);
+        cc.fetch_fresh = [this, &ios](const Request& rq, asio::yield_context yield) {
+            auto host = rq["host"].to_string();
+            sys::error_code ec;
+            auto con = connect_to_host(ios, host, yield[ec]);
+            if (ec) return or_throw<Response>(yield, ec);
+            return fetch_http_page(ios, con, rq, yield);
         };
 
         cc.fetch_stored = [this](const Request& rq, asio::yield_context yield) {
