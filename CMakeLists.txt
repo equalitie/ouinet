@@ -65,7 +65,7 @@ add_executable(client ${client_sources})
 add_dependencies(client beast ${IPFS_CACHE_TARGET} gnunet-channels i2poui)
 
 target_link_libraries(client
-    i2poui
+    i2poui i2pdclient libi2pd
     ${Boost_LIBRARIES}
     ${IPFS_CACHE_LIBRARIES}
     ${GNUNET_CHANNELS_LIBRARIES})
@@ -88,7 +88,7 @@ add_executable(injector ${injector_sources})
 add_dependencies(injector beast ${IPFS_CACHE_TARGET} gnunet-channels i2poui)
 
 target_link_libraries(injector
-    i2poui
+    i2poui i2pdclient libi2pd
     ${Boost_LIBRARIES}
     ${IPFS_CACHE_LIBRARIES}
     ${GNUNET_CHANNELS_LIBRARIES})
