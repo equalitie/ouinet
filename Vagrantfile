@@ -142,10 +142,12 @@ Vagrant.configure("2") do |config|
         zlib1g-dev
 
       # Install testing tools
+      echo wireshark-common wireshark-common/install-setuid boolean true | debconf-set-selections
       DEBIAN_FRONTEND=noninteractive apt-get install -y \
         firefox-esr \
         wireshark \
         xauth
+      adduser vagrant wireshark
     SHELL
 
     vm.vm.provision "shell", inline: <<-SHELL
