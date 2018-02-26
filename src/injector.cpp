@@ -151,7 +151,9 @@ private:
 
         if (!parser.is_done()) {
             cerr << "------- WARNING: Unfinished message in cache --------" << endl;
-            cerr << rq << parser.get() << endl;
+            assert(parser.is_header_done() && "Malformed response head did not cause error");
+            auto rp = parser.get();
+            cerr << rq << rp.base() << "<" << rp.body().size() << " bytes in body>" << endl;
             cerr << "-----------------------------------------------------" << endl;
             ec = asio::error::not_found;
         }

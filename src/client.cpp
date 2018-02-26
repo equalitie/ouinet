@@ -240,7 +240,9 @@ fetch_stored( const Request& request
     if (!parser.is_done()) {
 #ifndef NDEBUG
         cerr << "------- WARNING: Unfinished message in cache --------" << endl;
-        cerr << request << parser.get() << endl;
+        assert(parser.is_header_done() && "Malformed response head did not cause error");
+        auto response = parser.get();
+        cerr << request << response.base() << "<" << response.body().size() << " bytes in body>" << endl;
         cerr << "-----------------------------------------------------" << endl;
 #endif
         ec = asio::error::not_found;
