@@ -25,6 +25,9 @@
 #include "increase_open_file_limit.h"
 #include "full_duplex_forward.h"
 
+#include "ouiservice.h"
+#include "ouiservice/i2p.h"
+
 using namespace std;
 using namespace ouinet;
 
@@ -211,117 +214,26 @@ void spawn_and_serve( Connection&& connection
                  });
 }
 
-//------------------------------------------------------------------------------
-static
-void listen_tcp( asio::io_service& ios
-               , tcp::endpoint endpoint
-               , ipfs_cache::Injector& ipfs_cache_injector
-               , asio::yield_context yield)
-{
-    sys::error_code ec;
-
-    // Open the acceptor
-    tcp::acceptor acceptor(ios);
-
-    acceptor.open(endpoint.protocol(), ec);
-    if (ec) return fail(ec, "open");
-
-    acceptor.set_option(asio::socket_base::reuse_address(true));
-
-    // Bind to the server address
-    acceptor.bind(endpoint, ec);
-    if (ec) return fail(ec, "bind");
-
-    // Start listening for connections
-    acceptor.listen(asio::socket_base::max_connections, ec);
-    if (ec) return fail(ec, "listen");
-
-    for(;;)
-    {
-        tcp::socket socket(ios);
-        acceptor.async_accept(socket, yield[ec]);
-        if(ec) {
-            fail(ec, "accept");
-            // Wait one second before we start accepting again.
-            async_sleep(ios, chrono::seconds(1), yield);
-        }
-        else {
-            spawn_and_serve(move(socket), ipfs_cache_injector);
-        }
-    }
-}
-
-//------------------------------------------------------------------------------
-static
-void listen_gnunet( asio::io_service& ios
-                  , string port_str
+static void listen( asio::io_service& ios
                   , ipfs_cache::Injector& ipfs_cache_injector
-                  , asio::yield_context yield)
+                  , OuiServiceServer& proxy_server
+                  , asio::yield_context yield
+                  )
 {
-    namespace gc = gnunet_channels;
-
-    gc::Service service((REPO_ROOT/"gnunet"/"peer.conf").native(), ios);
-
-    sys::error_code ec;
-
-    cout << "Setting up GNUnet..." << endl;
-    service.async_setup(yield[ec]);
-
+    sys::error_code ec = proxy_server.start_listen(yield);
     if (ec) {
-        cerr << "Failed to setup GNUnet service: " << ec.message() << endl;
+        cerr << "Failed to setup ouiservice proxy server: " << ec.message() << endl;
         return;
     }
 
-    cout << "GNUnet ID: " << service.identity() << endl;
-
-    gc::CadetPort port(service);
-
     while (true) {
-        gc::Channel channel(service);
-        port.open(channel, port_str, yield[ec]);
-
-        if (ec) {
-            cerr << "Failed to accept: " << ec.message() << endl;
+        Result<std::unique_ptr<GenericConnection>> connection = proxy_server.accept(yield);
+        if (connection.is_error()) {
+            cerr << "Failed to accept: " << connection.get_error().message() << endl;
             async_sleep(ios, chrono::milliseconds(100), yield);
-            continue;
+        } else {
+            spawn_and_serve(std::move(*connection), ipfs_cache_injector);
         }
-
-        spawn_and_serve(move(channel), ipfs_cache_injector);
-    }
-}
-
-//------------------------------------------------------------------------------
-static
-void listen_i2p( asio::io_service& ios
-               , ipfs_cache::Injector& ipfs_cache_injector
-               , asio::yield_context yield)
-{
-    i2poui::Service service((REPO_ROOT/"i2p").native(), ios);
-
-    sys::error_code ec;
-
-    cout << "Setting up I2Poui service..." << endl;
-    i2poui::Acceptor acceptor = service.build_acceptor(yield[ec]);
-
-    if (ec) {
-        cerr << "Failed to setup I2Poui service: " << ec.message() << endl;
-        return;
-    }
-
-    cout << "I2P Public ID: " << service.public_identity() << endl;
-
-
-    while (true) {
-        i2poui::Channel channel(service);
-        acceptor.accept(channel, yield[ec]);
-
-        if (ec) {
-            cerr << "Failed to accept: " << ec.message() << endl;
-            async_sleep(ios, chrono::milliseconds(100), yield);
-            continue;
-        }
-
-        spawn_and_serve(move(channel), ipfs_cache_injector);
     }
 }
 
@@ -418,33 +330,34 @@ int main(int argc, char* argv[])
 
     std::cout << "IPNS DB: " << ipfs_cache_injector.ipns_id() << endl;
 
-    if (vm.count("listen-on-tcp")) {
-        auto const injector_ep
-            = util::parse_endpoint(vm["listen-on-tcp"].as<string>());
+    OuiServiceServer proxy_server;
 
-        asio::spawn
-            ( ios
-            , [&, injector_ep](asio::yield_context yield) {
-                  listen_tcp(ios, injector_ep, ipfs_cache_injector, yield);
-              });
+    std::unique_ptr<TcpOuiServiceServer> tcp_server;
+
+    std::unique_ptr<GnunetOuiServiceServer> gnunet_server;
+
+    std::unique_ptr<ItpOuiService> i2p_service;
+    std::unique_ptr<I2pOuiServiceServer> i2p_server;
+
+    if (vm.count("listen-on-tcp")) {
+        tcp_server = std::make_unique<TcpOuiServiceServer>(vm["listen-on-tcp"].as<string>());
+        proxy_server.add(tcp_server);
     }
 
     if (vm.count("listen-on-gnunet")) {
-        asio::spawn
-            ( ios
-            , [&](asio::yield_context yield) {
-                  string port = vm["listen-on-gnunet"].as<string>();
-                  listen_gnunet(ios, port, ipfs_cache_injector, yield);
-              });
+        // ...
     }
 
-    if (listen_on_i2p) {
-        asio::spawn
-            ( ios
-            , [&](asio::yield_context yield) {
-                  listen_i2p(ios, ipfs_cache_injector, yield);
-              });
+    if (vm.count("listen-on-i2p")) {
+        std::string i2p_private_key; // This should be a config setting?
+        i2p_service = std::make_unique<I2pOuiService>(); // ...
+        i2p_server = std::make_unique<I2pOuiServiceServer>(*i2p_service, i2p_private_key);
+        proxy_server.add(i2p_server);
     }
+
+    asio::spawn(ios, [&](asio::yield_context yield) {
+        listen(ios, ipfs_cache_injector, proxy_server, yield);
+    });
 
     ios.run();
 
