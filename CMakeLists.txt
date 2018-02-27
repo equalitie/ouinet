@@ -51,6 +51,7 @@ include_directories(
     "${BEAST_DIR}/include"
     "${IPFS_CACHE_INCLUDE_DIR}"
     "${GNUNET_CHANNELS_INCLUDE_DIR}"
+    "${IPFS_CACHE_JSON_INCLUDE_DIR}"
     "${I2POUI_INCLUDE_DIR}")
 
 file(GLOB client_sources
