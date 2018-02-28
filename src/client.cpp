@@ -23,7 +23,6 @@
 #include "client_front_end.h"
 #include "generic_connection.h"
 #include "util.h"
-#include "result.h"
 #include "blocker.h"
 #include "async_sleep.h"
 #include "increase_open_file_limit.h"
@@ -96,11 +95,13 @@ void handle_bad_request( GenericConnection& con
 
 //------------------------------------------------------------------------------
 static
-Result<GenericConnection>
+GenericConnection
 connect_to_injector(Client& client, asio::yield_context yield)
 {
+    namespace error = asio::error;
+
     struct Visitor {
-        using Ret = Result<GenericConnection>;
+        using Ret = GenericConnection;
 
         sys::error_code ec;
         Client& client;
@@ -112,35 +113,31 @@ connect_to_injector(Client& client, asio::yield_context yield)
         Ret operator()(const tcp::endpoint& ep) {
             tcp::socket socket(client.ios);
             socket.async_connect(ep, yield[ec]);
-
-            if (ec) return ec;
-            return GenericConnection(move(socket));
+            return or_throw(yield, ec, GenericConnection(move(socket)));
         }
 
         Ret operator()(const GnunetEndpoint& ep) {
             using Channel = gnunet_channels::Channel;
 
             if (!client.gnunet_service) {
-                return Ret::make_error(asio::error::no_protocol_option);
+                return or_throw<Ret>(yield, error::no_protocol_option);
             }
 
             Channel ch(*client.gnunet_service);
             ch.connect(ep.host, ep.port, yield[ec]);
 
-            if (ec) return ec;
-            return GenericConnection(move(ch));
+            return or_throw(yield, ec, GenericConnection(move(ch)));
         }
 
         Ret operator()(const I2PEndpoint&) {
             if (!client.i2p) {
-                return Ret::make_error(asio::error::no_protocol_option);
+                return or_throw<Ret>(yield, error::no_protocol_option);
             }
 
             i2poui::Channel ch(client.i2p->service);
             ch.connect(client.i2p->connector, yield[ec]);
 
-            if (ec) return ec;
-            return GenericConnection(move(ch));
+            return or_throw(yield, ec, GenericConnection(move(ch)));
         }
     };
 
@@ -175,7 +172,7 @@ void handle_connect_request( GenericConnection& client_c
         return handle_bad_request(client_c, req, "Can't connect to injector", yield[ec]);
     }
 
-    http::async_write(*injector_c, const_cast<Request&>(req), yield[ec]);
+    http::async_write(injector_c, const_cast<Request&>(req), yield[ec]);
 
     if (ec) {
         // TODO: Does an RFC dicate a particular HTTP status code?
@@ -184,7 +181,7 @@ void handle_connect_request( GenericConnection& client_c
 
     beast::flat_buffer buffer;
     Response res;
-    http::async_read(*injector_c, buffer, res, yield[ec]);
+    http::async_read(injector_c, buffer, res, yield[ec]);
 
     if (ec) {
         // TODO: Does an RFC dicate a particular HTTP status code?
@@ -199,7 +196,7 @@ void handle_connect_request( GenericConnection& client_c
         return;
     }
 
-    full_duplex(client_c, *injector_c, yield);
+    full_duplex(client_c, injector_c, yield);
 }
 
 //------------------------------------------------------------------------------
@@ -243,7 +240,9 @@ fetch_stored( const Request& request
     if (!parser.is_done()) {
 #ifndef NDEBUG
         cerr << "------- WARNING: Unfinished message in cache --------" << endl;
-        cerr << request << parser.get() << endl;
+        assert(parser.is_header_done() && "Malformed response head did not cause error");
+        auto response = parser.get();
+        cerr << request << response.base() << "<" << response.body().size() << " bytes in body>" << endl;
         cerr << "-----------------------------------------------------" << endl;
 #endif
         ec = asio::error::not_found;
@@ -284,14 +283,14 @@ fetch_fresh( const Request& request
                 if (!client.front_end.is_injector_proxying_enabled()) {
                     continue;
                 }
-                auto inj_con = connect_to_injector(client, yield);
-                if (inj_con.is_error()) {
-                    last_error = inj_con.get_error();
+                sys::error_code ec;
+                auto inj_con = connect_to_injector(client, yield[ec]);
+                if (ec) {
+                    last_error = ec;
                     continue;
                 }
-                sys::error_code ec;
                 // Forward the request to the injector
-                auto res = fetch_http_page(client.ios, *inj_con, request, yield[ec]);
+                auto res = fetch_http_page(client.ios, inj_con, request, yield[ec]);
                 if (!ec) return res;
                 last_error = ec;
                 continue;
