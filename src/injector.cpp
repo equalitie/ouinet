@@ -220,19 +220,20 @@ static void listen( asio::io_service& ios
                   , asio::yield_context yield
                   )
 {
-    sys::error_code ec = proxy_server.start_listen(yield);
+    sys::error_code ec;
+    proxy_server.start_listen(yield[ec]);
     if (ec) {
         cerr << "Failed to setup ouiservice proxy server: " << ec.message() << endl;
         return;
     }
 
     while (true) {
-        Result<std::unique_ptr<GenericConnection>> connection = proxy_server.accept(yield);
-        if (connection.is_error()) {
-            cerr << "Failed to accept: " << connection.get_error().message() << endl;
+        GenericConnection connection = proxy_server.accept(yield[ec]);
+        if (ec) {
+            cerr << "Failed to accept: " << ec.message() << endl;
             async_sleep(ios, chrono::milliseconds(100), yield);
         } else {
-            spawn_and_serve(std::move(*connection), ipfs_cache_injector);
+            spawn_and_serve(std::move(connection), ipfs_cache_injector);
         }
     }
 }
@@ -330,7 +331,7 @@ int main(int argc, char* argv[])
 
     std::cout << "IPNS DB: " << ipfs_cache_injector.ipns_id() << endl;
 
-    OuiServiceServer proxy_server;
+    OuiServiceServer proxy_server(ios);
 
     std::unique_ptr<TcpOuiServiceServer> tcp_server;
 
