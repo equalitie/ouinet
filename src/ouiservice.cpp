@@ -1,4 +1,8 @@
 #include "ouiservice.h"
+#include "or_throw.h"
+#include <boost/asio.hpp>
+#include "namespaces.h"
+#include "blocker.h"
 
 #include "or_throw.h"
 
@@ -6,7 +10,10 @@ namespace ouinet {
 
 OuiServiceServer::OuiServiceServer(asio::io_service& ios):
 	_ios(ios),
-	_is_listening(false)
+	_is_listening(false),
+	_is_canceling_listen(false),
+	_is_accepting(false),
+	_is_canceling_accept(false)
 {}
 
 void OuiServiceServer::add(std::unique_ptr<OuiServiceImplementationServer>&& implementation)
@@ -14,27 +21,30 @@ void OuiServiceServer::add(std::unique_ptr<OuiServiceImplementationServer>&& imp
 	_implementations.push_back(std::move(implementation));
 }
 
+// NOTE Leaky abstraction: Even if we do start_listen in parallel, this API
+// forces all the implementations to wait for the slowest one.
 void OuiServiceServer::start_listen(asio::yield_context yield)
 {
 	if (_is_listening) {
-		// TODO: Figure out how to use custom error codes
-		or_throw(yield, sys::errc::invalid_argument);
-		return;
+		return or_throw(yield, asio::error::invalid_argument);
 	}
 	
-	// TODO: This needs to happen in parallel
+	Blocker blocker(_ios);
+	
 	for (auto it : _implementations) {
-		sys::error_code ec;
-		it->start_listen(yield[ec]);
-		if (!ec) {
-			_listening_implementations.push_back(*it);
-		}
+		asio::spawn(_ios, [this, it, b = blocker.make_block()] (asio::yield_context yield) {
+			sys::error_code ec;
+			it->start_listen(yield[ec]);
+			if (ec) return;
+			_listening_implementations.push_back(it);
+		});
 	}
+	
+	blocker.wait(yield);
 	
 	if (_listening_implementations.empty()) {
 		// TODO: Figure out how to use custom error codes
-		or_throw(yield, sys::errc::connection_refused);
-		return;
+		return or_throw(yield, asio::error::connection_refused);
 	}
 	
 	_is_listening = true;
@@ -50,26 +60,74 @@ void OuiServiceServer::stop_listen(asio::yield_context yield)
 	_is_listening = false;
 }
 
+// NOTE: Leaky abstraction: In the original architecture, each individual
+// transoport started to serve connections right after it accepted it. With
+// this API, each time a connection is accepted, it triggers an unnecessary
+// round of canceling acceptation on the rest of the transport and only once
+// each one is of them is cancelled, the caller of this function can make use
+// of the newly accepted connection.
+//
+// The speed at which servers can accept connections is usually something that
+// devs prefer to optimize extensivel, not the other way around.
 GenericConnection OuiServiceServer::accept(asio::yield_context yield)
 {
-	using Ret = Result<std::unique_ptr<GenericConnection>>;
-	
 	if (!_is_listening) {
 		// TODO: Figure out how to use custom error codes
-		// TODO: Add empty-value support to GenericConnection
-		return or_throw<GenericConnection>(yield, sys::errc::invalid_argument);
+		return or_throw<GenericConnection>(yield, asio::error::invalid_argument);
 	}
 	
-	// Try accept()ing each of _listening_implementations in parallel
-	// When the first one returns successfully, cancel all the others, and return that one.
-	// If all fail, return an error.
+	assert(!_is_accepting);
+	assert(!_is_canceling_accept);
+	_is_accepting = true;
+	
+	Blocker blocker(_ios);
+	
+	bool accepted = false;
+	sys::error_code first_error; // Only set if accepted == false
+	GenericConnection connection;
+	
+	for (auto it : _listening_implementations) {
+		asio::spawn(_ios, [
+			  this
+			, it
+			, &connection
+			, &accepted
+			, &first_error
+			, b = blocker.make_block()
+		] (asio::yield_context yield) {
+			sys::error_code ec;
+			connection = it->accept(yield[ec]);
+			if (accepted) return;
+			if (ec && !first_error) first_error = ec;
+			if (ec) return;
+			accepted = true;
+			for (auto it_ : _listening_implementations) {
+				if (it == it_ || !it_->is_accepting()) continue;
+				sys::error_code ec;
+				it_->cancel_accept(yield[ec]);
+			}
+		});
+	}
+	
+	blocker.wait(yield);
+	
+	_is_accepting = false;
+	return or_throw(yield, first_error, std::move(connection));
 }
 
 void OuiServiceServer::cancel_accept()
 {
-	// Cancel the active accept() call
+	assert(!_is_canceling_accept);
+	_is_canceling_accept = true;
+	
+	if (!_is_accepting) return;
+	
+	for (auto it : _listening_implementations) {
+		if (!it->is_accepting()) continue;
+		it->cancel_accept(yield);
+	}
+	
+	_is_canceling_accept = false;
 }
-
-
 
 } // ouinet namespace

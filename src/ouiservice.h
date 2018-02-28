@@ -17,6 +17,8 @@ class OuiServiceImplementationServer
 	
 	virtual GenericConnection accept(asio::yield_context yield) = 0;
 	virtual void cancel_accept() = 0;
+	
+	virtual bool is_accepting() = 0;
 };
 
 class OuiServiceServer
@@ -36,6 +38,9 @@ class OuiServiceServer
 	asio::io_service& _ios;
 	std::vector<std::unique_ptr<OuiServiceImplementationServer>> _implementations;
 	bool _is_listening;
+	bool _is_canceling_listen;
+	bool _is_accepting;
+	bool _is_canceling_accept;
 	std::vector<OuiServiceImplementationServer*> _listening_implementations;
 };
 
