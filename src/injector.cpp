@@ -298,11 +298,15 @@ void listen_gnunet( asio::io_service& ios
 
     sys::error_code ec;
 
+    auto service_canceler = g_shutter.add([&] { service.close(); });
+
     cout << "Setting up GNUnet..." << endl;
     service.async_setup(yield[ec]);
 
     if (ec) {
-        cerr << "Failed to setup GNUnet service: " << ec.message() << endl;
+        if (ec != asio::error::operation_aborted) {
+            cerr << "Failed to setup GNUnet service: " << ec.message() << endl;
+        }
         return;
     }
 
@@ -321,9 +325,7 @@ void listen_gnunet( asio::io_service& ios
             continue;
         }
 
-        // TODO: Remove the second argument to GenericConnection once the
-        // GNUnet Channel implements the 'close' member function.
-        auto c = make_shared<GenericConnection>(move(channel), [](auto&){});
+        auto c = make_shared<GenericConnection>(move(channel));
         spawn_and_serve(c, ipfs_cache_injector);
     }
 }

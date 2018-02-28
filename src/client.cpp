@@ -128,9 +128,7 @@ connect_to_injector(Client& client, asio::yield_context yield)
             Channel ch(*client.gnunet_service);
             ch.connect(ep.host, ep.port, yield[ec]);
 
-            // TODO: Remove the second argument to GenericConnection once the
-            // GNUnet Channel implements the 'close' member function.
-            return or_throw(yield, ec, GenericConnection(move(ch), [](auto&){}));
+            return or_throw(yield, ec, GenericConnection(move(ch)));
         }
 
         Ret operator()(const I2PEndpoint&) {
