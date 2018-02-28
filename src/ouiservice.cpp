@@ -65,7 +65,7 @@ GenericConnection OuiServiceServer::accept(asio::yield_context yield)
 	// If all fail, return an error.
 }
 
-void OuiServiceServer::cancel_accept(asio::yield_context yield)
+void OuiServiceServer::cancel_accept()
 {
 	// Cancel the active accept() call
 }

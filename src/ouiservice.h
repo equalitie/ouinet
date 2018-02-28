@@ -4,7 +4,6 @@
 #include <boost/asio/spawn.hpp>
 
 #include "generic_connection.h"
-#include "result.h"
 
 namespace ouinet {
 
@@ -17,7 +16,7 @@ class OuiServiceImplementationServer
 	virtual void stop_listen(asio::yield_context yield) = 0;
 	
 	virtual GenericConnection accept(asio::yield_context yield) = 0;
-	virtual void cancel_accept(asio::yield_context yield) = 0;
+	virtual void cancel_accept() = 0;
 };
 
 class OuiServiceServer
@@ -31,7 +30,7 @@ class OuiServiceServer
 	void stop_listen(asio::yield_context yield);
 	
 	GenericConnection accept(asio::yield_context yield);
-	void cancel_accept(asio::yield_context yield);
+	void cancel_accept();
 	
 	private:
 	asio::io_service& _ios;
@@ -45,7 +44,6 @@ class OuiServiceImplementationClient
 	public:
 	virtual ~OuiServiceImplementationClient() {}
 	
-	virtual bool match_endpoint(std::string endpoint) = 0;
 	virtual GenericConnection connect(asio::yield_context yield) = 0;
 	virtual void cancel_connect(asio::yield_context yield) = 0;
 };
@@ -58,7 +56,7 @@ class OuiServiceClient
 	void add(std::unique_ptr<OuiServiceImplementationClient>&& implementation);
 	
 	GenericConnection connect(asio::yield_context yield);
-	void cancel_connect(asio::yield_context yield);
+	void cancel_connect();
 	
 	private:
 	asio::io_service& _ios;

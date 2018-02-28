@@ -20,7 +20,7 @@ class I2pOuiServiceServer : OuiServiceImplementationServer
 	void stop_listen(asio::yield_context yield);
 	
 	GenericConnection accept(asio::yield_context yield);
-	void cancel_accept(asio::yield_context yield);
+	void cancel_accept();
 };
 
 class I2pOuiServiceClient : OuiServiceImplementationClient
@@ -29,7 +29,7 @@ class I2pOuiServiceClient : OuiServiceImplementationClient
 	I2pOuiServiceClient(I2pOuiService& service, std::string endpoint);
 	
 	GenericConnection connect(asio::yield_context yield);
-	void cancel_connect(asio::yield_context yield);
+	void cancel_connect();
 };
 
 } // ouinet namespace
