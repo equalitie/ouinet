@@ -83,7 +83,10 @@ include_directories(
 file(GLOB injector_sources
     "./src/injector.cpp"
     "./src/connect_to_host.cpp"
-    "./src/cache_control.cpp")
+    "./src/cache_control.cpp"
+    "./src/ouiservice.cpp"
+    "./src/ouiservice/tcp.cpp"
+)
 
 add_executable(injector ${injector_sources})
 add_dependencies(injector beast ${IPFS_CACHE_TARGET} gnunet-channels i2poui)

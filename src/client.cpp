@@ -55,15 +55,16 @@ static posix_time::time_duration MAX_CACHED_AGE = posix_time::hours(7*24);  // o
 
 //------------------------------------------------------------------------------
 struct Client {
+/*
     struct I2P {
         i2poui::Service service;
         i2poui::Connector connector;
     };
-
+*/
     asio::io_service& ios;
     Endpoint injector_ep;
-    unique_ptr<gnunet_channels::Service> gnunet_service;
-    unique_ptr<I2P> i2p;
+//    unique_ptr<gnunet_channels::Service> gnunet_service;
+//    unique_ptr<I2P> i2p;
     unique_ptr<ipfs_cache::Client> ipfs_cache;
 
     ClientFrontEnd front_end;
@@ -117,6 +118,7 @@ connect_to_injector(Client& client, asio::yield_context yield)
         }
 
         Ret operator()(const GnunetEndpoint& ep) {
+/*
             using Channel = gnunet_channels::Channel;
 
             if (!client.gnunet_service) {
@@ -127,9 +129,12 @@ connect_to_injector(Client& client, asio::yield_context yield)
             ch.connect(ep.host, ep.port, yield[ec]);
 
             return or_throw(yield, ec, GenericConnection(move(ch)));
+*/
+            return or_throw(yield, error::no_protocol_option, GenericConnection());
         }
 
         Ret operator()(const I2PEndpoint&) {
+/*
             if (!client.i2p) {
                 return or_throw<Ret>(yield, error::no_protocol_option);
             }
@@ -138,6 +143,8 @@ connect_to_injector(Client& client, asio::yield_context yield)
             ch.connect(client.i2p->connector, yield[ec]);
 
             return or_throw(yield, ec, GenericConnection(move(ch)));
+*/
+            return or_throw(yield, error::no_protocol_option, GenericConnection());
         }
     };
 
@@ -592,7 +599,7 @@ int main(int argc, char* argv[])
         , [&](asio::yield_context yield) {
 
               Client client(ios, injector_ep);
-
+/*
               if (is_gnunet_endpoint(injector_ep)) {
                   namespace gc = gnunet_channels;
 
@@ -632,7 +639,7 @@ int main(int argc, char* argv[])
                       make_unique<Client::I2P>(Client::I2P{move(service),
                               move(connector)});
               }
-
+*/
               do_listen( client
                        , local_ep
                        , ipns

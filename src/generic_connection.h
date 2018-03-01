@@ -35,6 +35,8 @@ private:
         virtual void read_impl (OnRead&&)  = 0;
         virtual void write_impl(OnWrite&&) = 0;
 
+        virtual void close() = 0;
+
         virtual ~Base() {}
 
         ReadBuffers  read_buffers;
@@ -60,6 +62,11 @@ private:
         void write_impl(OnWrite&& on_write) override
         {
             _impl.async_write_some(write_buffers, std::move(on_write));
+        }
+
+        void close() override
+        {
+            _impl.close();
         }
 
     private:
@@ -113,6 +120,11 @@ public:
         _impl->write_impl(move(handler));
 
         return result.get();
+    }
+
+    void close()
+    {
+        _impl->close();
     }
 
 private:

@@ -25,10 +25,10 @@
 #include "async_sleep.h"
 #include "increase_open_file_limit.h"
 #include "full_duplex_forward.h"
-#include "blocker.h"
+#include "coroutineset.h"
 
 #include "ouiservice.h"
-#include "ouiservice/i2p.h"
+#include "ouiservice/tcp.h"
 
 using namespace std;
 using namespace ouinet;
@@ -174,53 +174,27 @@ private:
 
 
 
-typedef boost::intrusive::list_base_hook<boost::intrusive::link_mode<boost::intrusive::auto_unlink> > auto_unlink_hook;
-
-
-
-class InjectorConnection : public auto_unlink_hook
+class InjectorConnection
 {
     public:
     InjectorConnection(GenericConnection&& connection, ipfs_cache::Injector& ipfs_cache_injector);
 
-    void serve();
-    void kill(asio::yield_context yield);
-
-    private:
-    void do_serve(asio::yield_context yield);
+    void run(asio::yield_context yield);
+    void stop();
 
     private:
     asio::io_service& _ios;
     GenericConnection _connection;
     ipfs_cache::Injector& _ipfs_cache_injector;
-
-    Blocker _stopped;
 };
 
 InjectorConnection::InjectorConnection(GenericConnection&& connection, ipfs_cache::Injector& ipfs_cache_injector):
     _ios(connection.get_io_service()),
     _connection(std::move(connection)),
-    _ipfs_cache_injector(ipfs_cache_injector),
-    _stopped(_ios)
+    _ipfs_cache_injector(ipfs_cache_injector)
 {}
 
-void InjectorConnection::serve()
-{
-    asio::spawn(_ios, [this](asio::yield_context yield) mutable {
-        do_serve(yield);
-
-        auto_unlink_hook::unlink();
-        _stopped.make_block().release();
-    });
-}
-
-void InjectorConnection::kill(asio::yield_context yield)
-{
-    _connection.close();
-    _stopped.wait(yield);
-}
-
-void InjectorConnection::do_serve(asio::yield_context yield)
+void InjectorConnection::run(asio::yield_context yield)
 {
     sys::error_code ec;
     beast::flat_buffer buffer;
@@ -250,6 +224,11 @@ void InjectorConnection::do_serve(asio::yield_context yield)
     }
 }
 
+void InjectorConnection::stop()
+{
+    _connection.close();
+}
+
 
 
 class Injector
@@ -257,8 +236,8 @@ class Injector
     public:
     Injector(asio::io_service& ios, OuiServiceServer& proxy_server, ipfs_cache::Injector& ipfs_cache_injector);
 
-    void start();
-    void stop(asio::yield_context yield);
+    void run(asio::yield_context yield);
+    void stop();
 
     private:
     asio::io_service& _ios;
@@ -266,9 +245,8 @@ class Injector
     ipfs_cache::Injector& _ipfs_cache_injector;
 
     bool _stopping;
-    Blocker _stopped;
 
-    boost::intrusive::list<std::unique_ptr<InjectorConnection>, boost::intrusive::constant_time_size<false>> _connections;
+    CoroutineSet<InjectorConnection> _connections;
 };
 
 Injector::Injector(asio::io_service& ios, OuiServiceServer& proxy_server, ipfs_cache::Injector& ipfs_cache_injector):
@@ -276,48 +254,45 @@ Injector::Injector(asio::io_service& ios, OuiServiceServer& proxy_server, ipfs_c
     _proxy_server(proxy_server),
     _ipfs_cache_injector(ipfs_cache_injector),
     _stopping(false),
-    _stopped(_ios)
+    _connections(ios)
 {}
 
-void Injector::start()
+void Injector::run(asio::yield_context yield)
 {
-    asio::spawn(_ios, [this](asio::yield_context yield) {
-        sys::error_code ec;
-        _proxy_server.start_listen(yield[ec]);
-        if (ec) {
-            cerr << "Failed to setup ouiservice proxy server: " << ec.message() << endl;
-            return;
-        }
+    sys::error_code ec;
+    _proxy_server.start_listen(yield[ec]);
+    if (ec) {
+        cerr << "Failed to setup ouiservice proxy server: " << ec.message() << endl;
+        return;
+    }
 
-        while (!_stopping) {
-            GenericConnection connection = _proxy_server.accept(yield[ec]);
-            if (ec == boost::asio::error::operation_aborted) {
-                continue;
-            } else if (ec) {
-                cerr << "Failed to accept: " << ec.message() << endl;
-                async_sleep(_ios, chrono::milliseconds(100), yield);
-            } else {
-                std::unique_ptr<InjectorConnection> c = std::make_unique<InjectorConnection>(std::move(connection), _ipfs_cache_injector);
-                InjectorConnection* cc = c.get();
-                _connections.push_back(std::move(c));
-                cc->start();
-            }
+    while (!_stopping) {
+        GenericConnection connection = _proxy_server.accept(yield[ec]);
+        if (ec == boost::asio::error::operation_aborted) {
+            continue;
+        } else if (ec) {
+            cerr << "Failed to accept: " << ec.message() << endl;
+            async_sleep(_ios, chrono::milliseconds(100), yield);
+        } else {
+            std::unique_ptr<InjectorConnection> c = std::make_unique<InjectorConnection>(std::move(connection), _ipfs_cache_injector);
+            _connections.run(std::move(c), [](InjectorConnection* c, asio::yield_context yield) {
+                c->run(yield);
+            });
         }
+    }
 
-        // TODO: This needs to happen in parallel.
-        for (auto i : _connections) {
-            i->kill(yield);
-        }
+    for (auto i : _connections.coroutines()) {
+        i->stop();
+    }
+    _connections.wait_empty(yield);
 
-        _stopped.make_block().release();
-    });
+    // TODO: Gracefully shutdown the ouiservice implementations as well
 }
 
-void Injector::stop(asio::yield_context yield)
+void Injector::stop()
 {
     _stopping = true;
     _proxy_server.cancel_accept();
-    _stopped.wait(yield);
 }
 
 
@@ -417,17 +392,18 @@ int main(int argc, char* argv[])
 
     OuiServiceServer proxy_server(ios);
 
-    std::unique_ptr<TcpOuiServiceServer> tcp_server;
+    if (vm.count("listen-on-tcp")) {
+        auto const injector_ep = util::parse_endpoint(vm["listen-on-tcp"].as<string>());
 
+        std::unique_ptr<ouiservice::TcpOuiServiceServer> tcp_server = std::make_unique<ouiservice::TcpOuiServiceServer>(ios, injector_ep);
+        proxy_server.add(std::move(tcp_server));
+    }
+
+/*
     std::unique_ptr<GnunetOuiServiceServer> gnunet_server;
 
     std::unique_ptr<ItpOuiService> i2p_service;
     std::unique_ptr<I2pOuiServiceServer> i2p_server;
-
-    if (vm.count("listen-on-tcp")) {
-        tcp_server = std::make_unique<TcpOuiServiceServer>(vm["listen-on-tcp"].as<string>());
-        proxy_server.add(tcp_server);
-    }
 
     if (vm.count("listen-on-gnunet")) {
         // ...
@@ -439,16 +415,23 @@ int main(int argc, char* argv[])
         i2p_server = std::make_unique<I2pOuiServiceServer>(*i2p_service, i2p_private_key);
         proxy_server.add(i2p_server);
     }
+*/
 
-    Injector injector(ios, proxy_server, ipfs_cache_injector);
-    injector.start();
+
+
+    CoroutineSet<Injector> injector_coroutine(ios);
+    std::unique_ptr<Injector> injector = std::make_unique<Injector>(ios, proxy_server, ipfs_cache_injector);
+    injector_coroutine.run(std::move(injector), [](Injector* injector, asio::yield_context yield) {
+        injector->run(yield);
+    });
 
     asio::signal_set signals(ios, SIGINT, SIGTERM);
-    signals.async_wait([&injector, &signals, &ios](const sys::error_code& ec, int signal_number) {
+    signals.async_wait([&injector_coroutine, &signals, &ios](const sys::error_code& ec, int signal_number) {
         cerr << "Got signal, shutting down" << endl;
 
-        asio::spawn(ios, [&injector, &ios](asio::yield_context yield) {
-            injector.stop(yield);
+        asio::spawn(ios, [&injector_coroutine, &ios](asio::yield_context yield) {
+            injector_coroutine.coroutine()->stop();
+            injector_coroutine.wait_empty(yield);
             ios.stop();
         });
 

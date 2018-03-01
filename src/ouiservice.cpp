@@ -16,7 +16,7 @@ OuiServiceServer::OuiServiceServer(asio::io_service& ios):
 	_is_canceling_accept(false)
 {}
 
-void OuiServiceServer::add(std::unique_ptr<OuiServiceImplementationServer>&& implementation)
+void OuiServiceServer::add(std::unique_ptr<OuiServiceImplementationServer> implementation)
 {
 	_implementations.push_back(std::move(implementation));
 }
@@ -31,12 +31,12 @@ void OuiServiceServer::start_listen(asio::yield_context yield)
 	
 	Blocker blocker(_ios);
 	
-	for (auto it : _implementations) {
-		asio::spawn(_ios, [this, it, b = blocker.make_block()] (asio::yield_context yield) {
+	for (auto& it : _implementations) {
+		asio::spawn(_ios, [this, implementation = it.get(), b = blocker.make_block()] (asio::yield_context yield) {
 			sys::error_code ec;
-			it->start_listen(yield[ec]);
+			implementation->start_listen(yield[ec]);
 			if (ec) return;
-			_listening_implementations.push_back(it);
+			_listening_implementations.push_back(implementation);
 		});
 	}
 	
@@ -104,7 +104,7 @@ GenericConnection OuiServiceServer::accept(asio::yield_context yield)
 			for (auto it_ : _listening_implementations) {
 				if (it == it_ || !it_->is_accepting()) continue;
 				sys::error_code ec;
-				it_->cancel_accept(yield[ec]);
+				it_->cancel_accept();
 			}
 		});
 	}
@@ -124,7 +124,7 @@ void OuiServiceServer::cancel_accept()
 	
 	for (auto it : _listening_implementations) {
 		if (!it->is_accepting()) continue;
-		it->cancel_accept(yield);
+		it->cancel_accept();
 	}
 	
 	_is_canceling_accept = false;

@@ -14,7 +14,7 @@ class I2pOuiServiceServer : OuiServiceImplementationServer
 {
 	public:
 	// Represents an endpoint that i2p can listen on, in the form of a private key (?)
-	I2pOuiServiceServer(I2pOuiService& service, I2pPrivateKey private_key);
+	I2pOuiServiceServer(I2pOuiService& service/*, I2pPrivateKey private_key*/);
 	
 	void start_listen(asio::yield_context yield);
 	void stop_listen(asio::yield_context yield);

@@ -26,7 +26,7 @@ class OuiServiceServer
 	public:
 	OuiServiceServer(asio::io_service& ios);
 	
-	void add(std::unique_ptr<OuiServiceImplementationServer>&& implementation);
+	void add(std::unique_ptr<OuiServiceImplementationServer> implementation);
 	
 	void start_listen(asio::yield_context yield);
 	void stop_listen(asio::yield_context yield);
@@ -58,7 +58,7 @@ class OuiServiceClient
 	public:
 	OuiServiceClient(asio::io_service& ios);
 	
-	void add(std::unique_ptr<OuiServiceImplementationClient>&& implementation);
+	void add(std::unique_ptr<OuiServiceImplementationClient> implementation);
 	
 	GenericConnection connect(asio::yield_context yield);
 	void cancel_connect();
