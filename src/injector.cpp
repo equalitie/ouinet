@@ -270,7 +270,7 @@ void listen_tcp( asio::io_service& ios
             if (ec == asio::error::operation_aborted) break;
             fail(ec, "accept");
             // Wait one second before we start accepting again.
-            async_sleep(ios, chrono::seconds(1), yield);
+            async_sleep(ios, g_shutter, chrono::seconds(1), yield);
         }
         else {
             static const auto tcp_shutter = [](tcp::socket& s) {
@@ -321,7 +321,7 @@ void listen_gnunet( asio::io_service& ios
         if (ec) {
             if (ec == asio::error::operation_aborted) break;
             cerr << "Failed to accept: " << ec.message() << endl;
-            async_sleep(ios, chrono::milliseconds(100), yield);
+            async_sleep(ios, g_shutter, chrono::milliseconds(100), yield);
             continue;
         }
 
@@ -359,7 +359,7 @@ void listen_i2p( asio::io_service& ios
         if (ec) {
             if (ec == asio::error::operation_aborted) break;
             cerr << "Failed to accept: " << ec.message() << endl;
-            async_sleep(ios, chrono::milliseconds(100), yield);
+            async_sleep(ios, g_shutter, chrono::milliseconds(100), yield);
             continue;
         }
 

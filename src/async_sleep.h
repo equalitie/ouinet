@@ -2,15 +2,18 @@
 
 #include <boost/asio/steady_timer.hpp>
 #include "namespaces.h"
+#include "shutter.h"
 
 namespace ouinet {
 
 inline
 void async_sleep( asio::io_service& ios
+                , Shutter& shutter
                 , asio::steady_timer::duration duration
                 , asio::yield_context yield)
 {
     asio::steady_timer timer(ios);
+    auto cancel_handle = shutter.add([&timer] { timer.cancel(); });
     timer.expires_from_now(duration);
     sys::error_code ec;
     timer.async_wait(yield[ec]);

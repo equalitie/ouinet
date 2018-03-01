@@ -490,7 +490,7 @@ void do_listen( Client& client
         if(ec) {
             if (ec == asio::error::operation_aborted) break;
             fail(ec, "accept");
-            ASYNC_DEBUG(async_sleep(ios, chrono::seconds(1), yield), "Sleep");
+            async_sleep(ios, client.shutter, chrono::seconds(1), yield);
         }
         else {
             static const auto tcp_shutter = [](tcp::socket& s) {

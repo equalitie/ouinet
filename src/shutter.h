@@ -14,6 +14,10 @@ private:
 public:
     using Cancel = std::function<void()>;
 
+    Shutter()                          = default;
+    Shutter(const Shutter&)            = delete;
+    Shutter& operator=(const Shutter&) = delete;
+
     class Handle : public Hook {
         friend class Shutter;
         Cancel cancel;
