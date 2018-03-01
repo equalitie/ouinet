@@ -207,6 +207,11 @@ Blocker::Block::~Block()
 {
     if (!_blocker) return; // Was moved from
 
+    if (!_blocker->_wait_state) {
+        --_blocker->_block_count;
+        return;
+    }
+
     if (_round != _blocker->_round) return;
 
     if (--_blocker->_block_count == 0 && !_blocker->_released) {
