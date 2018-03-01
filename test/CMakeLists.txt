@@ -4,10 +4,11 @@ include_directories(
     "${BEAST_DIR}/include"
     "../src")
 
-file(GLOB test_sources "*.cpp" "../src/cache_control.cpp")
+file(GLOB test_cache_src "test_cache_control.cpp" "../src/cache_control.cpp")
+add_executable(test-cache ${test_cache_src})
+add_dependencies(test-cache beast)
+target_link_libraries(test-cache ${Boost_LIBRARIES})
 
-add_executable(test-ouinet ${test_sources})
-add_dependencies(test-ouinet beast)
-
-target_link_libraries(test-ouinet
-    ${Boost_LIBRARIES})
+file(GLOB test_blocker_src "test_blocker.cpp")
+add_executable(test-blocker ${test_blocker_src})
+target_link_libraries(test-blocker ${Boost_LIBRARIES})
