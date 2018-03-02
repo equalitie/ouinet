@@ -1,5 +1,6 @@
 #pragma once
 
+#include <list>
 #include <boost/asio/ip/tcp.hpp>
 
 #include "../ouiservice.h"
@@ -27,14 +28,20 @@ class TcpOuiServiceServer : public OuiServiceImplementationServer
     bool _in_accept;
 };
 
-/*
-class TcpOuiServiceClient
+
+class TcpOuiServiceClient : public OuiServiceImplementationClient
 {
     public:
-    GenericConnection connect(asio::yield_context yield) = 0;
-    void cancel_connect(asio::yield_context yield) = 0;
+    TcpOuiServiceClient(boost::asio::io_service& ios, boost::asio::ip::tcp::endpoint endpoint);
+
+    GenericConnection connect(asio::yield_context yield);
+    void cancel_connect();
+
+    private:
+    boost::asio::io_service& _ios;
+    boost::asio::ip::tcp::endpoint _endpoint;
+    std::list<boost::asio::ip::tcp::socket*> _connecting_sockets;
 };
-*/
 
 } // ouiservice namespace
 } // ouinet namespace

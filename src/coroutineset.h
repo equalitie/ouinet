@@ -9,6 +9,11 @@
 
 namespace ouinet {
 
+/*
+ * A CoroutineSet holds a set of coroutines represented by a heap-allocated object with a run function.
+ * When this function returns, the object is deleted, and the coroutine is removed from the set.
+ */
+
 template<typename T>
 class CoroutineSet
 {

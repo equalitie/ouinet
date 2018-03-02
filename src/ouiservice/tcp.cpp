@@ -71,5 +71,34 @@ bool TcpOuiServiceServer::is_accepting()
     return _in_accept;
 }
 
+TcpOuiServiceClient::TcpOuiServiceClient(boost::asio::io_service& ios, boost::asio::ip::tcp::endpoint endpoint):
+    _ios(ios),
+    _endpoint(endpoint)
+{}
+
+GenericConnection TcpOuiServiceClient::connect(asio::yield_context yield)
+{
+    sys::error_code ec;
+
+    boost::asio::ip::tcp::socket socket(_ios);
+    auto it = _connecting_sockets.insert(_connecting_sockets.end(), &socket);
+    socket.async_connect(_endpoint, yield[ec]);
+    _connecting_sockets.erase(it);
+
+    if (ec) {
+        return or_throw<GenericConnection>(yield, ec, GenericConnection());
+    }
+
+    return GenericConnection(std::move(socket));
+}
+
+void TcpOuiServiceClient::cancel_connect()
+{
+    for (auto& socket : _connecting_sockets) {
+        // tcp::socket::cancel() does not work properly on all platforms
+        socket->close();
+    }
+}
+
 } // ouiservice namespace
 } // ouinet namespace

@@ -130,4 +130,26 @@ void OuiServiceServer::cancel_accept()
 	_is_canceling_accept = false;
 }
 
+OuiServiceClient::OuiServiceClient(asio::io_service& ios):
+	_ios(ios)
+{}
+
+void OuiServiceClient::add(std::unique_ptr<OuiServiceImplementationClient> implementation)
+{
+	assert(_implementations.empty());
+	_implementations.push_back(std::move(implementation));
+}
+
+GenericConnection OuiServiceClient::connect(asio::yield_context yield)
+{
+	assert(_implementations.size() == 1);
+	return _implementations[0]->connect(yield);
+}
+
+void OuiServiceClient::cancel_connect()
+{
+	assert(_implementations.size() == 1);
+	_implementations[0]->cancel_connect();
+}
+
 } // ouinet namespace

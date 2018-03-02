@@ -50,9 +50,13 @@ class OuiServiceImplementationClient
 	virtual ~OuiServiceImplementationClient() {}
 	
 	virtual GenericConnection connect(asio::yield_context yield) = 0;
-	virtual void cancel_connect(asio::yield_context yield) = 0;
+	virtual void cancel_connect() = 0;
 };
 
+/*
+ * This temporary version supports only a single active implementation.
+ * Later versions will support functionality like trying multiple parallel implementations.
+ */
 class OuiServiceClient
 {
 	public:
@@ -65,7 +69,7 @@ class OuiServiceClient
 	
 	private:
 	asio::io_service& _ios;
-	std::vector<std::unique_ptr<OuiServiceImplementationServer>> _implementations;
+	std::vector<std::unique_ptr<OuiServiceImplementationClient>> _implementations;
 };
 
 } // ouinet namespace
