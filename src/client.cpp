@@ -604,14 +604,6 @@ int main(int argc, char* argv[])
     // The io_service is required for all I/O
     asio::io_service ios;
 
-    // Trap interruptions so as to proceed to normal cleanup and exit.
-    asio::signal_set signals(ios, SIGINT, SIGTERM);
-    signals.async_wait([&](const sys::error_code& ec, int sn) {
-            if (!ec)
-                ios.stop();
-        }
-    );
-
     asio::spawn
         ( ios
         , [&](asio::yield_context yield) {
