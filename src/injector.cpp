@@ -402,7 +402,7 @@ int main(int argc, char* argv[])
     // Although the IPNS ID is already in IPFS's config file,
     // this just helps put all info relevant to the user right in the repo root.
     auto ipns_id = ipfs_cache_injector.ipns_id();
-    std::cout << "IPNS DB: " << ipns_id << endl;
+    cout << "IPNS DB: " << ipns_id << endl;
     util::create_state_file(REPO_ROOT/"cache-ipns", ipns_id);
 
     OuiServiceServer proxy_server(ios);
