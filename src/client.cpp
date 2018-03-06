@@ -656,6 +656,16 @@ int main(int argc, char* argv[])
                        , yield);
           });
 
+    asio::signal_set signals(ios, SIGINT, SIGTERM);
+    signals.async_wait([&](const sys::error_code& ec, int signal_number) {
+            cerr << "Got signal, shutting down" << endl;
+
+            // TODO: This needs better handling of existing coroutines waiting for I/O.
+            if (!ec)
+                ios.stop();
+        }
+    );
+
     ios.run();
 
     return EXIT_SUCCESS;
