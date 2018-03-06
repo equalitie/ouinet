@@ -179,7 +179,9 @@ GNUnet ID: <GNUNET_ID>
 ```
 
 Make note of the `<DB_IPNS>` and `<GNUNET_ID>` strings in the above output,
-we'll need to pass them as arguments to the client.
+we'll need to pass them as arguments to the client.  You may also find these
+values in the `cache-ipns` and `endpoint-gnunet` files in the injector's
+repository root directory (`../repos/injector` in the example).
 
 While injector is still running, start the client in yet another terminal
 window and pass it the injector's `<GNUNET_ID>` and `<DB_IPNS>` strings from
