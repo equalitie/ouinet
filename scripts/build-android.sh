@@ -141,18 +141,6 @@ ANDROID_FLAGS="\
     -DBOOST_LIBRARYDIR=${DIR}/Boost-for-Android/build/out/${ABI}/lib"
 
 ######################################################################
-if [ ! -d "build-ipfs-cache" ]; then
-    mkdir -p build-ipfs-cache
-    cd build-ipfs-cache
-    cmake ${ANDROID_FLAGS} ${ROOT}/modules/ipfs-cache
-    make
-    cd ..
-fi
-
-add_library $DIR/build-ipfs-cache/ipfs_bindings/ipfs_bindings.so
-add_library $DIR/build-ipfs-cache/libipfs-cache.so
-
-######################################################################
 if [ ! -d "android-ifaddrs" ]; then
     # TODO: Still need to compile the .c file and make use of it.
     git clone https://github.com/PurpleI2P/android-ifaddrs.git
@@ -162,30 +150,35 @@ fi
 # add_library ./.../ifaddrs.a
 
 ######################################################################
-# TODO: Missing dependencies for i2pd:
-#   * git clone https://github.com/PurpleI2P/MiniUPnP-for-Android-Prebuilt.git
-# As described here:
+# TODO: miniupnp
 #   https://i2pd.readthedocs.io/en/latest/devs/building/android/
 
-#rm -rf build-i2poui
-mkdir -p build-i2poui
-cd build-i2poui
-
-cmake \
-    ${ANDROID_FLAGS} \
+######################################################################
+mkdir -p build-ouinet
+cd build-ouinet
+cmake ${ANDROID_FLAGS} \
     -DANDROID=1 \
+    -DWITH_GNUNET=OFF \
+    -DWITH_INJECTOR=OFF \
     -DOPENSSL_INCLUDE_DIR=${SSL_DIR}/include \
     -DCMAKE_CXX_FLAGS="-I ${DIR}/android-ifaddrs -I $SSL_DIR/include" \
-    ${ROOT}/modules/i2pouiservice
-
+    ${ROOT}
 make VERBOSE=1
 cd ..
 
-add_library $DIR/build-i2poui/i2pd/build/libi2pd.a
-add_library $DIR/build-i2poui/i2pd/build/libi2pdclient.a
-add_library $DIR/build-i2poui/libi2poui.a
+./build.android/build-ouinet/libclient.a
+
+add_library $DIR/build-ouinet/modules/i2pouiservice/i2pd/build/libi2pd.a
+add_library $DIR/build-ouinet/modules/i2pouiservice/i2pd/build/libi2pdclient.a
+add_library $DIR/build-ouinet/modules/i2pouiservice/libi2poui.a
+
+add_library $DIR/build-ouinet/modules/ipfs-cache/ipfs_bindings/ipfs_bindings.so
+add_library $DIR/build-ouinet/modules/ipfs-cache/libipfs-cache.so
+
+exit
 
 ######################################################################
+# Unpolished code to build the browser-debug.apk
 #adb uninstall ie.equalit.ouinet
 rm -rf android || true
 rsync -r ../android .
