@@ -7,17 +7,21 @@
 
 namespace ouinet {
 
+#ifdef USE_GNUNET
 struct GnunetEndpoint {
     std::string host;
     std::string port;
 };
+#endif
 
 struct I2PEndpoint {
     std::string pubkey;
 };
 
 using Endpoint = boost::variant< asio::ip::tcp::endpoint
+#ifdef USE_GNUNET
                                , GnunetEndpoint
+#endif
                                , I2PEndpoint>;
 
 inline
@@ -50,24 +54,30 @@ boost::optional<Endpoint> parse_endpoint(beast::string_view endpoint)
     if (auto ep = as_tcp_endpoint(host, port)) {
         return Endpoint{*ep};
     }
+#ifdef USE_GNUNET
     else if (host.size() == 52 /*GNUNET_CRYPTO_PKEY_ASCII_LENGTH*/) {
         return Endpoint{GnunetEndpoint{host.to_string(), port.to_string()}};
     }
+#endif
 
     return boost::none;
 }
 
+#ifdef USE_GNUNET
 inline
 bool is_gnunet_endpoint(const Endpoint& ep) {
     return boost::get<GnunetEndpoint>(&ep) ? true : false;
 }
+#endif
 
 inline
 bool is_i2p_endpoint(const Endpoint& ep) {
     return boost::get<I2PEndpoint>(&ep) ? true : false;
 }
 
+#ifdef USE_GNUNET
 std::ostream& operator<<(std::ostream& os, const GnunetEndpoint&);
+#endif
 std::ostream& operator<<(std::ostream& os, const I2PEndpoint&);
 std::ostream& operator<<(std::ostream& os, const Endpoint&);
 

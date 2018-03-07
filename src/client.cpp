@@ -13,8 +13,10 @@
 #include <ipfs_cache/client.h>
 #include <ipfs_cache/error.h>
 
-#include <gnunet_channels/channel.h>
-#include <gnunet_channels/service.h>
+#ifdef USE_GNUNET
+#   include <gnunet_channels/channel.h>
+#   include <gnunet_channels/service.h>
+#endif
 
 #include <i2poui.h>
 
@@ -62,7 +64,9 @@ struct Client {
 
     asio::io_service& ios;
     Endpoint injector_ep;
+#ifdef USE_GNUNET
     unique_ptr<gnunet_channels::Service> gnunet_service;
+#endif
     unique_ptr<I2P> i2p;
     unique_ptr<ipfs_cache::Client> ipfs_cache;
 
@@ -116,6 +120,7 @@ connect_to_injector(Client& client, asio::yield_context yield)
             return or_throw(yield, ec, GenericConnection(move(socket)));
         }
 
+#ifdef USE_GNUNET
         Ret operator()(const GnunetEndpoint& ep) {
             using Channel = gnunet_channels::Channel;
 
@@ -128,6 +133,7 @@ connect_to_injector(Client& client, asio::yield_context yield)
 
             return or_throw(yield, ec, GenericConnection(move(ch)));
         }
+#endif
 
         Ret operator()(const I2PEndpoint&) {
             if (!client.i2p) {
@@ -593,6 +599,7 @@ int main(int argc, char* argv[])
 
               Client client(ios, injector_ep);
 
+#ifdef USE_GNUNET
               if (is_gnunet_endpoint(injector_ep)) {
                   namespace gc = gnunet_channels;
 
@@ -614,8 +621,9 @@ int main(int argc, char* argv[])
                   cout << "GNUnet ID: " << service->identity() << endl;
 
                   client.gnunet_service = move(service);
-              }
-              else if (is_i2p_endpoint(injector_ep)) {
+              } else
+#endif
+              if (is_i2p_endpoint(injector_ep)) {
                   auto ep = boost::get<I2PEndpoint>(injector_ep).pubkey;
 
                   i2poui::Service service((REPO_ROOT/"i2p").native(), ios);
