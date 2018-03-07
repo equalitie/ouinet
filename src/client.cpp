@@ -45,6 +45,7 @@ using Response    = http::response<http::dynamic_body>;
 
 static fs::path REPO_ROOT;
 static const fs::path OUINET_CONF_FILE = "ouinet-client.conf";
+static const fs::path OUINET_PID_FILE = "pid";
 static posix_time::time_duration MAX_CACHED_AGE = posix_time::hours(7*24);  // one week
 
 //------------------------------------------------------------------------------
@@ -591,6 +592,15 @@ int main(int argc, char* argv[])
         ipns = vm["injector-ipns"].as<string>();
     }
 
+    if (exists(REPO_ROOT/OUINET_PID_FILE)) {
+        cerr << "Existing PID file " << REPO_ROOT/OUINET_PID_FILE
+             << "; another client process may be running"
+             << ", otherwise please remove the file." << endl;
+        return 1;
+    }
+    // Acquire a PID file for the life of the process
+    util::PidFile pid_file(REPO_ROOT/OUINET_PID_FILE);
+
     // The io_service is required for all I/O
     asio::io_service ios;
 
@@ -645,6 +655,16 @@ int main(int argc, char* argv[])
                        , ipns
                        , yield);
           });
+
+    asio::signal_set signals(ios, SIGINT, SIGTERM);
+    signals.async_wait([&](const sys::error_code& ec, int signal_number) {
+            cerr << "Got signal, shutting down" << endl;
+
+            // TODO: This needs better handling of existing coroutines waiting for I/O.
+            if (!ec)
+                ios.stop();
+        }
+    );
 
     ios.run();
 

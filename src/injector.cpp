@@ -9,6 +9,7 @@
 #include <boost/intrusive/list.hpp>
 #include <iostream>
 #include <fstream>
+#include <string>
 
 #include <ipfs_cache/injector.h>
 #include <gnunet_channels/channel.h>
@@ -42,6 +43,7 @@ using Response    = http::response<http::dynamic_body>;
 
 static fs::path REPO_ROOT;
 static const fs::path OUINET_CONF_FILE = "ouinet-injector.conf";
+static const fs::path OUINET_PID_FILE = "pid";
 
 //------------------------------------------------------------------------------
 static
@@ -383,12 +385,25 @@ int main(int argc, char* argv[])
         listen_on_i2p = value == "true";
     }
 
+    if (exists(REPO_ROOT/OUINET_PID_FILE)) {
+        cerr << "Existing PID file " << REPO_ROOT/OUINET_PID_FILE
+             << "; another injector process may be running"
+             << ", otherwise please remove the file." << endl;
+        return 1;
+    }
+    // Acquire a PID file for the life of the process
+    util::PidFile pid_file(REPO_ROOT/OUINET_PID_FILE);
+
     // The io_service is required for all I/O
     asio::io_service ios;
 
     ipfs_cache::Injector ipfs_cache_injector(ios, (REPO_ROOT/"ipfs").native());
 
-    std::cout << "IPNS DB: " << ipfs_cache_injector.ipns_id() << endl;
+    // Although the IPNS ID is already in IPFS's config file,
+    // this just helps put all info relevant to the user right in the repo root.
+    auto ipns_id = ipfs_cache_injector.ipns_id();
+    cout << "IPNS DB: " << ipns_id << endl;
+    util::create_state_file(REPO_ROOT/"cache-ipns", ipns_id);
 
     OuiServiceServer proxy_server(ios);
 
