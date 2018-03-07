@@ -9,7 +9,6 @@
 using namespace std;
 using namespace ouinet;
 
-using string_view = beast::string_view;
 using Request = CacheControl::Request;
 using Response = CacheControl::Response;
 using Request = CacheControl::Request;
@@ -23,7 +22,7 @@ namespace posix_time = boost::posix_time;
 template <bool isRequest, class Body>
 static
 bool has_cache_control_directive( const http::message<isRequest, Body>& request
-                                , const string_view& directive)
+                                , const beast::string_view& directive)
 {
     auto cache_control_i = request.find(http::field::cache_control);
     if (cache_control_i == request.end()) return false;
@@ -36,7 +35,7 @@ bool has_cache_control_directive( const http::message<isRequest, Body>& request
 }
 
 template<class R>
-static optional<string_view> get(const R& r, http::field f)
+static optional<beast::string_view> get(const R& r, http::field f)
 {
     auto i = r.find(f);
     if (i == r.end()) return boost::none;
@@ -101,14 +100,15 @@ posix_time::ptime CacheControl::parse_date(beast::string_view s)
 }
 
 static
-optional<unsigned> get_max_age(const string_view& cache_control_value)
+optional<unsigned> get_max_age(const beast::string_view& cache_control_value)
 {
     using boost::optional;
 
     optional<unsigned> max_age;
     optional<unsigned> s_maxage;
 
-    auto update_max_age = [] (optional<unsigned>& max_age, string_view value) {
+    auto update_max_age = [] ( optional<unsigned>& max_age
+                             , beast::string_view value) {
         trim_quotes(value);
 
         unsigned delta = util::parse_num<unsigned>(value, unsigned(-1));

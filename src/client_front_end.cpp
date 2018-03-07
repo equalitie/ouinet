@@ -8,13 +8,12 @@ using namespace ouinet;
 
 using Request = http::request<http::string_body>;
 using Response = ClientFrontEnd::Response;
-using string_view = beast::string_view;
 
 static Response redirect_back(const Request& req)
 {
     http::response<http::dynamic_body> res{http::status::ok, req.version()};
 
-    string_view body =
+    beast::string_view body =
         "<!DOCTYPE html>\n"
         "<html>\n"
         "    <head>\n"
@@ -35,8 +34,8 @@ static Response redirect_back(const Request& req)
 }
 
 struct ToggleInput {
-    string_view text;
-    string_view name;
+    beast::string_view text;
+    beast::string_view name;
     bool current_value;
 };
 
