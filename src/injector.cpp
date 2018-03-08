@@ -8,6 +8,7 @@
 #include <boost/filesystem.hpp>
 #include <iostream>
 #include <fstream>
+#include <string>
 
 #include <ipfs_cache/injector.h>
 #include <gnunet_channels/channel.h>
@@ -39,6 +40,7 @@ using Response    = http::response<http::dynamic_body>;
 
 static fs::path REPO_ROOT;
 static const fs::path OUINET_CONF_FILE = "ouinet-injector.conf";
+static const fs::path OUINET_PID_FILE = "pid";
 
 // TODO: Instead of having global variables, create a class similar to the
 // client.cpp/Client one to hold per-injector state (such as this shutter).
@@ -262,6 +264,10 @@ void listen_tcp( asio::io_service& ios
     acceptor.listen(asio::socket_base::max_connections, ec);
     if (ec) return fail(ec, "listen");
 
+    string ep = endpoint.address().to_string() + ":" + to_string(endpoint.port());
+    cout << "TCP Address: " << ep << endl;
+    util::create_state_file(REPO_ROOT/"endpoint-tcp", ep);
+
     for(;;)
     {
         tcp::socket socket(ios);
@@ -310,7 +316,9 @@ void listen_gnunet( asio::io_service& ios
         return;
     }
 
-    cout << "GNUnet ID: " << service.identity() << endl;
+    auto ep = service.identity();
+    cout << "GNUnet ID: " << ep << endl;
+    util::create_state_file(REPO_ROOT/"endpoint-gnunet", ep);
 
     gc::CadetPort port(service);
 
@@ -349,8 +357,9 @@ void listen_i2p( asio::io_service& ios
         return;
     }
 
-    cout << "I2P Public ID: " << service.public_identity() << endl;
-
+    auto ep = service.public_identity();
+    cout << "I2P Public ID: " << ep << endl;
+    util::create_state_file(REPO_ROOT/"endpoint-i2p", ep);
 
     while (true) {
         i2poui::Channel channel(service);
@@ -456,6 +465,15 @@ int main(int argc, char* argv[])
         listen_on_i2p = value == "true";
     }
 
+    if (exists(REPO_ROOT/OUINET_PID_FILE)) {
+        cerr << "Existing PID file " << REPO_ROOT/OUINET_PID_FILE
+             << "; another injector process may be running"
+             << ", otherwise please remove the file." << endl;
+        return 1;
+    }
+    // Acquire a PID file for the life of the process
+    util::PidFile pid_file(REPO_ROOT/OUINET_PID_FILE);
+
     // The io_service is required for all I/O
     asio::io_service ios;
 
@@ -464,7 +482,11 @@ int main(int argc, char* argv[])
 
     auto ipfs_shutter = g_shutter.add([&] { ipfs_cache_injector = nullptr; });
 
-    std::cout << "IPNS DB: " << ipfs_cache_injector->ipns_id() << endl;
+    // Although the IPNS ID is already in IPFS's config file,
+    // this just helps put all info relevant to the user right in the repo root.
+    auto ipns_id = ipfs_cache_injector->ipns_id();
+    std::cout << "IPNS DB: " << ipns_id << endl;
+    util::create_state_file(REPO_ROOT/"cache-ipns", ipns_id);
 
     if (vm.count("listen-on-tcp")) {
         auto const injector_ep
