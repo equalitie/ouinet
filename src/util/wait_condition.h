@@ -51,10 +51,10 @@ public:
 
         ~Lock();
 
-        void release();
+        void release() const;
 
     private:
-        std::shared_ptr<WaitState> _wait_state;
+        mutable std::shared_ptr<WaitState> _wait_state;
     };
 
 public:
@@ -108,7 +108,7 @@ WaitCondition::Lock::~Lock()
 }
 
 inline
-void WaitCondition::Lock::release()
+void WaitCondition::Lock::release() const
 {
     if (!_wait_state) {
         return;

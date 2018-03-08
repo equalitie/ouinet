@@ -2,7 +2,6 @@
 #include "or_throw.h"
 #include <boost/asio.hpp>
 #include "namespaces.h"
-#include "blocker.h"
 
 #include "util/condition_variable.h"
 #include "util/success_condition.h"
