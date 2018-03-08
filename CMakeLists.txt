@@ -60,7 +60,10 @@ file(GLOB client_sources
     "./src/client_front_end.cpp"
     "./src/endpoint.cpp"
     "./src/cache_control.cpp"
-    "./src/request_routing.cpp")
+    "./src/request_routing.cpp"
+    "./src/ouiservice.cpp"
+    "./src/ouiservice/tcp.cpp"
+)
 
 add_executable(client ${client_sources})
 add_dependencies(client beast ${IPFS_CACHE_TARGET} gnunet-channels i2poui)

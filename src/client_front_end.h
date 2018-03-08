@@ -46,8 +46,7 @@ public:
     };
 
 public:
-    Response serve( const Endpoint& injector_ep
-                  , const http::request<http::string_body>&
+    Response serve( const http::request<http::string_body>&
                   , ipfs_cache::Client*);
 
     bool is_injector_proxying_enabled() const

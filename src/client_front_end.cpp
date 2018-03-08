@@ -76,8 +76,7 @@ static ostream& operator<<(ostream& os, const ClientFrontEnd::Task& task) {
 
 } // ouinet namespace
 
-Response ClientFrontEnd::serve( const Endpoint& injector_ep
-                              , const Request& req
+Response ClientFrontEnd::serve( const Request& req
                               , ipfs_cache::Client* cache_client)
 {
     Response res{http::status::ok, req.version()};
@@ -128,7 +127,6 @@ Response ClientFrontEnd::serve( const Endpoint& injector_ep
     ss << ToggleInput{"IPFS Cache",     "ipfs_cache",     _ipfs_cache_enabled};
 
     ss << "<br>\n";
-    ss << "Injector endpoint: " << injector_ep << "<br>\n";
 
     ss << "        <h2>Pending tasks " << _pending_tasks.size() << "</h2>\n";
     ss << "        <ul>\n";

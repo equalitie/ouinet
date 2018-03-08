@@ -31,6 +31,9 @@
 #include "request_routing.h"
 #include "full_duplex_forward.h"
 
+#include "ouiservice.h"
+#include "ouiservice/tcp.h"
+
 using namespace std;
 using namespace ouinet;
 
@@ -55,23 +58,16 @@ static posix_time::time_duration MAX_CACHED_AGE = posix_time::hours(7*24);  // o
 
 //------------------------------------------------------------------------------
 struct Client {
-/*
-    struct I2P {
-        i2poui::Service service;
-        i2poui::Connector connector;
-    };
-*/
     asio::io_service& ios;
-    Endpoint injector_ep;
-//    unique_ptr<gnunet_channels::Service> gnunet_service;
-//    unique_ptr<I2P> i2p;
+    OuiServiceClient& injector_client;
+
     unique_ptr<ipfs_cache::Client> ipfs_cache;
 
     ClientFrontEnd front_end;
 
-    Client(asio::io_service& ios, const Endpoint& injector_ep)
+    Client(asio::io_service& ios, OuiServiceClient& injector_client)
         : ios(ios)
-        , injector_ep(injector_ep)
+        , injector_client(injector_client)
     {}
 };
 
@@ -96,65 +92,6 @@ void handle_bad_request( GenericConnection& con
 
 //------------------------------------------------------------------------------
 static
-GenericConnection
-connect_to_injector(Client& client, asio::yield_context yield)
-{
-    namespace error = asio::error;
-
-    struct Visitor {
-        using Ret = GenericConnection;
-
-        sys::error_code ec;
-        Client& client;
-        asio::yield_context yield;
-
-        Visitor(Client& client, asio::yield_context yield)
-            : client(client), yield(yield) {}
-
-        Ret operator()(const tcp::endpoint& ep) {
-            tcp::socket socket(client.ios);
-            socket.async_connect(ep, yield[ec]);
-            return or_throw(yield, ec, GenericConnection(move(socket)));
-        }
-
-        Ret operator()(const GnunetEndpoint& ep) {
-/*
-            using Channel = gnunet_channels::Channel;
-
-            if (!client.gnunet_service) {
-                return or_throw<Ret>(yield, error::no_protocol_option);
-            }
-
-            Channel ch(*client.gnunet_service);
-            ch.connect(ep.host, ep.port, yield[ec]);
-
-            return or_throw(yield, ec, GenericConnection(move(ch)));
-*/
-            return or_throw(yield, error::no_protocol_option, GenericConnection());
-        }
-
-        Ret operator()(const I2PEndpoint&) {
-/*
-            if (!client.i2p) {
-                return or_throw<Ret>(yield, error::no_protocol_option);
-            }
-
-            i2poui::Channel ch(client.i2p->service);
-            ch.connect(client.i2p->connector, yield[ec]);
-
-            return or_throw(yield, ec, GenericConnection(move(ch)));
-*/
-            return or_throw(yield, error::no_protocol_option, GenericConnection());
-        }
-    };
-
-    Visitor visitor(client, yield);
-
-    return boost::apply_visitor(visitor, client.injector_ep);
-}
-
-//------------------------------------------------------------------------------
-static
 void handle_connect_request( GenericConnection& client_c
                            , const Request& req
                            , Client& client
@@ -172,7 +109,7 @@ void handle_connect_request( GenericConnection& client_c
                           , "Forwarding disabled");
     }
 
-    auto injector_c = connect_to_injector(client, yield[ec]);
+    auto injector_c = client.injector_client.connect(yield[ec]);
 
     if (ec) {
         // TODO: Does an RFC dicate a particular HTTP status code?
@@ -291,7 +228,7 @@ fetch_fresh( const Request& request
                     continue;
                 }
                 sys::error_code ec;
-                auto inj_con = connect_to_injector(client, yield[ec]);
+                auto inj_con = client.injector_client.connect(yield[ec]);
                 if (ec) {
                     last_error = ec;
                     continue;
@@ -303,8 +240,7 @@ fetch_fresh( const Request& request
                 continue;
             }
             case responder::_front_end: {
-                return client.front_end.serve( client.injector_ep
-                                             , request
+                return client.front_end.serve( request
                                              , client.ipfs_cache.get());
             }
         }
@@ -603,13 +539,10 @@ int main(int argc, char* argv[])
     // The io_service is required for all I/O
     asio::io_service ios;
 
-    asio::spawn
-        ( ios
-        , [&](asio::yield_context yield) {
-
-              Client client(ios, injector_ep);
+    OuiServiceClient injector_client(ios);
+    if (is_gnunet_endpoint(injector_ep)) {
+        assert(0 && "TODO");
 /*
-              if (is_gnunet_endpoint(injector_ep)) {
                   namespace gc = gnunet_channels;
 
                   string config = (REPO_ROOT/"gnunet"/"peer.conf").native();
@@ -630,8 +563,10 @@ int main(int argc, char* argv[])
                   cout << "GNUnet ID: " << service->identity() << endl;
 
                   client.gnunet_service = move(service);
-              }
-              else if (is_i2p_endpoint(injector_ep)) {
+*/
+    } else if (is_i2p_endpoint(injector_ep)) {
+        assert(0 && "TODO");
+/*
                   auto ep = boost::get<I2PEndpoint>(injector_ep).pubkey;
 
                   i2poui::Service service((REPO_ROOT/"i2p").native(), ios);
@@ -647,8 +582,21 @@ int main(int argc, char* argv[])
                   client.i2p =
                       make_unique<Client::I2P>(Client::I2P{move(service),
                               move(connector)});
-              }
 */
+    } else {
+        boost::asio::ip::tcp::endpoint tcp_endpoint = boost::get<boost::asio::ip::tcp::endpoint>(injector_ep);
+
+        std::unique_ptr<ouiservice::TcpOuiServiceClient> tcp_client = std::make_unique<ouiservice::TcpOuiServiceClient>(ios, tcp_endpoint);
+        injector_client.add(std::move(tcp_client));
+    }
+
+
+
+    asio::spawn
+        ( ios
+        , [&](asio::yield_context yield) {
+
+              Client client(ios, injector_client);
               do_listen( client
                        , local_ep
                        , ipns
