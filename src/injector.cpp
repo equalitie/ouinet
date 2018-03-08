@@ -181,11 +181,11 @@ static
 void serve(
     GenericConnection connection,
     ipfs_cache::Injector& ipfs_cache_injector,
-    Signal<void()>& abort,
+    Signal<void()>& close_connection_signal,
     asio::yield_context yield
 )
 {
-    auto abort_connection = abort.connect([&] {
+    auto close_slot = close_connection_signal.connect([&] {
         connection.close();
     });
 
@@ -202,10 +202,12 @@ void serve(
         }
 
         if (req.method() == http::verb::connect) {
+            // TODO: Listen to signal
             return handle_connect_request(connection, req, yield);
         }
 
         InjectorCacheControl cc(ios, ipfs_cache_injector);
+        // TODO: Listen to signal
         auto res = cc.fetch(req, yield[ec]);
 
         if (ec) {
@@ -225,11 +227,11 @@ static
 void listen(
     OuiServiceServer& proxy_server,
     ipfs_cache::Injector& ipfs_cache_injector,
-    Signal<void()>& stop,
+    Signal<void()>& shutdown_signal,
     asio::yield_context yield
 )
 {
-    auto stop_proxy = stop.connect([&] {
+    auto stop_proxy_slot = shutdown_signal.connect([&] {
         proxy_server.stop_listen();
     });
 
@@ -250,7 +252,7 @@ void listen(
         if (ec == boost::asio::error::operation_aborted) {
             break;
         } else if (ec) {
-            if (!async_sleep(ios, std::chrono::milliseconds(100), stop, yield)) {
+            if (!async_sleep(ios, std::chrono::milliseconds(100), shutdown_signal, yield)) {
                 break;
             }
             continue;
@@ -259,10 +261,10 @@ void listen(
         boost::asio::spawn(ios, [
             connection = std::move(connection),
             &ipfs_cache_injector,
-            &stop,
+            &shutdown_signal,
             lock = shutdown_connections.lock()
         ] (boost::asio::yield_context yield) mutable {
-            serve(std::move(connection), ipfs_cache_injector, stop, yield);
+            serve(std::move(connection), ipfs_cache_injector, shutdown_signal, yield);
         });
 
     }
@@ -412,9 +414,13 @@ int main(int argc, char* argv[])
     boost::asio::spawn(ios, [
         &proxy_server,
         &ipfs_cache_injector,
-        &shutdown_injector
+        &shutdown_injector,
+        &ios
     ] (boost::asio::yield_context yield) {
         listen(proxy_server, ipfs_cache_injector, shutdown_injector, yield);
+
+        // TODO: This is bad; we should wait for _all_ coroutines to finish.
+        ios.stop();
     });
 
     asio::signal_set signals(ios, SIGINT, SIGTERM);

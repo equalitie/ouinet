@@ -275,9 +275,12 @@ CacheControl build_cache_control( asio::io_service& ios
 }
 
 //------------------------------------------------------------------------------
-static void serve_request( GenericConnection con
-                         , Client& client
-                         , asio::yield_context yield)
+static void serve_request(
+    GenericConnection con,
+    Client& client,
+    Signal<void()>& close_connection_signal,
+    asio::yield_context yield
+)
 {
     namespace rr = request_route;
     using rr::responder;
@@ -338,6 +341,10 @@ static void serve_request( GenericConnection con
              , {true, queue<responder>({responder::injector})} ),
     });
 
+    auto close_slot = close_connection_signal.connect([&] {
+        con.close();
+    });
+
     // Process the different requests that may come over the same connection.
     for (;;) {  // continue for next request; break for no more requests
         Request req;
@@ -350,12 +357,14 @@ static void serve_request( GenericConnection con
 
         // Attempt connection to origin for CONNECT requests
         if (req.method() == http::verb::connect) {
+            // TODO: Listen to signal
             return ASYNC_DEBUG( handle_connect_request(con, req, client, yield)
                               , "Connect ", req.target());
         }
 
         request_config = route_choose_config(req, matches, default_request_config);
 
+        // TODO: Listen to signal
         auto res = ASYNC_DEBUG( cache_control.fetch(req, yield[ec])
                               , "Fetch "
                               , req.target());
@@ -369,6 +378,7 @@ static void serve_request( GenericConnection con
 #endif
 
             // TODO: Better error message.
+            // TODO: Listen to signal
             ASYNC_DEBUG(handle_bad_request(con, req, "Not cached", yield), "Send error");
             if (req.keep_alive()) continue;
             else return;
@@ -382,10 +392,13 @@ static void serve_request( GenericConnection con
 }
 
 //------------------------------------------------------------------------------
-void do_listen( Client& client
-              , tcp::endpoint local_endpoint
-              , string ipns
-              , asio::yield_context yield)
+void listen(
+    Client& client,
+    tcp::endpoint local_endpoint,
+    string ipns,
+    Signal<void()>& shutdown_signal,
+    asio::yield_context yield
+)
 {
     auto& ios = client.ios;
 
@@ -414,25 +427,36 @@ void do_listen( Client& client
 
     cout << "Client accepting on " << acceptor.local_endpoint() << endl;
 
-    for(;;)
-    {
+    auto stop_client_slot = shutdown_signal.connect([&] {
+        acceptor.close();
+    });
+
+    WaitCondition shutdown_connections(ios);
+
+    while (true) {
         tcp::socket socket(ios);
         ASYNC_DEBUG(acceptor.async_accept(socket, yield[ec]), "Accept");
-        if(ec) {
+        if (ec == boost::asio::error::operation_aborted) {
+            break;
+        } else if (ec) {
             fail(ec, "accept");
-            ASYNC_DEBUG(async_sleep(ios, chrono::seconds(1), yield), "Sleep");
+            if (!ASYNC_DEBUG(async_sleep(ios, std::chrono::milliseconds(100), shutdown_signal, yield), "Sleep")) {
+                break;
+            }
+            continue;
         }
-        else {
-            asio::spawn( ios
-                       , [ s = move(socket)
-                         , &client
-                         ](asio::yield_context yield) mutable {
-                             serve_request( GenericConnection(move(s))
-                                          , client
-                                          , yield);
-                         });
-        }
+
+        boost::asio::spawn(ios, [
+            socket = std::move(socket),
+            &client,
+            &shutdown_signal,
+            lock = shutdown_connections.lock()
+        ] (boost::asio::yield_context yield) mutable {
+            serve_request(GenericConnection(std::move(socket)), client, shutdown_signal, yield);
+        });
     }
+
+    shutdown_connections.wait(yield);
 }
 
 //------------------------------------------------------------------------------
@@ -590,30 +614,37 @@ int main(int argc, char* argv[])
         injector_client.add(std::move(tcp_client));
     }
 
+    Client client(ios, injector_client);
 
 
-    asio::spawn
-        ( ios
-        , [&](asio::yield_context yield) {
 
-              Client client(ios, injector_client);
-              do_listen( client
-                       , local_ep
-                       , ipns
-                       , yield);
-          });
+    Signal<void()> shutdown_client;
+
+    boost::asio::spawn(ios, [
+        &client,
+        local_ep,
+        ipns,
+        &shutdown_client,
+        &ios
+    ] (boost::asio::yield_context yield) {
+        listen(client, local_ep, ipns, shutdown_client, yield);
+
+        // TODO: This is bad; we should wait for _all_ coroutines to finish.
+        ios.stop();
+    });
 
     asio::signal_set signals(ios, SIGINT, SIGTERM);
-    signals.async_wait([&](const sys::error_code& ec, int signal_number) {
-            cerr << "Got signal, shutting down" << endl;
+    signals.async_wait([&shutdown_client, &signals, &ios](const sys::error_code& ec, int signal_number) mutable {
+        cerr << "Got signal, shutting down" << endl;
 
-            // TODO: This needs better handling of existing coroutines waiting for I/O.
-            if (!ec)
-                ios.stop();
-        }
-    );
+        shutdown_client();
+
+        signals.async_wait([](const sys::error_code& ec, int signal_number) {
+            cerr << "Got second signal, terminating immediately" << endl;
+            exit(1);
+        });
+    });
 
     ios.run();
-
     return EXIT_SUCCESS;
 }
