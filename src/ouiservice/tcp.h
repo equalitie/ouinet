@@ -14,18 +14,14 @@ class TcpOuiServiceServer : public OuiServiceImplementationServer
     TcpOuiServiceServer(boost::asio::io_service& ios, boost::asio::ip::tcp::endpoint endpoint);
 
     void start_listen(asio::yield_context yield);
-    void stop_listen(asio::yield_context yield);
+    void stop_listen();
 
     GenericConnection accept(asio::yield_context yield);
-    void cancel_accept();
-
-    bool is_accepting();
 
     private:
     boost::asio::io_service& _ios;
     boost::asio::ip::tcp::acceptor _acceptor;
     boost::asio::ip::tcp::endpoint _endpoint;
-    bool _in_accept;
 };
 
 

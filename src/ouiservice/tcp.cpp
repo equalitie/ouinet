@@ -7,8 +7,7 @@ namespace ouiservice {
 TcpOuiServiceServer::TcpOuiServiceServer(boost::asio::io_service& ios, boost::asio::ip::tcp::endpoint endpoint):
     _ios(ios),
     _acceptor(ios),
-    _endpoint(endpoint),
-    _in_accept(false)
+    _endpoint(endpoint)
 {}
 
 void TcpOuiServiceServer::start_listen(asio::yield_context yield)
@@ -35,7 +34,7 @@ void TcpOuiServiceServer::start_listen(asio::yield_context yield)
     }
 }
 
-void TcpOuiServiceServer::stop_listen(asio::yield_context yield)
+void TcpOuiServiceServer::stop_listen()
 {
     if (_acceptor.is_open()) {
         _acceptor.cancel();
@@ -48,27 +47,13 @@ GenericConnection TcpOuiServiceServer::accept(asio::yield_context yield)
     sys::error_code ec;
 
     boost::asio::ip::tcp::socket socket(_ios);
-    _in_accept = true;
     _acceptor.async_accept(socket, yield[ec]);
-    _in_accept = false;
 
     if (ec) {
         return or_throw<GenericConnection>(yield, ec, GenericConnection());
     }
 
     return GenericConnection(std::move(socket));
-}
-
-void TcpOuiServiceServer::cancel_accept()
-{
-    if (_acceptor.is_open()) {
-        _acceptor.cancel();
-    }
-}
-
-bool TcpOuiServiceServer::is_accepting()
-{
-    return _in_accept;
 }
 
 TcpOuiServiceClient::TcpOuiServiceClient(boost::asio::io_service& ios, boost::asio::ip::tcp::endpoint endpoint):

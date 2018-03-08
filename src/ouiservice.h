@@ -1,9 +1,14 @@
 #pragma once
 
+#include <list>
 #include <memory>
+#include <vector>
+
 #include <boost/asio/spawn.hpp>
 
 #include "generic_connection.h"
+#include "util/condition_variable.h"
+#include "util/signal.h"
 
 namespace ouinet {
 
@@ -12,36 +17,33 @@ class OuiServiceImplementationServer
     public:
     virtual ~OuiServiceImplementationServer() {}
 
-    virtual void start_listen(asio::yield_context yield) = 0;
-    virtual void stop_listen(asio::yield_context yield) = 0;
+    virtual void start_listen(boost::asio::yield_context yield) = 0;
+    virtual void stop_listen() = 0;
 
-    virtual GenericConnection accept(asio::yield_context yield) = 0;
-    virtual void cancel_accept() = 0;
-
-    virtual bool is_accepting() = 0;
+    virtual GenericConnection accept(boost::asio::yield_context yield) = 0;
 };
 
 class OuiServiceServer
 {
     public:
-    OuiServiceServer(asio::io_service& ios);
+    OuiServiceServer(boost::asio::io_service& ios);
 
     void add(std::unique_ptr<OuiServiceImplementationServer> implementation);
 
-    void start_listen(asio::yield_context yield);
-    void stop_listen(asio::yield_context yield);
+    void start_listen(boost::asio::yield_context yield);
+    void stop_listen();
 
-    GenericConnection accept(asio::yield_context yield);
+    GenericConnection accept(boost::asio::yield_context yield);
     void cancel_accept();
 
     private:
-    asio::io_service& _ios;
+    boost::asio::io_service& _ios;
+
     std::vector<std::unique_ptr<OuiServiceImplementationServer>> _implementations;
-    bool _is_listening;
-    bool _is_canceling_listen;
-    bool _is_accepting;
-    bool _is_canceling_accept;
-    std::vector<OuiServiceImplementationServer*> _listening_implementations;
+
+    Signal<void()> _stop_listen;
+    std::list<GenericConnection> _connection_queue;
+    ConditionVariable _connection_available;
 };
 
 class OuiServiceImplementationClient
@@ -49,26 +51,27 @@ class OuiServiceImplementationClient
     public:
     virtual ~OuiServiceImplementationClient() {}
 
-    virtual GenericConnection connect(asio::yield_context yield) = 0;
+    virtual GenericConnection connect(boost::asio::yield_context yield) = 0;
     virtual void cancel_connect() = 0;
 };
 
 /*
- * This temporary version supports only a single active implementation.
- * Later versions will support functionality like trying multiple parallel implementations.
+ * This temporary version supports only a single active implementation, and
+ * therefore is just an empty shell.Later versions will support functionality
+ * like trying multiple parallel implementations.
  */
 class OuiServiceClient
 {
     public:
-    OuiServiceClient(asio::io_service& ios);
+    OuiServiceClient(boost::asio::io_service& ios);
 
     void add(std::unique_ptr<OuiServiceImplementationClient> implementation);
 
-    GenericConnection connect(asio::yield_context yield);
+    GenericConnection connect(boost::asio::yield_context yield);
     void cancel_connect();
 
     private:
-    asio::io_service& _ios;
+    boost::asio::io_service& _ios;
     std::vector<std::unique_ptr<OuiServiceImplementationClient>> _implementations;
 };
 
