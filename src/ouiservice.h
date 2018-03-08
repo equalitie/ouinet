@@ -28,6 +28,8 @@ class OuiServiceServer
     public:
     OuiServiceServer(boost::asio::io_service& ios);
 
+    boost::asio::io_service& get_io_service() { return _ios; }
+
     void add(std::unique_ptr<OuiServiceImplementationServer> implementation);
 
     void start_listen(boost::asio::yield_context yield);

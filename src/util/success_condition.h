@@ -40,9 +40,12 @@ class SuccessCondition {
 private:
     struct WaitState {
         ConditionVariable condition;
-        bool is_released;
         int remaining_locks;
         bool success;
+
+        bool blocked() {
+            return remaining_locks > 0 && !success;
+        }
 
         WaitState(boost::asio::io_service& ios);
     };
@@ -78,19 +81,19 @@ private:
     std::shared_ptr<WaitState> _wait_state;
 };
 
+
+
 inline
 SuccessCondition::WaitState::WaitState(boost::asio::io_service& ios):
     condition(ios),
-    is_released(false),
     remaining_locks(0),
     success(false)
 {}
 
 inline
-SuccessCondition::Lock::Lock(const std::shared_ptr<WaitState>& wait_state):
+SuccessCondition::Lock::Lock(const std::shared_ptr<SuccessCondition::WaitState>& wait_state):
     _wait_state(wait_state)
 {
-    assert(!_wait_state->is_released);
     _wait_state->remaining_locks++;
 }
 
@@ -123,13 +126,11 @@ void SuccessCondition::Lock::release(bool success)
     }
 
     _wait_state->remaining_locks--;
-    if (!_wait_state->is_released) {
-        assert(!_wait_state->success);
-        if (success || _wait_state->remaining_locks == 0) {
-            _wait_state->success = success;
-            _wait_state->is_released = true;
-            _wait_state->condition.notify_one();
-        }
+    if (success) {
+        _wait_state->success = true;
+    }
+    if (!_wait_state->blocked()) {
+        _wait_state->condition.notify_one();
     }
     _wait_state.reset();
 }
@@ -147,7 +148,7 @@ bool SuccessCondition::wait_for_success(boost::asio::yield_context yield)
     }
 
     std::shared_ptr<WaitState> wait_state = std::move(_wait_state);
-    if (!wait_state->is_released) {
+    if (wait_state->blocked()) {
         wait_state->condition.wait(yield);
     }
     return wait_state->success;

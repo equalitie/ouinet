@@ -34,7 +34,9 @@ void OuiServiceServer::start_listen(asio::yield_context yield)
 
             lock.release(true);
 
-            auto slot_connection = _stop_listen.connect([implementation] () {
+            bool running = true;
+            auto slot_connection = _stop_listen.connect([implementation, &running] () {
+                running = false;
                 implementation->stop_listen();
             });
 
@@ -44,6 +46,11 @@ void OuiServiceServer::start_listen(asio::yield_context yield)
                  * TODO: Reconnect logic? There are errors other than operation_aborted.
                  */
                 if (ec) {
+                    break;
+                }
+
+                if (!running) {
+                    connection.close();
                     break;
                 }
 
@@ -63,6 +70,11 @@ void OuiServiceServer::start_listen(asio::yield_context yield)
 void OuiServiceServer::stop_listen()
 {
     _stop_listen();
+    while (!_connection_queue.empty()) {
+        _connection_queue.front().close();
+        _connection_queue.pop_front();
+    }
+    _connection_available.notify_one();
 }
 
 GenericConnection OuiServiceServer::accept(asio::yield_context yield)

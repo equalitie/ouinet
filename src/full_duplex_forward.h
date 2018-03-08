@@ -1,7 +1,7 @@
 #pragma once
 
 #include "generic_connection.h"
-#include "blocker.h"
+#include "util/wait_condition.h"
 
 namespace ouinet {
 
@@ -29,21 +29,21 @@ void full_duplex( GenericConnection& c1
 
     assert(&c1.get_io_service() == &c2.get_io_service());
 
-    Blocker blocker(c1.get_io_service());
+    WaitCondition wait_condition(c1.get_io_service());
 
     asio::spawn
         ( yield
-        , [&, b = blocker.make_block()](asio::yield_context yield) {
+        , [&, b = wait_condition.lock()](asio::yield_context yield) {
               half_duplex(c1, c2, yield);
           });
 
     asio::spawn
         ( yield
-        , [&, b = blocker.make_block()](asio::yield_context yield) {
+        , [&, b = wait_condition.lock()](asio::yield_context yield) {
               half_duplex(c2, c1, yield);
           });
 
-    blocker.wait(yield);
+    wait_condition.wait(yield);
 }
 
 } // ouinet namespace

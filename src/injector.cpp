@@ -26,10 +26,11 @@
 #include "async_sleep.h"
 #include "increase_open_file_limit.h"
 #include "full_duplex_forward.h"
-#include "coroutineset.h"
 
 #include "ouiservice.h"
 #include "ouiservice/tcp.h"
+
+#include "util/wait_condition.h"
 
 using namespace std;
 using namespace ouinet;
@@ -176,125 +177,97 @@ private:
 
 
 
-class InjectorConnection
+static
+void serve(
+    GenericConnection connection,
+    ipfs_cache::Injector& ipfs_cache_injector,
+    Signal<void()>& abort,
+    asio::yield_context yield
+)
 {
-    public:
-    InjectorConnection(GenericConnection&& connection, ipfs_cache::Injector& ipfs_cache_injector);
+    auto abort_connection = abort.connect([&] {
+        connection.close();
+    });
 
-    void run(asio::yield_context yield);
-    void stop();
-
-    private:
-    asio::io_service& _ios;
-    GenericConnection _connection;
-    ipfs_cache::Injector& _ipfs_cache_injector;
-};
-
-InjectorConnection::InjectorConnection(GenericConnection&& connection, ipfs_cache::Injector& ipfs_cache_injector):
-    _ios(connection.get_io_service()),
-    _connection(std::move(connection)),
-    _ipfs_cache_injector(ipfs_cache_injector)
-{}
-
-void InjectorConnection::run(asio::yield_context yield)
-{
-    sys::error_code ec;
-    beast::flat_buffer buffer;
+    asio::io_service& ios = connection.get_io_service();
 
     for (;;) {
-        InjectorCacheControl cc(_ios, _ipfs_cache_injector);
+        sys::error_code ec;
 
         Request req;
-
-        http::async_read(_connection, buffer, req, yield[ec]);
-
-        if (ec == http::error::end_of_stream) break;
-        if (ec) return fail(ec, "read");
-
-        if (req.method() == http::verb::connect) {
-            return handle_connect_request(_connection, req, yield);
+        beast::flat_buffer buffer;
+        http::async_read(connection, buffer, req, yield[ec]);
+        if (ec) {
+            break;
         }
 
+        if (req.method() == http::verb::connect) {
+            return handle_connect_request(connection, req, yield);
+        }
+
+        InjectorCacheControl cc(ios, ipfs_cache_injector);
         auto res = cc.fetch(req, yield[ec]);
 
-        if (ec == http::error::end_of_stream) break;
-        if (ec) return fail(ec, "fetch");
+        if (ec) {
+            break;
+        }
 
-        // Forward back the response
-        http::async_write(_connection, res, yield[ec]);
-        if (ec) return fail(ec, "write");
+        http::async_write(connection, res, yield[ec]);
+        if (ec) {
+            break;
+        }
     }
 }
 
-void InjectorConnection::stop()
+
+
+static
+void listen(
+    OuiServiceServer& proxy_server,
+    ipfs_cache::Injector& ipfs_cache_injector,
+    Signal<void()>& stop,
+    asio::yield_context yield
+)
 {
-    _connection.close();
-}
+    auto stop_proxy = stop.connect([&] {
+        proxy_server.stop_listen();
+    });
 
+    asio::io_service& ios = proxy_server.get_io_service();
 
-
-class Injector
-{
-    public:
-    Injector(asio::io_service& ios, OuiServiceServer& proxy_server, ipfs_cache::Injector& ipfs_cache_injector);
-
-    void run(asio::yield_context yield);
-    void stop();
-
-    private:
-    asio::io_service& _ios;
-    OuiServiceServer& _proxy_server;
-    ipfs_cache::Injector& _ipfs_cache_injector;
-
-    bool _stopping;
-
-    CoroutineSet<InjectorConnection> _connections;
-};
-
-Injector::Injector(asio::io_service& ios, OuiServiceServer& proxy_server, ipfs_cache::Injector& ipfs_cache_injector):
-    _ios(ios),
-    _proxy_server(proxy_server),
-    _ipfs_cache_injector(ipfs_cache_injector),
-    _stopping(false),
-    _connections(ios)
-{}
-
-void Injector::run(asio::yield_context yield)
-{
     sys::error_code ec;
-    _proxy_server.start_listen(yield[ec]);
+    proxy_server.start_listen(yield[ec]);
     if (ec) {
-        cerr << "Failed to setup ouiservice proxy server: " << ec.message() << endl;
+        std::cerr << "Failed to setup ouiservice proxy server: " << ec.message() << endl;
         return;
     }
 
-    while (!_stopping) {
-        GenericConnection connection = _proxy_server.accept(yield[ec]);
+    WaitCondition shutdown_connections(ios);
+
+    while (true) {
+        sys::error_code ec;
+        GenericConnection connection = proxy_server.accept(yield[ec]);
         if (ec == boost::asio::error::operation_aborted) {
-            continue;
+            break;
         } else if (ec) {
-            cerr << "Failed to accept: " << ec.message() << endl;
-            async_sleep(_ios, chrono::milliseconds(100), yield);
-        } else {
-            std::unique_ptr<InjectorConnection> c = std::make_unique<InjectorConnection>(std::move(connection), _ipfs_cache_injector);
-            _connections.run(std::move(c), [](InjectorConnection* c, asio::yield_context yield) {
-                c->run(yield);
-            });
+            if (!async_sleep(ios, std::chrono::milliseconds(100), stop, yield)) {
+                break;
+            }
+            continue;
         }
+
+        boost::asio::spawn(ios, [
+            connection = std::move(connection),
+            &ipfs_cache_injector,
+            &stop,
+            lock = shutdown_connections.lock()
+        ] (boost::asio::yield_context yield) mutable {
+            serve(std::move(connection), ipfs_cache_injector, stop, yield);
+        });
+
     }
 
-    for (auto i : _connections.coroutines()) {
-        i->stop();
-    }
-    _connections.wait_empty(yield);
-
-    // TODO: Gracefully shutdown the ouiservice implementations as well
-}
-
-void Injector::stop()
-{
-    _stopping = true;
-    _proxy_server.cancel_accept();
+    shutdown_connections.wait(yield);
 }
 
 
@@ -434,21 +407,21 @@ int main(int argc, char* argv[])
 
 
 
-    CoroutineSet<Injector> injector_coroutine(ios);
-    std::unique_ptr<Injector> injector = std::make_unique<Injector>(ios, proxy_server, ipfs_cache_injector);
-    injector_coroutine.run(std::move(injector), [](Injector* injector, asio::yield_context yield) {
-        injector->run(yield);
+    Signal<void()> shutdown_injector;
+
+    boost::asio::spawn(ios, [
+        &proxy_server,
+        &ipfs_cache_injector,
+        &shutdown_injector
+    ] (boost::asio::yield_context yield) {
+        listen(proxy_server, ipfs_cache_injector, shutdown_injector, yield);
     });
 
     asio::signal_set signals(ios, SIGINT, SIGTERM);
-    signals.async_wait([&injector_coroutine, &signals, &ios](const sys::error_code& ec, int signal_number) {
+    signals.async_wait([&shutdown_injector, &signals, &ios](const sys::error_code& ec, int signal_number) mutable {
         cerr << "Got signal, shutting down" << endl;
 
-        asio::spawn(ios, [&injector_coroutine, &ios](asio::yield_context yield) {
-            injector_coroutine.coroutine()->stop();
-            injector_coroutine.wait_empty(yield);
-            ios.stop();
-        });
+        shutdown_injector();
 
         signals.async_wait([](const sys::error_code& ec, int signal_number) {
             cerr << "Got second signal, terminating immediately" << endl;
