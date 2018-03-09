@@ -193,8 +193,10 @@ rm -rf android || true
 rsync -r ../android .
 cd android
 GRADLE_USER_HOME=$DIR/.gradle-home
-gradle -s --no-daemon build
+gradle --info -s --no-daemon build
 adb devices
-adb install ../android/browser/build/outputs/apk/debug/browser-debug.apk
+adb install -r ../android/browser/build/outputs/apk/debug/browser-debug.apk
+adb logcat -c
+adb logcat
 
 ######################################################################
