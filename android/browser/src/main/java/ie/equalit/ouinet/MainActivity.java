@@ -8,6 +8,9 @@ public class MainActivity extends AppCompatActivity {
 
     // Used to load the 'native-lib' library on application startup.
     static {
+        System.loadLibrary("ipfs_bindings");
+        System.loadLibrary("ipfs-cache");
+        System.loadLibrary("client");
         System.loadLibrary("native-lib");
     }
 
