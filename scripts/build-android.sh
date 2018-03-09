@@ -83,6 +83,8 @@ fi
 
 export ANDROID_NDK_HOME=$DIR/android-ndk-r16b
 
+add_library $NDK_TOOLCHAIN_DIR/arm-linux-androideabi/lib/$CMAKE_SYSTEM_PROCESSOR/libc++_shared.so
+
 ######################################################################
 if [ ! -d "./gradle-4.6" ]; then
     wget https://services.gradle.org/distributions/gradle-4.6-bin.zip
@@ -109,8 +111,6 @@ if [ ! -d "Boost-for-Android/build" ]; then
     cd ..
 fi
 
-add_library $DIR/Boost-for-Android/build/out/armeabi-v7a/lib/*
-
 ######################################################################
 function build_openssl {
     export SYSTEM=android
@@ -136,9 +136,6 @@ if [ ! -d "$SSL_DIR" ]; then
     (cd $SSL_DIR && build_openssl)
 fi
 
-add_library $DIR/openssl-1.1.0g/libcrypto.a
-add_library $DIR/openssl-1.1.0g/libssl.a
-
 ######################################################################
 ANDROID_FLAGS="\
     -DBoost_COMPILER='-clang' \
@@ -148,6 +145,7 @@ ANDROID_FLAGS="\
     -DCMAKE_ANDROID_STANDALONE_TOOLCHAIN=${NDK_TOOLCHAIN_DIR} \
     -DCMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR} \
     -DCMAKE_ANDROID_ARCH_ABI=${ABI} \
+    -DOPENSSL_ROOT_DIR=${SSL_DIR} \
     -DBOOST_INCLUDEDIR=${DIR}/Boost-for-Android/build/out/${ABI}/include/boost-${BOOST_V} \
     -DBOOST_LIBRARYDIR=${DIR}/Boost-for-Android/build/out/${ABI}/lib"
 
@@ -156,9 +154,6 @@ if [ ! -d "android-ifaddrs" ]; then
     # TODO: Still need to compile the .c file and make use of it.
     git clone https://github.com/PurpleI2P/android-ifaddrs.git
 fi
-
-# TODO: Compile ifaddrs.c and add it to libraries
-# add_library ./.../ifaddrs.a
 
 ######################################################################
 # TODO: miniupnp
@@ -171,22 +166,25 @@ cmake ${ANDROID_FLAGS} \
     -DANDROID=1 \
     -DWITH_GNUNET=OFF \
     -DWITH_INJECTOR=OFF \
+    -DIFADDRS_SOURCES="${DIR}/android-ifaddrs/ifaddrs.c" \
     -DOPENSSL_INCLUDE_DIR=${SSL_DIR}/include \
     -DCMAKE_CXX_FLAGS="-I ${DIR}/android-ifaddrs -I $SSL_DIR/include" \
     ${ROOT}
 make VERBOSE=1
 cd ..
 
-./build.android/build-ouinet/libclient.a
-
-add_library $DIR/build-ouinet/modules/i2pouiservice/i2pd/build/libi2pd.a
-add_library $DIR/build-ouinet/modules/i2pouiservice/i2pd/build/libi2pdclient.a
-add_library $DIR/build-ouinet/modules/i2pouiservice/libi2poui.a
-
-add_library $DIR/build-ouinet/modules/ipfs-cache/ipfs_bindings/ipfs_bindings.so
+add_library $DIR/build-ouinet/libclient.so
+add_library $DIR/build-ouinet/modules/ipfs-cache/ipfs_bindings/libipfs_bindings.so
 add_library $DIR/build-ouinet/modules/ipfs-cache/libipfs-cache.so
 
-exit
+######################################################################
+JNI_DST_DIR=${ROOT}/android/browser/src/main/jniLibs/${ABI}
+rm -rf ${ROOT}/android/browser/src/main/jniLibs
+mkdir -p $JNI_DST_DIR
+for lib in "${OUT_LIBS[@]}"; do
+    echo "Copying $lib to $JNI_DST_DIR"
+    cp $lib $JNI_DST_DIR/
+done
 
 ######################################################################
 # Unpolished code to build the browser-debug.apk
