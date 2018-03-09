@@ -44,6 +44,7 @@ endif()
 ################################################################################
 project(ouinet)
 
+find_package(OpenSSL REQUIRED)
 find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS filesystem
                                                         regex
                                                         unit_test_framework
@@ -74,15 +75,21 @@ file(GLOB client_sources
 
 if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
     add_executable(client ${client_sources})
-
-    target_link_libraries(client
-        i2poui i2pdclient libi2pd
-        ${Boost_LIBRARIES}
-        ${IPFS_CACHE_LIBRARIES}
-        ${GNUNET_CHANNELS_LIBRARIES})
 else()
-    add_library(client ${client_sources})
+    find_library( # Sets the name of the path variable.
+                  log-lib
+                  # Specifies the name of the NDK library that
+                  # you want CMake to locate.
+                  log )
+    add_library(client SHARED ${client_sources})
 endif()
+
+target_link_libraries(client
+    ${log-lib}
+    i2poui i2pdclient libi2pd
+    ${Boost_LIBRARIES}
+    ${IPFS_CACHE_LIBRARIES}
+    ${GNUNET_CHANNELS_LIBRARIES})
 
 add_dependencies(client beast ${IPFS_CACHE_TARGET} ${GNUNET_TARGET} i2poui)
 
