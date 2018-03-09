@@ -22,6 +22,7 @@ BOOST_V_DOT=${BOOST_V//_/.} # 1.65.1
 
 # https://developer.android.com/ndk/guides/abis.html
 ABI=armeabi-v7a
+#ABI=arm64-v8a
 
 ######################################################################
 # This variable shall contain paths to generated libraries which
@@ -45,7 +46,17 @@ which unzip > /dev/null || sudo apt-get install unzip
 ######################################################################
 if [ "$ABI" = "armeabi-v7a" ]; then
     CMAKE_SYSTEM_PROCESSOR="armv7-a"
+elif [ "$ABI" = "arm64-v8a" ]; then
+    CMAKE_SYSTEM_PROCESSOR="aarch64"
+elif [ "$ABI" = "armeabi" ]; then
+    CMAKE_SYSTEM_PROCESSOR="armv5te"
+elif [ "$ABI" = "x86" ]; then
+    CMAKE_SYSTEM_PROCESSOR="i686"
+elif [ "$ABI" = "x86_64" ]; then
+    CMAKE_SYSTEM_PROCESSOR="x86_64"
 else
+    # This may help:
+    # https://github.com/opencv/opencv/blob/5b868ccd829975da5372bf330994553e176aee09/platforms/android/android.toolchain.cmake#L658
     >&2 echo "TODO: Need a mapping from \"$ABI\" to CMAKE_SYSTEM_PROCESSOR"
     exit 1
 fi
