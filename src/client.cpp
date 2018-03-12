@@ -4,8 +4,6 @@
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/connect.hpp>
-#include <boost/program_options.hpp>
-#include <boost/filesystem.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <iostream>
 #include <fstream>
@@ -33,21 +31,17 @@
 #include "or_throw.h"
 #include "request_routing.h"
 #include "full_duplex_forward.h"
+#include "client_config.h"
 
 using namespace std;
 using namespace ouinet;
 
-namespace fs = boost::filesystem;
 namespace posix_time = boost::posix_time;
 
 using tcp         = asio::ip::tcp;
 using string_view = beast::string_view;
 using Request     = http::request<http::string_body>;
 using Response    = http::response<http::dynamic_body>;
-
-static fs::path REPO_ROOT;
-static const fs::path OUINET_CONF_FILE = "ouinet-client.conf";
-static posix_time::time_duration MAX_CACHED_AGE = posix_time::hours(7*24);  // one week
 
 //------------------------------------------------------------------------------
 #define ASYNC_DEBUG(code, ...) [&] () mutable {\
@@ -63,7 +57,7 @@ struct Client {
     };
 
     asio::io_service& ios;
-    Endpoint injector_ep;
+    ClientConfig config;
 #ifdef USE_GNUNET
     unique_ptr<gnunet_channels::Service> gnunet_service;
 #endif
@@ -72,9 +66,9 @@ struct Client {
 
     ClientFrontEnd front_end;
 
-    Client(asio::io_service& ios, const Endpoint& injector_ep)
+    Client(asio::io_service& ios, const ClientConfig& config)
         : ios(ios)
-        , injector_ep(injector_ep)
+        , config(config)
     {}
 };
 
@@ -149,7 +143,7 @@ connect_to_injector(Client& client, asio::yield_context yield)
 
     Visitor visitor(client, yield);
 
-    return boost::apply_visitor(visitor, client.injector_ep);
+    return boost::apply_visitor(visitor, client.config.injector_endpoint());
 }
 
 //------------------------------------------------------------------------------
@@ -302,7 +296,7 @@ fetch_fresh( const Request& request
                 continue;
             }
             case responder::_front_end: {
-                return client.front_end.serve( client.injector_ep
+                return client.front_end.serve( client.config.injector_endpoint()
                                              , request
                                              , client.ipfs_cache.get());
             }
@@ -332,7 +326,7 @@ CacheControl build_cache_control( asio::io_service& ios
                               , "Fetch from origin: ", request.target());
         };
 
-    cache_control.max_cached_age(MAX_CACHED_AGE);
+    cache_control.max_cached_age(client.config.max_cached_age());
 
     return cache_control;
 }
@@ -445,11 +439,11 @@ static void serve_request( GenericConnection con
 }
 
 //------------------------------------------------------------------------------
-void do_listen( Client& client
-              , tcp::endpoint local_endpoint
-              , string ipns
-              , asio::yield_context yield)
+void do_listen(Client& client, asio::yield_context yield)
 {
+    const auto local_endpoint = client.config.local_endpoint();
+    const auto ipns = client.config.ipns();
+
     auto& ios = client.ios;
 
     sys::error_code ec;
@@ -471,7 +465,10 @@ void do_listen( Client& client
     if (ec) return fail(ec, "listen");
 
     if (ipns.size()) {
-        ipfs_cache::Client cache(ios, ipns, (REPO_ROOT/"ipfs").native());
+        ipfs_cache::Client cache( ios
+                                , ipns
+                                , (client.config.repo_root()/"ipfs").native());
+
         client.ipfs_cache = make_unique<ipfs_cache::Client>(move(cache));
     }
 
@@ -501,93 +498,14 @@ void do_listen( Client& client
 //------------------------------------------------------------------------------
 int main(int argc, char* argv[])
 {
-    namespace po = boost::program_options;
+    ClientConfig config;
 
-    po::options_description desc("\nOptions");
-
-    desc.add_options()
-        ("help", "Produce this help message")
-        ("repo", po::value<string>(), "Path to the repository root")
-        ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen")
-        ("injector-ep"
-         , po::value<string>()
-         , "Injector's endpoint (either <IP>:<PORT> or <GNUnet's ID>:<GNUnet's PORT>")
-        ("injector-ipns"
-         , po::value<string>()->default_value("")
-         , "IPNS of the injector's database")
-        ("max-cached-age"
-         , po::value<int>()->default_value(MAX_CACHED_AGE.total_seconds())
-         , "Discard cached content older than this many seconds (0: discard all; -1: discard none)")
-        ("open-file-limit"
-         , po::value<unsigned int>()
-         , "To increase the maximum number of open files")
-        ;
-
-    po::variables_map vm;
-    po::store(po::parse_command_line(argc, argv, desc), vm);
-    po::notify(vm);
-
-    if (!vm.count("repo")) {
-        cerr << "The 'repo' argument is missing" << endl;
-        cerr << desc << endl;
+    try {
+        config = ClientConfig(argc, argv);
+    }
+    catch (std::exception& e) {
+        cerr << e.what() << endl;
         return 1;
-    }
-
-    REPO_ROOT = fs::path(vm["repo"].as<string>());
-
-    if (!fs::exists(REPO_ROOT)) {
-        cerr << "Directory " << REPO_ROOT << " does not exist." << endl;
-        cerr << desc << endl;
-        return 1;
-    }
-
-    if (!fs::is_directory(REPO_ROOT)) {
-        cerr << "The path " << REPO_ROOT << " is not a directory." << endl;
-        cerr << desc << endl;
-        return 1;
-    }
-
-    fs::path ouinet_conf_path = REPO_ROOT/OUINET_CONF_FILE;
-
-    if (!fs::is_regular_file(ouinet_conf_path)) {
-        cerr << "The path " << REPO_ROOT << " does not contain "
-             << "the " << OUINET_CONF_FILE << " configuration file." << endl;
-        cerr << desc << endl;
-        return 1;
-    }
-
-    ifstream ouinet_conf(ouinet_conf_path.native());
-
-    po::store(po::parse_config_file(ouinet_conf, desc), vm);
-    po::notify(vm);
-
-    if (vm.count("open-file-limit")) {
-        increase_open_file_limit(vm["open-file-limit"].as<unsigned int>());
-    }
-
-    if (vm.count("max-cached-age")) {
-        MAX_CACHED_AGE = boost::posix_time::seconds(vm["max-cached-age"].as<int>());
-    }
-
-    if (!vm.count("listen-on-tcp")) {
-        cerr << "The parameter 'listen-on-tcp' is missing" << endl;
-        cerr << desc << endl;
-        return 1;
-    }
-
-    if (!vm.count("injector-ep")) {
-        cerr << "The parameter 'injector-ep' is missing" << endl;
-        cerr << desc << endl;
-        return 1;
-    }
-
-    auto const local_ep = util::parse_endpoint(vm["listen-on-tcp"].as<string>());
-    auto const injector_ep = *parse_endpoint(vm["injector-ep"].as<string>());
-
-    string ipns;
-
-    if (vm.count("injector-ipns")) {
-        ipns = vm["injector-ipns"].as<string>();
     }
 
     // The io_service is required for all I/O
@@ -596,16 +514,18 @@ int main(int argc, char* argv[])
     asio::spawn
         ( ios
         , [&](asio::yield_context yield) {
+              auto injector_ep = config.injector_endpoint();
 
-              Client client(ios, injector_ep);
+              Client client(ios, config);
 
 #ifdef USE_GNUNET
               if (is_gnunet_endpoint(injector_ep)) {
                   namespace gc = gnunet_channels;
 
-                  string config = (REPO_ROOT/"gnunet"/"peer.conf").native();
+                  string gnunet_cfg
+                      = (config.repo_root()/"gnunet"/"peer.conf").native();
 
-                  auto service = make_unique<gc::Service>(config, ios);
+                  auto service = make_unique<gc::Service>(gnunet_cfg, ios);
 
                   sys::error_code ec;
 
@@ -626,7 +546,7 @@ int main(int argc, char* argv[])
               if (is_i2p_endpoint(injector_ep)) {
                   auto ep = boost::get<I2PEndpoint>(injector_ep).pubkey;
 
-                  i2poui::Service service((REPO_ROOT/"i2p").native(), ios);
+                  i2poui::Service service((config.repo_root()/"i2p").native(), ios);
                   sys::error_code ec;
                   i2poui::Connector connector = service.build_connector(ep, yield[ec]);
 
@@ -641,10 +561,7 @@ int main(int argc, char* argv[])
                               move(connector)});
               }
 
-              do_listen( client
-                       , local_ep
-                       , ipns
-                       , yield);
+              do_listen(client, yield);
           });
 
     ios.run();
