@@ -33,6 +33,10 @@
 #include "full_duplex_forward.h"
 #include "client_config.h"
 
+#ifdef __ANDROID__
+#include "redirect_to_android_log.h"
+#endif // ifdef __ANDROID__
+
 using namespace std;
 using namespace ouinet;
 
@@ -496,8 +500,14 @@ void do_listen(Client& client, asio::yield_context yield)
 }
 
 //------------------------------------------------------------------------------
-int main(int argc, char* argv[])
+
+int run_client(int argc, char* argv[])
 {
+#ifdef __ANDROID__
+    RedirectToAndroidLog cout_guard(cout);
+    RedirectToAndroidLog cerr_guard(cerr);
+#endif // ifdef __ANDROID__
+
     ClientConfig config;
 
     try {
@@ -568,3 +578,11 @@ int main(int argc, char* argv[])
 
     return EXIT_SUCCESS;
 }
+
+//------------------------------------------------------------------------------
+#ifndef __ANDROID__
+int main(int argc, char* argv[])
+{
+    return run_client(argc, argv);
+}
+#endif
