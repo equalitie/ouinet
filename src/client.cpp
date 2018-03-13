@@ -31,6 +31,7 @@
 #include "or_throw.h"
 #include "request_routing.h"
 #include "full_duplex_forward.h"
+#include "shutter.h"
 
 using namespace std;
 using namespace ouinet;
@@ -45,6 +46,7 @@ using Response    = http::response<http::dynamic_body>;
 
 static fs::path REPO_ROOT;
 static const fs::path OUINET_CONF_FILE = "ouinet-client.conf";
+static const fs::path OUINET_PID_FILE = "pid";
 static posix_time::time_duration MAX_CACHED_AGE = posix_time::hours(7*24);  // one week
 
 //------------------------------------------------------------------------------
@@ -65,6 +67,7 @@ struct Client {
     unique_ptr<gnunet_channels::Service> gnunet_service;
     unique_ptr<I2P> i2p;
     unique_ptr<ipfs_cache::Client> ipfs_cache;
+    Shutter shutter;
 
     ClientFrontEnd front_end;
 
@@ -137,7 +140,9 @@ connect_to_injector(Client& client, asio::yield_context yield)
             i2poui::Channel ch(client.i2p->service);
             ch.connect(client.i2p->connector, yield[ec]);
 
-            return or_throw(yield, ec, GenericConnection(move(ch)));
+            // TODO: Remove the second argument to GenericConnection once
+            // i2poui Channel implements the 'close' member function.
+            return or_throw(yield, ec, GenericConnection(move(ch), [](auto&){}));
         }
     };
 
@@ -166,6 +171,9 @@ void handle_connect_request( GenericConnection& client_c
     }
 
     auto injector_c = connect_to_injector(client, yield[ec]);
+
+    auto injector_canceler
+        = client.shutter.add([&injector_c] { injector_c.close(); });
 
     if (ec) {
         // TODO: Does an RFC dicate a particular HTTP status code?
@@ -332,7 +340,7 @@ CacheControl build_cache_control( asio::io_service& ios
 }
 
 //------------------------------------------------------------------------------
-static void serve_request( GenericConnection con
+static void serve_request( GenericConnection& con
                          , Client& client
                          , asio::yield_context yield)
 {
@@ -450,6 +458,7 @@ void do_listen( Client& client
 
     // Open the acceptor
     tcp::acceptor acceptor(ios);
+    auto acceptor_canceler = client.shutter.add([&acceptor] { acceptor.close(); });
 
     acceptor.open(local_endpoint.protocol(), ec);
     if (ec) return fail(ec, "open");
@@ -469,24 +478,39 @@ void do_listen( Client& client
         client.ipfs_cache = make_unique<ipfs_cache::Client>(move(cache));
     }
 
+    auto ipfs_canceler = client.shutter.add(
+            [&client] { client.ipfs_cache = nullptr; });
+
     cout << "Client accepting on " << acceptor.local_endpoint() << endl;
 
     for(;;)
     {
         tcp::socket socket(ios);
+
         ASYNC_DEBUG(acceptor.async_accept(socket, yield[ec]), "Accept");
         if(ec) {
+            if (ec == asio::error::operation_aborted) break;
             fail(ec, "accept");
-            ASYNC_DEBUG(async_sleep(ios, chrono::seconds(1), yield), "Sleep");
+            async_sleep(ios, client.shutter, chrono::seconds(1), yield);
         }
         else {
+            static const auto tcp_shutter = [](tcp::socket& s) {
+                s.shutdown(tcp::socket::shutdown_both);
+                s.close();
+            };
+
+            auto connection
+                = make_shared<GenericConnection>(move(socket), tcp_shutter);
+
+            auto connection_canceler = client.shutter.add(
+                    [connection] { connection->close(); });
+
             asio::spawn( ios
-                       , [ s = move(socket)
+                       , [ connection
                          , &client
+                         , cc = move(connection_canceler)
                          ](asio::yield_context yield) mutable {
-                             serve_request( GenericConnection(move(s))
-                                          , client
-                                          , yield);
+                             serve_request(*connection, client, yield);
                          });
         }
     }
@@ -584,14 +608,23 @@ int main(int argc, char* argv[])
         ipns = vm["injector-ipns"].as<string>();
     }
 
+    if (exists(REPO_ROOT/OUINET_PID_FILE)) {
+        cerr << "Existing PID file " << REPO_ROOT/OUINET_PID_FILE
+             << "; another client process may be running"
+             << ", otherwise please remove the file." << endl;
+        return 1;
+    }
+    // Acquire a PID file for the life of the process
+    util::PidFile pid_file(REPO_ROOT/OUINET_PID_FILE);
+
     // The io_service is required for all I/O
     asio::io_service ios;
+
+    Client client(ios, injector_ep);
 
     asio::spawn
         ( ios
         , [&](asio::yield_context yield) {
-
-              Client client(ios, injector_ep);
 
               if (is_gnunet_endpoint(injector_ep)) {
                   namespace gc = gnunet_channels;
@@ -639,7 +672,16 @@ int main(int argc, char* argv[])
                        , yield);
           });
 
+    asio::signal_set signals(ios, SIGINT, SIGTERM);
+
+    signals.async_wait([&client](const sys::error_code& ec, int signal_number) {
+            client.shutter.close_everything();
+        });
+
     ios.run();
+
+    // TODO: Remove this once work on clean exit is done.
+    cerr << "Clean exit" << endl;
 
     return EXIT_SUCCESS;
 }

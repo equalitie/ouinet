@@ -11,6 +11,7 @@ using namespace ouinet;
 
 GenericConnection
 ouinet::connect_to_host( asio::io_service& ios
+                       , Shutter& shutter
                        , beast::string_view host_and_port
                        , asio::yield_context yield)
 {
@@ -23,6 +24,12 @@ ouinet::connect_to_host( asio::io_service& ios
     string port = hp.second.to_string();
 
     tcp::socket socket(ios);
+
+    auto socket_shutter = shutter.add([&socket] {
+            socket.shutdown(tcp::socket::shutdown_both);
+            socket.close();
+        });
+
     sys::error_code ec;
 
     tcp::resolver resolver{ios};
