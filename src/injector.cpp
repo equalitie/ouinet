@@ -26,7 +26,8 @@
 #include "async_sleep.h"
 #include "increase_open_file_limit.h"
 #include "full_duplex_forward.h"
-#include "shutter.h"
+
+#include "util/signal.h"
 
 using namespace std;
 using namespace ouinet;
@@ -41,10 +42,6 @@ using Response    = http::response<http::dynamic_body>;
 static fs::path REPO_ROOT;
 static const fs::path OUINET_CONF_FILE = "ouinet-injector.conf";
 static const fs::path OUINET_PID_FILE = "pid";
-
-// TODO: Instead of having global variables, create a class similar to the
-// client.cpp/Client one to hold per-injector state (such as this shutter).
-Shutter g_shutter;
 
 //------------------------------------------------------------------------------
 static
@@ -69,15 +66,18 @@ void handle_bad_request( GenericConnection& con
 static
 void handle_connect_request( GenericConnection& client_c
                            , const Request& req
+                           , Signal<void()>& disconnect_signal
                            , asio::yield_context yield)
 {
     sys::error_code ec;
 
     asio::io_service& ios = client_c.get_io_service();
 
-    auto origin_c = connect_to_host(ios, g_shutter, req["host"], yield[ec]);
+    auto disconnect_client_slot = disconnect_signal.connect([&client_c] {
+        client_c.close();
+    });
 
-    auto origin_c_shutter = g_shutter.add([&origin_c] { origin_c.close(); });
+    auto origin_c = connect_to_host(ios, req["host"], disconnect_signal, yield[ec]);
 
     if (ec) {
         return handle_bad_request( client_c
@@ -85,6 +85,10 @@ void handle_connect_request( GenericConnection& client_c
                                  , "Connect: can't connect to the origin"
                                  , yield[ec]);
     }
+
+    auto disconnect_origin_slot = disconnect_signal.connect([&origin_c] {
+        origin_c.close();
+    });
 
     // Send the client an OK message indicating that the tunnel
     // has been established.
@@ -101,17 +105,23 @@ void handle_connect_request( GenericConnection& client_c
 //------------------------------------------------------------------------------
 struct InjectorCacheControl {
 public:
+    // TODO: Replace this with cancellation support in which fetch_ operations get a signal parameter
     InjectorCacheControl( asio::io_service& ios
-                        , unique_ptr<ipfs_cache::Injector>& injector)
+                        , unique_ptr<ipfs_cache::Injector>& injector
+                        , Signal<void()>& abort_signal)
         : ios(ios)
         , injector(injector)
     {
-        cc.fetch_fresh = [this, &ios](const Request& rq, asio::yield_context yield) {
+        cc.fetch_fresh = [this, &ios, &abort_signal](const Request& rq, asio::yield_context yield) {
             auto host = rq["host"].to_string();
+
             sys::error_code ec;
-            auto con = connect_to_host(ios, g_shutter, host, yield[ec]);
+            auto con = connect_to_host(ios, host, abort_signal, yield[ec]);
             if (ec) return or_throw<Response>(yield, ec);
-            auto shut_handle = g_shutter.add([&con] {con.close();});
+
+            auto close_con_slot = abort_signal.connect([&con] {
+                con.close();
+            });
             return fetch_http_page(ios, con, rq, yield);
         };
 
@@ -189,23 +199,29 @@ private:
 static
 void serve( GenericConnection& con
           , unique_ptr<ipfs_cache::Injector>& injector
+          , Signal<void()>& close_connection_signal
           , asio::yield_context yield)
 {
     sys::error_code ec;
     beast::flat_buffer buffer;
 
+    auto close_connection_slot = close_connection_signal.connect([&con] {
+        con.close();
+    });
+
     for (;;) {
-        InjectorCacheControl cc(con.get_io_service(), injector);
+        InjectorCacheControl cc(con.get_io_service(), injector, close_connection_signal);
 
         Request req;
 
         http::async_read(con, buffer, req, yield[ec]);
 
+        if (ec == asio::error::operation_aborted) break;
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "read");
 
         if (req.method() == http::verb::connect) {
-            return handle_connect_request(con, req, yield);
+            return handle_connect_request(con, req, close_connection_signal, yield);
         }
 
         auto res = cc.fetch(req, yield[ec]);
@@ -215,6 +231,7 @@ void serve( GenericConnection& con
 
         // Forward back the response
         http::async_write(con, res, yield[ec]);
+        if (ec == asio::error::operation_aborted) break;
         if (ec) return fail(ec, "write");
     }
 }
@@ -222,18 +239,17 @@ void serve( GenericConnection& con
 //------------------------------------------------------------------------------
 static
 void spawn_and_serve( shared_ptr<GenericConnection> c
-                    , unique_ptr<ipfs_cache::Injector>& ipfs_cache_injector)
+                    , unique_ptr<ipfs_cache::Injector>& ipfs_cache_injector
+                    , Signal<void()>& close_connection_signal)
 {
     auto& ios = c->get_io_service();
 
-    auto c_shutter = g_shutter.add([c] { c->close(); });
-
     asio::spawn( ios
                , [ c
-                 , cs = move(c_shutter)
                  , &ipfs_cache_injector
+                 , &close_connection_signal
                  ](asio::yield_context yield) mutable {
-                     serve(*c, ipfs_cache_injector, yield);
+                     serve(*c, ipfs_cache_injector, close_connection_signal, yield);
                  });
 }
 
@@ -242,14 +258,13 @@ static
 void listen_tcp( asio::io_service& ios
                , tcp::endpoint endpoint
                , unique_ptr<ipfs_cache::Injector>& ipfs_cache_injector
+               , Signal<void()>& shutdown_signal
                , asio::yield_context yield)
 {
     sys::error_code ec;
 
     // Open the acceptor
     tcp::acceptor acceptor(ios);
-
-    auto acceptor_canceler = g_shutter.add([&acceptor] { acceptor.close(); });
 
     acceptor.open(endpoint.protocol(), ec);
     if (ec) return fail(ec, "open");
@@ -268,6 +283,10 @@ void listen_tcp( asio::io_service& ios
     cout << "TCP Address: " << ep << endl;
     util::create_state_file(REPO_ROOT/"endpoint-tcp", ep);
 
+    auto shutdown_slot = shutdown_signal.connect([&acceptor] {
+        acceptor.close();
+    });
+
     for(;;)
     {
         tcp::socket socket(ios);
@@ -276,16 +295,17 @@ void listen_tcp( asio::io_service& ios
             if (ec == asio::error::operation_aborted) break;
             fail(ec, "accept");
             // Wait one second before we start accepting again.
-            async_sleep(ios, g_shutter, chrono::seconds(1), yield);
-        }
-        else {
+            if (!async_sleep(ios, chrono::seconds(1), shutdown_signal, yield)) {
+                break;
+            }
+        } else {
             static const auto tcp_shutter = [](tcp::socket& s) {
                 s.shutdown(tcp::socket::shutdown_both);
                 s.close();
             };
 
             auto c = make_shared<GenericConnection>(move(socket), tcp_shutter);
-            spawn_and_serve(c, ipfs_cache_injector);
+            spawn_and_serve(c, ipfs_cache_injector, shutdown_signal);
         }
     }
 }
@@ -295,16 +315,18 @@ static
 void listen_gnunet( asio::io_service& ios
                   , string port_str
                   , unique_ptr<ipfs_cache::Injector>& ipfs_cache_injector
+                  , Signal<void()>& shutdown_signal
                   , asio::yield_context yield)
 {
     namespace gc = gnunet_channels;
 
-    // TODO: Add service and port to g_shutter.
     gc::Service service((REPO_ROOT/"gnunet"/"peer.conf").native(), ios);
 
     sys::error_code ec;
 
-    auto service_canceler = g_shutter.add([&] { service.close(); });
+    auto shutdown_service_slot = shutdown_signal.connect([&service] {
+        service.close();
+    });
 
     cout << "Setting up GNUnet..." << endl;
     service.async_setup(yield[ec]);
@@ -329,12 +351,14 @@ void listen_gnunet( asio::io_service& ios
         if (ec) {
             if (ec == asio::error::operation_aborted) break;
             cerr << "Failed to accept: " << ec.message() << endl;
-            async_sleep(ios, g_shutter, chrono::milliseconds(100), yield);
+            if (!async_sleep(ios, chrono::milliseconds(100), shutdown_signal, yield)) {
+                break;
+            }
             continue;
         }
 
         auto c = make_shared<GenericConnection>(move(channel));
-        spawn_and_serve(c, ipfs_cache_injector);
+        spawn_and_serve(c, ipfs_cache_injector, shutdown_signal);
     }
 }
 
@@ -342,9 +366,10 @@ void listen_gnunet( asio::io_service& ios
 static
 void listen_i2p( asio::io_service& ios
                , unique_ptr<ipfs_cache::Injector>& ipfs_cache_injector
+               , Signal<void()>& shutdown_signal
                , asio::yield_context yield)
 {
-    // TODO: Add service and acceptor to g_shutter.
+    // TODO: Add service and acceptor to shutdown_signal.
     i2poui::Service service((REPO_ROOT/"i2p").native(), ios);
 
     sys::error_code ec;
@@ -368,14 +393,16 @@ void listen_i2p( asio::io_service& ios
         if (ec) {
             if (ec == asio::error::operation_aborted) break;
             cerr << "Failed to accept: " << ec.message() << endl;
-            async_sleep(ios, g_shutter, chrono::milliseconds(100), yield);
+            if (!async_sleep(ios, chrono::milliseconds(100), shutdown_signal, yield)) {
+                break;
+            }
             continue;
         }
 
         // TODO: Remove the second argument to GenericConnection once the
         // i2poui Channel implements the 'close' member function.
         auto c = make_shared<GenericConnection>(move(channel), [](auto&){});
-        spawn_and_serve(c, ipfs_cache_injector);
+        spawn_and_serve(c, ipfs_cache_injector, shutdown_signal);
     }
 }
 
@@ -477,10 +504,14 @@ int main(int argc, char* argv[])
     // The io_service is required for all I/O
     asio::io_service ios;
 
+    Signal<void()> shutdown_signal;
+
     auto ipfs_cache_injector
         = make_unique<ipfs_cache::Injector>(ios, (REPO_ROOT/"ipfs").native());
 
-    auto ipfs_shutter = g_shutter.add([&] { ipfs_cache_injector = nullptr; });
+    auto shutdown_ipfs_slot = shutdown_signal.connect([&] {
+        ipfs_cache_injector = nullptr;
+    });
 
     // Although the IPNS ID is already in IPFS's config file,
     // this just helps put all info relevant to the user right in the repo root.
@@ -495,7 +526,7 @@ int main(int argc, char* argv[])
         asio::spawn
             ( ios
             , [&, injector_ep](asio::yield_context yield) {
-                  listen_tcp(ios, injector_ep, ipfs_cache_injector, yield);
+                  listen_tcp(ios, injector_ep, ipfs_cache_injector, shutdown_signal,yield);
               });
     }
 
@@ -504,7 +535,7 @@ int main(int argc, char* argv[])
             ( ios
             , [&](asio::yield_context yield) {
                   string port = vm["listen-on-gnunet"].as<string>();
-                  listen_gnunet(ios, port, ipfs_cache_injector, yield);
+                  listen_gnunet(ios, port, ipfs_cache_injector, shutdown_signal, yield);
               });
     }
 
@@ -512,7 +543,7 @@ int main(int argc, char* argv[])
         asio::spawn
             ( ios
             , [&](asio::yield_context yield) {
-                  listen_i2p(ios, ipfs_cache_injector, yield);
+                  listen_i2p(ios, ipfs_cache_injector, shutdown_signal,yield);
               });
     }
 
@@ -520,7 +551,7 @@ int main(int argc, char* argv[])
 
     signals.async_wait([&](const sys::error_code& ec, int signal_number) {
             cerr << "Got signal" << endl;
-            g_shutter.close_everything();
+            shutdown_signal();
         });
 
     ios.run();

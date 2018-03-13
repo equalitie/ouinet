@@ -31,7 +31,8 @@
 #include "or_throw.h"
 #include "request_routing.h"
 #include "full_duplex_forward.h"
-#include "shutter.h"
+
+#include "util/signal.h"
 
 using namespace std;
 using namespace ouinet;
@@ -67,7 +68,6 @@ struct Client {
     unique_ptr<gnunet_channels::Service> gnunet_service;
     unique_ptr<I2P> i2p;
     unique_ptr<ipfs_cache::Client> ipfs_cache;
-    Shutter shutter;
 
     ClientFrontEnd front_end;
 
@@ -156,6 +156,7 @@ static
 void handle_connect_request( GenericConnection& client_c
                            , const Request& req
                            , Client& client
+                           , Signal<void()>& disconnect_signal
                            , asio::yield_context yield)
 {
     // https://tools.ietf.org/html/rfc2817#section-5.2
@@ -172,13 +173,14 @@ void handle_connect_request( GenericConnection& client_c
 
     auto injector_c = connect_to_injector(client, yield[ec]);
 
-    auto injector_canceler
-        = client.shutter.add([&injector_c] { injector_c.close(); });
-
     if (ec) {
         // TODO: Does an RFC dicate a particular HTTP status code?
         return handle_bad_request(client_c, req, "Can't connect to injector", yield[ec]);
     }
+
+    auto disconnect_injector_slot = disconnect_signal.connect([&injector_c] {
+        injector_c.close();
+    });
 
     http::async_write(injector_c, const_cast<Request&>(req), yield[ec]);
 
@@ -342,10 +344,15 @@ CacheControl build_cache_control( asio::io_service& ios
 //------------------------------------------------------------------------------
 static void serve_request( GenericConnection& con
                          , Client& client
+                         , Signal<void()>& close_connection_signal
                          , asio::yield_context yield)
 {
     namespace rr = request_route;
     using rr::responder;
+
+    auto close_con_slot = close_connection_signal.connect([&con] {
+        con.close();
+    });
 
     // These access mechanisms are attempted in order for requests by default.
     const rr::Config default_request_config
@@ -415,7 +422,7 @@ static void serve_request( GenericConnection& con
 
         // Attempt connection to origin for CONNECT requests
         if (req.method() == http::verb::connect) {
-            return ASYNC_DEBUG( handle_connect_request(con, req, client, yield)
+            return ASYNC_DEBUG( handle_connect_request(con, req, client, close_connection_signal, yield)
                               , "Connect ", req.target());
         }
 
@@ -450,6 +457,7 @@ static void serve_request( GenericConnection& con
 void do_listen( Client& client
               , tcp::endpoint local_endpoint
               , string ipns
+              , Signal<void()>& shutdown_signal
               , asio::yield_context yield)
 {
     auto& ios = client.ios;
@@ -458,7 +466,6 @@ void do_listen( Client& client
 
     // Open the acceptor
     tcp::acceptor acceptor(ios);
-    auto acceptor_canceler = client.shutter.add([&acceptor] { acceptor.close(); });
 
     acceptor.open(local_endpoint.protocol(), ec);
     if (ec) return fail(ec, "open");
@@ -473,13 +480,18 @@ void do_listen( Client& client
     acceptor.listen(asio::socket_base::max_connections, ec);
     if (ec) return fail(ec, "listen");
 
+    auto shutdown_acceptor_slot = shutdown_signal.connect([&acceptor] {
+        acceptor.close();
+    });
+
     if (ipns.size()) {
         ipfs_cache::Client cache(ios, ipns, (REPO_ROOT/"ipfs").native());
         client.ipfs_cache = make_unique<ipfs_cache::Client>(move(cache));
     }
 
-    auto ipfs_canceler = client.shutter.add(
-            [&client] { client.ipfs_cache = nullptr; });
+    auto shutdown_ipfs_slot = shutdown_signal.connect([&client] {
+        client.ipfs_cache = nullptr;
+    });
 
     cout << "Client accepting on " << acceptor.local_endpoint() << endl;
 
@@ -491,9 +503,10 @@ void do_listen( Client& client
         if(ec) {
             if (ec == asio::error::operation_aborted) break;
             fail(ec, "accept");
-            async_sleep(ios, client.shutter, chrono::seconds(1), yield);
-        }
-        else {
+            if (!async_sleep(ios, chrono::seconds(1), shutdown_signal, yield)) {
+                break;
+            }
+        } else {
             static const auto tcp_shutter = [](tcp::socket& s) {
                 s.shutdown(tcp::socket::shutdown_both);
                 s.close();
@@ -502,15 +515,12 @@ void do_listen( Client& client
             auto connection
                 = make_shared<GenericConnection>(move(socket), tcp_shutter);
 
-            auto connection_canceler = client.shutter.add(
-                    [connection] { connection->close(); });
-
             asio::spawn( ios
                        , [ connection
                          , &client
-                         , cc = move(connection_canceler)
+                         , &shutdown_signal
                          ](asio::yield_context yield) mutable {
-                             serve_request(*connection, client, yield);
+                             serve_request(*connection, client, shutdown_signal, yield);
                          });
         }
     }
@@ -620,6 +630,8 @@ int main(int argc, char* argv[])
     // The io_service is required for all I/O
     asio::io_service ios;
 
+    Signal<void()> shutdown_signal;
+
     Client client(ios, injector_ep);
 
     asio::spawn
@@ -669,13 +681,14 @@ int main(int argc, char* argv[])
               do_listen( client
                        , local_ep
                        , ipns
+                       , shutdown_signal
                        , yield);
           });
 
     asio::signal_set signals(ios, SIGINT, SIGTERM);
 
-    signals.async_wait([&client](const sys::error_code& ec, int signal_number) {
-            client.shutter.close_everything();
+    signals.async_wait([&shutdown_signal](const sys::error_code& ec, int signal_number) {
+            shutdown_signal();
         });
 
     ios.run();

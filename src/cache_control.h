@@ -17,6 +17,7 @@ public:
         Response response;
     };
 
+    // TODO: Add cancellation support
     using FetchStored = std::function<CacheEntry(const Request&, asio::yield_context)>;
     using FetchFresh  = std::function<Response(const Request&, asio::yield_context)>;
     using Store       = std::function<void(const Request&, const Response&)>;
@@ -37,6 +38,7 @@ public:
     static boost::posix_time::ptime parse_date(beast::string_view);
 
 private:
+    // TODO: Add cancellation support
     Response do_fetch(const Request&, asio::yield_context);
     Response do_fetch_fresh(const Request&, asio::yield_context);
     CacheEntry do_fetch_stored(const Request&, asio::yield_context);
