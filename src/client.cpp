@@ -535,7 +535,6 @@ void do_listen( Client& client
 }
 
 //------------------------------------------------------------------------------
-
 int run_client(int argc, char* argv[])
 {
 #ifdef __ANDROID__
@@ -553,6 +552,7 @@ int run_client(int argc, char* argv[])
         return 1;
     }
 
+#ifndef __ANDROID__
     if (exists(config.repo_root()/OUINET_PID_FILE)) {
         cerr << "Existing PID file " << config.repo_root()/OUINET_PID_FILE
              << "; another client process may be running"
@@ -561,6 +561,7 @@ int run_client(int argc, char* argv[])
     }
     // Acquire a PID file for the life of the process
     util::PidFile pid_file(config.repo_root()/OUINET_PID_FILE);
+#endif
 
     // The io_service is required for all I/O
     asio::io_service ios;
