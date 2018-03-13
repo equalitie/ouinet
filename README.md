@@ -98,14 +98,14 @@ Give it a few seconds and start the Ouinet client by running:
 
     ouinet-build/client --repo ouinet-repos/client
 
-The client opens a web proxy on local port 7070 (see option `listen-on-tcp` in
+The client opens a web proxy on local port 8080 (see option `listen-on-tcp` in
 its configuration file).  If you have Firefox installed, you can create a new
 profile (stored under the `ff-profile` directory in the example below) which
 uses the Ouinet client as a proxy by executing the following commands on
 another shell:
 
     mkdir -p ff-profile
-    env http_proxy='http://localhost:7070/' firefox --no-remote --profile ff-profile
+    env http_proxy='http://localhost:8080/' firefox --no-remote --profile ff-profile
 
 When you access the web using this browser, your requests will go through your
 local Ouinet client, which will attempt several mechanisms supported by Ouinet
@@ -179,7 +179,9 @@ GNUnet ID: <GNUNET_ID>
 ```
 
 Make note of the `<DB_IPNS>` and `<GNUNET_ID>` strings in the above output,
-we'll need to pass them as arguments to the client.
+we'll need to pass them as arguments to the client.  You may also find these
+values in the `cache-ipns` and `endpoint-gnunet` files in the injector's
+repository root directory (`../repos/injector` in the example).
 
 While injector is still running, start the client in yet another terminal
 window and pass it the injector's `<GNUNET_ID>` and `<DB_IPNS>` strings from
@@ -194,7 +196,7 @@ $ ./client --repo ../repos/client \
 Now [modify the settings of your
 browser](http://www.wikihow.com/Enter-Proxy-Settings-in-Firefox) to:
 
-* Make the client - which runs on port localhost:7070 - it's proxy, AND
+* Make the client - which runs on port localhost:8080 - it's proxy, AND
 * **make sure 'localhost' is not listed in the `"No Proxy for"` field**, AND
 * the `"Use this proxy for all protocols"` is checked (mostly for SSL).
 

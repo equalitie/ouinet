@@ -23,7 +23,6 @@
 #include "client_front_end.h"
 #include "generic_connection.h"
 #include "util.h"
-#include "blocker.h"
 #include "async_sleep.h"
 #include "increase_open_file_limit.h"
 #include "endpoint.h"
@@ -37,6 +36,8 @@
 #include "redirect_to_android_log.h"
 #endif // ifdef __ANDROID__
 
+#include "util/signal.h"
+
 using namespace std;
 using namespace ouinet;
 
@@ -46,6 +47,8 @@ using tcp         = asio::ip::tcp;
 using string_view = beast::string_view;
 using Request     = http::request<http::string_body>;
 using Response    = http::response<http::dynamic_body>;
+
+static const boost::filesystem::path OUINET_PID_FILE = "pid";
 
 //------------------------------------------------------------------------------
 #define ASYNC_DEBUG(code, ...) [&] () mutable {\
@@ -141,7 +144,9 @@ connect_to_injector(Client& client, asio::yield_context yield)
             i2poui::Channel ch(client.i2p->service);
             ch.connect(client.i2p->connector, yield[ec]);
 
-            return or_throw(yield, ec, GenericConnection(move(ch)));
+            // TODO: Remove the second argument to GenericConnection once
+            // i2poui Channel implements the 'close' member function.
+            return or_throw(yield, ec, GenericConnection(move(ch), [](auto&){}));
         }
     };
 
@@ -155,6 +160,7 @@ static
 void handle_connect_request( GenericConnection& client_c
                            , const Request& req
                            , Client& client
+                           , Signal<void()>& disconnect_signal
                            , asio::yield_context yield)
 {
     // https://tools.ietf.org/html/rfc2817#section-5.2
@@ -175,6 +181,10 @@ void handle_connect_request( GenericConnection& client_c
         // TODO: Does an RFC dicate a particular HTTP status code?
         return handle_bad_request(client_c, req, "Can't connect to injector", yield[ec]);
     }
+
+    auto disconnect_injector_slot = disconnect_signal.connect([&injector_c] {
+        injector_c.close();
+    });
 
     http::async_write(injector_c, const_cast<Request&>(req), yield[ec]);
 
@@ -336,12 +346,17 @@ CacheControl build_cache_control( asio::io_service& ios
 }
 
 //------------------------------------------------------------------------------
-static void serve_request( GenericConnection con
+static void serve_request( GenericConnection& con
                          , Client& client
+                         , Signal<void()>& close_connection_signal
                          , asio::yield_context yield)
 {
     namespace rr = request_route;
     using rr::responder;
+
+    auto close_con_slot = close_connection_signal.connect([&con] {
+        con.close();
+    });
 
     // These access mechanisms are attempted in order for requests by default.
     const rr::Config default_request_config
@@ -411,7 +426,7 @@ static void serve_request( GenericConnection con
 
         // Attempt connection to origin for CONNECT requests
         if (req.method() == http::verb::connect) {
-            return ASYNC_DEBUG( handle_connect_request(con, req, client, yield)
+            return ASYNC_DEBUG( handle_connect_request(con, req, client, close_connection_signal, yield)
                               , "Connect ", req.target());
         }
 
@@ -443,7 +458,9 @@ static void serve_request( GenericConnection con
 }
 
 //------------------------------------------------------------------------------
-void do_listen(Client& client, asio::yield_context yield)
+void do_listen( Client& client
+              , Signal<void()>& shutdown_signal
+              , asio::yield_context yield)
 {
     const auto local_endpoint = client.config.local_endpoint();
     const auto ipns = client.config.ipns();
@@ -468,6 +485,10 @@ void do_listen(Client& client, asio::yield_context yield)
     acceptor.listen(asio::socket_base::max_connections, ec);
     if (ec) return fail(ec, "listen");
 
+    auto shutdown_acceptor_slot = shutdown_signal.connect([&acceptor] {
+        acceptor.close();
+    });
+
     if (ipns.size()) {
         ipfs_cache::Client cache( ios
                                 , ipns
@@ -476,24 +497,38 @@ void do_listen(Client& client, asio::yield_context yield)
         client.ipfs_cache = make_unique<ipfs_cache::Client>(move(cache));
     }
 
+    auto shutdown_ipfs_slot = shutdown_signal.connect([&client] {
+        client.ipfs_cache = nullptr;
+    });
+
     cout << "Client accepting on " << acceptor.local_endpoint() << endl;
 
     for(;;)
     {
         tcp::socket socket(ios);
+
         ASYNC_DEBUG(acceptor.async_accept(socket, yield[ec]), "Accept");
         if(ec) {
+            if (ec == asio::error::operation_aborted) break;
             fail(ec, "accept");
-            ASYNC_DEBUG(async_sleep(ios, chrono::seconds(1), yield), "Sleep");
-        }
-        else {
+            if (!async_sleep(ios, chrono::seconds(1), shutdown_signal, yield)) {
+                break;
+            }
+        } else {
+            static const auto tcp_shutter = [](tcp::socket& s) {
+                s.shutdown(tcp::socket::shutdown_both);
+                s.close();
+            };
+
+            auto connection
+                = make_shared<GenericConnection>(move(socket), tcp_shutter);
+
             asio::spawn( ios
-                       , [ s = move(socket)
+                       , [ connection
                          , &client
+                         , &shutdown_signal
                          ](asio::yield_context yield) mutable {
-                             serve_request( GenericConnection(move(s))
-                                          , client
-                                          , yield);
+                             serve_request(*connection, client, shutdown_signal, yield);
                          });
         }
     }
@@ -518,8 +553,19 @@ int run_client(int argc, char* argv[])
         return 1;
     }
 
+    if (exists(config.repo_root()/OUINET_PID_FILE)) {
+        cerr << "Existing PID file " << config.repo_root()/OUINET_PID_FILE
+             << "; another client process may be running"
+             << ", otherwise please remove the file." << endl;
+        return 1;
+    }
+    // Acquire a PID file for the life of the process
+    util::PidFile pid_file(config.repo_root()/OUINET_PID_FILE);
+
     // The io_service is required for all I/O
     asio::io_service ios;
+
+    Signal<void()> shutdown_signal;
 
     asio::spawn
         ( ios
@@ -571,10 +617,19 @@ int run_client(int argc, char* argv[])
                               move(connector)});
               }
 
-              do_listen(client, yield);
+              do_listen(client, shutdown_signal, yield);
           });
 
+    asio::signal_set signals(ios, SIGINT, SIGTERM);
+
+    signals.async_wait([&shutdown_signal](const sys::error_code& ec, int signal_number) {
+            shutdown_signal();
+        });
+
     ios.run();
+
+    // TODO: Remove this once work on clean exit is done.
+    cerr << "Clean exit" << endl;
 
     return EXIT_SUCCESS;
 }

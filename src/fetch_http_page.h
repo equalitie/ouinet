@@ -4,8 +4,8 @@
 #include <boost/asio/spawn.hpp>
 
 #include "fail.h"
-#include "connect_to_host.h"
 #include "or_throw.h"
+#include "generic_connection.h"
 
 namespace ouinet {
 

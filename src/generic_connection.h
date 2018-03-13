@@ -35,6 +35,8 @@ private:
         virtual void read_impl (OnRead&&)  = 0;
         virtual void write_impl(OnWrite&&) = 0;
 
+        virtual void close() = 0;
+
         virtual ~Base() {}
 
         ReadBuffers  read_buffers;
@@ -43,8 +45,16 @@ private:
 
     template<class Impl>
     struct Wrapper : public Base {
+        using Shutter = std::function<void(Impl&)>;
+
         Wrapper(Impl&& impl)
             : _impl(std::move(impl))
+            , _shutter([](Impl& impl) { impl.close(); })
+        {}
+
+        Wrapper(Impl&& impl, Shutter shutter)
+            : _impl(std::move(impl))
+            , _shutter(std::move(shutter))
         {}
 
         virtual asio::io_service& get_io_service() override
@@ -62,8 +72,14 @@ private:
             _impl.async_write_some(write_buffers, std::move(on_write));
         }
 
+        void close() override
+        {
+            _shutter(_impl);
+        }
+
     private:
         Impl _impl;
+        Shutter _shutter;
     };
 
 public:
@@ -74,9 +90,21 @@ public:
         : _impl(new Wrapper<AsyncRWStream>(std::forward<AsyncRWStream>(impl)))
     {}
 
+    template<class AsyncRWStream, class Shutter>
+    GenericConnection( AsyncRWStream&& impl
+                     , Shutter shutter)
+        : _impl(new Wrapper<AsyncRWStream>( std::forward<AsyncRWStream>(impl)
+                                          , std::move(shutter)))
+    {}
+
     asio::io_service& get_io_service()
     {
         return _impl->get_io_service();
+    }
+
+    void close()
+    {
+        _impl->close();
     }
 
     template< class MutableBufferSequence
