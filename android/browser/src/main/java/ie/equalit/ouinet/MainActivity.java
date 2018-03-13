@@ -4,6 +4,9 @@ import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.widget.TextView;
 
+import android.view.Menu;
+import android.view.MenuItem;
+
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -29,6 +32,11 @@ public class MainActivity extends AppCompatActivity {
         System.setProperty("https.proxyPort", "8080");
     }
 
+    void refresh() {
+        Log.d("Ouinet", "Refreshing");
+        _webView.loadUrl("http://www.bbc.com");
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -41,13 +49,24 @@ public class MainActivity extends AppCompatActivity {
         WebSettings webSettings = _webView.getSettings();
         webSettings.setJavaScriptEnabled(true);
 
-        _webView.loadUrl("http://www.bbc.com");
+        refresh();
     }
 
     @Override
-    public boolean onTouchEvent(MotionEvent event) {
-        _webView.loadUrl("http://www.bbc.com");
-        return super.onTouchEvent(event);
+    public boolean onCreateOptionsMenu(Menu menu) {
+        menu.add(Menu.NONE, 1, Menu.NONE, "Refresh").setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        switch (item.getItemId()) {
+            case 1:
+                refresh();
+                return true;
+            default:
+                return super.onOptionsItemSelected(item);
+        }
     }
 
     /**
