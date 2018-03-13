@@ -4,7 +4,16 @@ import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.widget.TextView;
 
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+
+import android.util.Log;
+import android.view.MotionEvent;
+
 public class MainActivity extends AppCompatActivity {
+
+    private WebView _webView;
 
     // Used to load the 'native-lib' library on application startup.
     static {
@@ -19,9 +28,20 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // Example of a call to a native method
-        TextView tv = (TextView) findViewById(R.id.sample_text);
-        tv.setText(startOuinetClient(getFilesDir().getAbsolutePath()));
+        startOuinetClient(getFilesDir().getAbsolutePath());
+
+        _webView = (WebView) findViewById(R.id.webview);
+        _webView.setWebViewClient(new WebViewClient());
+        WebSettings webSettings = _webView.getSettings();
+        webSettings.setJavaScriptEnabled(true);
+
+        _webView.loadUrl("http://www.bbc.com");
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        _webView.loadUrl("http://www.bbc.com");
+        return super.onTouchEvent(event);
     }
 
     /**
