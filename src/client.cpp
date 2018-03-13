@@ -23,7 +23,6 @@
 #include "client_front_end.h"
 #include "generic_connection.h"
 #include "util.h"
-#include "blocker.h"
 #include "async_sleep.h"
 #include "increase_open_file_limit.h"
 #include "endpoint.h"
