@@ -195,8 +195,10 @@ cd android
 GRADLE_USER_HOME=$DIR/.gradle-home
 gradle --info -s --no-daemon build
 adb devices
+#adb uninstall ie.equalit.ouinet
 adb install -r ../android/browser/build/outputs/apk/debug/browser-debug.apk
 adb logcat -c
-adb logcat
+adb shell am start -n ie.equalit.ouinet/ie.equalit.ouinet.MainActivity
+adb logcat Ouinet:V '*:S'
 
 ######################################################################
