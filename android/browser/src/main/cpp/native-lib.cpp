@@ -28,8 +28,8 @@ void start_client(string repo_root)
 
             const char* args[] = { "ouinet-client"
                                  , repo_arg.c_str()
-                                 , "--listen-on-tcp=127.0.0.0:8080"
-                                 , "--injector-ep=127.0.0.0:7070"
+                                 , "--listen-on-tcp=127.0.0.1:8080"
+                                 , "--injector-ep=127.0.0.1:7070"
                                  };
 
             int status = run_client( sizeof(args) / sizeof(char*)
