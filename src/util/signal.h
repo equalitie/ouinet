@@ -27,7 +27,7 @@ public:
     {
         auto connections = std::move(_connections);
         for (auto& connection : connections) {
-            connection.slot(args...);
+            connection.slot(std::forward<Args>(args)...);
         }
     }
 
