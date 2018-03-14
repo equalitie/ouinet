@@ -2,7 +2,6 @@ package ie.equalit.ouinet;
 
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
-import android.widget.TextView;
 
 import android.view.Menu;
 import android.view.MenuItem;
@@ -12,7 +11,6 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
 import android.util.Log;
-import android.view.MotionEvent;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -53,6 +51,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onDestroy() {
+        stopOuinetClient();
+        super.onDestroy();
+    }
+
+    @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         menu.add(Menu.NONE, 1, Menu.NONE, "Refresh")
             .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
@@ -75,4 +79,5 @@ public class MainActivity extends AppCompatActivity {
      * which is packaged with this application.
      */
     public native String startOuinetClient(String repo_root);
+    public native void stopOuinetClient();
 }

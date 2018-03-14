@@ -137,6 +137,9 @@ if [ ! -d "$SSL_DIR" ]; then
 fi
 
 ######################################################################
+BOOST_INCLUDEDIR=${DIR}/Boost-for-Android/build/out/${ABI}/include/boost-${BOOST_V}
+BOOST_LIBRARYDIR=${DIR}/Boost-for-Android/build/out/${ABI}/lib
+
 ANDROID_FLAGS="\
     -DBoost_COMPILER='-clang' \
     -DCMAKE_ANDROID_NDK_TOOLCHAIN_VERSION=clang \
@@ -146,8 +149,8 @@ ANDROID_FLAGS="\
     -DCMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR} \
     -DCMAKE_ANDROID_ARCH_ABI=${ABI} \
     -DOPENSSL_ROOT_DIR=${SSL_DIR} \
-    -DBOOST_INCLUDEDIR=${DIR}/Boost-for-Android/build/out/${ABI}/include/boost-${BOOST_V} \
-    -DBOOST_LIBRARYDIR=${DIR}/Boost-for-Android/build/out/${ABI}/lib"
+    -DBOOST_INCLUDEDIR=${BOOST_INCLUDEDIR} \
+    -DBOOST_LIBRARYDIR=${BOOST_LIBRARYDIR}"
 
 ######################################################################
 if [ ! -d "android-ifaddrs" ]; then
@@ -191,12 +194,12 @@ done
 #adb uninstall ie.equalit.ouinet
 cd ../android
 GRADLE_USER_HOME=$DIR/.gradle-home
-gradle --no-daemon build
+gradle --no-daemon build -Pboost_includedir=${BOOST_INCLUDEDIR}
 adb devices
 #adb uninstall ie.equalit.ouinet
 adb install -r ./browser/build/outputs/apk/debug/browser-debug.apk
 adb logcat -c
 adb shell am start -n ie.equalit.ouinet/ie.equalit.ouinet.MainActivity
-adb logcat Ouinet:V '*:S'
+adb logcat Ouinet:V libc:V '*:S'
 
 ######################################################################

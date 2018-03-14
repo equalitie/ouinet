@@ -73,9 +73,19 @@ struct Client {
 
     ClientFrontEnd front_end;
 
-    Client(asio::io_service& ios, const ClientConfig& config)
+#ifdef __ANDROID__
+    // While these two objects are 'alive', everything that is written
+    // into std::{cout,cerr} will be written into Android's log.
+    RedirectToAndroidLog cout_guard;
+    RedirectToAndroidLog cerr_guard;
+#endif // ifdef __ANDROID__
+
+    Client(asio::io_service& ios)
         : ios(ios)
-        , config(config)
+#ifdef __ANDROID__
+        , cout_guard(cout)
+        , cerr_guard(cerr)
+#endif // ifdef __ANDROID__
     {}
 };
 
@@ -458,14 +468,14 @@ static void serve_request( GenericConnection& con
 }
 
 //------------------------------------------------------------------------------
-void do_listen( Client& client
+void do_listen( shared_ptr<Client> client
               , Signal<void()>& shutdown_signal
               , asio::yield_context yield)
 {
-    const auto local_endpoint = client.config.local_endpoint();
-    const auto ipns = client.config.ipns();
+    const auto local_endpoint = client->config.local_endpoint();
+    const auto ipns = client->config.ipns();
 
-    auto& ios = client.ios;
+    auto& ios = client->ios;
 
     sys::error_code ec;
 
@@ -492,13 +502,13 @@ void do_listen( Client& client
     if (ipns.size()) {
         ipfs_cache::Client cache( ios
                                 , ipns
-                                , (client.config.repo_root()/"ipfs").native());
+                                , (client->config.repo_root()/"ipfs").native());
 
-        client.ipfs_cache = make_unique<ipfs_cache::Client>(move(cache));
+        client->ipfs_cache = make_unique<ipfs_cache::Client>(move(cache));
     }
 
-    auto shutdown_ipfs_slot = shutdown_signal.connect([&client] {
-        client.ipfs_cache = nullptr;
+    auto shutdown_ipfs_slot = shutdown_signal.connect([client] {
+        client->ipfs_cache = nullptr;
     });
 
     cout << "Client accepting on " << acceptor.local_endpoint() << endl;
@@ -507,7 +517,7 @@ void do_listen( Client& client
     {
         tcp::socket socket(ios);
 
-        ASYNC_DEBUG(acceptor.async_accept(socket, yield[ec]), "Accept");
+        acceptor.async_accept(socket, yield[ec]);
         if(ec) {
             if (ec == asio::error::operation_aborted) break;
             fail(ec, "accept");
@@ -525,23 +535,36 @@ void do_listen( Client& client
 
             asio::spawn( ios
                        , [ connection
-                         , &client
+                         , client
                          , &shutdown_signal
                          ](asio::yield_context yield) mutable {
-                             serve_request(*connection, client, shutdown_signal, yield);
+                             serve_request(*connection, *client, shutdown_signal, yield);
                          });
         }
     }
 }
 
 //------------------------------------------------------------------------------
-int run_client(int argc, char* argv[])
-{
+// For some reason we can't call Signal<...>::operator() from the Android glue
+// library directly. Or it will cause segfaults. I think it has something to do
+// with the `operator()` being a template function (if I make it non templated,
+// then the problem goes away).
 #ifdef __ANDROID__
-    RedirectToAndroidLog cout_guard(cout);
-    RedirectToAndroidLog cerr_guard(cerr);
+void call_shutdown_signal(Signal<void()>& shutdown_signal)
+{
+    shutdown_signal();
+}
 #endif // ifdef __ANDROID__
 
+//------------------------------------------------------------------------------
+// NOTE: If you modify the signature of this function, please make sure you
+// don't break Android build.
+int start_client( asio::io_service& ios
+                , Signal<void()>& shutdown_signal
+                , int argc
+                , char* argv[])
+{
+    auto client = make_shared<Client>(ios);
     ClientConfig config;
 
     try {
@@ -549,31 +572,29 @@ int run_client(int argc, char* argv[])
     }
     catch (std::exception& e) {
         cerr << e.what() << endl;
-        return 1;
+        return false;
     }
+
+    client->config = config;
 
 #ifndef __ANDROID__
     if (exists(config.repo_root()/OUINET_PID_FILE)) {
         cerr << "Existing PID file " << config.repo_root()/OUINET_PID_FILE
              << "; another client process may be running"
              << ", otherwise please remove the file." << endl;
-        return 1;
+        return false;
     }
     // Acquire a PID file for the life of the process
     util::PidFile pid_file(config.repo_root()/OUINET_PID_FILE);
 #endif
 
-    // The io_service is required for all I/O
-    asio::io_service ios;
-
-    Signal<void()> shutdown_signal;
 
     asio::spawn
         ( ios
-        , [&](asio::yield_context yield) {
+        , [&ios, &shutdown_signal, client]
+          (asio::yield_context yield) {
+              auto& config = client->config;
               auto injector_ep = config.injector_endpoint();
-
-              Client client(ios, config);
 
 #ifdef USE_GNUNET
               if (is_gnunet_endpoint(injector_ep)) {
@@ -597,7 +618,7 @@ int run_client(int argc, char* argv[])
 
                   cout << "GNUnet ID: " << service->identity() << endl;
 
-                  client.gnunet_service = move(service);
+                  client->gnunet_service = move(service);
               } else
 #endif
               if (is_i2p_endpoint(injector_ep)) {
@@ -613,7 +634,7 @@ int run_client(int argc, char* argv[])
                       return;
                   }
 
-                  client.i2p =
+                  client->i2p =
                       make_unique<Client::I2P>(Client::I2P{move(service),
                               move(connector)});
               }
@@ -621,11 +642,27 @@ int run_client(int argc, char* argv[])
               do_listen(client, shutdown_signal, yield);
           });
 
+    return true;
+}
+
+//------------------------------------------------------------------------------
+#ifndef __ANDROID__
+int main(int argc, char* argv[])
+{
+    asio::io_service ios;
+
+    Signal<void()> shutdown_signal;
+
     asio::signal_set signals(ios, SIGINT, SIGTERM);
 
     signals.async_wait([&shutdown_signal](const sys::error_code& ec, int signal_number) {
             shutdown_signal();
         });
+
+    if (!start_client(ios, shutdown_signal, argc, argv)) {
+        cerr << "Failed to start the client." << endl;
+        return 1;
+    }
 
     ios.run();
 
@@ -633,12 +670,5 @@ int run_client(int argc, char* argv[])
     cerr << "Clean exit" << endl;
 
     return EXIT_SUCCESS;
-}
-
-//------------------------------------------------------------------------------
-#ifndef __ANDROID__
-int main(int argc, char* argv[])
-{
-    return run_client(argc, argv);
 }
 #endif
