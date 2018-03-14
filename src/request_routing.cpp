@@ -31,21 +31,21 @@ class RegexReqExpr : public ReqExpr {  // can match a request field against a re
         RegexReqExpr(const field_getter& gf, const boost::regex& rx)
             : get_field(gf), regexp(rx) { };
 
-        bool match(const http::request<http::string_body>& req) const {
+        bool match(const http::request<http::string_body>& req) const override {
             return boost::regex_match(get_field(req).to_string(), regexp);
         }
 };
 
 class TrueReqExpr : public ReqExpr {  // matches all requests
     public:
-        bool match(const http::request<http::string_body>& req) const {
+        bool match(const http::request<http::string_body>& req) const override {
             return true;
         }
 };
 
 class FalseReqExpr : public ReqExpr {  // matches no request
     public:
-        bool match(const http::request<http::string_body>& req) const {
+        bool match(const http::request<http::string_body>& req) const override {
             return false;
         }
 };
@@ -58,7 +58,7 @@ class NotReqExpr : public ReqExpr {  // negates match of subexpr
         NotReqExpr(const std::shared_ptr<ReqExpr> sub)
             : child(sub) { }
 
-        bool match(const http::request<http::string_body>& req) const {
+        bool match(const http::request<http::string_body>& req) const override {
             return !(child->match(req));
         }
 };
@@ -71,7 +71,7 @@ class AndReqExpr : public ReqExpr {  // a shortcircuit logical AND of two subexp
         AndReqExpr(const std::shared_ptr<ReqExpr> left_, const std::shared_ptr<ReqExpr> right_)
             : left(left_), right(right_) { }
 
-        bool match(const http::request<http::string_body>& req) const {
+        bool match(const http::request<http::string_body>& req) const override {
             if (left->match(req))
               return right->match(req);
             return false;
@@ -86,7 +86,7 @@ class OrReqExpr : public ReqExpr {  // a shortcircuit logical OR of two subexprs
         OrReqExpr(const std::shared_ptr<ReqExpr> left_, const std::shared_ptr<ReqExpr> right_)
             : left(left_), right(right_) { }
 
-        bool match(const http::request<http::string_body>& req) const {
+        bool match(const http::request<http::string_body>& req) const override {
             if (left->match(req))
                 return true;
             return right->match(req);
