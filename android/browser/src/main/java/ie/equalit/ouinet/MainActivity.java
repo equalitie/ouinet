@@ -43,9 +43,8 @@ public class MainActivity extends AppCompatActivity {
         startOuinetClient(getFilesDir().getAbsolutePath());
 
         _webView = (WebView) findViewById(R.id.webview);
+        _webView.getSettings().setJavaScriptEnabled(true);
         _webView.setWebViewClient(new WebViewClient());
-        WebSettings webSettings = _webView.getSettings();
-        webSettings.setJavaScriptEnabled(true);
 
         refresh();
     }
@@ -71,6 +70,15 @@ public class MainActivity extends AppCompatActivity {
                 return true;
             default:
                 return super.onOptionsItemSelected(item);
+        }
+    }
+
+    @Override
+    public void onBackPressed() {
+        if(_webView.canGoBack()) {
+            _webView.goBack();
+        } else {
+            super.onBackPressed();
         }
     }
 
