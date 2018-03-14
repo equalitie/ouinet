@@ -12,7 +12,7 @@ namespace reqexpr {
 
 class ReqExpr {
     public:
-        virtual ~ReqExpr() { }
+        virtual ~ReqExpr() = default;
 
         virtual bool match(const http::request<http::string_body>&) const = 0;
 };
