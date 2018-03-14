@@ -12,7 +12,12 @@ namespace reqexpr {
 
 class ReqExpr {
     public:
+        ReqExpr() = default;
         virtual ~ReqExpr() = default;
+        ReqExpr(ReqExpr&&) = default;
+        ReqExpr& operator=(ReqExpr&&) = default;
+        ReqExpr(const ReqExpr&) = default;
+        ReqExpr& operator=(const ReqExpr&) = default;
 
         virtual bool match(const http::request<http::string_body>&) const = 0;
 };
