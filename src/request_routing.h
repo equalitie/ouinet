@@ -45,7 +45,7 @@ namespace reqexpr {
 class ReqExpr;
 
 // The type of functions that retrieve a given field (as a string) from a request.
-typedef typename std::function<beast::string_view (const http::request<http::string_body>&)> field_getter;
+using field_getter = std::function<beast::string_view (const http::request<http::string_body>&)>;
 
 class reqex {
     friend reqex true_();
