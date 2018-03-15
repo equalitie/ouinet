@@ -71,7 +71,7 @@ void start_client_thread(string repo_root)
 }
 
 extern "C"
-JNIEXPORT jstring JNICALL
+JNIEXPORT void JNICALL
 Java_ie_equalit_ouinet_MainActivity_startOuinetClient(
         JNIEnv *env,
         jobject /* this */,
@@ -79,8 +79,6 @@ Java_ie_equalit_ouinet_MainActivity_startOuinetClient(
 {
     const char* path = env->GetStringUTFChars(repo_root, NULL);
     start_client_thread(path);
-    std::string hello = "Hello from C++";
-    return env->NewStringUTF(hello.c_str());
 }
 
 extern "C"
