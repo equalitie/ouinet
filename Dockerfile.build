@@ -27,8 +27,8 @@ RUN apt-get update && apt-get install -y \
     wget \
     zlib1g-dev \
  && rm -rf /var/lib/apt/lists/*
-WORKDIR /root/vc/git
+WORKDIR /usr/local/src
 RUN git clone --recursive https://github.com/equalitie/ouinet.git
-WORKDIR /root/ouinet-build
-RUN cmake /root/vc/git/ouinet \
+WORKDIR /opt/ouinet
+RUN cmake /usr/local/src/ouinet \
  && make
