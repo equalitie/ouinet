@@ -16,28 +16,28 @@ using namespace std;
 struct State {
     ouinet::asio::io_service ios;
     ouinet::Client client;
-    thread client_thread;
-
-    State()
-        : client(ios)
-    {}
+    State() : client(ios) {}
 };
 
+// g_state is only accessed from the g_client_thread.
 std::unique_ptr<State> g_state;
+thread g_client_thread;
 
 void start_client_thread(string repo_root)
 {
-    if (g_state) return;
+    if (g_client_thread.get_id() != thread::id()) return;
 
-    g_state = make_unique<State>();
+    g_client_thread = thread([repo_root] {
+            if (g_state) return;
+            g_state = make_unique<State>();
 
-    {
-        // Just touch this file, as the client looks into the repository and
-        // fails if this conf file isn't there.
-        fstream conf(repo_root + "/ouinet-client.conf", conf.binary | conf.out);
-    }
+            {
+                // Just touch this file, as the client looks into the
+                // repository and fails if this conf file isn't there.
+                fstream conf(repo_root + "/ouinet-client.conf"
+                            , conf.binary | conf.out);
+            }
 
-    g_state->client_thread = thread([repo_root] {
             string repo_arg = "--repo=" + repo_root;
 
             const char* args[] = { "ouinet-client"
@@ -55,8 +55,8 @@ void start_client_thread(string repo_root)
             }
 
             g_state->ios.run();
+            g_state.reset();
         });
-
 }
 
 extern "C"
@@ -78,7 +78,9 @@ Java_ie_equalit_ouinet_MainActivity_stopOuinetClient(
         jstring repo_root)
 {
     if (!g_state) return;
-    g_state->ios.post([] { if (g_state) g_state->client.stop(); });
-    g_state->client_thread.join();
-    g_state.reset();
+    g_state->ios.post([] {
+            if (g_state) g_state->client.stop();
+        });
+    g_client_thread.join();
+    g_client_thread = thread();
 }
