@@ -58,7 +58,7 @@ static const boost::filesystem::path OUINET_PID_FILE = "pid";
 }()
 
 //------------------------------------------------------------------------------
-class Client::State {
+class Client::State : public enable_shared_from_this<Client::State> {
 private:
     using Request  = http::request<http::string_body>;
     using Response = http::response<http::dynamic_body>;
@@ -592,7 +592,7 @@ bool Client::State::start(int argc, char* argv[])
 
     asio::spawn
         ( _ios
-        , [this]
+        , [this, self = shared_from_this()]
           (asio::yield_context yield) {
               auto injector_ep = _config.injector_endpoint();
 
