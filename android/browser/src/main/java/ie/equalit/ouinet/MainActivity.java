@@ -43,7 +43,19 @@ public class MainActivity extends AppCompatActivity {
         startOuinetClient(getFilesDir().getAbsolutePath());
 
         _webView = (WebView) findViewById(R.id.webview);
-        _webView.getSettings().setJavaScriptEnabled(true);
+
+        WebSettings webSettings = _webView.getSettings();
+
+        // The first two are necessary for BBC to show correctly.
+        webSettings.setJavaScriptEnabled(true);
+        webSettings.setDomStorageEnabled(true);
+        webSettings.setLoadWithOverviewMode(true);
+        webSettings.setUseWideViewPort(true);
+        webSettings.setBuiltInZoomControls(true);
+        webSettings.setDisplayZoomControls(false);
+        webSettings.setSupportZoom(true);
+        webSettings.setDefaultTextEncodingName("utf-8");
+
         _webView.setWebViewClient(new WebViewClient());
 
         refresh();
