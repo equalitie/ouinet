@@ -5,9 +5,8 @@
 #include <fstream>
 #include <thread>
 #include <boost/asio.hpp>
-
-#include <redirect_to_android_log.h>
 #include <namespaces.h>
+#include <client.h>
 #include <util/signal.h>
 
 using namespace std;
@@ -15,21 +14,16 @@ using namespace std;
 #define debug(...) __android_log_print(ANDROID_LOG_VERBOSE, "Ouinet", __VA_ARGS__);
 
 struct State {
-    ouinet::Signal<void()> shutdown_signal;
     ouinet::asio::io_service ios;
+    ouinet::Client client;
     thread client_thread;
+
+    State()
+        : client(ios)
+    {}
 };
 
 std::unique_ptr<State> g_state;
-
-// TODO: This should be in a header
-void call_shutdown_signal(ouinet::Signal<void()>&);
-
-// TODO: This should be in a header
-int start_client( ouinet::asio::io_service& ios
-                , ouinet::Signal<void()>& shutdown_signal
-                , int argc
-                , char* argv[]);
 
 void start_client_thread(string repo_root)
 {
@@ -44,9 +38,6 @@ void start_client_thread(string repo_root)
     }
 
     g_state->client_thread = thread([repo_root] {
-            ouinet::RedirectToAndroidLog cout_guard(cout);
-            ouinet::RedirectToAndroidLog cerr_guard(cerr);
-
             string repo_arg = "--repo=" + repo_root;
 
             const char* args[] = { "ouinet-client"
@@ -55,12 +46,10 @@ void start_client_thread(string repo_root)
                                  , "--injector-ep=192.168.0.136:7070"
                                  };
 
-            if (!start_client( g_state->ios
-                             , g_state->shutdown_signal
-                             , sizeof(args) / sizeof(char*)
-                             , (char**) args))
+            if (!g_state->client.start( sizeof(args) / sizeof(char*)
+                                      , (char**) args))
             {
-                cerr << "Failed to start Ouinet client" << endl;
+                debug("Failed to start Ouinet client");
                 g_state.reset();
                 return;
             }
@@ -89,9 +78,7 @@ Java_ie_equalit_ouinet_MainActivity_stopOuinetClient(
         jstring repo_root)
 {
     if (!g_state) return;
-    g_state->ios.post([] {
-            call_shutdown_signal(g_state->shutdown_signal);
-         });
+    g_state->ios.post([] { if (g_state) g_state->client.stop(); });
     g_state->client_thread.join();
     g_state.reset();
 }
