@@ -46,10 +46,14 @@ void start_client_thread(string repo_root)
                                  , "--injector-ep=192.168.0.136:7070"
                                  };
 
-            if (!g_state->client.start( sizeof(args) / sizeof(char*)
-                                      , (char**) args))
-            {
-                debug("Failed to start Ouinet client");
+            unsigned argc = sizeof(args) / sizeof(char*);
+
+            try {
+                g_state->client.start(argc, (char**) args);
+            }
+            catch (std::exception& e) {
+                debug("Failed to start Ouinet client:");
+                debug("%s", e.what());
                 g_state.reset();
                 return;
             }

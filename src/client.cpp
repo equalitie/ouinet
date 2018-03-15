@@ -77,7 +77,7 @@ public:
 #endif // ifdef __ANDROID__
     {}
 
-    bool start(int argc, char* argv[]);
+    void start(int argc, char* argv[]);
     void stop() { _shutdown_signal(); }
 
 private:
@@ -563,31 +563,19 @@ void Client::State::do_listen(asio::yield_context yield)
 }
 
 //------------------------------------------------------------------------------
-// NOTE: If you modify the signature of this function, please make sure you
-// don't break Android build.
-bool Client::State::start(int argc, char* argv[])
+void Client::State::start(int argc, char* argv[])
 {
-    ClientConfig config;
-
-    try {
-        config = ClientConfig(argc, argv);
-    }
-    catch (std::exception& e) {
-        cerr << e.what() << endl;
-        return false;
-    }
-
-    _config = config;
+    _config = ClientConfig(argc, argv);
 
 #ifndef __ANDROID__
     if (exists(_config.repo_root()/OUINET_PID_FILE)) {
-        cerr << "Existing PID file " << config.repo_root()/OUINET_PID_FILE
-             << "; another client process may be running"
-             << ", otherwise please remove the file." << endl;
-        return false;
+        throw runtime_error(util::str
+             ( "Existing PID file ", _config.repo_root()/OUINET_PID_FILE
+             , "; another client process may be running"
+             , ", otherwise please remove the file."));
     }
     // Acquire a PID file for the life of the process
-    util::PidFile pid_file(config.repo_root()/OUINET_PID_FILE);
+    util::PidFile pid_file(_config.repo_root()/OUINET_PID_FILE);
 #endif
 
     asio::spawn
@@ -639,22 +627,20 @@ bool Client::State::start(int argc, char* argv[])
 
               do_listen(yield);
           });
-
-    return true;
 }
 
 //------------------------------------------------------------------------------
 Client::Client(asio::io_service& ios)
-    : _state(make_unique<State>(ios))
+    : _state(make_shared<State>(ios))
 {}
 
 Client::~Client()
 {
 }
 
-bool Client::start(int argc, char* argv[])
+void Client::start(int argc, char* argv[])
 {
-    return _state->start(argc, argv);
+    _state->start(argc, argv);
 }
 
 void Client::stop()
@@ -678,8 +664,10 @@ int main(int argc, char* argv[])
             client.stop();
         });
 
-    if (!client.start(argc, argv)) {
-        cerr << "Failed to start the client." << endl;
+    try {
+        client.start(argc, argv);
+    } catch (std::exception& e) {
+        cerr << e.what() << endl;
         return 1;
     }
 

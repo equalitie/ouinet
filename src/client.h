@@ -10,13 +10,16 @@ private:
 
 public:
     Client(asio::io_service& ios);
+
     ~Client();
 
-    bool start(int argc, char* argv[]);
+    // May throw on error.
+    void start(int argc, char* argv[]);
+
     void stop();
 
 private:
-    std::unique_ptr<State> _state;
+    std::shared_ptr<State> _state;
 };
 
 } // ouinet namespace
