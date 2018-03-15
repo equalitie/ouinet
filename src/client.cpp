@@ -60,9 +60,6 @@ static const boost::filesystem::path OUINET_PID_FILE = "pid";
 //------------------------------------------------------------------------------
 class Client::State : public enable_shared_from_this<Client::State> {
 private:
-    using Request  = http::request<http::string_body>;
-    using Response = http::response<http::dynamic_body>;
-
     struct I2P {
         i2poui::Service service;
         i2poui::Connector connector;
@@ -120,6 +117,8 @@ private:
     RedirectToAndroidLog _cout_guard;
     RedirectToAndroidLog _cerr_guard;
 #endif // ifdef __ANDROID__
+
+    unique_ptr<util::PidFile> _pid_file;
 };
 
 //------------------------------------------------------------------------------
@@ -575,7 +574,8 @@ void Client::State::start(int argc, char* argv[])
              , ", otherwise please remove the file."));
     }
     // Acquire a PID file for the life of the process
-    util::PidFile pid_file(_config.repo_root()/OUINET_PID_FILE);
+    assert(!_pid_file);
+    _pid_file = make_unique<util::PidFile>(_config.repo_root()/OUINET_PID_FILE);
 #endif
 
     asio::spawn
@@ -653,8 +653,6 @@ void Client::stop()
 int main(int argc, char* argv[])
 {
     asio::io_service ios;
-
-    Signal<void()> shutdown_signal;
 
     asio::signal_set signals(ios, SIGINT, SIGTERM);
 
