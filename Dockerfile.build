@@ -1,0 +1,34 @@
+FROM debian:stretch
+RUN apt-get update && apt-get install -y \
+    autoconf \
+    automake \
+    autopoint \
+    build-essential \
+    cmake \
+    gettext \
+    git \
+    libboost-coroutine-dev \
+    libboost-date-time-dev \
+    libboost-dev \
+    libboost-filesystem-dev \
+    libboost-program-options-dev \
+    libboost-regex-dev \
+    libboost-system-dev \
+    libboost-test-dev \
+    libboost-thread-dev \
+    libgcrypt-dev \
+    libidn11-dev \
+    libssl-dev \
+    libtool \
+    libunistring-dev \
+    pkg-config \
+    rsync \
+    texinfo \
+    wget \
+    zlib1g-dev \
+ && rm -rf /var/lib/apt/lists/*
+WORKDIR /root/vc/git
+RUN git clone --recursive https://github.com/equalitie/ouinet.git
+WORKDIR /root/ouinet-build
+RUN cmake /root/vc/git/ouinet \
+ && make
