@@ -27,7 +27,11 @@ public:
     {
         auto connections = std::move(_connections);
         for (auto& connection : connections) {
-            connection.slot(std::forward<Args>(args)...);
+            try {
+                connection.slot(std::forward<Args>(args)...);
+            } catch (std::exception& e) {
+                assert(0);
+            }
         }
     }
 
