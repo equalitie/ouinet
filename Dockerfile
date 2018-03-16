@@ -72,7 +72,7 @@ COPY --from=builder /opt/ouinet/modules/ipfs-cache/ipfs_bindings/ipfs_bindings.s
 COPY --from=builder /opt/ouinet/modules/ipfs-cache/libipfs-cache.so modules/ipfs-cache/
 COPY --from=builder /opt/ouinet/modules/gnunet-channels/gnunet-bin/share/gnunet/ modules/gnunet-channels/gnunet-bin/share/gnunet/
 COPY --from=builder /opt/ouinet/modules/gnunet-channels/gnunet-bin/lib/ modules/gnunet-channels/gnunet-bin/lib/
-COPY --from=builder /opt/ouinet/injector /opt/ouinet/client /usr/local/src/ouinet/scripts/injector-docker.sh ./
+COPY --from=builder /opt/ouinet/injector /opt/ouinet/client /usr/local/src/ouinet/scripts/ouinet-docker.sh ./
 COPY --from=builder /opt/ouinet/test/test-* test/
 COPY --from=builder /usr/local/src/ouinet/repos/ repos/
-CMD ["./injector-docker.sh"]
+CMD ["./ouinet-docker.sh", "injector"]
