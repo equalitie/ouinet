@@ -73,3 +73,4 @@ COPY --from=builder /opt/ouinet/modules/ipfs-cache/libipfs-cache.so modules/ipfs
 COPY --from=builder /opt/ouinet/modules/gnunet-channels/gnunet-bin/lib/ modules/gnunet-channels/gnunet-bin/lib/
 COPY --from=builder /opt/ouinet/injector /opt/ouinet/client ./
 COPY --from=builder /opt/ouinet/test/test-* test/
+CMD ["./injector", "--repo", "/var/opt/ouinet/injector"]
