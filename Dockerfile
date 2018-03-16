@@ -32,7 +32,9 @@ RUN git clone --recursive https://github.com/equalitie/ouinet.git
 WORKDIR /opt/ouinet
 RUN cmake /usr/local/src/ouinet \
  && make
-RUN strip injector client test/test-*
+RUN strip injector client test/test-* \
+ && find . -name '*.so' | xargs strip \
+ && find . -wholename '*/libexec/*' -executable -type f | xargs strip
 
 FROM debian:stretch
 # To get the list of library packages, enter the build directory and execute:
