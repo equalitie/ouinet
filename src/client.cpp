@@ -75,7 +75,10 @@ public:
     {}
 
     void start(int argc, char* argv[]);
-    void stop() { _shutdown_signal(); }
+    void stop() { _stopped = true; _shutdown_signal(); }
+
+    void set_ipns(string);
+    void set_injector(string);
 
 private:
     void serve_request(GenericConnection& con, asio::yield_context yield);
@@ -98,6 +101,7 @@ private:
     CacheControl build_cache_control(request_route::Config& request_config);
 
     void do_listen(asio::yield_context yield);
+    void setup_injector(asio::yield_context);
 
 private:
     asio::io_service& _ios;
@@ -105,7 +109,7 @@ private:
 #ifdef USE_GNUNET
     std::unique_ptr<gnunet_channels::Service> _gnunet_service;
 #endif
-    std::unique_ptr<I2P> _i2p;
+    std::shared_ptr<I2P> _i2p;
     std::unique_ptr<ipfs_cache::Client> _ipfs_cache;
 
     ClientFrontEnd _front_end;
@@ -119,6 +123,7 @@ private:
 #endif // ifdef __ANDROID__
 
     unique_ptr<util::PidFile> _pid_file;
+    bool _stopped = false;
 };
 
 //------------------------------------------------------------------------------
@@ -182,8 +187,13 @@ Client::State::connect_to_injector(asio::yield_context yield)
                 return or_throw<Ret>(yield, error::no_protocol_option);
             }
 
-            i2poui::Channel ch(client._i2p->service);
-            ch.connect(client._i2p->connector, yield[ec]);
+            // User now has the ability to change the injector during runtime.
+            // So we make a copy of the shared_ptr here to ensure the I2P
+            // structures don't get destroyed mid-async-IO.
+            auto i2p = client._i2p;
+
+            i2poui::Channel ch(i2p->service);
+            ch.connect(i2p->connector, yield[ec]);
 
             // TODO: Remove the second argument to GenericConnection once
             // i2poui Channel implements the 'close' member function.
@@ -485,6 +495,16 @@ void Client::State::serve_request( GenericConnection& con
 }
 
 //------------------------------------------------------------------------------
+void Client::State::set_ipns(string ipns)
+{
+    ipfs_cache::Client cache( _ios
+                            , ipns
+                            , (_config.repo_root()/"ipfs").native());
+
+    _ipfs_cache = make_unique<ipfs_cache::Client>(move(cache));
+}
+
+//------------------------------------------------------------------------------
 void Client::State::do_listen(asio::yield_context yield)
 {
     const auto local_endpoint = _config.local_endpoint();
@@ -513,11 +533,7 @@ void Client::State::do_listen(asio::yield_context yield)
     });
 
     if (ipns.size()) {
-        ipfs_cache::Client cache( _ios
-                                , ipns
-                                , (_config.repo_root()/"ipfs").native());
-
-        _ipfs_cache = make_unique<ipfs_cache::Client>(move(cache));
+        set_ipns(ipns);
     }
 
     auto shutdown_ipfs_slot = _shutdown_signal.connect([this] {
@@ -526,13 +542,13 @@ void Client::State::do_listen(asio::yield_context yield)
 
     cout << "Client accepting on " << acceptor.local_endpoint() << endl;
 
-    WaitCondition wait_condition(_ios); 
+    WaitCondition wait_condition(_ios);
 
     for(;;)
     {
         tcp::socket socket(_ios);
-
         acceptor.async_accept(socket, yield[ec]);
+
         if(ec) {
             if (ec == asio::error::operation_aborted) break;
             fail(ec, "accept");
@@ -541,8 +557,9 @@ void Client::State::do_listen(asio::yield_context yield)
             }
         } else {
             static const auto tcp_shutter = [](tcp::socket& s) {
-                s.shutdown(tcp::socket::shutdown_both);
-                s.close();
+                sys::error_code ec; // Don't throw
+                s.shutdown(tcp::socket::shutdown_both, ec);
+                s.close(ec);
             };
 
             auto connection
@@ -582,51 +599,85 @@ void Client::State::start(int argc, char* argv[])
         ( _ios
         , [this, self = shared_from_this()]
           (asio::yield_context yield) {
-              auto injector_ep = _config.injector_endpoint();
+              sys::error_code ec;
+              setup_injector(yield[ec]);
+              if (ec) {
+                  cerr << "Failed to setup injector" << endl;
+              }
+              do_listen(yield[ec]);
+          });
+}
+
+//------------------------------------------------------------------------------
+void Client::State::setup_injector(asio::yield_context yield)
+{
+    auto injector_ep = _config.injector_endpoint();
 
 #ifdef USE_GNUNET
-              if (is_gnunet_endpoint(injector_ep)) {
-                  namespace gc = gnunet_channels;
+    if (is_gnunet_endpoint(injector_ep)) {
+        namespace gc = gnunet_channels;
 
-                  string gnunet_cfg
-                      = (_config.repo_root()/"gnunet"/"peer.conf").native();
+        string gnunet_cfg
+            = (_config.repo_root()/"gnunet"/"peer.conf").native();
 
-                  auto service = make_unique<gc::Service>(gnunet_cfg, _ios);
+        auto service = make_unique<gc::Service>(gnunet_cfg, _ios);
 
-                  sys::error_code ec;
+        sys::error_code ec;
 
-                  cout << "Setting up GNUnet ..." << endl;
-                  service->async_setup(yield[ec]);
+        cout << "Setting up GNUnet ..." << endl;
+        service->async_setup(yield[ec]);
 
-                  if (ec) {
-                      cerr << "Failed to setup GNUnet service: "
-                           << ec.message() << endl;
-                      return;
-                  }
+        if (ec) {
+            cerr << "Failed to setup GNUnet service: "
+                 << ec.message() << endl;
+            return or_throw(yield, ec);
+        }
 
-                  cout << "GNUnet ID: " << service->identity() << endl;
+        cout << "GNUnet ID: " << service->identity() << endl;
 
-                  _gnunet_service = move(service);
-              } else
+        _gnunet_service = move(service);
+    } else
 #endif
-              if (is_i2p_endpoint(injector_ep)) {
-                  auto ep = boost::get<I2PEndpoint>(injector_ep).pubkey;
+    if (is_i2p_endpoint(injector_ep)) {
+        auto ep = boost::get<I2PEndpoint>(injector_ep).pubkey;
 
-                  i2poui::Service service((_config.repo_root()/"i2p").native(), _ios);
-                  sys::error_code ec;
-                  i2poui::Connector connector = service.build_connector(ep, yield[ec]);
+        i2poui::Service service((_config.repo_root()/"i2p").native(), _ios);
+        sys::error_code ec;
+        i2poui::Connector connector = service.build_connector(ep, yield[ec]);
 
-                  if (ec) {
-                      cerr << "Failed to setup I2Poui service: "
-                           << ec.message() << endl;
-                      return;
-                  }
+        if (ec) {
+            cerr << "Failed to setup I2Poui service: "
+                 << ec.message() << endl;
+            return or_throw(yield, ec);
+        }
 
-                  _i2p = make_unique<I2P>(I2P{move(service), move(connector)});
-              }
+        _i2p = make_shared<I2P>(I2P{move(service), move(connector)});
+    }
+}
 
-              do_listen(yield);
-          });
+//------------------------------------------------------------------------------
+void Client::State::set_injector(string injector_ep)
+{
+    auto prev_ep = _config.injector_endpoint();
+
+    if (!_config.set_injector_endpoint(injector_ep)) {
+        cerr << "Failed parsing injector endpoint" << endl;
+        return;
+    }
+
+    if (_config.injector_endpoint() == prev_ep) {
+        return;
+    }
+
+    asio::spawn(_ios, [this, self = shared_from_this()]
+                      (asio::yield_context yield) {
+            if (_stopped) return;
+            sys::error_code ec;
+            setup_injector(yield);
+            if (ec) {
+                cerr << "Failed to setup injector" << endl;
+            }
+        });
 }
 
 //------------------------------------------------------------------------------
@@ -646,6 +697,18 @@ void Client::start(int argc, char* argv[])
 void Client::stop()
 {
     _state->stop();
+}
+
+void Client::set_injector_endpoint(const char* injector_ep)
+{
+    cerr << "Client::set_injector_endpoint(" << injector_ep << ")" << endl;
+    _state->set_injector(injector_ep);
+}
+
+void Client::set_ipns(const char* ipns)
+{
+    cerr << "Client::set_ipns(" << ipns << ")" << endl;
+    _state->set_ipns(ipns);
 }
 
 //------------------------------------------------------------------------------

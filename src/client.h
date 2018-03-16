@@ -18,6 +18,9 @@ public:
 
     void stop();
 
+    void set_injector_endpoint(const char*);
+    void set_ipns(const char*);
+
 private:
     std::shared_ptr<State> _state;
 };

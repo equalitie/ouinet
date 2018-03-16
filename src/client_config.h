@@ -28,6 +28,8 @@ public:
         return _injector_ep;
     }
 
+    bool set_injector_endpoint(const std::string& ep);
+
     const asio::ip::tcp::endpoint& local_endpoint() const {
         return _local_ep;
     }
@@ -139,11 +141,26 @@ ClientConfig::ClientConfig(int argc, char* argv[])
     }
 
     _local_ep = util::parse_endpoint(vm["listen-on-tcp"].as<string>());
-    _injector_ep = *parse_endpoint(vm["injector-ep"].as<string>());
+
+    if (!set_injector_endpoint(vm["injector-ep"].as<string>())) {
+        throw std::runtime_error(
+                "Failed to parse endpoint \""
+                + vm["injector-ep"].as<string>() + "\"");
+    }
+
 
     if (vm.count("injector-ipns")) {
         _ipns = vm["injector-ipns"].as<string>();
     }
+}
+
+inline
+bool ClientConfig::set_injector_endpoint(const std::string& ep)
+{
+    auto opt = parse_endpoint(ep);
+    if (!opt) return false;
+    _injector_ep = *opt;
+    return true;
 }
 
 } // ouinet namespace

@@ -11,11 +11,20 @@ namespace ouinet {
 struct GnunetEndpoint {
     std::string host;
     std::string port;
+
+    bool operator==(const GnunetEndpoint& other) const {
+        return host == other.host
+            && port == other.port;
+    }
 };
 #endif
 
 struct I2PEndpoint {
     std::string pubkey;
+
+    bool operator==(const I2PEndpoint& other) const {
+        return pubkey == other.pubkey;
+    }
 };
 
 using Endpoint = boost::variant< asio::ip::tcp::endpoint
