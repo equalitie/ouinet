@@ -64,3 +64,8 @@ RUN apt-get update && apt-get install -y \
     libunistring0 \
     zlib1g \
  && rm -rf /var/lib/apt/lists/*
+WORKDIR /opt/ouinet
+COPY --from=builder /opt/ouinet/modules/ipfs-cache/ipfs_bindings/ipfs_bindings.so modules/ipfs-cache/ipfs_bindings/
+COPY --from=builder /opt/ouinet/modules/ipfs-cache/libipfs-cache.so modules/ipfs-cache/
+COPY --from=builder /opt/ouinet/modules/gnunet-channels/gnunet-bin/lib/ modules/gnunet-channels/gnunet-bin/lib/
+COPY --from=builder /opt/ouinet/injector /opt/ouinet/client ./
