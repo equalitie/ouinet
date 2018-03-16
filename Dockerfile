@@ -71,7 +71,7 @@ WORKDIR /opt/ouinet
 COPY --from=builder /opt/ouinet/modules/ipfs-cache/ipfs_bindings/ipfs_bindings.so modules/ipfs-cache/ipfs_bindings/
 COPY --from=builder /opt/ouinet/modules/ipfs-cache/libipfs-cache.so modules/ipfs-cache/
 COPY --from=builder /opt/ouinet/modules/gnunet-channels/gnunet-bin/lib/ modules/gnunet-channels/gnunet-bin/lib/
-COPY --from=builder /opt/ouinet/injector /opt/ouinet/client ./
+COPY --from=builder /opt/ouinet/injector /opt/ouinet/client /usr/local/src/ouinet/scripts/injector-docker.sh ./
 COPY --from=builder /opt/ouinet/test/test-* test/
 COPY --from=builder /usr/local/src/ouinet/repos/ repos/
-CMD ["./injector", "--repo", "/var/opt/ouinet/injector"]
+CMD ["./injector-docker.sh"]
