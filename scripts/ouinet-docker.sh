@@ -20,4 +20,4 @@ if [ ! -f "$CONF" ]; then
     cp -r repos/$PROG "$REPO"
 fi
 
-exec ./$PROG --repo "$REPO"
+exec ./$PROG --repo "$REPO" "$@"
