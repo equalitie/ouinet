@@ -78,6 +78,7 @@ public:
     void stop() { _stopped = true; _shutdown_signal(); }
 
     void set_ipns(string);
+    void setup_ipfs_cache();
     void set_injector(string);
 
 private:
@@ -495,13 +496,36 @@ void Client::State::serve_request( GenericConnection& con
 }
 
 //------------------------------------------------------------------------------
+void Client::State::setup_ipfs_cache()
+{
+    if (_ipfs_cache) {
+        // XXX: Workaround.
+        // We need to add API to ipfs-cache to swap IPNS.  Simply destroying an
+        // instance of ipfs_cache::Client and creating a new one probably won't
+        // work because (I think) there may be some code in ipfs_cache::Client
+        // which fails if more than one instance of that class is created.
+        cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
+        cerr << "Switching IPNS not yet supported." << endl;
+        cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
+        return;
+    }
+
+    try {
+        ipfs_cache::Client cache( _ios
+                                , _config.ipns()
+                                , (_config.repo_root()/"ipfs").native());
+
+        _ipfs_cache = make_unique<ipfs_cache::Client>(move(cache));
+    }
+    catch(std::exception& e) {
+        cerr << "Client::State::set_ipns exception: " << e.what() << endl;
+    }
+}
+
+//------------------------------------------------------------------------------
 void Client::State::set_ipns(string ipns)
 {
-    ipfs_cache::Client cache( _ios
-                            , ipns
-                            , (_config.repo_root()/"ipfs").native());
-
-    _ipfs_cache = make_unique<ipfs_cache::Client>(move(cache));
+    _config.set_ipns(move(ipns));
 }
 
 //------------------------------------------------------------------------------
@@ -533,7 +557,7 @@ void Client::State::do_listen(asio::yield_context yield)
     });
 
     if (ipns.size()) {
-        set_ipns(ipns);
+        setup_ipfs_cache();
     }
 
     auto shutdown_ipfs_slot = _shutdown_signal.connect([this] {
@@ -701,13 +725,11 @@ void Client::stop()
 
 void Client::set_injector_endpoint(const char* injector_ep)
 {
-    cerr << "Client::set_injector_endpoint(" << injector_ep << ")" << endl;
     _state->set_injector(injector_ep);
 }
 
 void Client::set_ipns(const char* ipns)
 {
-    cerr << "Client::set_ipns(" << ipns << ")" << endl;
     _state->set_ipns(ipns);
 }
 

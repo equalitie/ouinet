@@ -38,6 +38,10 @@ public:
         return _ipns;
     }
 
+    void set_ipns(std::string ipns) {
+        _ipns = std::move(ipns);
+    }
+
     boost::posix_time::time_duration max_cached_age() const {
         return _max_cached_age;
     }
