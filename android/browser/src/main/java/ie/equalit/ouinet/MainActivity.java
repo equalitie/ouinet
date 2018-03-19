@@ -21,6 +21,12 @@ import android.text.InputType;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 
+import com.google.zxing.integration.android.IntentResult;
+import com.google.zxing.integration.android.IntentIntegrator;
+
+import android.content.Intent;
+import android.widget.Toast;
+
 interface OnInput {
     public void call(String input);
 }
@@ -43,9 +49,14 @@ public class MainActivity extends AppCompatActivity {
         System.setProperty("https.proxyPort", "8080");
     }
 
-    void refresh() {
-        Log.d("Ouinet", "Refreshing");
+    void go_home() {
+        Log.d("Ouinet", "Requesting http://www.bbc.com");
         _webView.loadUrl("http://www.bbc.com");
+    }
+
+    void reload() {
+        Log.d("Ouinet", "Reload");
+        _webView.reload();
     }
 
     protected void saveToFile(String filename, String value) {
@@ -84,6 +95,61 @@ public class MainActivity extends AppCompatActivity {
     protected String readInjectorEP() { return readFromFile("injector.txt"); }
     protected void writeInjectorEP(String s) { saveToFile("injector.txt", s); }
 
+    protected void loadConfigFromQR() {
+        IntentIntegrator integrator = new IntentIntegrator(this);
+        integrator.initiateScan();
+    }
+
+    protected void log(String s) {
+        Log.d("Ouinet", s);
+    }
+
+    protected void toast(String s) {
+        Toast.makeText(this, s, Toast.LENGTH_LONG).show();
+    }
+
+    protected void applyConfig(String config) {
+        String[] lines = config.split("[\\r?\\n]+");
+
+        for (String line:lines) {
+            String[] keyval = line.split("=");
+
+            if (keyval.length != 2) {
+                continue;
+            }
+
+            String key = keyval[0];
+            String val = keyval[1];
+
+            if (key.equalsIgnoreCase("ipns")) {
+                toast("Setting IPNS to: " + val);
+                writeIPNS(val);
+                setOuinetIPNS(val);
+            }
+            else if (key.equalsIgnoreCase("injector")) {
+                toast("Setting injector to: " + val);
+                writeInjectorEP(val);
+                setOuinetInjectorEP(val);
+            }
+            else {
+                toast("Unknown config key: " + key);
+            }
+        }
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        IntentResult result = IntentIntegrator.parseActivityResult(requestCode, resultCode, data);
+        if (result == null) {
+            super.onActivityResult(requestCode, resultCode, data);
+            return;
+        }
+
+        if(result.getContents() != null) {
+            applyConfig(result.getContents());
+        }
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -113,7 +179,7 @@ public class MainActivity extends AppCompatActivity {
 
         _webView.setWebViewClient(new WebViewClient());
 
-        refresh();
+        go_home();
     }
 
     protected void showDialog(String title, String default_value, final OnInput onInput) {
@@ -170,9 +236,11 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        menu.add(Menu.NONE, 1, Menu.NONE, "Refresh");
-        menu.add(Menu.NONE, 2, Menu.NONE, "Set injector endpoint");
-        menu.add(Menu.NONE, 3, Menu.NONE, "Set INPS");
+        menu.add(Menu.NONE, 1, Menu.NONE, "Home");
+        menu.add(Menu.NONE, 2, Menu.NONE, "Reload");
+        menu.add(Menu.NONE, 3, Menu.NONE, "Set injector endpoint");
+        menu.add(Menu.NONE, 4, Menu.NONE, "Set INPS");
+        menu.add(Menu.NONE, 5, Menu.NONE, "Load config from QR");
         return true;
     }
 
@@ -180,13 +248,19 @@ public class MainActivity extends AppCompatActivity {
     public boolean onOptionsItemSelected(MenuItem item) {
         switch (item.getItemId()) {
             case 1:
-                refresh();
+                go_home();
                 return true;
             case 2:
-                showChangeInjectorDialog();
+                reload();
                 return true;
             case 3:
+                showChangeInjectorDialog();
+                return true;
+            case 4:
                 showChangeIPNSDialog();
+                return true;
+            case 5:
+                loadConfigFromQR();
                 return true;
             default:
                 return super.onOptionsItemSelected(item);
@@ -209,5 +283,5 @@ public class MainActivity extends AppCompatActivity {
     public native void startOuinetClient(String repo_root);
     public native void stopOuinetClient();
     public native void setOuinetInjectorEP(String endpoint);
-    public native void setOuinetIPNS(String endpoint);
+    public native void setOuinetIPNS(String ipns);
 }
