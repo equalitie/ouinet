@@ -178,7 +178,6 @@ cd ..
 
 add_library $DIR/build-ouinet/libclient.so
 add_library $DIR/build-ouinet/modules/ipfs-cache/ipfs_bindings/libipfs_bindings.so
-add_library $DIR/build-ouinet/modules/ipfs-cache/libipfs-cache.so
 
 ######################################################################
 JNI_DST_DIR=${ROOT}/android/browser/src/main/jniLibs/${ABI}
