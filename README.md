@@ -239,3 +239,127 @@ HTTP page.
 $ ./test.sh <BUILD DIR>/client
 ```
 
+## Creating a Docker image and injector (or client) container
+
+A `Dockerfile` is included that can be used to create a Docker image which
+contains the Ouinet injector, client and necessary software dependencies
+running on top of a Debian base system.
+
+### Image
+
+To build the image you will need around 3 GiB of disk space, although to run
+the final image only a couple hundred MiB are needed, plus the space devoted
+to the data volume.
+
+You may use the `Dockerfile` as included in Ouinet's source code, or you
+can just [download it][Dockerfile].  Then build the image by running:
+
+```
+$ sudo docker build -t ouinet:latest .
+```
+
+[DockerFile]: https://raw.githubusercontent.com/equalitie/ouinet/master/Dockerfile
+
+After a while you will get the `ouinet:latest` image.
+
+### Data volume
+
+You need to create a volume for Ouinet to store their repositories.  The
+following commands create the `ouinet-repos` volume and mount it in a
+convenience BusyBox container of the same name (under `/var/opt/ouinet`):
+
+```
+$ sudo docker volume create ouinet-repos
+$ sudo docker create --name ouinet-repos -it \
+              --mount src=ouinet-repos,dst=/var/opt/ouinet busybox
+```
+
+Should you need to manually edit the contents of the repositories, you can
+start this container by running:
+
+```
+$ sudo docker start -ia ouinet-repos
+```
+
+You now need to populate `/var/opt/ouinet` with the configuration for the
+Ouinet injector or client.  One easy way to do it is copying the configuration
+templates included in Ouinet's source code (via the convenience container).
+
+For the injector:
+
+```
+$ sudo docker cp repos/injector ouinet-repos:/var/opt/ouinet
+```
+
+For the client:
+
+```
+$ sudo docker cp repos/client ouinet-repos:/var/opt/ouinet
+```
+
+### Injector container
+
+To create an injector container, make sure that you have populated
+`/var/opt/ouinet` with injector configuration files (see above), then run the
+following command which creates the `ouinet-injector` container and mounts the
+`ouinet-repos` volume under `/var/opt/ouinet`:
+
+```
+$ sudo docker create --name ouinet-injector -it \
+              --mount src=ouinet-repos,dst=/var/opt/ouinet \
+              ouinet:latest
+```
+
+The default command run by the `ouinet:latest` image starts an injector node.
+The `-it` options allow you to attach the program to a terminal so that you
+can see its logging messages and send Ctrl+C to terminate it.
+
+If you want to pass additional options to the injector, just edit its
+configuration at `/var/opt/ouinet/injector/ouinet-injector.conf` using the the
+`ouinet-repos`  container.  You can also add a command like the following at
+the end of the `docker create` command, though this is not recommended:
+
+    ./ouinet-docker.sh injector --<OPTION>=<VALUE>...
+
+To start the container, run:
+
+```
+$ sudo docker start -ia ouinet-injector
+```
+
+The `-ia` options also attach the program to a terminal.  To stop the
+container, hit Ctrl+C or run:
+
+```
+$ sudo docker stop ouinet-injector
+```
+
+If the program crashes for some reason, you may have to remove the injector's
+PID file manually for it to start again.  Just use the the `ouinet-repos`
+container to remove `/var/opt/ouinet/injector/pid`.
+
+### Client container
+
+To create a client container, make sure that you have populated
+`/var/opt/ouinet` with client configuration files (see above), then run the
+following command which creates the `ouinet-client` container, mounts the
+`ouinet-repos` volume under `/var/opt/ouinet` and publishes the client's proxy
+port 8080 to the host at local port 8080:
+
+```
+$ sudo docker create --name ouinet-client -it \
+              --mount src=ouinet-repos,dst=/var/opt/ouinet \
+              --publish 127.0.0.1:8080:8080 \
+              ouinet:latest ./ouinet-docker.sh client
+```
+
+Before starting the container, you must fix some options in the client's
+configuration file:
+
+  - Make the client's proxy listen on port 8080 of all interfaces (so that
+    port redirection works) by setting `listen-on-tcp = 0.0.0.0:8080`.
+  - Set the value of `injector-ep` (injector endpoint).
+  - Set the value of `injector-ipns` (cache IPNS).
+
+The rest of instructions for the injector (see above) also hold for the client
+(just replace `injector` with `client` where appropriate).
