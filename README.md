@@ -307,7 +307,8 @@ following command which creates the `ouinet-injector` container and mounts the
 
 ```
 $ sudo docker create --name ouinet-injector -it \
-              --mount src=ouinet-repos,dst=/var/opt/ouinet ouinet:latest
+              --mount src=ouinet-repos,dst=/var/opt/ouinet \
+              ouinet:latest
 ```
 
 The `-it` options allow you to attach the program to a terminal so that you
