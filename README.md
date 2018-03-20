@@ -337,3 +337,29 @@ $ sudo docker stop ouinet-injector
 If the program crashes for some reason, you may have to remove the injector's
 PID file manually for it to start again.  Just use the the `ouinet-repos`
 container to remove `/var/opt/ouinet/injector/pid`.
+
+### Client container
+
+To create a client container, make sure that you have populated
+`/var/opt/ouinet` with client configuration files (see above), then run the
+following command which creates the `ouinet-client` container, mounts the
+`ouinet-repos` volume under `/var/opt/ouinet` and publishes the client's proxy
+port 8080 to the host at local port 8080:
+
+```
+$ sudo docker create --name ouinet-client -it \
+              --mount src=ouinet-repos,dst=/var/opt/ouinet \
+              --publish 127.0.0.1:8080:8080 \
+              ouinet:latest ./ouinet-docker.sh client
+```
+
+Before starting the container, you must fix some options in the client's
+configuration file:
+
+  - Make the client's proxy listen on port 8080 of all interfaces (so that
+    port redirection works) by setting `listen-on-tcp = 0.0.0.0:8080`.
+  - Set the value of `injector-ep` (injector endpoint).
+  - Set the value of `injector-ipns` (cache IPNS).
+
+The rest of instructions for the injector (see above) also hold for the client
+(just replace `injector` with `client` where appropriate).
