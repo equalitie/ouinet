@@ -239,3 +239,60 @@ HTTP page.
 $ ./test.sh <BUILD DIR>/client
 ```
 
+## Creating a Docker image and injector (or client) container
+
+A `Dockerfile` is included that can be used to create a Docker image which
+contains the Ouinet injector, client and necessary software dependencies
+running on top of a Debian base system.
+
+### Image
+
+To build the image you will need around 3 GiB of disk space, although to run
+the final image only a couple hundred MiB are needed, plus the space devoted
+to the data volume.
+
+You may use the `Dockerfile` as included in Ouinet's source code, or you
+can just [download it][Dockerfile].  Then build the image by running:
+
+```
+$ sudo docker build -t ouinet:latest .
+```
+
+[DockerFile]: https://raw.githubusercontent.com/equalitie/ouinet/master/Dockerfile
+
+After a while you will get the `ouinet:latest` image.
+
+### Data volume
+
+You need to create a volume for Ouinet to store their repositories.  The
+following commands create the `ouinet-repos` volume and mount it under a
+BusyBox container of the same name:
+
+```
+$ sudo docker volume create ouinet-repos
+$ sudo docker create --name ouinet-repos -it \
+              --mount src=ouinet-repos,dst=/var/opt/ouinet busybox
+```
+
+Should you need to manually edit the contents of the repositories, you can
+start this container by running:
+
+```
+$ sudo docker start -ia ouinet-repos
+```
+
+You now need to populate `/var/opt/ouinet` with the configuration for the
+Ouinet injector or client.  One easy way to do it is copying the configuration
+templates included in Ouinet's source code.
+
+For the injector:
+
+```
+$ sudo docker cp repos/injector ouinet-repos:/var/opt/ouinet
+```
+
+For the client:
+
+```
+$ sudo docker cp repos/client ouinet-repos:/var/opt/ouinet
+```
