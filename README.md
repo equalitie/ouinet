@@ -299,7 +299,6 @@ $ sudo docker cp repos/client ouinet-repos:/var/opt/ouinet
 
 ### Injector container
 
-The default command run by the `ouinet:latest` image starts an injector node.
 To create an injector container, make sure that you have populated
 `/var/opt/ouinet` with injector configuration files (see above), then run the
 following command which creates the `ouinet-injector` container and mounts the
@@ -311,12 +310,14 @@ $ sudo docker create --name ouinet-injector -it \
               ouinet:latest
 ```
 
+The default command run by the `ouinet:latest` image starts an injector node.
 The `-it` options allow you to attach the program to a terminal so that you
-can see its logging messages and send Ctrl+C to terminate it.  If you want to
-pass additional options to the injector, just edit its configuration at
-`/var/opt/ouinet/injector/ouinet-injector.conf` using the the `ouinet-repos`
-container.  You can also add a command like the following at the end of the
-`docker create` command, though this is not recommended:
+can see its logging messages and send Ctrl+C to terminate it.
+
+If you want to pass additional options to the injector, just edit its
+configuration at `/var/opt/ouinet/injector/ouinet-injector.conf` using the the
+`ouinet-repos`  container.  You can also add a command like the following at
+the end of the `docker create` command, though this is not recommended:
 
     ./ouinet-docker.sh injector --<OPTION>=<VALUE>...
 
@@ -333,6 +334,6 @@ container, hit Ctrl+C or run:
 $ sudo docker stop ouinet-injector
 ```
 
-If the program crashes for some reason, you will have to remove the injector's
+If the program crashes for some reason, you may have to remove the injector's
 PID file manually for it to start again.  Just use the the `ouinet-repos`
 container to remove `/var/opt/ouinet/injector/pid`.
