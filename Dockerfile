@@ -1,4 +1,9 @@
 FROM debian:stretch AS builder
+# To get the list of build dependency packages from the Vagrantfile, run:
+#
+#     sed '/# Install toolchain/,/^$/!d' Vagrantfile \
+#         | sed -En 's/^\s+(\S+)\s*\\?$/\1/p' | sort
+#
 RUN apt-get update && apt-get install -y \
     autoconf \
     automake \
