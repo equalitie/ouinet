@@ -265,8 +265,8 @@ After a while you will get the `ouinet:latest` image.
 ### Data volume
 
 You need to create a volume for Ouinet to store their repositories.  The
-following commands create the `ouinet-repos` volume and mount it under a
-BusyBox container of the same name:
+following commands create the `ouinet-repos` volume and mount it in a
+convenience BusyBox container of the same name (under `/var/opt/ouinet`):
 
 ```
 $ sudo docker volume create ouinet-repos
@@ -283,7 +283,7 @@ $ sudo docker start -ia ouinet-repos
 
 You now need to populate `/var/opt/ouinet` with the configuration for the
 Ouinet injector or client.  One easy way to do it is copying the configuration
-templates included in Ouinet's source code.
+templates included in Ouinet's source code (via the convenience container).
 
 For the injector:
 
