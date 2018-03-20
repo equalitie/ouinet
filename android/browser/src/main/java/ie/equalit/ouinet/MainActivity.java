@@ -49,8 +49,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     void go_home() {
-        Log.d("Ouinet", "Requesting http://www.bbc.com");
-        _webView.loadUrl("http://www.bbc.com");
+        String home = "http://www.bbc.com";
+        Log.d("Ouinet", "Requesting " + home);
+        _webView.loadUrl(home);
     }
 
     void reload() {

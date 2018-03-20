@@ -59,6 +59,8 @@ static const boost::filesystem::path OUINET_PID_FILE = "pid";
 
 //------------------------------------------------------------------------------
 class Client::State : public enable_shared_from_this<Client::State> {
+    friend class Client;
+
 private:
     struct I2P {
         i2poui::Service service;
@@ -77,7 +79,6 @@ public:
     void start(int argc, char* argv[]);
     void stop() { _stopped = true; _shutdown_signal(); }
 
-    void set_ipns(string);
     void setup_ipfs_cache();
     void set_injector(string);
 
@@ -523,12 +524,6 @@ void Client::State::setup_ipfs_cache()
 }
 
 //------------------------------------------------------------------------------
-void Client::State::set_ipns(string ipns)
-{
-    _config.set_ipns(move(ipns));
-}
-
-//------------------------------------------------------------------------------
 void Client::State::do_listen(asio::yield_context yield)
 {
     const auto local_endpoint = _config.local_endpoint();
@@ -730,7 +725,7 @@ void Client::set_injector_endpoint(const char* injector_ep)
 
 void Client::set_ipns(const char* ipns)
 {
-    _state->set_ipns(ipns);
+    _state->_config.set_ipns(move(ipns));
 }
 
 //------------------------------------------------------------------------------
