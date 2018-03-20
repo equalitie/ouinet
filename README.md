@@ -311,7 +311,13 @@ $ sudo docker create --name ouinet-injector -it \
 ```
 
 The `-it` options allow you to attach the program to a terminal so that you
-can see its logging messages and send Ctrl+C to terminate it.
+can see its logging messages and send Ctrl+C to terminate it.  If you want to
+pass additional options to the injector, either edit its configuration at
+`/var/opt/ouinet/injector/ouinet-injector.conf` using the the `ouinet-repos`
+container or add a command like the following at the end of the `docker
+create` command:
+
+    ./ouinet-docker.sh injector OPTION...
 
 To start the container, run:
 
