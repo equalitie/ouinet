@@ -2,6 +2,11 @@ cmake_minimum_required (VERSION 3.5)
 set(BOOST_VERSION 1.62)
 include(ExternalProject)
 ################################################################################
+# Configurable options
+option(WITH_GNUNET   "Use GNUnet for transport" ON)
+option(WITH_INJECTOR "Compile injector" ON)
+
+################################################################################
 # NOTE: https://stackoverflow.com/questions/37603238/fsanitize-not-using-gold-linker-in-gcc-6-1
 # NOTE2: Need to disable ASan until Boost.Asio switches to Boost.Coroutine2
 #        because trowing (and catching) exceptions inside a coroutine confuses
@@ -29,11 +34,17 @@ option(IPFS_CACHE_WITH_EXAMPLE_BINARIES "" OFF)
 
 add_subdirectory(./modules/i2pouiservice)
 add_subdirectory(./modules/ipfs-cache)
-add_subdirectory(./modules/gnunet-channels)
+
+if (WITH_GNUNET)
+    add_definitions(-DUSE_GNUNET)
+    set(GNUNET_TARGET gnunet-channels)
+    add_subdirectory(./modules/gnunet-channels)
+endif()
 
 ################################################################################
 project(ouinet)
 
+find_package(OpenSSL REQUIRED)
 find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS filesystem
                                                         regex
                                                         unit_test_framework
@@ -50,7 +61,7 @@ include_directories(
     "${Boost_INCLUDE_DIR}"
     "${BEAST_DIR}/include"
     "${IPFS_CACHE_INCLUDE_DIR}"
-    "${GNUNET_CHANNELS_INCLUDE_DIR}"
+    ${GNUNET_CHANNELS_INCLUDE_DIR}
     "${IPFS_CACHE_JSON_INCLUDE_DIR}"
     "${I2POUI_INCLUDE_DIR}")
 
@@ -62,37 +73,50 @@ file(GLOB client_sources
     "./src/cache_control.cpp"
     "./src/request_routing.cpp")
 
-add_executable(client ${client_sources})
-add_dependencies(client beast ${IPFS_CACHE_TARGET} gnunet-channels i2poui)
+if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
+    add_executable(client ${client_sources})
+else()
+    find_library( # Sets the name of the path variable.
+                  log-lib
+                  # Specifies the name of the NDK library that
+                  # you want CMake to locate.
+                  log )
+    add_library(client SHARED ${client_sources})
+endif()
 
 target_link_libraries(client
+    ${log-lib}
     i2poui i2pdclient libi2pd
     ${Boost_LIBRARIES}
     ${IPFS_CACHE_LIBRARIES}
     ${GNUNET_CHANNELS_LIBRARIES})
+
+add_dependencies(client beast ${IPFS_CACHE_TARGET} ${GNUNET_TARGET} i2poui)
 
 ################################################################################
-include_directories(
-    "${Boost_INCLUDE_DIR}"
-    "${BEAST_DIR}/include"
-    "${IPFS_CACHE_INCLUDE_DIR}"
-    "${IPFS_CACHE_JSON_INCLUDE_DIR}"
-    "${GNUNET_CHANNELS_INCLUDE_DIR}"
-    "${I2POUI_INCLUDE_DIR}")
+if (WITH_INJECTOR)
+    include_directories(
+        "${Boost_INCLUDE_DIR}"
+        "${BEAST_DIR}/include"
+        "${IPFS_CACHE_INCLUDE_DIR}"
+        "${IPFS_CACHE_JSON_INCLUDE_DIR}"
+        "${GNUNET_CHANNELS_INCLUDE_DIR}"
+        "${I2POUI_INCLUDE_DIR}")
 
-file(GLOB injector_sources
-    "./src/injector.cpp"
-    "./src/connect_to_host.cpp"
-    "./src/cache_control.cpp")
+    file(GLOB injector_sources
+        "./src/injector.cpp"
+        "./src/connect_to_host.cpp"
+        "./src/cache_control.cpp")
 
-add_executable(injector ${injector_sources})
-add_dependencies(injector beast ${IPFS_CACHE_TARGET} gnunet-channels i2poui)
+    add_executable(injector ${injector_sources})
+    add_dependencies(injector beast ${IPFS_CACHE_TARGET} ${GNUNET_TARGET} i2poui)
 
-target_link_libraries(injector
-    i2poui i2pdclient libi2pd
-    ${Boost_LIBRARIES}
-    ${IPFS_CACHE_LIBRARIES}
-    ${GNUNET_CHANNELS_LIBRARIES})
+    target_link_libraries(injector
+        i2poui i2pdclient libi2pd
+        ${Boost_LIBRARIES}
+        ${IPFS_CACHE_LIBRARIES}
+        ${GNUNET_CHANNELS_LIBRARIES})
+endif() # if WITH_INJECTOR
 
 ################################################################################
 # Config file directory

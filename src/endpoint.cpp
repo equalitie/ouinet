@@ -2,10 +2,12 @@
 
 namespace ouinet {
 
+#ifdef USE_GNUNET
 std::ostream& operator<<(std::ostream& os, const GnunetEndpoint& ep)
 {
     return os << ep.host << ":" << ep.port;
 }
+#endif
 
 std::ostream& operator<<(std::ostream& os, const I2PEndpoint& ep)
 {
@@ -21,9 +23,11 @@ std::ostream& operator<<(std::ostream& os, const Endpoint& ep)
             os << ep;
         }
 
+#ifdef USE_GNUNET
         void operator()(const GnunetEndpoint& ep) {
             os << ep;
         }
+#endif
 
         void operator()(const I2PEndpoint& ep) {
             os << ep;

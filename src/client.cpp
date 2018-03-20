@@ -4,8 +4,6 @@
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/connect.hpp>
-#include <boost/program_options.hpp>
-#include <boost/filesystem.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <iostream>
 #include <fstream>
@@ -13,8 +11,10 @@
 #include <ipfs_cache/client.h>
 #include <ipfs_cache/error.h>
 
-#include <gnunet_channels/channel.h>
-#include <gnunet_channels/service.h>
+#ifdef USE_GNUNET
+#   include <gnunet_channels/channel.h>
+#   include <gnunet_channels/service.h>
+#endif
 
 #include <i2poui.h>
 
@@ -30,13 +30,18 @@
 #include "or_throw.h"
 #include "request_routing.h"
 #include "full_duplex_forward.h"
+#include "client_config.h"
+#include "client.h"
+
+#ifdef __ANDROID__
+#include "redirect_to_android_log.h"
+#endif // ifdef __ANDROID__
 
 #include "util/signal.h"
 
 using namespace std;
 using namespace ouinet;
 
-namespace fs = boost::filesystem;
 namespace posix_time = boost::posix_time;
 
 using tcp         = asio::ip::tcp;
@@ -44,36 +49,83 @@ using string_view = beast::string_view;
 using Request     = http::request<http::string_body>;
 using Response    = http::response<http::dynamic_body>;
 
-static fs::path REPO_ROOT;
-static const fs::path OUINET_CONF_FILE = "ouinet-client.conf";
-static const fs::path OUINET_PID_FILE = "pid";
-static posix_time::time_duration MAX_CACHED_AGE = posix_time::hours(7*24);  // one week
+static const boost::filesystem::path OUINET_PID_FILE = "pid";
 
 //------------------------------------------------------------------------------
 #define ASYNC_DEBUG(code, ...) [&] () mutable {\
-    auto task = client.front_end.notify_task(util::str(__VA_ARGS__));\
+    auto task = _front_end.notify_task(util::str(__VA_ARGS__));\
     return code;\
 }()
 
 //------------------------------------------------------------------------------
-struct Client {
+class Client::State : public enable_shared_from_this<Client::State> {
+    friend class Client;
+
+private:
     struct I2P {
         i2poui::Service service;
         i2poui::Connector connector;
     };
 
-    asio::io_service& ios;
-    Endpoint injector_ep;
-    unique_ptr<gnunet_channels::Service> gnunet_service;
-    unique_ptr<I2P> i2p;
-    unique_ptr<ipfs_cache::Client> ipfs_cache;
-
-    ClientFrontEnd front_end;
-
-    Client(asio::io_service& ios, const Endpoint& injector_ep)
-        : ios(ios)
-        , injector_ep(injector_ep)
+public:
+    State(asio::io_service& ios)
+        : _ios(ios)
+#ifdef __ANDROID__
+        , _cout_guard(std::cout)
+        , _cerr_guard(std::cerr)
+#endif // ifdef __ANDROID__
     {}
+
+    void start(int argc, char* argv[]);
+    void stop() { _stopped = true; _shutdown_signal(); }
+
+    void setup_ipfs_cache();
+    void set_injector(string);
+
+private:
+    void serve_request(GenericConnection& con, asio::yield_context yield);
+
+    GenericConnection connect_to_injector(asio::yield_context yield);
+
+    void handle_connect_request( GenericConnection& client_c
+                               , const Request& req
+                               , asio::yield_context yield);
+
+    CacheControl::CacheEntry
+    fetch_stored( const Request& request
+                , request_route::Config& request_config
+                , asio::yield_context yield);
+
+    Response fetch_fresh( const Request& request
+                        , request_route::Config& request_config
+                        , asio::yield_context yield);
+
+    CacheControl build_cache_control(request_route::Config& request_config);
+
+    void do_listen(asio::yield_context yield);
+    void setup_injector(asio::yield_context);
+
+private:
+    asio::io_service& _ios;
+    ClientConfig _config;
+#ifdef USE_GNUNET
+    std::unique_ptr<gnunet_channels::Service> _gnunet_service;
+#endif
+    std::shared_ptr<I2P> _i2p;
+    std::unique_ptr<ipfs_cache::Client> _ipfs_cache;
+
+    ClientFrontEnd _front_end;
+    Signal<void()> _shutdown_signal;
+
+#ifdef __ANDROID__
+    // While these two objects are 'alive', everything that is written
+    // into std::{cout,cerr} will be written into Android's log.
+    RedirectToAndroidLog _cout_guard;
+    RedirectToAndroidLog _cerr_guard;
+#endif // ifdef __ANDROID__
+
+    unique_ptr<util::PidFile> _pid_file;
+    bool _stopped = false;
 };
 
 //------------------------------------------------------------------------------
@@ -96,9 +148,8 @@ void handle_bad_request( GenericConnection& con
 }
 
 //------------------------------------------------------------------------------
-static
 GenericConnection
-connect_to_injector(Client& client, asio::yield_context yield)
+Client::State::connect_to_injector(asio::yield_context yield)
 {
     namespace error = asio::error;
 
@@ -106,38 +157,45 @@ connect_to_injector(Client& client, asio::yield_context yield)
         using Ret = GenericConnection;
 
         sys::error_code ec;
-        Client& client;
+        Client::State& client;
         asio::yield_context yield;
 
-        Visitor(Client& client, asio::yield_context yield)
+        Visitor(Client::State& client, asio::yield_context yield)
             : client(client), yield(yield) {}
 
         Ret operator()(const tcp::endpoint& ep) {
-            tcp::socket socket(client.ios);
+            tcp::socket socket(client._ios);
             socket.async_connect(ep, yield[ec]);
             return or_throw(yield, ec, GenericConnection(move(socket)));
         }
 
+#ifdef USE_GNUNET
         Ret operator()(const GnunetEndpoint& ep) {
             using Channel = gnunet_channels::Channel;
 
-            if (!client.gnunet_service) {
+            if (!client._gnunet_service) {
                 return or_throw<Ret>(yield, error::no_protocol_option);
             }
 
-            Channel ch(*client.gnunet_service);
+            Channel ch(*client._gnunet_service);
             ch.connect(ep.host, ep.port, yield[ec]);
 
             return or_throw(yield, ec, GenericConnection(move(ch)));
         }
+#endif
 
         Ret operator()(const I2PEndpoint&) {
-            if (!client.i2p) {
+            if (!client._i2p) {
                 return or_throw<Ret>(yield, error::no_protocol_option);
             }
 
-            i2poui::Channel ch(client.i2p->service);
-            ch.connect(client.i2p->connector, yield[ec]);
+            // User now has the ability to change the injector during runtime.
+            // So we make a copy of the shared_ptr here to ensure the I2P
+            // structures don't get destroyed mid-async-IO.
+            auto i2p = client._i2p;
+
+            i2poui::Channel ch(i2p->service);
+            ch.connect(i2p->connector, yield[ec]);
 
             // TODO: Remove the second argument to GenericConnection once
             // i2poui Channel implements the 'close' member function.
@@ -145,24 +203,21 @@ connect_to_injector(Client& client, asio::yield_context yield)
         }
     };
 
-    Visitor visitor(client, yield);
+    Visitor visitor(*this, yield);
 
-    return boost::apply_visitor(visitor, client.injector_ep);
+    return boost::apply_visitor(visitor, _config.injector_endpoint());
 }
 
 //------------------------------------------------------------------------------
-static
-void handle_connect_request( GenericConnection& client_c
-                           , const Request& req
-                           , Client& client
-                           , Signal<void()>& disconnect_signal
-                           , asio::yield_context yield)
+void Client::State::handle_connect_request( GenericConnection& client_c
+                                          , const Request& req
+                                          , asio::yield_context yield)
 {
     // https://tools.ietf.org/html/rfc2817#section-5.2
 
     sys::error_code ec;
 
-    if (!client.front_end.is_injector_proxying_enabled()) {
+    if (!_front_end.is_injector_proxying_enabled()) {
         return ASYNC_DEBUG( handle_bad_request( client_c
                                               , req
                                               , "Forwarding disabled"
@@ -170,14 +225,14 @@ void handle_connect_request( GenericConnection& client_c
                           , "Forwarding disabled");
     }
 
-    auto injector_c = connect_to_injector(client, yield[ec]);
+    auto injector_c = connect_to_injector(yield[ec]);
 
     if (ec) {
         // TODO: Does an RFC dicate a particular HTTP status code?
         return handle_bad_request(client_c, req, "Can't connect to injector", yield[ec]);
     }
 
-    auto disconnect_injector_slot = disconnect_signal.connect([&injector_c] {
+    auto disconnect_injector_slot = _shutdown_signal.connect([&injector_c] {
         injector_c.close();
     });
 
@@ -209,19 +264,17 @@ void handle_connect_request( GenericConnection& client_c
 }
 
 //------------------------------------------------------------------------------
-static
 CacheControl::CacheEntry
-fetch_stored( const Request& request
-            , request_route::Config& request_config
-            , Client& client
-            , asio::yield_context yield)
+Client::State::fetch_stored( const Request& request
+                           , request_route::Config& request_config
+                           , asio::yield_context yield)
 {
     using CacheEntry = CacheControl::CacheEntry;
 
     const bool cache_is_disabled
         = !request_config.enable_cache
-       || !client.ipfs_cache
-       || !client.front_end.is_ipfs_cache_enabled();
+       || !_ipfs_cache
+       || !_front_end.is_ipfs_cache_enabled();
 
     if (cache_is_disabled) {
         return or_throw<CacheControl::CacheEntry>( yield ,
@@ -232,7 +285,7 @@ fetch_stored( const Request& request
     // Get the content from cache
     auto key = request.target();
 
-    auto content = client.ipfs_cache->get_content(key.to_string(), yield[ec]);
+    auto content = _ipfs_cache->get_content(key.to_string(), yield[ec]);
 
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
@@ -263,12 +316,9 @@ fetch_stored( const Request& request
 }
 
 //------------------------------------------------------------------------------
-static
-Response
-fetch_fresh( const Request& request
-           , request_route::Config& request_config
-           , Client& client
-           , asio::yield_context yield)
+Response Client::State::fetch_fresh( const Request& request
+                                   , request_route::Config& request_config
+                                   , asio::yield_context yield)
 {
     using namespace asio::error;
     using request_route::responder;
@@ -289,25 +339,25 @@ fetch_fresh( const Request& request
                 continue;
             }
             case responder::injector: {
-                if (!client.front_end.is_injector_proxying_enabled()) {
+                if (!_front_end.is_injector_proxying_enabled()) {
                     continue;
                 }
                 sys::error_code ec;
-                auto inj_con = connect_to_injector(client, yield[ec]);
+                auto inj_con = connect_to_injector(yield[ec]);
                 if (ec) {
                     last_error = ec;
                     continue;
                 }
                 // Forward the request to the injector
-                auto res = fetch_http_page(client.ios, inj_con, request, yield[ec]);
+                auto res = fetch_http_page(_ios, inj_con, request, yield[ec]);
                 if (!ec) return res;
                 last_error = ec;
                 continue;
             }
             case responder::_front_end: {
-                return client.front_end.serve( client.injector_ep
-                                             , request
-                                             , client.ipfs_cache.get());
+                return _front_end.serve( _config.injector_endpoint()
+                                       , request
+                                       , _ipfs_cache.get());
             }
         }
     }
@@ -316,40 +366,36 @@ fetch_fresh( const Request& request
 }
 
 //------------------------------------------------------------------------------
-static
-CacheControl build_cache_control( asio::io_service& ios
-                                , request_route::Config& request_config
-                                , Client& client)
+CacheControl
+Client::State::build_cache_control(request_route::Config& request_config)
 {
     CacheControl cache_control;
 
     cache_control.fetch_stored =
         [&] (const Request& request, asio::yield_context yield) {
-            return ASYNC_DEBUG( fetch_stored(request, request_config, client, yield)
+            return ASYNC_DEBUG( fetch_stored(request, request_config, yield)
                               , "Fetch from cache: " , request.target());
         };
 
     cache_control.fetch_fresh =
         [&] (const Request& request, asio::yield_context yield) {
-            return ASYNC_DEBUG( fetch_fresh(request, request_config, client, yield)
+            return ASYNC_DEBUG( fetch_fresh(request, request_config, yield)
                               , "Fetch from origin: ", request.target());
         };
 
-    cache_control.max_cached_age(MAX_CACHED_AGE);
+    cache_control.max_cached_age(_config.max_cached_age());
 
     return cache_control;
 }
 
 //------------------------------------------------------------------------------
-static void serve_request( GenericConnection& con
-                         , Client& client
-                         , Signal<void()>& close_connection_signal
-                         , asio::yield_context yield)
+void Client::State::serve_request( GenericConnection& con
+                                 , asio::yield_context yield)
 {
     namespace rr = request_route;
     using rr::responder;
 
-    auto close_con_slot = close_connection_signal.connect([&con] {
+    auto close_con_slot = _shutdown_signal.connect([&con] {
         con.close();
     });
 
@@ -360,9 +406,7 @@ static void serve_request( GenericConnection& con
 
     rr::Config request_config;
 
-    CacheControl cache_control = build_cache_control( con.get_io_service()
-                                                    , request_config
-                                                    , client);
+    CacheControl cache_control = build_cache_control(request_config);
 
     sys::error_code ec;
     beast::flat_buffer buffer;
@@ -421,7 +465,7 @@ static void serve_request( GenericConnection& con
 
         // Attempt connection to origin for CONNECT requests
         if (req.method() == http::verb::connect) {
-            return ASYNC_DEBUG( handle_connect_request(con, req, client, close_connection_signal, yield)
+            return ASYNC_DEBUG( handle_connect_request(con, req, yield)
                               , "Connect ", req.target());
         }
 
@@ -453,18 +497,42 @@ static void serve_request( GenericConnection& con
 }
 
 //------------------------------------------------------------------------------
-void do_listen( Client& client
-              , tcp::endpoint local_endpoint
-              , string ipns
-              , Signal<void()>& shutdown_signal
-              , asio::yield_context yield)
+void Client::State::setup_ipfs_cache()
 {
-    auto& ios = client.ios;
+    if (_ipfs_cache) {
+        // XXX: Workaround.
+        // We need to add API to ipfs-cache to swap IPNS.  Simply destroying an
+        // instance of ipfs_cache::Client and creating a new one probably won't
+        // work because (I think) there may be some code in ipfs_cache::Client
+        // which fails if more than one instance of that class is created.
+        cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
+        cerr << "Switching IPNS not yet supported." << endl;
+        cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
+        return;
+    }
+
+    try {
+        ipfs_cache::Client cache( _ios
+                                , _config.ipns()
+                                , (_config.repo_root()/"ipfs").native());
+
+        _ipfs_cache = make_unique<ipfs_cache::Client>(move(cache));
+    }
+    catch(std::exception& e) {
+        cerr << "Client::State::set_ipns exception: " << e.what() << endl;
+    }
+}
+
+//------------------------------------------------------------------------------
+void Client::State::do_listen(asio::yield_context yield)
+{
+    const auto local_endpoint = _config.local_endpoint();
+    const auto ipns = _config.ipns();
 
     sys::error_code ec;
 
     // Open the acceptor
-    tcp::acceptor acceptor(ios);
+    tcp::acceptor acceptor(_ios);
 
     acceptor.open(local_endpoint.protocol(), ec);
     if (ec) return fail(ec, "open");
@@ -479,216 +547,207 @@ void do_listen( Client& client
     acceptor.listen(asio::socket_base::max_connections, ec);
     if (ec) return fail(ec, "listen");
 
-    auto shutdown_acceptor_slot = shutdown_signal.connect([&acceptor] {
+    auto shutdown_acceptor_slot = _shutdown_signal.connect([&acceptor] {
         acceptor.close();
     });
 
     if (ipns.size()) {
-        ipfs_cache::Client cache(ios, ipns, (REPO_ROOT/"ipfs").native());
-        client.ipfs_cache = make_unique<ipfs_cache::Client>(move(cache));
+        setup_ipfs_cache();
     }
 
-    auto shutdown_ipfs_slot = shutdown_signal.connect([&client] {
-        client.ipfs_cache = nullptr;
+    auto shutdown_ipfs_slot = _shutdown_signal.connect([this] {
+        _ipfs_cache = nullptr;
     });
 
     cout << "Client accepting on " << acceptor.local_endpoint() << endl;
 
+    WaitCondition wait_condition(_ios);
+
     for(;;)
     {
-        tcp::socket socket(ios);
+        tcp::socket socket(_ios);
+        acceptor.async_accept(socket, yield[ec]);
 
-        ASYNC_DEBUG(acceptor.async_accept(socket, yield[ec]), "Accept");
         if(ec) {
             if (ec == asio::error::operation_aborted) break;
             fail(ec, "accept");
-            if (!async_sleep(ios, chrono::seconds(1), shutdown_signal, yield)) {
+            if (!async_sleep(_ios, chrono::seconds(1), _shutdown_signal, yield)) {
                 break;
             }
         } else {
             static const auto tcp_shutter = [](tcp::socket& s) {
-                s.shutdown(tcp::socket::shutdown_both);
-                s.close();
+                sys::error_code ec; // Don't throw
+                s.shutdown(tcp::socket::shutdown_both, ec);
+                s.close(ec);
             };
 
             auto connection
                 = make_shared<GenericConnection>(move(socket), tcp_shutter);
 
-            asio::spawn( ios
-                       , [ connection
-                         , &client
-                         , &shutdown_signal
+            asio::spawn( _ios
+                       , [ this
+                         , connection
+                         , lock = wait_condition.lock()
                          ](asio::yield_context yield) mutable {
-                             serve_request(*connection, client, shutdown_signal, yield);
+                             serve_request(*connection, yield);
                          });
         }
+    }
+
+    wait_condition.wait(yield);
+}
+
+//------------------------------------------------------------------------------
+void Client::State::start(int argc, char* argv[])
+{
+    _config = ClientConfig(argc, argv);
+
+#ifndef __ANDROID__
+    if (exists(_config.repo_root()/OUINET_PID_FILE)) {
+        throw runtime_error(util::str
+             ( "Existing PID file ", _config.repo_root()/OUINET_PID_FILE
+             , "; another client process may be running"
+             , ", otherwise please remove the file."));
+    }
+    // Acquire a PID file for the life of the process
+    assert(!_pid_file);
+    _pid_file = make_unique<util::PidFile>(_config.repo_root()/OUINET_PID_FILE);
+#endif
+
+    asio::spawn
+        ( _ios
+        , [this, self = shared_from_this()]
+          (asio::yield_context yield) {
+              sys::error_code ec;
+              setup_injector(yield[ec]);
+              if (ec) {
+                  cerr << "Failed to setup injector" << endl;
+              }
+              do_listen(yield[ec]);
+          });
+}
+
+//------------------------------------------------------------------------------
+void Client::State::setup_injector(asio::yield_context yield)
+{
+    auto injector_ep = _config.injector_endpoint();
+
+#ifdef USE_GNUNET
+    if (is_gnunet_endpoint(injector_ep)) {
+        namespace gc = gnunet_channels;
+
+        string gnunet_cfg
+            = (_config.repo_root()/"gnunet"/"peer.conf").native();
+
+        auto service = make_unique<gc::Service>(gnunet_cfg, _ios);
+
+        sys::error_code ec;
+
+        cout << "Setting up GNUnet ..." << endl;
+        service->async_setup(yield[ec]);
+
+        if (ec) {
+            cerr << "Failed to setup GNUnet service: "
+                 << ec.message() << endl;
+            return or_throw(yield, ec);
+        }
+
+        cout << "GNUnet ID: " << service->identity() << endl;
+
+        _gnunet_service = move(service);
+    } else
+#endif
+    if (is_i2p_endpoint(injector_ep)) {
+        auto ep = boost::get<I2PEndpoint>(injector_ep).pubkey;
+
+        i2poui::Service service((_config.repo_root()/"i2p").native(), _ios);
+        sys::error_code ec;
+        i2poui::Connector connector = service.build_connector(ep, yield[ec]);
+
+        if (ec) {
+            cerr << "Failed to setup I2Poui service: "
+                 << ec.message() << endl;
+            return or_throw(yield, ec);
+        }
+
+        _i2p = make_shared<I2P>(I2P{move(service), move(connector)});
     }
 }
 
 //------------------------------------------------------------------------------
+void Client::State::set_injector(string injector_ep)
+{
+    auto prev_ep = _config.injector_endpoint();
+
+    if (!_config.set_injector_endpoint(injector_ep)) {
+        cerr << "Failed parsing injector endpoint" << endl;
+        return;
+    }
+
+    if (_config.injector_endpoint() == prev_ep) {
+        return;
+    }
+
+    asio::spawn(_ios, [this, self = shared_from_this()]
+                      (asio::yield_context yield) {
+            if (_stopped) return;
+            sys::error_code ec;
+            setup_injector(yield);
+            if (ec) {
+                cerr << "Failed to setup injector" << endl;
+            }
+        });
+}
+
+//------------------------------------------------------------------------------
+Client::Client(asio::io_service& ios)
+    : _state(make_shared<State>(ios))
+{}
+
+Client::~Client()
+{
+}
+
+void Client::start(int argc, char* argv[])
+{
+    _state->start(argc, argv);
+}
+
+void Client::stop()
+{
+    _state->stop();
+}
+
+void Client::set_injector_endpoint(const char* injector_ep)
+{
+    _state->set_injector(injector_ep);
+}
+
+void Client::set_ipns(const char* ipns)
+{
+    _state->_config.set_ipns(move(ipns));
+}
+
+//------------------------------------------------------------------------------
+#ifndef __ANDROID__
 int main(int argc, char* argv[])
 {
-    namespace po = boost::program_options;
-
-    po::options_description desc("\nOptions");
-
-    desc.add_options()
-        ("help", "Produce this help message")
-        ("repo", po::value<string>(), "Path to the repository root")
-        ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen")
-        ("injector-ep"
-         , po::value<string>()
-         , "Injector's endpoint (either <IP>:<PORT> or <GNUnet's ID>:<GNUnet's PORT>")
-        ("injector-ipns"
-         , po::value<string>()->default_value("")
-         , "IPNS of the injector's database")
-        ("max-cached-age"
-         , po::value<int>()->default_value(MAX_CACHED_AGE.total_seconds())
-         , "Discard cached content older than this many seconds (0: discard all; -1: discard none)")
-        ("open-file-limit"
-         , po::value<unsigned int>()
-         , "To increase the maximum number of open files")
-        ;
-
-    po::variables_map vm;
-    po::store(po::parse_command_line(argc, argv, desc), vm);
-    po::notify(vm);
-
-    if (!vm.count("repo")) {
-        cerr << "The 'repo' argument is missing" << endl;
-        cerr << desc << endl;
-        return 1;
-    }
-
-    REPO_ROOT = fs::path(vm["repo"].as<string>());
-
-    if (!fs::exists(REPO_ROOT)) {
-        cerr << "Directory " << REPO_ROOT << " does not exist." << endl;
-        cerr << desc << endl;
-        return 1;
-    }
-
-    if (!fs::is_directory(REPO_ROOT)) {
-        cerr << "The path " << REPO_ROOT << " is not a directory." << endl;
-        cerr << desc << endl;
-        return 1;
-    }
-
-    fs::path ouinet_conf_path = REPO_ROOT/OUINET_CONF_FILE;
-
-    if (!fs::is_regular_file(ouinet_conf_path)) {
-        cerr << "The path " << REPO_ROOT << " does not contain "
-             << "the " << OUINET_CONF_FILE << " configuration file." << endl;
-        cerr << desc << endl;
-        return 1;
-    }
-
-    ifstream ouinet_conf(ouinet_conf_path.native());
-
-    po::store(po::parse_config_file(ouinet_conf, desc), vm);
-    po::notify(vm);
-
-    if (vm.count("open-file-limit")) {
-        increase_open_file_limit(vm["open-file-limit"].as<unsigned int>());
-    }
-
-    if (vm.count("max-cached-age")) {
-        MAX_CACHED_AGE = boost::posix_time::seconds(vm["max-cached-age"].as<int>());
-    }
-
-    if (!vm.count("listen-on-tcp")) {
-        cerr << "The parameter 'listen-on-tcp' is missing" << endl;
-        cerr << desc << endl;
-        return 1;
-    }
-
-    if (!vm.count("injector-ep")) {
-        cerr << "The parameter 'injector-ep' is missing" << endl;
-        cerr << desc << endl;
-        return 1;
-    }
-
-    auto const local_ep = util::parse_endpoint(vm["listen-on-tcp"].as<string>());
-    auto const injector_ep = *parse_endpoint(vm["injector-ep"].as<string>());
-
-    string ipns;
-
-    if (vm.count("injector-ipns")) {
-        ipns = vm["injector-ipns"].as<string>();
-    }
-
-    if (exists(REPO_ROOT/OUINET_PID_FILE)) {
-        cerr << "Existing PID file " << REPO_ROOT/OUINET_PID_FILE
-             << "; another client process may be running"
-             << ", otherwise please remove the file." << endl;
-        return 1;
-    }
-    // Acquire a PID file for the life of the process
-    util::PidFile pid_file(REPO_ROOT/OUINET_PID_FILE);
-
-    // The io_service is required for all I/O
     asio::io_service ios;
-
-    Signal<void()> shutdown_signal;
-
-    Client client(ios, injector_ep);
-
-    asio::spawn
-        ( ios
-        , [&](asio::yield_context yield) {
-
-              if (is_gnunet_endpoint(injector_ep)) {
-                  namespace gc = gnunet_channels;
-
-                  string config = (REPO_ROOT/"gnunet"/"peer.conf").native();
-
-                  auto service = make_unique<gc::Service>(config, ios);
-
-                  sys::error_code ec;
-
-                  cout << "Setting up GNUnet ..." << endl;
-                  service->async_setup(yield[ec]);
-
-                  if (ec) {
-                      cerr << "Failed to setup GNUnet service: "
-                           << ec.message() << endl;
-                      return;
-                  }
-
-                  cout << "GNUnet ID: " << service->identity() << endl;
-
-                  client.gnunet_service = move(service);
-              }
-              else if (is_i2p_endpoint(injector_ep)) {
-                  auto ep = boost::get<I2PEndpoint>(injector_ep).pubkey;
-
-                  i2poui::Service service((REPO_ROOT/"i2p").native(), ios);
-                  sys::error_code ec;
-                  i2poui::Connector connector = service.build_connector(ep, yield[ec]);
-
-                  if (ec) {
-                      cerr << "Failed to setup I2Poui service: "
-                           << ec.message() << endl;
-                      return;
-                  }
-
-                  client.i2p =
-                      make_unique<Client::I2P>(Client::I2P{move(service),
-                              move(connector)});
-              }
-
-              do_listen( client
-                       , local_ep
-                       , ipns
-                       , shutdown_signal
-                       , yield);
-          });
 
     asio::signal_set signals(ios, SIGINT, SIGTERM);
 
-    signals.async_wait([&shutdown_signal](const sys::error_code& ec, int signal_number) {
-            shutdown_signal();
+    Client client(ios);
+
+    signals.async_wait([&client](const sys::error_code& ec, int signal_number) {
+            client.stop();
         });
+
+    try {
+        client.start(argc, argv);
+    } catch (std::exception& e) {
+        cerr << e.what() << endl;
+        return 1;
+    }
 
     ios.run();
 
@@ -697,3 +756,4 @@ int main(int argc, char* argv[])
 
     return EXIT_SUCCESS;
 }
+#endif

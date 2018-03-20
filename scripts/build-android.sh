@@ -10,7 +10,9 @@ NDK=android-ndk-r16b
 NDK_DIR=$DIR/$NDK
 NDK_ZIP=${NDK}-linux-x86_64.zip
 
-NDK_PLATFORM=19
+# `posix_fadvise`, required by Boost.Beast is was only added in LOLLIPOP
+# https://developer.android.com/guide/topics/manifest/uses-sdk-element.html#ApiLevels
+NDK_PLATFORM=21
 NDK_ARCH=arm
 NDK_STL='libc++'
 NDK_TOOLCHAIN_DIR=${DIR}/${NDK}-toolchain-android$NDK_PLATFORM-$NDK_ARCH-$NDK_STL
@@ -20,11 +22,41 @@ BOOST_V_DOT=${BOOST_V//_/.} # 1.65.1
 
 # https://developer.android.com/ndk/guides/abis.html
 ABI=armeabi-v7a
+#ABI=arm64-v8a
+
+######################################################################
+# This variable shall contain paths to generated libraries which
+# must all be included in the final Android package.
+OUT_LIBS=()
+
+function add_library {
+    local libs=("$@")
+    for lib in "${libs[@]}"; do
+        if [ ! -f "$lib" ]; then
+            echo "Cannot add library \"$lib\": File doesn't exist"
+            exit 1
+        fi
+        OUT_LIBS+=("$lib")
+    done
+}
+
+######################################################################
+which unzip > /dev/null || sudo apt-get install unzip
 
 ######################################################################
 if [ "$ABI" = "armeabi-v7a" ]; then
     CMAKE_SYSTEM_PROCESSOR="armv7-a"
+elif [ "$ABI" = "arm64-v8a" ]; then
+    CMAKE_SYSTEM_PROCESSOR="aarch64"
+elif [ "$ABI" = "armeabi" ]; then
+    CMAKE_SYSTEM_PROCESSOR="armv5te"
+elif [ "$ABI" = "x86" ]; then
+    CMAKE_SYSTEM_PROCESSOR="i686"
+elif [ "$ABI" = "x86_64" ]; then
+    CMAKE_SYSTEM_PROCESSOR="x86_64"
 else
+    # This may help:
+    # https://github.com/opencv/opencv/blob/5b868ccd829975da5372bf330994553e176aee09/platforms/android/android.toolchain.cmake#L658
     >&2 echo "TODO: Need a mapping from \"$ABI\" to CMAKE_SYSTEM_PROCESSOR"
     exit 1
 fi
@@ -32,7 +64,9 @@ fi
 ######################################################################
 if [ ! -d "./$NDK" ]; then
     cd /tmp
-    wget https://dl.google.com/android/repository/${NDK_ZIP}
+    if [ ! -f ${NDK_ZIP} ]; then
+        wget https://dl.google.com/android/repository/${NDK_ZIP}
+    fi
     cd ${DIR}
     unzip /tmp/${NDK_ZIP}
     rm /tmp/${NDK_ZIP}
@@ -47,6 +81,20 @@ if [ ! -d "${NDK_TOOLCHAIN_DIR}" ]; then
         --install-dir=${NDK_TOOLCHAIN_DIR}
 fi
 
+export ANDROID_NDK_HOME=$DIR/android-ndk-r16b
+
+add_library $NDK_TOOLCHAIN_DIR/arm-linux-androideabi/lib/$CMAKE_SYSTEM_PROCESSOR/libc++_shared.so
+
+######################################################################
+if [ ! -d "./gradle-4.6" ]; then
+    wget https://services.gradle.org/distributions/gradle-4.6-bin.zip
+    # TODO: Check SHA256
+    unzip gradle-4.6-bin.zip
+    rm gradle-4.6-bin.zip
+fi
+
+export PATH="`pwd`/gradle-4.6/bin:$PATH"
+
 ######################################################################
 if [ ! -d "Boost-for-Android" ]; then
     git clone https://github.com/inetic/Boost-for-Android
@@ -54,10 +102,11 @@ fi
 
 if [ ! -d "Boost-for-Android/build" ]; then
     cd Boost-for-Android
+    # TODO: Android doesn't need program_options and test.
     ./build-android.sh \
         --boost=${BOOST_V_DOT} \
         --arch=${ABI} \
-        --with-libraries=context,coroutine,program_options,system,test,thread,filesystem,date_time \
+        --with-libraries=regex,context,coroutine,program_options,system,test,thread,filesystem,date_time \
         $NDK_DIR
     cd ..
 fi
@@ -88,6 +137,9 @@ if [ ! -d "$SSL_DIR" ]; then
 fi
 
 ######################################################################
+BOOST_INCLUDEDIR=${DIR}/Boost-for-Android/build/out/${ABI}/include/boost-${BOOST_V}
+BOOST_LIBRARYDIR=${DIR}/Boost-for-Android/build/out/${ABI}/lib
+
 ANDROID_FLAGS="\
     -DBoost_COMPILER='-clang' \
     -DCMAKE_ANDROID_NDK_TOOLCHAIN_VERSION=clang \
@@ -96,35 +148,57 @@ ANDROID_FLAGS="\
     -DCMAKE_ANDROID_STANDALONE_TOOLCHAIN=${NDK_TOOLCHAIN_DIR} \
     -DCMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR} \
     -DCMAKE_ANDROID_ARCH_ABI=${ABI} \
-    -DBOOST_INCLUDEDIR=${DIR}/Boost-for-Android/build/out/${ABI}/include/boost-${BOOST_V} \
-    -DBOOST_LIBRARYDIR=${DIR}/Boost-for-Android/build/out/${ABI}/lib"
+    -DOPENSSL_ROOT_DIR=${SSL_DIR} \
+    -DBOOST_INCLUDEDIR=${BOOST_INCLUDEDIR} \
+    -DBOOST_LIBRARYDIR=${BOOST_LIBRARYDIR}"
 
 ######################################################################
-if [ ! -d "build-ipfs-cache" ]; then
-    mkdir -p build-ipfs-cache
-    cd build-ipfs-cache
-    cmake ${ANDROID_FLAGS} ${ROOT}/modules/ipfs-cache
-    make
-    cd ..
+if [ ! -d "android-ifaddrs" ]; then
+    # TODO: Still need to compile the .c file and make use of it.
+    git clone https://github.com/PurpleI2P/android-ifaddrs.git
 fi
 
 ######################################################################
-# TODO: Missing dependencies for i2pd:
-#   * git clone https://github.com/PurpleI2P/MiniUPnP-for-Android-Prebuilt.git
-#   * git clone https://github.com/PurpleI2P/android-ifaddrs.git
-# As described here:
+# TODO: miniupnp
 #   https://i2pd.readthedocs.io/en/latest/devs/building/android/
 
-#rm -rf build-i2poui
-#mkdir -p build-i2poui
-#cd build-i2poui
-#
-#cmake \
-#    ${ANDROID_FLAGS} \
-#    -DOPENSSL_INCLUDE_DIR=${SSL_DIR}/include \
-#    ${ROOT}/modules/i2pouiservice
-#
-#make VERBOSE=1
-#cd ..
+######################################################################
+mkdir -p build-ouinet
+cd build-ouinet
+cmake ${ANDROID_FLAGS} \
+    -DANDROID=1 \
+    -DWITH_GNUNET=OFF \
+    -DWITH_INJECTOR=OFF \
+    -DIFADDRS_SOURCES="${DIR}/android-ifaddrs/ifaddrs.c" \
+    -DOPENSSL_INCLUDE_DIR=${SSL_DIR}/include \
+    -DCMAKE_CXX_FLAGS="-I ${DIR}/android-ifaddrs -I $SSL_DIR/include" \
+    ${ROOT}
+make VERBOSE=1
+cd ..
+
+add_library $DIR/build-ouinet/libclient.so
+add_library $DIR/build-ouinet/modules/ipfs-cache/ipfs_bindings/libipfs_bindings.so
+
+######################################################################
+JNI_DST_DIR=${ROOT}/android/browser/src/main/jniLibs/${ABI}
+rm -rf ${ROOT}/android/browser/src/main/jniLibs
+mkdir -p $JNI_DST_DIR
+for lib in "${OUT_LIBS[@]}"; do
+    echo "Copying $lib to $JNI_DST_DIR"
+    cp $lib $JNI_DST_DIR/
+done
+
+######################################################################
+# Unpolished code to build the browser-debug.apk
+#adb uninstall ie.equalit.ouinet
+cd ../android
+GRADLE_USER_HOME=$DIR/.gradle-home
+gradle --no-daemon build -Pboost_includedir=${BOOST_INCLUDEDIR}
+adb devices
+#adb uninstall ie.equalit.ouinet
+adb install -r ./browser/build/outputs/apk/debug/browser-debug.apk
+adb logcat -c
+adb shell am start -n ie.equalit.ouinet/ie.equalit.ouinet.MainActivity
+adb logcat Ouinet:V libc:V '*:S'
 
 ######################################################################
