@@ -1,0 +1,44 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 3ed10d7..8c488c3 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -39,33 +39,3 @@ target_link_libraries(i2poui
+ set(I2POUI_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include" PARENT_SCOPE)
+ 
+ ################################################################################
+-project(chat)
+-
+-find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS filesystem
+-                                                              program_options
+-                                                              date_time
+-                                                              thread
+-                                                              system
+-                                                              coroutine)
+-
+-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -Wall -ggdb ${SANITIZE}")
+-
+-include_directories(
+-    "${Boost_INCLUDE_DIR}"
+-    "./include/")
+-
+-set(sources "./example/chat.cpp")
+-
+-add_executable(chat ${sources})
+-add_dependencies(chat i2poui)
+-
+-target_link_libraries(chat
+-    i2poui
+-    i2pdclient
+-    libi2pd
+-    ssl
+-    crypto
+-    z
+-    ${Boost_LIBRARIES}
+-    ${CMAKE_THREAD_LIBS_INIT})
+-
+diff --git a/i2pd b/i2pd
+--- a/i2pd
++++ b/i2pd
+@@ -1 +1 @@
+-Subproject commit e630b8f8a8077aac4eece7495e8e92b8517906f0
++Subproject commit e630b8f8a8077aac4eece7495e8e92b8517906f0-dirty

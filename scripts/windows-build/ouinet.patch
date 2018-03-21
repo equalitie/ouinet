@@ -1,0 +1,209 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index c41fea6..c202348 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -29,7 +29,6 @@ option(IPFS_CACHE_WITH_EXAMPLE_BINARIES "" OFF)
+ 
+ add_subdirectory(./modules/i2pouiservice)
+ add_subdirectory(./modules/ipfs-cache)
+-add_subdirectory(./modules/gnunet-channels)
+ 
+ ################################################################################
+ project(ouinet)
+@@ -43,14 +42,13 @@ find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS filesystem
+                                                         system)
+ find_package(Threads)
+ 
+-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -Wall -ggdb ${SANITIZE}")
++set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -Wall -ggdb ${SANITIZE} -Wa,-mbig-obj")
+ 
+ ################################################################################
+ include_directories(
+     "${Boost_INCLUDE_DIR}"
+     "${BEAST_DIR}/include"
+     "${IPFS_CACHE_INCLUDE_DIR}"
+-    "${GNUNET_CHANNELS_INCLUDE_DIR}"
+     "${IPFS_CACHE_JSON_INCLUDE_DIR}"
+     "${I2POUI_INCLUDE_DIR}")
+ 
+@@ -66,13 +64,14 @@ file(GLOB client_sources
+ )
+ 
+ add_executable(client ${client_sources})
+-add_dependencies(client beast ${IPFS_CACHE_TARGET} gnunet-channels i2poui)
++add_dependencies(client beast ${IPFS_CACHE_TARGET} i2poui)
+ 
+ target_link_libraries(client
+     i2poui i2pdclient libi2pd
+     ${IPFS_CACHE_LIBRARIES}
+     ${Boost_LIBRARIES}
+-    ${GNUNET_CHANNELS_LIBRARIES})
++    mswsock
++)
+ 
+ ################################################################################
+ include_directories(
+@@ -80,7 +79,6 @@ include_directories(
+     "${BEAST_DIR}/include"
+     "${IPFS_CACHE_INCLUDE_DIR}"
+     "${IPFS_CACHE_JSON_INCLUDE_DIR}"
+-    "${GNUNET_CHANNELS_INCLUDE_DIR}"
+     "${I2POUI_INCLUDE_DIR}")
+ 
+ file(GLOB injector_sources
+@@ -92,13 +90,14 @@ file(GLOB injector_sources
+ )
+ 
+ add_executable(injector ${injector_sources})
+-add_dependencies(injector beast ${IPFS_CACHE_TARGET} gnunet-channels i2poui)
++add_dependencies(injector beast ${IPFS_CACHE_TARGET} i2poui)
+ 
+ target_link_libraries(injector
+     i2poui i2pdclient libi2pd
+     ${IPFS_CACHE_LIBRARIES}
+     ${Boost_LIBRARIES}
+-    ${GNUNET_CHANNELS_LIBRARIES})
++    mswsock
++)
+ 
+ ################################################################################
+ # Config file directory
+@@ -123,10 +122,10 @@ if(NOT ${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
+         )
+         set(config_targets ${config_targets} ${CMAKE_BINARY_DIR}/${config_file})
+     endforeach()
+-    add_custom_target(appel ALL DEPENDS ${config_targets})
++    add_custom_target(copy_config_files ALL DEPENDS ${config_targets})
+ endif()
+ 
+ ################################################################################
+ # Tests
+-add_subdirectory(test)
++#add_subdirectory(test)
+ ################################################################################
+diff --git a/modules/i2pouiservice b/modules/i2pouiservice
+--- a/modules/i2pouiservice
++++ b/modules/i2pouiservice
+@@ -1 +1 @@
+-Subproject commit 4b4fdb91b14469c5b33bab534fdb18d35c01fd7e
++Subproject commit 4b4fdb91b14469c5b33bab534fdb18d35c01fd7e-dirty
+diff --git a/modules/ipfs-cache b/modules/ipfs-cache
+--- a/modules/ipfs-cache
++++ b/modules/ipfs-cache
+@@ -1 +1 @@
+-Subproject commit 1ad8530ae9763316c2ce1c71ccfe734f9b01abfb
++Subproject commit 1ad8530ae9763316c2ce1c71ccfe734f9b01abfb-dirty
+diff --git a/src/client.cpp b/src/client.cpp
+index 86d4cc2..792da49 100644
+--- a/src/client.cpp
++++ b/src/client.cpp
+@@ -13,9 +13,6 @@
+ #include <ipfs_cache/client.h>
+ #include <ipfs_cache/error.h>
+ 
+-#include <gnunet_channels/channel.h>
+-#include <gnunet_channels/service.h>
+-
+ #include <i2poui.h>
+ 
+ #include "namespaces.h"
+@@ -421,7 +418,7 @@ void listen(
+     if (ec) return fail(ec, "listen");
+ 
+     if (ipns.size()) {
+-        ipfs_cache::Client cache(ios, ipns, (REPO_ROOT/"ipfs").native());
++        ipfs_cache::Client cache(ios, ipns, (REPO_ROOT/"ipfs").string());
+         client.ipfs_cache = make_unique<ipfs_cache::Client>(move(cache));
+     }
+ 
+@@ -445,7 +442,6 @@ void listen(
+             }
+             continue;
+         }
+-
+         boost::asio::spawn(ios, [
+             socket = std::move(socket),
+             &client,
+@@ -517,7 +513,7 @@ int main(int argc, char* argv[])
+         return 1;
+     }
+ 
+-    ifstream ouinet_conf(ouinet_conf_path.native());
++    ifstream ouinet_conf(ouinet_conf_path.string());
+ 
+     po::store(po::parse_config_file(ouinet_conf, desc), vm);
+     po::notify(vm);
+diff --git a/src/increase_open_file_limit.h b/src/increase_open_file_limit.h
+index f11265a..850da1b 100644
+--- a/src/increase_open_file_limit.h
++++ b/src/increase_open_file_limit.h
+@@ -1,5 +1,17 @@
+ #pragma once
+ 
++#ifdef WIN32
++
++namespace ouinet {
++
++inline
++void increase_open_file_limit(unsigned int new_value)
++{}
++
++}
++
++#else
++
+ #include <sys/resource.h>
+ 
+ namespace ouinet {
+@@ -42,3 +54,5 @@ void increase_open_file_limit(rlim_t new_value)
+ }
+ 
+ } // ouinet namespace
++
++#endif
+\ No newline at end of file
+diff --git a/src/injector.cpp b/src/injector.cpp
+index 68bbb90..b9e9361 100644
+--- a/src/injector.cpp
++++ b/src/injector.cpp
+@@ -12,9 +12,6 @@
+ #include <string>
+ 
+ #include <ipfs_cache/injector.h>
+-#include <gnunet_channels/channel.h>
+-#include <gnunet_channels/cadet_port.h>
+-#include <gnunet_channels/service.h>
+ #include <i2poui.h>
+ 
+ #include "namespaces.h"
+@@ -327,7 +324,7 @@ int main(int argc, char* argv[])
+         return 1;
+     }
+ 
+-    ifstream ouinet_conf(ouinet_conf_path.native());
++    ifstream ouinet_conf(ouinet_conf_path.string());
+ 
+     po::store(po::parse_config_file(ouinet_conf, desc), vm);
+     po::notify(vm);
+@@ -372,7 +369,7 @@ int main(int argc, char* argv[])
+     // The io_service is required for all I/O
+     asio::io_service ios;
+ 
+-    ipfs_cache::Injector ipfs_cache_injector(ios, (REPO_ROOT/"ipfs").native());
++    ipfs_cache::Injector ipfs_cache_injector(ios, (REPO_ROOT/"ipfs").string());
+ 
+     // Although the IPNS ID is already in IPFS's config file,
+     // this just helps put all info relevant to the user right in the repo root.
+diff --git a/src/util.h b/src/util.h
+index cd7ff18..eb64386 100644
+--- a/src/util.h
++++ b/src/util.h
+@@ -109,7 +109,7 @@ Num parse_num(beast::string_view s, Num default_value) {
+ // If existing, truncate it.
+ inline
+ void create_state_file(const boost::filesystem::path& path, const std::string& line) {
+-    std::fstream fs(path.native(), std::fstream::out | std::fstream::trunc);
++    std::fstream fs(path.string(), std::fstream::out | std::fstream::trunc);
+     fs << line << std::endl;
+     fs.close();
+ }
