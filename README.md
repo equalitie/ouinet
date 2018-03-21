@@ -353,11 +353,11 @@ The rest of instructions for the injector (see above) also hold for the client
 (just replace `injector` with `client` where appropriate).
 
 Unless you transferred an existing client configuration, when you start the
-client container it will probably error out complaining about some missing
-parameters.  In this case you may want to use the `ouinet-repos` container to
-edit `/var/opt/ouinet/client/ouinet-client.conf` and add the missing options
-there (mainly the injector endpoint `injector-ep` and cache IPNS
-`injector-ipns`).
+client container it will be missing some important parameters.  You may want
+to stop the container, use the `ouinet-repos` container to edit
+`/var/opt/ouinet/client/ouinet-client.conf` and add configuration options for
+the injector endpoint `injector-ep` and cache IPNS `injector-ipns`, then
+restart the client container.
 
 **Note:** The client configuration is automatically fixed to have it listen on
 all interfaces (so that publishing the proxy port to the host works).  Please
