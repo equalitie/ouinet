@@ -276,35 +276,30 @@ $ sudo docker create --name ouinet-repos -it \
               --mount src=ouinet-repos,dst=/var/opt/ouinet busybox
 ```
 
-Should you need to manually edit the contents of the repositories, you can
-start this container by running:
+If you want to transfer an existing Ouinet injector or client repository to
+`/var/opt/ouinet`, you may copy them using (respectively):
+
+```
+$ sudo docker cp /path/to/injector/repo ouinet-repos:/var/opt/ouinet/injector
+$ sudo docker cp /path/to/client/repo ouinet-repos:/var/opt/ouinet/client
+```
+
+Otherwise, when the Ouinet container first starts, if there is no repository,
+it automatically populates `/var/opt/ouinet` with a default configuration for
+the injector or client from templates included in Ouinet's source code.
+
+Should you need to manually edit the contents of the repositories after their
+creation, you can start the convenience container by running:
 
 ```
 $ sudo docker start -ia ouinet-repos
 ```
 
-You now need to populate `/var/opt/ouinet` with the configuration for the
-Ouinet injector or client.  One easy way to do it is copying the configuration
-templates included in Ouinet's source code (via the convenience container).
-
-For the injector:
-
-```
-$ sudo docker cp repos/injector ouinet-repos:/var/opt/ouinet
-```
-
-For the client:
-
-```
-$ sudo docker cp repos/client ouinet-repos:/var/opt/ouinet
-```
-
 ### Injector container
 
-To create an injector container, make sure that you have populated
-`/var/opt/ouinet` with injector configuration files (see above), then run the
-following command which creates the `ouinet-injector` container and mounts the
-`ouinet-repos` volume under `/var/opt/ouinet`:
+To create an injector container, run the following command which creates the
+`ouinet-injector` container and mounts the `ouinet-repos` volume (created
+above) under `/var/opt/ouinet`:
 
 ```
 $ sudo docker create --name ouinet-injector -it \
@@ -342,11 +337,10 @@ container to remove `/var/opt/ouinet/injector/pid`.
 
 ### Client container
 
-To create a client container, make sure that you have populated
-`/var/opt/ouinet` with client configuration files (see above), then run the
-following command which creates the `ouinet-client` container, mounts the
-`ouinet-repos` volume under `/var/opt/ouinet` and publishes the client's proxy
-port 8080 to the host at local port 8080:
+To create a client container, run the following command which creates the
+`ouinet-client` container, mounts the `ouinet-repos` volume (created above)
+under `/var/opt/ouinet` and publishes the client's proxy port 8080 to the host
+at local port 8080:
 
 ```
 $ sudo docker create --name ouinet-client -it \
@@ -355,13 +349,15 @@ $ sudo docker create --name ouinet-client -it \
               ouinet:latest ./ouinet-docker.sh client
 ```
 
-Before starting the container, you must fix some options in the client's
-configuration file:
+The rest of instructions for the injector (see above) also hold for the client
+(just replace `injector` with `client` where appropriate).
+
+Unless you transferred an existing client configuration, when you start the
+client container it will probably error out complaining about some missing
+parameters.  In this case you must fix some options in the client's
+configuration file at `/var/opt/ouinet/client/ouinet-client.conf`:
 
   - Make the client's proxy listen on port 8080 of all interfaces (so that
     port redirection works) by setting `listen-on-tcp = 0.0.0.0:8080`.
   - Set the value of `injector-ep` (injector endpoint).
   - Set the value of `injector-ipns` (cache IPNS).
-
-The rest of instructions for the injector (see above) also hold for the client
-(just replace `injector` with `client` where appropriate).
