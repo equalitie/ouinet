@@ -260,7 +260,9 @@ $ sudo docker build -t ouinet:latest .
 
 [DockerFile]: https://raw.githubusercontent.com/equalitie/ouinet/master/Dockerfile
 
-After a while you will get the `ouinet:latest` image.
+After a while you will get the `ouinet:latest` image.  Then you may want to
+run `sudo docker prune` to free up the space taken by temporary builder images
+(which may amount to a couple of GiB).
 
 ### Data volume
 
