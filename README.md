@@ -331,8 +331,13 @@ container, hit Ctrl+C or run:
 $ sudo docker stop ouinet-injector
 ```
 
+After the injector has finished starting, you may want to use the
+`ouinet-repos` container to inspect and note down the contents of
+`/var/opt/ouinet/injector/endpoint-*` (injector endpoints) and
+`/var/opt/ouinet/injector/cache-ipns` (cache IPNS) to be used by clients.
+
 If the program crashes for some reason, you may have to remove the injector's
-PID file manually for it to start again.  Just use the the `ouinet-repos`
+PID file manually for it to start again.  Just use the `ouinet-repos`
 container to remove `/var/opt/ouinet/injector/pid`.
 
 ### Client container
