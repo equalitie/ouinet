@@ -354,10 +354,7 @@ The rest of instructions for the injector (see above) also hold for the client
 
 Unless you transferred an existing client configuration, when you start the
 client container it will probably error out complaining about some missing
-parameters.  In this case you must fix some options in the client's
-configuration file at `/var/opt/ouinet/client/ouinet-client.conf`:
-
-  - Make the client's proxy listen on port 8080 of all interfaces (so that
-    port redirection works) by setting `listen-on-tcp = 0.0.0.0:8080`.
-  - Set the value of `injector-ep` (injector endpoint).
-  - Set the value of `injector-ipns` (cache IPNS).
+parameters.  In this case you may want to use the `ouinet-repos` container to
+edit `/var/opt/ouinet/client/ouinet-client.conf` and add the missing options
+there (mainly the injector endpoint `injector-ep` and cache IPNS
+`injector-ipns`).
