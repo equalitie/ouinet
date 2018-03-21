@@ -358,3 +358,8 @@ parameters.  In this case you may want to use the `ouinet-repos` container to
 edit `/var/opt/ouinet/client/ouinet-client.conf` and add the missing options
 there (mainly the injector endpoint `injector-ep` and cache IPNS
 `injector-ipns`).
+
+**Note:** The client configuration is automatically fixed to have it listen on
+all interfaces (so that publishing the proxy port to the host works).  Please
+take this into account if you want to reuse the configuration for another
+machine.
