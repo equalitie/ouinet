@@ -48,6 +48,7 @@ using tcp         = asio::ip::tcp;
 using string_view = beast::string_view;
 using Request     = http::request<http::string_body>;
 using Response    = http::response<http::dynamic_body>;
+using boost::optional;
 
 static const boost::filesystem::path OUINET_PID_FILE = "pid";
 
@@ -203,9 +204,15 @@ Client::State::connect_to_injector(asio::yield_context yield)
         }
     };
 
-    Visitor visitor(*this, yield);
+    optional<Endpoint> injector_ep = _config.injector_endpoint();
 
-    return boost::apply_visitor(visitor, _config.injector_endpoint());
+    if (!injector_ep) {
+        return or_throw<GenericConnection>(yield,
+                asio::error::operation_not_supported);
+    }
+
+    Visitor visitor(*this, yield);
+    return boost::apply_visitor(visitor, *injector_ep);
 }
 
 //------------------------------------------------------------------------------
@@ -632,8 +639,10 @@ void Client::State::setup_injector(asio::yield_context yield)
 {
     auto injector_ep = _config.injector_endpoint();
 
+    if (!injector_ep) return;
+
 #ifdef USE_GNUNET
-    if (is_gnunet_endpoint(injector_ep)) {
+    if (is_gnunet_endpoint(*injector_ep)) {
         namespace gc = gnunet_channels;
 
         string gnunet_cfg
@@ -657,8 +666,8 @@ void Client::State::setup_injector(asio::yield_context yield)
         _gnunet_service = move(service);
     } else
 #endif
-    if (is_i2p_endpoint(injector_ep)) {
-        auto ep = boost::get<I2PEndpoint>(injector_ep).pubkey;
+    if (is_i2p_endpoint(*injector_ep)) {
+        auto ep = boost::get<I2PEndpoint>(*injector_ep).pubkey;
 
         i2poui::Service service((_config.repo_root()/"i2p").native(), _ios);
         sys::error_code ec;

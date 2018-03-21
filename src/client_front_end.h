@@ -46,7 +46,7 @@ public:
     };
 
 public:
-    Response serve( const Endpoint& injector_ep
+    Response serve( const boost::optional<Endpoint>& injector_ep
                   , const http::request<http::string_body>&
                   , ipfs_cache::Client*);
 
