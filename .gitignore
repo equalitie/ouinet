@@ -1,4 +1,5 @@
 .vagrant/
+Vagrantfile.kvm
 
 android/.gradle/
 android/.idea/
@@ -7,3 +8,26 @@ android/browser/.externalNativeBuild/
 android/browser/browser.iml
 android/browser/src/main/jniLibs/
 android/local.properties
+
+repos/client/ipfs/
+repos/client/i2p/
+repos/client/gnunet/.config/
+repos/client/gnunet/.local/
+
+repos/injector/ipfs/
+repos/injector/i2p/
+repos/injector/gnunet/.config/
+repos/injector/gnunet/.local/
+
+scripts/ouinet-local-build/
+
+#emacs temp files
+*~
+\#*\#
+\.\#*
+
+#gtags
+GPATH
+GRTAGS
+GTAGS
+

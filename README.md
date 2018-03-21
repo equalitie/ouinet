@@ -68,6 +68,37 @@ You may need to repeat this until the script succeeds and reports instructions
 on how to run the client or injector tools.  The whole process takes a few
 minutes and requires around 2 GB of storage.
 
+### Running over the Vagrant instance
+
+#### Install 
+
+    sudo apt-get install vagrant
+
+For some reason the vagrant config is not compatibe with virtualbox and you need to use libvirt instead
+
+    sudo apt-get install libvirt-bin libvirt-dev
+    vagrant plugin install vagrant-libvirt
+
+#### Vagrant instance using libvert
+
+    vagrant up --provider=libvirt
+    vagrant ssh
+
+#### Vagrant instance on Amazon aws cloud
+
+    vagrant plugin install vagrant-aws
+    vagrant plugin install vagrant-sshfs
+
+    export AWS_ACCESS_KEY_ID='YOUR_ACCESS_ID'
+    export AWS_SECRET_ACCESS_KEY='your secret token'
+
+    mv Vagrantfile Vagrantfile.kvm
+    mv Vagrantfile.aws Vagrantfile
+
+    vagrant up
+    vagrant sshfs --mount linux
+    vagrant ssh
+
 ### Testing
 
 To perform some tests using the just-built Ouinet client and an existing
