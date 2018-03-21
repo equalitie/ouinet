@@ -338,7 +338,7 @@ CacheControl::do_fetch(const Request& request, asio::yield_context yield)
             return add_stale_warning(move(cache_entry.response));
         }
 
-        if (response.result() == http::status::found) {
+        if (response.result() == http::status::not_modified) {
             return move(cache_entry.response);
         }
 
