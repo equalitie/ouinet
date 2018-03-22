@@ -749,6 +749,11 @@ int main(int argc, char* argv[])
 
     signals.async_wait([&client](const sys::error_code& ec, int signal_number) {
             client.stop();
+
+            signals.async_wait([](const sys::error_code& ec, int signal_number) {
+                cerr << "Got second signal, terminating immediately" << endl;
+                exit(1);
+            });
         });
 
     try {
