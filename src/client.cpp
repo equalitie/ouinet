@@ -4,6 +4,7 @@
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/connect.hpp>
+#include <boost/asio/signal_set.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <iostream>
 #include <fstream>
@@ -15,8 +16,6 @@
 #   include <gnunet_channels/channel.h>
 #   include <gnunet_channels/service.h>
 #endif
-
-#include <i2poui.h>
 
 #include "namespaces.h"
 #include "fetch_http_page.h"
@@ -36,6 +35,10 @@
 #ifdef __ANDROID__
 #include "redirect_to_android_log.h"
 #endif // ifdef __ANDROID__
+
+#include "ouiservice.h"
+#include "ouiservice/i2p.h"
+#include "ouiservice/tcp.h"
 
 #include "util/signal.h"
 
@@ -61,12 +64,6 @@ static const boost::filesystem::path OUINET_PID_FILE = "pid";
 class Client::State : public enable_shared_from_this<Client::State> {
     friend class Client;
 
-private:
-    struct I2P {
-        i2poui::Service service;
-        i2poui::Connector connector;
-    };
-
 public:
     State(asio::io_service& ios)
         : _ios(ios)
@@ -77,15 +74,13 @@ public:
     {}
 
     void start(int argc, char* argv[]);
-    void stop() { _stopped = true; _shutdown_signal(); }
+    void stop() { _shutdown_signal(); }
 
     void setup_ipfs_cache();
     void set_injector(string);
 
 private:
     void serve_request(GenericConnection& con, asio::yield_context yield);
-
-    GenericConnection connect_to_injector(asio::yield_context yield);
 
     void handle_connect_request( GenericConnection& client_c
                                , const Request& req
@@ -108,10 +103,7 @@ private:
 private:
     asio::io_service& _ios;
     ClientConfig _config;
-#ifdef USE_GNUNET
-    std::unique_ptr<gnunet_channels::Service> _gnunet_service;
-#endif
-    std::shared_ptr<I2P> _i2p;
+    std::unique_ptr<OuiServiceClient> _injector;
     std::unique_ptr<ipfs_cache::Client> _ipfs_cache;
 
     ClientFrontEnd _front_end;
@@ -125,7 +117,6 @@ private:
 #endif // ifdef __ANDROID__
 
     unique_ptr<util::PidFile> _pid_file;
-    bool _stopped = false;
 };
 
 //------------------------------------------------------------------------------
@@ -148,67 +139,6 @@ void handle_bad_request( GenericConnection& con
 }
 
 //------------------------------------------------------------------------------
-GenericConnection
-Client::State::connect_to_injector(asio::yield_context yield)
-{
-    namespace error = asio::error;
-
-    struct Visitor {
-        using Ret = GenericConnection;
-
-        sys::error_code ec;
-        Client::State& client;
-        asio::yield_context yield;
-
-        Visitor(Client::State& client, asio::yield_context yield)
-            : client(client), yield(yield) {}
-
-        Ret operator()(const tcp::endpoint& ep) {
-            tcp::socket socket(client._ios);
-            socket.async_connect(ep, yield[ec]);
-            return or_throw(yield, ec, GenericConnection(move(socket)));
-        }
-
-#ifdef USE_GNUNET
-        Ret operator()(const GnunetEndpoint& ep) {
-            using Channel = gnunet_channels::Channel;
-
-            if (!client._gnunet_service) {
-                return or_throw<Ret>(yield, error::no_protocol_option);
-            }
-
-            Channel ch(*client._gnunet_service);
-            ch.connect(ep.host, ep.port, yield[ec]);
-
-            return or_throw(yield, ec, GenericConnection(move(ch)));
-        }
-#endif
-
-        Ret operator()(const I2PEndpoint&) {
-            if (!client._i2p) {
-                return or_throw<Ret>(yield, error::no_protocol_option);
-            }
-
-            // User now has the ability to change the injector during runtime.
-            // So we make a copy of the shared_ptr here to ensure the I2P
-            // structures don't get destroyed mid-async-IO.
-            auto i2p = client._i2p;
-
-            i2poui::Channel ch(i2p->service);
-            ch.connect(i2p->connector, yield[ec]);
-
-            // TODO: Remove the second argument to GenericConnection once
-            // i2poui Channel implements the 'close' member function.
-            return or_throw(yield, ec, GenericConnection(move(ch), [](auto&){}));
-        }
-    };
-
-    Visitor visitor(*this, yield);
-
-    return boost::apply_visitor(visitor, _config.injector_endpoint());
-}
-
-//------------------------------------------------------------------------------
 void Client::State::handle_connect_request( GenericConnection& client_c
                                           , const Request& req
                                           , asio::yield_context yield)
@@ -225,7 +155,7 @@ void Client::State::handle_connect_request( GenericConnection& client_c
                           , "Forwarding disabled");
     }
 
-    auto injector_c = connect_to_injector(yield[ec]);
+    auto injector_c = _injector->connect(yield[ec], _shutdown_signal);
 
     if (ec) {
         // TODO: Does an RFC dicate a particular HTTP status code?
@@ -343,7 +273,7 @@ Response Client::State::fetch_fresh( const Request& request
                     continue;
                 }
                 sys::error_code ec;
-                auto inj_con = connect_to_injector(yield[ec]);
+                auto inj_con = _injector->connect(yield[ec], _shutdown_signal);
                 if (ec) {
                     last_error = ec;
                     continue;
@@ -630,10 +560,14 @@ void Client::State::start(int argc, char* argv[])
 //------------------------------------------------------------------------------
 void Client::State::setup_injector(asio::yield_context yield)
 {
+    _injector = std::make_unique<OuiServiceClient>(_ios);
+
     auto injector_ep = _config.injector_endpoint();
 
 #ifdef USE_GNUNET
     if (is_gnunet_endpoint(injector_ep)) {
+        assert(0 && "TODO");
+/*
         namespace gc = gnunet_channels;
 
         string gnunet_cfg
@@ -655,48 +589,36 @@ void Client::State::setup_injector(asio::yield_context yield)
         cout << "GNUnet ID: " << service->identity() << endl;
 
         _gnunet_service = move(service);
+*/
     } else
 #endif
     if (is_i2p_endpoint(injector_ep)) {
-        auto ep = boost::get<I2PEndpoint>(injector_ep).pubkey;
+        std::string ep = boost::get<I2PEndpoint>(injector_ep).pubkey;
 
-        i2poui::Service service((_config.repo_root()/"i2p").native(), _ios);
-        sys::error_code ec;
-        i2poui::Connector connector = service.build_connector(ep, yield[ec]);
+        std::shared_ptr<ouiservice::I2pOuiService> i2p_service = std::make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ios);
+        std::unique_ptr<ouiservice::I2pOuiServiceClient> i2p_client = i2p_service->build_client(ep);
 
-        if (ec) {
-            cerr << "Failed to setup I2Poui service: "
-                 << ec.message() << endl;
-            return or_throw(yield, ec);
-        }
+        _injector->add(std::move(i2p_client));
+    } else {
+        asio::ip::tcp::endpoint tcp_endpoint = boost::get<asio::ip::tcp::endpoint>(injector_ep);
 
-        _i2p = make_shared<I2P>(I2P{move(service), move(connector)});
+        std::unique_ptr<ouiservice::TcpOuiServiceClient> tcp_client = std::make_unique<ouiservice::TcpOuiServiceClient>(_ios, tcp_endpoint);
+        _injector->add(std::move(tcp_client));
     }
+
+    _injector->start(yield);
 }
 
 //------------------------------------------------------------------------------
 void Client::State::set_injector(string injector_ep)
 {
-    auto prev_ep = _config.injector_endpoint();
-
-    if (!_config.set_injector_endpoint(injector_ep)) {
-        cerr << "Failed parsing injector endpoint" << endl;
-        return;
-    }
-
-    if (_config.injector_endpoint() == prev_ep) {
-        return;
-    }
-
-    asio::spawn(_ios, [this, self = shared_from_this()]
-                      (asio::yield_context yield) {
-            if (_stopped) return;
-            sys::error_code ec;
-            setup_injector(yield);
-            if (ec) {
-                cerr << "Failed to setup injector" << endl;
-            }
-        });
+    // XXX: Workaround.
+    // Eventually, OuiServiceClient should just support multiple parallel
+    // active injector EPs.
+    cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
+    cerr << "Switching injector EPs not yet supported." << endl;
+    cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
+    return;
 }
 
 //------------------------------------------------------------------------------

@@ -32,8 +32,9 @@ set(BEAST_DIR "${CMAKE_BINARY_DIR}/beast/src/beast")
 ################################################################################
 option(IPFS_CACHE_WITH_EXAMPLE_BINARIES "" OFF)
 
-add_subdirectory(./modules/i2pouiservice)
+#add_subdirectory(./modules/i2pouiservice)
 add_subdirectory(./modules/ipfs-cache)
+add_subdirectory(./src/ouiservice/i2p)
 
 if (WITH_GNUNET)
     add_definitions(-DUSE_GNUNET)
@@ -63,7 +64,7 @@ include_directories(
     "${IPFS_CACHE_INCLUDE_DIR}"
     ${GNUNET_CHANNELS_INCLUDE_DIR}
     "${IPFS_CACHE_JSON_INCLUDE_DIR}"
-    "${I2POUI_INCLUDE_DIR}")
+)
 
 file(GLOB client_sources
     "./src/client.cpp"
@@ -71,7 +72,10 @@ file(GLOB client_sources
     "./src/client_front_end.cpp"
     "./src/endpoint.cpp"
     "./src/cache_control.cpp"
-    "./src/request_routing.cpp")
+    "./src/request_routing.cpp"
+    "./src/ouiservice.cpp"
+    "./src/ouiservice/tcp.cpp"
+)
 
 if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
     add_executable(client ${client_sources})
@@ -86,12 +90,13 @@ endif()
 
 target_link_libraries(client
     ${log-lib}
-    i2poui i2pdclient libi2pd
+    ouiservice-i2p
     ${Boost_LIBRARIES}
     ${IPFS_CACHE_LIBRARIES}
-    ${GNUNET_CHANNELS_LIBRARIES})
+    ${GNUNET_CHANNELS_LIBRARIES}
+)
 
-add_dependencies(client beast ${IPFS_CACHE_TARGET} ${GNUNET_TARGET} i2poui)
+add_dependencies(client beast ${IPFS_CACHE_TARGET} ${GNUNET_TARGET})
 
 ################################################################################
 if (WITH_INJECTOR)
@@ -101,21 +106,25 @@ if (WITH_INJECTOR)
         "${IPFS_CACHE_INCLUDE_DIR}"
         "${IPFS_CACHE_JSON_INCLUDE_DIR}"
         "${GNUNET_CHANNELS_INCLUDE_DIR}"
-        "${I2POUI_INCLUDE_DIR}")
+    )
 
     file(GLOB injector_sources
         "./src/injector.cpp"
         "./src/connect_to_host.cpp"
-        "./src/cache_control.cpp")
+        "./src/cache_control.cpp"
+        "./src/ouiservice.cpp"
+        "./src/ouiservice/tcp.cpp"
+    )
 
     add_executable(injector ${injector_sources})
-    add_dependencies(injector beast ${IPFS_CACHE_TARGET} ${GNUNET_TARGET} i2poui)
+    add_dependencies(injector beast ${IPFS_CACHE_TARGET} ${GNUNET_TARGET})
 
     target_link_libraries(injector
-        i2poui i2pdclient libi2pd
+        ouiservice-i2p
         ${Boost_LIBRARIES}
         ${IPFS_CACHE_LIBRARIES}
-        ${GNUNET_CHANNELS_LIBRARIES})
+        ${GNUNET_CHANNELS_LIBRARIES}
+    )
 endif() # if WITH_INJECTOR
 
 ################################################################################
