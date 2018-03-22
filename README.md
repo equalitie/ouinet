@@ -399,3 +399,36 @@ restart the client container.
 all interfaces (so that publishing the proxy port to the host works).  Please
 take this into account if you want to reuse the configuration for another
 machine.
+
+## Android
+
+### Requirements
+
+A lot of free space (something less than 15GB). Everything else shall be
+downloaded by the `build-android.sh` script.
+
+The instructions below use Vagrant for bulding, but the `build-android.sh`
+script should work on any reasonably up-to-date debian based system.
+
+In the following instructions, I'll use `<ANDROID>` to represent the absolute
+path to your build directory. That is, the directory from which you'll run the
+`build-android.sh` script (e.g. `~/ouinet.android.build`).
+
+### Building
+
+```
+host    $ vagrant up --provider=libvirt
+host    $ vagrant ssh
+vagrant $ mkdir <ANDROID>
+vagrant $ cd <ANDROID>
+vagrant $ git clone --recursive /vagrant
+vagrant $ ./vagrant/scripts/build-android.sh
+```
+
+When the `build-android.sh` script finishes successfully, it prints out a path
+to the `browser-debug.apk` app package which can now be deployed.
+
+Note that above we had to clone a fresh copy `ouinet` repository. This is
+because the `gradle` tool used inside the `build-android.sh` script has problem
+building from the NFS mounted disk `/vagrant` we use on Vagrant (something
+about nfs locking).
