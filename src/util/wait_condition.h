@@ -116,7 +116,7 @@ void WaitCondition::Lock::release() const
 
     _wait_state->remaining_locks--;
     if (!_wait_state->blocked()) {
-        _wait_state->condition.notify_one();
+        _wait_state->condition.notify();
     }
     _wait_state.reset();
 }

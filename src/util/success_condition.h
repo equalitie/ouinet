@@ -130,7 +130,7 @@ void SuccessCondition::Lock::release(bool success) const
         _wait_state->success = true;
     }
     if (!_wait_state->blocked()) {
-        _wait_state->condition.notify_one();
+        _wait_state->condition.notify();
     }
     _wait_state.reset();
 }
