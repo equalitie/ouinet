@@ -50,6 +50,8 @@ find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS filesystem
                                                         unit_test_framework
                                                         program_options
                                                         coroutine
+                                                        context
+                                                        thread
                                                         date_time
                                                         system)
 find_package(Threads)
