@@ -42,6 +42,33 @@ function add_library {
 
 ######################################################################
 which unzip > /dev/null || sudo apt-get install unzip
+which java > /dev/null || sudo apt-get install default-jre
+dpkg-query -W default-jdk > /dev/null 2>&1 || sudo apt-get install default-jdk
+
+######################################################################
+if [ ! `which adb > /dev/null` ]; then
+    toolsfile=sdk-tools-linux-3859397.zip
+
+    if [ ! -f "tools/bin/sdkmanager" ]; then
+        [ -d tools ] || rm -rf tools
+        if [ ! -f "$toolsfile" ]; then
+            # https://developer.android.com/studio/index.html#command-tools
+            wget https://dl.google.com/android/repository/$toolsfile
+        fi
+        unzip $toolsfile
+    fi
+
+    # To get list of all packages, use `sdkmanager --list`
+    echo y | ./tools/bin/sdkmanager --sdk_root=$DIR/sdk_root \
+        "platforms;android-26" \
+        "build-tools;26.0.3" \
+        "platform-tools" \
+        "cmake;3.6.4111459"
+
+    export PATH="$DIR/sdk_root/platform-tools:$PATH"
+fi
+
+export ANDROID_HOME=$(dirname $(dirname $(which adb)))
 
 ######################################################################
 if [ "$ABI" = "armeabi-v7a" ]; then
