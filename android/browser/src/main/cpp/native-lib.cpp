@@ -42,7 +42,6 @@ void start_client_thread(string repo_root)
             const char* args[] = { "ouinet-client"
                                  , repo_arg.c_str()
                                  , "--listen-on-tcp=127.0.0.1:8080"
-                                 , "--injector-ep=192.168.0.136:7070"
                                  };
 
             unsigned argc = sizeof(args) / sizeof(char*);
