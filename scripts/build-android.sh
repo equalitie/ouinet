@@ -218,14 +218,13 @@ done
 ######################################################################
 # Unpolished code to build the browser-debug.apk
 #adb uninstall ie.equalit.ouinet
-cd ../android
-GRADLE_USER_HOME=$DIR/.gradle-home
+cd ${ROOT}/android
+export GRADLE_USER_HOME=$DIR/.gradle-home
 gradle --no-daemon build -Pboost_includedir=${BOOST_INCLUDEDIR}
-adb devices
-#adb uninstall ie.equalit.ouinet
-adb install -r ./browser/build/outputs/apk/debug/browser-debug.apk
-adb logcat -c
-adb shell am start -n ie.equalit.ouinet/ie.equalit.ouinet.MainActivity
-adb logcat Ouinet:V libc:V '*:S'
+
+echo "---------------------------------"
+echo "Your Android package is ready at:"
+ls -l ${ROOT}/android/browser/build/outputs/apk/debug/browser-debug.apk
+echo "---------------------------------"
 
 ######################################################################
