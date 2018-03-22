@@ -747,7 +747,7 @@ int main(int argc, char* argv[])
 
     Client client(ios);
 
-    signals.async_wait([&client](const sys::error_code& ec, int signal_number) {
+    signals.async_wait([&client, &signals, &ios](const sys::error_code& ec, int signal_number) {
             client.stop();
 
             signals.async_wait([](const sys::error_code& ec, int signal_number) {
