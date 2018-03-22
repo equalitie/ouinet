@@ -5,9 +5,6 @@
 [submodule "modules/gnunet-channels"]
 	path = modules/gnunet-channels
 	url = https://github.com/equalitie/gnunet-channels
-[submodule "modules/i2pouiservice"]
-	path = modules/i2pouiservice
-	url = https://github.com/equalitie/i2pouiservice
 [submodule "src/ouiservice/i2p/i2pd"]
 	path = src/ouiservice/i2p/i2pd
 	url = https://github.com/inetic/i2pd.git
