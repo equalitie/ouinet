@@ -51,6 +51,7 @@ using tcp         = asio::ip::tcp;
 using string_view = beast::string_view;
 using Request     = http::request<http::string_body>;
 using Response    = http::response<http::dynamic_body>;
+using boost::optional;
 
 static const boost::filesystem::path OUINET_PID_FILE = "pid";
 
@@ -564,8 +565,10 @@ void Client::State::setup_injector(asio::yield_context yield)
 
     auto injector_ep = _config.injector_endpoint();
 
+    if (!injector_ep) return;
+
 #ifdef USE_GNUNET
-    if (is_gnunet_endpoint(injector_ep)) {
+    if (is_gnunet_endpoint(*injector_ep)) {
         assert(0 && "TODO");
 /*
         namespace gc = gnunet_channels;
@@ -592,15 +595,14 @@ void Client::State::setup_injector(asio::yield_context yield)
 */
     } else
 #endif
-    if (is_i2p_endpoint(injector_ep)) {
-        std::string ep = boost::get<I2PEndpoint>(injector_ep).pubkey;
-
+    if (is_i2p_endpoint(*injector_ep)) {
+        std::string ep = boost::get<I2PEndpoint>(*injector_ep).pubkey;
         std::shared_ptr<ouiservice::I2pOuiService> i2p_service = std::make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ios);
         std::unique_ptr<ouiservice::I2pOuiServiceClient> i2p_client = i2p_service->build_client(ep);
 
         _injector->add(std::move(i2p_client));
     } else {
-        asio::ip::tcp::endpoint tcp_endpoint = boost::get<asio::ip::tcp::endpoint>(injector_ep);
+        asio::ip::tcp::endpoint tcp_endpoint = boost::get<asio::ip::tcp::endpoint>(*injector_ep);
 
         std::unique_ptr<ouiservice::TcpOuiServiceClient> tcp_client = std::make_unique<ouiservice::TcpOuiServiceClient>(_ios, tcp_endpoint);
         _injector->add(std::move(tcp_client));
@@ -660,8 +662,13 @@ int main(int argc, char* argv[])
 
     Client client(ios);
 
-    signals.async_wait([&client](const sys::error_code& ec, int signal_number) {
+    signals.async_wait([&client, &signals, &ios](const sys::error_code& ec, int signal_number) {
             client.stop();
+
+            signals.async_wait([](const sys::error_code& ec, int signal_number) {
+                cerr << "Got second signal, terminating immediately" << endl;
+                exit(1);
+            });
         });
 
     try {

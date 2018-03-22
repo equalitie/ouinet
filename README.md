@@ -68,6 +68,37 @@ You may need to repeat this until the script succeeds and reports instructions
 on how to run the client or injector tools.  The whole process takes a few
 minutes and requires around 2 GB of storage.
 
+### Running over the Vagrant instance
+
+#### Install 
+
+    sudo apt-get install vagrant
+
+For some reason the vagrant config is not compatibe with virtualbox and you need to use libvirt instead
+
+    sudo apt-get install libvirt-bin libvirt-dev
+    vagrant plugin install vagrant-libvirt
+
+#### Vagrant instance using libvert
+
+    vagrant up --provider=libvirt
+    vagrant ssh
+
+#### Vagrant instance on Amazon aws cloud
+
+    vagrant plugin install vagrant-aws
+    vagrant plugin install vagrant-sshfs
+
+    export AWS_ACCESS_KEY_ID='YOUR_ACCESS_ID'
+    export AWS_SECRET_ACCESS_KEY='your secret token'
+
+    mv Vagrantfile Vagrantfile.kvm
+    mv Vagrantfile.aws Vagrantfile
+
+    vagrant up
+    vagrant sshfs --mount linux
+    vagrant ssh
+
 ### Testing
 
 To perform some tests using the just-built Ouinet client and an existing
@@ -260,7 +291,9 @@ $ sudo docker build -t ouinet:latest .
 
 [DockerFile]: https://raw.githubusercontent.com/equalitie/ouinet/master/Dockerfile
 
-After a while you will get the `ouinet:latest` image.
+After a while you will get the `ouinet:latest` image.  Then you may want to
+run `sudo docker prune` to free up the space taken by temporary builder images
+(which may amount to a couple of GiB).
 
 ### Data volume
 
@@ -274,38 +307,33 @@ $ sudo docker create --name ouinet-repos -it \
               --mount src=ouinet-repos,dst=/var/opt/ouinet busybox
 ```
 
-Should you need to manually edit the contents of the repositories, you can
-start this container by running:
+If you want to transfer an existing Ouinet injector or client repository to
+`/var/opt/ouinet`, you may copy them using (respectively):
+
+```
+$ sudo docker cp /path/to/injector/repo ouinet-repos:/var/opt/ouinet/injector
+$ sudo docker cp /path/to/client/repo ouinet-repos:/var/opt/ouinet/client
+```
+
+Otherwise, when the Ouinet container first starts, if there is no repository,
+it automatically populates `/var/opt/ouinet` with a default configuration for
+the injector or client from templates included in Ouinet's source code.
+
+Should you need to manually edit the contents of the repositories after their
+creation, you can start the convenience container by running:
 
 ```
 $ sudo docker start -ia ouinet-repos
 ```
 
-You now need to populate `/var/opt/ouinet` with the configuration for the
-Ouinet injector or client.  One easy way to do it is copying the configuration
-templates included in Ouinet's source code (via the convenience container).
-
-For the injector:
-
-```
-$ sudo docker cp repos/injector ouinet-repos:/var/opt/ouinet
-```
-
-For the client:
-
-```
-$ sudo docker cp repos/client ouinet-repos:/var/opt/ouinet
-```
-
 ### Injector container
 
-To create an injector container, make sure that you have populated
-`/var/opt/ouinet` with injector configuration files (see above), then run the
-following command which creates the `ouinet-injector` container and mounts the
-`ouinet-repos` volume under `/var/opt/ouinet`:
+To create an injector container, run the following command which creates the
+`ouinet-injector` container (using the host's network) and mounts the
+`ouinet-repos` volume (created above) under `/var/opt/ouinet`:
 
 ```
-$ sudo docker create --name ouinet-injector -it \
+$ sudo docker create --name ouinet-injector -it --network host \
               --mount src=ouinet-repos,dst=/var/opt/ouinet \
               ouinet:latest
 ```
@@ -334,32 +362,66 @@ container, hit Ctrl+C or run:
 $ sudo docker stop ouinet-injector
 ```
 
+After the injector has finished starting, you may want to use the
+`ouinet-repos` container to inspect and note down the contents of
+`/var/opt/ouinet/injector/endpoint-*` (injector endpoints) and
+`/var/opt/ouinet/injector/cache-ipns` (cache IPNS) to be used by clients.
+
 If the program crashes for some reason, you may have to remove the injector's
-PID file manually for it to start again.  Just use the the `ouinet-repos`
+PID file manually for it to start again.  Just use the `ouinet-repos`
 container to remove `/var/opt/ouinet/injector/pid`.
 
 ### Client container
 
-To create a client container, make sure that you have populated
-`/var/opt/ouinet` with client configuration files (see above), then run the
-following command which creates the `ouinet-client` container, mounts the
-`ouinet-repos` volume under `/var/opt/ouinet` and publishes the client's proxy
-port 8080 to the host at local port 8080:
+To create a client container, run the following command which creates the
+`ouinet-client` container (using the host's network) and mounts the
+`ouinet-repos` volume (created above) under `/var/opt/ouinet`:
 
 ```
-$ sudo docker create --name ouinet-client -it \
+$ sudo docker create --name ouinet-client -it --network host \
               --mount src=ouinet-repos,dst=/var/opt/ouinet \
-              --publish 127.0.0.1:8080:8080 \
               ouinet:latest ./ouinet-docker.sh client
 ```
 
-Before starting the container, you must fix some options in the client's
-configuration file:
-
-  - Make the client's proxy listen on port 8080 of all interfaces (so that
-    port redirection works) by setting `listen-on-tcp = 0.0.0.0:8080`.
-  - Set the value of `injector-ep` (injector endpoint).
-  - Set the value of `injector-ipns` (cache IPNS).
-
 The rest of instructions for the injector (see above) also hold for the client
 (just replace `injector` with `client` where appropriate).
+
+Unless you transferred an existing client configuration, when you start the
+client container it will be missing some important parameters.  You may want
+to stop the container, use the `ouinet-repos` container to edit
+`/var/opt/ouinet/client/ouinet-client.conf` and add configuration options for
+the injector endpoint `injector-ep` and cache IPNS `injector-ipns`, then
+restart the client container.
+
+## Android
+
+### Requirements
+
+A lot of free space (something less than 15GB). Everything else shall be
+downloaded by the `build-android.sh` script.
+
+The instructions below use Vagrant for bulding, but the `build-android.sh`
+script should work on any reasonably up-to-date debian based system.
+
+In the following instructions, I'll use `<ANDROID>` to represent the absolute
+path to your build directory. That is, the directory from which you'll run the
+`build-android.sh` script (e.g. `~/ouinet.android.build`).
+
+### Building
+
+```
+host    $ vagrant up --provider=libvirt
+host    $ vagrant ssh
+vagrant $ mkdir <ANDROID>
+vagrant $ cd <ANDROID>
+vagrant $ git clone --recursive /vagrant
+vagrant $ ./vagrant/scripts/build-android.sh
+```
+
+When the `build-android.sh` script finishes successfully, it prints out a path
+to the `browser-debug.apk` app package which can now be deployed.
+
+Note that above we had to clone a fresh copy `ouinet` repository. This is
+because the `gradle` tool used inside the `build-android.sh` script has problem
+building from the NFS mounted disk `/vagrant` we use on Vagrant (something
+about nfs locking).

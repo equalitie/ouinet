@@ -347,8 +347,8 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
         BOOST_REQUIRE(etag);
 
         if (*etag == "123") {
-            Response rs{http::status::found, rq.version()};
-            rs.set("X-Test", "from-origin-found");
+            Response rs{http::status::not_modified, rq.version()};
+            rs.set("X-Test", "from-origin-not-modified");
             return rs;
         }
 

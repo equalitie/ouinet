@@ -338,7 +338,7 @@ CacheControl::do_fetch(const Request& request, asio::yield_context yield)
             return add_stale_warning(move(cache_entry.response));
         }
 
-        if (response.result() == http::status::found) {
+        if (response.result() == http::status::not_modified) {
             return move(cache_entry.response);
         }
 
@@ -525,6 +525,7 @@ CacheControl::try_to_cache( const Request& request
                            , http::field::content_type
                            , http::field::content_encoding
                            , http::field::content_language
+                           , http::field::transfer_encoding
                            , http::field::accept_ranges
                            , http::field::etag
                            , http::field::age

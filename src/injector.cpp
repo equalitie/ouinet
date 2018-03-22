@@ -442,10 +442,15 @@ int main(int argc, char* argv[])
 
     asio::signal_set signals(ios, SIGINT, SIGTERM);
 
-    signals.async_wait([&](const sys::error_code& ec, int signal_number) {
-        cerr << "Got signal" << endl;
-        shutdown_signal();
-    });
+    signals.async_wait([&shutdown_signal, &signals, &ios](const sys::error_code& ec, int signal_number) {
+            cerr << "Got signal" << endl;
+            shutdown_signal();
+
+            signals.async_wait([](const sys::error_code& ec, int signal_number) {
+                cerr << "Got second signal, terminating immediately" << endl;
+                exit(1);
+            });
+        });
 
     ios.run();
 

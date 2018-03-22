@@ -24,7 +24,7 @@ public:
         return _repo_root;
     }
 
-    const Endpoint& injector_endpoint() const {
+    const boost::optional<Endpoint>& injector_endpoint() const {
         return _injector_ep;
     }
 
@@ -50,7 +50,7 @@ private:
     Path _repo_root;
     Path _ouinet_conf_file = "ouinet-client.conf";
     asio::ip::tcp::endpoint _local_ep;
-    Endpoint _injector_ep;
+    boost::optional<Endpoint> _injector_ep;
     std::string _ipns;
 
     boost::posix_time::time_duration _max_cached_age
@@ -138,20 +138,18 @@ ClientConfig::ClientConfig(int argc, char* argv[])
                          , desc, "\n"));
     }
 
-    if (!vm.count("injector-ep")) {
-        throw std::runtime_error(
-                util::str( "The parameter 'injector-ep' is missing.\n"
-                         , desc, "\n"));
-    }
-
     _local_ep = util::parse_endpoint(vm["listen-on-tcp"].as<string>());
 
-    if (!set_injector_endpoint(vm["injector-ep"].as<string>())) {
-        throw std::runtime_error(
-                "Failed to parse endpoint \""
-                + vm["injector-ep"].as<string>() + "\"");
-    }
+    if (vm.count("injector-ep")) {
+        auto injector_ep_str = vm["injector-ep"].as<string>();
 
+        if (!injector_ep_str.empty()) {
+            if (!set_injector_endpoint(injector_ep_str)) {
+                throw std::runtime_error( "Failed to parse endpoint \""
+                        + injector_ep_str + "\"");
+            }
+        }
+    }
 
     if (vm.count("injector-ipns")) {
         _ipns = vm["injector-ipns"].as<string>();

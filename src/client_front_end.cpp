@@ -1,6 +1,7 @@
 #include "client_front_end.h"
 #include "generic_connection.h"
 #include <ipfs_cache/client.h>
+#include <boost/optional/optional_io.hpp>
 
 
 using namespace std;
@@ -8,6 +9,7 @@ using namespace ouinet;
 
 using Request = http::request<http::string_body>;
 using Response = ClientFrontEnd::Response;
+using boost::optional;
 
 static Response redirect_back(const Request& req)
 {
@@ -75,7 +77,7 @@ static ostream& operator<<(ostream& os, const ClientFrontEnd::Task& task) {
 
 } // ouinet namespace
 
-Response ClientFrontEnd::serve( const Endpoint& injector_ep
+Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
                               , const Request& req
                               , ipfs_cache::Client* cache_client)
 {
