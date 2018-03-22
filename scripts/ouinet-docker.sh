@@ -20,10 +20,4 @@ if [ ! -d "$REPO" ]; then
     cp -r repos/$PROG "$REPO"
 fi
 
-if [ $PROG = client ]; then
-    # Have the client listen on a fixed port in all interfaces
-    # so that it can be published to the host.
-    sed -i -E 's/^\s*(listen-on-tcp)\b.*/\1 = 0.0.0.0:8080/' "$CONF"
-fi
-
 exec ./$PROG --repo "$REPO" "$@"

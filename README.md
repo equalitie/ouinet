@@ -329,11 +329,11 @@ $ sudo docker start -ia ouinet-repos
 ### Injector container
 
 To create an injector container, run the following command which creates the
-`ouinet-injector` container and mounts the `ouinet-repos` volume (created
-above) under `/var/opt/ouinet`:
+`ouinet-injector` container (using the host's network) and mounts the
+`ouinet-repos` volume (created above) under `/var/opt/ouinet`:
 
 ```
-$ sudo docker create --name ouinet-injector -it \
+$ sudo docker create --name ouinet-injector -it --network host \
               --mount src=ouinet-repos,dst=/var/opt/ouinet \
               ouinet:latest
 ```
@@ -374,14 +374,12 @@ container to remove `/var/opt/ouinet/injector/pid`.
 ### Client container
 
 To create a client container, run the following command which creates the
-`ouinet-client` container, mounts the `ouinet-repos` volume (created above)
-under `/var/opt/ouinet` and publishes the client's proxy port 8080 to the host
-at local port 8080:
+`ouinet-client` container (using the host's network) and mounts the
+`ouinet-repos` volume (created above) under `/var/opt/ouinet`:
 
 ```
-$ sudo docker create --name ouinet-client -it \
+$ sudo docker create --name ouinet-client -it --network host \
               --mount src=ouinet-repos,dst=/var/opt/ouinet \
-              --publish 127.0.0.1:8080:8080 \
               ouinet:latest ./ouinet-docker.sh client
 ```
 
@@ -394,11 +392,6 @@ to stop the container, use the `ouinet-repos` container to edit
 `/var/opt/ouinet/client/ouinet-client.conf` and add configuration options for
 the injector endpoint `injector-ep` and cache IPNS `injector-ipns`, then
 restart the client container.
-
-**Note:** The client configuration is automatically fixed to have it listen on
-all interfaces (so that publishing the proxy port to the host works).  Please
-take this into account if you want to reuse the configuration for another
-machine.
 
 ## Android
 
