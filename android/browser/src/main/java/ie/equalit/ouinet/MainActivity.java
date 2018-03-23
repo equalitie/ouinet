@@ -155,13 +155,15 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        startOuinetClient(getFilesDir().getAbsolutePath());
-
         String ipns = readIPNS();
         if (ipns.length() > 0) { setOuinetIPNS(ipns); }
 
         String injector_ep = readInjectorEP();
         if (injector_ep.length() > 0) { setOuinetInjectorEP(injector_ep); }
+
+        startOuinetClient( getFilesDir().getAbsolutePath()
+                         , injector_ep
+                         , ipns);
 
         _webView = (WebView) findViewById(R.id.webview);
 
@@ -284,7 +286,7 @@ public class MainActivity extends AppCompatActivity {
      * A native method that is implemented by the 'native-lib' native library,
      * which is packaged with this application.
      */
-    public native void startOuinetClient(String repo_root);
+    public native void startOuinetClient(String repo_root, String injector, String ipns);
     public native void stopOuinetClient();
     public native void setOuinetInjectorEP(String endpoint);
     public native void setOuinetIPNS(String ipns);

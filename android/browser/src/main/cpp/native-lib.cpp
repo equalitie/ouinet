@@ -18,11 +18,13 @@ std::unique_ptr<ouinet::Client> g_client;
 ouinet::asio::io_service g_ios;
 thread g_client_thread;
 
-void start_client_thread(string repo_root)
+void start_client_thread( string repo_root
+                        , string injector_ep
+                        , string ipns)
 {
     if (g_client_thread.get_id() != thread::id()) return;
 
-    g_client_thread = thread([repo_root] {
+    g_client_thread = thread([=] {
             if (g_client) return;
 
             g_client = make_unique<ouinet::Client>(g_ios);
@@ -37,17 +39,26 @@ void start_client_thread(string repo_root)
                             , conf.binary | conf.out);
             }
 
-            string repo_arg = "--repo=" + repo_root;
+            string repo_arg        = "--repo="          + repo_root;
+            string injector_ep_arg = "--injector-ep="   + injector_ep;
+            string ipns_arg        = "--injector-ipns=" + ipns;
 
-            const char* args[] = { "ouinet-client"
-                                 , repo_arg.c_str()
-                                 , "--listen-on-tcp=127.0.0.1:8080"
-                                 };
+            vector<const char*> args;
 
-            unsigned argc = sizeof(args) / sizeof(char*);
+            args.push_back("ouinet-client");
+            args.push_back("--listen-on-tcp=127.0.0.1:8080");
+            args.push_back(repo_arg.c_str());
+
+            if (!injector_ep.empty()) {
+                args.push_back(injector_ep_arg.c_str());
+            }
+
+            if (!ipns.empty()) {
+                args.push_back(ipns_arg.c_str());
+            }
 
             try {
-                g_client->start(argc, (char**) args);
+                g_client->start(args.size(), (char**) args.data());
             }
             catch (std::exception& e) {
                 debug("Failed to start Ouinet client:");
@@ -66,10 +77,15 @@ JNIEXPORT void JNICALL
 Java_ie_equalit_ouinet_MainActivity_startOuinetClient(
         JNIEnv* env,
         jobject /* this */,
-        jstring repo_root)
+        jstring j_repo_root,
+        jstring j_injector_ep,
+        jstring j_ipns)
 {
-    const char* path = env->GetStringUTFChars(repo_root, NULL);
-    start_client_thread(path);
+    const char* repo_root   = env->GetStringUTFChars(j_repo_root,   NULL);
+    const char* injector_ep = env->GetStringUTFChars(j_injector_ep, NULL);
+    const char* ipns        = env->GetStringUTFChars(j_ipns,        NULL);
+
+    start_client_thread(repo_root, injector_ep, ipns);
 }
 
 extern "C"
