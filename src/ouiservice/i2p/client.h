@@ -18,7 +18,10 @@ class Client : public ouinet::OuiServiceImplementationClient {
 private:
     // Client is constructed by i2poui::Service
     friend class Service;
-    Client(std::shared_ptr<Service> service, const std::string& target_id, uint32_t timeout, asio::io_service& ios);
+    Client( std::shared_ptr<Service> service
+          , const std::string& target_id
+          , uint32_t timeout
+          , asio::io_service& ios);
 
 public:
     ~Client();

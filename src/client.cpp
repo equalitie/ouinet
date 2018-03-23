@@ -597,14 +597,17 @@ void Client::State::setup_injector(asio::yield_context yield)
 #endif
     if (is_i2p_endpoint(*injector_ep)) {
         std::string ep = boost::get<I2PEndpoint>(*injector_ep).pubkey;
-        std::shared_ptr<ouiservice::I2pOuiService> i2p_service = std::make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ios);
+        auto i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ios);
         std::unique_ptr<ouiservice::I2pOuiServiceClient> i2p_client = i2p_service->build_client(ep);
 
         _injector->add(std::move(i2p_client));
     } else {
-        asio::ip::tcp::endpoint tcp_endpoint = boost::get<asio::ip::tcp::endpoint>(*injector_ep);
+        tcp::endpoint tcp_endpoint
+            = boost::get<asio::ip::tcp::endpoint>(*injector_ep);
 
-        std::unique_ptr<ouiservice::TcpOuiServiceClient> tcp_client = std::make_unique<ouiservice::TcpOuiServiceClient>(_ios, tcp_endpoint);
+        auto tcp_client
+            = make_unique<ouiservice::TcpOuiServiceClient>(_ios, tcp_endpoint);
+
         _injector->add(std::move(tcp_client));
     }
 
