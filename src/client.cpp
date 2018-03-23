@@ -101,6 +101,11 @@ private:
     void do_listen(asio::yield_context yield);
     void setup_injector(asio::yield_context);
 
+    boost::filesystem::path get_pid_path() const {
+        return _config.repo_root()/OUINET_PID_FILE;
+    }
+
+
 private:
     asio::io_service& _ios;
     ClientConfig _config;
@@ -534,15 +539,16 @@ void Client::State::start(int argc, char* argv[])
     _config = ClientConfig(argc, argv);
 
 #ifndef __ANDROID__
-    if (exists(_config.repo_root()/OUINET_PID_FILE)) {
+    auto pid_path = get_pid_path();
+    if (exists(pid_path)) {
         throw runtime_error(util::str
-             ( "Existing PID file ", _config.repo_root()/OUINET_PID_FILE
+             ( "Existing PID file ", pid_path
              , "; another client process may be running"
              , ", otherwise please remove the file."));
     }
     // Acquire a PID file for the life of the process
     assert(!_pid_file);
-    _pid_file = make_unique<util::PidFile>(_config.repo_root()/OUINET_PID_FILE);
+    _pid_file = make_unique<util::PidFile>(pid_path);
 #endif
 
     asio::spawn
@@ -655,6 +661,11 @@ void Client::set_ipns(const char* ipns)
     _state->_config.set_ipns(move(ipns));
 }
 
+boost::filesystem::path Client::get_pid_path() const
+{
+    return _state->get_pid_path();
+}
+
 //------------------------------------------------------------------------------
 #ifndef __ANDROID__
 int main(int argc, char* argv[])
@@ -666,10 +677,13 @@ int main(int argc, char* argv[])
     Client client(ios);
 
     signals.async_wait([&client, &signals, &ios](const sys::error_code& ec, int signal_number) {
+            auto pid_path = client.get_pid_path();
             client.stop();
 
-            signals.async_wait([](const sys::error_code& ec, int signal_number) {
+            signals.async_wait([pid_path](const sys::error_code& ec, int signal_number) {
                 cerr << "Got second signal, terminating immediately" << endl;
+                // Force removal of PID file on abnormal exit
+                remove(pid_path);
                 exit(1);
             });
         });

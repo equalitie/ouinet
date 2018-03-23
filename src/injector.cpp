@@ -9,6 +9,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <cstdlib>  // for atexit()
 
 #include <ipfs_cache/injector.h>
 //#include <i2poui.h>
@@ -371,6 +372,8 @@ int main(int argc, char* argv[])
     }
     // Acquire a PID file for the life of the process
     util::PidFile pid_file(REPO_ROOT/OUINET_PID_FILE);
+    // Force removal of PID file on abnormal exit
+    std::atexit([] { remove(REPO_ROOT/OUINET_PID_FILE); });
 
 
 

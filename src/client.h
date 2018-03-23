@@ -1,5 +1,7 @@
 #pragma once
 
+#include <boost/filesystem.hpp>
+
 #include "namespaces.h"
 
 namespace ouinet {
@@ -20,6 +22,8 @@ public:
 
     void set_injector_endpoint(const char*);
     void set_ipns(const char*);
+
+    boost::filesystem::path get_pid_path() const;
 
 private:
     std::shared_ptr<State> _state;
