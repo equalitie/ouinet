@@ -138,12 +138,16 @@ void OuiServiceClient::stop()
 
 GenericConnection OuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
 {
-    assert(_implementation);
+    namespace err = asio::error;
+
+    if (!_implementation) {
+        return or_throw<GenericConnection>(yield, err::operation_not_supported);
+    }
 
     if (!_started) {
         _started_condition.wait(yield);
         if (!_started) {
-            return or_throw<GenericConnection>(yield, boost::asio::error::operation_aborted, GenericConnection());
+            return or_throw<GenericConnection>(yield, err::operation_aborted);
         }
     }
 
