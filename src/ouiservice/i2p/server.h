@@ -22,17 +22,20 @@ class Server : public ouinet::OuiServiceImplementationServer {
 private:
     // Client is constructed by i2poui::Service
     friend class Service;
-    Server(std::shared_ptr<Service> service, const std::string& private_key_filename, uint32_t timeout, asio::io_service& ios);
+
+    Server( std::shared_ptr<Service> service
+          , const std::string& private_key_filename
+          , uint32_t timeout, asio::io_service& ios);
 
     void load_private_key(const std::string& key_file_name);
 
 public:
     ~Server();
 
-    void start_listen(asio::yield_context yield);
-    void stop_listen();
+    void start_listen(asio::yield_context yield) override;
+    void stop_listen() override;
 
-    GenericConnection accept(asio::yield_context yield);
+    GenericConnection accept(asio::yield_context yield) override;
 
     std::string public_identity() const;
 

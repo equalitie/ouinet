@@ -25,10 +25,11 @@ public:
 
     asio::io_service& get_io_service() { return _ios; }
 
-    void start(asio::yield_context yield);
-    void stop();
+    void start(asio::yield_context yield) override;
+    void stop() override;
 
-    ouinet::GenericConnection connect(asio::yield_context yield, Signal<void()>& cancel);
+    ouinet::GenericConnection
+    connect(asio::yield_context yield, Signal<void()>& cancel) override;
 
 private:
     std::shared_ptr<Service> _service;
