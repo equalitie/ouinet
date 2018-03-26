@@ -112,7 +112,7 @@ public class MainActivity extends AppCompatActivity {
         String[] lines = config.split("[\\r?\\n]+");
 
         for (String line:lines) {
-            String[] keyval = line.split("=");
+            String[] keyval = line.trim().split("\\s*=\\s*", 2);
 
             if (keyval.length != 2) {
                 continue;
