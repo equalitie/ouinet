@@ -75,7 +75,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen")
         ("injector-ep"
          , po::value<string>()
-         , "Injector's endpoint (either <IP>:<PORT> or <GNUnet's ID>:<GNUnet's PORT>")
+         , "Injector's endpoint (either <IP>:<PORT> or I2P public key")
         ("injector-ipns"
          , po::value<string>()->default_value("")
          , "IPNS of the injector's database")

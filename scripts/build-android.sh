@@ -194,7 +194,6 @@ mkdir -p build-ouinet
 cd build-ouinet
 cmake ${ANDROID_FLAGS} \
     -DANDROID=1 \
-    -DWITH_GNUNET=OFF \
     -DWITH_INJECTOR=OFF \
     -DIFADDRS_SOURCES="${DIR}/android-ifaddrs/ifaddrs.c" \
     -DOPENSSL_INCLUDE_DIR=${SSL_DIR}/include \

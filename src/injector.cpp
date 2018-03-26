@@ -294,7 +294,6 @@ int main(int argc, char* argv[])
         ("help", "Produce this help message")
         ("repo", po::value<string>(), "Path to the repository root")
         ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen")
-        ("listen-on-gnunet", po::value<string>(), "GNUnet port on which we'll listen")
         ("listen-on-i2p",
          po::value<string>(),
          "Whether we should be listening on I2P (true/false)")
@@ -340,13 +339,6 @@ int main(int argc, char* argv[])
 
     po::store(po::parse_config_file(ouinet_conf, desc), vm);
     po::notify(vm);
-
-    if (!vm.count("listen-on-tcp") && !vm.count("listen-on-gnunet") && !vm.count("listen-on-i2p")) {
-        cerr << "One or more of {listen-on-tcp,listen-on-gnunet,listen-on-i2p}"
-             << " must be provided." << endl;
-        cerr << desc << endl;
-        return 1;
-    }
 
     if (vm.count("open-file-limit")) {
         increase_open_file_limit(vm["open-file-limit"].as<unsigned int>());
@@ -398,9 +390,6 @@ int main(int argc, char* argv[])
     cout << "IPNS DB: " << ipns_id << endl;
     util::create_state_file(REPO_ROOT/"cache-ipns", ipns_id);
 
-
-
-
     OuiServiceServer proxy_server(ios);
 
     if (vm.count("listen-on-tcp")) {
@@ -426,14 +415,6 @@ int main(int argc, char* argv[])
         proxy_server.add(std::move(i2p_server));
     }
 
-/*
-    if (vm.count("listen-on-gnunet")) {
-        string port = vm["listen-on-gnunet"].as<string>();
-        
-        
-    }
-*/
-
     asio::spawn(ios, [
         &proxy_server,
         &ipfs_cache_injector,
@@ -441,8 +422,6 @@ int main(int argc, char* argv[])
     ] (asio::yield_context yield) {
         listen(proxy_server, ipfs_cache_injector, shutdown_signal, yield);
     });
-
-
 
     asio::signal_set signals(ios, SIGINT, SIGTERM);
 

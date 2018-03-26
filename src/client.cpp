@@ -12,11 +12,6 @@
 #include <ipfs_cache/client.h>
 #include <ipfs_cache/error.h>
 
-#ifdef USE_GNUNET
-#   include <gnunet_channels/channel.h>
-#   include <gnunet_channels/service.h>
-#endif
-
 #include "namespaces.h"
 #include "fetch_http_page.h"
 #include "client_front_end.h"
@@ -565,34 +560,6 @@ void Client::State::setup_injector(asio::yield_context yield)
 
     if (!injector_ep) return;
 
-#ifdef USE_GNUNET
-    if (is_gnunet_endpoint(*injector_ep)) {
-        assert(0 && "TODO");
-/*
-        namespace gc = gnunet_channels;
-
-        string gnunet_cfg
-            = (_config.repo_root()/"gnunet"/"peer.conf").native();
-
-        auto service = make_unique<gc::Service>(gnunet_cfg, _ios);
-
-        sys::error_code ec;
-
-        cout << "Setting up GNUnet ..." << endl;
-        service->async_setup(yield[ec]);
-
-        if (ec) {
-            cerr << "Failed to setup GNUnet service: "
-                 << ec.message() << endl;
-            return or_throw(yield, ec);
-        }
-
-        cout << "GNUnet ID: " << service->identity() << endl;
-
-        _gnunet_service = move(service);
-*/
-    } else
-#endif
     if (is_i2p_endpoint(*injector_ep)) {
         std::string ep = boost::get<I2PEndpoint>(*injector_ep).pubkey;
         auto i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ios);

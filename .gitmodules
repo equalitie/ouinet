@@ -2,9 +2,6 @@
 	path = modules/ipfs-cache
 	url = https://github.com/equalitie/ipfs-cache.git
 	branch = asio
-[submodule "modules/gnunet-channels"]
-	path = modules/gnunet-channels
-	url = https://github.com/equalitie/gnunet-channels
 [submodule "src/ouiservice/i2p/i2pd"]
 	path = src/ouiservice/i2p/i2pd
 	url = https://github.com/inetic/i2pd.git

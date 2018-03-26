@@ -3,7 +3,6 @@ set(BOOST_VERSION 1.62)
 include(ExternalProject)
 ################################################################################
 # Configurable options
-option(WITH_GNUNET   "Use GNUnet for transport" ON)
 option(WITH_INJECTOR "Compile injector" ON)
 
 ################################################################################
@@ -36,12 +35,6 @@ option(IPFS_CACHE_WITH_EXAMPLE_BINARIES "" OFF)
 add_subdirectory(./modules/ipfs-cache)
 add_subdirectory(./src/ouiservice/i2p)
 
-if (WITH_GNUNET)
-    add_definitions(-DUSE_GNUNET)
-    set(GNUNET_TARGET gnunet-channels)
-    add_subdirectory(./modules/gnunet-channels)
-endif()
-
 ################################################################################
 project(ouinet)
 
@@ -64,7 +57,6 @@ include_directories(
     "${Boost_INCLUDE_DIR}"
     "${BEAST_DIR}/include"
     "${IPFS_CACHE_INCLUDE_DIR}"
-    ${GNUNET_CHANNELS_INCLUDE_DIR}
     "${IPFS_CACHE_JSON_INCLUDE_DIR}"
 )
 
@@ -95,10 +87,9 @@ target_link_libraries(client
     ouiservice-i2p
     ${Boost_LIBRARIES}
     ${IPFS_CACHE_LIBRARIES}
-    ${GNUNET_CHANNELS_LIBRARIES}
 )
 
-add_dependencies(client beast ${IPFS_CACHE_TARGET} ${GNUNET_TARGET})
+add_dependencies(client beast ${IPFS_CACHE_TARGET})
 
 ################################################################################
 if (WITH_INJECTOR)
@@ -107,7 +98,6 @@ if (WITH_INJECTOR)
         "${BEAST_DIR}/include"
         "${IPFS_CACHE_INCLUDE_DIR}"
         "${IPFS_CACHE_JSON_INCLUDE_DIR}"
-        "${GNUNET_CHANNELS_INCLUDE_DIR}"
     )
 
     file(GLOB injector_sources
@@ -119,13 +109,12 @@ if (WITH_INJECTOR)
     )
 
     add_executable(injector ${injector_sources})
-    add_dependencies(injector beast ${IPFS_CACHE_TARGET} ${GNUNET_TARGET})
+    add_dependencies(injector beast ${IPFS_CACHE_TARGET})
 
     target_link_libraries(injector
         ouiservice-i2p
         ${Boost_LIBRARIES}
         ${IPFS_CACHE_LIBRARIES}
-        ${GNUNET_CHANNELS_LIBRARIES}
     )
 endif() # if WITH_INJECTOR
 
@@ -134,9 +123,7 @@ endif() # if WITH_INJECTOR
 
 set(config_files
     "repos/client/ouinet-client.conf"
-    "repos/client/gnunet/peer.conf"
     "repos/injector/ouinet-injector.conf"
-    "repos/injector/gnunet/peer.conf"
 )
 set(config_targets )
 
