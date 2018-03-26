@@ -77,7 +77,7 @@ public:
     void start(int argc, char* argv[]);
     void stop() { _shutdown_signal(); }
 
-    void setup_ipfs_cache();
+    void setup_ipfs_cache(const string& ipns);
     void set_injector(string);
 
 private:
@@ -433,23 +433,15 @@ void Client::State::serve_request( GenericConnection& con
 }
 
 //------------------------------------------------------------------------------
-void Client::State::setup_ipfs_cache()
+void Client::State::setup_ipfs_cache(const string& ipns)
 {
     if (_ipfs_cache) {
-        // XXX: Workaround.
-        // We need to add API to ipfs-cache to swap IPNS.  Simply destroying an
-        // instance of ipfs_cache::Client and creating a new one probably won't
-        // work because (I think) there may be some code in ipfs_cache::Client
-        // which fails if more than one instance of that class is created.
-        cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
-        cerr << "Switching IPNS not yet supported." << endl;
-        cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
-        return;
+        return _ipfs_cache->set_ipns(move(ipns));
     }
 
     try {
         ipfs_cache::Client cache( _ios
-                                , _config.ipns()
+                                , ipns
                                 , (_config.repo_root()/"ipfs").native());
 
         _ipfs_cache = make_unique<ipfs_cache::Client>(move(cache));
@@ -488,7 +480,7 @@ void Client::State::do_listen(asio::yield_context yield)
     });
 
     if (ipns.size()) {
-        setup_ipfs_cache();
+        setup_ipfs_cache(ipns);
     }
 
     auto shutdown_ipfs_slot = _shutdown_signal.connect([this] {

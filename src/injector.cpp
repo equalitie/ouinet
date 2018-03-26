@@ -107,14 +107,16 @@ void handle_connect_request( GenericConnection& client_c
 //------------------------------------------------------------------------------
 struct InjectorCacheControl {
 public:
-    // TODO: Replace this with cancellation support in which fetch_ operations get a signal parameter
+    // TODO: Replace this with cancellation support in which fetch_ operations
+    // get a signal parameter
     InjectorCacheControl( asio::io_service& ios
                         , unique_ptr<ipfs_cache::Injector>& injector
                         , Signal<void()>& abort_signal)
         : ios(ios)
         , injector(injector)
     {
-        cc.fetch_fresh = [this, &ios, &abort_signal](const Request& rq, asio::yield_context yield) {
+        cc.fetch_fresh = [this, &ios, &abort_signal]
+                         (const Request& rq, asio::yield_context yield) {
             auto host = rq["host"].to_string();
 
             sys::error_code ec;
@@ -124,6 +126,7 @@ public:
             auto close_con_slot = abort_signal.connect([&con] {
                 con.close();
             });
+
             return fetch_http_page(ios, con, rq, yield);
         };
 
@@ -279,8 +282,6 @@ void listen( OuiServiceServer& proxy_server
         });
     }
 }
-
-
 
 //------------------------------------------------------------------------------
 int main(int argc, char* argv[])
