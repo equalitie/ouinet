@@ -24,6 +24,7 @@
 #include "async_sleep.h"
 #include "increase_open_file_limit.h"
 #include "full_duplex_forward.h"
+#include "injector_config.h"
 
 #include "ouiservice.h"
 #include "ouiservice/i2p.h"
@@ -34,16 +35,12 @@
 using namespace std;
 using namespace ouinet;
 
-namespace fs = boost::filesystem;
-
 using tcp         = asio::ip::tcp;
 using string_view = beast::string_view;
 using Request     = http::request<http::string_body>;
 using Response    = http::response<http::dynamic_body>;
 
-static fs::path REPO_ROOT;
-static const fs::path OUINET_CONF_FILE = "ouinet-injector.conf";
-static const fs::path OUINET_PID_FILE = "pid";
+static const boost::filesystem::path OUINET_PID_FILE = "pid";
 
 //------------------------------------------------------------------------------
 static
@@ -284,101 +281,47 @@ void listen( OuiServiceServer& proxy_server
 }
 
 //------------------------------------------------------------------------------
-int main(int argc, char* argv[])
+int main(int argc, const char* argv[])
 {
-    namespace po = boost::program_options;
+    InjectorConfig config;
 
-    po::options_description desc("\nOptions");
-
-    desc.add_options()
-        ("help", "Produce this help message")
-        ("repo", po::value<string>(), "Path to the repository root")
-        ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen")
-        ("listen-on-i2p",
-         po::value<string>(),
-         "Whether we should be listening on I2P (true/false)")
-        ("open-file-limit"
-         , po::value<unsigned int>()
-         , "To increase the maximum number of open files")
-        ;
-
-    po::variables_map vm;
-    po::store(po::parse_command_line(argc, argv, desc), vm);
-    po::notify(vm);
-
-    if (vm.count("help")) {
-        cout << desc << endl;
-        return 0;
+    try {
+        config = InjectorConfig(argc, argv);
     }
-
-    if (!vm.count("repo")) {
-        cerr << "The 'repo' argument is missing" << endl;
-        cerr << desc << endl;
+    catch(const exception& e) {
+        cerr << e.what() << endl;
+        cerr << InjectorConfig::options_description() << endl;
         return 1;
     }
 
-    REPO_ROOT = vm["repo"].as<string>();
-
-    if (!exists(REPO_ROOT) || !is_directory(REPO_ROOT)) {
-        cerr << "The path " << REPO_ROOT << " either doesn't exist or"
-             << " is not a directory." << endl;
-        cerr << desc << endl;
-        return 1;
+    if (config.is_help()) {
+        cout << InjectorConfig::options_description() << endl;
+        return EXIT_SUCCESS;
     }
 
-    fs::path ouinet_conf_path = REPO_ROOT/OUINET_CONF_FILE;
-
-    if (!fs::is_regular_file(ouinet_conf_path)) {
-        cerr << "The path " << REPO_ROOT << " does not contain the "
-             << OUINET_CONF_FILE << " configuration file." << endl;
-        cerr << desc << endl;
-        return 1;
+    if (config.open_file_limit()) {
+        increase_open_file_limit(*config.open_file_limit());
     }
 
-    ifstream ouinet_conf(ouinet_conf_path.native());
-
-    po::store(po::parse_config_file(ouinet_conf, desc), vm);
-    po::notify(vm);
-
-    if (vm.count("open-file-limit")) {
-        increase_open_file_limit(vm["open-file-limit"].as<unsigned int>());
-    }
-
-    // Unfortunately, Boost.ProgramOptions doesn't support arguments without
-    // values in config files. Thus we need to force the 'listen-on-i2p' arg
-    // to have one of the strings values "true" or "false".
-    if (vm.count("listen-on-i2p")) {
-        auto value = vm["listen-on-i2p"].as<string>();
-
-        if (value != "" && value != "true" && value != "false") {
-            cerr << "The listen-on-i2p parameter may be either 'true' or 'false'"
-                 << endl;
-            return 1;
-        }
-    }
-
-    if (exists(REPO_ROOT/OUINET_PID_FILE)) {
-        cerr << "Existing PID file " << REPO_ROOT/OUINET_PID_FILE
+    if (exists(config.repo_root()/OUINET_PID_FILE)) {
+        cerr << "Existing PID file " << config.repo_root()/OUINET_PID_FILE
              << "; another injector process may be running"
              << ", otherwise please remove the file." << endl;
         return 1;
     }
     // Acquire a PID file for the life of the process
-    util::PidFile pid_file(REPO_ROOT/OUINET_PID_FILE);
+    static const auto pid_file_path = config.repo_root()/OUINET_PID_FILE;
+    util::PidFile pid_file(pid_file_path);
     // Force removal of PID file on abnormal exit
-    std::atexit([] { remove(REPO_ROOT/OUINET_PID_FILE); });
-
-
+    std::atexit([] { remove(pid_file_path); });
 
     // The io_service is required for all I/O
     asio::io_service ios;
 
     Signal<void()> shutdown_signal;
 
-
-
     auto ipfs_cache_injector
-        = make_unique<ipfs_cache::Injector>(ios, (REPO_ROOT/"ipfs").native());
+        = make_unique<ipfs_cache::Injector>(ios, (config.repo_root()/"ipfs").native());
 
     auto shutdown_ipfs_slot = shutdown_signal.connect([&] {
         ipfs_cache_injector = nullptr;
@@ -388,29 +331,27 @@ int main(int argc, char* argv[])
     // this just helps put all info relevant to the user right in the repo root.
     auto ipns_id = ipfs_cache_injector->ipns_id();
     cout << "IPNS DB: " << ipns_id << endl;
-    util::create_state_file(REPO_ROOT/"cache-ipns", ipns_id);
+    util::create_state_file(config.repo_root()/"cache-ipns", ipns_id);
 
     OuiServiceServer proxy_server(ios);
 
-    if (vm.count("listen-on-tcp")) {
-        auto endpoint_setting = util::parse_endpoint(vm["listen-on-tcp"].as<string>());
-        asio::ip::tcp::endpoint endpoint = boost::get<asio::ip::tcp::endpoint>(endpoint_setting);
+    if (config.tcp_endpoint()) {
+        tcp::endpoint endpoint = *config.tcp_endpoint();
+        cout << "TCP Address: " << endpoint << endl;
 
-        string endpoint_string = endpoint.address().to_string() + ":" + to_string(endpoint.port());
-        cout << "TCP Address: " << endpoint_string << endl;
-        util::create_state_file(REPO_ROOT/"endpoint-tcp", endpoint_string);
+        util::create_state_file( config.repo_root()/"endpoint-tcp"
+                               , util::str(endpoint));
 
-        std::unique_ptr<ouiservice::TcpOuiServiceServer> tcp_server = std::make_unique<ouiservice::TcpOuiServiceServer>(ios, endpoint);
-        proxy_server.add(std::move(tcp_server));
+        proxy_server.add(make_unique<ouiservice::TcpOuiServiceServer>(ios, endpoint));
     }
 
-    if (vm.count("listen-on-i2p") && vm["listen-on-i2p"].as<string>() == "true") {
-        std::shared_ptr<ouiservice::I2pOuiService> i2p_service = std::make_shared<ouiservice::I2pOuiService>((REPO_ROOT/"i2p").string(), ios);
+    if (config.listen_on_i2p()) {
+        auto i2p_service = make_shared<ouiservice::I2pOuiService>((config.repo_root()/"i2p").string(), ios);
         std::unique_ptr<ouiservice::I2pOuiServiceServer> i2p_server = i2p_service->build_server("i2p-private-key");
 
         auto ep = i2p_server->public_identity();
         cout << "I2P Public ID: " << ep << endl;
-        util::create_state_file(REPO_ROOT/"endpoint-i2p", ep);
+        util::create_state_file(config.repo_root()/"endpoint-i2p", ep);
 
         proxy_server.add(std::move(i2p_server));
     }
