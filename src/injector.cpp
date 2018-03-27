@@ -25,6 +25,7 @@
 #include "increase_open_file_limit.h"
 #include "full_duplex_forward.h"
 #include "injector_config.h"
+#include "authenticate.h"
 
 #include "ouiservice.h"
 #include "ouiservice/i2p.h"
@@ -195,11 +196,13 @@ private:
     asio::io_service& ios;
     unique_ptr<ipfs_cache::Injector>& injector;
     CacheControl cc;
+    //RateLimiter _rate_limiter;
 };
 
 //------------------------------------------------------------------------------
 static
-void serve( GenericConnection con
+void serve( InjectorConfig& config
+          , GenericConnection con
           , unique_ptr<ipfs_cache::Injector>& injector
           , Signal<void()>& close_connection_signal
           , asio::yield_context yield)
@@ -214,8 +217,11 @@ void serve( GenericConnection con
         Request req;
         beast::flat_buffer buffer;
         http::async_read(con, buffer, req, yield[ec]);
-        if (ec == asio::error::operation_aborted) {
-            break;
+
+        if (ec) break;
+
+        if (!authenticate(req, con, config.credentials(), yield[ec])) {
+            continue;
         }
 
         if (req.method() == http::verb::connect) {
@@ -238,7 +244,8 @@ void serve( GenericConnection con
 
 //------------------------------------------------------------------------------
 static
-void listen( OuiServiceServer& proxy_server
+void listen( InjectorConfig& config
+           , OuiServiceServer& proxy_server
            , unique_ptr<ipfs_cache::Injector>& ipfs_cache_injector
            , Signal<void()>& shutdown_signal
            , asio::yield_context yield)
@@ -273,9 +280,14 @@ void listen( OuiServiceServer& proxy_server
             connection = std::move(connection),
             &ipfs_cache_injector,
             &shutdown_signal,
+            &config,
             lock = shutdown_connections.lock()
         ] (boost::asio::yield_context yield) mutable {
-            serve(std::move(connection), ipfs_cache_injector, shutdown_signal, yield);
+            serve( config
+                 , std::move(connection)
+                 , ipfs_cache_injector
+                 , shutdown_signal
+                 , yield);
         });
     }
 }
@@ -359,9 +371,14 @@ int main(int argc, const char* argv[])
     asio::spawn(ios, [
         &proxy_server,
         &ipfs_cache_injector,
+        &config,
         &shutdown_signal
     ] (asio::yield_context yield) {
-        listen(proxy_server, ipfs_cache_injector, shutdown_signal, yield);
+        listen( config
+              , proxy_server
+              , ipfs_cache_injector
+              , shutdown_signal
+              , yield);
     });
 
     asio::signal_set signals(ios, SIGINT, SIGTERM);

@@ -31,6 +31,9 @@ public:
     static boost::program_options::options_description
     options_description();
 
+    std::string credentials() const
+    { return _credentials; }
+
 private:
     bool _is_help = false;
     boost::filesystem::path _repo_root;
@@ -38,6 +41,7 @@ private:
     bool _listen_on_i2p = false;
     boost::optional<asio::ip::tcp::endpoint> _tcp_endpoint;
     boost::filesystem::path OUINET_CONF_FILE = "ouinet-injector.conf";
+    std::string _credentials;
 };
 
 inline
@@ -59,6 +63,9 @@ InjectorConfig::options_description()
         ("open-file-limit"
          , po::value<unsigned int>()
          , "To increase the maximum number of open files")
+        ("credentials", po::value<string>()
+         , "<username>:<password> authentication pair. "
+           "If unused, this injector shall behave as an open proxy.")
         ;
 
     return desc;
@@ -109,6 +116,16 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
     if (vm.count("open-file-limit")) {
         _open_file_limit = vm["open-file-limit"].as<unsigned int>();
+    }
+
+    if (vm.count("credentials")) {
+        _credentials = vm["credentials"].as<string>();
+        if (!_credentials.empty() && _credentials.find(':') == string::npos) {
+            throw std::runtime_error(util::str(
+                "The '--credentials' argument expects a string "
+                "in the format <username>:<password>. But the provided "
+                "string \"", _credentials, "\" is missing a colon."));
+        }
     }
 
     // Unfortunately, Boost.ProgramOptions doesn't support arguments without

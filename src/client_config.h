@@ -46,6 +46,10 @@ public:
         return _max_cached_age;
     }
 
+    std::string injector_credentials() const {
+        return _injector_credentials;
+    }
+
 private:
     Path _repo_root;
     Path _ouinet_conf_file = "ouinet-client.conf";
@@ -55,6 +59,8 @@ private:
 
     boost::posix_time::time_duration _max_cached_age
         = boost::posix_time::hours(7*24);  // one week
+
+    std::string _injector_credentials;
 };
 
 inline
@@ -85,6 +91,8 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         ("open-file-limit"
          , po::value<unsigned int>()
          , "To increase the maximum number of open files")
+        ("injector-credentials", po::value<string>()
+         , "<username>:<password> authentication pair for the injector")
         ;
 
     po::variables_map vm;
@@ -153,6 +161,18 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
     if (vm.count("injector-ipns")) {
         _ipns = vm["injector-ipns"].as<string>();
+    }
+
+    if (vm.count("injector-credentials")) {
+        _injector_credentials = vm["injector-credentials"].as<string>();
+
+        if (!_injector_credentials.empty()
+          && _injector_credentials.find(':') == string::npos) {
+            throw std::runtime_error(util::str(
+                "The '--injector-credentials' argument expects a string "
+                "in the format <username>:<password>. But the provided "
+                "string \"", _injector_credentials, "\" is missing a colon."));
+        }
     }
 }
 
