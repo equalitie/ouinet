@@ -25,7 +25,7 @@ ABI=armeabi-v7a
 #ABI=arm64-v8a
 
 # Android API level
-PLATFORM=android-26
+PLATFORM=android-25
 
 ######################################################################
 # This variable shall contain paths to generated libraries which
@@ -89,13 +89,13 @@ fi
 declare -A sdk_pkgs
 sdk_pkgs[build]="
 platforms;$PLATFORM
-build-tools;26.0.3
+build-tools;25.0.3
 platform-tools
 cmake;3.6.4111459
 "
 sdk_pkgs[emu]="
 system-images;$PLATFORM;default;$ABI
-platforms;android-26
+platforms;$PLATFORM
 platform-tools
 emulator
 "
