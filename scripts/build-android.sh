@@ -115,7 +115,7 @@ done
 sdk_pkgs_install=$(echo "$sdk_pkgs_install" | tr [:space:] '\n' | sort -u)
 # Install missing packages.
 if [ "$sdk_pkgs_install" ]; then
-    echo y | "$sdkmanager" --sdk_root="$sdk_root" "$sdk_pkgs_install"
+    echo y | "$sdkmanager" --sdk_root="$sdk_root" $sdk_pkgs_install
 fi
 
 # Use locally installed platform tools if missing in the system.
