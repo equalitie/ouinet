@@ -83,16 +83,16 @@ fi
 
 ######################################################################
 toolsfile=sdk-tools-linux-3859397.zip
-sdkmanager=tools/bin/sdkmanager
-sdk_root="$DIR/sdk_root"
+sdk="$DIR/sdk"
+sdkmanager="$sdk/tools/bin/sdkmanager"
 
 if [ ! -f "$sdkmanager" ]; then
-    [ -d tools ] || rm -rf tools
+    [ -d "$sdk/tools" ] || rm -rf "$sdk/tools"
     if [ ! -f "$toolsfile" ]; then
         # https://developer.android.com/studio/index.html#command-tools
-        wget https://dl.google.com/android/repository/$toolsfile
+        wget "https://dl.google.com/android/repository/$toolsfile"
     fi
-    unzip $toolsfile
+    unzip "$toolsfile" -d "$sdk"
 fi
 
 # SDK packages needed by the different modes.
@@ -116,7 +116,7 @@ sdk_pkgs_install=
 for mode in $MODES; do
     if check_mode $mode; then
         for pkg in ${sdk_pkgs[$mode]}; do
-            if [ ! -d "$sdk_root/$(echo $pkg | tr ';' /)" ]; then
+            if [ ! -d "$sdk/$(echo $pkg | tr ';' /)" ]; then
                 sdk_pkgs_install="$sdk_pkgs_install $pkg"
             fi
         done
@@ -126,22 +126,22 @@ done
 sdk_pkgs_install=$(echo "$sdk_pkgs_install" | tr [:space:] '\n' | sort -u)
 # Install missing packages.
 if [ "$sdk_pkgs_install" ]; then
-    echo y | "$sdkmanager" --sdk_root="$sdk_root" $sdk_pkgs_install
+    echo y | "$sdkmanager" $sdk_pkgs_install
 fi
 
 # Use locally installed platform tools if missing in the system.
 if [ ! `which adb > /dev/null` ]; then
-    export PATH="$sdk_root/platform-tools:$PATH"
+    export PATH="$sdk/platform-tools:$PATH"
 fi
 
 export ANDROID_HOME=$(dirname $(dirname $(which adb)))
 
 ######################################################################
 # Create Android virtual device for the emulator.
-if check_mode emu && ! tools/emulator -list-avds | grep -q "^$EMULATOR_AVD$"; then
-    echo no | tools/bin/avdmanager create avd -n "$EMULATOR_AVD" \
-                                   -k "$EMULATOR_IMAGE" -g "$EMULATOR_IMAGE_TAG" \
-                                   -b "$ABI" -d "$EMULATOR_DEV"
+if check_mode emu && ! "$sdk/tools/emulator" -list-avds | grep -q "^$EMULATOR_AVD$"; then
+    echo no | "$sdk/tools/bin/avdmanager" create avd -n "$EMULATOR_AVD" \
+                                          -k "$EMULATOR_IMAGE" -g "$EMULATOR_IMAGE_TAG" \
+                                          -b "$ABI" -d "$EMULATOR_DEV"
 fi
 
 ######################################################################
