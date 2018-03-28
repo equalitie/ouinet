@@ -94,7 +94,7 @@ platform-tools
 cmake;3.6.4111459
 "
 sdk_pkgs[emu]="
-system-images;$PLATFORM;default;$ABI
+system-images;$PLATFORM;google_apis;$ABI
 platforms;$PLATFORM
 platform-tools
 emulator
