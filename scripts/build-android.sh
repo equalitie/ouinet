@@ -45,6 +45,17 @@ which unzip > /dev/null || sudo apt-get install unzip
 which java > /dev/null || sudo apt-get install default-jre
 dpkg-query -W default-jdk > /dev/null 2>&1 || sudo apt-get install default-jdk
 
+# J2EE is no longer part of standard Java modules in Java 9,
+# although the Android SDK uses some of its classes.
+# This causes exception "java.lang.NoClassDefFoundError: javax/xml/bind/...",
+# so we need to reenable J2EE modules explicitly when using JRE 9
+# (see <https://stackoverflow.com/a/43574427>).
+java_add_modules=' --add-modules java.se.ee'
+if [ $(dpkg-query -W default-jre | cut -f2 | sed -En 's/^[0-9]+:1\.([0-9]+).*/\1/p') -ge 9 \
+     -a "${JAVA_OPTS%%$java_add_modules*}" = "$JAVA_OPTS" ] ; then
+    export JAVA_OPTS="$JAVA_OPTS$java_add_modules"
+fi
+
 ######################################################################
 if [ ! `which adb > /dev/null` ]; then
     toolsfile=sdk-tools-linux-3859397.zip
