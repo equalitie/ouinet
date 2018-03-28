@@ -8,9 +8,7 @@ import android.view.MenuItem;
 
 import android.webkit.WebSettings;
 import android.webkit.WebView;
-import android.webkit.WebViewClient;
-
-import android.util.Log;
+import android.webkit.HttpAuthHandler;
 
 import android.app.AlertDialog;
 import android.content.DialogInterface;
@@ -18,14 +16,14 @@ import android.view.View.OnClickListener;
 import android.widget.EditText;
 import android.text.InputType;
 
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-
 import com.google.zxing.integration.android.IntentResult;
 import com.google.zxing.integration.android.IntentIntegrator;
 
 import android.content.Intent;
 import android.widget.Toast;
+
+import ie.equalit.ouinet.OuiWebViewClient;
+import ie.equalit.ouinet.Util;
 
 interface OnInput {
     public void call(String input);
@@ -50,58 +48,24 @@ public class MainActivity extends AppCompatActivity {
 
     void go_home() {
         String home = "http://www.bbc.com";
-        Log.d("Ouinet", "Requesting " + home);
+        Util.log("Requesting " + home);
         _webView.loadUrl(home);
     }
 
     void reload() {
-        Log.d("Ouinet", "Reload");
+        Util.log("Reload");
         _webView.reload();
     }
 
-    protected void saveToFile(String filename, String value) {
-        FileOutputStream outputStream;
-        try {
-            outputStream = openFileOutput(filename, MODE_PRIVATE);
-            outputStream.write(value.getBytes());
-            outputStream.close();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
+    protected String readIPNS() { return Util.readFromFile(this, "ipns.txt"); }
+    protected void writeIPNS(String s) { Util.saveToFile(this, "ipns.txt", s); }
 
-    protected String readFromFile(String filename) {
-        FileInputStream inputStream;
-        try {
-            inputStream = openFileInput(filename);
-            StringBuffer content = new StringBuffer("");
-
-            byte[] buffer = new byte[1024];
-
-            int n;
-            while ((n = inputStream.read(buffer)) != -1) {
-                content.append(new String(buffer, 0, n));
-            }
-
-            return content.toString();
-        } catch (Exception e) {
-            return "";
-        }
-    }
-
-    protected String readIPNS() { return readFromFile("ipns.txt"); }
-    protected void writeIPNS(String s) { saveToFile("ipns.txt", s); }
-
-    protected String readInjectorEP() { return readFromFile("injector.txt"); }
-    protected void writeInjectorEP(String s) { saveToFile("injector.txt", s); }
+    protected String readInjectorEP() { return Util.readFromFile(this, "injector.txt"); }
+    protected void writeInjectorEP(String s) { Util.saveToFile(this, "injector.txt", s); }
 
     protected void loadConfigFromQR() {
         IntentIntegrator integrator = new IntentIntegrator(this);
         integrator.initiateScan();
-    }
-
-    protected void log(String s) {
-        Log.d("Ouinet", s);
     }
 
     protected void toast(String s) {
@@ -179,7 +143,7 @@ public class MainActivity extends AppCompatActivity {
         webSettings.setSupportZoom(true);
         webSettings.setDefaultTextEncodingName("utf-8");
 
-        _webView.setWebViewClient(new WebViewClient());
+        _webView.setWebViewClient(new OuiWebViewClient(this));
 
         go_home();
     }
