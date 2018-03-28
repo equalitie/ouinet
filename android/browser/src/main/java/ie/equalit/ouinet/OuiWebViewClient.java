@@ -5,6 +5,7 @@ import android.content.Context;
 import android.webkit.WebViewClient;
 import android.webkit.WebView;
 import android.webkit.HttpAuthHandler;
+import android.webkit.WebViewDatabase;
 
 import android.widget.EditText;
 
@@ -14,11 +15,28 @@ import android.view.View.OnClickListener;
 import android.text.InputType;
 
 class OuiWebViewClient extends WebViewClient {
+    class Credentials {
+        String username;
+        String password;
+    }
+
     private Context _context;
+    private Credentials _saved_credentials;
+    private String _cred_file = "injector.credentials.txt";
 
     public OuiWebViewClient(Context context) {
         super();
+
         _context = context;
+
+        _saved_credentials
+            = parse(Util.readFromFile(_context, _cred_file, null));
+    }
+
+    public void forgetCredentials() {
+        _saved_credentials = null;
+        Util.saveToFile(_context, _cred_file, "");
+        WebViewDatabase.getInstance(_context).clearHttpAuthUsernamePassword();
     }
 
     @Override
@@ -27,6 +45,22 @@ class OuiWebViewClient extends WebViewClient {
                                           String host,
                                           String realm)
     {
+        // TODO: Android system sees our client as being the main proxy for
+        // which credentials are being asked (not the injector!). This will
+        // become dangerous once we enable injector switching and  when we
+        // allow more than one injector.
+        //
+        // I think the proper solution for this is to remove this
+        // onReceivedHttpAuthRequest and let the ouinet/client make a request
+        // to java to create this credential prompt. That way the client will
+        // know for which injector the credentials are being asked for.
+        if (_saved_credentials != null) {
+            Credentials c = _saved_credentials;
+            _saved_credentials = null;
+            handler.proceed(c.username, c.password);
+            return;
+        }
+
         AlertDialog.Builder builder = new AlertDialog.Builder(_context);
 
         builder.setTitle("Credentials required for Ouinet injector");
@@ -41,15 +75,13 @@ class OuiWebViewClient extends WebViewClient {
         builder.setPositiveButton("OK", new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
-                String credentials_str = credentials.getText().toString();
-                String[] keyval = credentials_str.split(":", 2);
+                String s = credentials.getText().toString();
+                Credentials c = parse(s);
 
-                if (keyval.length != 2) { return; }
+                if (c == null) { return; }
 
-                String username = keyval[0];
-                String password = keyval[1];
-
-                handler.proceed(username, password);
+                Util.saveToFile(_context, _cred_file, s);
+                handler.proceed(c.username, c.password);
             }
         });
 
@@ -61,6 +93,21 @@ class OuiWebViewClient extends WebViewClient {
         });
 
         builder.show();
+    }
+
+    private Credentials parse(String str) {
+        if (str == null) return null;
+
+        String[] keyval = str.split(":", 2);
+
+        if (keyval.length != 2) { return null; }
+
+        Credentials c = new Credentials();
+
+        c.username = keyval[0];
+        c.password = keyval[1];
+
+        return c;
     }
 }
 

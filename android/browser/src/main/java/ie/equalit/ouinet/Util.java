@@ -17,7 +17,9 @@ class Util {
         }
     }
 
-    public static String readFromFile(Context ctx, String filename) {
+    public static String readFromFile(Context ctx,
+                                      String filename,
+                                      String default_) {
         FileInputStream inputStream;
         try {
             inputStream = ctx.openFileInput(filename);
@@ -32,7 +34,7 @@ class Util {
 
             return content.toString();
         } catch (Exception e) {
-            return "";
+            return default_;
         }
     }
 

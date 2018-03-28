@@ -32,6 +32,7 @@ interface OnInput {
 public class MainActivity extends AppCompatActivity {
 
     private WebView _webView;
+    private OuiWebViewClient _webViewClient;
 
     // Used to load the 'native-lib' library on application startup.
     static {
@@ -57,10 +58,10 @@ public class MainActivity extends AppCompatActivity {
         _webView.reload();
     }
 
-    protected String readIPNS() { return Util.readFromFile(this, "ipns.txt"); }
+    protected String readIPNS() { return Util.readFromFile(this, "ipns.txt", ""); }
     protected void writeIPNS(String s) { Util.saveToFile(this, "ipns.txt", s); }
 
-    protected String readInjectorEP() { return Util.readFromFile(this, "injector.txt"); }
+    protected String readInjectorEP() { return Util.readFromFile(this, "injector.txt", ""); }
     protected void writeInjectorEP(String s) { Util.saveToFile(this, "injector.txt", s); }
 
     protected void loadConfigFromQR() {
@@ -93,6 +94,7 @@ public class MainActivity extends AppCompatActivity {
             else if (key.equalsIgnoreCase("injector")) {
                 toast("Setting injector to: " + val);
                 writeInjectorEP(val);
+                _webViewClient.forgetCredentials();
                 setOuinetInjectorEP(val);
             }
             else {
@@ -143,7 +145,8 @@ public class MainActivity extends AppCompatActivity {
         webSettings.setSupportZoom(true);
         webSettings.setDefaultTextEncodingName("utf-8");
 
-        _webView.setWebViewClient(new OuiWebViewClient(this));
+        _webViewClient = new OuiWebViewClient(this);
+        _webView.setWebViewClient(_webViewClient);
 
         go_home();
     }
@@ -179,6 +182,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void call(String input) {
                 writeInjectorEP(input);
+                _webViewClient.forgetCredentials();
                 setOuinetInjectorEP(input);
             }
         });
