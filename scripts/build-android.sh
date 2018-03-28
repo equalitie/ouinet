@@ -24,6 +24,9 @@ BOOST_V_DOT=${BOOST_V//_/.} # 1.65.1
 ABI=armeabi-v7a
 #ABI=arm64-v8a
 
+# Android API level
+PLATFORM=android-26
+
 ######################################################################
 # This variable shall contain paths to generated libraries which
 # must all be included in the final Android package.
@@ -38,6 +41,17 @@ function add_library {
         fi
         OUT_LIBS+=("$lib")
     done
+}
+
+######################################################################
+MODE=${MODE:-build}
+MODES="build emu"
+
+function check_mode {
+    if echo "$MODE" | grep -q "\b$1\b"; then
+        return 0
+    fi
+    return 1
 }
 
 ######################################################################
@@ -58,8 +72,10 @@ fi
 
 ######################################################################
 toolsfile=sdk-tools-linux-3859397.zip
+sdkmanager=tools/bin/sdkmanager
+sdk_root="$DIR/sdk_root"
 
-if [ ! -f "tools/bin/sdkmanager" ]; then
+if [ ! -f "$sdkmanager" ]; then
     [ -d tools ] || rm -rf tools
     if [ ! -f "$toolsfile" ]; then
         # https://developer.android.com/studio/index.html#command-tools
@@ -68,15 +84,43 @@ if [ ! -f "tools/bin/sdkmanager" ]; then
     unzip $toolsfile
 fi
 
-if [ ! `which adb > /dev/null` ]; then
-    # To get list of all packages, use `sdkmanager --list`
-    echo y | ./tools/bin/sdkmanager --sdk_root=$DIR/sdk_root \
-        "platforms;android-26" \
-        "build-tools;26.0.3" \
-        "platform-tools" \
-        "cmake;3.6.4111459"
+# SDK packages needed by the different modes.
+# To get list of all packages, use `sdkmanager --list`.
+declare -A sdk_pkgs
+sdk_pkgs[build]="
+platforms;$PLATFORM
+build-tools;26.0.3
+platform-tools
+cmake;3.6.4111459
+"
+sdk_pkgs[emu]="
+system-images;$PLATFORM;default;$ABI
+platforms;android-26
+platform-tools
+emulator
+"
 
-    export PATH="$DIR/sdk_root/platform-tools:$PATH"
+# Collect SDK packages that need to be installed for the requested modes.
+sdk_pkgs_install=
+for mode in $MODES; do
+    if check_mode $mode; then
+        for pkg in ${sdk_pkgs[$mode]}; do
+            if [ ! -d "$sdk_root/$(echo $pkg | tr ';' /)" ]; then
+                sdk_pkgs_install="$sdk_pkgs_install $pkg"
+            fi
+        done
+    fi
+done
+# Filter out repeated packages.
+sdk_pkgs_install=$(echo "$sdk_pkgs_install" | tr [:space:] '\n' | sort -u)
+# Install missing packages.
+if [ "$sdk_pkgs_install" ]; then
+    echo y | "$sdkmanager" --sdk_root="$sdk_root" "$sdk_pkgs_install"
+fi
+
+# Use locally installed platform tools if missing in the system.
+if [ ! `which adb > /dev/null` ]; then
+    export PATH="$sdk_root/platform-tools:$PATH"
 fi
 
 export ANDROID_HOME=$(dirname $(dirname $(which adb)))
