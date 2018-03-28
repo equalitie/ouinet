@@ -20,12 +20,23 @@ NDK_TOOLCHAIN_DIR=${DIR}/${NDK}-toolchain-android$NDK_PLATFORM-$NDK_ARCH-$NDK_ST
 BOOST_V=1_65_1
 BOOST_V_DOT=${BOOST_V//_/.} # 1.65.1
 
+EMULATOR_AVD=ouinet-test
+
+# The following options may be limited by availability of SDK packages,
+# to get list of all packages, use `sdkmanager --list`.
 # https://developer.android.com/ndk/guides/abis.html
 ABI=armeabi-v7a
 #ABI=arm64-v8a
 
 # Android API level
 PLATFORM=android-25
+
+# The image to be used by the emulator AVD
+EMULATOR_IMAGE_TAG=google_apis
+EMULATOR_IMAGE="system-images;$PLATFORM;$EMULATOR_IMAGE_TAG;$ABI"
+
+# To get list of all devices, use `avdmanager list device`.
+EMULATOR_DEV="Nexus 6"
 
 ######################################################################
 # This variable shall contain paths to generated libraries which
@@ -94,7 +105,7 @@ platform-tools
 cmake;3.6.4111459
 "
 sdk_pkgs[emu]="
-system-images;$PLATFORM;google_apis;$ABI
+$EMULATOR_IMAGE
 platforms;$PLATFORM
 platform-tools
 emulator
@@ -124,6 +135,14 @@ if [ ! `which adb > /dev/null` ]; then
 fi
 
 export ANDROID_HOME=$(dirname $(dirname $(which adb)))
+
+######################################################################
+# Create Android virtual device for the emulator.
+if check_mode emu && ! tools/emulator -list-avds | grep -q "^$EMULATOR_AVD$"; then
+    echo no | tools/bin/avdmanager create avd -n "$EMULATOR_AVD" \
+                                   -k "$EMULATOR_IMAGE" -g "$EMULATOR_IMAGE_TAG" \
+                                   -b "$ABI" -d "$EMULATOR_DEV"
+fi
 
 ######################################################################
 if [ "$ABI" = "armeabi-v7a" ]; then
