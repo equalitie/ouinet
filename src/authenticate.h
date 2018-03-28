@@ -36,7 +36,7 @@ namespace authenticate_detail {
 // https://developer.mozilla.org/en-US/docs/Web/HTTP/Authentication
 template<class Request>
 inline
-bool authenticate( const Request& req
+bool authenticate( Request& req
                  , GenericConnection& con
                  , beast::string_view credentials /* e.g.: "test:123" */
                  , asio::yield_context yield)
@@ -47,8 +47,13 @@ bool authenticate( const Request& req
 
     auto auth_i = req.find(http::field::proxy_authorization);
 
-    if (auth_i != req.end() && credentials == parse_auth(auth_i->value())) {
-        return true;
+    if (auth_i != req.end()) {
+        bool valid = credentials == parse_auth(auth_i->value());
+
+        // Make sure we don't pass the credentials further.
+        req.erase(http::field::proxy_authorization);
+
+        if (valid) return true;
     }
 
     http::response<http::string_body>
