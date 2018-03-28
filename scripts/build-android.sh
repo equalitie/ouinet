@@ -57,18 +57,18 @@ if [ $(dpkg-query -W default-jre | cut -f2 | sed -En 's/^[0-9]+:1\.([0-9]+).*/\1
 fi
 
 ######################################################################
-if [ ! `which adb > /dev/null` ]; then
-    toolsfile=sdk-tools-linux-3859397.zip
+toolsfile=sdk-tools-linux-3859397.zip
 
-    if [ ! -f "tools/bin/sdkmanager" ]; then
-        [ -d tools ] || rm -rf tools
-        if [ ! -f "$toolsfile" ]; then
-            # https://developer.android.com/studio/index.html#command-tools
-            wget https://dl.google.com/android/repository/$toolsfile
-        fi
-        unzip $toolsfile
+if [ ! -f "tools/bin/sdkmanager" ]; then
+    [ -d tools ] || rm -rf tools
+    if [ ! -f "$toolsfile" ]; then
+        # https://developer.android.com/studio/index.html#command-tools
+        wget https://dl.google.com/android/repository/$toolsfile
     fi
+    unzip $toolsfile
+fi
 
+if [ ! `which adb > /dev/null` ]; then
     # To get list of all packages, use `sdkmanager --list`
     echo y | ./tools/bin/sdkmanager --sdk_root=$DIR/sdk_root \
         "platforms;android-26" \
