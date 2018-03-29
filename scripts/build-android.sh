@@ -349,11 +349,13 @@ function run_emulator {
     "$sdk/tools/emulator" -avd "$EMULATOR_AVD" -skin "$EMULATOR_SKIN" \
                           -use-system-libs "$@" &
     local emupid=$!
+    # Inspired in <https://android.stackexchange.com/q/83726>.
     adb -e wait-for-device
+    adb -e shell 'while [ "$(getprop sys.boot_completed)" != 1 ]; do sleep 1; done'
     cat << EOF
 
-The emulator is running.  Once you can interact with it normally,
-you may run:
+The emulated Android environment is now running.
+Once you can interact with it normally, you may execute:
 
   - To install the APK: $(which adb) -e install $APK
   - To uninstall the APK: $(which adb) -e uninstall $APK_ID
