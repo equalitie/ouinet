@@ -27,6 +27,7 @@ void start_client_thread( string repo_root
     g_client_thread = thread([=] {
             if (g_client) return;
 
+            debug("Starting new ouinet client.");
             g_client = make_unique<ouinet::Client>(g_ios);
 
             // In case we're restarting.
@@ -68,13 +69,14 @@ void start_client_thread( string repo_root
             }
 
             g_ios.run();
+            debug("Stopping ouinet client.");
             g_client.reset();
         });
 }
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_ie_equalit_ouinet_MainActivity_startOuinetClient(
+Java_ie_equalit_ouinet_Ouinet_startOuinetClient(
         JNIEnv* env,
         jobject /* this */,
         jstring j_repo_root,
@@ -90,7 +92,7 @@ Java_ie_equalit_ouinet_MainActivity_startOuinetClient(
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_ie_equalit_ouinet_MainActivity_stopOuinetClient(
+Java_ie_equalit_ouinet_Ouinet_stopOuinetClient(
         JNIEnv *env,
         jobject /* this */,
         jstring repo_root)
@@ -102,7 +104,7 @@ Java_ie_equalit_ouinet_MainActivity_stopOuinetClient(
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_ie_equalit_ouinet_MainActivity_setOuinetInjectorEP(
+Java_ie_equalit_ouinet_Ouinet_setOuinetInjectorEP(
         JNIEnv* env,
         jobject /* this */,
         jstring j_injector_ep)
@@ -117,7 +119,7 @@ Java_ie_equalit_ouinet_MainActivity_setOuinetInjectorEP(
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_ie_equalit_ouinet_MainActivity_setOuinetIPNS(
+Java_ie_equalit_ouinet_Ouinet_setOuinetIPNS(
         JNIEnv* env,
         jobject /* this */,
         jstring j_inps)

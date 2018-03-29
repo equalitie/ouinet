@@ -24,6 +24,7 @@ import android.widget.Toast;
 
 import ie.equalit.ouinet.OuiWebViewClient;
 import ie.equalit.ouinet.Util;
+import ie.equalit.ouinet.Ouinet;
 
 interface OnInput {
     public void call(String input);
@@ -33,19 +34,7 @@ public class MainActivity extends AppCompatActivity {
 
     private WebView _webView;
     private OuiWebViewClient _webViewClient;
-
-    // Used to load the 'native-lib' library on application startup.
-    static {
-        System.loadLibrary("ipfs_bindings");
-        System.loadLibrary("client");
-        System.loadLibrary("native-lib");
-
-        System.setProperty("http.proxyHost", "127.0.0.1");
-        System.setProperty("http.proxyPort", "8080");
-
-        System.setProperty("https.proxyHost", "127.0.0.1");
-        System.setProperty("https.proxyPort", "8080");
-    }
+    private Ouinet _ouinet;
 
     void go_home() {
         String home = "http://www.bbc.com";
@@ -89,13 +78,13 @@ public class MainActivity extends AppCompatActivity {
             if (key.equalsIgnoreCase("ipns")) {
                 toast("Setting IPNS to: " + val);
                 writeIPNS(val);
-                setOuinetIPNS(val);
+                _ouinet.setOuinetIPNS(val);
             }
             else if (key.equalsIgnoreCase("injector")) {
                 toast("Setting injector to: " + val);
                 writeInjectorEP(val);
                 _webViewClient.forgetCredentials();
-                setOuinetInjectorEP(val);
+                _ouinet.setOuinetInjectorEP(val);
             }
             else {
                 toast("Unknown config key: " + key);
@@ -119,17 +108,20 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        _ouinet = new Ouinet();
+
         setContentView(R.layout.activity_main);
 
         String ipns = readIPNS();
-        if (ipns.length() > 0) { setOuinetIPNS(ipns); }
+        if (ipns.length() > 0) { _ouinet.setOuinetIPNS(ipns); }
 
         String injector_ep = readInjectorEP();
-        if (injector_ep.length() > 0) { setOuinetInjectorEP(injector_ep); }
+        if (injector_ep.length() > 0) { _ouinet.setOuinetInjectorEP(injector_ep); }
 
-        startOuinetClient( getFilesDir().getAbsolutePath()
-                         , injector_ep
-                         , ipns);
+        _ouinet.startOuinetClient( getFilesDir().getAbsolutePath()
+                                 , injector_ep
+                                 , ipns);
 
         _webView = (WebView) findViewById(R.id.webview);
 
@@ -183,7 +175,7 @@ public class MainActivity extends AppCompatActivity {
             public void call(String input) {
                 writeInjectorEP(input);
                 _webViewClient.forgetCredentials();
-                setOuinetInjectorEP(input);
+                _ouinet.setOuinetInjectorEP(input);
             }
         });
     }
@@ -193,14 +185,14 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void call(String input) {
                 writeIPNS(input);
-                setOuinetIPNS(input);
+                _ouinet.setOuinetIPNS(input);
             }
         });
     }
 
     @Override
     protected void onDestroy() {
-        stopOuinetClient();
+        _ouinet.stopOuinetClient();
         super.onDestroy();
     }
 
@@ -249,13 +241,4 @@ public class MainActivity extends AppCompatActivity {
             super.onBackPressed();
         }
     }
-
-    /**
-     * A native method that is implemented by the 'native-lib' native library,
-     * which is packaged with this application.
-     */
-    public native void startOuinetClient(String repo_root, String injector, String ipns);
-    public native void stopOuinetClient();
-    public native void setOuinetInjectorEP(String endpoint);
-    public native void setOuinetIPNS(String ipns);
 }
