@@ -345,7 +345,7 @@ check_mode build && build_ouinet_apk
 # "libGL error: unable to load driver" and X error `BadValue` on
 # `X_GLXCreateNewContext`.
 function run_emulator {
-    echo "Starting Android emulator, please be patient on first boot..."
+    echo "Starting Android emulator, first boot may take more than 10 minutes..."
     "$sdk/tools/emulator" -avd "$EMULATOR_AVD" -skin "$EMULATOR_SKIN" \
                           -use-system-libs "$@" &
     local emupid=$!
