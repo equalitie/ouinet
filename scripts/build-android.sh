@@ -82,6 +82,7 @@ if [ $(dpkg-query -W default-jre | cut -f2 | sed -En 's/^[0-9]+:1\.([0-9]+).*/\1
 fi
 
 ######################################################################
+# Install SDK dependencies.
 toolsfile=sdk-tools-linux-3859397.zip
 sdk="$DIR/sdk"
 sdkmanager="$sdk/tools/bin/sdkmanager"
