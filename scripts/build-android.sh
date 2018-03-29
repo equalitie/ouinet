@@ -5,7 +5,8 @@ set -e
 DIR=`pwd`
 SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
 ROOT=$(cd ${SCRIPT_DIR}/.. && pwd)
-APK="${ROOT}/android/browser/build/outputs/apk/debug/browser-debug.apk"
+APP_ROOT="${ROOT}/android/browser"
+APK="${APP_ROOT}/build/outputs/apk/debug/browser-debug.apk"
 APK_ID=ie.equalit.ouinet
 
 NDK=android-ndk-r16b
@@ -313,8 +314,8 @@ check_mode build && build_ouinet_libs
 
 ######################################################################
 function copy_jni_libs {
-JNI_DST_DIR=${ROOT}/android/browser/src/main/jniLibs/${ABI}
-rm -rf ${ROOT}/android/browser/src/main/jniLibs
+JNI_DST_DIR=${APP_ROOT}/src/main/jniLibs/${ABI}
+rm -rf ${APP_ROOT}/src/main/jniLibs
 mkdir -p $JNI_DST_DIR
 for lib in "${OUT_LIBS[@]}"; do
     echo "Copying $lib to $JNI_DST_DIR"
@@ -325,9 +326,9 @@ done
 check_mode build && copy_jni_libs
 
 ######################################################################
-# Unpolished code to build the browser-debug.apk
+# Unpolished code to build the debug APK
 function build_ouinet_apk {
-cd ${ROOT}/android
+cd $(dirname ${APP_ROOT})
 export GRADLE_USER_HOME=$DIR/.gradle-home
 gradle --no-daemon build -Pboost_includedir=${BOOST_INCLUDEDIR}
 
