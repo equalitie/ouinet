@@ -164,6 +164,7 @@ else
 fi
 
 ######################################################################
+function maybe_install_ndk {
 if [ ! -d "./$NDK" ]; then
     cd /tmp
     if [ ! -f ${NDK_ZIP} ]; then
@@ -173,8 +174,12 @@ if [ ! -d "./$NDK" ]; then
     unzip /tmp/${NDK_ZIP}
     rm /tmp/${NDK_ZIP}
 fi
+}
+
+check_mode build && maybe_install_ndk
 
 ######################################################################
+function maybe_install_ndk_toolchain {
 if [ ! -d "${NDK_TOOLCHAIN_DIR}" ]; then
     $NDK_DIR/build/tools/make-standalone-toolchain.sh \
         --platform=android-$NDK_PLATFORM \
@@ -186,8 +191,12 @@ fi
 export ANDROID_NDK_HOME=$DIR/android-ndk-r16b
 
 add_library $NDK_TOOLCHAIN_DIR/arm-linux-androideabi/lib/$CMAKE_SYSTEM_PROCESSOR/libc++_shared.so
+}
+
+check_mode build && maybe_install_ndk_toolchain
 
 ######################################################################
+function maybe_install_gradle {
 if [ ! -d "./gradle-4.6" ]; then
     wget https://services.gradle.org/distributions/gradle-4.6-bin.zip
     # TODO: Check SHA256
@@ -196,8 +205,12 @@ if [ ! -d "./gradle-4.6" ]; then
 fi
 
 export PATH="`pwd`/gradle-4.6/bin:$PATH"
+}
+
+check_mode build && maybe_install_gradle
 
 ######################################################################
+function maybe_install_boost {
 if [ ! -d "Boost-for-Android" ]; then
     git clone https://github.com/inetic/Boost-for-Android
 fi
@@ -212,6 +225,9 @@ if [ ! -d "Boost-for-Android/build" ]; then
         $NDK_DIR
     cd ..
 fi
+}
+
+check_mode build && maybe_install_boost
 
 ######################################################################
 function build_openssl {
@@ -227,6 +243,7 @@ function build_openssl {
     make build_libs
 }
 
+function maybe_install_openssl {
 SSL_V="1.1.0g"
 SSL_DIR=${DIR}/openssl-${SSL_V}
 
@@ -237,6 +254,9 @@ if [ ! -d "$SSL_DIR" ]; then
     tar xf openssl-${SSL_V}.tar.gz
     (cd $SSL_DIR && build_openssl)
 fi
+}
+
+check_mode build && maybe_install_openssl
 
 ######################################################################
 BOOST_INCLUDEDIR=${DIR}/Boost-for-Android/build/out/${ABI}/include/boost-${BOOST_V}
@@ -255,16 +275,21 @@ ANDROID_FLAGS="\
     -DBOOST_LIBRARYDIR=${BOOST_LIBRARYDIR}"
 
 ######################################################################
+function maybe_clone_ifaddrs {
 if [ ! -d "android-ifaddrs" ]; then
     # TODO: Still need to compile the .c file and make use of it.
     git clone https://github.com/PurpleI2P/android-ifaddrs.git
 fi
+}
+
+check_mode build && maybe_clone_ifaddrs
 
 ######################################################################
 # TODO: miniupnp
 #   https://i2pd.readthedocs.io/en/latest/devs/building/android/
 
 ######################################################################
+function build_ouinet_libs {
 mkdir -p build-ouinet
 cd build-ouinet
 cmake ${ANDROID_FLAGS} \
@@ -279,8 +304,12 @@ cd ..
 
 add_library $DIR/build-ouinet/libclient.so
 add_library $DIR/build-ouinet/modules/ipfs-cache/ipfs_bindings/libipfs_bindings.so
+}
+
+check_mode build && build_ouinet_libs
 
 ######################################################################
+function copy_jni_libs {
 JNI_DST_DIR=${ROOT}/android/browser/src/main/jniLibs/${ABI}
 rm -rf ${ROOT}/android/browser/src/main/jniLibs
 mkdir -p $JNI_DST_DIR
@@ -288,10 +317,14 @@ for lib in "${OUT_LIBS[@]}"; do
     echo "Copying $lib to $JNI_DST_DIR"
     cp $lib $JNI_DST_DIR/
 done
+}
+
+check_mode build && copy_jni_libs
 
 ######################################################################
 # Unpolished code to build the browser-debug.apk
 #adb uninstall ie.equalit.ouinet
+function build_ouinet_apk {
 cd ${ROOT}/android
 export GRADLE_USER_HOME=$DIR/.gradle-home
 gradle --no-daemon build -Pboost_includedir=${BOOST_INCLUDEDIR}
@@ -300,5 +333,9 @@ echo "---------------------------------"
 echo "Your Android package is ready at:"
 ls -l ${ROOT}/android/browser/build/outputs/apk/debug/browser-debug.apk
 echo "---------------------------------"
+cd -
+}
+
+check_mode build && build_ouinet_apk
 
 ######################################################################
