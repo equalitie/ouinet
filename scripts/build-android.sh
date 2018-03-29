@@ -134,10 +134,8 @@ if [ "$sdk_pkgs_install" ]; then
     echo y | "$sdkmanager" $sdk_pkgs_install
 fi
 
-# Use locally installed platform tools if missing in the system.
-if [ ! `which adb > /dev/null` ]; then
-    export PATH="$sdk/platform-tools:$PATH"
-fi
+# Prefer locally installed platform tools to those in the system.
+export PATH="$sdk/platform-tools:$PATH"
 
 export ANDROID_HOME=$(dirname $(dirname $(which adb)))
 
@@ -357,8 +355,8 @@ function run_emulator {
 The emulator is running.  Once you can interact with it normally,
 you may run:
 
-  - To install the APK: adb -e install $APK
-  - To uninstall the APK: adb -e uninstall $APK_ID
+  - To install the APK: $(which adb) -e install $APK
+  - To uninstall the APK: $(which adb) -e uninstall $APK_ID
 
 EOF
     wait $emupid
