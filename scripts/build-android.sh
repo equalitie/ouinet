@@ -364,4 +364,4 @@ EOF
     wait $emupid
 }
 
-check_mode emu && run_emulator
+check_mode emu && run_emulator "$@"
