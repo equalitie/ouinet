@@ -5,6 +5,8 @@ set -e
 DIR=`pwd`
 SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
 ROOT=$(cd ${SCRIPT_DIR}/.. && pwd)
+APK="${ROOT}/android/browser/build/outputs/apk/debug/browser-debug.apk"
+APK_ID=ie.equalit.ouinet
 
 NDK=android-ndk-r16b
 NDK_DIR=$DIR/$NDK
@@ -324,7 +326,6 @@ check_mode build && copy_jni_libs
 
 ######################################################################
 # Unpolished code to build the browser-debug.apk
-#adb uninstall ie.equalit.ouinet
 function build_ouinet_apk {
 cd ${ROOT}/android
 export GRADLE_USER_HOME=$DIR/.gradle-home
@@ -332,7 +333,7 @@ gradle --no-daemon build -Pboost_includedir=${BOOST_INCLUDEDIR}
 
 echo "---------------------------------"
 echo "Your Android package is ready at:"
-ls -l ${ROOT}/android/browser/build/outputs/apk/debug/browser-debug.apk
+ls -l "$APK"
 echo "---------------------------------"
 cd -
 }
@@ -344,6 +345,22 @@ check_mode build && build_ouinet_apk
 # The `-use-system-libs` option is necessary to avoid errors like
 # "libGL error: unable to load driver" and X error `BadValue` on
 # `X_GLXCreateNewContext`.
-check_mode emu \
-    && "$sdk/tools/emulator" -avd "$EMULATOR_AVD" -skin "$EMULATOR_SKIN" \
-                             -use-system-libs "$@"
+function run_emulator {
+    echo "Starting Android emulator, please be patient on first boot..."
+    "$sdk/tools/emulator" -avd "$EMULATOR_AVD" -skin "$EMULATOR_SKIN" \
+                          -use-system-libs "$@" &
+    local emupid=$!
+    adb -e wait-for-device
+    cat << EOF
+
+The emulator is running.  Once you can interact with it normally,
+you may run:
+
+  - To install the APK: adb -e install $APK
+  - To uninstall the APK: adb -e uninstall $APK_ID
+
+EOF
+    wait $emupid
+}
+
+check_mode emu && run_emulator
