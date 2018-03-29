@@ -7,7 +7,7 @@ SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
 ROOT=$(cd ${SCRIPT_DIR}/.. && pwd)
 APP_ROOT="${ROOT}/android/browser"
 APK="${APP_ROOT}/build/outputs/apk/debug/browser-debug.apk"
-APK_ID=ie.equalit.ouinet
+APK_ID=$(sed -En 's/^\s*\bapplicationId\s+"([^"]+)".*/\1/p' "${APP_ROOT}/build.gradle")
 
 NDK=android-ndk-r16b
 NDK_DIR=$DIR/$NDK
