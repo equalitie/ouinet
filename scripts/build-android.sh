@@ -351,7 +351,11 @@ function run_emulator {
     local emupid=$!
     # Inspired in <https://android.stackexchange.com/q/83726>.
     adb -e wait-for-device
-    adb -e shell 'while [ "$(getprop sys.boot_completed)" != 1 ]; do sleep 1; done'
+    # Candidates:
+    #   - sys.boot_completed == 1
+    #   - service.bootanim.exit == 1
+    #   - ro.runtime.firstboot != 0 (nor empty)
+    adb -e shell 'while [ "$(getprop ro.runtime.firstboot 0)" -lt 1 ]; do sleep 1; done'
     cat << EOF
 
 The emulated Android environment is now running.
