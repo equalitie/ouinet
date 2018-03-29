@@ -37,6 +37,7 @@ EMULATOR_IMAGE="system-images;$PLATFORM;$EMULATOR_IMAGE_TAG;$ABI"
 
 # To get list of all devices, use `avdmanager list device`.
 EMULATOR_DEV="Nexus 6"
+EMULATOR_SKIN=1440x2560  # automatically scaled down on smaller screens
 
 ######################################################################
 # This variable shall contain paths to generated libraries which
@@ -339,3 +340,10 @@ cd -
 check_mode build && build_ouinet_apk
 
 ######################################################################
+# Run the Android emulator with the AVD created above.
+# The `-use-system-libs` option is necessary to avoid errors like
+# "libGL error: unable to load driver" and X error `BadValue` on
+# `X_GLXCreateNewContext`.
+check_mode emu \
+    && "$sdk/tools/emulator" -avd "$EMULATOR_AVD" -skin "$EMULATOR_SKIN" \
+                             -use-system-libs "$@"
