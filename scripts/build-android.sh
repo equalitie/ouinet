@@ -5,6 +5,9 @@ set -e
 DIR=`pwd`
 SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
 ROOT=$(cd ${SCRIPT_DIR}/.. && pwd)
+APP_ROOT="${ROOT}/android/browser"
+APK="${APP_ROOT}/build/outputs/apk/debug/browser-debug.apk"
+APK_ID=$(sed -En 's/^\s*\bapplicationId\s+"([^"]+)".*/\1/p' "${APP_ROOT}/build.gradle")
 
 NDK=android-ndk-r16b
 NDK_DIR=$DIR/$NDK
@@ -20,9 +23,24 @@ NDK_TOOLCHAIN_DIR=${DIR}/${NDK}-toolchain-android$NDK_PLATFORM-$NDK_ARCH-$NDK_ST
 BOOST_V=1_65_1
 BOOST_V_DOT=${BOOST_V//_/.} # 1.65.1
 
+EMULATOR_AVD=ouinet-test
+
+# The following options may be limited by availability of SDK packages,
+# to get list of all packages, use `sdkmanager --list`.
 # https://developer.android.com/ndk/guides/abis.html
 ABI=armeabi-v7a
 #ABI=arm64-v8a
+
+# Android API level
+PLATFORM=android-25
+
+# The image to be used by the emulator AVD
+EMULATOR_IMAGE_TAG=google_apis
+EMULATOR_IMAGE="system-images;$PLATFORM;$EMULATOR_IMAGE_TAG;$ABI"
+
+# To get list of all devices, use `avdmanager list device`.
+EMULATOR_DEV="Nexus 6"
+EMULATOR_SKIN=1440x2560  # automatically scaled down on smaller screens
 
 ######################################################################
 # This variable shall contain paths to generated libraries which
@@ -30,7 +48,7 @@ ABI=armeabi-v7a
 OUT_LIBS=()
 
 function add_library {
-    local libs=("$@")
+    local libs=("$@") lib
     for lib in "${libs[@]}"; do
         if [ ! -f "$lib" ]; then
             echo "Cannot add library \"$lib\": File doesn't exist"
@@ -41,34 +59,99 @@ function add_library {
 }
 
 ######################################################################
+MODES=
+ALLOWED_MODES="build emu"
+DEFAULT_MODES="build"
+
+function check_mode {
+    if echo "$MODES" | grep -q "\b$1\b"; then
+        return 0
+    fi
+    return 1
+}
+
+######################################################################
+function setup_deps {
 which unzip > /dev/null || sudo apt-get install unzip
 which java > /dev/null || sudo apt-get install default-jre
 dpkg-query -W default-jdk > /dev/null 2>&1 || sudo apt-get install default-jdk
 
-######################################################################
-if [ ! `which adb > /dev/null` ]; then
-    toolsfile=sdk-tools-linux-3859397.zip
-
-    if [ ! -f "tools/bin/sdkmanager" ]; then
-        [ -d tools ] || rm -rf tools
-        if [ ! -f "$toolsfile" ]; then
-            # https://developer.android.com/studio/index.html#command-tools
-            wget https://dl.google.com/android/repository/$toolsfile
-        fi
-        unzip $toolsfile
-    fi
-
-    # To get list of all packages, use `sdkmanager --list`
-    echo y | ./tools/bin/sdkmanager --sdk_root=$DIR/sdk_root \
-        "platforms;android-26" \
-        "build-tools;26.0.3" \
-        "platform-tools" \
-        "cmake;3.6.4111459"
-
-    export PATH="$DIR/sdk_root/platform-tools:$PATH"
+# J2EE is no longer part of standard Java modules in Java 9,
+# although the Android SDK uses some of its classes.
+# This causes exception "java.lang.NoClassDefFoundError: javax/xml/bind/...",
+# so we need to reenable J2EE modules explicitly when using JRE 9
+# (see <https://stackoverflow.com/a/43574427>).
+local java_add_modules=' --add-modules java.se.ee'
+if [ $(dpkg-query -W default-jre | cut -f2 | sed -En 's/^[0-9]+:1\.([0-9]+).*/\1/p') -ge 9 \
+     -a "${JAVA_OPTS%%$java_add_modules*}" = "$JAVA_OPTS" ] ; then
+    export JAVA_OPTS="$JAVA_OPTS$java_add_modules"
 fi
 
+######################################################################
+# Install SDK dependencies.
+SDK="$DIR/sdk"
+local toolsfile=sdk-tools-linux-3859397.zip
+local sdkmanager="$SDK/tools/bin/sdkmanager"
+
+if [ ! -f "$sdkmanager" ]; then
+    [ -d "$SDK/tools" ] || rm -rf "$SDK/tools"
+    if [ ! -f "$toolsfile" ]; then
+        # https://developer.android.com/studio/index.html#command-tools
+        wget "https://dl.google.com/android/repository/$toolsfile"
+    fi
+    unzip "$toolsfile" -d "$SDK"
+fi
+
+# SDK packages needed by the different modes.
+# To get list of all packages, use `sdkmanager --list`.
+local sdk_pkgs
+declare -A sdk_pkgs
+sdk_pkgs[build]="
+platforms;$PLATFORM
+build-tools;25.0.3
+platform-tools
+cmake;3.6.4111459
+"
+sdk_pkgs[emu]="
+$EMULATOR_IMAGE
+platforms;$PLATFORM
+platform-tools
+emulator
+"
+
+# Collect SDK packages that need to be installed for the requested modes.
+local sdk_pkgs_install mode pkg
+for mode in $ALLOWED_MODES; do
+    if check_mode $mode; then
+        for pkg in ${sdk_pkgs[$mode]}; do
+            if [ ! -d "$SDK/$(echo $pkg | tr ';' /)" ]; then
+                sdk_pkgs_install="$sdk_pkgs_install $pkg"
+            fi
+        done
+    fi
+done
+# Filter out repeated packages.
+sdk_pkgs_install=$(echo "$sdk_pkgs_install" | tr [:space:] '\n' | sort -u)
+# Install missing packages.
+if [ "$sdk_pkgs_install" ]; then
+    echo y | "$sdkmanager" $sdk_pkgs_install
+fi
+
+# Prefer locally installed platform tools to those in the system.
+export PATH="$SDK/platform-tools:$PATH"
+
 export ANDROID_HOME=$(dirname $(dirname $(which adb)))
+}
+
+######################################################################
+# Create Android virtual device for the emulator.
+function maybe_create_avd {
+if ! "$SDK/tools/emulator" -list-avds | grep -q "^$EMULATOR_AVD$"; then
+    echo no | "$SDK/tools/bin/avdmanager" create avd -n "$EMULATOR_AVD" \
+                                          -k "$EMULATOR_IMAGE" -g "$EMULATOR_IMAGE_TAG" \
+                                          -b "$ABI" -d "$EMULATOR_DEV"
+fi
+}
 
 ######################################################################
 if [ "$ABI" = "armeabi-v7a" ]; then
@@ -89,6 +172,7 @@ else
 fi
 
 ######################################################################
+function maybe_install_ndk {
 if [ ! -d "./$NDK" ]; then
     cd /tmp
     if [ ! -f ${NDK_ZIP} ]; then
@@ -98,8 +182,10 @@ if [ ! -d "./$NDK" ]; then
     unzip /tmp/${NDK_ZIP}
     rm /tmp/${NDK_ZIP}
 fi
+}
 
 ######################################################################
+function maybe_install_ndk_toolchain {
 if [ ! -d "${NDK_TOOLCHAIN_DIR}" ]; then
     $NDK_DIR/build/tools/make-standalone-toolchain.sh \
         --platform=android-$NDK_PLATFORM \
@@ -111,8 +197,10 @@ fi
 export ANDROID_NDK_HOME=$DIR/android-ndk-r16b
 
 add_library $NDK_TOOLCHAIN_DIR/arm-linux-androideabi/lib/$CMAKE_SYSTEM_PROCESSOR/libc++_shared.so
+}
 
 ######################################################################
+function maybe_install_gradle {
 if [ ! -d "./gradle-4.6" ]; then
     wget https://services.gradle.org/distributions/gradle-4.6-bin.zip
     # TODO: Check SHA256
@@ -121,8 +209,10 @@ if [ ! -d "./gradle-4.6" ]; then
 fi
 
 export PATH="`pwd`/gradle-4.6/bin:$PATH"
+}
 
 ######################################################################
+function maybe_install_boost {
 if [ ! -d "Boost-for-Android" ]; then
     git clone https://github.com/inetic/Boost-for-Android
 fi
@@ -137,6 +227,7 @@ if [ ! -d "Boost-for-Android/build" ]; then
         $NDK_DIR
     cd ..
 fi
+}
 
 ######################################################################
 function build_openssl {
@@ -152,16 +243,18 @@ function build_openssl {
     make build_libs
 }
 
-SSL_V="1.1.0g"
-SSL_DIR=${DIR}/openssl-${SSL_V}
+function maybe_install_openssl {
+local ssl_v="1.1.0g"
+SSL_DIR=${DIR}/openssl-${ssl_v}
 
 if [ ! -d "$SSL_DIR" ]; then
-    if [ ! -f openssl-${SSL_V}.tar.gz ]; then
-        wget https://www.openssl.org/source/openssl-${SSL_V}.tar.gz
+    if [ ! -f openssl-${ssl_v}.tar.gz ]; then
+        wget https://www.openssl.org/source/openssl-${ssl_v}.tar.gz
     fi
-    tar xf openssl-${SSL_V}.tar.gz
+    tar xf openssl-${ssl_v}.tar.gz
     (cd $SSL_DIR && build_openssl)
 fi
+}
 
 ######################################################################
 BOOST_INCLUDEDIR=${DIR}/Boost-for-Android/build/out/${ABI}/include/boost-${BOOST_V}
@@ -180,16 +273,19 @@ ANDROID_FLAGS="\
     -DBOOST_LIBRARYDIR=${BOOST_LIBRARYDIR}"
 
 ######################################################################
+function maybe_clone_ifaddrs {
 if [ ! -d "android-ifaddrs" ]; then
     # TODO: Still need to compile the .c file and make use of it.
     git clone https://github.com/PurpleI2P/android-ifaddrs.git
 fi
+}
 
 ######################################################################
 # TODO: miniupnp
 #   https://i2pd.readthedocs.io/en/latest/devs/building/android/
 
 ######################################################################
+function build_ouinet_libs {
 mkdir -p build-ouinet
 cd build-ouinet
 cmake ${ANDROID_FLAGS} \
@@ -204,26 +300,107 @@ cd ..
 
 add_library $DIR/build-ouinet/libclient.so
 add_library $DIR/build-ouinet/modules/ipfs-cache/ipfs_bindings/libipfs_bindings.so
+}
 
 ######################################################################
-JNI_DST_DIR=${ROOT}/android/browser/src/main/jniLibs/${ABI}
-rm -rf ${ROOT}/android/browser/src/main/jniLibs
-mkdir -p $JNI_DST_DIR
+function copy_jni_libs {
+local jni_dst_dir=${APP_ROOT}/src/main/jniLibs/${ABI}
+rm -rf ${APP_ROOT}/src/main/jniLibs
+mkdir -p $jni_dst_dir
+local lib
 for lib in "${OUT_LIBS[@]}"; do
-    echo "Copying $lib to $JNI_DST_DIR"
-    cp $lib $JNI_DST_DIR/
+    echo "Copying $lib to $jni_dst_dir"
+    cp $lib $jni_dst_dir/
 done
+}
 
 ######################################################################
-# Unpolished code to build the browser-debug.apk
-#adb uninstall ie.equalit.ouinet
-cd ${ROOT}/android
+# Unpolished code to build the debug APK
+function build_ouinet_apk {
+cd $(dirname ${APP_ROOT})
 export GRADLE_USER_HOME=$DIR/.gradle-home
 gradle --no-daemon build -Pboost_includedir=${BOOST_INCLUDEDIR}
 
 echo "---------------------------------"
 echo "Your Android package is ready at:"
-ls -l ${ROOT}/android/browser/build/outputs/apk/debug/browser-debug.apk
+ls -l "$APK"
 echo "---------------------------------"
+cd -
+}
 
 ######################################################################
+# Run the Android emulator with the AVD created above.
+# The `-use-system-libs` option is necessary to avoid errors like
+# "libGL error: unable to load driver" and X error `BadValue` on
+# `X_GLXCreateNewContext`.
+function run_emulator {
+    echo "Starting Android emulator, first boot may take more than 10 minutes..."
+    "$SDK/tools/emulator" -avd "$EMULATOR_AVD" -skin "$EMULATOR_SKIN" \
+                          -use-system-libs "$@" &
+    local emupid=$!
+    # Inspired in <https://android.stackexchange.com/q/83726>.
+    adb -e wait-for-device
+    # Candidates:
+    #   - sys.boot_completed == 1
+    #   - service.bootanim.exit == 1
+    #   - ro.runtime.firstboot != 0 (nor empty)
+    adb -e shell 'while [ "$(getprop ro.runtime.firstboot 0)" -lt 1 ]; do sleep 1; done'
+    cat << EOF
+
+The emulated Android environment is now running.
+Once you can interact with it normally, you may execute:
+
+  - To install the APK: $(which adb) -e install $APK
+  - To uninstall the APK: $(which adb) -e uninstall $APK_ID
+
+EOF
+    wait $emupid
+}
+
+######################################################################
+
+# Parse modes and leave emulator arguments.
+progname=$(basename "$0")
+if [ "$1" = --help ]; then
+    echo "Usage: $progname [MODE...] [-- EMULATOR_ARG...]"
+    echo "Accepted values of MODE: $ALLOWED_MODES"
+    echo "If no MODE is provided, assume \"$DEFAULT_MODES\"."
+    exit 0
+fi
+
+while [ -n "$1" -a "$1" != -- ]; do
+    if ! echo "$ALLOWED_MODES" | grep -q "\b$1\b"; then
+        echo "$progname: unknown mode \"$1\"; accepted modes: $ALLOWED_MODES" >&2
+        exit 1
+    fi
+    MODES="$MODES $1"
+    shift
+done
+
+if [ "$1" = -- ]; then
+    shift  # leave the rest of arguments for the emulator
+fi
+
+if [ ! "$MODES" ]; then
+    MODES="$DEFAULT_MODES"
+fi
+
+setup_deps
+
+if check_mode build; then
+    maybe_install_ndk
+    maybe_install_ndk_toolchain
+    maybe_install_gradle
+    maybe_install_boost
+    maybe_install_openssl
+    maybe_clone_ifaddrs
+    # TODO: miniupnp
+    build_ouinet_libs
+    copy_jni_libs
+    build_ouinet_apk
+fi
+
+if check_mode emu; then
+    maybe_create_avd
+    run_emulator "$@"
+fi
