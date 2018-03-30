@@ -59,7 +59,8 @@ function add_library {
 }
 
 ######################################################################
-MODES=${MODES:-build}
+# Parse modes and leave emulator arguments.
+MODES=
 ALLOWED_MODES="build emu"
 
 function check_mode {
@@ -69,12 +70,29 @@ function check_mode {
     return 1
 }
 
-for m in $MODES; do
-    if ! echo "$ALLOWED_MODES" | grep -q "\b$m\b"; then
-        echo "Unknown mode \"$m\"; accepted modes: $ALLOWED_MODES" >&2
+progname=$(basename "$0")
+if [ "$1" = --help ]; then
+    echo "Usage: $progname [MODE...] [-- EMULATOR_ARG...]"
+    echo "Accepted values of MODE: $ALLOWED_MODES"
+    exit 0
+fi
+
+while [ -n "$1" -a "$1" != -- ]; do
+    if ! echo "$ALLOWED_MODES" | grep -q "\b$1\b"; then
+        echo "$progname: unknown mode \"$1\"; accepted modes: $ALLOWED_MODES" >&2
         exit 1
     fi
+    MODES="$MODES $1"
+    shift
 done
+
+if [ "$1" = -- ]; then
+    shift  # leave the rest of arguments for the emulator
+fi
+
+if [ ! "$MODES" ]; then
+    MODES=build
+fi
 
 ######################################################################
 which unzip > /dev/null || sudo apt-get install unzip
