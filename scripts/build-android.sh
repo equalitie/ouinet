@@ -69,6 +69,13 @@ function check_mode {
     return 1
 }
 
+for m in $MODE; do
+    if ! echo "$MODES" | grep -q "\b$m\b"; then
+        echo "Unknown mode \"$m\"; accepted modes: $MODES" >&2
+        exit 1
+    fi
+done
+
 ######################################################################
 which unzip > /dev/null || sudo apt-get install unzip
 which java > /dev/null || sudo apt-get install default-jre
