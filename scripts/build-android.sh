@@ -174,8 +174,6 @@ if ! "$sdk/tools/emulator" -list-avds | grep -q "^$EMULATOR_AVD$"; then
 fi
 }
 
-check_mode emu && maybe_create_avd
-
 ######################################################################
 if [ "$ABI" = "armeabi-v7a" ]; then
     CMAKE_SYSTEM_PROCESSOR="armv7-a"
@@ -207,8 +205,6 @@ if [ ! -d "./$NDK" ]; then
 fi
 }
 
-check_mode build && maybe_install_ndk
-
 ######################################################################
 function maybe_install_ndk_toolchain {
 if [ ! -d "${NDK_TOOLCHAIN_DIR}" ]; then
@@ -224,8 +220,6 @@ export ANDROID_NDK_HOME=$DIR/android-ndk-r16b
 add_library $NDK_TOOLCHAIN_DIR/arm-linux-androideabi/lib/$CMAKE_SYSTEM_PROCESSOR/libc++_shared.so
 }
 
-check_mode build && maybe_install_ndk_toolchain
-
 ######################################################################
 function maybe_install_gradle {
 if [ ! -d "./gradle-4.6" ]; then
@@ -237,8 +231,6 @@ fi
 
 export PATH="`pwd`/gradle-4.6/bin:$PATH"
 }
-
-check_mode build && maybe_install_gradle
 
 ######################################################################
 function maybe_install_boost {
@@ -257,8 +249,6 @@ if [ ! -d "Boost-for-Android/build" ]; then
     cd ..
 fi
 }
-
-check_mode build && maybe_install_boost
 
 ######################################################################
 function build_openssl {
@@ -287,8 +277,6 @@ if [ ! -d "$SSL_DIR" ]; then
 fi
 }
 
-check_mode build && maybe_install_openssl
-
 ######################################################################
 BOOST_INCLUDEDIR=${DIR}/Boost-for-Android/build/out/${ABI}/include/boost-${BOOST_V}
 BOOST_LIBRARYDIR=${DIR}/Boost-for-Android/build/out/${ABI}/lib
@@ -313,8 +301,6 @@ if [ ! -d "android-ifaddrs" ]; then
 fi
 }
 
-check_mode build && maybe_clone_ifaddrs
-
 ######################################################################
 # TODO: miniupnp
 #   https://i2pd.readthedocs.io/en/latest/devs/building/android/
@@ -337,8 +323,6 @@ add_library $DIR/build-ouinet/libclient.so
 add_library $DIR/build-ouinet/modules/ipfs-cache/ipfs_bindings/libipfs_bindings.so
 }
 
-check_mode build && build_ouinet_libs
-
 ######################################################################
 function copy_jni_libs {
 JNI_DST_DIR=${APP_ROOT}/src/main/jniLibs/${ABI}
@@ -349,8 +333,6 @@ for lib in "${OUT_LIBS[@]}"; do
     cp $lib $JNI_DST_DIR/
 done
 }
-
-check_mode build && copy_jni_libs
 
 ######################################################################
 # Unpolished code to build the debug APK
@@ -365,8 +347,6 @@ ls -l "$APK"
 echo "---------------------------------"
 cd -
 }
-
-check_mode build && build_ouinet_apk
 
 ######################################################################
 # Run the Android emulator with the AVD created above.
@@ -397,4 +377,21 @@ EOF
     wait $emupid
 }
 
-check_mode emu && run_emulator "$@"
+######################################################################
+if check_mode build; then
+    maybe_install_ndk
+    maybe_install_ndk_toolchain
+    maybe_install_gradle
+    maybe_install_boost
+    maybe_install_openssl
+    maybe_clone_ifaddrs
+    # TODO: miniupnp
+    build_ouinet_libs
+    copy_jni_libs
+    build_ouinet_apk
+fi
+
+if check_mode emu; then
+    maybe_create_avd
+    run_emulator "$@"
+fi
