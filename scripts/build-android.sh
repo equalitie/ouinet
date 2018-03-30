@@ -48,7 +48,7 @@ EMULATOR_SKIN=1440x2560  # automatically scaled down on smaller screens
 OUT_LIBS=()
 
 function add_library {
-    local libs=("$@")
+    local libs=("$@") lib
     for lib in "${libs[@]}"; do
         if [ ! -f "$lib" ]; then
             echo "Cannot add library \"$lib\": File doesn't exist"
@@ -80,7 +80,7 @@ dpkg-query -W default-jdk > /dev/null 2>&1 || sudo apt-get install default-jdk
 # This causes exception "java.lang.NoClassDefFoundError: javax/xml/bind/...",
 # so we need to reenable J2EE modules explicitly when using JRE 9
 # (see <https://stackoverflow.com/a/43574427>).
-java_add_modules=' --add-modules java.se.ee'
+local java_add_modules=' --add-modules java.se.ee'
 if [ $(dpkg-query -W default-jre | cut -f2 | sed -En 's/^[0-9]+:1\.([0-9]+).*/\1/p') -ge 9 \
      -a "${JAVA_OPTS%%$java_add_modules*}" = "$JAVA_OPTS" ] ; then
     export JAVA_OPTS="$JAVA_OPTS$java_add_modules"
@@ -88,21 +88,22 @@ fi
 
 ######################################################################
 # Install SDK dependencies.
-toolsfile=sdk-tools-linux-3859397.zip
-sdk="$DIR/sdk"
-sdkmanager="$sdk/tools/bin/sdkmanager"
+SDK="$DIR/sdk"
+local toolsfile=sdk-tools-linux-3859397.zip
+local sdkmanager="$SDK/tools/bin/sdkmanager"
 
 if [ ! -f "$sdkmanager" ]; then
-    [ -d "$sdk/tools" ] || rm -rf "$sdk/tools"
+    [ -d "$SDK/tools" ] || rm -rf "$SDK/tools"
     if [ ! -f "$toolsfile" ]; then
         # https://developer.android.com/studio/index.html#command-tools
         wget "https://dl.google.com/android/repository/$toolsfile"
     fi
-    unzip "$toolsfile" -d "$sdk"
+    unzip "$toolsfile" -d "$SDK"
 fi
 
 # SDK packages needed by the different modes.
 # To get list of all packages, use `sdkmanager --list`.
+local sdk_pkgs
 declare -A sdk_pkgs
 sdk_pkgs[build]="
 platforms;$PLATFORM
@@ -118,11 +119,11 @@ emulator
 "
 
 # Collect SDK packages that need to be installed for the requested modes.
-sdk_pkgs_install=
+local sdk_pkgs_install mode pkg
 for mode in $ALLOWED_MODES; do
     if check_mode $mode; then
         for pkg in ${sdk_pkgs[$mode]}; do
-            if [ ! -d "$sdk/$(echo $pkg | tr ';' /)" ]; then
+            if [ ! -d "$SDK/$(echo $pkg | tr ';' /)" ]; then
                 sdk_pkgs_install="$sdk_pkgs_install $pkg"
             fi
         done
@@ -136,7 +137,7 @@ if [ "$sdk_pkgs_install" ]; then
 fi
 
 # Prefer locally installed platform tools to those in the system.
-export PATH="$sdk/platform-tools:$PATH"
+export PATH="$SDK/platform-tools:$PATH"
 
 export ANDROID_HOME=$(dirname $(dirname $(which adb)))
 }
@@ -144,8 +145,8 @@ export ANDROID_HOME=$(dirname $(dirname $(which adb)))
 ######################################################################
 # Create Android virtual device for the emulator.
 function maybe_create_avd {
-if ! "$sdk/tools/emulator" -list-avds | grep -q "^$EMULATOR_AVD$"; then
-    echo no | "$sdk/tools/bin/avdmanager" create avd -n "$EMULATOR_AVD" \
+if ! "$SDK/tools/emulator" -list-avds | grep -q "^$EMULATOR_AVD$"; then
+    echo no | "$SDK/tools/bin/avdmanager" create avd -n "$EMULATOR_AVD" \
                                           -k "$EMULATOR_IMAGE" -g "$EMULATOR_IMAGE_TAG" \
                                           -b "$ABI" -d "$EMULATOR_DEV"
 fi
@@ -242,14 +243,14 @@ function build_openssl {
 }
 
 function maybe_install_openssl {
-SSL_V="1.1.0g"
-SSL_DIR=${DIR}/openssl-${SSL_V}
+local ssl_v="1.1.0g"
+SSL_DIR=${DIR}/openssl-${ssl_v}
 
 if [ ! -d "$SSL_DIR" ]; then
-    if [ ! -f openssl-${SSL_V}.tar.gz ]; then
-        wget https://www.openssl.org/source/openssl-${SSL_V}.tar.gz
+    if [ ! -f openssl-${ssl_v}.tar.gz ]; then
+        wget https://www.openssl.org/source/openssl-${ssl_v}.tar.gz
     fi
-    tar xf openssl-${SSL_V}.tar.gz
+    tar xf openssl-${ssl_v}.tar.gz
     (cd $SSL_DIR && build_openssl)
 fi
 }
@@ -302,12 +303,13 @@ add_library $DIR/build-ouinet/modules/ipfs-cache/ipfs_bindings/libipfs_bindings.
 
 ######################################################################
 function copy_jni_libs {
-JNI_DST_DIR=${APP_ROOT}/src/main/jniLibs/${ABI}
+local jni_dst_dir=${APP_ROOT}/src/main/jniLibs/${ABI}
 rm -rf ${APP_ROOT}/src/main/jniLibs
-mkdir -p $JNI_DST_DIR
+mkdir -p $jni_dst_dir
+local lib
 for lib in "${OUT_LIBS[@]}"; do
-    echo "Copying $lib to $JNI_DST_DIR"
-    cp $lib $JNI_DST_DIR/
+    echo "Copying $lib to $jni_dst_dir"
+    cp $lib $jni_dst_dir/
 done
 }
 
@@ -332,7 +334,7 @@ cd -
 # `X_GLXCreateNewContext`.
 function run_emulator {
     echo "Starting Android emulator, first boot may take more than 10 minutes..."
-    "$sdk/tools/emulator" -avd "$EMULATOR_AVD" -skin "$EMULATOR_SKIN" \
+    "$SDK/tools/emulator" -avd "$EMULATOR_AVD" -skin "$EMULATOR_SKIN" \
                           -use-system-libs "$@" &
     local emupid=$!
     # Inspired in <https://android.stackexchange.com/q/83726>.
