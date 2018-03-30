@@ -166,11 +166,15 @@ export ANDROID_HOME=$(dirname $(dirname $(which adb)))
 
 ######################################################################
 # Create Android virtual device for the emulator.
-if check_mode emu && ! "$sdk/tools/emulator" -list-avds | grep -q "^$EMULATOR_AVD$"; then
+function maybe_create_avd {
+if ! "$sdk/tools/emulator" -list-avds | grep -q "^$EMULATOR_AVD$"; then
     echo no | "$sdk/tools/bin/avdmanager" create avd -n "$EMULATOR_AVD" \
                                           -k "$EMULATOR_IMAGE" -g "$EMULATOR_IMAGE_TAG" \
                                           -b "$ABI" -d "$EMULATOR_DEV"
 fi
+}
+
+check_mode emu && maybe_create_avd
 
 ######################################################################
 if [ "$ABI" = "armeabi-v7a" ]; then
