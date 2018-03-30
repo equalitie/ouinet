@@ -59,7 +59,6 @@ function add_library {
 }
 
 ######################################################################
-# Parse modes and leave emulator arguments.
 MODES=
 ALLOWED_MODES="build emu"
 
@@ -70,31 +69,8 @@ function check_mode {
     return 1
 }
 
-progname=$(basename "$0")
-if [ "$1" = --help ]; then
-    echo "Usage: $progname [MODE...] [-- EMULATOR_ARG...]"
-    echo "Accepted values of MODE: $ALLOWED_MODES"
-    exit 0
-fi
-
-while [ -n "$1" -a "$1" != -- ]; do
-    if ! echo "$ALLOWED_MODES" | grep -q "\b$1\b"; then
-        echo "$progname: unknown mode \"$1\"; accepted modes: $ALLOWED_MODES" >&2
-        exit 1
-    fi
-    MODES="$MODES $1"
-    shift
-done
-
-if [ "$1" = -- ]; then
-    shift  # leave the rest of arguments for the emulator
-fi
-
-if [ ! "$MODES" ]; then
-    MODES=build
-fi
-
 ######################################################################
+function setup_deps {
 which unzip > /dev/null || sudo apt-get install unzip
 which java > /dev/null || sudo apt-get install default-jre
 dpkg-query -W default-jdk > /dev/null 2>&1 || sudo apt-get install default-jdk
@@ -163,6 +139,7 @@ fi
 export PATH="$sdk/platform-tools:$PATH"
 
 export ANDROID_HOME=$(dirname $(dirname $(which adb)))
+}
 
 ######################################################################
 # Create Android virtual device for the emulator.
@@ -378,6 +355,34 @@ EOF
 }
 
 ######################################################################
+
+# Parse modes and leave emulator arguments.
+progname=$(basename "$0")
+if [ "$1" = --help ]; then
+    echo "Usage: $progname [MODE...] [-- EMULATOR_ARG...]"
+    echo "Accepted values of MODE: $ALLOWED_MODES"
+    exit 0
+fi
+
+while [ -n "$1" -a "$1" != -- ]; do
+    if ! echo "$ALLOWED_MODES" | grep -q "\b$1\b"; then
+        echo "$progname: unknown mode \"$1\"; accepted modes: $ALLOWED_MODES" >&2
+        exit 1
+    fi
+    MODES="$MODES $1"
+    shift
+done
+
+if [ "$1" = -- ]; then
+    shift  # leave the rest of arguments for the emulator
+fi
+
+if [ ! "$MODES" ]; then
+    MODES=build
+fi
+
+setup_deps
+
 if check_mode build; then
     maybe_install_ndk
     maybe_install_ndk_toolchain
