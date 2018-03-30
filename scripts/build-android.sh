@@ -61,6 +61,7 @@ function add_library {
 ######################################################################
 MODES=
 ALLOWED_MODES="build emu"
+DEFAULT_MODES="build"
 
 function check_mode {
     if echo "$MODES" | grep -q "\b$1\b"; then
@@ -363,6 +364,7 @@ progname=$(basename "$0")
 if [ "$1" = --help ]; then
     echo "Usage: $progname [MODE...] [-- EMULATOR_ARG...]"
     echo "Accepted values of MODE: $ALLOWED_MODES"
+    echo "If no MODE is provided, assume \"$DEFAULT_MODES\"."
     exit 0
 fi
 
@@ -380,7 +382,7 @@ if [ "$1" = -- ]; then
 fi
 
 if [ ! "$MODES" ]; then
-    MODES=build
+    MODES="$DEFAULT_MODES"
 fi
 
 setup_deps
