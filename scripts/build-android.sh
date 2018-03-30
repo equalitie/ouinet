@@ -59,19 +59,19 @@ function add_library {
 }
 
 ######################################################################
-MODE=${MODE:-build}
-MODES="build emu"
+MODES=${MODES:-build}
+ALLOWED_MODES="build emu"
 
 function check_mode {
-    if echo "$MODE" | grep -q "\b$1\b"; then
+    if echo "$MODES" | grep -q "\b$1\b"; then
         return 0
     fi
     return 1
 }
 
-for m in $MODE; do
-    if ! echo "$MODES" | grep -q "\b$m\b"; then
-        echo "Unknown mode \"$m\"; accepted modes: $MODES" >&2
+for m in $MODES; do
+    if ! echo "$ALLOWED_MODES" | grep -q "\b$m\b"; then
+        echo "Unknown mode \"$m\"; accepted modes: $ALLOWED_MODES" >&2
         exit 1
     fi
 done
@@ -125,7 +125,7 @@ emulator
 
 # Collect SDK packages that need to be installed for the requested modes.
 sdk_pkgs_install=
-for mode in $MODES; do
+for mode in $ALLOWED_MODES; do
     if check_mode $mode; then
         for pkg in ${sdk_pkgs[$mode]}; do
             if [ ! -d "$sdk/$(echo $pkg | tr ';' /)" ]; then
