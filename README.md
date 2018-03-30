@@ -425,3 +425,35 @@ Note that above we had to clone a fresh copy `ouinet` repository. This is
 because the `gradle` tool used inside the `build-android.sh` script has problem
 building from the NFS mounted disk `/vagrant` we use on Vagrant (something
 about nfs locking).
+
+### Testing
+
+You may also use the `build-android.sh` script to fire up an Android emulator
+session with a compatible system image; just run:
+
+```
+$ /path/to/build-android.sh emu
+```
+
+It will download the necessary files to the current directory (or reuse files
+downloaded by the build process, if available) and start the emulator.  Please
+note that downloading the system image may take a few minutes, and booting the
+emulator for the first time may take more than 10 minutes.  In subsequent
+runs, the emulator will just recover the snapshot saved on last quit, which is
+way faster.
+
+You may pass options to the emulator at the script's command line, after a
+`--` (double dash) argument.  For instance:
+
+```
+$ /path/to/build-android.sh emu -- -no-snapshot-save
+```
+
+Some useful options include `-no-snapshot`, `-no-snapshot-load` and
+`-no-snapshot-save`.  See [emulator startup options][] for more information.
+
+[emulator startup options]: https://developer.android.com/studio/run/emulator-commandline.html#startup-options
+
+While the emulator is running, you may interact with it using ADB, e.g. to
+install the APK built in the previous step.  See the script's output for
+particular instructions and paths.
