@@ -93,6 +93,11 @@ SDK="$DIR/sdk"
 local toolsfile=sdk-tools-linux-3859397.zip
 local sdkmanager="$SDK/tools/bin/sdkmanager"
 
+# Reuse downloaded SDK stuff from old versions of this script.
+if [ -d "$DIR/sdk_root" -a ! -d "$SDK" ]; then
+    mv "$DIR/sdk_root" "$SDK"
+fi
+
 if [ ! -f "$sdkmanager" ]; then
     [ -d "$SDK/tools" ] || rm -rf "$SDK/tools"
     if [ ! -f "$toolsfile" ]; then
