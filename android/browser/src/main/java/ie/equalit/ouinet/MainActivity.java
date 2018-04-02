@@ -202,7 +202,7 @@ public class MainActivity extends AppCompatActivity {
         menu.add(Menu.NONE, 2, Menu.NONE, "Reload");
         menu.add(Menu.NONE, 3, Menu.NONE, "Clear cache");
         menu.add(Menu.NONE, 4, Menu.NONE, "Injector endpoint");
-        menu.add(Menu.NONE, 5, Menu.NONE, "INPS");
+        menu.add(Menu.NONE, 5, Menu.NONE, "IPNS");
         menu.add(Menu.NONE, 6, Menu.NONE, "Load config from QR");
         return true;
     }
