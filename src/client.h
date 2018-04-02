@@ -23,6 +23,7 @@ public:
     void set_injector_endpoint(const char*);
     void set_ipns(const char*);
 
+    // Calling this only has meaning after client start.
     boost::filesystem::path get_pid_path() const;
 
 private:

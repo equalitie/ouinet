@@ -8,6 +8,7 @@
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <iostream>
 #include <fstream>
+#include <cstdlib>  // for atexit()
 
 #include <ipfs_cache/client.h>
 #include <ipfs_cache/error.h>
@@ -636,19 +637,20 @@ int main(int argc, char* argv[])
     Client client(ios);
 
     signals.async_wait([&client, &signals, &ios](const sys::error_code& ec, int signal_number) {
-            auto pid_path = client.get_pid_path();
             client.stop();
 
-            signals.async_wait([pid_path](const sys::error_code& ec, int signal_number) {
+            signals.async_wait([](const sys::error_code& ec, int signal_number) {
                 cerr << "Got second signal, terminating immediately" << endl;
-                // Force removal of PID file on abnormal exit
-                remove(pid_path);
                 exit(1);
             });
         });
 
     try {
         client.start(argc, argv);
+
+        static auto pid_file_path = client.get_pid_path();
+        // Force removal of PID file on abnormal exit
+        std::atexit([] { remove(pid_file_path); });
     } catch (std::exception& e) {
         cerr << e.what() << endl;
         return 1;
