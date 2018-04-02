@@ -74,8 +74,9 @@ RUN apt-get update && apt-get install -y \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/ouinet
 COPY --from=builder /opt/ouinet/modules/ipfs-cache/ipfs_bindings/libipfs_bindings.so modules/ipfs-cache/ipfs_bindings/
-COPY --from=builder /opt/ouinet/modules/gnunet-channels/gnunet-bin/share/gnunet/ modules/gnunet-channels/gnunet-bin/share/gnunet/
-COPY --from=builder /opt/ouinet/modules/gnunet-channels/gnunet-bin/lib/ modules/gnunet-channels/gnunet-bin/lib/
+# GNUnet support has been temporarily removed.
+#COPY --from=builder /opt/ouinet/modules/gnunet-channels/gnunet-bin/share/gnunet/ modules/gnunet-channels/gnunet-bin/share/gnunet/
+#COPY --from=builder /opt/ouinet/modules/gnunet-channels/gnunet-bin/lib/ modules/gnunet-channels/gnunet-bin/lib/
 COPY --from=builder /opt/ouinet/injector /opt/ouinet/client /usr/local/src/ouinet/scripts/ouinet-docker.sh ./
 COPY --from=builder /opt/ouinet/test/test-* test/
 COPY --from=builder /usr/local/src/ouinet/repos/ repos/
