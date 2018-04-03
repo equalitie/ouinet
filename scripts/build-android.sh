@@ -58,6 +58,23 @@ NDK_TOOLCHAIN_DIR=${DIR}/${NDK}-toolchain-android$NDK_PLATFORM-$NDK_ARCH-$NDK_ST
 
 BOOST_V=1_65_1
 BOOST_V_DOT=${BOOST_V//_/.} # 1.65.1
+BOOST_INCLUDEDIR=${DIR}/Boost-for-Android/build/out/${ABI}/include/boost-${BOOST_V}
+BOOST_LIBRARYDIR=${DIR}/Boost-for-Android/build/out/${ABI}/lib
+
+SSL_V="1.1.0g"
+SSL_DIR=${DIR}/openssl-${SSL_V}
+
+ANDROID_FLAGS="\
+    -DBoost_COMPILER='-clang' \
+    -DCMAKE_ANDROID_NDK_TOOLCHAIN_VERSION=clang \
+    -DCMAKE_SYSTEM_NAME=Android \
+    -DCMAKE_SYSTEM_VERSION=${NDK_PLATFORM} \
+    -DCMAKE_ANDROID_STANDALONE_TOOLCHAIN=${NDK_TOOLCHAIN_DIR} \
+    -DCMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR} \
+    -DCMAKE_ANDROID_ARCH_ABI=${ABI} \
+    -DOPENSSL_ROOT_DIR=${SSL_DIR} \
+    -DBOOST_INCLUDEDIR=${BOOST_INCLUDEDIR} \
+    -DBOOST_LIBRARYDIR=${BOOST_LIBRARYDIR}"
 
 EMULATOR_AVD=${EMULATOR_AVD:-ouinet-test}
 
@@ -264,33 +281,14 @@ function build_openssl {
 }
 
 function maybe_install_openssl {
-local ssl_v="1.1.0g"
-SSL_DIR=${DIR}/openssl-${ssl_v}
-
 if [ ! -d "$SSL_DIR" ]; then
-    if [ ! -f openssl-${ssl_v}.tar.gz ]; then
-        wget https://www.openssl.org/source/openssl-${ssl_v}.tar.gz
+    if [ ! -f openssl-${SSL_V}.tar.gz ]; then
+        wget https://www.openssl.org/source/openssl-${SSL_V}.tar.gz
     fi
-    tar xf openssl-${ssl_v}.tar.gz
+    tar xf openssl-${SSL_V}.tar.gz
     (cd $SSL_DIR && build_openssl)
 fi
 }
-
-######################################################################
-BOOST_INCLUDEDIR=${DIR}/Boost-for-Android/build/out/${ABI}/include/boost-${BOOST_V}
-BOOST_LIBRARYDIR=${DIR}/Boost-for-Android/build/out/${ABI}/lib
-
-ANDROID_FLAGS="\
-    -DBoost_COMPILER='-clang' \
-    -DCMAKE_ANDROID_NDK_TOOLCHAIN_VERSION=clang \
-    -DCMAKE_SYSTEM_NAME=Android \
-    -DCMAKE_SYSTEM_VERSION=${NDK_PLATFORM} \
-    -DCMAKE_ANDROID_STANDALONE_TOOLCHAIN=${NDK_TOOLCHAIN_DIR} \
-    -DCMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR} \
-    -DCMAKE_ANDROID_ARCH_ABI=${ABI} \
-    -DOPENSSL_ROOT_DIR=${SSL_DIR} \
-    -DBOOST_INCLUDEDIR=${BOOST_INCLUDEDIR} \
-    -DBOOST_LIBRARYDIR=${BOOST_LIBRARYDIR}"
 
 ######################################################################
 function maybe_clone_ifaddrs {
