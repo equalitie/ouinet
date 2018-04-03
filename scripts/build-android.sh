@@ -46,6 +46,8 @@ else
     exit 1
 fi
 
+SDK_DIR="$DIR/sdk"
+
 NDK=android-ndk-r16b
 NDK_DIR=$DIR/$NDK
 NDK_ZIP=${NDK}-linux-x86_64.zip
@@ -139,22 +141,21 @@ fi
 
 ######################################################################
 # Install SDK dependencies.
-SDK="$DIR/sdk"
 local toolsfile=sdk-tools-linux-3859397.zip
-local sdkmanager="$SDK/tools/bin/sdkmanager"
+local sdkmanager="$SDK_DIR/tools/bin/sdkmanager"
 
 # Reuse downloaded SDK stuff from old versions of this script.
-if [ -d "$DIR/sdk_root" -a ! -d "$SDK" ]; then
-    mv "$DIR/sdk_root" "$SDK"
+if [ -d "$DIR/sdk_root" -a ! -d "$SDK_DIR" ]; then
+    mv "$DIR/sdk_root" "$SDK_DIR"
 fi
 
 if [ ! -f "$sdkmanager" ]; then
-    [ -d "$SDK/tools" ] || rm -rf "$SDK/tools"
+    [ -d "$SDK_DIR/tools" ] || rm -rf "$SDK_DIR/tools"
     if [ ! -f "$toolsfile" ]; then
         # https://developer.android.com/studio/index.html#command-tools
         wget "https://dl.google.com/android/repository/$toolsfile"
     fi
-    unzip "$toolsfile" -d "$SDK"
+    unzip "$toolsfile" -d "$SDK_DIR"
 fi
 
 # SDK packages needed by the different modes.
@@ -179,7 +180,7 @@ local sdk_pkgs_install mode pkg
 for mode in $ALLOWED_MODES; do
     if check_mode $mode; then
         for pkg in ${sdk_pkgs[$mode]}; do
-            if [ ! -d "$SDK/$(echo $pkg | tr ';' /)" ]; then
+            if [ ! -d "$SDK_DIR/$(echo $pkg | tr ';' /)" ]; then
                 sdk_pkgs_install="$sdk_pkgs_install $pkg"
             fi
         done
@@ -193,7 +194,7 @@ if [ "$sdk_pkgs_install" ]; then
 fi
 
 # Prefer locally installed platform tools to those in the system.
-export PATH="$SDK/platform-tools:$PATH"
+export PATH="$SDK_DIR/platform-tools:$PATH"
 
 export ANDROID_HOME=$(dirname $(dirname $(which adb)))
 }
@@ -201,10 +202,10 @@ export ANDROID_HOME=$(dirname $(dirname $(which adb)))
 ######################################################################
 # Create Android virtual device for the emulator.
 function maybe_create_avd {
-if ! "$SDK/tools/emulator" -list-avds | grep -q "^$EMULATOR_AVD$"; then
-    echo no | "$SDK/tools/bin/avdmanager" create avd -n "$EMULATOR_AVD" \
-                                          -k "$EMULATOR_IMAGE" -g "$EMULATOR_IMAGE_TAG" \
-                                          -b "$ABI" -d "$EMULATOR_DEV"
+if ! "$SDK_DIR/tools/emulator" -list-avds | grep -q "^$EMULATOR_AVD$"; then
+    echo no | "$SDK_DIR/tools/bin/avdmanager" create avd -n "$EMULATOR_AVD" \
+                                              -k "$EMULATOR_IMAGE" -g "$EMULATOR_IMAGE_TAG" \
+                                              -b "$ABI" -d "$EMULATOR_DEV"
 fi
 }
 
@@ -353,8 +354,8 @@ cd -
 # `X_GLXCreateNewContext`.
 function run_emulator {
     echo "Starting Android emulator, first boot may take more than 10 minutes..."
-    "$SDK/tools/emulator" -avd "$EMULATOR_AVD" -skin "$EMULATOR_SKIN" \
-                          -use-system-libs "$@" &
+    "$SDK_DIR/tools/emulator" -avd "$EMULATOR_AVD" -skin "$EMULATOR_SKIN" \
+                              -use-system-libs "$@" &
     local emupid=$!
     # Inspired in <https://android.stackexchange.com/q/83726>.
     adb -e wait-for-device
