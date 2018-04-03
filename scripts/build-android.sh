@@ -324,7 +324,7 @@ done
 function build_ouinet_apk {
 cd $(dirname ${APP_ROOT})
 export GRADLE_USER_HOME=$DIR/.gradle-home
-gradle --no-daemon build -Pboost_includedir=${BOOST_INCLUDEDIR}
+gradle --no-daemon build -Pboost_includedir=${BOOST_INCLUDEDIR} -Pandroid_abi=${ABI}
 
 echo "---------------------------------"
 echo "Your Android package is ready at:"
