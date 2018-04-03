@@ -72,4 +72,17 @@ bool authenticate( Request& req
     return false;
 }
 
+template<class Request>
+inline
+void authorize( Request& req
+              , beast::string_view credentials /* e.g.: "test:123" */)
+{
+    std::string c = beast::detail::base64_encode(
+            reinterpret_cast<const unsigned char*>(credentials.data()),
+                                                   credentials.size());
+
+    req.set(http::field::proxy_authorization, "Basic " + c);
+    req.prepare_payload();
+}
+
 } // ouinet namespace

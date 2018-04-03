@@ -27,6 +27,7 @@
 #include "full_duplex_forward.h"
 #include "client_config.h"
 #include "client.h"
+#include "authenticate.h"
 
 #ifdef __ANDROID__
 #include "redirect_to_android_log.h"
@@ -394,6 +395,12 @@ void Client::State::serve_request( GenericConnection& con
 
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "read");
+
+        const string& credentials = _config.injector_credentials();
+
+        if (credentials.size()) {
+            authorize(req, credentials);
+        }
 
         // Attempt connection to origin for CONNECT requests
         if (req.method() == http::verb::connect) {
