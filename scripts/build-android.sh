@@ -23,23 +23,23 @@ NDK_TOOLCHAIN_DIR=${DIR}/${NDK}-toolchain-android$NDK_PLATFORM-$NDK_ARCH-$NDK_ST
 BOOST_V=1_65_1
 BOOST_V_DOT=${BOOST_V//_/.} # 1.65.1
 
-EMULATOR_AVD=ouinet-test
+EMULATOR_AVD=${EMULATOR_AVD:-ouinet-test}
 
 # The following options may be limited by availability of SDK packages,
 # to get list of all packages, use `sdkmanager --list`.
 # https://developer.android.com/ndk/guides/abis.html
-ABI=armeabi-v7a
+ABI=${ABI:-armeabi-v7a}
 #ABI=arm64-v8a
 
 # Android API level
-PLATFORM=android-25
+PLATFORM=${PLATFORM:-android-25}
 
 # The image to be used by the emulator AVD
-EMULATOR_IMAGE_TAG=google_apis
+EMULATOR_IMAGE_TAG=google_apis  # uses to be available for all platforms and ABIs
 EMULATOR_IMAGE="system-images;$PLATFORM;$EMULATOR_IMAGE_TAG;$ABI"
 
 # To get list of all devices, use `avdmanager list device`.
-EMULATOR_DEV="Nexus 6"
+EMULATOR_DEV=${EMULATOR_DEV:-Nexus 6}
 EMULATOR_SKIN=1440x2560  # automatically scaled down on smaller screens
 
 ######################################################################
