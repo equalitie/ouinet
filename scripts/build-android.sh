@@ -232,7 +232,7 @@ if [ ! -d "${NDK_TOOLCHAIN_DIR}" ]; then
         --install-dir=${NDK_TOOLCHAIN_DIR}
 fi
 
-export ANDROID_NDK_HOME=$DIR/android-ndk-r16b
+export ANDROID_NDK_HOME=$NDK_DIR
 
 add_library $NDK_TOOLCHAIN_DIR/$NDK_TOOLCHAIN_TARGET/lib*/libc++_shared.so
 }
