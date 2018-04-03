@@ -203,7 +203,7 @@ fi
 
 export ANDROID_NDK_HOME=$DIR/android-ndk-r16b
 
-add_library $NDK_TOOLCHAIN_DIR/$NDK_ARCH-linux-android*/lib*/$CMAKE_SYSTEM_PROCESSOR/libc++_shared.so
+add_library $NDK_TOOLCHAIN_DIR/$NDK_ARCH-linux-android*/lib*/libc++_shared.so
 }
 
 ######################################################################
