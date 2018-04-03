@@ -14,6 +14,7 @@ ABI=${ABI:-armeabi-v7a}
 
 # Derive other variables from the selected ABI.
 # See `$NDK/build/tools/make_standalone_toolchain.py:get_{triple,abis}()`.
+# See <https://github.com/opencv/opencv/blob/5b868ccd829975da5372bf330994553e176aee09/platforms/android/android.toolchain.cmake#L658>.
 # See `$OPENSSL/config`.
 if [ "$ABI" = "armeabi-v7a" ]; then
     NDK_ARCH="arm"
@@ -41,9 +42,7 @@ elif [ "$ABI" = "x86_64" ]; then
     CMAKE_SYSTEM_PROCESSOR="x86_64"
     OPENSSL_MACHINE="x86_64"
 else
-    # This may help:
-    # https://github.com/opencv/opencv/blob/5b868ccd829975da5372bf330994553e176aee09/platforms/android/android.toolchain.cmake#L658
-    >&2 echo "TODO: Need a mapping from \"$ABI\" to NDK architecture, NDK toolchain target triplet and CMAKE_SYSTEM_PROCESSOR"
+    >&2 echo "TODO: Need a mapping from \"$ABI\" to other target selection variables"
     exit 1
 fi
 
