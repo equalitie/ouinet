@@ -273,6 +273,7 @@ function build_openssl {
     export CROSS_SYSROOT="$NDK_TOOLCHAIN_DIR/sysroot"
     export ANDROID_DEV="$SYSROOT/usr"
     export MACHINE="$OPENSSL_MACHINE"
+    export CC=gcc
     export CROSS_COMPILE="$NDK_TOOLCHAIN_TARGET-"
     export TOOLCHAIN="$NDK_TOOLCHAIN_DIR"
     export PATH="$NDK_TOOLCHAIN_DIR/bin:$PATH"
