@@ -211,12 +211,12 @@ fi
 
 ######################################################################
 function maybe_install_ndk {
-if [ ! -d "./$NDK" ]; then
+if [ ! -d "$NDK" ]; then
     cd /tmp
     if [ ! -f ${NDK_ZIP} ]; then
         wget https://dl.google.com/android/repository/${NDK_ZIP}
     fi
-    cd ${DIR}
+    cd -
     unzip /tmp/${NDK_ZIP}
     rm /tmp/${NDK_ZIP}
 fi
@@ -263,7 +263,7 @@ if [ ! -d "Boost-for-Android/build" ]; then
         --arch=${ABI} \
         --with-libraries=regex,context,coroutine,program_options,system,test,thread,filesystem,date_time \
         $NDK_DIR
-    cd ..
+    cd -
 fi
 }
 
@@ -316,7 +316,7 @@ cmake ${ANDROID_FLAGS} \
     -DCMAKE_CXX_FLAGS="-I ${DIR}/android-ifaddrs -I $SSL_DIR/include" \
     ${ROOT}
 make VERBOSE=1
-cd ..
+cd -
 
 add_library $DIR/build-ouinet/libclient.so
 add_library $DIR/build-ouinet/modules/ipfs-cache/ipfs_bindings/libipfs_bindings.so
