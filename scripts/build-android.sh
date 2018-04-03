@@ -16,7 +16,8 @@ NDK_ZIP=${NDK}-linux-x86_64.zip
 # `posix_fadvise`, required by Boost.Beast is was only added in LOLLIPOP
 # https://developer.android.com/guide/topics/manifest/uses-sdk-element.html#ApiLevels
 NDK_PLATFORM=21
-NDK_ARCH=arm
+NDK_ARCH=${NDK_ARCH:-arm}  # TODO: Derive from $ABI below.
+#NDK_ARCH=x86_64
 NDK_STL='libc++'
 NDK_TOOLCHAIN_DIR=${DIR}/${NDK}-toolchain-android$NDK_PLATFORM-$NDK_ARCH-$NDK_STL
 
@@ -30,6 +31,7 @@ EMULATOR_AVD=${EMULATOR_AVD:-ouinet-test}
 # https://developer.android.com/ndk/guides/abis.html
 ABI=${ABI:-armeabi-v7a}
 #ABI=arm64-v8a
+#ABI=x86_64
 
 # Android API level
 PLATFORM=${PLATFORM:-android-25}
@@ -201,7 +203,7 @@ fi
 
 export ANDROID_NDK_HOME=$DIR/android-ndk-r16b
 
-add_library $NDK_TOOLCHAIN_DIR/arm-linux-androideabi/lib/$CMAKE_SYSTEM_PROCESSOR/libc++_shared.so
+add_library $NDK_TOOLCHAIN_DIR/$NDK_ARCH-linux-android*/lib*/$CMAKE_SYSTEM_PROCESSOR/libc++_shared.so
 }
 
 ######################################################################
