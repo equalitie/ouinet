@@ -60,8 +60,9 @@ NDK_TOOLCHAIN_DIR=${DIR}/${NDK}-toolchain-android$NDK_PLATFORM-$NDK_ARCH-$NDK_ST
 
 BOOST_V=1_65_1
 BOOST_V_DOT=${BOOST_V//_/.} # 1.65.1
-BOOST_INCLUDEDIR=${DIR}/Boost-for-Android/build/out/${ABI}/include/boost-${BOOST_V}
-BOOST_LIBRARYDIR=${DIR}/Boost-for-Android/build/out/${ABI}/lib
+BOOST_SOURCE=${DIR}/Boost-for-Android
+BOOST_INCLUDEDIR=$BOOST_SOURCE/build/out/${ABI}/include/boost-${BOOST_V}
+BOOST_LIBRARYDIR=$BOOST_SOURCE/build/out/${ABI}/lib
 
 SSL_V="1.1.0g"
 SSL_DIR=${DIR}/openssl-${SSL_V}
@@ -251,12 +252,14 @@ export PATH="`pwd`/gradle-4.6/bin:$PATH"
 
 ######################################################################
 function maybe_install_boost {
-if [ ! -d "Boost-for-Android" ]; then
-    git clone https://github.com/inetic/Boost-for-Android
+if [ ! -d "$BOOST_SOURCE" ]; then
+    (cd "$(dirname "$BOOST_SOURCE")" \
+         && git clone https://github.com/inetic/Boost-for-Android \
+                "$(basename "$BOOST_SOURCE")")
 fi
 
-if [ ! -d "Boost-for-Android/build" ]; then
-    cd Boost-for-Android
+if [ ! -d "$BOOST_LIBRARYDIR" ]; then
+    cd "$BOOST_SOURCE"
     # TODO: Android doesn't need program_options and test.
     ./build-android.sh \
         --boost=${BOOST_V_DOT} \
