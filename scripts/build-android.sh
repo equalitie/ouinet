@@ -6,7 +6,7 @@ DIR=`pwd`
 SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
 ROOT=$(cd ${SCRIPT_DIR}/.. && pwd)
 APP_ROOT="${ROOT}/android/browser"
-APK="${APP_ROOT}/build/outputs/apk/debug/browser-debug.apk"
+APK="${DIR}"/build-android/builddir/browser/build-android/outputs/apk/debug/browser-debug.apk
 APK_ID=$(sed -En 's/^\s*\bapplicationId\s+"([^"]+)".*/\1/p' "${APP_ROOT}/build.gradle")
 
 # https://developer.android.com/ndk/guides/abis.html
@@ -327,9 +327,9 @@ add_library $DIR/build-ouinet/modules/ipfs-cache/ipfs_bindings/libipfs_bindings.
 
 ######################################################################
 function copy_jni_libs {
-local jni_dst_dir=${APP_ROOT}/src/main/jniLibs/${ABI}
-rm -rf ${APP_ROOT}/src/main/jniLibs
-mkdir -p $jni_dst_dir
+local jni_dst_dir="${DIR}"/build-android/builddir/deps
+rm -rf "${jni_dst_dir}"
+mkdir -p "${jni_dst_dir}"
 local lib
 for lib in "${OUT_LIBS[@]}"; do
     echo "Copying $lib to $jni_dst_dir"
@@ -340,9 +340,11 @@ done
 ######################################################################
 # Unpolished code to build the debug APK
 function build_ouinet_apk {
-cd $(dirname ${APP_ROOT})
-export GRADLE_USER_HOME=$DIR/.gradle-home
-gradle --no-daemon build -Pboost_includedir=${BOOST_INCLUDEDIR} -Pandroid_abi=${ABI}
+mkdir -p "${DIR}"/build-android
+cd "${DIR}"/build-android
+ln -sf $(dirname ${APP_ROOT})/* .
+export GRADLE_USER_HOME=$(pwd)/.gradle-home
+gradle --no-daemon build -Pboost_includedir=${BOOST_INCLUDEDIR} -Pandroid_abi=${ABI} -Pouinet_clientlib_path="${DIR}"/build-android/builddir/deps/libclient.so
 
 echo "---------------------------------"
 echo "Your Android package is ready at:"

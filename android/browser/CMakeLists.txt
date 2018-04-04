@@ -39,9 +39,8 @@ find_library( # Sets the name of the path variable.
 # can link multiple libraries, such as libraries you define in this
 # build script, prebuilt third-party libraries, or system libraries.
 
-set(CLIENT_PATH ${PROJECT_SOURCE_DIR}/src/main/jniLibs/${CMAKE_ANDROID_ARCH_ABI}/libclient.so)
 add_library(client-lib SHARED IMPORTED)
-set_property(TARGET client-lib PROPERTY IMPORTED_LOCATION ${CLIENT_PATH})
+set_property(TARGET client-lib PROPERTY IMPORTED_LOCATION ${OUINET_CLIENTLIB_PATH})
 
 # Ouinet sources
 

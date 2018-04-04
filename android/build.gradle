@@ -19,6 +19,12 @@ allprojects {
         google()
         jcenter()
     }
+
+    def rootdir = getRootProject().projectDir
+    def rootbuilddir = new File(rootdir, "builddir")
+    def relativeprojectdir = project.projectDir.getAbsolutePath().substring(rootdir.getAbsolutePath().size())
+    def projectbuilddir = new File(rootbuilddir, relativeprojectdir + "/build-android")
+    project.buildDir = projectbuilddir
 }
 
 task clean(type: Delete) {
