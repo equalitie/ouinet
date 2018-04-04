@@ -76,7 +76,7 @@ void start_client_thread( string repo_root
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_ie_equalit_ouinet_Ouinet_startOuinetClient(
+Java_ie_equalit_ouinet_Ouinet_nStartClient(
         JNIEnv* env,
         jobject /* this */,
         jstring j_repo_root,
@@ -92,7 +92,7 @@ Java_ie_equalit_ouinet_Ouinet_startOuinetClient(
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_ie_equalit_ouinet_Ouinet_stopOuinetClient(
+Java_ie_equalit_ouinet_Ouinet_nStopClient(
         JNIEnv *env,
         jobject /* this */,
         jstring repo_root)
@@ -104,7 +104,7 @@ Java_ie_equalit_ouinet_Ouinet_stopOuinetClient(
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_ie_equalit_ouinet_Ouinet_setOuinetInjectorEP(
+Java_ie_equalit_ouinet_Ouinet_nSetInjectorEP(
         JNIEnv* env,
         jobject /* this */,
         jstring j_injector_ep)
@@ -119,7 +119,7 @@ Java_ie_equalit_ouinet_Ouinet_setOuinetInjectorEP(
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_ie_equalit_ouinet_Ouinet_setOuinetIPNS(
+Java_ie_equalit_ouinet_Ouinet_nSetIPNS(
         JNIEnv* env,
         jobject /* this */,
         jstring j_inps)

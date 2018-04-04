@@ -47,12 +47,6 @@ public class MainActivity extends AppCompatActivity {
         _webView.reload();
     }
 
-    protected String readIPNS() { return Util.readFromFile(this, "ipns.txt", ""); }
-    protected void writeIPNS(String s) { Util.saveToFile(this, "ipns.txt", s); }
-
-    protected String readInjectorEP() { return Util.readFromFile(this, "injector.txt", ""); }
-    protected void writeInjectorEP(String s) { Util.saveToFile(this, "injector.txt", s); }
-
     protected void loadConfigFromQR() {
         IntentIntegrator integrator = new IntentIntegrator(this);
         integrator.initiateScan();
@@ -77,14 +71,12 @@ public class MainActivity extends AppCompatActivity {
 
             if (key.equalsIgnoreCase("ipns")) {
                 toast("Setting IPNS to: " + val);
-                writeIPNS(val);
-                _ouinet.setOuinetIPNS(val);
+                _ouinet.setIPNS(val);
             }
             else if (key.equalsIgnoreCase("injector")) {
                 toast("Setting injector to: " + val);
-                writeInjectorEP(val);
                 _webViewClient.forgetCredentials();
-                _ouinet.setOuinetInjectorEP(val);
+                _ouinet.setInjectorEP(val);
             }
             else {
                 toast("Unknown config key: " + key);
@@ -109,19 +101,9 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        _ouinet = new Ouinet();
+        _ouinet = new Ouinet(this);
 
         setContentView(R.layout.activity_main);
-
-        String ipns = readIPNS();
-        if (ipns.length() > 0) { _ouinet.setOuinetIPNS(ipns); }
-
-        String injector_ep = readInjectorEP();
-        if (injector_ep.length() > 0) { _ouinet.setOuinetInjectorEP(injector_ep); }
-
-        _ouinet.startOuinetClient( getFilesDir().getAbsolutePath()
-                                 , injector_ep
-                                 , ipns);
 
         _webView = (WebView) findViewById(R.id.webview);
 
@@ -137,7 +119,7 @@ public class MainActivity extends AppCompatActivity {
         webSettings.setSupportZoom(true);
         webSettings.setDefaultTextEncodingName("utf-8");
 
-        _webViewClient = new OuiWebViewClient(this);
+        _webViewClient = new OuiWebViewClient(this, _ouinet);
         _webView.setWebViewClient(_webViewClient);
 
         go_home();
@@ -170,29 +152,29 @@ public class MainActivity extends AppCompatActivity {
     }
 
     protected void showChangeInjectorDialog() {
-        showDialog("Injector endpoint", readInjectorEP(), new OnInput() {
+        String ep = _ouinet.getInjectorEndpoint();
+
+        showDialog("Injector endpoint", ep, new OnInput() {
             @Override
             public void call(String input) {
-                writeInjectorEP(input);
                 _webViewClient.forgetCredentials();
-                _ouinet.setOuinetInjectorEP(input);
+                _ouinet.setInjectorEP(input);
             }
         });
     }
 
     protected void showChangeIPNSDialog() {
-        showDialog("IPNS", readIPNS(), new OnInput() {
+        showDialog("IPNS", _ouinet.getIPNS(), new OnInput() {
             @Override
             public void call(String input) {
-                writeIPNS(input);
-                _ouinet.setOuinetIPNS(input);
+                _ouinet.setIPNS(input);
             }
         });
     }
 
     @Override
     protected void onDestroy() {
-        _ouinet.stopOuinetClient();
+        _ouinet.stop();
         super.onDestroy();
     }
 

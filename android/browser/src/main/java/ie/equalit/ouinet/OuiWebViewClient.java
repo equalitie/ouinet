@@ -20,13 +20,15 @@ class OuiWebViewClient extends WebViewClient {
         String password;
     }
 
+    private Ouinet _ouinet;
     private Context _context;
     private Credentials _saved_credentials;
     private String _cred_file = "injector.credentials.txt";
 
-    public OuiWebViewClient(Context context) {
+    public OuiWebViewClient(Context context, Ouinet ouinet) {
         super();
 
+        _ouinet  = ouinet;
         _context = context;
 
         _saved_credentials
