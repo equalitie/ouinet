@@ -421,10 +421,11 @@ vagrant $ ./vagrant/scripts/build-android.sh
 When the `build-android.sh` script finishes successfully, it prints out a path
 to the `browser-debug.apk` app package which can now be deployed.
 
-Note that above we had to clone a fresh copy `ouinet` repository. This is
-because the `gradle` tool used inside the `build-android.sh` script has problem
-building from the NFS mounted disk `/vagrant` we use on Vagrant (something
-about nfs locking).
+Note that above we cloned a fresh copy of the `ouinet` repository. This is not
+strictly necessary since the build environment supports out-of-source builds,
+however it spares you from having to keep your source directory clean and
+submodules up to date. If you fullfill these requirements, you can just skip
+the cloning and run `/vagrant/scripts/build-android.sh` instead.
 
 ### Testing
 
