@@ -427,6 +427,18 @@ however it spares you from having to keep your source directory clean and
 submodules up to date. If you fullfill these requirements, you can just skip
 the cloning and run `/vagrant/scripts/build-android.sh` instead.
 
+The script builds by default an APK for the `armeabi-v7a` [Android ABI][]. If
+you want a build for a different ABI, just set the `ABI` environment variable:
+
+```
+$ env ABI=x86_64 /path/to/build-android.sh
+```
+
+Please note that merging different ABI builds at the same build directory is
+not yet supported.
+
+[Android ABI]: https://developer.android.com/ndk/guides/abis.html
+
 ### Testing
 
 You may also use the `build-android.sh` script to fire up an Android emulator
@@ -442,6 +454,13 @@ note that downloading the system image may take a few minutes, and booting the
 emulator for the first time may take more than 10 minutes.  In subsequent
 runs, the emulator will just recover the snapshot saved on last quit, which is
 way faster.
+
+The `ABI` environment variable described above also works for selecting the
+emulator architecture:
+
+```
+$ env ABI=x86_64 /path/to/build-android.sh emu
+```
 
 You may pass options to the emulator at the script's command line, after a
 `--` (double dash) argument.  For instance:
