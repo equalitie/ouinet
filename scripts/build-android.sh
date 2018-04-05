@@ -237,15 +237,17 @@ add_library $NDK_TOOLCHAIN_DIR/$NDK_TOOLCHAIN_TARGET/lib*/libc++_shared.so
 
 ######################################################################
 function maybe_install_gradle {
-if [ ! -d "./gradle-4.6" ]; then
-    if [ ! -f gradle-4.6-bin.zip ]; then
-        wget https://services.gradle.org/distributions/gradle-4.6-bin.zip
+local GRADLE=gradle-4.6
+local GRADLE_ZIP=$GRADLE-bin.zip
+if [ ! -d "$GRADLE" ]; then
+    if [ ! -f $GRADLE_ZIP ]; then
+        wget https://services.gradle.org/distributions/$GRADLE_ZIP
     fi
     # TODO: Check SHA256
-    unzip gradle-4.6-bin.zip
+    unzip $GRADLE_ZIP
 fi
 
-export PATH="`pwd`/gradle-4.6/bin:$PATH"
+export PATH="`pwd`/$GRADLE/bin:$PATH"
 }
 
 ######################################################################
