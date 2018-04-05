@@ -113,7 +113,7 @@ function add_library {
 
 ######################################################################
 MODES=
-ALLOWED_MODES="build emu"
+ALLOWED_MODES="build emu abiclean"
 DEFAULT_MODES="build"
 
 function check_mode {
@@ -428,4 +428,14 @@ fi
 if check_mode emu; then
     maybe_create_avd
     run_emulator "$@"
+fi
+
+# This only cleans files which may interfere when building for a different ABI,
+# while keeping (some) downloaded and ABI-neutral stuff.
+if check_mode abiclean; then
+    rm -rf \
+       Boost-for-Android/build \
+       openssl-1.1.0g \
+       build-ouinet \
+       build-android/builddir
 fi
