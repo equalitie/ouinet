@@ -213,13 +213,10 @@ fi
 ######################################################################
 function maybe_install_ndk {
 if [ ! -d "$NDK" ]; then
-    cd /tmp
     if [ ! -f ${NDK_ZIP} ]; then
         wget https://dl.google.com/android/repository/${NDK_ZIP}
     fi
-    cd -
-    unzip /tmp/${NDK_ZIP}
-    rm /tmp/${NDK_ZIP}
+    unzip ${NDK_ZIP}
 fi
 }
 
@@ -241,10 +238,11 @@ add_library $NDK_TOOLCHAIN_DIR/$NDK_TOOLCHAIN_TARGET/lib*/libc++_shared.so
 ######################################################################
 function maybe_install_gradle {
 if [ ! -d "./gradle-4.6" ]; then
-    wget https://services.gradle.org/distributions/gradle-4.6-bin.zip
+    if [ ! -f gradle-4.6-bin.zip ]; then
+        wget https://services.gradle.org/distributions/gradle-4.6-bin.zip
+    fi
     # TODO: Check SHA256
     unzip gradle-4.6-bin.zip
-    rm gradle-4.6-bin.zip
 fi
 
 export PATH="`pwd`/gradle-4.6/bin:$PATH"
