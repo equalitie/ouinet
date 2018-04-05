@@ -3,16 +3,18 @@ package ie.equalit.ouinet;
 import android.content.Context;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.File;
 import android.util.Log;
 
 class Util {
     public static void saveToFile(Context ctx, String filename, String value) {
         FileOutputStream outputStream;
         try {
-            outputStream = ctx.openFileOutput(filename, ctx.MODE_PRIVATE);
+            outputStream = new FileOutputStream(new File(filename), false);
             outputStream.write(value.getBytes());
             outputStream.close();
         } catch (Exception e) {
+            log("3");
             e.printStackTrace();
         }
     }
@@ -22,7 +24,7 @@ class Util {
                                       String default_) {
         FileInputStream inputStream;
         try {
-            inputStream = ctx.openFileInput(filename);
+            inputStream = new FileInputStream(new File(filename));
             StringBuffer content = new StringBuffer("");
 
             byte[] buffer = new byte[1024];

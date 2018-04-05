@@ -8,6 +8,7 @@
 #include <namespaces.h>
 #include <client.h>
 #include <util/signal.h>
+#include <condition_variable>
 
 using namespace std;
 
@@ -20,7 +21,8 @@ thread g_client_thread;
 
 void start_client_thread( string repo_root
                         , string injector_ep
-                        , string ipns)
+                        , string ipns
+                        , string credentials)
 {
     if (g_client_thread.get_id() != thread::id()) return;
 
@@ -40,9 +42,10 @@ void start_client_thread( string repo_root
                             , conf.binary | conf.out);
             }
 
-            string repo_arg        = "--repo="          + repo_root;
-            string injector_ep_arg = "--injector-ep="   + injector_ep;
-            string ipns_arg        = "--injector-ipns=" + ipns;
+            string repo_arg        = "--repo="                 + repo_root;
+            string injector_ep_arg = "--injector-ep="          + injector_ep;
+            string ipns_arg        = "--injector-ipns="        + ipns;
+            string credentials_arg = "--injector-credentials=" + credentials;
 
             vector<const char*> args;
 
@@ -56,6 +59,10 @@ void start_client_thread( string repo_root
 
             if (!ipns.empty()) {
                 args.push_back(ipns_arg.c_str());
+            }
+
+            if (!credentials.empty()) {
+                args.push_back(credentials_arg.c_str());
             }
 
             try {
@@ -81,13 +88,15 @@ Java_ie_equalit_ouinet_Ouinet_nStartClient(
         jobject /* this */,
         jstring j_repo_root,
         jstring j_injector_ep,
-        jstring j_ipns)
+        jstring j_ipns,
+        jstring j_credentials)
 {
     const char* repo_root   = env->GetStringUTFChars(j_repo_root,   NULL);
     const char* injector_ep = env->GetStringUTFChars(j_injector_ep, NULL);
     const char* ipns        = env->GetStringUTFChars(j_ipns,        NULL);
+    const char* credentials = env->GetStringUTFChars(j_credentials, NULL);
 
-    start_client_thread(repo_root, injector_ep, ipns);
+    start_client_thread(repo_root, injector_ep, ipns, credentials);
 }
 
 extern "C"
@@ -130,4 +139,28 @@ Java_ie_equalit_ouinet_Ouinet_nSetIPNS(
             if (!g_client) return;
             g_client->set_ipns(ipns.c_str());
         });
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_ie_equalit_ouinet_Ouinet_nSetCredentialsFor(
+        JNIEnv* env,
+        jobject /* this */,
+        jstring j_injector,
+        jstring j_credentials)
+{
+    string injector    = env->GetStringUTFChars(j_injector, NULL);
+    string credentials = env->GetStringUTFChars(j_credentials, NULL);
+
+    mutex m;
+    unique_lock<mutex> lk(m);
+    condition_variable cv;
+
+    g_ios.post([i = move(injector), c = move(credentials), &cv] {
+            if (!g_client) return;
+            g_client->set_credentials(i.c_str(), c.c_str());
+            cv.notify_one();
+        });
+
+    cv.wait(lk);
 }

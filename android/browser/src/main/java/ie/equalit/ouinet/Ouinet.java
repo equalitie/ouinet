@@ -21,13 +21,14 @@ public class Ouinet {
     public Ouinet(Context ctx) {
         _ctx = ctx;
 
-        String ipns = readIPNS();
-        if (ipns.length() > 0) { nSetIPNS(ipns); }
-
+        String ipns        = readIPNS();
         String injector_ep = readInjectorEP();
-        if (injector_ep.length() > 0) { setInjectorEP(injector_ep); }
+        String credentials = readCredentialsFor(injector_ep);
 
-        nStartClient(_ctx.getFilesDir().getAbsolutePath(), injector_ep, ipns);
+        nStartClient(_ctx.getFilesDir().getAbsolutePath(),
+                injector_ep,
+                ipns,
+                credentials);
     }
 
     public void stop() {
@@ -52,23 +53,55 @@ public class Ouinet {
         return readInjectorEP();
     }
 
+    public void setCredentialsFor(String injector, String credentials) {
+        writeCredentials(injector, credentials);
+        nSetCredentialsFor(injector, credentials);
+    }
+
+    public String getCredentialsFor(String injector) {
+        return readCredentialsFor(injector);
+    }
+
     //----------------------------------------------------------------
     protected String dir() { return _ctx.getFilesDir().getAbsolutePath(); }
 
-    protected void writeIPNS(String s)       { Util.saveToFile(_ctx, dir()+"ipns.txt", s); }
-    protected void writeInjectorEP(String s) { Util.saveToFile(_ctx, dir()+"injector.txt", s); }
+    protected String config_ipns()        { return dir() + "/ipns.txt";        }
+    protected String config_injector()    { return dir() + "/injector.txt";    }
+    protected String config_credentials() { return dir() + "/credentials.txt"; }
 
-    protected String readIPNS()       { return Util.readFromFile(_ctx, dir()+"ipns.txt", ""); }
-    protected String readInjectorEP() { return Util.readFromFile(_ctx, dir()+"injector.txt", ""); }
+    protected void writeIPNS(String s)       { Util.saveToFile(_ctx, config_ipns(), s); }
+    protected void writeInjectorEP(String s) { Util.saveToFile(_ctx, config_injector(), s); }
 
+    protected String readIPNS()       { return Util.readFromFile(_ctx, config_ipns(), ""); }
+    protected String readInjectorEP() { return Util.readFromFile(_ctx, config_injector(), ""); }
+
+    protected void writeCredentials(String injector, String cred) {
+        Util.saveToFile(_ctx, config_credentials(), injector + "\n" + cred);
+    }
+
+    protected String readCredentialsFor(String injector) {
+        if (injector == null || injector.length() == 0) return "";
+
+        String content = Util.readFromFile(_ctx, config_credentials(), null);
+
+        if (content == null) { return ""; }
+
+        String[] lines = content.split("\\n");
+
+        if (lines.length != 2)          { return ""; }
+        if (!lines[0].equals(injector)) { return ""; }
+
+        return lines[1];
+    }
 
     //----------------------------------------------------------------
     /**
      * A native method that is implemented by the 'native-lib' native library,
      * which is packaged with this application.
      */
-    private native void nStartClient(String repo_root, String injector, String ipns);
+    private native void nStartClient(String repo_root, String injector, String ipns, String credentials);
     private native void nStopClient();
     private native void nSetInjectorEP(String endpoint);
+    private native void nSetCredentialsFor(String injector, String cred);
     private native void nSetIPNS(String ipns);
 }

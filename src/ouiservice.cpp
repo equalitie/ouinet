@@ -136,18 +136,21 @@ void OuiServiceClient::stop()
     _started_condition.notify();
 }
 
-GenericConnection OuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
+OuiServiceImplementationClient::ConnectInfo
+OuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
 {
+    using ConnectInfo = OuiServiceImplementationClient::ConnectInfo;
+
     namespace err = asio::error;
 
     if (!_implementation) {
-        return or_throw<GenericConnection>(yield, err::operation_not_supported);
+        return or_throw<ConnectInfo>(yield, err::operation_not_supported);
     }
 
     if (!_started) {
         _started_condition.wait(yield);
         if (!_started) {
-            return or_throw<GenericConnection>(yield, err::operation_aborted);
+            return or_throw<ConnectInfo>(yield, err::operation_aborted);
         }
     }
 

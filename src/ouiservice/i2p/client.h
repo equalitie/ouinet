@@ -31,7 +31,7 @@ public:
     void start(asio::yield_context yield) override;
     void stop() override;
 
-    ouinet::GenericConnection
+    ouinet::OuiServiceImplementationClient::ConnectInfo
     connect(asio::yield_context yield, Signal<void()>& cancel) override;
 
 private:

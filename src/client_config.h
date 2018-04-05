@@ -46,8 +46,16 @@ public:
         return _max_cached_age;
     }
 
-    std::string injector_credentials() const {
-        return _injector_credentials;
+    boost::optional<std::string>
+    credentials_for(const std::string& injector) const {
+        auto i = _injector_credentials.find(injector);
+        if (i == _injector_credentials.end()) return {};
+        return i->second;
+    }
+
+    void set_credentials( const std::string& injector
+                        , const std::string& cred) {
+        _injector_credentials[injector] = cred;
     }
 
 private:
@@ -60,7 +68,7 @@ private:
     boost::posix_time::time_duration _max_cached_age
         = boost::posix_time::hours(7*24);  // one week
 
-    std::string _injector_credentials;
+    std::map<std::string, std::string> _injector_credentials;
 };
 
 inline
@@ -164,15 +172,23 @@ ClientConfig::ClientConfig(int argc, char* argv[])
     }
 
     if (vm.count("injector-credentials")) {
-        _injector_credentials = vm["injector-credentials"].as<string>();
+        auto cred = vm["injector-credentials"].as<string>();
 
-        if (!_injector_credentials.empty()
-          && _injector_credentials.find(':') == string::npos) {
+        if (!cred.empty()
+          && cred.find(':') == string::npos) {
             throw std::runtime_error(util::str(
                 "The '--injector-credentials' argument expects a string "
                 "in the format <username>:<password>. But the provided "
-                "string \"", _injector_credentials, "\" is missing a colon."));
+                "string \"", cred, "\" is missing a colon."));
         }
+
+        if (!_injector_ep) {
+            throw std::runtime_error(util::str(
+                "The '--injector-credentials' argument must be used with "
+                "'--injector-ep'"));
+        }
+
+        set_credentials(util::str(*_injector_ep), cred);
     }
 }
 

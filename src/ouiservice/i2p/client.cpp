@@ -53,8 +53,11 @@ void Client::stop()
     _connections.close_all();
 }
 
-ouinet::GenericConnection Client::connect(asio::yield_context yield, Signal<void()>& cancel)
+ouinet::OuiServiceImplementationClient::ConnectInfo
+Client::connect(asio::yield_context yield, Signal<void()>& cancel)
 {
+    using ConnectInfo = ouinet::OuiServiceImplementationClient::ConnectInfo;
+
     sys::error_code ec;
 
     Connection connection(_ios);
@@ -65,10 +68,14 @@ ouinet::GenericConnection Client::connect(asio::yield_context yield, Signal<void
     });
 
     connection.socket().async_connect(asio::ip::tcp::endpoint(asio::ip::address_v4::loopback(), _port), yield[ec]);
+
     if (ec) {
-        return or_throw<GenericConnection>(yield, ec, GenericConnection());
+        return or_throw<ConnectInfo>(yield, ec);
     }
 
     _connections.add(connection);
-    return GenericConnection(std::move(connection));
+
+    return ConnectInfo({ GenericConnection(std::move(connection))
+                       , _target_id
+                       });
 }

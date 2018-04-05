@@ -1,5 +1,6 @@
 #include "tcp.h"
 #include "../or_throw.h"
+#include "../util.h"
 
 namespace ouinet {
 namespace ouiservice {
@@ -66,7 +67,8 @@ TcpOuiServiceClient::TcpOuiServiceClient(asio::io_service& ios, asio::ip::tcp::e
     _endpoint(endpoint)
 {}
 
-GenericConnection TcpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
+OuiServiceImplementationClient::ConnectInfo
+TcpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
 {
     sys::error_code ec;
 
@@ -80,7 +82,7 @@ GenericConnection TcpOuiServiceClient::connect(asio::yield_context yield, Signal
     socket.async_connect(_endpoint, yield[ec]);
 
     if (ec) {
-        return or_throw<GenericConnection>(yield, ec, GenericConnection());
+        return or_throw<ConnectInfo>(yield, ec);
     }
 
     static const auto tcp_shutter = [](asio::ip::tcp::socket& s) {
@@ -88,7 +90,8 @@ GenericConnection TcpOuiServiceClient::connect(asio::yield_context yield, Signal
         s.close();
     };
 
-    return GenericConnection(std::move(socket), tcp_shutter);
+    return ConnectInfo{ GenericConnection(std::move(socket), tcp_shutter)
+                      , util::str(_endpoint) };
 }
 
 } // ouiservice namespace

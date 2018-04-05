@@ -158,18 +158,26 @@ void Client::State::handle_connect_request( GenericConnection& client_c
                           , "Forwarding disabled");
     }
 
-    auto injector_c = _injector->connect(yield[ec], _shutdown_signal);
+    auto inj = _injector->connect(yield[ec], _shutdown_signal);
 
     if (ec) {
         // TODO: Does an RFC dicate a particular HTTP status code?
         return handle_bad_request(client_c, req, "Can't connect to injector", yield[ec]);
     }
 
-    auto disconnect_injector_slot = _shutdown_signal.connect([&injector_c] {
-        injector_c.close();
+    auto disconnect_injector_slot = _shutdown_signal.connect([&inj] {
+        inj.connection.close();
     });
 
-    http::async_write(injector_c, const_cast<Request&>(req), yield[ec]);
+    auto credentials = _config.credentials_for(inj.remote_endpoint);
+
+    if (credentials) {
+        auto auth_req = authorize(req, *credentials);
+        http::async_write(inj.connection, auth_req, yield[ec]);
+    }
+    else {
+        http::async_write(inj.connection, const_cast<Request&>(req), yield[ec]);
+    }
 
     if (ec) {
         // TODO: Does an RFC dicate a particular HTTP status code?
@@ -178,7 +186,7 @@ void Client::State::handle_connect_request( GenericConnection& client_c
 
     beast::flat_buffer buffer;
     Response res;
-    http::async_read(injector_c, buffer, res, yield[ec]);
+    http::async_read(inj.connection, buffer, res, yield[ec]);
 
     if (ec) {
         // TODO: Does an RFC dicate a particular HTTP status code?
@@ -193,7 +201,7 @@ void Client::State::handle_connect_request( GenericConnection& client_c
         return;
     }
 
-    full_duplex(client_c, injector_c, yield);
+    full_duplex(client_c, inj.connection, yield);
 }
 
 //------------------------------------------------------------------------------
@@ -276,13 +284,33 @@ Response Client::State::fetch_fresh( const Request& request
                     continue;
                 }
                 sys::error_code ec;
-                auto inj_con = _injector->connect(yield[ec], _shutdown_signal);
+
+                auto inj
+                    = _injector->connect(yield[ec], _shutdown_signal);
+
                 if (ec) {
                     last_error = ec;
                     continue;
                 }
+
+                auto credentials = _config.credentials_for(inj.remote_endpoint);
+
+                Response res;
+
                 // Forward the request to the injector
-                auto res = fetch_http_page(_ios, inj_con, request, yield[ec]);
+                if (credentials) {
+                    res = fetch_http_page(_ios
+                                         , inj.connection
+                                         , authorize(request, *credentials)
+                                         , yield[ec]);
+                }
+                else {
+                    res = fetch_http_page(_ios
+                                         , inj.connection
+                                         , request
+                                         , yield[ec]);
+                }
+
                 if (!ec) return res;
                 last_error = ec;
                 continue;
@@ -395,12 +423,6 @@ void Client::State::serve_request( GenericConnection& con
 
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "read");
-
-        const string& credentials = _config.injector_credentials();
-
-        if (credentials.size()) {
-            authorize(req, credentials);
-        }
 
         // Attempt connection to origin for CONNECT requests
         if (req.method() == http::verb::connect) {
@@ -626,6 +648,11 @@ void Client::set_injector_endpoint(const char* injector_ep)
 void Client::set_ipns(const char* ipns)
 {
     _state->_config.set_ipns(move(ipns));
+}
+
+void Client::set_credentials(const char* injector, const char* cred)
+{
+    _state->_config.set_credentials(injector, cred);
 }
 
 boost::filesystem::path Client::get_pid_path() const

@@ -59,6 +59,9 @@ public class MainActivity extends AppCompatActivity {
     protected void applyConfig(String config) {
         String[] lines = config.split("[\\r?\\n]+");
 
+        String credentials = null;
+        String injector = null;
+
         for (String line:lines) {
             String[] keyval = line.trim().split("\\s*=\\s*", 2);
 
@@ -75,11 +78,24 @@ public class MainActivity extends AppCompatActivity {
             }
             else if (key.equalsIgnoreCase("injector")) {
                 toast("Setting injector to: " + val);
-                _webViewClient.forgetCredentials();
                 _ouinet.setInjectorEP(val);
+                injector = val;
+            }
+            else if (key.equalsIgnoreCase("credentials")) {
+                credentials = val;
             }
             else {
                 toast("Unknown config key: " + key);
+            }
+
+            if (credentials != null) {
+                if (injector == null) {
+                    toast("The 'credentials' option not used without injector");
+                }
+                else {
+                    toast("Setting up credentials");
+                    _ouinet.setCredentialsFor(injector, credentials);
+                }
             }
         }
     }
@@ -157,7 +173,6 @@ public class MainActivity extends AppCompatActivity {
         showDialog("Injector endpoint", ep, new OnInput() {
             @Override
             public void call(String input) {
-                _webViewClient.forgetCredentials();
                 _ouinet.setInjectorEP(input);
             }
         });

@@ -27,14 +27,17 @@ class TcpOuiServiceServer : public OuiServiceImplementationServer
 class TcpOuiServiceClient : public OuiServiceImplementationClient
 {
     public:
+    using ConnectInfo = OuiServiceImplementationClient::ConnectInfo;
+
+    public:
     TcpOuiServiceClient(asio::io_service& ios, asio::ip::tcp::endpoint endpoint);
 
     // Tcp clients don't have any internal async IO to be started/stopped.
     void start(asio::yield_context yield) override {}
     void stop() override {}
 
-    GenericConnection connect( asio::yield_context yield
-                             , Signal<void()>& cancel) override;
+    ConnectInfo connect( asio::yield_context yield
+                       , Signal<void()>& cancel) override;
 
     private:
     asio::io_service& _ios;

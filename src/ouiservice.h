@@ -55,12 +55,18 @@ class OuiServiceServer
 class OuiServiceImplementationClient
 {
     public:
+    struct ConnectInfo {
+        GenericConnection connection;
+        std::string remote_endpoint;
+    };
+
+    public:
     virtual ~OuiServiceImplementationClient() {}
 
     virtual void start(asio::yield_context yield) = 0;
     virtual void stop() = 0;
 
-    virtual GenericConnection connect(asio::yield_context yield, Signal<void()>& cancel) = 0;
+    virtual ConnectInfo connect(asio::yield_context yield, Signal<void()>& cancel) = 0;
 };
 
 /*
@@ -78,7 +84,8 @@ class OuiServiceClient
     void start(asio::yield_context yield);
     void stop();
 
-    GenericConnection connect(asio::yield_context yield, Signal<void()>& cancel);
+    OuiServiceImplementationClient::ConnectInfo
+    connect(asio::yield_context yield, Signal<void()>& cancel);
 
     private:
     asio::io_service& _ios;
