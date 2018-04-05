@@ -435,7 +435,13 @@ $ env ABI=x86_64 /path/to/build-android.sh
 ```
 
 Please note that merging different ABI builds at the same build directory is
-not yet supported.
+not yet supported.  To remove potentially conflicting files while keeping
+downloads and ABI-neutral source files so that you can reuse them for the next
+build, please run:
+
+```
+$ /path/to/build-android.sh abiclean
+```
 
 [Android ABI]: https://developer.android.com/ndk/guides/abis.html
 
