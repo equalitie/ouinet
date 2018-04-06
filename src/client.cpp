@@ -30,8 +30,10 @@
 #include "authenticate.h"
 
 #ifdef __ANDROID__
-#include "redirect_to_android_log.h"
-#endif // ifdef __ANDROID__
+#  include "redirect_to_android_log.h"
+#else // ifdef __ANDROID__
+#  include "force_exit_on_signal.h"
+#endif // else ifdef __ANDROID__
 
 #include "ouiservice.h"
 #include "ouiservice/i2p.h"
@@ -670,13 +672,13 @@ int main(int argc, char* argv[])
 
     Client client(ios);
 
-    signals.async_wait([&client, &signals, &ios](const sys::error_code& ec, int signal_number) {
-            client.stop();
+    unique_ptr<ForceExitOnSignal> force_exit;
 
-            signals.async_wait([](const sys::error_code& ec, int signal_number) {
-                cerr << "Got second signal, terminating immediately" << endl;
-                exit(1);
-            });
+    signals.async_wait([&client, &signals, &ios, &force_exit]
+                       (const sys::error_code& ec, int signal_number) {
+            client.stop();
+            signals.clear();
+            force_exit = make_unique<ForceExitOnSignal>();
         });
 
     try {
@@ -684,16 +686,17 @@ int main(int argc, char* argv[])
 
         static auto pid_file_path = client.get_pid_path();
         // Force removal of PID file on abnormal exit
-        std::atexit([] { remove(pid_file_path); });
+        std::atexit([] {
+                if (!exists(pid_file_path)) return;
+                cerr << "Warning: not a clean exit" << endl;
+                remove(pid_file_path);
+            });
     } catch (std::exception& e) {
         cerr << e.what() << endl;
         return 1;
     }
 
     ios.run();
-
-    // TODO: Remove this once work on clean exit is done.
-    cerr << "Clean exit" << endl;
 
     return EXIT_SUCCESS;
 }

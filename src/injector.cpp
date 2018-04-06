@@ -12,7 +12,6 @@
 #include <cstdlib>  // for atexit()
 
 #include <ipfs_cache/injector.h>
-//#include <i2poui.h>
 
 #include "namespaces.h"
 #include "util.h"
@@ -26,6 +25,7 @@
 #include "full_duplex_forward.h"
 #include "injector_config.h"
 #include "authenticate.h"
+#include "force_exit_on_signal.h"
 
 #include "ouiservice.h"
 #include "ouiservice/i2p.h"
@@ -325,7 +325,11 @@ int main(int argc, const char* argv[])
     static const auto pid_file_path = config.repo_root()/OUINET_PID_FILE;
     util::PidFile pid_file(pid_file_path);
     // Force removal of PID file on abnormal exit
-    std::atexit([] { remove(pid_file_path); });
+    std::atexit([] {
+            if (!exists(pid_file_path)) return;
+            cerr << "Warning: not a clean exit" << endl;
+            remove(pid_file_path);
+        });
 
     // The io_service is required for all I/O
     asio::io_service ios;
@@ -383,20 +387,16 @@ int main(int argc, const char* argv[])
 
     asio::signal_set signals(ios, SIGINT, SIGTERM);
 
-    signals.async_wait([&shutdown_signal, &signals, &ios](const sys::error_code& ec, int signal_number) {
-            cerr << "Got signal" << endl;
-            shutdown_signal();
+    unique_ptr<ForceExitOnSignal> force_exit;
 
-            signals.async_wait([](const sys::error_code& ec, int signal_number) {
-                cerr << "Got second signal, terminating immediately" << endl;
-                exit(1);
-            });
+    signals.async_wait([&shutdown_signal, &signals, &ios, &force_exit]
+                       (const sys::error_code& ec, int signal_number) {
+            shutdown_signal();
+            signals.clear();
+            force_exit = make_unique<ForceExitOnSignal>();
         });
 
     ios.run();
-
-    // TODO: Remove this once work on clean exit is done.
-    cerr << "Clean exit" << endl;
 
     return EXIT_SUCCESS;
 }
