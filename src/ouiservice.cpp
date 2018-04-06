@@ -119,9 +119,8 @@ void OuiServiceClient::start(asio::yield_context yield)
 
     sys::error_code ec;
     _implementation->start(yield[ec]);
-    if (ec) {
-        or_throw(yield, ec);
-    }
+
+    if (ec) return or_throw(yield, ec);
 
     _started = true;
     _started_condition.notify();
