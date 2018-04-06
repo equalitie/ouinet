@@ -9,7 +9,8 @@ namespace ouinet {
 // main io_service because that would prevent that io_service from finishing
 // it's `run` function. Instead, we create a new io_service and run it in a
 // separate thread so that it doesn't block the rest of the app.
-struct ForceExitOnSignal {
+class ForceExitOnSignal {
+public:
     ForceExitOnSignal()
     {
         _thread = std::thread([this] {
@@ -19,11 +20,13 @@ struct ForceExitOnSignal {
         });
     }
 
-    ~ForceExitOnSignal() {
+    ~ForceExitOnSignal()
+    {
         _ios.stop();
         _thread.join();
     }
 
+private:
     asio::io_service _ios;
     std::thread _thread;
 };
