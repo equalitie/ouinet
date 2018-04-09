@@ -35,7 +35,7 @@ split_host_port(const beast::string_view& hp)
 
 inline
 asio::ip::tcp::endpoint
-parse_endpoint(const std::string& s, sys::error_code& ec)
+parse_tcp_endpoint(const std::string& s, sys::error_code& ec)
 {
     using namespace std;
     auto pos = s.find(':');
@@ -62,10 +62,10 @@ parse_endpoint(const std::string& s, sys::error_code& ec)
 
 inline
 asio::ip::tcp::endpoint
-parse_endpoint(const std::string& s)
+parse_tcp_endpoint(const std::string& s)
 {
     sys::error_code ec;
-    auto ep = parse_endpoint(s, ec);
+    auto ep = parse_tcp_endpoint(s, ec);
     if (ec) throw sys::system_error(ec);
     return ep;
 }

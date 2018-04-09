@@ -6,7 +6,12 @@
 #include "util/condition_variable.h"
 #include "util/success_condition.h"
 
-namespace ouinet {
+using namespace std;
+using namespace ouinet;
+
+//--------------------------------------------------------------------
+// OuiServiceServer
+//--------------------------------------------------------------------
 
 OuiServiceServer::OuiServiceServer(asio::io_service& ios):
     _ios(ios),
@@ -96,7 +101,9 @@ void OuiServiceServer::cancel_accept()
     _connection_available.notify();
 }
 
-
+//--------------------------------------------------------------------
+// OuiServiceClient
+//--------------------------------------------------------------------
 
 OuiServiceClient::OuiServiceClient(asio::io_service& ios):
     _ios(ios),
@@ -106,7 +113,12 @@ OuiServiceClient::OuiServiceClient(asio::io_service& ios):
 
 void OuiServiceClient::add(std::unique_ptr<OuiServiceImplementationClient> implementation)
 {
-    assert(!_implementation);
+    // TODO: Currently _adding_ with actually _swap_ the previous
+    // implementation for the new one.
+
+    if (_implementation) {
+        _implementation->stop();
+    }
 
     _implementation = std::move(implementation);
 }
@@ -118,7 +130,14 @@ void OuiServiceClient::start(asio::yield_context yield)
     _started = false;
 
     sys::error_code ec;
-    _implementation->start(yield[ec]);
+
+    decltype(_implementation) impl;
+
+    do {
+        impl = _implementation;
+        _implementation->start(yield[ec]);
+    }
+    while (_implementation && impl != _implementation);
 
     if (ec) return or_throw(yield, ec);
 
@@ -153,7 +172,16 @@ OuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
         }
     }
 
-    return _implementation->connect(yield, cancel);
-}
+    ConnectInfo retval;
+    sys::error_code ec;
+    decltype(_implementation) impl;
 
-} // ouinet namespace
+    do {
+        ec = sys::error_code();
+        impl = _implementation;
+        retval = _implementation->connect(yield[ec], cancel);
+    }
+    while (_implementation && impl != _implementation);
+
+    return or_throw(yield, ec, move(retval));
+}

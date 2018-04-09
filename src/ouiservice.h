@@ -89,7 +89,7 @@ class OuiServiceClient
 
     private:
     asio::io_service& _ios;
-    std::unique_ptr<OuiServiceImplementationClient> _implementation;
+    std::shared_ptr<OuiServiceImplementationClient> _implementation;
     bool _started;
     ConditionVariable _started_condition;
 };

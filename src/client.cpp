@@ -612,15 +612,31 @@ void Client::State::setup_injector(asio::yield_context yield)
 }
 
 //------------------------------------------------------------------------------
-void Client::State::set_injector(string injector_ep)
+void Client::State::set_injector(string injector_ep_str)
 {
     // XXX: Workaround.
     // Eventually, OuiServiceClient should just support multiple parallel
     // active injector EPs.
-    cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
-    cerr << "Switching injector EPs not yet supported." << endl;
-    cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
-    return;
+
+    auto injector_ep = parse_endpoint(injector_ep_str);
+
+    if (!injector_ep) {
+        cerr << "Failed to parse endpoint \"" << injector_ep_str << "\"" << endl;
+        return;
+    }
+
+    auto current_ep = _config.injector_endpoint();
+
+    if (current_ep && *injector_ep == *current_ep) {
+        return;
+    }
+
+    _config.set_injector_endpoint(*injector_ep);
+
+    asio::spawn(_ios, [self = shared_from_this()] (auto yield) {
+            sys::error_code ec;
+            self->setup_injector(yield[ec]);
+        });
 }
 
 //------------------------------------------------------------------------------

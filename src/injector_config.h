@@ -143,7 +143,7 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
     }
 
     if (vm.count("listen-on-tcp")) {
-        _tcp_endpoint = util::parse_endpoint(vm["listen-on-tcp"].as<string>());
+        _tcp_endpoint = util::parse_tcp_endpoint(vm["listen-on-tcp"].as<string>());
     }
 }
 
