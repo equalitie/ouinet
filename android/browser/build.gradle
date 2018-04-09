@@ -21,6 +21,11 @@ android {
             abiFilters "$android_abi"
         }
     }
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ["$libdir"]
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false

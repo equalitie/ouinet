@@ -327,7 +327,7 @@ add_library $DIR/build-ouinet/modules/ipfs-cache/ipfs_bindings/libipfs_bindings.
 
 ######################################################################
 function copy_jni_libs {
-local jni_dst_dir="${DIR}"/build-android/builddir/deps
+local jni_dst_dir="${DIR}"/build-android/builddir/deps/${ABI}
 rm -rf "${jni_dst_dir}"
 mkdir -p "${jni_dst_dir}"
 local lib
@@ -344,7 +344,11 @@ mkdir -p "${DIR}"/build-android
 cd "${DIR}"/build-android
 ln -sf $(dirname ${APP_ROOT})/* .
 export GRADLE_USER_HOME=$(pwd)/.gradle-home
-gradle --no-daemon build -Pboost_includedir=${BOOST_INCLUDEDIR} -Pandroid_abi=${ABI} -Pouinet_clientlib_path="${DIR}"/build-android/builddir/deps/libclient.so
+gradle --no-daemon build \
+    -Pboost_includedir=${BOOST_INCLUDEDIR} \
+    -Pandroid_abi=${ABI} \
+    -Pouinet_clientlib_path="${DIR}"/build-android/builddir/deps/${ABI}/libclient.so \
+    -Plibdir="${DIR}"/build-android/builddir/deps
 
 echo "---------------------------------"
 echo "Your Android package is ready at:"
