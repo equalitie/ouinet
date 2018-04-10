@@ -47,7 +47,6 @@ using namespace ouinet;
 namespace posix_time = boost::posix_time;
 
 using tcp         = asio::ip::tcp;
-using string_view = beast::string_view;
 using Request     = http::request<http::string_body>;
 using Response    = http::response<http::dynamic_body>;
 using boost::optional;
