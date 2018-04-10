@@ -429,7 +429,8 @@ static bool contains_private_data(const http::request_header<>& request)
 //
 // TODO: This function is incomplete.
 static bool ok_to_cache( const http::request_header<>&  request
-                       , const http::response_header<>& response)
+                       , const http::response_header<>& response
+                       , const char** reason = nullptr)
 {
     using boost::iequals;
 
@@ -447,7 +448,10 @@ static bool ok_to_cache( const http::request_header<>&  request
     if (req_cache_control_i != request.end()) {
         for (auto v : SplitString(req_cache_control_i->value(), ',')) {
             // https://tools.ietf.org/html/rfc7234#section-3 (bullet #3)
-            if (iequals(v, "no-store")) return false;
+            if (iequals(v, "no-store")) {
+                if (reason) *reason = "request has no-store";
+                return false;
+            }
         }
     }
 
@@ -456,7 +460,10 @@ static bool ok_to_cache( const http::request_header<>&  request
     // https://tools.ietf.org/html/rfc7234#section-3 (bullet #5)
     if (request.count(http::field::authorization)) {
         // https://tools.ietf.org/html/rfc7234#section-3.2
-        if (res_cache_control_i == response.end()) return false;
+        if (res_cache_control_i == response.end()) {
+            if (reason) *reason = "request has auth";
+            return false;
+        }
 
         bool allowed = false;
 
@@ -467,7 +474,14 @@ static bool ok_to_cache( const http::request_header<>&  request
             if (iequals(v,"s-maxage"))        { allowed = true; break; }
         }
 
-        if (!allowed) return false;
+        if (!allowed) {
+            if (reason)
+                *reason = "request contains auth, but response's cache control "
+                          "header field contains none of "
+                          "{must-revalidate, public, s-maxage}";
+
+            return false;
+        }
     }
 
     if (res_cache_control_i == response.end()) return true;
@@ -478,7 +492,11 @@ static bool ok_to_cache( const http::request_header<>&  request
         std::tie(key, val) = split_string_pair(kv, '=');
 
         // https://tools.ietf.org/html/rfc7234#section-3 (bullet #3)
-        if (iequals(key, "no-store")) return false;
+        if (iequals(key, "no-store")) {
+            if (reason) *reason = "response contains cache-control: no-store";
+
+            return false;
+        }
         // https://tools.ietf.org/html/rfc7234#section-3 (bullet #4)
         if (iequals(key, "private"))  {
             // NOTE: This decision based on the request having private data is
@@ -493,6 +511,9 @@ static bool ok_to_cache( const http::request_header<>&  request
             // this 'private' field when fetching from distributed cache and
             // - if present - re-fetch from origin if possible.
             if (contains_private_data(request)) {
+                if (reason)
+                    *reason = "response contains cache-control: private";
+
                 return false;
             }
         }
@@ -507,9 +528,13 @@ CacheControl::try_to_cache( const Request& request
                           , const Response& response) const
 {
     if (!store) return;
-    if (!ok_to_cache(request, response)) {
+
+    const char* reason = "";
+
+    if (!ok_to_cache(request, response, &reason)) {
 #ifndef NDEBUG
         cerr << "::::: CacheControl: NOT CACHING :::::" << endl;
+        cerr << ":: " << reason << endl;
         cerr << request.base() << response.base() << endl;
         cerr << ":::::::::::::::::::::::::::::::::::::" << endl;
 #endif
