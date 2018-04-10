@@ -396,6 +396,8 @@ static bool contains_private_data(const http::request_header<>& request)
                 , http::field::keep_alive
                 , http::field::connection
                 , http::field::referer
+                , http::field::proxy_connection
+                , "X-Requested-With"
                 // https://www.w3.org/TR/upgrade-insecure-requests/
                 , "Upgrade-Insecure-Requests"
                 // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/DNT
