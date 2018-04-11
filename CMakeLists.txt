@@ -1,4 +1,11 @@
-cmake_minimum_required (VERSION 3.5)
+if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
+    # CMAKE_ANDROID_STANDALONE_TOOLCHAIN (and likely other cross compilation
+    # android variables) was only introduced in v3.7
+    cmake_minimum_required (VERSION 3.7)
+else()
+    cmake_minimum_required (VERSION 3.5)
+endif()
+
 set(BOOST_VERSION 1.62)
 include(ExternalProject)
 ################################################################################
