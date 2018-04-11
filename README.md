@@ -371,6 +371,30 @@ If the program crashes for some reason, you may have to remove the injector's
 PID file manually for it to start again.  Just use the `ouinet-repos`
 container to remove `/var/opt/ouinet/injector/pid`.
 
+If you ever need to reset and empty the injector's database for some reason
+(e.g. testing) while keeping injector IDs and credentials, you may:
+
+ 1. Fetch a Go IPFS binary and copy it to the data volume:
+
+        $ wget "https://dist.ipfs.io/go-ipfs/v0.4.14/go-ipfs_v0.4.14_linux-amd64.tar.gz"
+        $ tar -xf go-ipfs_v0.4.14_linux-amd64.tar.gz
+        $ sudo docker cp go-ipfs/ipfs ouinet-repos:/var/opt/ouinet
+
+ 2. Stop the injector (see above).
+ 3. Run a temporary injector container:
+
+        $ sudo docker run --rm -it --mount src=ouinet-repos,dst=/var/opt/ouinet \
+                      ouinet:latest /bin/bash
+
+ 4. In the container, run:
+
+        # cd /var/opt/ouinet
+        # printf '{"sites":{}}' > injector/ipfs/ipfs_cache_db.*.json
+        # ./ipfs -Lc injector/ipfs repo gc
+        # exit
+
+ 5. Start the injector (see above).
+
 ### Client container
 
 To create a client container, run the following command which creates the
