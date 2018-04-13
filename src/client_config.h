@@ -58,12 +58,17 @@ public:
         _injector_credentials[injector] = cred;
     }
 
+    bool enable_http_connect_requests() const {
+        return _enable_http_connect_requests;
+    }
+
 private:
     Path _repo_root;
     Path _ouinet_conf_file = "ouinet-client.conf";
     asio::ip::tcp::endpoint _local_ep;
     boost::optional<Endpoint> _injector_ep;
     std::string _ipns;
+    bool _enable_http_connect_requests = false;
 
     boost::posix_time::time_duration _max_cached_age
         = boost::posix_time::hours(7*24);  // one week
@@ -95,12 +100,15 @@ ClientConfig::ClientConfig(int argc, char* argv[])
          , "IPNS of the injector's database")
         ("max-cached-age"
          , po::value<int>()->default_value(_max_cached_age.total_seconds())
-         , "Discard cached content older than this many seconds (0: discard all; -1: discard none)")
+         , "Discard cached content older than this many seconds "
+           "(0: discard all; -1: discard none)")
         ("open-file-limit"
          , po::value<unsigned int>()
          , "To increase the maximum number of open files")
         ("injector-credentials", po::value<string>()
          , "<username>:<password> authentication pair for the injector")
+        ("enable-http-connect-requests", po::bool_switch(&_enable_http_connect_requests)
+         , "Enable HTTP CONNECT requests")
         ;
 
     po::variables_map vm;

@@ -28,7 +28,8 @@ public class Ouinet {
         nStartClient(_ctx.getFilesDir().getAbsolutePath(),
                 injector_ep,
                 ipns,
-                credentials);
+                credentials,
+                false);
     }
 
     public void stop() {
@@ -99,7 +100,12 @@ public class Ouinet {
      * A native method that is implemented by the 'native-lib' native library,
      * which is packaged with this application.
      */
-    private native void nStartClient(String repo_root, String injector, String ipns, String credentials);
+    private native void nStartClient( String repo_root
+                                    , String injector
+                                    , String ipns
+                                    , String credentials
+                                    , boolean enable_http_connect_requests);
+
     private native void nStopClient();
     private native void nSetInjectorEP(String endpoint);
     private native void nSetCredentialsFor(String injector, String cred);

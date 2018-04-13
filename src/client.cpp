@@ -351,6 +351,16 @@ Client::State::build_cache_control(request_route::Config& request_config)
 }
 
 //------------------------------------------------------------------------------
+static
+Response bad_gateway(const Request& req)
+{
+    Response res{http::status::bad_gateway, req.version()};
+    res.set(http::field::server, "Ouinet");
+    res.keep_alive(req.keep_alive());
+    return res;
+}
+
+//------------------------------------------------------------------------------
 void Client::State::serve_request( GenericConnection& con
                                  , asio::yield_context yield)
 {
@@ -427,8 +437,16 @@ void Client::State::serve_request( GenericConnection& con
 
         // Attempt connection to origin for CONNECT requests
         if (req.method() == http::verb::connect) {
-            return ASYNC_DEBUG( handle_connect_request(con, req, yield)
-                              , "Connect ", req.target());
+            if (_config.enable_http_connect_requests()) {
+                auto res = bad_gateway(req);
+                http::async_write(con, res, yield[ec]);
+            }
+            else {
+                ASYNC_DEBUG( handle_connect_request(con, req, yield)
+                           , "Connect ", req.target());
+            }
+
+            return;
         }
 
         request_config = route_choose_config(req, matches, default_request_config);

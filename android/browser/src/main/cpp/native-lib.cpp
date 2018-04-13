@@ -22,7 +22,8 @@ thread g_client_thread;
 void start_client_thread( string repo_root
                         , string injector_ep
                         , string ipns
-                        , string credentials)
+                        , string credentials
+                        , bool enable_http_connect_requests)
 {
     if (g_client_thread.get_id() != thread::id()) return;
 
@@ -65,6 +66,10 @@ void start_client_thread( string repo_root
                 args.push_back(credentials_arg.c_str());
             }
 
+            if (enable_http_connect_requests) {
+                args.push_back("--enable-http-connect-requests");
+            }
+
             try {
                 g_client->start(args.size(), (char**) args.data());
             }
@@ -89,14 +94,19 @@ Java_ie_equalit_ouinet_Ouinet_nStartClient(
         jstring j_repo_root,
         jstring j_injector_ep,
         jstring j_ipns,
-        jstring j_credentials)
+        jstring j_credentials,
+        jboolean enable_http_connect_requests)
 {
     const char* repo_root   = env->GetStringUTFChars(j_repo_root,   NULL);
     const char* injector_ep = env->GetStringUTFChars(j_injector_ep, NULL);
     const char* ipns        = env->GetStringUTFChars(j_ipns,        NULL);
     const char* credentials = env->GetStringUTFChars(j_credentials, NULL);
 
-    start_client_thread(repo_root, injector_ep, ipns, credentials);
+    start_client_thread( repo_root
+                       , injector_ep
+                       , ipns
+                       , credentials
+                       , enable_http_connect_requests);
 }
 
 extern "C"
