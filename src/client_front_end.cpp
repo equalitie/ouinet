@@ -26,7 +26,7 @@ static Response redirect_back(const Request& req)
         "<!DOCTYPE html>\n"
         "<html>\n"
         "    <head>\n"
-        "        <meta http-equiv=\"refresh\" content=\"0; url=http://localhost\"/>\n"
+        "        <meta http-equiv=\"refresh\" content=\"0; url=./\"/>\n"
         "    </head>\n"
         "</html>\n";
 

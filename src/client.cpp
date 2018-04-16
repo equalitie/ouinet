@@ -96,7 +96,10 @@ private:
 
     CacheControl build_cache_control(request_route::Config& request_config);
 
-    void do_listen(asio::yield_context yield);
+    void listen_tcp( asio::yield_context
+                   , tcp::endpoint
+                   , function<void(GenericConnection, asio::yield_context)>);
+
     void setup_injector(asio::yield_context);
 
     boost::filesystem::path get_pid_path() const {
@@ -500,9 +503,11 @@ void Client::State::setup_ipfs_cache(const string& ipns)
 }
 
 //------------------------------------------------------------------------------
-void Client::State::do_listen(asio::yield_context yield)
+void Client::State::listen_tcp
+        ( asio::yield_context yield
+        , tcp::endpoint local_endpoint
+        , function<void(GenericConnection, asio::yield_context)> handler)
 {
-    const auto local_endpoint = _config.local_endpoint();
     const auto ipns = _config.ipns();
 
     sys::error_code ec;
@@ -557,15 +562,15 @@ void Client::State::do_listen(asio::yield_context yield)
                 s.close(ec);
             };
 
-            auto connection
-                = make_shared<GenericConnection>(move(socket), tcp_shutter);
+            GenericConnection connection(move(socket) , move(tcp_shutter));
 
             asio::spawn( _ios
                        , [ this
-                         , connection
+                         , c = move(connection)
+                         , h = move(handler)
                          , lock = wait_condition.lock()
                          ](asio::yield_context yield) mutable {
-                             serve_request(*connection, yield);
+                             h(move(c), yield);
                          });
         }
     }
@@ -596,12 +601,50 @@ void Client::State::start(int argc, char* argv[])
         , [this, self = shared_from_this()]
           (asio::yield_context yield) {
               sys::error_code ec;
+
               setup_injector(yield[ec]);
+
               if (ec) {
                   cerr << "Failed to setup injector" << endl;
               }
-              do_listen(yield[ec]);
+
+              listen_tcp( yield[ec]
+                        , _config.local_endpoint()
+                        , [this, self]
+                          (GenericConnection c, asio::yield_context yield) {
+                      serve_request(c, yield);
+                  });
           });
+
+    if (_config.front_end_endpoint() != tcp::endpoint()) {
+        asio::spawn
+            ( _ios
+            , [this, self = shared_from_this()]
+              (asio::yield_context yield) {
+                  sys::error_code ec;
+
+                  auto ep = _config.front_end_endpoint();
+                  if (ep == tcp::endpoint()) return;
+
+                  listen_tcp( yield[ec]
+                            , ep
+                            , [this, self]
+                              (GenericConnection c, asio::yield_context yield) {
+                        sys::error_code ec;
+                        Request rq;
+                        beast::flat_buffer buffer;
+                        http::async_read(c, buffer, rq, yield[ec]);
+
+                        if (ec) return;
+
+                        auto rs = _front_end.serve( _config.injector_endpoint()
+                                                  , rq
+                                                  , _ipfs_cache.get());
+
+                        http::async_write(c, rs, yield[ec]);
+                  });
+              });
+    }
 }
 
 //------------------------------------------------------------------------------

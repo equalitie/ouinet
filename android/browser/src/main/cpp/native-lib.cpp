@@ -58,6 +58,7 @@ void start_client_thread( string repo_root
 
             args.push_back("ouinet-client");
             args.push_back("--listen-on-tcp=127.0.0.1:8080");
+            args.push_back("--front-end-ep=0.0.0.0:8081");
             args.push_back(repo_arg.c_str());
 
             if (!injector_ep.empty()) {
