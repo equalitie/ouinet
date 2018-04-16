@@ -197,10 +197,11 @@ public class MainActivity extends AppCompatActivity {
     public boolean onCreateOptionsMenu(Menu menu) {
         menu.add(Menu.NONE, 1, Menu.NONE, "Home");
         menu.add(Menu.NONE, 2, Menu.NONE, "Reload");
-        menu.add(Menu.NONE, 3, Menu.NONE, "Clear cache");
-        menu.add(Menu.NONE, 4, Menu.NONE, "Injector endpoint");
-        menu.add(Menu.NONE, 5, Menu.NONE, "IPNS");
-        menu.add(Menu.NONE, 6, Menu.NONE, "Load config from QR");
+        menu.add(Menu.NONE, 3, Menu.NONE, "Toggle frontend");
+        menu.add(Menu.NONE, 4, Menu.NONE, "Clear cache");
+        menu.add(Menu.NONE, 5, Menu.NONE, "Injector endpoint");
+        menu.add(Menu.NONE, 6, Menu.NONE, "IPNS");
+        menu.add(Menu.NONE, 7, Menu.NONE, "Load config from QR");
         return true;
     }
 
@@ -214,15 +215,21 @@ public class MainActivity extends AppCompatActivity {
                 reload();
                 return true;
             case 3:
-                _webView.clearCache(true);
+                _webViewClient.toggleShowClientFrontend();
+                _webView.clearView();
+                _webView.loadUrl("about:blank");
+                go_home();
                 return true;
             case 4:
-                showChangeInjectorDialog();
+                _webView.clearCache(true);
                 return true;
             case 5:
-                showChangeIPNSDialog();
+                showChangeInjectorDialog();
                 return true;
             case 6:
+                showChangeIPNSDialog();
+                return true;
+            case 7:
                 loadConfigFromQR();
                 return true;
             default:

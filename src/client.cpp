@@ -389,11 +389,15 @@ void Client::State::serve_request( GenericConnection& con
 
     auto method_getter([](const Request& r) {return r.method_string();});
     auto host_getter([](const Request& r) {return r["Host"];});
+    auto x_oui_dest_getter([](const Request& r) {return r["X-Oui-Destination"];});
     auto target_getter([](const Request& r) {return r.target();});
 
     const vector<Match> matches({
         // Handle requests to <http://localhost/> internally.
         Match( reqexpr::from_regex(host_getter, "localhost")
+             , {false, queue<responder>({responder::_front_end})} ),
+
+        Match( reqexpr::from_regex(x_oui_dest_getter, "OuiClient")
              , {false, queue<responder>({responder::_front_end})} ),
 
         // NOTE: The matching of HTTP methods below can be simplified,
