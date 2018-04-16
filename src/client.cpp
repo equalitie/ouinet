@@ -73,9 +73,13 @@ public:
     {}
 
     void start(int argc, char* argv[]);
-    void stop() { _shutdown_signal(); }
 
-    void setup_ipfs_cache(const string& ipns);
+    void stop() {
+        _ipfs_cache = nullptr;
+        _shutdown_signal();
+    }
+
+    void setup_ipfs_cache();
     void set_injector(string);
 
 private:
@@ -484,8 +488,12 @@ void Client::State::serve_request( GenericConnection& con
 }
 
 //------------------------------------------------------------------------------
-void Client::State::setup_ipfs_cache(const string& ipns)
+void Client::State::setup_ipfs_cache()
 {
+    const string ipns = _config.ipns();
+
+    if (ipns.empty()) return;
+
     if (_ipfs_cache) {
         return _ipfs_cache->set_ipns(move(ipns));
     }
@@ -508,8 +516,6 @@ void Client::State::listen_tcp
         , tcp::endpoint local_endpoint
         , function<void(GenericConnection, asio::yield_context)> handler)
 {
-    const auto ipns = _config.ipns();
-
     sys::error_code ec;
 
     // Open the acceptor
@@ -530,14 +536,6 @@ void Client::State::listen_tcp
 
     auto shutdown_acceptor_slot = _shutdown_signal.connect([&acceptor] {
         acceptor.close();
-    });
-
-    if (ipns.size()) {
-        setup_ipfs_cache(ipns);
-    }
-
-    auto shutdown_ipfs_slot = _shutdown_signal.connect([this] {
-        _ipfs_cache = nullptr;
     });
 
     cout << "Client accepting on " << acceptor.local_endpoint() << endl;
@@ -603,6 +601,7 @@ void Client::State::start(int argc, char* argv[])
               sys::error_code ec;
 
               setup_injector(yield[ec]);
+              setup_ipfs_cache();
 
               if (ec) {
                   cerr << "Failed to setup injector" << endl;
