@@ -2,6 +2,7 @@
 #include "generic_connection.h"
 #include <ipfs_cache/client.h>
 #include <boost/optional/optional_io.hpp>
+#include <boost/date_time/posix_time/posix_time.hpp>
 
 
 using namespace std;
@@ -10,6 +11,12 @@ using namespace ouinet;
 using Request = http::request<http::string_body>;
 using Response = ClientFrontEnd::Response;
 using boost::optional;
+
+static string now_as_string() {
+    namespace pt = boost::posix_time;
+    auto entry_ts = pt::microsec_clock::universal_time();
+    return pt::to_iso_extended_string(entry_ts);
+}
 
 static Response redirect_back(const Request& req)
 {
@@ -129,6 +136,7 @@ Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
     ss << ToggleInput{"IPFS Cache",     "ipfs_cache",     _ipfs_cache_enabled};
 
     ss << "<br>\n";
+    ss << "Now: " << now_as_string()  << "<br>\n";
     ss << "Injector endpoint: " << injector_ep << "<br>\n";
 
     if (_show_pending_tasks) {
