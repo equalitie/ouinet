@@ -565,10 +565,10 @@ void Client::State::listen_tcp
             asio::spawn( _ios
                        , [ this
                          , c = move(connection)
-                         , h = move(handler)
+                         , handler
                          , lock = wait_condition.lock()
                          ](asio::yield_context yield) mutable {
-                             h(move(c), yield);
+                             handler(move(c), yield);
                          });
         }
     }
