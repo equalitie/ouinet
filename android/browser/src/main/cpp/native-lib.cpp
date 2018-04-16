@@ -12,6 +12,12 @@
 
 using namespace std;
 
+struct Defer {
+    Defer(function<void()> f) : _f(move(f)) {}
+    ~Defer() { _f(); }
+    function<void()> _f;
+};
+
 #define debug(...) __android_log_print(ANDROID_LOG_VERBOSE, "Ouinet", __VA_ARGS__);
 
 // g_client is only accessed from the g_client_thread.
@@ -165,12 +171,13 @@ Java_ie_equalit_ouinet_Ouinet_nSetCredentialsFor(
     mutex m;
     unique_lock<mutex> lk(m);
     condition_variable cv;
+    bool done = false;
 
-    g_ios.post([i = move(injector), c = move(credentials), &cv] {
+    g_ios.post([i = move(injector), c = move(credentials), &cv, &done] {
+            Defer on_exit([&] { done = true; cv.notify_one(); });
             if (!g_client) return;
             g_client->set_credentials(i.c_str(), c.c_str());
-            cv.notify_one();
         });
 
-    cv.wait(lk);
+    cv.wait(lk, [&]{ return done; });
 }
