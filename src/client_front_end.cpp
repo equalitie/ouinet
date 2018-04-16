@@ -131,12 +131,14 @@ Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
     ss << "<br>\n";
     ss << "Injector endpoint: " << injector_ep << "<br>\n";
 
-    ss << "        <h2>Pending tasks " << _pending_tasks.size() << "</h2>\n";
-    ss << "        <ul>\n";
-    for (auto& task : _pending_tasks) {
-        ss << "            <li><pre>" << task << "</pre></li>\n";
+    if (_show_pending_tasks) {
+        ss << "        <h2>Pending tasks " << _pending_tasks.size() << "</h2>\n";
+        ss << "        <ul>\n";
+        for (auto& task : _pending_tasks) {
+            ss << "            <li><pre>" << task << "</pre></li>\n";
+        }
+        ss << "        </ul>\n";
     }
-    ss << "        </ul>\n";
 
     if (cache_client) {
         ss << "        <h2>Database</h2>\n";
