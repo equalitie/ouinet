@@ -449,12 +449,12 @@ void Client::State::serve_request( GenericConnection& con
         // Attempt connection to origin for CONNECT requests
         if (req.method() == http::verb::connect) {
             if (_config.enable_http_connect_requests()) {
-                auto res = bad_gateway(req);
-                http::async_write(con, res, yield[ec]);
-            }
-            else {
                 ASYNC_DEBUG( handle_connect_request(con, req, yield)
                            , "Connect ", req.target());
+            }
+            else {
+                auto res = bad_gateway(req);
+                http::async_write(con, res, yield[ec]);
             }
 
             return;
