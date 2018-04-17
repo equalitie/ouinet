@@ -2,6 +2,8 @@ package ie.equalit.ouinet;
 
 import android.content.Context;
 
+import android.net.wifi.WifiManager;
+
 public class Ouinet {
     // Used to load the 'native-lib' library on application startup.
     static {
@@ -17,6 +19,7 @@ public class Ouinet {
     }
 
     private Context _ctx;
+    private WifiManager.MulticastLock _lock;
 
     public Ouinet(Context ctx) {
         _ctx = ctx;
@@ -24,6 +27,12 @@ public class Ouinet {
         String ipns        = readIPNS();
         String injector_ep = readInjectorEP();
         String credentials = readCredentialsFor(injector_ep);
+
+        WifiManager wifi = (WifiManager)ctx.getSystemService(Context.WIFI_SERVICE);
+        if (wifi != null){
+            _lock = wifi.createMulticastLock("mylock");
+            _lock.acquire();
+        }
 
         nStartClient(_ctx.getFilesDir().getAbsolutePath(),
                 injector_ep,
