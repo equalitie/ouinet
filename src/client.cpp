@@ -758,6 +758,7 @@ void Client::set_injector_endpoint(const char* injector_ep)
 void Client::set_ipns(const char* ipns)
 {
     _state->_config.set_ipns(move(ipns));
+    _state->setup_ipfs_cache();
 }
 
 void Client::set_credentials(const char* injector, const char* cred)
