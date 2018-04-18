@@ -371,14 +371,34 @@ Client::State::build_cache_control(request_route::Config& request_config)
 
     cache_control.fetch_stored =
         [&] (const Request& request, asio::yield_context yield) {
-            return ASYNC_DEBUG( fetch_stored(request, request_config, yield)
+
+            cerr << "Fetching from cache " << request.target() << endl;
+
+            sys::error_code ec;
+            auto r = ASYNC_DEBUG( fetch_stored(request, request_config, yield[ec])
                               , "Fetch from cache: " , request.target());
+
+            cerr << "Fetched from cache " << request.target()
+                 << " " << ec.message() << " " << r.response.result()
+                 << endl;
+
+            return or_throw(yield, ec, move(r));
         };
 
     cache_control.fetch_fresh =
         [&] (const Request& request, asio::yield_context yield) {
-            return ASYNC_DEBUG( fetch_fresh(request, request_config, yield)
+
+            cerr << "Fetching fresh " << request.target() << endl;
+
+            sys::error_code ec;
+            auto r = ASYNC_DEBUG( fetch_fresh(request, request_config, yield[ec])
                               , "Fetch from origin: ", request.target());
+
+            cerr << "Fetched fresh " << request.target()
+                 << " " << ec.message() << " " << r.result()
+                 << endl;
+
+            return or_throw(yield, ec, move(r));
         };
 
     cache_control.max_cached_age(_config.max_cached_age());
@@ -475,6 +495,8 @@ void Client::State::serve_request( GenericConnection& con
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "read");
 
+        cout << "Received request for: " << req.target() << endl;
+
         // Attempt connection to origin for CONNECT requests
         if (req.method() == http::verb::connect) {
             if (_config.enable_http_connect_requests()) {
@@ -494,6 +516,8 @@ void Client::State::serve_request( GenericConnection& con
         auto res = ASYNC_DEBUG( cache_control.fetch(req, yield[ec])
                               , "Fetch "
                               , req.target());
+
+        cout << "Sending back response: " << req.target() << " " << res.result() << endl;
 
         if (ec) {
 #ifndef NDEBUG
@@ -683,6 +707,8 @@ void Client::State::setup_injector(asio::yield_context yield)
     auto injector_ep = _config.injector_endpoint();
 
     if (!injector_ep) return;
+
+    cout << "Setting up injector: " << *injector_ep << endl;
 
     if (is_i2p_endpoint(*injector_ep)) {
         std::string ep = boost::get<I2PEndpoint>(*injector_ep).pubkey;
