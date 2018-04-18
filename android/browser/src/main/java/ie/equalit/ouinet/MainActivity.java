@@ -53,6 +53,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     protected void toast(String s) {
+        Util.log("Toast: " + s);
         Toast.makeText(this, s, Toast.LENGTH_LONG).show();
     }
 
@@ -72,6 +73,7 @@ public class MainActivity extends AppCompatActivity {
             String key = keyval[0];
             String val = keyval[1];
 
+            Util.log("key: " + key + " value: " + val);
             if (key.equalsIgnoreCase("ipns")) {
                 toast("Setting IPNS to: " + val);
                 _ouinet.setIPNS(val);
