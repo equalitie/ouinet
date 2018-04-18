@@ -19,7 +19,7 @@ public class Ouinet {
     }
 
     private Context _ctx;
-    private WifiManager.MulticastLock _lock;
+    private WifiManager.MulticastLock _lock = null;
 
     public Ouinet(Context ctx) {
         _ctx = ctx;
@@ -43,6 +43,7 @@ public class Ouinet {
 
     public void stop() {
         nStopClient();
+        if (_lock != null) { _lock.release(); }
     }
 
     public void setInjectorEP(String endpoint) {
