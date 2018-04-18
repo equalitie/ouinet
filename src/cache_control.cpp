@@ -429,9 +429,9 @@ static bool contains_private_data(const http::request_header<>& request)
 // https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/http-caching
 //
 // TODO: This function is incomplete.
-static bool ok_to_cache( const http::request_header<>&  request
-                       , const http::response_header<>& response
-                       , const char** reason = nullptr)
+bool CacheControl::ok_to_cache( const http::request_header<>&  request
+                              , const http::response_header<>& response
+                              , const char** reason)
 {
     using boost::iequals;
 
@@ -524,28 +524,12 @@ static bool ok_to_cache( const http::request_header<>&  request
 }
 
 //------------------------------------------------------------------------------
-void
-CacheControl::try_to_cache( const Request& request
-                          , const Response& response) const
+Response CacheControl::filter_before_store(Response response)
 {
-    if (!store) return;
-
-    const char* reason = "";
-
-    if (!ok_to_cache(request, response, &reason)) {
-#ifndef NDEBUG
-        cerr << "::::: CacheControl: NOT CACHING :::::" << endl;
-        cerr << ":: " << reason << endl;
-        cerr << request.base() << response.base() << endl;
-        cerr << ":::::::::::::::::::::::::::::::::::::" << endl;
-#endif
-        return;
-    }
-
     // TODO: This list was created by going through some 100 responses from
     // bbc.com. Careful selection from all possible (standard) fields is
     // needed.
-    auto filtered_response =
+    return
         util::filter_fields( response
                            , http::field::server
                            , http::field::retry_after
@@ -585,7 +569,28 @@ CacheControl::try_to_cache( const Request& request
                            , "Access-Control-Expose-Headers"  // headers of response to be exposed
                            );
 
+}
+
+//------------------------------------------------------------------------------
+void
+CacheControl::try_to_cache( const Request& request
+                          , const Response& response) const
+{
+    if (!store) return;
+
+    const char* reason = "";
+
+    if (!ok_to_cache(request, response, &reason)) {
+#ifndef NDEBUG
+        cerr << "::::: CacheControl: NOT CACHING :::::" << endl;
+        cerr << ":: " << reason << endl;
+        cerr << request.base() << response.base() << endl;
+        cerr << ":::::::::::::::::::::::::::::::::::::" << endl;
+#endif
+        return;
+    }
+
     // TODO: Apply similar filter to the request.
-    store(request, filtered_response);
+    store(request, filter_before_store(response));
 }
 

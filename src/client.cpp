@@ -110,6 +110,9 @@ private:
         return _config.repo_root()/OUINET_PID_FILE;
     }
 
+    string maybe_start_seeding( const Request&
+                              , const Response&
+                              , asio::yield_context);
 
 private:
     asio::io_service& _ios;
@@ -129,6 +132,29 @@ private:
 
     unique_ptr<util::PidFile> _pid_file;
 };
+
+//------------------------------------------------------------------------------
+string Client::State::maybe_start_seeding( const Request&  req
+                                         , const Response& res
+                                         , asio::yield_context yield)
+{
+    if (!_ipfs_cache)
+        return or_throw<string>(yield, asio::error::operation_not_supported);
+
+    const char* reason = "";
+    if (!CacheControl::ok_to_cache(req, res, &reason)) {
+        cerr << "---------------------------------------" << endl;
+        cerr << "Not caching " << req.target() << endl;
+        cerr << "Because: \"" << reason << "\"" << endl;
+        cerr << req.base() << res.base();
+        cerr << "---------------------------------------" << endl;
+        return {};
+    }
+
+    return _ipfs_cache->ipfs_add
+            ( util::str(CacheControl::filter_before_store(res))
+            , yield);
+}
 
 //------------------------------------------------------------------------------
 static
@@ -319,9 +345,12 @@ Response Client::State::fetch_fresh( const Request& request
                                          , yield[ec]);
                 }
 
-                if (!ec) return res;
-                last_error = ec;
-                continue;
+                if (ec) { last_error = ec; continue; }
+
+                sys::error_code ec_;
+                string ipfs = maybe_start_seeding(request, res, yield[ec_]);
+
+                return res;
             }
             case responder::_front_end: {
                 return _front_end.serve( _config.injector_endpoint()

@@ -37,6 +37,12 @@ public:
     // Returns ptime() if parsing fails.
     static boost::posix_time::ptime parse_date(beast::string_view);
 
+    static bool ok_to_cache( const http::request_header<>&  request
+                           , const http::response_header<>& response
+                           , const char** reason = nullptr);
+
+    static Response filter_before_store(Response);
+
 private:
     // TODO: Add cancellation support
     Response do_fetch(const Request&, asio::yield_context);
