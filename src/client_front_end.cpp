@@ -149,6 +149,7 @@ Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
     }
 
     if (cache_client) {
+        ss << "        Our IPFS ID (IPNS): " << cache_client->id() << "<br>\n";
         ss << "        <h2>Database</h2>\n";
         ss << "        IPNS: " << cache_client->ipns() << "<br>\n";
         ss << "        IPFS: " << cache_client->ipfs() << "<br>\n";
