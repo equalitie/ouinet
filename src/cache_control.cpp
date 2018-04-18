@@ -390,6 +390,7 @@ static bool contains_private_data(const http::request_header<>& request)
         if(!util::field_is_one_of(field
                 , http::field::host
                 , http::field::user_agent
+                , http::field::cache_control
                 , http::field::accept
                 , http::field::accept_language
                 , http::field::accept_encoding
