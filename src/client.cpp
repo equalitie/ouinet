@@ -114,6 +114,10 @@ private:
                               , const Response&
                               , asio::yield_context);
 
+    bool was_stopped() const {
+        return _shutdown_signal.call_count() != 0;
+    }
+
 private:
     asio::io_service& _ios;
     ClientConfig _config;
@@ -617,10 +621,12 @@ void Client::State::listen_tcp
 
             asio::spawn( _ios
                        , [ this
+                         , self = shared_from_this()
                          , c = move(connection)
                          , handler
                          , lock = wait_condition.lock()
                          ](asio::yield_context yield) mutable {
+                             if (was_stopped()) return;
                              handler(move(c), yield);
                          });
         }
@@ -651,6 +657,8 @@ void Client::State::start(int argc, char* argv[])
         ( _ios
         , [this, self = shared_from_this()]
           (asio::yield_context yield) {
+              if (was_stopped()) return;
+
               sys::error_code ec;
 
               setup_injector(yield[ec]);
@@ -673,6 +681,8 @@ void Client::State::start(int argc, char* argv[])
             ( _ios
             , [this, self = shared_from_this()]
               (asio::yield_context yield) {
+                  if (was_stopped()) return;
+
                   sys::error_code ec;
 
                   auto ep = _config.front_end_endpoint();
@@ -752,6 +762,7 @@ void Client::State::set_injector(string injector_ep_str)
     _config.set_injector_endpoint(*injector_ep);
 
     asio::spawn(_ios, [self = shared_from_this()] (auto yield) {
+            if (self->was_stopped()) return;
             sys::error_code ec;
             self->setup_injector(yield[ec]);
         });
