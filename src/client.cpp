@@ -30,11 +30,9 @@
 #include "authenticate.h"
 #include "defer.h"
 
-#ifdef __ANDROID__
-#  include "redirect_to_android_log.h"
-#else // ifdef __ANDROID__
+#ifndef __ANDROID__
 #  include "force_exit_on_signal.h"
-#endif // else ifdef __ANDROID__
+#endif // ifndef __ANDROID__
 
 #include "ouiservice.h"
 #include "ouiservice/i2p.h"
@@ -67,10 +65,6 @@ class Client::State : public enable_shared_from_this<Client::State> {
 public:
     State(asio::io_service& ios)
         : _ios(ios)
-#ifdef __ANDROID__
-        , _cout_guard(std::cout)
-        , _cerr_guard(std::cerr)
-#endif // ifdef __ANDROID__
     {}
 
     void start(int argc, char* argv[]);
@@ -127,13 +121,6 @@ private:
 
     ClientFrontEnd _front_end;
     Signal<void()> _shutdown_signal;
-
-#ifdef __ANDROID__
-    // While these two objects are 'alive', everything that is written
-    // into std::{cout,cerr} will be written into Android's log.
-    RedirectToAndroidLog _cout_guard;
-    RedirectToAndroidLog _cerr_guard;
-#endif // ifdef __ANDROID__
 
     unique_ptr<util::PidFile> _pid_file;
 

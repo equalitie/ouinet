@@ -10,6 +10,10 @@
 #include <util/signal.h>
 #include <condition_variable>
 
+#include <fcntl.h>
+#include <unistd.h>
+#include <android/log.h>
+
 using namespace std;
 
 struct Defer {
@@ -93,6 +97,56 @@ void start_client_thread( string repo_root
         });
 }
 
+thread g_stderr_thread;
+
+bool setup_stderr_redirection()
+{
+    int fd[2];
+    if (pipe(fd)) {
+        __android_log_print(ANDROID_LOG_INFO, "Ouinet", "%s %d %d", "ERROR: Cannot read stderr", __LINE__, errno);
+        return false;
+    }
+
+    // fd[1] is the write end; 2 is the fd for stderr
+    if (dup2(fd[1], 2) == -1) {
+        close(fd[0]);
+        close(fd[1]);
+        __android_log_print(ANDROID_LOG_INFO, "Ouinet", "%s %d %d", "ERROR: Cannot read stderr", __LINE__, errno);
+        return false;
+    }
+
+    close(fd[1]);
+
+    g_stderr_thread = thread([fd_in = fd[0]] {
+        std::string message_buffer;
+
+        while (true) {
+            char receive_buffer[256];
+            ssize_t bytes_read = read(fd_in, receive_buffer, sizeof(receive_buffer));
+            if (bytes_read == -1) {
+                __android_log_print(ANDROID_LOG_INFO, "Ouinet", "%s %d %d", "ERROR: Cannot read stderr", __LINE__, errno);
+                break;
+            }
+            message_buffer += std::string(receive_buffer, bytes_read);
+
+            while (true) {
+                size_t pos = message_buffer.find('\n');
+                if (pos == -1) {
+                    break;
+                }
+
+                // This does not include the newline.
+                std::string message = message_buffer.substr(0, pos);
+                message_buffer.erase(0, pos + 1);
+
+                __android_log_print(ANDROID_LOG_INFO, "Ouinet", "%s", message.c_str());
+            }
+        }
+    });
+
+    return true;
+}
+
 extern "C"
 JNIEXPORT void JNICALL
 Java_ie_equalit_ouinet_Ouinet_nStartClient(
@@ -104,6 +158,8 @@ Java_ie_equalit_ouinet_Ouinet_nStartClient(
         jstring j_credentials,
         jboolean enable_http_connect_requests)
 {
+    setup_stderr_redirection();
+
     const char* repo_root   = env->GetStringUTFChars(j_repo_root,   NULL);
     const char* injector_ep = env->GetStringUTFChars(j_injector_ep, NULL);
     const char* ipns        = env->GetStringUTFChars(j_ipns,        NULL);
