@@ -83,4 +83,4 @@ COPY --from=builder /opt/ouinet/modules/ipfs-cache/ipfs_bindings/libipfs_binding
 COPY --from=builder /opt/ouinet/injector /opt/ouinet/client /usr/local/src/ouinet/scripts/ouinet-docker.sh ./
 COPY --from=builder /opt/ouinet/test/test-* test/
 COPY --from=builder /usr/local/src/ouinet/repos/ repos/
-CMD ["./ouinet-docker.sh", "injector"]
+ENTRYPOINT ["./ouinet-docker.sh"]

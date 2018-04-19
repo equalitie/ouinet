@@ -332,25 +332,25 @@ $ sudo docker start -ia ouinet-repos
 ### Injector container
 
 To create an injector container, run the following command which creates the
-`ouinet-injector` container (using the host's network) and mounts the
-`ouinet-repos` volume (created above) under `/var/opt/ouinet`:
+`ouinet-injector` container (using the host's network), mounts the
+`ouinet-repos` volume (created above) under `/var/opt/ouinet` and starts the
+injector node:
 
 ```
 $ sudo docker create --name ouinet-injector -it --network host \
               --mount src=ouinet-repos,dst=/var/opt/ouinet \
-              ouinet:latest
+              ouinet:latest injector
 ```
 
-The default command run by the `ouinet:latest` image starts an injector node.
 The `-it` options allow you to attach the program to a terminal so that you
 can see its logging messages and send Ctrl+C to terminate it.
 
 If you want to pass additional options to the injector, just edit its
-configuration at `/var/opt/ouinet/injector/ouinet-injector.conf` using the the
-`ouinet-repos`  container.  You can also add a command like the following at
-the end of the `docker create` command, though this is not recommended:
+configuration at `/var/opt/ouinet/injector/ouinet-injector.conf` using the
+`ouinet-repos` container.  You can also include additional arguments at the
+end of the `docker create` command, though this is not recommended:
 
-    ./ouinet-docker.sh injector --<OPTION>=<VALUE>...
+    ... ouinet:latest injector --<OPTION>=<VALUE>...
 
 To start the container, run:
 
@@ -401,13 +401,14 @@ If you ever need to reset and empty the injector's database for some reason
 ### Client container
 
 To create a client container, run the following command which creates the
-`ouinet-client` container (using the host's network) and mounts the
-`ouinet-repos` volume (created above) under `/var/opt/ouinet`:
+`ouinet-client` container (using the host's network), mounts the
+`ouinet-repos` volume (created above) under `/var/opt/ouinet` and starts the
+client node:
 
 ```
 $ sudo docker create --name ouinet-client -it --network host \
               --mount src=ouinet-repos,dst=/var/opt/ouinet \
-              ouinet:latest ./ouinet-docker.sh client
+              ouinet:latest client
 ```
 
 The rest of instructions for the injector (see above) also hold for the client
