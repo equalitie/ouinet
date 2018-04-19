@@ -289,6 +289,9 @@ can just [download it][Dockerfile].  Then build the image by running:
 $ sudo docker build -t ouinet:latest .
 ```
 
+That will build a default recommended version, which you can override with
+`--build-arg OUINET_VERSION=<VERSION>`.
+
 [DockerFile]: https://raw.githubusercontent.com/equalitie/ouinet/master/Dockerfile
 
 After a while you will get the `ouinet:latest` image.  Then you may want to
