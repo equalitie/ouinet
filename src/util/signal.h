@@ -25,6 +25,8 @@ public:
     template<typename... Args>
     void operator()(Args&&... args)
     {
+        ++_call_count;
+
         auto connections = std::move(_connections);
         for (auto& connection : connections) {
             try {
@@ -34,6 +36,8 @@ public:
             }
         }
     }
+
+    size_t call_count() const { return _call_count; }
 
     Connection connect(std::function<T> slot)
     {
@@ -45,6 +49,7 @@ public:
 
 private:
     boost::intrusive::list<Connection, boost::intrusive::constant_time_size<false>> _connections;
+    size_t _call_count = 0;
 };
 
 } // ouinet namespace
