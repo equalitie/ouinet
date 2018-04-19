@@ -28,6 +28,7 @@
 #include "client_config.h"
 #include "client.h"
 #include "authenticate.h"
+#include "defer.h"
 
 #ifdef __ANDROID__
 #  include "redirect_to_android_log.h"
@@ -135,6 +136,8 @@ private:
 #endif // ifdef __ANDROID__
 
     unique_ptr<util::PidFile> _pid_file;
+
+    bool _is_ipns_being_setup = false;
 };
 
 //------------------------------------------------------------------------------
@@ -547,24 +550,59 @@ void Client::State::serve_request( GenericConnection& con
 //------------------------------------------------------------------------------
 void Client::State::setup_ipfs_cache()
 {
-    const string ipns = _config.ipns();
-
-    if (ipns.empty()) return;
-
-    if (_ipfs_cache) {
-        return _ipfs_cache->set_ipns(move(ipns));
+    if (_is_ipns_being_setup) {
+        return;
     }
 
-    try {
-        ipfs_cache::Client cache( _ios
-                                , ipns
-                                , (_config.repo_root()/"ipfs").native());
+    _is_ipns_being_setup = true;
 
-        _ipfs_cache = make_unique<ipfs_cache::Client>(move(cache));
-    }
-    catch(std::exception& e) {
-        cerr << "Client::State::set_ipns exception: " << e.what() << endl;
-    }
+    asio::spawn(_ios, [ this
+                      , self = shared_from_this()
+                      ] (asio::yield_context yield) {
+        if (was_stopped()) return;
+
+        const string ipns = _config.ipns();
+
+        {
+            Defer on_exit([&] { _is_ipns_being_setup = false; });
+
+            if (ipns.empty()) {
+                _ipfs_cache = nullptr;
+                return;
+            }
+
+            if (_ipfs_cache) {
+                return _ipfs_cache->set_ipns(move(ipns));
+            }
+
+            string repo_root = (_config.repo_root()/"ipfs").native();
+
+            function<void()> cancel;
+
+            auto cancel_slot = _shutdown_signal.connect([&] {
+                if (cancel) cancel();
+            });
+
+            sys::error_code ec;
+
+            _ipfs_cache = ipfs_cache::Client::build(_ios
+                                                   , ipns
+                                                   , move(repo_root)
+                                                   , cancel
+                                                   , yield[ec]);
+
+            if (ec) {
+                cerr << "Failed to build ipfs_cache::Client: "
+                     << ec.message()
+                     << endl;
+            }
+        }
+
+        if (ipns != _config.ipns()) {
+            // Use requested yet another IPNS
+            setup_ipfs_cache();
+        }
+    });
 }
 
 //------------------------------------------------------------------------------
