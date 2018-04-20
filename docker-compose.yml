@@ -1,3 +1,13 @@
+# Environment variables:
+#
+#   - OUINET_VERSION: Optional version tag (default 'latest').
+#   - OUINET_ROLE: Compulsory, either 'injector' or 'client'.
+#
+# Usage example:
+#
+#     $ env OUINET_ROLE=client docker-compose -p ouinet-client up
+#
+
 version: '3'
 
 services:
@@ -7,6 +17,7 @@ services:
       - data:/var/opt/ouinet
     network_mode: host
     command: ["${OUINET_ROLE:?please specify 'injector' or 'client'}"]
+    # These do not work for ``docker-compose up``, including as hints.
     deploy:
       restart_policy:
         condition: on-failure
