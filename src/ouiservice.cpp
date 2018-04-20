@@ -38,9 +38,7 @@ void OuiServiceServer::start_listen(asio::yield_context yield)
 
             lock.release(true);
 
-            bool running = true;
-            auto slot_connection = _stop_listen.connect([implementation, &running] () {
-                running = false;
+            auto slot_connection = _stop_listen.connect([implementation] () {
                 implementation->stop_listen();
             });
 
@@ -53,7 +51,7 @@ void OuiServiceServer::start_listen(asio::yield_context yield)
                     break;
                 }
 
-                if (!running) {
+                if (_stop_listen.call_count()) {
                     connection.close();
                     break;
                 }
