@@ -7,10 +7,23 @@
 #
 #     $ env OUINET_ROLE=client docker-compose -p ouinet-client up
 #
+# To run a shell on its data volume:
+#
+#     $ env OUINET_ROLE=client docker-compose -p ouinet-client run shell
+#
 
 version: '3'
 
 services:
+  shell:
+    image: busybox
+    volumes:
+      - data:/var/opt/ouinet
+    network_mode: none
+    # This leaves the user at the right place when running a shell.
+    working_dir: /var/opt/ouinet
+    # The shell just exits successfully on up or start.
+
   node:
     image: "ouinet:${OUINET_VERSION:-latest}"
     volumes:
