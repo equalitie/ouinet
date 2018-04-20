@@ -1,0 +1,17 @@
+version: '3'
+
+services:
+  node:
+    image: "ouinet:${OUINET_VERSION:-latest}"
+    volumes:
+      - data:/var/opt/ouinet
+    network_mode: host
+    command: ["${OUINET_ROLE:?please specify 'injector' or 'client'}"]
+    deploy:
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+        window: 30s
+
+volumes:
+  data:
