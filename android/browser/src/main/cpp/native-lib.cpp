@@ -12,7 +12,9 @@
 
 #include <fcntl.h>
 #include <unistd.h>
-#include <android/log.h>
+
+#include "debug.h"
+#include "std_scoped_redirect.h"
 
 using namespace std;
 
@@ -21,8 +23,6 @@ struct Defer {
     ~Defer() { _f(); }
     function<void()> _f;
 };
-
-#define debug(...) __android_log_print(ANDROID_LOG_VERBOSE, "Ouinet", __VA_ARGS__);
 
 // g_client is only accessed from the g_client_thread.
 std::unique_ptr<ouinet::Client> g_client;
@@ -40,7 +40,10 @@ void start_client_thread( string repo_root
     g_client_thread = thread([=] {
             if (g_client) return;
 
+            StdScopedRedirect redirect_guard;
+
             debug("Starting new ouinet client.");
+
             g_client = make_unique<ouinet::Client>(g_ios);
 
             // In case we're restarting.
@@ -49,7 +52,7 @@ void start_client_thread( string repo_root
             {
                 // Just touch this file, as the client looks into the
                 // repository and fails if this conf file isn't there.
-                fstream conf(repo_root + "/ouinet-client.conf"
+                fstream conf( repo_root + "/ouinet-client.conf"
                             , conf.binary | conf.out);
             }
 
@@ -92,59 +95,9 @@ void start_client_thread( string repo_root
             }
 
             g_ios.run();
-            debug("Stopping ouinet client.");
+            debug("Ouinet's main loop stopped.");
             g_client.reset();
         });
-}
-
-thread g_stderr_thread;
-
-bool setup_stderr_redirection()
-{
-    int fd[2];
-    if (pipe(fd)) {
-        __android_log_print(ANDROID_LOG_INFO, "Ouinet", "%s %d %d", "ERROR: Cannot read stderr", __LINE__, errno);
-        return false;
-    }
-
-    // fd[1] is the write end; 2 is the fd for stderr
-    if (dup2(fd[1], 2) == -1) {
-        close(fd[0]);
-        close(fd[1]);
-        __android_log_print(ANDROID_LOG_INFO, "Ouinet", "%s %d %d", "ERROR: Cannot read stderr", __LINE__, errno);
-        return false;
-    }
-
-    close(fd[1]);
-
-    g_stderr_thread = thread([fd_in = fd[0]] {
-        std::string message_buffer;
-
-        while (true) {
-            char receive_buffer[256];
-            ssize_t bytes_read = read(fd_in, receive_buffer, sizeof(receive_buffer));
-            if (bytes_read == -1) {
-                __android_log_print(ANDROID_LOG_INFO, "Ouinet", "%s %d %d", "ERROR: Cannot read stderr", __LINE__, errno);
-                break;
-            }
-            message_buffer += std::string(receive_buffer, bytes_read);
-
-            while (true) {
-                size_t pos = message_buffer.find('\n');
-                if (pos == -1) {
-                    break;
-                }
-
-                // This does not include the newline.
-                std::string message = message_buffer.substr(0, pos);
-                message_buffer.erase(0, pos + 1);
-
-                __android_log_print(ANDROID_LOG_INFO, "Ouinet", "%s", message.c_str());
-            }
-        }
-    });
-
-    return true;
 }
 
 extern "C"
@@ -158,8 +111,6 @@ Java_ie_equalit_ouinet_Ouinet_nStartClient(
         jstring j_credentials,
         jboolean enable_http_connect_requests)
 {
-    setup_stderr_redirection();
-
     const char* repo_root   = env->GetStringUTFChars(j_repo_root,   NULL);
     const char* injector_ep = env->GetStringUTFChars(j_injector_ep, NULL);
     const char* ipns        = env->GetStringUTFChars(j_ipns,        NULL);
