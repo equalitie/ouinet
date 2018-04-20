@@ -3,13 +3,15 @@
 #   - OUINET_VERSION: Optional version tag (default 'latest').
 #   - OUINET_ROLE: Compulsory, either 'injector' or 'client'.
 #
-# Usage example:
+# Usage example for client (with default environment file):
 #
-#     $ env OUINET_ROLE=client docker-compose -p ouinet-client up
+#     $ echo COMPOSE_PROJECT_NAME=ouinet-client >> .env  # optional
+#     $ echo OUINET_ROLE=client >> .env  # compulsory
+#     $ docker-compose up
 #
 # To run a shell on its data volume:
 #
-#     $ env OUINET_ROLE=client docker-compose -p ouinet-client run --rm shell
+#     $ docker-compose run --rm shell
 #
 
 version: '3'
