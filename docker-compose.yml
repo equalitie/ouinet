@@ -9,7 +9,7 @@
 #
 # To run a shell on its data volume:
 #
-#     $ env OUINET_ROLE=client docker-compose -p ouinet-client run shell
+#     $ env OUINET_ROLE=client docker-compose -p ouinet-client run --rm shell
 #
 
 version: '3'
