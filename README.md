@@ -400,14 +400,13 @@ If you ever need to reset and empty the injector's database for some reason
         $ sudo docker cp go-ipfs/ipfs SHELL_CONTAINER:/var/opt/ouinet
 
  2. Stop the injector.
- 3. Run a temporary injector container:
+ 3. Run a temporary Debian container with access to the data volume:
 
-        $ sudo docker run --rm -it --mount src=ouinet-injector_data,dst=/var/opt/ouinet \
-                      ouinet:latest /bin/bash
+        $ sudo docker run --rm -it -v ouinet-injector_data:/mnt debian
 
  4. In the container, run:
 
-        # cd /var/opt/ouinet
+        # cd /mnt
         # printf '{"sites":{}}' > injector/ipfs/ipfs_cache_db.*.json
         # ./ipfs -Lc injector/ipfs repo gc
         # exit
