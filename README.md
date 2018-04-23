@@ -276,11 +276,19 @@ A `Dockerfile` is included that can be used to create a Docker image which
 contains the Ouinet injector, client and necessary software dependencies
 running on top of a Debian base system.
 
-### Image
+Also a `docker-compose.yml` file is included for easily deploying all volumes
+and containers needed for either an injector or client Ouinet node using
+[Docker Compose](https://docs.docker.com/compose/).
 
-To build the image you will need around 3 GiB of disk space, although to run
-the final image only a couple hundred MiB are needed, plus the space devoted
-to the data volume.
+To run a Ouinet node container only a couple hundred MiB are needed, plus the
+space devoted to the data volume (which may grow considerably larger in the
+case of the injector).
+
+### Building the image
+
+Ouinet Docker images should be available from the Docker Hub.  Follow the
+instructions below if you still want to build the image yourself.  You will
+need around 3 GiB of disk space.
 
 You may use the `Dockerfile` as included in Ouinet's source code, or you
 can just [download it][Dockerfile].  Then build the image by running:
@@ -289,8 +297,8 @@ can just [download it][Dockerfile].  Then build the image by running:
 $ sudo docker build -t ouinet:latest .
 ```
 
-That will build a default recommended version, which you can override with
-`--build-arg OUINET_VERSION=<VERSION>`.
+That command will build a default recommended version, which you can override
+with `--build-arg OUINET_VERSION=<VERSION>`.
 
 [DockerFile]: https://raw.githubusercontent.com/equalitie/ouinet/master/Dockerfile
 
