@@ -349,38 +349,35 @@ populate its default environment file:
 
 ### Accessing data files
 
-Unless you reused an existing data volume with repositories and configuration
-files, when the Ouinet container first starts it automatically populates
-`/var/opt/ouinet` with a default configuration for the injector or client from
-templates included in Ouinet's source code.
-
-When you start a client with such a configuration it will be missing some
-important parameters.  You may want to stop it and run the convenience shell
-container like this:
+You may use the convenience *shell container* to access Ouinet node data
+directly:
 
 ```
 $ sudo docker-compose run --rm shell
 ```
 
 This will create a throwaway container with a shell at the `/var/opt/ouinet`
-directory in the data volume.  You may edit `client/ouinet-client.conf` and
-add configuration options for the injector endpoint `injector-ep` and cache
-IPNS `injector-ipns`, then restart the client.
+directory in the data volume.
 
-If the injector or client crashes for some reason, you may have to remove its
-PID file manually for it to start again.  Just use the shell container to
+A *new client node* which starts with no configuration in `/var/opt/ouinet`
+will get a default one from templates included in Ouinet's source code, and it
+will be missing some important parameters, so you may want to stop it and use
+the shell container to edit `client/ouinet-client.conf` and add configuration
+options for the injector endpoint `injector-ep` and cache IPNS
+`injector-ipns`, then restart the client.
+
+If the *injector or client crashes* for some reason, you may have to remove
+its PID file manually for it to start again.  Just use the shell container to
 remove `injector/pid` or `client/pid`.
 
-If you want to transfer an entire existing Ouinet injector or client
-repository to `/var/opt/ouinet`, you first need to move away or remove the
-existing one using the shell container:
+If you want to *transfer an existing repository* to `/var/opt/ouinet`, you
+first need to move away or remove the existing one using the shell container:
 
 ```
-# mv REPO REPO.old
+# mv REPO REPO.old  # REPO is either 'injector' or 'client'
 ```
 
-Where `REPO` is either `injector` or `client`.  Then you may copy it in from
-the host using:
+Then you may copy it in from the host using:
 
 ```
 $ sudo docker cp /path/to/REPO SHELL_CONTAINER:/var/opt/ouinet/REPO
