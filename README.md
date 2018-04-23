@@ -273,8 +273,8 @@ $ ./test.sh <BUILD DIR>/client
 ## Using Docker containers
 
 Ouinet injectors and clients can be run as Docker containers.  An application
-configuration file for [Docker Compose](https://docs.docker.com/compose/) is
-included for easily deploying all needed volumes and containers.
+configuration file for Docker Compose is included for easily deploying all
+needed volumes and containers.
 
 To run a Ouinet node container only a couple hundred MiB are needed, plus the
 space devoted to the data volume (which may grow considerably larger in the
@@ -308,20 +308,20 @@ run `sudo docker prune` to free up the space taken by temporary builder images
 
 ### Deploying a client
 
-You may use Docker Compose with the `docker-compose.yml` file included in
-Ouinet's source code (or you may [download it](docker-compose.yml)).  If you
-just plan to run a single client with the latest code on you computer, you
-should be fine with:
+You may use [Docker Compose](https://docs.docker.com/compose/) with the
+`docker-compose.yml` file included in Ouinet's source code (or you can just
+[download it](docker-compose.yml)).  If you just plan to run a single client
+with the latest code on you computer, you should be fine with:
 
 ```
 $ sudo docker-compose up
 ```
 
-That command will create a `data` volume, a main `node` container for running
+That command will create a *data volume*, a main *node container* for running
 the Ouinet client or injector (using the host's network directly), and a
-convenience `shell` container to allow you to modify files in the data volume
-(the shell container will exit immediately when run along the rest of
-services; this is normal).
+convenience *shell container* to allow you to modify files in the data volume,
+then run the containers (the shell container will exit immediately; this is
+normal).
 
 To stop the node, hit Ctrl+C.  Run `sudo docker-compose images` to see the
 names of the actual node and shell containers.
