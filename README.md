@@ -92,10 +92,7 @@ For some reason the vagrant config is not compatibe with virtualbox and you need
     export AWS_ACCESS_KEY_ID='YOUR_ACCESS_ID'
     export AWS_SECRET_ACCESS_KEY='your secret token'
 
-    mv Vagrantfile Vagrantfile.kvm
-    mv Vagrantfile.aws Vagrantfile
-
-    vagrant up
+    VAGRANT_VAGRANTFILE=Vagrantfile.aws vagrant up
     vagrant sshfs --mount linux
     vagrant ssh
 
@@ -104,8 +101,8 @@ For some reason the vagrant config is not compatibe with virtualbox and you need
 To perform some tests using the just-built Ouinet client and an existing
 injector, you first need to know the *injector endpoint* and a *distributed
 cache name*.  These use to be an IP address and PORT, and an IPNS identifier,
-respectively (although the injector endpoint may also be a GNUnet peer
-identity and service name).
+respectively (although the injector endpoint may also be an I2P peer
+identity).
 
 You need to configure the Ouinet client to use the aforementioned parameters.
 Edit the included configuration file:
@@ -120,12 +117,7 @@ Remember to replace the values with your own:
 
 All the steps above only need to be done once.
 
-Before you start the Ouinet client, you must run some local GNUnet services.
-Execute the following command:
-
-    env BUILD=ouinet-build REPOS=ouinet-repos ouinet/scripts/start-gnunet-services.sh client & gn=$!
-
-Give it a few seconds and start the Ouinet client by running:
+Now start the Ouinet client by running:
 
     ouinet-build/client --repo ouinet-repos/client
 
@@ -143,9 +135,7 @@ local Ouinet client, which will attempt several mechanisms supported by Ouinet
 to retrieve the resource.
 
 When you are done testing the Ouinet client, just shut down the browser, the
-client itself (by hitting Ctrl+C) and finally the GNUnet services by running:
-
-    kill $gn
+client itself (by hitting Ctrl+C).
 
 ## Requirements
 
@@ -160,69 +150,51 @@ during the build process.
 
 Ouinet uses Git submodules, thus to properly clone it, use
 
-```
-$ git clone --recursive git@github.com:equalitie/ouinet.git
-```
+    $ git clone --recursive git@github.com:equalitie/ouinet.git
 
 OR
 
-```
-$ git clone git@github.com:equalitie/ouinet.git
-$ cd ouinet
-$ git submodule update --init --recursive
-```
+    $ git clone git@github.com:equalitie/ouinet.git
+    $ cd ouinet
+    $ git submodule update --init --recursive
 
 ## Build
 
-```
-# Assuming:
-#   * <PROJECT ROOT> points to the directory where the
-#                    CMakeLists.txt file is
-#   * <BUILD DIR> is a directory of your choice where all
-#                 (even temporary) build files will go
-$ mkdir -p <BUILD DIR>
-$ cd <BUILD DIR>
-$ cmake <PROJECT ROOT>
-$ make
-```
+    # Assuming:
+    #   * <PROJECT ROOT> points to the directory where the
+    #                    CMakeLists.txt file is
+    #   * <BUILD DIR> is a directory of your choice where all
+    #                 (even temporary) build files will go
+    $ mkdir -p <BUILD DIR>
+    $ cd <BUILD DIR>
+    $ cmake <PROJECT ROOT>
+    $ make
 
 ## Test
 
-Before everything else, we need to start GNUnet services. To do that
-open a new terminal window and execute:
+    First, we start the injector locally:
+    
+    $ ./injector --repo ../repos/injector
+    Swarm listening on /ip4/127.0.0.1/tcp/4001
+    Swarm listening on /ip4/192.168.0.136/tcp/4001
+    Swarm listening on /ip6/::1/tcp/4001
+    IPNS DB: <DB_IPNS>
+    ...
+    TCP Address: <IP:PORT>
+    ...
 
-```
-$ ./scripts/start-gnunet-services.sh
-```
-
-Leave that script running and start another terminal window where we'll start
-the injector:
-
-```
-$ ./injector --repo ../repos/injector
-Swarm listening on /ip4/127.0.0.1/tcp/4001
-Swarm listening on /ip4/192.168.0.136/tcp/4001
-Swarm listening on /ip6/::1/tcp/4001
-IPNS DB: <DB_IPNS>
-...
-GNUnet ID: <GNUNET_ID>
-...
-```
-
-Make note of the `<DB_IPNS>` and `<GNUNET_ID>` strings in the above output,
+Make note of the `<DB_IPNS>` and `<IP:PORT>` strings in the above output,
 we'll need to pass them as arguments to the client.  You may also find these
-values in the `cache-ipns` and `endpoint-gnunet` files in the injector's
+values in the `cache-ipns` and `endpoint-tcp` files in the injector's
 repository root directory (`../repos/injector` in the example).
 
 While injector is still running, start the client in yet another terminal
-window and pass it the injector's `<GNUNET_ID>` and `<DB_IPNS>` strings from
+window and pass it the injector's `<IP:PORT>` and `<DB_IPNS>` strings from
 above:
 
-```
-$ ./client --repo ../repos/client \
-           --injector-ipns <DB_IPNS> \
-           --injector-ep <GNUNET_ID>:injector-main-port
-```
+    $ ./client --repo ../repos/client \
+               --injector-ipns <DB_IPNS> \
+               --injector-ep <IP:PORT>
 
 Now [modify the settings of your
 browser](http://www.wikihow.com/Enter-Proxy-Settings-in-Firefox) to:
@@ -242,9 +214,7 @@ once the client downloads the database, it should display automatically.
 In the mean time, notice also the small form at the top of the page looking
 something like this:
 
-```
-Injector proxy: enabled [disable]
-```
+    Injector proxy: enabled [disable]
 
 This means that proxing to injector is currently `enabled`, which in turn
 means that if one points the browser to a non secure http page and the page
@@ -254,9 +224,7 @@ back and (B) upload the content to the IPFS database.
 
 Each time the injector updates the database it prints out a message:
 
-```
-Published DB: Qm...
-```
+    Published DB: Qm...
 
 Once published, it will take some time for the client to download it
 (up to three minutes from experience) and once it does so, it will be shown
@@ -265,10 +233,6 @@ on client's frontend.
 At that point one can disable the proxying through injector, clear
 browser's cached data and try to point the browser to the same non secured
 HTTP page.
-
-```
-$ ./test.sh <BUILD DIR>/client
-```
 
 ## Creating a Docker image and injector (or client) container
 
@@ -433,14 +397,12 @@ path to your build directory. That is, the directory from which you'll run the
 
 ### Building
 
-```
-host    $ vagrant up --provider=libvirt
-host    $ vagrant ssh
-vagrant $ mkdir <ANDROID>
-vagrant $ cd <ANDROID>
-vagrant $ git clone --recursive /vagrant
-vagrant $ ./vagrant/scripts/build-android.sh
-```
+    host    $ vagrant up --provider=libvirt
+    host    $ vagrant ssh
+    vagrant $ mkdir <ANDROID>
+    vagrant $ cd <ANDROID>
+    vagrant $ git clone --recursive /vagrant
+    vagrant $ ./vagrant/scripts/build-android.sh
 
 When the `build-android.sh` script finishes successfully, it prints out a path
 to the `browser-debug.apk` app package which can now be deployed.
@@ -454,29 +416,39 @@ the cloning and run `/vagrant/scripts/build-android.sh` instead.
 The script builds by default an APK for the `armeabi-v7a` [Android ABI][]. If
 you want a build for a different ABI, just set the `ABI` environment variable:
 
-```
-$ env ABI=x86_64 /path/to/build-android.sh
-```
+    $ env ABI=x86_64 /path/to/build-android.sh
 
 Please note that merging different ABI builds at the same build directory is
 not yet supported.  To remove potentially conflicting files while keeping
 downloads and ABI-neutral source files so that you can reuse them for the next
 build, please run:
 
-```
-$ /path/to/build-android.sh abiclean
-```
+    $ /path/to/build-android.sh abiclean
 
 [Android ABI]: https://developer.android.com/ndk/guides/abis.html
 
-### Testing
+### Setting up Android browser/client
+
+The android app has user menus for specifying the injector's endpoint,
+injector's credentials, and the IPFS database ID (IPNS), but that is very
+tedious to do. Because of that, the app also gives you an option to
+read QR codes. To generate one, create a text with these values:
+
+    injector=<INJECTOR ENDPOINT>
+    ipns=<INJECTOR's IPFS-ID/IPNS>
+    credentials=<USERNAME:PASSWORD>
+
+and the use an online QR code generator such as [this one](https://www.the-qrcode-generator.com/),
+or use a command line tool such as [qrencode](https://fukuchi.org/works/qrencode/)
+
+    $ qrencode -t PNG -o FILE.png < FILE.txt
+
+### Testing with Android emulator
 
 You may also use the `build-android.sh` script to fire up an Android emulator
 session with a compatible system image; just run:
 
-```
-$ /path/to/build-android.sh emu
-```
+    $ /path/to/build-android.sh emu
 
 It will download the necessary files to the current directory (or reuse files
 downloaded by the build process, if available) and start the emulator.  Please
