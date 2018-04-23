@@ -306,81 +306,92 @@ After a while you will get the `ouinet:latest` image.  Then you may want to
 run `sudo docker prune` to free up the space taken by temporary builder images
 (which may amount to a couple of GiB).
 
-### Data volume
+### Deploying a client
 
-You need to create a volume for Ouinet to store their repositories.  The
-following commands create the `ouinet-repos` volume and mount it in a
-convenience BusyBox container of the same name (under `/var/opt/ouinet`):
-
-```
-$ sudo docker volume create ouinet-repos
-$ sudo docker create --name ouinet-repos -it \
-              --mount src=ouinet-repos,dst=/var/opt/ouinet busybox
-```
-
-If you want to transfer an existing Ouinet injector or client repository to
-`/var/opt/ouinet`, you may copy them using (respectively):
+You may use Docker Compose with the `docker-compose.yml` file included in
+Ouinet's source code (or you may [download it](docker-compose.yml)).  If you
+just plan to run a single client with the latest code on you computer, you
+should be fine with:
 
 ```
-$ sudo docker cp /path/to/injector/repo ouinet-repos:/var/opt/ouinet/injector
-$ sudo docker cp /path/to/client/repo ouinet-repos:/var/opt/ouinet/client
+$ sudo docker-compose up
 ```
 
-Otherwise, when the Ouinet container first starts, if there is no repository,
-it automatically populates `/var/opt/ouinet` with a default configuration for
-the injector or client from templates included in Ouinet's source code.
+That command will create a `data` volume, a main `node` container for running
+the Ouinet client or injector (using the host's network directly), and a
+convenience `shell` container to allow you to modify files in the data volume
+(the shell container will exit immediately when run along the rest of
+services; this is normal).
 
-Should you need to manually edit the contents of the repositories after their
-creation, you can start the convenience container by running:
+To stop the node, hit Ctrl+C.  Run `sudo docker-compose images` to see the
+names of the actual node and shell containers.
+
+[docker-compose.yml]: https://raw.githubusercontent.com/equalitie/ouinet/master/docker-compose.yml
+
+### Accessing data files
+
+Unless you reused an existing data volume with repositories and configuration
+files, when the Ouinet container first starts it automatically populates
+`/var/opt/ouinet` with a default configuration for the injector or client from
+templates included in Ouinet's source code.
+
+When you start a client with such a configuration it will be missing some
+important parameters.  You may want to stop it and run the convenience shell
+container like this:
 
 ```
-$ sudo docker start -ia ouinet-repos
+$ sudo docker-compose run --rm shell
 ```
+
+This will create a throwaway container with a shell at the `/var/opt/ouinet`
+directory in the data volume.  You may edit `client/ouinet-client.conf` and
+add configuration options for the injector endpoint `injector-ep` and cache
+IPNS `injector-ipns`, then restart the client.
+
+If the injector or client crashes for some reason, you may have to remove its
+PID file manually for it to start again.  Just use the shell container to
+remove `injector/pid` or `client/pid`.
+
+If you want to transfer an entire existing Ouinet injector or client
+repository to `/var/opt/ouinet`, you first need to move away or remove the
+existing one using the shell container:
+
+```
+# mv REPO REPO.old
+```
+
+Where `REPO` is either `injector` or `client`.  Then you may copy it in from
+the host using:
+
+```
+$ sudo docker cp /path/to/REPO SHELL_CONTAINER:/var/opt/ouinet/REPO
+```
+
+### Other deployments
+
+If you plan on running several nodes on the same host you will need to use
+different explicit Docker Compose project names for them.  To make the node an
+injector instead of a client you need to set `OUINET_ROLE=injector`.  To make
+the container use a particular image version instead of `latest`, set
+`OUINET_VERSION`.
+
+An easy way to set all these parameters is to copy or link the
+`docker-compose.yml` file to a directory with the desired project name and
+populate its default environment file:
+
+    $ mkdir -p /path/to/ouinet-injector  # ouinet-injector is the project name
+    $ cd /path/to/ouinet-injector
+    $ cp /path/to/docker-compose.yml .
+    $ echo OUINET_ROLE=injector >> .env
+    $ echo OUINET_VERSION=v0.0.4-android >> .env
+    $ docker-compose up
 
 ### Injector container
 
-To create an injector container, run the following command which creates the
-`ouinet-injector` container (using the host's network), mounts the
-`ouinet-repos` volume (created above) under `/var/opt/ouinet` and starts the
-injector node:
-
-```
-$ sudo docker create --name ouinet-injector -it --network host \
-              --mount src=ouinet-repos,dst=/var/opt/ouinet \
-              ouinet:latest injector
-```
-
-The `-it` options allow you to attach the program to a terminal so that you
-can see its logging messages and send Ctrl+C to terminate it.
-
-If you want to pass additional options to the injector, just edit its
-configuration at `/var/opt/ouinet/injector/ouinet-injector.conf` using the
-`ouinet-repos` container.  You can also include additional arguments at the
-end of the `docker create` command, though this is not recommended:
-
-    ... ouinet:latest injector --<OPTION>=<VALUE>...
-
-To start the container, run:
-
-```
-$ sudo docker start -ia ouinet-injector
-```
-
-The `-ia` options also attach the program to a terminal.  To stop the
-container, hit Ctrl+C or run:
-
-```
-$ sudo docker stop ouinet-injector
-```
-
-After the injector has finished starting, you may want to use the
-`ouinet-repos` container to inspect and note down the contents of
-`/var/opt/ouinet/injector/endpoint-*` (injector endpoints) and
-`/var/opt/ouinet/injector/cache-ipns` (cache IPNS) to be used by clients.
-
-If the program crashes for some reason, you may have to remove the injector's
-PID file manually for it to start again.  Just use the `ouinet-repos`
-container to remove `/var/opt/ouinet/injector/pid`.
+After an injector has finished starting, you may want to use the shell
+container to inspect and note down the contents of `injector/endpoint-*`
+(injector endpoints) and `injector/cache-ipns` (cache IPNS) to be used by
+clients.
 
 If you ever need to reset and empty the injector's database for some reason
 (e.g. testing) while keeping injector IDs and credentials, you may:
@@ -389,12 +400,12 @@ If you ever need to reset and empty the injector's database for some reason
 
         $ wget "https://dist.ipfs.io/go-ipfs/v0.4.14/go-ipfs_v0.4.14_linux-amd64.tar.gz"
         $ tar -xf go-ipfs_v0.4.14_linux-amd64.tar.gz
-        $ sudo docker cp go-ipfs/ipfs ouinet-repos:/var/opt/ouinet
+        $ sudo docker cp go-ipfs/ipfs SHELL_CONTAINER:/var/opt/ouinet
 
- 2. Stop the injector (see above).
+ 2. Stop the injector.
  3. Run a temporary injector container:
 
-        $ sudo docker run --rm -it --mount src=ouinet-repos,dst=/var/opt/ouinet \
+        $ sudo docker run --rm -it --mount src=ouinet-injector_data,dst=/var/opt/ouinet \
                       ouinet:latest /bin/bash
 
  4. In the container, run:
@@ -404,30 +415,7 @@ If you ever need to reset and empty the injector's database for some reason
         # ./ipfs -Lc injector/ipfs repo gc
         # exit
 
- 5. Start the injector (see above).
-
-### Client container
-
-To create a client container, run the following command which creates the
-`ouinet-client` container (using the host's network), mounts the
-`ouinet-repos` volume (created above) under `/var/opt/ouinet` and starts the
-client node:
-
-```
-$ sudo docker create --name ouinet-client -it --network host \
-              --mount src=ouinet-repos,dst=/var/opt/ouinet \
-              ouinet:latest client
-```
-
-The rest of instructions for the injector (see above) also hold for the client
-(just replace `injector` with `client` where appropriate).
-
-Unless you transferred an existing client configuration, when you start the
-client container it will be missing some important parameters.  You may want
-to stop the container, use the `ouinet-repos` container to edit
-`/var/opt/ouinet/client/ouinet-client.conf` and add configuration options for
-the injector endpoint `injector-ep` and cache IPNS `injector-ipns`, then
-restart the client container.
+ 5. Start the injector.
 
 ## Android
 
