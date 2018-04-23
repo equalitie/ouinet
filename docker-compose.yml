@@ -1,12 +1,12 @@
 # Environment variables:
 #
 #   - OUINET_VERSION: Optional version tag (default 'latest').
-#   - OUINET_ROLE: Compulsory, either 'injector' or 'client'.
+#   - OUINET_ROLE: Optional node role: 'injector' or 'client' (default).
 #
 # Usage example for client (with default environment file):
 #
 #     $ echo COMPOSE_PROJECT_NAME=ouinet-client >> .env  # optional
-#     $ echo OUINET_ROLE=client >> .env  # compulsory
+#     $ echo OUINET_ROLE=client >> .env  # optional
 #     $ docker-compose up
 #
 # To run a shell on its data volume:
@@ -31,7 +31,7 @@ services:
     volumes:
       - data:/var/opt/ouinet
     network_mode: host
-    command: ["${OUINET_ROLE:?please specify 'injector' or 'client'}"]
+    command: ["${OUINET_ROLE:-client}"]
     # These do not work for ``docker-compose up``, including as hints.
     deploy:
       restart_policy:
