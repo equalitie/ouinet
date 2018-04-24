@@ -17,7 +17,7 @@ import pdb
 
 from test_fixtures import TestFixtures
 
-TIMEOUT_LEN = 300 # seconds
+TIMEOUT_LEN = 15 # seconds
 
 # Helper: stick "| " at the beginning of each line of |s|.
 
@@ -53,18 +53,56 @@ ouinet_env = {}
 ouinet_env.update(os.environ)
 ouinet_env['MALLOC_CHECK_'] = '2'
 
-class OuinetClient(subprocess.Popen):
-    def __init__(self, client_name, *args, **kwargs):
-        argv = [ouinet_env['OUINET_BUILD_DIR'] + "client", "--repo", client_name]
+class OuinetProcess(subprocess.Popen):
+    def make_config_folder(self):
+        if not os.path.exists(TestFixtures.REPO_FOLDER_NAME):
+            os.makedirs(TestFixtures.REPO_FOLDER_NAME)
 
-        if not os.path.exists(client_name):
-            os.makedirs(client_name)
+        if not os.path.exists(TestFixtures.REPO_FOLDER_NAME + "/" + self.app_name):
+            os.makedirs(TestFixtures.REPO_FOLDER_NAME + "/" + self.app_name)
+
+        self.config_folder = TestFixtures.REPO_FOLDER_NAME + "/" + self.app_name
+
+    
+    def check_for_fatal_error(self):
+        """
+        Reads the first unread line from stderr and check if the ouinet client 
+        has thrown an error
+
+        Returns:
+            True if a fatal error has occurred False otherwise 
+        """
+        line = self.stderr.readline()
+        #pdb.set_trace()
+        if re.match(r'stderr', line):
+            print line
+            return True
+  
+        return False
+
+    def setup_config(self, app_name, config_file_name, config_file_content):
+        #making the necessary folders for the configs and cache
+        self.app_name = app_name
+        self.make_config_folder()
 
         #we need to make a minimal configuration file
         #we overwrite any existing config file to make
-        #the test canonical
-        with open(client_name + "/ouinet-client.conf", "w") as conf_file:
-            conf_file.write(TestFixtures.FIRST_CLIENT_CONF_FILE_CONTENT)
+        #the test canonical (also trial delete its temp
+        #folder each time
+        with open(self.config_folder + "/" + config_file_name, "w") as conf_file:
+            conf_file.write(config_file_content)
+
+    def stop(self):
+        if self.poll() is None:
+            self.terminate()
+            print self.app_name," stopped"
+
+class OuinetClient(OuinetProcess):
+    def __init__(self, client_name, *args, **kwargs):
+        #making the necessary folders for the configs and cache
+        self.setup_config(client_name, "ouinet-client.conf", TestFixtures.FIRST_CLIENT_CONF_FILE_CONTENT)
+
+        argv = [ouinet_env['OUINET_BUILD_DIR'] + "client", "--repo", self.config_folder]
         
         if len(args) == 1 and (isinstance(args[0], list) or
                                isinstance(args[0], tuple)):
@@ -82,7 +120,6 @@ class OuinetClient(subprocess.Popen):
 
         # wait for startup completion, which is signaled by
         # the subprocess closing its stdout
-        pdb.set_trace()
         self.check_for_fatal_error()
         #self.output = self.stdout.read()
         
@@ -96,28 +133,8 @@ class OuinetClient(subprocess.Popen):
     severe_error_re = re.compile(
         r"\[(?:warn|err(?:or)?)\]|ERROR SUMMARY: [1-9]|LEAK SUMMARY:")
 
-    def stop(self):
-        if self.poll() is None:
-            self.terminate()
-
     def run_communicate(self):
         self.errput = self.stderr.read()
-
-    def check_for_fatal_error(self):
-        """
-        Reads the first unread line from stderr and check if the ouinet client 
-        has thrown an error
-
-        Returns:
-            True if a fatal error has occurred False otherwise 
-        """
-        line = self.stderr.readline()
-        #pdb.set_trace()
-        if re.match(r'stderr', line):
-            print line
-            return True
-  
-        return False
         
     def check_completion(self, label, force_stderr=False):
         self.stdin.close()
@@ -149,13 +166,12 @@ class OuinetClient(subprocess.Popen):
         return report
 
 # As above, but for the 'injector' 
-class OuinetInjector(subprocess.Popen):
+class OuinetInjector(OuinetProcess):
     def __init__(self, injector_name, extra_args=(), **kwargs):
-        argv = [ouinet_env['OUINET_BUILD_DIR'] + "injector", "--repo", injector_name]
+        self.setup_config(injector_name, "ouinet-injector.conf", TestFixtures.INJECTOR_CONF_FILE_CONTENT)
+        pdb.set_trace()
+        argv = [ouinet_env['OUINET_BUILD_DIR'] + "injector", "--repo", self.config_folder]
         argv.extend(extra_args)
-
-        if not os.path.exists(injector_name):
-            os.makedirs(injector_name)
 
         subprocess.Popen.__init__(self, argv,
                                   stdin=subprocess.PIPE,
@@ -164,16 +180,16 @@ class OuinetInjector(subprocess.Popen):
                                   env=ouinet_env,
                                   close_fds=True,
                                   **kwargs)
+        # wait for startup completion, which is signaled by
+        # the subprocess closing its stdout
+        self.check_for_fatal_error()
+
         # invoke communicate() in a separate thread, since we will
         # have several processes outstanding at the same time
         self.communicator = threading.Thread(target=self.run_communicate)
         self.communicator.start()
         self.timeout = threading.Timer(TIMEOUT_LEN, self.stop)
         self.timeout.start()
-
-    def stop(self):
-        if self.poll() is None:
-            self.terminate()
 
     def run_communicate(self):
         (out, err) = self.communicate()

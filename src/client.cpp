@@ -8,6 +8,7 @@
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <iostream>
 #include <fstream>
+#include <strstream>
 #include <cstdlib>  // for atexit()
 
 #include <ipfs_cache/client.h>
@@ -39,6 +40,10 @@
 #include "ouiservice/tcp.h"
 
 #include "util/signal.h"
+
+#include "logger.h"
+
+extern Logger logger;
 
 using namespace std;
 using namespace ouinet;
@@ -294,6 +299,8 @@ Response Client::State::fetch_fresh( const Request& request
 
     sys::error_code last_error = operation_not_supported;
 
+    logger.debug("fetching fresh");
+
     while (!request_config.responders.empty()) {
         auto r = request_config.responders.front();
         request_config.responders.pop();
@@ -414,6 +421,9 @@ Response bad_gateway(const Request& req)
 void Client::State::serve_request( GenericConnection& con
                                  , asio::yield_context yield)
 {
+
+    logger.debug("Request received ");
+  
     namespace rr = request_route;
     using rr::responder;
 
@@ -421,6 +431,7 @@ void Client::State::serve_request( GenericConnection& con
         con.close();
     });
 
+    
     // These access mechanisms are attempted in order for requests by default.
     const rr::Config default_request_config
         { true
@@ -527,6 +538,7 @@ void Client::State::serve_request( GenericConnection& con
             else return;
         }
 
+        cout << req.base() << res.base() << endl;
         // Forward the response back
         ASYNC_DEBUG(http::async_write(con, res, yield[ec]), "Write response ", req.target());
         if (ec == http::error::end_of_stream) break;

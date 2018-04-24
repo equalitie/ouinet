@@ -76,6 +76,7 @@ file(GLOB client_sources
     "./src/request_routing.cpp"
     "./src/ouiservice.cpp"
     "./src/ouiservice/tcp.cpp"
+    "./src/logger.cpp"
 )
 
 if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
@@ -113,6 +114,7 @@ if (WITH_INJECTOR)
         "./src/cache_control.cpp"
         "./src/ouiservice.cpp"
         "./src/ouiservice/tcp.cpp"
+        "./src/logger.cpp"
     )
 
     add_executable(injector ${injector_sources})
