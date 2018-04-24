@@ -27,7 +27,7 @@ services:
     # The shell just exits successfully on up or start.
 
   node:
-    image: "ouinet:${OUINET_VERSION:-latest}"
+    image: "equalitie/ouinet:${OUINET_VERSION:-latest}"
     volumes:
       - data:/var/opt/ouinet
     network_mode: host

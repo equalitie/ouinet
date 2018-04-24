@@ -294,7 +294,7 @@ You may use the `Dockerfile` as included in Ouinet's source code, or you
 can just [download it][Dockerfile].  Then build the image by running:
 
 ```
-$ sudo docker build -t ouinet:latest .
+$ sudo docker build -t equalitie/ouinet:latest .
 ```
 
 That command will build a default recommended version, which you can override
@@ -302,9 +302,9 @@ with `--build-arg OUINET_VERSION=<VERSION>`.
 
 [DockerFile]: https://raw.githubusercontent.com/equalitie/ouinet/master/Dockerfile
 
-After a while you will get the `ouinet:latest` image.  Then you may want to
-run `sudo docker prune` to free up the space taken by temporary builder images
-(which may amount to a couple of GiB).
+After a while you will get the `equalitie/ouinet:latest` image.  Then you may
+want to run `sudo docker prune` to free up the space taken by temporary
+builder images (which may amount to a couple of GiB).
 
 ### Deploying a client
 
