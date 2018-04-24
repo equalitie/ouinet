@@ -1,0 +1,43 @@
+# Environment variables:
+#
+#   - OUINET_VERSION: Optional version tag (default 'latest').
+#   - OUINET_ROLE: Optional node role: 'injector' or 'client' (default).
+#
+# Usage example for client (with default environment file):
+#
+#     $ echo COMPOSE_PROJECT_NAME=ouinet-client >> .env  # optional
+#     $ echo OUINET_ROLE=client >> .env  # optional
+#     $ docker-compose up
+#
+# To run a shell on its data volume:
+#
+#     $ docker-compose run --rm shell
+#
+
+version: '3'
+
+services:
+  shell:
+    image: busybox
+    volumes:
+      - data:/var/opt/ouinet
+    network_mode: none
+    # This leaves the user at the right place when running a shell.
+    working_dir: /var/opt/ouinet
+    # The shell just exits successfully on up or start.
+
+  node:
+    image: "equalitie/ouinet:${OUINET_VERSION:-latest}"
+    volumes:
+      - data:/var/opt/ouinet
+    network_mode: host
+    command: ["${OUINET_ROLE:-client}"]
+    # These do not work for ``docker-compose up``, including as hints.
+    deploy:
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+        window: 30s
+
+volumes:
+  data:

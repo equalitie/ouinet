@@ -33,7 +33,10 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /usr/local/src
-RUN git clone --recursive https://github.com/equalitie/ouinet.git
+# This version is a recommendation and this file has been tested to work for it,
+# but you may attempt to build other versions by overriding this argument.
+ARG OUINET_VERSION=v0.0.4-android
+RUN git clone --recursive -b "$OUINET_VERSION" https://github.com/equalitie/ouinet.git
 WORKDIR /opt/ouinet
 RUN cmake /usr/local/src/ouinet \
  && make
@@ -80,4 +83,4 @@ COPY --from=builder /opt/ouinet/modules/ipfs-cache/ipfs_bindings/libipfs_binding
 COPY --from=builder /opt/ouinet/injector /opt/ouinet/client /usr/local/src/ouinet/scripts/ouinet-docker.sh ./
 COPY --from=builder /opt/ouinet/test/test-* test/
 COPY --from=builder /usr/local/src/ouinet/repos/ repos/
-CMD ["./ouinet-docker.sh", "injector"]
+ENTRYPOINT ["./ouinet-docker.sh"]
