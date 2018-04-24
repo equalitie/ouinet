@@ -58,12 +58,22 @@ public:
         _injector_credentials[injector] = cred;
     }
 
+    bool enable_http_connect_requests() const {
+        return _enable_http_connect_requests;
+    }
+
+    asio::ip::tcp::endpoint front_end_endpoint() const {
+        return _front_end_endpoint;
+    }
+
 private:
     Path _repo_root;
     Path _ouinet_conf_file = "ouinet-client.conf";
     asio::ip::tcp::endpoint _local_ep;
     boost::optional<Endpoint> _injector_ep;
     std::string _ipns;
+    bool _enable_http_connect_requests = false;
+    asio::ip::tcp::endpoint _front_end_endpoint;
 
     boost::posix_time::time_duration _max_cached_age
         = boost::posix_time::hours(7*24);  // one week
@@ -89,18 +99,24 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen")
         ("injector-ep"
          , po::value<string>()
-         , "Injector's endpoint (either <IP>:<PORT> or I2P public key")
+         , "Injector's endpoint (either <IP>:<PORT> or I2P public key)")
         ("injector-ipns"
          , po::value<string>()->default_value("")
          , "IPNS of the injector's database")
         ("max-cached-age"
          , po::value<int>()->default_value(_max_cached_age.total_seconds())
-         , "Discard cached content older than this many seconds (0: discard all; -1: discard none)")
+         , "Discard cached content older than this many seconds "
+           "(0: discard all; -1: discard none)")
         ("open-file-limit"
          , po::value<unsigned int>()
          , "To increase the maximum number of open files")
         ("injector-credentials", po::value<string>()
          , "<username>:<password> authentication pair for the injector")
+        ("enable-http-connect-requests", po::bool_switch(&_enable_http_connect_requests)
+         , "Enable HTTP CONNECT requests")
+        ("front-end-ep"
+         , po::value<string>()
+         , "Front-end's endpoint (in <IP>:<PORT> format)")
         ;
 
     po::variables_map vm;
@@ -168,6 +184,20 @@ ClientConfig::ClientConfig(int argc, char* argv[])
             }
 
             _injector_ep = *opt;
+        }
+    }
+
+    if (vm.count("front-end-ep")) {
+        auto ep_str = vm["front-end-ep"].as<string>();
+
+        if (!ep_str.empty()) {
+            sys::error_code ec;
+            _front_end_endpoint = util::parse_tcp_endpoint(ep_str, ec);
+
+            if (ec) {
+                throw std::runtime_error( "Failed to parse endpoint \""
+                        + ep_str + "\"");
+            }
         }
     }
 

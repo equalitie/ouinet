@@ -23,6 +23,13 @@ fetch_http_page( asio::io_service& ios
 
     // Send the HTTP request to the remote host
     http::async_write(con, req, yield[ec]);
+
+    // Ignore end_of_stream error, there may still be data in the receive
+    // buffer we can read.
+    if (ec == http::error::end_of_stream) {
+        ec = sys::error_code();
+    }
+
     if (ec) return or_throw(yield, ec, move(res));
 
     beast::flat_buffer buffer;

@@ -8,6 +8,7 @@
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <iostream>
 #include <fstream>
+#include <strstream>
 #include <cstdlib>  // for atexit()
 
 #include <ipfs_cache/client.h>
@@ -41,6 +42,10 @@
 
 #include "util/signal.h"
 
+#include "logger.h"
+
+extern Logger logger;
+
 using namespace std;
 using namespace ouinet;
 
@@ -73,9 +78,13 @@ public:
     {}
 
     void start(int argc, char* argv[]);
-    void stop() { _shutdown_signal(); }
 
-    void setup_ipfs_cache(const string& ipns);
+    void stop() {
+        _ipfs_cache = nullptr;
+        _shutdown_signal();
+    }
+
+    void setup_ipfs_cache();
     void set_injector(string);
 
 private:
@@ -96,7 +105,10 @@ private:
 
     CacheControl build_cache_control(request_route::Config& request_config);
 
-    void do_listen(asio::yield_context yield);
+    void listen_tcp( asio::yield_context
+                   , tcp::endpoint
+                   , function<void(GenericConnection, asio::yield_context)>);
+
     void setup_injector(asio::yield_context);
 
     boost::filesystem::path get_pid_path() const {
@@ -267,6 +279,8 @@ Response Client::State::fetch_fresh( const Request& request
 
     sys::error_code last_error = operation_not_supported;
 
+    logger.debug("fetching fresh");
+
     while (!request_config.responders.empty()) {
         auto r = request_config.responders.front();
         request_config.responders.pop();
@@ -351,9 +365,22 @@ Client::State::build_cache_control(request_route::Config& request_config)
 }
 
 //------------------------------------------------------------------------------
+static
+Response bad_gateway(const Request& req)
+{
+    Response res{http::status::bad_gateway, req.version()};
+    res.set(http::field::server, "Ouinet");
+    res.keep_alive(req.keep_alive());
+    return res;
+}
+
+//------------------------------------------------------------------------------
 void Client::State::serve_request( GenericConnection& con
                                  , asio::yield_context yield)
 {
+
+    logger.debug("Request received ");
+  
     namespace rr = request_route;
     using rr::responder;
 
@@ -361,6 +388,7 @@ void Client::State::serve_request( GenericConnection& con
         con.close();
     });
 
+    
     // These access mechanisms are attempted in order for requests by default.
     const rr::Config default_request_config
         { true
@@ -379,11 +407,15 @@ void Client::State::serve_request( GenericConnection& con
 
     auto method_getter([](const Request& r) {return r.method_string();});
     auto host_getter([](const Request& r) {return r["Host"];});
+    auto x_oui_dest_getter([](const Request& r) {return r["X-Oui-Destination"];});
     auto target_getter([](const Request& r) {return r.target();});
 
     const vector<Match> matches({
         // Handle requests to <http://localhost/> internally.
         Match( reqexpr::from_regex(host_getter, "localhost")
+             , {false, queue<responder>({responder::_front_end})} ),
+
+        Match( reqexpr::from_regex(x_oui_dest_getter, "OuiClient")
              , {false, queue<responder>({responder::_front_end})} ),
 
         // NOTE: The matching of HTTP methods below can be simplified,
@@ -425,10 +457,22 @@ void Client::State::serve_request( GenericConnection& con
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "read");
 
+        //std::strstream raw_request;
+        //raw_request << beast::buffers(buffer.data());
+        //logger.debug(raw_request.str());
+
         // Attempt connection to origin for CONNECT requests
         if (req.method() == http::verb::connect) {
-            return ASYNC_DEBUG( handle_connect_request(con, req, yield)
-                              , "Connect ", req.target());
+            if (_config.enable_http_connect_requests()) {
+                ASYNC_DEBUG( handle_connect_request(con, req, yield)
+                           , "Connect ", req.target());
+            }
+            else {
+                auto res = bad_gateway(req);
+                http::async_write(con, res, yield[ec]);
+            }
+
+            return;
         }
 
         request_config = route_choose_config(req, matches, default_request_config);
@@ -451,6 +495,7 @@ void Client::State::serve_request( GenericConnection& con
             else return;
         }
 
+        cout << req.base() << res.base() << endl;
         // Forward the response back
         ASYNC_DEBUG(http::async_write(con, res, yield[ec]), "Write response ", req.target());
         if (ec == http::error::end_of_stream) break;
@@ -459,8 +504,12 @@ void Client::State::serve_request( GenericConnection& con
 }
 
 //------------------------------------------------------------------------------
-void Client::State::setup_ipfs_cache(const string& ipns)
+void Client::State::setup_ipfs_cache()
 {
+    const string ipns = _config.ipns();
+
+    if (ipns.empty()) return;
+
     if (_ipfs_cache) {
         return _ipfs_cache->set_ipns(move(ipns));
     }
@@ -478,11 +527,11 @@ void Client::State::setup_ipfs_cache(const string& ipns)
 }
 
 //------------------------------------------------------------------------------
-void Client::State::do_listen(asio::yield_context yield)
+void Client::State::listen_tcp
+        ( asio::yield_context yield
+        , tcp::endpoint local_endpoint
+        , function<void(GenericConnection, asio::yield_context)> handler)
 {
-    const auto local_endpoint = _config.local_endpoint();
-    const auto ipns = _config.ipns();
-
     sys::error_code ec;
 
     // Open the acceptor
@@ -503,14 +552,6 @@ void Client::State::do_listen(asio::yield_context yield)
 
     auto shutdown_acceptor_slot = _shutdown_signal.connect([&acceptor] {
         acceptor.close();
-    });
-
-    if (ipns.size()) {
-        setup_ipfs_cache(ipns);
-    }
-
-    auto shutdown_ipfs_slot = _shutdown_signal.connect([this] {
-        _ipfs_cache = nullptr;
     });
 
     cout << "Client accepting on " << acceptor.local_endpoint() << endl;
@@ -535,15 +576,15 @@ void Client::State::do_listen(asio::yield_context yield)
                 s.close(ec);
             };
 
-            auto connection
-                = make_shared<GenericConnection>(move(socket), tcp_shutter);
+            GenericConnection connection(move(socket) , move(tcp_shutter));
 
             asio::spawn( _ios
                        , [ this
-                         , connection
+                         , c = move(connection)
+                         , handler
                          , lock = wait_condition.lock()
                          ](asio::yield_context yield) mutable {
-                             serve_request(*connection, yield);
+                             handler(move(c), yield);
                          });
         }
     }
@@ -574,12 +615,51 @@ void Client::State::start(int argc, char* argv[])
         , [this, self = shared_from_this()]
           (asio::yield_context yield) {
               sys::error_code ec;
+
               setup_injector(yield[ec]);
+              setup_ipfs_cache();
+
               if (ec) {
                   cerr << "Failed to setup injector" << endl;
               }
-              do_listen(yield[ec]);
+
+              listen_tcp( yield[ec]
+                        , _config.local_endpoint()
+                        , [this, self]
+                          (GenericConnection c, asio::yield_context yield) {
+                      serve_request(c, yield);
+                  });
           });
+
+    if (_config.front_end_endpoint() != tcp::endpoint()) {
+        asio::spawn
+            ( _ios
+            , [this, self = shared_from_this()]
+              (asio::yield_context yield) {
+                  sys::error_code ec;
+
+                  auto ep = _config.front_end_endpoint();
+                  if (ep == tcp::endpoint()) return;
+
+                  listen_tcp( yield[ec]
+                            , ep
+                            , [this, self]
+                              (GenericConnection c, asio::yield_context yield) {
+                        sys::error_code ec;
+                        Request rq;
+                        beast::flat_buffer buffer;
+                        http::async_read(c, buffer, rq, yield[ec]);
+
+                        if (ec) return;
+
+                        auto rs = _front_end.serve( _config.injector_endpoint()
+                                                  , rq
+                                                  , _ipfs_cache.get());
+
+                        http::async_write(c, rs, yield[ec]);
+                  });
+              });
+    }
 }
 
 //------------------------------------------------------------------------------

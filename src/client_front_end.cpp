@@ -2,6 +2,7 @@
 #include "generic_connection.h"
 #include <ipfs_cache/client.h>
 #include <boost/optional/optional_io.hpp>
+#include <boost/date_time/posix_time/posix_time.hpp>
 
 
 using namespace std;
@@ -11,6 +12,12 @@ using Request = http::request<http::string_body>;
 using Response = ClientFrontEnd::Response;
 using boost::optional;
 
+static string now_as_string() {
+    namespace pt = boost::posix_time;
+    auto entry_ts = pt::microsec_clock::universal_time();
+    return pt::to_iso_extended_string(entry_ts);
+}
+
 static Response redirect_back(const Request& req)
 {
     http::response<http::dynamic_body> res{http::status::ok, req.version()};
@@ -19,7 +26,7 @@ static Response redirect_back(const Request& req)
         "<!DOCTYPE html>\n"
         "<html>\n"
         "    <head>\n"
-        "        <meta http-equiv=\"refresh\" content=\"0; url=http://localhost\"/>\n"
+        "        <meta http-equiv=\"refresh\" content=\"0; url=./\"/>\n"
         "    </head>\n"
         "</html>\n";
 
@@ -129,14 +136,17 @@ Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
     ss << ToggleInput{"IPFS Cache",     "ipfs_cache",     _ipfs_cache_enabled};
 
     ss << "<br>\n";
+    ss << "Now: " << now_as_string()  << "<br>\n";
     ss << "Injector endpoint: " << injector_ep << "<br>\n";
 
-    ss << "        <h2>Pending tasks " << _pending_tasks.size() << "</h2>\n";
-    ss << "        <ul>\n";
-    for (auto& task : _pending_tasks) {
-        ss << "            <li><pre>" << task << "</pre></li>\n";
+    if (_show_pending_tasks) {
+        ss << "        <h2>Pending tasks " << _pending_tasks.size() << "</h2>\n";
+        ss << "        <ul>\n";
+        for (auto& task : _pending_tasks) {
+            ss << "            <li><pre>" << task << "</pre></li>\n";
+        }
+        ss << "        </ul>\n";
     }
-    ss << "        </ul>\n";
 
     if (cache_client) {
         ss << "        <h2>Database</h2>\n";
