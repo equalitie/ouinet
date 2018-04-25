@@ -234,6 +234,14 @@ At that point one can disable the proxying through injector, clear
 browser's cached data and try to point the browser to the same non secured
 HTTP page.
 
+### Integration tests
+
+You can run the integration tests as follows
+
+```
+$ ./scripts/run_integration_tests.sh
+```
+
 ## Using Docker containers
 
 Ouinet injectors and clients can be run as Docker containers.  An application
