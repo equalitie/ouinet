@@ -8,7 +8,6 @@
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <iostream>
 #include <fstream>
-#include <strstream>
 #include <cstdlib>  // for atexit()
 
 #include <ipfs_cache/client.h>
@@ -456,10 +455,6 @@ void Client::State::serve_request( GenericConnection& con
 
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "read");
-
-        //std::strstream raw_request;
-        //raw_request << beast::buffers(buffer.data());
-        //logger.debug(raw_request.str());
 
         // Attempt connection to origin for CONNECT requests
         if (req.method() == http::verb::connect) {

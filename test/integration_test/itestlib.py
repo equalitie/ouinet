@@ -169,7 +169,6 @@ class OuinetClient(OuinetProcess):
 class OuinetInjector(OuinetProcess):
     def __init__(self, injector_name, extra_args=(), **kwargs):
         self.setup_config(injector_name, "ouinet-injector.conf", TestFixtures.INJECTOR_CONF_FILE_CONTENT)
-        pdb.set_trace()
         argv = [ouinet_env['OUINET_BUILD_DIR'] + "injector", "--repo", self.config_folder]
         argv.extend(extra_args)
 

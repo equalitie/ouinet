@@ -270,6 +270,14 @@ HTTP page.
 $ ./test.sh <BUILD DIR>/client
 ```
 
+### Integration tests
+
+You can run the integration tests as follows
+
+```
+$ ./scripts/run_integration_tests.sh
+```
+
 ## Creating a Docker image and injector (or client) container
 
 A `Dockerfile` is included that can be used to create a Docker image which
