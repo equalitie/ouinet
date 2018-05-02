@@ -25,8 +25,12 @@
 
 #include "logger.h"
 
+
 Logger logger(DEBUG);
 
+const std::string log_level_announce[] = {"SILLY"        , "DEBUG"     , "VERBOSE"   , "INFO"      , "WARN"        , "ERROR"      , "ABORT"};
+const std::string log_level_color_prefix[] =   {"\033[1;35;47m", "\033[1;32m", "\033[1;37m", "\033[1;34m", "\033[90;103m", "\033[91;40m", "\033[91;40m"};
+const bool log_level_colored_msg[] =          {true           , false       , false       , false       , true        , true          , true};
 
 void Logger::initiate_textual_conversions()
 {
@@ -93,32 +97,27 @@ void Logger::log(log_level_t level, std::string msg, std::string function_name)
 
     msg = (function_name.empty()) ? msg : function_name + ": " + msg;
 
-    switch (level) {
-    case SILLY:
-        msg = "\033[1;35;47m[SILLY] " + msg + "\033[0m";
-        break;
-    case DEBUG:
-        msg = "\033[1;32m[DEBUG]\033[0m " + msg;
-        break;
-    case VERBOSE:
-        msg = "\033[1;37m[VERBOSE]\033[0m " + msg;
-        break;
-    case INFO:
-        msg = "\033[1;34m[INFO]\033[0m " + msg;
-        break;
-    case WARN:
-        msg = "\033[90;103m[WARN] " + msg + "\033[0m";
-        break;
-    case ERROR:
-        msg = "\033[91;40m[ERROR] " + msg + "\033[0m";
-        break;
-    case ABORT:
-        msg = "\033[91;40m[ABORT] " + msg + "\033[0m";
-        break;
-    }
+    std::string message_prefix = "[" + log_level_announce[level];
+#ifndef __ANDROID__
+    message_prefix = log_level_color_prefix[level] + message_prefix + "]";
+    if (log_level_colored_msg[level])
+      message_prefix += " ";
+    else
+      message_prefix += "\033[0m ";
+#else
+    message_prefix = message_prefix + "] ";
+#endif // ifndef __ANDROID__
+
+    msg =  message_prefix + msg;
+#ifndef __ANDROID__
+    if (log_level_colored_msg[level])
+      msg += "\033[0m";
+#endif
 
     //time stamp
-    msg = std::to_string(log_get_timestamp()) + ": " + msg;
+    if (_stamp_with_time) {
+      msg = std::to_string(log_get_timestamp()) + ": " + msg;
+    }
 
     if (log_to_stderr) {
         std::cerr << msg << std::endl;

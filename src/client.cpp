@@ -298,7 +298,7 @@ Response Client::State::fetch_fresh( const Request& request
 
     sys::error_code last_error = operation_not_supported;
 
-    logger.debug("fetching fresh");
+    LOG_DEBUG("fetching fresh");
 
     while (!request_config.responders.empty()) {
         auto r = request_config.responders.front();
@@ -421,7 +421,7 @@ void Client::State::serve_request( GenericConnection& con
                                  , asio::yield_context yield)
 {
 
-    logger.debug("Request received ");
+    LOG_DEBUG("Request received ");
   
     namespace rr = request_route;
     using rr::responder;
@@ -540,8 +540,12 @@ void Client::State::serve_request( GenericConnection& con
         cout << req.base() << res.base() << endl;
         // Forward the response back
         ASYNC_DEBUG(http::async_write(con, res, yield[ec]), "Write response ", req.target());
-        if (ec == http::error::end_of_stream) break;
+        if (ec == http::error::end_of_stream) {
+          LOG_DEBUG("request served. Connection closed");
+          break;
+        }
         if (ec) return fail(ec, "write");
+        LOG_DEBUG("request served");
     }
 }
 
@@ -674,7 +678,13 @@ void Client::State::listen_tcp
 //------------------------------------------------------------------------------
 void Client::State::start(int argc, char* argv[])
 {
+  try {
     _config = ClientConfig(argc, argv);
+
+  } catch(std::exception const& e) {
+    //explicit is better than implecit
+    LOG_ABORT(e.what());
+  }
 
 #ifndef __ANDROID__
     auto pid_path = get_pid_path();

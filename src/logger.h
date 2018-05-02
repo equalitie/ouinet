@@ -19,14 +19,23 @@
 #ifndef SRC_LOGGER_H_
 #define SRC_LOGGER_H_
 
+//Logger micros which should be used for efficiency
+#define LOG_DEBUG(...) if (logger.get_threshold() >= DEBUG) { logger.debug(util::str(__VA_ARGS__)); }
+#define LOG_VERBOSE(...) if (logger.get_threshold() >= VERBOSE) { logger.verbose(util::str(__VA_ARGS__)); }
+#define LOG_INFO(...) if (logger.get_threshold() >= INFO) { logger.info(util::str(__VA_ARGS__)); }
+#define LOG_WARN(...) if (logger.get_threshold() >= WARN) { logger.warn(util::str(__VA_ARGS__)); }
+#define LOG_ERROR(...) if (logger.get_threshold() >= ERROR) { logger.error(util::str(__VA_ARGS__)); }
+#define LOG_ABORT(...) logger.abort(util::str(__VA_ARGS__)) 
+
 // Standard log levels, ascending order of specificity.
 enum log_level_t { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT };
-
 const log_level_t default_log_level = DEBUG;
+
 
 class Logger
 {
   protected:
+    bool _stamp_with_time = false;
     log_level_t threshold;
     bool log_to_stderr;
     bool log_to_file;
@@ -77,6 +86,11 @@ class Logger
     // Get the current log file name
     std::string current_log_file() { return log_filename; }
 
+    // Get the current threshold
+    log_level_t get_threshold() { return threshold;}
+    void enable_timestamp() { _stamp_with_time = true;}
+    void disable_timestamp() { _stamp_with_time = false;}
+    
     void config(bool log_stderr, bool log_file, std::string fname);
     void set_threshold(log_level_t level);
     void log(log_level_t level, std::string msg, std::string function_name = "");
