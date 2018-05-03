@@ -308,7 +308,7 @@ populate its default environment file:
     $ cd /path/to/ouinet-injector
     $ cp /path/to/docker-compose.yml .
     $ echo OUINET_ROLE=injector >> .env
-    $ echo OUINET_VERSION=v0.0.4-android >> .env
+    $ echo OUINET_VERSION=v0.0.6-docker >> .env
     $ docker-compose up
 
 ### Accessing data files

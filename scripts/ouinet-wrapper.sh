@@ -1,6 +1,7 @@
 #!/bin/sh
 # Populate repo and start the injector or client.
-# Both program binary and repos templates should be at current directory.
+# Both program binary and repos templates should be in the directory
+# where this wrapper script resides.
 
 set -e
 
@@ -11,13 +12,14 @@ case "$1" in
         ;;
 esac
 
+INST="$(dirname -- "$(readlink -f -- "$0")")"
 PROG=$1
 
 CONF=/var/opt/ouinet/$PROG/ouinet-$PROG.conf
 REPO=$(dirname $CONF)
 
 if [ ! -d "$REPO" ]; then
-    cp -r repos/$PROG "$REPO"
+    cp -r "$INST/repo-templates/$PROG" "$REPO"
 fi
 
-exec ./$PROG --repo "$REPO" "$@"
+exec "$INST/$PROG" --repo "$REPO" "$@"
