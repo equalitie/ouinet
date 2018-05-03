@@ -82,5 +82,5 @@ COPY --from=builder /opt/ouinet/modules/ipfs-cache/ipfs_bindings/libipfs_binding
 #COPY --from=builder /opt/ouinet/modules/gnunet-channels/gnunet-bin/lib/ modules/gnunet-channels/gnunet-bin/lib/
 COPY --from=builder /opt/ouinet/injector /opt/ouinet/client /usr/local/src/ouinet/scripts/ouinet-wrapper.sh ouinet
 COPY --from=builder /opt/ouinet/test/test-* test/
-COPY --from=builder /usr/local/src/ouinet/repos/ repos/
+COPY --from=builder /usr/local/src/ouinet/repos/ repo-templates/
 ENTRYPOINT ["./ouinet"]

@@ -17,7 +17,7 @@ CONF=/var/opt/ouinet/$PROG/ouinet-$PROG.conf
 REPO=$(dirname $CONF)
 
 if [ ! -d "$REPO" ]; then
-    cp -r repos/$PROG "$REPO"
+    cp -r repo-templates/$PROG "$REPO"
 fi
 
 exec ./$PROG --repo "$REPO" "$@"
