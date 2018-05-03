@@ -35,7 +35,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /usr/local/src
 # This version is a recommendation and this file has been tested to work for it,
 # but you may attempt to build other versions by overriding this argument.
-ARG OUINET_VERSION=v0.0.6-docker
+ARG OUINET_VERSION=v0.0.5-docker2
 RUN git clone --recursive -b "$OUINET_VERSION" https://github.com/equalitie/ouinet.git
 WORKDIR /opt/ouinet
 RUN cmake /usr/local/src/ouinet \
