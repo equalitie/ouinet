@@ -5,6 +5,15 @@
 
 set -e
 
+has_help_arg() {
+    for arg in "$@"; do
+        if [ "$arg" = --help ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Checks for args overriding the default repository.
 get_repo_from_args() {
     local arg setnext=n repo
@@ -43,7 +52,7 @@ REPO=$(dirname $CONF)
 repo_arg=$(get_repo_from_args "$@")
 REPO="${repo_arg:-$REPO}"
 
-if [ ! -d "$REPO" ]; then
+if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
     cp -r "$INST/repo-templates/$PROG" "$REPO"
 fi
 
