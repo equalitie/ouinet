@@ -57,3 +57,7 @@ stages:
           export LD_LIBRARY_PATH=${boost_root}/stage/lib:$LD_LIBRARY_PATH
           ./build/test/test-cache --log_level=test_suite
           ./build/test/test-wait-condition --log_level=test_suite
+          export OUINET_BUILD_DIR=./build
+          ./scripts/run_integration_tests.sh
+
+          

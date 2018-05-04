@@ -42,8 +42,6 @@
 
 #include "logger.h"
 
-extern Logger logger;
-
 using namespace std;
 using namespace ouinet;
 

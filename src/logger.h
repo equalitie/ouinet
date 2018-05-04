@@ -105,5 +105,6 @@ class Logger
     void assert_or_die(bool expr, std::string failure_message, std::string function_name = "");
 };
 
+extern Logger logger;
 
 #endif // SRC_LOGGER_H_

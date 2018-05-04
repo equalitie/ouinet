@@ -22,9 +22,7 @@
 #include <iostream>
 #include <fstream>
 
-
 #include "logger.h"
-
 
 Logger logger(DEBUG);
 

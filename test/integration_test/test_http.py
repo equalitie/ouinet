@@ -2,7 +2,6 @@
 # See LICENSE for other credits and copying information
 
 # Integration tests for Ouinet
-#
 import os
 import os.path
 
