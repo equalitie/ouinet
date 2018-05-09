@@ -8,7 +8,7 @@ stages:
       - BOOST_MAJOR: "1"
       - BOOST_MINOR: "65"
       - BOOST_PATCH: "1"
-
+      
     steps:
       - type: checkout
 
@@ -57,3 +57,7 @@ stages:
           export LD_LIBRARY_PATH=${boost_root}/stage/lib:$LD_LIBRARY_PATH
           ./build/test/test-cache --log_level=test_suite
           ./build/test/test-wait-condition --log_level=test_suite
+          virtualenv .venv
+          pip install twisted
+          export OUINET_BUILD_DIR=~/project/build/
+          ./scripts/run_integration_tests.sh
