@@ -55,23 +55,15 @@ class OuinetTests(TestCase):
     def run_http_server(self, port):
         return TestHttpServer(port)
 
-    @inlineCallbacks
     def request_echo(self, content):
         """
         Send a get request to request the test server to echo the content 
         """
         ouinet_client_endpoint = TCP4ClientEndpoint(reactor, "127.0.0.1", TestFixtures.FIRST_CLIENT["port"])
         agent = ProxyAgent(ouinet_client_endpoint)
-        agent = Agent(reactor)
-        TestFixtures.TEST_HTTP_SERVER_PORT = 8080
-        defered_response = yield agent.request(
+        return agent.request(
             "GET",
             "http://127.0.0.1:"+str(TestFixtures.TEST_HTTP_SERVER_PORT)+"/?content="+content)
-
-        self.assertEquals(defered_response.code, 200)
-
-        response_body = yield readBody(defered_response)
-        self.assertEquals(response_body, content)
 
     def wait_for_port_to_get_open(self, server, port, timeout=None):
         """ Wait for network service to appear 
@@ -116,6 +108,8 @@ class OuinetTests(TestCase):
                 s.close()
                 return True
 
+
+    @inlineCallbacks
     def test_tcp_transport(self):
         """
         Starts an echoing http server, a injector and a client and send a unique http 
@@ -139,7 +133,13 @@ class OuinetTests(TestCase):
         self.wait_for_port_to_get_open("127.0.0.1", TestFixtures.FIRST_CLIENT["port"]);
 
         content = self.safe_random_str(TestFixtures.RESPONSE_LENGTH)
-        self.request_echo(content)
+        defered_response = yield  self.request_echo(content)
+
+        self.assertEquals(defered_response.code, 200)
+
+        response_body = yield readBody(defered_response)
+        self.assertEquals(response_body, content)
+
 
     def tearDown(self):
         deferred_procs = [] 
