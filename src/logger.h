@@ -12,12 +12,13 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
+#ifndef SRC_LOGGER_H_
+#define SRC_LOGGER_H_
 
 #include <iostream>
 #include <fstream>
 
-#ifndef SRC_LOGGER_H_
-#define SRC_LOGGER_H_
+#include "util.h"
 
 //Logger micros which should be used for efficiency
 #define LOG_DEBUG(...) if (logger.get_threshold() >= DEBUG) { logger.debug(util::str(__VA_ARGS__)); }
@@ -30,7 +31,6 @@
 // Standard log levels, ascending order of specificity.
 enum log_level_t { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT };
 const log_level_t default_log_level = DEBUG;
-
 
 class Logger
 {

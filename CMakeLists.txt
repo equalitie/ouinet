@@ -7,6 +7,8 @@ else()
 endif()
 
 set(BOOST_VERSION 1.62)
+set(BOOST_ROOT /home/klaymen/doc/code/boost_1_65_1)
+
 include(ExternalProject)
 ################################################################################
 # Configurable options
@@ -57,7 +59,7 @@ find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS filesystem
                                                         system)
 find_package(Threads)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -Wall -ggdb ${SANITIZE}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -Wall -O0 -ggdb ${SANITIZE}")
 
 ################################################################################
 include_directories(
@@ -114,7 +116,7 @@ if (WITH_INJECTOR)
         "./src/cache_control.cpp"
         "./src/ouiservice.cpp"
         "./src/ouiservice/tcp.cpp"
-        "./src/logger.cpp"
+          "./src/logger.cpp"
     )
 
     add_executable(injector ${injector_sources})

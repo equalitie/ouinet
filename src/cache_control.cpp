@@ -5,6 +5,7 @@
 #include "or_throw.h"
 #include "split_string.h"
 #include "util.h"
+#include "http_util.h"
 
 using namespace std;
 using namespace ouinet;

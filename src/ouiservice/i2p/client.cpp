@@ -1,9 +1,10 @@
+#include <I2PTunnel.h>
+
 #include "client.h"
 
+#include "../../logger.h"
 #include "../../util/condition_variable.h"
 #include "../../or_throw.h"
-
-#include <I2PTunnel.h>
 
 using namespace std;
 using namespace ouinet::ouiservice;
@@ -41,6 +42,8 @@ void Client::start(asio::yield_context yield)
     if (ec) {
         or_throw(yield, ec);
     }
+
+    LOG_DEBUG("I2P Tunnel has been established");
 }
 
 void Client::stop()

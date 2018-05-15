@@ -1,7 +1,7 @@
 # Copyright 2018 eQualit.ie
 # See LICENSE for other credits and copying information
 
-# Integration tests for Ouinet
+# Integration tests for Ouinet - test for http communication offered through different transports and caches
 import os
 import os.path
 
@@ -21,7 +21,7 @@ import urllib
 import string
 import random
 
-from itestlib import OuinetClient, OuinetInjector
+from ouinet_process_controler import OuinetConfig, OuinetClient, OuinetInjector, OuinetI2PClient, OuinetI2PInjector
 from test_fixtures import TestFixtures
 from test_http_server import TestHttpServer
 
@@ -39,18 +39,31 @@ class OuinetTests(TestCase):
         letters = string.ascii_lowercase                             
         return ''.join(random.choice(letters) for i in range(length))
     
+    def run_injector(self, injector_args):
+        injector = OuinetInjector(OuinetConfig(app_name="injector", timeout=TestFixtures.TIMEOUT_LEN, argv=injector_args))
+        injector.start()
+        self.proc_list.append(injector)
+
+        return injector
+
+    def run_i2p_injector(self, injector_args):
+        injector = OuinetI2PInjector(OuinetConfig("injector", TestFixtures.TIMEOUT_LEN, injector_args))
+        injector.start()
+        self.proc_list.append(injector)
+
     def run_client(self, name, args):
-        client = OuinetClient(name, TestFixtures.TIMEOUT_LEN, args)
+        client = OuinetClient(OuinetConfig(name, TestFixtures.TIMEOUT_LEN, args))
+        client.start()
         self.proc_list.append(client)
 
         return client
 
-    def run_injector(self, injector_args):
-        #we first need to run our http server
-        injector = OuinetInjector("injector", TestFixtures.TIMEOUT_LEN, injector_args)
-        self.proc_list.append(injector)
+    def run_i2p_client(self, name, args, deferred_i2p_ready):
+        client = OuinetI2PClient(OuinetConfig(name, TestFixtures.TIMEOUT_LEN, args), deferred_i2p_ready)
+        client.start()
+        self.proc_list.append(client)
 
-        return injector
+        return client
 
     def run_http_server(self, port):
         return TestHttpServer(port)
@@ -107,19 +120,46 @@ class OuinetTests(TestCase):
             else:
                 s.close()
                 return True
-
-
+    def wait_for_i2p_tunnel_to_get_connected(self, deferred_tunnel):
+        return defer.gatherResults([deferred_tunnel]) 
+        
     @inlineCallbacks
-    def test_tcp_transport(self):
+    def test_i2p_transport(self):
         """
         Starts an echoing http server, a injector and a client and send a unique http 
-        request to the echoing http server through the client -> injector -> http server
+        request to the echoing http server through the client --i2p--> injector -> http server
         and make sure it gets the correct echo. The unique request makes sure that
         the response is from the http server and is not cached.
         """
         #injector
-        self.run_injector(["--listen-on-i2p", "true", "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.INJECTOR_PORT)])
+        i2pinjector = self.run_i2p_injector(["--listen-on-i2p", "true"])
 
+        #client
+        i2pclient_tunnel_ready = defer.Deferred()
+        i2pclient = self.run_i2p_client(TestFixtures.FIRST_CLIENT["name"], ["--listen-on-tcp", "127.0.0.1:"+str(TestFixtures.FIRST_CLIENT["port"]), "--injector-ipns", TestFixtures.INJECTOR_IPNS_PERSISTANT_IDENTITY["Identity"]["PeerID"], "--injector-ep", TestFixtures.INJECTOR_I2P_PUBLIC_ID, "http://localhost/"], i2pclient_tunnel_ready)
+
+        #wait for the injector to open the port
+        success = yield self.wait_for_i2p_tunnel_to_get_connected(i2pclient_tunnel_ready)
+
+        content = self.safe_random_str(TestFixtures.RESPONSE_LENGTH)
+        defered_response = yield  self.request_echo(content)
+
+        self.assertEquals(defered_response.code, 200)
+
+        response_body = yield readBody(defered_response)
+        self.assertEquals(response_body, content)
+
+    @inlineCallbacks
+    def no_test_tcp_transport(self):
+        """
+        Starts an echoing http server, a injector and a client and send a unique http 
+        request to the echoing http server through the g client --tcp--> injector -> http server
+        and make sure it gets the correct echo. The unique request makes sure that
+        the response is from the http server and is not cached.
+        """
+        #injector
+        self.run_injector(["--listen-on-i2p", "false", "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.INJECTOR_PORT)])
+        
         #client
         self.run_client(TestFixtures.FIRST_CLIENT["name"], ["--listen-on-tcp", "127.0.0.1:"+str(TestFixtures.FIRST_CLIENT["port"]), "--injector-ipns", TestFixtures.INJECTOR_IPNS_PERSISTANT_IDENTITY["Identity"]["PeerID"], "--injector-ep", "127.0.0.1:" + str(TestFixtures.INJECTOR_PORT), "http://localhost/"])
 
@@ -140,13 +180,15 @@ class OuinetTests(TestCase):
         response_body = yield readBody(defered_response)
         self.assertEquals(response_body, content)
 
-
     def tearDown(self):
         deferred_procs = [] 
         for cur_proc in self.proc_list:
             deferred_procs.append(cur_proc.proc_end)
             cur_proc.stop()
-        deferred_procs.append(self.test_http_server.stopListening())
+
+        if hasattr(self,'test_http_server'):
+            deferred_procs.append(self.test_http_server.stopListening())
+            
         return defer.gatherResults(deferred_procs) 
     
 class BeginningPrinter(Protocol):
