@@ -153,9 +153,6 @@ Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
         ss << "        <h2>Database</h2>\n";
         ss << "        IPNS: " << cache_client->ipns() << "<br>\n";
         ss << "        IPFS: " << cache_client->ipfs() << "<br>\n";
-        ss << "        <pre>\n";
-        ss << cache_client->json_db().dump(4);
-        ss << "        </pre>\n";
     }
 
     ss << "    </body>\n"
