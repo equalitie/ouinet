@@ -30,7 +30,7 @@ class OuinetConfig(object):
     """
 
     def __init__(self, app_name = "generic ouinet app",
-                 timeout = TestFixtures.TIMEOUT_LEN, argv = [],
+                 timeout = TestFixtures.DEFAULT_PROCESS_TIMEOUT, argv = [],
                  config_file_name = "ouinet.conf", 
                  config_file_content = ""):
         """
@@ -57,7 +57,7 @@ class OuinetProcess(object):
         and injectors:
         - makes a basic config folder and file 
         - sets the timeout for the process 
-
+ 
         Args 
         ouinet_config A OuinetConfig instance containing the configuration
                       related to this process
@@ -123,6 +123,7 @@ class OuinetProcess(object):
         self._has_started = True
 
         # we add a twisted timer to kill the process after timeout
+        print self.config.app_name, "has timeout", self.config.timeout
         self.timeout_killer = reactor.callLater(self.config.timeout, self.stop)
 
         # we *might* need to make sure that the process has ended before

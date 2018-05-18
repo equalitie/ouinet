@@ -1,3 +1,4 @@
+#include <I2PService.h>
 #include "server.h"
 
 #include <Destination.h>
@@ -77,19 +78,14 @@ void Server::start_listen(asio::yield_context yield)
     uint16_t port = _tcp_acceptor.local_endpoint().port();
 
     std::shared_ptr<i2p::client::ClientDestination> local_dst = i2p::api::CreateLocalDestination(*_private_keys, true);
-    _i2p_tunnel = std::make_unique<i2p::client::I2PServerTunnel>("i2p_oui_server", "127.0.0.1", port, local_dst);
-    _i2p_tunnel->Start();
-    _i2p_tunnel->SetConnectTimeout(_timeout);
+    _server_tunnel = std::make_unique<Tunnel>(_ios, std::make_unique<i2p::client::I2PServerTunnel>("i2p_oui_server", "127.0.0.1", port, local_dst), _timeout);
 }
 
 void Server::stop_listen()
 {
-    if (_i2p_tunnel) {
-        _i2p_tunnel->Stop();
-        _i2p_tunnel = nullptr;
-    }
-    _tcp_acceptor.close();
-    _connections.close_all();
+  _server_tunnel.reset();
+  _tcp_acceptor.close();
+  
 }
 
 ouinet::GenericConnection Server::accept(asio::yield_context yield)
@@ -102,7 +98,7 @@ ouinet::GenericConnection Server::accept(asio::yield_context yield)
         return or_throw<GenericConnection>(yield, ec, GenericConnection());
     }
 
-    _connections.add(connection);
+    _server_tunnel->_connections.add(connection);
     return GenericConnection(std::move(connection));
 }
 

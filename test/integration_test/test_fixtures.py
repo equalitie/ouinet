@@ -5,7 +5,10 @@
 
 class TestFixtures:
     FATAL_ERROR_INDICATOR = "[ABORT]"
-    TIMEOUT_LEN = 120 # seconds
+    DEFAULT_PROCESS_TIMEOUT = 15 # seconds
+    TCP_TRANSPORT_TIMEOUT = 15 
+    I2P_TRANSPORT_TIMEOUT = 600
+    
     REPO_FOLDER_NAME = "repos"
 
     INJECTOR_CONF_FILE_NAME = "ouinet-injector.conf"

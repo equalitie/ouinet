@@ -1,4 +1,5 @@
 #include <I2PTunnel.h>
+#include <I2PService.h>
 
 #include "client.h"
 
@@ -24,36 +25,30 @@ Client::~Client()
 
 void Client::start(asio::yield_context yield)
 {
-    _i2p_tunnel = std::make_unique<i2p::client::I2PClientTunnel>("i2p_oui_client", _target_id, "127.0.0.1", 0, nullptr);
+  _client_tunnel = std::make_unique<Tunnel>(_ios, std::make_unique<i2p::client::I2PClientTunnel>("i2p_oui_client", _target_id, "127.0.0.1", 0, nullptr), _timeout);
 
-    sys::error_code ec;
-    ConditionVariable ready_condition(_ios);
+  sys::error_code ec;
 
-    _i2p_tunnel->AddReadyCallback([&ec, &ready_condition](const sys::error_code& error) mutable {
-        ec = error;
-        ready_condition.notify();
-    });
+  _client_tunnel->wait_to_get_ready(yield);
+  if (ec) {
+    or_throw(yield, ec);
+  }
 
-    _i2p_tunnel->Start();
-    _port = _i2p_tunnel->GetLocalEndpoint().port();
-    _i2p_tunnel->SetConnectTimeout(_timeout);
+  //The client_tunnel can't return its port becaues it doesn't know
+  //that it is a client i2p tunnel, all it knows is that it is an
+  //i2ptunnel holding some connections but doesn't know how connections
+  //are created.
+  _port = dynamic_cast<i2p::client::I2PClientTunnel*>(_client_tunnel->_i2p_tunnel.get())->GetLocalEndpoint().port();
 
-    ready_condition.wait(yield);
-    if (ec) {
-        or_throw(yield, ec);
-    }
-
-    LOG_DEBUG("I2P Tunnel has been established");
+  LOG_DEBUG("I2P Tunnel has been established");
 }
 
 void Client::stop()
 {
-    if (_i2p_tunnel) {
-        _i2p_tunnel->Stop();
-        _i2p_tunnel = nullptr;
-    }
+  _client_tunnel.reset();
+  //tunnel destructor will stop the i2p tunnel after the connections
+  //are closed. (TODO: maybe we need to add a wait here)
 
-    _connections.close_all();
 }
 
 ouinet::OuiServiceImplementationClient::ConnectInfo
@@ -76,9 +71,10 @@ Client::connect(asio::yield_context yield, Signal<void()>& cancel)
         return or_throw<ConnectInfo>(yield, ec);
     }
 
-    _connections.add(connection);
+    _client_tunnel->_connections.add(connection);
 
     return ConnectInfo({ GenericConnection(std::move(connection))
                        , _target_id
                        });
+    
 }

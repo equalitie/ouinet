@@ -27,6 +27,7 @@ include_directories(
 )
 
 set(sources
+    "./tunnel.cpp"
     "./client.cpp"
     "./server.cpp"
     "./service.cpp"
