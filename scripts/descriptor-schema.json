@@ -14,12 +14,12 @@
         "uri": {
             "description": "The URI that this descriptor describes.",
             "type": "string",
-            "$comment": "TODO: Check against regular expression."
+            "$comment": "TODO: Check against URI regular expression."
         },
         "ts": {
             "description": "An ISO time stamp of the UTC time when this descriptor was created.",
             "type": "string",
-            "$comment": "TODO: Check against regular expression."
+            "$comment": "TODO: Check against time regular expression."
         },
         "versions": {
             "description": "The different versions of the URI bound together by this descriptor.",
@@ -31,7 +31,7 @@
                     "ts": {
                         "description": "An ISO time stamp of the UTC time when this version was last seen by the injector.",
                         "type": "string",
-                        "$comment": "TODO: Check against regular expression."
+                        "$comment": "TODO: Check against time regular expression."
                     },
                     "data_length": {
                         "description": "Length of this version's content in bytes.",
@@ -41,7 +41,7 @@
                     "data_hash": {
                         "description": "A self-describing, hex-encoded digest of this version's content using the indicated hash algorithm.",
                         "type": "string",
-                        "$comment": "TODO: Check against regular expression."
+                        "$comment": "TODO: Check against hash regular expression."
                     }
                 },
                 "patternProperties": {
@@ -66,14 +66,14 @@
                 "data_links": {
                     "description": "If present, it maps data hashes to a list of URIs for data retrieval.",
                     "type": "object",
-                    "$comment": "TODO: Check property names against data_hash regular expressions.",
+                    "$comment": "TODO: Check property names against hash regular expressions.",
                     "patternProperties": {
                         ".*": {
                             "description": "A list of URIs for data retrieval.",
                             "type": "array",
                             "items": {
                                 "type": "string",
-                                "$comment": "TODO: Check against regular expression."
+                                "$comment": "TODO: Check against URI regular expression."
                             },
                             "minItems": 1,
                             "uniqueItems": true
