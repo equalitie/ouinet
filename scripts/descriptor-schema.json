@@ -1,0 +1,53 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Ouinet URI descriptor v0",
+    "description": "A URI descriptor is a set of different versions of the data and metadata behind a URI which make sense as a whole according to a particular injector service.",
+
+    "type": "object",
+    "properties": {
+        "ouinet_descriptor_version": {
+            "description": "The version of the schema that this descriptor adheres to.",
+            "const": 0,
+            "$comment": "The same number indicated at the schema's title."
+        },
+        "uri": {
+            "description": "The URI that this descriptor describes.",
+            "type": "string",
+            "$comment": "TODO: Check against regular expression."
+        },
+        "ts": {
+            "description": "An ISO time stamp of the UTC time when this descriptor was created.",
+            "type": "string",
+            "$comment": "TODO: Check against regular expression."
+        },
+        "versions": {
+            "description": "The different versions of the URI bound together by this descriptor.",
+            "type": "array",
+            "items": {
+                "description": "A particular version of the URI with a fixed content length and hash, and optional metadata.",
+                "type": "object",
+                "properties": {
+                    "ts": {
+                        "description": "An ISO time stamp of the UTC time when this version was last seen by the injector.",
+                        "type": "string",
+                        "$comment": "TODO: Check against regular expression."
+                    },
+                    "data_length": {
+                        "description": "Length of this version's content in bytes.",
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "data_hash": {
+                        "description": "A self-describing, hex-encoded digest of this version's content using the indicated hash algorithm.",
+                        "type": "string",
+                        "$comment": "TODO: Check against regular expression."
+                    }
+                },
+                "required": ["ts", "data_length", "data_hash"]
+            },
+            "minItems": 1
+        }
+    },
+
+    "required": ["ouinet_descriptor_version", "uri", "ts", "versions"]
+}
