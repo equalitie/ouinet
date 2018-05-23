@@ -45,7 +45,7 @@
                     }
                 },
                 "patternProperties": {
-                    "^meta_[_0-9a-z]+": {
+                    "^meta_[_0-9a-z]+$": {
                         "description": "A set of arbitrary, named, string-valued properties acting as metadata (e.g. for the particular URI protocol).",
                         "type": "object",
                         "additionalProperties": {
