@@ -60,12 +60,12 @@
             "minItems": 1
         },
         "signatures": {
-            "description": "Signatures of injector services on this descriptor.",
+            "description": "Signatures of injector services on this descriptor; public key and time stamp are used as signing entity.",
             "type": "object",
             "$comment": "TODO: Check public key and signature time stamp in property name.",
             "patternProperties": {
                 ".*": {
-                    "description": "Signatures of a particular injector service.",
+                    "description": "Signatures of a particular injector service (exactly one for the given key and time).",
                     "type": "object",
                     "$comment": "TODO: Check property names against hash algorithm and key id regular expression, values against unpadded Base64.",
                     "patternProperties": {
@@ -73,7 +73,9 @@
                             "description": "A particular signature.",
                             "type": "string"
                         }
-                    }
+                    },
+                    "minProperties": 1,
+                    "maxProperties": 1
                 }
             },
             "minProperties": 1
