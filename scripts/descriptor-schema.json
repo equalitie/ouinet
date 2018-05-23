@@ -59,6 +59,25 @@
 
             "minItems": 1
         },
+        "signatures": {
+            "description": "Signatures of injector services on this descriptor.",
+            "type": "object",
+            "$comment": "TODO: Check public key and signature time stamp in property name.",
+            "patternProperties": {
+                ".*": {
+                    "description": "Signatures of a particular injector service.",
+                    "type": "object",
+                    "$comment": "TODO: Check property names against hash algorithm and key id regular expression, values against unpadded Base64.",
+                    "patternProperties": {
+                        ".*": {
+                            "description": "A particular signature.",
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "minProperties": 1
+        },
         "unsigned": {
             "description": "This part may be added by cache publishers, but it is not signed by injector services.",
             "type": "object",
@@ -85,5 +104,5 @@
         }
     },
 
-    "required": ["ouinet_descriptor_version", "uri", "ts", "versions"]
+    "required": ["ouinet_descriptor_version", "uri", "ts", "versions", "signatures"]
 }
