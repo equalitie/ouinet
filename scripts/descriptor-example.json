@@ -1,0 +1,31 @@
+{
+    "ouinet_descriptor_version": 0,
+    "uri": "https://example.com/foo.html",
+    "ts": "2018-01-15T21:31:50Z",
+    "versions": [
+        {
+            "ts": "2018-01-15T21:31:44Z",
+            "meta_http_rqh": {"@method": "GET", "@target": "https://example.com/foo.html", "@version": "HTTP/1.1",
+                              "host": "example.com"},
+            "meta_http_rph": {"@version": "HTTP/1.1", "@code": "200", "@reason": "OK",
+                                   "date": "Mon, 15 Jan 2018 20:37:50 GMT", "server": "Apache"},
+            "data_length": 38,
+            "data_hash": "DATA_HASH_0"
+        }
+    ],
+    "signatures": {
+        "ed25519:1:XXXX1#2018-01-15T21:31:51Z#FooBar injector service": {
+            "ed25519:1": "YYYY1"
+        },
+        "ed25519:1:XXXX2#2018-01-15T21:45:10Z#XYZ injector service": {
+            "ed25519:1": "YYYY2"
+        }
+    },
+    "unsigned": {
+        "data_links": {
+            "DATA_HASH_0": ["ipfs:/ipfs/QmXYZ…", "magnet:?xt.1=urn.sha1:ZYX…",
+                            "data:,%3C!DOCTYPE%20html%3E%0A%3Cp%3ETiny%20body%20here!%3C%2Fp%3E",
+                            "http://…", "ftp://…", "file://./data/…"]
+        }
+    }
+}
