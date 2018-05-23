@@ -44,6 +44,15 @@
                         "$comment": "TODO: Check against regular expression."
                     }
                 },
+                "patternProperties": {
+                    "^meta_[_0-9a-z]+": {
+                        "description": "A set of arbitrary, named, string-valued properties acting as metadata (e.g. for the particular URI protocol).",
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        }
+                    }
+                },
 
                 "required": ["ts", "data_length", "data_hash"]
             },
