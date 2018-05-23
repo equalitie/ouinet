@@ -7,6 +7,7 @@
     "properties": {
         "ouinet_descriptor_version": {
             "description": "The version of the schema that this descriptor adheres to.",
+            "type": "integer",
             "const": 0,
             "$comment": "The same number indicated at the schema's title."
         },
@@ -43,8 +44,10 @@
                         "$comment": "TODO: Check against regular expression."
                     }
                 },
+
                 "required": ["ts", "data_length", "data_hash"]
             },
+
             "minItems": 1
         }
     },
