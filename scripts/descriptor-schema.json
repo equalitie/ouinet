@@ -25,7 +25,7 @@
             "description": "The different versions of the URI bound together by this descriptor.",
             "type": "array",
             "items": {
-                "description": "A particular version of the URI with a fixed content length and hash, and optional metadata.",
+                "description": "A particular version of the URI with a fixed data length and hash, and optional metadata.",
                 "type": "object",
                 "properties": {
                     "ts": {
@@ -34,12 +34,12 @@
                         "$comment": "TODO: Check against time regular expression."
                     },
                     "data_length": {
-                        "description": "Length of this version's content in bytes.",
+                        "description": "Length of this version's data in bytes.",
                         "type": "integer",
                         "minimum": 0
                     },
                     "data_hash": {
-                        "description": "A self-describing, hex-encoded digest of this version's content using the indicated hash algorithm.",
+                        "description": "A self-describing, hex-encoded digest of this version's data using the indicated hash algorithm.",
                         "type": "string",
                         "$comment": "TODO: Check against hash regular expression."
                     }
