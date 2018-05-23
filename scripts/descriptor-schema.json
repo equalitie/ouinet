@@ -58,6 +58,30 @@
             },
 
             "minItems": 1
+        },
+        "unsigned": {
+            "description": "This part may be added by cache publishers, but it is not signed by injector services.",
+            "type": "object",
+            "properties": {
+                "data_links": {
+                    "description": "If present, it maps data hashes to a list of URIs for data retrieval.",
+                    "type": "object",
+                    "$comment": "TODO: Check property names against data_hash regular expressions.",
+                    "patternProperties": {
+                        ".*": {
+                            "description": "A list of URIs for data retrieval.",
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "$comment": "TODO: Check against regular expression."
+                            },
+                            "minItems": 1,
+                            "uniqueItems": true
+                        }
+                    },
+                    "minProperties": 1
+                }
+            }
         }
     },
 
