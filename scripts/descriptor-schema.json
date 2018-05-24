@@ -90,7 +90,7 @@
                     "type": "object",
                     "$comment": "Signature format: '<sig algo>:1' (key, same as in name); '<unpadded Base64 signature>' (value)",
                     "patternProperties": {
-                        "^[0-9a-z]+:1:[+/0-9A-Za-z]+$": {
+                        "^[0-9a-z]+:1$": {
                             "description": "A particular signature.",
                             "$ref": "#/definitions/upbase64"
                         }
