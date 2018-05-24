@@ -14,7 +14,7 @@
         "uri": {
             "description": "The URI that this descriptor describes.",
             "type": "string",
-            "$comment": "TODO: Check against URI regular expression."
+            "pattern": "^[a-z][\\+\\-\\.-0-9a-z]+:"
         },
         "ts": {
             "description": "An ISO time stamp of the UTC time when this descriptor was created.",
@@ -103,7 +103,7 @@
                             "type": "array",
                             "items": {
                                 "type": "string",
-                                "$comment": "TODO: Check against URI regular expression."
+                                "pattern": "^[a-z][\\+\\-\\.-0-9a-z]+:"
                             },
                             "minItems": 1,
                             "uniqueItems": true
