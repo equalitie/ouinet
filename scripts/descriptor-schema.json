@@ -3,6 +3,25 @@
     "title": "Ouinet URI descriptor v0",
     "description": "A URI descriptor is a set of different versions of the data and metadata behind a URI which make sense as a whole according to a particular injector service.",
 
+    "definitions": {
+        "uri": {
+            "$id": "#uri",
+            "type": "string",
+            "pattern": "^[a-z][\\+\\-\\.-0-9a-z]+:"
+        },
+        "date": {
+            "$id": "#date",
+            "type": "string",
+            "$comment": "Format: '<long ISO 8601 UTC date up to seconds>'",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$"
+        },
+        "upbase64": {
+            "$id": "#upbase64",
+            "type": "string",
+            "pattern": "^[+/0-9A-Za-z]+$"
+        }
+    },
+
     "type": "object",
     "properties": {
         "ouinet_descriptor_version": {
@@ -13,14 +32,11 @@
         },
         "uri": {
             "description": "The URI that this descriptor describes.",
-            "type": "string",
-            "pattern": "^[a-z][\\+\\-\\.-0-9a-z]+:"
+            "$ref": "#/definitions/uri"
         },
         "ts": {
-            "description": "An ISO time stamp of the UTC time when this descriptor was created.",
-            "type": "string",
-            "$comment": "Format: '<long ISO 8601 UTC date up to seconds>'",
-            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$"
+            "description": "The time when this descriptor was created.",
+            "$ref": "#/definitions/date"
         },
         "versions": {
             "description": "The different versions of the URI bound together by this descriptor.",
@@ -30,10 +46,8 @@
                 "type": "object",
                 "properties": {
                     "ts": {
-                        "description": "An ISO time stamp of the UTC time when this version was last seen by the injector.",
-                        "type": "string",
-                        "$comment": "Format: '<long ISO 8601 UTC date up to seconds>'",
-                        "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$"
+                        "description": "The time when this version was last seen by the injector.",
+                        "$ref": "#/definitions/date"
                     },
                     "data_length": {
                         "description": "Length of this version's data in bytes.",
@@ -73,8 +87,7 @@
                     "patternProperties": {
                         "^[0-9a-z]+:1:[+/0-9A-Za-z]+$": {
                             "description": "A particular signature.",
-                            "type": "string",
-                            "pattern": "^[+/0-9A-Za-z]+$"
+                            "$ref": "#/definitions/upbase64"
                         }
                     },
                     "additionalProperties": {
@@ -102,8 +115,7 @@
                             "description": "A list of URIs for data retrieval.",
                             "type": "array",
                             "items": {
-                                "type": "string",
-                                "pattern": "^[a-z][\\+\\-\\.-0-9a-z]+:"
+                                "$ref": "#/definitions/uri"
                             },
                             "minItems": 1,
                             "uniqueItems": true
