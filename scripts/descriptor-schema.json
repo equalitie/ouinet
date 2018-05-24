@@ -95,16 +95,12 @@
                             "$ref": "#/definitions/upbase64"
                         }
                     },
-                    "additionalProperties": {
-                        "maxProperties": 0
-                    },
+                    "additionalProperties": false,
                     "minProperties": 1,
                     "maxProperties": 1
                 }
             },
-            "additionalProperties": {
-                "maxProperties": 0
-            },
+            "additionalProperties": false,
             "minProperties": 1
         },
         "unsigned": {
@@ -125,9 +121,7 @@
                             "uniqueItems": true
                         }
                     },
-                    "additionalProperties": {
-                        "maxProperties": 0
-                    },
+                    "additionalProperties": false,
                     "minProperties": 1
                 }
             }
