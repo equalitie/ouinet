@@ -8,7 +8,7 @@
 #include "namespaces.h"
 #include "endpoint.h"
 
-namespace ipfs_cache { class Client; }
+namespace ouinet { class CacheClient; }
 
 namespace ouinet {
 
@@ -48,7 +48,7 @@ public:
 public:
     Response serve( const boost::optional<Endpoint>& injector_ep
                   , const http::request<http::string_body>&
-                  , ipfs_cache::Client*);
+                  , CacheClient*);
 
     bool is_injector_proxying_enabled() const
     {

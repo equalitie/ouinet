@@ -1,7 +1,6 @@
-[submodule "modules/ipfs-cache"]
-	path = modules/ipfs-cache
-	url = https://github.com/equalitie/ipfs-cache.git
-	branch = asio
 [submodule "src/ouiservice/i2p/i2pd"]
 	path = src/ouiservice/i2p/i2pd
 	url = https://github.com/inetic/i2pd.git
+[submodule "modules/asio-ipfs"]
+	path = modules/asio-ipfs
+	url = git@github.com:equalitie/asio-ipfs.git
