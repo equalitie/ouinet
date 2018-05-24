@@ -19,6 +19,12 @@
             "$id": "#upbase64",
             "type": "string",
             "pattern": "^[+/0-9A-Za-z]+$"
+        },
+        "mhash": {
+            "$id": "#mhash",
+            "type": "string",
+            "$comment": "IPFS-like Base58-encoded multihash.",
+            "pattern": "^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]+$"
         }
     },
 
@@ -55,9 +61,8 @@
                         "minimum": 0
                     },
                     "data_hash": {
-                        "description": "A self-describing, hex-encoded digest of this version's data using the indicated hash algorithm.",
-                        "type": "string",
-                        "$comment": "TODO: Check against hash regular expression."
+                        "description": "A self-describing, text-encoded digest of this version's data.",
+                        "$ref": "#/definitions/mhash"
                     }
                 },
                 "patternProperties": {
@@ -109,9 +114,8 @@
                 "data_links": {
                     "description": "If present, it maps data hashes to a list of URIs for data retrieval.",
                     "type": "object",
-                    "$comment": "TODO: Check property names against hash regular expressions.",
                     "patternProperties": {
-                        ".*": {
+                        "^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]+$": {
                             "description": "A list of URIs for data retrieval.",
                             "type": "array",
                             "items": {
@@ -120,6 +124,9 @@
                             "minItems": 1,
                             "uniqueItems": true
                         }
+                    },
+                    "additionalProperties": {
+                        "maxProperties": 0
                     },
                     "minProperties": 1
                 }

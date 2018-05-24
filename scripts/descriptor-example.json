@@ -10,7 +10,7 @@
             "meta_http_rph": {"@version": "HTTP/1.1", "@code": "200", "@reason": "OK",
                                    "date": "Mon, 15 Jan 2018 20:37:50 GMT", "server": "Apache"},
             "data_length": 38,
-            "data_hash": "DATA_HASH_0"
+            "data_hash": "DATAHASH1"
         }
     ],
     "signatures": {
@@ -23,9 +23,9 @@
     },
     "unsigned": {
         "data_links": {
-            "DATA_HASH_0": ["ipfs:/ipfs/QmXYZ…", "magnet:?xt.1=urn.sha1:ZYX…",
-                            "data:,%3C!DOCTYPE%20html%3E%0A%3Cp%3ETiny%20body%20here!%3C%2Fp%3E",
-                            "http://…", "ftp://…", "file://./data/…"]
+            "DATAHASH1": ["ipfs:/ipfs/QmXYZ…", "magnet:?xt.1=urn.sha1:ZYX…",
+                          "data:,%3C!DOCTYPE%20html%3E%0A%3Cp%3ETiny%20body%20here!%3C%2Fp%3E",
+                          "http://…", "ftp://…", "file://./data/…"]
         }
     }
 }
