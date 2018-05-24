@@ -2,9 +2,10 @@
 
 namespace ouinet {
 
+template<class F>
 class Defer {
 public:
-    Defer(std::function<void()> on_destruct)
+    Defer(F on_destruct)
         : _on_destruct(std::move(on_destruct))
     {}
 
@@ -13,7 +14,11 @@ public:
     }
 
 private:
-    std::function<void()> _on_destruct;
+    F _on_destruct;
 };
+
+template<class F> Defer<F> defer(F f) {
+    return Defer<F>(std::move(f));
+}
 
 } // namespace

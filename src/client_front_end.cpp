@@ -1,6 +1,6 @@
 #include "client_front_end.h"
 #include "generic_connection.h"
-#include <ipfs_cache/client.h>
+#include "cache/cache_client.h"
 #include <boost/optional/optional_io.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 
@@ -86,7 +86,7 @@ static ostream& operator<<(ostream& os, const ClientFrontEnd::Task& task) {
 
 Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
                               , const Request& req
-                              , ipfs_cache::Client* cache_client)
+                              , CacheClient* cache_client)
 {
     Response res{http::status::ok, req.version()};
 
