@@ -22,9 +22,9 @@ CacheInjector::CacheInjector(asio::io_service& ios, string path_to_repo)
 {
 }
 
-string CacheInjector::ipns_id() const
+string CacheInjector::id() const
 {
-    return _ipfs_node->ipns_id();
+    return _ipfs_node->id();
 }
 
 void CacheInjector::insert_content_from_queue()

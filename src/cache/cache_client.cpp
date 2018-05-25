@@ -83,7 +83,7 @@ void CacheClient::set_ipns(std::string ipns)
 
 std::string CacheClient::id() const
 {
-    return _ipfs_node->ipns_id();
+    return _ipfs_node->id();
 }
 
 const string& CacheClient::ipns() const

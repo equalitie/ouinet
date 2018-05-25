@@ -123,7 +123,7 @@ ClientDb::ClientDb(asio_ipfs::node& ipfs_node, string path_to_repo, string ipns)
 
 InjectorDb::InjectorDb(asio_ipfs::node& ipfs_node, string path_to_repo)
     : _path_to_repo(move(path_to_repo))
-    , _ipns(ipfs_node.ipns_id())
+    , _ipns(ipfs_node.id())
     , _ipfs_node(ipfs_node)
     , _republisher(new Republisher(_ipfs_node))
     , _has_callbacks(_ipfs_node.get_io_service())

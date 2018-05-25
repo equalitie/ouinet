@@ -35,8 +35,8 @@ public:
 
     // Returns the IPNS CID of the database.
     // The database could be then looked up by e.g. pointing your browser to:
-    // "https://ipfs.io/ipns/" + ipfs.ipns_id()
-    std::string ipns_id() const;
+    // "https://ipfs.io/ipns/" + ipfs.id()
+    std::string id() const;
 
     // Insert `content` into IPFS and store its IPFS ID under the `url` in the
     // database. The IPFS ID is also returned as a parameter to the callback
