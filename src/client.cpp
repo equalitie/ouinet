@@ -688,7 +688,7 @@ void Client::State::start(int argc, char* argv[])
     auto pid_path = get_pid_path();
     if (exists(pid_path)) {
         throw runtime_error(util::str
-             ( "Existing PID file ", pid_path
+             ( "[ABORT] Existing PID file ", pid_path
              , "; another client process may be running"
              , ", otherwise please remove the file."));
     }

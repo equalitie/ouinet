@@ -2,12 +2,17 @@
 
 #include <I2PService.h>
 
+#include "../../blocker.h"
+
+
+#include "../../logger.h"
+
 using namespace std;
 using namespace ouinet::ouiservice;
 using namespace ouinet::ouiservice::i2poui;
 
-Tunnel::Tunnel(boost::asio::io_service& ios, std::unique_ptr<i2p::client::I2PService> _i2p_tunnel, uint32_t timeout)
-  : _ios(ios), _i2p_tunnel(std::move(_i2p_tunnel))
+Tunnel::Tunnel(boost::asio::io_service& ios, std::unique_ptr<i2p::client::I2PService> i2p_tunnel, uint32_t timeout)
+  : _ios(ios), _i2p_tunnel(std::move(i2p_tunnel))
 {
   // I2Pd doesn't implicitly keep io_service busy, so we need to
   // do it ourselves.
@@ -33,23 +38,25 @@ void Tunnel::set_timeout_to_get_ready(uint32_t timeout)
 */
 void Tunnel::wait_to_get_ready(boost::asio::yield_context yield) {
     
-
-    sys::error_code ec;
-    ConditionVariable ready_condition(_ios);
+  sys::error_code ec;
+  ConditionVariable ready_condition(_ios);
 
     // Wait till we find a route to the service and tunnel is ready then try to
     // acutally connect and then unblock
-    _i2p_tunnel->AddReadyCallback([&ec, &ready_condition](const sys::error_code& error) mutable {
-        ec = error;
-        ready_condition.notify();
+  LOG_DEBUG("Waiting for I2P tunnel to get established");
+  
+  _i2p_tunnel->AddReadyCallback([&ec, &ready_condition](const sys::error_code& error) mutable {
+      ec = error;
+      ready_condition.notify();
     });
 
-    // This _returns_ once the `block` thing create above gets destroyed
-    // i.e. when the handler finishes.
-    ready_condition.wait(yield);
+  // This _returns_ once the `block` thing create above gets destroyed
+  // i.e. when the handler finishes.
+  ready_condition.wait(yield);
 
-  }
-
+  LOG_DEBUG("I2P Tunnel has been established");
+  
+}
 
 Tunnel::~Tunnel() {
   _connections.close_all();

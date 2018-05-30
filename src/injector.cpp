@@ -33,6 +33,8 @@
 
 #include "util/signal.h"
 
+#include "logger.h"
+
 using namespace std;
 using namespace ouinet;
 
@@ -316,9 +318,9 @@ int main(int argc, const char* argv[])
     }
 
     if (exists(config.repo_root()/OUINET_PID_FILE)) {
-        cerr << "Existing PID file " << config.repo_root()/OUINET_PID_FILE
-             << "; another injector process may be running"
-             << ", otherwise please remove the file." << endl;
+      LOG_ABORT("Existing PID file ", config.repo_root()/OUINET_PID_FILE,
+                "; another injector process may be running" ,
+                ", otherwise please remove the file.\n");
         return 1;
     }
     // Acquire a PID file for the life of the process

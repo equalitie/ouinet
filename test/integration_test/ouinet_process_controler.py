@@ -203,6 +203,8 @@ class OuinetI2PInjector(OuinetInjector):
     def __init__(self, injector_config, i2p_ready = None):
         super(OuinetI2PInjector, self).__init__(injector_config)
         self._setup_i2p_private_key()
+        self.set_process_protocol(OuinetI2PEnabledProcessProtocol())
+        self._proc_protocol.set_i2p_is_ready_object(i2p_ready)
 
     def _setup_i2p_private_key(self):
         if not os.path.exists(self.config.config_folder_name+"/i2p"):

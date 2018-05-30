@@ -25,7 +25,8 @@ Client::~Client()
 
 void Client::start(asio::yield_context yield)
 {
-  _client_tunnel = std::make_unique<Tunnel>(_ios, std::make_unique<i2p::client::I2PClientTunnel>("i2p_oui_client", _target_id, "127.0.0.1", 0, nullptr), _timeout);
+  std::unique_ptr<i2p::client::I2PClientTunnel> i2p_client_tunnel = std::make_unique<i2p::client::I2PClientTunnel>("i2p_oui_client", _target_id, "127.0.0.1", 0, nullptr);
+  _client_tunnel = std::make_unique<Tunnel>(_ios, std::move(i2p_client_tunnel), _timeout);
 
   sys::error_code ec;
 
