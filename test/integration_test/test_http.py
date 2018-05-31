@@ -34,7 +34,7 @@ class OuinetTests(TestCase):
 
     def setUp(self):
         self.proc_list = [] #keep track of all process we start for clean tear down
-        self.timeout = 600
+        #self.timeout = 180
 
     def safe_random_str(self, length):
         letters = string.ascii_lowercase                             
@@ -146,9 +146,12 @@ class OuinetTests(TestCase):
         i2pclient_tunnel_ready = defer.Deferred()
         i2pclient = self.run_i2p_client(TestFixtures.FIRST_CLIENT["name"], ["--listen-on-tcp", "127.0.0.1:"+str(TestFixtures.FIRST_CLIENT["port"]), "--injector-ipns", TestFixtures.INJECTOR_IPNS_PERSISTANT_IDENTITY["Identity"]["PeerID"], "--injector-ep", TestFixtures.INJECTOR_I2P_PUBLIC_ID, "http://localhost/"], i2pclient_tunnel_ready)
 
+        #http_server
+        self.test_http_server = self.run_http_server(TestFixtures.TEST_HTTP_SERVER_PORT)
+
         #wait for the client tunnel to connect to the injector
         success = yield self.wait_for_i2p_tunnel_to_get_connected(i2pclient_tunnel_ready)
-        pdb.set_trace()
+        #pdb.set_trace()
 
         content = self.safe_random_str(TestFixtures.RESPONSE_LENGTH)
         defered_response = yield  self.request_echo(content)
@@ -190,6 +193,7 @@ class OuinetTests(TestCase):
         self.assertEquals(response_body, content)
 
     def tearDown(self):
+        pdb.set_trace()
         deferred_procs = [] 
         for cur_proc in self.proc_list:
             deferred_procs.append(cur_proc.proc_end)

@@ -41,7 +41,6 @@ void Client::start(asio::yield_context yield)
   //are created.
   _port = dynamic_cast<i2p::client::I2PClientTunnel*>(_client_tunnel->_i2p_tunnel.get())->GetLocalEndpoint().port();
 
-  LOG_DEBUG("I2P Tunnel has been established");
 }
 
 void Client::stop()
@@ -60,17 +59,21 @@ Client::connect(asio::yield_context yield, Signal<void()>& cancel)
     sys::error_code ec;
 
     Connection connection(_ios);
-
+    
     auto cancel_slot = cancel.connect([&] {
         // tcp::socket::cancel() does not work properly on all platforms
         connection.close();
     });
+
+    LOG_DEBUG("Connecting to the i2p injector...");
 
     connection.socket().async_connect(asio::ip::tcp::endpoint(asio::ip::address_v4::loopback(), _port), yield[ec]);
 
     if (ec) {
         return or_throw<ConnectInfo>(yield, ec);
     }
+
+    LOG_DEBUG("Connection to the i2p injector is established");
 
     _client_tunnel->_connections.add(connection);
 

@@ -220,6 +220,7 @@ void serve( InjectorConfig& config
         beast::flat_buffer buffer;
         http::async_read(con, buffer, req, yield[ec]);
 
+        cerr << req;
         if (ec) break;
 
         if (!authenticate(req, con, config.credentials(), yield[ec])) {
