@@ -61,5 +61,4 @@ void Tunnel::wait_to_get_ready(boost::asio::yield_context yield) {
 Tunnel::~Tunnel() {
   _connections.close_all();
   _i2p_tunnel->Stop();
-
 }
