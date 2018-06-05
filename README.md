@@ -68,6 +68,11 @@ You may need to repeat this until the script succeeds and reports instructions
 on how to run the client or injector tools.  The whole process takes a few
 minutes and requires around 2 GB of storage.
 
+If you are using a custom built boost library, you can define BOOST_ROOT=/path/to/boost
+environmental variable for the build-script to use it:
+
+    BOOST_ROOT=/path/to/boost sh build-ouinet.sh
+
 ### Running over the Vagrant instance
 
 #### Install 
