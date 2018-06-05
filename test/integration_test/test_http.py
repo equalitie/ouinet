@@ -25,6 +25,8 @@ from ouinet_process_controler import OuinetConfig, OuinetClient, OuinetInjector,
 from test_fixtures import TestFixtures
 from test_http_server import TestHttpServer
 
+import sys
+import logging
 import pdb
 
 class OuinetTests(TestCase):
@@ -34,7 +36,8 @@ class OuinetTests(TestCase):
 
     def setUp(self):
         self.proc_list = [] #keep track of all process we start for clean tear down
-        #self.timeout = 180
+
+        logging.basicConfig(stream=sys.stdout, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=TestFixtures.LOGGING_LEVEL, )
 
     def safe_random_str(self, length):
         letters = string.ascii_lowercase                             
@@ -134,7 +137,7 @@ class OuinetTests(TestCase):
         and make sure it gets the correct echo. The unique request makes sure that
         the response is from the http server and is not cached.
         """
-        print self.getTimeout()
+        self.timeout = TestFixtures.I2P_TRANSPORT_TIMEOUT
         #injector
         i2pinjector_tunnel_ready = defer.Deferred()
         i2pinjector = self.run_i2p_injector(["--listen-on-i2p", "true"], i2pinjector_tunnel_ready)
@@ -151,7 +154,6 @@ class OuinetTests(TestCase):
 
         #wait for the client tunnel to connect to the injector
         success = yield self.wait_for_i2p_tunnel_to_get_connected(i2pclient_tunnel_ready)
-        #pdb.set_trace()
 
         content = self.safe_random_str(TestFixtures.RESPONSE_LENGTH)
         defered_response = yield  self.request_echo(content)
@@ -162,13 +164,15 @@ class OuinetTests(TestCase):
         self.assertEquals(response_body, content)
 
     @inlineCallbacks
-    def no_test_tcp_transport(self):
+    def test_tcp_transport(self):
         """
         Starts an echoing http server, a injector and a client and send a unique http 
         request to the echoing http server through the g client --tcp--> injector -> http server
         and make sure it gets the correct echo. The unique request makes sure that
         the response is from the http server and is not cached.
         """
+        self.timeout = TestFixtures.TCP_TRANSPORT_TIMEOUT
+
         #injector
         self.run_tcp_injector(["--listen-on-i2p", "false", "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.INJECTOR_PORT)])
         
@@ -193,7 +197,6 @@ class OuinetTests(TestCase):
         self.assertEquals(response_body, content)
 
     def tearDown(self):
-        pdb.set_trace()
         deferred_procs = [] 
         for cur_proc in self.proc_list:
             deferred_procs.append(cur_proc.proc_end)

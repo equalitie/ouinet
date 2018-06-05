@@ -2,12 +2,15 @@
 # See LICENSE for other credits and copying information
 
 # Constants used in the test
+import logging
 
 class TestFixtures:
+    LOGGING_LEVEL = logging.DEBUG #Change true to turn on debugging 
+    
     FATAL_ERROR_INDICATOR = "[ABORT]"
     DEFAULT_PROCESS_TIMEOUT = 15 # seconds
     TCP_TRANSPORT_TIMEOUT = 15 
-    I2P_TRANSPORT_TIMEOUT = 600
+    I2P_TRANSPORT_TIMEOUT = 200
     
     REPO_FOLDER_NAME = "repos"
 

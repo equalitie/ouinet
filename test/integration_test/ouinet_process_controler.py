@@ -6,8 +6,8 @@
 
 import errno
 import os
-import threading
 import time
+import logging
 
 import pdb
 
@@ -28,7 +28,6 @@ class OuinetConfig(object):
     to make it easier to send the config to different
     process
     """
-
     def __init__(self, app_name = "generic ouinet app",
                  timeout = TestFixtures.DEFAULT_PROCESS_TIMEOUT, argv = [],
                  config_file_name = "ouinet.conf", 
@@ -123,7 +122,7 @@ class OuinetProcess(object):
         self._has_started = True
 
         # we add a twisted timer to kill the process after timeout
-        print self.config.app_name, "has timeout", self.config.timeout
+        logging.debug(self.config.app_name + " times out in " + str(self.config.timeout) + " seconds")
         self.timeout_killer = reactor.callLater(self.config.timeout, self.stop)
 
         # we *might* need to make sure that the process has ended before

@@ -4,6 +4,7 @@
 # Integration tests for ouinet - classes which setup and fire ouinet client and injectors for different tests situation
 
 import re
+import logging
 
 from twisted.internet import protocol
 
@@ -21,12 +22,12 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
         """
         listen for the debugger output reacto to fatal errors and other clues
         """
-        print self.app_name, data
+        logging.debug(self.app_name + ": " + data)
         if re.match(r'\[ABORT\]', data):
             raise Exception, "Fatal error"
             
     def outReceived(self, data):
-        print self.app_name, data
+        logging.debug(self.app_name + ": " + data)
 
     def processExited(self, reason):
         self.onExit.callback(self)
