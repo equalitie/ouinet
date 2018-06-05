@@ -7,7 +7,6 @@ else()
 endif()
 
 set(BOOST_VERSION 1.62)
-set(BOOST_ROOT /home/klaymen/doc/code/boost_1_65_1)
 
 include(ExternalProject)
 ################################################################################
