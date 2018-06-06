@@ -102,8 +102,10 @@ ouinet::GenericConnection Server::accept(asio::yield_context yield)
     sys::error_code ec;
 
     Connection connection(_ios);
-    _tcp_acceptor.async_accept(connection.socket(), yield);
-    if (ec) {
+
+    _tcp_acceptor.async_accept(connection.socket(), yield[ec]);
+
+    if (ec || !_server_tunnel) {
         return or_throw<GenericConnection>(yield, ec, GenericConnection());
     }
 
