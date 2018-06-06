@@ -32,7 +32,7 @@ public:
   */
   void wait_to_get_ready(boost::asio::yield_context yield);
   
-  Tunnel(boost::asio::io_service& ios, std::unique_ptr<i2p::client::I2PService> _i2p_tunnel, uint32_t timeout);
+  Tunnel(boost::asio::io_service& ios, std::shared_ptr<i2p::client::I2PService> _i2p_tunnel, uint32_t timeout);
   
   ~Tunnel();
   
@@ -46,7 +46,9 @@ public:
   //from exiting while channel is waiting for accepting or connecting
   std::shared_ptr<boost::asio::io_service::work> _waiting_work;
 
-  std::unique_ptr<i2p::client::I2PService> _i2p_tunnel;
+  // I2PService derives from std::enable_shared_from_this, so it must
+  // be a shared_ptr.
+  std::shared_ptr<i2p::client::I2PService> _i2p_tunnel;
   ConnectionList _connections;
   std::unique_ptr<ConditionVariable> _ready_condition;
   std::shared_ptr<bool> _was_destroyed;

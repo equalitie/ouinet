@@ -13,8 +13,9 @@ using namespace std;
 using namespace ouinet::ouiservice;
 using namespace ouinet::ouiservice::i2poui;
 
-Tunnel::Tunnel(boost::asio::io_service& ios, std::unique_ptr<i2p::client::I2PService> i2p_tunnel, uint32_t timeout)
-  : _ios(ios), _i2p_tunnel(std::move(i2p_tunnel))
+Tunnel::Tunnel(boost::asio::io_service& ios, std::shared_ptr<i2p::client::I2PService> i2p_tunnel, uint32_t timeout)
+  : _ios(ios), _i2p_tunnel(std::move(i2p_tunnel)),
+    _was_destroyed(make_shared<bool>(false))
 {
   // I2Pd doesn't implicitly keep io_service busy, so we need to
   // do it ourselves.
