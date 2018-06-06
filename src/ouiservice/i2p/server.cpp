@@ -90,9 +90,11 @@ void Server::start_listen(asio::yield_context yield)
 
 void Server::stop_listen()
 {
-  _server_tunnel.reset();
-  _tcp_acceptor.close();
-  
+    _server_tunnel.reset();
+
+    if (_tcp_acceptor.is_open()) {
+        _tcp_acceptor.close();
+    }
 }
 
 ouinet::GenericConnection Server::accept(asio::yield_context yield)
