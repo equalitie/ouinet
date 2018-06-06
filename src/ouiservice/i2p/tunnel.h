@@ -48,6 +48,8 @@ public:
 
   std::unique_ptr<i2p::client::I2PService> _i2p_tunnel;
   ConnectionList _connections;
+  std::unique_ptr<ConditionVariable> _ready_condition;
+  std::shared_ptr<bool> _was_destroyed;
 
 };
 

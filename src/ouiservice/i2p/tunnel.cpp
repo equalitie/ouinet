@@ -6,6 +6,8 @@
 
 
 #include "../../logger.h"
+#include "../../defer.h"
+#include "../../or_throw.h"
 
 using namespace std;
 using namespace ouinet::ouiservice;
@@ -38,27 +40,42 @@ void Tunnel::set_timeout_to_get_ready(uint32_t timeout)
 */
 void Tunnel::wait_to_get_ready(boost::asio::yield_context yield) {
     
+  auto wd = _was_destroyed;
+
   sys::error_code ec;
-  ConditionVariable ready_condition(_ios);
+
+  assert(!_ready_condition);
+  _ready_condition = make_unique<ConditionVariable>(_ios);
+  auto on_exit = Defer{[this, wd] { if (!*wd) _ready_condition = nullptr; }};
 
     // Wait till we find a route to the service and tunnel is ready then try to
     // acutally connect and then unblock
   LOG_DEBUG("Waiting for I2P tunnel to get established");
   
-  _i2p_tunnel->AddReadyCallback([&ec, &ready_condition](const sys::error_code& error) mutable {
+  _i2p_tunnel->AddReadyCallback([wd, &ec, this](const sys::error_code& error) mutable {
       ec = error;
-      ready_condition.notify();
+      if (*wd) return;
+      _ready_condition->notify();
     });
 
   // This _returns_ once the `block` thing create above gets destroyed
   // i.e. when the handler finishes.
-  ready_condition.wait(yield);
+  _ready_condition->wait(yield);
 
-  LOG_DEBUG("I2P Tunnel has been established");
-  
+  if (!*wd) {
+      LOG_DEBUG("I2P Tunnel has been established");
+  }
+  else {
+      return or_throw(yield, asio::error::operation_aborted);
+  }
 }
 
 Tunnel::~Tunnel() {
+  *_was_destroyed = true;
   _connections.close_all();
   _i2p_tunnel->Stop();
+
+  if (_ready_condition) {
+      _ready_condition->notify();
+  }
 }
