@@ -83,6 +83,11 @@ private:
     };
 
 public:
+    using lowest_layer_type = GenericConnection;
+
+    GenericConnection& lowest_layer() { return *this; }
+
+public:
     GenericConnection() {}
 
     template<class AsyncRWStream>
