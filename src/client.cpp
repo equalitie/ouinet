@@ -6,6 +6,8 @@
 #include <boost/asio/connect.hpp>
 #include <boost/asio/signal_set.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include <boost/asio/ssl.hpp>
+#include <boost/asio/ssl/stream.hpp>
 #include <iostream>
 #include <fstream>
 #include <cstdlib>  // for atexit()
@@ -27,6 +29,7 @@
 #include "client.h"
 #include "authenticate.h"
 #include "defer.h"
+#include "ssl/ca_certificate.h"
 
 #ifndef __ANDROID__
 #  include "force_exit_on_signal.h"
@@ -45,10 +48,11 @@ using namespace ouinet;
 
 namespace posix_time = boost::posix_time;
 
-using tcp         = asio::ip::tcp;
-using Request     = http::request<http::string_body>;
-using Response    = http::response<http::dynamic_body>;
+using tcp      = asio::ip::tcp;
+using Request  = http::request<http::string_body>;
+using Response = http::response<http::dynamic_body>;
 using boost::optional;
+namespace ssl = boost::asio::ssl;
 
 static const boost::filesystem::path OUINET_PID_FILE = "pid";
 
@@ -65,7 +69,7 @@ class Client::State : public enable_shared_from_this<Client::State> {
 public:
     State(asio::io_service& ios)
         : _ios(ios)
-    {}
+    { }
 
     void start(int argc, char* argv[]);
 
@@ -78,6 +82,12 @@ public:
     void set_injector(string);
 
 private:
+    void mitm_tls_handshake( GenericConnection
+                           , const Request&
+                           , asio::yield_context);
+
+    void setup_ssl_context(ssl::context&);
+
     void serve_request(GenericConnection& con, asio::yield_context yield);
 
     void handle_connect_request( GenericConnection& client_c
@@ -115,6 +125,7 @@ private:
 
 private:
     asio::io_service& _ios;
+    CACertificate _ca_certificate;
     ClientConfig _config;
     std::unique_ptr<OuiServiceClient> _injector;
     std::unique_ptr<CacheClient> _ipfs_cache;
@@ -413,6 +424,34 @@ Response bad_gateway(const Request& req)
 }
 
 //------------------------------------------------------------------------------
+// TODO: This function is heavily unfinished, mostly just for debugging ATM
+void Client::State::mitm_tls_handshake( GenericConnection con
+                                      , const Request& con_req
+                                      , asio::yield_context yield)
+{
+    ssl::context ssl_context{ssl::context::sslv23};
+
+    setup_ssl_context(ssl_context);
+
+    // Send back OK to let the UA know we have the "tunnel"
+    http::response<http::string_body> res{http::status::ok, con_req.version()};
+
+    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
+    res.set(http::field::content_type, "text/html");
+    res.keep_alive(con_req.keep_alive());
+
+    http::async_write(con, res, yield);
+
+    ssl::stream<GenericConnection&> ssl_con(con, ssl_context);
+
+    ssl_con.async_handshake(ssl::stream_base::server, yield);
+
+    Request req;
+    beast::flat_buffer buffer;
+    http::async_read(ssl_con, buffer, req, yield);
+}
+
+//------------------------------------------------------------------------------
 void Client::State::serve_request( GenericConnection& con
                                  , asio::yield_context yield)
 {
@@ -499,15 +538,28 @@ void Client::State::serve_request( GenericConnection& con
 
         // Attempt connection to origin for CONNECT requests
         if (req.method() == http::verb::connect) {
-            if (_config.enable_http_connect_requests()) {
-                ASYNC_DEBUG( handle_connect_request(con, req, yield)
-                           , "Connect ", req.target());
-            }
-            else {
-                auto res = bad_gateway(req);
-                http::async_write(con, res, yield[ec]);
-            }
+            // TODO: This scope is a heavily unfinished/debug code. What I
+            // think we need to do here is check whether the request contains
+            // any private data (cookies, GET, POST arguments, ... we have a
+            // function for it somewhere) and then decide whether to do MitM or
+            // pass the CONNECT request further to the injector (as is done in
+            // the handle_connect_request function).
 
+            //if (_config.enable_http_connect_requests()) {
+            //    ASYNC_DEBUG( handle_connect_request(con, req, yield)
+            //               , "Connect ", req.target());
+            //}
+            //else {
+            //    auto res = bad_gateway(req);
+            //    http::async_write(con, res, yield[ec]);
+            //}
+
+            try {
+                mitm_tls_handshake(move(con), req, yield);
+            }
+            catch(const std::exception& e) {
+                cerr << "Mitm exception: " << e.what() << endl;
+            }
             return;
         }
 
@@ -807,6 +859,37 @@ void Client::State::set_injector(string injector_ep_str)
             if (self->was_stopped()) return;
             sys::error_code ec;
             self->setup_injector(yield[ec]);
+        });
+}
+
+void Client::State::setup_ssl_context(ssl::context& ssl_context)
+{
+    // TODO: The pem_ functions allocate new strings each time, it may
+    // be more efficient to store these variables in Client::State
+    // and just reuse them.
+    const string cert = _ca_certificate.pem_certificate();
+    const string key  = _ca_certificate.pem_private_key();
+    const string dh   = _ca_certificate.pem_dh_param();
+
+    ssl_context.set_options( ssl::context::default_workarounds
+                           | ssl::context::no_sslv2
+                           | ssl::context::single_dh_use);
+
+    // TODO: We also need to generate a per-request dummy context
+    // and add it to the certificate chain.
+    ssl_context.use_certificate_chain(
+            asio::buffer(cert.data(), cert.size()));
+
+    ssl_context.use_private_key( asio::buffer(key.data(), key.size())
+                               , ssl::context::file_format::pem);
+
+    ssl_context.use_tmp_dh(asio::buffer(dh.data(), dh.size()));
+
+    ssl_context.set_password_callback(
+        [](std::size_t, asio::ssl::context_base::password_purpose)
+        {
+            assert(0 && "TODO: Not yet supported");
+            return "";
         });
 }
 
