@@ -74,6 +74,7 @@ public:
     void stop() {
         _ipfs_cache = nullptr;
         _shutdown_signal();
+        if (_injector) _injector->stop();
     }
 
     void setup_ipfs_cache();
@@ -706,11 +707,16 @@ void Client::State::start(int argc, char* argv[])
               sys::error_code ec;
 
               setup_injector(yield[ec]);
-              setup_ipfs_cache();
+
+              if (was_stopped()) return;
 
               if (ec) {
-                  cerr << "Failed to setup injector" << endl;
+                  cerr << "Failed to setup injector: "
+                       << ec.message()
+                       << endl;
               }
+
+              setup_ipfs_cache();
 
               listen_tcp( yield[ec]
                         , _config.local_endpoint()
