@@ -58,6 +58,7 @@ namespace ssl = boost::asio::ssl;
 static const boost::filesystem::path OUINET_PID_FILE = "pid";
 static const boost::filesystem::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
 static const boost::filesystem::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
+static const boost::filesystem::path OUINET_CA_DH_FILE = "ssl-ca-dh.pem";
 
 //------------------------------------------------------------------------------
 #define ASYNC_DEBUG(code, ...) [&] () mutable {\
@@ -817,6 +818,8 @@ void Client::State::start(int argc, char* argv[])
             << _ca_certificate.pem_certificate();
         boost::filesystem::ofstream(_config.repo_root() / OUINET_CA_KEY_FILE)
             << _ca_certificate.pem_private_key();
+        boost::filesystem::ofstream(_config.repo_root() / OUINET_CA_DH_FILE)
+            << _ca_certificate.pem_dh_param();
     }
 #endif
 
