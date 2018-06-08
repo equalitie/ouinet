@@ -117,6 +117,11 @@ CACertificate::CACertificate()
     _pem_dh_param = g_default_dh_param;
 }
 
+CACertificate::CACertificate(std::string pem_cert, std::string pem_key, std::string pem_dh)
+{
+    throw runtime_error("TODO: CA certificate loading is not yet implemented!");
+}
+
 
 X509_NAME* CACertificate::get_subject_name() const
 {

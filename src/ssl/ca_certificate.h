@@ -8,6 +8,7 @@ namespace ouinet {
 class CACertificate {
 public:
     CACertificate();
+    CACertificate(std::string pem_cert, std::string pem_key, std::string pem_dh);
 
     const std::string& pem_private_key() const { return _pem_private_key; }
     const std::string& pem_certificate() const { return _pem_certificate; }
