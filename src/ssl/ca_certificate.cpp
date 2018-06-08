@@ -138,6 +138,14 @@ CACertificate::CACertificate(std::string pem_cert, std::string pem_key, std::str
             throw runtime_error("Failed to parse CA PEM certificate");
         _x = cert;
     }
+    {
+        BIO* bio = BIO_new_mem_buf(_pem_dh_param.data(), _pem_dh_param.size());
+        DH* dh = PEM_read_bio_DHparams(bio, nullptr, nullptr, nullptr);
+        BIO_free_all(bio);
+        if (!dh)
+            throw runtime_error("Failed to parse CA PEM DH parameters");
+        DH_free(dh);  // just to check it is correct
+    }
 }
 
 
