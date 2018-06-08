@@ -56,7 +56,7 @@ using boost::optional;
 namespace ssl = boost::asio::ssl;
 
 static const boost::filesystem::path OUINET_PID_FILE = "pid";
-static const boost::filesystem::path OUINET_CA_FILE = "ssl-ca-cert.pem";
+static const boost::filesystem::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
 static const boost::filesystem::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
 
 //------------------------------------------------------------------------------
@@ -813,7 +813,7 @@ void Client::State::start(int argc, char* argv[])
 
 #ifndef __ANDROID__
     {
-        boost::filesystem::ofstream(_config.repo_root() / OUINET_CA_FILE)
+        boost::filesystem::ofstream(_config.repo_root() / OUINET_CA_CERT_FILE)
             << _ca_certificate.pem_certificate();
         boost::filesystem::ofstream(_config.repo_root() / OUINET_CA_KEY_FILE)
             << _ca_certificate.pem_private_key();
