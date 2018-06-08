@@ -118,8 +118,26 @@ CACertificate::CACertificate()
 }
 
 CACertificate::CACertificate(std::string pem_cert, std::string pem_key, std::string pem_dh)
+    : _pem_private_key(move(pem_key))
+    , _pem_certificate(move(pem_cert))
+    , _pem_dh_param(move(pem_dh))
 {
-    throw runtime_error("TODO: CA certificate loading is not yet implemented!");
+    {
+        BIO* bio = BIO_new_mem_buf(_pem_private_key.data(), _pem_private_key.size());
+        EVP_PKEY* key = PEM_read_bio_PrivateKey(bio, nullptr, nullptr, nullptr);
+        BIO_free_all(bio);
+        if (!key)
+            throw runtime_error("Failed to parse CA PEM key");
+        _pk = key;
+    }
+    {
+        BIO* bio = BIO_new_mem_buf(_pem_certificate.data(), _pem_certificate.size());
+        X509* cert = PEM_read_bio_X509(bio, nullptr, nullptr, nullptr);
+        BIO_free_all(bio);
+        if (!cert)
+            throw runtime_error("Failed to parse CA PEM certificate");
+        _x = cert;
+    }
 }
 
 
