@@ -816,7 +816,10 @@ void Client::State::start(int argc, char* argv[])
     auto ca_cert_path = _config.repo_root() / OUINET_CA_CERT_FILE;
     auto ca_key_path = _config.repo_root() / OUINET_CA_KEY_FILE;
     auto ca_dh_path = _config.repo_root() / OUINET_CA_DH_FILE;
-    {
+    if (exists(ca_cert_path) && exists(ca_key_path) && exists(ca_dh_path)) {
+        throw runtime_error("TODO: CA certificate loading is not yet implemented!");
+    } else {
+        cout << "Generating and storing CA certificate..." << endl;
         _ca_certificate = make_unique<CACertificate>();
         boost::filesystem::ofstream(ca_cert_path)
             << _ca_certificate->pem_certificate();
