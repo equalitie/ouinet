@@ -127,7 +127,7 @@ private:
 
 private:
     asio::io_service& _ios;
-    CACertificate _ca_certificate;
+    std::unique_ptr<CACertificate> _ca_certificate;
     // TODO: This needs to be a LRU cache
     map<string, string> _ssl_certificate_cache;
     ClientConfig _config;
@@ -482,10 +482,10 @@ void Client::State::mitm_tls_handshake( GenericConnection con
     auto i = _ssl_certificate_cache.find(target);
 
     if (i == _ssl_certificate_cache.end()) {
-        DummyCertificate dummy_crt(_ca_certificate, target);
+        DummyCertificate dummy_crt(*_ca_certificate, target);
 
         string crt_chain = dummy_crt.pem_certificate()
-                         + _ca_certificate.pem_certificate();
+                         + _ca_certificate->pem_certificate();
 
         i = _ssl_certificate_cache.insert(make_pair( move(target)
                                                    , move(crt_chain))).first;
@@ -493,8 +493,8 @@ void Client::State::mitm_tls_handshake( GenericConnection con
 
     setup_ssl_context( ssl_context
                      , i->second
-                     , _ca_certificate.pem_private_key()
-                     , _ca_certificate.pem_dh_param());
+                     , _ca_certificate->pem_private_key()
+                     , _ca_certificate->pem_dh_param());
 
     // Send back OK to let the UA know we have the "tunnel"
     http::response<http::string_body> res{http::status::ok, con_req.version()};
@@ -813,13 +813,17 @@ void Client::State::start(int argc, char* argv[])
 #endif
 
 #ifndef __ANDROID__
+    auto ca_cert_path = _config.repo_root() / OUINET_CA_CERT_FILE;
+    auto ca_key_path = _config.repo_root() / OUINET_CA_KEY_FILE;
+    auto ca_dh_path = _config.repo_root() / OUINET_CA_DH_FILE;
     {
-        boost::filesystem::ofstream(_config.repo_root() / OUINET_CA_CERT_FILE)
-            << _ca_certificate.pem_certificate();
-        boost::filesystem::ofstream(_config.repo_root() / OUINET_CA_KEY_FILE)
-            << _ca_certificate.pem_private_key();
-        boost::filesystem::ofstream(_config.repo_root() / OUINET_CA_DH_FILE)
-            << _ca_certificate.pem_dh_param();
+        _ca_certificate = make_unique<CACertificate>();
+        boost::filesystem::ofstream(ca_cert_path)
+            << _ca_certificate->pem_certificate();
+        boost::filesystem::ofstream(ca_key_path)
+            << _ca_certificate->pem_private_key();
+        boost::filesystem::ofstream(ca_dh_path)
+            << _ca_certificate->pem_dh_param();
     }
 #endif
 
