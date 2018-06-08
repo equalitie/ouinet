@@ -817,6 +817,7 @@ void Client::State::start(int argc, char* argv[])
     auto ca_key_path = _config.repo_root() / OUINET_CA_KEY_FILE;
     auto ca_dh_path = _config.repo_root() / OUINET_CA_DH_FILE;
     if (exists(ca_cert_path) && exists(ca_key_path) && exists(ca_dh_path)) {
+        cout << "Loading existing CA certificate..." << endl;
         auto read_pem = [](auto path) {
             std::stringstream ss;
             ss << boost::filesystem::ifstream(path).rdbuf();
