@@ -125,6 +125,8 @@ private:
 private:
     asio::io_service& _ios;
     CACertificate _ca_certificate;
+    // TODO: This needs to be a LRU cache
+    map<string, string> _ssl_certificate_cache;
     ClientConfig _config;
     std::unique_ptr<OuiServiceClient> _injector;
     std::unique_ptr<CacheClient> _ipfs_cache;
@@ -469,13 +471,25 @@ void Client::State::mitm_tls_handshake( GenericConnection con
 {
     ssl::context ssl_context{ssl::context::sslv23};
 
-    static DummyCertificate dummy_crt(_ca_certificate, "www.example.com");
+    // TODO: Can we do without creating std::string?
+    string target = con_req.target()
+                           .substr(0, con_req.target().find(':'))
+                           .to_string();
 
-    string cert_chain = dummy_crt.pem_certificate()
-                      + _ca_certificate.pem_certificate();
+    auto i = _ssl_certificate_cache.find(target);
+
+    if (i == _ssl_certificate_cache.end()) {
+        DummyCertificate dummy_crt(_ca_certificate, target);
+
+        string crt_chain = dummy_crt.pem_certificate()
+                         + _ca_certificate.pem_certificate();
+
+        i = _ssl_certificate_cache.insert(make_pair( move(target)
+                                                   , move(crt_chain))).first;
+    }
 
     setup_ssl_context( ssl_context
-                     , cert_chain
+                     , i->second
                      , _ca_certificate.pem_private_key()
                      , _ca_certificate.pem_dh_param());
 
