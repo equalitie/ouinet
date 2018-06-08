@@ -1,0 +1,49 @@
+#include "dummy_certificate.h"
+#include "ca_certificate.h"
+#include "util.h"
+
+using namespace std;
+using namespace ouinet;
+
+DummyCertificate::DummyCertificate( CACertificate& ca_cert
+                                  , const beast::string_view cn)
+    : _x(X509_new())
+{
+    // TODO: Is this a proper version?
+    X509_set_version(_x, 2);
+    ASN1_INTEGER_set(X509_get_serialNumber(_x), ca_cert.next_serial_number());
+
+    X509_gmtime_adj(X509_get_notBefore(_x), -ssl::util::ONE_HOUR);
+    X509_gmtime_adj(X509_get_notAfter(_x), 15 * ssl::util::ONE_YEAR);
+
+    X509_set_pubkey(_x, ca_cert.get_private_key());
+    
+    X509_NAME* name = X509_get_subject_name(_x); 
+    
+    // TODO: Check error code?
+    X509_NAME_add_entry_by_txt(name, "CN",
+            MBSTRING_ASC, (const unsigned char*) cn.data(), cn.size(), -1, 0);
+    
+    X509_set_issuer_name(_x, ca_cert.get_subject_name());
+
+    string alt_name = "DNS:" + cn.to_string();
+
+    // Add various standard extensions
+    ssl::util::x509_add_ext(_x, NID_subject_alt_name, alt_name.c_str());
+
+    if (!X509_sign(_x, ca_cert.get_private_key(), EVP_sha256()))
+        throw runtime_error("Failed in X509_sign");
+
+    {
+        BIO* bio = BIO_new(BIO_s_mem());
+        PEM_write_bio_X509(bio, _x);
+        _pem_certificate = ssl::util::read_bio(bio);
+        BIO_free_all(bio);
+    }
+}
+
+
+DummyCertificate::~DummyCertificate()
+{
+    if (_x) X509_free(_x);
+}

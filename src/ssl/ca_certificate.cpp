@@ -8,6 +8,7 @@
 #include <openssl/x509v3.h>
 
 #include "ca_certificate.h"
+#include "util.h"
 #include "../defer.h"
 #include "../util.h"
 
@@ -54,34 +55,6 @@ static string g_default_dh_param =
     "-----END DH PARAMETERS-----\n";
 
 
-// Add extension using V3 code: we can set the config file as nullptr
-// because we wont reference any other sections.
-static void add_ext(X509 *cert, int nid, const char *value)
-{
-    X509_EXTENSION *ex;
-    X509V3_CTX ctx;
-    // This sets the 'context' of the extensions.
-    // No configuration database
-    X509V3_set_ctx_nodb(&ctx);
-    // Issuer and subject certs: both the target since it is self signed,
-    // no request and no CRL
-    X509V3_set_ctx(&ctx, cert, cert, nullptr, nullptr, 0);
-    ex = X509V3_EXT_conf_nid(nullptr, &ctx, nid, (char*) value);
-
-    if (!ex) throw runtime_error("Failed to add X509 extension");
-    
-    X509_add_ext(cert,ex,-1);
-    X509_EXTENSION_free(ex);
-}
-
-
-static string read_bio(BIO* bio) {
-    char* data = nullptr;
-    long length = BIO_get_mem_data(bio, &data);
-    return string(data, length);
-};
-
-
 CACertificate::CACertificate()
     : _x(X509_new())
     , _pk(EVP_PKEY_new())
@@ -95,11 +68,10 @@ CACertificate::CACertificate()
     }
 
     X509_set_version(_x, 2);
-    // TODO: Should serial be a random number?
-    ASN1_INTEGER_set(X509_get_serialNumber(_x), 0);
-    X509_gmtime_adj(X509_get_notBefore(_x), 0);
+    ASN1_INTEGER_set(X509_get_serialNumber(_x), next_serial_number());
+    X509_gmtime_adj(X509_get_notBefore(_x), -ssl::util::ONE_HOUR);
     // TODO: Don't hardcode the time
-    X509_gmtime_adj(X509_get_notAfter(_x), (long)60*60*24*365*15 /* ~15 years */);
+    X509_gmtime_adj(X509_get_notAfter(_x), 15*ssl::util::ONE_YEAR);
     X509_set_pubkey(_x, _pk);
     
     X509_NAME* name = X509_get_subject_name(_x);
@@ -118,40 +90,43 @@ CACertificate::CACertificate()
     X509_set_issuer_name(_x, name);
 
     // Add various standard extensions
-    add_ext(_x, NID_basic_constraints, "critical,CA:TRUE");
-    add_ext(_x, NID_key_usage, "critical,keyCertSign,cRLSign");
-    
-    add_ext(_x, NID_subject_key_identifier, "hash");
+    ssl::util::x509_add_ext(_x, NID_basic_constraints, "critical,CA:TRUE");
+    ssl::util::x509_add_ext(_x, NID_key_usage, "critical,keyCertSign,cRLSign");
+    ssl::util::x509_add_ext(_x, NID_subject_key_identifier, "hash");
     
     // Some Netscape specific extensions
-    add_ext(_x, NID_netscape_cert_type, "sslCA");
+    ssl::util::x509_add_ext(_x, NID_netscape_cert_type, "sslCA");
     
     if (!X509_sign(_x, _pk, EVP_sha256()))
         throw runtime_error("Failed in X509_sign");
+
+    {
+        BIO* bio = BIO_new(BIO_s_mem());
+        PEM_write_bio_PrivateKey(bio, _pk, nullptr, nullptr, 0, nullptr, nullptr);
+        _pem_private_key = ssl::util::read_bio(bio);
+        BIO_free_all(bio);
+    }
+
+    {
+        BIO* bio = BIO_new(BIO_s_mem());
+        PEM_write_bio_X509(bio, _x);
+        _pem_certificate = ssl::util::read_bio(bio);
+        BIO_free_all(bio);
+    }
+
+    _pem_dh_param = g_default_dh_param;
 }
 
 
-string CACertificate::pem_private_key() const
+X509_NAME* CACertificate::get_subject_name() const
 {
-    BIO* bio = BIO_new(BIO_s_mem());
-    PEM_write_bio_PrivateKey(bio, _pk, nullptr, nullptr, 0, nullptr, nullptr);
-    auto on_exit = defer([&] { BIO_free_all(bio); });
-    return read_bio(bio);
+    return X509_get_subject_name(_x);
 }
 
 
-string CACertificate::pem_certificate() const
+EVP_PKEY* CACertificate::get_private_key() const
 {
-    BIO* bio = BIO_new(BIO_s_mem());
-    PEM_write_bio_X509(bio, _x);
-    auto on_exit = defer([&] { BIO_free_all(bio); });
-    return read_bio(bio);
-}
-
-
-string CACertificate::pem_dh_param() const
-{
-    return g_default_dh_param;
+    return _pk;
 }
 
 

@@ -86,6 +86,7 @@ file(GLOB client_sources
     "./src/request_routing.cpp"
     "./src/ouiservice.cpp"
     "./src/ssl/ca_certificate.cpp"
+    "./src/ssl/dummy_certificate.cpp"
     "./src/ouiservice/tcp.cpp"
     "./src/logger.cpp"
     "./src/cache/*.cpp"

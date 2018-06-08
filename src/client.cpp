@@ -30,6 +30,7 @@
 #include "authenticate.h"
 #include "defer.h"
 #include "ssl/ca_certificate.h"
+#include "ssl/dummy_certificate.h"
 
 #ifndef __ANDROID__
 #  include "force_exit_on_signal.h"
@@ -85,8 +86,6 @@ private:
     void mitm_tls_handshake( GenericConnection
                            , const Request&
                            , asio::yield_context);
-
-    void setup_ssl_context(ssl::context&);
 
     void serve_request(GenericConnection& con, asio::yield_context yield);
 
@@ -423,6 +422,45 @@ Response bad_gateway(const Request& req)
     return res;
 }
 
+static
+http::response<http::string_body> test_page(const Request& req)
+{
+    http::response<http::string_body> res{http::status::ok, req.version()};
+    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
+    res.set(http::field::content_type, "text/html");
+    res.keep_alive(req.keep_alive());
+    res.body() = "It works!";
+    res.prepare_payload();
+    return res;
+}
+
+//------------------------------------------------------------------------------
+void setup_ssl_context( ssl::context& ssl_context
+                      , const string& cert_chain
+                      , const string& private_key
+                      , const string& dh)
+{
+    ssl_context.set_options( ssl::context::default_workarounds
+                           | ssl::context::no_sslv2
+                           | ssl::context::single_dh_use);
+
+    ssl_context.use_certificate_chain(
+            asio::buffer(cert_chain.data(), cert_chain.size()));
+
+    ssl_context.use_private_key( asio::buffer( private_key.data()
+                                             , private_key.size())
+                               , ssl::context::file_format::pem);
+
+    ssl_context.use_tmp_dh(asio::buffer(dh.data(), dh.size()));
+
+    ssl_context.set_password_callback(
+        [](std::size_t, asio::ssl::context_base::password_purpose)
+        {
+            assert(0 && "TODO: Not yet supported");
+            return "";
+        });
+}
+
 //------------------------------------------------------------------------------
 // TODO: This function is heavily unfinished, mostly just for debugging ATM
 void Client::State::mitm_tls_handshake( GenericConnection con
@@ -431,7 +469,15 @@ void Client::State::mitm_tls_handshake( GenericConnection con
 {
     ssl::context ssl_context{ssl::context::sslv23};
 
-    setup_ssl_context(ssl_context);
+    static DummyCertificate dummy_crt(_ca_certificate, "www.example.com");
+
+    string cert_chain = dummy_crt.pem_certificate()
+                      + _ca_certificate.pem_certificate();
+
+    setup_ssl_context( ssl_context
+                     , cert_chain
+                     , _ca_certificate.pem_private_key()
+                     , _ca_certificate.pem_dh_param());
 
     // Send back OK to let the UA know we have the "tunnel"
     http::response<http::string_body> res{http::status::ok, con_req.version()};
@@ -449,6 +495,8 @@ void Client::State::mitm_tls_handshake( GenericConnection con
     Request req;
     beast::flat_buffer buffer;
     http::async_read(ssl_con, buffer, req, yield);
+    auto res2 = test_page(req);
+    http::async_write(ssl_con, res2, yield);
 }
 
 //------------------------------------------------------------------------------
@@ -747,6 +795,13 @@ void Client::State::start(int argc, char* argv[])
     _pid_file = make_unique<util::PidFile>(pid_path);
 #endif
 
+#ifndef __ANDROID__
+    {
+        boost::filesystem::ofstream(_config.repo_root() / "ssl-ca-cert.pem")
+            << _ca_certificate.pem_certificate();
+    }
+#endif
+
     asio::spawn
         ( _ios
         , [this, self = shared_from_this()]
@@ -859,37 +914,6 @@ void Client::State::set_injector(string injector_ep_str)
             if (self->was_stopped()) return;
             sys::error_code ec;
             self->setup_injector(yield[ec]);
-        });
-}
-
-void Client::State::setup_ssl_context(ssl::context& ssl_context)
-{
-    // TODO: The pem_ functions allocate new strings each time, it may
-    // be more efficient to store these variables in Client::State
-    // and just reuse them.
-    const string cert = _ca_certificate.pem_certificate();
-    const string key  = _ca_certificate.pem_private_key();
-    const string dh   = _ca_certificate.pem_dh_param();
-
-    ssl_context.set_options( ssl::context::default_workarounds
-                           | ssl::context::no_sslv2
-                           | ssl::context::single_dh_use);
-
-    // TODO: We also need to generate a per-request dummy context
-    // and add it to the certificate chain.
-    ssl_context.use_certificate_chain(
-            asio::buffer(cert.data(), cert.size()));
-
-    ssl_context.use_private_key( asio::buffer(key.data(), key.size())
-                               , ssl::context::file_format::pem);
-
-    ssl_context.use_tmp_dh(asio::buffer(dh.data(), dh.size()));
-
-    ssl_context.set_password_callback(
-        [](std::size_t, asio::ssl::context_base::password_purpose)
-        {
-            assert(0 && "TODO: Not yet supported");
-            return "";
         });
 }
 
