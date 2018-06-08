@@ -14,6 +14,12 @@ class DummyCertificate {
 public:
     DummyCertificate(CACertificate&, beast::string_view cn);
 
+    DummyCertificate(const DummyCertificate&) = delete;
+    DummyCertificate& operator=(const DummyCertificate&) = delete;
+
+    DummyCertificate(DummyCertificate&&);
+    DummyCertificate& operator=(DummyCertificate&&);
+
     const std::string& pem_certificate() const { return _pem_certificate; }
 
     ~DummyCertificate();

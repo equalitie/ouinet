@@ -47,3 +47,21 @@ DummyCertificate::~DummyCertificate()
 {
     if (_x) X509_free(_x);
 }
+
+DummyCertificate::DummyCertificate(DummyCertificate&& other)
+    : _x(other._x)
+    , _pem_certificate(move(other._pem_certificate))
+{
+    other._x = nullptr;
+}
+
+DummyCertificate& DummyCertificate::operator=(DummyCertificate&& other)
+{
+    if (_x) X509_free(_x);
+
+    _x = other._x;
+    other._x = nullptr;
+    _pem_certificate = move(other._pem_certificate);
+
+    return *this;
+}
