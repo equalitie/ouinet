@@ -322,7 +322,7 @@ make VERBOSE=1
 cd -
 
 add_library $DIR/build-ouinet/libclient.so
-add_library $DIR/build-ouinet/modules/ipfs-cache/ipfs_bindings/libipfs_bindings.so
+add_library $DIR/build-ouinet/modules/asio-ipfs/ipfs_bindings/libipfs_bindings.so
 }
 
 ######################################################################
