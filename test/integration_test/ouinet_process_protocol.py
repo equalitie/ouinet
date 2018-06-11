@@ -4,6 +4,7 @@
 # Integration tests for ouinet - classes which setup and fire ouinet client and injectors for different tests situation
 
 import re
+import os
 import logging
 
 from twisted.internet import protocol
@@ -18,47 +19,41 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
     from ouinet client/injector process and report failure 
     in case of fatal error
     """
-    def errReceived(self, data):
-        """
-        listen for the debugger output reacto to fatal errors and other clues
-        """
-        logging.debug(self.app_name + ": " + data)
-        if re.match(r'\[ABORT\]', data):
-            raise Exception, "Fatal error"
-            
-    def outReceived(self, data):
-        logging.debug(self.app_name + ": " + data)
-
-    def processExited(self, reason):
-        self.onExit.callback(self)
-
-class OuinetI2PEnabledProcessProtocol(OuinetProcessProtocol):
     """
     Protocols are the way to communicate with different players
     in a system in Twisted. This protocol is receiving outputs
     from ouinet client/injector process and report failure 
     in case of fatal error
     """
-    def __init__(self):
-        super(OuinetI2PEnabledProcessProtocol, self).__init__()
-        self._i2p_ready_deferred = None
+    def __init__(self, proc_config, ready_benchmark_regex = "", ready_deferred = None):
+        super(OuinetProcessProtocol, self).__init__()
+        self._ready_benchmark_regex = ready_benchmark_regex
+        self._ready_deferred = ready_deferred
+        self._proc_config = proc_config
         
-    def set_i2p_is_ready_object(self, i2p_is_ready_deferred):
-        self._i2p_ready_deferred = i2p_is_ready_deferred
-    
     def errReceived(self, data):
         """
-        listen for the debugger output calls the parent function and
-        then check on i2p related messages
+        listen for the debugger output reacto to fatal errors and other clues
         """
-        super(OuinetI2PEnabledProcessProtocol, self).errReceived(data)
+        logging.debug(self.app_name + ": " + data)
+        if re.match(TestFixtures.FATAL_ERROR_INDICATOR_REGEX, data):
+            pdb.set_trace()
+            raise Exception, "Fatal error"
 
-        if self.client_tunnel_is_ready(data) or self.injector_tunnel_is_ready(data):
-           if self._i2p_ready_deferred:
-               self._i2p_ready_deferred.callback(self)
+        if self._ready_deferred and self.check_got_ready(data):
+            self._ready_deferred.callback(self)
 
-    def client_tunnel_is_ready(self, data):
-        return re.match(TestFixtures.I2P_TUNNEL_READY_REGEX, data)
+    def check_got_ready(self, data):
+        if self._ready_benchmark_regex:
+            return re.match(self._ready_benchmark_regex, data)
+            
+    def outReceived(self, data):
+        logging.debug(self.app_name + ": " + data)
 
-    def injector_tunnel_is_ready(self, data):
-        return re.match(TestFixtures.I2P_TUNNEL_READY_REGEX, data)
+    def processExited(self, reason):
+        self.onExit.callback(self)
+        #delete the pid file if still exists
+        process_pid_file = self._proc_config.config_folder_name + "/pid"
+        if os.path.exists(process_pid_file):
+            os.remove(process_pid_file)
+        

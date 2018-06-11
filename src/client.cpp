@@ -634,6 +634,7 @@ void Client::State::listen_tcp
         acceptor.close();
     });
 
+    LOG_DEBUG("Successfully listening on TCP Port");
     cout << "Client accepting on " << acceptor.local_endpoint() << endl;
 
     WaitCondition wait_condition(_ios);

@@ -15,11 +15,10 @@ from test_fixtures import TestFixtures
 
 from twisted.internet import reactor, defer
 
-from ouinet_process_protocol import OuinetProcessProtocol, OuinetI2PEnabledProcessProtocol
+from ouinet_process_protocol import OuinetProcessProtocol
 
 ouinet_env = {}
 ouinet_env.update(os.environ)
-
 
 class OuinetConfig(object):
     """
@@ -30,7 +29,8 @@ class OuinetConfig(object):
     """
     def __init__(self, app_name = "generic ouinet app",
                  timeout = TestFixtures.DEFAULT_PROCESS_TIMEOUT, argv = [],
-                 config_file_name = "ouinet.conf", 
+                 config_file_name = "ouinet.conf",
+                 ready_benchmark_regex = "",
                  config_file_content = ""):
         """
         Initials a config object which is used to properly run a ouinet process
@@ -41,6 +41,9 @@ class OuinetConfig(object):
         app_name: a name for the process uses for naming the config folder to
                   preventing config overlapping
 
+        ready_benchmark_regex: is a string which the process will look into log to callback
+                         the deferred object to annouce that the process is ready
+
         config_file_content: the content of config file to be written as text
         """
         self.app_name = app_name
@@ -48,9 +51,10 @@ class OuinetConfig(object):
         self.config_file_content = config_file_content
         self.timeout = timeout
         self.argv = argv
+        self.ready_benchmark_regex = ready_benchmark_regex
 
 class OuinetProcess(object):
-    def __init__(self, ouinet_config = OuinetConfig()):
+    def __init__(self, ouinet_config = OuinetConfig(), process_ready_deferred = None):
         """
         perform the initialization tasks common between all clients 
         and injectors:
@@ -58,11 +62,12 @@ class OuinetProcess(object):
         - sets the timeout for the process 
  
         Args 
-        ouinet_config A OuinetConfig instance containing the configuration
-                      related to this process
+        ouinet_config            A OuinetConfig instance containing the configuration
+                                 related to this process
+        process_ready_deferred   a deferred object which get called back when the process is ready
         """
         self.config = ouinet_config
-        self._proc_protocol = OuinetProcessProtocol() # default protocol
+        self._proc_protocol = OuinetProcessProtocol(proc_config = self.config, ready_benchmark_regex = ouinet_config.ready_benchmark_regex, ready_deferred = process_ready_deferred) # default protocol
         # in case the communication process protocol is not explicitly set 
         # starts a default process protocol to check on Fatal errors
         self._has_started = False
@@ -132,37 +137,23 @@ class OuinetProcess(object):
 
     def stop(self):
         if self._has_started: # stop only if started
-            self.timeout_killer.cancel()
+            self._has_started = False
+            logging.debug("process " + self.config.app_name + " stopping")
+            if self.timeout_killer.active():
+                self.timeout_killer.cancel()
             self._proc_protocol.transport.loseConnection()
             self._proc.signalProcess("TERM")
-            self._has_started = False
 
-            
 class OuinetClient(OuinetProcess):
-    def __init__(self, client_config):
+    def __init__(self, client_config, ready_deferred):
         client_config.config_file_name = "ouinet-client.conf"
         client_config.config_file_content = TestFixtures.FIRST_CLIENT_CONF_FILE_CONTENT
-        super(OuinetClient, self).__init__(client_config)
+        super(OuinetClient, self).__init__(client_config, ready_deferred)
 
         self.config.argv = [ouinet_env['OUINET_BUILD_DIR' ] + "/client",
                                 "--repo",
                                 self.config.config_folder_name] + self.config.argv
         
-
-class OuinetI2PClient(OuinetClient):
-    def __init__(self, client_config, i2p_ready):
-        """
-        Args
-        i2p_ready is a deferred object whose callback is
-                  called when the i2p tunnel to the injector gets
-                  connected
-        """
-        super(OuinetI2PClient, self).__init__(client_config)
-
-        # we need a process protocol which reacts on i2p related output
-        self.set_process_protocol(OuinetI2PEnabledProcessProtocol())
-        self._proc_protocol.set_i2p_is_ready_object(i2p_ready)
-
 class OuinetInjector(OuinetProcess):
     """
     As above, but for the 'injector'
@@ -176,11 +167,11 @@ class OuinetInjector(OuinetProcess):
     i2p_ready: is a Deferred object whose callback is being called when i2p
               tunnel is ready
     """
-    def __init__(self, injector_config):
+    def __init__(self, injector_config, ready_deferred):
         injector_config.config_file_name = TestFixtures.INJECTOR_CONF_FILE_NAME
         injector_config.config_file_content = \
           TestFixtures.INJECTOR_CONF_FILE_CONTENT
-        super(OuinetInjector, self).__init__(injector_config)
+        super(OuinetInjector, self).__init__(injector_config, ready_deferred)
         self.config.argv = [ouinet_env['OUINET_BUILD_DIR'] + "injector",
                             "--repo",
                             self.config.config_folder_name] + self.config.argv
@@ -199,11 +190,9 @@ class OuinetI2PInjector(OuinetInjector):
     TODO: i2p_ready: is a Deferred object whose callback is being called when
                       i2p tunnel is ready
     """
-    def __init__(self, injector_config, i2p_ready = None):
-        super(OuinetI2PInjector, self).__init__(injector_config)
+    def __init__(self, injector_config, ready_deferred = None):
+        super(OuinetI2PInjector, self).__init__(injector_config, ready_deferred)
         self._setup_i2p_private_key()
-        self.set_process_protocol(OuinetI2PEnabledProcessProtocol())
-        self._proc_protocol.set_i2p_is_ready_object(i2p_ready)
 
     def _setup_i2p_private_key(self):
         if not os.path.exists(self.config.config_folder_name+"/i2p"):
