@@ -3,12 +3,13 @@
 #include "cache/cache_client.h"
 #include <boost/optional/optional_io.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include <boost/regex.hpp>
 
 
 using namespace std;
 using namespace ouinet;
 
-using Request = http::request<http::string_body>;
+using Request = ClientFrontEnd::Request;
 using Response = ClientFrontEnd::Response;
 using boost::optional;
 
@@ -16,30 +17,6 @@ static string now_as_string() {
     namespace pt = boost::posix_time;
     auto entry_ts = pt::microsec_clock::universal_time();
     return pt::to_iso_extended_string(entry_ts);
-}
-
-static Response redirect_back(const Request& req)
-{
-    http::response<http::dynamic_body> res{http::status::ok, req.version()};
-
-    beast::string_view body =
-        "<!DOCTYPE html>\n"
-        "<html>\n"
-        "    <head>\n"
-        "        <meta http-equiv=\"refresh\" content=\"0; url=./\"/>\n"
-        "    </head>\n"
-        "</html>\n";
-
-    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-    res.set(http::field::content_type, "text/html");
-    res.keep_alive(false);
-    http::dynamic_body::writer writer(res);
-    sys::error_code ec;
-    writer.put(asio::const_buffer(body.data(), body.size()), ec);
-    assert(!ec);
-    res.prepare_payload();
-
-    return res;
 }
 
 struct ToggleInput {
@@ -84,11 +61,22 @@ static ostream& operator<<(ostream& os, const ClientFrontEnd::Task& task) {
 
 } // ouinet namespace
 
-Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
-                              , const Request& req
-                              , CacheClient* cache_client)
+static
+string get_url_path(const string url) {
+    // This is not a bullet-proof URL parser, it just gets some common cases here.
+    static const boost::regex urlrx("^(?:http://[-\\.a-z0-9]+)?(/[^?#]*).*");
+    boost::smatch url_match;
+    boost::regex_match(url, url_match, urlrx);
+    return url_match[1];
+}
+
+void ClientFrontEnd::handle_portal( const Request& req, Response& res, stringstream& ss
+                                  , const boost::optional<Endpoint>& injector_ep
+                                  , CacheClient* cache_client)
 {
-    Response res{http::status::ok, req.version()};
+    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
+    res.set(http::field::content_type, "text/html");
+    res.keep_alive(false);
 
     auto target = req.target();
 
@@ -112,10 +100,17 @@ Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
         else if (target.find("?ipfs_cache=disable") != string::npos) {
             _ipfs_cache_enabled = false;
         }
-        return redirect_back(req);
+
+        // Redirect back to the portal.
+        ss << "<!DOCTYPE html>\n"
+               "<html>\n"
+               "    <head>\n"
+               "        <meta http-equiv=\"refresh\" content=\"0; url=./\"/>\n"
+               "    </head>\n"
+               "</html>\n";
+        return;
     }
 
-    stringstream ss;
     ss << "<!DOCTYPE html>\n"
           "<html>\n"
           "    <head>\n";
@@ -160,10 +155,17 @@ Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
 
     ss << "    </body>\n"
           "</html>\n";
+}
 
-    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-    res.set(http::field::content_type, "text/html");
-    res.keep_alive(false);
+Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
+                              , const Request& req
+                              , CacheClient* cache_client)
+{
+    Response res{http::status::ok, req.version()};
+    stringstream ss;
+
+    auto url_path = get_url_path(req.target().to_string());
+    handle_portal(req, res, ss, injector_ep, cache_client);
 
     Response::body_type::writer writer(res);
     sys::error_code ec;

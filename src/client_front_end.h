@@ -22,6 +22,7 @@ class ClientFrontEnd {
             <boost::intrusive::link_mode
                 <boost::intrusive::auto_unlink>>;
 public:
+    using Request = http::request<http::string_body>;
     using Response = http::response<http::dynamic_body>;
 
 public:
@@ -77,6 +78,9 @@ private:
         < Task
         , boost::intrusive::constant_time_size<false>
         > _pending_tasks;
+
+    void handle_portal( const Request&, Response&, std::stringstream&
+                      , const boost::optional<Endpoint>&, CacheClient*);
 };
 
 } // ouinet namespace
