@@ -70,13 +70,20 @@ string get_url_path(const string url) {
     return url_match[1];
 }
 
+void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, stringstream& ss
+                                  , const CACertificate& ca)
+{
+    res.set(http::field::content_type, "application/x-x509-ca-cert");
+    res.set(http::field::content_disposition, "inline");
+
+    ss << ca.pem_certificate();
+}
+
 void ClientFrontEnd::handle_portal( const Request& req, Response& res, stringstream& ss
                                   , const boost::optional<Endpoint>& injector_ep
                                   , CacheClient* cache_client)
 {
-    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
     res.set(http::field::content_type, "text/html");
-    res.keep_alive(false);
 
     auto target = req.target();
 
@@ -159,13 +166,20 @@ void ClientFrontEnd::handle_portal( const Request& req, Response& res, stringstr
 
 Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
                               , const Request& req
-                              , CacheClient* cache_client)
+                              , CacheClient* cache_client
+                              , const CACertificate& ca)
 {
     Response res{http::status::ok, req.version()};
+    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
+    res.keep_alive(false);
+
     stringstream ss;
 
     auto url_path = get_url_path(req.target().to_string());
-    handle_portal(req, res, ss, injector_ep, cache_client);
+    if (url_path == "/ca.pem")
+        handle_ca_pem(req, res, ss, ca);
+    else
+        handle_portal(req, res, ss, injector_ep, cache_client);
 
     Response::body_type::writer writer(res);
     sys::error_code ec;
