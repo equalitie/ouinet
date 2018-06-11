@@ -134,7 +134,10 @@ void ClientFrontEnd::handle_portal( const Request& req, Response& res, stringstr
           "    <body>\n";
 
     // TODO: Do some browsers require P12 instead of PEM?
-    ss << "      <p><a href=\"ca.pem\">Install client-specific CA certificate for HTTPS support</a></p>\n";
+    ss << "      <p><a href=\"ca.pem\">Install client-specific CA certificate for HTTPS support</a>."
+          "      This certificate will only be used by your Ouinet-enabled applications in this device."
+          "      Verification of HTTPS content will be performed by injectors or publishers"
+          "      that you have configured your client to trust.</p>\n";
 
     ss << ToggleInput{"Auto refresh",   "auto_refresh",   _auto_refresh_enabled};
     ss << ToggleInput{"Injector proxy", "injector_proxy", _injector_proxying_enabled};
