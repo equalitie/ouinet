@@ -69,7 +69,9 @@ CACertificate::CACertificate()
 
     X509_set_version(_x, 2);
     ASN1_INTEGER_set(X509_get_serialNumber(_x), next_serial_number());
-    X509_gmtime_adj(X509_get_notBefore(_x), -ssl::util::ONE_HOUR);
+    // Avoid signature issues because of time zone differences.
+    // See [Mitmproxy can't record traffic when time set with 1 hour ago.](https://github.com/mitmproxy/mitmproxy/issues/200).
+    X509_gmtime_adj(X509_get_notBefore(_x), -48*ssl::util::ONE_HOUR);
     // TODO: Don't hardcode the time
     X509_gmtime_adj(X509_get_notAfter(_x), 15*ssl::util::ONE_YEAR);
     X509_set_pubkey(_x, _pk);
