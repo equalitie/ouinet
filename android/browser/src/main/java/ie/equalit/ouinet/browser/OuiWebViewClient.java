@@ -1,5 +1,6 @@
-package ie.equalit.ouinet;
+package ie.equalit.ouinet.browser;
 
+import ie.equalit.ouinet.Ouinet;
 import android.content.Context;
 
 import android.webkit.WebViewClient;
@@ -45,6 +46,11 @@ class OuiWebViewClient extends WebViewClient {
             return super.shouldInterceptRequest(view, url);
 
         try {
+            // The ouinet/client proxy can serve a simple web page with a
+            // summary of its internal state. We call this web page "Client's
+            // front-end". To tell ouinet/client to show us this page we insert
+            // the 'X-Oui-Destination' HTTP header field into the request. When
+            // this is the case, the ouinet/client will ignore the URL.
             OkHttpClient httpClient = new OkHttpClient();
 
             Request request = new Request.Builder()
@@ -64,6 +70,14 @@ class OuiWebViewClient extends WebViewClient {
         }
     }
 
+    // An injector may be configured to require HTTP Authentication
+    //
+    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Authentication
+    //
+    // If this client hasn't authenticated yet, the code below will
+    // create a new dialog box asking for creadentials. Note that
+    // these credentials may be set using QR codes as well. For more
+    // info on the latter look into MainActivity.applyConfig.
     @Override
     public void onReceivedHttpAuthRequest(WebView view,
                                           final HttpAuthHandler handler,

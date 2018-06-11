@@ -1,1 +1,1 @@
-include ':browser'
+include ':ouinet', ':browser'
