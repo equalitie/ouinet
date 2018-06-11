@@ -131,6 +131,9 @@ Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
           "    </head>\n"
           "    <body>\n";
 
+    // TODO: Do some browsers require P12 instead of PEM?
+    ss << "      <p><a href=\"ca.pem\">Install client-specific CA certificate for HTTPS support</a></p>\n";
+
     ss << ToggleInput{"Auto refresh",   "auto_refresh",   _auto_refresh_enabled};
     ss << ToggleInput{"Injector proxy", "injector_proxy", _injector_proxying_enabled};
     ss << ToggleInput{"IPFS Cache",     "ipfs_cache",     _ipfs_cache_enabled};
