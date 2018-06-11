@@ -72,7 +72,9 @@ CACertificate::CACertificate()
     // Avoid signature issues because of time zone differences.
     // See [Mitmproxy can't record traffic when time set with 1 hour ago.](https://github.com/mitmproxy/mitmproxy/issues/200).
     X509_gmtime_adj(X509_get_notBefore(_x), -48*ssl::util::ONE_HOUR);
-    // TODO: Don't hardcode the time
+    // A long-enough expiration for the CA (sort of everlasting).
+    // Please note that certificates emitted by this CA may not be more than 39 months old:
+    // [Validity Period, 9.4.1](https://cabforum.org/wp-content/uploads/BRv1.2.3.pdf).
     X509_gmtime_adj(X509_get_notAfter(_x), 15*ssl::util::ONE_YEAR);
     X509_set_pubkey(_x, _pk);
     
