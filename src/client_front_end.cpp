@@ -62,7 +62,7 @@ static ostream& operator<<(ostream& os, const ClientFrontEnd::Task& task) {
 } // ouinet namespace
 
 static
-string get_url_path(const string url) {
+string get_url_path(const string& url) {
     // This is not a bullet-proof URL parser, it just gets some common cases here.
     static const boost::regex urlrx("^(?:http://[-\\.a-z0-9]+)?(/[^?#]*).*");
     boost::smatch url_match;
