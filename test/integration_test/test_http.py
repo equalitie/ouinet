@@ -48,14 +48,14 @@ class OuinetTests(TestCase):
         return ''.join(random.choice(letters) for i in range(length))
     
     def run_tcp_injector(self, injector_args, deffered_tcp_port_ready):
-        injector = OuinetInjector(OuinetConfig(app_name="injector", timeout=TestFixtures.TCP_TRANSPORT_TIMEOUT, argv=injector_args, ready_benchmark_regex=TestFixtures.TCP_PORT_READY_REGEX), deffered_tcp_port_ready)
+        injector = OuinetInjector(OuinetConfig(app_name=TestFixtures.TCP_INJECTOR_NAME, timeout=TestFixtures.TCP_TRANSPORT_TIMEOUT, argv=injector_args, ready_benchmark_regex=TestFixtures.TCP_PORT_READY_REGEX), deffered_tcp_port_ready)
         injector.start()
         self.proc_list.append(injector)
 
         return injector
 
     def run_i2p_injector(self, injector_args, deferred_i2p_ready):
-        injector = OuinetI2PInjector(OuinetConfig("injector", TestFixtures.I2P_TRANSPORT_TIMEOUT, injector_args, ready_benchmark_regex=TestFixtures.I2P_TUNNEL_READY_REGEX), deferred_i2p_ready)
+        injector = OuinetI2PInjector(OuinetConfig(TestFixtures.I2P_INJECTOR_NAME, TestFixtures.I2P_TRANSPORT_TIMEOUT, injector_args, ready_benchmark_regex=TestFixtures.I2P_TUNNEL_READY_REGEX), deferred_i2p_ready)
         injector.start()
         self.proc_list.append(injector)
 
@@ -82,55 +82,12 @@ class OuinetTests(TestCase):
         """
         Send a get request to request the test server to echo the content 
         """
-        ouinet_client_endpoint = TCP4ClientEndpoint(reactor, "127.0.0.1", TestFixtures.FIRST_CLIENT["port"])
+        ouinet_client_endpoint = TCP4ClientEndpoint(reactor, "127.0.0.1", TestFixtures.TCP_CLIENT["port"])
         agent = ProxyAgent(ouinet_client_endpoint)
         return agent.request(
             "GET",
             "http://127.0.0.1:"+str(TestFixtures.TEST_HTTP_SERVER_PORT)+"/?content="+content)
 
-    def wait_for_port_to_get_open(self, server, port, timeout=None):
-        """ Wait for network service to appear 
-            @param timeout: in seconds, if None or 0 wait forever
-            @return: True of False, if timeout is None may return only True or
-            throw unhandled network exception
-        """
-        import socket
-        import errno
-
-        s = socket.socket()
-        if timeout:
-            from time import time as now
-            # time module is needed to calc timeout shared between two exceptions
-            end = now() + timeout
-
-        while True:
-            try:
-                if timeout:
-                    next_timeout = end - now()
-                    if next_timeout < 0:
-                        return False
-                    else:
-                        s.settimeout(next_timeout)
-
-                s.connect((server, port))
-
-            except socket.timeout, err:
-                # this exception occurs only if timeout is set
-                if timeout:
-                    return False
-
-            except socket.error, err:
-                # catch timeout exception from underlying network library
-                # this one is different from socket.timeout
-                # we need to capture and ignore 111 connection refused
-                # because it also says that the app has not opened the
-                # socket yet
-                if type(err.args) != tuple or (err[0] != errno.ETIMEDOUT and err[0] != errno.ECONNREFUSED):
-                    raise
-            else:
-                s.close()
-                return True
-    
     @inlineCallbacks
     def test_i2p_transport(self):
         """
@@ -150,7 +107,7 @@ class OuinetTests(TestCase):
 
         #client
         i2pclient_tunnel_ready = defer.Deferred()
-        i2pclient = self.run_i2p_client(TestFixtures.FIRST_CLIENT["name"], ["--listen-on-tcp", "127.0.0.1:"+str(TestFixtures.FIRST_CLIENT["port"]), "--injector-ipns", TestFixtures.INJECTOR_IPNS_PERSISTANT_IDENTITY["Identity"]["PeerID"], "--injector-ep", TestFixtures.INJECTOR_I2P_PUBLIC_ID, "http://localhost/"], i2pclient_tunnel_ready)
+        i2pclient = self.run_i2p_client(TestFixtures.I2P_CLIENT["name"], ["--listen-on-tcp", "127.0.0.1:"+str(TestFixtures.I2P_CLIENT["port"]), "--injector-ipns", TestFixtures.INJECTOR_IPNS_PERSISTANT_IDENTITY["Identity"]["PeerID"], "--injector-ep", TestFixtures.INJECTOR_I2P_PUBLIC_ID, "http://localhost/"], i2pclient_tunnel_ready)
 
         #http_server
         self.test_http_server = self.run_http_server(TestFixtures.TEST_HTTP_SERVER_PORT)
@@ -181,14 +138,14 @@ class OuinetTests(TestCase):
 
         #injector
         injector_tcp_port_ready = defer.Deferred()
-        self.run_tcp_injector(["--listen-on-i2p", "false", "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.INJECTOR_PORT)], injector_tcp_port_ready)
+        self.run_tcp_injector(["--listen-on-i2p", "false", "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)], injector_tcp_port_ready)
 
         #wait for the injector to open the port
         success = yield injector_tcp_port_ready
 
         #client
         client_tcp_port_ready = defer.Deferred()
-        self.run_tcp_client(TestFixtures.FIRST_CLIENT["name"], ["--listen-on-tcp", "127.0.0.1:"+str(TestFixtures.FIRST_CLIENT["port"]), "--injector-ipns", TestFixtures.INJECTOR_IPNS_PERSISTANT_IDENTITY["Identity"]["PeerID"], "--injector-ep", "127.0.0.1:" + str(TestFixtures.INJECTOR_PORT), "http://localhost/"], client_tcp_port_ready)
+        self.run_tcp_client(TestFixtures.TCP_CLIENT["name"], ["--listen-on-tcp", "127.0.0.1:"+str(TestFixtures.TCP_CLIENT["port"]), "--injector-ipns", TestFixtures.INJECTOR_IPNS_PERSISTANT_IDENTITY["Identity"]["PeerID"], "--injector-ep", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT), "http://localhost/"], client_tcp_port_ready)
 
         #http_server
         self.test_http_server = self.run_http_server(TestFixtures.TEST_HTTP_SERVER_PORT)
