@@ -89,7 +89,7 @@ public class MainActivity extends AppCompatActivity {
             }
             else if (key.equalsIgnoreCase("injector")) {
                 toast("Setting injector to: " + val);
-                _ouinet.setInjectorEP(val);
+                _ouinet.setInjectorEndpoint(val);
                 injector = val;
             }
             else if (key.equalsIgnoreCase("credentials")) {
@@ -184,7 +184,7 @@ public class MainActivity extends AppCompatActivity {
         showDialog("Injector endpoint", ep, new OnInput() {
             @Override
             public void call(String input) {
-                _ouinet.setInjectorEP(input);
+                _ouinet.setInjectorEndpoint(input);
             }
         });
     }

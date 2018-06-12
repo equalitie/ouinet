@@ -41,25 +41,34 @@ public class Ouinet {
                 false);
     }
 
+    // Stop the internal ouinet/client threads. Once this function returns, the
+    // ouinet/client will have all of it's resources freed. It should be called
+    // no later than in Activity.onDestroy()
     public void stop() {
         nStopClient();
         if (_lock != null) { _lock.release(); }
     }
 
-    public void setInjectorEP(String endpoint) {
-        writeInjectorEP(endpoint);
-        nSetInjectorEP(endpoint);
-    }
-
+    // Set injector's IPNS (A.k.a. it's IPFS ID)
     public void setIPNS(String ipns) {
         writeIPNS(ipns);
         nSetIPNS(ipns);
     }
 
+    // Get injector's IPNS (A.k.a. it's IPFS ID)
     public String getIPNS() {
         return readIPNS();
     }
 
+    // Set injector endpoint. Can be either in the form IP:PORT or it can be an
+    // I2P address.
+    public void setInjectorEndpoint(String endpoint) {
+        writeInjectorEP(endpoint);
+        nSetInjectorEP(endpoint);
+    }
+
+    // Return injector's endpoint as specified with the setInjectorEndpoint
+    // function.
     public String getInjectorEndpoint() {
         return readInjectorEP();
     }
