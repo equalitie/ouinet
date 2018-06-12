@@ -482,10 +482,14 @@ void Client::State::mitm_tls_handshake( GenericConnection con
     // and rewind the Hello message,
     // but for the moment we will assume that the browser sends
     // a host name instead of an IP address or is reverse resolution.
-    // TODO: Can we do without creating std::string?
-    string target = con_req.target()
-                           .substr(0, con_req.target().find(':'))
-                           .to_string();
+    auto full_host = con_req.target()
+                            .substr(0, con_req.target().find(':'));
+    size_t dot0, dot1 = 0;
+    if ((dot0 = full_host.find('.')) != full_host.rfind('.'))
+        // Two different dots were found
+        // (e.g. "www.example.com" but not "localhost" or "example.com").
+        dot1 = dot0 + 1;  // skip first component and dot (e.g. "www.")
+    string target(full_host.substr(dot1).to_string());
 
     auto i = _ssl_certificate_cache.find(target);
 
