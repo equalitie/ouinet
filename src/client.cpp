@@ -475,6 +475,13 @@ void Client::State::mitm_tls_handshake( GenericConnection con
 {
     ssl::context ssl_context{ssl::context::sslv23};
 
+    // TODO: We really should be waiting for
+    // the TLS Client Hello message to arrive at the clear text connection
+    // (after we send back 200 OK),
+    // then retrieve the value of the Server Name Indication (SNI) field
+    // and rewind the Hello message,
+    // but for the moment we will assume that the browser sends
+    // a host name instead of an IP address or is reverse resolution.
     // TODO: Can we do without creating std::string?
     string target = con_req.target()
                            .substr(0, con_req.target().find(':'))
