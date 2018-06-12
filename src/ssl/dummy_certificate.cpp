@@ -23,7 +23,7 @@ DummyCertificate::DummyCertificate( CACertificate& ca_cert
     X509_set_pubkey(_x, ca_cert.get_private_key());
     
     string wc_cn("*.");
-    wc_cn += string(cn);
+    wc_cn += cn.to_string();
     X509_NAME* name = X509_get_subject_name(_x); 
     // TODO: Check error code?
     X509_NAME_add_entry_by_txt(name, "CN",
