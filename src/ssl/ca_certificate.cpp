@@ -1,7 +1,7 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <iostream>
+#include <ctime>
 
 #include <openssl/pem.h>
 #include <openssl/conf.h>
@@ -58,6 +58,7 @@ static string g_default_dh_param =
 CACertificate::CACertificate()
     : _x(X509_new())
     , _pk(EVP_PKEY_new())
+    , _next_serial_number(std::time(nullptr))
 {
     {
         RSA* rsa = RSA_generate_key(2048, RSA_F4, nullptr, nullptr);
@@ -122,6 +123,7 @@ CACertificate::CACertificate(std::string pem_cert, std::string pem_key, std::str
     : _pem_private_key(move(pem_key))
     , _pem_certificate(move(pem_cert))
     , _pem_dh_param(move(pem_dh))
+    , _next_serial_number(std::time(nullptr))
 {
     {
         BIO* bio = BIO_new_mem_buf(_pem_private_key.data(), _pem_private_key.size());

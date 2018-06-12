@@ -34,7 +34,7 @@ private:
     std::string _pem_certificate;
     std::string _pem_dh_param;
 
-    unsigned long _next_serial_number = 0;
+    unsigned long _next_serial_number;
 };
 
 } // namespace
