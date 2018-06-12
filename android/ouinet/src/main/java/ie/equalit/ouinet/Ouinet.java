@@ -3,6 +3,7 @@ package ie.equalit.ouinet;
 import android.content.Context;
 
 import android.net.wifi.WifiManager;
+import java.io.File;
 
 public class Ouinet {
     // Used to load the 'native-lib' library on application startup.
@@ -28,13 +29,15 @@ public class Ouinet {
         String injector_ep = readInjectorEP();
         String credentials = readCredentialsFor(injector_ep);
 
+        new File(dir()).mkdirs();
+
         WifiManager wifi = (WifiManager)ctx.getSystemService(Context.WIFI_SERVICE);
         if (wifi != null){
             _lock = wifi.createMulticastLock("mylock");
             _lock.acquire();
         }
 
-        nStartClient(_ctx.getFilesDir().getAbsolutePath(),
+        nStartClient(dir(),
                 injector_ep,
                 ipns,
                 credentials,
@@ -83,7 +86,9 @@ public class Ouinet {
     }
 
     //----------------------------------------------------------------
-    protected String dir() { return _ctx.getFilesDir().getAbsolutePath(); }
+    protected String dir() {
+        return _ctx.getFilesDir().getAbsolutePath() + "/ouinet";
+    }
 
     protected String config_ipns()        { return dir() + "/ipns.txt";        }
     protected String config_injector()    { return dir() + "/injector.txt";    }
