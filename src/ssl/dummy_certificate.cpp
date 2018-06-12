@@ -22,16 +22,16 @@ DummyCertificate::DummyCertificate( CACertificate& ca_cert
 
     X509_set_pubkey(_x, ca_cert.get_private_key());
     
+    string wc_cn("*.");
+    wc_cn += string(cn);
     X509_NAME* name = X509_get_subject_name(_x); 
-    
     // TODO: Check error code?
     X509_NAME_add_entry_by_txt(name, "CN",
-            MBSTRING_ASC, (const unsigned char*) cn.data(), cn.size(), -1, 0);
+            MBSTRING_ASC, (const unsigned char*) wc_cn.data(), wc_cn.size(), -1, 0);
     
     X509_set_issuer_name(_x, ca_cert.get_subject_name());
 
     string alt_name = "DNS:" + cn.to_string();
-
     // Add various standard extensions
     ssl::util::x509_add_ext(_x, NID_subject_alt_name, alt_name.c_str());
 
