@@ -1,4 +1,4 @@
-package ie.equalit.ouinet;
+package ie.equalit.ouinet.browser;
 
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
@@ -22,8 +22,8 @@ import com.google.zxing.integration.android.IntentIntegrator;
 import android.content.Intent;
 import android.widget.Toast;
 
-import ie.equalit.ouinet.OuiWebViewClient;
-import ie.equalit.ouinet.Util;
+import ie.equalit.ouinet.browser.OuiWebViewClient;
+import ie.equalit.ouinet.browser.Util;
 import ie.equalit.ouinet.Ouinet;
 
 interface OnInput {
@@ -48,6 +48,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     protected void loadConfigFromQR() {
+        // Start the QR config reader intent.
         IntentIntegrator integrator = new IntentIntegrator(this);
         integrator.initiateScan();
     }
@@ -57,6 +58,14 @@ public class MainActivity extends AppCompatActivity {
         Toast.makeText(this, s, Toast.LENGTH_LONG).show();
     }
 
+    // Parse config string in the form:
+    //
+    //     ipns=<IPNS-STRING-STARTING-WITH-Qm>
+    //     injector=<IP_AND_PORT-OR-I2P_DESTINATION>
+    //     credentials=<USERNAME:PASSWORD>
+    //
+    // Note that the config doesn't have to contain all of the entries, but the
+    // 'credentials' entry must be used with the `injector` entry.
     protected void applyConfig(String config) {
         String[] lines = config.split("[\\r?\\n]+");
 
@@ -80,7 +89,7 @@ public class MainActivity extends AppCompatActivity {
             }
             else if (key.equalsIgnoreCase("injector")) {
                 toast("Setting injector to: " + val);
-                _ouinet.setInjectorEP(val);
+                _ouinet.setInjectorEndpoint(val);
                 injector = val;
             }
             else if (key.equalsIgnoreCase("credentials")) {
@@ -175,7 +184,7 @@ public class MainActivity extends AppCompatActivity {
         showDialog("Injector endpoint", ep, new OnInput() {
             @Override
             public void call(String input) {
-                _ouinet.setInjectorEP(input);
+                _ouinet.setInjectorEndpoint(input);
             }
         });
     }
