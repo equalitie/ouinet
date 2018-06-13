@@ -467,6 +467,18 @@ void setup_ssl_context( ssl::context& ssl_context
         });
 }
 
+static
+string get_base_domain(const beast::string_view& target)
+{
+    auto full_host = target.substr(0, target.find(':'));
+    size_t dot0, dot1 = 0;
+    if ((dot0 = full_host.find('.')) != full_host.rfind('.'))
+        // Two different dots were found
+        // (e.g. "www.example.com" but not "localhost" or "example.com").
+        dot1 = dot0 + 1;  // skip first component and dot (e.g. "www.")
+    return full_host.substr(dot1).to_string();
+}
+
 //------------------------------------------------------------------------------
 // TODO: This function is heavily unfinished, mostly just for debugging ATM
 void Client::State::mitm_tls_handshake( GenericConnection con
@@ -482,14 +494,7 @@ void Client::State::mitm_tls_handshake( GenericConnection con
     // and rewind the Hello message,
     // but for the moment we will assume that the browser sends
     // a host name instead of an IP address or is reverse resolution.
-    auto full_host = con_req.target()
-                            .substr(0, con_req.target().find(':'));
-    size_t dot0, dot1 = 0;
-    if ((dot0 = full_host.find('.')) != full_host.rfind('.'))
-        // Two different dots were found
-        // (e.g. "www.example.com" but not "localhost" or "example.com").
-        dot1 = dot0 + 1;  // skip first component and dot (e.g. "www.")
-    string target(full_host.substr(dot1).to_string());
+    auto target = get_base_domain(con_req.target());
 
     auto i = _ssl_certificate_cache.find(target);
 
