@@ -6,7 +6,7 @@ using namespace std;
 using namespace ouinet;
 
 DummyCertificate::DummyCertificate( CACertificate& ca_cert
-                                  , const beast::string_view cn)
+                                  , const string& cn)
     : _x(X509_new())
 {
     // TODO: Is this a proper version?
@@ -22,8 +22,7 @@ DummyCertificate::DummyCertificate( CACertificate& ca_cert
 
     X509_set_pubkey(_x, ca_cert.get_private_key());
     
-    string wc_cn("*.");
-    wc_cn += cn.to_string();
+    string wc_cn("*." + cn);
     X509_NAME* name = X509_get_subject_name(_x); 
     // TODO: Check error code?
     X509_NAME_add_entry_by_txt(name, "CN",
@@ -31,7 +30,7 @@ DummyCertificate::DummyCertificate( CACertificate& ca_cert
     
     X509_set_issuer_name(_x, ca_cert.get_subject_name());
 
-    string alt_name = "DNS:" + cn.to_string();
+    string alt_name("DNS:" + cn);
     // Add various standard extensions
     ssl::util::x509_add_ext(_x, NID_subject_alt_name, alt_name.c_str());
 

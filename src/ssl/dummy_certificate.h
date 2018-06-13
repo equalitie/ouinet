@@ -14,7 +14,7 @@ class DummyCertificate {
 public:
     // If `cn` is ``example.com``, this generates a certificate for
     // ``*.example.com`` with ``example.com`` as an alternative name.
-    DummyCertificate(CACertificate&, beast::string_view cn);
+    DummyCertificate(CACertificate&, const std::string& cn);
 
     DummyCertificate(const DummyCertificate&) = delete;
     DummyCertificate& operator=(const DummyCertificate&) = delete;
