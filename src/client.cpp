@@ -515,11 +515,6 @@ void Client::State::mitm_tls_handshake( GenericConnection con
 
     // Send back OK to let the UA know we have the "tunnel"
     http::response<http::string_body> res{http::status::ok, con_req.version()};
-
-    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-    res.set(http::field::content_type, "text/html");
-    res.keep_alive(con_req.keep_alive());
-
     http::async_write(con, res, yield);
 
     ssl::stream<GenericConnection&> ssl_con(con, ssl_context);
