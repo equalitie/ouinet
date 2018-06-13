@@ -62,7 +62,7 @@ static ostream& operator<<(ostream& os, const ClientFrontEnd::Task& task) {
 } // ouinet namespace
 
 static
-string get_url_path(const string& url) {
+string path_from_url(const string& url) {
     // This is not a bullet-proof URL parser, it just gets some common cases here.
     static const boost::regex urlrx("^(?:http://[-\\.a-z0-9]+)?(/[^?#]*).*");
     boost::smatch url_match;
@@ -180,7 +180,7 @@ Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
 
     stringstream ss;
 
-    auto url_path = get_url_path(req.target().to_string());
+    auto url_path = path_from_url(req.target().to_string());
     if (url_path == "/ca.pem")
         handle_ca_pem(req, res, ss, ca);
     else

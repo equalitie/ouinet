@@ -468,7 +468,7 @@ void setup_ssl_context( ssl::context& ssl_context
 }
 
 static
-string get_base_domain(const beast::string_view& target)
+string base_domain_from_target(const beast::string_view& target)
 {
     auto full_host = target.substr(0, target.find(':'));
     size_t dot0, dot1 = 0;
@@ -494,17 +494,17 @@ void Client::State::mitm_tls_handshake( GenericConnection con
     // and rewind the Hello message,
     // but for the moment we will assume that the browser sends
     // a host name instead of an IP address or is reverse resolution.
-    auto target = get_base_domain(con_req.target());
+    auto base_domain = base_domain_from_target(con_req.target());
 
-    auto i = _ssl_certificate_cache.find(target);
+    auto i = _ssl_certificate_cache.find(base_domain);
 
     if (i == _ssl_certificate_cache.end()) {
-        DummyCertificate dummy_crt(*_ca_certificate, target);
+        DummyCertificate dummy_crt(*_ca_certificate, base_domain);
 
         string crt_chain = dummy_crt.pem_certificate()
                          + _ca_certificate->pem_certificate();
 
-        i = _ssl_certificate_cache.insert(make_pair( move(target)
+        i = _ssl_certificate_cache.insert(make_pair( move(base_domain)
                                                    , move(crt_chain))).first;
     }
 
