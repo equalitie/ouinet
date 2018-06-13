@@ -30,7 +30,7 @@ DummyCertificate::DummyCertificate( CACertificate& ca_cert
     
     X509_set_issuer_name(_x, ca_cert.get_subject_name());
 
-    string alt_name("DNS:" + cn);
+    string alt_name("DNS.1:*." + cn + ",DNS.2:" + cn);
     // Add various standard extensions
     ssl::util::x509_add_ext(_x, NID_subject_alt_name, alt_name.c_str());
 
