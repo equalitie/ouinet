@@ -1,6 +1,7 @@
 #define BOOST_TEST_MODULE blocker
 #include <boost/test/included/unit_test.hpp>
 
+#include <boost/asio/io_service.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <namespaces.h>

@@ -2,6 +2,7 @@
 
 #include <boost/system/error_code.hpp>
 #include <boost/asio/spawn.hpp>
+#include <boost/asio/io_service.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <string>
@@ -12,7 +13,6 @@
 #include "../namespaces.h"
 #include "condition_variable.h"
 
-namespace boost { namespace asio { class io_service; }}
 namespace asio_ipfs { class node; }
 
 namespace ouinet {

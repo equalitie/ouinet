@@ -1,11 +1,9 @@
 
 include_directories(
     "${Boost_INCLUDE_DIR}"
-    "${BEAST_DIR}/include"
     "../src")
 
 add_executable(test-cache "test_cache_control.cpp" "../src/cache_control.cpp")
-add_dependencies(test-cache beast)
 target_link_libraries(test-cache ${Boost_LIBRARIES})
 
 add_executable(test-wait-condition "test_wait_condition.cpp")

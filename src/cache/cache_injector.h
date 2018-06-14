@@ -1,6 +1,7 @@
 #pragma once
 
 #include <boost/asio/spawn.hpp>
+#include <boost/asio/io_service.hpp>
 #include <boost/system/error_code.hpp>
 #include <functional>
 #include <memory>
@@ -8,7 +9,6 @@
 
 #include "cached_content.h"
 
-namespace boost { namespace asio { class io_service; }}
 namespace asio_ipfs { class node; }
 
 namespace ouinet {
