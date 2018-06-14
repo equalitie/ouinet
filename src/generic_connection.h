@@ -14,6 +14,9 @@
 namespace ouinet {
 
 class GenericConnection {
+public:
+    using executor_type = asio::io_context::executor_type;
+
 private:
     template<class Token, class Ret>
     using Handler = typename asio::handler_type< Token
@@ -28,8 +31,6 @@ private:
 
     using ReadBuffers  = std::vector<asio::mutable_buffer>;
     using WriteBuffers = std::vector<asio::const_buffer>;
-
-    using executor_type = asio::io_context::executor_type;
 
     struct Base {
         virtual asio::io_service& get_io_service() = 0;
