@@ -6,8 +6,8 @@ stages:
     environment:
       - CMAKE_PATH: "/home/circleci/cmake-3.10.0-Linux-x86_64/bin"
       - BOOST_MAJOR: "1"
-      - BOOST_MINOR: "65"
-      - BOOST_PATCH: "1"
+      - BOOST_MINOR: "67"
+      - BOOST_PATCH: "0"
       
     steps:
       - type: checkout
