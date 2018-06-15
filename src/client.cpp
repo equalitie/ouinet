@@ -86,9 +86,9 @@ public:
     void set_injector(string);
 
 private:
-    void mitm_tls_handshake( GenericConnection&
-                           , const Request&
-                           , asio::yield_context);
+    GenericConnection mitm_tls_handshake( GenericConnection&
+                                        , const Request&
+                                        , asio::yield_context);
 
     void serve_request(GenericConnection&& con, asio::yield_context yield);
 
@@ -481,9 +481,9 @@ string base_domain_from_target(const beast::string_view& target)
 
 //------------------------------------------------------------------------------
 // TODO: This function is heavily unfinished, mostly just for debugging ATM
-void Client::State::mitm_tls_handshake( GenericConnection& con
-                                      , const Request& con_req
-                                      , asio::yield_context yield)
+GenericConnection Client::State::mitm_tls_handshake( GenericConnection& con
+                                                   , const Request& con_req
+                                                   , asio::yield_context yield)
 {
     ssl::context ssl_context{ssl::context::sslv23};
 
@@ -526,13 +526,7 @@ void Client::State::mitm_tls_handshake( GenericConnection& con
         s.next_layer().close();
     };
 
-    auto ssl_gc = GenericConnection(move(ssl_con), move(ssl_shutter));
-
-    Request req;
-    beast::flat_buffer buffer;
-    http::async_read(ssl_gc, buffer, req, yield);
-    auto res2 = test_page(req);
-    http::async_write(ssl_gc, res2, yield);
+    return GenericConnection(move(ssl_con), move(ssl_shutter));
 }
 
 //------------------------------------------------------------------------------
@@ -639,7 +633,13 @@ void Client::State::serve_request( GenericConnection&& con
             //}
 
             try {
-                mitm_tls_handshake(con, req, yield);
+                auto ssl_con = mitm_tls_handshake(con, req, yield);
+
+                Request ssl_req;
+                beast::flat_buffer ssl_buffer;
+                http::async_read(ssl_con, ssl_buffer, ssl_req, yield);
+                auto res2 = test_page(ssl_req);
+                http::async_write(ssl_con, res2, yield);
             }
             catch(const std::exception& e) {
                 cerr << "Mitm exception: " << e.what() << endl;
