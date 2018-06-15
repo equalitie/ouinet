@@ -14,7 +14,6 @@ class Util {
             outputStream.write(value.getBytes());
             outputStream.close();
         } catch (Exception e) {
-            log("3");
             e.printStackTrace();
         }
     }
