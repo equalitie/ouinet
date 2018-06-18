@@ -136,6 +136,7 @@ class DhtNode {
     };
     uint32_t _next_transaction_id;
     std::map<std::string, ActiveRequest> _active_requests;
+    std::string _rx_buffer;
 };
 
 } // dht namespace

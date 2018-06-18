@@ -16,6 +16,10 @@
 namespace ouinet {
 namespace bittorrent {
 
+static
+boost::asio::mutable_buffers_1 buffer(std::string& s) {
+    return boost::asio::buffer(const_cast<char*>(s.data()), s.size());
+}
 
 bool NodeID::bit(int n) const
 {
@@ -60,7 +64,8 @@ dht::DhtNode::DhtNode(asio::io_service& ios, ip::address interface_address):
     _ios(ios),
     _interface_address(interface_address),
     _socket(ios),
-    _initialized(false)
+    _initialized(false),
+    _rx_buffer(65536, '\0')
 {
     _routing_table = std::make_unique<RoutingTreeNode>();
     _routing_table->bucket = std::make_unique<RoutingBucket>();
@@ -106,22 +111,16 @@ void dht::DhtNode::receive_loop(asio::yield_context yield)
          * Later versions of boost::asio make it possible to (1) wait for a
          * datagram, (2) find out the size, (3) allocate a buffer, (4) recv
          * the datagram. Unfortunately, boost::asio 1.62 does not support that.
-         *
-         * HACK:
-         * boost::asio seems to crash here if the buffer is too large; in
-         * particular, 2^16 (maximum size of an UDP datagram) is too large, and
-         * will crash boost::asio. 2^15 in practice is plenty large enough and
-         * far larger than realistic MTUs. So let's hope for the best here.
          */
-        char buffer[1 << 15];
         udp::endpoint sender;
-        std::size_t size = _socket.async_receive_from(asio::buffer(buffer, sizeof(buffer)), sender, yield[ec]);
+        std::size_t size = _socket.async_receive_from(buffer(_rx_buffer), sender, yield[ec]);
         if (ec) {
             break;
         }
 
-        std::string message(buffer, size);
-        boost::optional<BencodedValue> decoded_message = bencoding_decode(message);
+        boost::optional<BencodedValue> decoded_message
+            = bencoding_decode(_rx_buffer.substr(0, size));
+
         if (!decoded_message) {
             continue;
         }
