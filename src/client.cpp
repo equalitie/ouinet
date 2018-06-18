@@ -428,17 +428,6 @@ Response bad_gateway(const Request& req)
     return res;
 }
 
-static
-Response test_page(const Request& req)
-{
-    Response res{http::status::ok, req.version()};
-    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-    res.set(http::field::content_type, "text/html");
-    res.keep_alive(req.keep_alive());
-    res.prepare_payload();
-    return res;
-}
-
 //------------------------------------------------------------------------------
 void setup_ssl_context( ssl::context& ssl_context
                       , const string& cert_chain
@@ -667,13 +656,9 @@ void Client::State::serve_request( GenericConnection&& con
 
         request_config = route_choose_config(req, matches, default_request_config);
 
-        Response res;
-        if (mitm)  // always return the same response (for testing)
-            res = test_page(req);
-        else
-            res = ASYNC_DEBUG( cache_control.fetch(req, yield[ec])
-                             , "Fetch "
-                             , req.target());
+        auto res = ASYNC_DEBUG( cache_control.fetch(req, yield[ec])
+                              , "Fetch "
+                              , req.target());
 
         cout << "Sending back response: " << req.target() << " " << res.result() << endl;
 
