@@ -139,6 +139,24 @@ if (WITH_INJECTOR)
 endif() # if WITH_INJECTOR
 
 ################################################################################
+# Temporary, until we have proper dht tests. At which point it should move
+# to the ./test/ directory.
+
+file(GLOB test_dht_sources
+    "./src/bittorrent/*.cpp"
+)
+
+add_executable(test-dht ${test_dht_sources})
+
+target_include_directories(test-dht PUBLIC
+    "${Boost_INCLUDE_DIR}"
+    "${BEAST_DIR}/include"
+    "${ASIO_IPFS_INCLUDE_DIR}"
+)
+
+target_link_libraries(test-dht ${Boost_LIBRARIES})
+
+################################################################################
 # Config file directory
 
 set(config_files
