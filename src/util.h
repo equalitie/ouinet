@@ -17,23 +17,6 @@
 namespace ouinet { namespace util {
 
 inline
-std::pair< beast::string_view
-         , beast::string_view
-         >
-split_host_port(const beast::string_view& hp)
-{
-    using namespace std;
-
-    auto pos = hp.find(':');
-
-    if (pos == string::npos) {
-        return make_pair(hp, "80");
-    }
-
-    return make_pair(hp.substr(0, pos), hp.substr(pos+1));
-}
-
-inline
 asio::ip::tcp::endpoint
 parse_tcp_endpoint(const std::string& s, sys::error_code& ec)
 {

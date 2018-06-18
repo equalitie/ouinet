@@ -6,6 +6,7 @@
 #include <boost/asio/signal_set.hpp>
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/regex.hpp>
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -77,7 +78,19 @@ void handle_connect_request( GenericConnection& client_c
         client_c.close();
     });
 
-    auto origin_c = connect_to_host(ios, req["host"], disconnect_signal, yield[ec]);
+    // Split CONNECT target in host and port (443 i.e. HTTPS by default).
+    auto hp = req["host"];
+    auto pos = hp.find(':');
+    string host, port;
+    if (pos != string::npos) {
+        host = hp.substr(0, pos).to_string();
+        port = hp.substr(pos + 1).to_string();
+    } else {
+        host = hp.to_string();
+        port = "443";  // HTTPS port by default
+    }
+
+    auto origin_c = connect_to_host(ios, host, port, disconnect_signal, yield[ec]);
 
     if (ec) {
         return handle_bad_request( client_c
@@ -115,10 +128,27 @@ public:
     {
         cc.fetch_fresh = [this, &ios, &abort_signal]
                          (const Request& rq, asio::yield_context yield) {
-            auto host = rq["host"].to_string();
-
             sys::error_code ec;
-            auto con = connect_to_host(ios, host, abort_signal, yield[ec]);
+
+            // Parse the URL to tell HTTP/HTTPS, host, port.
+            auto target = rq.target().to_string();
+            static const boost::regex urlrx("^(http|https)://([-\\.a-z0-9]+)(:[0-9]{1,5})?/.*");
+            boost::smatch url_match;
+            if (!boost::regex_match(target, url_match, urlrx)) {
+                ec = asio::error::operation_not_supported;  // unsupported URL
+                return or_throw<Response>(yield, ec);
+            }
+            string schema = url_match[1];
+            string host = url_match[2];
+            string port = url_match[3];
+            if (port.length() > 0)
+                port = port.substr(1, string::npos);  // just drop the colon
+            else if (schema == "https")
+                port = "443";
+            else  // schema == "http"
+                port = "80";
+
+            auto con = connect_to_host(ios, host, port, abort_signal, yield[ec]);
             if (ec) return or_throw<Response>(yield, ec);
 
             auto close_con_slot = abort_signal.connect([&con] {
