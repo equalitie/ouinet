@@ -4,6 +4,8 @@
 #include <boost/asio/connect.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/signal_set.hpp>
+#include <boost/asio/ssl.hpp>
+#include <boost/asio/ssl/stream.hpp>
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
 #include <iostream>
@@ -35,6 +37,7 @@
 
 using namespace std;
 using namespace ouinet;
+namespace ssl = boost::asio::ssl;
 
 using tcp         = asio::ip::tcp;
 using string_view = beast::string_view;
@@ -114,6 +117,30 @@ void handle_connect_request( GenericConnection& client_c
     full_duplex(client_c, origin_c, yield);
 }
 
+static
+GenericConnection ssl_client_handshake( GenericConnection& con
+                                      , asio::yield_context yield) {
+    // SSL contexts do not seem to be reusable.
+    ssl::context ssl_context{ssl::context::sslv23};
+    ssl_context.set_verify_mode(ssl::verify_peer);
+    ssl_context.set_default_verify_paths();
+
+    // When we adopt Boost >= 1.67
+    // (which enables moving ownership of the underlying connection into ``ssl::stream``),
+    // these will be ``ssl::stream<GenericConnection>``
+    // and we can move `con` (a `GenericConnection&&`).
+    auto ssl_sock = make_unique<ssl::stream<GenericConnection&>>(con, ssl_context);
+    ssl_sock->async_handshake(ssl::stream_base::client, yield);
+
+    static const auto ssl_shutter = [](ssl::stream<GenericConnection&>& s) {
+        // Just close the underlying connection
+        // (TLS has no message exchange for shutdown).
+        s.next_layer().close();
+    };
+
+    return GenericConnection(move(ssl_sock), move(ssl_shutter));
+}
+
 //------------------------------------------------------------------------------
 struct InjectorCacheControl {
 public:
@@ -137,11 +164,13 @@ public:
                 return or_throw<Response>(yield, ec);
             }
             string url_port;
+            bool ssl(false);
             if (url.port.length() > 0)
                 url_port = url.port;
-            else if (url.scheme == "https")
+            else if (url.scheme == "https") {
                 url_port = "443";
-            else  // url.scheme == "http"
+                ssl = true;
+            } else  // url.scheme == "http"
                 url_port = "80";
 
             auto con = connect_to_host(ios, url.host, url_port, abort_signal, yield[ec]);
@@ -151,13 +180,22 @@ public:
                 con.close();
             });
 
+            // When we adopt Boost >= 1.67
+            // `con` will be moved into `ssl_handshake()`
+            // and we will be able to just replace `con` here with the SSL-enabled connection.
+            // For the moment we keep both here and
+            // decide which one to use according to `ssl`.
+            GenericConnection ssl_con;
+            if (ssl)
+                ssl_con = ssl_client_handshake(con, yield);
+
             // Now that we have a connection to the origin
             // we can send a non-proxy request to it
             // (i.e. with target "/foo..." and not "http://example.com/foo...").
             // Actually some web servers do not like the full form.
             Request origin_rq(rq);
             origin_rq.target(target.substr(target.find(url.path)));
-            return fetch_http_page(ios, con, origin_rq, yield);
+            return fetch_http_page(ios, ssl? ssl_con : con, origin_rq, yield);
         };
 
         cc.fetch_stored = [this](const Request& rq, asio::yield_context yield) {
