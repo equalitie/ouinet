@@ -64,7 +64,7 @@ static ostream& operator<<(ostream& os, const ClientFrontEnd::Task& task) {
 static
 string path_from_url(const string& url) {
     // This is not a bullet-proof URL parser, it just gets some common cases here.
-    static const boost::regex urlrx("^(?:http://[-\\.a-z0-9]+)?(/[^?#]*).*");
+    static const boost::regex urlrx("^(?:http://[-\\.:\\[\\]a-z0-9]+)?(/[^?#]*).*");
     boost::smatch url_match;
     boost::regex_match(url, url_match, urlrx);
     return url_match[1];

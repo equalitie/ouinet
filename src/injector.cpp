@@ -132,7 +132,7 @@ public:
 
             // Parse the URL to tell HTTP/HTTPS, host, port.
             auto target = rq.target().to_string();
-            static const boost::regex urlrx("^(http|https)://([-\\.a-z0-9]+)(:[0-9]{1,5})?/.*");
+            static const boost::regex urlrx("^(http|https)://([-\\.a-z0-9]+|\\[[:0-9a-fA-F]+\\])(:[0-9]{1,5})?/.*");
             boost::smatch url_match;
             if (!boost::regex_match(target, url_match, urlrx)) {
                 ec = asio::error::operation_not_supported;  // unsupported URL
