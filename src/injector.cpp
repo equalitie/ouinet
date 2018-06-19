@@ -127,11 +127,12 @@ public:
     {
         cc.fetch_fresh = [this, &ios, &abort_signal]
                          (const Request& rq, asio::yield_context yield) {
+            auto target = rq.target();
             sys::error_code ec;
 
             // Parse the URL to tell HTTP/HTTPS, host, port.
             util::url_match url;
-            if (!util::match_http_url(rq.target().to_string(), url)) {
+            if (!util::match_http_url(target.to_string(), url)) {
                 ec = asio::error::operation_not_supported;  // unsupported URL
                 return or_throw<Response>(yield, ec);
             }
@@ -150,7 +151,13 @@ public:
                 con.close();
             });
 
-            return fetch_http_page(ios, con, rq, yield);
+            // Now that we have a connection to the origin
+            // we can send a non-proxy request to it
+            // (i.e. with target "/foo..." and not "http://example.com/foo...").
+            // Actually some web servers do not like the full form.
+            Request origin_rq(rq);
+            origin_rq.target(target.substr(target.find(url.path)));
+            return fetch_http_page(ios, con, origin_rq, yield);
         };
 
         cc.fetch_stored = [this](const Request& rq, asio::yield_context yield) {
