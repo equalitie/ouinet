@@ -71,7 +71,7 @@ class DhtNode {
     udp::socket _socket;
     NodeID _node_id;
     bool _initialized;
-    std::unique_ptr<RoutingTreeNode> _routing_table;
+    std::unique_ptr<RoutingTable> _routing_table;
 
     struct ActiveRequest {
         udp::endpoint destination;

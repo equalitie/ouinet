@@ -57,8 +57,17 @@ struct RoutingTreeNode {
 
 class RoutingTable {
     public:
+    RoutingTable(NodeID);
+
+    RoutingTable(const RoutingTable&) = delete;
+
+    RoutingBucket* find_routing_bucket(NodeID id, bool split_buckets);
+
+    RoutingTreeNode* root() { return _root_node.get(); }
 
     private:
+    NodeID _node_id;
+    std::unique_ptr<RoutingTreeNode> _root_node;
 };
 
 }}} // namespaces

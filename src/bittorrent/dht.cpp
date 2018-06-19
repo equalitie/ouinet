@@ -33,8 +33,6 @@ dht::DhtNode::DhtNode(asio::io_service& ios, ip::address interface_address):
     _initialized(false),
     _rx_buffer(65536, '\0')
 {
-    _routing_table = std::make_unique<RoutingTreeNode>();
-    _routing_table->bucket = std::make_unique<RoutingBucket>();
 }
 
 void dht::DhtNode::start(sys::error_code& ec)
@@ -65,7 +63,6 @@ void dht::DhtNode::start(sys::error_code& ec)
     asio::spawn(_ios, [this] (asio::yield_context yield) {
         bootstrap(yield);
     });
-
 }
 
 void dht::DhtNode::receive_loop(asio::yield_context yield)
@@ -392,6 +389,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
     }
 
     _node_id = NodeID::generate(my_endpoint->address());
+    _routing_table = std::make_unique<RoutingTable>(_node_id);
 
     /*
      * TODO: Make bootstrap node handling and ID determination more reliable.
@@ -416,7 +414,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
      * This ensures that every node that should route to us, knows about us.
      */
     WaitCondition refresh_done(_ios);
-    refresh_tree_node(_routing_table.get(), NodeID::zero(), 0, refresh_done);
+    refresh_tree_node(_routing_table->root(), NodeID::zero(), 0, refresh_done);
     refresh_done.wait(yield);
 
     _initialized = true;
@@ -717,7 +715,7 @@ void dht::DhtNode::send_ping(NodeContact contact)
  */
 dht::RoutingBucket* dht::DhtNode::find_routing_bucket(NodeID id, bool split_buckets)
 {
-    RoutingTreeNode* tree_node = _routing_table.get();
+    RoutingTreeNode* tree_node = _routing_table->root();
     std::set<RoutingTreeNode*> ancestors;
     ancestors.insert(tree_node);
     bool node_contains_self = true;
@@ -1053,7 +1051,7 @@ static int count_nodes_in_subtree(dht::RoutingTreeNode* tree_node)
 dht::RoutingTreeNode* dht::DhtNode::exhaustive_routing_subtable_fragment_root() const
 {
     std::vector<RoutingTreeNode*> path;
-    RoutingTreeNode* tree_node = _routing_table.get();
+    RoutingTreeNode* tree_node = _routing_table->root();
     while (!tree_node->bucket) {
         path.push_back(tree_node);
         if (_node_id.bit(path.size())) {
@@ -1115,7 +1113,7 @@ static void list_closest_routing_nodes_subtree(
  */
 std::vector<dht::NodeContact> dht::DhtNode::find_closest_routing_nodes(NodeID target, unsigned int count)
 {
-    RoutingTreeNode* tree_node = _routing_table.get();
+    RoutingTreeNode* tree_node = _routing_table->root();
     std::vector<RoutingTreeNode*> ancestors;
     ancestors.push_back(tree_node);
     int depth = 0;
