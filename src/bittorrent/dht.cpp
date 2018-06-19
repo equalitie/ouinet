@@ -4,7 +4,6 @@
 #include "../util/condition_variable.h"
 #include "../util/wait_condition.h"
 
-#include <boost/crc.hpp>
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/steady_timer.hpp>
 
@@ -19,39 +18,6 @@ namespace bittorrent {
 static
 boost::asio::mutable_buffers_1 buffer(std::string& s) {
     return boost::asio::buffer(const_cast<char*>(s.data()), s.size());
-}
-
-bool NodeID::bit(int n) const
-{
-    return (buffer[n / CHAR_BIT] & (1 << (CHAR_BIT - 1 - (n % CHAR_BIT)))) != 0;
-}
-
-std::string NodeID::to_hex() const
-{
-    std::string output;
-    for (unsigned int i = 0; i < sizeof(buffer); i++) {
-        const char* digits = "0123456789abcdef";
-        output += digits[(buffer[i] >> 4) & 0xf];
-        output += digits[(buffer[i] >> 0) & 0xf];
-    }
-    return output;
-}
-
-std::string NodeID::to_bytestring() const
-{
-    return std::string((char *)buffer.data(), buffer.size());
-}
-
-NodeID NodeID::from_bytestring(const std::string& bytestring)
-{
-    NodeID output;
-    std::copy(bytestring.begin(), bytestring.end(), output.buffer.begin());
-    return output;
-}
-
-NodeID NodeID::zero()
-{
-    return from_bytestring(std::string(20, '\0'));
 }
 
 std::string dht::NodeContact::to_string() const
@@ -89,7 +55,7 @@ void dht::DhtNode::start(sys::error_code& ec)
     }
     _port = _socket.local_endpoint().port();
 
-    _node_id = NodeID::from_bytestring(std::string(20, '\0'));
+    _node_id = NodeID::zero();
     _next_transaction_id = 1;
 
     asio::spawn(_ios, [this] (asio::yield_context yield) {
@@ -425,7 +391,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
         return;
     }
 
-    choose_id(my_endpoint->address());
+    _node_id = NodeID::generate(my_endpoint->address());
 
     /*
      * TODO: Make bootstrap node handling and ID determination more reliable.
@@ -1174,48 +1140,6 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_routing_nodes(NodeID ta
     return output;
 }
 
-
-
-
-void dht::DhtNode::choose_id(ip::address address)
-{
-    /*
-     * Choose DHT ID based on ip address.
-     * See: BEP 42
-     */
-
-    uint32_t checksum;
-    _node_id.buffer[19] = rand() & 0xff;
-    if (address.is_v4()) {
-        std::array<unsigned char, 4> ip_bytes = address.to_v4().to_bytes();
-        for (int i = 0; i < 4; i++) {
-            ip_bytes[i] &= (0xff >> (6 - i * 2));
-        }
-        ip_bytes[0] |= ((_node_id.buffer[19] & 7) << 5);
-
-        boost::crc_optimal<32, 0x1edc6f41, 0xffffffff, 0xffffffff, true, true> crc;
-        crc.process_bytes(ip_bytes.data(), 4);
-        checksum = crc.checksum();
-    } else {
-        std::array<unsigned char, 16> ip_bytes = address.to_v6().to_bytes();
-        for (int i = 0; i < 8; i++) {
-            ip_bytes[i] &= (0xff >> (7 - i));
-        }
-        ip_bytes[0] |= ((_node_id.buffer[19] & 7) << 5);
-
-        boost::crc_optimal<32, 0x1edc6f41, 0xffffffff, 0xffffffff, true, true> crc;
-        crc.process_bytes(ip_bytes.data(), 8);
-        checksum = crc.checksum();
-    }
-
-    _node_id.buffer[0] = (checksum >> 24) & 0xff;
-    _node_id.buffer[1] = (checksum >> 16) & 0xff;
-    _node_id.buffer[2] = ((checksum >>  8) & 0xe0) | (rand() & 0x1f);
-    for (int i = 3; i < 19; i++) {
-        _node_id.buffer[i] = rand() & 0xff;
-    }
-
-}
 
 bool dht::DhtNode::closer_to(const NodeID& reference, const NodeID& left, const NodeID& right)
 {
