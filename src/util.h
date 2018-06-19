@@ -11,10 +11,43 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/beast/http/fields.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/regex.hpp>
 // Only available in Boost >= 1.64.0.
 ////#include <boost/process/environment.hpp>
 
 namespace ouinet { namespace util {
+
+struct url_match {
+    std::string scheme;
+    std::string host;
+    std::string port;  // maybe empty
+    std::string path;
+    std::string query;  // maybe empty
+    std::string fragment;  // maybe empty
+};
+
+// Parse the HTTP URL to tell the different components.
+// If successful, the `match` is updated.
+inline
+bool match_http_url(const std::string& url, url_match& match) {
+    static const boost::regex urlrx( "^(http|https)://"  // 1: scheme
+                                     "([-\\.a-z0-9]+|\\[[:0-9a-fA-F]+\\])"  // 2: host
+                                     "(:[0-9]{1,5})?"  // 3: :port (or empty)
+                                     "(/[^?#]*)"  // 4: /path
+                                     "(\\?[^#]*)?"  // 5: ?query (or empty)
+                                     "(#.*)?");  // 6: #fragment (or empty)
+    boost::smatch m;
+    if (!boost::regex_match(url, m, urlrx))
+        return false;
+    match = { m[1]
+            , m[2]
+            , m[3].length() > 0 ? std::string(m[3], 1) : ""  // drop colon
+            , m[4]
+            , m[5].length() > 0 ? std::string(m[5], 1) : ""  // drop qmark
+            , m[6].length() > 0 ? std::string(m[6], 1) : ""  // drop hash
+    };
+    return true;
+}
 
 inline
 asio::ip::tcp::endpoint

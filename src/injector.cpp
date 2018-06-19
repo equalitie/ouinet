@@ -6,7 +6,6 @@
 #include <boost/asio/signal_set.hpp>
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
-#include <boost/regex.hpp>
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -131,24 +130,20 @@ public:
             sys::error_code ec;
 
             // Parse the URL to tell HTTP/HTTPS, host, port.
-            auto target = rq.target().to_string();
-            static const boost::regex urlrx("^(http|https)://([-\\.a-z0-9]+|\\[[:0-9a-fA-F]+\\])(:[0-9]{1,5})?/.*");
-            boost::smatch url_match;
-            if (!boost::regex_match(target, url_match, urlrx)) {
+            util::url_match url;
+            if (!util::match_http_url(rq.target().to_string(), url)) {
                 ec = asio::error::operation_not_supported;  // unsupported URL
                 return or_throw<Response>(yield, ec);
             }
-            string schema = url_match[1];
-            string host = url_match[2];
-            string port = url_match[3];
-            if (port.length() > 0)
-                port = port.substr(1, string::npos);  // just drop the colon
-            else if (schema == "https")
-                port = "443";
-            else  // schema == "http"
-                port = "80";
+            string url_port;
+            if (url.port.length() > 0)
+                url_port = url.port;
+            else if (url.scheme == "https")
+                url_port = "443";
+            else  // url.scheme == "http"
+                url_port = "80";
 
-            auto con = connect_to_host(ios, host, port, abort_signal, yield[ec]);
+            auto con = connect_to_host(ios, url.host, url_port, abort_signal, yield[ec]);
             if (ec) return or_throw<Response>(yield, ec);
 
             auto close_con_slot = abort_signal.connect([&con] {

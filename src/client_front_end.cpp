@@ -1,9 +1,9 @@
 #include "client_front_end.h"
 #include "generic_connection.h"
 #include "cache/cache_client.h"
+#include "util.h"
 #include <boost/optional/optional_io.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
-#include <boost/regex.hpp>
 
 
 using namespace std;
@@ -60,15 +60,6 @@ static ostream& operator<<(ostream& os, const ClientFrontEnd::Task& task) {
 }
 
 } // ouinet namespace
-
-static
-string path_from_url(const string& url) {
-    // This is not a bullet-proof URL parser, it just gets some common cases here.
-    static const boost::regex urlrx("^(?:http://[-\\.:\\[\\]a-z0-9]+)?(/[^?#]*).*");
-    boost::smatch url_match;
-    boost::regex_match(url, url_match, urlrx);
-    return url_match[1];
-}
 
 void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, stringstream& ss
                                   , const CACertificate& ca)
@@ -180,8 +171,9 @@ Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
 
     stringstream ss;
 
-    auto url_path = path_from_url(req.target().to_string());
-    if (url_path == "/ca.pem")
+    util::url_match url;
+    match_http_url(req.target().to_string(), url);
+    if (url.path == "/ca.pem")
         handle_ca_pem(req, res, ss, ca);
     else
         handle_portal(req, res, ss, injector_ep, cache_client);
