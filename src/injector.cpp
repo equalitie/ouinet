@@ -154,12 +154,12 @@ public:
     {
         cc.fetch_fresh = [this, &ios, &abort_signal]
                          (const Request& rq, asio::yield_context yield) {
-            auto target = rq.target();
+            auto target = rq.target().to_string();
             sys::error_code ec;
 
             // Parse the URL to tell HTTP/HTTPS, host, port.
             util::url_match url;
-            if (!util::match_http_url(target.to_string(), url)) {
+            if (!util::match_http_url(target, url)) {
                 ec = asio::error::operation_not_supported;  // unsupported URL
                 return or_throw<Response>(yield, ec);
             }
@@ -194,10 +194,10 @@ public:
             // (i.e. with target "/foo..." and not "http://example.com/foo...").
             // Actually some web servers do not like the full form.
             Request origin_rq(rq);
-            origin_rq.target(target.substr( target.find(url.path)
-                                          // Length of "http://" or "https://",
-                                          // do not fail on "http(s)://FOO/FOO".
-                                          , url.scheme.length() + 3));
+            origin_rq.target(target.substr(target.find( url.path
+                                                      // Length of "http://" or "https://",
+                                                      // do not fail on "http(s)://FOO/FOO".
+                                                      , url.scheme.length() + 3)));
             return fetch_http_page(ios, ssl? ssl_con : con, origin_rq, yield);
         };
 
