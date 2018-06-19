@@ -150,8 +150,6 @@ add_executable(test-dht ${test_dht_sources})
 
 target_include_directories(test-dht PUBLIC
     "${Boost_INCLUDE_DIR}"
-    "${BEAST_DIR}/include"
-    "${ASIO_IPFS_INCLUDE_DIR}"
 )
 
 target_link_libraries(test-dht ${Boost_LIBRARIES})
