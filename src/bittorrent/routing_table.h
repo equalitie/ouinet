@@ -58,12 +58,12 @@ struct RoutingTreeNode {
 class RoutingTable {
     public:
     RoutingTable(NodeID);
-
     RoutingTable(const RoutingTable&) = delete;
-
-    RoutingBucket* find_routing_bucket(NodeID id, bool split_buckets);
-
+    RoutingBucket* find_bucket(NodeID id, bool split_buckets);
     RoutingTreeNode* root() { return _root_node.get(); }
+
+    private:
+    RoutingTreeNode* exhaustive_routing_subtable_fragment_root() const;
 
     private:
     NodeID _node_id;

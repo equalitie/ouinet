@@ -53,10 +53,8 @@ class DhtNode {
 
     void send_ping(NodeContact contact);
 
-    RoutingBucket* find_routing_bucket(NodeID id, bool split_buckets);
     void routing_bucket_try_add_node(RoutingBucket* bucket, NodeContact contact, bool verify_contact);
     void routing_bucket_fail_node(RoutingBucket* bucket, NodeContact contact);
-    RoutingTreeNode* exhaustive_routing_subtable_fragment_root() const;
     std::vector<NodeContact> find_closest_routing_nodes(NodeID target, unsigned int count);
 
     void choose_id(ip::address address);
