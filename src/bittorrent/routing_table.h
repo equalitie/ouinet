@@ -62,6 +62,8 @@ class RoutingTable {
     RoutingBucket* find_bucket(NodeID id, bool split_buckets);
     RoutingTreeNode* root() { return _root_node.get(); }
 
+    std::vector<NodeContact> find_closest_routing_nodes(NodeID target, unsigned int count);
+
     private:
     RoutingTreeNode* exhaustive_routing_subtable_fragment_root() const;
 

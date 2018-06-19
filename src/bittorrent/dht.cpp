@@ -305,7 +305,9 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
         }
         NodeID target_id = NodeID::from_bytestring(*target_id_);
 
-        std::vector<dht::NodeContact> contacts = find_closest_routing_nodes(target_id, RoutingBucket::BUCKET_SIZE);
+        std::vector<dht::NodeContact> contacts
+            = _routing_table->find_closest_routing_nodes(target_id, RoutingBucket::BUCKET_SIZE);
+
         std::string nodes;
         if (!contacts.empty() && contacts[0].id == target_id) {
             nodes += contacts[0].id.to_bytestring();
@@ -466,7 +468,9 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
     int in_progress_endpoints = 0;
     const int MAX_NODES = 8;
 
-    std::vector<dht::NodeContact> routing_nodes = find_closest_routing_nodes(id, MAX_NODES);
+    std::vector<dht::NodeContact> routing_nodes
+        = _routing_table->find_closest_routing_nodes(id, MAX_NODES);
+
     for (auto& contact : routing_nodes) {
         Candidate candidate;
         candidate.endpoint = contact.endpoint;
@@ -923,71 +927,6 @@ void dht::DhtNode::routing_bucket_fail_node(RoutingBucket* bucket, NodeContact c
         bucket->unverified_candidates.pop_front();
     }
 }
-
-static void list_closest_routing_nodes_subtree(
-    dht::RoutingTreeNode* tree_node,
-    int depth,
-    NodeID target,
-    std::vector<dht::NodeContact>& output,
-    size_t max_output
-) {
-    if (output.size() >= max_output) {
-        return;
-    }
-    if (tree_node->bucket) {
-        /*
-         * Nodes are listed oldest first, so iterate in reverse order
-         */
-        for (auto it = tree_node->bucket->nodes.rbegin(); it != tree_node->bucket->nodes.rend(); ++it) {
-            if (!it->is_bad()) {
-                output.push_back(it->contact);
-                if (output.size() >= max_output) {
-                    break;
-                }
-            }
-        }
-    } else {
-        if (target.bit(depth)) {
-            list_closest_routing_nodes_subtree(tree_node->right_child.get(), depth + 1, target, output, max_output);
-            list_closest_routing_nodes_subtree(tree_node->left_child.get(),  depth + 1, target, output, max_output);
-        } else {
-            list_closest_routing_nodes_subtree(tree_node->left_child.get(),  depth + 1, target, output, max_output);
-            list_closest_routing_nodes_subtree(tree_node->right_child.get(), depth + 1, target, output, max_output);
-        }
-    }
-}
-
-/*
- * Find the $count nodes in the routing table, not known to be bad, that are
- * closest to $target.
- */
-std::vector<dht::NodeContact> dht::DhtNode::find_closest_routing_nodes(NodeID target, unsigned int count)
-{
-    RoutingTreeNode* tree_node = _routing_table->root();
-    std::vector<RoutingTreeNode*> ancestors;
-    ancestors.push_back(tree_node);
-    int depth = 0;
-    while (!tree_node->bucket) {
-        if (target.bit(depth)) {
-            tree_node = tree_node->right_child.get();
-        } else {
-            tree_node = tree_node->left_child.get();
-        }
-        depth++;
-        ancestors.push_back(tree_node);
-    }
-
-    std::vector<dht::NodeContact> output;
-    for (auto it = ancestors.rbegin(); it != ancestors.rend(); ++it) {
-        list_closest_routing_nodes_subtree(*it, depth, target, output, count);
-        depth--;
-        if (output.size() >= count) {
-            break;
-        }
-    }
-    return output;
-}
-
 
 bool dht::DhtNode::closer_to(const NodeID& reference, const NodeID& left, const NodeID& right)
 {

@@ -166,3 +166,68 @@ RoutingTreeNode* RoutingTable::exhaustive_routing_subtable_fragment_root() const
     return tree_node;
 }
 
+static void list_closest_routing_nodes_subtree(
+    RoutingTreeNode* tree_node,
+    int depth,
+    ouinet::bittorrent::NodeID target,
+    std::vector<NodeContact>& output,
+    size_t max_output
+) {
+    if (output.size() >= max_output) {
+        return;
+    }
+    if (tree_node->bucket) {
+        /*
+         * Nodes are listed oldest first, so iterate in reverse order
+         */
+        for (auto it = tree_node->bucket->nodes.rbegin(); it != tree_node->bucket->nodes.rend(); ++it) {
+            if (!it->is_bad()) {
+                output.push_back(it->contact);
+                if (output.size() >= max_output) {
+                    break;
+                }
+            }
+        }
+    } else {
+        if (target.bit(depth)) {
+            list_closest_routing_nodes_subtree(tree_node->right_child.get(), depth + 1, target, output, max_output);
+            list_closest_routing_nodes_subtree(tree_node->left_child.get(),  depth + 1, target, output, max_output);
+        } else {
+            list_closest_routing_nodes_subtree(tree_node->left_child.get(),  depth + 1, target, output, max_output);
+            list_closest_routing_nodes_subtree(tree_node->right_child.get(), depth + 1, target, output, max_output);
+        }
+    }
+}
+
+/*
+ * Find the $count nodes in the routing table, not known to be bad, that are
+ * closest to $target.
+ */
+std::vector<NodeContact>
+RoutingTable::find_closest_routing_nodes(NodeID target, unsigned int count)
+{
+    RoutingTreeNode* tree_node = _root_node.get();
+    std::vector<RoutingTreeNode*> ancestors;
+    ancestors.push_back(tree_node);
+    int depth = 0;
+
+    while (!tree_node->bucket) {
+        if (target.bit(depth)) {
+            tree_node = tree_node->right_child.get();
+        } else {
+            tree_node = tree_node->left_child.get();
+        }
+        depth++;
+        ancestors.push_back(tree_node);
+    }
+
+    std::vector<NodeContact> output;
+    for (auto it = ancestors.rbegin(); it != ancestors.rend(); ++it) {
+        list_closest_routing_nodes_subtree(*it, depth, target, output, count);
+        depth--;
+        if (output.size() >= count) {
+            break;
+        }
+    }
+    return output;
+}
