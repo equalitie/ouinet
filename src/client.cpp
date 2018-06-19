@@ -458,7 +458,7 @@ void setup_ssl_context( ssl::context& ssl_context
 static
 string base_domain_from_target(const beast::string_view& target)
 {
-    auto full_host = target.substr(0, target.find(':'));
+    auto full_host = target.substr(0, target.rfind(':'));
     size_t dot0, dot1 = 0;
     if ((dot0 = full_host.find('.')) != full_host.rfind('.'))
         // Two different dots were found

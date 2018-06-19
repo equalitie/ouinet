@@ -80,7 +80,7 @@ void handle_connect_request( GenericConnection& client_c
 
     // Split CONNECT target in host and port (443 i.e. HTTPS by default).
     auto hp = req["host"];
-    auto pos = hp.find(':');
+    auto pos = hp.rfind(':');
     string host, port;
     if (pos != string::npos) {
         host = hp.substr(0, pos).to_string();

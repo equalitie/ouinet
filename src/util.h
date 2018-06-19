@@ -21,7 +21,7 @@ asio::ip::tcp::endpoint
 parse_tcp_endpoint(const std::string& s, sys::error_code& ec)
 {
     using namespace std;
-    auto pos = s.find(':');
+    auto pos = s.rfind(':');
 
     ec = sys::error_code();
 
