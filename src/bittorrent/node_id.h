@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+#include <array>
 #include "../namespaces.h"
 
 namespace ouinet { namespace bittorrent {
