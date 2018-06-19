@@ -194,7 +194,10 @@ public:
             // (i.e. with target "/foo..." and not "http://example.com/foo...").
             // Actually some web servers do not like the full form.
             Request origin_rq(rq);
-            origin_rq.target(target.substr(target.find(url.path)));
+            origin_rq.target(target.substr( target.find(url.path)
+                                          // Length of "http://" or "https://",
+                                          // do not fail on "http(s)://FOO/FOO".
+                                          , url.scheme.length() + 3));
             return fetch_http_page(ios, ssl? ssl_con : con, origin_rq, yield);
         };
 
