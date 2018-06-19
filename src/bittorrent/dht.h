@@ -10,25 +10,13 @@
 #include <vector>
 
 #include "bencoding.h"
+#include "node_id.h"
 #include "../namespaces.h"
 #include "../util/signal.h"
 #include "../util/wait_condition.h"
 
 namespace ouinet {
 namespace bittorrent {
-
-struct NodeID {
-    std::array<unsigned char, 20> buffer;
-
-    bool bit(int n) const;
-    std::string to_hex() const;
-    std::string to_bytestring() const;
-    static NodeID from_bytestring(const std::string& bytestring);
-    static NodeID zero();
-
-    inline bool operator==(const NodeID& other) const { return buffer == other.buffer; }
-};
-
 namespace dht {
 
 namespace ip = asio::ip;
