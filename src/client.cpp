@@ -86,7 +86,7 @@ public:
     void set_injector(string);
 
 private:
-    GenericConnection mitm_tls_handshake( GenericConnection&
+    GenericConnection ssl_mitm_handshake( GenericConnection&
                                         , const Request&
                                         , asio::yield_context);
 
@@ -469,7 +469,7 @@ string base_domain_from_target(const beast::string_view& target)
 
 //------------------------------------------------------------------------------
 // TODO: This function is heavily unfinished, mostly just for debugging ATM
-GenericConnection Client::State::mitm_tls_handshake( GenericConnection& con
+GenericConnection Client::State::ssl_mitm_handshake( GenericConnection& con
                                                    , const Request& con_req
                                                    , asio::yield_context yield)
 {
@@ -509,8 +509,8 @@ GenericConnection Client::State::mitm_tls_handshake( GenericConnection& con
     // (which enables moving ownership of the underlying connection into ``ssl::stream``),
     // these will be ``ssl::stream<GenericConnection>``
     // and we can move `con` (a `GenericConnection&&`).
-    auto ssl_con = make_unique<ssl::stream<GenericConnection&>>(con, ssl_context);
-    ssl_con->async_handshake(ssl::stream_base::server, yield);
+    auto ssl_sock = make_unique<ssl::stream<GenericConnection&>>(con, ssl_context);
+    ssl_sock->async_handshake(ssl::stream_base::server, yield);
 
     static const auto ssl_shutter = [](ssl::stream<GenericConnection&>& s) {
         // Just close the underlying connection
@@ -518,7 +518,7 @@ GenericConnection Client::State::mitm_tls_handshake( GenericConnection& con
         s.next_layer().close();
     };
 
-    return GenericConnection(move(ssl_con), move(ssl_shutter));
+    return GenericConnection(move(ssl_sock), move(ssl_shutter));
 }
 
 //------------------------------------------------------------------------------
@@ -597,7 +597,7 @@ void Client::State::serve_request( GenericConnection&& con
     // Is MitM active?
     bool mitm(false);
     // When we adopt Boost >= 1.67
-    // `con` will be moved into `mitm_tls_handshake()`
+    // `con` will be moved into `ssl_mitm_handshake()`
     // and we will be able to just replace `con` here with the SSL-enabled connection.
     // For the moment we keep both here and
     // decide which one to use according to `mitm`.
@@ -644,7 +644,7 @@ void Client::State::serve_request( GenericConnection&& con
             try {
                 // Subsequent access to the connection will use the encrypted channel.
                 // See note above about moving `con`.
-                ssl_con = mitm_tls_handshake(con, req, yield);
+                ssl_con = ssl_mitm_handshake(con, req, yield);
                 mitm = true;
             }
             catch(const std::exception& e) {
