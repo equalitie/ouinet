@@ -14,7 +14,7 @@ struct NodeID {
     std::string to_hex() const;
     std::string to_bytestring() const;
     static NodeID from_bytestring(const std::string& bytestring);
-    static NodeID zero();
+    static const NodeID& zero();
     static NodeID generate(asio::ip::address address);
 
     bool operator==(const NodeID& other) const { return buffer == other.buffer; }

@@ -31,9 +31,10 @@ NodeID NodeID::from_bytestring(const std::string& bytestring)
     return output;
 }
 
-NodeID NodeID::zero()
+const NodeID& NodeID::zero()
 {
-    return from_bytestring(std::string(20, '\0'));
+    static const NodeID ret = from_bytestring(std::string(20, '\0'));
+    return ret;
 }
 
 NodeID NodeID::generate(asio::ip::address address)
