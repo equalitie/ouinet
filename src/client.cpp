@@ -8,6 +8,7 @@
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/ssl/stream.hpp>
+#include <lrucache.hpp>
 #include <iostream>
 #include <fstream>
 #include <cstdlib>  // for atexit()
@@ -73,6 +74,10 @@ class Client::State : public enable_shared_from_this<Client::State> {
 public:
     State(asio::io_service& ios)
         : _ios(ios)
+        // A certificate chain with OUINET_CA + SUBJECT_CERT
+        // can be around 2 KiB, so this would be around 2 MiB.
+        // TODO: Fine tune if necessary.
+        , _ssl_certificate_cache(1000)
     { }
 
     void start(int argc, char* argv[]);
@@ -128,8 +133,7 @@ private:
 private:
     asio::io_service& _ios;
     std::unique_ptr<CACertificate> _ca_certificate;
-    // TODO: This needs to be a LRU cache
-    map<string, string> _ssl_certificate_cache;
+    cache::lru_cache<string, string> _ssl_certificate_cache;
     ClientConfig _config;
     std::unique_ptr<OuiServiceClient> _injector;
     std::unique_ptr<CacheClient> _ipfs_cache;
@@ -484,20 +488,20 @@ GenericConnection Client::State::ssl_mitm_handshake( GenericConnection& con
     // a host name instead of an IP address or is reverse resolution.
     auto base_domain = base_domain_from_target(con_req.target());
 
-    auto i = _ssl_certificate_cache.find(base_domain);
-
-    if (i == _ssl_certificate_cache.end()) {
+    string crt_chain;
+    try {
+        crt_chain = _ssl_certificate_cache.get(base_domain);
+    } catch(const std::range_error&) {
         DummyCertificate dummy_crt(*_ca_certificate, base_domain);
 
-        string crt_chain = dummy_crt.pem_certificate()
-                         + _ca_certificate->pem_certificate();
+        crt_chain = dummy_crt.pem_certificate()
+                  + _ca_certificate->pem_certificate();
 
-        i = _ssl_certificate_cache.insert(make_pair( move(base_domain)
-                                                   , move(crt_chain))).first;
+        _ssl_certificate_cache.put(move(base_domain), move(crt_chain));
     }
 
     setup_ssl_context( ssl_context
-                     , i->second
+                     , crt_chain
                      , _ca_certificate->pem_private_key()
                      , _ca_certificate->pem_dh_param());
 
