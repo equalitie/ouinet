@@ -119,11 +119,13 @@ void handle_connect_request( GenericConnection& client_c
 
 static
 GenericConnection ssl_client_handshake( GenericConnection& con
+                                      , const string& host
                                       , asio::yield_context yield) {
     // SSL contexts do not seem to be reusable.
     ssl::context ssl_context{ssl::context::sslv23};
-    ssl_context.set_verify_mode(ssl::verify_peer);
     ssl_context.set_default_verify_paths();
+    ssl_context.set_verify_mode(ssl::verify_peer);
+    ssl_context.set_verify_callback(ssl::rfc2818_verification(host));
 
     // When we adopt Boost >= 1.67
     // (which enables moving ownership of the underlying connection into ``ssl::stream``),
@@ -187,7 +189,7 @@ public:
             // decide which one to use according to `ssl`.
             GenericConnection ssl_con;
             if (ssl)
-                ssl_con = ssl_client_handshake(con, yield);
+                ssl_con = ssl_client_handshake(con, url.host, yield);
 
             // Now that we have a connection to the origin
             // we can send a non-proxy request to it
