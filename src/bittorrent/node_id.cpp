@@ -8,6 +8,39 @@ bool NodeID::bit(int n) const
     return (buffer[n / CHAR_BIT] & (1 << (CHAR_BIT - 1 - (n % CHAR_BIT)))) != 0;
 }
 
+void NodeID::set_bit(int n, bool value)
+{
+    char bit = 1 << (CHAR_BIT - (n % CHAR_BIT) - 1);
+
+    if (value) buffer[n / CHAR_BIT] |=  bit;
+    else       buffer[n / CHAR_BIT] &= ~bit;
+}
+
+NodeID NodeID::random(const NodeID& stencil, size_t stencil_mask)
+{
+    // XXX: Use std::uniform_int_distribution instead of std::rand
+
+    size_t s_bytes = stencil_mask / CHAR_BIT;
+    size_t s_bits  = stencil_mask % CHAR_BIT;
+
+    NodeID ret;
+
+    for (size_t i = 0; i < ret.buffer.size(); i++) {
+        if (i < s_bytes) {
+            ret.buffer[i] = stencil.buffer[i];
+        }
+        else if (i > s_bytes) {
+            ret.buffer[i] = rand() & 0xff;
+        }
+        else {
+            ret.buffer[i] = (stencil.buffer[i] & ((0xff << (CHAR_BIT - s_bits)) & 0xff))
+                          | (rand() & ((1 << (CHAR_BIT - s_bits)) - 1));
+        }
+    }
+
+    return ret;
+}
+
 std::string NodeID::to_hex() const
 {
     std::string output;

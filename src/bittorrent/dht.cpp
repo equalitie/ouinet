@@ -422,31 +422,26 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
     _initialized = true;
 }
 
-void dht::DhtNode::refresh_tree_node(dht::RoutingTreeNode* node, NodeID id, int depth, WaitCondition& refresh_done)
-{
-    size_t depth_bytes = depth / CHAR_BIT;
-    int depth_bits = depth % CHAR_BIT;
-    if (node->bucket) {
-        NodeID target_id;
-        for (size_t i = 0; i < target_id.buffer.size(); i++) {
-            if (i < depth_bytes) {
-                target_id.buffer[i] = id.buffer[i];
-            } else if (i > depth_bytes) {
-                target_id.buffer[i] = rand() & 0xff;
-            } else {
-                target_id.buffer[i] = (id.buffer[i] & (((0xff << (CHAR_BIT - depth_bits)) & 0xff)))
-                                    | (rand() & ((1 << (CHAR_BIT - depth_bits)) - 1));
-            }
-        }
 
-        asio::spawn(_ios, [this, target_id, id, depth, peer = refresh_done.lock()] (asio::yield_context yield) {
+void dht::DhtNode::refresh_tree_node(dht::RoutingTreeNode* node, const NodeID stencil, int depth, WaitCondition& refresh_done)
+{
+    if (node->bucket) {
+        NodeID target_id = NodeID::random(stencil, depth);
+
+        asio::spawn(_ios, [ this
+                          , target_id
+                          , stencil
+                          , depth
+                          , lock = refresh_done.lock()
+                          ] (asio::yield_context yield) {
             find_closest_nodes(target_id, std::vector<udp::endpoint>(), yield);
         });
     } else {
-        refresh_tree_node(node->left_child.get(), id, depth + 1, refresh_done); 
-        NodeID right_id = id;
-        right_id.buffer[depth / CHAR_BIT] |= (1 << (CHAR_BIT - depth_bits));
-        refresh_tree_node(node->right_child.get(), right_id, depth + 1, refresh_done);
+        refresh_tree_node(node->left_child.get(), stencil, depth + 1, refresh_done);
+
+        NodeID right_stencil = stencil;
+        right_stencil.set_bit(depth, true);
+        refresh_tree_node(node->right_child.get(), right_stencil, depth + 1, refresh_done);
     }
 }
 
