@@ -505,12 +505,15 @@ GenericConnection Client::State::ssl_mitm_handshake( GenericConnection& con
     http::response<http::string_body> res{http::status::ok, con_req.version()};
     http::async_write(con, res, yield);
 
+    sys::error_code ec;
+
     // When we adopt Boost >= 1.67
     // (which enables moving ownership of the underlying connection into ``ssl::stream``),
     // these will be ``ssl::stream<GenericConnection>``
     // and we can move `con` (a `GenericConnection&&`).
     auto ssl_sock = make_unique<ssl::stream<GenericConnection&>>(con, ssl_context);
-    ssl_sock->async_handshake(ssl::stream_base::server, yield);
+    ssl_sock->async_handshake(ssl::stream_base::server, yield[ec]);
+    if (ec) return or_throw<GenericConnection>(yield, ec);
 
     static const auto ssl_shutter = [](ssl::stream<GenericConnection&>& s) {
         // Just close the underlying connection

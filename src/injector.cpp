@@ -127,12 +127,15 @@ GenericConnection ssl_client_handshake( GenericConnection& con
     ssl_context.set_verify_mode(ssl::verify_peer);
     ssl_context.set_verify_callback(ssl::rfc2818_verification(host));
 
+    sys::error_code ec;
+
     // When we adopt Boost >= 1.67
     // (which enables moving ownership of the underlying connection into ``ssl::stream``),
     // these will be ``ssl::stream<GenericConnection>``
     // and we can move `con` (a `GenericConnection&&`).
     auto ssl_sock = make_unique<ssl::stream<GenericConnection&>>(con, ssl_context);
-    ssl_sock->async_handshake(ssl::stream_base::client, yield);
+    ssl_sock->async_handshake(ssl::stream_base::client, yield[ec]);
+    if (ec) return or_throw<GenericConnection>(yield, ec);
 
     static const auto ssl_shutter = [](ssl::stream<GenericConnection&>& s) {
         // Just close the underlying connection
@@ -188,8 +191,10 @@ public:
             // For the moment we keep both here and
             // decide which one to use according to `ssl`.
             GenericConnection ssl_con;
-            if (ssl)
-                ssl_con = ssl_client_handshake(con, url.host, yield);
+            if (ssl) {
+                ssl_con = ssl_client_handshake(con, url.host, yield[ec]);
+                if (ec) return or_throw<Response>(yield, ec);
+            }
 
             // Now that we have a connection to the origin
             // we can send a non-proxy request to it
