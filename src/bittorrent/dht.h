@@ -55,9 +55,7 @@ class DhtNode {
 
     void routing_bucket_try_add_node(RoutingBucket* bucket, NodeContact contact, bool verify_contact);
     void routing_bucket_fail_node(RoutingBucket* bucket, NodeContact contact);
-    std::vector<NodeContact> find_closest_routing_nodes(NodeID target, unsigned int count);
 
-    void choose_id(ip::address address);
     static bool closer_to(const NodeID& reference, const NodeID& left, const NodeID& right);
     static std::string encode_endpoint(udp::endpoint endpoint);
     static boost::optional<udp::endpoint> decode_endpoint(std::string endpoint);

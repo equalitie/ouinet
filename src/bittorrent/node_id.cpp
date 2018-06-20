@@ -11,7 +11,7 @@ bool NodeID::bit(int n) const
 std::string NodeID::to_hex() const
 {
     std::string output;
-    for (unsigned int i = 0; i < sizeof(buffer); i++) {
+    for (unsigned int i = 0; i < buffer.size(); i++) {
         const char* digits = "0123456789abcdef";
         output += digits[(buffer[i] >> 4) & 0xf];
         output += digits[(buffer[i] >> 0) & 0xf];
@@ -21,7 +21,7 @@ std::string NodeID::to_hex() const
 
 std::string NodeID::to_bytestring() const
 {
-    return std::string((char *)buffer.data(), buffer.size());
+    return std::string((char*) buffer.data(), buffer.size());
 }
 
 NodeID NodeID::from_bytestring(const std::string& bytestring)

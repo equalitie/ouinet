@@ -201,7 +201,7 @@ void dht::DhtNode::send_query_await_reply(
     }
 
     if (!received_response) {
-         or_throw(yield, sys::errc::make_error_code(sys::errc::timed_out));
+         or_throw(yield, asio::error::timed_out);
     }
 }
 
@@ -967,21 +967,17 @@ boost::optional<asio::ip::udp::endpoint> dht::DhtNode::decode_endpoint(std::stri
         std::copy(endpoint.begin(), endpoint.begin() + ip_bytes.size(), ip_bytes.data());
         uint16_t port = ((uint16_t)(unsigned char)endpoint[4]) << 8
                       | ((uint16_t)(unsigned char)endpoint[5]) << 0;
-        return asio::ip::udp::endpoint(asio::ip::address_v4(ip_bytes), port);
+        return udp::endpoint(ip::address_v4(ip_bytes), port);
     } else if (endpoint.size() == 18) {
         std::array<unsigned char, 16> ip_bytes;
         std::copy(endpoint.begin(), endpoint.begin() + ip_bytes.size(), ip_bytes.data());
         uint16_t port = ((uint16_t)(unsigned char)endpoint[16]) << 8
                       | ((uint16_t)(unsigned char)endpoint[17]) << 0;
-        return asio::ip::udp::endpoint(asio::ip::address_v6(ip_bytes), port);
+        return udp::endpoint(ip::address_v6(ip_bytes), port);
     } else {
         return boost::none;
     }
 }
-
-
-
-
 
 MainlineDht::MainlineDht(asio::io_service& ios):
     _ios(ios)
