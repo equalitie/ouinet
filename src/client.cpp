@@ -472,7 +472,6 @@ string base_domain_from_target(const beast::string_view& target)
 }
 
 //------------------------------------------------------------------------------
-// TODO: This function is heavily unfinished, mostly just for debugging ATM
 GenericConnection Client::State::ssl_mitm_handshake( GenericConnection& con
                                                    , const Request& con_req
                                                    , asio::yield_context yield)
@@ -633,22 +632,6 @@ void Client::State::serve_request( GenericConnection&& con
 
         // Attempt connection to origin for CONNECT requests
         if (!mitm && req.method() == http::verb::connect) {
-            // TODO: This scope is a heavily unfinished/debug code. What I
-            // think we need to do here is check whether the request contains
-            // any private data (cookies, GET, POST arguments, ... we have a
-            // function for it somewhere) and then decide whether to do MitM or
-            // pass the CONNECT request further to the injector (as is done in
-            // the handle_connect_request function).
-
-            //if (_config.enable_http_connect_requests()) {
-            //    ASYNC_DEBUG( handle_connect_request(con, req, yield)
-            //               , "Connect ", req.target());
-            //}
-            //else {
-            //    auto res = bad_gateway(req);
-            //    http::async_write(con, res, yield[ec]);
-            //}
-
             try {
                 // Subsequent access to the connection will use the encrypted channel.
                 // See note above about moving `con`.
@@ -662,6 +645,19 @@ void Client::State::serve_request( GenericConnection&& con
             continue;
         }
 
+        // TODO: If an HTTPS request contains any private data (cookies, GET,
+        // POST arguments...) it should be either routed to the Origin or a
+        // Proxy (which may be the injector) using a CONNECT request (as is
+        // done in the handle_connect_request function).
+
+        //if (_config.enable_http_connect_requests()) {
+        //    ASYNC_DEBUG( handle_connect_request(con, req, yield)
+        //               , "Connect ", req.target());
+        //}
+        //else {
+        //    auto res = bad_gateway(req);
+        //    http::async_write(con, res, yield[ec]);
+        //}
         request_config = route_choose_config(req, matches, default_request_config);
 
         auto res = ASYNC_DEBUG( cache_control.fetch(req, yield[ec])
