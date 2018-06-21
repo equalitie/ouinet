@@ -91,7 +91,7 @@ public:
     void set_injector(string);
 
 private:
-    GenericConnection ssl_mitm_handshake( GenericConnection&
+    GenericConnection ssl_mitm_handshake( GenericConnection&&
                                         , const Request&
                                         , asio::yield_context);
 
@@ -472,7 +472,7 @@ string base_domain_from_target(const beast::string_view& target)
 }
 
 //------------------------------------------------------------------------------
-GenericConnection Client::State::ssl_mitm_handshake( GenericConnection& con
+GenericConnection Client::State::ssl_mitm_handshake( GenericConnection&& con
                                                    , const Request& con_req
                                                    , asio::yield_context yield)
 {
@@ -510,15 +510,11 @@ GenericConnection Client::State::ssl_mitm_handshake( GenericConnection& con
 
     sys::error_code ec;
 
-    // When we adopt Boost >= 1.67
-    // (which enables moving ownership of the underlying connection into ``ssl::stream``),
-    // these will be ``ssl::stream<GenericConnection>``
-    // and we can move `con` (a `GenericConnection&&`).
-    auto ssl_sock = make_unique<ssl::stream<GenericConnection&>>(con, ssl_context);
+    auto ssl_sock = make_unique<ssl::stream<GenericConnection>>(move(con), ssl_context);
     ssl_sock->async_handshake(ssl::stream_base::server, yield[ec]);
     if (ec) return or_throw<GenericConnection>(yield, ec);
 
-    static const auto ssl_shutter = [](ssl::stream<GenericConnection&>& s) {
+    static const auto ssl_shutter = [](ssl::stream<GenericConnection>& s) {
         // Just close the underlying connection
         // (TLS has no message exchange for shutdown).
         s.next_layer().close();
@@ -602,18 +598,12 @@ void Client::State::serve_request( GenericConnection&& con
 
     // Is MitM active?
     bool mitm(false);
-    // When we adopt Boost >= 1.67
-    // `con` will be moved into `ssl_mitm_handshake()`
-    // and we will be able to just replace `con` here with the SSL-enabled connection.
-    // For the moment we keep both here and
-    // decide which one to use according to `mitm`.
-    GenericConnection ssl_con;
     // Process the different requests that may come over the same connection.
     for (;;) {  // continue for next request; break for no more requests
         Request req;
 
         // Read the (clear-text) HTTP request
-        ASYNC_DEBUG(http::async_read(mitm? ssl_con : con, buffer, req, yield[ec]), "Read request");
+        ASYNC_DEBUG(http::async_read(con, buffer, req, yield[ec]), "Read request");
 
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "read");
@@ -633,8 +623,7 @@ void Client::State::serve_request( GenericConnection&& con
         if (!mitm && req.method() == http::verb::connect) {
             try {
                 // Subsequent access to the connection will use the encrypted channel.
-                // See note above about moving `con`.
-                ssl_con = ssl_mitm_handshake(con, req, yield);
+                con = ssl_mitm_handshake(move(con), req, yield);
                 mitm = true;
             }
             catch(const std::exception& e) {
@@ -674,14 +663,14 @@ void Client::State::serve_request( GenericConnection&& con
 #endif
 
             // TODO: Better error message.
-            ASYNC_DEBUG(handle_bad_request(mitm? ssl_con : con, req, "Not cached", yield), "Send error");
+            ASYNC_DEBUG(handle_bad_request(con, req, "Not cached", yield), "Send error");
             if (req.keep_alive()) continue;
             else return;
         }
 
         cout << req.base() << res.base() << endl;
         // Forward the response back
-        ASYNC_DEBUG(http::async_write(mitm? ssl_con : con, res, yield[ec]), "Write response ", req.target());
+        ASYNC_DEBUG(http::async_write(con, res, yield[ec]), "Write response ", req.target());
         if (ec == http::error::end_of_stream) {
           LOG_DEBUG("request served. Connection closed");
           break;

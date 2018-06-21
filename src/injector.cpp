@@ -118,7 +118,7 @@ void handle_connect_request( GenericConnection& client_c
 }
 
 static
-GenericConnection ssl_client_handshake( GenericConnection& con
+GenericConnection ssl_client_handshake( GenericConnection&& con
                                       , const string& host
                                       , asio::yield_context yield) {
     // SSL contexts do not seem to be reusable.
@@ -129,15 +129,11 @@ GenericConnection ssl_client_handshake( GenericConnection& con
 
     sys::error_code ec;
 
-    // When we adopt Boost >= 1.67
-    // (which enables moving ownership of the underlying connection into ``ssl::stream``),
-    // these will be ``ssl::stream<GenericConnection>``
-    // and we can move `con` (a `GenericConnection&&`).
-    auto ssl_sock = make_unique<ssl::stream<GenericConnection&>>(con, ssl_context);
+    auto ssl_sock = make_unique<ssl::stream<GenericConnection>>(move(con), ssl_context);
     ssl_sock->async_handshake(ssl::stream_base::client, yield[ec]);
     if (ec) return or_throw<GenericConnection>(yield, ec);
 
-    static const auto ssl_shutter = [](ssl::stream<GenericConnection&>& s) {
+    static const auto ssl_shutter = [](ssl::stream<GenericConnection>& s) {
         // Just close the underlying connection
         // (TLS has no message exchange for shutdown).
         s.next_layer().close();
@@ -185,14 +181,9 @@ public:
                 con.close();
             });
 
-            // When we adopt Boost >= 1.67
-            // `con` will be moved into `ssl_handshake()`
-            // and we will be able to just replace `con` here with the SSL-enabled connection.
-            // For the moment we keep both here and
-            // decide which one to use according to `ssl`.
-            GenericConnection ssl_con;
             if (ssl) {
-                ssl_con = ssl_client_handshake(con, url.host, yield[ec]);
+                // Subsequent access to the connection will use the encrypted channel.
+                con = ssl_client_handshake(move(con), url.host, yield[ec]);
                 if (ec) {
                     cerr << "SSL client handshake error: "
                          << url.host << ": " << ec.message() << endl;
@@ -209,7 +200,7 @@ public:
                                                       // Length of "http://" or "https://",
                                                       // do not fail on "http(s)://FOO/FOO".
                                                       , url.scheme.length() + 3)));
-            return fetch_http_page(ios, ssl? ssl_con : con, origin_rq, yield);
+            return fetch_http_page(ios, con, origin_rq, yield);
         };
 
         cc.fetch_stored = [this](const Request& rq, asio::yield_context yield) {
