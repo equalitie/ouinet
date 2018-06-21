@@ -69,7 +69,7 @@ RUN apt-get update && apt-get install -y \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /usr/local/lib/libboost_* /usr/local/lib/
 WORKDIR /opt/ouinet
-COPY --from=builder /opt/ouinet/modules/ipfs-cache/ipfs_bindings/libipfs_bindings.so modules/ipfs-cache/ipfs_bindings/
+COPY --from=builder /opt/ouinet/modules/asio-ipfs/ipfs_bindings/libipfs_bindings.so modules/asio-ipfs/ipfs_bindings/
 # GNUnet support has been temporarily removed.
 #COPY --from=builder /opt/ouinet/modules/gnunet-channels/gnunet-bin/share/gnunet/ modules/gnunet-channels/gnunet-bin/share/gnunet/
 #COPY --from=builder /opt/ouinet/modules/gnunet-channels/gnunet-bin/lib/ modules/gnunet-channels/gnunet-bin/lib/
