@@ -22,12 +22,14 @@ public class Ouinet {
     private Context _ctx;
     private WifiManager.MulticastLock _lock = null;
 
-    public Ouinet(Context ctx) {
+    public Ouinet(Context ctx, String ipns,
+                               String injector_ep,
+                               String credentials) {
         _ctx = ctx;
 
-        String ipns        = readIPNS();
-        String injector_ep = readInjectorEP();
-        String credentials = readCredentialsFor(injector_ep);
+        if (ipns        == null) ipns        = "";
+        if (injector_ep == null) injector_ep = "";
+        if (credentials == null) credentials = "";
 
         new File(dir()).mkdirs();
 
@@ -54,69 +56,22 @@ public class Ouinet {
 
     // Set injector's IPNS (A.k.a. it's IPFS ID)
     public void setIPNS(String ipns) {
-        writeIPNS(ipns);
         nSetIPNS(ipns);
-    }
-
-    // Get injector's IPNS (A.k.a. it's IPFS ID)
-    public String getIPNS() {
-        return readIPNS();
     }
 
     // Set injector endpoint. Can be either in the form IP:PORT or it can be an
     // I2P address.
     public void setInjectorEndpoint(String endpoint) {
-        writeInjectorEP(endpoint);
         nSetInjectorEP(endpoint);
     }
 
-    // Return injector's endpoint as specified with the setInjectorEndpoint
-    // function.
-    public String getInjectorEndpoint() {
-        return readInjectorEP();
-    }
-
     public void setCredentialsFor(String injector, String credentials) {
-        writeCredentials(injector, credentials);
         nSetCredentialsFor(injector, credentials);
     }
 
-    public String getCredentialsFor(String injector) {
-        return readCredentialsFor(injector);
-    }
-
     //----------------------------------------------------------------
-    protected String dir() {
+    private String dir() {
         return _ctx.getFilesDir().getAbsolutePath() + "/ouinet";
-    }
-
-    protected String config_ipns()        { return dir() + "/ipns.txt";        }
-    protected String config_injector()    { return dir() + "/injector.txt";    }
-    protected String config_credentials() { return dir() + "/credentials.txt"; }
-
-    protected void writeIPNS(String s)       { Util.saveToFile(_ctx, config_ipns(), s); }
-    protected void writeInjectorEP(String s) { Util.saveToFile(_ctx, config_injector(), s); }
-
-    protected String readIPNS()       { return Util.readFromFile(_ctx, config_ipns(), ""); }
-    protected String readInjectorEP() { return Util.readFromFile(_ctx, config_injector(), ""); }
-
-    protected void writeCredentials(String injector, String cred) {
-        Util.saveToFile(_ctx, config_credentials(), injector + "\n" + cred);
-    }
-
-    protected String readCredentialsFor(String injector) {
-        if (injector == null || injector.length() == 0) return "";
-
-        String content = Util.readFromFile(_ctx, config_credentials(), null);
-
-        if (content == null) { return ""; }
-
-        String[] lines = content.split("\\n");
-
-        if (lines.length != 2)          { return ""; }
-        if (!lines[0].equals(injector)) { return ""; }
-
-        return lines[1];
     }
 
     //----------------------------------------------------------------

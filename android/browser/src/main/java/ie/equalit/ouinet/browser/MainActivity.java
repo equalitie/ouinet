@@ -85,10 +85,12 @@ public class MainActivity extends AppCompatActivity {
             Util.log("key: " + key + " value: " + val);
             if (key.equalsIgnoreCase("ipns")) {
                 toast("Setting IPNS to: " + val);
+                writeIPNS(val);
                 _ouinet.setIPNS(val);
             }
             else if (key.equalsIgnoreCase("injector")) {
                 toast("Setting injector to: " + val);
+                writeInjectorEP(val);
                 _ouinet.setInjectorEndpoint(val);
                 injector = val;
             }
@@ -105,6 +107,7 @@ public class MainActivity extends AppCompatActivity {
                 }
                 else {
                     toast("Setting up credentials");
+                    writeCredentials(injector, credentials);
                     _ouinet.setCredentialsFor(injector, credentials);
                 }
             }
@@ -128,7 +131,11 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        _ouinet = new Ouinet(this);
+        String ipns        = readIPNS();
+        String injector_ep = readInjectorEP();
+        String credentials = readCredentialsFor(injector_ep);
+
+        _ouinet = new Ouinet(this, ipns, injector_ep, credentials);
 
         setContentView(R.layout.activity_main);
 
@@ -147,6 +154,7 @@ public class MainActivity extends AppCompatActivity {
         webSettings.setDefaultTextEncodingName("utf-8");
 
         _webViewClient = new OuiWebViewClient(this, _ouinet);
+
         _webView.setWebViewClient(_webViewClient);
 
         go_home();
@@ -179,20 +187,22 @@ public class MainActivity extends AppCompatActivity {
     }
 
     protected void showChangeInjectorDialog() {
-        String ep = _ouinet.getInjectorEndpoint();
+        String ep = readInjectorEP();
 
         showDialog("Injector endpoint", ep, new OnInput() {
             @Override
             public void call(String input) {
+                writeInjectorEP(input);
                 _ouinet.setInjectorEndpoint(input);
             }
         });
     }
 
     protected void showChangeIPNSDialog() {
-        showDialog("IPNS", _ouinet.getIPNS(), new OnInput() {
+        showDialog("IPNS", readIPNS(), new OnInput() {
             @Override
             public void call(String input) {
+                writeIPNS(input);
                 _ouinet.setIPNS(input);
             }
         });
@@ -256,4 +266,40 @@ public class MainActivity extends AppCompatActivity {
             super.onBackPressed();
         }
     }
+
+    //----------------------------------------------------------------
+    private String dir() {
+        return getFilesDir().getAbsolutePath();
+    }
+
+    private String config_ipns()        { return dir() + "/ipns.txt";        }
+    private String config_injector()    { return dir() + "/injector.txt";    }
+    private String config_credentials() { return dir() + "/credentials.txt"; }
+
+    private void writeIPNS(String s)       { Util.saveToFile(this, config_ipns(), s); }
+    private void writeInjectorEP(String s) { Util.saveToFile(this, config_injector(), s); }
+
+    public String readIPNS()       { return Util.readFromFile(this, config_ipns(), ""); }
+    public String readInjectorEP() { return Util.readFromFile(this, config_injector(), ""); }
+
+    private void writeCredentials(String injector, String cred) {
+        Util.saveToFile(this, config_credentials(), injector + "\n" + cred);
+    }
+
+    private String readCredentialsFor(String injector) {
+        if (injector == null || injector.length() == 0) return "";
+
+        String content = Util.readFromFile(this, config_credentials(), null);
+
+        if (content == null) { return ""; }
+
+        String[] lines = content.split("\\n");
+
+        if (lines.length != 2)          { return ""; }
+        if (!lines[0].equals(injector)) { return ""; }
+
+        return lines[1];
+    }
+
+    //----------------------------------------------------------------
 }
