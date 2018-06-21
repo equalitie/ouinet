@@ -31,7 +31,7 @@ stages:
         command: |
           cd ~
           boost=boost_${BOOST_MAJOR}_${BOOST_MINOR}_${BOOST_PATCH}
-          wget http://downloads.sourceforge.net/project/boost/boost/${BOOST_MAJOR}.${BOOST_MINOR}.${BOOST_PATCH}/${boost}.tar.bz2
+          wget https://downloads.sourceforge.net/project/boost/boost/${BOOST_MAJOR}.${BOOST_MINOR}.${BOOST_PATCH}/${boost}.tar.bz2
           tar xf ${boost}.tar.bz2
           cd ${boost}
           ./bootstrap.sh
