@@ -178,9 +178,9 @@ Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
     else
         handle_portal(req, res, ss, injector_ep, cache_client);
 
-    Response::body_type::writer writer(res);
+    Response::body_type::reader reader(res, res.body());
     sys::error_code ec;
-    writer.put(asio::buffer(ss.str()), ec);
+    reader.put(asio::buffer(ss.str()), ec);
     assert(!ec);
 
     res.prepare_payload();

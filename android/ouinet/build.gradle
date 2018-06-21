@@ -1,14 +1,24 @@
-apply plugin: 'com.android.application'
+apply plugin: 'com.android.library'
 
 android {
     compileSdkVersion 26
     defaultConfig {
-        applicationId "ie.equalit.ouinet.browser"
         minSdkVersion 15
         targetSdkVersion 26
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
+        externalNativeBuild {
+            cmake {
+                arguments "-DBOOST_INCLUDEDIR=$boost_includedir",
+                          "-DANDROID_STL='c++_shared'",
+                          "-DOUINET_CLIENTLIB_PATH=$ouinet_clientlib_path"
+                cppFlags "-std=c++14 -frtti -fexceptions"
+            }
+        }
+        ndk {
+            abiFilters "$android_abi"
+        }
     }
     sourceSets {
         main {
@@ -21,13 +31,15 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
+    externalNativeBuild {
+        cmake {
+            path "CMakeLists.txt"
+            buildStagingDirectory (new File(project.buildDir, "../build-cmake"))
+        }
+    }
 }
 
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
-    implementation project(':ouinet')
-    implementation 'com.journeyapps:zxing-android-embedded:3.6.0'
-    implementation 'com.squareup.okhttp3:okhttp:3.10.0'
     implementation 'com.android.support:appcompat-v7:26.1.0'
-    implementation 'com.android.support.constraint:constraint-layout:1.0.2'
 }

@@ -1,6 +1,7 @@
 #define BOOST_TEST_MODULE cache_control
 #include <boost/test/included/unit_test.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include <boost/asio/io_service.hpp>
 #include <boost/optional.hpp>
 
 #include <cache_control.h>

@@ -6,7 +6,7 @@ else()
     cmake_minimum_required (VERSION 3.5)
 endif()
 
-set(BOOST_VERSION 1.62)
+set(BOOST_VERSION 1.67)
 include(ExternalProject)
 ################################################################################
 # Configurable options
@@ -23,17 +23,6 @@ option(WITH_INJECTOR "Compile injector" ON)
 # For some reason we need to define both of these
 add_definitions(-DBOOST_COROUTINES_NO_DEPRECATION_WARNING)
 add_definitions(-DBOOST_COROUTINE_NO_DEPRECATION_WARNING)
-
-################################################################################
-externalproject_add(beast
-    GIT_REPOSITORY https://github.com/inetic/beast
-    UPDATE_COMMAND ""
-    CONFIGURE_COMMAND ""
-    INSTALL_COMMAND ""
-    BUILD_COMMAND ""
-    PREFIX "beast")
-
-set(BEAST_DIR "${CMAKE_BINARY_DIR}/beast/src/beast")
 
 ################################################################################
 option(ASIO_IPFS_WITH_EXAMPLE_BINARIES "" OFF)
@@ -85,7 +74,6 @@ set(LRU_INCLUDE_DIR "${CMAKE_BINARY_DIR}/lru/src/lru/include")
 ################################################################################
 include_directories(
     "${Boost_INCLUDE_DIR}"
-    "${BEAST_DIR}/include"
     "${ASIO_IPFS_INCLUDE_DIR}"
     "${JSON_INCLUDE_DIR}"
     "${LRU_INCLUDE_DIR}"
@@ -124,13 +112,12 @@ target_link_libraries(client
     ${ASIO_IPFS_LIBRARIES}
 )
 
-add_dependencies(client json lru beast ${ASIO_IPFS_TARGET})
+add_dependencies(client json lru ${ASIO_IPFS_TARGET})
 
 ################################################################################
 if (WITH_INJECTOR)
     include_directories(
         "${Boost_INCLUDE_DIR}"
-        "${BEAST_DIR}/include"
         "${ASIO_IPFS_INCLUDE_DIR}"
     )
 
@@ -145,7 +132,7 @@ if (WITH_INJECTOR)
     )
 
     add_executable(injector ${injector_sources})
-    add_dependencies(injector json beast ${ASIO_IPFS_TARGET})
+    add_dependencies(injector json ${ASIO_IPFS_TARGET})
 
     target_link_libraries(injector
         ouiservice-i2p
@@ -153,6 +140,26 @@ if (WITH_INJECTOR)
         ${ASIO_IPFS_LIBRARIES}
     )
 endif() # if WITH_INJECTOR
+
+################################################################################
+# Temporary, until we have proper dht tests. At which point it should move
+# to the ./test/ directory.
+
+if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
+
+    file(GLOB test_dht_sources
+        "./src/bittorrent/*.cpp"
+    )
+
+    add_executable(test-dht ${test_dht_sources})
+
+    target_include_directories(test-dht PUBLIC
+        "${Boost_INCLUDE_DIR}"
+    )
+
+    target_link_libraries(test-dht ${Boost_LIBRARIES})
+
+endif()
 
 ################################################################################
 # Config file directory

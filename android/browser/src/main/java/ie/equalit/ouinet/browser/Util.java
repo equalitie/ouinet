@@ -1,4 +1,4 @@
-package ie.equalit.ouinet;
+package ie.equalit.ouinet.browser;
 
 import android.content.Context;
 import java.io.FileInputStream;
@@ -14,7 +14,6 @@ class Util {
             outputStream.write(value.getBytes());
             outputStream.close();
         } catch (Exception e) {
-            log("3");
             e.printStackTrace();
         }
     }
