@@ -61,3 +61,12 @@ stages:
           pip install twisted
           export OUINET_BUILD_DIR=~/project/build/
           ./scripts/run_integration_tests.sh
+
+      - type: shell
+        name: Build.Android
+        command: |
+          mkdir build.android
+          cd build.android
+          export PATH="$CMAKE_PATH:$PATH"
+          ../scripts/build-android.sh
+
