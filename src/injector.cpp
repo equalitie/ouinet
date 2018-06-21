@@ -193,7 +193,11 @@ public:
             GenericConnection ssl_con;
             if (ssl) {
                 ssl_con = ssl_client_handshake(con, url.host, yield[ec]);
-                if (ec) return or_throw<Response>(yield, ec);
+                if (ec) {
+                    cerr << "SSL client handshake error: "
+                         << url.host << ": " << ec.message() << endl;
+                    return or_throw<Response>(yield, ec);
+                }
             }
 
             // Now that we have a connection to the origin
