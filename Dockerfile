@@ -67,7 +67,9 @@ RUN apt-get update && apt-get install -y \
     libunistring0 \
     zlib1g \
  && rm -rf /var/lib/apt/lists/*
+# Manually install Boost libraries and update the dynamic linker cache.
 COPY --from=builder /usr/local/lib/libboost_* /usr/local/lib/
+RUN ldconfig
 WORKDIR /opt/ouinet
 COPY --from=builder /opt/ouinet/modules/asio-ipfs/ipfs_bindings/libipfs_bindings.so modules/asio-ipfs/ipfs_bindings/
 # GNUnet support has been temporarily removed.
