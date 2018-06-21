@@ -122,8 +122,7 @@ GenericConnection ssl_client_handshake( GenericConnection& con
                                       , const string& host
                                       , asio::yield_context yield) {
     // SSL contexts do not seem to be reusable.
-    // TODO: Use generic `tls_client` when switching to Boost 1.67.
-    ssl::context ssl_context{ssl::context::sslv23};
+    ssl::context ssl_context{ssl::context::tls_client};
     ssl_context.set_default_verify_paths();
     ssl_context.set_verify_mode(ssl::verify_peer);
     ssl_context.set_verify_callback(ssl::rfc2818_verification(host));

@@ -476,8 +476,7 @@ GenericConnection Client::State::ssl_mitm_handshake( GenericConnection& con
                                                    , const Request& con_req
                                                    , asio::yield_context yield)
 {
-    // TODO: Use generic `tls_server` when switching to Boost 1.67.
-    ssl::context ssl_context{ssl::context::sslv23};
+    ssl::context ssl_context{ssl::context::tls_server};
 
     // TODO: We really should be waiting for
     // the TLS Client Hello message to arrive at the clear text connection
