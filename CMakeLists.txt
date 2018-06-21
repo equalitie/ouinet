@@ -25,17 +25,6 @@ add_definitions(-DBOOST_COROUTINES_NO_DEPRECATION_WARNING)
 add_definitions(-DBOOST_COROUTINE_NO_DEPRECATION_WARNING)
 
 ################################################################################
-externalproject_add(beast
-    GIT_REPOSITORY https://github.com/inetic/beast
-    UPDATE_COMMAND ""
-    CONFIGURE_COMMAND ""
-    INSTALL_COMMAND ""
-    BUILD_COMMAND ""
-    PREFIX "beast")
-
-set(BEAST_DIR "${CMAKE_BINARY_DIR}/beast/src/beast")
-
-################################################################################
 option(ASIO_IPFS_WITH_EXAMPLE_BINARIES "" OFF)
 
 add_subdirectory(./modules/asio-ipfs)
@@ -72,7 +61,6 @@ set(JSON_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/json/src/json/src")
 ################################################################################
 include_directories(
     "${Boost_INCLUDE_DIR}"
-    "${BEAST_DIR}/include"
     "${ASIO_IPFS_INCLUDE_DIR}"
     "${JSON_INCLUDE_DIR}"
 )
@@ -108,13 +96,12 @@ target_link_libraries(client
     ${ASIO_IPFS_LIBRARIES}
 )
 
-add_dependencies(client json beast ${ASIO_IPFS_TARGET})
+add_dependencies(client json ${ASIO_IPFS_TARGET})
 
 ################################################################################
 if (WITH_INJECTOR)
     include_directories(
         "${Boost_INCLUDE_DIR}"
-        "${BEAST_DIR}/include"
         "${ASIO_IPFS_INCLUDE_DIR}"
     )
 
@@ -129,7 +116,7 @@ if (WITH_INJECTOR)
     )
 
     add_executable(injector ${injector_sources})
-    add_dependencies(injector json beast ${ASIO_IPFS_TARGET})
+    add_dependencies(injector json ${ASIO_IPFS_TARGET})
 
     target_link_libraries(injector
         ouiservice-i2p

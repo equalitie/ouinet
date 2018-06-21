@@ -14,6 +14,9 @@
 namespace ouinet {
 
 class GenericConnection {
+public:
+    using executor_type = asio::io_context::executor_type;
+
 private:
     template<class Token, class Ret>
     using Handler = typename asio::handler_type< Token
@@ -31,6 +34,7 @@ private:
 
     struct Base {
         virtual asio::io_service& get_io_service() = 0;
+        virtual executor_type     get_executor() = 0;
 
         virtual void read_impl (OnRead&&)  = 0;
         virtual void write_impl(OnWrite&&) = 0;
@@ -60,6 +64,11 @@ private:
         virtual asio::io_service& get_io_service() override
         {
             return _impl.get_io_service();
+        }
+
+        virtual executor_type get_executor() override
+        {
+            return _impl.get_executor();
         }
 
         void read_impl(OnRead&& on_read) override
@@ -102,6 +111,11 @@ public:
         return _impl->get_io_service();
     }
 
+    executor_type get_executor()
+    {
+        return _impl->get_executor();
+    }
+
     void close()
     {
         _impl->close();
@@ -114,13 +128,29 @@ public:
     {
         using namespace std;
 
-        Handler<Token, size_t> handler(forward<Token>(token));
-        Result<Token, size_t> result(handler);
+        namespace asio   = boost::asio;
+        namespace system = boost::system;
 
-        _impl->read_buffers.resize(distance(bs.begin(), bs.end()));
-        copy(bs.begin(), bs.end(), _impl->read_buffers.begin());
+        using Sig     = void(system::error_code, size_t);
+        using Result  = asio::async_result<Token, Sig>;
+        using Handler = typename Result::completion_handler_type;
 
-        _impl->read_impl(move(handler));
+        // XXX: Handler is non-copyable, but can we do this without allocation?
+        auto handler = make_shared<Handler>(forward<decltype(token)>(token));
+
+        Result result(*handler);
+
+        _impl->read_buffers.resize(distance( asio::buffer_sequence_begin(bs)
+                                           , asio::buffer_sequence_end(bs)));
+
+        copy( asio::buffer_sequence_begin(bs)
+            , asio::buffer_sequence_end(bs)
+            , _impl->read_buffers.begin());
+
+        _impl->read_impl([h = move(handler)]
+                         (const system::error_code& ec, size_t size) {
+                             (*h)(ec, size);
+                         });
 
         return result.get();
     }
@@ -132,13 +162,29 @@ public:
     {
         using namespace std;
 
-        Handler<Token, size_t> handler(forward<Token>(token));
-        Result<Token, size_t> result(handler);
+        namespace asio   = boost::asio;
+        namespace system = boost::system;
 
-        _impl->write_buffers.resize(distance(bs.begin(), bs.end()));
-        copy(bs.begin(), bs.end(), _impl->write_buffers.begin());
+        using Sig     = void(system::error_code, size_t);
+        using Result  = asio::async_result<Token, Sig>;
+        using Handler = typename Result::completion_handler_type;
 
-        _impl->write_impl(move(handler));
+        // XXX: Handler is non-copyable, but can we do this without allocation?
+        auto handler = make_shared<Handler>(forward<decltype(token)>(token));
+
+        Result result(*handler);
+
+        _impl->write_buffers.resize(distance( asio::buffer_sequence_begin(bs)
+                                            , asio::buffer_sequence_end(bs)));
+
+        copy( asio::buffer_sequence_begin(bs)
+            , asio::buffer_sequence_end(bs)
+            , _impl->write_buffers.begin());
+
+        _impl->write_impl([h = move(handler)]
+                          (const system::error_code& ec, size_t size) {
+                              (*h)(ec, size);
+                          });
 
         return result.get();
     }

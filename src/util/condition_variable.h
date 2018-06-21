@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include <boost/asio/io_service.hpp>
 #include <boost/asio/spawn.hpp>
 
 namespace ouinet {
