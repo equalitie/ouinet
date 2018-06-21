@@ -1,6 +1,6 @@
 #include "client_front_end.h"
 #include "generic_connection.h"
-#include <ipfs_cache/client.h>
+#include "cache/cache_client.h"
 #include <boost/optional/optional_io.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 
@@ -33,10 +33,12 @@ static Response redirect_back(const Request& req)
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
     res.set(http::field::content_type, "text/html");
     res.keep_alive(false);
-    http::dynamic_body::writer writer(res);
+
+    http::dynamic_body::reader reader(res, res.body());
     sys::error_code ec;
-    writer.put(asio::const_buffer(body.data(), body.size()), ec);
+    reader.put(asio::const_buffer(body.data(), body.size()), ec);
     assert(!ec);
+
     res.prepare_payload();
 
     return res;
@@ -86,7 +88,7 @@ static ostream& operator<<(ostream& os, const ClientFrontEnd::Task& task) {
 
 Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
                               , const Request& req
-                              , ipfs_cache::Client* cache_client)
+                              , CacheClient* cache_client)
 {
     Response res{http::status::ok, req.version()};
 
@@ -162,9 +164,9 @@ Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
     res.set(http::field::content_type, "text/html");
     res.keep_alive(false);
 
-    Response::body_type::writer writer(res);
+    Response::body_type::reader reader(res, res.body());
     sys::error_code ec;
-    writer.put(asio::buffer(ss.str()), ec);
+    reader.put(asio::buffer(ss.str()), ec);
     assert(!ec);
 
     res.prepare_payload();

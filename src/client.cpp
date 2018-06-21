@@ -10,9 +10,7 @@
 #include <fstream>
 #include <cstdlib>  // for atexit()
 
-#include <ipfs_cache/client.h>
-#include <ipfs_cache/error.h>
-
+#include "cache/cache_client.h"
 #include "namespaces.h"
 #include "fetch_http_page.h"
 #include "client_front_end.h"
@@ -120,7 +118,7 @@ private:
     asio::io_service& _ios;
     ClientConfig _config;
     std::unique_ptr<OuiServiceClient> _injector;
-    std::unique_ptr<ipfs_cache::Client> _ipfs_cache;
+    std::unique_ptr<CacheClient> _ipfs_cache;
 
     ClientFrontEnd _front_end;
     Signal<void()> _shutdown_signal;
@@ -565,7 +563,7 @@ void Client::State::setup_ipfs_cache()
         const string ipns = _config.ipns();
 
         {
-            Defer on_exit([&] { _is_ipns_being_setup = false; });
+            auto on_exit = defer([&] { _is_ipns_being_setup = false; });
 
             if (ipns.empty()) {
                 _ipfs_cache = nullptr;
@@ -586,14 +584,14 @@ void Client::State::setup_ipfs_cache()
 
             sys::error_code ec;
 
-            _ipfs_cache = ipfs_cache::Client::build(_ios
-                                                   , ipns
-                                                   , move(repo_root)
-                                                   , cancel
-                                                   , yield[ec]);
+            _ipfs_cache = CacheClient::build(_ios
+                                            , ipns
+                                            , move(repo_root)
+                                            , cancel
+                                            , yield[ec]);
 
             if (ec) {
-                cerr << "Failed to build ipfs_cache::Client: "
+                cerr << "Failed to build CacheClient: "
                      << ec.message()
                      << endl;
             }

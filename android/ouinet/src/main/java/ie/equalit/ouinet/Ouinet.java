@@ -3,6 +3,7 @@ package ie.equalit.ouinet;
 import android.content.Context;
 
 import android.net.wifi.WifiManager;
+import java.io.File;
 
 public class Ouinet {
     // Used to load the 'native-lib' library on application startup.
@@ -21,12 +22,16 @@ public class Ouinet {
     private Context _ctx;
     private WifiManager.MulticastLock _lock = null;
 
-    public Ouinet(Context ctx) {
+    public Ouinet(Context ctx, String ipns,
+                               String injector_ep,
+                               String credentials) {
         _ctx = ctx;
 
-        String ipns        = readIPNS();
-        String injector_ep = readInjectorEP();
-        String credentials = readCredentialsFor(injector_ep);
+        if (ipns        == null) ipns        = "";
+        if (injector_ep == null) injector_ep = "";
+        if (credentials == null) credentials = "";
+
+        new File(dir()).mkdirs();
 
         WifiManager wifi = (WifiManager)ctx.getSystemService(Context.WIFI_SERVICE);
         if (wifi != null){
@@ -34,75 +39,39 @@ public class Ouinet {
             _lock.acquire();
         }
 
-        nStartClient(_ctx.getFilesDir().getAbsolutePath(),
+        nStartClient(dir(),
                 injector_ep,
                 ipns,
                 credentials,
                 false);
     }
 
+    // Stop the internal ouinet/client threads. Once this function returns, the
+    // ouinet/client will have all of it's resources freed. It should be called
+    // no later than in Activity.onDestroy()
     public void stop() {
         nStopClient();
         if (_lock != null) { _lock.release(); }
     }
 
-    public void setInjectorEP(String endpoint) {
-        writeInjectorEP(endpoint);
-        nSetInjectorEP(endpoint);
-    }
-
+    // Set injector's IPNS (A.k.a. it's IPFS ID)
     public void setIPNS(String ipns) {
-        writeIPNS(ipns);
         nSetIPNS(ipns);
     }
 
-    public String getIPNS() {
-        return readIPNS();
-    }
-
-    public String getInjectorEndpoint() {
-        return readInjectorEP();
+    // Set injector endpoint. Can be either in the form IP:PORT or it can be an
+    // I2P address.
+    public void setInjectorEndpoint(String endpoint) {
+        nSetInjectorEP(endpoint);
     }
 
     public void setCredentialsFor(String injector, String credentials) {
-        writeCredentials(injector, credentials);
         nSetCredentialsFor(injector, credentials);
     }
 
-    public String getCredentialsFor(String injector) {
-        return readCredentialsFor(injector);
-    }
-
     //----------------------------------------------------------------
-    protected String dir() { return _ctx.getFilesDir().getAbsolutePath(); }
-
-    protected String config_ipns()        { return dir() + "/ipns.txt";        }
-    protected String config_injector()    { return dir() + "/injector.txt";    }
-    protected String config_credentials() { return dir() + "/credentials.txt"; }
-
-    protected void writeIPNS(String s)       { Util.saveToFile(_ctx, config_ipns(), s); }
-    protected void writeInjectorEP(String s) { Util.saveToFile(_ctx, config_injector(), s); }
-
-    protected String readIPNS()       { return Util.readFromFile(_ctx, config_ipns(), ""); }
-    protected String readInjectorEP() { return Util.readFromFile(_ctx, config_injector(), ""); }
-
-    protected void writeCredentials(String injector, String cred) {
-        Util.saveToFile(_ctx, config_credentials(), injector + "\n" + cred);
-    }
-
-    protected String readCredentialsFor(String injector) {
-        if (injector == null || injector.length() == 0) return "";
-
-        String content = Util.readFromFile(_ctx, config_credentials(), null);
-
-        if (content == null) { return ""; }
-
-        String[] lines = content.split("\\n");
-
-        if (lines.length != 2)          { return ""; }
-        if (!lines[0].equals(injector)) { return ""; }
-
-        return lines[1];
+    private String dir() {
+        return _ctx.getFilesDir().getAbsolutePath() + "/ouinet";
     }
 
     //----------------------------------------------------------------

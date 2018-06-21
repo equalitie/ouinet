@@ -1,4 +1,4 @@
-package ie.equalit.ouinet;
+package ie.equalit.ouinet.browser;
 
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
@@ -22,8 +22,8 @@ import com.google.zxing.integration.android.IntentIntegrator;
 import android.content.Intent;
 import android.widget.Toast;
 
-import ie.equalit.ouinet.OuiWebViewClient;
-import ie.equalit.ouinet.Util;
+import ie.equalit.ouinet.browser.OuiWebViewClient;
+import ie.equalit.ouinet.browser.Util;
 import ie.equalit.ouinet.Ouinet;
 
 interface OnInput {
@@ -48,6 +48,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     protected void loadConfigFromQR() {
+        // Start the QR config reader intent.
         IntentIntegrator integrator = new IntentIntegrator(this);
         integrator.initiateScan();
     }
@@ -57,6 +58,14 @@ public class MainActivity extends AppCompatActivity {
         Toast.makeText(this, s, Toast.LENGTH_LONG).show();
     }
 
+    // Parse config string in the form:
+    //
+    //     ipns=<IPNS-STRING-STARTING-WITH-Qm>
+    //     injector=<IP_AND_PORT-OR-I2P_DESTINATION>
+    //     credentials=<USERNAME:PASSWORD>
+    //
+    // Note that the config doesn't have to contain all of the entries, but the
+    // 'credentials' entry must be used with the `injector` entry.
     protected void applyConfig(String config) {
         String[] lines = config.split("[\\r?\\n]+");
 
@@ -76,11 +85,13 @@ public class MainActivity extends AppCompatActivity {
             Util.log("key: " + key + " value: " + val);
             if (key.equalsIgnoreCase("ipns")) {
                 toast("Setting IPNS to: " + val);
+                writeIPNS(val);
                 _ouinet.setIPNS(val);
             }
             else if (key.equalsIgnoreCase("injector")) {
                 toast("Setting injector to: " + val);
-                _ouinet.setInjectorEP(val);
+                writeInjectorEP(val);
+                _ouinet.setInjectorEndpoint(val);
                 injector = val;
             }
             else if (key.equalsIgnoreCase("credentials")) {
@@ -96,6 +107,7 @@ public class MainActivity extends AppCompatActivity {
                 }
                 else {
                     toast("Setting up credentials");
+                    writeCredentials(injector, credentials);
                     _ouinet.setCredentialsFor(injector, credentials);
                 }
             }
@@ -119,7 +131,11 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        _ouinet = new Ouinet(this);
+        String ipns        = readIPNS();
+        String injector_ep = readInjectorEP();
+        String credentials = readCredentialsFor(injector_ep);
+
+        _ouinet = new Ouinet(this, ipns, injector_ep, credentials);
 
         setContentView(R.layout.activity_main);
 
@@ -138,6 +154,7 @@ public class MainActivity extends AppCompatActivity {
         webSettings.setDefaultTextEncodingName("utf-8");
 
         _webViewClient = new OuiWebViewClient(this, _ouinet);
+
         _webView.setWebViewClient(_webViewClient);
 
         go_home();
@@ -170,20 +187,22 @@ public class MainActivity extends AppCompatActivity {
     }
 
     protected void showChangeInjectorDialog() {
-        String ep = _ouinet.getInjectorEndpoint();
+        String ep = readInjectorEP();
 
         showDialog("Injector endpoint", ep, new OnInput() {
             @Override
             public void call(String input) {
-                _ouinet.setInjectorEP(input);
+                writeInjectorEP(input);
+                _ouinet.setInjectorEndpoint(input);
             }
         });
     }
 
     protected void showChangeIPNSDialog() {
-        showDialog("IPNS", _ouinet.getIPNS(), new OnInput() {
+        showDialog("IPNS", readIPNS(), new OnInput() {
             @Override
             public void call(String input) {
+                writeIPNS(input);
                 _ouinet.setIPNS(input);
             }
         });
@@ -247,4 +266,40 @@ public class MainActivity extends AppCompatActivity {
             super.onBackPressed();
         }
     }
+
+    //----------------------------------------------------------------
+    private String dir() {
+        return getFilesDir().getAbsolutePath();
+    }
+
+    private String config_ipns()        { return dir() + "/ipns.txt";        }
+    private String config_injector()    { return dir() + "/injector.txt";    }
+    private String config_credentials() { return dir() + "/credentials.txt"; }
+
+    private void writeIPNS(String s)       { Util.saveToFile(this, config_ipns(), s); }
+    private void writeInjectorEP(String s) { Util.saveToFile(this, config_injector(), s); }
+
+    public String readIPNS()       { return Util.readFromFile(this, config_ipns(), ""); }
+    public String readInjectorEP() { return Util.readFromFile(this, config_injector(), ""); }
+
+    private void writeCredentials(String injector, String cred) {
+        Util.saveToFile(this, config_credentials(), injector + "\n" + cred);
+    }
+
+    private String readCredentialsFor(String injector) {
+        if (injector == null || injector.length() == 0) return "";
+
+        String content = Util.readFromFile(this, config_credentials(), null);
+
+        if (content == null) { return ""; }
+
+        String[] lines = content.split("\\n");
+
+        if (lines.length != 2)          { return ""; }
+        if (!lines[0].equals(injector)) { return ""; }
+
+        return lines[1];
+    }
+
+    //----------------------------------------------------------------
 }

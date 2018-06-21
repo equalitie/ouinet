@@ -1,5 +1,7 @@
-package ie.equalit.ouinet;
+package ie.equalit.ouinet.browser;
 
+import ie.equalit.ouinet.Ouinet;
+import ie.equalit.ouinet.browser.MainActivity;
 import android.content.Context;
 
 import android.webkit.WebViewClient;
@@ -25,13 +27,13 @@ import okhttp3.Response;
 
 class OuiWebViewClient extends WebViewClient {
     private Ouinet _ouinet;
-    private Context _context;
+    private MainActivity _activity;
     private boolean _showClientFrontEnd = false;
 
-    public OuiWebViewClient(Context context, Ouinet ouinet) {
+    public OuiWebViewClient(MainActivity activity, Ouinet ouinet) {
         super();
         _ouinet  = ouinet;
-        _context = context;
+        _activity = activity;
     }
 
     public void toggleShowClientFrontend() {
@@ -45,6 +47,11 @@ class OuiWebViewClient extends WebViewClient {
             return super.shouldInterceptRequest(view, url);
 
         try {
+            // The ouinet/client proxy can serve a simple web page with a
+            // summary of its internal state. We call this web page "Client's
+            // front-end". To tell ouinet/client to show us this page we insert
+            // the 'X-Oui-Destination' HTTP header field into the request. When
+            // this is the case, the ouinet/client will ignore the URL.
             OkHttpClient httpClient = new OkHttpClient();
 
             Request request = new Request.Builder()
@@ -64,26 +71,34 @@ class OuiWebViewClient extends WebViewClient {
         }
     }
 
+    // An injector may be configured to require HTTP Authentication
+    //
+    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Authentication
+    //
+    // If this client hasn't authenticated yet, the code below will
+    // create a new dialog box asking for creadentials. Note that
+    // these credentials may be set using QR codes as well. For more
+    // info on the latter look into MainActivity.applyConfig.
     @Override
     public void onReceivedHttpAuthRequest(WebView view,
                                           final HttpAuthHandler handler,
                                           String host,
                                           String realm)
     {
-        final String cur_injector = _ouinet.getInjectorEndpoint();
+        final String cur_injector = _activity.readInjectorEP();
 
         if (cur_injector == null || cur_injector.length() == 0) {
             handler.cancel();
             return;
         }
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(_context);
+        AlertDialog.Builder builder = new AlertDialog.Builder(_activity);
 
         builder.setTitle("Credentials required for Ouinet injector");
         builder.setMessage("Insert credentials for " + cur_injector +
                            " in the <USENAME>:<PASSWORD> format");
 
-        final EditText credentials = new EditText(_context);
+        final EditText credentials = new EditText(_activity);
 
         credentials.setInputType(InputType.TYPE_CLASS_TEXT);
 

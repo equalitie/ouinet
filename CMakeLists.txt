@@ -26,21 +26,9 @@ add_definitions(-DBOOST_COROUTINES_NO_DEPRECATION_WARNING)
 add_definitions(-DBOOST_COROUTINE_NO_DEPRECATION_WARNING)
 
 ################################################################################
-externalproject_add(beast
-    GIT_REPOSITORY https://github.com/inetic/beast
-    UPDATE_COMMAND ""
-    CONFIGURE_COMMAND ""
-    INSTALL_COMMAND ""
-    BUILD_COMMAND ""
-    PREFIX "beast")
+option(ASIO_IPFS_WITH_EXAMPLE_BINARIES "" OFF)
 
-set(BEAST_DIR "${CMAKE_BINARY_DIR}/beast/src/beast")
-
-################################################################################
-option(IPFS_CACHE_WITH_EXAMPLE_BINARIES "" OFF)
-
-#add_subdirectory(./modules/i2pouiservice)
-add_subdirectory(./modules/ipfs-cache)
+add_subdirectory(./modules/asio-ipfs)
 add_subdirectory(./src/ouiservice/i2p)
 
 ################################################################################
@@ -61,11 +49,21 @@ find_package(Threads)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -Wall -O0 -ggdb ${SANITIZE}")
 
 ################################################################################
+externalproject_add(json
+    # TODO: We only really need to download one header file.
+    URL https://github.com/nlohmann/json/archive/v2.1.1.tar.gz
+    BUILD_COMMAND ""
+    UPDATE_COMMAND ""
+    INSTALL_COMMAND ""
+    PREFIX json)
+
+set(JSON_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/json/src/json/src")
+
+################################################################################
 include_directories(
     "${Boost_INCLUDE_DIR}"
-    "${BEAST_DIR}/include"
-    "${IPFS_CACHE_INCLUDE_DIR}"
-    "${IPFS_CACHE_JSON_INCLUDE_DIR}"
+    "${ASIO_IPFS_INCLUDE_DIR}"
+    "${JSON_INCLUDE_DIR}"
 )
 
 file(GLOB client_sources
@@ -78,6 +76,7 @@ file(GLOB client_sources
     "./src/ouiservice.cpp"
     "./src/ouiservice/tcp.cpp"
     "./src/logger.cpp"
+    "./src/cache/*.cpp"
 )
 
 if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
@@ -95,18 +94,16 @@ target_link_libraries(client
     ${log-lib}
     ouiservice-i2p
     ${Boost_LIBRARIES}
-    ${IPFS_CACHE_LIBRARIES}
+    ${ASIO_IPFS_LIBRARIES}
 )
 
-add_dependencies(client beast ${IPFS_CACHE_TARGET})
+add_dependencies(client json ${ASIO_IPFS_TARGET})
 
 ################################################################################
 if (WITH_INJECTOR)
     include_directories(
         "${Boost_INCLUDE_DIR}"
-        "${BEAST_DIR}/include"
-        "${IPFS_CACHE_INCLUDE_DIR}"
-        "${IPFS_CACHE_JSON_INCLUDE_DIR}"
+        "${ASIO_IPFS_INCLUDE_DIR}"
     )
 
     file(GLOB injector_sources
@@ -115,18 +112,39 @@ if (WITH_INJECTOR)
         "./src/cache_control.cpp"
         "./src/ouiservice.cpp"
         "./src/ouiservice/tcp.cpp"
-          "./src/logger.cpp"
+        "./src/logger.cpp"
+        "./src/cache/*.cpp"
     )
 
     add_executable(injector ${injector_sources})
-    add_dependencies(injector beast ${IPFS_CACHE_TARGET})
+    add_dependencies(injector json ${ASIO_IPFS_TARGET})
 
     target_link_libraries(injector
         ouiservice-i2p
         ${Boost_LIBRARIES}
-        ${IPFS_CACHE_LIBRARIES}
+        ${ASIO_IPFS_LIBRARIES}
     )
 endif() # if WITH_INJECTOR
+
+################################################################################
+# Temporary, until we have proper dht tests. At which point it should move
+# to the ./test/ directory.
+
+if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
+
+    file(GLOB test_dht_sources
+        "./src/bittorrent/*.cpp"
+    )
+
+    add_executable(test-dht ${test_dht_sources})
+
+    target_include_directories(test-dht PUBLIC
+        "${Boost_INCLUDE_DIR}"
+    )
+
+    target_link_libraries(test-dht ${Boost_LIBRARIES})
+
+endif()
 
 ################################################################################
 # Config file directory

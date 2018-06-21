@@ -11,7 +11,7 @@
 #include <string>
 #include <cstdlib>  // for atexit()
 
-#include <ipfs_cache/injector.h>
+#include "cache/cache_injector.h"
 
 #include "namespaces.h"
 #include "util.h"
@@ -110,7 +110,7 @@ public:
     // TODO: Replace this with cancellation support in which fetch_ operations
     // get a signal parameter
     InjectorCacheControl( asio::io_service& ios
-                        , unique_ptr<ipfs_cache::Injector>& injector
+                        , unique_ptr<CacheInjector>& injector
                         , Signal<void()>& abort_signal)
         : ios(ios)
         , injector(injector)
@@ -196,7 +196,7 @@ private:
 
 private:
     asio::io_service& ios;
-    unique_ptr<ipfs_cache::Injector>& injector;
+    unique_ptr<CacheInjector>& injector;
     CacheControl cc;
     //RateLimiter _rate_limiter;
 };
@@ -205,7 +205,7 @@ private:
 static
 void serve( InjectorConfig& config
           , GenericConnection con
-          , unique_ptr<ipfs_cache::Injector>& injector
+          , unique_ptr<CacheInjector>& injector
           , Signal<void()>& close_connection_signal
           , asio::yield_context yield)
 {
@@ -249,7 +249,7 @@ void serve( InjectorConfig& config
 static
 void listen( InjectorConfig& config
            , OuiServiceServer& proxy_server
-           , unique_ptr<ipfs_cache::Injector>& ipfs_cache_injector
+           , unique_ptr<CacheInjector>& cache_injector
            , Signal<void()>& shutdown_signal
            , asio::yield_context yield)
 {
@@ -281,14 +281,14 @@ void listen( InjectorConfig& config
 
         asio::spawn(ios, [
             connection = std::move(connection),
-            &ipfs_cache_injector,
+            &cache_injector,
             &shutdown_signal,
             &config,
             lock = shutdown_connections.lock()
         ] (boost::asio::yield_context yield) mutable {
             serve( config
                  , std::move(connection)
-                 , ipfs_cache_injector
+                 , cache_injector
                  , shutdown_signal
                  , yield);
         });
@@ -339,16 +339,16 @@ int main(int argc, const char* argv[])
 
     Signal<void()> shutdown_signal;
 
-    auto ipfs_cache_injector
-        = make_unique<ipfs_cache::Injector>(ios, (config.repo_root()/"ipfs").native());
+    auto cache_injector
+        = make_unique<CacheInjector>(ios, (config.repo_root()/"ipfs").native());
 
     auto shutdown_ipfs_slot = shutdown_signal.connect([&] {
-        ipfs_cache_injector = nullptr;
+        cache_injector = nullptr;
     });
 
     // Although the IPNS ID is already in IPFS's config file,
     // this just helps put all info relevant to the user right in the repo root.
-    auto ipns_id = ipfs_cache_injector->ipns_id();
+    auto ipns_id = cache_injector->id();
     cout << "IPNS DB: " << ipns_id << endl;
     util::create_state_file(config.repo_root()/"cache-ipns", ipns_id);
 
@@ -377,13 +377,13 @@ int main(int argc, const char* argv[])
 
     asio::spawn(ios, [
         &proxy_server,
-        &ipfs_cache_injector,
+        &cache_injector,
         &config,
         &shutdown_signal
     ] (asio::yield_context yield) {
         listen( config
               , proxy_server
-              , ipfs_cache_injector
+              , cache_injector
               , shutdown_signal
               , yield);
     });
