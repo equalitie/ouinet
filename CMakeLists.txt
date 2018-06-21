@@ -129,17 +129,21 @@ endif() # if WITH_INJECTOR
 # Temporary, until we have proper dht tests. At which point it should move
 # to the ./test/ directory.
 
-file(GLOB test_dht_sources
-    "./src/bittorrent/*.cpp"
-)
+if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
 
-add_executable(test-dht ${test_dht_sources})
+    file(GLOB test_dht_sources
+        "./src/bittorrent/*.cpp"
+    )
 
-target_include_directories(test-dht PUBLIC
-    "${Boost_INCLUDE_DIR}"
-)
+    add_executable(test-dht ${test_dht_sources})
 
-target_link_libraries(test-dht ${Boost_LIBRARIES})
+    target_include_directories(test-dht PUBLIC
+        "${Boost_INCLUDE_DIR}"
+    )
+
+    target_link_libraries(test-dht ${Boost_LIBRARIES})
+
+endif()
 
 ################################################################################
 # Config file directory
