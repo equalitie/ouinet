@@ -24,8 +24,8 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /usr/local/src
-ADD https://downloads.sourceforge.net/project/boost/boost/1.67.0/boost_1_67_0.tar.bz2 ./
-RUN tar -xf boost_1_67_0.tar.bz2 \
+RUN wget "https://downloads.sourceforge.net/project/boost/boost/1.67.0/boost_1_67_0.tar.bz2" \
+ && tar -xf boost_1_67_0.tar.bz2 \
  && cd boost_1_67_0 \
  && ./bootstrap.sh \
  && ./b2 -j `nproc` -d+0 --link=shared \
