@@ -8,6 +8,7 @@
 #include <boost/asio/ssl/stream.hpp>
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
+#include <openssl/ssl.h>
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -130,7 +131,12 @@ GenericConnection ssl_client_handshake( GenericConnection&& con
     sys::error_code ec;
 
     auto ssl_sock = make_unique<ssl::stream<GenericConnection>>(move(con), ssl_context);
-    ssl_sock->async_handshake(ssl::stream_base::client, yield[ec]);
+    // Set Server Name Indication (SNI).
+    // As seen in ``http_client_async_ssl.cpp`` Boost Beast example.
+    if (!::SSL_set_tlsext_host_name(ssl_sock->native_handle(), host.c_str()))
+        ec = {static_cast<int>(::ERR_get_error()), asio::error::get_ssl_category()};
+    if (!ec)
+        ssl_sock->async_handshake(ssl::stream_base::client, yield[ec]);
     if (ec) return or_throw<GenericConnection>(yield, ec);
 
     static const auto ssl_shutter = [](ssl::stream<GenericConnection>& s) {
