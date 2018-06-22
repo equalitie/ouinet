@@ -335,29 +335,38 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
 }
 
 
+static
+asio::ip::udp::endpoint resolve( asio::io_context& ioc
+                               , const std::string& addr
+                               , const std::string& port
+                               , asio::yield_context yield)
+{
+    using asio::ip::udp;
+
+    sys::error_code ec;
+
+    udp::resolver::query bootstrap_query(addr, port);
+    udp::resolver bootstrap_resolver(ioc);
+    udp::resolver::iterator it = bootstrap_resolver.async_resolve(bootstrap_query, yield[ec]);
+
+    if (ec) return or_throw<udp::endpoint>(yield, ec);
+
+    while (it != udp::resolver::iterator()) {
+        return it->endpoint();
+    }
+
+    return or_throw<udp::endpoint>(yield, asio::error::not_found);
+}
 
 void dht::DhtNode::bootstrap(asio::yield_context yield)
 {
     sys::error_code ec;
 
-    bool bootstrap_endpoint_found = false;
-    udp::endpoint bootstrap_endpoint;
-
-    udp::resolver::query bootstrap_query("router.bittorrent.com", "6881");
     // Other servers include router.utorrent.com:6881 and dht.transmissionbt.com:6881
-    udp::resolver bootstrap_resolver(_ios);
-    udp::resolver::iterator it = bootstrap_resolver.async_resolve(bootstrap_query, yield[ec]);
+    auto bootstrap_ep = resolve(_ios, "router.bittorrent.com", "6881", yield[ec]);
+
     if (ec) {
         std::cout << "Unable to resolve bootstrap server, giving up\n";
-        return;
-    }
-    while (it != udp::resolver::iterator()) {
-        bootstrap_endpoint = it->endpoint();
-        bootstrap_endpoint_found = true;
-        ++it;
-    }
-    if (!bootstrap_endpoint_found) {
-        std::cout << "Bootstrap server does not resolve, giving up\n";
         return;
     }
 
@@ -366,7 +375,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
 
     BencodedMap initial_ping_reply;
     send_query_await_reply(
-        bootstrap_endpoint,
+        bootstrap_ep,
         boost::none,
         "ping",
         initial_ping_message,
@@ -405,7 +414,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
      */
 
     std::vector<udp::endpoint> bootstrap_endpoints;
-    bootstrap_endpoints.push_back(bootstrap_endpoint);
+    bootstrap_endpoints.push_back(bootstrap_ep);
     /*
      * Lookup our own ID, constructing a basic path to ourselves.
      */
