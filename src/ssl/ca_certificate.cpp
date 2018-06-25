@@ -22,6 +22,8 @@ using namespace ouinet;
 // Changes made:
 //
 //     * Changed the `num` parameter to RSA_generate_key from 512 to 2048
+//     * Use RSA_generate_key_ex instead of deprecated RSA_generate_key_
+//       with hints from <https://stackoverflow.com/a/16393292>
 //     * Replaced EVP_md5 for EVP_sha256 in X509_sign
 
 
@@ -37,8 +39,6 @@ using namespace ouinet;
 // To do it:
 //
 //     https://stackoverflow.com/a/12094032/273348
-//
-// TODO: The same page says that RSA_generate_key is deprecated.
 //
 
 
@@ -69,9 +69,30 @@ CACertificate::CACertificate()
     , _next_serial_number(std::time(nullptr) * CERT_SERNUM_SCALE)
 {
     {
-        RSA* rsa = RSA_generate_key(2048, RSA_F4, nullptr, nullptr);
+        RSA* rsa = RSA_new();
+        if (!rsa) {
+            throw runtime_error("Failed to allocate new RSA key");
+        }
+
+        BIGNUM* exp = BN_new();
+        if (!exp) {
+            RSA_free(rsa);
+            throw runtime_error("Failed to allocate exponent");
+        }
+        // Exponent and modulus size below as recommended by
+        // RSA_generate_key documentation.
+        BN_set_word(exp, 65537);
+
+        if (!RSA_generate_key_ex(rsa, 2048, exp, nullptr)) {
+            BN_free(exp);
+            RSA_free(rsa);
+            throw runtime_error("Failed to generate new RSA key");
+        }
+
+        BN_free(exp);  // no longer used
 
         if (!EVP_PKEY_assign_RSA(_pk, rsa)) {
+            RSA_free(rsa);
             throw runtime_error("Failed in EVP_PKEY_assign_RSA");
         }
     }
