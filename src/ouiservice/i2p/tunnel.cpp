@@ -47,7 +47,7 @@ void Tunnel::wait_to_get_ready(boost::asio::yield_context yield) {
 
   assert(!_ready_condition);
   _ready_condition = make_unique<ConditionVariable>(_ios);
-  auto on_exit = Defer{[this, wd] { if (!*wd) _ready_condition = nullptr; }};
+  auto on_exit = defer([this, wd] { if (!*wd) _ready_condition = nullptr; });
 
     // Wait till we find a route to the service and tunnel is ready then try to
     // acutally connect and then unblock
