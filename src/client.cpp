@@ -6,6 +6,9 @@
 #include <boost/asio/connect.hpp>
 #include <boost/asio/signal_set.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include <boost/asio/ssl.hpp>
+#include <boost/asio/ssl/stream.hpp>
+#include <lrucache.hpp>
 #include <iostream>
 #include <fstream>
 #include <cstdlib>  // for atexit()
@@ -27,6 +30,8 @@
 #include "client.h"
 #include "authenticate.h"
 #include "defer.h"
+#include "ssl/ca_certificate.h"
+#include "ssl/dummy_certificate.h"
 
 #ifndef __ANDROID__
 #  include "force_exit_on_signal.h"
@@ -45,12 +50,16 @@ using namespace ouinet;
 
 namespace posix_time = boost::posix_time;
 
-using tcp         = asio::ip::tcp;
-using Request     = http::request<http::string_body>;
-using Response    = http::response<http::dynamic_body>;
+using tcp      = asio::ip::tcp;
+using Request  = http::request<http::string_body>;
+using Response = http::response<http::dynamic_body>;
 using boost::optional;
+namespace ssl = boost::asio::ssl;
 
 static const boost::filesystem::path OUINET_PID_FILE = "pid";
+static const boost::filesystem::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
+static const boost::filesystem::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
+static const boost::filesystem::path OUINET_CA_DH_FILE = "ssl-ca-dh.pem";
 
 //------------------------------------------------------------------------------
 #define ASYNC_DEBUG(code, ...) [&] () mutable {\
@@ -65,7 +74,11 @@ class Client::State : public enable_shared_from_this<Client::State> {
 public:
     State(asio::io_service& ios)
         : _ios(ios)
-    {}
+        // A certificate chain with OUINET_CA + SUBJECT_CERT
+        // can be around 2 KiB, so this would be around 2 MiB.
+        // TODO: Fine tune if necessary.
+        , _ssl_certificate_cache(1000)
+    { }
 
     void start(int argc, char* argv[]);
 
@@ -78,7 +91,11 @@ public:
     void set_injector(string);
 
 private:
-    void serve_request(GenericConnection& con, asio::yield_context yield);
+    GenericConnection ssl_mitm_handshake( GenericConnection&&
+                                        , const Request&
+                                        , asio::yield_context);
+
+    void serve_request(GenericConnection&& con, asio::yield_context yield);
 
     void handle_connect_request( GenericConnection& client_c
                                , const Request& req
@@ -115,6 +132,8 @@ private:
 
 private:
     asio::io_service& _ios;
+    std::unique_ptr<CACertificate> _ca_certificate;
+    cache::lru_cache<string, string> _ssl_certificate_cache;
     ClientConfig _config;
     std::unique_ptr<OuiServiceClient> _injector;
     std::unique_ptr<CacheClient> _ipfs_cache;
@@ -351,7 +370,8 @@ Response Client::State::fetch_fresh( const Request& request
             case responder::_front_end: {
                 return _front_end.serve( _config.injector_endpoint()
                                        , request
-                                       , _ipfs_cache.get());
+                                       , _ipfs_cache.get()
+                                       , *_ca_certificate);
             }
         }
     }
@@ -413,7 +433,98 @@ Response bad_gateway(const Request& req)
 }
 
 //------------------------------------------------------------------------------
-void Client::State::serve_request( GenericConnection& con
+void setup_ssl_context( ssl::context& ssl_context
+                      , const string& cert_chain
+                      , const string& private_key
+                      , const string& dh)
+{
+    ssl_context.set_options( ssl::context::default_workarounds
+                           | ssl::context::no_sslv2
+                           | ssl::context::single_dh_use);
+
+    ssl_context.use_certificate_chain(
+            asio::buffer(cert_chain.data(), cert_chain.size()));
+
+    ssl_context.use_private_key( asio::buffer( private_key.data()
+                                             , private_key.size())
+                               , ssl::context::file_format::pem);
+
+    ssl_context.use_tmp_dh(asio::buffer(dh.data(), dh.size()));
+
+    ssl_context.set_password_callback(
+        [](std::size_t, asio::ssl::context_base::password_purpose)
+        {
+            assert(0 && "TODO: Not yet supported");
+            return "";
+        });
+}
+
+static
+string base_domain_from_target(const beast::string_view& target)
+{
+    auto full_host = target.substr(0, target.rfind(':'));
+    size_t dot0, dot1 = 0;
+    if ((dot0 = full_host.find('.')) != full_host.rfind('.'))
+        // Two different dots were found
+        // (e.g. "www.example.com" but not "localhost" or "example.com").
+        dot1 = dot0 + 1;  // skip first component and dot (e.g. "www.")
+    return full_host.substr(dot1).to_string();
+}
+
+//------------------------------------------------------------------------------
+GenericConnection Client::State::ssl_mitm_handshake( GenericConnection&& con
+                                                   , const Request& con_req
+                                                   , asio::yield_context yield)
+{
+    ssl::context ssl_context{ssl::context::tls_server};
+
+    // TODO: We really should be waiting for
+    // the TLS Client Hello message to arrive at the clear text connection
+    // (after we send back 200 OK),
+    // then retrieve the value of the Server Name Indication (SNI) field
+    // and rewind the Hello message,
+    // but for the moment we will assume that the browser sends
+    // a host name instead of an IP address or its reverse resolution.
+    auto base_domain = base_domain_from_target(con_req.target());
+
+    string crt_chain;
+    try {
+        crt_chain = _ssl_certificate_cache.get(base_domain);
+    } catch(const std::range_error&) {
+        DummyCertificate dummy_crt(*_ca_certificate, base_domain);
+
+        crt_chain = dummy_crt.pem_certificate()
+                  + _ca_certificate->pem_certificate();
+
+        _ssl_certificate_cache.put(move(base_domain), move(crt_chain));
+    }
+
+    setup_ssl_context( ssl_context
+                     , crt_chain
+                     , _ca_certificate->pem_private_key()
+                     , _ca_certificate->pem_dh_param());
+
+    // Send back OK to let the UA know we have the "tunnel"
+    http::response<http::string_body> res{http::status::ok, con_req.version()};
+    http::async_write(con, res, yield);
+
+    sys::error_code ec;
+
+    auto ssl_sock = make_unique<ssl::stream<GenericConnection>>(move(con), ssl_context);
+    ssl_sock->async_handshake(ssl::stream_base::server, yield[ec]);
+    if (ec) return or_throw<GenericConnection>(yield, ec);
+
+    static const auto ssl_shutter = [](ssl::stream<GenericConnection>& s) {
+        // Just close the underlying connection
+        // (TLS has no message exchange for shutdown).
+        s.next_layer().close();
+    };
+
+    return GenericConnection(move(ssl_sock), move(ssl_shutter));
+}
+
+//------------------------------------------------------------------------------
+void Client::State::serve_request( GenericConnection&& con
                                  , asio::yield_context yield)
 {
 
@@ -485,6 +596,10 @@ void Client::State::serve_request( GenericConnection& con
              , {true, queue<responder>({responder::injector})} ),
     });
 
+    // Is MitM active?
+    bool mitm(false);
+    // Saved host/port from CONNECT request.
+    string connect_hp;
     // Process the different requests that may come over the same connection.
     for (;;) {  // continue for next request; break for no more requests
         Request req;
@@ -495,22 +610,55 @@ void Client::State::serve_request( GenericConnection& con
         if (ec == http::error::end_of_stream) break;
         if (ec) return fail(ec, "read");
 
+        // Requests in the encrypted channel are not proxy-like
+        // so the target is not "http://example.com/foo" but just "/foo".
+        // We expand the target again with the ``Host:`` header
+        // (or the CONNECT target if the header is missing in HTTP/1.0)
+        // so that "/foo" becomes "https://example.com/foo".
+        if (mitm)
+            req.target( string("https://")
+                      + ( (req[http::field::host].length() > 0)
+                          ? req[http::field::host].to_string()
+                          : connect_hp)
+                      + req.target().to_string());
         cout << "Received request for: " << req.target() << endl;
 
-        // Attempt connection to origin for CONNECT requests
-        if (req.method() == http::verb::connect) {
-            if (_config.enable_http_connect_requests()) {
-                ASYNC_DEBUG( handle_connect_request(con, req, yield)
-                           , "Connect ", req.target());
+        // Perform MitM for CONNECT requests (to be able to see encrypted requests)
+        if (!mitm && req.method() == http::verb::connect) {
+            try {
+                // Subsequent access to the connection will use the encrypted channel.
+                con = ssl_mitm_handshake(move(con), req, yield);
             }
-            else {
-                auto res = bad_gateway(req);
-                http::async_write(con, res, yield[ec]);
+            catch(const std::exception& e) {
+                cerr << "Mitm exception: " << e.what() << endl;
+                return;
             }
-
-            return;
+            mitm = true;
+            // Save CONNECT target (minus standard HTTPS port ``:443`` if present)
+            // in case of subsequent HTTP/1.0 requests with no ``Host:`` header.
+            auto port_pos = max( req.target().length() - 4 /* strlen(":443") */
+                               , string::npos);
+            connect_hp = req.target()
+                // Do not to hit ``:443`` inside of an IPv6 address.
+                .substr(0, req.target().rfind(":443", port_pos))
+                .to_string();
+            // Go for requests in the encrypted channel.
+            continue;
         }
 
+        // TODO: If an HTTPS request contains any private data (cookies, GET,
+        // POST arguments...) it should be either routed to the Origin or a
+        // Proxy (which may be the injector) using a CONNECT request (as is
+        // done in the handle_connect_request function).
+
+        //if (_config.enable_http_connect_requests()) {
+        //    ASYNC_DEBUG( handle_connect_request(con, req, yield)
+        //               , "Connect ", req.target());
+        //}
+        //else {
+        //    auto res = bad_gateway(req);
+        //    http::async_write(con, res, yield[ec]);
+        //}
         request_config = route_choose_config(req, matches, default_request_config);
 
         auto res = ASYNC_DEBUG( cache_control.fetch(req, yield[ec])
@@ -695,6 +843,33 @@ void Client::State::start(int argc, char* argv[])
     _pid_file = make_unique<util::PidFile>(pid_path);
 #endif
 
+#ifndef __ANDROID__
+    auto ca_cert_path = _config.repo_root() / OUINET_CA_CERT_FILE;
+    auto ca_key_path = _config.repo_root() / OUINET_CA_KEY_FILE;
+    auto ca_dh_path = _config.repo_root() / OUINET_CA_DH_FILE;
+    if (exists(ca_cert_path) && exists(ca_key_path) && exists(ca_dh_path)) {
+        cout << "Loading existing CA certificate..." << endl;
+        auto read_pem = [](auto path) {
+            std::stringstream ss;
+            ss << boost::filesystem::ifstream(path).rdbuf();
+            return ss.str();
+        };
+        auto cert = read_pem(ca_cert_path);
+        auto key = read_pem(ca_key_path);
+        auto dh = read_pem(ca_dh_path);
+        _ca_certificate = make_unique<CACertificate>(cert, key, dh);
+    } else {
+        cout << "Generating and storing CA certificate..." << endl;
+        _ca_certificate = make_unique<CACertificate>();
+        boost::filesystem::ofstream(ca_cert_path)
+            << _ca_certificate->pem_certificate();
+        boost::filesystem::ofstream(ca_key_path)
+            << _ca_certificate->pem_private_key();
+        boost::filesystem::ofstream(ca_dh_path)
+            << _ca_certificate->pem_dh_param();
+    }
+#endif
+
     asio::spawn
         ( _ios
         , [this, self = shared_from_this()]
@@ -714,7 +889,7 @@ void Client::State::start(int argc, char* argv[])
                         , _config.local_endpoint()
                         , [this, self]
                           (GenericConnection c, asio::yield_context yield) {
-                      serve_request(c, yield);
+                      serve_request(move(c), yield);
                   });
           });
 
@@ -743,7 +918,8 @@ void Client::State::start(int argc, char* argv[])
 
                         auto rs = _front_end.serve( _config.injector_endpoint()
                                                   , rq
-                                                  , _ipfs_cache.get());
+                                                  , _ipfs_cache.get()
+                                                  , *_ca_certificate);
 
                         http::async_write(c, rs, yield[ec]);
                   });
