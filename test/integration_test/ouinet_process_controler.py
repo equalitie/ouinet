@@ -71,6 +71,7 @@ class OuinetProcess(object):
         # in case the communication process protocol is not explicitly set 
         # starts a default process protocol to check on Fatal errors
         self._has_started = False
+        self._term_signal_sent = False
         self.setup_config()
 
     def setup_config(self):
@@ -128,21 +129,28 @@ class OuinetProcess(object):
 
         # we add a twisted timer to kill the process after timeout
         logging.debug(self.config.app_name + " times out in " + str(self.config.timeout) + " seconds")
-        self.timeout_killer = reactor.callLater(self.config.timeout, self.stop)
+        self.timeout_killer = reactor.callLater(self.config.timeout, self.send_term_signal)
 
         # we *might* need to make sure that the process has ended before
         # ending the test because Twisted Trial might get mad otherwise
         self.proc_end = defer.Deferred()
         self._proc_protocol.onExit = self.proc_end
 
+    def send_term_signal(self):
+        if not self._term_signal_sent:
+            self._term_signal_sent = True
+            self._proc.signalProcess("TERM")
+
     def stop(self):
         if self._has_started: # stop only if started
             self._has_started = False
             logging.debug("process " + self.config.app_name + " stopping")
+
             if self.timeout_killer.active():
                 self.timeout_killer.cancel()
+
+            self.send_term_signal()
             self._proc_protocol.transport.loseConnection()
-            self._proc.signalProcess("TERM")
 
 class OuinetClient(OuinetProcess):
     def __init__(self, client_config, ready_deferred):
