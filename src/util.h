@@ -5,13 +5,13 @@
 #include <unistd.h>  // for getpid()
 #include <fstream>
 #include <string>
+#include <regex>
 
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/beast/http/fields.hpp>
 #include <boost/filesystem.hpp>
-#include <boost/regex.hpp>
 // Only available in Boost >= 1.64.0.
 ////#include <boost/process/environment.hpp>
 
@@ -30,14 +30,14 @@ struct url_match {
 // If successful, the `match` is updated.
 inline
 bool match_http_url(const std::string& url, url_match& match) {
-    static const boost::regex urlrx( "^(http|https)://"  // 1: scheme
-                                     "([-\\.a-z0-9]+|\\[[:0-9a-fA-F]+\\])"  // 2: host
-                                     "(:[0-9]{1,5})?"  // 3: :port (or empty)
-                                     "(/[^?#]*)"  // 4: /path
-                                     "(\\?[^#]*)?"  // 5: ?query (or empty)
-                                     "(#.*)?");  // 6: #fragment (or empty)
-    boost::smatch m;
-    if (!boost::regex_match(url, m, urlrx))
+    static const std::regex urlrx( "^(http|https)://"  // 1: scheme
+                                   "([-\\.a-z0-9]+|\\[[:0-9a-fA-F]+\\])"  // 2: host
+                                   "(:[0-9]{1,5})?"  // 3: :port (or empty)
+                                   "(/[^?#]*)"  // 4: /path
+                                   "(\\?[^#]*)?"  // 5: ?query (or empty)
+                                   "(#.*)?");  // 6: #fragment (or empty)
+    std::smatch m;
+    if (!std::regex_match(url, m, urlrx))
         return false;
     match = { m[1]
             , m[2]
