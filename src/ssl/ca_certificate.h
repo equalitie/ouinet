@@ -16,6 +16,10 @@ public:
 
     ~CACertificate();
 
+    // Which is version 3 according to
+    // <https://www.openssl.org/docs/man1.1.0/crypto/X509_set_version.html>.
+    static const long x509_version = 2;
+
 private:
     friend class DummyCertificate;
 

@@ -92,7 +92,7 @@ CACertificate::CACertificate()
         }
     }
 
-    X509_set_version(_x, 2);
+    X509_set_version(_x, x509_version);
     ASN1_INTEGER_set(X509_get_serialNumber(_x), next_serial_number());
     // Avoid signature issues because of time zone differences.
     // See [Mitmproxy can't record traffic when time set with 1 hour ago.](https://github.com/mitmproxy/mitmproxy/issues/200).

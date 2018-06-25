@@ -9,8 +9,7 @@ DummyCertificate::DummyCertificate( CACertificate& ca_cert
                                   , const string& cn)
     : _x(X509_new())
 {
-    // TODO: Is this a proper version?
-    X509_set_version(_x, 2);
+    X509_set_version(_x, ca_cert.x509_version);
     ASN1_INTEGER_set(X509_get_serialNumber(_x), ca_cert.next_serial_number());
 
     // Avoid signature issues because of time zone differences.
