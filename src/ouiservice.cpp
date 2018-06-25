@@ -91,7 +91,7 @@ GenericConnection OuiServiceServer::accept(asio::yield_context yield)
 
     GenericConnection connection = std::move(_connection_queue.front());
     _connection_queue.pop_front();
-    return std::move(connection);
+    return connection;
 }
 
 void OuiServiceServer::cancel_accept()
