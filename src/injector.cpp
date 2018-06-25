@@ -150,10 +150,6 @@ public:
             auto con = connect_to_host(ios, url.host, url_port, abort_signal, yield[ec]);
             if (ec) return or_throw<Response>(yield, ec);
 
-            auto close_con_slot = abort_signal.connect([&con] {
-                con.close();
-            });
-
             if (ssl) {
                 // Subsequent access to the connection will use the encrypted channel.
                 con = ssl::util::client_handshake(move(con), url.host, yield[ec]);
@@ -173,7 +169,7 @@ public:
                                                       // Length of "http://" or "https://",
                                                       // do not fail on "http(s)://FOO/FOO".
                                                       , url.scheme.length() + 3)));
-            return fetch_http_page(ios, con, origin_rq, yield);
+            return fetch_http_page(ios, con, origin_rq, abort_signal, yield);
         };
 
         cc.fetch_stored = [this](const Request& rq, asio::yield_context yield) {
