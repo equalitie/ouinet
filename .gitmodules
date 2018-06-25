@@ -4,4 +4,4 @@
 	branch = openssl
 [submodule "modules/asio-ipfs"]
 	path = modules/asio-ipfs
-	url = git@github.com:equalitie/asio-ipfs.git
+	url = https://github.com/equalitie/asio-ipfs.git

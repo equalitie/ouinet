@@ -12,15 +12,6 @@ RUN apt-get update && apt-get install -y \
     cmake \
     gettext \
     git \
-    libboost-coroutine-dev \
-    libboost-date-time-dev \
-    libboost-dev \
-    libboost-filesystem-dev \
-    libboost-program-options-dev \
-    libboost-regex-dev \
-    libboost-system-dev \
-    libboost-test-dev \
-    libboost-thread-dev \
     libgcrypt-dev \
     libidn11-dev \
     libssl-dev \
@@ -33,9 +24,22 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /usr/local/src
+RUN wget "https://downloads.sourceforge.net/project/boost/boost/1.67.0/boost_1_67_0.tar.bz2" \
+ && tar -xf boost_1_67_0.tar.bz2 \
+ && cd boost_1_67_0 \
+ && ./bootstrap.sh \
+ && ./b2 -j `nproc` -d+0 --link=shared \
+         --with-system \
+         --with-program_options \
+         --with-test \
+         --with-coroutine \
+         --with-filesystem \
+         --with-date_time \
+         --with-regex \
+         --prefix=/usr/local install
 # This version is a recommendation and this file has been tested to work for it,
 # but you may attempt to build other versions by overriding this argument.
-ARG OUINET_VERSION=v0.0.5-docker3
+ARG OUINET_VERSION=v0.0.6-docker2
 RUN git clone --recursive -b "$OUINET_VERSION" https://github.com/equalitie/ouinet.git
 WORKDIR /opt/ouinet
 RUN cmake /usr/local/src/ouinet \
@@ -52,18 +56,6 @@ FROM debian:stretch
 #         | (while read l; do dpkg -S $l; done) | cut -f1 -d: | sort -u
 #
 RUN apt-get update && apt-get install -y \
-    libboost-atomic1.62.0 \
-    libboost-chrono1.62.0 \
-    libboost-context1.62.0 \
-    libboost-coroutine1.62.0 \
-    libboost-date-time1.62.0 \
-    libboost-filesystem1.62.0 \
-    libboost-program-options1.62.0 \
-    libboost-regex1.62.0 \
-    libboost-system1.62.0 \
-    libboost-test1.62.0 \
-    libboost-thread1.62.0 \
-    libboost-timer1.62.0 \
     libc6 \
     libgcc1 \
     libgcrypt20 \
@@ -75,8 +67,11 @@ RUN apt-get update && apt-get install -y \
     libunistring0 \
     zlib1g \
  && rm -rf /var/lib/apt/lists/*
+# Manually install Boost libraries and update the dynamic linker cache.
+COPY --from=builder /usr/local/lib/libboost_* /usr/local/lib/
+RUN ldconfig
 WORKDIR /opt/ouinet
-COPY --from=builder /opt/ouinet/modules/ipfs-cache/ipfs_bindings/libipfs_bindings.so modules/ipfs-cache/ipfs_bindings/
+COPY --from=builder /opt/ouinet/modules/asio-ipfs/ipfs_bindings/libipfs_bindings.so modules/asio-ipfs/ipfs_bindings/
 # GNUnet support has been temporarily removed.
 #COPY --from=builder /opt/ouinet/modules/gnunet-channels/gnunet-bin/share/gnunet/ modules/gnunet-channels/gnunet-bin/share/gnunet/
 #COPY --from=builder /opt/ouinet/modules/gnunet-channels/gnunet-bin/lib/ modules/gnunet-channels/gnunet-bin/lib/

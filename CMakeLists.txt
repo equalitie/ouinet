@@ -6,7 +6,7 @@ else()
     cmake_minimum_required (VERSION 3.5)
 endif()
 
-set(BOOST_VERSION 1.62)
+set(BOOST_VERSION 1.67)
 
 include(ExternalProject)
 ################################################################################
