@@ -6,6 +6,7 @@
 #include <openssl/pem.h>
 #include <openssl/conf.h>
 #include <openssl/x509v3.h>
+#include <openssl/rand.h>
 
 #include "ca_certificate.h"
 #include "util.h"
@@ -25,21 +26,6 @@ using namespace ouinet;
 //     * Use RSA_generate_key_ex instead of deprecated RSA_generate_key_
 //       with hints from <https://stackoverflow.com/a/16393292>
 //     * Replaced EVP_md5 for EVP_sha256 in X509_sign
-
-
-// TODO: This page:
-//
-//     https://www.openssl.org/docs/man1.1.0/crypto/RSA_generate_key.html
-//
-// says that:
-//
-//     "The pseudo-random number generator must be seeded prior to calling
-//      RSA_generate_key_ex()"
-//
-// To do it:
-//
-//     https://stackoverflow.com/a/12094032/273348
-//
 
 
 // Generated with:
@@ -69,6 +55,15 @@ CACertificate::CACertificate()
     , _next_serial_number(std::time(nullptr) * CERT_SERNUM_SCALE)
 {
     {
+        // Feed time to the random number generator.  According to
+        // <https://www.openssl.org/docs/man1.1.0/crypto/RSA_generate_key.html>,
+        // "The pseudo-random number generator must be seeded prior to calling
+        // RSA_generate_key_ex()".
+        auto time = std::time(nullptr);
+        RAND_add(&time, sizeof(time), sizeof(time));
+        auto ticks = std::clock();
+        RAND_add(&ticks, sizeof(ticks), sizeof(ticks));
+
         RSA* rsa = RSA_new();
         if (!rsa) {
             throw runtime_error("Failed to allocate new RSA key");
