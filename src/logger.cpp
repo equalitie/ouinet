@@ -21,6 +21,7 @@
 #include <string>
 #include <iostream>
 #include <fstream>
+#include <execinfo.h> // For backtrace*
 
 #include "logger.h"
 
@@ -156,6 +157,16 @@ void Logger::warn(std::string msg, std::string function_name)
 void Logger::error(std::string msg, std::string function_name)
 {
     log(ERROR, msg, function_name);
+
+    void* callstack[128];
+    int i, frames = backtrace(callstack, 128);
+    char** strs = backtrace_symbols(callstack, frames);
+    for (i = 0; i < frames; ++i) {
+        printf(">> %s\n", strs[i]);
+    }
+    free(strs);
+
+    assert(0);
 }
 
 void Logger::abort(std::string msg, std::string function_name)
