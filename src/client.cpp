@@ -484,7 +484,7 @@ GenericConnection Client::State::ssl_mitm_handshake( GenericConnection&& con
     // then retrieve the value of the Server Name Indication (SNI) field
     // and rewind the Hello message,
     // but for the moment we will assume that the browser sends
-    // a host name instead of an IP address or is reverse resolution.
+    // a host name instead of an IP address or its reverse resolution.
     auto base_domain = base_domain_from_target(con_req.target());
 
     string crt_chain;
@@ -598,6 +598,8 @@ void Client::State::serve_request( GenericConnection&& con
 
     // Is MitM active?
     bool mitm(false);
+    // Saved host/port from CONNECT request.
+    string connect_hp;
     // Process the different requests that may come over the same connection.
     for (;;) {  // continue for next request; break for no more requests
         Request req;
@@ -611,25 +613,36 @@ void Client::State::serve_request( GenericConnection&& con
         // Requests in the encrypted channel are not proxy-like
         // so the target is not "http://example.com/foo" but just "/foo".
         // We expand the target again with the ``Host:`` header
+        // (or the CONNECT target if the header is missing in HTTP/1.0)
         // so that "/foo" becomes "https://example.com/foo".
         if (mitm)
-            // TODO: Use CONNECT target if ``Host:`` is missing.
             req.target( string("https://")
-                      + req[http::field::host].to_string()
+                      + ( (req[http::field::host].length() > 0)
+                          ? req[http::field::host].to_string()
+                          : connect_hp)
                       + req.target().to_string());
         cout << "Received request for: " << req.target() << endl;
 
-        // Attempt connection to origin for CONNECT requests
+        // Perform MitM for CONNECT requests (to be able to see encrypted requests)
         if (!mitm && req.method() == http::verb::connect) {
             try {
                 // Subsequent access to the connection will use the encrypted channel.
                 con = ssl_mitm_handshake(move(con), req, yield);
-                mitm = true;
             }
             catch(const std::exception& e) {
                 cerr << "Mitm exception: " << e.what() << endl;
                 return;
             }
+            mitm = true;
+            // Save CONNECT target (minus standard HTTPS port ``:443`` if present)
+            // in case of subsequent HTTP/1.0 requests with no ``Host:`` header.
+            auto port_pos = max( req.target().length() - 4 /* strlen(":443") */
+                               , string::npos);
+            connect_hp = req.target()
+                // Do not to hit ``:443`` inside of an IPv6 address.
+                .substr(0, req.target().rfind(":443", port_pos))
+                .to_string();
+            // Go for requests in the encrypted channel.
             continue;
         }
 
