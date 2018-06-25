@@ -107,9 +107,11 @@ CACertificate::CACertificate()
     
     // This function creates and adds the entry, working out the
     // correct string type and performing checks on its length.
-    // TODO: Normally we'd check the return value for errors...
-    X509_NAME_add_entry_by_txt(name, "CN",
-            MBSTRING_ASC, (const unsigned char*) "Your own local Ouinet client", -1, -1, 0);
+    if (!X509_NAME_add_entry_by_txt( name, "CN"
+                                   , MBSTRING_ASC
+                                   , (const unsigned char*) "Your own local Ouinet client"
+                                   , -1, -1, 0))
+        throw runtime_error("Failed in X509_NAME_add_entry_by_txt");
     
     // Its self signed so set the issuer name to be the same as the
     // subject.

@@ -23,11 +23,15 @@ DummyCertificate::DummyCertificate( CACertificate& ca_cert
     
     string wc_cn("*." + cn);
     X509_NAME* name = X509_get_subject_name(_x); 
-    // TODO: Check error code?
-    X509_NAME_add_entry_by_txt(name, "CN",
-            MBSTRING_ASC, (const unsigned char*) wc_cn.data(), wc_cn.size(), -1, 0);
+
+    if (!X509_NAME_add_entry_by_txt( name, "CN"
+                                   , MBSTRING_ASC,
+                                     (const unsigned char*) wc_cn.data()
+                                     , wc_cn.size(), -1, 0))
+        throw runtime_error("Failed in X509_NAME_add_entry_by_txt");
     
-    X509_set_issuer_name(_x, ca_cert.get_subject_name());
+    if (!X509_set_issuer_name(_x, ca_cert.get_subject_name()))
+        throw runtime_error("Failed in X509_set_issuer_name");
 
     string alt_name("DNS.1:*." + cn + ",DNS.2:" + cn);
     // Add various standard extensions
