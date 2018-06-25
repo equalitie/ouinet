@@ -6,6 +6,7 @@
 #include "fail.h"
 #include "or_throw.h"
 #include "generic_connection.h"
+#include "util/signal.h"
 
 namespace ouinet {
 
@@ -15,11 +16,16 @@ http::response<http::dynamic_body>
 fetch_http_page( asio::io_service& ios
                , GenericConnection& con
                , RequestType req
+               , Signal<void()>& abort_signal
                , asio::yield_context yield)
 {
     http::response<http::dynamic_body> res;
 
     sys::error_code ec;
+
+    auto close_con_slot = abort_signal.connect([&con] {
+        con.close();
+    });
 
     // Send the HTTP request to the remote host
     http::async_write(con, req, yield[ec]);

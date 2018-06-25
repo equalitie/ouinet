@@ -123,11 +123,7 @@ public:
             auto con = connect_to_host(ios, host, abort_signal, yield[ec]);
             if (ec) return or_throw<Response>(yield, ec);
 
-            auto close_con_slot = abort_signal.connect([&con] {
-                con.close();
-            });
-
-            return fetch_http_page(ios, con, rq, yield);
+            return fetch_http_page(ios, con, rq, abort_signal, yield);
         };
 
         cc.fetch_stored = [this](const Request& rq, asio::yield_context yield) {

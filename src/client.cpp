@@ -333,12 +333,14 @@ Response Client::State::fetch_fresh( const Request& request
                     res = fetch_http_page(_ios
                                          , inj.connection
                                          , authorize(request, *credentials)
+                                         , _shutdown_signal
                                          , yield[ec]);
                 }
                 else {
                     res = fetch_http_page(_ios
                                          , inj.connection
                                          , request
+                                         , _shutdown_signal
                                          , yield[ec]);
                 }
 
