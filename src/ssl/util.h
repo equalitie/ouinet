@@ -47,9 +47,11 @@ static inline std::string read_bio(BIO* bio) {
 //
 // The verification is done for the given `host` name, using SNI.
 static inline
-ouinet::GenericConnection client_handshake( ouinet::GenericConnection&& con
-                                          , const std::string& host
-                                          , boost::asio::yield_context yield) {
+ouinet::GenericConnection
+client_handshake( ouinet::GenericConnection&& con
+                , const std::string& host
+                , boost::asio::yield_context yield)
+{
     using namespace std;
     using namespace ouinet;
     namespace ssl = boost::asio::ssl;
