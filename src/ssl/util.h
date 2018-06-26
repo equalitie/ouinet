@@ -43,9 +43,9 @@ static inline std::string read_bio(BIO* bio) {
 };
 
 static inline
-ouinet::GenericConnection ssl_client_handshake( ouinet::GenericConnection&& con
-                                              , const std::string& host
-                                              , boost::asio::yield_context yield) {
+ouinet::GenericConnection client_handshake( ouinet::GenericConnection&& con
+                                          , const std::string& host
+                                          , boost::asio::yield_context yield) {
     using namespace std;
     using namespace ouinet;
     namespace ssl = boost::asio::ssl;

@@ -156,7 +156,7 @@ public:
 
             if (ssl) {
                 // Subsequent access to the connection will use the encrypted channel.
-                con = ssl::util::ssl_client_handshake(move(con), url.host, yield[ec]);
+                con = ssl::util::client_handshake(move(con), url.host, yield[ec]);
                 if (ec) {
                     cerr << "SSL client handshake error: "
                          << url.host << ": " << ec.message() << endl;
