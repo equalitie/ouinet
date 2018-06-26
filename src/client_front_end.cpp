@@ -80,7 +80,13 @@ void ClientFrontEnd::handle_portal( const Request& req, Response& res, stringstr
 
     if (target.find('?') != string::npos) {
         // XXX: Extra primitive value parsing.
-        if (target.find("?injector_proxy=enable") != string::npos) {
+        if (target.find("?origin_access=enable") != string::npos) {
+            _origin_access_enabled = true;
+        }
+        else if (target.find("?origin_access=disable") != string::npos) {
+            _origin_access_enabled = false;
+        }
+        else if (target.find("?injector_proxy=enable") != string::npos) {
             _injector_proxying_enabled = true;
         }
         else if (target.find("?injector_proxy=disable") != string::npos) {
@@ -133,6 +139,7 @@ void ClientFrontEnd::handle_portal( const Request& req, Response& res, stringstr
           "      using system-accepted Certification Authorities.</p>\n";
 
     ss << ToggleInput{"Auto refresh",   "auto_refresh",   _auto_refresh_enabled};
+    ss << ToggleInput{"Origin access", "origin_access", _origin_access_enabled};
     ss << ToggleInput{"Injector proxy", "injector_proxy", _injector_proxying_enabled};
     ss << ToggleInput{"IPFS Cache",     "ipfs_cache",     _ipfs_cache_enabled};
 

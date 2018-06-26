@@ -52,6 +52,11 @@ public:
                   , const http::request<http::string_body>&
                   , CacheClient*, const CACertificate&);
 
+    bool is_origin_access_enabled() const
+    {
+        return _origin_access_enabled;
+    }
+
     bool is_injector_proxying_enabled() const
     {
         return _injector_proxying_enabled;
@@ -71,6 +76,7 @@ public:
 
 private:
     bool _auto_refresh_enabled = true;
+    bool _origin_access_enabled = false;
     bool _injector_proxying_enabled = true;
     bool _ipfs_cache_enabled = true;
     bool _show_pending_tasks = false;
