@@ -42,6 +42,10 @@ static inline std::string read_bio(BIO* bio) {
     return std::string(data, length);
 };
 
+// Perform an SSL client handshake over the given connection `con`
+// and return an SSL-tunneled connection using it as a lower layer.
+//
+// The verification is done for the given `host` name, using SNI.
 static inline
 ouinet::GenericConnection client_handshake( ouinet::GenericConnection&& con
                                           , const std::string& host
