@@ -11,3 +11,6 @@ target_link_libraries(test-wait-condition ${Boost_LIBRARIES})
 
 add_executable(test-btree "test_btree.cpp" "../src/cache/btree.cpp")
 target_link_libraries(test-btree ${Boost_LIBRARIES})
+
+add_executable(test-timeout-stream "test_timeout_stream.cpp")
+target_link_libraries(test-timeout-stream ${Boost_LIBRARIES})
