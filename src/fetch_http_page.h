@@ -9,6 +9,9 @@
 
 namespace ouinet {
 
+// Send the HTTP request `req` over the connection `con`
+// (which may be already an SSL tunnel)
+// and return the HTTP response.
 template<class RequestType>
 inline
 http::response<http::dynamic_body>
