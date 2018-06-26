@@ -320,8 +320,21 @@ Response Client::State::fetch_fresh( const Request& request
 
         switch (r) {
             case responder::origin: {
-                assert(0 && "TODO");
-                continue;
+                if (!_front_end.is_origin_access_enabled()) {
+                    continue;
+                }
+                sys::error_code ec;
+                Response res;
+
+                // Send the request straight to the origin
+                res = fetch_http_page(_ios, request, _shutdown_signal, yield[ec]);
+
+                if (ec) {
+                    last_error = ec;
+                    continue;
+                }
+
+                return res;
             }
             case responder::proxy: {
                 assert(0 && "TODO");
@@ -593,6 +606,9 @@ void Client::State::serve_request( GenericConnection&& con
         // Caching these is not yet supported.
         Match( reqexpr::from_regex(method_getter, "HEAD")
              , {false, queue<responder>({responder::injector})} ),
+        // Disable cache and always go to origin for this site.
+        Match( reqexpr::from_regex(target_getter, "https?://ident.me/.*")
+             , {false, queue<responder>({responder::origin})} ),
         // Force cache and default mechanisms for this site.
         Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example.com/.*")
              , {true, queue<responder>()} ),
