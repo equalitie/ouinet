@@ -54,7 +54,6 @@ using tcp      = asio::ip::tcp;
 using Request  = http::request<http::string_body>;
 using Response = http::response<http::dynamic_body>;
 using boost::optional;
-namespace ssl = boost::asio::ssl;
 
 static const boost::filesystem::path OUINET_PID_FILE = "pid";
 static const boost::filesystem::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
@@ -435,11 +434,13 @@ Response bad_gateway(const Request& req)
 }
 
 //------------------------------------------------------------------------------
-void setup_ssl_context( ssl::context& ssl_context
+void setup_ssl_context( asio::ssl::context& ssl_context
                       , const string& cert_chain
                       , const string& private_key
                       , const string& dh)
 {
+    namespace ssl = boost::asio::ssl;
+
     ssl_context.set_options( ssl::context::default_workarounds
                            | ssl::context::no_sslv2
                            | ssl::context::single_dh_use);
@@ -454,7 +455,7 @@ void setup_ssl_context( ssl::context& ssl_context
     ssl_context.use_tmp_dh(asio::buffer(dh.data(), dh.size()));
 
     ssl_context.set_password_callback(
-        [](std::size_t, asio::ssl::context_base::password_purpose)
+        [](std::size_t, ssl::context_base::password_purpose)
         {
             assert(0 && "TODO: Not yet supported");
             return "";
@@ -478,6 +479,8 @@ GenericConnection Client::State::ssl_mitm_handshake( GenericConnection&& con
                                                    , const Request& con_req
                                                    , asio::yield_context yield)
 {
+    namespace ssl = boost::asio::ssl;
+
     ssl::context ssl_context{ssl::context::tls_server};
 
     // TODO: We really should be waiting for
