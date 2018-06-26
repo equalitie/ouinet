@@ -4,11 +4,8 @@
 #include <boost/asio/connect.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/signal_set.hpp>
-#include <boost/asio/ssl.hpp>
-#include <boost/asio/ssl/stream.hpp>
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
-#include <openssl/ssl.h>
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -35,10 +32,10 @@
 #include "ouiservice/tcp.h"
 
 #include "util/signal.h"
+#include "ssl/util.h"
 
 using namespace std;
 using namespace ouinet;
-namespace ssl = boost::asio::ssl;
 
 using tcp         = asio::ip::tcp;
 using string_view = beast::string_view;
@@ -118,36 +115,6 @@ void handle_connect_request( GenericConnection& client_c
     full_duplex(client_c, origin_c, yield);
 }
 
-static
-GenericConnection ssl_client_handshake( GenericConnection&& con
-                                      , const string& host
-                                      , asio::yield_context yield) {
-    // SSL contexts do not seem to be reusable.
-    ssl::context ssl_context{ssl::context::tls_client};
-    ssl_context.set_default_verify_paths();
-    ssl_context.set_verify_mode(ssl::verify_peer);
-    ssl_context.set_verify_callback(ssl::rfc2818_verification(host));
-
-    sys::error_code ec;
-
-    auto ssl_sock = make_unique<ssl::stream<GenericConnection>>(move(con), ssl_context);
-    // Set Server Name Indication (SNI).
-    // As seen in ``http_client_async_ssl.cpp`` Boost Beast example.
-    if (!::SSL_set_tlsext_host_name(ssl_sock->native_handle(), host.c_str()))
-        ec = {static_cast<int>(::ERR_get_error()), asio::error::get_ssl_category()};
-    if (!ec)
-        ssl_sock->async_handshake(ssl::stream_base::client, yield[ec]);
-    if (ec) return or_throw<GenericConnection>(yield, ec);
-
-    static const auto ssl_shutter = [](ssl::stream<GenericConnection>& s) {
-        // Just close the underlying connection
-        // (TLS has no message exchange for shutdown).
-        s.next_layer().close();
-    };
-
-    return GenericConnection(move(ssl_sock), move(ssl_shutter));
-}
-
 //------------------------------------------------------------------------------
 struct InjectorCacheControl {
 public:
@@ -189,7 +156,7 @@ public:
 
             if (ssl) {
                 // Subsequent access to the connection will use the encrypted channel.
-                con = ssl_client_handshake(move(con), url.host, yield[ec]);
+                con = ssl::util::ssl_client_handshake(move(con), url.host, yield[ec]);
                 if (ec) {
                     cerr << "SSL client handshake error: "
                          << url.host << ": " << ec.message() << endl;
