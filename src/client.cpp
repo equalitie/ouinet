@@ -514,7 +514,7 @@ GenericConnection Client::State::ssl_mitm_handshake( GenericConnection&& con
         crt_chain = dummy_crt.pem_certificate()
                   + _ca_certificate->pem_certificate();
 
-        _ssl_certificate_cache.put(move(base_domain), move(crt_chain));
+        _ssl_certificate_cache.put(move(base_domain), crt_chain);
     }
 
     setup_ssl_context( ssl_context
