@@ -28,6 +28,7 @@ private:
     using Clock     = typename Timer::clock_type;
     using Duration  = typename Timer::duration;
     using TimePoint = typename Timer::time_point;
+    using Handler   = std::function<void(const sys::error_code&, size_t)>;
 
     class Deadline : public std::enable_shared_from_this<Deadline> {
         using Parent = std::enable_shared_from_this<Deadline>;
@@ -98,6 +99,9 @@ private:
 
         std::shared_ptr<Deadline> read_deadline;
         std::shared_ptr<Deadline> write_deadline;
+
+        Handler read_handler;
+        Handler write_handler;
 
         State(InnerStream&& in)
             : inner(std::move(in))
@@ -197,40 +201,26 @@ auto TimeoutStream<InnerStream>::async_read_some
     ( const MutableBufferSequence& bs
     , Token&& token)
 {
-    using namespace std;
+    using Sig = void(const sys::error_code&, size_t);
 
-    namespace asio = boost::asio;
-    namespace sys  = boost::system;
+    boost::asio::async_completion<Token, Sig> init(token);
 
-    using Sig     = void(sys::error_code, size_t);
-    using Result  = asio::async_result<Token, Sig>;
-    using Handler = typename Result::completion_handler_type;
+    _state->read_handler = std::move(init.completion_handler);
 
-    struct ReadState {
-        Handler handler;
-        bool timed_out;
-    };
-
-    // XXX: Handler is non-copyable, but can we do this without allocation?
-    auto recv_state = make_shared<ReadState>(
-            ReadState{forward<Token>(token), false});
-
-    Result result(recv_state->handler);
-
-    setup_deadline(_max_read_duration, *_state->read_deadline, [recv_state] {
-        recv_state->timed_out = true;
-        recv_state->handler(asio::error::timed_out, 0);
+    setup_deadline(_max_read_duration, *_state->read_deadline, [s = _state] {
+        auto h = std::move(s->read_handler);
+        h(asio::error::timed_out, 0);
     });
 
     _state->inner.async_read_some( bs
-                                 , [s = _state, recv_state]
+                                 , [s = _state]
                                    (const sys::error_code& ec, size_t size) {
                                        s->read_deadline->stop();
-                                       if (!recv_state->timed_out)
-                                           recv_state->handler(ec, size);
+                                       if (s->read_handler)
+                                           s->read_handler(ec, size);
                                    });
 
-    return result.get();
+    return init.result.get();
 }
 
 template<class InnerStream>
@@ -239,40 +229,26 @@ inline
 auto TimeoutStream<InnerStream>::async_write_some( const ConstBufferSequence& bs
                                                  , Token&& token)
 {
-    using namespace std;
+    using Sig = void(const sys::error_code&, size_t);
 
-    namespace asio = boost::asio;
-    namespace sys  = boost::system;
+    boost::asio::async_completion<Token, Sig> init(token);
 
-    using Sig     = void(sys::error_code, size_t);
-    using Result  = asio::async_result<Token, Sig>;
-    using Handler = typename Result::completion_handler_type;
+    _state->write_handler = std::move(init.completion_handler);
 
-    struct WriteState {
-        Handler handler;
-        bool timed_out;
-    };
-
-    // XXX: Handler is non-copyable, but can we do this without allocation?
-    auto write_state = make_shared<WriteState>(
-            WriteState{forward<Token>(token), false});
-
-    Result result(write_state->handler);
-
-    setup_deadline(_max_write_duration, *_state->write_deadline, [write_state] {
-        write_state->timed_out = true;
-        write_state->handler(asio::error::timed_out, 0);
+    setup_deadline(_max_write_duration, *_state->write_deadline, [s = _state] {
+        auto h = std::move(s->write_handler);
+        h(asio::error::timed_out, 0);
     });
 
     _state->inner.async_write_some( bs
-                                  , [s = _state, write_state]
+                                  , [s = _state]
                                     (const sys::error_code& ec, size_t size) {
                                         s->write_deadline->stop();
-                                        if (!write_state->timed_out)
-                                            write_state->handler(ec, size);
+                                        if (s->write_handler)
+                                            s->write_handler(ec, size);
                                     });
 
-    return result.get();
+    return init.result.get();
 }
 
 template<class InnerStream>
