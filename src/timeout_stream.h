@@ -23,6 +23,7 @@ template<class InnerStream> class TimeoutStream {
 public:
     using executor_type = asio::io_context::executor_type;
     using next_layer_type = InnerStream;
+    using endpoint_type = typename InnerStream::endpoint_type;
 
 private:
     using Timer     = boost::asio::steady_timer;
@@ -30,6 +31,7 @@ private:
     using Duration  = typename Timer::duration;
     using TimePoint = typename Timer::time_point;
     using Handler   = std::function<void(const sys::error_code&, size_t)>;
+    using ConnectHandler = std::function<void(const sys::error_code&)>;
 
     class Deadline : public std::enable_shared_from_this<Deadline> {
         using Parent = std::enable_shared_from_this<Deadline>;
@@ -98,19 +100,24 @@ private:
     struct State {
         InnerStream inner;
 
+        // XXX: Use shared_ptr's aliasing constructor to avoid
+        // unnecessary allocations.
         std::shared_ptr<Deadline> read_deadline;
         std::shared_ptr<Deadline> write_deadline;
+        std::shared_ptr<Deadline> connect_deadline;
 
         Handler read_handler;
         Handler write_handler;
+        ConnectHandler connect_handler;
 
         State(InnerStream&& in)
             : inner(std::move(in))
         {
             auto& ctx = inner.get_executor().context();
 
-            read_deadline  = std::make_shared<Deadline>(ctx);
-            write_deadline = std::make_shared<Deadline>(ctx);
+            read_deadline    = std::make_shared<Deadline>(ctx);
+            write_deadline   = std::make_shared<Deadline>(ctx);
+            connect_deadline = std::make_shared<Deadline>(ctx);
         }
     };
 
@@ -135,6 +142,9 @@ public:
     template<class ConstBufferSequence, class Token>
     auto async_write_some(const ConstBufferSequence&, Token&&);
 
+    template<class Token>
+    auto async_connect(const endpoint_type&, Token&&);
+
     // Set the timeout for all consecutive read operations.
     void set_read_timeout(Duration d) {
         _max_read_duration = d;
@@ -157,6 +167,18 @@ public:
     void set_write_timeout(boost::optional<DurationT> d) {
         if (d) _max_write_duration = Duration(*d);
         else   _max_write_duration = boost::none;
+    }
+
+    // Set the timeout for all consecutive write operations.
+    void set_connect_timeout(Duration d) {
+        _max_connect_duration = d;
+    }
+
+    // Set the timeout for all consecutive write operations.
+    template<class DurationT>
+    void set_connect_timeout(boost::optional<DurationT> d) {
+        if (d) _max_connect_duration = Duration(*d);
+        else   _max_connect_duration = boost::none;
     }
 
     void close()
@@ -194,6 +216,7 @@ private:
     std::shared_ptr<State> _state;
     boost::optional<Duration> _max_read_duration;
     boost::optional<Duration> _max_write_duration;
+    boost::optional<Duration> _max_connect_duration;
 };
 
 template<class InnerStream>
@@ -258,6 +281,35 @@ auto TimeoutStream<InnerStream>::async_write_some( const ConstBufferSequence& bs
                                         if (s->write_handler)
                                             s->write_handler(ec, size);
                                     });
+
+    return init.result.get();
+}
+
+template<class InnerStream>
+template<class Token>
+inline
+auto TimeoutStream<InnerStream>::async_connect
+    (const endpoint_type& ep, Token&& token)
+{
+    using Sig = void(const sys::error_code&);
+
+    boost::asio::async_completion<Token, Sig> init(token);
+
+    _state->connect_handler = std::move(init.completion_handler);
+
+    setup_deadline(_max_connect_duration, *_state->connect_deadline, [s = _state] {
+        auto h = std::move(s->connect_handler);
+        s->inner.close();
+        h(asio::error::timed_out);
+    });
+
+    _state->inner.async_connect( ep
+                               , [s = _state]
+                                 (const sys::error_code& ec) {
+                                     s->connect_deadline->stop();
+                                     if (s->connect_handler)
+                                         s->connect_handler(ec);
+                                 });
 
     return init.result.get();
 }
