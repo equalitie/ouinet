@@ -152,7 +152,7 @@ CACertificate::CACertificate(std::string pem_cert, std::string pem_key, std::str
     , _next_serial_number(std::time(nullptr) * CERT_SERNUM_SCALE)
 {
     {
-        BIO* bio = BIO_new_mem_buf(_pem_private_key.data(), _pem_private_key.size());
+        BIO* bio = BIO_new_mem_buf((void*) _pem_private_key.data(), _pem_private_key.size());
         EVP_PKEY* key = PEM_read_bio_PrivateKey(bio, nullptr, nullptr, nullptr);
         BIO_free_all(bio);
         if (!key)
@@ -160,7 +160,7 @@ CACertificate::CACertificate(std::string pem_cert, std::string pem_key, std::str
         _pk = key;
     }
     {
-        BIO* bio = BIO_new_mem_buf(_pem_certificate.data(), _pem_certificate.size());
+        BIO* bio = BIO_new_mem_buf((void*) _pem_certificate.data(), _pem_certificate.size());
         X509* cert = PEM_read_bio_X509(bio, nullptr, nullptr, nullptr);
         BIO_free_all(bio);
         if (!cert)
@@ -168,7 +168,7 @@ CACertificate::CACertificate(std::string pem_cert, std::string pem_key, std::str
         _x = cert;
     }
     {
-        BIO* bio = BIO_new_mem_buf(_pem_dh_param.data(), _pem_dh_param.size());
+        BIO* bio = BIO_new_mem_buf((void*) _pem_dh_param.data(), _pem_dh_param.size());
         DH* dh = PEM_read_bio_DHparams(bio, nullptr, nullptr, nullptr);
         BIO_free_all(bio);
         if (!dh)
