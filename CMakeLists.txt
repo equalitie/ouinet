@@ -36,7 +36,6 @@ project(ouinet)
 
 find_package(OpenSSL REQUIRED)
 find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS filesystem
-                                                        regex
                                                         unit_test_framework
                                                         program_options
                                                         coroutine
@@ -60,10 +59,24 @@ externalproject_add(json
 set(JSON_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/json/src/json/src")
 
 ################################################################################
+externalproject_add(lru
+    # TODO: We only really need to download one header file.
+    GIT_REPOSITORY https://github.com/lamerman/cpp-lru-cache
+    GIT_TAG de1c4a03569bf3bd540e7f55ab5c2961411dbe22
+    UPDATE_COMMAND ""
+    CONFIGURE_COMMAND ""
+    INSTALL_COMMAND ""
+    BUILD_COMMAND ""
+    PREFIX "lru")
+
+set(LRU_INCLUDE_DIR "${CMAKE_BINARY_DIR}/lru/src/lru/include")
+
+################################################################################
 include_directories(
     "${Boost_INCLUDE_DIR}"
     "${ASIO_IPFS_INCLUDE_DIR}"
     "${JSON_INCLUDE_DIR}"
+    "${LRU_INCLUDE_DIR}"
 )
 
 file(GLOB client_sources
@@ -74,6 +87,8 @@ file(GLOB client_sources
     "./src/cache_control.cpp"
     "./src/request_routing.cpp"
     "./src/ouiservice.cpp"
+    "./src/ssl/ca_certificate.cpp"
+    "./src/ssl/dummy_certificate.cpp"
     "./src/ouiservice/tcp.cpp"
     "./src/logger.cpp"
     "./src/cache/*.cpp"
@@ -97,7 +112,7 @@ target_link_libraries(client
     ${ASIO_IPFS_LIBRARIES}
 )
 
-add_dependencies(client json ${ASIO_IPFS_TARGET})
+add_dependencies(client json lru ${ASIO_IPFS_TARGET})
 
 ################################################################################
 if (WITH_INJECTOR)

@@ -5,6 +5,7 @@
 #include <unistd.h>  // for getpid()
 #include <fstream>
 #include <string>
+#include <regex>
 
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/lexical_cast.hpp>
@@ -15,12 +16,44 @@
 
 namespace ouinet { namespace util {
 
+struct url_match {
+    std::string scheme;
+    std::string host;
+    std::string port;  // maybe empty
+    std::string path;
+    std::string query;  // maybe empty
+    std::string fragment;  // maybe empty
+};
+
+// Parse the HTTP URL to tell the different components.
+// If successful, the `match` is updated.
+inline
+bool match_http_url(const std::string& url, url_match& match) {
+    static const std::regex urlrx( "^(http|https)://"  // 1: scheme
+                                   "([-\\.a-z0-9]+|\\[[:0-9a-fA-F]+\\])"  // 2: host
+                                   "(:[0-9]{1,5})?"  // 3: :port (or empty)
+                                   "(/[^?#]*)"  // 4: /path
+                                   "(\\?[^#]*)?"  // 5: ?query (or empty)
+                                   "(#.*)?");  // 6: #fragment (or empty)
+    std::smatch m;
+    if (!std::regex_match(url, m, urlrx))
+        return false;
+    match = { m[1]
+            , m[2]
+            , m[3].length() > 0 ? std::string(m[3], 1) : ""  // drop colon
+            , m[4]
+            , m[5].length() > 0 ? std::string(m[5], 1) : ""  // drop qmark
+            , m[6].length() > 0 ? std::string(m[6], 1) : ""  // drop hash
+    };
+    return true;
+}
+
 inline
 asio::ip::tcp::endpoint
 parse_tcp_endpoint(const std::string& s, sys::error_code& ec)
 {
     using namespace std;
-    auto pos = s.find(':');
+    auto pos = s.rfind(':');
 
     ec = sys::error_code();
 

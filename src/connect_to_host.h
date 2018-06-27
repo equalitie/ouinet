@@ -11,7 +11,8 @@ namespace ouinet {
 
 GenericConnection
 connect_to_host( asio::io_service& ios
-               , beast::string_view host_and_port
+               , const std::string& host
+               , const std::string& port
                , Signal<void()>& cancel_signal
                , asio::yield_context yield);
 

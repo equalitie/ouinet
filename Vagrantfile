@@ -136,7 +136,7 @@ Vagrant.configure("2") do |config|
       tar -xf boost_1_67_0.tar.bz2
       cd boost_1_67_0
       ./bootstrap.sh
-      ./b2 -j `nproc` -d+0 --link=shared --with-system --with-program_options --with-test --with-coroutine --with-filesystem --with-date_time --with-regex --prefix=/usr/local install
+      ./b2 -j `nproc` -d+0 --link=shared --with-system --with-program_options --with-test --with-coroutine --with-filesystem --with-date_time --prefix=/usr/local install
 
       # Install testing tools
       echo wireshark-common wireshark-common/install-setuid boolean true | debconf-set-selections

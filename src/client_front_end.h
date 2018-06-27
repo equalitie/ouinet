@@ -7,6 +7,7 @@
 #include <chrono>
 #include "namespaces.h"
 #include "endpoint.h"
+#include "ssl/ca_certificate.h"
 
 namespace ouinet { class CacheClient; }
 
@@ -22,6 +23,7 @@ class ClientFrontEnd {
             <boost::intrusive::link_mode
                 <boost::intrusive::auto_unlink>>;
 public:
+    using Request = http::request<http::string_body>;
     using Response = http::response<http::dynamic_body>;
 
 public:
@@ -48,7 +50,7 @@ public:
 public:
     Response serve( const boost::optional<Endpoint>& injector_ep
                   , const http::request<http::string_body>&
-                  , CacheClient*);
+                  , CacheClient*, const CACertificate&);
 
     bool is_injector_proxying_enabled() const
     {
@@ -77,6 +79,12 @@ private:
         < Task
         , boost::intrusive::constant_time_size<false>
         > _pending_tasks;
+
+    void handle_ca_pem( const Request&, Response&, std::stringstream&
+                      , const CACertificate& );
+
+    void handle_portal( const Request&, Response&, std::stringstream&
+                      , const boost::optional<Endpoint>&, CacheClient*);
 };
 
 } // ouinet namespace
