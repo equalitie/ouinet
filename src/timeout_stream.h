@@ -22,6 +22,7 @@ namespace ouinet {
 template<class InnerStream> class TimeoutStream {
 public:
     using executor_type = asio::io_context::executor_type;
+    using next_layer_type = InnerStream;
 
 private:
     using Timer     = boost::asio::steady_timer;
@@ -165,6 +166,14 @@ public:
         if (_state->inner.is_open()) {
             _state->inner.close();
         }
+    }
+
+          next_layer_type& next_layer()       { return _state->inner; }
+    const next_layer_type& next_layer() const { return _state->inner; }
+
+    template<typename ShutdownType>
+    void shutdown(ShutdownType type) {
+        _state->inner.shutdown(type);
     }
 
     ~TimeoutStream();
