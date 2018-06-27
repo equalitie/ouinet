@@ -66,7 +66,7 @@ Client::connect(asio::yield_context yield, Signal<void()>& cancel)
 
     LOG_DEBUG("Connecting to the i2p injector...");
 
-    connection.socket().async_connect(asio::ip::tcp::endpoint(asio::ip::address_v4::loopback(), _port), yield[ec]);
+    connection._socket.async_connect(asio::ip::tcp::endpoint(asio::ip::address_v4::loopback(), _port), yield[ec]);
 
     if (ec) {
         return or_throw<ConnectInfo>(yield, ec);
