@@ -54,7 +54,6 @@ using tcp      = asio::ip::tcp;
 using Request  = http::request<http::string_body>;
 using Response = http::response<http::dynamic_body>;
 using boost::optional;
-namespace ssl = boost::asio::ssl;
 
 static const boost::filesystem::path OUINET_PID_FILE = "pid";
 static const boost::filesystem::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
@@ -321,8 +320,21 @@ Response Client::State::fetch_fresh( const Request& request
 
         switch (r) {
             case responder::origin: {
-                assert(0 && "TODO");
-                continue;
+                if (!_front_end.is_origin_access_enabled()) {
+                    continue;
+                }
+                sys::error_code ec;
+                Response res;
+
+                // Send the request straight to the origin
+                res = fetch_http_page(_ios, request, _shutdown_signal, yield[ec]);
+
+                if (ec) {
+                    last_error = ec;
+                    continue;
+                }
+
+                return res;
             }
             case responder::proxy: {
                 assert(0 && "TODO");
@@ -351,12 +363,14 @@ Response Client::State::fetch_fresh( const Request& request
                     res = fetch_http_page(_ios
                                          , inj.connection
                                          , authorize(request, *credentials)
+                                         , _shutdown_signal
                                          , yield[ec]);
                 }
                 else {
                     res = fetch_http_page(_ios
                                          , inj.connection
                                          , request
+                                         , _shutdown_signal
                                          , yield[ec]);
                 }
 
@@ -433,11 +447,13 @@ Response bad_gateway(const Request& req)
 }
 
 //------------------------------------------------------------------------------
-void setup_ssl_context( ssl::context& ssl_context
+void setup_ssl_context( asio::ssl::context& ssl_context
                       , const string& cert_chain
                       , const string& private_key
                       , const string& dh)
 {
+    namespace ssl = boost::asio::ssl;
+
     ssl_context.set_options( ssl::context::default_workarounds
                            | ssl::context::no_sslv2
                            | ssl::context::single_dh_use);
@@ -452,7 +468,7 @@ void setup_ssl_context( ssl::context& ssl_context
     ssl_context.use_tmp_dh(asio::buffer(dh.data(), dh.size()));
 
     ssl_context.set_password_callback(
-        [](std::size_t, asio::ssl::context_base::password_purpose)
+        [](std::size_t, ssl::context_base::password_purpose)
         {
             assert(0 && "TODO: Not yet supported");
             return "";
@@ -476,6 +492,8 @@ GenericConnection Client::State::ssl_mitm_handshake( GenericConnection&& con
                                                    , const Request& con_req
                                                    , asio::yield_context yield)
 {
+    namespace ssl = boost::asio::ssl;
+
     ssl::context ssl_context{ssl::context::tls_server};
 
     // TODO: We really should be waiting for
@@ -588,6 +606,9 @@ void Client::State::serve_request( GenericConnection&& con
         // Caching these is not yet supported.
         Match( reqexpr::from_regex(method_getter, "HEAD")
              , {false, queue<responder>({responder::injector})} ),
+        // Disable cache and always go to origin for this site.
+        Match( reqexpr::from_regex(target_getter, "https?://ident.me/.*")
+             , {false, queue<responder>({responder::origin})} ),
         // Force cache and default mechanisms for this site.
         Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example.com/.*")
              , {true, queue<responder>()} ),

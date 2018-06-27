@@ -2,6 +2,14 @@
 
 #include <stdexcept>
 #include <openssl/pem.h>
+#include <openssl/ssl.h>
+
+#include <boost/asio/ssl.hpp>
+#include <boost/asio/ssl/stream.hpp>
+
+#include "../generic_connection.h"
+#include "../or_throw.h"
+
 
 namespace ouinet { namespace ssl { namespace util {
 
@@ -33,5 +41,45 @@ static inline std::string read_bio(BIO* bio) {
     long length = BIO_get_mem_data(bio, &data);
     return std::string(data, length);
 };
+
+// Perform an SSL client handshake over the given connection `con`
+// and return an SSL-tunneled connection using it as a lower layer.
+//
+// The verification is done for the given `host` name, using SNI.
+static inline
+ouinet::GenericConnection
+client_handshake( ouinet::GenericConnection&& con
+                , const std::string& host
+                , boost::asio::yield_context yield)
+{
+    using namespace std;
+    using namespace ouinet;
+    namespace ssl = boost::asio::ssl;
+
+    // SSL contexts do not seem to be reusable.
+    ssl::context ssl_context{ssl::context::tls_client};
+    ssl_context.set_default_verify_paths();
+    ssl_context.set_verify_mode(ssl::verify_peer);
+    ssl_context.set_verify_callback(ssl::rfc2818_verification(host));
+
+    boost::system::error_code ec;
+
+    auto ssl_sock = make_unique<ssl::stream<GenericConnection>>(move(con), ssl_context);
+    // Set Server Name Indication (SNI).
+    // As seen in ``http_client_async_ssl.cpp`` Boost Beast example.
+    if (!::SSL_set_tlsext_host_name(ssl_sock->native_handle(), host.c_str()))
+        ec = {static_cast<int>(::ERR_get_error()), boost::asio::error::get_ssl_category()};
+    if (!ec)
+        ssl_sock->async_handshake(ssl::stream_base::client, yield[ec]);
+    if (ec) return or_throw<GenericConnection>(yield, ec);
+
+    static const auto ssl_shutter = [](ssl::stream<GenericConnection>& s) {
+        // Just close the underlying connection
+        // (TLS has no message exchange for shutdown).
+        s.next_layer().close();
+    };
+
+    return GenericConnection(move(ssl_sock), move(ssl_shutter));
+}
 
 }}} // namespaces
