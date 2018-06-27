@@ -4,10 +4,10 @@
 #include <utility>
 #include <vector>
 #include <queue>
-#include <regex>
 
 #include <boost/beast/core/string.hpp>
 #include <boost/beast/http.hpp>
+#include <boost/regex.hpp>
 
 #include "namespaces.h"
 
@@ -50,7 +50,7 @@ using field_getter = std::function<beast::string_view (const http::request<http:
 class reqex {
     friend reqex true_();
     friend reqex false_();
-    friend reqex from_regex(const field_getter&, const std::regex&);
+    friend reqex from_regex(const field_getter&, const boost::regex&);
     friend reqex operator!(const reqex&);
     friend reqex operator&&(const reqex&, const reqex&);
     friend reqex operator||(const reqex&, const reqex&);
@@ -73,7 +73,7 @@ reqex true_();
 // Never matches, regardless of request content.
 reqex false_();
 // Only matches when the extracted field matches the given (anchored) regular expression.
-reqex from_regex(const field_getter&, const std::regex&);
+reqex from_regex(const field_getter&, const boost::regex&);
 reqex from_regex(const field_getter&, const std::string&);
 
 // Negates the matching of the given expression.
