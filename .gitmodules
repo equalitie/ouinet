@@ -1,6 +1,6 @@
 [submodule "src/ouiservice/i2p/i2pd"]
 	path = src/ouiservice/i2p/i2pd
-	url = https://github.com/inetic/i2pd.git
+	url = github.com:/equalitie/i2pd.git
 [submodule "modules/asio-ipfs"]
 	path = modules/asio-ipfs
 	url = git@github.com:equalitie/asio-ipfs.git

@@ -17,7 +17,7 @@ if [[ ! -e ${BUILDDIR}/Makefile ]]; then
 	rm -rf "${BUILDDIR}"
 	mkdir "${BUILDDIR}"
 	cd "${BUILDDIR}"
-	cmake "${SOURCEDIR}" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX="${BINDIR}"
+	cmake "${SOURCEDIR}" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX="${BINDIR}" -DBOOST_ROOT=/home/klaymen/doc/code/boost_1_65_1
 fi
 
 cd "${BUILDDIR}"
