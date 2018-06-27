@@ -209,6 +209,7 @@ auto TimeoutStream<InnerStream>::async_read_some
 
     setup_deadline(_max_read_duration, *_state->read_deadline, [s = _state] {
         auto h = std::move(s->read_handler);
+        s->inner.close();
         h(asio::error::timed_out, 0);
     });
 
@@ -237,6 +238,7 @@ auto TimeoutStream<InnerStream>::async_write_some( const ConstBufferSequence& bs
 
     setup_deadline(_max_write_duration, *_state->write_deadline, [s = _state] {
         auto h = std::move(s->write_handler);
+        s->inner.close();
         h(asio::error::timed_out, 0);
     });
 
