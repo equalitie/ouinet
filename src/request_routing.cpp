@@ -25,14 +25,14 @@ class ReqExpr {
 class RegexReqExpr : public ReqExpr {  // can match a request field against a regular expression
     private:
         const field_getter& get_field;
-        const std::regex regexp;
+        const boost::regex regexp;
 
     public:
-        RegexReqExpr(const field_getter& gf, const std::regex& rx)
+        RegexReqExpr(const field_getter& gf, const boost::regex& rx)
             : get_field(gf), regexp(rx) { };
 
         bool match(const http::request<http::string_body>& req) const override {
-            return std::regex_match(get_field(req).to_string(), regexp);
+            return boost::regex_match(get_field(req).to_string(), regexp);
         }
 };
 
@@ -111,7 +111,7 @@ false_()
 }
 
 reqex
-from_regex(const field_getter& gf, const std::regex& rx)
+from_regex(const field_getter& gf, const boost::regex& rx)
 {
     return reqex(std::make_shared<RegexReqExpr>(gf, rx));
 }
@@ -119,7 +119,7 @@ from_regex(const field_getter& gf, const std::regex& rx)
 reqex
 from_regex(const field_getter& gf, const std::string& rx)
 {
-    return from_regex(gf, std::regex(rx));
+    return from_regex(gf, boost::regex(rx));
 }
 
 reqex

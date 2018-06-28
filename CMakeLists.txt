@@ -36,6 +36,7 @@ project(ouinet)
 
 find_package(OpenSSL REQUIRED)
 find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS filesystem
+                                                        regex
                                                         unit_test_framework
                                                         program_options
                                                         coroutine
