@@ -506,6 +506,9 @@ GenericConnection Client::State::ssl_mitm_handshake( GenericConnection&& con
     auto base_domain = base_domain_from_target(con_req.target());
 
     string crt_chain;
+    // TODO: ASan gets confused when an exception is thrown inside a coroutine,
+    // the alternative is to check ``_ssl_certificate_cache.exists(base_domain)``
+    // (i.e. an additional lookup) then take one branch or the other.
     try {
         crt_chain = _ssl_certificate_cache.get(base_domain);
     } catch(const std::range_error&) {
