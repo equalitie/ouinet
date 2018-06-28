@@ -7,8 +7,40 @@ using namespace ouinet::bittorrent::dht;
 RoutingTable::RoutingTable(NodeID node_id) :
     _node_id(node_id)
 {
-    _root_node = std::make_unique<RoutingTreeNode>();
+    _root_node = std::make_unique<RoutingTreeNode>(NodeIdRange::max());
     _root_node->bucket = std::make_unique<RoutingBucket>();
+}
+
+void RoutingTreeNode::split() {
+    assert(bucket);
+    assert(!left_child);
+    assert(!right_child);
+
+    /*
+     * Buckets that may be split are never supposed to have candidates
+     * in them.
+     */
+    assert(bucket->verified_candidates.empty());
+    assert(bucket->unverified_candidates.empty());
+
+    /*
+     * Split the bucket.
+     */
+    left_child = std::make_unique<RoutingTreeNode>(range.reduced(0));
+    left_child->bucket = std::make_unique<RoutingBucket>();
+
+    right_child = std::make_unique<RoutingTreeNode>(range.reduced(1));
+    right_child->bucket = std::make_unique<RoutingBucket>();
+
+    for (const auto& node : bucket->nodes) {
+        if (node.contact.id.bit(depth())) {
+            right_child->bucket->nodes.push_back(node);
+        } else {
+            left_child->bucket->nodes.push_back(node);
+        }
+    }
+
+    bucket = nullptr;
 }
 
 /*
@@ -75,33 +107,7 @@ RoutingBucket* RoutingTable::find_bucket(NodeID id, bool split_buckets)
                 break;
             }
 
-            assert(tree_node->bucket);
-            assert(!tree_node->left_child);
-            assert(!tree_node->right_child);
-
-            /*
-             * Buckets that may be split are never supposed to have candidates
-             * in them.
-             */
-            assert(tree_node->bucket->verified_candidates.empty());
-            assert(tree_node->bucket->unverified_candidates.empty());
-
-            /*
-             * Split the bucket.
-             */
-            tree_node->left_child = std::make_unique<RoutingTreeNode>();
-            tree_node->left_child->bucket = std::make_unique<RoutingBucket>();
-            tree_node->right_child = std::make_unique<RoutingTreeNode>();
-            tree_node->right_child->bucket = std::make_unique<RoutingBucket>();
-
-            for (const auto& node : tree_node->bucket->nodes) {
-                if (node.contact.id.bit(depth)) {
-                    tree_node->right_child->bucket->nodes.push_back(node);
-                } else {
-                    tree_node->left_child->bucket->nodes.push_back(node);
-                }
-            }
-            tree_node->bucket = nullptr;
+            tree_node->split();
 
             if (id.bit(depth)) {
                 tree_node = tree_node->right_child.get();

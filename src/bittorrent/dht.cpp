@@ -424,34 +424,25 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
      * For each bucket in the routing table, lookup a random ID in that range.
      * This ensures that every node that should route to us, knows about us.
      */
-    WaitCondition refresh_done(_ios);
-    refresh_tree_node(_routing_table->root(), NodeID::zero(), 0, refresh_done);
-    refresh_done.wait(yield);
+    refresh_routing_table(yield);
 
     _initialized = true;
 }
 
 
-void dht::DhtNode::refresh_tree_node(dht::RoutingTreeNode* node, const NodeID stencil, int depth, WaitCondition& refresh_done)
+void dht::DhtNode::refresh_routing_table(asio::yield_context yield)
 {
-    if (node->bucket) {
-        NodeID target_id = NodeID::random(stencil, depth);
+    WaitCondition wc(_ios);
 
-        asio::spawn(_ios, [ this
-                          , target_id
-                          , stencil
-                          , depth
-                          , lock = refresh_done.lock()
-                          ] (asio::yield_context yield) {
-            find_closest_nodes(target_id, std::vector<udp::endpoint>(), yield);
+    _routing_table->for_each_bucket(
+        [&] (const NodeIdRange& range, RoutingBucket& bucket) {
+            spawn(_ios, [this, range, lock = wc.lock()]
+                        (asio::yield_context yield) {
+                            find_closest_nodes(range.random_id(), {}, yield);
+                        });
         });
-    } else {
-        refresh_tree_node(node->left_child.get(), stencil, depth + 1, refresh_done);
 
-        NodeID right_stencil = stencil;
-        right_stencil.set_bit(depth, true);
-        refresh_tree_node(node->right_child.get(), right_stencil, depth + 1, refresh_done);
-    }
+    wc.wait(yield);
 }
 
 std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
