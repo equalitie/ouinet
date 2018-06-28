@@ -70,17 +70,15 @@ RoutingBucket* RoutingTable::find_bucket(NodeID id, bool split_buckets)
     std::set<TreeNode*> ancestors;
     ancestors.insert(tree_node);
     bool node_contains_self = true;
-    int depth = 0;
     while (!tree_node->bucket) {
-        if (id.bit(depth)) {
+        if (id.bit(tree_node->depth())) {
             tree_node = tree_node->right_child.get();
         } else {
             tree_node = tree_node->left_child.get();
         }
-        if (id.bit(depth) != _node_id.bit(depth)) {
+        if (id.bit(tree_node->depth()) != _node_id.bit(tree_node->depth())) {
             node_contains_self = false;
         }
-        depth++;
         ancestors.insert(tree_node);
     }
 
@@ -108,10 +106,11 @@ RoutingBucket* RoutingTable::find_bucket(NodeID id, bool split_buckets)
         const int TREE_BASE = 5;
         TreeNode* exhaustive_root = exhaustive_routing_subtable_fragment_root();
 
-        while (tree_node->bucket->nodes.size() == RoutingBucket::BUCKET_SIZE && depth < 160) {
+        while (tree_node->bucket->nodes.size() == RoutingBucket::BUCKET_SIZE
+                && tree_node->depth() < NodeID::bit_size) {
             if (
                 !node_contains_self
-                && (depth % TREE_BASE) == 0
+                && (tree_node->depth() % TREE_BASE) == 0
                 && !ancestors.count(exhaustive_root)
             ) {
                 break;
@@ -119,15 +118,16 @@ RoutingBucket* RoutingTable::find_bucket(NodeID id, bool split_buckets)
 
             tree_node->split();
 
-            if (id.bit(depth)) {
+            if (id.bit(tree_node->depth())) {
                 tree_node = tree_node->right_child.get();
             } else {
                 tree_node = tree_node->left_child.get();
             }
-            if (_node_id.bit(depth) != id.bit(depth)) {
+
+            if (_node_id.bit(tree_node->depth()) != id.bit(tree_node->depth())) {
                 node_contains_self = false;
             }
-            depth++;
+
             ancestors.insert(tree_node);
 
             // TODO: each bucket needs a refresh background coroutine.

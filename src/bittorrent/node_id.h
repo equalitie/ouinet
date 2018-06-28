@@ -8,7 +8,10 @@
 namespace ouinet { namespace bittorrent {
 
 struct NodeID {
-    using Buffer = std::array<uint8_t, 20>;
+    static constexpr size_t size     = 20;
+    static constexpr size_t bit_size = size * 8;
+
+    using Buffer = std::array<uint8_t, size>;
 
     struct Range {
         Buffer stencil;
