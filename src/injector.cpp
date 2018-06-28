@@ -26,6 +26,7 @@
 #include "injector_config.h"
 #include "authenticate.h"
 #include "force_exit_on_signal.h"
+#include "request_routing.h"
 
 #include "ouiservice.h"
 #include "ouiservice/i2p.h"
@@ -230,8 +231,23 @@ void serve( InjectorConfig& config
             return handle_connect_request(con, req, close_connection_signal, yield);
         }
 
-        InjectorCacheControl cc(con.get_io_service(), injector, close_connection_signal);
-        auto res = cc.fetch(req, yield[ec]);
+        // Check for a Ouinet version header hinting us on
+        // whether to behave like an injector or a proxy.
+        Response res;
+        auto req2(req);
+        auto ouinet_version_hdr = req2.find(request_version_hdr);
+        if (ouinet_version_hdr == req2.end()) {
+            // No Ouinet header, behave like a (non-caching) proxy.
+            // TODO: Maybe reject requests for HTTPS URLS:
+            // we are perfectly able to handle them (and do verification locally),
+            // but the client should be using a CONNECT request instead!
+            res = fetch_http_page(con.get_io_service(), req2, close_connection_signal, yield[ec]);
+        } else {
+            // Ouinet header found, behave like a Ouinet injector.
+            req2.erase(ouinet_version_hdr);  // do not propagate or cache the header
+            InjectorCacheControl cc(con.get_io_service(), injector, close_connection_signal);
+            res = cc.fetch(req2, yield[ec]);
+        }
         if (ec) {
             break;
         }

@@ -358,25 +358,29 @@ Response Client::State::fetch_fresh( const Request& request
 
                 Response res;
 
-                // Forward the request to the injector
+                // Forward the request to the injector,
+                // adding first a Ouinet version header
+                // to hint it to behave like an injector instead of a proxy.
+                auto injreq(request);
+                injreq.set(request_version_hdr, request_version_hdr_latest);
                 if (credentials) {
                     res = fetch_http_page(_ios
                                          , inj.connection
-                                         , authorize(request, *credentials)
+                                         , authorize(injreq, *credentials)
                                          , _shutdown_signal
                                          , yield[ec]);
                 }
                 else {
                     res = fetch_http_page(_ios
                                          , inj.connection
-                                         , request
+                                         , injreq
                                          , _shutdown_signal
                                          , yield[ec]);
                 }
 
                 if (ec) { last_error = ec; continue; }
 
-                sys::error_code ec_;
+                sys::error_code ec_;  // seed the original request
                 string ipfs = maybe_start_seeding(request, res, yield[ec_]);
 
                 return res;
