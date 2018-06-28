@@ -8,7 +8,19 @@
 namespace ouinet { namespace bittorrent {
 
 struct NodeID {
-    std::array<unsigned char, 20> buffer;
+    using Buffer = std::array<uint8_t, 20>;
+
+    struct Range {
+        Buffer stencil;
+        size_t mask;
+
+        NodeID random_id() const;
+        Range reduce(bool bit) const;
+
+        static const Range& max();
+    };
+
+    Buffer buffer;
 
     // XXX: `bit(0)` is the most signifficant, perhaps the function should be
     // called `rbit` ('r' for reverse)?
@@ -20,12 +32,6 @@ struct NodeID {
     static NodeID from_bytestring(const std::string& bytestring);
     static const NodeID& zero();
     static NodeID generate(asio::ip::address address);
-
-    /*
-     * Generate a random NodeID with first $stencil_mask number of
-     * most signifficant bits equal to those in $stencil.
-     */
-    static NodeID random(const NodeID& stencil, size_t stencil_mask);
 
     bool operator==(const NodeID& other) const { return buffer == other.buffer; }
 };

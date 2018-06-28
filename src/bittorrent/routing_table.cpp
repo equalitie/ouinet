@@ -7,7 +7,7 @@ using namespace ouinet::bittorrent::dht;
 RoutingTable::RoutingTable(NodeID node_id) :
     _node_id(node_id)
 {
-    _root_node = std::make_unique<TreeNode>(NodeIdRange::max());
+    _root_node = std::make_unique<TreeNode>(NodeID::Range::max());
     _root_node->bucket = std::make_unique<RoutingBucket>();
 }
 
@@ -26,10 +26,10 @@ void RoutingTable::TreeNode::split() {
     /*
      * Split the bucket.
      */
-    left_child = std::make_unique<TreeNode>(range.reduced(0));
+    left_child = std::make_unique<TreeNode>(range.reduce(0));
     left_child->bucket = std::make_unique<RoutingBucket>();
 
-    right_child = std::make_unique<TreeNode>(range.reduced(1));
+    right_child = std::make_unique<TreeNode>(range.reduce(1));
     right_child->bucket = std::make_unique<RoutingBucket>();
 
     for (const auto& node : bucket->nodes) {
@@ -157,7 +157,7 @@ RoutingTable::TreeNode* RoutingTable::exhaustive_routing_subtable_fragment_root(
         }
     }
 
-    int size = tree_node->bucket->nodes.size();
+    size_t size = tree_node->bucket->nodes.size();
 
     while (size < RoutingBucket::BUCKET_SIZE && !path.empty()) {
         tree_node = path.back();

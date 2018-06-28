@@ -3,41 +3,74 @@
 
 using namespace ouinet::bittorrent;
 
-bool NodeID::bit(int n) const
-{
+static bool get_rbit(const NodeID::Buffer& buffer, size_t n) {
     return (buffer[n / CHAR_BIT] & (1 << (CHAR_BIT - 1 - (n % CHAR_BIT)))) != 0;
 }
 
-void NodeID::set_bit(int n, bool value)
-{
+static void set_rbit(NodeID::Buffer& buffer, size_t n, bool value) {
     char bit = 1 << (CHAR_BIT - (n % CHAR_BIT) - 1);
 
     if (value) buffer[n / CHAR_BIT] |=  bit;
     else       buffer[n / CHAR_BIT] &= ~bit;
 }
 
-NodeID NodeID::random(const NodeID& stencil, size_t stencil_mask)
+static const NodeID::Buffer& zero_buffer() {
+    bool was_zeroed = false;
+    static NodeID::Buffer buf;
+
+    if (!was_zeroed) {
+        memset(buf.data(), 0, buf.size());
+        was_zeroed = true;
+    }
+
+    return buf;
+}
+
+bool NodeID::bit(int n) const
+{
+    return get_rbit(buffer, n);
+}
+
+void NodeID::set_bit(int n, bool value)
+{
+    set_rbit(buffer, n, value);
+}
+
+const NodeID::Range& NodeID::Range::max()
+{
+    static Range max_range{ zero_buffer(), 0 };
+    return max_range;
+}
+
+NodeID NodeID::Range::random_id() const
 {
     // XXX: Use std::uniform_int_distribution instead of std::rand
 
-    size_t s_bytes = stencil_mask / CHAR_BIT;
-    size_t s_bits  = stencil_mask % CHAR_BIT;
+    size_t s_bytes = mask / CHAR_BIT;
+    size_t s_bits  = mask % CHAR_BIT;
 
     NodeID ret;
 
     for (size_t i = 0; i < ret.buffer.size(); i++) {
         if (i < s_bytes) {
-            ret.buffer[i] = stencil.buffer[i];
+            ret.buffer[i] = stencil[i];
         }
         else if (i > s_bytes) {
             ret.buffer[i] = rand() & 0xff;
         }
         else {
-            ret.buffer[i] = (stencil.buffer[i] & ((0xff << (CHAR_BIT - s_bits)) & 0xff))
+            ret.buffer[i] = (stencil[i] & ((0xff << (CHAR_BIT - s_bits)) & 0xff))
                           | (rand() & ((1 << (CHAR_BIT - s_bits)) - 1));
         }
     }
 
+    return ret;
+}
+
+NodeID::Range NodeID::Range::reduce(bool bit) const {
+    Range ret{stencil, mask};
+    ++ret.mask;
+    set_rbit(ret.stencil, ret.mask, bit);
     return ret;
 }
 

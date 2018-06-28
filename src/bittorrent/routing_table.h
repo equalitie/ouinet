@@ -6,7 +6,6 @@
 #include <deque>
 
 #include "node_id.h"
-#include "node_id_range.h"
 
 namespace ouinet { namespace bittorrent { namespace dht {
 
@@ -31,7 +30,7 @@ struct RoutingNode {
 };
 
 struct RoutingBucket {
-    static const int BUCKET_SIZE = 8;
+    static const size_t BUCKET_SIZE = 8;
 
     std::vector<RoutingNode> nodes;
     std::deque<RoutingNode> verified_candidates;
@@ -53,9 +52,9 @@ class RoutingTable {
          * or a non-leaf with children.
          */
 
-        NodeIdRange range;
+        NodeID::Range range;
 
-        TreeNode(NodeIdRange r) : range(std::move(r)) {}
+        TreeNode(NodeID::Range r) : range(std::move(r)) {}
 
         void split();
         size_t depth() const { return range.mask; }

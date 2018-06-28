@@ -435,7 +435,7 @@ void dht::DhtNode::refresh_routing_table(asio::yield_context yield)
     WaitCondition wc(_ios);
 
     _routing_table->for_each_bucket(
-        [&] (const NodeIdRange& range, RoutingBucket& bucket) {
+        [&] (const NodeID::Range& range, RoutingBucket& bucket) {
             spawn(_ios, [this, range, lock = wc.lock()]
                         (asio::yield_context yield) {
                             find_closest_nodes(range.random_id(), {}, yield);
