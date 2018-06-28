@@ -44,7 +44,6 @@ class DhtNode {
     void handle_query(udp::endpoint sender, BencodedMap query);
 
     void bootstrap(asio::yield_context yield);
-    void refresh_tree_node(dht::RoutingTreeNode* node, const NodeID id, int depth, WaitCondition& refresh_done);
     void refresh_routing_table(asio::yield_context yield);
     std::vector<NodeContact> find_closest_nodes(
         NodeID id,

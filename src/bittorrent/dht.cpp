@@ -306,7 +306,7 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
         NodeID target_id = NodeID::from_bytestring(*target_id_);
 
         std::vector<dht::NodeContact> contacts
-            = _routing_table->find_closest_routing_nodes(target_id, RoutingBucket::BUCKET_SIZE);
+            = _routing_table->find_closest_dht_nodes(target_id, RoutingBucket::BUCKET_SIZE);
 
         std::string nodes;
         if (!contacts.empty() && contacts[0].id == target_id) {
@@ -464,7 +464,7 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
     const int MAX_NODES = 8;
 
     std::vector<dht::NodeContact> routing_nodes
-        = _routing_table->find_closest_routing_nodes(id, MAX_NODES);
+        = _routing_table->find_closest_dht_nodes(id, MAX_NODES);
 
     for (auto& contact : routing_nodes) {
         Candidate candidate;
