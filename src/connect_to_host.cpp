@@ -11,17 +11,13 @@ using namespace ouinet;
 
 GenericConnection
 ouinet::connect_to_host( asio::io_service& ios
-                       , beast::string_view host_and_port
+                       , const string& host
+                       , const string& port
                        , Signal<void()>& cancel_signal
                        , asio::yield_context yield)
 {
     using namespace std;
     using tcp = asio::ip::tcp;
-
-    auto hp = util::split_host_port(host_and_port);
-
-    string host = hp.first .to_string();
-    string port = hp.second.to_string();
 
     sys::error_code ec;
 

@@ -1,6 +1,7 @@
 #include "client_front_end.h"
 #include "generic_connection.h"
 #include "cache/cache_client.h"
+#include "util.h"
 #include <boost/optional/optional_io.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 
@@ -8,7 +9,7 @@
 using namespace std;
 using namespace ouinet;
 
-using Request = http::request<http::string_body>;
+using Request = ClientFrontEnd::Request;
 using Response = ClientFrontEnd::Response;
 using boost::optional;
 
@@ -16,32 +17,6 @@ static string now_as_string() {
     namespace pt = boost::posix_time;
     auto entry_ts = pt::microsec_clock::universal_time();
     return pt::to_iso_extended_string(entry_ts);
-}
-
-static Response redirect_back(const Request& req)
-{
-    http::response<http::dynamic_body> res{http::status::ok, req.version()};
-
-    beast::string_view body =
-        "<!DOCTYPE html>\n"
-        "<html>\n"
-        "    <head>\n"
-        "        <meta http-equiv=\"refresh\" content=\"0; url=./\"/>\n"
-        "    </head>\n"
-        "</html>\n";
-
-    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-    res.set(http::field::content_type, "text/html");
-    res.keep_alive(false);
-
-    http::dynamic_body::reader reader(res, res.body());
-    sys::error_code ec;
-    reader.put(asio::const_buffer(body.data(), body.size()), ec);
-    assert(!ec);
-
-    res.prepare_payload();
-
-    return res;
 }
 
 struct ToggleInput {
@@ -86,17 +61,32 @@ static ostream& operator<<(ostream& os, const ClientFrontEnd::Task& task) {
 
 } // ouinet namespace
 
-Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
-                              , const Request& req
-                              , CacheClient* cache_client)
+void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, stringstream& ss
+                                  , const CACertificate& ca)
 {
-    Response res{http::status::ok, req.version()};
+    res.set(http::field::content_type, "application/x-x509-ca-cert");
+    res.set(http::field::content_disposition, "inline");
+
+    ss << ca.pem_certificate();
+}
+
+void ClientFrontEnd::handle_portal( const Request& req, Response& res, stringstream& ss
+                                  , const boost::optional<Endpoint>& injector_ep
+                                  , CacheClient* cache_client)
+{
+    res.set(http::field::content_type, "text/html");
 
     auto target = req.target();
 
     if (target.find('?') != string::npos) {
         // XXX: Extra primitive value parsing.
-        if (target.find("?injector_proxy=enable") != string::npos) {
+        if (target.find("?origin_access=enable") != string::npos) {
+            _origin_access_enabled = true;
+        }
+        else if (target.find("?origin_access=disable") != string::npos) {
+            _origin_access_enabled = false;
+        }
+        else if (target.find("?injector_proxy=enable") != string::npos) {
             _injector_proxying_enabled = true;
         }
         else if (target.find("?injector_proxy=disable") != string::npos) {
@@ -114,10 +104,17 @@ Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
         else if (target.find("?ipfs_cache=disable") != string::npos) {
             _ipfs_cache_enabled = false;
         }
-        return redirect_back(req);
+
+        // Redirect back to the portal.
+        ss << "<!DOCTYPE html>\n"
+               "<html>\n"
+               "    <head>\n"
+               "        <meta http-equiv=\"refresh\" content=\"0; url=./\"/>\n"
+               "    </head>\n"
+               "</html>\n";
+        return;
     }
 
-    stringstream ss;
     ss << "<!DOCTYPE html>\n"
           "<html>\n"
           "    <head>\n";
@@ -133,7 +130,16 @@ Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
           "    </head>\n"
           "    <body>\n";
 
+    // TODO: Do some browsers require P12 instead of PEM?
+    ss << "      <p><a href=\"ca.pem\">Install client-specific CA certificate for HTTPS support</a>.\n"
+          "      This certificate will only be used by your Ouinet-enabled applications in this device.\n"
+          "      Verification of HTTPS content coming from the cache will be performed by injectors or publishers\n"
+          "      that you have configured your Ouinet client to trust.\n"
+          "      Verification of HTTPS content coming from the origin will be performed by your Ouinet client\n"
+          "      using system-accepted Certification Authorities.</p>\n";
+
     ss << ToggleInput{"Auto refresh",   "auto_refresh",   _auto_refresh_enabled};
+    ss << ToggleInput{"Origin access", "origin_access", _origin_access_enabled};
     ss << ToggleInput{"Injector proxy", "injector_proxy", _injector_proxying_enabled};
     ss << ToggleInput{"IPFS Cache",     "ipfs_cache",     _ipfs_cache_enabled};
 
@@ -159,10 +165,25 @@ Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
 
     ss << "    </body>\n"
           "</html>\n";
+}
 
+Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
+                              , const Request& req
+                              , CacheClient* cache_client
+                              , const CACertificate& ca)
+{
+    Response res{http::status::ok, req.version()};
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-    res.set(http::field::content_type, "text/html");
     res.keep_alive(false);
+
+    stringstream ss;
+
+    util::url_match url;
+    match_http_url(req.target().to_string(), url);
+    if (url.path == "/ca.pem")
+        handle_ca_pem(req, res, ss, ca);
+    else
+        handle_portal(req, res, ss, injector_ep, cache_client);
 
     Response::body_type::reader reader(res, res.body());
     sys::error_code ec;

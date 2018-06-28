@@ -77,7 +77,19 @@ void handle_connect_request( GenericConnection& client_c
         client_c.close();
     });
 
-    auto origin_c = connect_to_host(ios, req["host"], disconnect_signal, yield[ec]);
+    // Split CONNECT target in host and port (443 i.e. HTTPS by default).
+    auto hp = req["host"];
+    auto pos = hp.rfind(':');
+    string host, port;
+    if (pos != string::npos) {
+        host = hp.substr(0, pos).to_string();
+        port = hp.substr(pos + 1).to_string();
+    } else {
+        host = hp.to_string();
+        port = "443";  // HTTPS port by default
+    }
+
+    auto origin_c = connect_to_host(ios, host, port, disconnect_signal, yield[ec]);
 
     if (ec) {
         return handle_bad_request( client_c
@@ -113,19 +125,9 @@ public:
         : ios(ios)
         , injector(injector)
     {
-        cc.fetch_fresh = [this, &ios, &abort_signal]
+        cc.fetch_fresh = [&ios, &abort_signal]
                          (const Request& rq, asio::yield_context yield) {
-            auto host = rq["host"].to_string();
-
-            sys::error_code ec;
-            auto con = connect_to_host(ios, host, abort_signal, yield[ec]);
-            if (ec) return or_throw<Response>(yield, ec);
-
-            auto close_con_slot = abort_signal.connect([&con] {
-                con.close();
-            });
-
-            return fetch_http_page(ios, con, rq, yield);
+            return fetch_http_page(ios, rq, abort_signal, yield);
         };
 
         cc.fetch_stored = [this](const Request& rq, asio::yield_context yield) {
