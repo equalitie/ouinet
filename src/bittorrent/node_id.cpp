@@ -15,7 +15,7 @@ static void set_rbit(NodeID::Buffer& buffer, size_t n, bool value) {
 }
 
 static const NodeID::Buffer& zero_buffer() {
-    bool was_zeroed = false;
+    static bool was_zeroed = false;
     static NodeID::Buffer buf;
 
     if (!was_zeroed) {
