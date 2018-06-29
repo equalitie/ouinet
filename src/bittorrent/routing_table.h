@@ -58,9 +58,9 @@ class RoutingTable {
 
         void split();
         size_t depth() const { return range.mask; }
-        size_t count_dht_nodes() const;
+        size_t count_routing_nodes() const;
 
-        void closest_dht_nodes( NodeID target
+        void closest_routing_nodes( NodeID target
                               , size_t max_output
                               , std::vector<NodeContact>& output);
 
@@ -74,7 +74,7 @@ class RoutingTable {
     RoutingTable(const RoutingTable&) = delete;
 
     RoutingBucket* find_bucket(NodeID id, bool split_buckets);
-    std::vector<NodeContact> find_closest_dht_nodes(NodeID target, size_t count);
+    std::vector<NodeContact> find_closest_routing_nodes(NodeID target, size_t count);
 
     template<class F> void for_each_bucket(F&&);
 

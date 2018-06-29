@@ -43,13 +43,13 @@ void RoutingTable::TreeNode::split() {
     bucket = nullptr;
 }
 
-size_t RoutingTable::TreeNode::count_dht_nodes() const
+size_t RoutingTable::TreeNode::count_routing_nodes() const
 {
     if (bucket) {
         return bucket->nodes.size();
     } else {
-        return left_child ->count_dht_nodes()
-             + right_child->count_dht_nodes();
+        return left_child ->count_routing_nodes()
+             + right_child->count_routing_nodes();
     }
 }
 
@@ -163,18 +163,18 @@ RoutingTable::TreeNode* RoutingTable::exhaustive_routing_subtable_fragment_root(
         tree_node = path.back();
         path.pop_back();
         if (_node_id.bit(path.size())) {
-            size += tree_node->left_child->count_dht_nodes();
+            size += tree_node->left_child->count_routing_nodes();
         } else {
-            size += tree_node->right_child->count_dht_nodes();
+            size += tree_node->right_child->count_routing_nodes();
         }
     }
 
     return tree_node;
 }
 
-void RoutingTable::TreeNode::closest_dht_nodes( NodeID target
-                                              , size_t max_output
-                                              , std::vector<NodeContact>& output)
+void RoutingTable::TreeNode::closest_routing_nodes( NodeID target
+                                                  , size_t max_output
+                                                  , std::vector<NodeContact>& output)
 {
     if (output.size() >= max_output) {
         return;
@@ -193,11 +193,11 @@ void RoutingTable::TreeNode::closest_dht_nodes( NodeID target
         }
     } else {
         if (target.bit(depth())) {
-            right_child->closest_dht_nodes(target, max_output, output);
-            left_child ->closest_dht_nodes(target, max_output, output);
+            right_child->closest_routing_nodes(target, max_output, output);
+            left_child ->closest_routing_nodes(target, max_output, output);
         } else {
-            left_child ->closest_dht_nodes(target, max_output, output);
-            right_child->closest_dht_nodes(target, max_output, output);
+            left_child ->closest_routing_nodes(target, max_output, output);
+            right_child->closest_routing_nodes(target, max_output, output);
         }
     }
 }
@@ -207,7 +207,7 @@ void RoutingTable::TreeNode::closest_dht_nodes( NodeID target
  * closest to $target.
  */
 std::vector<NodeContact>
-RoutingTable::find_closest_dht_nodes(NodeID target, size_t count)
+RoutingTable::find_closest_routing_nodes(NodeID target, size_t count)
 {
     TreeNode* tree_node = _root_node.get();
     std::vector<TreeNode*> ancestors;
@@ -227,7 +227,7 @@ RoutingTable::find_closest_dht_nodes(NodeID target, size_t count)
     std::vector<NodeContact> output;
 
     for (auto it = ancestors.rbegin(); it != ancestors.rend(); ++it) {
-        (*it)->closest_dht_nodes(target, count, output);
+        (*it)->closest_routing_nodes(target, count, output);
         if (output.size() >= count) break;
     }
 
