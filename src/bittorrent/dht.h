@@ -53,7 +53,7 @@ class DhtNode {
 
     void send_ping(NodeContact contact);
 
-    void routing_bucket_try_add_node(RoutingBucket* bucket, NodeContact contact, bool verify_contact);
+    void routing_bucket_try_add_node(RoutingBucket* bucket, NodeContact contact, bool is_verified);
     void routing_bucket_fail_node(RoutingBucket* bucket, NodeContact contact);
 
     static bool closer_to(const NodeID& reference, const NodeID& left, const NodeID& right);

@@ -703,10 +703,10 @@ void dht::DhtNode::send_ping(NodeContact contact)
 
 /*
  * Record a node in the routing table, space permitting. If there is no space,
- * check for node replacement opportunities. If verify_contact is not set, ping
+ * check for node replacement opportunities. If is_verified is not set, ping
  * the target contact before adding it.
  */
-void dht::DhtNode::routing_bucket_try_add_node(RoutingBucket* bucket, NodeContact contact, bool verify_contact)
+void dht::DhtNode::routing_bucket_try_add_node(RoutingBucket* bucket, NodeContact contact, bool is_verified)
 {
     /*
      * Check whether the contact is already in the routing table. If so, bump it.
@@ -715,7 +715,7 @@ void dht::DhtNode::routing_bucket_try_add_node(RoutingBucket* bucket, NodeContac
         if (bucket->nodes[i].contact == contact) {
             RoutingNode node = bucket->nodes[i];
             node.last_activity = std::chrono::steady_clock::now();
-            if (verify_contact) {
+            if (is_verified) {
                 node.queries_failed = 0;
                 node.questionable_ping_ongoing = false;
             }
@@ -750,7 +750,7 @@ void dht::DhtNode::routing_bucket_try_add_node(RoutingBucket* bucket, NodeContac
      * ping it instead; on success, the node will be added.
      */
     if (bucket->nodes.size() < RoutingBucket::BUCKET_SIZE) {
-        if (verify_contact) {
+        if (is_verified) {
             RoutingNode node;
             node.contact = contact;
             node.last_activity = std::chrono::steady_clock::now();
@@ -769,7 +769,7 @@ void dht::DhtNode::routing_bucket_try_add_node(RoutingBucket* bucket, NodeContac
      */
     for (size_t i = 0; i < bucket->nodes.size(); i++) {
         if (bucket->nodes[i].is_bad()) {
-            if (verify_contact) {
+            if (is_verified) {
                 bucket->nodes.erase(bucket->nodes.begin() + i);
 
                 RoutingNode node;
@@ -810,7 +810,7 @@ void dht::DhtNode::routing_bucket_try_add_node(RoutingBucket* bucket, NodeContac
      * Other fields are meaningless for candidates.
      */
 
-    if (verify_contact) {
+    if (is_verified) {
         if (questionable_nodes > 0) {
             bucket->verified_candidates.push_back(candidate);
         }
