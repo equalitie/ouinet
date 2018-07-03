@@ -93,9 +93,8 @@ void handle_connect_request( GenericConnection& client_c
     auto origin_c = connect_to_host(ios, host, port, disconnect_signal, yield[ec]);
 
     if (ec) {
-        return handle_bad_request( client_c
-                                 , req
-                                 , "Connect: can't connect to the origin"
+        return handle_bad_request( client_c, req
+                                 , "Failed to connect to origin: " + ec.message()
                                  , yield[ec]);
     }
 
@@ -249,6 +248,9 @@ void serve( InjectorConfig& config
             res = cc.fetch(req2, yield[ec]);
         }
         if (ec) {
+            handle_bad_request( con, req
+                              , "Failed to retrieve content from origin: " + ec.message()
+                              , yield[ec]);
             break;
         }
 
