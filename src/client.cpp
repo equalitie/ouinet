@@ -336,52 +336,62 @@ Response Client::State::fetch_fresh( const Request& request
 
                 return res;
             }
-            case responder::proxy: {
-                assert(0 && "TODO");
-                continue;
-            }
+            // Since the current implementation uses the injector as a proxy,
+            // both cases are quite similar, so we fall through.
+            case responder::proxy:
             case responder::injector: {
-                if (!_front_end.is_injector_proxying_enabled()) {
+                if (r == responder::proxy && !_front_end.is_proxy_access_enabled()) {
                     continue;
                 }
-                sys::error_code ec;
+                if (r == responder::injector && !_front_end.is_injector_proxying_enabled()) {
+                    continue;
+                }
 
+                // Parse the URL to check for HTTPS stuff.
+                util::url_match url;
+                if (!match_http_url(request.target().to_string(), url)) {
+                    last_error = asio::error::operation_not_supported;  // unsupported URL
+                    continue;
+                }
+
+                // Connect to the injector/proxy.
+                sys::error_code ec;
                 auto inj
                     = _injector->connect(yield[ec], _shutdown_signal);
-
                 if (ec) {
                     last_error = ec;
                     continue;
                 }
 
+                // Build the actual request to send to the injector/proxy.
                 auto credentials = _config.credentials_for(inj.remote_endpoint);
+                Request injreq;
+                if (r == responder::proxy && url.scheme == "https")
+                    injreq = Request{ http::verb::connect
+                                    , url.host + ":" + (url.port.empty() ? "443" : url.port)
+                                    , 11 /* HTTP/1.1 */};
+                else
+                    injreq = request;
+                if (r == responder::injector)
+                    // Add first a Ouinet version header
+                    // to hint it to behave like an injector instead of a proxy.
+                    injreq.set(request_version_hdr, request_version_hdr_latest);
+                if (credentials)
+                    injreq = authorize(injreq, *credentials);
 
                 Response res;
-
-                // Forward the request to the injector,
-                // adding first a Ouinet version header
-                // to hint it to behave like an injector instead of a proxy.
-                auto injreq(request);
-                injreq.set(request_version_hdr, request_version_hdr_latest);
-                if (credentials) {
-                    res = fetch_http_page(_ios
-                                         , inj.connection
-                                         , authorize(injreq, *credentials)
-                                         , _shutdown_signal
-                                         , yield[ec]);
-                }
-                else {
-                    res = fetch_http_page(_ios
-                                         , inj.connection
-                                         , injreq
-                                         , _shutdown_signal
-                                         , yield[ec]);
-                }
-
+                // XXXXX check proxy+HTTPS, then CONNECT + SSL handshake + relative request
+                res = fetch_http_page( _ios
+                                     , inj.connection
+                                     , injreq
+                                     , _shutdown_signal
+                                     , yield[ec]);
                 if (ec) { last_error = ec; continue; }
 
-                sys::error_code ec_;  // seed the original request
-                string ipfs = maybe_start_seeding(request, res, yield[ec_]);
+                if (r == responder::injector) {
+                    sys::error_code ec_;  // seed the original request
+                    string ipfs = maybe_start_seeding(request, res, yield[ec_]);
+                }
 
                 return res;
             }
