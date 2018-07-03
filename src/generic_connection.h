@@ -41,6 +41,7 @@ namespace generic_connection_detail {
     };
 } // namespace
 
+
 class GenericConnection {
 public:
     using executor_type = asio::io_context::executor_type;
@@ -165,14 +166,14 @@ public:
         namespace asio   = boost::asio;
         namespace system = boost::system;
 
-        using Sig     = void(system::error_code, size_t);
-        using Result  = asio::async_result<Token, Sig>;
-        using Handler = typename Result::completion_handler_type;
+        using Sig = void(system::error_code, size_t);
+
+        boost::asio::async_completion<Token, Sig> init(token);
+
+        using Handler = std::decay_t<decltype(init.completion_handler)>;
 
         // XXX: Handler is non-copyable, but can we do this without allocation?
-        auto handler = make_shared<Handler>(forward<decltype(token)>(token));
-
-        Result result(*handler);
+        auto handler = make_shared<Handler>(std::move(init.completion_handler));
 
         _impl->read_buffers.resize(distance( asio::buffer_sequence_begin(bs)
                                            , asio::buffer_sequence_end(bs)));
@@ -186,7 +187,7 @@ public:
                              (*h)(ec, size);
                          });
 
-        return result.get();
+        return init.result.get();
     }
 
     template< class ConstBufferSequence
@@ -199,14 +200,14 @@ public:
         namespace asio   = boost::asio;
         namespace system = boost::system;
 
-        using Sig     = void(system::error_code, size_t);
-        using Result  = asio::async_result<Token, Sig>;
-        using Handler = typename Result::completion_handler_type;
+        using Sig = void(system::error_code, size_t);
+
+        boost::asio::async_completion<Token, Sig> init(token);
+
+        using Handler = std::decay_t<decltype(init.completion_handler)>;
 
         // XXX: Handler is non-copyable, but can we do this without allocation?
-        auto handler = make_shared<Handler>(forward<decltype(token)>(token));
-
-        Result result(*handler);
+        auto handler = make_shared<Handler>(std::move(init.completion_handler));
 
         _impl->write_buffers.resize(distance( asio::buffer_sequence_begin(bs)
                                             , asio::buffer_sequence_end(bs)));
@@ -220,7 +221,7 @@ public:
                               (*h)(ec, size);
                           });
 
-        return result.get();
+        return init.result.get();
     }
 
 private:
