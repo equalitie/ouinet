@@ -337,56 +337,91 @@ Response Client::State::fetch_fresh( const Request& request
                 return res;
             }
             // Since the current implementation uses the injector as a proxy,
-            // both cases are quite similar, so we fall through.
-            case responder::proxy:
+            // both cases are quite similar, so we only handle HTTPS requests here.
+            case responder::proxy: {
+                if (!_front_end.is_proxy_access_enabled())
+                    continue;
+
+                auto target = request.target();
+                if (target.starts_with("https://")) {
+                    // Parse the URL to check for HTTPS stuff.
+                    util::url_match url;
+                    if (!match_http_url(target.to_string(), url)) {
+                        last_error = asio::error::operation_not_supported;  // unsupported URL
+                        continue;
+                    }
+
+                    // Connect to the injector/proxy.
+                    sys::error_code ec;
+                    auto inj = _injector->connect(yield[ec], _shutdown_signal);
+                    if (ec) {
+                        last_error = ec;
+                        continue;
+                    }
+
+                    // Build the actual request to send to the proxy.
+                    Request connreq = { http::verb::connect
+                                      , url.host + ":" + (url.port.empty() ? "443" : url.port)
+                                      , 11 /* HTTP/1.1 */};
+                    if (auto credentials = _config.credentials_for(inj.remote_endpoint))
+                        connreq = authorize(connreq, *credentials);
+
+                    // XXXX DO CONNECT
+                    // XXXX DO SSL HANDSHAKE
+
+                    // Now that we have a connection to the origin
+                    // we can send a non-proxy request to it
+                    // (i.e. with target "/foo..." and not "http://example.com/foo...").
+                    // Actually some web servers do not like the full form.
+                    Request origreq(request);
+                    origreq.target(target.substr(target.find( url.path
+                                                            // Length of "http://" or "https://",
+                                                            // do not fail on "http(s)://FOO/FOO".
+                                                            , url.scheme.length() + 3)));
+                    auto res = fetch_http_page( _ios
+                                              , inj.connection // XXXX PLACEHOLDER! USE SSL CON
+                                              , origreq
+                                              , _shutdown_signal
+                                              , yield[ec]);
+                    if (ec) {
+                        last_error = ec;
+                        continue;
+                    }
+
+                    return res;
+                }
+            }
+            // Fall through, the case below handles both injector and proxy with plain HTTP.
             case responder::injector: {
-                if (r == responder::proxy && !_front_end.is_proxy_access_enabled()) {
+                if (r == responder::injector && !_front_end.is_injector_proxying_enabled())
                     continue;
-                }
-                if (r == responder::injector && !_front_end.is_injector_proxying_enabled()) {
-                    continue;
-                }
 
-                // Parse the URL to check for HTTPS stuff.
-                util::url_match url;
-                if (!match_http_url(request.target().to_string(), url)) {
-                    last_error = asio::error::operation_not_supported;  // unsupported URL
-                    continue;
-                }
-
-                // Connect to the injector/proxy.
+                // Connect to the injector.
                 sys::error_code ec;
-                auto inj
-                    = _injector->connect(yield[ec], _shutdown_signal);
+                auto inj = _injector->connect(yield[ec], _shutdown_signal);
                 if (ec) {
                     last_error = ec;
                     continue;
                 }
 
-                // Build the actual request to send to the injector/proxy.
-                auto credentials = _config.credentials_for(inj.remote_endpoint);
-                Request injreq;
-                if (r == responder::proxy && url.scheme == "https")
-                    injreq = Request{ http::verb::connect
-                                    , url.host + ":" + (url.port.empty() ? "443" : url.port)
-                                    , 11 /* HTTP/1.1 */};
-                else
-                    injreq = request;
+                // Build the actual request to send to the injector.
+                Request injreq(request);
                 if (r == responder::injector)
                     // Add first a Ouinet version header
                     // to hint it to behave like an injector instead of a proxy.
                     injreq.set(request_version_hdr, request_version_hdr_latest);
-                if (credentials)
+                if (auto credentials = _config.credentials_for(inj.remote_endpoint))
                     injreq = authorize(injreq, *credentials);
 
-                Response res;
-                // XXXXX check proxy+HTTPS, then CONNECT + SSL handshake + relative request
-                res = fetch_http_page( _ios
-                                     , inj.connection
-                                     , injreq
-                                     , _shutdown_signal
-                                     , yield[ec]);
-                if (ec) { last_error = ec; continue; }
+                auto res = fetch_http_page( _ios
+                                          , inj.connection
+                                          , injreq
+                                          , _shutdown_signal
+                                          , yield[ec]);
+                if (ec) {
+                    last_error = ec;
+                    continue;
+                }
 
                 if (r == responder::injector) {
                     sys::error_code ec_;  // seed the original request
