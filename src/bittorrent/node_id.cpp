@@ -105,6 +105,12 @@ const NodeID& NodeID::zero()
 
 NodeID NodeID::generate(asio::ip::address address)
 {
+    return generate(address, boost::none);
+}
+
+NodeID NodeID::generate( asio::ip::address address
+                       , boost::optional<uint8_t> test_rnd)
+{
     /*
      * Choose DHT ID based on ip address.
      * See: BEP 42
@@ -112,33 +118,41 @@ NodeID NodeID::generate(asio::ip::address address)
 
     NodeID node_id;
 
+    using CRC32C = boost::crc_optimal<32, 0x1edc6f41, 0xffffffff, 0xffffffff, true, true>;
+
     uint32_t checksum;
-    node_id.buffer[19] = rand() & 0xff;
+
+    node_id.buffer[19] = (test_rnd ? *test_rnd : std::rand()) & 0xff;
+
     if (address.is_v4()) {
-        std::array<unsigned char, 4> ip_bytes = address.to_v4().to_bytes();
+        auto ip_bytes = address.to_v4().to_bytes();
+
         for (int i = 0; i < 4; i++) {
             ip_bytes[i] &= (0xff >> (6 - i * 2));
         }
+
         ip_bytes[0] |= ((node_id.buffer[19] & 7) << 5);
 
-        boost::crc_optimal<32, 0x1edc6f41, 0xffffffff, 0xffffffff, true, true> crc;
+        CRC32C crc;
         crc.process_bytes(ip_bytes.data(), 4);
         checksum = crc.checksum();
     } else {
-        std::array<unsigned char, 16> ip_bytes = address.to_v6().to_bytes();
+        auto ip_bytes = address.to_v6().to_bytes();
+
         for (int i = 0; i < 8; i++) {
             ip_bytes[i] &= (0xff >> (7 - i));
         }
+
         ip_bytes[0] |= ((node_id.buffer[19] & 7) << 5);
 
-        boost::crc_optimal<32, 0x1edc6f41, 0xffffffff, 0xffffffff, true, true> crc;
+        CRC32C crc;
         crc.process_bytes(ip_bytes.data(), 8);
         checksum = crc.checksum();
     }
 
     node_id.buffer[0] = (checksum >> 24) & 0xff;
     node_id.buffer[1] = (checksum >> 16) & 0xff;
-    node_id.buffer[2] = ((checksum >>  8) & 0xe0) | (rand() & 0x1f);
+    node_id.buffer[2] = ((checksum >> 8) & 0xf8) | (rand() & 0x7);
     for (int i = 3; i < 19; i++) {
         node_id.buffer[i] = rand() & 0xff;
     }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <boost/asio/ip/address.hpp>
+#include <boost/optional.hpp>
 #include <string>
 #include <array>
 #include "../namespaces.h"
@@ -34,7 +35,13 @@ struct NodeID {
     std::string to_bytestring() const;
     static NodeID from_bytestring(const std::string& bytestring);
     static const NodeID& zero();
+
+    // http://bittorrent.org/beps/bep_0042.html
     static NodeID generate(asio::ip::address address);
+
+    private:
+    static NodeID generate( asio::ip::address address
+                          , boost::optional<uint8_t> test_rnd);
 
     bool operator==(const NodeID& other) const { return buffer == other.buffer; }
 };

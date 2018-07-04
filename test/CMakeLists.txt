@@ -11,3 +11,7 @@ target_link_libraries(test-wait-condition ${Boost_LIBRARIES})
 
 add_executable(test-btree "test_btree.cpp" "../src/cache/btree.cpp")
 target_link_libraries(test-btree ${Boost_LIBRARIES})
+
+add_executable(test-bittorrent "test_bittorrent.cpp"
+                               "../src/bittorrent/node_id.cpp")
+target_link_libraries(test-bittorrent ${Boost_LIBRARIES})
