@@ -15,7 +15,7 @@ namespace ouinet {
 
 // Send the HTTP request `req` over the connection `con`
 // (which may be already an SSL tunnel)
-// and return the HTTP response.
+// *as is* and return the HTTP response.
 template<class RequestType>
 inline
 http::response<http::dynamic_body>
@@ -54,7 +54,7 @@ fetch_http_page( asio::io_service& ios
 
 // Retrieve the HTTP/HTTPS URL in the proxy request `req`
 // (i.e. with a target like ``https://x.y/z``, not just ``/z``)
-// and return the HTTP response.
+// *from the origin* and return the HTTP response.
 template<class RequestType>
 http::response<http::dynamic_body>
 fetch_http_page( asio::io_service& ios
@@ -74,17 +74,11 @@ fetch_http_page( asio::io_service& ios
         ec = asio::error::operation_not_supported;  // unsupported URL
         return or_throw<Response>(yield, ec);
     }
-    string url_port;
-    bool ssl(false);
-    if (url.port.length() > 0)
-        url_port = url.port;
-    else if (url.scheme == "https") {
-        url_port = "443";
-        ssl = true;
-    } else  // url.scheme == "http"
-        url_port = "80";
+    bool ssl(url.scheme == "https");
+    if (url.port.empty())
+        url.port = ssl ? "443" : "80";
 
-    auto con = connect_to_host(ios, url.host, url_port, abort_signal, yield[ec]);
+    auto con = connect_to_host(ios, url.host, url.port, abort_signal, yield[ec]);
     if (ec) return or_throw<Response>(yield, ec);
 
     if (ssl) {
