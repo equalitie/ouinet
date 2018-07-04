@@ -47,14 +47,6 @@ public:
     using executor_type = asio::io_context::executor_type;
 
 private:
-    template<class Token, class Ret>
-    using Handler = typename asio::handler_type< Token
-                                               , void(sys::error_code, Ret)
-                                               >::type;
-
-    template<class Token, class Ret>
-    using Result = typename asio::async_result<Handler<Token, Ret>>;
-
     using OnRead  = std::function<void(sys::error_code, size_t)>;
     using OnWrite = std::function<void(sys::error_code, size_t)>;
 
@@ -158,8 +150,7 @@ public:
 
     template< class MutableBufferSequence
             , class Token>
-    typename Result<Token, size_t>::type
-    async_read_some(const MutableBufferSequence& bs, Token&& token)
+    auto async_read_some(const MutableBufferSequence& bs, Token&& token)
     {
         using namespace std;
 
@@ -192,8 +183,7 @@ public:
 
     template< class ConstBufferSequence
             , class Token>
-    typename Result<Token, size_t>::type
-    async_write_some(const ConstBufferSequence& bs, Token&& token)
+    auto async_write_some(const ConstBufferSequence& bs, Token&& token)
     {
         using namespace std;
 
