@@ -377,7 +377,7 @@ Response Client::State::fetch_fresh( const Request& request
                         // This error code is quite fake, so log the error too.
                         last_error = asio::error::connection_refused;
                         cerr << "Failed HTTP CONNECT to " << connreq.target() << ": "
-                             << connres.result() << " " << connres.reason() << endl;
+                             << connres.result_int() << " " << connres.reason() << endl;
                         continue;
                     }
 
