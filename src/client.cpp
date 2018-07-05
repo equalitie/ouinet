@@ -366,8 +366,17 @@ Response Client::State::fetch_fresh( const Request& request
                     if (auto credentials = _config.credentials_for(inj.remote_endpoint))
                         connreq = authorize(connreq, *credentials);
 
-                    // XXXX DO CONNECT
-                    // XXXX DO SSL HANDSHAKE
+                    // XXXX DO HTTP CONNECT
+
+                    // Subsequent access to the connection will use the encrypted channel.
+                    auto con = ssl::util::client_handshake( move(inj.connection)
+                                                          , url.host, yield[ec]);
+                    if (ec) {
+                        cerr << "SSL client handshake error: "
+                             << url.host << ": " << ec.message() << endl;
+                        last_error = ec;
+                        continue;
+                    }
 
                     // Now that we have a connection to the origin
                     // we can send a non-proxy request to it
@@ -379,7 +388,7 @@ Response Client::State::fetch_fresh( const Request& request
                                                             // do not fail on "http(s)://FOO/FOO".
                                                             , url.scheme.length() + 3)));
                     auto res = fetch_http_page( _ios
-                                              , inj.connection // XXXX PLACEHOLDER! USE SSL CON
+                                              , con
                                               , origreq
                                               , _shutdown_signal
                                               , yield[ec]);
