@@ -344,7 +344,7 @@ Response Client::State::fetch_fresh( const Request& request
 
                 auto target = request.target();
                 if (target.starts_with("https://")) {
-                    // Parse the URL to check for HTTPS stuff.
+                    // Parse the URL to tell HTTP/HTTPS, host, port.
                     util::url_match url;
                     if (!match_http_url(target.to_string(), url)) {
                         last_error = asio::error::operation_not_supported;  // unsupported URL
@@ -368,30 +368,10 @@ Response Client::State::fetch_fresh( const Request& request
 
                     // XXXX DO HTTP CONNECT
 
-                    // Subsequent access to the connection will use the encrypted channel.
-                    auto con = ssl::util::client_handshake( move(inj.connection)
-                                                          , url.host, yield[ec]);
-                    if (ec) {
-                        cerr << "SSL client handshake error: "
-                             << url.host << ": " << ec.message() << endl;
-                        last_error = ec;
-                        continue;
-                    }
-
-                    // Now that we have a connection to the origin
-                    // we can send a non-proxy request to it
-                    // (i.e. with target "/foo..." and not "http://example.com/foo...").
-                    // Actually some web servers do not like the full form.
-                    Request origreq(request);
-                    origreq.target(target.substr(target.find( url.path
-                                                            // Length of "http://" or "https://",
-                                                            // do not fail on "http(s)://FOO/FOO".
-                                                            , url.scheme.length() + 3)));
-                    auto res = fetch_http_page( _ios
-                                              , con
-                                              , origreq
-                                              , _shutdown_signal
-                                              , yield[ec]);
+                    auto res = fetch_http_origin( _ios , inj.connection
+                                                , url, request
+                                                , _shutdown_signal
+                                                , yield[ec]);
                     if (ec) {
                         last_error = ec;
                         continue;
