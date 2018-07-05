@@ -366,8 +366,22 @@ Response Client::State::fetch_fresh( const Request& request
                     if (auto credentials = _config.credentials_for(inj.remote_endpoint))
                         connreq = authorize(connreq, *credentials);
 
-                    // XXXX DO HTTP CONNECT
+                    // Open a tunnel to the origin
+                    // (to later perform the SSL handshake and send the request).
+                    auto connres = fetch_http_page( _ios
+                                                  , inj.connection
+                                                  , connreq
+                                                  , _shutdown_signal
+                                                  , yield[ec]);
+                    if (connres.result() != http::status::ok) {
+                        // This error code is quite fake, so log the error too.
+                        last_error = asio::error::connection_refused;
+                        cerr << "Failed HTTP CONNECT to " << connreq.target() << ": "
+                             << connres.result() << " " << connres.reason() << endl;
+                        continue;
+                    }
 
+                    // Send the request to the origin.
                     auto res = fetch_http_origin( _ios , inj.connection
                                                 , url, request
                                                 , _shutdown_signal
@@ -402,6 +416,7 @@ Response Client::State::fetch_fresh( const Request& request
                 if (auto credentials = _config.credentials_for(inj.remote_endpoint))
                     injreq = authorize(injreq, *credentials);
 
+                // Send the request to the injector/proxy.
                 auto res = fetch_http_page( _ios
                                           , inj.connection
                                           , injreq
