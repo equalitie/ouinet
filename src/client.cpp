@@ -665,6 +665,9 @@ void Client::State::serve_request( GenericConnection&& con
         // Disable cache and always go to origin for this site.
         Match( reqexpr::from_regex(target_getter, "https?://ident.me/.*")
              , {false, queue<responder>({responder::origin})} ),
+        // Disable cache and always go to proxy for this site.
+        Match( reqexpr::from_regex(target_getter, "https?://ifconfig.co/.*")
+             , {false, queue<responder>({responder::proxy})} ),
         // Force cache and default mechanisms for this site.
         Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example.com/.*")
              , {true, queue<responder>()} ),
