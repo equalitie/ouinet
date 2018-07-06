@@ -91,6 +91,15 @@ void handle_connect_request( GenericConnection& client_c
         host = hp.to_string();
         port = "443";  // HTTPS port by default
     }
+    // Restrict connections towards certain hosts and ports.
+    // TODO: Enhance this filter.
+    if (util::is_localhost(host, ios, disconnect_signal, yield[ec])
+        || (port != "80" && port != "443" && port != "8080" && port != "8443")) {
+        ec = asio::error::invalid_argument;
+        return handle_bad_request( client_c, req
+                                 , "Illegal CONNECT target: " + port
+                                 , yield[ec]);
+    }
 
     auto origin_c = connect_to_host(ios, host, port, disconnect_signal, yield[ec]);
 
