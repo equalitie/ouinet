@@ -431,6 +431,15 @@ build, please run:
 
 [Android ABI]: https://developer.android.com/ndk/guides/abis.html
 
+### Existing Android SDK and Android NDK
+By the default the build-android.sh script downloads all required libries to build ouinet android library including Android SDK and Android NDK. If you have already have these installed on your system you tune the script to use those:
+
+export SDK_DIR=/opt/android-sdk
+export NDK_DIR=/opt/android-sdk/ndk-bundle
+export PLATFORM=android-26
+export BOOST_SOURCE=/path/to/Boost-for-Android
+export BOOST_INCLUDEDIR=$BOOST_SOURCE/build/out/${ABI}/include/boost-${BOOST_V}
+
 ### Setting up Android browser/client
 
 The android app has user menus for specifying the injector's endpoint,
@@ -483,3 +492,63 @@ Some useful options include `-no-snapshot`, `-no-snapshot-load` and
 While the emulator is running, you may interact with it using ADB, e.g. to
 install the APK built in the previous step.  See the script's output for
 particular instructions and paths.
+
+### Integrating ouinet library into your app
+
+In order for your android app to access the resources its needs through HTTP protocol over OuiNet and take advantage of its caching and distributed request handling, you need to take few simple steps.
+
+Here we assume, the app is developed in Android Studio environment.
+
+First you need to compile library for the ABI environment at which your are aiming (ex. armeabi-v7a or x86). After the build_android.sh script finishes successfully, you where you are going to find the library:
+
+    /your/build/folder/outputs/aar/ouinet-debug.aar
+
+You then can copy the 'ouinet-debug.aar' files to your app libs folder:
+
+  cp /your/build/folder/outputs/aar/ouinet-debug.aar  /your/android/studio/project/folder/app/libs/ouinet-debug.aar
+
+At
+
+    allprojects {
+      repositories {
+      ...
+      }
+    }
+section of /your/android/studio/project/build.gradle Add 
+
+    flatDir {
+      dirs 'libs'
+    }
+
+and at 
+
+    dependencies {
+    ...
+    }
+    
+section of /your/android/studio/project/app/build.gradle Add 
+
+  implementation(name:'ouinet-debug', ext:'aar')
+  
+At this stage your project should compile with no errors. Now to tell Ouinet to take over your http communication. in MainActivity.java of your app import Ouinet
+
+import ie.equalit.ouinet.Ouinet;
+
+Add a private member to your MainActivity class:
+
+    private Ouinet _ouinet;
+    
+And in its OnCreate method initiate the Ouinet object:
+
+        _ouinet = new Ouinet(this);
+
+        _ouinet.setInjectorEndpoint("InjectorIP:PORT");
+        _ouinet.setIPNS("Injector_ipns_EndPoint");
+        _ouinet.setCredentialsFor("InjectorIP:PORT", "user:password");
+        
+From now on all of the app's HTTP communication is served over OuiNet.
+
+
+
+
+

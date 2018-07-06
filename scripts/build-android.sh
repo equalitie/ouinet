@@ -9,6 +9,8 @@ APP_ROOT="${ROOT}/android/browser"
 APK="${DIR}"/build-android/builddir/browser/build-android/outputs/apk/debug/browser-debug.apk
 APK_ID=$(sed -En 's/^\s*\bapplicationId\s+"([^"]+)".*/\1/p' "${APP_ROOT}/build.gradle")
 
+DEBIAN=${DEBIAN:-true}
+
 # https://developer.android.com/ndk/guides/abis.html
 ABI=${ABI:-armeabi-v7a}
 
@@ -46,21 +48,21 @@ else
     exit 1
 fi
 
-SDK_DIR="$DIR/sdk"
+SDK_DIR=${SDK_DIR:-"$DIR/sdk"}
 
 NDK=android-ndk-r16b
-NDK_DIR=$DIR/$NDK
+NDK_DIR=${NDK_DIR:-"$DIR/$NDK"}
 NDK_ZIP=${NDK}-linux-x86_64.zip
 
 # `posix_fadvise`, required by Boost.Beast is was only added in LOLLIPOP
 # https://developer.android.com/guide/topics/manifest/uses-sdk-element.html#ApiLevels
-NDK_PLATFORM=21
+NDK_PLATFORM=${NDK_PLATFORM:-21}
 NDK_STL='libc++'
-NDK_TOOLCHAIN_DIR=${DIR}/${NDK}-toolchain-android$NDK_PLATFORM-$NDK_ARCH-$NDK_STL
+NDK_TOOLCHAIN_DIR=${NDK_TOOLCHAIN_DIR:-${DIR}/${NDK}-toolchain-android$NDK_PLATFORM-$NDK_ARCH-$NDK_STL}
 
-BOOST_V=1_65_1
+BOOST_V=${BOOST_V:-"1_65_1"}
 BOOST_V_DOT=${BOOST_V//_/.} # 1.65.1
-BOOST_SOURCE=${DIR}/Boost-for-Android
+BOOST_SOURCE=${BOOST_SOURCE:-"${DIR}/Boost-for-Android"}
 BOOST_INCLUDEDIR=$BOOST_SOURCE/build/out/${ABI}/include/boost-${BOOST_V}
 BOOST_LIBRARYDIR=$BOOST_SOURCE/build/out/${ABI}/lib
 
@@ -95,6 +97,13 @@ EMULATOR_IMAGE="system-images;$PLATFORM;$EMULATOR_IMAGE_TAG;$ABI"
 EMULATOR_DEV=${EMULATOR_DEV:-Nexus 6}
 EMULATOR_SKIN=1440x2560  # automatically scaled down on smaller screens
 
+echo "NDK_DIR: "$NDK_DIR
+echo "SDK_DIR: "$SDK_DIR
+echo "NDK_TOOLCHAIN_DIR: "$NDK_TOOLCHAIN_DIR
+echo "PLATFORM: "$PLATFORM
+echo "BOOST_SOURCE: "$BOOST_SOURCE
+echo "BOOST LIB: "$BOOST_LIBRARYDIR
+
 ######################################################################
 # This variable shall contain paths to generated libraries which
 # must all be included in the final Android package.
@@ -125,20 +134,24 @@ function check_mode {
 
 ######################################################################
 function setup_deps {
-which unzip > /dev/null || sudo apt-get install unzip
-which java > /dev/null || sudo apt-get install default-jre
-dpkg-query -W default-jdk > /dev/null 2>&1 || sudo apt-get install default-jdk
+    if [ $DEBIAN == true ] ; then
+       which unzip > /dev/null || sudo apt-get install unzip
+       which java > /dev/null || sudo apt-get install default-jre
+       dpkg-query -W default-jdk > /dev/null 2>&1 || sudo apt-get install default-jdk
+    fi
 
 # J2EE is no longer part of standard Java modules in Java 9,
 # although the Android SDK uses some of its classes.
 # This causes exception "java.lang.NoClassDefFoundError: javax/xml/bind/...",
 # so we need to reenable J2EE modules explicitly when using JRE 9
 # (see <https://stackoverflow.com/a/43574427>).
-local java_add_modules=' --add-modules java.se.ee'
-if [ $(dpkg-query -W default-jre | cut -f2 | sed -En 's/^[0-9]+:1\.([0-9]+).*/\1/p') -ge 9 \
-     -a "${JAVA_OPTS%%$java_add_modules*}" = "$JAVA_OPTS" ] ; then
-    export JAVA_OPTS="$JAVA_OPTS$java_add_modules"
-fi
+    local java_add_modules=' --add-modules java.se.ee'
+    if [ $DEBIAN == true ] ; then
+        if [ $(dpkg-query -W default-jre | cut -f2 | sed -En 's/^[0-9]+:1\.([0-9]+).*/\1/p') -ge 9 \
+             -a "${JAVA_OPTS%%$java_add_modules*}" = "$JAVA_OPTS" ] ; then
+            export JAVA_OPTS="$JAVA_OPTS$java_add_modules"
+        fi
+    fi
 
 ######################################################################
 # Install SDK dependencies.
@@ -151,6 +164,8 @@ if [ -d "$DIR/sdk_root" -a ! -d "$SDK_DIR" ]; then
 fi
 
 if [ ! -f "$sdkmanager" ]; then
+    echo "cannot find sdk manager: $sdkmangaer"
+    echo "downlodaing sdk.."
     [ -d "$SDK_DIR/tools" ] || rm -rf "$SDK_DIR/tools"
     if [ ! -f "$toolsfile" ]; then
         # https://developer.android.com/studio/index.html#command-tools
@@ -187,6 +202,7 @@ for mode in $ALLOWED_MODES; do
         done
     fi
 done
+
 # Filter out repeated packages.
 sdk_pkgs_install=$(echo "$sdk_pkgs_install" | tr [:space:] '\n' | sort -u)
 # Install missing packages.
@@ -212,46 +228,53 @@ fi
 
 ######################################################################
 function maybe_install_ndk {
-if [ ! -d "$NDK" ]; then
-    if [ ! -f ${NDK_ZIP} ]; then
-        wget https://dl.google.com/android/repository/${NDK_ZIP}
+    if [ ! -d "$NDK_DIR" ]; then
+        echo "installing ndk..."
+        if [ ! -f ${NDK_ZIP} ]; then
+            wget https://dl.google.com/android/repository/${NDK_ZIP}
+        fi
+        unzip ${NDK_ZIP}
     fi
-    unzip ${NDK_ZIP}
-fi
 }
 
 ######################################################################
 function maybe_install_ndk_toolchain {
-if [ ! -d "${NDK_TOOLCHAIN_DIR}" ]; then
-    $NDK_DIR/build/tools/make-standalone-toolchain.sh \
-        --platform=android-$NDK_PLATFORM \
-        --arch=$NDK_ARCH \
-        --stl=$NDK_STL \
-        --install-dir=${NDK_TOOLCHAIN_DIR}
-fi
+    if [ ! -d "${NDK_TOOLCHAIN_DIR}" ]; then
+        echo "installing ndk toolchain..."
+        $NDK_DIR/build/tools/make-standalone-toolchain.sh \
+            --platform=android-$NDK_PLATFORM \
+            --arch=$NDK_ARCH \
+            --stl=$NDK_STL \
+            --install-dir=${NDK_TOOLCHAIN_DIR}
+    fi
 
-export ANDROID_NDK_HOME=$NDK_DIR
+    export ANDROID_NDK_HOME=$NDK_DIR
 
-add_library $NDK_TOOLCHAIN_DIR/$NDK_TOOLCHAIN_TARGET/lib*/libc++_shared.so
+    TOOLCHAIN_LIBCXX="$NDK_TOOLCHAIN_DIR/$NDK_TOOLCHAIN_TARGET/lib*/$CMAKE_SYSTEM_PROCESSOR/libc++_shared.so"
+    add_library $TOOLCHAIN_LIBCXX
+    echo "TOOLCHAIN_LIBCXX: $TOOLCHAIN_LIBCXX"
 }
 
 ######################################################################
 function maybe_install_gradle {
-local GRADLE=gradle-4.6
-local GRADLE_ZIP=$GRADLE-bin.zip
-if [ ! -d "$GRADLE" ]; then
-    if [ ! -f $GRADLE_ZIP ]; then
-        wget https://services.gradle.org/distributions/$GRADLE_ZIP
+    if ! which gradle 1> /dev/null 2>1; then
+        local GRADLE=gradle-4.6
+        local GRADLE_ZIP=$GRADLE-bin.zip
+        if [ ! -d "$GRADLE" ]; then
+            if [ ! -f $GRADLE_ZIP ]; then
+                echo "downloading gradle..."
+                wget https://services.gradle.org/distributions/$GRADLE_ZIP
+            fi
+            TODO: Check SHA256
+            unzip $GRADLE_ZIP
+        fi
+        export PATH="`pwd`/$GRADLE/bin:$PATH"
     fi
-    # TODO: Check SHA256
-    unzip $GRADLE_ZIP
-fi
-
-export PATH="`pwd`/$GRADLE/bin:$PATH"
 }
 
 ######################################################################
 function maybe_install_boost {
+echo "maybe install boost"
 if [ ! -d "$BOOST_SOURCE" ]; then
     (cd "$(dirname "$BOOST_SOURCE")" \
          && git clone https://github.com/inetic/Boost-for-Android \
@@ -259,6 +282,7 @@ if [ ! -d "$BOOST_SOURCE" ]; then
 fi
 
 if [ ! -d "$BOOST_LIBRARYDIR" ]; then
+    echo "building boost"
     cd "$BOOST_SOURCE"
     # TODO: Android doesn't need program_options and test.
     ./build-android.sh \
@@ -286,13 +310,13 @@ function build_openssl {
 }
 
 function maybe_install_openssl {
-if [ ! -d "$SSL_DIR" ]; then
-    if [ ! -f openssl-${SSL_V}.tar.gz ]; then
-        wget https://www.openssl.org/source/openssl-${SSL_V}.tar.gz
+    if [ ! -d "$SSL_DIR" ]; then
+        if [ ! -f openssl-${SSL_V}.tar.gz ]; then
+            wget https://www.openssl.org/source/openssl-${SSL_V}.tar.gz
+        fi
+        tar xf openssl-${SSL_V}.tar.gz
+        (cd $SSL_DIR && build_openssl)
     fi
-    tar xf openssl-${SSL_V}.tar.gz
-    (cd $SSL_DIR && build_openssl)
-fi
 }
 
 ######################################################################
@@ -309,20 +333,21 @@ fi
 
 ######################################################################
 function build_ouinet_libs {
-mkdir -p build-ouinet
-cd build-ouinet
-cmake ${ANDROID_FLAGS} \
-    -DANDROID=1 \
-    -DWITH_INJECTOR=OFF \
-    -DIFADDRS_SOURCES="${DIR}/android-ifaddrs/ifaddrs.c" \
-    -DOPENSSL_INCLUDE_DIR=${SSL_DIR}/include \
-    -DCMAKE_CXX_FLAGS="-I ${DIR}/android-ifaddrs -I $SSL_DIR/include" \
-    ${ROOT}
-make VERBOSE=1
-cd -
+    mkdir -p build-ouinet
+    cd build-ouinet
+    cmake ${ANDROID_FLAGS} \
+          -DANDROID=1 \
+          -DWITH_INJECTOR=OFF \
+          -DIFADDRS_SOURCES="${DIR}/android-ifaddrs/ifaddrs.c" \
+          -DOPENSSL_INCLUDE_DIR=${SSL_DIR}/include \
+          -DCMAKE_CXX_FLAGS="-I ${DIR}/android-ifaddrs -I $SSL_DIR/include" \
+          -DBOOST_ROOT="$BOOST_SOURCE" \
+          ${ROOT}
+    make VERBOSE=1
+    cd -
 
-add_library $DIR/build-ouinet/libclient.so
-add_library $DIR/build-ouinet/modules/asio-ipfs/ipfs_bindings/libipfs_bindings.so
+    add_library $DIR/build-ouinet/libclient.so
+    add_library $DIR/build-ouinet/modules/asio-ipfs/ipfs_bindings/libipfs_bindings.so
 }
 
 ######################################################################
@@ -365,7 +390,7 @@ cd -
 function run_emulator {
     echo "Starting Android emulator, first boot may take more than 10 minutes..."
     "$SDK_DIR/tools/emulator" -avd "$EMULATOR_AVD" -skin "$EMULATOR_SKIN" \
-                              -use-system-libs "$@" &
+nnn                              -use-system-libs "$@" &
     local emupid=$!
     # Inspired in <https://android.stackexchange.com/q/83726>.
     adb -e wait-for-device
