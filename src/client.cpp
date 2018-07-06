@@ -363,6 +363,9 @@ Response Client::State::fetch_fresh( const Request& request
                     Request connreq = { http::verb::connect
                                       , url.host + ":" + (url.port.empty() ? "443" : url.port)
                                       , 11 /* HTTP/1.1 */};
+                    // HTTP/1.1 requires a ``Host:`` header in all requests:
+                    // <https://tools.ietf.org/html/rfc7230#section-5.4>.
+                    connreq.set(http::field::host, connreq.target());
                     if (auto credentials = _config.credentials_for(inj.remote_endpoint))
                         connreq = authorize(connreq, *credentials);
 
