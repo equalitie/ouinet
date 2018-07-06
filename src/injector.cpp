@@ -251,7 +251,7 @@ void serve( InjectorConfig& config
             handle_bad_request( con, req
                               , "Failed to retrieve content from origin: " + ec.message()
                               , yield[ec]);
-            break;
+            continue;
         }
 
         // Forward back the response
