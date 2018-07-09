@@ -9,8 +9,10 @@
 #include <vector>
 
 #include "bencoding.h"
+#include "dht_tracker.h"
 #include "node_id.h"
 #include "routing_table.h"
+
 #include "../namespaces.h"
 #include "../util/signal.h"
 #include "../util/wait_condition.h"
@@ -25,6 +27,9 @@ using ip::udp;
 
 
 class DhtNode {
+    public:
+    const int RESPONSIBLE_TRACKERS_PER_SWARM = 8;
+
     public:
     DhtNode(asio::io_service& ios, ip::address interface_address);
     void start(sys::error_code& ec);
@@ -138,6 +143,7 @@ class DhtNode {
     void routing_bucket_fail_node(RoutingBucket* bucket, NodeContact contact);
 
     static bool closer_to(const NodeID& reference, const NodeID& left, const NodeID& right);
+    static std::string encode_endpoint(tcp::endpoint endpoint) { return encode_endpoint(udp::endpoint(endpoint.address(), endpoint.port())); }
     static std::string encode_endpoint(udp::endpoint endpoint);
     static boost::optional<udp::endpoint> decode_endpoint(std::string endpoint);
 
@@ -149,6 +155,7 @@ class DhtNode {
     NodeID _node_id;
     bool _initialized;
     std::unique_ptr<RoutingTable> _routing_table;
+    std::unique_ptr<Tracker> _tracker;
 
     struct ActiveRequest {
         udp::endpoint destination;

@@ -31,6 +31,7 @@ dht::DhtNode::DhtNode(asio::io_service& ios, ip::address interface_address):
     _interface_address(interface_address),
     _socket(ios),
     _initialized(false),
+    _tracker(std::make_unique<Tracker>(_ios)),
     _rx_buffer(65536, '\0')
 {
 }
@@ -377,9 +378,10 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
         }
         NodeID target_id = NodeID::from_bytestring(*target_id_);
 
+        BencodedMap reply;
+
         std::vector<dht::NodeContact> contacts
             = _routing_table->find_closest_routing_nodes(target_id, RoutingBucket::BUCKET_SIZE);
-
         std::string nodes;
         if (!contacts.empty() && contacts[0].id == target_id) {
             nodes += contacts[0].id.to_bytestring();
@@ -390,16 +392,119 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
                 nodes += encode_endpoint(contact.endpoint);
             }
         }
-        BencodedMap reply;
         if (_interface_address.is_v4()) {
             reply["nodes"] = nodes;
         } else {
             reply["nodes6"] = nodes;
         }
+
         send_reply(reply);
         return;
-//    } else if (query_type == "get_peers") {
-//    } else if (query_type == "announce_peer") {
+    } else if (query_type == "get_peers") {
+        boost::optional<std::string> infohash_ = arguments["info_hash"].as_string();
+        if (!infohash_) {
+            send_error(203, "Missing argument 'info_hash'");
+            return;
+        }
+        if (infohash_->size() != 20) {
+            send_error(203, "Malformed argument 'info_hash'");
+            return;
+        }
+        NodeID infohash = NodeID::from_bytestring(*infohash_);
+
+        BencodedMap reply;
+
+        std::vector<dht::NodeContact> contacts
+            = _routing_table->find_closest_routing_nodes(infohash, RoutingBucket::BUCKET_SIZE);
+        std::string nodes;
+        for (auto& contact : contacts) {
+            nodes += contact.id.to_bytestring();
+            nodes += encode_endpoint(contact.endpoint);
+        }
+        if (_interface_address.is_v4()) {
+            reply["nodes"] = nodes;
+        } else {
+            reply["nodes6"] = nodes;
+        }
+
+        /*
+         * 50 peers will comfortably fit in a single UDP packet even in the
+         * worst case.
+         */
+        const int NUM_PEERS = 50;
+        std::vector<tcp::endpoint> peers = _tracker->list_peers(infohash, NUM_PEERS);
+        if (!peers.empty()) {
+            BencodedList peer_list;
+            for (auto& peer : peers) {
+                peer_list.push_back(encode_endpoint(peer));
+            }
+            reply["values"] = peer_list;
+        }
+
+        send_reply(reply);
+        return;
+    } else if (query_type == "announce_peer") {
+        boost::optional<std::string> infohash_ = arguments["info_hash"].as_string();
+        if (!infohash_) {
+            send_error(203, "Missing argument 'info_hash'");
+            return;
+        }
+        if (infohash_->size() != 20) {
+            send_error(203, "Malformed argument 'info_hash'");
+            return;
+        }
+        NodeID infohash = NodeID::from_bytestring(*infohash_);
+
+        boost::optional<std::string> token_ = arguments["token"].as_string();
+        if (!token_) {
+            send_error(203, "Missing argument 'token'");
+            return;
+        }
+        std::string token = *token_;
+        boost::optional<int64_t> port_ = arguments["port"].as_int();
+        if (!port_) {
+            send_error(203, "Missing argument 'port'");
+            return;
+        }
+        boost::optional<int64_t> implied_port_ = arguments["implied_port"].as_int();
+        int effective_port;
+        if (implied_port_ && *implied_port_ == 1) {
+            effective_port = sender.port();
+        } else {
+            effective_port = *port_;
+        }
+
+        /*
+         * Reject announce_peer requests for which there are more than enough
+         * better responsible known nodes.
+         *
+         * TODO: This can be done in a more efficient way once the routing
+         * table code stabilizes.
+         */
+        {
+            bool contains_self = false;
+            std::vector<NodeContact> closer_nodes = _routing_table->find_closest_routing_nodes(infohash, RESPONSIBLE_TRACKERS_PER_SWARM * 4);
+            for (auto& i : closer_nodes) {
+                if (closer_to(infohash, _node_id, i.id)) {
+                    contains_self = true;
+                }
+            }
+            if (!contains_self) {
+                send_error(201, "This torrent is not my responsibility");
+                return;
+            }
+        }
+
+        if (!_tracker->verify_token(sender.address(), token)) {
+            send_error(203, "Incorrect announce token");
+            return;
+        }
+
+        _tracker->add_peer(infohash, tcp::endpoint(sender.address(), effective_port));
+
+        BencodedMap reply;
+        send_reply(reply);
+        return;
     } else {
         send_error(204, "Query type not implemented");
         return;
@@ -1009,7 +1114,7 @@ void dht::DhtNode::tracker_search_peers(
         return got_peers;
     };
 
-    search_dht_for_nodes(infohash, 8, query, std::vector<udp::endpoint>(), yield);
+    search_dht_for_nodes(infohash, RESPONSIBLE_TRACKERS_PER_SWARM, query, std::vector<udp::endpoint>(), yield);
 }
 
 
