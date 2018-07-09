@@ -30,7 +30,24 @@ class DhtNode {
     void start(sys::error_code& ec);
     bool initialized() const { return _initialized; }
 
+    /**
+     * Query peers for a bittorrent swarm surrounding a particular infohash.
+     * This returns a randomized subset of all such peers, not the entire swarm.
+     */
     void tracker_get_peers(NodeID infohash, std::vector<tcp::endpoint>& peers, asio::yield_context yield);
+
+    /**
+     * Announce yourself on the bittorrent swarm surrounding a particular
+     * infohash, and retrieve existing peers in that swarm.
+     * This returns a randomized subset of all such peers, not the entire swarm.
+     *
+     * @param port If set, announce yourself on the TCP (and, possibly, UDP)
+     *     port listed. If unset, announce yourself on the UDP (and, possibly,
+     *     TCP) port used for communicating with the DHT.
+     *
+     * TODO: [ruud] I am not clear to what degree this is actually followed in practice.
+     */
+    void tracker_announce(NodeID infohash, boost::optional<int> port, std::vector<tcp::endpoint>& peers, asio::yield_context yield);
 
     private:
     void receive_loop(asio::yield_context yield);
@@ -104,6 +121,16 @@ class DhtNode {
         boost::optional<NodeID> node_id,
         std::string& closer_nodes,
         std::string& closer_nodes6,
+        asio::yield_context yield
+    );
+    struct TrackerNode {
+        udp::endpoint node_endpoint;
+        std::vector<tcp::endpoint> peers;
+        std::string announce_token;
+    };
+    void tracker_search_peers(
+        NodeID infohash,
+        std::map<NodeID, TrackerNode>& tracker_reply,
         asio::yield_context yield
     );
 

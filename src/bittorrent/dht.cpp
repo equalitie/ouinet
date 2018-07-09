@@ -67,131 +67,73 @@ void dht::DhtNode::start(sys::error_code& ec)
 
 void dht::DhtNode::tracker_get_peers(NodeID infohash, std::vector<tcp::endpoint>& peers, asio::yield_context yield)
 {
-    /*
-     * Contains the peers reported by the closest N nodes found so far.
-     */
-    std::map<NodeID, std::vector<tcp::endpoint>> best_peers;
-
-    auto query = [this, infohash, &best_peers] (
-        udp::endpoint node_endpoint,
-        boost::optional<NodeID> node_id,
-        std::string& closer_nodes,
-        std::string& closer_nodes6,
-        /**
-         * Called if the queried node becomes part of the set of closest
-         * good nodes seen so far. Only ever invoked if query_node()
-         * returned true, and node_id is not empty.
-         *
-         * @param displaced_node The node that is removed from the closest
-         *     set to make room for the queried node, if any.
-         */
-        std::function<void(
-            boost::optional<NodeContact> displaced_node,
-            asio::yield_context yield
-        )>& on_promote,
-        asio::yield_context yield
-    ) -> bool {
-        sys::error_code ec;
-
-        BencodedMap get_peers_message;
-        get_peers_message["id"] = _node_id.to_bytestring();
-        get_peers_message["info_hash"] = infohash.to_bytestring();
-
-        BencodedMap get_peers_reply;
-        send_query_await_reply(
-            node_endpoint,
-            node_id,
-            "get_peers",
-            get_peers_message,
-            get_peers_reply,
-            std::chrono::seconds(2),
-            yield[ec]
-        );
-
-        if (ec) {
-            or_throw(yield, ec);
-            return false;
-        }
-
-        if (!get_peers_reply["y"].as_string() || *get_peers_reply["y"].as_string() != "r") {
-            return false;
-        }
-
-        boost::optional<BencodedMap> get_peers_arguments = get_peers_reply["r"].as_map();
-        if (!get_peers_arguments) {
-            return false;
-        }
-
-        bool got_peers = false;
-        std::vector<tcp::endpoint> peers;
-        boost::optional<BencodedList> encoded_peers = (*get_peers_arguments)["values"].as_list();
-        if (encoded_peers) {
-            got_peers = true;
-            for (auto& peer : *encoded_peers) {
-                boost::optional<std::string> peer_string = peer.as_string();
-                if (peer_string) {
-                    boost::optional<udp::endpoint> endpoint = decode_endpoint(*peer_string);
-                    if (endpoint) {
-                        tcp::endpoint tcp_endpoint(endpoint->address(), endpoint->port());
-                        peers.push_back(tcp_endpoint);
-                    }
-                }
-            }
-
-            on_promote = [node_id, peers = std::move(peers), &best_peers] (
-                boost::optional<NodeContact> displaced_node,
-                asio::yield_context yield
-            ) {
-                assert(node_id);
-                if (displaced_node) {
-                    best_peers.erase(displaced_node->id);
-                }
-                best_peers[*node_id] = std::move(peers);
-            };
-        }
-
-        bool got_nodes = true;
-        boost::optional<std::string> nodes = (*get_peers_arguments)["nodes"].as_string();
-        if (nodes) {
-            closer_nodes = *nodes;
-        } else if (_interface_address.is_v4()) {
-            // This field is required in v4 requests and optional elsewhere
-            got_nodes = false;
-        }
-
-        boost::optional<std::string> nodes6 = (*get_peers_arguments)["nodes6"].as_string();
-        if (nodes) {
-            closer_nodes6 = *nodes6;
-        } else if (_interface_address.is_v6()) {
-            // This field is required in v6 requests and optional elsewhere
-            got_nodes = false;
-        }
-
-        /*
-         * A reply that contains peers may or may not also contain nodes.
-         * If it does not, follow up the get_peers message with a find_node.
-         * Ignore errors; a reply that contains peers but no nodes,
-         * even after a find_node, is still valid.
-         */
-        if (!got_nodes) {
-            query_find_node(
-                infohash,
-                node_endpoint,
-                node_id,
-                closer_nodes,
-                closer_nodes6,
-                yield
-            );
-        }
-
-        return got_peers;
-    };
-
-    search_dht_for_nodes(infohash, 8, query, std::vector<udp::endpoint>(), yield);
+    std::map<NodeID, TrackerNode> tracker_reply;
+    tracker_search_peers(infohash, tracker_reply, yield);
 
     peers.clear();
-    for (auto& i : best_peers) {
-        peers.insert(peers.end(), i.second.begin(), i.second.end());
+    for (auto& i : tracker_reply) {
+        peers.insert(peers.end(), i.second.peers.begin(), i.second.peers.end());
+    }
+}
+
+void dht::DhtNode::tracker_announce(NodeID infohash, boost::optional<int> port, std::vector<tcp::endpoint>& peers, asio::yield_context yield)
+{
+    std::map<NodeID, TrackerNode> tracker_reply;
+    tracker_search_peers(infohash, tracker_reply, yield);
+
+    peers.clear();
+    for (auto& i : tracker_reply) {
+        peers.insert(peers.end(), i.second.peers.begin(), i.second.peers.end());
+    }
+
+    for (auto& i : tracker_reply) {
+        /*
+         * Fire-and-forget announce messages to each responsible node.
+         */
+        asio::spawn(_ios, [
+            this,
+            infohash,
+            port,
+            node_endpoint = i.second.node_endpoint,
+            node_id = i.first,
+            announce_token = i.second.announce_token
+        ] (asio::yield_context yield) {
+            BencodedMap announce_message;
+            announce_message["id"] = _node_id.to_bytestring();
+            announce_message["info_hash"] = infohash.to_bytestring();
+            announce_message["token"] = announce_token;
+            if (port) {
+                announce_message["implied_port"] = int64_t(0);
+                announce_message["port"] = int64_t(*port);
+            } else {
+                announce_message["implied_port"] = int64_t(1);
+                announce_message["port"] = int64_t(0);
+            }
+
+            /*
+             * Retry the announce message a couple of times.
+             */
+            const int TRIES = 5;
+            for (int i = 0; i < TRIES; i++) {
+                sys::error_code ec;
+
+                BencodedMap announce_reply;
+                send_query_await_reply(
+                    node_endpoint,
+                    node_id,
+                    "announce_peer",
+                    announce_message,
+                    announce_reply,
+                    std::chrono::seconds(5),
+                    yield[ec]
+                );
+
+                    dump_bencoded(announce_reply);
+                if (!ec) {
+                    break;
+                }
+            }
+        });
     }
 }
 
@@ -872,6 +814,10 @@ void dht::DhtNode::send_ping(NodeContact contact)
     });
 }
 
+/**
+ * Send a find_node query to a target node, and parse the reply.
+ * @return True when received a valid response, false otherwise.
+ */
 bool dht::DhtNode::query_find_node(
     NodeID target_id,
     udp::endpoint node_endpoint,
@@ -929,6 +875,143 @@ bool dht::DhtNode::query_find_node(
 
     return nodes_present;
 }
+
+/**
+ * Perform a get_peers search. Returns the peers found, as well as necessary
+ * data to later perform an announce operation.
+ */
+void dht::DhtNode::tracker_search_peers(
+    NodeID infohash,
+    std::map<NodeID, TrackerNode>& tracker_reply,
+    asio::yield_context yield
+) {
+    /*
+     * Contains the peers reported by the closest N nodes found so far.
+     */
+    tracker_reply.clear();
+
+    auto query = [this, infohash, &tracker_reply] (
+        udp::endpoint node_endpoint,
+        boost::optional<NodeID> node_id,
+        std::string& closer_nodes,
+        std::string& closer_nodes6,
+        /**
+         * Called if the queried node becomes part of the set of closest
+         * good nodes seen so far. Only ever invoked if query_node()
+         * returned true, and node_id is not empty.
+         *
+         * @param displaced_node The node that is removed from the closest
+         *     set to make room for the queried node, if any.
+         */
+        std::function<void(
+            boost::optional<NodeContact> displaced_node,
+            asio::yield_context yield
+        )>& on_promote,
+        asio::yield_context yield
+    ) -> bool {
+        sys::error_code ec;
+
+        BencodedMap get_peers_message;
+        get_peers_message["id"] = _node_id.to_bytestring();
+        get_peers_message["info_hash"] = infohash.to_bytestring();
+
+        BencodedMap get_peers_reply;
+        send_query_await_reply(
+            node_endpoint,
+            node_id,
+            "get_peers",
+            get_peers_message,
+            get_peers_reply,
+            std::chrono::seconds(2),
+            yield[ec]
+        );
+
+        if (ec) {
+            or_throw(yield, ec);
+            return false;
+        }
+
+        if (!get_peers_reply["y"].as_string() || *get_peers_reply["y"].as_string() != "r") {
+            return false;
+        }
+
+        boost::optional<BencodedMap> get_peers_arguments = get_peers_reply["r"].as_map();
+        if (!get_peers_arguments) {
+            return false;
+        }
+
+        bool got_peers = false;
+        boost::optional<BencodedList> encoded_peers = (*get_peers_arguments)["values"].as_list();
+        boost::optional<std::string> announce_token = (*get_peers_arguments)["token"].as_string();
+        if (encoded_peers && announce_token) {
+            TrackerNode tracker_node;
+            tracker_node.node_endpoint = node_endpoint;
+            tracker_node.announce_token = *announce_token;
+
+            got_peers = true;
+            for (auto& peer : *encoded_peers) {
+                boost::optional<std::string> peer_string = peer.as_string();
+                if (peer_string) {
+                    boost::optional<udp::endpoint> endpoint = decode_endpoint(*peer_string);
+                    if (endpoint) {
+                        tcp::endpoint tcp_endpoint(endpoint->address(), endpoint->port());
+                        tracker_node.peers.push_back(tcp_endpoint);
+                    }
+                }
+            }
+
+            on_promote = [node_id, tracker_node = std::move(tracker_node), &tracker_reply] (
+                boost::optional<NodeContact> displaced_node,
+                asio::yield_context yield
+            ) {
+                assert(node_id);
+                if (displaced_node) {
+                    tracker_reply.erase(displaced_node->id);
+                }
+                tracker_reply[*node_id] = std::move(tracker_node);
+            };
+        }
+
+        bool got_nodes = true;
+        boost::optional<std::string> nodes = (*get_peers_arguments)["nodes"].as_string();
+        if (nodes) {
+            closer_nodes = *nodes;
+        } else if (_interface_address.is_v4()) {
+            // This field is required in v4 requests and optional elsewhere
+            got_nodes = false;
+        }
+
+        boost::optional<std::string> nodes6 = (*get_peers_arguments)["nodes6"].as_string();
+        if (nodes) {
+            closer_nodes6 = *nodes6;
+        } else if (_interface_address.is_v6()) {
+            // This field is required in v6 requests and optional elsewhere
+            got_nodes = false;
+        }
+
+        /*
+         * A reply that contains peers may or may not also contain nodes.
+         * If it does not, follow up the get_peers message with a find_node.
+         * Ignore errors; a reply that contains peers but no nodes,
+         * even after a find_node, is still valid.
+         */
+        if (!got_nodes) {
+            query_find_node(
+                infohash,
+                node_endpoint,
+                node_id,
+                closer_nodes,
+                closer_nodes6,
+                yield
+            );
+        }
+
+        return got_peers;
+    };
+
+    search_dht_for_nodes(infohash, 8, query, std::vector<udp::endpoint>(), yield);
+}
+
 
 
 /*

@@ -5,7 +5,7 @@ namespace bittorrent {
 
 struct BencodedValueVisitor : public boost::static_visitor<std::string> {
     std::string operator()(const int64_t& value) {
-        return std::string("i") + std::to_string(value) + std::string("d");
+        return std::string("i") + std::to_string(value) + std::string("e");
     }
 
     std::string operator()(const std::string& value) {
