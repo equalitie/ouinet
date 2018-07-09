@@ -15,7 +15,7 @@ namespace ouinet {
 
 // Send the HTTP request `req` over the connection `con`
 // (which may be already an SSL tunnel)
-// and return the HTTP response.
+// *as is* and return the HTTP response.
 template<class RequestType>
 inline
 http::response<http::dynamic_body>
@@ -26,7 +26,39 @@ fetch_http_page( asio::io_service& ios
                , asio::yield_context yield)
 {
     http::response<http::dynamic_body> res;
+    return fetch_http(ios, con, req, move(res), abort_signal, yield);
+}
 
+// Send the HTTP request `req` over the connection `con`
+// (which may be already an SSL tunnel)
+// *as is* and return the HTTP response head.
+template<class RequestType>
+inline
+http::response<http::empty_body>
+fetch_http_head( asio::io_service& ios
+               , GenericConnection& con
+               , RequestType req
+               , Signal<void()>& abort_signal
+               , asio::yield_context yield)
+{
+    http::response<http::empty_body> res;
+    return fetch_http(ios, con, req, move(res), abort_signal, yield);
+}
+
+// Send the HTTP request `req` over the connection `con`
+// (which may be already an SSL tunnel)
+// *as is* and return the HTTP response or just its head
+// depending on the expected `ResponseType`.
+template<class RequestType, class ResponseType>
+inline
+ResponseType
+fetch_http( asio::io_service& ios
+          , GenericConnection& con
+          , RequestType req
+          , ResponseType res
+          , Signal<void()>& abort_signal
+          , asio::yield_context yield)
+{
     sys::error_code ec;
 
     auto close_con_slot = abort_signal.connect([&con] {
@@ -47,14 +79,36 @@ fetch_http_page( asio::io_service& ios
     beast::flat_buffer buffer;
 
     // Receive the HTTP response
-    http::async_read(con, buffer, res, yield[ec]);
+    _recv_http_response(con, buffer, res, yield[ec]);
 
     return or_throw(yield, ec, move(res));
 }
 
+inline
+void
+_recv_http_response( GenericConnection& con
+                   , beast::flat_buffer& buffer
+                   , http::response<http::dynamic_body>& res
+                   , asio::yield_context yield)
+{
+    http::async_read(con, buffer, res, yield);
+}
+
+inline
+void
+_recv_http_response( GenericConnection& con
+                   , beast::flat_buffer& buffer
+                   , http::response<http::empty_body>& res
+                   , asio::yield_context yield)
+{
+    http::response_parser<http::empty_body> crph;
+    http::async_read_header(con, buffer, crph, yield);
+    res = move(crph.get());
+}
+
 // Retrieve the HTTP/HTTPS URL in the proxy request `req`
 // (i.e. with a target like ``https://x.y/z``, not just ``/z``)
-// and return the HTTP response.
+// *from the origin* and return the HTTP response.
 template<class RequestType>
 http::response<http::dynamic_body>
 fetch_http_page( asio::io_service& ios
@@ -62,32 +116,46 @@ fetch_http_page( asio::io_service& ios
                , Signal<void()>& abort_signal
                , asio::yield_context yield)
 {
+    using Response = http::response<http::dynamic_body>;
+
+    sys::error_code ec;
+
+    // Parse the URL to tell HTTP/HTTPS, host, port.
+    util::url_match url;
+    if (!util::match_http_url(req.target().to_string(), url)) {
+        ec = asio::error::operation_not_supported;  // unsupported URL
+        return or_throw<Response>(yield, ec);
+    }
+    bool ssl(url.scheme == "https");
+    if (url.port.empty())
+        url.port = ssl ? "443" : "80";
+
+    auto con = connect_to_host(ios, url.host, url.port, abort_signal, yield[ec]);
+    if (ec) return or_throw<Response>(yield, ec);
+
+    return fetch_http_origin(ios, con, url, req, abort_signal, yield);
+}
+
+// Retrieve the pre-parsed HTTP/HTTPS `url` for the given proxy request `req`
+// (i.e. with a target like ``https://x.y/z``, not just ``/z``)
+// over an existing connection `con` *to the origin*
+// (i.e. a direct connection or the tunnel resulting from HTTP CONNECT).
+template<class RequestType>
+http::response<http::dynamic_body>
+fetch_http_origin( asio::io_service& ios
+                 , GenericConnection& con
+                 , const util::url_match& url
+                 , RequestType req
+                 , Signal<void()>& abort_signal
+                 , asio::yield_context yield)
+{
     using namespace std;
     using Response = http::response<http::dynamic_body>;
 
     auto target = req.target().to_string();
     sys::error_code ec;
 
-    // Parse the URL to tell HTTP/HTTPS, host, port.
-    util::url_match url;
-    if (!util::match_http_url(target, url)) {
-        ec = asio::error::operation_not_supported;  // unsupported URL
-        return or_throw<Response>(yield, ec);
-    }
-    string url_port;
-    bool ssl(false);
-    if (url.port.length() > 0)
-        url_port = url.port;
-    else if (url.scheme == "https") {
-        url_port = "443";
-        ssl = true;
-    } else  // url.scheme == "http"
-        url_port = "80";
-
-    auto con = connect_to_host(ios, url.host, url_port, abort_signal, yield[ec]);
-    if (ec) return or_throw<Response>(yield, ec);
-
-    if (ssl) {
+    if (url.scheme == "https") {
         // Subsequent access to the connection will use the encrypted channel.
         con = ssl::util::client_handshake(move(con), url.host, yield[ec]);
         if (ec) {
