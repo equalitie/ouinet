@@ -44,7 +44,7 @@ class DhtNode {
         asio::steady_timer::duration timeout,
         asio::yield_context yield
     );
-    void handle_query(udp::endpoint sender, BencodedMap query);
+    void handle_query(udp::endpoint sender, BencodedMap query, asio::yield_context);
 
     void bootstrap(asio::yield_context yield);
     void refresh_routing_table(asio::yield_context yield);

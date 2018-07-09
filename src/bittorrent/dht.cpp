@@ -107,7 +107,7 @@ void dht::DhtNode::receive_loop(asio::yield_context yield)
         }
 
         if (*message_type == "q") {
-            handle_query(sender, *message_map);
+            handle_query(sender, *message_map, yield);
         } else if (*message_type == "r" || *message_type == "e") {
             auto it = _active_requests.find(*transaction_id);
             if (it != _active_requests.end() && it->second.destination == sender) {
@@ -209,50 +209,40 @@ void dht::DhtNode::send_query_await_reply(
     }
 }
 
-void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
+void dht::DhtNode::handle_query( udp::endpoint sender
+                               , BencodedMap query
+                               , asio::yield_context yield)
 {
     assert(query["y"].as_string() && *query["y"].as_string() == "q");
 
     boost::optional<std::string> transaction_ = query["t"].as_string();
-    if (!transaction_) {
-        return;
-    }
+
+    if (!transaction_) { return; }
+
     std::string transaction = *transaction_;
-    auto send_error = [this, sender, transaction] (int code, std::string description) {
-        asio::spawn(_ios, [this, sender, transaction, code, description] (asio::yield_context yield) {
-            BencodedList arguments;
-            arguments.push_back(code);
-            arguments.push_back(description);
 
-            BencodedMap message;
-            message["y"] = "e";
-            message["t"] = transaction;
-            message["e"] = arguments;
-            std::string message_string = bencoding_encode(message);
+    auto send_error = [&] (int code, std::string description) {
+        BencodedMap message;
+        message["y"] = "e";
+        message["t"] = transaction;
+        message["e"] = BencodedList{code, description};
+        std::string message_string = bencoding_encode(message);
 
-            /*
-             * Ignore errors.
-             */
-            sys::error_code ec;
-            _multiplexer->send(buffer(message_string), sender, yield[ec]);
-        });
+        sys::error_code ec; // Ignored
+        _multiplexer->send(buffer(message_string), sender, yield[ec]);
     };
-    auto send_reply = [this, sender, transaction, node_id = _node_id] (BencodedMap reply) {
-        asio::spawn(_ios, [this, sender, transaction, &reply, node_id] (asio::yield_context yield) {
-            reply["id"] = node_id.to_bytestring();
 
-            BencodedMap message;
-            message["y"] = "r";
-            message["t"] = transaction;
-            message["r"] = reply;
-            std::string message_string = bencoding_encode(message);
+    auto send_reply = [&] (BencodedMap reply) {
+        reply["id"] = _node_id.to_bytestring();
 
-            /*
-             * Ignore errors.
-             */
-            sys::error_code ec;
-            _multiplexer->send(buffer(message_string), sender, yield[ec]);
-        });
+        BencodedMap message;
+        message["y"] = "r";
+        message["t"] = transaction;
+        message["r"] = reply;
+        std::string message_string = bencoding_encode(message);
+
+        sys::error_code ec; // Ignored
+        _multiplexer->send(buffer(message_string), sender, yield[ec]);
     };
 
     if (!query["q"].is_string()) {
