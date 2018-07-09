@@ -30,6 +30,8 @@ class DhtNode {
     void start(sys::error_code& ec);
     bool initialized() const { return _initialized; }
 
+    void tracker_get_peers(NodeID infohash, std::vector<tcp::endpoint>& peers, asio::yield_context yield);
+
     private:
     void receive_loop(asio::yield_context yield);
     void send_query_await_reply(
@@ -79,7 +81,8 @@ class DhtNode {
             std::string& closer_nodes6,
             /**
              * Called if the queried node becomes part of the set of closest
-             * good nodes seen so far.
+             * good nodes seen so far. Only ever invoked if query_node()
+             * returned true, and node_id is not empty.
              *
              * @param displaced_node The node that is removed from the closest
              *     set to make room for the queried node, if any.
@@ -95,6 +98,14 @@ class DhtNode {
     );
 
     void send_ping(NodeContact contact);
+    bool query_find_node(
+        NodeID target_id,
+        udp::endpoint node_endpoint,
+        boost::optional<NodeID> node_id,
+        std::string& closer_nodes,
+        std::string& closer_nodes6,
+        asio::yield_context yield
+    );
 
     void routing_bucket_try_add_node(RoutingBucket* bucket, NodeContact contact, bool is_verified);
     void routing_bucket_fail_node(RoutingBucket* bucket, NodeContact contact);

@@ -85,6 +85,15 @@ std::string NodeID::to_hex() const
     return output;
 }
 
+NodeID NodeID::from_hex(const std::string& hex)
+{
+    NodeID output;
+    for (unsigned int i = 0; i < output.buffer.size(); i++) {
+        output.buffer[i] = (unsigned char)std::stoi(hex.substr(2 * i, 2), nullptr, 16);
+    }
+    return output;
+}
+
 std::string NodeID::to_bytestring() const
 {
     return std::string((char*) buffer.data(), buffer.size());
@@ -159,4 +168,3 @@ NodeID NodeID::generate( asio::ip::address address
 
     return node_id;
 }
-

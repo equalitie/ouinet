@@ -32,6 +32,7 @@ struct NodeID {
     void set_bit(int n, bool value);
 
     std::string to_hex() const;
+    static NodeID from_hex(const std::string& hex);
     std::string to_bytestring() const;
     static NodeID from_bytestring(const std::string& bytestring);
     static const NodeID& zero();
@@ -40,6 +41,7 @@ struct NodeID {
     static NodeID generate(asio::ip::address address);
 
     bool operator==(const NodeID& other) const { return buffer == other.buffer; }
+    bool operator<(const NodeID& other) const { return buffer < other.buffer; }
 
     private:
     static NodeID generate( asio::ip::address address

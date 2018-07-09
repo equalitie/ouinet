@@ -65,6 +65,136 @@ void dht::DhtNode::start(sys::error_code& ec)
     });
 }
 
+void dht::DhtNode::tracker_get_peers(NodeID infohash, std::vector<tcp::endpoint>& peers, asio::yield_context yield)
+{
+    /*
+     * Contains the peers reported by the closest N nodes found so far.
+     */
+    std::map<NodeID, std::vector<tcp::endpoint>> best_peers;
+
+    auto query = [this, infohash, &best_peers] (
+        udp::endpoint node_endpoint,
+        boost::optional<NodeID> node_id,
+        std::string& closer_nodes,
+        std::string& closer_nodes6,
+        /**
+         * Called if the queried node becomes part of the set of closest
+         * good nodes seen so far. Only ever invoked if query_node()
+         * returned true, and node_id is not empty.
+         *
+         * @param displaced_node The node that is removed from the closest
+         *     set to make room for the queried node, if any.
+         */
+        std::function<void(
+            boost::optional<NodeContact> displaced_node,
+            asio::yield_context yield
+        )>& on_promote,
+        asio::yield_context yield
+    ) -> bool {
+        sys::error_code ec;
+
+        BencodedMap get_peers_message;
+        get_peers_message["id"] = _node_id.to_bytestring();
+        get_peers_message["info_hash"] = infohash.to_bytestring();
+
+        BencodedMap get_peers_reply;
+        send_query_await_reply(
+            node_endpoint,
+            node_id,
+            "get_peers",
+            get_peers_message,
+            get_peers_reply,
+            std::chrono::seconds(2),
+            yield[ec]
+        );
+
+        if (ec) {
+            or_throw(yield, ec);
+            return false;
+        }
+
+        if (!get_peers_reply["y"].as_string() || *get_peers_reply["y"].as_string() != "r") {
+            return false;
+        }
+
+        boost::optional<BencodedMap> get_peers_arguments = get_peers_reply["r"].as_map();
+        if (!get_peers_arguments) {
+            return false;
+        }
+
+        bool got_peers = false;
+        std::vector<tcp::endpoint> peers;
+        boost::optional<BencodedList> encoded_peers = (*get_peers_arguments)["values"].as_list();
+        if (encoded_peers) {
+            got_peers = true;
+            for (auto& peer : *encoded_peers) {
+                boost::optional<std::string> peer_string = peer.as_string();
+                if (peer_string) {
+                    boost::optional<udp::endpoint> endpoint = decode_endpoint(*peer_string);
+                    if (endpoint) {
+                        tcp::endpoint tcp_endpoint(endpoint->address(), endpoint->port());
+                        peers.push_back(tcp_endpoint);
+                    }
+                }
+            }
+
+            on_promote = [node_id, peers = std::move(peers), &best_peers] (
+                boost::optional<NodeContact> displaced_node,
+                asio::yield_context yield
+            ) {
+                assert(node_id);
+                if (displaced_node) {
+                    best_peers.erase(displaced_node->id);
+                }
+                best_peers[*node_id] = std::move(peers);
+            };
+        }
+
+        bool got_nodes = true;
+        boost::optional<std::string> nodes = (*get_peers_arguments)["nodes"].as_string();
+        if (nodes) {
+            closer_nodes = *nodes;
+        } else if (_interface_address.is_v4()) {
+            // This field is required in v4 requests and optional elsewhere
+            got_nodes = false;
+        }
+
+        boost::optional<std::string> nodes6 = (*get_peers_arguments)["nodes6"].as_string();
+        if (nodes) {
+            closer_nodes6 = *nodes6;
+        } else if (_interface_address.is_v6()) {
+            // This field is required in v6 requests and optional elsewhere
+            got_nodes = false;
+        }
+
+        /*
+         * A reply that contains peers may or may not also contain nodes.
+         * If it does not, follow up the get_peers message with a find_node.
+         * Ignore errors; a reply that contains peers but no nodes,
+         * even after a find_node, is still valid.
+         */
+        if (!got_nodes) {
+            query_find_node(
+                infohash,
+                node_endpoint,
+                node_id,
+                closer_nodes,
+                closer_nodes6,
+                yield
+            );
+        }
+
+        return got_peers;
+    };
+
+    search_dht_for_nodes(infohash, 8, query, std::vector<udp::endpoint>(), yield);
+
+    peers.clear();
+    for (auto& i : best_peers) {
+        peers.insert(peers.end(), i.second.begin(), i.second.end());
+    }
+}
+
 void dht::DhtNode::receive_loop(asio::yield_context yield)
 {
     while (true) {
@@ -457,7 +587,8 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
         std::string& closer_nodes6,
         /**
          * Called if the queried node becomes part of the set of closest
-         * good nodes seen so far.
+         * good nodes seen so far. Only ever invoked if query_node()
+         * returned true, and node_id is not empty.
          *
          * @param displaced_node The node that is removed from the closest
          *     set to make room for the queried node, if any.
@@ -468,55 +599,14 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
         )>& on_promote,
         asio::yield_context yield
     ) -> bool {
-        sys::error_code ec;
-
-        BencodedMap find_node;
-        find_node["id"] = _node_id.to_bytestring();
-        find_node["target"] = target_id.to_bytestring();
-
-        BencodedMap find_node_reply;
-        send_query_await_reply(
+        return query_find_node(
+            target_id,
             node_endpoint,
             node_id,
-            "find_node",
-            find_node,
-            find_node_reply,
-            std::chrono::seconds(2),
-            yield[ec]
+            closer_nodes,
+            closer_nodes6,
+            yield
         );
-
-        if (ec) {
-            or_throw(yield, ec);
-            return false;
-        }
-
-        if (!find_node_reply["y"].as_string() || *find_node_reply["y"].as_string() != "r") {
-            return false;
-        }
-
-        boost::optional<BencodedMap> arguments = find_node_reply["r"].as_map();
-        if (!arguments) {
-            return false;
-        }
-
-        boost::optional<std::string> nodes = (*arguments)["nodes"].as_string();
-        if (nodes) {
-            closer_nodes = *nodes;
-        } else if (_interface_address.is_v4()) {
-            // This field is required in v4 requests and optional elsewhere
-            return false;
-        }
-
-        boost::optional<std::string> nodes6 = (*arguments)["nodes6"].as_string();
-        if (nodes) {
-            closer_nodes6 = *nodes6;
-        } else if (_interface_address.is_v6()) {
-            // This field is required in v6 requests and optional elsewhere
-            return false;
-        }
-
-        on_promote = [](boost::optional<NodeContact>, asio::yield_context) {};
-        return true;
     };
 
     return search_dht_for_nodes(target_id, 8, query, extra_starting_points, yield);
@@ -548,7 +638,8 @@ std::vector<dht::NodeContact> dht::DhtNode::search_dht_for_nodes(
         std::string& closer_nodes6,
         /**
          * Called if the queried node becomes part of the set of closest
-         * good nodes seen so far.
+         * good nodes seen so far. Only ever invoked if query_node()
+         * returned true, and node_id is not empty.
          *
          * @param displaced_node The node that is removed from the closest
          *     set to make room for the queried node, if any.
@@ -685,10 +776,10 @@ std::vector<dht::NodeContact> dht::DhtNode::search_dht_for_nodes(
 
                         if (confirmed_nodes >= max_nodes) {
                             /*
-                            * Remove remote candidates until there are $max_nodes confirmed candidates
-                            * left, and no nonconfirmed candidates more remote than the most remote
-                            * confirmed candidate remain.
-                            */
+                             * Remove remote candidates until there are $max_nodes confirmed candidates
+                             * left, and no nonconfirmed candidates more remote than the most remote
+                             * confirmed candidate remain.
+                             */
                             while (true) {
                                 auto it = candidates.rbegin();
                                 assert(it != candidates.rend());
@@ -709,7 +800,9 @@ std::vector<dht::NodeContact> dht::DhtNode::search_dht_for_nodes(
                             }
                         }
 
-                        on_promote(displaced_node, yield);
+                        if (on_promote) {
+                            on_promote(displaced_node, yield);
+                        }
                     }
                 }
 
@@ -720,7 +813,7 @@ std::vector<dht::NodeContact> dht::DhtNode::search_dht_for_nodes(
                 bool added = false;
                 for (const NodeContact& contact : contacts) {
                     if (confirmed_nodes >= max_nodes) {
-                        if (closer_to(target_id, candidates.rend()->first, contact.id)) {
+                        if (closer_to(target_id, candidates.rbegin()->first, contact.id)) {
                             continue;
                         }
                     }
@@ -779,6 +872,63 @@ void dht::DhtNode::send_ping(NodeContact contact)
     });
 }
 
+bool dht::DhtNode::query_find_node(
+    NodeID target_id,
+    udp::endpoint node_endpoint,
+    boost::optional<NodeID> node_id,
+    std::string& closer_nodes,
+    std::string& closer_nodes6,
+    asio::yield_context yield
+) {
+    sys::error_code ec;
+
+    BencodedMap find_node_message;
+    find_node_message["id"] = _node_id.to_bytestring();
+    find_node_message["target"] = target_id.to_bytestring();
+
+    BencodedMap find_node_reply;
+    send_query_await_reply(
+        node_endpoint,
+        node_id,
+        "find_node",
+        find_node_message,
+        find_node_reply,
+        std::chrono::seconds(2),
+        yield[ec]
+    );
+
+    if (ec) {
+        return false;
+    }
+
+    if (!find_node_reply["y"].as_string() || *find_node_reply["y"].as_string() != "r") {
+        return false;
+    }
+
+    boost::optional<BencodedMap> arguments = find_node_reply["r"].as_map();
+    if (!arguments) {
+        return false;
+    }
+
+    bool nodes_present = true;
+    boost::optional<std::string> nodes = (*arguments)["nodes"].as_string();
+    if (nodes) {
+        closer_nodes = *nodes;
+    } else if (_interface_address.is_v4()) {
+        // This field is required in v4 requests and optional elsewhere
+        nodes_present = false;
+    }
+
+    boost::optional<std::string> nodes6 = (*arguments)["nodes6"].as_string();
+    if (nodes) {
+        closer_nodes6 = *nodes6;
+    } else if (_interface_address.is_v6()) {
+        // This field is required in v6 requests and optional elsewhere
+        nodes_present = false;
+    }
+
+    return nodes_present;
+}
 
 
 /*
