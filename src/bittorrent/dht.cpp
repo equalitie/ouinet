@@ -129,7 +129,6 @@ void dht::DhtNode::tracker_announce(NodeID infohash, boost::optional<int> port, 
                     yield[ec]
                 );
 
-                    dump_bencoded(announce_reply);
                 if (!ec) {
                     break;
                 }
