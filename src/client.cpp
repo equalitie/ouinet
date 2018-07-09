@@ -371,7 +371,11 @@ Response Client::State::fetch_fresh( const Request& request
 
                     // Open a tunnel to the origin
                     // (to later perform the SSL handshake and send the request).
-                    auto connres = fetch_http_page( _ios
+                    // Only get the head of the CONNECT response
+                    // (otherwise we would get stuck waiting to read
+                    // a body whose length we do not know
+                    // since the respone should have no content length).
+                    auto connres = fetch_http_head( _ios
                                                   , inj.connection
                                                   , connreq
                                                   , _shutdown_signal

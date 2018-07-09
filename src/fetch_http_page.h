@@ -26,7 +26,35 @@ fetch_http_page( asio::io_service& ios
                , asio::yield_context yield)
 {
     http::response<http::dynamic_body> res;
+    return fetch_http(ios, con, req, move(res), abort_signal, yield);
+}
 
+// Send the HTTP request `req` over the connection `con`
+// (which may be already an SSL tunnel)
+// *as is* and return the HTTP response head.
+template<class RequestType>
+inline
+http::response<http::empty_body>
+fetch_http_head( asio::io_service& ios
+               , GenericConnection& con
+               , RequestType req
+               , Signal<void()>& abort_signal
+               , asio::yield_context yield)
+{
+    http::response<http::empty_body> res;
+    return fetch_http(ios, con, req, move(res), abort_signal, yield);
+}
+
+template<class RequestType, class ResponseType>
+inline
+ResponseType
+fetch_http( asio::io_service& ios
+          , GenericConnection& con
+          , RequestType req
+          , ResponseType res
+          , Signal<void()>& abort_signal
+          , asio::yield_context yield)
+{
     sys::error_code ec;
 
     auto close_con_slot = abort_signal.connect([&con] {
@@ -47,9 +75,31 @@ fetch_http_page( asio::io_service& ios
     beast::flat_buffer buffer;
 
     // Receive the HTTP response
-    http::async_read(con, buffer, res, yield[ec]);
+    recv_http_response(con, buffer, res, yield[ec]);
 
     return or_throw(yield, ec, move(res));
+}
+
+inline
+void
+recv_http_response( GenericConnection& con
+                  , beast::flat_buffer& buffer
+                  , http::response<http::dynamic_body>& res
+                  , asio::yield_context yield)
+{
+    http::async_read(con, buffer, res, yield);
+}
+
+inline
+void
+recv_http_response( GenericConnection& con
+                  , beast::flat_buffer& buffer
+                  , http::response<http::empty_body>& res
+                  , asio::yield_context yield)
+{
+    http::response_parser<http::empty_body> crph;
+    http::async_read_header(con, buffer, crph, yield);
+    res = move(crph.get());
 }
 
 // Retrieve the HTTP/HTTPS URL in the proxy request `req`
