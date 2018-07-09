@@ -45,6 +45,10 @@ fetch_http_head( asio::io_service& ios
     return fetch_http(ios, con, req, move(res), abort_signal, yield);
 }
 
+// Send the HTTP request `req` over the connection `con`
+// (which may be already an SSL tunnel)
+// *as is* and return the HTTP response or just its head
+// depending on the expected `ResponseType`.
 template<class RequestType, class ResponseType>
 inline
 ResponseType
@@ -75,27 +79,27 @@ fetch_http( asio::io_service& ios
     beast::flat_buffer buffer;
 
     // Receive the HTTP response
-    recv_http_response(con, buffer, res, yield[ec]);
+    _recv_http_response(con, buffer, res, yield[ec]);
 
     return or_throw(yield, ec, move(res));
 }
 
 inline
 void
-recv_http_response( GenericConnection& con
-                  , beast::flat_buffer& buffer
-                  , http::response<http::dynamic_body>& res
-                  , asio::yield_context yield)
+_recv_http_response( GenericConnection& con
+                   , beast::flat_buffer& buffer
+                   , http::response<http::dynamic_body>& res
+                   , asio::yield_context yield)
 {
     http::async_read(con, buffer, res, yield);
 }
 
 inline
 void
-recv_http_response( GenericConnection& con
-                  , beast::flat_buffer& buffer
-                  , http::response<http::empty_body>& res
-                  , asio::yield_context yield)
+_recv_http_response( GenericConnection& con
+                   , beast::flat_buffer& buffer
+                   , http::response<http::empty_body>& res
+                   , asio::yield_context yield)
 {
     http::response_parser<http::empty_body> crph;
     http::async_read_header(con, buffer, crph, yield);
