@@ -1,4 +1,5 @@
 #include "dht.h"
+#include "udp_multiplexer.h"
 
 #include "../or_throw.h"
 #include "../util/condition_variable.h"
@@ -29,28 +30,29 @@ std::string dht::NodeContact::to_string() const
 dht::DhtNode::DhtNode(asio::io_service& ios, ip::address interface_address):
     _ios(ios),
     _interface_address(interface_address),
-    _socket(ios),
-    _initialized(false),
-    _rx_buffer(65536, '\0')
+    _initialized(false)
 {
+    cerr << "DhtNode()" << endl;
 }
 
 void dht::DhtNode::start(sys::error_code& ec)
 {
+    udp::socket socket(_ios);
+
     if (_interface_address.is_v4()) {
-        _socket.open(udp::v4(), ec);
+        socket.open(udp::v4(), ec);
     } else {
-        _socket.open(udp::v6(), ec);
+        socket.open(udp::v6(), ec);
     }
     if (ec) {
         return;
     }
 
     udp::endpoint endpoint(_interface_address, 0);
-    _socket.bind(endpoint, ec);
-    if (ec) {
-        return;
-    }
+    socket.bind(endpoint, ec);
+    if (ec) return;
+
+    _multiplexer = std::make_unique<UdpMultiplexer>(std::move(socket));
 
     _node_id = NodeID::zero();
     _next_transaction_id = 1;
@@ -75,13 +77,15 @@ void dht::DhtNode::receive_loop(asio::yield_context yield)
          * the datagram. Unfortunately, boost::asio 1.62 does not support that.
          */
         udp::endpoint sender;
-        std::size_t size = _socket.async_receive_from(buffer(_rx_buffer), sender, yield[ec]);
-        if (ec) {
-            break;
-        }
 
+        const boost::string_view packet
+            = _multiplexer->receive(sender, yield[ec]);
+
+        if (ec) break;
+
+        // TODO: The bencode parser should only need a string_view.
         boost::optional<BencodedValue> decoded_message
-            = bencoding_decode(_rx_buffer.substr(0, size));
+            = bencoding_decode(packet.to_string());
 
         if (!decoded_message) {
             continue;
@@ -171,7 +175,8 @@ void dht::DhtNode::send_query_await_reply(
     });
 
     sys::error_code ec;
-    _socket.async_send_to(asio::buffer(message_string.data(), message_string.size()), destination, yield[ec]);
+    _multiplexer->send(buffer(message_string), destination, yield[ec]);
+
     /*
      * Ignore errors. If the message isn't sent properly, so be it.
      */
@@ -229,7 +234,7 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
              * Ignore errors.
              */
             sys::error_code ec;
-            _socket.async_send_to(asio::buffer(message_string.data(), message_string.size()), sender, yield[ec]);
+            _multiplexer->send(buffer(message_string), sender, yield[ec]);
         });
     };
     auto send_reply = [this, sender, transaction, node_id = _node_id] (BencodedMap reply) {
@@ -246,7 +251,7 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
              * Ignore errors.
              */
             sys::error_code ec;
-            _socket.async_send_to(asio::buffer(message_string.data(), message_string.size()), sender, yield[ec]);
+            _multiplexer->send(buffer(message_string), sender, yield[ec]);
         });
     };
 

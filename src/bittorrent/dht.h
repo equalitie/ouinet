@@ -17,6 +17,9 @@
 
 namespace ouinet {
 namespace bittorrent {
+
+class UdpMultiplexer;
+
 namespace dht {
 
 namespace ip = asio::ip;
@@ -63,7 +66,7 @@ class DhtNode {
     private:
     asio::io_service& _ios;
     ip::address _interface_address;
-    udp::socket _socket;
+    std::unique_ptr<UdpMultiplexer> _multiplexer;
     NodeID _node_id;
     bool _initialized;
     std::unique_ptr<RoutingTable> _routing_table;
@@ -74,7 +77,6 @@ class DhtNode {
     };
     uint32_t _next_transaction_id;
     std::map<std::string, ActiveRequest> _active_requests;
-    std::string _rx_buffer;
 };
 
 } // dht namespace
