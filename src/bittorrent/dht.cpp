@@ -32,7 +32,7 @@ dht::DhtNode::DhtNode(asio::io_service& ios, ip::address interface_address):
     _interface_address(interface_address),
     _initialized(false)
 {
-    cerr << "DhtNode()" << endl;
+    std::cerr << "DhtNode()" << std::endl;
 }
 
 void dht::DhtNode::start(sys::error_code& ec)
