@@ -446,7 +446,119 @@ void dht::DhtNode::refresh_routing_table(asio::yield_context yield)
 }
 
 std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
-    NodeID id,
+    NodeID target_id,
+    std::vector<udp::endpoint> extra_starting_points,
+    asio::yield_context yield
+) {
+    auto query = [this, target_id] (
+        udp::endpoint node_endpoint,
+        boost::optional<NodeID> node_id,
+        std::string& closer_nodes,
+        std::string& closer_nodes6,
+        /**
+         * Called if the queried node becomes part of the set of closest
+         * good nodes seen so far.
+         *
+         * @param displaced_node The node that is removed from the closest
+         *     set to make room for the queried node, if any.
+         */
+        std::function<void(
+            boost::optional<NodeContact> displaced_node,
+            asio::yield_context yield
+        )>& on_promote,
+        asio::yield_context yield
+    ) -> bool {
+        sys::error_code ec;
+
+        BencodedMap find_node;
+        find_node["id"] = _node_id.to_bytestring();
+        find_node["target"] = target_id.to_bytestring();
+
+        BencodedMap find_node_reply;
+        send_query_await_reply(
+            node_endpoint,
+            node_id,
+            "find_node",
+            find_node,
+            find_node_reply,
+            std::chrono::seconds(2),
+            yield[ec]
+        );
+
+        if (ec) {
+            or_throw(yield, ec);
+            return false;
+        }
+
+        if (!find_node_reply["y"].as_string() || *find_node_reply["y"].as_string() != "r") {
+            return false;
+        }
+
+        boost::optional<BencodedMap> arguments = find_node_reply["r"].as_map();
+        if (!arguments) {
+            return false;
+        }
+
+        boost::optional<std::string> nodes = (*arguments)["nodes"].as_string();
+        if (nodes) {
+            closer_nodes = *nodes;
+        } else if (_interface_address.is_v4()) {
+            // This field is required in v4 requests and optional elsewhere
+            return false;
+        }
+
+        boost::optional<std::string> nodes6 = (*arguments)["nodes6"].as_string();
+        if (nodes) {
+            closer_nodes6 = *nodes6;
+        } else if (_interface_address.is_v6()) {
+            // This field is required in v6 requests and optional elsewhere
+            return false;
+        }
+
+        on_promote = [](boost::optional<NodeContact>, asio::yield_context) {};
+        return true;
+    };
+
+    return search_dht_for_nodes(target_id, 8, query, extra_starting_points, yield);
+}
+
+std::vector<dht::NodeContact> dht::DhtNode::search_dht_for_nodes(
+    NodeID target_id,
+    int max_nodes,
+    /**
+     * Called to query a particular node for nodes closer to the search
+     * target, as well as any payload query for the search.
+     *
+     * @param node_endpoint Endpoint of the node to query.
+     * @param node_id Node ID of the node to query, if any.
+     * @param closer_nodes If the query returns any nodes found, this field
+     *     is to store the ipv4 nodes, in find_node "nodes" encoding.
+     * @param closer_nodes6 If the query returns any nodes found, this field
+     *     is to store the ipv6 nodes, in find_node "nodes6" encoding.
+     * @param on_promote Called if the queried node becomes part of the set
+     *     of closest good nodes seen so far.
+     *
+     * @return True if this node is eligible for inclusion in the output
+     *     set of the search. False otherwise.
+     */
+    std::function<bool(
+        udp::endpoint node_endpoint,
+        boost::optional<NodeID> node_id,
+        std::string& closer_nodes,
+        std::string& closer_nodes6,
+        /**
+         * Called if the queried node becomes part of the set of closest
+         * good nodes seen so far.
+         *
+         * @param displaced_node The node that is removed from the closest
+         *     set to make room for the queried node, if any.
+         */
+        std::function<void(
+            boost::optional<NodeContact> displaced_node,
+            asio::yield_context yield
+        )>& on_promote,
+        asio::yield_context yield
+    )> query_node,
     std::vector<udp::endpoint> extra_starting_points,
     asio::yield_context yield
 ) {
@@ -455,18 +567,14 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
         bool confirmed_good;
         bool in_progress;
     };
-    auto order_ids = [&id] (const NodeID& left, const NodeID& right) {
-        return closer_to(id, left, right);
+    auto order_ids = [&target_id] (const NodeID& left, const NodeID& right) {
+        return closer_to(target_id, left, right);
     };
     std::map<NodeID, Candidate, decltype(order_ids)> candidates(order_ids);
     int confirmed_nodes = 0;
     int in_progress_endpoints = 0;
-    const int MAX_NODES = 8;
 
-    std::vector<dht::NodeContact> routing_nodes
-        = _routing_table->find_closest_routing_nodes(id, MAX_NODES);
-
-    for (auto& contact : routing_nodes) {
+    for (auto& contact : _routing_table->find_closest_routing_nodes(target_id, max_nodes)) {
         Candidate candidate;
         candidate.endpoint = contact.endpoint;
         candidate.confirmed_good = false;
@@ -474,16 +582,14 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
         candidates[contact.id] = candidate;
     }
 
-    const int THREADS = 3;
+    const int THREADS = 64;
     WaitCondition all_done(_ios);
     ConditionVariable candidate_available(_ios);
     for (int thread = 0; thread < THREADS; thread++) {
         asio::spawn(_ios, [&, lock = all_done.lock()] (asio::yield_context yield) {
             while (true) {
-                bool have_id = false;
-                bool have_endpoint = false;
-                NodeID candidate_id;
-                udp::endpoint endpoint;
+                boost::optional<NodeID> candidate_id = boost::none;
+                boost::optional<udp::endpoint> endpoint = boost::none;
 
                 /*
                  * Try the closest untried candidate...
@@ -493,9 +599,7 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
                         continue;
                     }
                     candidate_id = it->first;
-                    have_id = true;
                     endpoint = it->second.endpoint;
-                    have_endpoint = true;
                     it->second.in_progress = true;
                     break;
                 }
@@ -503,15 +607,14 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
                 /*
                  * or, failing that, try one of the bootstrap nodes.
                  */
-                if (!have_endpoint) {
+                if (!endpoint) {
                     if (!extra_starting_points.empty()) {
                         endpoint = extra_starting_points.back();
-                        have_endpoint = true;
                         extra_starting_points.pop_back();
                     }
                 }
 
-                if (!have_endpoint) {
+                if (!endpoint) {
                     if (in_progress_endpoints == 0) {
                         break;
                     }
@@ -521,87 +624,48 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
                 in_progress_endpoints++;
 
                 sys::error_code ec;
+                std::string result_nodes;
+                std::string result_nodes6;
+                std::function<void(boost::optional<NodeContact> displaced_node, asio::yield_context yield)> on_promote;
 
-                BencodedMap find_node;
-                find_node["id"] = _node_id.to_bytestring();
-                find_node["target"] = id.to_bytestring();
-
-                BencodedMap find_node_reply;
-                send_query_await_reply(
-                    endpoint,
-                    (have_id ? boost::optional<NodeID>(candidate_id) : boost::none),
-                    "find_node",
-                    find_node,
-                    find_node_reply,
-                    std::chrono::seconds(2),
-                    yield[ec]
-                );
+                bool accepted = query_node(*endpoint, candidate_id, result_nodes, result_nodes6, on_promote, yield[ec]);
 
                 in_progress_endpoints--;
                 candidate_available.notify();
 
                 if (ec) {
-                    if (have_id) {
-                        candidates.erase(candidate_id);
-                    }
-                    continue;
-                }
-
-                if (!find_node_reply["y"].as_string() || *find_node_reply["y"].as_string() != "r") {
-                    if (have_id) {
-                        candidates.erase(candidate_id);
-                    }
-                    continue;
-                }
-
-                boost::optional<BencodedMap> arguments = find_node_reply["r"].as_map();
-                if (!arguments) {
-                    if (have_id) {
-                        candidates.erase(candidate_id);
+                    if (candidate_id) {
+                        candidates.erase(*candidate_id);
                     }
                     continue;
                 }
 
                 std::vector<NodeContact> contacts;
                 if (_interface_address.is_v4()) {
-                    if (!(*arguments)["nodes"].is_string()) {
-                        if (have_id) {
-                            candidates.erase(candidate_id);
-                        }
-                        continue;
-                    }
-                    std::string encoded_contacts = *((*arguments)["nodes"].as_string());
                     // 20 bytes of ID, plus 6 bytes of endpoint
-                    if (encoded_contacts.size() % 26) {
-                        if (have_id) {
-                            candidates.erase(candidate_id);
+                    if (result_nodes.size() % 26) {
+                        if (candidate_id) {
+                            candidates.erase(*candidate_id);
                         }
                         continue;
                     }
-                    for (unsigned int i = 0; i < encoded_contacts.size() / 26; i++) {
-                        std::string encoded_contact = encoded_contacts.substr(i * 26, 26);
+                    for (unsigned int i = 0; i < result_nodes.size() / 26; i++) {
+                        std::string encoded_contact = result_nodes.substr(i * 26, 26);
                         NodeContact contact;
                         contact.id = NodeID::from_bytestring(encoded_contact.substr(0, 20));
                         contact.endpoint = *decode_endpoint(encoded_contact.substr(20));
                         contacts.push_back(contact);
                     }
                 } else {
-                    if (!(*arguments)["nodes6"].is_string()) {
-                        if (have_id) {
-                            candidates.erase(candidate_id);
-                        }
-                        continue;
-                    }
-                    std::string encoded_contacts = *((*arguments)["nodes6"].as_string());
                     // 20 bytes of ID, plus 18 bytes of endpoint
-                    if (encoded_contacts.size() % 38) {
-                        if (have_id) {
-                            candidates.erase(candidate_id);
+                    if (result_nodes6.size() % 38) {
+                        if (candidate_id) {
+                            candidates.erase(*candidate_id);
                         }
                         continue;
                     }
-                    for (unsigned int i = 0; i < encoded_contacts.size() / 38; i++) {
-                        std::string encoded_contact = encoded_contacts.substr(i * 38, 38);
+                    for (unsigned int i = 0; i < result_nodes6.size() / 38; i++) {
+                        std::string encoded_contact = result_nodes6.substr(i * 38, 38);
                         NodeContact contact;
                         contact.id = NodeID::from_bytestring(encoded_contact.substr(0, 20));
                         contact.endpoint = *decode_endpoint(encoded_contact.substr(20));
@@ -609,39 +673,54 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
                     }
                 }
 
-                /*
-                 * This candidate may have been pruned in the meantime.
-                 */
-                if (have_id && candidates.count(candidate_id) > 0) {
-                    candidates[candidate_id].confirmed_good = true;
-                    candidates[candidate_id].in_progress = false;
-                    confirmed_nodes++;
+                if (candidate_id && candidates.count(*candidate_id) > 0) {
+                    if (!accepted) {
+                        candidates.erase(*candidate_id);
+                    } else {
+                        candidates[*candidate_id].confirmed_good = true;
+                        candidates[*candidate_id].in_progress = false;
+                        confirmed_nodes++;
 
-                    if (confirmed_nodes >= MAX_NODES) {
-                        /*
-                         * Remove remote candidates until there are MAX_NODES confirmed candidates
-                         * left, and no nonconfirmed candidates more remote than the most remote
-                         * confirmed candidate remain.
-                         */
-                        while (true) {
-                            auto it = candidates.rbegin();
-                            assert(it != candidates.rend());
-                            if (it->second.confirmed_good) {
-                                if (confirmed_nodes == MAX_NODES) {
-                                    break;
-                                } else {
-                                    confirmed_nodes--;
+                        boost::optional<NodeContact> displaced_node = boost::none;
+
+                        if (confirmed_nodes >= max_nodes) {
+                            /*
+                            * Remove remote candidates until there are $max_nodes confirmed candidates
+                            * left, and no nonconfirmed candidates more remote than the most remote
+                            * confirmed candidate remain.
+                            */
+                            while (true) {
+                                auto it = candidates.rbegin();
+                                assert(it != candidates.rend());
+                                if (it->second.confirmed_good) {
+                                    if (confirmed_nodes == max_nodes) {
+                                        break;
+                                    } else {
+                                        confirmed_nodes--;
+
+                                        assert(!displaced_node);
+                                        NodeContact contact;
+                                        contact.id = it->first;
+                                        contact.endpoint = it->second.endpoint;
+                                        displaced_node = contact;
+                                    }
                                 }
+                                candidates.erase(it->first);
                             }
-                            candidates.erase(it->first);
                         }
+
+                        on_promote(displaced_node, yield);
                     }
                 }
 
+                /*
+                 * Only add new nodes after promoting the candidate. This saves
+                 * remote contacts from being added and then immediately purged.
+                 */
                 bool added = false;
                 for (const NodeContact& contact : contacts) {
-                    if (confirmed_nodes >= MAX_NODES) {
-                        if (closer_to(id, candidates.rend()->first, contact.id)) {
+                    if (confirmed_nodes >= max_nodes) {
+                        if (closer_to(target_id, candidates.rend()->first, contact.id)) {
                             continue;
                         }
                     }
@@ -677,6 +756,7 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
     }
     return output;
 }
+
 
 void dht::DhtNode::send_ping(NodeContact contact)
 {

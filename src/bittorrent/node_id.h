@@ -39,11 +39,12 @@ struct NodeID {
     // http://bittorrent.org/beps/bep_0042.html
     static NodeID generate(asio::ip::address address);
 
+    bool operator==(const NodeID& other) const { return buffer == other.buffer; }
+
     private:
     static NodeID generate( asio::ip::address address
                           , boost::optional<uint8_t> test_rnd);
 
-    bool operator==(const NodeID& other) const { return buffer == other.buffer; }
 };
 
 }} // namespaces

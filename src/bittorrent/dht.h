@@ -46,7 +46,50 @@ class DhtNode {
     void bootstrap(asio::yield_context yield);
     void refresh_routing_table(asio::yield_context yield);
     std::vector<NodeContact> find_closest_nodes(
-        NodeID id,
+        NodeID target_id,
+        std::vector<udp::endpoint> extra_starting_points,
+        asio::yield_context yield
+    );
+
+
+    std::vector<NodeContact> search_dht_for_nodes(
+        NodeID target_id,
+        int max_nodes,
+        /**
+         * Called to query a particular node for nodes closer to the search
+         * target, as well as any payload query for the search.
+         *
+         * @param node_endpoint Endpoint of the node to query.
+         * @param node_id Node ID of the node to query, if any.
+         * @param closer_nodes If the query returns any nodes found, this field
+         *     is to store the ipv4 nodes, in find_node "nodes" encoding.
+         * @param closer_nodes6 If the query returns any nodes found, this field
+         *     is to store the ipv6 nodes, in find_node "nodes6" encoding.
+         * @param on_promote Called if the queried node becomes part of the set
+         *     of closest good nodes seen so far. This can only happen if
+         *     query_node returns true.
+         *
+         * @return True if this node is eligible for inclusion in the output
+         *     set of the search. False otherwise.
+         */
+        std::function<bool(
+            udp::endpoint node_endpoint,
+            boost::optional<NodeID> node_id,
+            std::string& closer_nodes,
+            std::string& closer_nodes6,
+            /**
+             * Called if the queried node becomes part of the set of closest
+             * good nodes seen so far.
+             *
+             * @param displaced_node The node that is removed from the closest
+             *     set to make room for the queried node, if any.
+             */
+            std::function<void(
+                boost::optional<NodeContact> displaced_node,
+                asio::yield_context yield
+            )>& on_promote,
+            asio::yield_context yield
+        )> query_node,
         std::vector<udp::endpoint> extra_starting_points,
         asio::yield_context yield
     );
