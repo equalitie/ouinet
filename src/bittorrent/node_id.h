@@ -46,7 +46,6 @@ struct NodeID {
     private:
     static NodeID generate( asio::ip::address address
                           , boost::optional<uint8_t> test_rnd);
-
 };
 
 }} // namespaces
