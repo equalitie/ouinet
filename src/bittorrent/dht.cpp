@@ -51,7 +51,6 @@ void dht::DhtNode::start(sys::error_code& ec)
     if (ec) {
         return;
     }
-    _port = _socket.local_endpoint().port();
 
     _node_id = NodeID::zero();
     _next_transaction_id = 1;

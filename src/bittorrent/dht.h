@@ -63,7 +63,6 @@ class DhtNode {
     private:
     asio::io_service& _ios;
     ip::address _interface_address;
-    uint16_t _port;
     udp::socket _socket;
     NodeID _node_id;
     bool _initialized;
