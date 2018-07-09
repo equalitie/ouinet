@@ -116,7 +116,8 @@ void handle_connect_request( GenericConnection& client_c
     // Send the client an OK message indicating that the tunnel
     // has been established.
     http::response<http::empty_body> res{http::status::ok, req.version()};
-    res.prepare_payload();
+    // No ``res.prepare_payload()`` since no payload is allowed for CONNECT:
+    // <https://tools.ietf.org/html/rfc7231#section-6.3.1>.
 
     http::async_write(client_c, res, yield[ec]);
 
