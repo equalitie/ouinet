@@ -82,7 +82,7 @@ public:
 private:
     bool _auto_refresh_enabled = true;
     bool _origin_access_enabled = false;
-    bool _proxy_access_enabled = false;
+    bool _proxy_access_enabled = true;
     bool _injector_proxying_enabled = true;
     bool _ipfs_cache_enabled = true;
     bool _show_pending_tasks = false;

@@ -660,15 +660,16 @@ void Client::State::serve_request( GenericConnection&& con
         // NOTE: The cache need not be disabled as it should know not to
         // fetch requests in these cases.
         Match( !reqexpr::from_regex(method_getter, "(GET|HEAD|OPTIONS|TRACE)")
-             , {false, queue<responder>({responder::injector/*responder::origin, responder::proxy*/})} ),
+             , {false, queue<responder>({responder::origin, responder::proxy})} ),
         // Do not use cache for safe but uncacheable HTTP method requests.
         // NOTE: same as above.
         Match( reqexpr::from_regex(method_getter, "(OPTIONS|TRACE)")
-             , {false, queue<responder>({responder::injector/*responder::origin, responder::proxy*/})} ),
+             , {false, queue<responder>({responder::origin, responder::proxy})} ),
         // Do not use cache for validation HEADs.
         // Caching these is not yet supported.
         Match( reqexpr::from_regex(method_getter, "HEAD")
-             , {false, queue<responder>({responder::injector})} ),
+             , {false, queue<responder>({responder::origin, responder::proxy})} ),
+
         // Disable cache and always go to origin for this site.
         Match( reqexpr::from_regex(target_getter, "https?://ident.me/.*")
              , {false, queue<responder>({responder::origin})} ),
