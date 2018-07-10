@@ -299,17 +299,17 @@ can just [download it][Dockerfile].  Then build the image by running:
 That command will build a default recommended version, which you can override
 with `--build-arg OUINET_VERSION=<VERSION>`.
 
-[DockerFile]: https://raw.githubusercontent.com/equalitie/ouinet/master/Dockerfile
-
 After a while you will get the `equalitie/ouinet:latest` image.  Then you may
 want to run `sudo docker prune` to free up the space taken by temporary
 builder images (which may amount to a couple of GiB).
+
+[Dockerfile]: https://raw.githubusercontent.com/equalitie/ouinet/master/Dockerfile
 
 ### Deploying a client
 
 You may use [Docker Compose](https://docs.docker.com/compose/) with the
 `docker-compose.yml` file included in Ouinet's source code (or you can just
-[download it](docker-compose.yml)).  If you just plan to run a single client
+[download it][docker-compose.yml]).  If you just plan to run a single client
 with the latest code on you computer, you should be fine with:
 
     $ sudo docker-compose up
