@@ -1,5 +1,6 @@
 #include "dht.h"
 #include "udp_multiplexer.h"
+#include "code.h"
 
 #include "../or_throw.h"
 #include "../util/condition_variable.h"
@@ -796,42 +797,21 @@ std::vector<dht::NodeContact> dht::DhtNode::search_dht_for_nodes(
                 }
 
                 std::vector<NodeContact> contacts;
-                if (_interface_address.is_v4()) {
-                    // 20 bytes of ID, plus 6 bytes of endpoint
-                    if (result_nodes.size() % 26) {
-                        if (candidate_id) {
-                            candidates.erase(*candidate_id);
-                        }
-                        continue;
+                if (!decode_contacts( _interface_address.is_v4()
+                                    , result_nodes
+                                    , contacts))
+                {
+                    if (candidate_id) {
+                        candidates.erase(*candidate_id);
                     }
-                    for (unsigned int i = 0; i < result_nodes.size() / 26; i++) {
-                        std::string encoded_contact = result_nodes.substr(i * 26, 26);
-                        NodeContact contact;
-                        contact.id = NodeID::from_bytestring(encoded_contact.substr(0, 20));
-                        contact.endpoint = *decode_endpoint(encoded_contact.substr(20));
-                        contacts.push_back(contact);
-                    }
-                } else {
-                    // 20 bytes of ID, plus 18 bytes of endpoint
-                    if (result_nodes6.size() % 38) {
-                        if (candidate_id) {
-                            candidates.erase(*candidate_id);
-                        }
-                        continue;
-                    }
-                    for (unsigned int i = 0; i < result_nodes6.size() / 38; i++) {
-                        std::string encoded_contact = result_nodes6.substr(i * 38, 38);
-                        NodeContact contact;
-                        contact.id = NodeID::from_bytestring(encoded_contact.substr(0, 20));
-                        contact.endpoint = *decode_endpoint(encoded_contact.substr(20));
-                        contacts.push_back(contact);
-                    }
+                    continue;
                 }
 
                 if (candidate_id && candidates.count(*candidate_id) > 0) {
                     if (!accepted) {
                         candidates.erase(*candidate_id);
                     } else {
+                        std::cerr << ">>> " << target_id.to_hex() << " " << candidate_id->to_hex() << std::endl;
                         candidates[*candidate_id].confirmed_good = true;
                         candidates[*candidate_id].in_progress = false;
                         confirmed_nodes++;
@@ -1362,42 +1342,6 @@ bool dht::DhtNode::closer_to(const NodeID& reference, const NodeID& left, const 
         }
     }
     return false;
-}
-
-std::string dht::DhtNode::encode_endpoint(udp::endpoint endpoint)
-{
-    std::string output;
-    if (endpoint.address().is_v4()) {
-        std::array<unsigned char, 4> ip_bytes = endpoint.address().to_v4().to_bytes();
-        output.append((char *)ip_bytes.data(), ip_bytes.size());
-    } else {
-        std::array<unsigned char, 16> ip_bytes = endpoint.address().to_v6().to_bytes();
-        output.append((char *)ip_bytes.data(), ip_bytes.size());
-    }
-    unsigned char p1 = (endpoint.port() >> 8) & 0xff;
-    unsigned char p2 = (endpoint.port() >> 0) & 0xff;
-    output += p1;
-    output += p2;
-    return output;
-}
-
-boost::optional<asio::ip::udp::endpoint> dht::DhtNode::decode_endpoint(std::string endpoint)
-{
-    if (endpoint.size() == 6) {
-        std::array<unsigned char, 4> ip_bytes;
-        std::copy(endpoint.begin(), endpoint.begin() + ip_bytes.size(), ip_bytes.data());
-        uint16_t port = ((uint16_t)(unsigned char)endpoint[4]) << 8
-                      | ((uint16_t)(unsigned char)endpoint[5]) << 0;
-        return udp::endpoint(ip::address_v4(ip_bytes), port);
-    } else if (endpoint.size() == 18) {
-        std::array<unsigned char, 16> ip_bytes;
-        std::copy(endpoint.begin(), endpoint.begin() + ip_bytes.size(), ip_bytes.data());
-        uint16_t port = ((uint16_t)(unsigned char)endpoint[16]) << 8
-                      | ((uint16_t)(unsigned char)endpoint[17]) << 0;
-        return udp::endpoint(ip::address_v6(ip_bytes), port);
-    } else {
-        return boost::none;
-    }
 }
 
 MainlineDht::MainlineDht(asio::io_service& ios):

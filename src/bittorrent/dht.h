@@ -163,9 +163,6 @@ class DhtNode {
                                  , asio::yield_context);
 
     static bool closer_to(const NodeID& reference, const NodeID& left, const NodeID& right);
-    static std::string encode_endpoint(tcp::endpoint endpoint) { return encode_endpoint(udp::endpoint(endpoint.address(), endpoint.port())); }
-    static std::string encode_endpoint(udp::endpoint endpoint);
-    static boost::optional<udp::endpoint> decode_endpoint(std::string endpoint);
 
     private:
     asio::io_service& _ios;
