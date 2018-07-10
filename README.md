@@ -2,25 +2,37 @@
 
 # Ouinet
 
-Ouinet is a peer-to-peer, distributed technology which allows web requests to
-be served with the help of an entire network of cooperating nodes using
+**Ouinet** is a Free/Open Source technology which allows web content to be
+served with the help of an entire network of cooperating nodes using
 peer-to-peer routing and distributed caching of responses.  This helps
-mitigate the Web's characteristic single point of failure due to a client app
-not being able to connect to a particular server.
+mitigate the Web's characteristic single point of failure due to a client
+application not being able to connect to a particular server.
 
-The typical Ouinet client setup consists of a web browser (or other HTTP
-client) which uses a special HTTP proxy running on the local machine and
-provided by the Ouinet `client` program.  Web requests performed by the
-browser are sent to the local Ouinet `client`, which attempts to retrieve the
-resource using several mechanisms.  The client tries to fetch the page from a
-distributed cache (like [IPFS][]), and if not available, it contacts a trusted
-*injector* server over a peer-to-peer routing system (like [GNUnet][] or
-[I2P][]) and asks it to fetch the page and store it in the distributed cache
-to speed up future accesses.
+The typical Ouinet *client* node setup consists of a web browser or other
+application using a special HTTP proxy or API provided by a dedicated program
+or library on the local machine.  When the client gets a request for content,
+it attempts to retrieve the resource using several mechanisms.  It tries to
+fetch the page from a distributed cache (like [IPFS][]), and if not available,
+it contacts a trusted *injector* server over a peer-to-peer routing system
+(like [I2P][]) and asks it to fetch the page and store it in the *distributed
+cache*.
 
 [IPFS]: https://ipfs.io/ "InterPlanetary File System"
-[GNUnet]: https://gnunet.org/ "GNU's Framework for Secure Peer-to-Peer Networking"
 [I2P]: https://geti2p.net/ "Invisible Internet Project"
+
+Future accesses by client nodes to popular content inserted in distributed
+storage shall benefit from an increased redundancy and locality, which
+translates in increased availability in the face of connectivity problems,
+increased transfer speeds in case or poor upstream links, and reduced
+bandwidth costs when access providers charge more for external or
+international traffic.  Content injection is also designed in a way which
+allows for content re-introduction and seeding on extreme cases of total
+connectivity loss (e.g. natural disasters).
+
+The Ouinet library is a core technology that can be used by any application to
+benefit from these advantages.  Ouinet integration provides any content
+creator the opportunity to use cooperative networking and storage for the
+delivery of their content to users around the world.
 
 **Warning:** Ouinet is still highly experimental.  Some features (like
 peer-to-peer routing) may or may not not work smoothly depending on the
