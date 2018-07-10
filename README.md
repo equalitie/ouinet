@@ -66,8 +66,8 @@ to be already available:
 * `g++` capable of C++14
 * The [Boost library](http://www.boost.org/) 1.67+
 
-Assuming that ``<PROJECT ROOT>`` points to the directory where the
-``CMakeLists.txt`` file is, and ``<BUILD DIR>`` is a directory of your choice
+Assuming that `<PROJECT ROOT>` points to the directory where the
+`CMakeLists.txt` file is, and `<BUILD DIR>` is a directory of your choice
 where all (even temporary) build files will go, you can build Ouinet with:
 
     $ mkdir -p <BUILD DIR>
@@ -92,7 +92,7 @@ To install Vagrant on a Debian system, run:
 
     $ sudo apt-get install vagrant
 
-Ouinet's source tree contains a ``Vagrantfile`` which allows you to start a
+Ouinet's source tree contains a `Vagrantfile` which allows you to start a
 Vagrant environment ready to build and run Ouinet by entering the source
 directory and executing:
 
@@ -107,20 +107,20 @@ you may need to force it to use libvirt instead:
 
 ### Building Ouinet in Vagrant
 
-Enter the Vagrant environment with ``vagrant ssh``.  There you will find:
+Enter the Vagrant environment with `vagrant ssh`.  There you will find:
 
-  - Your local Ouinet source tree mounted read-only under ``/vagrant``.
+  - Your local Ouinet source tree mounted read-only under `/vagrant`.
 
-  - Your local Ouinet source tree mounted read-write under ``/vagrant-rw``.
+  - Your local Ouinet source tree mounted read-write under `/vagrant-rw`.
 
-  - ``~vagrant/build-ouinet-git.sh``: Running this script will clone the
-    Ouinet Git repository and all submodules into ``$PWD/ouinet-git-source``
-    and build Ouinet into ``$PWD/ouinet-git-build``.  Changes to source
-    outside of the Vagrant environment will not affect this build.
+  - `~vagrant/build-ouinet-git.sh`: Running this script will clone the Ouinet
+    Git repository and all submodules into `$PWD/ouinet-git-source`  and build
+    Ouinet into `$PWD/ouinet-git-build`.  Changes to source outside of the
+    Vagrant environment will not affect this build.
 
-  - ``~vagrant/build-ouinet-local.sh``: Running this script will use your
-    local Ouinet source tree (mounted under ``/vagrant``) to build Ouinet into
-    ``$PWD/ouinet-local-build``.  Thus you can edit source files on your
+  - `~vagrant/build-ouinet-local.sh`: Running this script will use your local
+    Ouinet source tree (mounted under `/vagrant`) to build Ouinet into
+    `$PWD/ouinet-local-build`.  Thus you can edit source files on your
     computer and have them built in a consistent environment.
 
     Please note that this requires that you keep submodules in your checkout
@@ -133,7 +133,7 @@ redirect ports from the host to the environment.
 
 For instance, if you want to run a Ouinet client (with its default
 configuration) in Vagrant and use it as a proxy in a browser on your computer,
-you may uncomment the following line in ``Vagrantfile``:
+you may uncomment the following line in `Vagrantfile`:
 
     #vm.vm.network "forwarded_port", guest: 8080, host: 8081, guest_ip: "127.0.0.1"
 
@@ -142,12 +142,12 @@ And restart the environment:
     $ vagrant halt
     $ vagrant up
 
-Then you can configure your browser to use ``localhost`` port 8081 to contact
+Then you can configure your browser to use `localhost` port 8081 to contact
 the HTTP proxy.
 
 ### Vagrant instance on AWS
 
-The source tree also contains ``Vagrantfile.aws``, which you can use to deploy
+The source tree also contains `Vagrantfile.aws`, which you can use to deploy
 the Vagrant environment to Amazon Web Services (AWS):
 
     $ vagrant plugin install vagrant-aws
