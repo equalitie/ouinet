@@ -269,9 +269,7 @@ HTTP page.
 
 You can run the integration tests as follows
 
-```
-$ ./scripts/run_integration_tests.sh
-```
+    $ ./scripts/run_integration_tests.sh
 
 ## Using Docker containers
 
@@ -296,9 +294,7 @@ You will need around 3 GiB of disk space.
 You may use the `Dockerfile` as included in Ouinet's source code, or you
 can just [download it][Dockerfile].  Then build the image by running:
 
-```
-$ sudo docker build -t equalitie/ouinet:latest .
-```
+    $ sudo docker build -t equalitie/ouinet:latest .
 
 That command will build a default recommended version, which you can override
 with `--build-arg OUINET_VERSION=<VERSION>`.
@@ -316,9 +312,7 @@ You may use [Docker Compose](https://docs.docker.com/compose/) with the
 [download it](docker-compose.yml)).  If you just plan to run a single client
 with the latest code on you computer, you should be fine with:
 
-```
-$ sudo docker-compose up
-```
+    $ sudo docker-compose up
 
 That command will create a *data volume*, a main *node container* for running
 the Ouinet client or injector (using the host's network directly), and a
@@ -355,9 +349,7 @@ populate its default environment file:
 You may use the convenience *shell container* to access Ouinet node data
 directly:
 
-```
-$ sudo docker-compose run --rm shell
-```
+    $ sudo docker-compose run --rm shell
 
 This will create a throwaway container with a shell at the `/var/opt/ouinet`
 directory in the data volume.
@@ -376,15 +368,11 @@ remove `injector/pid` or `client/pid`.
 If you want to *transfer an existing repository* to `/var/opt/ouinet`, you
 first need to move away or remove the existing one using the shell container:
 
-```
-# mv REPO REPO.old  # REPO is either 'injector' or 'client'
-```
+    # mv REPO REPO.old  # REPO is either 'injector' or 'client'
 
 Then you may copy it in from the host using:
 
-```
-$ sudo docker cp /path/to/REPO SHELL_CONTAINER:/var/opt/ouinet/REPO
-```
+    $ sudo docker cp /path/to/REPO SHELL_CONTAINER:/var/opt/ouinet/REPO
 
 ### Injector container
 
@@ -495,16 +483,12 @@ way faster.
 The `ABI` environment variable described above also works for selecting the
 emulator architecture:
 
-```
-$ env ABI=x86_64 /path/to/build-android.sh emu
-```
+    $ env ABI=x86_64 /path/to/build-android.sh emu
 
 You may pass options to the emulator at the script's command line, after a
 `--` (double dash) argument.  For instance:
 
-```
-$ /path/to/build-android.sh emu -- -no-snapshot-save
-```
+    $ /path/to/build-android.sh emu -- -no-snapshot-save
 
 Some useful options include `-no-snapshot`, `-no-snapshot-load` and
 `-no-snapshot-save`.  See [emulator startup options][] for more information.
