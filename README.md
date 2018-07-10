@@ -398,8 +398,10 @@ If you ever need to reset and empty the injector's database for some reason
  4. In the container, run:
 
         # cd /mnt
-        # printf '{"sites":{}}' > injector/ipfs/ipfs_cache_db.*.json
-        # ./ipfs -Lc injector/ipfs repo gc
+        # rm injector/ipfs/ipfs_cache_db.*
+        # alias ipfs='./ipfs -Lc injector/ipfs'
+        # ipfs pin ls --type recursive | cut -d' ' -f1 | xargs ipfs pin rm
+        # ipfs repo gc
         # exit
 
  5. Start the injector.
