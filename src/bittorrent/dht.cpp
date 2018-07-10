@@ -811,7 +811,6 @@ std::vector<dht::NodeContact> dht::DhtNode::search_dht_for_nodes(
                     if (!accepted) {
                         candidates.erase(*candidate_id);
                     } else {
-                        std::cerr << ">>> " << target_id.to_hex() << " " << candidate_id->to_hex() << std::endl;
                         candidates[*candidate_id].confirmed_good = true;
                         candidates[*candidate_id].in_progress = false;
                         confirmed_nodes++;
