@@ -19,6 +19,9 @@
 
 namespace ouinet {
 namespace bittorrent {
+
+class UdpMultiplexer;
+
 namespace dht {
 
 namespace ip = asio::ip;
@@ -65,7 +68,7 @@ class DhtNode {
         asio::steady_timer::duration timeout,
         asio::yield_context yield
     );
-    void handle_query(udp::endpoint sender, BencodedMap query);
+    void handle_query(udp::endpoint sender, BencodedMap query, asio::yield_context);
 
     void bootstrap(asio::yield_context yield);
     void refresh_routing_table(asio::yield_context yield);
@@ -150,8 +153,7 @@ class DhtNode {
     private:
     asio::io_service& _ios;
     ip::address _interface_address;
-    uint16_t _port;
-    udp::socket _socket;
+    std::unique_ptr<UdpMultiplexer> _multiplexer;
     NodeID _node_id;
     bool _initialized;
     std::unique_ptr<RoutingTable> _routing_table;
@@ -163,7 +165,6 @@ class DhtNode {
     };
     uint32_t _next_transaction_id;
     std::map<std::string, ActiveRequest> _active_requests;
-    std::string _rx_buffer;
 };
 
 } // dht namespace

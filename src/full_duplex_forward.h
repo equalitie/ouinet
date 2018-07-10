@@ -20,7 +20,23 @@ void full_duplex( GenericConnection& c1
         std::array<uint8_t, 2048> data;
     
         for (;;) {
-            size_t length = in.async_read_some(asio::buffer(data), yield[ec]);
+            // XXX: Workaround: For some reason calling in.async_read_some
+            // directly throws the boost::coroutines::detail::forced_unwind
+            // exception from GenericConnection::async_read_some::result.get.
+            // When it's used indirectly through async_read then it doesn't.
+            //
+            // ¯\_(ツ)_/¯
+            //
+            //// size_t length = in.async_read_some(asio::buffer(data), yield[ec]);
+            size_t length = asio::async_read
+                ( in
+                , asio::buffer(data)
+                , [](const sys::error_code& ec, size_t size) -> size_t {
+                    if (ec) return 0;
+                    return size ? 0 : ~size_t(0);
+                  }
+                , yield[ec]);
+
             if (ec) break;
     
             asio::async_write(out, asio::buffer(data, length), yield[ec]);

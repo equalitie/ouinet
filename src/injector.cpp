@@ -26,6 +26,7 @@
 #include "injector_config.h"
 #include "authenticate.h"
 #include "force_exit_on_signal.h"
+#include "request_routing.h"
 
 #include "ouiservice.h"
 #include "ouiservice/i2p.h"
@@ -79,6 +80,8 @@ void handle_connect_request( GenericConnection& client_c
 
     // Split CONNECT target in host and port (443 i.e. HTTPS by default).
     auto hp = req["host"];
+    if (hp.empty() && req.version() == 10)  // HTTP/1.0 proxy client with no ``Host:``
+        hp = req.target();
     auto pos = hp.rfind(':');
     string host, port;
     if (pos != string::npos) {
@@ -88,13 +91,21 @@ void handle_connect_request( GenericConnection& client_c
         host = hp.to_string();
         port = "443";  // HTTPS port by default
     }
+    // Restrict connections towards certain hosts and ports.
+    // TODO: Enhance this filter.
+    if (util::is_localhost(host, ios, disconnect_signal, yield[ec])
+        || (port != "80" && port != "443" && port != "8080" && port != "8443")) {
+        ec = asio::error::invalid_argument;
+        return handle_bad_request( client_c, req
+                                 , "Illegal CONNECT target: " + port
+                                 , yield[ec]);
+    }
 
     auto origin_c = connect_to_host(ios, host, port, disconnect_signal, yield[ec]);
 
     if (ec) {
-        return handle_bad_request( client_c
-                                 , req
-                                 , "Connect: can't connect to the origin"
+        return handle_bad_request( client_c, req
+                                 , "Failed to connect to origin: " + ec.message()
                                  , yield[ec]);
     }
 
@@ -105,7 +116,8 @@ void handle_connect_request( GenericConnection& client_c
     // Send the client an OK message indicating that the tunnel
     // has been established.
     http::response<http::empty_body> res{http::status::ok, req.version()};
-    res.prepare_payload();
+    // No ``res.prepare_payload()`` since no payload is allowed for CONNECT:
+    // <https://tools.ietf.org/html/rfc7231#section-6.3.1>.
 
     http::async_write(client_c, res, yield[ec]);
 
@@ -230,10 +242,28 @@ void serve( InjectorConfig& config
             return handle_connect_request(con, req, close_connection_signal, yield);
         }
 
-        InjectorCacheControl cc(con.get_io_service(), injector, close_connection_signal);
-        auto res = cc.fetch(req, yield[ec]);
+        // Check for a Ouinet version header hinting us on
+        // whether to behave like an injector or a proxy.
+        Response res;
+        auto req2(req);
+        auto ouinet_version_hdr = req2.find(request_version_hdr);
+        if (ouinet_version_hdr == req2.end()) {
+            // No Ouinet header, behave like a (non-caching) proxy.
+            // TODO: Maybe reject requests for HTTPS URLS:
+            // we are perfectly able to handle them (and do verification locally),
+            // but the client should be using a CONNECT request instead!
+            res = fetch_http_page(con.get_io_service(), req2, close_connection_signal, yield[ec]);
+        } else {
+            // Ouinet header found, behave like a Ouinet injector.
+            req2.erase(ouinet_version_hdr);  // do not propagate or cache the header
+            InjectorCacheControl cc(con.get_io_service(), injector, close_connection_signal);
+            res = cc.fetch(req2, yield[ec]);
+        }
         if (ec) {
-            break;
+            handle_bad_request( con, req
+                              , "Failed to retrieve content from origin: " + ec.message()
+                              , yield[ec]);
+            continue;
         }
 
         // Forward back the response

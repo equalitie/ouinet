@@ -86,6 +86,12 @@ void ClientFrontEnd::handle_portal( const Request& req, Response& res, stringstr
         else if (target.find("?origin_access=disable") != string::npos) {
             _origin_access_enabled = false;
         }
+        else if (target.find("?proxy_access=enable") != string::npos) {
+            _proxy_access_enabled = true;
+        }
+        else if (target.find("?proxy_access=disable") != string::npos) {
+            _proxy_access_enabled = false;
+        }
         else if (target.find("?injector_proxy=enable") != string::npos) {
             _injector_proxying_enabled = true;
         }
@@ -140,6 +146,7 @@ void ClientFrontEnd::handle_portal( const Request& req, Response& res, stringstr
 
     ss << ToggleInput{"Auto refresh",   "auto_refresh",   _auto_refresh_enabled};
     ss << ToggleInput{"Origin access", "origin_access", _origin_access_enabled};
+    ss << ToggleInput{"Proxy access", "proxy_access", _proxy_access_enabled};
     ss << ToggleInput{"Injector proxy", "injector_proxy", _injector_proxying_enabled};
     ss << ToggleInput{"IPFS Cache",     "ipfs_cache",     _ipfs_cache_enabled};
 
