@@ -45,41 +45,6 @@ when using this software.
 **Note:** The steps described below have only been tested to work on GNU/Linux
 on AMD64 platforms.
 
-## Using the easy installation script
-
-The [scripts/build-ouinet.sh][build-ouinet.sh] script can be used to download
-all necessary source code, build the Ouinet library and tools and install
-them, all with a simple command invocation.  If you do not already have it in
-your computer, just download it and copy it to some temporary directory.  Then
-open a shell in that directory and run:
-
-    sh build-ouinet.sh
-
-[build-ouinet.sh]: https://raw.githubusercontent.com/equalitie/ouinet/master/scripts/build-ouinet.sh
-
-The script will first check that you have all the needed system packages.  If
-you do not, it will show an error like:
-
-    Missing dependencies:  some-package some-other-package
-    Ignore this warning with --force.
-
-The names of missing dependencies correspond to package names in a Debian or
-Ubuntu-based system.  To install them, just run:
-
-    sudo apt update
-    sudo apt install some-package some-other-package
-
-In other platforms the names of packages may differ and you may need to figure
-them out and install them manually.
-
-After installing missing packages you can run the script again:
-
-    sh build-ouinet.sh
-
-You may need to repeat this until the script succeeds and reports instructions
-on how to run the client or injector tools.  The whole process takes a few
-minutes and requires around 2 GB of storage.
-
 ### Running over the Vagrant instance
 
 #### Install 
