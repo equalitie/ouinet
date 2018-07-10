@@ -66,12 +66,11 @@ class DhtNode {
                    , BencodedMap query_arguments
                    , asio::yield_context yield);
 
-    void send_query_await_reply(
+    BencodedMap send_query_await_reply(
         udp::endpoint destination,
         boost::optional<NodeID> destination_id,
         const std::string& query_type,
         const BencodedMap& query_arguments,
-        BencodedMap& response,
         asio::steady_timer::duration timeout,
         asio::yield_context yield
     );

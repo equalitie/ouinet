@@ -118,13 +118,11 @@ void dht::DhtNode::tracker_announce(NodeID infohash, boost::optional<int> port, 
             for (int i = 0; i < TRIES; i++) {
                 sys::error_code ec;
 
-                BencodedMap announce_reply;
-                send_query_await_reply(
+                BencodedMap announce_reply = send_query_await_reply(
                     node_endpoint,
                     node_id,
                     "announce_peer",
                     announce_message,
-                    announce_reply,
                     std::chrono::seconds(5),
                     yield[ec]
                 );
@@ -237,15 +235,16 @@ void dht::DhtNode::send_query( udp::endpoint destination
  * If destination_id is set, update the routing table in accordance with
  * whether a successful reply was received.
  */
-void dht::DhtNode::send_query_await_reply(
+BencodedMap dht::DhtNode::send_query_await_reply(
     udp::endpoint destination,
     boost::optional<NodeID> destination_id,
     const std::string& query_type,
     const BencodedMap& query_arguments,
-    BencodedMap& response,
     asio::steady_timer::duration timeout,
     asio::yield_context yield
 ) {
+    BencodedMap response; // Return value
+
     ConditionVariable reply_and_timeout_condition(_ios);
     boost::optional<sys::error_code> first_error_code;
 
@@ -305,7 +304,7 @@ void dht::DhtNode::send_query_await_reply(
         }
     }
 
-    return or_throw(yield, *first_error_code);
+    return or_throw(yield, *first_error_code, std::move(response));
 }
 
 void dht::DhtNode::handle_query( udp::endpoint sender
@@ -570,13 +569,11 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
     BencodedMap initial_ping_message;
     initial_ping_message["id"] = _node_id.to_bytestring();
 
-    BencodedMap initial_ping_reply;
-    send_query_await_reply(
+    BencodedMap initial_ping_reply = send_query_await_reply(
         bootstrap_ep,
         boost::none,
         "ping",
         initial_ping_message,
-        initial_ping_reply,
         std::chrono::seconds(15),
         yield[ec]
     );
@@ -947,13 +944,11 @@ bool dht::DhtNode::query_find_node(
     find_node_message["id"] = _node_id.to_bytestring();
     find_node_message["target"] = target_id.to_bytestring();
 
-    BencodedMap find_node_reply;
-    send_query_await_reply(
+    BencodedMap find_node_reply = send_query_await_reply(
         node_endpoint,
         node_id,
         "find_node",
         find_node_message,
-        find_node_reply,
         std::chrono::seconds(2),
         yield[ec]
     );
@@ -1030,13 +1025,11 @@ void dht::DhtNode::tracker_search_peers(
         get_peers_message["id"] = _node_id.to_bytestring();
         get_peers_message["info_hash"] = infohash.to_bytestring();
 
-        BencodedMap get_peers_reply;
-        send_query_await_reply(
+        BencodedMap get_peers_reply = send_query_await_reply(
             node_endpoint,
             node_id,
             "get_peers",
             get_peers_message,
-            get_peers_reply,
             std::chrono::seconds(2),
             yield[ec]
         );
