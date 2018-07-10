@@ -182,10 +182,52 @@ void dht::DhtNode::receive_loop(asio::yield_context yield)
         } else if (*message_type == "r" || *message_type == "e") {
             auto it = _active_requests.find(*transaction_id);
             if (it != _active_requests.end() && it->second.destination == sender) {
-                (*it->second.callback)(*message_map);
+                it->second.callback(*message_map);
             }
         }
     }
+}
+
+std::string dht::DhtNode::new_transaction_string()
+{
+#if 0 // Useful for debugging
+    std::stringstream ss;
+    ss << _next_transaction_id++;
+    return ss.str();
+#else
+    uint32_t transaction_id = _next_transaction_id++;
+
+    if (transaction_id == 0) {
+        return "0";
+    }
+
+    std::string ret;
+
+    while (transaction_id) {
+        unsigned char c = transaction_id & 0xff;
+        transaction_id = transaction_id >> 8;
+        ret += c;
+    }
+
+    return ret;
+#endif
+}
+
+void dht::DhtNode::send_query( udp::endpoint destination
+                             , std::string transaction
+                             , std::string query_type
+                             , BencodedMap query_arguments
+                             , asio::yield_context yield)
+{
+    std::string message
+        = bencoding_encode(BencodedMap { { "y", "q" }
+                                       , { "q", std::move(query_type) }
+                                       , { "a", std::move(query_arguments) }
+                                       // TODO: version string
+                                       , { "t", std::move(transaction) }
+                                       });
+
+    _multiplexer->send(buffer(message), destination, yield);
 }
 
 /*
@@ -204,80 +246,66 @@ void dht::DhtNode::send_query_await_reply(
     asio::steady_timer::duration timeout,
     asio::yield_context yield
 ) {
-    std::string transaction_string;
-    uint32_t transaction_id = _next_transaction_id++;
-    while (transaction_id) {
-        unsigned char c = transaction_id & 0xff;
-        transaction_id = transaction_id >> 8;
-        transaction_string += c;
-    }
-
-    BencodedMap message;
-    message["y"] = "q";
-    message["q"] = query_type;
-    message["a"] = query_arguments;
-    // TODO: version string
-    message["t"] = transaction_string;
-    std::string message_string = bencoding_encode(message);
-
-    ConditionVariable reply_or_timeout_condition(_ios);
-    bool received_response;
-
-    Signal<void(const BencodedMap&)> callback;
-    auto connection = callback.connect([&] (const BencodedMap& response_) {
-        received_response = true;
-        response = response_;
-        reply_or_timeout_condition.notify();
-    });
-    ActiveRequest request_descriptor;
-    request_descriptor.destination = destination;
-    request_descriptor.callback = &callback;
-    _active_requests[transaction_string] = request_descriptor;
+    ConditionVariable reply_and_timeout_condition(_ios);
+    boost::optional<sys::error_code> first_error_code;
 
     asio::steady_timer timeout_timer(_ios);
-    asio::spawn(_ios, [&] (asio::yield_context yield) {
-        sys::error_code ec;
-        timeout_timer.expires_from_now(timeout);
-        timeout_timer.async_wait(yield[ec]);
-        if (!ec) {
-            received_response = false;
-            reply_or_timeout_condition.notify();
+    timeout_timer.expires_from_now(timeout);
+    timeout_timer.async_wait([&] (const sys::error_code&) {
+        if (!first_error_code) {
+            first_error_code = asio::error::timed_out;
         }
+        reply_and_timeout_condition.notify();
     });
 
+    std::string transaction = new_transaction_string();
+
+    _active_requests[transaction]
+        = { destination
+          , [&] (const BencodedMap& response_) {
+                if (first_error_code) return;
+                first_error_code = sys::error_code(); // success;
+                response = response_;
+                timeout_timer.cancel();
+            }
+          };
+
     sys::error_code ec;
-    _multiplexer->send(buffer(message_string), destination, yield[ec]);
 
-    /*
-     * Ignore errors. If the message isn't sent properly, so be it.
-     */
+    send_query( destination
+              , transaction
+              , std::move(query_type)
+              , std::move(query_arguments)
+              , yield[ec]);
 
-    reply_or_timeout_condition.wait(yield);
-    _active_requests.erase(transaction_string);
-    timeout_timer.cancel();
+    if (ec) {
+        first_error_code = ec;
+        timeout_timer.cancel();
+    }
+
+    reply_and_timeout_condition.wait(yield);
+    _active_requests.erase(transaction);
 
     if (destination_id) {
         NodeContact contact;
         contact.endpoint = destination;
         contact.id = *destination_id;
-        if (!received_response || *response["y"].as_string() != "r") {
+        if (*first_error_code || *response["y"].as_string() != "r") {
             /*
              * Record the failure in the routing table.
              */
             dht::RoutingBucket* routing_bucket = _routing_table->find_bucket(*destination_id, false);
-            routing_bucket_fail_node(routing_bucket, contact);
+            routing_bucket_fail_node(routing_bucket, contact, yield);
         } else {
             /*
              * Add the node to the routing table, subject to space limitations.
              */
             dht::RoutingBucket* routing_bucket = _routing_table->find_bucket(*destination_id, true);
-            routing_bucket_try_add_node(routing_bucket, contact, true);
+            routing_bucket_try_add_node(routing_bucket, contact, true, yield);
         }
     }
 
-    if (!received_response) {
-         or_throw(yield, asio::error::timed_out);
-    }
+    return or_throw(yield, *first_error_code);
 }
 
 void dht::DhtNode::handle_query( udp::endpoint sender
@@ -351,7 +379,7 @@ void dht::DhtNode::handle_query( udp::endpoint sender
         * Add the sender to the routing table.
         */
         dht::RoutingBucket* routing_bucket = _routing_table->find_bucket(contact.id, true);
-        routing_bucket_try_add_node(routing_bucket, contact, false);
+        routing_bucket_try_add_node(routing_bucket, contact, false, yield);
     }
 
     if (query_type == "ping") {
@@ -890,25 +918,15 @@ std::vector<dht::NodeContact> dht::DhtNode::search_dht_for_nodes(
 }
 
 
-void dht::DhtNode::send_ping(NodeContact contact)
+void dht::DhtNode::send_ping(NodeContact contact, asio::yield_context yield)
 {
-    asio::spawn(_ios, [this, contact] (asio::yield_context yield) {
-        BencodedMap ping_message;
-        ping_message["id"] = _node_id.to_bytestring();
+    sys::error_code ec;
 
-        sys::error_code ec;
-
-        BencodedMap ping_reply;
-        send_query_await_reply(
-            contact.endpoint,
-            contact.id,
-            "ping",
-            ping_message,
-            ping_reply,
-            std::chrono::seconds(2),
-            yield[ec]
-        );
-    });
+    send_query( contact.endpoint
+              , new_transaction_string()
+              , "ping"
+              , BencodedMap{ { "id", _node_id.to_bytestring() } }
+              , yield[ec]);
 }
 
 /**
@@ -1116,7 +1134,10 @@ void dht::DhtNode::tracker_search_peers(
  * check for node replacement opportunities. If is_verified is not set, ping
  * the target contact before adding it.
  */
-void dht::DhtNode::routing_bucket_try_add_node(RoutingBucket* bucket, NodeContact contact, bool is_verified)
+void dht::DhtNode::routing_bucket_try_add_node( RoutingBucket* bucket
+                                              , NodeContact contact
+                                              , bool is_verified
+                                              , asio::yield_context yield)
 {
     /*
      * Check whether the contact is already in the routing table. If so, bump it.
@@ -1168,7 +1189,7 @@ void dht::DhtNode::routing_bucket_try_add_node(RoutingBucket* bucket, NodeContac
             node.questionable_ping_ongoing = false;
             bucket->nodes.push_back(node);
         } else {
-            send_ping(contact);
+            send_ping(contact, yield);
         }
         return;
     }
@@ -1189,7 +1210,7 @@ void dht::DhtNode::routing_bucket_try_add_node(RoutingBucket* bucket, NodeContac
                 node.questionable_ping_ongoing = false;
                 bucket->nodes.push_back(node);
             } else {
-                send_ping(contact);
+                send_ping(contact, yield);
             }
             return;
         }
@@ -1204,7 +1225,7 @@ void dht::DhtNode::routing_bucket_try_add_node(RoutingBucket* bucket, NodeContac
         if (bucket->nodes[i].is_questionable()) {
             questionable_nodes++;
             if (!bucket->nodes[i].questionable_ping_ongoing) {
-                send_ping(bucket->nodes[i].contact);
+                send_ping(bucket->nodes[i].contact, yield);
                 bucket->nodes[i].questionable_ping_ongoing = true;
             }
         }
@@ -1248,7 +1269,9 @@ void dht::DhtNode::routing_bucket_try_add_node(RoutingBucket* bucket, NodeContac
  * Record a failure of a routing table node to respond to a query. If this
  * makes the node bad, try to replace it with a queued candidate.
  */
-void dht::DhtNode::routing_bucket_fail_node(RoutingBucket* bucket, NodeContact contact)
+void dht::DhtNode::routing_bucket_fail_node( RoutingBucket* bucket
+                                           , NodeContact contact
+                                           , asio::yield_context yield)
 {
     /*
      * Find the contact in the routing table.
@@ -1269,7 +1292,7 @@ void dht::DhtNode::routing_bucket_fail_node(RoutingBucket* bucket, NodeContact c
     if (!bucket->nodes[node_index].is_bad()) {
         if (bucket->nodes[node_index].is_questionable()) {
             bucket->nodes[node_index].questionable_ping_ongoing = true;
-            send_ping(contact);
+            send_ping(contact, yield);
         }
         return;
     }
@@ -1313,7 +1336,7 @@ void dht::DhtNode::routing_bucket_fail_node(RoutingBucket* bucket, NodeContact c
          */
         NodeContact contact = bucket->unverified_candidates[0].contact;
         bucket->unverified_candidates.pop_front();
-        send_ping(contact);
+        send_ping(contact, yield);
     }
 
     /*

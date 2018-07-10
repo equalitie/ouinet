@@ -59,6 +59,13 @@ class DhtNode {
 
     private:
     void receive_loop(asio::yield_context yield);
+
+    void send_query( udp::endpoint destination
+                   , std::string transaction
+                   , std::string query_type
+                   , BencodedMap query_arguments
+                   , asio::yield_context yield);
+
     void send_query_await_reply(
         udp::endpoint destination,
         boost::optional<NodeID> destination_id,
@@ -122,7 +129,10 @@ class DhtNode {
         asio::yield_context yield
     );
 
-    void send_ping(NodeContact contact);
+    std::string new_transaction_string();
+
+    void send_ping(NodeContact contact, asio::yield_context);
+
     bool query_find_node(
         NodeID target_id,
         udp::endpoint node_endpoint,
@@ -131,19 +141,27 @@ class DhtNode {
         std::string& closer_nodes6,
         asio::yield_context yield
     );
+
     struct TrackerNode {
         udp::endpoint node_endpoint;
         std::vector<tcp::endpoint> peers;
         std::string announce_token;
     };
+
     void tracker_search_peers(
         NodeID infohash,
         std::map<NodeID, TrackerNode>& tracker_reply,
         asio::yield_context yield
     );
 
-    void routing_bucket_try_add_node(RoutingBucket* bucket, NodeContact contact, bool is_verified);
-    void routing_bucket_fail_node(RoutingBucket* bucket, NodeContact contact);
+    void routing_bucket_try_add_node( RoutingBucket*
+                                    , NodeContact
+                                    , bool is_verified
+                                    , asio::yield_context);
+
+    void routing_bucket_fail_node( RoutingBucket*
+                                 , NodeContact
+                                 , asio::yield_context);
 
     static bool closer_to(const NodeID& reference, const NodeID& left, const NodeID& right);
     static std::string encode_endpoint(tcp::endpoint endpoint) { return encode_endpoint(udp::endpoint(endpoint.address(), endpoint.port())); }
@@ -161,7 +179,7 @@ class DhtNode {
 
     struct ActiveRequest {
         udp::endpoint destination;
-        Signal<void(const BencodedMap&)>* callback;
+        std::function<void(const BencodedMap&)> callback;
     };
     uint32_t _next_transaction_id;
     std::map<std::string, ActiveRequest> _active_requests;
