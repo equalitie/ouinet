@@ -57,6 +57,29 @@ You can also clone and update the modules separately:
     $ cd ouinet
     $ git submodule update --init --recursive
 
+## Build requirements (desktop)
+
+To build Ouinet natively on your system, you will need the following software
+to be already available:
+
+* CMake 3.5+
+* `g++` capable of C++14
+* The [Boost library](http://www.boost.org/) 1.67+
+
+Assuming that ``<PROJECT ROOT>`` points to the directory where the
+``CMakeLists.txt`` file is, and ``<BUILD DIR>`` is a directory of your choice
+where all (even temporary) build files will go, you can build Ouinet with:
+
+    $ mkdir -p <BUILD DIR>
+    $ cd <BUILD DIR>
+    $ cmake <PROJECT ROOT>
+    $ make
+
+However, we encourage you to use a Vagrant environment for development, or
+Docker containers for deploying a Ouinet client or an injector.  These have a
+different set of requirements.  See the corresponding sections below for
+further instructions on Vagrant and Docker.
+
 ## Using a Vagrant environment
 
 One of the easiest ways to build Ouinet from source code (e.g. for development
@@ -177,27 +200,6 @@ to retrieve the resource.
 
 When you are done testing the Ouinet client, just shut down the browser, the
 client itself (by hitting Ctrl+C).
-
-## Requirements
-
-* `cmake` 3.5+
-* `g++` capable of C++14
-* The [Boost library](http://www.boost.org/)
-
-Note: The Go language and the IPFS project will be downloaded automatically
-during the build process.
-
-## Build
-
-    # Assuming:
-    #   * <PROJECT ROOT> points to the directory where the
-    #                    CMakeLists.txt file is
-    #   * <BUILD DIR> is a directory of your choice where all
-    #                 (even temporary) build files will go
-    $ mkdir -p <BUILD DIR>
-    $ cd <BUILD DIR>
-    $ cmake <PROJECT ROOT>
-    $ make
 
 ## Test
 
