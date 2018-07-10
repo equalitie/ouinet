@@ -45,6 +45,18 @@ when using this software.
 **Note:** The steps described below have only been tested to work on GNU/Linux
 on AMD64 platforms.
 
+## Cloning the source tree
+
+Ouinet uses Git submodules, thus to properly clone it, use:
+
+    $ git clone --recursive https://github.com/equalitie/ouinet.git
+
+You can also clone and update the modules separately:
+
+    $ git clone https://github.com/equalitie/ouinet.git
+    $ cd ouinet
+    $ git submodule update --init --recursive
+
 ## Using a Vagrant environment
 
 One of the easiest ways to build Ouinet from source code (e.g. for development
@@ -89,7 +101,7 @@ Enter the Vagrant environment with ``vagrant ssh``.  There you will find:
     computer and have them built in a consistent environment.
 
     Please note that this requires that you keep submodules in your checkout
-    up to date with ``git submodule update --init --recursive --checkout``.
+    up to date as indicated above.
 
 ### Accessing Ouinet services from your computer
 
@@ -174,18 +186,6 @@ client itself (by hitting Ctrl+C).
 
 Note: The Go language and the IPFS project will be downloaded automatically
 during the build process.
-
-## Clone
-
-Ouinet uses Git submodules, thus to properly clone it, use
-
-    $ git clone --recursive git@github.com:equalitie/ouinet.git
-
-OR
-
-    $ git clone git@github.com:equalitie/ouinet.git
-    $ cd ouinet
-    $ git submodule update --init --recursive
 
 ## Build
 
