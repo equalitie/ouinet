@@ -45,35 +45,87 @@ when using this software.
 **Note:** The steps described below have only been tested to work on GNU/Linux
 on AMD64 platforms.
 
-### Running over the Vagrant instance
+## Using a Vagrant environment
 
-#### Install 
+One of the easiest ways to build Ouinet from source code (e.g. for development
+or testing changes and fixes to code) is using a [Vagrant][] development
+environment.
 
-    sudo apt-get install vagrant
+[Vagrant]: https://www.vagrantup.com/
 
-For some reason the vagrant config is not compatibe with virtualbox and you need to use libvirt instead
+To install Vagrant on a Debian system, run:
 
-    sudo apt-get install libvirt-bin libvirt-dev
-    vagrant plugin install vagrant-libvirt
+    $ sudo apt-get install vagrant
 
-#### Vagrant instance using libvert
+Ouinet's source tree contains a ``Vagrantfile`` which allows you to start a
+Vagrant environment ready to build and run Ouinet by entering the source
+directory and executing:
 
-    vagrant up --provider=libvirt
-    vagrant ssh
+    $ vagrant up
 
-#### Vagrant instance on Amazon aws cloud
+If your Vagrant installation uses VirtualBox by default and you find problems,
+you may need to force it to use libvirt instead:
 
-    vagrant plugin install vagrant-aws
-    vagrant plugin install vagrant-sshfs
+    $ sudo apt-get install libvirt-bin libvirt-dev
+    $ vagrant plugin install vagrant-libvirt
+    $ vagrant up --provider=libvirt
 
-    export AWS_ACCESS_KEY_ID='YOUR_ACCESS_ID'
-    export AWS_SECRET_ACCESS_KEY='your secret token'
+### Building Ouinet in Vagrant
 
-    VAGRANT_VAGRANTFILE=Vagrantfile.aws vagrant up
-    vagrant sshfs --mount linux
-    vagrant ssh
+Enter the Vagrant environment with ``vagrant ssh``.  There you will find:
 
-### Testing
+  - Your local Ouinet source tree mounted read-only under ``/vagrant``.
+
+  - Your local Ouinet source tree mounted read-write under ``/vagrant-rw``.
+
+  - ``~vagrant/build-ouinet-git.sh``: Running this script will clone the
+    Ouinet Git repository and all submodules into ``$PWD/ouinet-git-source``
+    and build Ouinet into ``$PWD/ouinet-git-build``.  Changes to source
+    outside of the Vagrant environment will not affect this build.
+
+  - ``~vagrant/build-ouinet-local.sh``: Running this script will use your
+    local Ouinet source tree (mounted under ``/vagrant``) to build Ouinet into
+    ``$PWD/ouinet-local-build``.  Thus you can edit source files on your
+    computer and have them built in a consistent environment.
+
+    Please note that this requires that you keep submodules in your checkout
+    up to date with ``git submodule update --init --recursive --checkout``.
+
+### Accessing Ouinet services from your computer
+
+The Vagrant environment is by default isolated, but you can configure it to
+redirect ports from the host to the environment.
+
+For instance, if you want to run a Ouinet client (with its default
+configuration) in Vagrant and use it as a proxy in a browser on your computer,
+you may uncomment the following line in ``Vagrantfile``:
+
+    #vm.vm.network "forwarded_port", guest: 8080, host: 8081, guest_ip: "127.0.0.1"
+
+And restart the environment:
+
+    $ vagrant halt
+    $ vagrant up
+
+Then you can configure your browser to use ``localhost`` port 8081 to contact
+the HTTP proxy.
+
+### Vagrant instance on AWS
+
+The source tree also contains ``Vagrantfile.aws``, which you can use to deploy
+the Vagrant environment to Amazon Web Services (AWS):
+
+    $ vagrant plugin install vagrant-aws
+    $ vagrant plugin install vagrant-sshfs
+
+    $ export AWS_ACCESS_KEY_ID='YOUR_ACCESS_ID'
+    $ export AWS_SECRET_ACCESS_KEY='your secret token'
+
+    $ VAGRANT_VAGRANTFILE=Vagrantfile.aws vagrant up
+    $ vagrant sshfs --mount linux
+    $ vagrant ssh
+
+## Testing
 
 To perform some tests using the just-built Ouinet client and an existing
 injector, you first need to know the *injector endpoint* and a *distributed
