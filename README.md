@@ -160,110 +160,158 @@ the Vagrant environment to Amazon Web Services (AWS):
     $ vagrant sshfs --mount linux
     $ vagrant ssh
 
-## Testing
+## Testing (desktop)
 
-To perform some tests using the just-built Ouinet client and an existing
-injector, you first need to know the *injector endpoint* and a *distributed
-cache name*.  These use to be an IP address and PORT, and an IPNS identifier,
-respectively (although the injector endpoint may also be an I2P peer
-identity).
+### Running a test injector
 
-You need to configure the Ouinet client to use the aforementioned parameters.
-Edit the included configuration file:
+If you want to run your own injector for testing, you can start by creating a
+copy of the `repos/injector` repository template directory included in
+Ouinet's source tree:
 
-    edit ouinet-repos/client/ouinet-client.conf
+    $ cp -r /path/to/ouinet-source/repos/injector /path/to/injector-repo
 
-Add options there for the injector endpoint and the distributed cache name.
-Remember to replace the values with your own:
+You should now edit `/path/to/injector-repo/ouinet-injector.conf` and
 
-    injector-ep = 192.0.2.1:1234
-    injector-ipns = Qm0123456789abcdefghijklmnopqrstuvwxyzABCDEFGI
+ 1. Enable listening on loopback addresses:
+
+        listen-tcp = ::1:7070
+
+    For clients you may then use `127.0.0.1:7070` as the *injector endpoint*
+    (IPv6 is not yet supported).
+
+ 2. Change the credentials to use the injector (use your own ones):
+
+        credentials = injector_user:injector_password
+
+    For clients you may use these as *injector credentials*.
 
 All the steps above only need to be done once.
 
-Now start the Ouinet client by running:
+Finally start the injector referring to the repository created above:
 
-    ouinet-build/client --repo ouinet-repos/client
-
-The client opens a web proxy on local port 8080 (see option `listen-on-tcp` in
-its configuration file).  If you have Firefox installed, you can create a new
-profile (stored under the `ff-profile` directory in the example below) which
-uses the Ouinet client as a proxy by executing the following commands on
-another shell:
-
-    mkdir -p ff-profile
-    env http_proxy='http://localhost:8080/' firefox --no-remote --profile ff-profile
-
-When you access the web using this browser, your requests will go through your
-local Ouinet client, which will attempt several mechanisms supported by Ouinet
-to retrieve the resource.
-
-When you are done testing the Ouinet client, just shut down the browser, the
-client itself (by hitting Ctrl+C).
-
-## Test
-
-    First, we start the injector locally:
-    
-    $ ./injector --repo ../repos/injector
+    $ /path/to/injector --repo /path/to/injector-repo
     Swarm listening on /ip4/127.0.0.1/tcp/4001
     Swarm listening on /ip4/192.168.0.136/tcp/4001
     Swarm listening on /ip6/::1/tcp/4001
     IPNS DB: <DB_IPNS>
     ...
-    TCP Address: <IP:PORT>
-    ...
 
-Make note of the `<DB_IPNS>` and `<IP:PORT>` strings in the above output,
-we'll need to pass them as arguments to the client.  You may also find these
-values in the `cache-ipns` and `endpoint-tcp` files in the injector's
-repository root directory (`../repos/injector` in the example).
+Note down the `<DB_IPNS>` string in the above output since clients will need
+that as the *distributed cache index*.  You may also find this value in the
+`cache-ipns` file in the injector's repository.
 
-While injector is still running, start the client in yet another terminal
-window and pass it the injector's `<IP:PORT>` and `<DB_IPNS>` strings from
-above:
+When you are done testing the Ouinet injector, you may shut it down by hitting
+Ctrl+C.
 
-    $ ./client --repo ../repos/client \
-               --injector-ipns <DB_IPNS> \
-               --injector-ep <IP:PORT>
+### Running a test client
 
-Now [modify the settings of your
-browser](http://www.wikihow.com/Enter-Proxy-Settings-in-Firefox) to:
+To perform some tests using a Ouinet client and an existing injector, you
+first need to know the *injector endpoint* and *credentials* (if needed), and
+a *distributed cache index*.  These use to be respectively an IP address and
+port (for testing, otherwise an I2P peer identity), a `<USER>:<PASSWORD>`
+string, and an IPNS identifier.
 
-* Make the client - which runs on port localhost:8080 - it's proxy, AND
-* **make sure 'localhost' is not listed in the `"No Proxy for"` field**, AND
-* the `"Use this proxy for all protocols"` is checked (mostly for SSL).
+You need to configure the Ouinet client to use the aforementioned parameters.
+You can start by creating a copy of the `repos/client` repository template
+directory included in Ouinet's source tree:
 
-Once done, you can enter `localhost` into your browser and it should show you
-what database of sites the client is currently using.
+    $ cp -r /path/to/ouinet-source/repos/client /path/to/client-repo
 
-It is likely that at first the database shall be `nill` which indicates that
-no database has been dowloaded from IPFS yet. This may take from a couple of
-seconds up to about three minutes. The page refreshes itself regurarly so
-once the client downloads the database, it should display automatically.
+Now edit `/path/to/client-repo/ouinet-client.conf` and add options for the
+injector endpoint and credentials and the distributed cache name.  Remember to
+replace the values with your own:
 
-In the mean time, notice also the small form at the top of the page looking
-something like this:
+    injector-ep = 127.0.0.1:7070
+    injector-credentials = injector_user:injector_password
+    injector-ipns = Qm0123456789abcdefghijklmnopqrstuvwxyzABCDEFGI
 
-    Injector proxy: enabled [disable]
+All the steps above only need to be done once.
 
-This means that proxing to injector is currently `enabled`, which in turn
-means that if one points the browser to a non secure http page and the page
-isn't yet in the IPFS database, then the client shall forward the HTTP
-request to the injector. On success, injector will (A) send the content
-back and (B) upload the content to the IPFS database.
+Finally start the client referring to the repository created above:
 
-Each time the injector updates the database it prints out a message:
+    $ /path/to/client --repo /path/to/client-repo
 
-    Published DB: Qm...
+The client opens a web proxy on local port 8080 (see option `listen-on-tcp` in
+its configuration file).  When you access the web using this proxy (see the
+following section), your requests will go through your local Ouinet client,
+which will attempt several mechanisms supported by Ouinet to retrieve the
+resource.
 
-Once published, it will take some time for the client to download it
-(up to three minutes from experience) and once it does so, it will be shown
-on client's frontend.
+When you are done testing the Ouinet client, you may shut it down by hitting
+Ctrl+C.
 
-At that point one can disable the proxying through injector, clear
-browser's cached data and try to point the browser to the same non secured
-HTTP page.
+### Testing the client with a browser
+
+Once your local Ouinet client is running (see above), if you have Firefox
+installed, you can create a new profile (stored under the `ff-profile`
+directory in the example below) which uses the Ouinet client as an HTTP proxy
+(listening on `localhost:8080` here) by executing the following commands on
+another shell:
+
+    mkdir -p ff-profile
+    env http_proxy='http://localhost:8080/' firefox --no-remote --profile ff-profile
+
+Otherwise you may manually [modify your browser's settings][Firefox proxy] to:
+
+  - Make the client (listening on port `localhost:8080` here) its HTTP proxy
+  - Make sure that `localhost` is not listed in the *No Proxy for* field
+  - Check *Use this proxy for all protocols* (mostly for HTTPS)
+
+[Firefox proxy]: http://www.wikihow.com/Enter-Proxy-Settings-in-Firefox
+    "How to Enter Proxy Settings in Firefox"
+
+Once done, you can visit `localhost` in your browser and it should show you
+the *client front-end* with assorted information from the client and
+configuration tools:
+
+  - To be able to browse HTTPS sites, you must first install the
+    *client-specific CA certificate* linked from the top of the front-end page
+    and authorize it to identify web sites.  The Ouinet client acts as a *man
+    in the middle* to enable it to process HTTPS requests, but it (or a
+    trusted injector when appropriate) still performs all standard certificate
+    validations.  This CA certificate is unique to your device.
+
+  - Several buttons near the top of the page look something like this:
+
+        Injector proxy: enabled [ disable ]
+
+    They allow you to enable or disable different *request mechanisms* to
+    retrieve content:
+
+      - *Origin*: The client contacts the origin server directly via HTTP(S).
+      - *Proxy*: The client contacts the origin server through an HTTP proxy
+        (currently the configured injector).
+      - *Injector*: The client asks the injector to fetch the content from the
+        origin server and inject it into the distributed cache.
+      - *Cache*: The client attempts to retrieve the content from the
+        distributed cache.
+
+    Content retrieved via the Origin and Proxy mechanisms is considered
+    *private and not seeded* to the distributed cache.  Content retrieved via
+    the Injector and Cache mechanisms is considered *public and seeded* to the
+    distributed cache.
+
+    These mechanisms are attempted in order according to a (currently
+    hard-wired, customizable in the future) *request router configuration*.
+    For instance, if one points the browser to a web page which it is not yet
+    in the distributed cache, then the client shall forward the request to the
+    injector.  On success, the injector will (A) send the content back to the
+    client and (B) seed the content to the cache.  The client will also seed
+    the content (along with parts of the cache index).
+
+  - The currently known version of the *published cache index* (IPFS database)
+    is also shown.  It is likely that at first it shall be empty, which
+    indicates that none has been downloaded yet.  The download may take from a
+    couple of seconds up to about three minutes (e.g. when starting the
+    client).  The page refreshes itself regularly so once the client downloads
+    the index, it should display automatically.
+
+After visiting a page with the Injector mechanism enabled and waiting for a
+new index to be published and downloaded by the client (the same one or a
+different one), you should be able to disable all request mechanisms except
+for the Cache, clear the browser's cached data, point the browser back to the
+same page and still get its contents from the distributed cache even when the
+origin server is completely unreachable.
 
 ### Integration tests
 
