@@ -358,8 +358,9 @@ A *new client node* which starts with no configuration in `/var/opt/ouinet`
 will get a default one from templates included in Ouinet's source code, and it
 will be missing some important parameters, so you may want to stop it and use
 the shell container to edit `client/ouinet-client.conf` and add configuration
-options for the injector endpoint `injector-ep` and cache IPNS
-`injector-ipns`, then restart the client.
+options for the injector endpoint `injector-ep` and credentials
+`injector-credentials`, and cache IPNS `injector-ipns`, then restart the
+client.
 
 If the *injector or client crashes* for some reason, you may have to remove
 its PID file manually for it to start again.  Just use the shell container to
