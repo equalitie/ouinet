@@ -197,7 +197,7 @@ std::string dht::DhtNode::new_transaction_string()
     uint32_t transaction_id = _next_transaction_id++;
 
     if (transaction_id == 0) {
-        return "0";
+        return std::string(1 /* count */, '\0');
     }
 
     std::string ret;
