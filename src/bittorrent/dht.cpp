@@ -796,18 +796,6 @@ std::vector<dht::NodeContact> dht::DhtNode::search_dht_for_nodes(
                     continue;
                 }
 
-                auto& contacts = _interface_address.is_v4()
-                               ? result_nodes
-                               : result_nodes6;
-
-                if (contacts.empty())
-                {
-                    if (candidate_id) {
-                        candidates.erase(*candidate_id);
-                    }
-                    continue;
-                }
-
                 if (candidate_id && candidates.count(*candidate_id) > 0) {
                     if (!accepted) {
                         candidates.erase(*candidate_id);
@@ -834,10 +822,11 @@ std::vector<dht::NodeContact> dht::DhtNode::search_dht_for_nodes(
                                         confirmed_nodes--;
 
                                         assert(!displaced_node);
-                                        NodeContact contact;
-                                        contact.id = it->first;
-                                        contact.endpoint = it->second.endpoint;
-                                        displaced_node = contact;
+
+                                        displaced_node = NodeContact {
+                                            .id = it->first,
+                                            .endpoint = it->second.endpoint
+                                        };
                                     }
                                 }
                                 candidates.erase(it->first);
@@ -849,6 +838,10 @@ std::vector<dht::NodeContact> dht::DhtNode::search_dht_for_nodes(
                         }
                     }
                 }
+
+                auto& contacts = _interface_address.is_v4()
+                               ? result_nodes
+                               : result_nodes6;
 
                 /*
                  * Only add new nodes after promoting the candidate. This saves
@@ -866,11 +859,12 @@ std::vector<dht::NodeContact> dht::DhtNode::search_dht_for_nodes(
                         continue;
                     }
 
-                    Candidate candidate;
-                    candidate.endpoint = contact.endpoint;
-                    candidate.confirmed_good = false;
-                    candidate.in_progress = false;
-                    candidates[contact.id] = candidate;
+                    candidates[contact.id] = Candidate {
+                        .endpoint       = contact.endpoint,
+                        .confirmed_good = false,
+                        .in_progress    = false
+                    };
+
                     added = true;
                 }
 
@@ -1017,8 +1011,7 @@ void dht::DhtNode::tracker_search_peers(
         );
 
         if (ec) {
-            or_throw(yield, ec);
-            return false;
+            return or_throw(yield, ec, false);
         }
 
         if (!get_peers_reply["y"].as_string() || *get_peers_reply["y"].as_string() != "r") {
@@ -1101,7 +1094,7 @@ void dht::DhtNode::tracker_search_peers(
         return got_peers;
     };
 
-    search_dht_for_nodes(infohash, RESPONSIBLE_TRACKERS_PER_SWARM, query, std::vector<udp::endpoint>(), yield);
+    search_dht_for_nodes(infohash, RESPONSIBLE_TRACKERS_PER_SWARM, query, {}, yield);
 }
 
 
