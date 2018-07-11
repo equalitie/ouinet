@@ -943,8 +943,15 @@ bool dht::DhtNode::query_find_node(
     boost::optional<std::string> nodes  = (*arguments)["nodes"].as_string();
     boost::optional<std::string> nodes6 = (*arguments)["nodes6"].as_string();
 
-    if (nodes)  decode_contacts_v4(*nodes,  closer_nodes);
-    if (nodes6) decode_contacts_v6(*nodes6, closer_nodes6);
+    if (nodes) {
+        if (!decode_contacts_v4(*nodes,  closer_nodes))
+            return or_throw(yield, asio::error::invalid_argument, false);
+    }
+
+    if (nodes6) {
+        if (!decode_contacts_v6(*nodes6, closer_nodes6))
+            return or_throw(yield, asio::error::invalid_argument, false);
+    }
 
     return (_interface_address.is_v4() && !closer_nodes .empty())
         || (_interface_address.is_v6() && !closer_nodes6.empty());
@@ -1043,8 +1050,15 @@ void dht::DhtNode::tracker_search_peers(
         boost::optional<std::string> nodes  = (*get_peers_arguments)["nodes"].as_string();
         boost::optional<std::string> nodes6 = (*get_peers_arguments)["nodes6"].as_string();
 
-        if (nodes)  decode_contacts_v4(*nodes,  closer_nodes);
-        if (nodes6) decode_contacts_v6(*nodes6, closer_nodes6);
+        if (nodes) {
+            if (!decode_contacts_v4(*nodes,  closer_nodes))
+                return or_throw(yield, asio::error::invalid_argument, false);
+        }
+
+        if (nodes6) {
+            if (!decode_contacts_v6(*nodes6, closer_nodes6))
+                return or_throw(yield, asio::error::invalid_argument, false);
+        }
 
         bool got_nodes = (_interface_address.is_v4() && !closer_nodes.empty())
                       || (_interface_address.is_v6() && !closer_nodes6.empty());
