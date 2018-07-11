@@ -940,29 +940,14 @@ bool dht::DhtNode::query_find_node(
         return false;
     }
 
-    bool nodes_present = true;
-
-    boost::optional<std::string> nodes = (*arguments)["nodes"].as_string();
-
-    if (nodes) {
-        if (!decode_contacts_v4(*nodes, closer_nodes))
-            nodes_present = false;
-    } else if (_interface_address.is_v4()) {
-        // This field is required in v4 requests and optional elsewhere
-        nodes_present = false;
-    }
-
+    boost::optional<std::string> nodes  = (*arguments)["nodes"].as_string();
     boost::optional<std::string> nodes6 = (*arguments)["nodes6"].as_string();
 
-    if (nodes) {
-        if (!decode_contacts_v6(*nodes6, closer_nodes6))
-            nodes_present = false;
-    } else if (_interface_address.is_v6()) {
-        // This field is required in v6 requests and optional elsewhere
-        nodes_present = false;
-    }
+    if (nodes)  decode_contacts_v4(*nodes,  closer_nodes);
+    if (nodes6) decode_contacts_v6(*nodes6, closer_nodes6);
 
-    return nodes_present;
+    return (_interface_address.is_v4() && !closer_nodes .empty())
+        || (_interface_address.is_v6() && !closer_nodes6.empty());
 }
 
 /**
@@ -1055,24 +1040,14 @@ void dht::DhtNode::tracker_search_peers(
             };
         }
 
-        bool got_nodes = true;
-        boost::optional<std::string> nodes = (*get_peers_arguments)["nodes"].as_string();
-        if (nodes) {
-            if (!decode_contacts_v4(*nodes, closer_nodes))
-                got_nodes = false;
-        } else if (_interface_address.is_v4()) {
-            // This field is required in v4 requests and optional elsewhere
-            got_nodes = false;
-        }
-
+        boost::optional<std::string> nodes  = (*get_peers_arguments)["nodes"].as_string();
         boost::optional<std::string> nodes6 = (*get_peers_arguments)["nodes6"].as_string();
-        if (nodes) {
-            if (!decode_contacts_v6(*nodes6, closer_nodes6))
-                got_nodes = false;
-        } else if (_interface_address.is_v6()) {
-            // This field is required in v6 requests and optional elsewhere
-            got_nodes = false;
-        }
+
+        if (nodes)  decode_contacts_v4(*nodes,  closer_nodes);
+        if (nodes6) decode_contacts_v6(*nodes6, closer_nodes6);
+
+        bool got_nodes = (_interface_address.is_v4() && !closer_nodes.empty())
+                      || (_interface_address.is_v6() && !closer_nodes6.empty());
 
         /*
          * A reply that contains peers may or may not also contain nodes.
