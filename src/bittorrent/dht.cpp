@@ -290,7 +290,7 @@ BencodedMap dht::DhtNode::send_query_await_reply(
         NodeContact contact;
         contact.endpoint = destination;
         contact.id = *destination_id;
-        if (*first_error_code || *response["y"].as_string() != "r") {
+        if (*first_error_code || response["y"] != "r") {
             /*
              * Record the failure in the routing table.
              */
@@ -312,7 +312,7 @@ void dht::DhtNode::handle_query( udp::endpoint sender
                                , BencodedMap query
                                , asio::yield_context yield)
 {
-    assert(query["y"].as_string() && *query["y"].as_string() == "q");
+    assert(query["y"] == "q");
 
     boost::optional<std::string> transaction_ = query["t"].as_string();
 
@@ -931,9 +931,7 @@ bool dht::DhtNode::query_find_node(
         return false;
     }
 
-    if (!find_node_reply["y"].as_string() || *find_node_reply["y"].as_string() != "r") {
-        return false;
-    }
+    if (find_node_reply["y"] != "r") return false;
 
     boost::optional<BencodedMap> arguments = find_node_reply["r"].as_map();
     if (!arguments) {
@@ -1006,7 +1004,7 @@ void dht::DhtNode::tracker_search_peers(
             return or_throw(yield, ec, false);
         }
 
-        if (!get_peers_reply["y"].as_string() || *get_peers_reply["y"].as_string() != "r") {
+        if (get_peers_reply["y"] != "r") {
             return false;
         }
 

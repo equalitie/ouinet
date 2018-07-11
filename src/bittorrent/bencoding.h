@@ -61,6 +61,15 @@ class BencodedValue : public detail::value {
         if (!v) return boost::none;
         return *v;
     }
+
+    bool operator==(const char* str) {
+        auto opt_str = as_string();
+        return opt_str && *opt_str == str;
+    }
+
+    bool operator!=(const char* str) {
+        return !(*this == str);
+    }
 };
 
 std::string bencoding_encode(const BencodedValue& value);
