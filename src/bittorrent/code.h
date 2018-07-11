@@ -50,37 +50,39 @@ boost::optional<asio::ip::udp::endpoint> decode_endpoint(std::string endpoint)
     }
 }
 
-static
-bool decode_contacts( bool ipv4
-                    , const std::string& str
-                    , std::vector<dht::NodeContact>& contacts)
+inline
+bool decode_contacts_v4( const std::string& str
+                       , std::vector<dht::NodeContact>& contacts)
 {
-    if (ipv4) {
-        // 20 bytes of ID, plus 6 bytes of endpoint
-        if (str.size() % 26) {
-            return false;
-        }
+    // 20 bytes of ID, plus 6 bytes of endpoint
+    if (str.size() % 26) { return false; }
 
-        for (unsigned int i = 0; i < str.size() / 26; i++) {
-            std::string encoded_contact = str.substr(i * 26, 26);
-            dht::NodeContact contact;
-            contact.id = NodeID::from_bytestring(encoded_contact.substr(0, 20));
-            contact.endpoint = *decode_endpoint(encoded_contact.substr(20));
-            contacts.push_back(contact);
-        }
-    } else {
-        // 20 bytes of ID, plus 18 bytes of endpoint
-        if (str.size() % 38) {
-            return false;
-        }
+    for (unsigned int i = 0; i < str.size() / 26; i++) {
+        std::string encoded_contact = str.substr(i * 26, 26);
 
-        for (unsigned int i = 0; i < str.size() / 38; i++) {
-            std::string encoded_contact = str.substr(i * 38, 38);
-            dht::NodeContact contact;
-            contact.id = NodeID::from_bytestring(encoded_contact.substr(0, 20));
-            contact.endpoint = *decode_endpoint(encoded_contact.substr(20));
-            contacts.push_back(contact);
-        }
+        contacts.push_back({
+            NodeID::from_bytestring(encoded_contact.substr(0, 20)),
+            *decode_endpoint(encoded_contact.substr(20))
+        });
+    }
+
+    return true;
+}
+
+inline
+bool decode_contacts_v6( const std::string& str
+                       , std::vector<dht::NodeContact>& contacts)
+{
+    // 20 bytes of ID, plus 18 bytes of endpoint
+    if (str.size() % 38) { return false; }
+
+    for (unsigned int i = 0; i < str.size() / 38; i++) {
+        std::string encoded_contact = str.substr(i * 38, 38);
+
+        contacts.push_back({
+            NodeID::from_bytestring(encoded_contact.substr(0, 20)),
+            *decode_endpoint(encoded_contact.substr(20))
+        });
     }
 
     return true;

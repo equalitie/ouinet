@@ -108,8 +108,8 @@ class DhtNode {
         std::function<bool(
             udp::endpoint node_endpoint,
             boost::optional<NodeID> node_id,
-            std::string& closer_nodes,
-            std::string& closer_nodes6,
+            std::vector<NodeContact>& closer_nodes,
+            std::vector<NodeContact>& closer_nodes6,
             /**
              * Called if the queried node becomes part of the set of closest
              * good nodes seen so far. Only ever invoked if query_node()
@@ -136,8 +136,8 @@ class DhtNode {
         NodeID target_id,
         udp::endpoint node_endpoint,
         boost::optional<NodeID> node_id,
-        std::string& closer_nodes,
-        std::string& closer_nodes6,
+        std::vector<NodeContact>& closer_nodes,
+        std::vector<NodeContact>& closer_nodes6,
         asio::yield_context yield
     );
 

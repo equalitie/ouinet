@@ -648,8 +648,8 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
     auto query = [this, target_id] (
         udp::endpoint node_endpoint,
         boost::optional<NodeID> node_id,
-        std::string& closer_nodes,
-        std::string& closer_nodes6,
+        std::vector<NodeContact>& closer_nodes,
+        std::vector<NodeContact>& closer_nodes6,
         /**
          * Called if the queried node becomes part of the set of closest
          * good nodes seen so far. Only ever invoked if query_node()
@@ -699,8 +699,8 @@ std::vector<dht::NodeContact> dht::DhtNode::search_dht_for_nodes(
     std::function<bool(
         udp::endpoint node_endpoint,
         boost::optional<NodeID> node_id,
-        std::string& closer_nodes,
-        std::string& closer_nodes6,
+        std::vector<NodeContact>& closer_nodes,
+        std::vector<NodeContact>& closer_nodes6,
         /**
          * Called if the queried node becomes part of the set of closest
          * good nodes seen so far. Only ever invoked if query_node()
@@ -780,8 +780,8 @@ std::vector<dht::NodeContact> dht::DhtNode::search_dht_for_nodes(
                 in_progress_endpoints++;
 
                 sys::error_code ec;
-                std::string result_nodes;
-                std::string result_nodes6;
+                std::vector<NodeContact> result_nodes;
+                std::vector<NodeContact> result_nodes6;
                 std::function<void(boost::optional<NodeContact> displaced_node, asio::yield_context yield)> on_promote;
 
                 bool accepted = query_node(*endpoint, candidate_id, result_nodes, result_nodes6, on_promote, yield[ec]);
@@ -796,10 +796,11 @@ std::vector<dht::NodeContact> dht::DhtNode::search_dht_for_nodes(
                     continue;
                 }
 
-                std::vector<NodeContact> contacts;
-                if (!decode_contacts( _interface_address.is_v4()
-                                    , result_nodes
-                                    , contacts))
+                auto& contacts = _interface_address.is_v4()
+                               ? result_nodes
+                               : result_nodes6;
+
+                if (contacts.empty())
                 {
                     if (candidate_id) {
                         candidates.erase(*candidate_id);
@@ -815,7 +816,7 @@ std::vector<dht::NodeContact> dht::DhtNode::search_dht_for_nodes(
                         candidates[*candidate_id].in_progress = false;
                         confirmed_nodes++;
 
-                        boost::optional<NodeContact> displaced_node = boost::none;
+                        boost::optional<NodeContact> displaced_node;
 
                         if (confirmed_nodes >= max_nodes) {
                             /*
@@ -913,8 +914,8 @@ bool dht::DhtNode::query_find_node(
     NodeID target_id,
     udp::endpoint node_endpoint,
     boost::optional<NodeID> node_id,
-    std::string& closer_nodes,
-    std::string& closer_nodes6,
+    std::vector<NodeContact>& closer_nodes,
+    std::vector<NodeContact>& closer_nodes6,
     asio::yield_context yield
 ) {
     sys::error_code ec;
@@ -946,17 +947,22 @@ bool dht::DhtNode::query_find_node(
     }
 
     bool nodes_present = true;
+
     boost::optional<std::string> nodes = (*arguments)["nodes"].as_string();
+
     if (nodes) {
-        closer_nodes = *nodes;
+        if (!decode_contacts_v4(*nodes, closer_nodes))
+            nodes_present = false;
     } else if (_interface_address.is_v4()) {
         // This field is required in v4 requests and optional elsewhere
         nodes_present = false;
     }
 
     boost::optional<std::string> nodes6 = (*arguments)["nodes6"].as_string();
+
     if (nodes) {
-        closer_nodes6 = *nodes6;
+        if (!decode_contacts_v6(*nodes6, closer_nodes6))
+            nodes_present = false;
     } else if (_interface_address.is_v6()) {
         // This field is required in v6 requests and optional elsewhere
         nodes_present = false;
@@ -982,8 +988,8 @@ void dht::DhtNode::tracker_search_peers(
     auto query = [this, infohash, &tracker_reply] (
         udp::endpoint node_endpoint,
         boost::optional<NodeID> node_id,
-        std::string& closer_nodes,
-        std::string& closer_nodes6,
+        std::vector<NodeContact>& closer_nodes,
+        std::vector<NodeContact>& closer_nodes6,
         /**
          * Called if the queried node becomes part of the set of closest
          * good nodes seen so far. Only ever invoked if query_node()
@@ -1000,15 +1006,12 @@ void dht::DhtNode::tracker_search_peers(
     ) -> bool {
         sys::error_code ec;
 
-        BencodedMap get_peers_message;
-        get_peers_message["id"] = _node_id.to_bytestring();
-        get_peers_message["info_hash"] = infohash.to_bytestring();
-
         BencodedMap get_peers_reply = send_query_await_reply(
             node_endpoint,
             node_id,
             "get_peers",
-            get_peers_message,
+            BencodedMap { { "id", _node_id.to_bytestring() }
+                        , { "info_hash", infohash.to_bytestring() } },
             std::chrono::seconds(2),
             yield[ec]
         );
@@ -1062,7 +1065,8 @@ void dht::DhtNode::tracker_search_peers(
         bool got_nodes = true;
         boost::optional<std::string> nodes = (*get_peers_arguments)["nodes"].as_string();
         if (nodes) {
-            closer_nodes = *nodes;
+            if (!decode_contacts_v4(*nodes, closer_nodes))
+                got_nodes = false;
         } else if (_interface_address.is_v4()) {
             // This field is required in v4 requests and optional elsewhere
             got_nodes = false;
@@ -1070,7 +1074,8 @@ void dht::DhtNode::tracker_search_peers(
 
         boost::optional<std::string> nodes6 = (*get_peers_arguments)["nodes6"].as_string();
         if (nodes) {
-            closer_nodes6 = *nodes6;
+            if (!decode_contacts_v6(*nodes6, closer_nodes6))
+                got_nodes = false;
         } else if (_interface_address.is_v6()) {
             // This field is required in v6 requests and optional elsewhere
             got_nodes = false;
