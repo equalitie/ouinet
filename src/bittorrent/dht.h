@@ -130,7 +130,7 @@ class DhtNode {
 
     std::string new_transaction_string();
 
-    void send_ping(NodeContact contact, asio::yield_context);
+    void send_ping(NodeContact contact);
 
     bool query_find_node(
         NodeID target_id,
@@ -155,12 +155,9 @@ class DhtNode {
 
     void routing_bucket_try_add_node( RoutingBucket*
                                     , NodeContact
-                                    , bool is_verified
-                                    , asio::yield_context);
+                                    , bool is_verified);
 
-    void routing_bucket_fail_node( RoutingBucket*
-                                 , NodeContact
-                                 , asio::yield_context);
+    void routing_bucket_fail_node(RoutingBucket*, NodeContact);
 
     static bool closer_to(const NodeID& reference, const NodeID& left, const NodeID& right);
 

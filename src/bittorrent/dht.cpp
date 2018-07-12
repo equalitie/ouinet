@@ -295,13 +295,13 @@ BencodedMap dht::DhtNode::send_query_await_reply(
              * Record the failure in the routing table.
              */
             dht::RoutingBucket* routing_bucket = _routing_table->find_bucket(*destination_id, false);
-            routing_bucket_fail_node(routing_bucket, contact, yield);
+            routing_bucket_fail_node(routing_bucket, contact);
         } else {
             /*
              * Add the node to the routing table, subject to space limitations.
              */
             dht::RoutingBucket* routing_bucket = _routing_table->find_bucket(*destination_id, true);
-            routing_bucket_try_add_node(routing_bucket, contact, true, yield);
+            routing_bucket_try_add_node(routing_bucket, contact, true);
         }
     }
 
@@ -379,7 +379,7 @@ void dht::DhtNode::handle_query( udp::endpoint sender
         * Add the sender to the routing table.
         */
         dht::RoutingBucket* routing_bucket = _routing_table->find_bucket(contact.id, true);
-        routing_bucket_try_add_node(routing_bucket, contact, false, yield);
+        routing_bucket_try_add_node(routing_bucket, contact, false);
     }
 
     if (query_type == "ping") {
@@ -878,26 +878,35 @@ std::vector<dht::NodeContact> dht::DhtNode::search_dht_for_nodes(
     all_done.wait(yield);
 
     std::vector<NodeContact> output;
+
     for (auto it : candidates) {
         assert(it.second.confirmed_good);
-        NodeContact contact;
-        contact.id = it.first;
-        contact.endpoint = it.second.endpoint;
-        output.push_back(contact);
+        output.push_back({.id = it.first, it.second.endpoint});
     }
+
     return output;
 }
 
-
-void dht::DhtNode::send_ping(NodeContact contact, asio::yield_context yield)
+void dht::DhtNode::send_ping(NodeContact contact)
 {
-    sys::error_code ec;
+    // It is currently expected that this function returns immediately, due to
+    // that we need to spawn an unlimited number of coroutines.  Perhaps it
+    // would be better if functions using this send_ping function would only
+    // spawn a limited number of coroutines and use only that.
+    asio::spawn(_ios, [&, c = std::move(contact)]
+                      (asio::yield_context yield) {
+        sys::error_code ec;
 
-    send_query( contact.endpoint
-              , new_transaction_string()
-              , "ping"
-              , BencodedMap{ { "id", _node_id.to_bytestring() } }
-              , yield[ec]);
+        // Note that even though we're not explicitly using the reply here,
+        // it's still being used internally by the `send_query_await_reply`
+        // function to update validity of the contact inside the routing table.
+        send_query_await_reply( contact.endpoint
+                              , contact.id
+                              , "ping"
+                              , BencodedMap{{ "id", _node_id.to_bytestring() }}
+                              , std::chrono::seconds(2)
+                              , yield[ec]);
+    });
 }
 
 /**
@@ -1093,8 +1102,7 @@ void dht::DhtNode::tracker_search_peers(
  */
 void dht::DhtNode::routing_bucket_try_add_node( RoutingBucket* bucket
                                               , NodeContact contact
-                                              , bool is_verified
-                                              , asio::yield_context yield)
+                                              , bool is_verified)
 {
     /*
      * Check whether the contact is already in the routing table. If so, bump it.
@@ -1146,7 +1154,7 @@ void dht::DhtNode::routing_bucket_try_add_node( RoutingBucket* bucket
             node.questionable_ping_ongoing = false;
             bucket->nodes.push_back(node);
         } else {
-            send_ping(contact, yield);
+            send_ping(contact);
         }
         return;
     }
@@ -1167,7 +1175,7 @@ void dht::DhtNode::routing_bucket_try_add_node( RoutingBucket* bucket
                 node.questionable_ping_ongoing = false;
                 bucket->nodes.push_back(node);
             } else {
-                send_ping(contact, yield);
+                send_ping(contact);
             }
             return;
         }
@@ -1182,7 +1190,7 @@ void dht::DhtNode::routing_bucket_try_add_node( RoutingBucket* bucket
         if (bucket->nodes[i].is_questionable()) {
             questionable_nodes++;
             if (!bucket->nodes[i].questionable_ping_ongoing) {
-                send_ping(bucket->nodes[i].contact, yield);
+                send_ping(bucket->nodes[i].contact);
                 bucket->nodes[i].questionable_ping_ongoing = true;
             }
         }
@@ -1227,8 +1235,7 @@ void dht::DhtNode::routing_bucket_try_add_node( RoutingBucket* bucket
  * makes the node bad, try to replace it with a queued candidate.
  */
 void dht::DhtNode::routing_bucket_fail_node( RoutingBucket* bucket
-                                           , NodeContact contact
-                                           , asio::yield_context yield)
+                                           , NodeContact contact)
 {
     /*
      * Find the contact in the routing table.
@@ -1249,7 +1256,7 @@ void dht::DhtNode::routing_bucket_fail_node( RoutingBucket* bucket
     if (!bucket->nodes[node_index].is_bad()) {
         if (bucket->nodes[node_index].is_questionable()) {
             bucket->nodes[node_index].questionable_ping_ongoing = true;
-            send_ping(contact, yield);
+            send_ping(contact);
         }
         return;
     }
@@ -1293,7 +1300,7 @@ void dht::DhtNode::routing_bucket_fail_node( RoutingBucket* bucket
          */
         NodeContact contact = bucket->unverified_candidates[0].contact;
         bucket->unverified_candidates.pop_front();
-        send_ping(contact, yield);
+        send_ping(contact);
     }
 
     /*
