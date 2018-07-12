@@ -126,24 +126,22 @@ Vagrant.configure("2") do |config|
         autopoint \
         texinfo \
         gettext \
-        libboost-dev \
-        libboost-coroutine-dev \
-        libboost-program-options-dev \
-        libboost-system-dev \
-        libboost-test-dev \
-        libboost-thread-dev \
-        libboost-filesystem-dev \
-        libboost-date-time-dev \
-        libboost-regex-dev \
         libgcrypt-dev \
         libidn11-dev \
         libssl-dev \
         libunistring-dev \
         zlib1g-dev
+      cd /usr/local/src
+      wget -q "https://downloads.sourceforge.net/project/boost/boost/1.67.0/boost_1_67_0.tar.bz2"
+      tar -xf boost_1_67_0.tar.bz2
+      cd boost_1_67_0
+      ./bootstrap.sh
+      ./b2 -j `nproc` -d+0 --link=shared --with-system --with-program_options --with-test --with-coroutine --with-filesystem --with-date_time --with-regex --prefix=/usr/local install
 
       # Install testing tools
       echo wireshark-common wireshark-common/install-setuid boolean true | debconf-set-selections
       DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        ca-certificates \
         firefox-esr \
         wireshark \
         xauth

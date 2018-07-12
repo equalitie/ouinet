@@ -60,10 +60,10 @@ NDK_PLATFORM=${NDK_PLATFORM:-21}
 NDK_STL='libc++'
 NDK_TOOLCHAIN_DIR=${NDK_TOOLCHAIN_DIR:-${DIR}/${NDK}-toolchain-android$NDK_PLATFORM-$NDK_ARCH-$NDK_STL}
 
-BOOST_V=${BOOST_V:-"1_65_1"}
-BOOST_V_DOT=${BOOST_V//_/.} # 1.65.1
+BOOST_V=${BOOST_V:-"1_67_0"}
+BOOST_V_DOT=${BOOST_V//_/.} # Replace '_' for '.'
 BOOST_SOURCE=${BOOST_SOURCE:-"${DIR}/Boost-for-Android"}
-BOOST_INCLUDEDIR=$BOOST_SOURCE/build/out/${ABI}/include/boost-${BOOST_V}
+BOOST_INCLUDEDIR=$BOOST_SOURCE/build/out/${ABI}/include
 BOOST_LIBRARYDIR=$BOOST_SOURCE/build/out/${ABI}/lib
 
 SSL_V="1.1.0g"
@@ -274,11 +274,12 @@ function maybe_install_gradle {
 
 ######################################################################
 function maybe_install_boost {
-echo "maybe install boost"
+
+BOOST_GIT=https://github.com/equalitie/Boost-for-Android
+
 if [ ! -d "$BOOST_SOURCE" ]; then
     (cd "$(dirname "$BOOST_SOURCE")" \
-         && git clone https://github.com/inetic/Boost-for-Android \
-                "$(basename "$BOOST_SOURCE")")
+         && git clone $BOOST_GIT "$(basename "$BOOST_SOURCE")")
 fi
 
 if [ ! -d "$BOOST_LIBRARYDIR" ]; then
@@ -289,6 +290,7 @@ if [ ! -d "$BOOST_LIBRARYDIR" ]; then
         --boost=${BOOST_V_DOT} \
         --arch=${ABI} \
         --with-libraries=regex,context,coroutine,program_options,system,test,thread,filesystem,date_time \
+        --layout=system \
         $NDK_DIR
     cd -
 fi

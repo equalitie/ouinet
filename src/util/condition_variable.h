@@ -1,67 +1,75 @@
 #pragma once
 
-#include <memory>
-
+#include <boost/asio/io_service.hpp>
 #include <boost/asio/spawn.hpp>
+#include <boost/intrusive/list.hpp>
 
 namespace ouinet {
 
 class ConditionVariable {
+    using Sig = void(boost::system::error_code);
+
+    using IntrusiveHook = boost::intrusive::list_base_hook
+        <boost::intrusive::link_mode
+            <boost::intrusive::auto_unlink>>;
+
+    struct WaitEntry : IntrusiveHook {
+        std::function<Sig> handler;
+    };
+
+    using IntrusiveList = boost::intrusive::list
+        <WaitEntry, boost::intrusive::constant_time_size<false>>;
+
 public:
     ConditionVariable(boost::asio::io_service& ios);
+
     ConditionVariable(const ConditionVariable&) = delete;
     ConditionVariable& operator=(const ConditionVariable&) = delete;
 
     ~ConditionVariable();
 
-    void notify();
+    asio::io_service& get_io_service() { return _ios; }
+
+    void notify(const boost::system::error_code& ec
+                    = boost::system::error_code());
+
     void wait(boost::asio::yield_context yield);
 
 private:
     boost::asio::io_service& _ios;
-    std::vector<std::function<void(boost::system::error_code)>> _on_notify;
+    IntrusiveList _on_notify;
 };
 
 inline
 ConditionVariable::ConditionVariable(boost::asio::io_service& ios)
     : _ios(ios)
-{}
+{
+}
 
 inline
 ConditionVariable::~ConditionVariable()
 {
-    if (!_on_notify.empty()) {
-        _ios.post([handlers = std::move(_on_notify)] {
-            for (auto& h : handlers) {
-                h(boost::asio::error::operation_aborted);
-            }
-        });
-    }
+    notify(boost::asio::error::operation_aborted);
 }
 
 inline
-void ConditionVariable::notify()
+void ConditionVariable::notify(const boost::system::error_code& ec)
 {
-    if (!_on_notify.empty()) {
-        _ios.post([handlers = std::move(_on_notify)] {
-            for (auto& h : handlers) {
-                h(boost::system::error_code());
-            }
-        });
+    while (!_on_notify.empty()) {
+        auto& e = _on_notify.front();
+        _ios.post([h = std::move(e.handler), ec] () mutable { h(ec); });
+        _on_notify.pop_front();
     }
 }
 
 inline
 void ConditionVariable::wait(boost::asio::yield_context yield)
 {
-    using Handler = boost::asio::handler_type<boost::asio::yield_context, void(boost::system::error_code)>::type;
-
-    Handler handler(yield);
-    boost::asio::async_result<Handler> result(handler);
-
-    _on_notify.push_back(std::move(handler));
-
-    return result.get();
+    boost::asio::async_completion<boost::asio::yield_context, Sig> init(yield);
+    WaitEntry entry;
+    entry.handler = std::move(init.completion_handler);
+    _on_notify.push_back(entry);
+    return init.result.get();
 }
 
 } // ouinet namespace

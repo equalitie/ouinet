@@ -1,6 +1,7 @@
 package ie.equalit.ouinet.browser;
 
 import ie.equalit.ouinet.Ouinet;
+import ie.equalit.ouinet.browser.MainActivity;
 import android.content.Context;
 
 import android.webkit.WebViewClient;
@@ -26,13 +27,13 @@ import okhttp3.Response;
 
 class OuiWebViewClient extends WebViewClient {
     private Ouinet _ouinet;
-    private Context _context;
+    private MainActivity _activity;
     private boolean _showClientFrontEnd = false;
 
-    public OuiWebViewClient(Context context, Ouinet ouinet) {
+    public OuiWebViewClient(MainActivity activity, Ouinet ouinet) {
         super();
         _ouinet  = ouinet;
-        _context = context;
+        _activity = activity;
     }
 
     public void toggleShowClientFrontend() {
@@ -84,20 +85,20 @@ class OuiWebViewClient extends WebViewClient {
                                           String host,
                                           String realm)
     {
-        final String cur_injector = _ouinet.getInjectorEndpoint();
+        final String cur_injector = _activity.readInjectorEP();
 
         if (cur_injector == null || cur_injector.length() == 0) {
             handler.cancel();
             return;
         }
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(_context);
+        AlertDialog.Builder builder = new AlertDialog.Builder(_activity);
 
         builder.setTitle("Credentials required for Ouinet injector");
         builder.setMessage("Insert credentials for " + cur_injector +
                            " in the <USENAME>:<PASSWORD> format");
 
-        final EditText credentials = new EditText(_context);
+        final EditText credentials = new EditText(_activity);
 
         credentials.setInputType(InputType.TYPE_CLASS_TEXT);
 

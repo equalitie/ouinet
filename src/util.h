@@ -1,36 +1,54 @@
 #pragma once
 
 #include "namespaces.h"
+#include "util/signal.h"
 
 #include <unistd.h>  // for getpid()
 #include <fstream>
 #include <string>
 
+#include <boost/asio/io_service.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/beast/http/fields.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/regex.hpp>
 // Only available in Boost >= 1.64.0.
 ////#include <boost/process/environment.hpp>
 
 namespace ouinet { namespace util {
 
+struct url_match {
+    std::string scheme;
+    std::string host;
+    std::string port;  // maybe empty
+    std::string path;
+    std::string query;  // maybe empty
+    std::string fragment;  // maybe empty
+};
+
+// Parse the HTTP URL to tell the different components.
+// If successful, the `match` is updated.
 inline
-std::pair< beast::string_view
-         , beast::string_view
-         >
-split_host_port(const beast::string_view& hp)
-{
-    using namespace std;
-
-    auto pos = hp.find(':');
-
-    if (pos == string::npos) {
-        return make_pair(hp, "80");
-    }
-
-    return make_pair(hp.substr(0, pos), hp.substr(pos+1));
+bool match_http_url(const std::string& url, url_match& match) {
+    static const boost::regex urlrx( "^(http|https)://"  // 1: scheme
+                                     "([-\\.a-z0-9]+|\\[[:0-9a-fA-F]+\\])"  // 2: host
+                                     "(:[0-9]{1,5})?"  // 3: :port (or empty)
+                                     "(/[^?#]*)"  // 4: /path
+                                     "(\\?[^#]*)?"  // 5: ?query (or empty)
+                                     "(#.*)?");  // 6: #fragment (or empty)
+    boost::smatch m;
+    if (!boost::regex_match(url, m, urlrx))
+        return false;
+    match = { m[1]
+            , m[2]
+            , m[3].length() > 0 ? std::string(m[3], 1) : ""  // drop colon
+            , m[4]
+            , m[5].length() > 0 ? std::string(m[5], 1) : ""  // drop qmark
+            , m[6].length() > 0 ? std::string(m[6], 1) : ""  // drop hash
+    };
+    return true;
 }
 
 inline
@@ -38,7 +56,7 @@ asio::ip::tcp::endpoint
 parse_tcp_endpoint(const std::string& s, sys::error_code& ec)
 {
     using namespace std;
-    auto pos = s.find(':');
+    auto pos = s.rfind(':');
 
     ec = sys::error_code();
 
@@ -68,6 +86,60 @@ parse_tcp_endpoint(const std::string& s)
     auto ep = parse_tcp_endpoint(s, ec);
     if (ec) throw sys::system_error(ec);
     return ep;
+}
+
+inline
+auto tcp_async_resolve( const std::string& host
+                      , const std::string& port
+                      , asio::io_service& ios
+                      , Signal<void()>& cancel_signal
+                      , asio::yield_context yield)
+{
+    asio::ip::tcp::resolver resolver{ios};
+    auto cancel_lookup_slot = cancel_signal.connect([&resolver] {
+        resolver.cancel();
+    });
+
+    return resolver.async_resolve({host, port}, yield);
+}
+
+// Return whether the given `host` points to a loopback address.
+// Please note that this implies a DNS lookup
+// to spot names that point to a loopback address.
+// No exceptions are raised (lookup failure returns false).
+inline
+bool is_localhost( const std::string& host
+                 , asio::io_service& ios
+                 , Signal<void()>& cancel_signal
+                 , asio::yield_context yield)
+{
+#define IPV4_LOOP "127(?:\\.[0-9]{1,3}){3}"
+    // Fortunately, resolving also canonicalizes IPv6 addresses
+    // so we can simplify the regular expression.`:)`
+    static const boost::regex lhrx
+      ( "^(?:"
+        IPV4_LOOP             // IPv4, e.g. 127.1.2.3
+        "|::1"                // IPv6 loopback
+        "|::ffff:" IPV4_LOOP  // IPv4-mapped IPv6
+        "|::" IPV4_LOOP       // IPv4-compatible IPv6
+        ")$" );
+
+    // Avoid the DNS lookup for very evident loopback addresses.`;)`
+    boost::smatch m;
+    if (boost::regex_match(host, m, lhrx))
+        return true;
+
+    // For the less evident ones, lookup DNS.
+    sys::error_code ec;
+    auto const lookup = tcp_async_resolve( host, "0"  // not interested in port
+                                         , ios, cancel_signal
+                                         , yield[ec]);
+    if (ec) return false;
+
+    for (auto r : lookup)
+        if (boost::regex_match(r.endpoint().address().to_string(), m, lhrx))
+            return true;
+    return false;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

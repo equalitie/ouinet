@@ -13,9 +13,16 @@
 
 
 namespace ouinet {
+// The presence of this (non-empty) HTTP request header
+// shows the protocol version used by the client
+// and hints the receiving injector to behave like an injector instead of a proxy.
+static const std::string request_version_hdr = "X-Ouinet-Version";
+static const std::string request_version_hdr_v0 = "0";
+static const std::string request_version_hdr_latest = request_version_hdr_v0;
 
 //------------------------------------------------------------------------------
 namespace request_route {
+
 // TODO: Better name?
 //
 // TODO: It may make sense to split private/dynamic/non-cached mechanisms (origin, proxy)
