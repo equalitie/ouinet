@@ -364,12 +364,20 @@ with the latest code on you computer, you should be fine with:
 
 That command will create a *data volume*, a main *node container* for running
 the Ouinet client or injector (using the host's network directly), and a
-convenience *shell container* to allow you to modify files in the data volume,
-then run the containers (the shell container will exit immediately; this is
-normal).
+convenience *shell container* (see below) to allow you to modify files in the
+data volume.  It will then run the containers (the shell container will exit
+immediately; this is normal).
 
 To stop the node, hit Ctrl+C.  Run `sudo docker-compose images` to see the
 names of the actual node and shell containers.
+
+A new client node which starts with no configuration will get a default one
+from templates included in Ouinet's source code and it will be missing some
+important parameters, so you may want to stop it and use the shell container
+to edit `/var/opt/ouinet/client/ouinet-client.conf` and add configuration
+options for the injector endpoint `injector-ep` and credentials
+`injector-credentials`, and cache IPNS `injector-ipns`, then restart the
+client.
 
 [docker-compose.yml]: https://raw.githubusercontent.com/equalitie/ouinet/master/docker-compose.yml
 
@@ -392,23 +400,15 @@ populate its default environment file:
     $ echo OUINET_VERSION=v0.0.5-docker3 >> .env
     $ docker-compose up
 
-### Accessing data files
+### Using the shell container
 
-You may use the convenience *shell container* to access Ouinet node data
+You may use the convenience *shell container* to access Ouinet node files
 directly:
 
     $ sudo docker-compose run --rm shell
 
 This will create a throwaway container with a shell at the `/var/opt/ouinet`
 directory in the data volume.
-
-A *new client node* which starts with no configuration in `/var/opt/ouinet`
-will get a default one from templates included in Ouinet's source code, and it
-will be missing some important parameters, so you may want to stop it and use
-the shell container to edit `client/ouinet-client.conf` and add configuration
-options for the injector endpoint `injector-ep` and credentials
-`injector-credentials`, and cache IPNS `injector-ipns`, then restart the
-client.
 
 If the *injector or client crashes* for some reason, you may have to remove
 its PID file manually for it to start again.  Just use the shell container to
