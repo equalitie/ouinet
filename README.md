@@ -231,7 +231,7 @@ from templates included in Ouinet's source code and it will be missing some
 important parameters, so you may want to stop it and use the shell container
 to edit `client/ouinet-client.conf` and add configuration options for the
 injector endpoint `injector-ep` and credentials `injector-credentials`, and
-cache IPNS `injector-ipns`, then restart the client.
+cache index IPNS ID `injector-ipns`, then restart the client.
 
 [docker-compose.yml]: https://raw.githubusercontent.com/equalitie/ouinet/master/docker-compose.yml
 
@@ -281,10 +281,10 @@ Then you may copy it in from the host using:
 
 After an injector has finished starting, you may want to use the shell
 container to inspect and note down the contents of `injector/endpoint-*`
-(injector endpoints) and `injector/cache-ipns` (cache IPNS) to be used by
-clients.
+(injector endpoints) and `injector/cache-ipns` (cache index IPNS ID) to be
+used by clients.
 
-If you ever need to reset and empty the injector's database for some reason
+If you ever need to reset and empty the injector's cache index for some reason
 (e.g. testing) while keeping injector IDs and credentials, you may:
 
  1. Fetch a Go IPFS binary and copy it to the data volume:
@@ -363,7 +363,7 @@ To perform some tests using a Ouinet client and an existing injector, you
 first need to know the *injector endpoint* and *credentials* (if needed), and
 a *distributed cache index*.  These use to be respectively an IP address and
 port (for testing, otherwise an I2P peer identity), a `<USER>:<PASSWORD>`
-string, and an IPNS identifier.
+string, and an IPNS ID.
 
 You need to configure the Ouinet client to use the aforementioned parameters.
 If you have a local build, create a copy of the `repos/client` repository
@@ -458,12 +458,12 @@ configuration tools:
     client and (B) seed the content to the cache.  The client will also seed
     the content (along with parts of the cache index).
 
-  - The currently known version of the *published cache index* (IPFS database)
-    is also shown.  It is likely that at first it shall be empty, which
-    indicates that none has been downloaded yet.  The download may take from a
-    couple of seconds up to about three minutes (e.g. when starting the
-    client).  The page refreshes itself regularly so once the client downloads
-    the index, it should display automatically.
+  - The last seen version of the published *cache index* (an IPFS hash) is
+    also shown.  It is likely that at first it shall be empty, which indicates
+    that none has been downloaded yet.  The download may take from a couple of
+    seconds up to about three minutes (e.g. when starting the client).  The
+    page refreshes itself regularly so once the client downloads the index, it
+    should display automatically.
 
 After visiting a page with the Injector mechanism enabled and waiting for a
 new index to be published and downloaded by the client (the same one or a
@@ -541,13 +541,13 @@ the next build.  Just run:
 ### Setting up the demo client
 
 The Android app has user menus for specifying the injector's endpoint,
-injector's credentials, and the IPFS database ID (IPNS), but that is very
-tedious to do.  Because of that, the app also gives you an option to read QR
-codes.  To generate one, create a text with these values:
+injector's credentials, and the cache index IPNS ID, but that is very tedious
+to do.  Because of that, the app also gives you an option to read QR codes.
+To generate one, create a text with these values:
 
-    injector=<INJECTOR ENDPOINT>
-    ipns=<INJECTOR's IPFS-ID/IPNS>
-    credentials=<USERNAME:PASSWORD>
+    injector=<INJECTOR ENDPOINT>
+    ipns=<CACHE INDEX IPNS ID>
+    credentials=<USER>:<PASSWORD>
 
 and the use an online QR code generator such as [this one](https://www.the-qrcode-generator.com/),
 or use a command line tool such as [qrencode](https://fukuchi.org/works/qrencode/)
