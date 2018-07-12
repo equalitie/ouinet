@@ -472,10 +472,12 @@ for the Cache, clear the browser's cached data, point the browser back to the
 same page and still get its contents from the distributed cache even when the
 origin server is completely unreachable.
 
-## Android demo client
+## Android library and demo client
 
-Ouinet comes with a sample, minimal Android web browser based on the standard
-`WebView`, as a demonstration of how to integrate Ouinet in your Android apps.
+Ouinet can also be built as an Android Archive library (AAR) to use in your
+Android addps.  As a demonstration of how to integrate Ouinet in your Android
+apps, Ouinet's sources include a minimal Android web browser based on the
+standard `WebView` using Ouinet as a transport.
 
 ### Build requirements
 
@@ -491,6 +493,9 @@ will run the `build-android.sh` script (e.g. `~/ouinet.android.build`).
 
 ### Building
 
+The following instructions will by build a Ouinet AAR library and demo client
+APK package for the `armeabi-v7a` [Android ABI][]:
+
     host    $ vagrant up --provider=libvirt
     host    $ vagrant ssh
     vagrant $ mkdir <ANDROID>
@@ -498,36 +503,42 @@ will run the `build-android.sh` script (e.g. `~/ouinet.android.build`).
     vagrant $ git clone --recursive /vagrant
     vagrant $ ./vagrant/scripts/build-android.sh
 
-Note that we cloned a fresh copy of the `ouinet` repository at `/vagrant`.
-This is not strictly necessary since the build environment supports
-out-of-source builds, however it spares you from having to keep your source
-directory clean and submodules up to date.  If you fullfill these
-requirements, you can just skip the cloning and run
-`/vagrant/scripts/build-android.sh` instead.
+Note that we cloned a fresh copy of the Ouinet repository at `/vagrant`.  This
+is not strictly necessary since the build environment supports out-of-source
+builds, however it spares you from having to keep your source directory clean
+and submodules up to date at the host.  If you fullfill these requirements,
+you can just skip the cloning and run `/vagrant/scripts/build-android.sh`
+instead.
 
-When the build script finishes successfully, it prints out a path to the
-`browser-debug.apk` app package which can now be copied to the host and
-deployed to the phone, for instance:
+If you want a build for a different ABI, do set the `ABI` environment
+variable:
+
+    vagrant $ env ABI=x86_64 /path/to/build-android.sh
+
+In any case, when the build script finishes successfully, it will leave the
+Ouinet AAR library at `<ANDROID BUILD DIR>/outputs/aar/ouinet-debug.aar`
+(where `<ANDROID BUILD DIR>=build-android/builddir/ouinet/build-android`
+unless instructed otherwise, e.g. via Android Studio).
+
+The script will also print out a path to the demo client APK package
+(`<ANDROID BUILD DIR>/outputs/apk/debug/browser-debug.apk` by default) which
+can now be copied to the host and deployed to the phone, for instance:
 
     vagrant $ cp /path/to/browser-debug.apk /vagrant-rw
     vagrant $ exit
     host    $ adb install /path/to/browser-debug.apk
 
-The script builds by default an APK for the `armeabi-v7a` [Android ABI][].  If
-you want a build for a different ABI, just set the `ABI` environment variable:
-
-    vagrant $ env ABI=x86_64 /path/to/build-android.sh
-
 Please note that merging different ABI builds at the same build directory is
-not yet supported.  To remove potentially conflicting files while keeping
-downloads and ABI-neutral source files so that you can reuse them for the next
-build, please run:
+not yet supported.  If you want to rebuild for a different ABI, you can remove
+potentially conflicting files (including the generated AAR and APK!)  while
+keeping downloads and ABI-neutral source files so that you can reuse them for
+the next build.  Just run:
 
     vagrant $ /path/to/build-android.sh abiclean
 
 [Android ABI]: https://developer.android.com/ndk/guides/abis.html
 
-### Setting up
+### Setting up the demo client
 
 The Android app has user menus for specifying the injector's endpoint,
 injector's credentials, and the IPFS database ID (IPNS), but that is very
@@ -573,5 +584,5 @@ Some useful options include `-no-snapshot`, `-no-snapshot-load` and
 [emulator startup options]: https://developer.android.com/studio/run/emulator-commandline.html#startup-options
 
 While the emulator is running, you may interact with it using ADB, e.g. to
-install the APK built in the previous step.  See the script's output for
-particular instructions and paths.
+install the APK built previously.  See the script's output for particular
+instructions and paths.
