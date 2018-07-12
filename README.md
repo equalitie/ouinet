@@ -431,14 +431,21 @@ build, please run:
 
 [Android ABI]: https://developer.android.com/ndk/guides/abis.html
 
-### Existing Android SDK and Android NDK
-By the default the build-android.sh script downloads all required libries to build ouinet android library including Android SDK and Android NDK. If you have already have these installed on your system you tune the script to use those:
+#### Using existing Android SDK/NDK and Boost
 
-export SDK_DIR=/opt/android-sdk
-export NDK_DIR=/opt/android-sdk/ndk-bundle
-export PLATFORM=android-26
-export BOOST_SOURCE=/path/to/Boost-for-Android
-export BOOST_INCLUDEDIR=$BOOST_SOURCE/build/out/${ABI}/include/boost-${BOOST_V}
+By default the `build-android.sh` script downloads all dependencies required
+to build the Ouinet Android library, including the Android SDK, Android NDK
+and Boost for Android.  If you already have these installed on your system you
+can tune the script to use them:
+
+    $ export SDK_DIR=/opt/android-sdk
+    $ export NDK_DIR=/opt/android-sdk/ndk-bundle
+    $ export ABI=armeabi-v7a
+    $ export PLATFORM=android-26
+    $ export BOOST_V=1_67_0
+    $ export BOOST_SOURCE=/path/to/Boost-for-Android
+    $ export BOOST_INCLUDEDIR=$BOOST_SOURCE/build/out/${ABI}/include/boost-${BOOST_V}
+    $ /path/to/build-android.sh
 
 ### Setting up Android browser/client
 
