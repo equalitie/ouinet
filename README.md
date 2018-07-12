@@ -192,7 +192,7 @@ running on top of a Debian base system.
 
 Ouinet Docker images should be available from the Docker Hub.  Follow the
 instructions in this section if you still want to build the image yourself.
-You will need around 3 GiB of disk space.
+You will need around 3 GiB of disk space.
 
 You may use the `Dockerfile` as included in Ouinet's source code, or you
 can just [download it][Dockerfile].  Then build the image by running:
@@ -472,19 +472,22 @@ for the Cache, clear the browser's cached data, point the browser back to the
 same page and still get its contents from the distributed cache even when the
 origin server is completely unreachable.
 
-## Android
+## Android demo client
 
-### Requirements
+Ouinet comes with a sample, minimal Android web browser based on the standard
+`WebView`, as a demonstration of how to integrate Ouinet in your Android apps.
 
-A lot of free space (something less than 15GB). Everything else shall be
+### Build requirements
+
+A lot of free space (something less than 15 GiB).  Everything else shall be
 downloaded by the `build-android.sh` script.
 
 The instructions below use Vagrant for bulding, but the `build-android.sh`
-script should work on any reasonably up-to-date debian based system.
+script should work on any reasonably up-to-date Debian based system.
 
-In the following instructions, I'll use `<ANDROID>` to represent the absolute
-path to your build directory. That is, the directory from which you'll run the
-`build-android.sh` script (e.g. `~/ouinet.android.build`).
+In the following instructions, we will use `<ANDROID>` to represent the
+absolute path to your build directory.  That is, the directory from which you
+will run the `build-android.sh` script (e.g. `~/ouinet.android.build`).
 
 ### Building
 
@@ -495,35 +498,41 @@ path to your build directory. That is, the directory from which you'll run the
     vagrant $ git clone --recursive /vagrant
     vagrant $ ./vagrant/scripts/build-android.sh
 
-When the `build-android.sh` script finishes successfully, it prints out a path
-to the `browser-debug.apk` app package which can now be deployed.
+Note that we cloned a fresh copy of the `ouinet` repository at `/vagrant`.
+This is not strictly necessary since the build environment supports
+out-of-source builds, however it spares you from having to keep your source
+directory clean and submodules up to date.  If you fullfill these
+requirements, you can just skip the cloning and run
+`/vagrant/scripts/build-android.sh` instead.
 
-Note that above we cloned a fresh copy of the `ouinet` repository. This is not
-strictly necessary since the build environment supports out-of-source builds,
-however it spares you from having to keep your source directory clean and
-submodules up to date. If you fullfill these requirements, you can just skip
-the cloning and run `/vagrant/scripts/build-android.sh` instead.
+When the build script finishes successfully, it prints out a path to the
+`browser-debug.apk` app package which can now be copied to the host and
+deployed to the phone, for instance:
 
-The script builds by default an APK for the `armeabi-v7a` [Android ABI][]. If
+    vagrant $ cp /path/to/browser-debug.apk /vagrant-rw
+    vagrant $ exit
+    host    $ adb install /path/to/browser-debug.apk
+
+The script builds by default an APK for the `armeabi-v7a` [Android ABI][].  If
 you want a build for a different ABI, just set the `ABI` environment variable:
 
-    $ env ABI=x86_64 /path/to/build-android.sh
+    vagrant $ env ABI=x86_64 /path/to/build-android.sh
 
 Please note that merging different ABI builds at the same build directory is
 not yet supported.  To remove potentially conflicting files while keeping
 downloads and ABI-neutral source files so that you can reuse them for the next
 build, please run:
 
-    $ /path/to/build-android.sh abiclean
+    vagrant $ /path/to/build-android.sh abiclean
 
 [Android ABI]: https://developer.android.com/ndk/guides/abis.html
 
-### Setting up Android browser/client
+### Setting up
 
-The android app has user menus for specifying the injector's endpoint,
+The Android app has user menus for specifying the injector's endpoint,
 injector's credentials, and the IPFS database ID (IPNS), but that is very
-tedious to do. Because of that, the app also gives you an option to
-read QR codes. To generate one, create a text with these values:
+tedious to do.  Because of that, the app also gives you an option to read QR
+codes.  To generate one, create a text with these values:
 
     injector=<INJECTOR ENDPOINT>
     ipns=<INJECTOR's IPFS-ID/IPNS>
@@ -539,7 +548,7 @@ or use a command line tool such as [qrencode](https://fukuchi.org/works/qrencode
 You may also use the `build-android.sh` script to fire up an Android emulator
 session with a compatible system image; just run:
 
-    $ /path/to/build-android.sh emu
+    host $ /path/to/build-android.sh emu
 
 It will download the necessary files to the current directory (or reuse files
 downloaded by the build process, if available) and start the emulator.  Please
@@ -551,12 +560,12 @@ way faster.
 The `ABI` environment variable described above also works for selecting the
 emulator architecture:
 
-    $ env ABI=x86_64 /path/to/build-android.sh emu
+    host $ env ABI=x86_64 /path/to/build-android.sh emu
 
 You may pass options to the emulator at the script's command line, after a
 `--` (double dash) argument.  For instance:
 
-    $ /path/to/build-android.sh emu -- -no-snapshot-save
+    host $ /path/to/build-android.sh emu -- -no-snapshot-save
 
 Some useful options include `-no-snapshot`, `-no-snapshot-load` and
 `-no-snapshot-save`.  See [emulator startup options][] for more information.
