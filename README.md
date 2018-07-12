@@ -66,19 +66,31 @@ to be already available:
 * `g++` capable of C++14
 * The [Boost library](http://www.boost.org/) 1.67+
 
-Assuming that `<PROJECT ROOT>` points to the directory where the
-`CMakeLists.txt` file is, and `<BUILD DIR>` is a directory of your choice
+Assuming that `<SOURCE DIR>` points to the directory where the
+`CMakeLists.txt` file is, and `<BUILD DIR>` is a directory of your choice
 where all (even temporary) build files will go, you can build Ouinet with:
 
-    $ mkdir -p <BUILD DIR>
-    $ cd <BUILD DIR>
-    $ cmake <PROJECT ROOT>
+    $ mkdir -p <BUILD DIR>
+    $ cd <BUILD DIR>
+    $ cmake <SOURCE DIR>
     $ make
 
 However, we encourage you to use a Vagrant environment for development, or
 Docker containers for deploying a Ouinet client or an injector.  These have a
 different set of requirements.  See the corresponding sections below for
 further instructions on Vagrant and Docker.
+
+## Running integration tests
+
+The Ouinet source comes with a set of integration tests.  To run them you will
+need the [Twisted](https://twistedmatrix.com/) Python framework.
+
+If you already built Ouinet from `<SOURCE DIR>` into `<BUILD DIR>` (see
+above), you can run the tests as follows:
+
+    $ export OUINET_REPO_DIR=<SOURCE DIR>
+    $ export OUINET_BUILD_DIR=<BUILD DIR>
+    $ ./scripts/run_integration_tests.sh
 
 ## Using a Vagrant environment
 
@@ -109,19 +121,21 @@ you may need to force it to use libvirt instead:
 
 Enter the Vagrant environment with `vagrant ssh`.  There you will find:
 
-  - Your local Ouinet source tree mounted read-only under `/vagrant`.
+  - Your local Ouinet source tree mounted read-only under `/vagrant`
+    (`<SOURCE DIR>` above).
 
-  - Your local Ouinet source tree mounted read-write under `/vagrant-rw`.
+  - Your local Ouinet source tree mounted read-write under `/vagrant-rw`.  You
+    can use it as a bridge to your host.
 
   - `~vagrant/build-ouinet-git.sh`: Running this script will clone the Ouinet
-    Git repository and all submodules into `$PWD/ouinet-git-source`  and build
-    Ouinet into `$PWD/ouinet-git-build`.  Changes to source outside of the
-    Vagrant environment will not affect this build.
+    Git repository and all submodules into `$PWD/ouinet-git-source` and build
+    Ouinet into `$PWD/ouinet-git-build` (`<BUILD DIR>` above).  Changes to
+    source outside of the Vagrant environment will not affect this build.
 
   - `~vagrant/build-ouinet-local.sh`: Running this script will use your local
     Ouinet source tree (mounted under `/vagrant`) to build Ouinet into
-    `$PWD/ouinet-local-build`.  Thus you can edit source files on your
-    computer and have them built in a consistent environment.
+    `$PWD/ouinet-local-build` (`<BUILD DIR>` above).  Thus you can edit source
+    files on your computer and have them built in a consistent environment.
 
     Please note that this requires that you keep submodules in your checkout
     up to date as indicated above.
@@ -312,12 +326,6 @@ different one), you should be able to disable all request mechanisms except
 for the Cache, clear the browser's cached data, point the browser back to the
 same page and still get its contents from the distributed cache even when the
 origin server is completely unreachable.
-
-### Integration tests
-
-You can run the integration tests as follows
-
-    $ ./scripts/run_integration_tests.sh
 
 ## Using Docker containers
 
