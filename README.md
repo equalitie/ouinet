@@ -229,10 +229,9 @@ names of the actual node and shell containers.
 A new client node which starts with no configuration will get a default one
 from templates included in Ouinet's source code and it will be missing some
 important parameters, so you may want to stop it and use the shell container
-to edit `/var/opt/ouinet/client/ouinet-client.conf` and add configuration
-options for the injector endpoint `injector-ep` and credentials
-`injector-credentials`, and cache IPNS `injector-ipns`, then restart the
-client.
+to edit `client/ouinet-client.conf` and add configuration options for the
+injector endpoint `injector-ep` and credentials `injector-credentials`, and
+cache IPNS `injector-ipns`, then restart the client.
 
 [docker-compose.yml]: https://raw.githubusercontent.com/equalitie/ouinet/master/docker-compose.yml
 
@@ -314,13 +313,17 @@ If you ever need to reset and empty the injector's database for some reason
 
 ### Running a test injector
 
-If you want to run your own injector for testing, you can start by creating a
-copy of the `repos/injector` repository template directory included in
-Ouinet's source tree:
+If you want to run your own injector for testing and you have a local build,
+create a copy of the `repos/injector` repository template directory included
+in Ouinet's source tree:
 
-    $ cp -r /path/to/ouinet-source/repos/injector /path/to/injector-repo
+    $ cp -r <SOURCE DIR>/repos/injector /path/to/injector-repo
 
-You should now edit `/path/to/injector-repo/ouinet-injector.conf` and
+When using a Docker-based injector as described above, just run and stop it so
+that it creates a default configuration for you.
+
+You should now edit `ouinet-injector.conf` in the injector repository (for
+Docker, use the shell container to edit `injector/ouinet-injector.conf`):
 
  1. Enable listening on loopback addresses:
 
@@ -337,18 +340,19 @@ You should now edit `/path/to/injector-repo/ouinet-injector.conf` and
 
 All the steps above only need to be done once.
 
-Finally start the injector referring to the repository created above:
+Finally start the injector.  For the local build you will need to explicitly
+point it to the repository created above:
 
-    $ /path/to/injector --repo /path/to/injector-repo
+    $ <BUILD DIR>/injector --repo /path/to/injector-repo
     Swarm listening on /ip4/127.0.0.1/tcp/4001
     Swarm listening on /ip4/192.168.0.136/tcp/4001
     Swarm listening on /ip6/::1/tcp/4001
-    IPNS DB: <DB_IPNS>
+    IPNS DB: <DB IPNS>
     ...
 
-Note down the `<DB_IPNS>` string in the above output since clients will need
+Note down the `<DB IPNS>` string in the above output since clients will need
 that as the *distributed cache index*.  You may also find this value in the
-`cache-ipns` file in the injector's repository.
+`cache-ipns` file in the injector repository.
 
 When you are done testing the Ouinet injector, you may shut it down by hitting
 Ctrl+C.
@@ -362,12 +366,16 @@ port (for testing, otherwise an I2P peer identity), a `<USER>:<PASSWORD>`
 string, and an IPNS identifier.
 
 You need to configure the Ouinet client to use the aforementioned parameters.
-You can start by creating a copy of the `repos/client` repository template
-directory included in Ouinet's source tree:
+If you have a local build, create a copy of the `repos/client` repository
+template directory included in Ouinet's source tree:
 
-    $ cp -r /path/to/ouinet-source/repos/client /path/to/client-repo
+    $ cp -r <SOURCE DIR>/repos/client /path/to/client-repo
 
-Now edit `/path/to/client-repo/ouinet-client.conf` and add options for the
+When using a Docker-based client as described above, just run and stop it so
+that it creates a default configuration for you.
+
+Now edit `ouinet-client.conf` in the client repository (for Docker, use the
+shell container to edit `client/ouinet-client.conf`) and add options for the
 injector endpoint and credentials and the distributed cache name.  Remember to
 replace the values with your own:
 
@@ -377,15 +385,16 @@ replace the values with your own:
 
 All the steps above only need to be done once.
 
-Finally start the client referring to the repository created above:
+Finally start the client.  For the local build you will need to explicitly
+point it to the repository created above:
 
-    $ /path/to/client --repo /path/to/client-repo
+    $ <BUIDL DIR>/client --repo /path/to/client-repo
 
-The client opens a web proxy on local port 8080 (see option `listen-on-tcp` in
-its configuration file).  When you access the web using this proxy (see the
-following section), your requests will go through your local Ouinet client,
-which will attempt several mechanisms supported by Ouinet to retrieve the
-resource.
+The client opens a web proxy on local port 8080 by default (see option
+`listen-on-tcp` in its configuration file).  When you access the web using
+this proxy (see the following section), your requests will go through your
+local Ouinet client, which will attempt several mechanisms supported by Ouinet
+to retrieve the resource.
 
 When you are done testing the Ouinet client, you may shut it down by hitting
 Ctrl+C.
