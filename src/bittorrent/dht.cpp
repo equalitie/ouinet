@@ -970,43 +970,6 @@ void dht::DhtNode::tracker_search_peers(
      */
     tracker_reply.clear();
 
-    auto query = [this, infohash, &tracker_reply] (
-        udp::endpoint node_endpoint,
-        boost::optional<NodeID> node_id,
-        std::vector<NodeContact>& closer_nodes,
-        std::vector<NodeContact>& closer_nodes6,
-        asio::yield_context yield
-    ) {
-        auto opt_tracker = query_get_peers( infohash
-                                          , node_endpoint
-                                          , node_id
-                                          , closer_nodes
-                                          , closer_nodes6
-                                          , yield);
-
-        bool got_nodes = (_interface_address.is_v4() && !closer_nodes.empty())
-                      || (_interface_address.is_v6() && !closer_nodes6.empty());
-
-        /*
-         * A reply that contains peers may or may not also contain nodes.
-         * If it does not, follow up the get_peers message with a find_node.
-         * Ignore errors; a reply that contains peers but no nodes,
-         * even after a find_node, is still valid.
-         */
-        if (!got_nodes) {
-            query_find_node(
-                infohash,
-                node_endpoint,
-                node_id,
-                closer_nodes,
-                closer_nodes6,
-                yield
-            );
-        }
-
-        return opt_tracker;
-    };
-
     using Candidates = std::deque<Contact>;
 
     const size_t max_nodes = RESPONSIBLE_TRACKERS_PER_SWARM;
@@ -1024,24 +987,43 @@ void dht::DhtNode::tracker_search_peers(
             std::vector<NodeContact> result_nodes;
             std::vector<NodeContact> result_nodes6;
 
-            auto opt_tracker = query(candidate.endpoint, candidate.id, result_nodes, result_nodes6, yield[ec]);
+            auto opt_tracker = query_get_peers( infohash
+                                              , candidate.endpoint
+                                              , candidate.id
+                                              , result_nodes
+                                              , result_nodes6
+                                              , yield[ec]);
 
             if (ec) {
                 return Candidates{};
             }
 
             if (opt_tracker && candidate.id) {
-                tracker_reply.insert(std::make_pair( *candidate.id
-                                                   , std::move(*opt_tracker) ));
+                tracker_reply.insert({ *candidate.id , std::move(*opt_tracker) });
             }
 
-            auto& contacts = _interface_address.is_v4()
-                           ? result_nodes
-                           : result_nodes6;
+            auto* contacts = _interface_address.is_v4()
+                           ? &result_nodes
+                           : &result_nodes6;
+
+            if (contacts->empty()) {
+                // XXX: Is this necessary? I.e. if the candidate knew, wouldn't
+                // it have replied in the get_peers message in the first place?
+                query_find_node( infohash
+                               , candidate.endpoint
+                               , candidate.id
+                               , result_nodes
+                               , result_nodes6
+                               , yield[ec]);
+
+                contacts = _interface_address.is_v4()
+                         ? &result_nodes
+                         : &result_nodes6;
+            }
 
             Candidates ret;
 
-            for (const NodeContact& contact : contacts) {
+            for (const NodeContact& contact : *contacts) {
                 ret.push_back({ contact.id, contact.endpoint });
             }
 
