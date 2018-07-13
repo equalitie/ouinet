@@ -161,6 +161,9 @@ class DhtNode {
 
     static bool closer_to(const NodeID& reference, const NodeID& left, const NodeID& right);
 
+    template<class Evaluate>
+    void collect(const NodeID& target, size_t max_nodes, Evaluate&&, asio::yield_context) const;
+
     private:
     asio::io_service& _ios;
     ip::address _interface_address;
@@ -176,6 +179,8 @@ class DhtNode {
     };
     uint32_t _next_transaction_id;
     std::map<std::string, ActiveRequest> _active_requests;
+
+    std::vector<udp::endpoint> _bootstrap_endpoints;
 };
 
 } // dht namespace

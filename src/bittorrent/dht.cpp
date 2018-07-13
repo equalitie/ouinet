@@ -608,12 +608,11 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
      * There also needs to be vastly more retrying and fallbacks here.
      */
 
-    std::vector<udp::endpoint> bootstrap_endpoints;
-    bootstrap_endpoints.push_back(bootstrap_ep);
+    _bootstrap_endpoints.push_back(bootstrap_ep);
     /*
      * Lookup our own ID, constructing a basic path to ourselves.
      */
-    find_closest_nodes(_node_id, bootstrap_endpoints, yield);
+    find_closest_nodes(_node_id, _bootstrap_endpoints, yield);
 
     /*
      * For each bucket in the routing table, lookup a random ID in that range.
@@ -676,6 +675,12 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
 
     return search_dht_for_nodes(target_id, 8, query, extra_starting_points, yield);
 }
+
+struct Candidate {
+    // If the `id` isn't set, the candidate is one of the bootstrap nodes.
+    boost::optional<NodeID> id;
+    asio::ip::udp::endpoint endpoint;
+};
 
 template<class CandidateSet, class Evaluate>
 void collect( asio::io_service& ios
@@ -747,6 +752,48 @@ void collect( asio::io_service& ios
     all_done.wait(yield);
 }
 
+template<class Evaluate>
+void dht::DhtNode::collect( const NodeID& target_id
+                          , size_t max_nodes
+                          , Evaluate&& evaluate
+                          , asio::yield_context yield) const
+{
+    // (Note: can't use lambda because we need default constructibility now)
+    struct Compare {
+        NodeID target_id;
+
+        // Bootstrap nodes (those with id == boost::none) shall be ordered
+        // last.
+        bool operator()(const Candidate& l, const Candidate& r) const {
+            if (!l.id && !r.id) return l.endpoint < r.endpoint;
+            if ( l.id && !r.id) return true;
+            if (!l.id &&  r.id) return false;
+            return closer_to(target_id, *l.id, *r.id);
+        }
+    };
+
+    using CandidateSet = std::set<Candidate, Compare>;
+
+    CandidateSet seed_candidates(Compare{target_id});
+
+    std::set<udp::endpoint> added_endpoints;
+
+    for (auto& contact : _routing_table->find_closest_routing_nodes(target_id, max_nodes)) {
+        seed_candidates.insert({ contact.id, contact.endpoint });
+        added_endpoints.insert(contact.endpoint);
+    }
+
+    for (auto ep : _bootstrap_endpoints) {
+        if (added_endpoints.count(ep) != 0) continue;
+        seed_candidates.insert({ boost::none, ep });
+    }
+
+    ::ouinet::bittorrent::collect( _ios
+                                 , std::move(seed_candidates)
+                                 , std::forward<Evaluate>(evaluate)
+                                 , yield);
+}
+
 std::vector<dht::NodeContact> dht::DhtNode::search_dht_for_nodes(
     NodeID target_id,
     size_t max_nodes,
@@ -788,46 +835,14 @@ std::vector<dht::NodeContact> dht::DhtNode::search_dht_for_nodes(
     std::vector<udp::endpoint> extra_starting_points,
     asio::yield_context yield
 ) {
-    struct Candidate {
-        // If the `id` isn't set, the candidate is one of the bootstrap nodes.
-        boost::optional<NodeID> id;
-        udp::endpoint endpoint;
-    };
-
-    struct Compare {
-        NodeID target_id;
-
-        // Bootstrap nodes (those with id == boost::none) shall be ordered
-        // last.
-        bool operator()(const Candidate& l, const Candidate& r) const {
-            if (!l.id && !r.id) return l.endpoint < r.endpoint;
-            if ( l.id && !r.id) return true;
-            if (!l.id &&  r.id) return false;
-            return closer_to(target_id, *l.id, *r.id);
-        }
-    };
-
-    using CandidateSet = std::set<Candidate, Compare>;
-
-    CandidateSet seed_candidates(Compare{target_id});
-
-    std::set<udp::endpoint> added_endpoints;
-
-    for (auto& contact : _routing_table->find_closest_routing_nodes(target_id, max_nodes)) {
-        seed_candidates.insert({ contact.id, contact.endpoint });
-        added_endpoints.insert(contact.endpoint);
-    }
-
-    for (auto ep : extra_starting_points) {
-        if (added_endpoints.count(ep) != 0) continue;
-        seed_candidates.insert({ boost::none, ep });
-    }
-
     std::set<NodeContact> output_set;
 
-    collect(_ios, seed_candidates, [&]( const Candidate& candidate
-                                      , asio::yield_context yield
-                                      ) -> boost::optional<CandidateSet> {
+    using Candidates = std::deque<Candidate>;
+
+    collect(target_id, max_nodes, [&]( const Candidate& candidate
+                                     , asio::yield_context yield
+                                     ) -> boost::optional<Candidates>
+        {
             if (output_set.size() >= max_nodes) {
                 return boost::none;
             }
@@ -841,7 +856,7 @@ std::vector<dht::NodeContact> dht::DhtNode::search_dht_for_nodes(
             bool accepted = query_node(candidate.endpoint, candidate.id, result_nodes, result_nodes6, on_promote, yield[ec]);
 
             if (ec) {
-                return CandidateSet{};
+                return Candidates{};
             }
 
             if (accepted && candidate.id) {
@@ -856,10 +871,10 @@ std::vector<dht::NodeContact> dht::DhtNode::search_dht_for_nodes(
                            ? result_nodes
                            : result_nodes6;
 
-            CandidateSet ret;
+            Candidates ret;
 
             for (const NodeContact& contact : contacts) {
-                ret.insert({ contact.id, contact.endpoint });
+                ret.push_back({ contact.id, contact.endpoint });
             }
 
             return ret;
