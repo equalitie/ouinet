@@ -639,43 +639,6 @@ void dht::DhtNode::refresh_routing_table(asio::yield_context yield)
     wc.wait(yield);
 }
 
-std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
-    NodeID target_id,
-    std::vector<udp::endpoint> extra_starting_points,
-    asio::yield_context yield
-) {
-    auto query = [this, target_id] (
-        udp::endpoint node_endpoint,
-        boost::optional<NodeID> node_id,
-        std::vector<NodeContact>& closer_nodes,
-        std::vector<NodeContact>& closer_nodes6,
-        /**
-         * Called if the queried node becomes part of the set of closest
-         * good nodes seen so far. Only ever invoked if query_node()
-         * returned true, and node_id is not empty.
-         *
-         * @param displaced_node The node that is removed from the closest
-         *     set to make room for the queried node, if any.
-         */
-        std::function<void(
-            boost::optional<NodeContact> displaced_node,
-            asio::yield_context yield
-        )>& on_promote,
-        asio::yield_context yield
-    ) -> bool {
-        return query_find_node(
-            target_id,
-            node_endpoint,
-            node_id,
-            closer_nodes,
-            closer_nodes6,
-            yield
-        );
-    };
-
-    return search_dht_for_nodes(target_id, 8, query, extra_starting_points, yield);
-}
-
 struct Candidate {
     // If the `id` isn't set, the candidate is one of the bootstrap nodes.
     boost::optional<NodeID> id;
@@ -792,6 +755,43 @@ void dht::DhtNode::collect( const NodeID& target_id
                                  , std::move(seed_candidates)
                                  , std::forward<Evaluate>(evaluate)
                                  , yield);
+}
+
+std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
+    NodeID target_id,
+    std::vector<udp::endpoint> extra_starting_points,
+    asio::yield_context yield
+) {
+    auto query = [this, target_id] (
+        udp::endpoint node_endpoint,
+        boost::optional<NodeID> node_id,
+        std::vector<NodeContact>& closer_nodes,
+        std::vector<NodeContact>& closer_nodes6,
+        /**
+         * Called if the queried node becomes part of the set of closest
+         * good nodes seen so far. Only ever invoked if query_node()
+         * returned true, and node_id is not empty.
+         *
+         * @param displaced_node The node that is removed from the closest
+         *     set to make room for the queried node, if any.
+         */
+        std::function<void(
+            boost::optional<NodeContact> displaced_node,
+            asio::yield_context yield
+        )>& on_promote,
+        asio::yield_context yield
+    ) -> bool {
+        return query_find_node(
+            target_id,
+            node_endpoint,
+            node_id,
+            closer_nodes,
+            closer_nodes6,
+            yield
+        );
+    };
+
+    return search_dht_for_nodes(target_id, 8, query, extra_starting_points, yield);
 }
 
 std::vector<dht::NodeContact> dht::DhtNode::search_dht_for_nodes(
