@@ -24,6 +24,11 @@ struct NodeContact {
     }
 };
 
+struct Contact {
+    boost::optional<NodeID> id;
+    asio::ip::udp::endpoint endpoint;
+};
+
 struct RoutingNode {
     static inline constexpr std::chrono::minutes QUESTIONABLE_TIMEOUT() { return std::chrono::minutes(15); }
 

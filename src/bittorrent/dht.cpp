@@ -17,6 +17,8 @@
 namespace ouinet {
 namespace bittorrent {
 
+using dht::Contact;
+
 static
 boost::asio::mutable_buffers_1 buffer(std::string& s) {
     return boost::asio::buffer(const_cast<char*>(s.data()), s.size());
@@ -639,12 +641,6 @@ void dht::DhtNode::refresh_routing_table(asio::yield_context yield)
     wc.wait(yield);
 }
 
-struct Candidate {
-    // If the `id` isn't set, the candidate is one of the bootstrap nodes.
-    boost::optional<NodeID> id;
-    asio::ip::udp::endpoint endpoint;
-};
-
 template<class CandidateSet, class Evaluate>
 void collect( asio::io_service& ios
             , CandidateSet candidates_
@@ -653,9 +649,7 @@ void collect( asio::io_service& ios
 {
     enum Progress { pending, in_progress, done };
 
-    using Candidate  = typename CandidateSet::key_type;
-
-    using Candidates = std::map< Candidate
+    using Candidates = std::map< Contact
                                , Progress
                                , typename CandidateSet::key_compare>;
 
@@ -727,7 +721,7 @@ void dht::DhtNode::collect( const NodeID& target_id
 
         // Bootstrap nodes (those with id == boost::none) shall be ordered
         // last.
-        bool operator()(const Candidate& l, const Candidate& r) const {
+        bool operator()(const Contact& l, const Contact& r) const {
             if (!l.id && !r.id) return l.endpoint < r.endpoint;
             if ( l.id && !r.id) return true;
             if (!l.id &&  r.id) return false;
@@ -735,7 +729,7 @@ void dht::DhtNode::collect( const NodeID& target_id
         }
     };
 
-    using CandidateSet = std::set<Candidate, Compare>;
+    using CandidateSet = std::set<Contact, Compare>;
 
     CandidateSet seed_candidates(Compare{target_id});
 
@@ -763,11 +757,11 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
 ) {
     std::set<NodeContact> output_set;
 
-    using Candidates = std::deque<Candidate>;
+    using Candidates = std::deque<Contact>;
 
     const size_t max_nodes = 8;
 
-    collect(target_id, max_nodes, [&]( const Candidate& candidate
+    collect(target_id, max_nodes, [&]( const Contact& candidate
                                      , asio::yield_context yield
                                      ) -> boost::optional<Candidates>
         {
@@ -857,9 +851,9 @@ std::vector<dht::NodeContact> dht::DhtNode::search_dht_for_nodes(
 ) {
     std::set<NodeContact> output_set;
 
-    using Candidates = std::deque<Candidate>;
+    using Candidates = std::deque<Contact>;
 
-    collect(target_id, max_nodes, [&]( const Candidate& candidate
+    collect(target_id, max_nodes, [&]( const Contact& candidate
                                      , asio::yield_context yield
                                      ) -> boost::optional<Candidates>
         {
