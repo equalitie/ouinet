@@ -21,6 +21,7 @@ ABI=${ABI:-armeabi-v7a}
 if [ "$ABI" = "armeabi-v7a" ]; then
     NDK_ARCH="arm"
     NDK_TOOLCHAIN_TARGET="arm-linux-androideabi"
+    NDK_TOOLCHAIN_LIB_SUBDIR="lib/armv7-a"
     CMAKE_SYSTEM_PROCESSOR="armv7-a"
     OPENSSL_MACHINE="armv7"
 elif [ "$ABI" = "arm64-v8a" ]; then
@@ -41,6 +42,7 @@ elif [ "$ABI" = "x86" ]; then
 elif [ "$ABI" = "x86_64" ]; then
     NDK_ARCH="x86_64"
     NDK_TOOLCHAIN_TARGET="x86_64-linux-android"
+    NDK_TOOLCHAIN_LIB_SUBDIR="lib64"
     CMAKE_SYSTEM_PROCESSOR="x86_64"
     OPENSSL_MACHINE="x86_64"
 else
@@ -75,6 +77,7 @@ ANDROID_FLAGS="\
     -DCMAKE_SYSTEM_NAME=Android \
     -DCMAKE_SYSTEM_VERSION=${NDK_PLATFORM} \
     -DCMAKE_ANDROID_STANDALONE_TOOLCHAIN=${NDK_TOOLCHAIN_DIR} \
+    -DCMAKE_SYSROOT=$NDK_TOOLCHAIN_DIR/sysroot \
     -DCMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR} \
     -DCMAKE_ANDROID_ARCH_ABI=${ABI} \
     -DOPENSSL_ROOT_DIR=${SSL_DIR} \
@@ -243,14 +246,15 @@ function maybe_install_ndk_toolchain {
         echo "installing ndk toolchain..."
         $NDK_DIR/build/tools/make-standalone-toolchain.sh \
             --platform=android-$NDK_PLATFORM \
-            --arch=$NDK_ARCH \
+            --march=$NDK_ARCH \
             --stl=$NDK_STL \
             --install-dir=${NDK_TOOLCHAIN_DIR}
     fi
 
     export ANDROID_NDK_HOME=$NDK_DIR
 
-    TOOLCHAIN_LIBCXX="$NDK_TOOLCHAIN_DIR/$NDK_TOOLCHAIN_TARGET/lib*/$CMAKE_SYSTEM_PROCESSOR/libc++_shared.so"
+    NDK_TOOLCHAIN_LIB_SUBDIR=${NDK_TOOLCHAIN_LIB_SUBDIR-:"lib"}
+    TOOLCHAIN_LIBCXX="$NDK_TOOLCHAIN_DIR/$NDK_TOOLCHAIN_TARGET/$NDK_TOOLCHAIN_LIB_SUBDIR/libc++_shared.so"
     add_library $TOOLCHAIN_LIBCXX
     echo "TOOLCHAIN_LIBCXX: $TOOLCHAIN_LIBCXX"
 }

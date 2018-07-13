@@ -42,6 +42,12 @@ your computer, just download it and copy it to some temporary directory.  Then
 open a shell in that directory and run:
 
     sh build-ouinet.sh
+    
+
+If you are using a custom built boost library, you can define BOOST_ROOT=/path/to/boost 
+environmental variable for the build-script to use it:
+
+   BOOST_ROOT=/path/to/boost sh build-ouinet.sh
 
 [build-ouinet.sh]: https://raw.githubusercontent.com/equalitie/ouinet/master/scripts/build-ouinet.sh
 
