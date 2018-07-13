@@ -612,7 +612,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
     /*
      * Lookup our own ID, constructing a basic path to ourselves.
      */
-    find_closest_nodes(_node_id, _bootstrap_endpoints, yield);
+    find_closest_nodes(_node_id, yield);
 
     /*
      * For each bucket in the routing table, lookup a random ID in that range.
@@ -632,7 +632,7 @@ void dht::DhtNode::refresh_routing_table(asio::yield_context yield)
         [&] (const NodeID::Range& range, RoutingBucket& bucket) {
             spawn(_ios, [this, range, lock = wc.lock()]
                         (asio::yield_context yield) {
-                            find_closest_nodes(range.random_id(), {}, yield);
+                            find_closest_nodes(range.random_id(), yield);
                         });
         });
 
@@ -759,39 +759,59 @@ void dht::DhtNode::collect( const NodeID& target_id
 
 std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
     NodeID target_id,
-    std::vector<udp::endpoint> extra_starting_points,
     asio::yield_context yield
 ) {
-    auto query = [this, target_id] (
-        udp::endpoint node_endpoint,
-        boost::optional<NodeID> node_id,
-        std::vector<NodeContact>& closer_nodes,
-        std::vector<NodeContact>& closer_nodes6,
-        /**
-         * Called if the queried node becomes part of the set of closest
-         * good nodes seen so far. Only ever invoked if query_node()
-         * returned true, and node_id is not empty.
-         *
-         * @param displaced_node The node that is removed from the closest
-         *     set to make room for the queried node, if any.
-         */
-        std::function<void(
-            boost::optional<NodeContact> displaced_node,
-            asio::yield_context yield
-        )>& on_promote,
-        asio::yield_context yield
-    ) -> bool {
-        return query_find_node(
-            target_id,
-            node_endpoint,
-            node_id,
-            closer_nodes,
-            closer_nodes6,
-            yield
-        );
-    };
+    std::set<NodeContact> output_set;
 
-    return search_dht_for_nodes(target_id, 8, query, extra_starting_points, yield);
+    using Candidates = std::deque<Candidate>;
+
+    const size_t max_nodes = 8;
+
+    collect(target_id, max_nodes, [&]( const Candidate& candidate
+                                     , asio::yield_context yield
+                                     ) -> boost::optional<Candidates>
+        {
+            if (output_set.size() >= max_nodes) {
+                return boost::none;
+            }
+
+            sys::error_code ec;
+
+            std::vector<NodeContact> result_nodes;
+            std::vector<NodeContact> result_nodes6;
+
+            bool accepted = query_find_node( target_id
+                                           , candidate.endpoint
+                                           , candidate.id
+                                           , result_nodes
+                                           , result_nodes6
+                                           , yield[ec]);
+
+            if (ec) {
+                return Candidates{};
+            }
+
+            if (accepted && candidate.id) {
+                output_set.insert(NodeContact{ *candidate.id, candidate.endpoint });
+            }
+
+            auto& contacts = _interface_address.is_v4()
+                           ? result_nodes
+                           : result_nodes6;
+
+            Candidates ret;
+
+            for (const NodeContact& contact : contacts) {
+                ret.push_back({ contact.id, contact.endpoint });
+            }
+
+            return ret;
+        }
+        , yield);
+
+    return { output_set.begin()
+           , std::next( output_set.begin()
+                      , std::min(output_set.size(), max_nodes))};
 }
 
 std::vector<dht::NodeContact> dht::DhtNode::search_dht_for_nodes(

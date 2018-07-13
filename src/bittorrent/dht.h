@@ -80,7 +80,6 @@ class DhtNode {
     void refresh_routing_table(asio::yield_context yield);
     std::vector<NodeContact> find_closest_nodes(
         NodeID target_id,
-        std::vector<udp::endpoint> extra_starting_points,
         asio::yield_context yield
     );
 
