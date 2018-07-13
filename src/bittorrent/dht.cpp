@@ -808,98 +808,6 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
                       , std::min(output_set.size(), max_nodes))};
 }
 
-std::vector<dht::NodeContact> dht::DhtNode::search_dht_for_nodes(
-    NodeID target_id,
-    size_t max_nodes,
-    /**
-     * Called to query a particular node for nodes closer to the search
-     * target, as well as any payload query for the search.
-     *
-     * @param node_endpoint Endpoint of the node to query.
-     * @param node_id Node ID of the node to query, if any.
-     * @param closer_nodes If the query returns any nodes found, this field
-     *     is to store the ipv4 nodes, in find_node "nodes" encoding.
-     * @param closer_nodes6 If the query returns any nodes found, this field
-     *     is to store the ipv6 nodes, in find_node "nodes6" encoding.
-     * @param on_promote Called if the queried node becomes part of the set
-     *     of closest good nodes seen so far.
-     *
-     * @return True if this node is eligible for inclusion in the output
-     *     set of the search. False otherwise.
-     */
-    std::function<bool(
-        udp::endpoint node_endpoint,
-        boost::optional<NodeID> node_id,
-        std::vector<NodeContact>& closer_nodes,
-        std::vector<NodeContact>& closer_nodes6,
-        /**
-         * Called if the queried node becomes part of the set of closest
-         * good nodes seen so far. Only ever invoked if query_node()
-         * returned true, and node_id is not empty.
-         *
-         * @param displaced_node The node that is removed from the closest
-         *     set to make room for the queried node, if any.
-         */
-        std::function<void(
-            boost::optional<NodeContact> displaced_node,
-            asio::yield_context yield
-        )>& on_promote,
-        asio::yield_context yield
-    )> query_node,
-    std::vector<udp::endpoint> extra_starting_points,
-    asio::yield_context yield
-) {
-    std::set<NodeContact> output_set;
-
-    using Candidates = std::deque<Contact>;
-
-    collect(target_id, max_nodes, [&]( const Contact& candidate
-                                     , asio::yield_context yield
-                                     ) -> boost::optional<Candidates>
-        {
-            if (output_set.size() >= max_nodes) {
-                return boost::none;
-            }
-
-            sys::error_code ec;
-
-            std::vector<NodeContact> result_nodes;
-            std::vector<NodeContact> result_nodes6;
-
-            std::function<void(boost::optional<NodeContact> displaced_node, asio::yield_context yield)> on_promote;
-            bool accepted = query_node(candidate.endpoint, candidate.id, result_nodes, result_nodes6, on_promote, yield[ec]);
-
-            if (ec) {
-                return Candidates{};
-            }
-
-            if (accepted && candidate.id) {
-                output_set.insert(NodeContact{ *candidate.id, candidate.endpoint });
-
-                if (on_promote) {
-                    on_promote(boost::none, yield);
-                }
-            }
-
-            auto& contacts = _interface_address.is_v4()
-                           ? result_nodes
-                           : result_nodes6;
-
-            Candidates ret;
-
-            for (const NodeContact& contact : contacts) {
-                ret.push_back({ contact.id, contact.endpoint });
-            }
-
-            return ret;
-        }
-        , yield);
-
-    return { output_set.begin()
-           , std::next( output_set.begin()
-                      , std::min(output_set.size(), max_nodes))};
-}
-
 void dht::DhtNode::send_ping(NodeContact contact)
 {
     // It is currently expected that this function returns immediately, due to
@@ -926,6 +834,7 @@ void dht::DhtNode::send_ping(NodeContact contact)
  * Send a find_node query to a target node, and parse the reply.
  * @return True when received a valid response, false otherwise.
  */
+// http://bittorrent.org/beps/bep_0005.html#find-node
 bool dht::DhtNode::query_find_node(
     NodeID target_id,
     udp::endpoint node_endpoint,
@@ -974,6 +883,79 @@ bool dht::DhtNode::query_find_node(
         || (_interface_address.is_v6() && !closer_nodes6.empty());
 }
 
+// http://bittorrent.org/beps/bep_0005.html#get-peers
+boost::optional<dht::DhtNode::TrackerNode>
+dht::DhtNode::query_get_peers( NodeID infohash
+                             , udp::endpoint node_endpoint
+                             , boost::optional<NodeID> node_id
+                             , std::vector<NodeContact>& closer_nodes
+                             , std::vector<NodeContact>& closer_nodes6
+                             , asio::yield_context yield)
+{
+    sys::error_code ec;
+
+    BencodedMap get_peers_reply = send_query_await_reply(
+        node_endpoint,
+        node_id,
+        "get_peers",
+        BencodedMap { { "id", _node_id.to_bytestring() }
+                    , { "info_hash", infohash.to_bytestring() } },
+        std::chrono::seconds(2),
+        yield[ec]
+    );
+
+    if (ec) {
+        return or_throw(yield, ec, boost::none);
+    }
+
+    if (get_peers_reply["y"] != "r") {
+        return boost::none;
+    }
+
+    boost::optional<BencodedMap> get_peers_arguments = get_peers_reply["r"].as_map();
+    if (!get_peers_arguments) {
+        return boost::none;
+    }
+
+    boost::optional<BencodedList> encoded_peers = (*get_peers_arguments)["values"].as_list();
+    boost::optional<std::string> announce_token = (*get_peers_arguments)["token"].as_string();
+
+    boost::optional<TrackerNode> tracker;
+
+    if (encoded_peers && announce_token) {
+        tracker = TrackerNode {
+            .node_endpoint = node_endpoint,
+            .peers = {},
+            .announce_token = *announce_token
+        };
+
+        for (auto& peer : *encoded_peers) {
+            boost::optional<std::string> peer_string = peer.as_string();
+            if (!peer_string) continue;
+
+            boost::optional<udp::endpoint> endpoint = decode_endpoint(*peer_string);
+            if (!endpoint) continue;
+
+            tracker->peers.push_back({endpoint->address(), endpoint->port()});
+        }
+    }
+
+    boost::optional<std::string> nodes  = (*get_peers_arguments)["nodes"].as_string();
+    boost::optional<std::string> nodes6 = (*get_peers_arguments)["nodes6"].as_string();
+
+    if (nodes) {
+        if (!decode_contacts_v4(*nodes,  closer_nodes))
+            return or_throw(yield, asio::error::invalid_argument, boost::none);
+    }
+
+    if (nodes6) {
+        if (!decode_contacts_v6(*nodes6, closer_nodes6))
+            return or_throw(yield, asio::error::invalid_argument, boost::none);
+    }
+
+    return tracker;
+}
+
 /**
  * Perform a get_peers search. Returns the peers found, as well as necessary
  * data to later perform an announce operation.
@@ -993,93 +975,14 @@ void dht::DhtNode::tracker_search_peers(
         boost::optional<NodeID> node_id,
         std::vector<NodeContact>& closer_nodes,
         std::vector<NodeContact>& closer_nodes6,
-        /**
-         * Called if the queried node becomes part of the set of closest
-         * good nodes seen so far. Only ever invoked if query_node()
-         * returned true, and node_id is not empty.
-         *
-         * @param displaced_node The node that is removed from the closest
-         *     set to make room for the queried node, if any.
-         */
-        std::function<void(
-            boost::optional<NodeContact> displaced_node,
-            asio::yield_context yield
-        )>& on_promote,
         asio::yield_context yield
-    ) -> bool {
-        sys::error_code ec;
-
-        BencodedMap get_peers_reply = send_query_await_reply(
-            node_endpoint,
-            node_id,
-            "get_peers",
-            BencodedMap { { "id", _node_id.to_bytestring() }
-                        , { "info_hash", infohash.to_bytestring() } },
-            std::chrono::seconds(2),
-            yield[ec]
-        );
-
-        if (ec) {
-            return or_throw(yield, ec, false);
-        }
-
-        if (get_peers_reply["y"] != "r") {
-            return false;
-        }
-
-        boost::optional<BencodedMap> get_peers_arguments = get_peers_reply["r"].as_map();
-        if (!get_peers_arguments) {
-            return false;
-        }
-
-        bool got_peers = false;
-        boost::optional<BencodedList> encoded_peers = (*get_peers_arguments)["values"].as_list();
-        boost::optional<std::string> announce_token = (*get_peers_arguments)["token"].as_string();
-
-        if (encoded_peers && announce_token) {
-            TrackerNode tracker_node {
-                .node_endpoint = node_endpoint,
-                .peers = {},
-                .announce_token = *announce_token
-            };
-
-            got_peers = true;
-
-            for (auto& peer : *encoded_peers) {
-                boost::optional<std::string> peer_string = peer.as_string();
-                if (!peer_string) continue;
-
-                boost::optional<udp::endpoint> endpoint = decode_endpoint(*peer_string);
-                if (!endpoint) continue;
-
-                tracker_node.peers.push_back({ endpoint->address()
-                                             , endpoint->port() });
-            }
-
-            on_promote = [node_id, tracker_node = std::move(tracker_node), &tracker_reply] (
-                boost::optional<NodeContact> displaced_node,
-                asio::yield_context yield
-            ) {
-                assert(node_id);
-                if (displaced_node) {
-                    tracker_reply.erase(displaced_node->id);
-                }
-                tracker_reply[*node_id] = std::move(tracker_node);
-            };
-        }
-
-        boost::optional<std::string> nodes  = (*get_peers_arguments)["nodes"].as_string();
-        boost::optional<std::string> nodes6 = (*get_peers_arguments)["nodes6"].as_string();
-
-        if (nodes) {
-            if (!decode_contacts_v4(*nodes,  closer_nodes))
-                return or_throw(yield, asio::error::invalid_argument, false);
-        }
-
-        if (nodes6) {
-            if (!decode_contacts_v6(*nodes6, closer_nodes6))
-                return or_throw(yield, asio::error::invalid_argument, false);
-        }
+    ) {
+        auto opt_tracker = query_get_peers( infohash
+                                          , node_endpoint
+                                          , node_id
+                                          , closer_nodes
+                                          , closer_nodes6
+                                          , yield);
 
         bool got_nodes = (_interface_address.is_v4() && !closer_nodes.empty())
                       || (_interface_address.is_v6() && !closer_nodes6.empty());
@@ -1101,10 +1004,54 @@ void dht::DhtNode::tracker_search_peers(
             );
         }
 
-        return got_peers;
+        return opt_tracker;
     };
 
-    search_dht_for_nodes(infohash, RESPONSIBLE_TRACKERS_PER_SWARM, query, {}, yield);
+    using Candidates = std::deque<Contact>;
+
+    const size_t max_nodes = RESPONSIBLE_TRACKERS_PER_SWARM;
+
+    collect(infohash, max_nodes, [&]( const Contact& candidate
+                                    , asio::yield_context yield
+                                    ) -> boost::optional<Candidates>
+        {
+            if (tracker_reply.size() >= max_nodes) {
+                return boost::none;
+            }
+
+            sys::error_code ec;
+
+            std::vector<NodeContact> result_nodes;
+            std::vector<NodeContact> result_nodes6;
+
+            auto opt_tracker = query(candidate.endpoint, candidate.id, result_nodes, result_nodes6, yield[ec]);
+
+            if (ec) {
+                return Candidates{};
+            }
+
+            if (opt_tracker && candidate.id) {
+                tracker_reply.insert(std::make_pair( *candidate.id
+                                                   , std::move(*opt_tracker) ));
+            }
+
+            auto& contacts = _interface_address.is_v4()
+                           ? result_nodes
+                           : result_nodes6;
+
+            Candidates ret;
+
+            for (const NodeContact& contact : contacts) {
+                ret.push_back({ contact.id, contact.endpoint });
+            }
+
+            return ret;
+        }
+        , yield);
+
+    tracker_reply.erase( std::next(tracker_reply.begin()
+                                  , std::min(tracker_reply.size(), max_nodes))
+                       , tracker_reply.end());
 }
 
 
