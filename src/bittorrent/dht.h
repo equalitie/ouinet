@@ -31,7 +31,7 @@ using ip::udp;
 
 class DhtNode {
     public:
-    const int RESPONSIBLE_TRACKERS_PER_SWARM = 8;
+    const size_t RESPONSIBLE_TRACKERS_PER_SWARM = 8;
 
     public:
     DhtNode(asio::io_service& ios, ip::address interface_address);
@@ -87,7 +87,7 @@ class DhtNode {
 
     std::vector<NodeContact> search_dht_for_nodes(
         NodeID target_id,
-        int max_nodes,
+        size_t max_nodes,
         /**
          * Called to query a particular node for nodes closer to the search
          * target, as well as any payload query for the search.
