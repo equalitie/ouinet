@@ -71,8 +71,8 @@ void dht::DhtNode::start(sys::error_code& ec)
 
 void dht::DhtNode::tracker_get_peers(NodeID infohash, std::vector<tcp::endpoint>& peers, asio::yield_context yield)
 {
-    std::map<NodeID, TrackerNode> tracker_reply;
-    tracker_search_peers(infohash, tracker_reply, yield);
+    std::map<NodeID, TrackerNode> tracker_reply
+        = tracker_search_peers(infohash, yield);
 
     peers.clear();
     for (auto& i : tracker_reply) {
@@ -82,8 +82,8 @@ void dht::DhtNode::tracker_get_peers(NodeID infohash, std::vector<tcp::endpoint>
 
 void dht::DhtNode::tracker_announce(NodeID infohash, boost::optional<int> port, std::vector<tcp::endpoint>& peers, asio::yield_context yield)
 {
-    std::map<NodeID, TrackerNode> tracker_reply;
-    tracker_search_peers(infohash, tracker_reply, yield);
+    std::map<NodeID, TrackerNode> tracker_reply
+        = tracker_search_peers(infohash, yield);
 
     peers.clear();
     for (auto& i : tracker_reply) {
@@ -960,15 +960,12 @@ dht::DhtNode::query_get_peers( NodeID infohash
  * Perform a get_peers search. Returns the peers found, as well as necessary
  * data to later perform an announce operation.
  */
-void dht::DhtNode::tracker_search_peers(
+std::map<NodeID, dht::DhtNode::TrackerNode>
+dht::DhtNode::tracker_search_peers(
     NodeID infohash,
-    std::map<NodeID, TrackerNode>& tracker_reply,
     asio::yield_context yield
 ) {
-    /*
-     * Contains the peers reported by the closest N nodes found so far.
-     */
-    tracker_reply.clear();
+    std::map<NodeID, TrackerNode> tracker_reply;
 
     using Candidates = std::deque<Contact>;
 
@@ -1034,6 +1031,8 @@ void dht::DhtNode::tracker_search_peers(
     tracker_reply.erase( std::next(tracker_reply.begin()
                                   , std::min(tracker_reply.size(), max_nodes))
                        , tracker_reply.end());
+
+    return tracker_reply;
 }
 
 

@@ -104,7 +104,7 @@ class DhtNode {
         boost::optional<NodeID> node_id,
         std::vector<NodeContact>& closer_nodes,
         std::vector<NodeContact>& closer_nodes6,
-        asio::yield_context yield
+        asio::yield_context
     );
 
     // http://bittorrent.org/beps/bep_0005.html#get-peers
@@ -114,13 +114,10 @@ class DhtNode {
                    , boost::optional<NodeID> node_id
                    , std::vector<NodeContact>& closer_nodes
                    , std::vector<NodeContact>& closer_nodes6
-                   , asio::yield_context yield);
+                   , asio::yield_context);
 
-    void tracker_search_peers(
-        NodeID infohash,
-        std::map<NodeID, TrackerNode>& tracker_reply,
-        asio::yield_context yield
-    );
+    std::map<NodeID, TrackerNode>
+    tracker_search_peers(NodeID infohash, asio::yield_context);
 
     void routing_bucket_try_add_node( RoutingBucket*
                                     , NodeContact
