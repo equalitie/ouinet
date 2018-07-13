@@ -48,4 +48,6 @@ struct NodeID {
                           , boost::optional<uint8_t> test_rnd);
 };
 
+std::ostream& operator<<(std::ostream&, const NodeID&);
+
 }} // namespaces

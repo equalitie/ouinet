@@ -168,3 +168,9 @@ NodeID NodeID::generate( asio::ip::address address
 
     return node_id;
 }
+
+std::ostream& ouinet::bittorrent::operator<<(std::ostream& os, const NodeID& id)
+{
+    auto hex = id.to_hex();
+    return os << "[" << hex.substr(0, 20) << "]";
+}
