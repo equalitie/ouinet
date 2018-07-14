@@ -246,14 +246,14 @@ function maybe_install_ndk_toolchain {
         echo "installing ndk toolchain..."
         $NDK_DIR/build/tools/make-standalone-toolchain.sh \
             --platform=android-$NDK_PLATFORM \
-            --march=$NDK_ARCH \
+            --arch=$NDK_ARCH \
             --stl=$NDK_STL \
             --install-dir=${NDK_TOOLCHAIN_DIR}
     fi
 
     export ANDROID_NDK_HOME=$NDK_DIR
 
-    NDK_TOOLCHAIN_LIB_SUBDIR=${NDK_TOOLCHAIN_LIB_SUBDIR-:"lib"}
+    NDK_TOOLCHAIN_LIB_SUBDIR=${NDK_TOOLCHAIN_LIB_SUBDIR:-"lib"}
     TOOLCHAIN_LIBCXX="$NDK_TOOLCHAIN_DIR/$NDK_TOOLCHAIN_TARGET/$NDK_TOOLCHAIN_LIB_SUBDIR/libc++_shared.so"
     add_library $TOOLCHAIN_LIBCXX
     echo "TOOLCHAIN_LIBCXX: $TOOLCHAIN_LIBCXX"
