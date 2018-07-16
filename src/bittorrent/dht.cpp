@@ -1053,25 +1053,15 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
                                            , result_nodes6
                                            , yield[ec]);
 
-            if (ec) {
-                return Candidates{};
-            }
+            if (ec) return Candidates{};
 
             if (accepted && candidate.id) {
-                output_set.insert(NodeContact{ *candidate.id, candidate.endpoint });
+                output_set.insert({ *candidate.id, candidate.endpoint });
             }
 
-            auto& contacts = _interface_address.is_v4()
-                           ? result_nodes
-                           : result_nodes6;
-
-            Candidates ret;
-
-            for (const NodeContact& contact : contacts) {
-                ret.push_back({ contact.endpoint, contact.id });
-            }
-
-            return ret;
+            return _interface_address.is_v4()
+                 ? to_contacts(result_nodes)
+                 : to_contacts(result_nodes6);
         }
         , yield);
 
