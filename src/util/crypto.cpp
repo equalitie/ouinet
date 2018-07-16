@@ -17,7 +17,7 @@ std::string random(unsigned int size)
     return std::string(buffer.data(), buffer.size());
 }
 
-std::array<uint8_t, 20> sha1(const std::string& data)
+static std::array<uint8_t, 20> sha1(const void* buffer, size_t size)
 {
     ::gcry_md_hd_t digest;
 
@@ -25,7 +25,7 @@ std::array<uint8_t, 20> sha1(const std::string& data)
         throw std::exception();
     }
 
-    ::gcry_md_write(digest, data.data(), data.size());
+    ::gcry_md_write(digest, buffer, size);
     unsigned char *digest_buffer = ::gcry_md_read(digest, ::gcry_md_algos::GCRY_MD_SHA1);
 
     std::array<uint8_t, 20> result;
@@ -33,6 +33,16 @@ std::array<uint8_t, 20> sha1(const std::string& data)
 
     ::gcry_md_close(digest);
     return result;
+}
+
+std::array<uint8_t, 20> sha1(const std::string& data)
+{
+    return sha1(data.data(), data.size());
+}
+
+std::array<uint8_t, 20> sha1(const std::vector<unsigned char>& data)
+{
+    return sha1(data.data(), data.size());
 }
 
 } // util namespace

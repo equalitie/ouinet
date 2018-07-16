@@ -4,6 +4,7 @@
 
 #include "../or_throw.h"
 #include "../util/condition_variable.h"
+#include "../util/crypto.h"
 #include "../util/wait_condition.h"
 
 #include <boost/asio/buffer.hpp>
@@ -67,6 +68,8 @@ void dht::DhtNode::start(sys::error_code& ec)
     });
 }
 
+
+
 void dht::DhtNode::tracker_get_peers(NodeID infohash, std::vector<tcp::endpoint>& peers, asio::yield_context yield)
 {
     std::map<NodeID, TrackerNode> tracker_reply;
@@ -89,52 +92,114 @@ void dht::DhtNode::tracker_announce(NodeID infohash, boost::optional<int> port, 
     }
 
     for (auto& i : tracker_reply) {
-        /*
-         * Fire-and-forget announce messages to each responsible node.
-         */
-        asio::spawn(_ios, [
-            this,
-            infohash,
-            port,
-            node_endpoint = i.second.node_endpoint,
-            node_id = i.first,
-            announce_token = i.second.announce_token
-        ] (asio::yield_context yield) {
-            BencodedMap announce_message;
-            announce_message["id"] = _node_id.to_bytestring();
-            announce_message["info_hash"] = infohash.to_bytestring();
-            announce_message["token"] = announce_token;
-            if (port) {
-                announce_message["implied_port"] = int64_t(0);
-                announce_message["port"] = int64_t(*port);
-            } else {
-                announce_message["implied_port"] = int64_t(1);
-                announce_message["port"] = int64_t(0);
-            }
+        BencodedMap announce_message;
+        announce_message["id"] = _node_id.to_bytestring();
+        announce_message["info_hash"] = infohash.to_bytestring();
+        announce_message["token"] = i.second.announce_token;
+        if (port) {
+            announce_message["implied_port"] = int64_t(0);
+            announce_message["port"] = int64_t(*port);
+        } else {
+            announce_message["implied_port"] = int64_t(1);
+            announce_message["port"] = int64_t(0);
+        }
 
-            /*
-             * Retry the announce message a couple of times.
-             */
-            const int TRIES = 5;
-            for (int i = 0; i < TRIES; i++) {
-                sys::error_code ec;
-
-                BencodedMap announce_reply = send_query_await_reply(
-                    node_endpoint,
-                    node_id,
-                    "announce_peer",
-                    announce_message,
-                    std::chrono::seconds(5),
-                    yield[ec]
-                );
-
-                if (!ec) {
-                    break;
-                }
-            }
-        });
+        send_write_query(
+            i.second.node_endpoint,
+            i.first,
+            "announce_peer",
+            announce_message
+        );
     }
 }
+
+
+struct ImmutableDataNode {
+    asio::ip::udp::endpoint node_endpoint;
+    std::string put_token;
+};
+
+NodeID dht::DhtNode::data_put_immutable(const BencodedValue& data, asio::yield_context yield)
+{
+    NodeID key{ util::sha1(bencoding_encode(data)) };
+    std::map<NodeID, ImmutableDataNode> responsible_nodes;
+
+    auto query = [this, key, &responsible_nodes] (
+        udp::endpoint node_endpoint,
+        boost::optional<NodeID> node_id,
+        std::vector<NodeContact>& closer_nodes,
+        std::vector<NodeContact>& closer_nodes6,
+        /**
+         * Called if the queried node becomes part of the set of closest
+         * good nodes seen so far. Only ever invoked if query_node()
+         * returned true, and node_id is not empty.
+         *
+         * @param displaced_node The node that is removed from the closest
+         *     set to make room for the queried node, if any.
+         */
+        std::function<void(
+            boost::optional<NodeContact> displaced_node,
+            asio::yield_context yield
+        )>& on_promote,
+        asio::yield_context yield
+    ) -> bool {
+        sys::error_code ec;
+        boost::optional<BencodedMap> get_arguments = query_get_data(
+            key,
+            node_endpoint,
+            node_id,
+            closer_nodes,
+            closer_nodes6,
+            yield[ec]
+        );
+
+        if (!get_arguments) {
+            return false;
+        }
+
+        boost::optional<std::string> put_token = (*get_arguments)["token"].as_string();
+        if (!put_token) {
+            return false;
+        }
+
+        ImmutableDataNode data_node;
+        data_node.node_endpoint = node_endpoint;
+        data_node.put_token = *put_token;
+
+        on_promote = [node_id, data_node = std::move(data_node), &responsible_nodes] (
+            boost::optional<NodeContact> displaced_node,
+            asio::yield_context yield
+        ) {
+            assert(node_id);
+            if (displaced_node) {
+                responsible_nodes.erase(displaced_node->id);
+            }
+            responsible_nodes[*node_id] = std::move(data_node);
+        };
+
+        return true;
+    };
+
+    search_dht_for_nodes(key, RESPONSIBLE_TRACKERS_PER_SWARM, query, {}, yield);
+
+    for (auto& i : responsible_nodes) {
+        BencodedMap put_message;
+        put_message["id"] = _node_id.to_bytestring();
+        put_message["v"] = data;
+        put_message["token"] = i.second.put_token;
+
+        send_write_query(
+            i.second.node_endpoint,
+            i.first,
+            "put",
+            put_message
+        );
+    }
+
+    return key;
+}
+
+
 
 void dht::DhtNode::receive_loop(asio::yield_context yield)
 {
@@ -909,6 +974,40 @@ void dht::DhtNode::send_ping(NodeContact contact)
     });
 }
 
+/*
+ * Send a query that writes data to the DHT. Repeat up to 5 times until we
+ * get a positive response. Return immediately without waiting for results.
+ */
+void dht::DhtNode::send_write_query(
+    udp::endpoint destination,
+    NodeID destination_id,
+    const std::string& query_type,
+    const BencodedMap& query_arguments
+) {
+    asio::spawn(_ios, [=] (asio::yield_context yield) {
+        /*
+         * Retry the write message a couple of times.
+         */
+        const int TRIES = 5;
+        for (int i = 0; i < TRIES; i++) {
+            sys::error_code ec;
+
+            BencodedMap write_reply = send_query_await_reply(
+                destination,
+                destination_id,
+                query_type,
+                query_arguments,
+                std::chrono::seconds(5),
+                yield[ec]
+            );
+
+            if (!ec) {
+                break;
+            }
+        }
+    });
+}
+
 /**
  * Send a find_node query to a target node, and parse the reply.
  * @return True when received a valid response, false otherwise.
@@ -951,17 +1050,102 @@ bool dht::DhtNode::query_find_node(
     boost::optional<std::string> nodes6 = (*arguments)["nodes6"].as_string();
 
     if (nodes) {
-        if (!decode_contacts_v4(*nodes,  closer_nodes))
-            return or_throw(yield, asio::error::invalid_argument, false);
+        if (!decode_contacts_v4(*nodes,  closer_nodes)) {
+            return false;
+        }
     }
 
     if (nodes6) {
-        if (!decode_contacts_v6(*nodes6, closer_nodes6))
-            return or_throw(yield, asio::error::invalid_argument, false);
+        if (!decode_contacts_v6(*nodes6, closer_nodes6)) {
+            return false;
+        }
     }
 
     return (_interface_address.is_v4() && !closer_nodes .empty())
         || (_interface_address.is_v6() && !closer_nodes6.empty());
+}
+
+boost::optional<BencodedMap> dht::DhtNode::query_get_data(
+    NodeID key,
+    udp::endpoint node_endpoint,
+    boost::optional<NodeID> node_id,
+    std::vector<NodeContact>& closer_nodes,
+    std::vector<NodeContact>& closer_nodes6,
+    asio::yield_context yield
+) {
+    sys::error_code ec;
+
+    BencodedMap get_reply = send_query_await_reply(
+        node_endpoint,
+        node_id,
+        "get",
+        BencodedMap { { "id", _node_id.to_bytestring() }
+                    , { "target", key.to_bytestring() } },
+        std::chrono::seconds(2),
+        yield[ec]
+    );
+
+    if (ec) {
+        /*
+         * Ideally, nodes that do not implement BEP 44 would reply to this
+         * query with a "not implemented" error. But in practice, most do not
+         * reply at all. If such nodes make up the entire routing table (as is
+         * often the case), the lookup might fail entirely. But doing an entire
+         * search through nodes without BEP 44 support slows things down quite
+         * a lot. Hm.
+         *
+         * TODO: Perhaps using a separate routing table for BEP 44 nodes would
+         * improve things here?
+         */
+        query_find_node(
+            key,
+            node_endpoint,
+            node_id,
+            closer_nodes,
+            closer_nodes6,
+            yield[ec]
+        );
+        return boost::none;
+    }
+
+    if (get_reply["y"] != "r") {
+        /*
+         * This is probably a node that does not implement BEP 44.
+         * Query it using find_node instead. Ignore errors and hope for
+         * the best; we are just trying to find some closer nodes here.
+         */
+        query_find_node(
+            key,
+            node_endpoint,
+            node_id,
+            closer_nodes,
+            closer_nodes6,
+            yield[ec]
+        );
+        return boost::none;
+    }
+
+    boost::optional<BencodedMap> get_arguments = get_reply["r"].as_map();
+    if (!get_arguments) {
+        return boost::none;
+    }
+
+    boost::optional<std::string> nodes  = (*get_arguments)["nodes"].as_string();
+    boost::optional<std::string> nodes6 = (*get_arguments)["nodes6"].as_string();
+
+    if (nodes) {
+        if (!decode_contacts_v4(*nodes,  closer_nodes)) {
+            return boost::none;
+        }
+    }
+
+    if (nodes6) {
+        if (!decode_contacts_v6(*nodes6, closer_nodes6)) {
+            return boost::none;
+        }
+    }
+
+    return *get_arguments;
 }
 
 /**
@@ -1058,13 +1242,15 @@ void dht::DhtNode::tracker_search_peers(
         boost::optional<std::string> nodes6 = (*get_peers_arguments)["nodes6"].as_string();
 
         if (nodes) {
-            if (!decode_contacts_v4(*nodes,  closer_nodes))
-                return or_throw(yield, asio::error::invalid_argument, false);
+            if (!decode_contacts_v4(*nodes,  closer_nodes)) {
+                return false;
+            }
         }
 
         if (nodes6) {
-            if (!decode_contacts_v6(*nodes6, closer_nodes6))
-                return or_throw(yield, asio::error::invalid_argument, false);
+            if (!decode_contacts_v6(*nodes6, closer_nodes6)) {
+                return false;
+            }
         }
 
         bool got_nodes = (_interface_address.is_v4() && !closer_nodes.empty())

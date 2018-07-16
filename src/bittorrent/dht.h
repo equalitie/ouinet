@@ -57,6 +57,13 @@ class DhtNode {
      */
     void tracker_announce(NodeID infohash, boost::optional<int> port, std::vector<tcp::endpoint>& peers, asio::yield_context yield);
 
+    /**
+     * Store $data in the DHT as a BEP-44 immutable data item.
+     * @return The ID as which this data is known in the DHT, equal to the
+     *         sha1 hash of the bencoded $data.
+     */
+    NodeID data_put_immutable(const BencodedValue& data, asio::yield_context yield);
+
     private:
     void receive_loop(asio::yield_context yield);
 
@@ -132,8 +139,24 @@ class DhtNode {
 
     void send_ping(NodeContact contact);
 
+    void send_write_query(
+        udp::endpoint destination,
+        NodeID destination_id,
+        const std::string& query_type,
+        const BencodedMap& query_arguments
+    );
+
     bool query_find_node(
         NodeID target_id,
+        udp::endpoint node_endpoint,
+        boost::optional<NodeID> node_id,
+        std::vector<NodeContact>& closer_nodes,
+        std::vector<NodeContact>& closer_nodes6,
+        asio::yield_context yield
+    );
+
+    boost::optional<BencodedMap> query_get_data(
+        NodeID key,
         udp::endpoint node_endpoint,
         boost::optional<NodeID> node_id,
         std::vector<NodeContact>& closer_nodes,
