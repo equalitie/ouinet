@@ -175,7 +175,7 @@ boost::optional<BencodedValue> dht::DhtNode::data_get_immutable(const NodeID& ke
     return data;
 }
 
-struct ImmutableDataNode {
+struct DhtPutDataNode {
     asio::ip::udp::endpoint node_endpoint;
     std::string put_token;
 };
@@ -183,7 +183,7 @@ struct ImmutableDataNode {
 NodeID dht::DhtNode::data_put_immutable(const BencodedValue& data, asio::yield_context yield)
 {
     NodeID key{ util::sha1(bencoding_encode(data)) };
-    std::map<NodeID, ImmutableDataNode> responsible_nodes;
+    std::map<NodeID, DhtPutDataNode> responsible_nodes;
 
     auto query = [this, key, &responsible_nodes] (
         udp::endpoint node_endpoint,
@@ -223,7 +223,7 @@ NodeID dht::DhtNode::data_put_immutable(const BencodedValue& data, asio::yield_c
             return false;
         }
 
-        ImmutableDataNode data_node;
+        DhtPutDataNode data_node;
         data_node.node_endpoint = node_endpoint;
         data_node.put_token = *put_token;
 
@@ -258,6 +258,197 @@ NodeID dht::DhtNode::data_put_immutable(const BencodedValue& data, asio::yield_c
     }
 
     return key;
+}
+
+static std::string mutable_data_signature_buffer(
+    const BencodedValue& data,
+    const std::string& salt,
+    int64_t sequence_number
+) {
+    std::string encoded_data = bencoding_encode(data);
+
+    /*
+     * Low-level buffer computation is mandated by
+     * http://bittorrent.org/beps/bep_0044.html#signature-verification
+     *
+     * This is a concatenation of three key/value pairs encoded as they are in
+     * a BencodedMap, but in a nonstandard way, and as specified not actually
+     * implemented using the BencodedMap logic.
+     */
+    std::string signature_buffer;
+    if (!salt.empty()) {
+        signature_buffer += "4:salt";
+        signature_buffer += std::to_string(salt.size());
+        signature_buffer += ":";
+        signature_buffer += salt;
+    }
+    signature_buffer += "3:seqi";
+    signature_buffer += std::to_string(sequence_number);
+    signature_buffer += "e1:v";
+    signature_buffer += encoded_data;
+    return signature_buffer;
+}
+
+static bool mutable_data_valid_signature(
+    BencodedMap get_arguments,
+    const util::Ed25519PublicKey& public_key,
+    const std::string& salt
+) {
+    std::array<uint8_t, 32> public_key_buffer = public_key.serialize();
+    std::string public_key_string((char*)public_key_buffer.data(), public_key_buffer.size());
+
+    if (get_arguments["k"] != public_key_string) {
+        return false;
+    }
+
+    boost::optional<int64_t> sequence_number = get_arguments["seq"].as_int();
+    if (!sequence_number) {
+        return false;
+    }
+
+    boost::optional<std::string> signature = get_arguments["sig"].as_string();
+    if (!signature) {
+        return false;
+    }
+    if (signature->size() != 64) {
+        return false;
+    }
+    std::array<uint8_t, 64> signature_data;
+    std::copy(signature->begin(), signature->end(), signature_data.begin());
+
+    std::string signature_buffer = mutable_data_signature_buffer(
+        get_arguments["v"],
+        salt,
+        *sequence_number
+    );
+    return public_key.verify(signature_buffer, signature_data);
+}
+
+NodeID dht::DhtNode::data_put_mutable(
+    const BencodedValue& data,
+    const util::Ed25519PrivateKey& private_key,
+    const std::string& salt,
+    int64_t sequence_number,
+    asio::yield_context yield
+) {
+    std::string signature_buffer = mutable_data_signature_buffer(data, salt, sequence_number);
+    std::array<uint8_t, 64> signature_array = private_key.sign(signature_buffer);
+    std::string signature_string((char*)signature_array.data(), signature_array.size());
+
+    util::Ed25519PublicKey public_key(private_key.public_key());
+    std::array<uint8_t, 32> public_key_array = public_key.serialize();
+    std::string public_key_string((char*)public_key_array.data(), public_key_array.size());
+    NodeID target_id{util::sha1(public_key_string + salt)};
+
+    std::map<NodeID, DhtPutDataNode> responsible_nodes;
+    std::map<NodeID, DhtPutDataNode> outdated_nodes;
+
+    auto query = [
+        this,
+        target_id,
+        salt,
+        public_key,
+        sequence_number,
+        &responsible_nodes,
+        &outdated_nodes
+    ] (
+        udp::endpoint node_endpoint,
+        boost::optional<NodeID> node_id,
+        std::vector<NodeContact>& closer_nodes,
+        std::vector<NodeContact>& closer_nodes6,
+        /**
+         * Called if the queried node becomes part of the set of closest
+         * good nodes seen so far. Only ever invoked if query_node()
+         * returned true, and node_id is not empty.
+         *
+         * @param displaced_node The node that is removed from the closest
+         *     set to make room for the queried node, if any.
+         */
+        std::function<void(
+            boost::optional<NodeContact> displaced_node,
+            asio::yield_context yield
+        )>& on_promote,
+        asio::yield_context yield
+    ) -> bool {
+        sys::error_code ec;
+        boost::optional<BencodedMap> get_arguments = query_get_data(
+            target_id,
+            node_endpoint,
+            node_id,
+            closer_nodes,
+            closer_nodes6,
+            yield[ec]
+        );
+
+        if (!get_arguments) {
+            return false;
+        }
+
+        boost::optional<std::string> put_token = (*get_arguments)["token"].as_string();
+        if (!put_token) {
+            return false;
+        }
+
+        DhtPutDataNode data_node;
+        data_node.node_endpoint = node_endpoint;
+        data_node.put_token = *put_token;
+
+        if (mutable_data_valid_signature(*get_arguments, public_key, salt)) {
+            boost::optional<int64_t> existing_sequence_number = (*get_arguments)["seq"].as_int();
+            if (existing_sequence_number && *existing_sequence_number < sequence_number) {
+                /*
+                 * This node has an old version of this data entry.
+                 * Update it even if it is no longer responsible.
+                 */
+                if (node_id) {
+                    outdated_nodes[*node_id] = data_node;
+                }
+            }
+        }
+
+        on_promote = [node_id, data_node = std::move(data_node), &responsible_nodes] (
+            boost::optional<NodeContact> displaced_node,
+            asio::yield_context yield
+        ) {
+            assert(node_id);
+            if (displaced_node) {
+                responsible_nodes.erase(displaced_node->id);
+            }
+            responsible_nodes[*node_id] = std::move(data_node);
+        };
+
+        return true;
+    };
+
+    search_dht_for_nodes(target_id, RESPONSIBLE_TRACKERS_PER_SWARM, query, {}, yield);
+
+    for (auto& i : outdated_nodes) {
+        if (!responsible_nodes.count(i.first)) {
+            responsible_nodes[i.first] = i.second;
+        }
+    }
+
+    for (auto& i : responsible_nodes) {
+        BencodedMap put_message;
+        put_message["id"] = _node_id.to_bytestring();
+        put_message["k"] = public_key_string;
+        put_message["seq"] = sequence_number;
+        put_message["sig"] = signature_string;
+        put_message["v"] = data;
+        put_message["token"] = i.second.put_token;
+        if (!salt.empty()) {
+            put_message["salt"] = salt;
+        }
+
+        send_write_query(
+            i.second.node_endpoint,
+            i.first,
+            "put",
+            put_message
+        );
+    }
+
+    return target_id;
 }
 
 

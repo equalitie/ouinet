@@ -62,12 +62,21 @@ class BencodedValue : public detail::value {
         return *v;
     }
 
-    bool operator==(const char* str) {
+    bool operator==(const char* str) const {
         auto opt_str = as_string();
         return opt_str && *opt_str == str;
     }
 
-    bool operator!=(const char* str) {
+    bool operator!=(const char* str) const {
+        return !(*this == str);
+    }
+
+    bool operator==(const std::string& str) const {
+        auto opt_str = as_string();
+        return opt_str && *opt_str == str;
+    }
+
+    bool operator!=(const std::string& str) const {
         return !(*this == str);
     }
 };
