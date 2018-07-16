@@ -106,7 +106,11 @@ int main(int argc, const char** argv)
         std::cout << "Spawning DHT node on " << addr << std::endl;
     }
 
-    dht.set_interfaces(ifaddrs);
+
+    asio::spawn(ios, [&] (auto yield) {
+        dht.set_interfaces(ifaddrs, yield);
+        //dht.tracker_get_peers();
+    });
 
     ios.run();
 }

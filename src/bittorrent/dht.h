@@ -35,7 +35,7 @@ class DhtNode {
 
     public:
     DhtNode(asio::io_service& ios, ip::address interface_address);
-    void start(sys::error_code& ec);
+    void start(asio::yield_context);
     bool initialized() const { return _initialized; }
 
     /**
@@ -156,7 +156,7 @@ class MainlineDht {
     MainlineDht(asio::io_service& ios);
     ~MainlineDht();
 
-    void set_interfaces(const std::vector<asio::ip::address>& addresses);
+    void set_interfaces(const std::vector<asio::ip::address>& addresses, asio::yield_context);
     std::vector<asio::ip::tcp::endpoint> find_peers(NodeID torrent_id, Signal<void()>& cancel, asio::yield_context yield);
     void announce(NodeID torrent_id, Signal<void()>& cancel, asio::yield_context yield);
 

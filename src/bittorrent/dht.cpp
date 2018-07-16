@@ -38,8 +38,10 @@ dht::DhtNode::DhtNode(asio::io_service& ios, ip::address interface_address):
 {
 }
 
-void dht::DhtNode::start(sys::error_code& ec)
+void dht::DhtNode::start(asio::yield_context yield)
 {
+    sys::error_code ec;
+
     udp::socket socket(_ios);
 
     if (_interface_address.is_v4()) {
@@ -48,12 +50,12 @@ void dht::DhtNode::start(sys::error_code& ec)
         socket.open(udp::v6(), ec);
     }
     if (ec) {
-        return;
+        return or_throw(yield, ec);
     }
 
     udp::endpoint endpoint(_interface_address, 0);
     socket.bind(endpoint, ec);
-    if (ec) return;
+    if (ec) return or_throw(yield, ec);
 
     _multiplexer = std::make_unique<UdpMultiplexer>(std::move(socket));
 
@@ -64,9 +66,7 @@ void dht::DhtNode::start(sys::error_code& ec)
         receive_loop(yield);
     });
 
-    asio::spawn(_ios, [this] (asio::yield_context yield) {
-        bootstrap(yield);
-    });
+    bootstrap(yield);
 }
 
 void dht::DhtNode::tracker_get_peers(NodeID infohash, std::vector<tcp::endpoint>& peers, asio::yield_context yield)
@@ -289,9 +289,8 @@ BencodedMap dht::DhtNode::send_query_await_reply(
     _active_requests.erase(transaction);
 
     if (destination_id) {
-        NodeContact contact;
-        contact.endpoint = destination;
-        contact.id = *destination_id;
+        NodeContact contact{ .id = *destination_id, .endpoint = destination };
+
         if (*first_error_code || response["y"] != "r") {
             /*
              * Record the failure in the routing table.
@@ -1286,22 +1285,29 @@ MainlineDht::~MainlineDht()
 {
 }
 
-void MainlineDht::set_interfaces(const std::vector<asio::ip::address>& addresses)
+void MainlineDht::set_interfaces( const std::vector<asio::ip::address>& addresses
+                                , asio::yield_context yield)
 {
+    WaitCondition wc(_ios);
+
     std::set<asio::ip::address> addresses_used;
 
     for (asio::ip::address address : addresses) {
         addresses_used.insert(address);
 
         if (!_nodes.count(address)) {
-            sys::error_code ec;
-            std::unique_ptr<dht::DhtNode> node = std::make_unique<dht::DhtNode>(_ios, address);
-            node->start(ec);
-            if (!ec) {
-                _nodes[address] = std::move(node);
-            }
+            auto node = std::make_unique<dht::DhtNode>(_ios, address);
+
+            asio::spawn(_ios, [&, n = std::move(node), lock = wc.lock()]
+                              (asio::yield_context yield) mutable {
+                sys::error_code ec;
+                n->start(yield[ec]);
+                if (!ec) _nodes[address] = std::move(n);
+            });
         }
     }
+
+    wc.wait(yield);
 
     for (auto it = _nodes.begin(); it != _nodes.end(); ) {
         if (addresses_used.count(it->first)) {
