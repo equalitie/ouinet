@@ -58,6 +58,13 @@ class DhtNode {
     void tracker_announce(NodeID infohash, boost::optional<int> port, std::vector<tcp::endpoint>& peers, asio::yield_context yield);
 
     /**
+     * Search the DHT for BEP-44 immutable data item with key $key.
+     * @return The data stored in the DHT under $key, or boost::none if no such
+     *         data was found.
+     */
+    boost::optional<BencodedValue> data_get_immutable(const NodeID& key, asio::yield_context yield);
+
+    /**
      * Store $data in the DHT as a BEP-44 immutable data item.
      * @return The ID as which this data is known in the DHT, equal to the
      *         sha1 hash of the bencoded $data.

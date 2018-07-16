@@ -114,6 +114,67 @@ void dht::DhtNode::tracker_announce(NodeID infohash, boost::optional<int> port, 
 }
 
 
+boost::optional<BencodedValue> dht::DhtNode::data_get_immutable(const NodeID& key, asio::yield_context yield)
+{
+    boost::optional<BencodedValue> data;
+
+    auto query = [this, key, &data] (
+        udp::endpoint node_endpoint,
+        boost::optional<NodeID> node_id,
+        std::vector<NodeContact>& closer_nodes,
+        std::vector<NodeContact>& closer_nodes6,
+        /**
+         * Called if the queried node becomes part of the set of closest
+         * good nodes seen so far. Only ever invoked if query_node()
+         * returned true, and node_id is not empty.
+         *
+         * @param displaced_node The node that is removed from the closest
+         *     set to make room for the queried node, if any.
+         */
+        std::function<void(
+            boost::optional<NodeContact> displaced_node,
+            asio::yield_context yield
+        )>& on_promote,
+        asio::yield_context yield
+    ) -> bool {
+        /*
+         * Once we got our value, we don't need to look any further.
+         */
+        if (data) {
+            return false;
+        }
+
+        sys::error_code ec;
+        boost::optional<BencodedMap> get_arguments = query_get_data(
+            key,
+            node_endpoint,
+            node_id,
+            closer_nodes,
+            closer_nodes6,
+            yield[ec]
+        );
+
+        if (!get_arguments) {
+            return false;
+        }
+
+        if ((*get_arguments).count("v")) {
+            BencodedValue value = (*get_arguments)["v"];
+            std::string encoded_value = bencoding_encode(value);
+            std::array<uint8_t, 20> hash = util::sha1(encoded_value);
+            if (hash == key.buffer) {
+                data = value;
+            }
+        }
+
+        return true;
+    };
+
+    search_dht_for_nodes(key, RESPONSIBLE_TRACKERS_PER_SWARM, query, {}, yield);
+
+    return data;
+}
+
 struct ImmutableDataNode {
     asio::ip::udp::endpoint node_endpoint;
     std::string put_token;
