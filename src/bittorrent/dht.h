@@ -43,7 +43,7 @@ class DhtNode {
      * Query peers for a bittorrent swarm surrounding a particular infohash.
      * This returns a randomized subset of all such peers, not the entire swarm.
      */
-    void tracker_get_peers(NodeID infohash, std::vector<tcp::endpoint>& peers, asio::yield_context yield);
+    std::vector<tcp::endpoint> tracker_get_peers(NodeID infohash, asio::yield_context yield);
 
     /**
      * Announce yourself on the bittorrent swarm surrounding a particular
@@ -56,7 +56,7 @@ class DhtNode {
      *
      * TODO: [ruud] I am not clear to what degree this is actually followed in practice.
      */
-    void tracker_announce(NodeID infohash, boost::optional<int> port, std::vector<tcp::endpoint>& peers, asio::yield_context yield);
+    std::vector<tcp::endpoint> tracker_announce(NodeID infohash, boost::optional<int> port, asio::yield_context yield);
 
     private:
     void receive_loop(asio::yield_context yield);

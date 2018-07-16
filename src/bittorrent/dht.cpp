@@ -67,23 +67,27 @@ void dht::DhtNode::start(asio::yield_context yield)
     bootstrap(yield);
 }
 
-void dht::DhtNode::tracker_get_peers(NodeID infohash, std::vector<tcp::endpoint>& peers, asio::yield_context yield)
+std::vector<tcp::endpoint> dht::DhtNode::tracker_get_peers(NodeID infohash, asio::yield_context yield)
 {
     std::map<NodeID, TrackerNode> tracker_reply
         = tracker_search_peers(infohash, yield);
 
-    peers.clear();
+    std::vector<tcp::endpoint> peers;
+
     for (auto& i : tracker_reply) {
         peers.insert(peers.end(), i.second.peers.begin(), i.second.peers.end());
     }
+
+    return peers;
 }
 
-void dht::DhtNode::tracker_announce(NodeID infohash, boost::optional<int> port, std::vector<tcp::endpoint>& peers, asio::yield_context yield)
+std::vector<tcp::endpoint> dht::DhtNode::tracker_announce(NodeID infohash, boost::optional<int> port, asio::yield_context yield)
 {
     std::map<NodeID, TrackerNode> tracker_reply
         = tracker_search_peers(infohash, yield);
 
-    peers.clear();
+    std::vector<tcp::endpoint> peers;
+
     for (auto& i : tracker_reply) {
         peers.insert(peers.end(), i.second.peers.begin(), i.second.peers.end());
     }
@@ -100,17 +104,13 @@ void dht::DhtNode::tracker_announce(NodeID infohash, boost::optional<int> port, 
             node_id = i.first,
             announce_token = i.second.announce_token
         ] (asio::yield_context yield) {
-            BencodedMap announce_message;
-            announce_message["id"] = _node_id.to_bytestring();
-            announce_message["info_hash"] = infohash.to_bytestring();
-            announce_message["token"] = announce_token;
-            if (port) {
-                announce_message["implied_port"] = int64_t(0);
-                announce_message["port"] = int64_t(*port);
-            } else {
-                announce_message["implied_port"] = int64_t(1);
-                announce_message["port"] = int64_t(0);
-            }
+            BencodedMap announce_message
+                { { "id", _node_id.to_bytestring() }
+                , { "info_hash", infohash.to_bytestring() }
+                , { "token", announce_token }
+                , { "implied_port", port ? uint64_t(0) : uint64_t(1) }
+                , { "port", port ? uint64_t(*port) : uint64_t(0) }
+                };
 
             /*
              * Retry the announce message a couple of times.
@@ -133,6 +133,8 @@ void dht::DhtNode::tracker_announce(NodeID infohash, boost::optional<int> port, 
             }
         });
     }
+
+    return peers;
 }
 
 void dht::DhtNode::receive_loop(asio::yield_context yield)
@@ -1281,10 +1283,9 @@ std::vector<tcp::endpoint> MainlineDht::tracker_get_peers( NodeID infohash
 
     for (auto& node : _nodes) {
         asio::spawn(_ios, [&, lock = wc.lock()] (asio::yield_context yield) {
-                std::vector<tcp::endpoint> trackers;
                 sys::error_code ec;
-                node.second->tracker_get_peers(infohash, trackers, yield[ec]);
-                assert(!ec);
+                auto trackers = node.second->tracker_get_peers(infohash, yield[ec]);
+                if (ec) return;
                 retval.insert(retval.end(), trackers.begin(), trackers.end());
             });
     }
