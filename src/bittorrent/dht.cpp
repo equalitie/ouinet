@@ -17,8 +17,6 @@
 namespace ouinet {
 namespace bittorrent {
 
-using dht::Contact;
-
 static
 boost::asio::mutable_buffers_1 buffer(std::string& s) {
     return boost::asio::buffer(const_cast<char*>(s.data()), s.size());
@@ -122,8 +120,7 @@ void dht::DhtNode::tracker_announce(NodeID infohash, boost::optional<int> port, 
                 sys::error_code ec;
 
                 BencodedMap announce_reply = send_query_await_reply(
-                    node_endpoint,
-                    node_id,
+                    { node_endpoint, node_id },
                     "announce_peer",
                     announce_message,
                     std::chrono::seconds(5),
@@ -239,8 +236,7 @@ void dht::DhtNode::send_query( udp::endpoint destination
  * whether a successful reply was received.
  */
 BencodedMap dht::DhtNode::send_query_await_reply(
-    udp::endpoint destination,
-    boost::optional<NodeID> destination_id,
+    Contact dst,
     const std::string& query_type,
     const BencodedMap& query_arguments,
     asio::steady_timer::duration timeout,
@@ -263,7 +259,7 @@ BencodedMap dht::DhtNode::send_query_await_reply(
     std::string transaction = new_transaction_string();
 
     _active_requests[transaction]
-        = { destination
+        = { dst.endpoint
           , [&] (const BencodedMap& response_) {
                 if (first_error_code) return;
                 first_error_code = sys::error_code(); // success;
@@ -274,7 +270,7 @@ BencodedMap dht::DhtNode::send_query_await_reply(
 
     sys::error_code ec;
 
-    send_query( destination
+    send_query( dst.endpoint
               , transaction
               , std::move(query_type)
               , std::move(query_arguments)
@@ -288,20 +284,20 @@ BencodedMap dht::DhtNode::send_query_await_reply(
     reply_and_timeout_condition.wait(yield);
     _active_requests.erase(transaction);
 
-    if (destination_id) {
-        NodeContact contact{ .id = *destination_id, .endpoint = destination };
+    if (dst.id) {
+        NodeContact contact{ .id = *dst.id, .endpoint = dst.endpoint };
 
         if (*first_error_code || response["y"] != "r") {
             /*
              * Record the failure in the routing table.
              */
-            dht::RoutingBucket* routing_bucket = _routing_table->find_bucket(*destination_id, false);
+            dht::RoutingBucket* routing_bucket = _routing_table->find_bucket(*dst.id, false);
             routing_bucket_fail_node(routing_bucket, contact);
         } else {
             /*
              * Add the node to the routing table, subject to space limitations.
              */
-            dht::RoutingBucket* routing_bucket = _routing_table->find_bucket(*destination_id, true);
+            dht::RoutingBucket* routing_bucket = _routing_table->find_bucket(*dst.id, true);
             routing_bucket_try_add_node(routing_bucket, contact, true);
         }
     }
@@ -572,8 +568,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
     initial_ping_message["id"] = _node_id.to_bytestring();
 
     BencodedMap initial_ping_reply = send_query_await_reply(
-        bootstrap_ep,
-        boost::none,
+        { bootstrap_ep, boost::none },
         "ping",
         initial_ping_message,
         std::chrono::seconds(15),
@@ -735,13 +730,13 @@ void dht::DhtNode::collect( const NodeID& target_id
     std::set<udp::endpoint> added_endpoints;
 
     for (auto& contact : _routing_table->find_closest_routing_nodes(target_id, max_nodes)) {
-        seed_candidates.insert({ contact.id, contact.endpoint });
+        seed_candidates.insert({ contact.endpoint, contact.id });
         added_endpoints.insert(contact.endpoint);
     }
 
     for (auto ep : _bootstrap_endpoints) {
         if (added_endpoints.count(ep) != 0) continue;
-        seed_candidates.insert({ boost::none, ep });
+        seed_candidates.insert({ ep, boost::none });
     }
 
     ::ouinet::bittorrent::collect( _ios
@@ -774,8 +769,7 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
             std::vector<NodeContact> result_nodes6;
 
             bool accepted = query_find_node( target_id
-                                           , candidate.endpoint
-                                           , candidate.id
+                                           , candidate
                                            , result_nodes
                                            , result_nodes6
                                            , yield[ec]);
@@ -795,7 +789,7 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
             Candidates ret;
 
             for (const NodeContact& contact : contacts) {
-                ret.push_back({ contact.id, contact.endpoint });
+                ret.push_back({ contact.endpoint, contact.id });
             }
 
             return ret;
@@ -820,8 +814,7 @@ void dht::DhtNode::send_ping(NodeContact contact)
         // Note that even though we're not explicitly using the reply here,
         // it's still being used internally by the `send_query_await_reply`
         // function to update validity of the contact inside the routing table.
-        send_query_await_reply( contact.endpoint
-                              , contact.id
+        send_query_await_reply( { contact.endpoint, contact.id }
                               , "ping"
                               , BencodedMap{{ "id", _node_id.to_bytestring() }}
                               , std::chrono::seconds(2)
@@ -836,8 +829,7 @@ void dht::DhtNode::send_ping(NodeContact contact)
 // http://bittorrent.org/beps/bep_0005.html#find-node
 bool dht::DhtNode::query_find_node(
     NodeID target_id,
-    udp::endpoint node_endpoint,
-    boost::optional<NodeID> node_id,
+    Contact node,
     std::vector<NodeContact>& closer_nodes,
     std::vector<NodeContact>& closer_nodes6,
     asio::yield_context yield
@@ -845,8 +837,7 @@ bool dht::DhtNode::query_find_node(
     sys::error_code ec;
 
     BencodedMap find_node_reply = send_query_await_reply(
-        node_endpoint,
-        node_id,
+        node,
         "find_node",
         BencodedMap { { "id", _node_id.to_bytestring() }
                     , { "target", target_id.to_bytestring() } },
@@ -885,8 +876,7 @@ bool dht::DhtNode::query_find_node(
 // http://bittorrent.org/beps/bep_0005.html#get-peers
 boost::optional<dht::DhtNode::TrackerNode>
 dht::DhtNode::query_get_peers( NodeID infohash
-                             , udp::endpoint node_endpoint
-                             , boost::optional<NodeID> node_id
+                             , Contact node
                              , std::vector<NodeContact>& closer_nodes
                              , std::vector<NodeContact>& closer_nodes6
                              , asio::yield_context yield)
@@ -894,8 +884,7 @@ dht::DhtNode::query_get_peers( NodeID infohash
     sys::error_code ec;
 
     BencodedMap get_peers_reply = send_query_await_reply(
-        node_endpoint,
-        node_id,
+        node,
         "get_peers",
         BencodedMap { { "id", _node_id.to_bytestring() }
                     , { "info_hash", infohash.to_bytestring() } },
@@ -923,7 +912,7 @@ dht::DhtNode::query_get_peers( NodeID infohash
 
     if (encoded_peers && announce_token) {
         tracker = TrackerNode {
-            .node_endpoint = node_endpoint,
+            .node_endpoint = node.endpoint,
             .peers = {},
             .announce_token = *announce_token
         };
@@ -984,8 +973,7 @@ dht::DhtNode::tracker_search_peers(
             std::vector<NodeContact> result_nodes6;
 
             auto opt_tracker = query_get_peers( infohash
-                                              , candidate.endpoint
-                                              , candidate.id
+                                              , candidate
                                               , result_nodes
                                               , result_nodes6
                                               , yield[ec]);
@@ -1006,8 +994,7 @@ dht::DhtNode::tracker_search_peers(
                 // XXX: Is this necessary? I.e. if the candidate knew, wouldn't
                 // it have replied in the get_peers message in the first place?
                 query_find_node( infohash
-                               , candidate.endpoint
-                               , candidate.id
+                               , candidate
                                , result_nodes
                                , result_nodes6
                                , yield[ec]);
@@ -1020,7 +1007,7 @@ dht::DhtNode::tracker_search_peers(
             Candidates ret;
 
             for (const NodeContact& contact : *contacts) {
-                ret.push_back({ contact.id, contact.endpoint });
+                ret.push_back({ contact.endpoint, contact.id });
             }
 
             return ret;

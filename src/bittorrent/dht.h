@@ -12,6 +12,7 @@
 #include "dht_tracker.h"
 #include "node_id.h"
 #include "routing_table.h"
+#include "contact.h"
 
 #include "../namespaces.h"
 #include "../util/signal.h"
@@ -67,8 +68,7 @@ class DhtNode {
                    , asio::yield_context yield);
 
     BencodedMap send_query_await_reply(
-        udp::endpoint destination,
-        boost::optional<NodeID> destination_id,
+        Contact,
         const std::string& query_type,
         const BencodedMap& query_arguments,
         asio::steady_timer::duration timeout,
@@ -100,8 +100,7 @@ class DhtNode {
     // http://bittorrent.org/beps/bep_0005.html#find-node
     bool query_find_node(
         NodeID target_id,
-        udp::endpoint node_endpoint,
-        boost::optional<NodeID> node_id,
+        Contact,
         std::vector<NodeContact>& closer_nodes,
         std::vector<NodeContact>& closer_nodes6,
         asio::yield_context
@@ -110,8 +109,7 @@ class DhtNode {
     // http://bittorrent.org/beps/bep_0005.html#get-peers
     boost::optional<TrackerNode>
     query_get_peers( NodeID infohash
-                   , udp::endpoint node_endpoint
-                   , boost::optional<NodeID> node_id
+                   , Contact
                    , std::vector<NodeContact>& closer_nodes
                    , std::vector<NodeContact>& closer_nodes6
                    , asio::yield_context);
