@@ -8,9 +8,11 @@
 #include <boost/asio/ip/address.hpp>
 
 namespace asio = boost::asio;
+using udp = asio::ip::udp;
 
 using std::cerr;
 using std::endl;
+using namespace ouinet::bittorrent;
 
 std::vector<asio::ip::address> linux_get_addresses()
 {
@@ -76,7 +78,7 @@ int main(int argc, const char** argv)
 {
     asio::io_service ios;
 
-    ouinet::bittorrent::MainlineDht dht(ios);
+    MainlineDht dht(ios);
 
     std::vector<asio::ip::address> ifaddrs;
 

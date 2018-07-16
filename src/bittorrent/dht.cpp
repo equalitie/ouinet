@@ -1285,6 +1285,27 @@ MainlineDht::~MainlineDht()
 {
 }
 
+std::vector<tcp::endpoint> MainlineDht::tracker_get_peers( NodeID infohash
+                                                         , asio::yield_context yield)
+{
+    WaitCondition wc(_ios);
+
+    std::vector<tcp::endpoint> retval;
+
+    for (auto& node : _nodes) {
+        asio::spawn(_ios, [&, lock = wc.lock()] (asio::yield_context yield) {
+                std::vector<tcp::endpoint> trackers;
+                sys::error_code ec;
+                node.second->tracker_get_peers(infohash, trackers, yield[ec]);
+                assert(!ec);
+                retval.insert(retval.end(), trackers.begin(), trackers.end());
+            });
+    }
+
+    wc.wait(yield);
+    return retval;
+}
+
 void MainlineDht::set_interfaces( const std::vector<asio::ip::address>& addresses
                                 , asio::yield_context yield)
 {

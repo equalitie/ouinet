@@ -22,12 +22,12 @@ namespace bittorrent {
 
 class UdpMultiplexer;
 
-namespace dht {
-
 namespace ip = asio::ip;
 using ip::tcp;
 using ip::udp;
 
+
+namespace dht {
 
 class DhtNode {
     public:
@@ -156,6 +156,7 @@ class MainlineDht {
     MainlineDht(asio::io_service& ios);
     ~MainlineDht();
 
+    std::vector<tcp::endpoint> tracker_get_peers(NodeID infohash, asio::yield_context);
     void set_interfaces(const std::vector<asio::ip::address>& addresses, asio::yield_context);
     std::vector<asio::ip::tcp::endpoint> find_peers(NodeID torrent_id, Signal<void()>& cancel, asio::yield_context yield);
     void announce(NodeID torrent_id, Signal<void()>& cancel, asio::yield_context yield);
