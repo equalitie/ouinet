@@ -324,6 +324,78 @@ static bool mutable_data_valid_signature(
     return public_key.verify(signature_buffer, signature_data);
 }
 
+boost::optional<BencodedValue> dht::DhtNode::data_get_mutable(
+    const util::Ed25519PublicKey& public_key,
+    const std::string& salt,
+    asio::yield_context yield
+) {
+    std::array<uint8_t, 32> public_key_array = public_key.serialize();
+    std::string public_key_string((char*)public_key_array.data(), public_key_array.size());
+    NodeID target_id{util::sha1(public_key_string + salt)};
+
+    boost::optional<BencodedValue> data;
+    boost::optional<int64_t> highest_sequence_number;
+
+    auto query = [
+        this,
+        target_id,
+        salt,
+        public_key,
+        &data,
+        &highest_sequence_number
+    ] (
+        udp::endpoint node_endpoint,
+        boost::optional<NodeID> node_id,
+        std::vector<NodeContact>& closer_nodes,
+        std::vector<NodeContact>& closer_nodes6,
+        /**
+         * Called if the queried node becomes part of the set of closest
+         * good nodes seen so far. Only ever invoked if query_node()
+         * returned true, and node_id is not empty.
+         *
+         * @param displaced_node The node that is removed from the closest
+         *     set to make room for the queried node, if any.
+         */
+        std::function<void(
+            boost::optional<NodeContact> displaced_node,
+            asio::yield_context yield
+        )>& on_promote,
+        asio::yield_context yield
+    ) -> bool {
+        sys::error_code ec;
+        boost::optional<BencodedMap> get_arguments = query_get_data(
+            target_id,
+            node_endpoint,
+            node_id,
+            closer_nodes,
+            closer_nodes6,
+            yield[ec]
+        );
+
+        if (!get_arguments) {
+            return false;
+        }
+
+        if (mutable_data_valid_signature(*get_arguments, public_key, salt)) {
+            boost::optional<int64_t> sequence_number = (*get_arguments)["seq"].as_int();
+            if (!sequence_number) {
+                return false;
+            }
+
+            if (!highest_sequence_number || *sequence_number > *highest_sequence_number) {
+                highest_sequence_number = *sequence_number;
+                data = (*get_arguments)["v"];
+            }
+        }
+
+        return true;
+    };
+
+    search_dht_for_nodes(target_id, RESPONSIBLE_TRACKERS_PER_SWARM, query, {}, yield);
+
+    return data;
+}
+
 NodeID dht::DhtNode::data_put_mutable(
     const BencodedValue& data,
     const util::Ed25519PrivateKey& private_key,

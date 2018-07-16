@@ -73,6 +73,20 @@ class DhtNode {
     NodeID data_put_immutable(const BencodedValue& data, asio::yield_context yield);
 
     /**
+     * Search the DHT for BEP-44 mutable data item with a given (public key, salt)
+     * combination.
+     * @return The data stored in the DHT under ($public_key, $salt), or
+     *         boost::none if no such data was found.
+     *
+     * TODO: Implement minimum sequence number if we ever need it.
+     */
+    boost::optional<BencodedValue> data_get_mutable(
+        const util::Ed25519PublicKey& public_key,
+        const std::string& salt,
+        asio::yield_context yield
+    );
+
+    /**
      * Store $data in the DHT as a BEP-44 mutable data item. The data item
      * can be found when searching for the combination of (public key, salt).
      *
