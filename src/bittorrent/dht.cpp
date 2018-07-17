@@ -135,11 +135,8 @@ boost::optional<BencodedValue> dht::DhtNode::data_get_immutable(const NodeID& ke
 {
     boost::optional<BencodedValue> data;
 
-    const size_t max_nodes = RESPONSIBLE_TRACKERS_PER_SWARM;
-
-    collect(key, max_nodes, [&]( const Contact& candidate
-                               , asio::yield_context yield
-                               ) -> boost::optional<Candidates>
+    collect(key, [&](const Contact& candidate , asio::yield_context yield)
+                 -> boost::optional<Candidates>
         {
             if (data) return boost::none;
 
@@ -193,13 +190,10 @@ NodeID dht::DhtNode::data_put_immutable(const BencodedValue& data, asio::yield_c
     NodeID key{ util::sha1(bencoding_encode(data)) };
     std::map<NodeID, DhtPutDataNode> responsible_nodes;
 
-    const size_t max_nodes = RESPONSIBLE_TRACKERS_PER_SWARM;
-
-    collect(key, max_nodes, [&]( const Contact& candidate
-                               , asio::yield_context yield
-                               ) -> boost::optional<Candidates>
+    collect(key, [&](const Contact& candidate, asio::yield_context yield)
+                 -> boost::optional<Candidates>
         {
-            if (responsible_nodes.size() >= max_nodes) {
+            if (responsible_nodes.size() >= RESPONSIBLE_TRACKERS_PER_SWARM) {
                 return boost::none;
             }
 
@@ -235,8 +229,10 @@ NodeID dht::DhtNode::data_put_immutable(const BencodedValue& data, asio::yield_c
 
     size_t cnt = 0;
     for (auto& i : responsible_nodes) {
-        if (cnt++ >= max_nodes) break;
+        if (cnt++ >= RESPONSIBLE_TRACKERS_PER_SWARM) break;
 
+        // TODO: This function spawns a new coroutine internally. We should
+        // wait for it to finish.
         send_write_query( i.second.node_endpoint
                         , i.first
                         , "put"
@@ -327,10 +323,8 @@ boost::optional<BencodedValue> dht::DhtNode::data_get_mutable(
 
     const size_t max_nodes = RESPONSIBLE_TRACKERS_PER_SWARM;
 
-    collect( target_id
-           , max_nodes
-           , [&](const Contact& candidate, asio::yield_context yield)
-             -> boost::optional<Candidates>
+    collect(target_id, [&](const Contact& candidate, asio::yield_context yield)
+                       -> boost::optional<Candidates>
         {
             if (valid_responses >= max_nodes) {
                 return boost::none;
@@ -398,10 +392,8 @@ NodeID dht::DhtNode::data_put_mutable(
 
     const size_t max_nodes = RESPONSIBLE_TRACKERS_PER_SWARM;
 
-    collect( target_id
-           , max_nodes
-           , [&](const Contact& candidate, asio::yield_context yield)
-             -> boost::optional<Candidates>
+    collect(target_id, [&](const Contact& candidate, asio::yield_context yield)
+                       -> boost::optional<Candidates>
         {
             if (responsible_nodes.size() >= max_nodes) {
                 return boost::none;
@@ -986,7 +978,6 @@ void dht::DhtNode::refresh_routing_table(asio::yield_context yield)
 
 template<class Evaluate>
 void dht::DhtNode::collect( const NodeID& target_id
-                          , size_t max_nodes
                           , Evaluate&& evaluate
                           , asio::yield_context yield) const
 {
@@ -1010,7 +1001,11 @@ void dht::DhtNode::collect( const NodeID& target_id
 
     std::set<udp::endpoint> added_endpoints;
 
-    for (auto& contact : _routing_table->find_closest_routing_nodes(target_id, max_nodes)) {
+    auto table_contacts = _routing_table->find_closest_routing_nodes
+                              ( target_id
+                              , RESPONSIBLE_TRACKERS_PER_SWARM);
+
+    for (auto& contact : table_contacts) {
         seed_candidates.insert({ contact.endpoint, contact.id });
         added_endpoints.insert(contact.endpoint);
     }
@@ -1032,11 +1027,10 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
 ) {
     std::set<NodeContact> output_set;
 
-    const size_t max_nodes = 8;
+    const size_t max_nodes = RESPONSIBLE_TRACKERS_PER_SWARM;
 
-    collect(target_id, max_nodes, [&]( const Contact& candidate
-                                     , asio::yield_context yield
-                                     ) -> boost::optional<Candidates>
+    collect(target_id, [&](const Contact& candidate, asio::yield_context yield)
+                       -> boost::optional<Candidates>
         {
             if (output_set.size() >= max_nodes) {
                 return boost::none;
@@ -1338,13 +1332,10 @@ dht::DhtNode::tracker_search_peers(
 ) {
     std::map<NodeID, TrackerNode> tracker_reply;
 
-    const size_t max_nodes = RESPONSIBLE_TRACKERS_PER_SWARM;
-
-    collect(infohash, max_nodes, [&]( const Contact& candidate
-                                    , asio::yield_context yield
-                                    ) -> boost::optional<Candidates>
+    collect(infohash, [&](const Contact& candidate, asio::yield_context yield)
+                       -> boost::optional<Candidates>
         {
-            if (tracker_reply.size() >= max_nodes) {
+            if (tracker_reply.size() >= RESPONSIBLE_TRACKERS_PER_SWARM) {
                 return boost::none;
             }
 
@@ -1395,8 +1386,9 @@ dht::DhtNode::tracker_search_peers(
         }
         , yield);
 
-    tracker_reply.erase( std::next(tracker_reply.begin()
-                                  , std::min(tracker_reply.size(), max_nodes))
+    tracker_reply.erase( std::next( tracker_reply.begin()
+                                  , std::min( tracker_reply.size()
+                                            , RESPONSIBLE_TRACKERS_PER_SWARM))
                        , tracker_reply.end());
 
     return tracker_reply;

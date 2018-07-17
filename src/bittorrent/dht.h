@@ -192,7 +192,7 @@ class DhtNode {
     static bool closer_to(const NodeID& reference, const NodeID& left, const NodeID& right);
 
     template<class Evaluate>
-    void collect(const NodeID& target, size_t max_nodes, Evaluate&&, asio::yield_context) const;
+    void collect(const NodeID& target, Evaluate&&, asio::yield_context) const;
 
     private:
     asio::io_service& _ios;
