@@ -108,8 +108,6 @@ class DhtNode {
     );
 
     private:
-    using Candidates = std::deque<Contact>;
-
     void receive_loop(asio::yield_context yield);
 
     void send_query( udp::endpoint destination

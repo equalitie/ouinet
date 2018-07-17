@@ -20,6 +20,8 @@ namespace ouinet {
 namespace bittorrent {
 
 using dht::NodeContact;
+using Candidates = std::vector<NodeContact>;
+
 
 static
 boost::asio::mutable_buffers_1 buffer(std::string& s) {
@@ -120,17 +122,6 @@ std::vector<tcp::endpoint> dht::DhtNode::tracker_announce(NodeID infohash, boost
     return peers;
 }
 
-static std::deque<Contact> to_contacts(const std::vector<NodeContact>& contacts)
-{
-    std::deque<Contact> ret;
-
-    for (auto& contact : contacts) {
-        ret.push_back({ contact.endpoint, contact.id });
-    }
-
-    return ret;
-}
-
 boost::optional<BencodedValue> dht::DhtNode::data_get_immutable(const NodeID& key, asio::yield_context yield)
 {
     boost::optional<BencodedValue> data;
@@ -156,8 +147,8 @@ boost::optional<BencodedValue> dht::DhtNode::data_get_immutable(const NodeID& ke
             if (ec) return Candidates{};
 
             auto new_candidates = _interface_address.is_v4()
-                                ? to_contacts(closer_nodes)
-                                : to_contacts(closer_nodes6);
+                                ? closer_nodes
+                                : closer_nodes6;
 
             if (!get_arguments) {
                 return new_candidates;
@@ -213,8 +204,8 @@ NodeID dht::DhtNode::data_put_immutable(const BencodedValue& data, asio::yield_c
             if (ec) return Candidates{};
 
             auto new_candidates = _interface_address.is_v4()
-                                ? to_contacts(closer_nodes)
-                                : to_contacts(closer_nodes6);
+                                ? closer_nodes
+                                : closer_nodes6;
 
             boost::optional<std::string> put_token = (*get_arguments)["token"].as_string();
             if (!put_token) return new_candidates;
@@ -346,8 +337,8 @@ boost::optional<BencodedValue> dht::DhtNode::data_get_mutable(
             if (ec) return Candidates{};
 
             auto new_candidates = _interface_address.is_v4()
-                                ? to_contacts(closer_nodes)
-                                : to_contacts(closer_nodes6);
+                                ? closer_nodes
+                                : closer_nodes6;
 
             if (!get_arguments) return new_candidates;
 
@@ -415,8 +406,8 @@ NodeID dht::DhtNode::data_put_mutable(
             if (ec) return Candidates{};
 
             auto new_candidates = _interface_address.is_v4()
-                                ? to_contacts(closer_nodes)
-                                : to_contacts(closer_nodes6);
+                                ? closer_nodes
+                                : closer_nodes6;
 
             if (!get_arguments) return new_candidates;
 
@@ -1054,8 +1045,8 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
             }
 
             return _interface_address.is_v4()
-                 ? to_contacts(result_nodes)
-                 : to_contacts(result_nodes6);
+                 ? result_nodes
+                 : result_nodes6;
         }
         , yield);
 
@@ -1376,13 +1367,7 @@ dht::DhtNode::tracker_search_peers(
                          : &result_nodes6;
             }
 
-            Candidates ret;
-
-            for (const NodeContact& contact : *contacts) {
-                ret.push_back({ contact.endpoint, contact.id });
-            }
-
-            return ret;
+            return *contacts;
         }
         , yield);
 
