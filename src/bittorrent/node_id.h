@@ -26,6 +26,10 @@ struct NodeID {
 
     Buffer buffer;
 
+    NodeID() = default;
+    NodeID(const NodeID& other) : buffer(other.buffer) {}
+    NodeID(const Buffer& buffer) : buffer(buffer) {}
+
     // XXX: `bit(0)` is the most signifficant, perhaps the function should be
     // called `rbit` ('r' for reverse)?
     bool bit(int n) const;
