@@ -110,6 +110,8 @@ class DhtNode {
     bool is_v4() const { return _interface_address.is_v4(); }
     bool is_v6() const { return _interface_address.is_v6(); }
 
+    udp::endpoint wan_endpoint() const { return _wan_endpoint; }
+
     private:
     void receive_loop(asio::yield_context yield);
 
@@ -201,6 +203,7 @@ class DhtNode {
     std::unique_ptr<UdpMultiplexer> _multiplexer;
     NodeID _node_id;
     bool _initialized;
+    udp::endpoint _wan_endpoint;
     std::unique_ptr<RoutingTable> _routing_table;
     std::unique_ptr<Tracker> _tracker;
 
