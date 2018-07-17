@@ -107,6 +107,9 @@ class DhtNode {
         asio::yield_context yield
     );
 
+    bool is_v4() const { return _interface_address.is_v4(); }
+    bool is_v6() const { return _interface_address.is_v6(); }
+
     private:
     void receive_loop(asio::yield_context yield);
 

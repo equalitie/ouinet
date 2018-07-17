@@ -146,9 +146,7 @@ boost::optional<BencodedValue> dht::DhtNode::data_get_immutable(const NodeID& ke
 
             if (ec) return Candidates{};
 
-            auto new_candidates = _interface_address.is_v4()
-                                ? closer_nodes
-                                : closer_nodes6;
+            auto new_candidates = is_v4() ? closer_nodes : closer_nodes6;
 
             if (!get_arguments) {
                 return new_candidates;
@@ -203,9 +201,7 @@ NodeID dht::DhtNode::data_put_immutable(const BencodedValue& data, asio::yield_c
 
             if (ec) return Candidates{};
 
-            auto new_candidates = _interface_address.is_v4()
-                                ? closer_nodes
-                                : closer_nodes6;
+            auto new_candidates = is_v4() ? closer_nodes : closer_nodes6;
 
             boost::optional<std::string> put_token = (*get_arguments)["token"].as_string();
             if (!put_token) return new_candidates;
@@ -336,9 +332,7 @@ boost::optional<BencodedValue> dht::DhtNode::data_get_mutable(
 
             if (ec) return Candidates{};
 
-            auto new_candidates = _interface_address.is_v4()
-                                ? closer_nodes
-                                : closer_nodes6;
+            auto new_candidates = is_v4() ? closer_nodes : closer_nodes6;
 
             if (!get_arguments) return new_candidates;
 
@@ -405,9 +399,7 @@ NodeID dht::DhtNode::data_put_mutable(
 
             if (ec) return Candidates{};
 
-            auto new_candidates = _interface_address.is_v4()
-                                ? closer_nodes
-                                : closer_nodes6;
+            auto new_candidates = is_v4() ? closer_nodes : closer_nodes6;
 
             if (!get_arguments) return new_candidates;
 
@@ -741,7 +733,7 @@ void dht::DhtNode::handle_query( udp::endpoint sender
                 nodes += encode_endpoint(contact.endpoint);
             }
         }
-        if (_interface_address.is_v4()) {
+        if (is_v4()) {
             reply["nodes"] = nodes;
         } else {
             reply["nodes6"] = nodes;
@@ -770,7 +762,7 @@ void dht::DhtNode::handle_query( udp::endpoint sender
             nodes += contact.id.to_bytestring();
             nodes += encode_endpoint(contact.endpoint);
         }
-        if (_interface_address.is_v4()) {
+        if (is_v4()) {
             reply["nodes"] = nodes;
         } else {
             reply["nodes6"] = nodes;
@@ -1044,9 +1036,7 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
                 output_set.insert({ *candidate.id, candidate.endpoint });
             }
 
-            return _interface_address.is_v4()
-                 ? result_nodes
-                 : result_nodes6;
+            return is_v4() ? result_nodes : result_nodes6;
         }
         , yield);
 
@@ -1158,8 +1148,8 @@ bool dht::DhtNode::query_find_node(
         }
     }
 
-    return (_interface_address.is_v4() && !closer_nodes .empty())
-        || (_interface_address.is_v6() && !closer_nodes6.empty());
+    return (is_v4() && !closer_nodes .empty())
+        || (is_v6() && !closer_nodes6.empty());
 }
 
 boost::optional<BencodedMap> dht::DhtNode::query_get_data(
@@ -1349,9 +1339,7 @@ dht::DhtNode::tracker_search_peers(
                 tracker_reply.insert({ *candidate.id , std::move(*opt_tracker) });
             }
 
-            auto* contacts = _interface_address.is_v4()
-                           ? &result_nodes
-                           : &result_nodes6;
+            auto* contacts = is_v4() ? &result_nodes : &result_nodes6;
 
             if (contacts->empty()) {
                 // XXX: Is this necessary? I.e. if the candidate knew, wouldn't
@@ -1362,9 +1350,7 @@ dht::DhtNode::tracker_search_peers(
                                , result_nodes6
                                , yield[ec]);
 
-                contacts = _interface_address.is_v4()
-                         ? &result_nodes
-                         : &result_nodes6;
+                contacts = is_v4() ? &result_nodes : &result_nodes6;
             }
 
             return *contacts;
