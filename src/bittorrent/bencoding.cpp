@@ -1,4 +1,5 @@
 #include "bencoding.h"
+#include <iomanip>
 
 namespace ouinet {
 namespace bittorrent {
@@ -140,6 +141,61 @@ boost::optional<BencodedValue> destructive_parse_value(std::string& encoded)
 boost::optional<BencodedValue> bencoding_decode(std::string encoded)
 {
     return destructive_parse_value(encoded);
+}
+
+std::ostream& operator<<(std::ostream& os, const BencodedValue& value)
+{
+    struct Visitor {
+        std::ostream& os;
+
+        void write_readable(char ch) {
+            if (ch == '\\' || ch == '"') {
+                os << "\\" << ch;
+            }
+            else if (' ' <= ch && ch <= '~') {
+                os << ch;
+            }
+            else {
+                os << "\\x" << std::setw(2)
+                            << std::setfill('0')
+                            << std::hex
+                            << int((uint8_t) ch)
+                            << std::dec;
+            }
+        }
+
+        void operator()(const int64_t& value) {
+            os << std::to_string(value);
+        }
+
+        void operator()(const std::string& value) {
+            os << "\"";
+            for (auto ch : value) { write_readable(ch); }
+            os << "\"";
+        }
+
+        void operator()(const BencodedList& value) {
+            os << "[";
+            for (auto i = value.begin(); i != value.end(); ++i) {
+                os << *i;
+                if (std::next(i) != value.end()) os << ", ";
+            }
+            os << "]";
+        }
+
+        void operator()(const BencodedMap& value) {
+            os << "{";
+            for (auto i = value.begin(); i != value.end(); ++i) {
+                os << i->first << ":" << i->second;
+                if (std::next(i) != value.end()) os << ", ";
+            }
+            os << "}";
+        }
+    };
+
+    Visitor visitor{os};
+    boost::apply_visitor(visitor, value);
+    return os;
 }
 
 } // bittorrent namespace
