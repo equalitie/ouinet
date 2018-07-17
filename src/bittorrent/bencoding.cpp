@@ -1,5 +1,5 @@
 #include "bencoding.h"
-#include <iomanip>
+#include "byte_printer.h"
 
 namespace ouinet {
 namespace bittorrent {
@@ -148,30 +148,12 @@ std::ostream& operator<<(std::ostream& os, const BencodedValue& value)
     struct Visitor {
         std::ostream& os;
 
-        void write_readable(char ch) {
-            if (ch == '\\' || ch == '"') {
-                os << "\\" << ch;
-            }
-            else if (' ' <= ch && ch <= '~') {
-                os << ch;
-            }
-            else {
-                os << "\\x" << std::setw(2)
-                            << std::setfill('0')
-                            << std::hex
-                            << int((uint8_t) ch)
-                            << std::dec;
-            }
-        }
-
         void operator()(const int64_t& value) {
             os << std::to_string(value);
         }
 
         void operator()(const std::string& value) {
-            os << "\"";
-            for (auto ch : value) { write_readable(ch); }
-            os << "\"";
+            os << "\"" << BytePrinter(value) << "\"";
         }
 
         void operator()(const BencodedList& value) {

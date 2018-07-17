@@ -1,5 +1,6 @@
 #include <boost/crc.hpp>
 #include "node_id.h"
+#include "byte_printer.h"
 
 using namespace ouinet::bittorrent;
 
@@ -171,6 +172,5 @@ NodeID NodeID::generate( asio::ip::address address
 
 std::ostream& ouinet::bittorrent::operator<<(std::ostream& os, const NodeID& id)
 {
-    auto hex = id.to_hex();
-    return os << "[" << hex.substr(0, 20) << "]";
+    return os << "\"" << BytePrinter(id.buffer) << "\"";
 }
