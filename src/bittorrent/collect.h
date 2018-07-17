@@ -8,7 +8,7 @@ void collect( asio::io_service& ios
             , Evaluate&& evaluate
             , asio::yield_context yield)
 {
-    enum Progress { pending, in_progress, done };
+    enum Progress { unused, used };
 
     using Candidates = std::map< Contact
                                , Progress
@@ -19,7 +19,7 @@ void collect( asio::io_service& ios
     int in_progress_endpoints = 0;
 
     for (auto& c : candidates_) {
-        candidates[c] = pending;
+        candidates.insert(candidates.end(), { c, unused });
     }
 
     const int THREADS = 64;
@@ -35,8 +35,8 @@ void collect( asio::io_service& ios
                  * Try the closest untried candidate...
                  */
                 for (auto it = candidates.begin(); it != candidates.end(); ++it) {
-                    if (it->second != pending) continue;
-                    it->second = in_progress;
+                    if (it->second != unused) continue;
+                    it->second = used;
                     candidate_i = it;
                     break;
                 }
@@ -51,7 +51,6 @@ void collect( asio::io_service& ios
 
                 in_progress_endpoints++;
                 auto opt_new_candidates = evaluate(candidate_i->first, yield);
-                candidate_i->second = done;
                 in_progress_endpoints--;
 
                 if (!opt_new_candidates) {
@@ -59,7 +58,7 @@ void collect( asio::io_service& ios
                 }
 
                 for (auto c : *opt_new_candidates) {
-                    candidates.insert(std::make_pair(c, pending));
+                    candidates.insert({ c, unused });
                 }
 
                 candidate_available.notify();
