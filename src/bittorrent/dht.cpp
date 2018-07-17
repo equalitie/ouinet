@@ -308,12 +308,10 @@ boost::optional<BencodedValue> dht::DhtNode::data_get_mutable(
     boost::optional<BencodedValue> data;
     boost::optional<int64_t> highest_sequence_number;
 
-    const size_t max_nodes = RESPONSIBLE_TRACKERS_PER_SWARM;
-
     collect(target_id, [&](const Contact& candidate, asio::yield_context yield)
                        -> boost::optional<Candidates>
         {
-            if (valid_responses >= max_nodes) {
+            if (valid_responses >= RESPONSIBLE_TRACKERS_PER_SWARM) {
                 return boost::none;
             }
 
@@ -375,12 +373,10 @@ NodeID dht::DhtNode::data_put_mutable(
     std::map<NodeID, DhtPutDataNode> responsible_nodes;
     std::map<NodeID, DhtPutDataNode> outdated_nodes;
 
-    const size_t max_nodes = RESPONSIBLE_TRACKERS_PER_SWARM;
-
     collect(target_id, [&](const Contact& candidate, asio::yield_context yield)
                        -> boost::optional<Candidates>
         {
-            if (responsible_nodes.size() >= max_nodes) {
+            if (responsible_nodes.size() >= RESPONSIBLE_TRACKERS_PER_SWARM) {
                 return boost::none;
             }
 
@@ -1010,12 +1006,10 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
 ) {
     std::set<NodeContact> output_set;
 
-    const size_t max_nodes = RESPONSIBLE_TRACKERS_PER_SWARM;
-
     collect(target_id, [&](const Contact& candidate, asio::yield_context yield)
                        -> boost::optional<Candidates>
         {
-            if (output_set.size() >= max_nodes) {
+            if (output_set.size() >= RESPONSIBLE_TRACKERS_PER_SWARM) {
                 return boost::none;
             }
 
@@ -1042,7 +1036,8 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
 
     return { output_set.begin()
            , std::next( output_set.begin()
-                      , std::min(output_set.size(), max_nodes))};
+                      , std::min( output_set.size()
+                                , RESPONSIBLE_TRACKERS_PER_SWARM))};
 }
 
 void dht::DhtNode::send_ping(NodeContact contact)
