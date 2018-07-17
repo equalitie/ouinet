@@ -1046,14 +1046,13 @@ void dht::DhtNode::send_ping(NodeContact contact)
     // that we need to spawn an unlimited number of coroutines.  Perhaps it
     // would be better if functions using this send_ping function would only
     // spawn a limited number of coroutines and use only that.
-    asio::spawn(_ios, [&, c = std::move(contact)]
-                      (asio::yield_context yield) {
+    asio::spawn(_ios, [this, contact] (asio::yield_context yield) {
         sys::error_code ec;
 
         // Note that even though we're not explicitly using the reply here,
         // it's still being used internally by the `send_query_await_reply`
         // function to update validity of the contact inside the routing table.
-        send_query_await_reply( { contact.endpoint, contact.id }
+        send_query_await_reply( contact
                               , "ping"
                               , BencodedMap{{ "id", _node_id.to_bytestring() }}
                               , std::chrono::seconds(2)
