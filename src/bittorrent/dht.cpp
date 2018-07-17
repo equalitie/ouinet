@@ -99,23 +99,15 @@ std::vector<tcp::endpoint> dht::DhtNode::tracker_announce(NodeID infohash, boost
     }
 
     for (auto& i : tracker_reply) {
-        BencodedMap announce_message;
-        announce_message["id"] = _node_id.to_bytestring();
-        announce_message["info_hash"] = infohash.to_bytestring();
-        announce_message["token"] = i.second.announce_token;
-        if (port) {
-            announce_message["implied_port"] = int64_t(0);
-            announce_message["port"] = int64_t(*port);
-        } else {
-            announce_message["implied_port"] = int64_t(1);
-            announce_message["port"] = int64_t(0);
-        }
-
         send_write_query(
             i.second.node_endpoint,
             i.first,
             "announce_peer",
-            announce_message
+            BencodedMap { { "id", _node_id.to_bytestring() }
+                        , { "info_hash", infohash.to_bytestring() }
+                        , { "token", i.second.announce_token }
+                        , { "implied_port", port ? int64_t(0) : int64_t(1) }
+                        , { "port", port ? int64_t(*port) : int64_t(0) } }
         );
     }
 
@@ -985,7 +977,7 @@ void dht::DhtNode::collect( const NodeID& target_id
                               , RESPONSIBLE_TRACKERS_PER_SWARM);
 
     for (auto& contact : table_contacts) {
-        seed_candidates.insert({ contact.endpoint, contact.id });
+        seed_candidates.insert(contact);
         added_endpoints.insert(contact.endpoint);
     }
 
