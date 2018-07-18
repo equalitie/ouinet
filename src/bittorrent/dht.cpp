@@ -87,29 +87,29 @@ dht::DhtNode::~DhtNode()
     stop();
 }
 
-std::vector<tcp::endpoint> dht::DhtNode::tracker_get_peers(NodeID infohash, asio::yield_context yield)
+std::set<tcp::endpoint> dht::DhtNode::tracker_get_peers(NodeID infohash, asio::yield_context yield)
 {
     std::map<NodeID, TrackerNode> tracker_reply
         = tracker_search_peers(infohash, yield);
 
-    std::vector<tcp::endpoint> peers;
+    std::set<tcp::endpoint> peers;
 
     for (auto& i : tracker_reply) {
-        peers.insert(peers.end(), i.second.peers.begin(), i.second.peers.end());
+        peers.insert(i.second.peers.begin(), i.second.peers.end());
     }
 
     return peers;
 }
 
-std::vector<tcp::endpoint> dht::DhtNode::tracker_announce(NodeID infohash, boost::optional<int> port, asio::yield_context yield)
+std::set<tcp::endpoint> dht::DhtNode::tracker_announce(NodeID infohash, boost::optional<int> port, asio::yield_context yield)
 {
     std::map<NodeID, TrackerNode> tracker_reply
         = tracker_search_peers(infohash, yield);
 
-    std::vector<tcp::endpoint> peers;
+    std::set<tcp::endpoint> peers;
 
     for (auto& i : tracker_reply) {
-        peers.insert(peers.end(), i.second.peers.begin(), i.second.peers.end());
+        peers.insert(i.second.peers.begin(), i.second.peers.end());
     }
 
     for (auto& i : tracker_reply) {
