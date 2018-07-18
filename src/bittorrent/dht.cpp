@@ -112,18 +112,24 @@ std::set<tcp::endpoint> dht::DhtNode::tracker_announce(NodeID infohash, boost::o
         peers.insert(i.second.peers.begin(), i.second.peers.end());
     }
 
+    WaitCondition wc(_ios);
+
     for (auto& i : tracker_reply) {
-        send_write_query(
-            i.second.node_endpoint,
-            i.first,
-            "announce_peer",
-            BencodedMap { { "id", _node_id.to_bytestring() }
-                        , { "info_hash", infohash.to_bytestring() }
-                        , { "token", i.second.announce_token }
-                        , { "implied_port", port ? int64_t(0) : int64_t(1) }
-                        , { "port", port ? int64_t(*port) : int64_t(0) } }
-        );
+        asio::spawn(_ios, [=, lock = wc.lock()] (asio::yield_context yield) {
+            send_write_query(
+                i.second.node_endpoint,
+                i.first,
+                "announce_peer",
+                BencodedMap { { "id", _node_id.to_bytestring() }
+                            , { "info_hash", infohash.to_bytestring() }
+                            , { "token", i.second.announce_token }
+                            , { "implied_port", port ? int64_t(0) : int64_t(1) }
+                            , { "port", port ? int64_t(*port) : int64_t(0) } },
+                yield);
+        });
     }
+
+    wc.wait(yield);
 
     return peers;
 }
@@ -227,16 +233,21 @@ NodeID dht::DhtNode::data_put_immutable(const BencodedValue& data, asio::yield_c
         }
         , yield);
 
+    WaitCondition wc(_ios);
+
     for (auto& i : responsible_nodes) {
-        // TODO: This function spawns a new coroutine internally. We should
-        // wait for it to finish.
-        send_write_query( i.second.node_endpoint
-                        , i.first
-                        , "put"
-                        , { { "id", _node_id.to_bytestring() }
-                          , { "v", data }
-                          , { "token", i.second.put_token } });
+        asio::spawn(_ios, [=, lock = wc.lock()] (asio::yield_context yield) {
+            send_write_query( i.second.node_endpoint
+                            , i.first
+                            , "put"
+                            , { { "id", _node_id.to_bytestring() }
+                              , { "v", data }
+                              , { "token", i.second.put_token } }
+                            , yield);
+        });
     }
+
+    wc.wait(yield);
 
     return key;
 }
@@ -444,26 +455,30 @@ NodeID dht::DhtNode::data_put_mutable(
     for (auto& i : responsible_nodes) { all_nodes.insert({i.first, &i.second}); }
     for (auto& i : outdated_nodes)    { all_nodes.insert({i.first, &i.second}); }
 
+    WaitCondition wc(_ios);
+
     for (auto& i : all_nodes) {
-        BencodedMap put_message { { "id", _node_id.to_bytestring() }
-                                , { "k", public_key_string }
-                                , { "seq", sequence_number }
-                                , { "sig", signature_string }
-                                , { "v", data }
-                                , { "token", i.second->put_token }};
+        asio::spawn(_ios, [=, lock = wc.lock()] (asio::yield_context yield) {
+            BencodedMap put_message { { "id", _node_id.to_bytestring() }
+                                    , { "k", public_key_string }
+                                    , { "seq", sequence_number }
+                                    , { "sig", signature_string }
+                                    , { "v", data }
+                                    , { "token", i.second->put_token }};
 
-        if (!salt.empty()) {
-            put_message["salt"] = salt;
-        }
+            if (!salt.empty()) {
+                put_message["salt"] = salt;
+            }
 
-        // TODO: Wait for these to finish.
-        send_write_query(
-            i.second->node_endpoint,
-            i.first,
-            "put",
-            put_message
-        );
+            send_write_query( i.second->node_endpoint
+                            , i.first
+                            , "put"
+                            , put_message
+                            , yield);
+        });
     }
+
+    wc.wait(yield);
 
     return target_id;
 }
@@ -559,9 +574,9 @@ void dht::DhtNode::send( udp::endpoint destination
                        , const BencodedMap& message
                        , asio::yield_context yield)
 {
-#if DEBUG_SHOW_MESSAGES
+#   if DEBUG_SHOW_MESSAGES
     std::cerr << "send: " << destination << " " << message << std::endl;
-#endif
+#   endif
     _multiplexer->send(buffer(bencoding_encode(message)), destination, yield);
 }
 
@@ -1106,29 +1121,28 @@ void dht::DhtNode::send_write_query(
     udp::endpoint destination,
     NodeID destination_id,
     const std::string& query_type,
-    const BencodedMap& query_arguments
+    const BencodedMap& query_arguments,
+    asio::yield_context yield
 ) {
-    asio::spawn(_ios, [=] (asio::yield_context yield) {
-        /*
-         * Retry the write message a couple of times.
-         */
-        const int TRIES = 5;
-        for (int i = 0; i < TRIES; i++) {
-            sys::error_code ec;
+    /*
+     * Retry the write message a couple of times.
+     */
+    const int TRIES = 5;
+    for (int i = 0; i < TRIES; i++) {
+        sys::error_code ec;
 
-            BencodedMap write_reply = send_query_await_reply(
-                { destination, destination_id },
-                query_type,
-                query_arguments,
-                std::chrono::seconds(5),
-                yield[ec]
-            );
+        BencodedMap write_reply = send_query_await_reply(
+            { destination, destination_id },
+            query_type,
+            query_arguments,
+            std::chrono::seconds(5),
+            yield[ec]
+        );
 
-            if (!ec) {
-                break;
-            }
+        if (!ec) {
+            break;
         }
-    });
+    }
 }
 
 /**

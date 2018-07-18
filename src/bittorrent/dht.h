@@ -156,7 +156,8 @@ class DhtNode {
         udp::endpoint destination,
         NodeID destination_id,
         const std::string& query_type,
-        const BencodedMap& query_arguments
+        const BencodedMap& query_arguments,
+        asio::yield_context
     );
 
     boost::optional<BencodedMap> query_get_data(
