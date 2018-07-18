@@ -170,6 +170,21 @@ NodeID NodeID::generate( asio::ip::address address
     return node_id;
 }
 
+bool NodeID::closer_to(const NodeID& left, const NodeID& right) const
+{
+    for (size_t i = 0; i < sizeof(buffer); i++) {
+        uint8_t l = left .buffer[i] ^ buffer[i];
+        uint8_t r = right.buffer[i] ^ buffer[i];
+        if (l < r) {
+            return true;
+        }
+        if (r < l) {
+            return false;
+        }
+    }
+    return false;
+}
+
 std::ostream& ouinet::bittorrent::operator<<(std::ostream& os, const NodeID& id)
 {
     return os << "\"" << BytePrinter(id.buffer) << "\"";

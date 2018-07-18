@@ -842,7 +842,7 @@ void dht::DhtNode::handle_query( udp::endpoint sender
             bool contains_self = false;
             std::vector<NodeContact> closer_nodes = _routing_table->find_closest_routing_nodes(infohash, RESPONSIBLE_TRACKERS_PER_SWARM * 4);
             for (auto& i : closer_nodes) {
-                if (closer_to(infohash, _node_id, i.id)) {
+                if (infohash.closer_to(_node_id, i.id)) {
                     contains_self = true;
                 }
             }
@@ -991,7 +991,7 @@ void dht::DhtNode::collect( const NodeID& target_id
             if (!l.id && !r.id) return l.endpoint < r.endpoint;
             if ( l.id && !r.id) return true;
             if (!l.id &&  r.id) return false;
-            return closer_to(target_id, *l.id, *r.id);
+            return target_id.closer_to(*l.id, *r.id);
         }
     };
 
@@ -1605,21 +1605,6 @@ void dht::DhtNode::routing_bucket_fail_node( RoutingBucket* bucket
     while (bucket->verified_candidates.size() + bucket->unverified_candidates.size() > questionable_nodes) {
         bucket->unverified_candidates.pop_front();
     }
-}
-
-bool dht::DhtNode::closer_to(const NodeID& reference, const NodeID& left, const NodeID& right)
-{
-    for (unsigned int i = 0; i < sizeof(reference.buffer); i++) {
-        unsigned char l = left.buffer[i] ^ reference.buffer[i];
-        unsigned char r = right.buffer[i] ^ reference.buffer[i];
-        if (l < r) {
-            return true;
-        }
-        if (r < l) {
-            return false;
-        }
-    }
-    return false;
 }
 
 MainlineDht::MainlineDht(asio::io_service& ios):

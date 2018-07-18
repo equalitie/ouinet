@@ -47,6 +47,10 @@ struct NodeID {
     bool operator==(const NodeID& other) const { return buffer == other.buffer; }
     bool operator<(const NodeID& other) const { return buffer < other.buffer; }
 
+    // Return true if `left` is closer to `this` than `right` is in the XOR
+    // metrics.
+    bool closer_to(const NodeID& left, const NodeID& right) const;
+
     private:
     static NodeID generate( asio::ip::address address
                           , boost::optional<uint8_t> test_rnd);
