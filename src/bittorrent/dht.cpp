@@ -2,6 +2,7 @@
 #include "udp_multiplexer.h"
 #include "code.h"
 #include "collect.h"
+#include "proximity_map.h"
 
 #include "../or_throw.h"
 #include "../util/condition_variable.h"
@@ -182,13 +183,19 @@ struct DhtPutDataNode {
 NodeID dht::DhtNode::data_put_immutable(const BencodedValue& data, asio::yield_context yield)
 {
     NodeID key{ util::sha1(bencoding_encode(data)) };
-    std::map<NodeID, DhtPutDataNode> responsible_nodes;
+
+    ProximityMap<DhtPutDataNode> responsible_nodes( key
+                                                  , RESPONSIBLE_TRACKERS_PER_SWARM);
 
     collect(key, [&](const Contact& candidate, asio::yield_context yield)
                  -> boost::optional<Candidates>
         {
-            if (responsible_nodes.size() >= RESPONSIBLE_TRACKERS_PER_SWARM) {
-                return boost::none;
+            if (!candidate.id && responsible_nodes.full()) {
+                return Candidates{};
+            }
+
+            if (candidate.id && !responsible_nodes.would_insert(*candidate.id)) {
+                return Candidates{};
             }
 
             sys::error_code ec;
@@ -212,17 +219,15 @@ NodeID dht::DhtNode::data_put_immutable(const BencodedValue& data, asio::yield_c
             if (!put_token) return new_candidates;
 
             if (candidate.id) {
-                responsible_nodes[*candidate.id] = { candidate.endpoint, *put_token };
+                responsible_nodes.insert({ *candidate.id
+                                         , { candidate.endpoint, *put_token }});
             }
 
             return new_candidates;
         }
         , yield);
 
-    size_t cnt = 0;
     for (auto& i : responsible_nodes) {
-        if (cnt++ >= RESPONSIBLE_TRACKERS_PER_SWARM) break;
-
         // TODO: This function spawns a new coroutine internally. We should
         // wait for it to finish.
         send_write_query( i.second.node_endpoint
@@ -375,14 +380,18 @@ NodeID dht::DhtNode::data_put_mutable(
     std::string public_key_string((char*)public_key_array.data(), public_key_array.size());
     NodeID target_id{util::sha1(public_key_string + salt)};
 
-    std::map<NodeID, DhtPutDataNode> responsible_nodes;
+    ProximityMap<DhtPutDataNode> responsible_nodes(target_id, RESPONSIBLE_TRACKERS_PER_SWARM);
     std::map<NodeID, DhtPutDataNode> outdated_nodes;
 
     collect(target_id, [&](const Contact& candidate, asio::yield_context yield)
                        -> boost::optional<Candidates>
         {
-            if (responsible_nodes.size() >= RESPONSIBLE_TRACKERS_PER_SWARM) {
-                return boost::none;
+            if (!candidate.id && responsible_nodes.full()) {
+                return Candidates{};
+            }
+
+            if (candidate.id && !responsible_nodes.would_insert(*candidate.id)) {
+                return Candidates{};
             }
 
             sys::error_code ec;
@@ -423,32 +432,33 @@ NodeID dht::DhtNode::data_put_mutable(
             }
 
             if (candidate.id) {
-                responsible_nodes[*candidate.id] = std::move(data_node);
+                responsible_nodes.insert({*candidate.id, std::move(data_node)});
             }
 
             return new_candidates;
         }
         , yield);
 
-    // XXX: With C++17 we could use std::map::merge
-    for (auto& i : outdated_nodes) {
-        responsible_nodes.insert(i);
-    }
+    std::map<NodeID, DhtPutDataNode*> all_nodes;
 
-    for (auto& i : responsible_nodes) {
+    for (auto& i : responsible_nodes) { all_nodes.insert({i.first, &i.second}); }
+    for (auto& i : outdated_nodes)    { all_nodes.insert({i.first, &i.second}); }
+
+    for (auto& i : all_nodes) {
         BencodedMap put_message { { "id", _node_id.to_bytestring() }
                                 , { "k", public_key_string }
                                 , { "seq", sequence_number }
                                 , { "sig", signature_string }
                                 , { "v", data }
-                                , { "token", i.second.put_token }};
+                                , { "token", i.second->put_token }};
 
         if (!salt.empty()) {
             put_message["salt"] = salt;
         }
 
+        // TODO: Wait for these to finish.
         send_write_query(
-            i.second.node_endpoint,
+            i.second->node_endpoint,
             i.first,
             "put",
             put_message
@@ -1025,13 +1035,17 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
     NodeID target_id,
     asio::yield_context yield
 ) {
-    std::set<NodeContact> output_set;
+    ProximityMap<udp::endpoint> out(target_id, RESPONSIBLE_TRACKERS_PER_SWARM);
 
     collect(target_id, [&](const Contact& candidate, asio::yield_context yield)
                        -> boost::optional<Candidates>
         {
-            if (output_set.size() >= RESPONSIBLE_TRACKERS_PER_SWARM) {
-                return boost::none;
+            if (!candidate.id && out.full()) {
+                return Candidates{};
+            }
+
+            if (candidate.id && !out.would_insert(*candidate.id)) {
+                return Candidates{};
             }
 
             sys::error_code ec;
@@ -1048,17 +1062,20 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
             if (ec) return Candidates{};
 
             if (accepted && candidate.id) {
-                output_set.insert({ *candidate.id, candidate.endpoint });
+                out.insert({ *candidate.id, candidate.endpoint });
             }
 
             return is_v4() ? result_nodes : result_nodes6;
         }
         , yield);
 
-    return { output_set.begin()
-           , std::next( output_set.begin()
-                      , std::min( output_set.size()
-                                , RESPONSIBLE_TRACKERS_PER_SWARM))};
+    std::vector<NodeContact> output_set;
+
+    for (auto& c : out) {
+        output_set.push_back({ c.first, c.second });
+    }
+
+    return output_set;
 }
 
 void dht::DhtNode::send_ping(NodeContact contact)
@@ -1327,13 +1344,18 @@ dht::DhtNode::tracker_search_peers(
     NodeID infohash,
     asio::yield_context yield
 ) {
-    std::map<NodeID, TrackerNode> tracker_reply;
+    ProximityMap<TrackerNode> tracker_reply( infohash
+                                           , RESPONSIBLE_TRACKERS_PER_SWARM);
 
     collect(infohash, [&](const Contact& candidate, asio::yield_context yield)
-                       -> boost::optional<Candidates>
+                      -> boost::optional<Candidates>
         {
-            if (tracker_reply.size() >= RESPONSIBLE_TRACKERS_PER_SWARM) {
-                return boost::none;
+            if (!candidate.id && tracker_reply.full()) {
+                return Candidates{};
+            }
+
+            if (candidate.id && !tracker_reply.would_insert(*candidate.id)) {
+                return Candidates{};
             }
 
             sys::error_code ec;
@@ -1358,8 +1380,6 @@ dht::DhtNode::tracker_search_peers(
             auto* contacts = is_v4() ? &result_nodes : &result_nodes6;
 
             if (contacts->empty()) {
-                // XXX: Is this necessary? I.e. if the candidate knew, wouldn't
-                // it have replied in the get_peers message in the first place?
                 query_find_node( infohash
                                , candidate
                                , result_nodes
@@ -1373,12 +1393,7 @@ dht::DhtNode::tracker_search_peers(
         }
         , yield);
 
-    tracker_reply.erase( std::next( tracker_reply.begin()
-                                  , std::min( tracker_reply.size()
-                                            , RESPONSIBLE_TRACKERS_PER_SWARM))
-                       , tracker_reply.end());
-
-    return tracker_reply;
+    return { tracker_reply.begin(), tracker_reply.end() };
 }
 
 
