@@ -22,10 +22,11 @@ namespace bittorrent {
 using dht::NodeContact;
 using Candidates = std::vector<NodeContact>;
 
+#define DEBUG_SHOW_MESSAGES 0
 
 static
-boost::asio::mutable_buffers_1 buffer(std::string& s) {
-    return boost::asio::buffer(const_cast<char*>(s.data()), s.size());
+boost::asio::const_buffers_1 buffer(const std::string& s) {
+    return boost::asio::buffer(const_cast<const char*>(s.data()), s.size());
 }
 
 std::string dht::NodeContact::to_string() const
@@ -469,8 +470,17 @@ void dht::DhtNode::receive_loop(asio::yield_context yield)
             = bencoding_decode(packet.to_string());
 
         if (!decoded_message) {
+#           if DEBUG_SHOW_MESSAGES
+            std::cerr << "recv: " << sender
+                      << " Failed parsing \"" << packet << "\"" << std::endl;
+#           endif
+
             continue;
         }
+
+#       if DEBUG_SHOW_MESSAGES
+        std::cerr << "recv: " << sender << " " << *decoded_message << std::endl;
+#       endif
 
         boost::optional<BencodedMap> message_map = decoded_message->as_map();
         if (!message_map) {
@@ -523,21 +533,29 @@ std::string dht::DhtNode::new_transaction_string()
 #endif
 }
 
+void dht::DhtNode::send( udp::endpoint destination
+                       , const BencodedMap& message
+                       , asio::yield_context yield)
+{
+#if DEBUG_SHOW_MESSAGES
+    std::cerr << "send: " << destination << " " << message << std::endl;
+#endif
+    _multiplexer->send(buffer(bencoding_encode(message)), destination, yield);
+}
+
 void dht::DhtNode::send_query( udp::endpoint destination
                              , std::string transaction
                              , std::string query_type
                              , BencodedMap query_arguments
                              , asio::yield_context yield)
 {
-    std::string message
-        = bencoding_encode(BencodedMap { { "y", "q" }
-                                       , { "q", std::move(query_type) }
-                                       , { "a", std::move(query_arguments) }
-                                       // TODO: version string
-                                       , { "t", std::move(transaction) }
-                                       });
-
-    _multiplexer->send(buffer(message), destination, yield);
+    send( destination
+        , BencodedMap { { "y", "q" }
+                      , { "q", std::move(query_type) }
+                      , { "a", std::move(query_arguments) }
+                      // TODO: version string
+                      , { "t", std::move(transaction) }}
+        , yield);
 }
 
 /*
@@ -630,27 +648,25 @@ void dht::DhtNode::handle_query( udp::endpoint sender
     std::string transaction = *transaction_;
 
     auto send_error = [&] (int code, std::string description) {
-        BencodedMap message;
-        message["y"] = "e";
-        message["t"] = transaction;
-        message["e"] = BencodedList{code, description};
-        std::string message_string = bencoding_encode(message);
-
         sys::error_code ec; // Ignored
-        _multiplexer->send(buffer(message_string), sender, yield[ec]);
+
+        send( sender
+            , BencodedMap { { "y", "e" }
+                          , { "t", transaction }
+                          , { "e", BencodedList{code, description} }}
+            , yield[ec]);
     };
 
     auto send_reply = [&] (BencodedMap reply) {
         reply["id"] = _node_id.to_bytestring();
 
-        BencodedMap message;
-        message["y"] = "r";
-        message["t"] = transaction;
-        message["r"] = reply;
-        std::string message_string = bencoding_encode(message);
-
         sys::error_code ec; // Ignored
-        _multiplexer->send(buffer(message_string), sender, yield[ec]);
+
+        send( sender
+            , BencodedMap { { "y", "r" }
+                          , { "t", transaction }
+                          , { "r", std::move(reply) } }
+            , yield[ec]);
     };
 
     if (!query["q"].is_string()) {

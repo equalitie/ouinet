@@ -115,6 +115,10 @@ class DhtNode {
     private:
     void receive_loop(asio::yield_context yield);
 
+    void send( udp::endpoint destination
+             , const BencodedMap& query_arguments
+             , asio::yield_context yield);
+
     void send_query( udp::endpoint destination
                    , std::string transaction
                    , std::string query_type
