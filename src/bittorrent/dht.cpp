@@ -74,6 +74,18 @@ void dht::DhtNode::start(asio::yield_context yield)
     bootstrap(yield);
 }
 
+void dht::DhtNode::stop()
+{
+    _stopped = true;
+    _tracker = nullptr;
+    _multiplexer = nullptr;
+}
+
+dht::DhtNode::~DhtNode()
+{
+    stop();
+}
+
 std::vector<tcp::endpoint> dht::DhtNode::tracker_get_peers(NodeID infohash, asio::yield_context yield)
 {
     std::map<NodeID, TrackerNode> tracker_reply
