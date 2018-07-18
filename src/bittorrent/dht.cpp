@@ -1281,15 +1281,14 @@ dht::DhtNode::query_get_peers( NodeID infohash
     boost::optional<BencodedList> encoded_peers = (*get_peers_arguments)["values"].as_list();
     boost::optional<std::string> announce_token = (*get_peers_arguments)["token"].as_string();
 
-    boost::optional<TrackerNode> tracker;
 
-    if (encoded_peers && announce_token) {
-        tracker = TrackerNode {
-            .node_endpoint = node.endpoint,
-            .peers = {},
-            .announce_token = *announce_token
-        };
+    if (!announce_token) {
+        return boost::none;
+    }
 
+    TrackerNode tracker{ node.endpoint, {}, *announce_token };
+
+    if (encoded_peers) {
         for (auto& peer : *encoded_peers) {
             boost::optional<std::string> peer_string = peer.as_string();
             if (!peer_string) continue;
@@ -1297,7 +1296,7 @@ dht::DhtNode::query_get_peers( NodeID infohash
             boost::optional<udp::endpoint> endpoint = decode_endpoint(*peer_string);
             if (!endpoint) continue;
 
-            tracker->peers.push_back({endpoint->address(), endpoint->port()});
+            tracker.peers.push_back({endpoint->address(), endpoint->port()});
         }
     }
 
@@ -1305,13 +1304,15 @@ dht::DhtNode::query_get_peers( NodeID infohash
     boost::optional<std::string> nodes6 = (*get_peers_arguments)["nodes6"].as_string();
 
     if (nodes) {
-        if (!decode_contacts_v4(*nodes,  closer_nodes))
+        if (!decode_contacts_v4(*nodes,  closer_nodes)) {
             return boost::none;
+        }
     }
 
     if (nodes6) {
-        if (!decode_contacts_v6(*nodes6, closer_nodes6))
+        if (!decode_contacts_v6(*nodes6, closer_nodes6)) {
             return boost::none;
+        }
     }
 
     return tracker;
