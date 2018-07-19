@@ -35,7 +35,7 @@ BOOST_AUTO_TEST_CASE(test_generate_node_id)
     BOOST_REQUIRE_EQUAL(id.substr(38), "01");
 }
 
-static udp::endpoint as_udp_endpoint(tcp::endpoint ep) {
+static tcp::endpoint as_tcp(udp::endpoint ep) {
     return { ep.address(), ep.port() };
 }
 
@@ -50,8 +50,7 @@ BOOST_AUTO_TEST_CASE(test_bep_5)
     asio::spawn(ios, [&] (auto yield) {
         sys::error_code ec;
 
-        stringstream ss;
-        NodeID infohash = util::sha1(ss.str());
+        NodeID infohash = util::sha1("ouinet-test-" + to_string(time(0)));
 
         dht.start(yield[ec]);
         BOOST_REQUIRE(!ec);
@@ -59,18 +58,10 @@ BOOST_AUTO_TEST_CASE(test_bep_5)
         dht.tracker_announce(infohash, dht.wan_endpoint().port(), yield[ec]);
         BOOST_REQUIRE(!ec);
 
-        auto peers = dht.tracker_get_peers(infohash , yield);
+        auto peers = dht.tracker_get_peers(infohash , yield[ec]);
+        BOOST_REQUIRE(!ec);
 
-        bool found = false;
-
-        for (auto p : peers) {
-            if (as_udp_endpoint(p) == dht.wan_endpoint()) {
-                found = true;
-                break;
-            }
-        }
-
-        BOOST_REQUIRE(found);
+        BOOST_REQUIRE(peers.count(as_tcp(dht.wan_endpoint())));
 
         dht.stop();
     });
