@@ -197,11 +197,11 @@ NodeID dht::DhtNode::data_put_immutable(const BencodedValue& data, asio::yield_c
                  -> boost::optional<Candidates>
         {
             if (!candidate.id && responsible_nodes.full()) {
-                return Candidates{};
+                return boost::none;
             }
 
             if (candidate.id && !responsible_nodes.would_insert(*candidate.id)) {
-                return Candidates{};
+                return boost::none;
             }
 
             sys::error_code ec;
@@ -398,11 +398,11 @@ NodeID dht::DhtNode::data_put_mutable(
                        -> boost::optional<Candidates>
         {
             if (!candidate.id && responsible_nodes.full()) {
-                return Candidates{};
+                return boost::none;
             }
 
             if (candidate.id && !responsible_nodes.would_insert(*candidate.id)) {
-                return Candidates{};
+                return boost::none;
             }
 
             sys::error_code ec;
@@ -1056,11 +1056,11 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
                        -> boost::optional<Candidates>
         {
             if (!candidate.id && out.full()) {
-                return Candidates{};
+                return boost::none;
             }
 
             if (candidate.id && !out.would_insert(*candidate.id)) {
-                return Candidates{};
+                return boost::none;
             }
 
             sys::error_code ec;
@@ -1365,11 +1365,11 @@ dht::DhtNode::tracker_search_peers(
                       -> boost::optional<Candidates>
         {
             if (!candidate.id && tracker_reply.full()) {
-                return Candidates{};
+                return boost::none;
             }
 
             if (candidate.id && !tracker_reply.would_insert(*candidate.id)) {
-                return Candidates{};
+                return boost::none;
             }
 
             sys::error_code ec;

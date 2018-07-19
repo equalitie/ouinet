@@ -14,7 +14,8 @@ void collect( asio::io_service& ios
                                , Progress
                                , typename CandidateSet::key_compare>;
 
-    Candidates candidates(candidates_.key_comp());
+    auto comp = candidates_.key_comp();
+    Candidates candidates(comp);
 
     int in_progress_endpoints = 0;
 
@@ -26,6 +27,9 @@ void collect( asio::io_service& ios
     WaitCondition all_done(ios);
     ConditionVariable candidate_available(ios);
 
+    // If set, every contact higher than *end will be ignored.
+    boost::optional<Contact> end;
+
     for (int thread = 0; thread < THREADS; thread++) {
         asio::spawn(ios, [&, lock = all_done.lock()] (asio::yield_context yield) {
             while (true) {
@@ -35,6 +39,7 @@ void collect( asio::io_service& ios
                  * Try the closest untried candidate...
                  */
                 for (auto it = candidates.begin(); it != candidates.end(); ++it) {
+                    if (end && comp(*end, it->first)) break;
                     if (it->second != unused) continue;
                     it->second = used;
                     candidate_i = it;
@@ -54,7 +59,10 @@ void collect( asio::io_service& ios
                 in_progress_endpoints--;
 
                 if (!opt_new_candidates) {
-                    return;
+                    if (!end || comp(candidate_i->first, *end)) {
+                        end = candidate_i->first;
+                    }
+                    continue;
                 }
 
                 for (auto c : *opt_new_candidates) {
