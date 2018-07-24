@@ -44,6 +44,10 @@ struct Config {
     bool enable_cache = true;
     std::queue<responder> responders;
 };
+
+std::ostream& operator<<(std::ostream&, responder);
+std::ostream& operator<<(std::ostream&, const Config&);
+
 } // request_route namespace
 //------------------------------------------------------------------------------
 // Request expressions can tell whether they match a given request

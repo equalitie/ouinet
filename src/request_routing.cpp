@@ -157,5 +157,38 @@ route_choose_config( const http::request<http::string_body>& req
             return mit->second;
     return default_config;
 }
+
+std::ostream& operator<<(std::ostream& os, responder r)
+{
+    switch (r) {
+        case responder::origin:     return os << "origin";
+        case responder::proxy:      return os << "proxy";
+        case responder::injector:   return os << "injector";
+        case responder::_front_end: return os << "_front_end";
+    }
+    return os << "?";
+}
+
+std::ostream& operator<<(std::ostream& os, const Config& c)
+{
+    os << "Config{enable_cache:"
+       << (c.enable_cache ? "true" : "false");
+
+    os << ", responders:[";
+
+    if (c.responders.empty()) return os << "]}";
+
+    auto q = c.responders;
+
+    while (!q.empty()) {
+        auto r = q.front();
+        q.pop();
+        os << r;
+        if (!q.empty()) os << ", ";
+    }
+
+    return os << "]}";
+}
+
 } // request_route namespace
 } // ouinet namespace
