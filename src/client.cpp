@@ -642,7 +642,7 @@ void Client::State::serve_request( GenericConnection&& con
 
     const vector<Match> matches({
         // Handle requests to <http://localhost/> internally.
-        Match( reqexpr::from_regex(host_getter, "localhost")
+        Match( reqexpr::from_regex(host_getter, "localhost(:\\d+)?")
              , {false, queue<responder>({responder::_front_end})} ),
 
         Match( reqexpr::from_regex(x_oui_dest_getter, "OuiClient")
