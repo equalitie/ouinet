@@ -3,6 +3,9 @@ include_directories(
     "${Boost_INCLUDE_DIR}"
     "../src")
 
+add_executable(test-match-http-url "test_match_http_url.cpp")
+target_link_libraries(test-match-http-url ${Boost_LIBRARIES})
+
 add_executable(test-cache "test_cache_control.cpp" "../src/cache_control.cpp")
 target_link_libraries(test-cache ${Boost_LIBRARIES})
 

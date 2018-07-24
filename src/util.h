@@ -7,6 +7,7 @@
 #include <fstream>
 #include <string>
 
+#include <boost/asio/spawn.hpp>
 #include <boost/asio/io_service.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/lexical_cast.hpp>
@@ -32,22 +33,25 @@ struct url_match {
 // If successful, the `match` is updated.
 inline
 bool match_http_url(const std::string& url, url_match& match) {
-    static const boost::regex urlrx( "^(http|https)://"  // 1: scheme
+    static const boost::regex urlrx( "^((http|https)://"  // 1: scheme
                                      "([-\\.a-z0-9]+|\\[[:0-9a-fA-F]+\\])"  // 2: host
-                                     "(:[0-9]{1,5})?"  // 3: :port (or empty)
+                                     "(:[0-9]{1,5})?)?"  // 3: :port (or empty)
                                      "(/[^?#]*)"  // 4: /path
                                      "(\\?[^#]*)?"  // 5: ?query (or empty)
                                      "(#.*)?");  // 6: #fragment (or empty)
     boost::smatch m;
+
     if (!boost::regex_match(url, m, urlrx))
         return false;
-    match = { m[1]
-            , m[2]
-            , m[3].length() > 0 ? std::string(m[3], 1) : ""  // drop colon
-            , m[4]
-            , m[5].length() > 0 ? std::string(m[5], 1) : ""  // drop qmark
-            , m[6].length() > 0 ? std::string(m[6], 1) : ""  // drop hash
+
+    match = { m[2]
+            , m[3]
+            , m[4].length() > 0 ? std::string(m[4], 1) : ""  // drop colon
+            , m[5]
+            , m[6].length() > 0 ? std::string(m[6], 1) : ""  // drop qmark
+            , m[7].length() > 0 ? std::string(m[7], 1) : ""  // drop hash
     };
+
     return true;
 }
 
