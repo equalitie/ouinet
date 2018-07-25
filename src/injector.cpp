@@ -352,6 +352,7 @@ int main(int argc, const char* argv[])
     // this just helps put all info relevant to the user right in the repo root.
     auto ipns_id = cache_injector->id();
     cout << "IPNS DB: " << ipns_id << endl;
+    LOG_DEBUG("IPNS DB: " + ipns_id);
     util::create_state_file(config.repo_root()/"cache-ipns", ipns_id);
 
     OuiServiceServer proxy_server(ios);

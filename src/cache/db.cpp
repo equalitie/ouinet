@@ -9,6 +9,8 @@
 #include <algorithm>
 #include <fstream>
 
+#include "../logger.h"
+
 using namespace std;
 using namespace ouinet;
 
@@ -204,6 +206,7 @@ void ClientDb::continuously_download_db(asio::yield_context yield)
         if (*d) return;
 
         if (!ec) {
+          LOG_DEBUG("IPNS has been resolved successfully");
             _ipfs = ipfs_id;
 
             _db_map->load(ipfs_id, yield[ec]);

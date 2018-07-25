@@ -123,7 +123,7 @@ class OuinetProcessProtocol(protocol.ProcessProtocol):
         self.onExit.callback(self)
 
 class OuinetClient(OuinetProcess):
-    def __init__(self, , i2p_ready = None):
+    def __init__(self, client_name, i2p_ready = None):
         super(OuinetClient(client_name, "ouinet-client.conf", TestFixtures.FIRST_CLIENT_CONF_FILE_CONTENT, timeout)
 
         argv = [ouinet_env['OUINET_BUILD_DIR'] + "client", "--repo", self.config_folder]
@@ -140,12 +140,12 @@ class OuinetInjector(OuinetProcess):
     injector_name: the name of the injector which determines the config folder name
     timeout: how long before killing the injector process
     args: list containing command line arguments passed directly to the injector
-    i2p_ready: is a Deferred object whose callback is being called when i2p tunnel is ready
-
+    ready_deferred: is a Deferred object whose callback is being called when the 
+                    injector is ready to serve client
     
     """
-    def __init__(self, injector_name, timeout, args, i2p_ready = None):
-        self.setup_config(injector_name, timeout, "ouinet-injector.conf", TestFixtures.INJECTOR_CONF_FILE_CONTENT, i2p_ready)
+    def __init__(self, injector_name, timeout, args, ready_deferred = None):
+        self.setup_config(injector_name, timeout, "ouinet-injector.conf", TestFixtures.INJECTOR_CONF_FILE_CONTENT, ready_deferred)
 
         argv = [ouinet_env['OUINET_BUILD_DIR'] + "injector", "--repo", self.config_folder]
         argv.extend(args)
@@ -153,10 +153,9 @@ class OuinetInjector(OuinetProcess):
         self.start(argv)
 
 
-# As above, but for the 'injector' 
-class OuinetI2PInjector(OuinetI2PInjector):
+class OuinetI2PInjector(OuineInjector):
     """
-    It is a child of OuinetI24injector with i2p ouiservice 
+    It is a child of OuinetInjector with i2p ouiservice 
 
     Args
     injector_name: the name of the injector which determines the config folder name
@@ -168,6 +167,31 @@ class OuinetI2PInjector(OuinetI2PInjector):
     """
     def __init__(self, injector_name, timeout, args, i2p_ready):
         self.setup_i2p_private_key()
+        super(OuinetInjector, self).__init__(injector_name, timeout, args)
+
+    def _setup_ip2_private_key(self):
+        if not os.path.exists(self.config_folder+"/i2p"):
+            os.makedirs(self.config_folder)
+
+        with open(self.config_folder+"/i2p/i2p-private-key", "w") as private_key_file:
+            private_key_file.write(TestFixtures.INJECTOR_I2P_PRIVATE_KEY)
+
+class OuinetI2PInjector(OuinetI2PInjector):
+    """
+    It is a child of OuinetInjector which check for the request to be cached 
+    and trigger a deferred object
+
+    Args
+    injector_name: the name of the injector which determines the config folder name
+    timeout: how long before killing the injector process
+    args: list containing command line arguments passed directly to the injector
+    benchmark_regexes: is an arry of two Deferred object the first's callback is being 
+    called when the the tcp port of the injector is ready. The second will be called
+    when firs request gets cached
+
+    
+    """
+    def __init__(self, injector_name, timeout, args, i2p_ready):
         super(OuinetInjector, self).__init__(injector_name, timeout, args)
 
     def _setup_ip2_private_key(self):

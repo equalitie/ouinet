@@ -7,6 +7,8 @@
 #include "util.h"
 #include "http_util.h"
 
+#include "logger.h"
+
 using namespace std;
 using namespace ouinet;
 
@@ -322,6 +324,7 @@ CacheControl::do_fetch(const Request& request, asio::yield_context yield)
     }
 
     if (!is_expired(cache_entry)) {
+        LOG_DEBUG("Response was served from cache");
         return cache_entry.response;
     }
 

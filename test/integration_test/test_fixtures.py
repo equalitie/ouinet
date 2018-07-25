@@ -11,18 +11,24 @@ class TestFixtures:
     DEFAULT_PROCESS_TIMEOUT = 15 # seconds
     TCP_TRANSPORT_TIMEOUT = 15 
     I2P_TRANSPORT_TIMEOUT = 300
+    IPFS_CACHE_TIMEOUT = 600
+    
     PROCESS_DYING_SLACK = 30
 
-    TEST_TIMEOUT = {"test_i2p_transport":300,
-                    "test_tcp_transport":15}
+    TEST_TIMEOUT = {
+        "test_i2p_transport":300,
+        "test_tcp_transport":15,
+        "test_ipfs_cache":1200}
+
+    #BENCHMARK REGEX INDICES
+    READY_REGEX_INDEX = 0
+    REQUEST_CACHED_REGEX_INDEX = 1
+    
     
     REPO_FOLDER_NAME = "repos"
 
     INJECTOR_CONF_FILE_NAME = "ouinet-injector.conf"
     INJECTOR_CONF_FILE_CONTENT = "open-file-limit = 32768\n"
-
-    INJECTOR_IPNS_PERSISTANT_IDENTITY = { "Identity": {"PeerID": "QmQdMc9wqxhmcwr5iYn4t48EDVUCD96FjyVn7ZdgowkxL2",
-                                            "PrivKey": "CAASpwkwggSjAgEAAoIBAQDCW6vOI/6msrbswRy/wKFp/4gbhkYQ9RYFb4Ty4kKVFagK8irkyqINDr8lqBRwqUM52h0zqa0e6Yj3cJ5QEpdmanrVOZ1mVnc3gFibcQc1vIMnJz/mI14CH17NOFaxLRONGAV/98u2JsnGIHsJ+JGzpxGSyHDv5k2geaRNOYa4NUn/ry3x6gZL2G6XBMWHzgUeMvmNyZ7BKKWaVONn+QbAdJgrI32rD5q9cKptbLBiLj70a0Jxgt6zNCfnhLvRKhSW2P9bmqqTPnxYBjTsfpqV8D646n2r5P7mvD8KT5D75aiqP4EkjwyMzI3OppsxDt3EArlcWKN85k6yEFOuM75NAgMBAAECggEABXNouBlOVQKCGtW3prESVdSyzoLPiD43ZeOgyOcLkv7OfbAY/92m+dLGDZpPKHG2zvKNCxvhHRLToozoA7rhwB+QXlaFUY9vPIE++u0KlLk6vGhfZGbthgW3NO41kDaBa92WmeYrMmqYEhRrHvZ3r6Ap4AH7GN9OogeHUhsg6h2X7e+FyWLCd3x9UIhGeY0D4jLrapj7x6CTx9Yw1/KdjEcCWy5zGSr7W+qVi3DsVv0H6bnIEVcfbve8V0C8sA6Lb4JQxr38hzb8EDfsMMTGzGHhDi0He6ftR56p/XBu2wZN/+yr3rAfvHKYuNXEBx80Lv4TAoxrGfqQt/L4RIRZSQKBgQDNgqQnThCUMHAwE+kC22fhiuvl3Nmyx8QPxbTBJu1gGergKCu0m9uNX5hQdN+9/ieCzTakth0oETx3Vz+DzI0FjVC9yr30kiNeaFMToBCEenYcGGCC3U2Vz6ppquiZAvVm025MvLHiAH3n/PS3yXEzoYSHUDNhi/+ddNoP4I+ElwKBgQDyG59Crup1amLXBc/Z0YTcGApnU9dbCTinmdpCRQVQczRj29tVOu05QSk1wQ0d2+V12Ydg2VD97rAx9T0mFFHq0QS7/I9fNCajerR3R0f7wsyrHZovFN8mTEh8fxl8pO3i0ScH7L1Z0wQbuxAzgehqmEoaj7ULkNfU0tgUhNm8uwKBgQCOhyhpyg5deCqWbXiQ7rHhDoQEa2LgRwOHHMr7mo/Osqrew31sSRu/tKjiQ+xYzEeCw+g927/k5e9VpUD7m4XCb/urZUzQrfmxpBDZ740FFBmN6qokmG8Sk2/Q0SN320FvCvvYZJXJ9CVeG2VtgVvtPvu3DLxVzs582WnS0R84CQKBgAnllSoNqmnoUmgFxcxaozq4BNzacYg4JUe8o05oMeJrAy4904Z1ZTMc9clLvfSFg6jAnqcX2xa2Rh+Urc47sGmP58ijd1zl7dpq7qudj1S8Ts+D40SfbsvK/H+SVoFg4JSQBi9tvwPH+3gCupPQcKbC2OyjCTySzC/X+ptEHv53AoGAJy5KhFBEQNTD3M942QJfTVdZL6i5c54hsaszblhcA+4yG2l3QEwad9HjofzfILhCsh8ZZg2o7yODBkgIwGYROX/GxbAhvAsRrHgCEUshV5hM6Ei3dFRyZt+d7AYqjWDs1d38XX0pFbMrSI0P/LlMpiVz64aIiDg6QsnIQL6FTVs="}}
 
     INJECTOR_I2P_PUBLIC_ID = "tR0ADsik-0Gn4F-t6WICzUT59H9NlUnejCknd4E4XZNha8B0zR8zFW6va~MpCzMdlE7FxChpHM9MjMnuR1PcakaKU9i5E0wJ~cP2oQd1GTCtMARmpsILysN4brfEvU2TAn1n7JZnHpMHSRPaPTqk7g-ReLR8jN5yQBOedxmmKIJspcOhTjRprqceKjoPpmHzqPgVtrspgQAOIUCcRQ3S44DGUfN603Woqlci6XDmMZW4gktHEygCoIbaXMbvt7gCY6S5PI5ENu-3xsKKZG5B7RUzDQGX5iQHfRLe9utGMRQf63RneFuXZ6hfMSSv7TXm7emUpw5gDXFoLK9GT3NDPPmjX3kU-SlNxF2BfI38YU8fuqguZEjQO0w89O8DbyKvqxBTS5scxucIw5Gu3qZX98If20QzVqk2ZaEeA8LTCIWsM4mi9Mmw~fD7fyX9fnmGNFHrDkXbNtZU-8K9TzB4Ka4KHJRBQIlNDKCT3LMKs5PJuW4TYtNb2M8UV2UsIFouBQAEAAEAAA=="
 
@@ -39,6 +45,8 @@ class TestFixtures:
     TCP_INJECTOR_NAME = "tcp_injector"
     TCP_PORT_READY_REGEX = r'[\s\S]*Successfully listening on TCP Port[\s\S]*'
     TCP_INJECTOR_PORT = 7070
+
+    CACHE_INJECTOR_NAME = "cache_injector"
     
     TEST_PAGE_BODY="<html><body>TESTPAGE</body></html>\n"
     TEST_HTTP_SERVER_PORT = 7080
@@ -48,5 +56,17 @@ class TestFixtures:
 
     TCP_CLIENT = { "name": "tcp_client",
                          "port": 8081}
-    
+
+    CACHE_CLIENT = [{ "name": "cache_client_1",
+                         "port": 8084},
+                      { "name": "cache_client_2",
+                         "port": 8085}]
+
     FIRST_CLIENT_CONF_FILE_CONTENT = "open-file-limit = 4096\n"
+
+    IPNS_ID_ANNOUNCE_REGEX = "[\s\S]*IPNS DB: ([A-Za-z0-9]+)\n[\s\S]*"
+    IPFS_CACHE_READY_REGEX = r'[\s\S]*IPNS has been resolved successfully[\s\S]*'
+    REQUEST_CACHED_REGEX = r'[\s\S]*Request was successfully published to cache[\s\S]*'
+    NO_OF_CACHED_MESSAGES_REQUIRED = 2 
+    SERVED_FROM_CACHE_REGEX = r'[\s\S]*Response was served from cache[\s\S]*'
+

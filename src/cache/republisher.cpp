@@ -2,6 +2,8 @@
 #include <asio_ipfs.h>
 #include <iostream>
 
+#include "../logger.h"
+
 using namespace std;
 using namespace ouinet;
 
@@ -65,6 +67,8 @@ void Republisher::start_publishing()
             if (*d) return;
 
             cout << "Published DB: " << id << endl;
+            LOG_DEBUG("Request was successfully published to cache");
+
             while (true) {
                 bool is_last = last_i == _callbacks.begin();
                 auto cb = move(_callbacks.front());
