@@ -25,15 +25,17 @@ Client::~Client()
 
 void Client::start(asio::yield_context yield)
 {
-  std::unique_ptr<i2p::client::I2PClientTunnel> i2p_client_tunnel = std::make_unique<i2p::client::I2PClientTunnel>("i2p_oui_client", _target_id, "127.0.0.1", 0, nullptr);
-  _client_tunnel = std::make_unique<Tunnel>(_ios, std::move(i2p_client_tunnel), _timeout);
-
   sys::error_code ec;
 
-  _client_tunnel->wait_to_get_ready(yield[ec]);
+  do {
+    std::unique_ptr<i2p::client::I2PClientTunnel> i2p_client_tunnel = std::make_unique<i2p::client::I2PClientTunnel>("i2p_oui_client", _target_id, "127.0.0.1", 0, nullptr);
+    _client_tunnel = std::make_unique<Tunnel>(_ios, std::move(i2p_client_tunnel), _timeout);
 
-  if (!ec && !_client_tunnel) ec = asio::error::operation_aborted;
-  if (ec) return or_throw(yield, ec);
+    _client_tunnel->wait_to_get_ready(yield[ec]);
+  } while(_client_tunnel->has_timed_out());
+
+    if (!ec && !_client_tunnel) ec = asio::error::operation_aborted;
+    if (ec) return or_throw(yield, ec);
 
   //The client_tunnel can't return its port becaues it doesn't know
   //that it is a client i2p tunnel, all it knows is that it is an

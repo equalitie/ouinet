@@ -31,6 +31,8 @@ public:
 
   */
   void wait_to_get_ready(boost::asio::yield_context yield);
+
+  bool has_timed_out() {return _has_timed_out;}
   
   Tunnel(boost::asio::io_service& ios, std::shared_ptr<i2p::client::I2PService> _i2p_tunnel, uint32_t timeout);
   
@@ -52,6 +54,8 @@ public:
   ConnectionList _connections;
   std::unique_ptr<ConditionVariable> _ready_condition;
   std::shared_ptr<bool> _was_destroyed;
+
+  bool _has_timed_out = false;
 
 };
 

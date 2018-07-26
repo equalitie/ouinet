@@ -7,6 +7,7 @@
 #include <fstream>
 #include <string>
 
+#include <boost/asio/spawn.hpp>
 #include <boost/asio/io_service.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/lexical_cast.hpp>

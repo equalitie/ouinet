@@ -28,7 +28,7 @@ public:
 
     ~ConditionVariable();
 
-1    boost::asio::io_service& get_io_service() { return _ios; }
+    asio::io_service& get_io_service() { return _ios; }
 
     void notify(const boost::system::error_code& ec
                     = boost::system::error_code());

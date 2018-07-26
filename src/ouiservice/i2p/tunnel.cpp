@@ -1,13 +1,12 @@
-#include "tunnel.h"
-
 #include <I2PService.h>
 
 #include "../../blocker.h"
 
-
 #include "../../logger.h"
 #include "../../defer.h"
 #include "../../or_throw.h"
+
+#include "tunnel.h"
 
 using namespace std;
 using namespace ouinet::ouiservice;
@@ -49,8 +48,8 @@ void Tunnel::wait_to_get_ready(boost::asio::yield_context yield) {
   _ready_condition = make_unique<ConditionVariable>(_ios);
   auto on_exit = defer([this, wd] { if (!*wd) _ready_condition = nullptr; });
 
-    // Wait till we find a route to the service and tunnel is ready then try to
-    // acutally connect and then unblock
+  // Wait till we find a route to the service and tunnel is ready then try to
+  // acutally connect and then unblock
   LOG_DEBUG("Waiting for I2P tunnel to get established");
   
   _i2p_tunnel->AddReadyCallback([wd, &ec, this](const sys::error_code& error) mutable {
@@ -63,6 +62,11 @@ void Tunnel::wait_to_get_ready(boost::asio::yield_context yield) {
   // i.e. when the handler finishes.
   _ready_condition->wait(yield);
 
+  if (ec == boost::asio::error::timed_out) {
+    LOG_ERROR("I2P Tunnel failed to be established in timely manner, trying again");
+    _has_timed_out = true;
+  }
+  
   if (!*wd) {
       LOG_DEBUG("I2P Tunnel has been established");
   }
