@@ -1,4 +1,5 @@
 #include "dht.h"
+#include "udp_multiplexer.h"
 
 #include "../or_throw.h"
 #include "../util/condition_variable.h"
@@ -29,29 +30,29 @@ std::string dht::NodeContact::to_string() const
 dht::DhtNode::DhtNode(asio::io_service& ios, ip::address interface_address):
     _ios(ios),
     _interface_address(interface_address),
-    _socket(ios),
-    _initialized(false),
-    _rx_buffer(65536, '\0')
+    _initialized(false)
 {
+    std::cerr << "DhtNode()" << std::endl;
 }
 
 void dht::DhtNode::start(sys::error_code& ec)
 {
+    udp::socket socket(_ios);
+
     if (_interface_address.is_v4()) {
-        _socket.open(udp::v4(), ec);
+        socket.open(udp::v4(), ec);
     } else {
-        _socket.open(udp::v6(), ec);
+        socket.open(udp::v6(), ec);
     }
     if (ec) {
         return;
     }
 
     udp::endpoint endpoint(_interface_address, 0);
-    _socket.bind(endpoint, ec);
-    if (ec) {
-        return;
-    }
-    _port = _socket.local_endpoint().port();
+    socket.bind(endpoint, ec);
+    if (ec) return;
+
+    _multiplexer = std::make_unique<UdpMultiplexer>(std::move(socket));
 
     _node_id = NodeID::zero();
     _next_transaction_id = 1;
@@ -76,13 +77,15 @@ void dht::DhtNode::receive_loop(asio::yield_context yield)
          * the datagram. Unfortunately, boost::asio 1.62 does not support that.
          */
         udp::endpoint sender;
-        std::size_t size = _socket.async_receive_from(buffer(_rx_buffer), sender, yield[ec]);
-        if (ec) {
-            break;
-        }
 
+        const boost::string_view packet
+            = _multiplexer->receive(sender, yield[ec]);
+
+        if (ec) break;
+
+        // TODO: The bencode parser should only need a string_view.
         boost::optional<BencodedValue> decoded_message
-            = bencoding_decode(_rx_buffer.substr(0, size));
+            = bencoding_decode(packet.to_string());
 
         if (!decoded_message) {
             continue;
@@ -104,7 +107,7 @@ void dht::DhtNode::receive_loop(asio::yield_context yield)
         }
 
         if (*message_type == "q") {
-            handle_query(sender, *message_map);
+            handle_query(sender, *message_map, yield);
         } else if (*message_type == "r" || *message_type == "e") {
             auto it = _active_requests.find(*transaction_id);
             if (it != _active_requests.end() && it->second.destination == sender) {
@@ -172,7 +175,8 @@ void dht::DhtNode::send_query_await_reply(
     });
 
     sys::error_code ec;
-    _socket.async_send_to(asio::buffer(message_string.data(), message_string.size()), destination, yield[ec]);
+    _multiplexer->send(buffer(message_string), destination, yield[ec]);
+
     /*
      * Ignore errors. If the message isn't sent properly, so be it.
      */
@@ -205,50 +209,40 @@ void dht::DhtNode::send_query_await_reply(
     }
 }
 
-void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
+void dht::DhtNode::handle_query( udp::endpoint sender
+                               , BencodedMap query
+                               , asio::yield_context yield)
 {
     assert(query["y"].as_string() && *query["y"].as_string() == "q");
 
     boost::optional<std::string> transaction_ = query["t"].as_string();
-    if (!transaction_) {
-        return;
-    }
+
+    if (!transaction_) { return; }
+
     std::string transaction = *transaction_;
-    auto send_error = [this, sender, transaction] (int code, std::string description) {
-        asio::spawn(_ios, [this, sender, transaction, code, description] (asio::yield_context yield) {
-            BencodedList arguments;
-            arguments.push_back(code);
-            arguments.push_back(description);
 
-            BencodedMap message;
-            message["y"] = "e";
-            message["t"] = transaction;
-            message["e"] = arguments;
-            std::string message_string = bencoding_encode(message);
+    auto send_error = [&] (int code, std::string description) {
+        BencodedMap message;
+        message["y"] = "e";
+        message["t"] = transaction;
+        message["e"] = BencodedList{code, description};
+        std::string message_string = bencoding_encode(message);
 
-            /*
-             * Ignore errors.
-             */
-            sys::error_code ec;
-            _socket.async_send_to(asio::buffer(message_string.data(), message_string.size()), sender, yield[ec]);
-        });
+        sys::error_code ec; // Ignored
+        _multiplexer->send(buffer(message_string), sender, yield[ec]);
     };
-    auto send_reply = [this, sender, transaction, node_id = _node_id] (BencodedMap reply) {
-        asio::spawn(_ios, [this, sender, transaction, &reply, node_id] (asio::yield_context yield) {
-            reply["id"] = node_id.to_bytestring();
 
-            BencodedMap message;
-            message["y"] = "r";
-            message["t"] = transaction;
-            message["r"] = reply;
-            std::string message_string = bencoding_encode(message);
+    auto send_reply = [&] (BencodedMap reply) {
+        reply["id"] = _node_id.to_bytestring();
 
-            /*
-             * Ignore errors.
-             */
-            sys::error_code ec;
-            _socket.async_send_to(asio::buffer(message_string.data(), message_string.size()), sender, yield[ec]);
-        });
+        BencodedMap message;
+        message["y"] = "r";
+        message["t"] = transaction;
+        message["r"] = reply;
+        std::string message_string = bencoding_encode(message);
+
+        sys::error_code ec; // Ignored
+        _multiplexer->send(buffer(message_string), sender, yield[ec]);
     };
 
     if (!query["q"].is_string()) {
@@ -424,34 +418,25 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
      * For each bucket in the routing table, lookup a random ID in that range.
      * This ensures that every node that should route to us, knows about us.
      */
-    WaitCondition refresh_done(_ios);
-    refresh_tree_node(_routing_table->root(), NodeID::zero(), 0, refresh_done);
-    refresh_done.wait(yield);
+    refresh_routing_table(yield);
 
     _initialized = true;
 }
 
 
-void dht::DhtNode::refresh_tree_node(dht::RoutingTreeNode* node, const NodeID stencil, int depth, WaitCondition& refresh_done)
+void dht::DhtNode::refresh_routing_table(asio::yield_context yield)
 {
-    if (node->bucket) {
-        NodeID target_id = NodeID::random(stencil, depth);
+    WaitCondition wc(_ios);
 
-        asio::spawn(_ios, [ this
-                          , target_id
-                          , stencil
-                          , depth
-                          , lock = refresh_done.lock()
-                          ] (asio::yield_context yield) {
-            find_closest_nodes(target_id, std::vector<udp::endpoint>(), yield);
+    _routing_table->for_each_bucket(
+        [&] (const NodeID::Range& range, RoutingBucket& bucket) {
+            spawn(_ios, [this, range, lock = wc.lock()]
+                        (asio::yield_context yield) {
+                            find_closest_nodes(range.random_id(), {}, yield);
+                        });
         });
-    } else {
-        refresh_tree_node(node->left_child.get(), stencil, depth + 1, refresh_done);
 
-        NodeID right_stencil = stencil;
-        right_stencil.set_bit(depth, true);
-        refresh_tree_node(node->right_child.get(), right_stencil, depth + 1, refresh_done);
-    }
+    wc.wait(yield);
 }
 
 std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
@@ -712,10 +697,10 @@ void dht::DhtNode::send_ping(NodeContact contact)
 
 /*
  * Record a node in the routing table, space permitting. If there is no space,
- * check for node replacement opportunities. If verify_contact is not set, ping
+ * check for node replacement opportunities. If is_verified is not set, ping
  * the target contact before adding it.
  */
-void dht::DhtNode::routing_bucket_try_add_node(RoutingBucket* bucket, NodeContact contact, bool verify_contact)
+void dht::DhtNode::routing_bucket_try_add_node(RoutingBucket* bucket, NodeContact contact, bool is_verified)
 {
     /*
      * Check whether the contact is already in the routing table. If so, bump it.
@@ -724,7 +709,7 @@ void dht::DhtNode::routing_bucket_try_add_node(RoutingBucket* bucket, NodeContac
         if (bucket->nodes[i].contact == contact) {
             RoutingNode node = bucket->nodes[i];
             node.last_activity = std::chrono::steady_clock::now();
-            if (verify_contact) {
+            if (is_verified) {
                 node.queries_failed = 0;
                 node.questionable_ping_ongoing = false;
             }
@@ -759,7 +744,7 @@ void dht::DhtNode::routing_bucket_try_add_node(RoutingBucket* bucket, NodeContac
      * ping it instead; on success, the node will be added.
      */
     if (bucket->nodes.size() < RoutingBucket::BUCKET_SIZE) {
-        if (verify_contact) {
+        if (is_verified) {
             RoutingNode node;
             node.contact = contact;
             node.last_activity = std::chrono::steady_clock::now();
@@ -778,7 +763,7 @@ void dht::DhtNode::routing_bucket_try_add_node(RoutingBucket* bucket, NodeContac
      */
     for (size_t i = 0; i < bucket->nodes.size(); i++) {
         if (bucket->nodes[i].is_bad()) {
-            if (verify_contact) {
+            if (is_verified) {
                 bucket->nodes.erase(bucket->nodes.begin() + i);
 
                 RoutingNode node;
@@ -819,7 +804,7 @@ void dht::DhtNode::routing_bucket_try_add_node(RoutingBucket* bucket, NodeContac
      * Other fields are meaningless for candidates.
      */
 
-    if (verify_contact) {
+    if (is_verified) {
         if (questionable_nodes > 0) {
             bucket->verified_candidates.push_back(candidate);
         }

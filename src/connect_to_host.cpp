@@ -22,13 +22,9 @@ ouinet::connect_to_host( asio::io_service& ios
 
     sys::error_code ec;
 
-    tcp::resolver resolver{ios};
-    auto cancel_lookup_slot = cancel_signal.connect([&resolver] {
-        resolver.cancel();
-    });
-
-    // Look up the domain name
-    auto const lookup = resolver.async_resolve({host, port}, yield[ec]);
+    auto const lookup = util::tcp_async_resolve( host, port
+                                               , ios, cancel_signal
+                                               , yield[ec]);
     if (ec) return or_throw(yield, ec, GenericConnection());
 
     tcp::socket socket(ios);

@@ -18,6 +18,7 @@
 #include <iostream>
 #include <fstream>
 
+#include "namespaces.h"
 #include "util.h"
 
 //Logger micros which should be used for efficiency

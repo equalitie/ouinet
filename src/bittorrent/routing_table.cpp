@@ -7,8 +7,50 @@ using namespace ouinet::bittorrent::dht;
 RoutingTable::RoutingTable(NodeID node_id) :
     _node_id(node_id)
 {
-    _root_node = std::make_unique<RoutingTreeNode>();
+    _root_node = std::make_unique<TreeNode>(NodeID::Range::max());
     _root_node->bucket = std::make_unique<RoutingBucket>();
+}
+
+void RoutingTable::TreeNode::split() {
+    assert(bucket);
+    assert(!left_child);
+    assert(!right_child);
+
+    /*
+     * Buckets that may be split are never supposed to have candidates
+     * in them.
+     */
+    assert(bucket->verified_candidates.empty());
+    assert(bucket->unverified_candidates.empty());
+
+    /*
+     * Split the bucket.
+     */
+    left_child = std::make_unique<TreeNode>(range.reduce(0));
+    left_child->bucket = std::make_unique<RoutingBucket>();
+
+    right_child = std::make_unique<TreeNode>(range.reduce(1));
+    right_child->bucket = std::make_unique<RoutingBucket>();
+
+    for (const auto& node : bucket->nodes) {
+        if (node.contact.id.bit(depth())) {
+            right_child->bucket->nodes.push_back(node);
+        } else {
+            left_child->bucket->nodes.push_back(node);
+        }
+    }
+
+    bucket = nullptr;
+}
+
+size_t RoutingTable::TreeNode::count_routing_nodes() const
+{
+    if (bucket) {
+        return bucket->nodes.size();
+    } else {
+        return left_child ->count_routing_nodes()
+             + right_child->count_routing_nodes();
+    }
 }
 
 /*
@@ -24,21 +66,19 @@ RoutingTable::RoutingTable(NodeID node_id) :
  */
 RoutingBucket* RoutingTable::find_bucket(NodeID id, bool split_buckets)
 {
-    RoutingTreeNode* tree_node = _root_node.get();
-    std::set<RoutingTreeNode*> ancestors;
+    TreeNode* tree_node = _root_node.get();
+    std::set<TreeNode*> ancestors;
     ancestors.insert(tree_node);
     bool node_contains_self = true;
-    int depth = 0;
     while (!tree_node->bucket) {
-        if (id.bit(depth)) {
+        if (id.bit(tree_node->depth())) {
             tree_node = tree_node->right_child.get();
         } else {
             tree_node = tree_node->left_child.get();
         }
-        if (id.bit(depth) != _node_id.bit(depth)) {
+        if (id.bit(tree_node->depth()) != _node_id.bit(tree_node->depth())) {
             node_contains_self = false;
         }
-        depth++;
         ancestors.insert(tree_node);
     }
 
@@ -64,54 +104,30 @@ RoutingBucket* RoutingTable::find_bucket(NodeID id, bool split_buckets)
          *   that contains at least BUCKET_SIZE nodes.
          */
         const int TREE_BASE = 5;
-        RoutingTreeNode* exhaustive_root = exhaustive_routing_subtable_fragment_root();
+        TreeNode* exhaustive_root = exhaustive_routing_subtable_fragment_root();
 
-        while (tree_node->bucket->nodes.size() == RoutingBucket::BUCKET_SIZE && depth < 160) {
+        while (tree_node->bucket->nodes.size() == RoutingBucket::BUCKET_SIZE
+                && tree_node->depth() < NodeID::bit_size) {
             if (
                 !node_contains_self
-                && (depth % TREE_BASE) == 0
+                && (tree_node->depth() % TREE_BASE) == 0
                 && !ancestors.count(exhaustive_root)
             ) {
                 break;
             }
 
-            assert(tree_node->bucket);
-            assert(!tree_node->left_child);
-            assert(!tree_node->right_child);
+            tree_node->split();
 
-            /*
-             * Buckets that may be split are never supposed to have candidates
-             * in them.
-             */
-            assert(tree_node->bucket->verified_candidates.empty());
-            assert(tree_node->bucket->unverified_candidates.empty());
-
-            /*
-             * Split the bucket.
-             */
-            tree_node->left_child = std::make_unique<RoutingTreeNode>();
-            tree_node->left_child->bucket = std::make_unique<RoutingBucket>();
-            tree_node->right_child = std::make_unique<RoutingTreeNode>();
-            tree_node->right_child->bucket = std::make_unique<RoutingBucket>();
-
-            for (const auto& node : tree_node->bucket->nodes) {
-                if (node.contact.id.bit(depth)) {
-                    tree_node->right_child->bucket->nodes.push_back(node);
-                } else {
-                    tree_node->left_child->bucket->nodes.push_back(node);
-                }
-            }
-            tree_node->bucket = nullptr;
-
-            if (id.bit(depth)) {
+            if (id.bit(tree_node->depth())) {
                 tree_node = tree_node->right_child.get();
             } else {
                 tree_node = tree_node->left_child.get();
             }
-            if (_node_id.bit(depth) != id.bit(depth)) {
+
+            if (_node_id.bit(tree_node->depth()) != id.bit(tree_node->depth())) {
                 node_contains_self = false;
             }
-            depth++;
+
             ancestors.insert(tree_node);
 
             // TODO: each bucket needs a refresh background coroutine.
@@ -121,26 +137,16 @@ RoutingBucket* RoutingTable::find_bucket(NodeID id, bool split_buckets)
     return tree_node->bucket.get();
 }
 
-static int count_nodes_in_subtree(RoutingTreeNode* tree_node)
-{
-    if (tree_node->bucket) {
-        return tree_node->bucket->nodes.size();
-    } else {
-        return count_nodes_in_subtree(tree_node->left_child.get())
-             + count_nodes_in_subtree(tree_node->right_child.get());
-    }
-}
-
 /*
  * The routing table contains every known good node in the smallest subtree
  * that contains _node_id and has at least BUCKET_SIZE contacts in it.
  * This function computes the root of that subtree. Routing tree nodes
  * below this node may always be split when full.
  */
-RoutingTreeNode* RoutingTable::exhaustive_routing_subtable_fragment_root() const
+RoutingTable::TreeNode* RoutingTable::exhaustive_routing_subtable_fragment_root() const
 {
-    std::vector<RoutingTreeNode*> path;
-    RoutingTreeNode* tree_node = _root_node.get();
+    std::vector<TreeNode*> path;
+    TreeNode* tree_node = _root_node.get();
 
     while (!tree_node->bucket) {
         path.push_back(tree_node);
@@ -151,36 +157,33 @@ RoutingTreeNode* RoutingTable::exhaustive_routing_subtable_fragment_root() const
         }
     }
 
-    int size = tree_node->bucket->nodes.size();
+    size_t size = tree_node->bucket->nodes.size();
 
     while (size < RoutingBucket::BUCKET_SIZE && !path.empty()) {
         tree_node = path.back();
         path.pop_back();
         if (_node_id.bit(path.size())) {
-            size += count_nodes_in_subtree(tree_node->left_child.get());
+            size += tree_node->left_child->count_routing_nodes();
         } else {
-            size += count_nodes_in_subtree(tree_node->right_child.get());
+            size += tree_node->right_child->count_routing_nodes();
         }
     }
 
     return tree_node;
 }
 
-static void list_closest_routing_nodes_subtree(
-    RoutingTreeNode* tree_node,
-    int depth,
-    ouinet::bittorrent::NodeID target,
-    std::vector<NodeContact>& output,
-    size_t max_output
-) {
+void RoutingTable::TreeNode::closest_routing_nodes( NodeID target
+                                                  , size_t max_output
+                                                  , std::vector<NodeContact>& output)
+{
     if (output.size() >= max_output) {
         return;
     }
-    if (tree_node->bucket) {
+    if (bucket) {
         /*
          * Nodes are listed oldest first, so iterate in reverse order
          */
-        for (auto it = tree_node->bucket->nodes.rbegin(); it != tree_node->bucket->nodes.rend(); ++it) {
+        for (auto it = bucket->nodes.rbegin(); it != bucket->nodes.rend(); ++it) {
             if (!it->is_bad()) {
                 output.push_back(it->contact);
                 if (output.size() >= max_output) {
@@ -189,12 +192,12 @@ static void list_closest_routing_nodes_subtree(
             }
         }
     } else {
-        if (target.bit(depth)) {
-            list_closest_routing_nodes_subtree(tree_node->right_child.get(), depth + 1, target, output, max_output);
-            list_closest_routing_nodes_subtree(tree_node->left_child.get(),  depth + 1, target, output, max_output);
+        if (target.bit(depth())) {
+            right_child->closest_routing_nodes(target, max_output, output);
+            left_child ->closest_routing_nodes(target, max_output, output);
         } else {
-            list_closest_routing_nodes_subtree(tree_node->left_child.get(),  depth + 1, target, output, max_output);
-            list_closest_routing_nodes_subtree(tree_node->right_child.get(), depth + 1, target, output, max_output);
+            left_child ->closest_routing_nodes(target, max_output, output);
+            right_child->closest_routing_nodes(target, max_output, output);
         }
     }
 }
@@ -204,30 +207,29 @@ static void list_closest_routing_nodes_subtree(
  * closest to $target.
  */
 std::vector<NodeContact>
-RoutingTable::find_closest_routing_nodes(NodeID target, unsigned int count)
+RoutingTable::find_closest_routing_nodes(NodeID target, size_t count)
 {
-    RoutingTreeNode* tree_node = _root_node.get();
-    std::vector<RoutingTreeNode*> ancestors;
+    TreeNode* tree_node = _root_node.get();
+    std::vector<TreeNode*> ancestors;
     ancestors.push_back(tree_node);
-    int depth = 0;
 
     while (!tree_node->bucket) {
-        if (target.bit(depth)) {
+        if (target.bit(tree_node->depth())) {
             tree_node = tree_node->right_child.get();
-        } else {
+        }
+        else {
             tree_node = tree_node->left_child.get();
         }
-        depth++;
+
         ancestors.push_back(tree_node);
     }
 
     std::vector<NodeContact> output;
+
     for (auto it = ancestors.rbegin(); it != ancestors.rend(); ++it) {
-        list_closest_routing_nodes_subtree(*it, depth, target, output, count);
-        depth--;
-        if (output.size() >= count) {
-            break;
-        }
+        (*it)->closest_routing_nodes(target, count, output);
+        if (output.size() >= count) break;
     }
+
     return output;
 }

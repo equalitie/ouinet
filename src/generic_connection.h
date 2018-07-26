@@ -41,19 +41,12 @@ namespace generic_connection_detail {
     };
 } // namespace
 
+
 class GenericConnection {
 public:
     using executor_type = asio::io_context::executor_type;
 
 private:
-    template<class Token, class Ret>
-    using Handler = typename asio::handler_type< Token
-                                               , void(sys::error_code, Ret)
-                                               >::type;
-
-    template<class Token, class Ret>
-    using Result = typename asio::async_result<Handler<Token, Ret>>;
-
     using OnRead  = std::function<void(sys::error_code, size_t)>;
     using OnWrite = std::function<void(sys::error_code, size_t)>;
 
@@ -157,22 +150,21 @@ public:
 
     template< class MutableBufferSequence
             , class Token>
-    typename Result<Token, size_t>::type
-    async_read_some(const MutableBufferSequence& bs, Token&& token)
+    auto async_read_some(const MutableBufferSequence& bs, Token&& token)
     {
         using namespace std;
 
         namespace asio   = boost::asio;
         namespace system = boost::system;
 
-        using Sig     = void(system::error_code, size_t);
-        using Result  = asio::async_result<Token, Sig>;
-        using Handler = typename Result::completion_handler_type;
+        using Sig = void(system::error_code, size_t);
+
+        boost::asio::async_completion<Token, Sig> init(token);
+
+        using Handler = std::decay_t<decltype(init.completion_handler)>;
 
         // XXX: Handler is non-copyable, but can we do this without allocation?
-        auto handler = make_shared<Handler>(forward<decltype(token)>(token));
-
-        Result result(*handler);
+        auto handler = make_shared<Handler>(std::move(init.completion_handler));
 
         _impl->read_buffers.resize(distance( asio::buffer_sequence_begin(bs)
                                            , asio::buffer_sequence_end(bs)));
@@ -186,27 +178,26 @@ public:
                              (*h)(ec, size);
                          });
 
-        return result.get();
+        return init.result.get();
     }
 
     template< class ConstBufferSequence
             , class Token>
-    typename Result<Token, size_t>::type
-    async_write_some(const ConstBufferSequence& bs, Token&& token)
+    auto async_write_some(const ConstBufferSequence& bs, Token&& token)
     {
         using namespace std;
 
         namespace asio   = boost::asio;
         namespace system = boost::system;
 
-        using Sig     = void(system::error_code, size_t);
-        using Result  = asio::async_result<Token, Sig>;
-        using Handler = typename Result::completion_handler_type;
+        using Sig = void(system::error_code, size_t);
+
+        boost::asio::async_completion<Token, Sig> init(token);
+
+        using Handler = std::decay_t<decltype(init.completion_handler)>;
 
         // XXX: Handler is non-copyable, but can we do this without allocation?
-        auto handler = make_shared<Handler>(forward<decltype(token)>(token));
-
-        Result result(*handler);
+        auto handler = make_shared<Handler>(std::move(init.completion_handler));
 
         _impl->write_buffers.resize(distance( asio::buffer_sequence_begin(bs)
                                             , asio::buffer_sequence_end(bs)));
@@ -220,7 +211,7 @@ public:
                               (*h)(ec, size);
                           });
 
-        return result.get();
+        return init.result.get();
     }
 
 private:

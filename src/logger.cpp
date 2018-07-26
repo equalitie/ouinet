@@ -22,6 +22,7 @@
 #include <iostream>
 #include <fstream>
 
+#include "namespaces.h"
 #include "logger.h"
 
 Logger logger(DEBUG);

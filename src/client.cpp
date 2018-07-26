@@ -337,48 +337,108 @@ Response Client::State::fetch_fresh( const Request& request
 
                 return res;
             }
+            // Since the current implementation uses the injector as a proxy,
+            // both cases are quite similar, so we only handle HTTPS requests here.
             case responder::proxy: {
-                assert(0 && "TODO");
-                continue;
-            }
-            case responder::injector: {
-                if (!_front_end.is_injector_proxying_enabled()) {
+                if (!_front_end.is_proxy_access_enabled())
                     continue;
+
+                auto target = request.target();
+                if (target.starts_with("https://")) {
+                    // Parse the URL to tell HTTP/HTTPS, host, port.
+                    util::url_match url;
+                    if (!match_http_url(target.to_string(), url)) {
+                        last_error = asio::error::operation_not_supported;  // unsupported URL
+                        continue;
+                    }
+
+                    // Connect to the injector/proxy.
+                    sys::error_code ec;
+                    auto inj = _injector->connect(yield[ec], _shutdown_signal);
+                    if (ec) {
+                        last_error = ec;
+                        continue;
+                    }
+
+                    // Build the actual request to send to the proxy.
+                    Request connreq = { http::verb::connect
+                                      , url.host + ":" + (url.port.empty() ? "443" : url.port)
+                                      , 11 /* HTTP/1.1 */};
+                    // HTTP/1.1 requires a ``Host:`` header in all requests:
+                    // <https://tools.ietf.org/html/rfc7230#section-5.4>.
+                    connreq.set(http::field::host, connreq.target());
+                    if (auto credentials = _config.credentials_for(inj.remote_endpoint))
+                        connreq = authorize(connreq, *credentials);
+
+                    // Open a tunnel to the origin
+                    // (to later perform the SSL handshake and send the request).
+                    // Only get the head of the CONNECT response
+                    // (otherwise we would get stuck waiting to read
+                    // a body whose length we do not know
+                    // since the respone should have no content length).
+                    auto connres = fetch_http_head( _ios
+                                                  , inj.connection
+                                                  , connreq
+                                                  , _shutdown_signal
+                                                  , yield[ec]);
+                    if (connres.result() != http::status::ok) {
+                        // This error code is quite fake, so log the error too.
+                        last_error = asio::error::connection_refused;
+                        cerr << "Failed HTTP CONNECT to " << connreq.target() << ": "
+                             << connres.result_int() << " " << connres.reason() << endl;
+                        continue;
+                    }
+
+                    // Send the request to the origin.
+                    auto res = fetch_http_origin( _ios , inj.connection
+                                                , url, request
+                                                , _shutdown_signal
+                                                , yield[ec]);
+                    if (ec) {
+                        last_error = ec;
+                        continue;
+                    }
+
+                    return res;
                 }
+            }
+            // Fall through, the case below handles both injector and proxy with plain HTTP.
+            case responder::injector: {
+                if (r == responder::injector && !_front_end.is_injector_proxying_enabled())
+                    continue;
+
+                // Connect to the injector.
                 sys::error_code ec;
-
-                auto inj
-                    = _injector->connect(yield[ec], _shutdown_signal);
-
+                auto inj = _injector->connect(yield[ec], _shutdown_signal);
                 if (ec) {
                     last_error = ec;
                     continue;
                 }
 
-                auto credentials = _config.credentials_for(inj.remote_endpoint);
+                // Build the actual request to send to the injector.
+                Request injreq(request);
+                if (r == responder::injector)
+                    // Add first a Ouinet version header
+                    // to hint it to behave like an injector instead of a proxy.
+                    injreq.set(request_version_hdr, request_version_hdr_latest);
+                if (auto credentials = _config.credentials_for(inj.remote_endpoint))
+                    injreq = authorize(injreq, *credentials);
 
-                Response res;
-
-                // Forward the request to the injector
-                if (credentials) {
-                    res = fetch_http_page(_ios
-                                         , inj.connection
-                                         , authorize(request, *credentials)
-                                         , _shutdown_signal
-                                         , yield[ec]);
+                // Send the request to the injector/proxy.
+                auto res = fetch_http_page( _ios
+                                          , inj.connection
+                                          , injreq
+                                          , _shutdown_signal
+                                          , yield[ec]);
+                if (ec) {
+                    last_error = ec;
+                    continue;
                 }
-                else {
-                    res = fetch_http_page(_ios
-                                         , inj.connection
-                                         , request
-                                         , _shutdown_signal
-                                         , yield[ec]);
+
+                if (r == responder::injector) {
+                    sys::error_code ec_;  // seed the original request
+                    string ipfs = maybe_start_seeding(request, res, yield[ec_]);
                 }
-
-                if (ec) { last_error = ec; continue; }
-
-                sys::error_code ec_;
-                string ipfs = maybe_start_seeding(request, res, yield[ec_]);
 
                 return res;
             }
@@ -507,6 +567,9 @@ GenericConnection Client::State::ssl_mitm_handshake( GenericConnection&& con
     auto base_domain = base_domain_from_target(con_req.target());
 
     string crt_chain;
+    // TODO: ASan gets confused when an exception is thrown inside a coroutine,
+    // the alternative is to check ``_ssl_certificate_cache.exists(base_domain)``
+    // (i.e. an additional lookup) then take one branch or the other.
     try {
         crt_chain = _ssl_certificate_cache.get(base_domain);
     } catch(const std::range_error&) {
@@ -598,18 +661,22 @@ void Client::State::serve_request( GenericConnection&& con
         // NOTE: The cache need not be disabled as it should know not to
         // fetch requests in these cases.
         Match( !reqexpr::from_regex(method_getter, "(GET|HEAD|OPTIONS|TRACE)")
-             , {false, queue<responder>({responder::injector/*responder::origin, responder::proxy*/})} ),
+             , {false, queue<responder>({responder::origin, responder::proxy})} ),
         // Do not use cache for safe but uncacheable HTTP method requests.
         // NOTE: same as above.
         Match( reqexpr::from_regex(method_getter, "(OPTIONS|TRACE)")
-             , {false, queue<responder>({responder::injector/*responder::origin, responder::proxy*/})} ),
+             , {false, queue<responder>({responder::origin, responder::proxy})} ),
         // Do not use cache for validation HEADs.
         // Caching these is not yet supported.
         Match( reqexpr::from_regex(method_getter, "HEAD")
-             , {false, queue<responder>({responder::injector})} ),
+             , {false, queue<responder>({responder::origin, responder::proxy})} ),
+
         // Disable cache and always go to origin for this site.
         Match( reqexpr::from_regex(target_getter, "https?://ident.me/.*")
              , {false, queue<responder>({responder::origin})} ),
+        // Disable cache and always go to proxy for this site.
+        Match( reqexpr::from_regex(target_getter, "https?://ifconfig.co/.*")
+             , {false, queue<responder>({responder::proxy})} ),
         // Force cache and default mechanisms for this site.
         Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example.com/.*")
              , {true, queue<responder>()} ),
