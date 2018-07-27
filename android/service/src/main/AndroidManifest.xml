@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="ie.equalit.ouinet.service">
+
+    <!--
+         Note: android:hardwareAccelerated="true" is there for the QR scanner.
+         https://github.com/journeyapps/zxing-android-embedded#hardware-acceleration
+    -->
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:hardwareAccelerated="true"
+        android:theme="@style/AppTheme">
+        <activity android:name=".Control">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <!--
+                     A filter to start ouinet.Controller from a browser
+                     when a user click on a link in a form "ouinet://controller".
+                     More info:
+
+                     https://developer.android.com/training/app-links/deep-linking
+
+                     TODO: Dynamic links would also allow redirecting the user
+                     to the play store if this app wasn't installed.
+                -->
+                <action android:name="android.intent.action.VIEW" />
+                <data android:scheme="ouinet" android:host="control"/>
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+            </intent-filter>
+        </activity>
+        <service android:name=".OuinetService">
+        </service>
+    </application>
+
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+</manifest>

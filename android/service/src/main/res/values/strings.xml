@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Ouinet Control</string>
+    <string name="start_ouinet">Start Ouinet</string>
+    <string name="stop_ouinet">Stop Ouinet</string>
+</resources>

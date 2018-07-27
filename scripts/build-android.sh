@@ -5,9 +5,13 @@ set -e
 DIR=`pwd`
 SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
 ROOT=$(cd ${SCRIPT_DIR}/.. && pwd)
-APP_ROOT="${ROOT}/android/browser"
-APK="${DIR}"/build-android/builddir/browser/build-android/outputs/apk/debug/browser-debug.apk
-APK_ID=$(sed -En 's/^\s*\bapplicationId\s+"([^"]+)".*/\1/p' "${APP_ROOT}/build.gradle")
+BROWSER_APP_ROOT="${ROOT}/android/browser"
+BROWSER_APK="${DIR}"/build-android/builddir/browser/build-android/outputs/apk/debug/browser-debug.apk
+BROWSER_APK_ID=$(sed -En 's/^\s*\bapplicationId\s+"([^"]+)".*/\1/p' "${BROWSER_APP_ROOT}/build.gradle")
+
+SERVICE_APP_ROOT="${ROOT}/android/service"
+SERVICE_APK="${DIR}"/build-android/builddir/service/build-android/outputs/apk/debug/service-debug.apk
+SERVICE_APK_ID=$(sed -En 's/^\s*\bapplicationId\s+"([^"]+)".*/\1/p' "${SERVICE_APP_ROOT}/build.gradle")
 
 # https://developer.android.com/ndk/guides/abis.html
 ABI=${ABI:-armeabi-v7a}
@@ -345,7 +349,7 @@ done
 function build_ouinet_apk {
 mkdir -p "${DIR}"/build-android
 cd "${DIR}"/build-android
-ln -sf $(dirname ${APP_ROOT})/* .
+ln -sf $(dirname ${BROWSER_APP_ROOT})/* .
 export GRADLE_USER_HOME=$(pwd)/.gradle-home
 gradle --no-daemon build \
     -Pboost_includedir=${BOOST_INCLUDEDIR} \
@@ -355,7 +359,8 @@ gradle --no-daemon build \
 
 echo "---------------------------------"
 echo "Your Android package is ready at:"
-ls -l "$APK"
+ls -l "$BROWSER_APK"
+ls -l "$SERVICE_APK"
 echo "---------------------------------"
 cd -
 }
@@ -382,8 +387,10 @@ function run_emulator {
 The emulated Android environment is now running.
 Once you can interact with it normally, you may execute:
 
-  - To install the APK: $(which adb) -e install $APK
-  - To uninstall the APK: $(which adb) -e uninstall $APK_ID
+  - To install the browser APK: $(which adb) -e install $BROWSER_APK
+  - To install the service APK: $(which adb) -e install $SERVICE_APK
+  - To uninstall the browser APK: $(which adb) -e uninstall $BROWSER_APK_ID
+  - To uninstall the service APK: $(which adb) -e uninstall $SERVICE_APK_ID
 
 EOF
     wait $emupid
