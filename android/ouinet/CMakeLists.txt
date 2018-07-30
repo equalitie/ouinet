@@ -13,6 +13,9 @@ cmake_minimum_required(VERSION 3.4.1)
 include_directories("../../src"
                     "${BOOST_INCLUDEDIR}")
 
+# https://www.boost.org/doc/libs/1_67_0/doc/html/boost_asio/using.html#boost_asio.using.optional_separate_compilation
+add_definitions(-DBOOST_ASIO_SEPARATE_COMPILATION)
+
 add_library( # Sets the name of the library.
              native-lib
 

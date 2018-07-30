@@ -2,6 +2,7 @@
 
 #include <boost/asio/io_service.hpp>
 #include <boost/asio/spawn.hpp>
+#include <boost/asio/error.hpp>
 #include <boost/intrusive/list.hpp>
 
 namespace ouinet {
