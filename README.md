@@ -20,6 +20,8 @@ cache*.
 [IPFS]: https://ipfs.io/ "InterPlanetary File System"
 [I2P]: https://geti2p.net/ "Invisible Internet Project"
 
+![Ouinet request/response flow](./doc/request-response-flow.svg)
+
 Future accesses by client nodes to popular content inserted in distributed
 storage shall benefit from an increased redundancy and locality, which
 translates in increased availability in the face of connectivity problems,
