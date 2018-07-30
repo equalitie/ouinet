@@ -119,15 +119,8 @@ class DataStore {
         return _token_storage.verify_token(address, id, token);
     }
 
-    enum class PutError
-    {
-        ValueTooLarge,
-        SaltTooLarge,
-        InvalidSignature
-    };
-
     NodeID immutable_get_id(BencodedValue value);
-    boost::optional<PutError> put_immutable(BencodedValue value);
+    void put_immutable(BencodedValue value);
     boost::optional<BencodedValue> get_immutable(NodeID id);
 
     struct MutableDataItem {
@@ -138,7 +131,7 @@ class DataStore {
         std::array<uint8_t, 64> signature;
     };
     NodeID mutable_get_id(util::Ed25519PublicKey public_key, const std::string& salt);
-    boost::optional<PutError> put_mutable(MutableDataItem item);
+    void put_mutable(MutableDataItem item);
     boost::optional<MutableDataItem> get_mutable(NodeID id);
     std::array<uint8_t, 64> sign_mutable(
         BencodedValue value,

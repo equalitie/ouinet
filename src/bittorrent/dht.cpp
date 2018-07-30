@@ -832,6 +832,231 @@ void dht::DhtNode::handle_query( udp::endpoint sender
         BencodedMap reply;
         send_reply(reply);
         return;
+    } else if (query_type == "get") {
+        boost::optional<std::string> target_ = arguments["target"].as_string();
+        if (!target_) {
+            send_error(203, "Missing argument 'target'");
+            return;
+        }
+        if (target_->size() != 20) {
+            send_error(203, "Malformed argument 'target'");
+            return;
+        }
+        NodeID target = NodeID::from_bytestring(*target_);
+
+        boost::optional<int64_t> sequence_number_ = arguments["seq"].as_int();
+
+        BencodedMap reply;
+
+        std::vector<dht::NodeContact> contacts
+            = _routing_table->find_closest_routing_nodes(target, RoutingBucket::BUCKET_SIZE);
+        std::string nodes;
+        for (auto& contact : contacts) {
+            nodes += contact.id.to_bytestring();
+            nodes += encode_endpoint(contact.endpoint);
+        }
+        if (is_v4()) {
+            reply["nodes"] = nodes;
+        } else {
+            reply["nodes6"] = nodes;
+        }
+
+        reply["token"] = _data_store->generate_token(sender.address(), target);
+
+        if (!sequence_number_) {
+            boost::optional<BencodedValue> immutable_value = _data_store->get_immutable(target);
+            if (immutable_value) {
+                reply["v"] = *immutable_value;
+                send_reply(reply);
+                return;
+            }
+        }
+
+        boost::optional<DataStore::MutableDataItem> mutable_item = _data_store->get_mutable(target);
+        if (mutable_item) {
+            if (sequence_number_ && *sequence_number_ <= mutable_item->sequence_number) {
+                send_reply(reply);
+                return;
+            }
+
+            reply["k"] = util::bytes::to_string(mutable_item->public_key.serialize());
+            reply["seq"] = mutable_item->sequence_number;
+            reply["sig"] = util::bytes::to_string(mutable_item->signature);
+            reply["v"] = mutable_item->value;
+            send_reply(reply);
+            return;
+        }
+
+        send_reply(reply);
+        return;
+    } else if (query_type == "put") {
+        boost::optional<std::string> token_ = arguments["token"].as_string();
+        if (!token_) {
+            send_error(203, "Missing argument 'token'");
+            return;
+        }
+
+        if (!arguments.count("v")) {
+            send_error(203, "Missing argument 'v'");
+            return;
+        }
+        BencodedValue value = arguments["v"];
+        /*
+         * Size limit specified in BEP 44
+         */
+        if (bencoding_encode(value).size() >= 1000) {
+            send_error(205, "Argument 'v' too big");
+            return;
+        }
+
+        if (arguments["k"].is_string()) {
+            /*
+             * This is a mutable data item.
+             */
+            boost::optional<std::string> public_key_ = arguments["k"].as_string();
+            if (!public_key_) {
+                send_error(203, "Missing argument 'k'");
+                return;
+            }
+            if (public_key_->size() != 32) {
+                send_error(203, "Malformed argument 'k'");
+                return;
+            }
+            util::Ed25519PublicKey public_key(util::bytes::to_array<uint8_t, 32>(*public_key_));
+
+            boost::optional<std::string> signature_ = arguments["sig"].as_string();
+            if (!signature_) {
+                send_error(203, "Missing argument 'sig'");
+                return;
+            }
+            if (signature_->size() != 64) {
+                send_error(203, "Malformed argument 'sig'");
+                return;
+            }
+            std::array<uint8_t, 64> signature = util::bytes::to_array<uint8_t, 64>(*signature_);
+
+            boost::optional<int64_t> sequence_number_ = arguments["seq"].as_int();
+            if (!sequence_number_) {
+                send_error(203, "Missing argument 'seq'");
+                return;
+            }
+            int64_t sequence_number = *sequence_number_;
+
+            boost::optional<std::string> salt_ = arguments["salt"].as_string();
+            /*
+             * Size limit specified in BEP 44
+             */
+            if (salt_ && salt_->size() > 64) {
+                send_error(207, "Argument 'salt' too big");
+                return;
+            }
+            std::string salt = salt_ ? *salt_ : "";
+
+            NodeID target = _data_store->mutable_get_id(public_key, salt);
+
+            if (!_data_store->verify_token(sender.address(), target, *token_)) {
+                send_error(203, "Incorrect put token");
+                return;
+            }
+
+            /*
+             * Reject put requests for which there are more than enough
+             * better responsible known nodes.
+             *
+             * TODO: This can be done in a more efficient way once the routing
+             * table code stabilizes.
+             */
+            {
+                bool contains_self = false;
+                std::vector<NodeContact> closer_nodes = _routing_table->find_closest_routing_nodes(target, RESPONSIBLE_TRACKERS_PER_SWARM * 4);
+                for (auto& i : closer_nodes) {
+                    if (target.closer_to(_node_id, i.id)) {
+                        contains_self = true;
+                    }
+                }
+                if (!contains_self) {
+                    send_error(201, "This data item is not my responsibility");
+                    return;
+                }
+            }
+
+            DataStore::MutableDataItem item {
+                public_key,
+                salt,
+                value,
+                sequence_number,
+                signature
+            };
+            if (!_data_store->verify_mutable(item)) {
+                send_error(206, "Invalid signature");
+                return;
+            }
+
+            boost::optional<DataStore::MutableDataItem> existing_item = _data_store->get_mutable(target);
+            if (existing_item) {
+                if (sequence_number < existing_item->sequence_number) {
+                    send_error(302, "Sequence number less than current");
+                    return;
+                }
+
+                if (
+                       sequence_number == existing_item->sequence_number
+                    && bencoding_encode(value) != bencoding_encode(existing_item->value)
+                ) {
+                    send_error(302, "Sequence number not updated");
+                    return;
+                }
+
+                boost::optional<int64_t> compare_and_swap_ = arguments["cas"].as_int();
+                if (compare_and_swap_ && *compare_and_swap_ != existing_item->sequence_number) {
+                    send_error(301, "Compare-and-swap mismatch");
+                    return;
+                }
+            }
+
+            _data_store->put_mutable(item);
+
+            BencodedMap reply;
+            send_reply(reply);
+            return;
+        } else {
+            /*
+             * This is an immutable data item.
+             */
+            NodeID target = _data_store->immutable_get_id(value);
+
+            if (!_data_store->verify_token(sender.address(), target, *token_)) {
+                send_error(203, "Incorrect put token");
+                return;
+            }
+
+            /*
+             * Reject put requests for which there are more than enough
+             * better responsible known nodes.
+             *
+             * TODO: This can be done in a more efficient way once the routing
+             * table code stabilizes.
+             */
+            {
+                bool contains_self = false;
+                std::vector<NodeContact> closer_nodes = _routing_table->find_closest_routing_nodes(target, RESPONSIBLE_TRACKERS_PER_SWARM * 4);
+                for (auto& i : closer_nodes) {
+                    if (target.closer_to(_node_id, i.id)) {
+                        contains_self = true;
+                    }
+                }
+                if (!contains_self) {
+                    send_error(201, "This data item is not my responsibility");
+                    return;
+                }
+            }
+
+            _data_store->put_immutable(value);
+
+            BencodedMap reply;
+            send_reply(reply);
+            return;
+        }
     } else {
         send_error(204, "Query type not implemented");
         return;

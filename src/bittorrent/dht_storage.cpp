@@ -211,21 +211,12 @@ NodeID DataStore::immutable_get_id(BencodedValue value)
     return util::sha1(bencoding_encode(value));
 }
 
-boost::optional<DataStore::PutError> DataStore::put_immutable(BencodedValue value)
+void DataStore::put_immutable(BencodedValue value)
 {
-    /*
-     * Size limit specified in BEP 44
-     */
-    if (bencoding_encode(value).size() >= 1000) {
-        return PutError::ValueTooLarge;
-    }
-
     _immutable_data[immutable_get_id(value)] = ImmutableStoredItem {
         value,
         std::chrono::steady_clock::now()
     };
-
-    return boost::none;
 }
 
 boost::optional<BencodedValue> DataStore::get_immutable(NodeID id)
@@ -242,24 +233,12 @@ NodeID DataStore::mutable_get_id(util::Ed25519PublicKey public_key, const std::s
     return util::sha1(util::bytes::to_string(public_key.serialize()) + salt);
 }
 
-boost::optional<DataStore::PutError> DataStore::put_mutable(MutableDataItem item)
+void DataStore::put_mutable(MutableDataItem item)
 {
-    /*
-     * Size limits specified in BEP 44
-     */
-    if (bencoding_encode(item.value).size() >= 1000) {
-        return PutError::ValueTooLarge;
-    }
-    if (item.salt.size() > 64) {
-        return PutError::SaltTooLarge;
-    }
-
     _mutable_data[mutable_get_id(item.public_key, item.salt)] = MutableStoredItem {
         item,
         std::chrono::steady_clock::now()
     };
-
-    return boost::none;
 }
 
 boost::optional<DataStore::MutableDataItem> DataStore::get_mutable(NodeID id)
