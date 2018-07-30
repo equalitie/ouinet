@@ -200,17 +200,17 @@ Node::find_or_create_lower_bound(const Key& key)
 void Node::insert_node(Node n)
 {
     assert(n.Entries::size() == 2);
-    
+
     auto& k1 = n.begin()->first;
     auto& e1 = n.begin()->second;
     auto& e2 = (++n.begin())->second;
-    
+
     auto j = Entries::insert(make_pair(std::move(k1), std::move(e1))).first;
-    
+
     assert(std::next(j) != Entries::end());
     auto& entry = std::next(j)->second;
     entry.child->Entries::clear();
-    
+
     for (auto& e : *e2.child) {
         std::next(j)->second.child->Entries::insert(std::move(e));
     }
@@ -451,7 +451,7 @@ void Node::restore(Hash hash, const CatOp& cat_op, asio::yield_context yield)
             }
 
             boost::optional<std::string> key;
-           
+
             if (!i.key().empty()) {
                 key = i.key();
             }

@@ -608,9 +608,8 @@ GenericConnection Client::State::ssl_mitm_handshake( GenericConnection&& con
 void Client::State::serve_request( GenericConnection&& con
                                  , asio::yield_context yield)
 {
-
     LOG_DEBUG("Request received ");
-  
+
     namespace rr = request_route;
     using rr::responder;
 
@@ -618,7 +617,6 @@ void Client::State::serve_request( GenericConnection&& con
         con.close();
     });
 
-    
     // These access mechanisms are attempted in order for requests by default.
     const rr::Config default_request_config
         { true
@@ -910,13 +908,12 @@ void Client::State::listen_tcp
 //------------------------------------------------------------------------------
 void Client::State::start(int argc, char* argv[])
 {
-  try {
-    _config = ClientConfig(argc, argv);
-
-  } catch(std::exception const& e) {
-    //explicit is better than implecit
-    LOG_ABORT(e.what());
-  }
+    try {
+        _config = ClientConfig(argc, argv);
+    } catch(std::exception const& e) {
+        //explicit is better than implecit
+        LOG_ABORT(e.what());
+    }
 
 #ifndef __ANDROID__
     auto pid_path = get_pid_path();
