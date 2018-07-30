@@ -187,5 +187,7 @@ endif()
 
 ################################################################################
 # Tests
-add_subdirectory(test)
+if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
+    add_subdirectory(test)
+endif()
 ################################################################################
