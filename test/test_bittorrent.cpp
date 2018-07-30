@@ -10,7 +10,6 @@
 #include <bittorrent/node_id.h>
 #include <bittorrent/dht.h>
 #include <bittorrent/code.h>
-#include <bittorrent/byte_printer.h>
 
 BOOST_AUTO_TEST_SUITE(bittorrent)
 

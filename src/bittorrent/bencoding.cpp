@@ -1,5 +1,5 @@
 #include "bencoding.h"
-#include "byte_printer.h"
+#include "../util/bytes.h"
 
 namespace ouinet {
 namespace bittorrent {
@@ -153,7 +153,7 @@ std::ostream& operator<<(std::ostream& os, const BencodedValue& value)
         }
 
         void operator()(const std::string& value) {
-            os << "\"" << BytePrinter(value) << "\"";
+            os << "\"" << util::bytes::to_printable(value) << "\"";
         }
 
         void operator()(const BencodedList& value) {

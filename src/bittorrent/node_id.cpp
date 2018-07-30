@@ -1,6 +1,5 @@
 #include <boost/crc.hpp>
 #include "node_id.h"
-#include "byte_printer.h"
 
 using namespace ouinet::bittorrent;
 
@@ -16,14 +15,8 @@ static void set_rbit(NodeID::Buffer& buffer, size_t n, bool value) {
 }
 
 static const NodeID::Buffer& zero_buffer() {
-    static bool was_zeroed = false;
+    // zero-initialized by static linkage
     static NodeID::Buffer buf;
-
-    if (!was_zeroed) {
-        memset(buf.data(), 0, buf.size());
-        was_zeroed = true;
-    }
-
     return buf;
 }
 
@@ -75,42 +68,9 @@ NodeID::Range NodeID::Range::reduce(bool bit) const {
     return ret;
 }
 
-std::string NodeID::to_hex() const
+NodeID NodeID::zero()
 {
-    std::string output;
-    for (unsigned int i = 0; i < buffer.size(); i++) {
-        const char* digits = "0123456789abcdef";
-        output += digits[(buffer[i] >> 4) & 0xf];
-        output += digits[(buffer[i] >> 0) & 0xf];
-    }
-    return output;
-}
-
-NodeID NodeID::from_hex(const std::string& hex)
-{
-    NodeID output;
-    for (unsigned int i = 0; i < output.buffer.size(); i++) {
-        output.buffer[i] = (unsigned char)std::stoi(hex.substr(2 * i, 2), nullptr, 16);
-    }
-    return output;
-}
-
-std::string NodeID::to_bytestring() const
-{
-    return std::string((char*) buffer.data(), buffer.size());
-}
-
-NodeID NodeID::from_bytestring(const std::string& bytestring)
-{
-    NodeID output;
-    std::copy(bytestring.begin(), bytestring.end(), output.buffer.begin());
-    return output;
-}
-
-const NodeID& NodeID::zero()
-{
-    static const NodeID ret = from_bytestring(std::string(20, '\0'));
-    return ret;
+    return NodeID{ zero_buffer() };
 }
 
 NodeID NodeID::generate(asio::ip::address address)
@@ -187,5 +147,5 @@ bool NodeID::closer_to(const NodeID& left, const NodeID& right) const
 
 std::ostream& ouinet::bittorrent::operator<<(std::ostream& os, const NodeID& id)
 {
-    return os << "\"" << BytePrinter(id.buffer) << "\"";
+    return os << id.to_hex();
 }

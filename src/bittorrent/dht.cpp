@@ -5,6 +5,7 @@
 #include "proximity_map.h"
 
 #include "../or_throw.h"
+#include "../util/bytes.h"
 #include "../util/condition_variable.h"
 #include "../util/crypto.h"
 #include "../util/wait_condition.h"
@@ -286,10 +287,7 @@ static bool mutable_data_valid_signature(
     const util::Ed25519PublicKey& public_key,
     const std::string& salt
 ) {
-    std::array<uint8_t, 32> public_key_buffer = public_key.serialize();
-    std::string public_key_string((char*)public_key_buffer.data(), public_key_buffer.size());
-
-    if (get_arguments["k"] != public_key_string) {
+    if (get_arguments["k"] != util::bytes::to_string(public_key.serialize())) {
         return false;
     }
 
@@ -299,21 +297,16 @@ static bool mutable_data_valid_signature(
     }
 
     boost::optional<std::string> signature = get_arguments["sig"].as_string();
-    if (!signature) {
+    if (!signature || signature->size() != 64) {
         return false;
     }
-    if (signature->size() != 64) {
-        return false;
-    }
-    std::array<uint8_t, 64> signature_data;
-    std::copy(signature->begin(), signature->end(), signature_data.begin());
 
     std::string signature_buffer = mutable_data_signature_buffer(
         get_arguments["v"],
         salt,
         *sequence_number
     );
-    return public_key.verify(signature_buffer, signature_data);
+    return public_key.verify(signature_buffer, util::bytes::to_array<uint8_t, 64>(*signature));
 }
 
 boost::optional<BencodedValue> dht::DhtNode::data_get_mutable(
@@ -321,9 +314,7 @@ boost::optional<BencodedValue> dht::DhtNode::data_get_mutable(
     const std::string& salt,
     asio::yield_context yield
 ) {
-    std::array<uint8_t, 32> public_key_array = public_key.serialize();
-    std::string public_key_string((char*)public_key_array.data(), public_key_array.size());
-    NodeID target_id{util::sha1(public_key_string + salt)};
+    NodeID target_id{util::sha1(util::bytes::to_string(public_key.serialize()) + salt)};
 
     size_t valid_responses = 0;
     boost::optional<BencodedValue> data;
@@ -383,13 +374,10 @@ NodeID dht::DhtNode::data_put_mutable(
     asio::yield_context yield
 ) {
     std::string signature_buffer = mutable_data_signature_buffer(data, salt, sequence_number);
-    std::array<uint8_t, 64> signature_array = private_key.sign(signature_buffer);
-    std::string signature_string((char*)signature_array.data(), signature_array.size());
+    std::string signature = util::bytes::to_string(private_key.sign(signature_buffer));
 
     util::Ed25519PublicKey public_key(private_key.public_key());
-    std::array<uint8_t, 32> public_key_array = public_key.serialize();
-    std::string public_key_string((char*)public_key_array.data(), public_key_array.size());
-    NodeID target_id{util::sha1(public_key_string + salt)};
+    NodeID target_id{util::sha1(util::bytes::to_string(public_key.serialize()) + salt)};
 
     ProximityMap<DhtPutDataNode> responsible_nodes(target_id, RESPONSIBLE_TRACKERS_PER_SWARM);
     std::map<NodeID, DhtPutDataNode> outdated_nodes;
@@ -460,9 +448,9 @@ NodeID dht::DhtNode::data_put_mutable(
     for (auto& i : all_nodes) {
         asio::spawn(_ios, [=, lock = wc.lock()] (asio::yield_context yield) {
             BencodedMap put_message { { "id", _node_id.to_bytestring() }
-                                    , { "k", public_key_string }
+                                    , { "k", util::bytes::to_string(public_key.serialize()) }
                                     , { "seq", sequence_number }
-                                    , { "sig", signature_string }
+                                    , { "sig", signature }
                                     , { "v", data }
                                     , { "token", i.second->put_token }};
 
