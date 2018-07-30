@@ -65,11 +65,23 @@ void ConditionVariable::notify(const boost::system::error_code& ec)
 inline
 void ConditionVariable::wait(boost::asio::yield_context yield)
 {
-    boost::asio::async_completion<boost::asio::yield_context, Sig> init(yield);
     WaitEntry entry;
+
+#if BOOST_VERSION >= 106700
+    boost::asio::async_completion<boost::asio::yield_context, Sig> init(yield);
     entry.handler = std::move(init.completion_handler);
     _on_notify.push_back(entry);
     return init.result.get();
+#else
+    using Handler = boost::asio::handler_type<boost::asio::yield_context, void(boost::system::error_code)>::type;
+
+    Handler handler(yield);
+    boost::asio::async_result<Handler> result(handler);
+    entry.handler = std::move(handler);
+    _on_notify.push_back(entry);
+
+    return result.get();
+#endif
 }
 
 } // ouinet namespace

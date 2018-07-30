@@ -26,7 +26,10 @@ public:
     Connection& operator=(Connection&&) = default;
 
     asio::io_service& get_io_service() { return _ios; }
+
+#if BOOST_VERSION >= 106700
     asio::io_context::executor_type get_executor()   { return _socket.get_executor(); }
+#endif
 
     asio::ip::tcp::socket& socket() { return _socket; }
 
