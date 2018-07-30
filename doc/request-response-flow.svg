@@ -68,7 +68,7 @@
        inkscape:collect="always"
        xlink:href="#pattern18360"
        id="pattern18369"
-       patternTransform="matrix(0.26458333,0,0,0.26458333,269.87499,170)" />
+       patternTransform="matrix(0.26458333,0,0,0.26458333,264.58332,170)" />
     <pattern
        inkscape:collect="always"
        xlink:href="#pattern2525"
@@ -2818,8 +2818,8 @@
      inkscape:groupmode="layer"
      id="layer3"
      inkscape:label="Services"
-     sodipodi:insensitive="true"
-     style="display:inline">
+     style="display:inline"
+     sodipodi:insensitive="true">
     <rect
        style="color:#000000;display:inline;overflow:visible;visibility:visible;opacity:0.1;vector-effect:none;fill:#0000ff;fill-opacity:1;fill-rule:nonzero;stroke:none;stroke-width:0.26458332;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;marker:none;enable-background:accumulate"
        id="rect3068"
@@ -2835,13 +2835,23 @@
        x="-216.95833"
        y="104.16666"
        transform="scale(-1,1)" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:6.3499999px;line-height:5.82083321px;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Bold';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-feature-settings:normal;text-align:start;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:start;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.26458332px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+       x="53.86483"
+       y="-288.48575"
+       id="text2324-0"
+       transform="rotate(90)"><tspan
+         sodipodi:role="line"
+         id="tspan698"
+         x="53.86483"
+         y="-288.48575">Ouinet-based services</tspan></text>
   </g>
   <g
      inkscape:label="Flow"
      inkscape:groupmode="layer"
      id="layer1"
-     transform="translate(0,-87)"
-     sodipodi:insensitive="true">
+     transform="translate(0,-87)">
     <g
        id="g306061"
        transform="translate(-44.979167,7.9375026)">
@@ -2977,23 +2987,23 @@
        style="fill:url(#pattern18369);stroke:none"
        width="16.933332"
        height="16.933332"
-       x="269.875"
+       x="264.58334"
        y="170"
        id="rect18365" />
     <text
        xml:space="preserve"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.64438343px;line-height:5.82077026px;font-family:sans-serif;-inkscape-font-specification:sans-serif;font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-feature-settings:normal;text-align:center;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:middle;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.26458046px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
-       x="278.25201"
+       x="272.96036"
        y="192.67432"
        id="text306000-7-0-6-5"><tspan
          sodipodi:role="line"
-         x="278.25201"
+         x="272.96036"
          y="192.67432"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:sans-serif;-inkscape-font-specification:sans-serif;stroke-width:0.26458046px"
          id="tspan306183-7">Injection</tspan><tspan
          id="tspan306306"
          sodipodi:role="line"
-         x="278.25201"
+         x="272.96036"
          y="198.49509"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:sans-serif;-inkscape-font-specification:sans-serif;stroke-width:0.26458046px">keys</tspan></text>
     <rect
@@ -3621,7 +3631,7 @@
     </g>
     <path
        style="display:inline;fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.26458332px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
-       d="M 258.13983,192.75417 269.875,184.45461"
+       d="m 256.17084,192.75417 8.4125,-7.12083"
        id="path18367"
        inkscape:connector-type="polyline"
        inkscape:connector-curvature="0"
