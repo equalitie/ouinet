@@ -94,46 +94,36 @@ dht::DhtNode::~DhtNode()
 
 std::set<tcp::endpoint> dht::DhtNode::tracker_get_peers(NodeID infohash, asio::yield_context yield)
 {
-    std::map<NodeID, TrackerNode> tracker_reply
-        = tracker_search_peers(infohash, yield);
-
     std::set<tcp::endpoint> peers;
-
-    for (auto& i : tracker_reply) {
-        peers.insert(i.second.peers.begin(), i.second.peers.end());
-    }
-
+    std::map<NodeID, TrackerNode> responsible_nodes;
+    tracker_do_search_peers(infohash, peers, responsible_nodes, yield);
     return peers;
 }
 
 std::set<tcp::endpoint> dht::DhtNode::tracker_announce(NodeID infohash, boost::optional<int> port, asio::yield_context yield)
 {
-    std::map<NodeID, TrackerNode> tracker_reply
-        = tracker_search_peers(infohash, yield);
-
     std::set<tcp::endpoint> peers;
-
-    for (auto& i : tracker_reply) {
-        peers.insert(i.second.peers.begin(), i.second.peers.end());
-    }
+    std::map<NodeID, TrackerNode> responsible_nodes;
+    tracker_do_search_peers(infohash, peers, responsible_nodes, yield);
 
     WaitCondition wc(_ios);
-
-    for (auto& i : tracker_reply) {
+    for (auto& i : responsible_nodes) {
         asio::spawn(_ios, [=, lock = wc.lock()] (asio::yield_context yield) {
             send_write_query(
                 i.second.node_endpoint,
                 i.first,
                 "announce_peer",
-                BencodedMap { { "id", _node_id.to_bytestring() }
-                            , { "info_hash", infohash.to_bytestring() }
-                            , { "token", i.second.announce_token }
-                            , { "implied_port", port ? int64_t(0) : int64_t(1) }
-                            , { "port", port ? int64_t(*port) : int64_t(0) } },
-                yield);
+                BencodedMap {
+                    { "id", _node_id.to_bytestring() },
+                    { "info_hash", infohash.to_bytestring() },
+                    { "token", i.second.announce_token },
+                    { "implied_port", port ? int64_t(0) : int64_t(1) },
+                    { "port", port ? int64_t(*port) : int64_t(0) }
+                },
+                yield
+            );
         });
     }
-
     wc.wait(yield);
 
     return peers;
@@ -150,54 +140,42 @@ boost::optional<BencodedValue> dht::DhtNode::data_get_immutable(const NodeID& ke
                 return boost::none;
             }
 
-            sys::error_code ec;
-
             std::vector<NodeContact> closer_nodes;
-            std::vector<NodeContact> closer_nodes6;
-
-            boost::optional<BencodedMap> get_arguments_ = query_get_data(
+            boost::optional<BencodedMap> response_ = query_get_data(
                 key,
                 candidate,
                 closer_nodes,
-                closer_nodes6,
-                yield[ec]
+                yield
             );
-
-            if (ec) {
-                return Candidates{};
+            if (!response_) {
+                return closer_nodes;
             }
-            auto new_candidates = is_v4() ? closer_nodes : closer_nodes6;
-            if (!get_arguments_) {
-                return new_candidates;
-            }
-            BencodedMap& get_arguments = *get_arguments_;
+            BencodedMap& response = *response_;
 
-            if (get_arguments.count("v")) {
-                BencodedValue value = get_arguments["v"];
+            if (response.count("v")) {
+                BencodedValue value = response["v"];
                 if (_data_store->immutable_get_id(value) == key) {
                     data = value;
                     return boost::none;
                 }
             }
 
-            return new_candidates;
+            return closer_nodes;
         }
         , yield);
 
     return data;
 }
 
-struct DhtPutDataNode {
-    asio::ip::udp::endpoint node_endpoint;
-    std::string put_token;
-};
-
 NodeID dht::DhtNode::data_put_immutable(const BencodedValue& data, asio::yield_context yield)
 {
     NodeID key = _data_store->immutable_get_id(data);
 
-    ProximityMap<DhtPutDataNode> responsible_nodes( key
-                                                  , RESPONSIBLE_TRACKERS_PER_SWARM);
+    struct ResponsibleNode {
+        asio::ip::udp::endpoint node_endpoint;
+        std::string put_token;
+    };
+    ProximityMap<ResponsibleNode> responsible_nodes(key, RESPONSIBLE_TRACKERS_PER_SWARM);
 
     collect(key, [&](const Contact& candidate, asio::yield_context yield)
                  -> boost::optional<Candidates>
@@ -205,61 +183,54 @@ NodeID dht::DhtNode::data_put_immutable(const BencodedValue& data, asio::yield_c
             if (!candidate.id && responsible_nodes.full()) {
                 return boost::none;
             }
-
             if (candidate.id && !responsible_nodes.would_insert(*candidate.id)) {
                 return boost::none;
             }
 
-            sys::error_code ec;
-
             std::vector<NodeContact> closer_nodes;
-            std::vector<NodeContact> closer_nodes6;
-
-            boost::optional<BencodedMap> get_arguments_ = query_get_data(
+            boost::optional<BencodedMap> response_ = query_get_data(
                 key,
                 candidate,
                 closer_nodes,
-                closer_nodes6,
-                yield[ec]
+                yield
             );
-
-            if (ec) {
-                return Candidates{};
+            if (!response_) {
+                return closer_nodes;
             }
-            auto new_candidates = is_v4() ? closer_nodes : closer_nodes6;
-            if (!get_arguments_) {
-                return new_candidates;
-            }
-            BencodedMap& get_arguments = *get_arguments_;
+            BencodedMap& response = *response_;
 
-            boost::optional<std::string> put_token = get_arguments["token"].as_string();
+            boost::optional<std::string> put_token = response["token"].as_string();
             if (!put_token) {
-                return new_candidates;
+                return closer_nodes;
             }
 
             if (candidate.id) {
-                responsible_nodes.insert({ *candidate.id
-                                         , { candidate.endpoint, *put_token }});
+                responsible_nodes.insert({
+                    *candidate.id,
+                    { candidate.endpoint, *put_token }
+                });
             }
 
-            return new_candidates;
+            return closer_nodes;
         }
         , yield);
 
     WaitCondition wc(_ios);
-
     for (auto& i : responsible_nodes) {
         asio::spawn(_ios, [=, lock = wc.lock()] (asio::yield_context yield) {
-            send_write_query( i.second.node_endpoint
-                            , i.first
-                            , "put"
-                            , { { "id", _node_id.to_bytestring() }
-                              , { "v", data }
-                              , { "token", i.second.put_token } }
-                            , yield);
+            send_write_query(
+                i.second.node_endpoint,
+                i.first,
+                "put",
+                {
+                    { "id", _node_id.to_bytestring() },
+                    { "v", data },
+                    { "token", i.second.put_token }
+                },
+                yield
+            );
         });
     }
-
     wc.wait(yield);
 
     return key;
@@ -282,55 +253,45 @@ boost::optional<BencodedValue> dht::DhtNode::data_get_mutable(
              * We want to find the latest version of the data, so don't stop early.
              */
 
-            sys::error_code ec;
-
             std::vector<NodeContact> closer_nodes;
-            std::vector<NodeContact> closer_nodes6;
-
-            boost::optional<BencodedMap> get_arguments_ = query_get_data(
+            boost::optional<BencodedMap> response_ = query_get_data(
                 target_id,
                 candidate,
                 closer_nodes,
-                closer_nodes6,
-                yield[ec]
+                yield
             );
+            if (!response_) {
+                return closer_nodes;
+            }
+            BencodedMap& response = *response_;
 
-            if (ec) {
-                return Candidates{};
+            if (response["k"] != util::bytes::to_string(public_key.serialize())) {
+                return closer_nodes;
             }
-            auto new_candidates = is_v4() ? closer_nodes : closer_nodes6;
-            if (!get_arguments_) {
-                return new_candidates;
-            }
-            BencodedMap& get_arguments = *get_arguments_;
-
-            if (get_arguments["k"] != util::bytes::to_string(public_key.serialize())) {
-                return new_candidates;
-            }
-            boost::optional<int64_t> sequence_number = get_arguments["seq"].as_int();
+            boost::optional<int64_t> sequence_number = response["seq"].as_int();
             if (!sequence_number) {
-                return new_candidates;
+                return closer_nodes;
             }
-            boost::optional<std::string> signature = get_arguments["sig"].as_string();
+            boost::optional<std::string> signature = response["sig"].as_string();
             if (!signature || signature->size() != 64) {
-                return new_candidates;
+                return closer_nodes;
             }
 
             DataStore::MutableDataItem item {
                 public_key,
                 salt,
-                get_arguments["v"],
+                response["v"],
                 *sequence_number,
                 util::bytes::to_array<uint8_t, 64>(*signature)
             };
             if (_data_store->verify_mutable(item)) {
                 if (!highest_sequence_number || *sequence_number > *highest_sequence_number) {
                     highest_sequence_number = *sequence_number;
-                    data = get_arguments["v"];
+                    data = response["v"];
                 }
             }
 
-            return new_candidates;
+            return closer_nodes;
         }
         , yield);
 
@@ -353,8 +314,12 @@ NodeID dht::DhtNode::data_put_mutable(
     util::Ed25519PublicKey public_key(private_key.public_key());
     NodeID target_id = _data_store->mutable_get_id(public_key, salt);
 
-    ProximityMap<DhtPutDataNode> responsible_nodes(target_id, RESPONSIBLE_TRACKERS_PER_SWARM);
-    std::map<NodeID, DhtPutDataNode> outdated_nodes;
+    struct ResponsibleNode {
+        asio::ip::udp::endpoint node_endpoint;
+        std::string put_token;
+    };
+    ProximityMap<ResponsibleNode> responsible_nodes(target_id, RESPONSIBLE_TRACKERS_PER_SWARM);
+    std::map<NodeID, ResponsibleNode> outdated_nodes;
 
     collect(target_id, [&](const Contact& candidate, asio::yield_context yield)
                        -> boost::optional<Candidates>
@@ -367,54 +332,44 @@ NodeID dht::DhtNode::data_put_mutable(
                 return boost::none;
             }
 
-            sys::error_code ec;
-
             std::vector<NodeContact> closer_nodes;
-            std::vector<NodeContact> closer_nodes6;
-
-            boost::optional<BencodedMap> get_arguments_ = query_get_data(
+            boost::optional<BencodedMap> response_ = query_get_data(
                 target_id,
                 candidate,
                 closer_nodes,
-                closer_nodes6,
-                yield[ec]
+                yield
             );
-
-            if (ec) {
-                return Candidates{};
+            if (!response_) {
+                return closer_nodes;
             }
-            auto new_candidates = is_v4() ? closer_nodes : closer_nodes6;
-            if (!get_arguments_) {
-                return new_candidates;
-            }
-            BencodedMap& get_arguments = *get_arguments_;
+            BencodedMap& response = *response_;
 
-            boost::optional<std::string> put_token = get_arguments["token"].as_string();
+            boost::optional<std::string> put_token = response["token"].as_string();
             if (!put_token) {
-                return new_candidates;
+                return closer_nodes;
             }
 
-            DhtPutDataNode data_node{ candidate.endpoint, *put_token };
+            ResponsibleNode data_node{ candidate.endpoint, *put_token };
             if (candidate.id) {
                 responsible_nodes.insert({*candidate.id, std::move(data_node)});
             }
 
-            if (get_arguments["k"] != util::bytes::to_string(public_key.serialize())) {
-                return new_candidates;
+            if (response["k"] != util::bytes::to_string(public_key.serialize())) {
+                return closer_nodes;
             }
-            boost::optional<int64_t> existing_sequence_number = get_arguments["seq"].as_int();
+            boost::optional<int64_t> existing_sequence_number = response["seq"].as_int();
             if (!existing_sequence_number) {
-                return new_candidates;
+                return closer_nodes;
             }
-            boost::optional<std::string> existing_signature = get_arguments["sig"].as_string();
+            boost::optional<std::string> existing_signature = response["sig"].as_string();
             if (!existing_signature || existing_signature->size() != 64) {
-                return new_candidates;
+                return closer_nodes;
             }
 
             DataStore::MutableDataItem item {
                 public_key,
                 salt,
-                get_arguments["v"],
+                response["v"],
                 *existing_sequence_number,
                 util::bytes::to_array<uint8_t, 64>(*existing_signature)
             };
@@ -430,38 +385,40 @@ NodeID dht::DhtNode::data_put_mutable(
                 }
             }
 
-            return new_candidates;
+            return closer_nodes;
         }
         , yield);
 
-    std::map<NodeID, DhtPutDataNode*> all_nodes;
+    std::map<NodeID, ResponsibleNode*> all_nodes;
 
     for (auto& i : responsible_nodes) { all_nodes.insert({i.first, &i.second}); }
     for (auto& i : outdated_nodes)    { all_nodes.insert({i.first, &i.second}); }
 
     WaitCondition wc(_ios);
-
     for (auto& i : all_nodes) {
         asio::spawn(_ios, [=, lock = wc.lock()] (asio::yield_context yield) {
-            BencodedMap put_message { { "id", _node_id.to_bytestring() }
-                                    , { "k", util::bytes::to_string(public_key.serialize()) }
-                                    , { "seq", sequence_number }
-                                    , { "sig", util::bytes::to_string(signature) }
-                                    , { "v", data }
-                                    , { "token", i.second->put_token }};
+            BencodedMap put_message {
+                { "id", _node_id.to_bytestring() },
+                { "k", util::bytes::to_string(public_key.serialize()) },
+                { "seq", sequence_number },
+                { "sig", util::bytes::to_string(signature) },
+                { "v", data },
+                { "token", i.second->put_token }
+            };
 
             if (!salt.empty()) {
                 put_message["salt"] = salt;
             }
 
-            send_write_query( i.second->node_endpoint
-                            , i.first
-                            , "put"
-                            , put_message
-                            , yield);
+            send_write_query(
+                i.second->node_endpoint,
+                i.first,
+                "put",
+                put_message,
+                yield
+            );
         });
     }
-
     wc.wait(yield);
 
     return target_id;
@@ -1053,26 +1010,19 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
                 return boost::none;
             }
 
-            sys::error_code ec;
-
-            std::vector<NodeContact> result_nodes;
-            std::vector<NodeContact> result_nodes6;
-
-            bool accepted = query_find_node( target_id
-                                           , candidate
-                                           , result_nodes
-                                           , result_nodes6
-                                           , yield[ec]);
-
-            if (ec) {
-                return Candidates{};
-            }
+            std::vector<NodeContact> closer_nodes;
+            bool accepted = query_find_node(
+                target_id,
+                candidate,
+                closer_nodes,
+                yield
+            );
 
             if (accepted && candidate.id) {
                 out.insert({ *candidate.id, candidate.endpoint });
             }
 
-            return is_v4() ? result_nodes : result_nodes6;
+            return closer_nodes;
         }
         , yield);
 
@@ -1146,7 +1096,6 @@ bool dht::DhtNode::query_find_node(
     NodeID target_id,
     Contact node,
     std::vector<NodeContact>& closer_nodes,
-    std::vector<NodeContact>& closer_nodes6,
     asio::yield_context yield
 ) {
     sys::error_code ec;
@@ -1154,8 +1103,10 @@ bool dht::DhtNode::query_find_node(
     BencodedMap find_node_reply = send_query_await_reply(
         node,
         "find_node",
-        BencodedMap { { "id", _node_id.to_bytestring() }
-                    , { "target", target_id.to_bytestring() } },
+        BencodedMap {
+            { "id", _node_id.to_bytestring() },
+            { "target", target_id.to_bytestring() }
+        },
         std::chrono::seconds(2),
         yield[ec]
     );
@@ -1163,40 +1114,93 @@ bool dht::DhtNode::query_find_node(
     if (ec) {
         return false;
     }
-
     if (find_node_reply["y"] != "r") {
         return false;
     }
-
-    boost::optional<BencodedMap> arguments = find_node_reply["r"].as_map();
-    if (!arguments) {
+    boost::optional<BencodedMap> response = find_node_reply["r"].as_map();
+    if (!response) {
         return false;
     }
 
-    boost::optional<std::string> nodes  = (*arguments)["nodes"].as_string();
-    boost::optional<std::string> nodes6 = (*arguments)["nodes6"].as_string();
-
-    if (nodes) {
-        if (!decode_contacts_v4(*nodes,  closer_nodes)) {
+    if (is_v4()) {
+        boost::optional<std::string> nodes = (*response)["nodes"].as_string();
+        if (!decode_contacts_v4(*nodes, closer_nodes)) {
+            return false;
+        }
+    } else {
+        boost::optional<std::string> nodes6 = (*response)["nodes6"].as_string();
+        if (!decode_contacts_v6(*nodes6, closer_nodes)) {
             return false;
         }
     }
 
-    if (nodes6) {
-        if (!decode_contacts_v6(*nodes6, closer_nodes6)) {
-            return false;
-        }
-    }
-
-    return (is_v4() && !closer_nodes .empty())
-        || (is_v6() && !closer_nodes6.empty());
+    return !closer_nodes.empty();
 }
 
+// http://bittorrent.org/beps/bep_0005.html#get-peers
+boost::optional<BencodedMap> dht::DhtNode::query_get_peers(
+    NodeID infohash,
+    Contact node,
+    std::vector<NodeContact>& closer_nodes,
+    asio::yield_context yield
+) {
+    sys::error_code ec;
+
+    BencodedMap get_peers_reply = send_query_await_reply(
+        node,
+        "get_peers",
+        BencodedMap {
+            { "id", _node_id.to_bytestring() },
+            { "info_hash", infohash.to_bytestring() }
+        },
+        std::chrono::seconds(2),
+        yield[ec]
+    );
+
+    if (ec) {
+        return boost::none;
+    }
+    if (get_peers_reply["y"] != "r") {
+        return boost::none;
+    }
+    boost::optional<BencodedMap> response = get_peers_reply["r"].as_map();
+    if (!response) {
+        return boost::none;
+    }
+
+    if (is_v4()) {
+        boost::optional<std::string> nodes = (*response)["nodes"].as_string();
+        if (!decode_contacts_v4(*nodes, closer_nodes)) {
+            return boost::none;
+        }
+    } else {
+        boost::optional<std::string> nodes6 = (*response)["nodes6"].as_string();
+        if (!decode_contacts_v6(*nodes6, closer_nodes)) {
+            return boost::none;
+        }
+    }
+
+    if (closer_nodes.empty()) {
+        /*
+         * We got a reply to get_peers, but it does not contain nodes.
+         * Follow up with a find_node to fill the gap.
+         */
+        query_find_node(
+            infohash,
+            node,
+            closer_nodes,
+            yield
+        );
+    }
+
+    return response;
+}
+
+// http://bittorrent.org/beps/bep_0044.html#get-message
 boost::optional<BencodedMap> dht::DhtNode::query_get_data(
     NodeID key,
     Contact node,
     std::vector<NodeContact>& closer_nodes,
-    std::vector<NodeContact>& closer_nodes6,
     asio::yield_context yield
 ) {
     sys::error_code ec;
@@ -1204,8 +1208,10 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data(
     BencodedMap get_reply = send_query_await_reply(
         node,
         "get",
-        BencodedMap { { "id", _node_id.to_bytestring() }
-                    , { "target", key.to_bytestring() } },
+        BencodedMap {
+            { "id", _node_id.to_bytestring() },
+            { "target", key.to_bytestring() }
+        },
         std::chrono::seconds(2),
         yield[ec]
     );
@@ -1226,8 +1232,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data(
             key,
             node,
             closer_nodes,
-            closer_nodes6,
-            yield[ec]
+            yield
         );
         return boost::none;
     }
@@ -1242,166 +1247,104 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data(
             key,
             node,
             closer_nodes,
-            closer_nodes6,
-            yield[ec]
+            yield
         );
         return boost::none;
     }
 
-    boost::optional<BencodedMap> get_arguments = get_reply["r"].as_map();
-    if (!get_arguments) {
+    boost::optional<BencodedMap> response = get_reply["r"].as_map();
+    if (!response) {
         return boost::none;
     }
 
-    boost::optional<std::string> nodes  = (*get_arguments)["nodes"].as_string();
-    boost::optional<std::string> nodes6 = (*get_arguments)["nodes6"].as_string();
-
-    if (nodes) {
-        if (!decode_contacts_v4(*nodes,  closer_nodes)) {
+    if (is_v4()) {
+        boost::optional<std::string> nodes = (*response)["nodes"].as_string();
+        if (!decode_contacts_v4(*nodes, closer_nodes)) {
+            return boost::none;
+        }
+    } else {
+        boost::optional<std::string> nodes6 = (*response)["nodes6"].as_string();
+        if (!decode_contacts_v6(*nodes6, closer_nodes)) {
             return boost::none;
         }
     }
 
-    if (nodes6) {
-        if (!decode_contacts_v6(*nodes6, closer_nodes6)) {
-            return boost::none;
-        }
-    }
-
-    return *get_arguments;
-}
-
-// http://bittorrent.org/beps/bep_0005.html#get-peers
-boost::optional<dht::DhtNode::TrackerNode>
-dht::DhtNode::query_get_peers( NodeID infohash
-                             , Contact node
-                             , std::vector<NodeContact>& closer_nodes
-                             , std::vector<NodeContact>& closer_nodes6
-                             , asio::yield_context yield)
-{
-    sys::error_code ec;
-
-    BencodedMap get_peers_reply = send_query_await_reply(
-        node,
-        "get_peers",
-        BencodedMap { { "id", _node_id.to_bytestring() }
-                    , { "info_hash", infohash.to_bytestring() } },
-        std::chrono::seconds(2),
-        yield[ec]
-    );
-
-    if (ec) {
-        return or_throw(yield, ec, boost::none);
-    }
-
-    if (get_peers_reply["y"] != "r") {
-        return boost::none;
-    }
-
-    boost::optional<BencodedMap> get_peers_arguments = get_peers_reply["r"].as_map();
-    if (!get_peers_arguments) {
-        return boost::none;
-    }
-
-    boost::optional<BencodedList> encoded_peers = (*get_peers_arguments)["values"].as_list();
-    boost::optional<std::string> announce_token = (*get_peers_arguments)["token"].as_string();
-
-
-    if (!announce_token) {
-        return boost::none;
-    }
-
-    TrackerNode tracker{ node.endpoint, {}, *announce_token };
-
-    if (encoded_peers) {
-        for (auto& peer : *encoded_peers) {
-            boost::optional<std::string> peer_string = peer.as_string();
-            if (!peer_string) continue;
-
-            boost::optional<udp::endpoint> endpoint = decode_endpoint(*peer_string);
-            if (!endpoint) continue;
-
-            tracker.peers.push_back({endpoint->address(), endpoint->port()});
-        }
-    }
-
-    boost::optional<std::string> nodes  = (*get_peers_arguments)["nodes"].as_string();
-    boost::optional<std::string> nodes6 = (*get_peers_arguments)["nodes6"].as_string();
-
-    if (nodes) {
-        if (!decode_contacts_v4(*nodes,  closer_nodes)) {
-            return boost::none;
-        }
-    }
-
-    if (nodes6) {
-        if (!decode_contacts_v6(*nodes6, closer_nodes6)) {
-            return boost::none;
-        }
-    }
-
-    return tracker;
+    return response;
 }
 
 /**
  * Perform a get_peers search. Returns the peers found, as well as necessary
  * data to later perform an announce operation.
  */
-std::map<NodeID, dht::DhtNode::TrackerNode>
-dht::DhtNode::tracker_search_peers(
+void dht::DhtNode::tracker_do_search_peers(
     NodeID infohash,
+    std::set<tcp::endpoint>& peers,
+    std::map<NodeID, TrackerNode>& responsible_nodes,
     asio::yield_context yield
 ) {
-    ProximityMap<TrackerNode> tracker_reply( infohash
-                                           , RESPONSIBLE_TRACKERS_PER_SWARM);
+    struct ResponsibleNode {
+        asio::ip::udp::endpoint node_endpoint;
+        std::vector<tcp::endpoint> peers;
+        std::string put_token;
+    };
+    ProximityMap<ResponsibleNode> responsible_nodes_full(infohash, RESPONSIBLE_TRACKERS_PER_SWARM);
 
     collect(infohash, [&](const Contact& candidate, asio::yield_context yield)
                       -> boost::optional<Candidates>
         {
-            if (!candidate.id && tracker_reply.full()) {
+            if (!candidate.id && responsible_nodes_full.full()) {
+                return boost::none;
+            }
+            if (candidate.id && !responsible_nodes_full.would_insert(*candidate.id)) {
                 return boost::none;
             }
 
-            if (candidate.id && !tracker_reply.would_insert(*candidate.id)) {
-                return boost::none;
+            std::vector<NodeContact> closer_nodes;
+            boost::optional<BencodedMap> response_ = query_get_peers(
+                infohash,
+                candidate,
+                closer_nodes,
+                yield
+            );
+            if (!response_) {
+                return closer_nodes;
+            }
+            BencodedMap& response = *response_;
+
+            boost::optional<std::string> announce_token = response["token"].as_string();
+            if (!announce_token) {
+                return closer_nodes;
             }
 
-            sys::error_code ec;
-
-            std::vector<NodeContact> result_nodes;
-            std::vector<NodeContact> result_nodes6;
-
-            auto opt_tracker = query_get_peers( infohash
-                                              , candidate
-                                              , result_nodes
-                                              , result_nodes6
-                                              , yield[ec]);
-
-            if (ec) {
-                return Candidates{};
+            if (candidate.id) {
+                ResponsibleNode node{ candidate.endpoint, {}, *announce_token };
+                boost::optional<BencodedList> encoded_peers = response["values"].as_list();
+                if (encoded_peers) {
+                    for (auto& peer : *encoded_peers) {
+                        boost::optional<std::string> peer_string = peer.as_string();
+                        if (!peer_string) {
+                            continue;
+                        }
+                        boost::optional<udp::endpoint> endpoint = decode_endpoint(*peer_string);
+                        if (!endpoint) {
+                            continue;
+                        }
+                        node.peers.push_back({endpoint->address(), endpoint->port()});
+                    }
+                }
+                responsible_nodes_full.insert({ *candidate.id, std::move(node) });
             }
 
-            if (opt_tracker && candidate.id) {
-                tracker_reply.insert({ *candidate.id , std::move(*opt_tracker) });
-            }
-
-            auto* contacts = is_v4() ? &result_nodes : &result_nodes6;
-
-            if (contacts->empty()) {
-                query_find_node( infohash
-                               , candidate
-                               , result_nodes
-                               , result_nodes6
-                               , yield[ec]);
-
-                contacts = is_v4() ? &result_nodes : &result_nodes6;
-            }
-
-            return *contacts;
+            return closer_nodes;
         }
         , yield);
 
-    return { tracker_reply.begin(), tracker_reply.end() };
+    peers.clear();
+    responsible_nodes.clear();
+    for (auto& i : responsible_nodes_full) {
+        peers.insert(i.second.peers.begin(), i.second.peers.end());
+        responsible_nodes[i.first] = { i.second.node_endpoint, i.second.put_token };
+    }
 }
 
 

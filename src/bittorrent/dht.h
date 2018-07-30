@@ -160,39 +160,41 @@ class DhtNode {
         asio::yield_context
     );
 
+    // http://bittorrent.org/beps/bep_0005.html#find-node
+    bool query_find_node(
+        NodeID target_id,
+        Contact node,
+        std::vector<NodeContact>& closer_nodes,
+        asio::yield_context yield
+    );
+
+    // http://bittorrent.org/beps/bep_0005.html#get-peers
+    boost::optional<BencodedMap> query_get_peers(
+        NodeID infohash,
+        Contact node,
+        std::vector<NodeContact>& closer_nodes,
+        asio::yield_context yield
+    );
+
+    // http://bittorrent.org/beps/bep_0044.html#get-message
     boost::optional<BencodedMap> query_get_data(
         NodeID key,
         Contact node,
         std::vector<NodeContact>& closer_nodes,
-        std::vector<NodeContact>& closer_nodes6,
         asio::yield_context yield
     );
 
+
     struct TrackerNode {
-        udp::endpoint node_endpoint;
-        std::vector<tcp::endpoint> peers;
+        asio::ip::udp::endpoint node_endpoint;
         std::string announce_token;
     };
-
-    // http://bittorrent.org/beps/bep_0005.html#find-node
-    bool query_find_node(
-        NodeID target_id,
-        Contact,
-        std::vector<NodeContact>& closer_nodes,
-        std::vector<NodeContact>& closer_nodes6,
+    void tracker_do_search_peers(
+        NodeID infohash,
+        std::set<tcp::endpoint>& peers,
+        std::map<NodeID, TrackerNode>& responsible_nodes,
         asio::yield_context
     );
-
-    // http://bittorrent.org/beps/bep_0005.html#get-peers
-    boost::optional<TrackerNode>
-    query_get_peers( NodeID infohash
-                   , Contact
-                   , std::vector<NodeContact>& closer_nodes
-                   , std::vector<NodeContact>& closer_nodes6
-                   , asio::yield_context);
-
-    std::map<NodeID, TrackerNode>
-    tracker_search_peers(NodeID infohash, asio::yield_context);
 
     void routing_bucket_try_add_node( RoutingBucket*
                                     , NodeContact
