@@ -48,7 +48,7 @@ std::array<uint8_t, 20> sha1(const std::vector<unsigned char>& data)
 
 
 
-Ed25519PublicKey::Ed25519PublicKey(const std::array<uint8_t, 32>& key):
+Ed25519PublicKey::Ed25519PublicKey(std::array<uint8_t, 32> key):
     _public_key(nullptr)
 {
     if (::gcry_sexp_build(&_public_key, NULL, "(public-key (ecc (curve Ed25519) (flags eddsa) (q %b)))", key.size(), key.data())) {

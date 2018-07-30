@@ -10,6 +10,10 @@
 namespace ouinet {
 namespace bittorrent {
 
+/*
+ * http://www.bittorrent.org/beps/bep_0003.html#bencoding
+ */
+
 class BencodedValue;
 
 typedef std::vector<BencodedValue> BencodedList;

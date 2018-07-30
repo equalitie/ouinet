@@ -20,7 +20,7 @@ std::array<uint8_t, 20> sha1(const std::vector<unsigned char>& data);
 
 class Ed25519PublicKey {
     public:
-    Ed25519PublicKey(const std::array<uint8_t, 32>& key);
+    Ed25519PublicKey(std::array<uint8_t, 32> key = {});
     ~Ed25519PublicKey();
 
     Ed25519PublicKey(const Ed25519PublicKey& other);

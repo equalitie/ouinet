@@ -125,6 +125,14 @@ boost::optional<BencodedValue> destructive_parse_value(std::string& encoded)
             if (!value) {
                 return boost::none;
             }
+            /*
+             * key/value pairs MUST be in ascending key order.
+             */
+            if (!output.empty()) {
+                if (output.rbegin()->first >= key) {
+                    return boost::none;
+                }
+            }
             output[std::move(*key)] = std::move(*value);
         }
         if (encoded.size() == 0) {

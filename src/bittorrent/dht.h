@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "bencoding.h"
-#include "dht_tracker.h"
+#include "dht_storage.h"
 #include "node_id.h"
 #include "routing_table.h"
 #include "contact.h"
@@ -215,6 +215,7 @@ class DhtNode {
     udp::endpoint _wan_endpoint;
     std::unique_ptr<RoutingTable> _routing_table;
     std::unique_ptr<Tracker> _tracker;
+    std::unique_ptr<DataStore> _data_store;
 
     struct ActiveRequest {
         udp::endpoint destination;
