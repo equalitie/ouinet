@@ -693,7 +693,9 @@ void Client::State::serve_request( GenericConnection&& con
         // Read the (clear-text) HTTP request
         ASYNC_DEBUG(http::async_read(con, buffer, req, yield[ec]), "Read request");
 
-        if (ec == http::error::end_of_stream) break;
+        if ( ec == http::error::end_of_stream
+          || ec == asio::ssl::error::stream_truncated) break;
+
         if (ec) return fail(ec, "read");
 
         // Requests in the encrypted channel are not proxy-like
