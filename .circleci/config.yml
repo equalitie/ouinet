@@ -53,7 +53,6 @@ stages:
       - type: shell
         name: Test
         command: |
-          timeout: 1200
           boost_root=${HOME}/boost_${BOOST_MAJOR}_${BOOST_MINOR}_${BOOST_PATCH}
           export LD_LIBRARY_PATH=${boost_root}/stage/lib:$LD_LIBRARY_PATH
 
