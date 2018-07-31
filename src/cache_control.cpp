@@ -441,6 +441,7 @@ bool CacheControl::ok_to_cache( const http::request_header<>&  request
             break;
         // TODO: Other response codes
         default:
+            if (reason) *reason = "Response status";
             return false;
     }
 
