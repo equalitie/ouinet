@@ -88,7 +88,6 @@ class OuiServiceClient
     connect(asio::yield_context yield, Signal<void()>& cancel);
 
     private:
-    asio::io_service& _ios;
     std::shared_ptr<OuiServiceImplementationClient> _implementation;
     bool _started;
     ConditionVariable _started_condition;

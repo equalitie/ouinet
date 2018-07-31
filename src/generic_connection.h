@@ -44,7 +44,17 @@ namespace generic_connection_detail {
 
 class GenericConnection {
 public:
+#if BOOST_VERSION >= 106700
     using executor_type = asio::io_context::executor_type;
+#else
+   template<class Token, class Ret>
+    using Handler = typename asio::handler_type< Token
+                                                , void(sys::error_code, Ret)
+                                                >::type;
+
+     template<class Token, class Ret>
+     using Result = typename asio::async_result<Handler<Token, Ret>>;
+#endif
 
 private:
     using OnRead  = std::function<void(sys::error_code, size_t)>;
@@ -55,7 +65,9 @@ private:
 
     struct Base {
         virtual asio::io_service& get_io_service() = 0;
+#if BOOST_VERSION >= 106700
         virtual executor_type     get_executor() = 0;
+#endif
 
         virtual void read_impl (OnRead&&)  = 0;
         virtual void write_impl(OnWrite&&) = 0;
@@ -88,10 +100,12 @@ private:
             return _impl->get_io_service();
         }
 
+#if BOOST_VERSION >= 106700
         virtual executor_type get_executor() override
         {
             return _impl->get_executor();
         }
+#endif
 
         void read_impl(OnRead&& on_read) override
         {
@@ -138,10 +152,12 @@ public:
         return _impl->get_io_service();
     }
 
+#if BOOST_VERSION >= 106700
     executor_type get_executor()
     {
         return _impl->get_executor();
     }
+#endif
 
     void close()
     {
@@ -157,6 +173,7 @@ public:
         namespace asio   = boost::asio;
         namespace system = boost::system;
 
+#if BOOST_VERSION >= 106700
         using Sig = void(system::error_code, size_t);
 
         boost::asio::async_completion<Token, Sig> init(token);
@@ -179,6 +196,17 @@ public:
                          });
 
         return init.result.get();
+#else
+        Handler<Token, size_t> handler(forward<Token>(token));
+        Result<Token, size_t> result(handler);
+
+        _impl->read_buffers.resize(distance(bs.begin(), bs.end()));
+        copy(bs.begin(), bs.end(), _impl->read_buffers.begin());
+
+        _impl->read_impl(move(handler));
+
+        return result.get();
+#endif
     }
 
     template< class ConstBufferSequence
@@ -190,6 +218,7 @@ public:
         namespace asio   = boost::asio;
         namespace system = boost::system;
 
+#if BOOST_VERSION >= 106700
         using Sig = void(system::error_code, size_t);
 
         boost::asio::async_completion<Token, Sig> init(token);
@@ -212,6 +241,17 @@ public:
                           });
 
         return init.result.get();
+#else
+        Handler<Token, size_t> handler(forward<Token>(token));
+        Result<Token, size_t> result(handler);
+
+        _impl->write_buffers.resize(distance(bs.begin(), bs.end()));
+        copy(bs.begin(), bs.end(), _impl->write_buffers.begin());
+
+        _impl->write_impl(move(handler));
+
+        return result.get();
+#endif
     }
 
 private:
