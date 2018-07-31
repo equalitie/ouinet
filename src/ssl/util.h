@@ -31,7 +31,7 @@ static inline void x509_add_ext(X509 *cert, int nid, const char *value)
     ex = X509V3_EXT_conf_nid(nullptr, &ctx, nid, (char*) value);
 
     if (!ex) throw std::runtime_error("Failed to add X509 extension");
-    
+
     X509_add_ext(cert,ex,-1);
     X509_EXTENSION_free(ex);
 }

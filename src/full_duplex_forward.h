@@ -18,7 +18,7 @@ void full_duplex( GenericConnection& c1
     {
         sys::error_code ec;
         std::array<uint8_t, 2048> data;
-    
+
         for (;;) {
             // XXX: Workaround: For some reason calling in.async_read_some
             // directly throws the boost::coroutines::detail::forced_unwind
@@ -38,7 +38,7 @@ void full_duplex( GenericConnection& c1
                 , yield[ec]);
 
             if (ec) break;
-    
+
             asio::async_write(out, asio::buffer(data, length), yield[ec]);
             if (ec) break;
         }

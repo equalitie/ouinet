@@ -5,6 +5,7 @@
 #include <vector>
 #include <queue>
 
+#include <boost/asio/error.hpp>
 #include <boost/beast/core/string.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/regex.hpp>

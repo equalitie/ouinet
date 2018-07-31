@@ -135,14 +135,24 @@ bool is_localhost( const std::string& host
 
     // For the less evident ones, lookup DNS.
     sys::error_code ec;
-    auto const lookup = tcp_async_resolve( host, "0"  // not interested in port
-                                         , ios, cancel_signal
-                                         , yield[ec]);
+    auto lookup = tcp_async_resolve( host, "0"  // not interested in port
+                                   , ios, cancel_signal
+                                   , yield[ec]);
+
     if (ec) return false;
 
+#if BOOST_VERSION >= 106700
     for (auto r : lookup)
         if (boost::regex_match(r.endpoint().address().to_string(), m, lhrx))
             return true;
+#else
+    while (*lookup != asio::ip::tcp::endpoint()) {
+        if (boost::regex_match(lookup->endpoint().address().to_string(), m, lhrx))
+            return true;
+        lookup++;
+    }
+#endif
+
     return false;
 }
 
