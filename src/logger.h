@@ -22,11 +22,11 @@
 #include "util.h"
 
 //Logger micros which should be used for efficiency
-#define LOG_DEBUG(...) if (logger.get_threshold() >= DEBUG) { logger.debug(util::str(__VA_ARGS__)); }
-#define LOG_VERBOSE(...) if (logger.get_threshold() >= VERBOSE) { logger.verbose(util::str(__VA_ARGS__)); }
-#define LOG_INFO(...) if (logger.get_threshold() >= INFO) { logger.info(util::str(__VA_ARGS__)); }
-#define LOG_WARN(...) if (logger.get_threshold() >= WARN) { logger.warn(util::str(__VA_ARGS__)); }
-#define LOG_ERROR(...) if (logger.get_threshold() >= ERROR) { logger.error(util::str(__VA_ARGS__)); }
+#define LOG_DEBUG(...) if (logger.get_threshold() <= DEBUG) { logger.debug(util::str(__VA_ARGS__)); }
+#define LOG_VERBOSE(...) if (logger.get_threshold() <= VERBOSE) { logger.verbose(util::str(__VA_ARGS__)); }
+#define LOG_INFO(...) if (logger.get_threshold() <= INFO) { logger.info(util::str(__VA_ARGS__)); }
+#define LOG_WARN(...) if (logger.get_threshold() <= WARN) { logger.warn(util::str(__VA_ARGS__)); }
+#define LOG_ERROR(...) if (logger.get_threshold() <= ERROR) { logger.error(util::str(__VA_ARGS__)); }
 #define LOG_ABORT(...) logger.abort(util::str(__VA_ARGS__)) 
 
 // Standard log levels, ascending order of specificity.

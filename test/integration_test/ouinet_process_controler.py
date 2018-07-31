@@ -14,8 +14,7 @@ import pdb
 
 from test_fixtures import TestFixtures
 
-from twisted.internet import reactor, defer
-
+from twisted.internet import reactor, defer, task
 from ouinet_process_protocol import OuinetProcessProtocol, OuinetIPFSCacheProcessProtocol
 
 ouinet_env = {}
@@ -129,7 +128,11 @@ class OuinetProcess(object):
 
         # we add a twisted timer to kill the process after timeout
         logging.debug(self.config.app_name + " times out in " + str(self.config.timeout) + " seconds")
-        self.timeout_killer = reactor.callLater(self.config.timeout, self.send_term_signal)
+        self.timeout_killer = reactor.callLater(self.config.timeout, self.stop)
+
+        # send a pulse to keep the output of the proccess alive
+        self.pulse_timer = task.LoopingCall(self._proc_protocol.pulse_out)
+        self.pulse_timer.start(TestFixtures.KEEP_IO_ALIVE_PULSE_INTERVAL) # call every second
 
         # we *might* need to make sure that the process has ended before
         # ending the test because Twisted Trial might get mad otherwise
@@ -138,6 +141,7 @@ class OuinetProcess(object):
 
     def send_term_signal(self):
         if not self._term_signal_sent:
+            logging.debug("Sending term signal to " + self.config.app_name)
             self._term_signal_sent = True
             self._proc.signalProcess("TERM")
 
@@ -148,6 +152,8 @@ class OuinetProcess(object):
 
             if self.timeout_killer.active():
                 self.timeout_killer.cancel()
+
+            self.pulse_timer.stop()
 
             self.send_term_signal()
             self._proc_protocol.transport.loseConnection()
@@ -175,6 +181,14 @@ class OuinetIPFSClient(OuinetClient):
         """
         if (self._proc_protocol):
             return self._proc_protocol.served_from_cache()
+
+        return False
+
+    def IPNS_resolution_start_time(self):
+        if (self._proc_protocol):
+            return self._proc_protocol.IPNS_resolution_start_time
+
+        return 0
         
 class OuinetInjector(OuinetProcess):
     """

@@ -799,9 +799,11 @@ void Client::State::setup_ipfs_cache()
         const string ipns = _config.ipns();
 
         {
+            LOG_DEBUG("Starting IPFS Cache with IPNS ID: " + ipns);
             auto on_exit = defer([&] { _is_ipns_being_setup = false; });
 
             if (ipns.empty()) {
+                LOG_WARN("Support for IPFS Cache is disabled because we have not been provided with an IPNS id");
                 _ipfs_cache = nullptr;
                 return;
             }
@@ -819,7 +821,6 @@ void Client::State::setup_ipfs_cache()
             });
 
             sys::error_code ec;
-
             _ipfs_cache = CacheClient::build(_ios
                                             , ipns
                                             , move(repo_root)

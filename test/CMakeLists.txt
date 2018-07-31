@@ -18,3 +18,7 @@ target_link_libraries(test-timeout-stream ${Boost_LIBRARIES})
 add_executable(test-bittorrent "test_bittorrent.cpp"
                                "../src/bittorrent/node_id.cpp")
 target_link_libraries(test-bittorrent ${Boost_LIBRARIES})
+
+add_executable(test-logger "test_logger.cpp"
+                               "../src/logger.cpp")
+target_link_libraries(test-logger ${Boost_LIBRARIES})

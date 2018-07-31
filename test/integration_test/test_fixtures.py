@@ -6,19 +6,18 @@ import logging
 
 class TestFixtures:
     LOGGING_LEVEL = logging.DEBUG #Change true to turn on debugging 
+    KEEP_IO_ALIVE_PULSE_INTERVAL = 60 #seconds
     
     FATAL_ERROR_INDICATOR_REGEX = r'[\s\S]*\[ABORT\][\s\S]*'
     DEFAULT_PROCESS_TIMEOUT = 15 # seconds
-    TCP_TRANSPORT_TIMEOUT = 15 
+    TCP_TRANSPORT_TIMEOUT = 15
     I2P_TRANSPORT_TIMEOUT = 300
-    IPFS_CACHE_TIMEOUT = 600
+    IPFS_CACHE_TIMEOUT = 900
     
-    PROCESS_DYING_SLACK = 30
-
     TEST_TIMEOUT = {
         "test_i2p_transport":300,
         "test_tcp_transport":15,
-        "test_ipfs_cache":1200}
+        "test_ipfs_cache":900}
 
     #BENCHMARK REGEX INDICES
     READY_REGEX_INDEX = 0
@@ -64,9 +63,11 @@ class TestFixtures:
 
     FIRST_CLIENT_CONF_FILE_CONTENT = "open-file-limit = 4096\n"
 
-    IPNS_ID_ANNOUNCE_REGEX = "[\s\S]*IPNS DB: ([A-Za-z0-9]+)\n[\s\S]*"
+    IPNS_ID_ANNOUNCE_REGEX = "[\s\S]*IPNS DB: ([A-Za-z0-9]+)[\s\S]*"
+    START_OF_IPNS_RESOLUTION_REGEX = r'[\s\S]*resolving IPNS address: [\s\S]*'
     IPFS_CACHE_READY_REGEX = r'[\s\S]*IPNS has been resolved successfully[\s\S]*'
     REQUEST_CACHED_REGEX = r'[\s\S]*Request was successfully published to cache[\s\S]*'
-    NO_OF_CACHED_MESSAGES_REQUIRED = 2 
-    SERVED_FROM_CACHE_REGEX = r'[\s\S]*Response was served from cache[\s\S]*'
+    NO_OF_CACHED_MESSAGES_REQUIRED = 1
+    RETRIEVED_FROM_CACHE_REGEX = r'[\s\S]*Response was retrieved from cache[\s\S]*'
+                                    
 

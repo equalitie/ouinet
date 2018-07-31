@@ -41,7 +41,9 @@ template<class R>
 static optional<beast::string_view> get(const R& r, http::field f)
 {
     auto i = r.find(f);
-    if (i == r.end()) return boost::none;
+    if (i == r.end())
+      return boost::none;
+        
     return i->value();
 }
 
@@ -146,7 +148,8 @@ static
 bool is_expired(const CacheControl::CacheEntry& entry)
 {
     // RFC2616: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.9.3
-
+    LOG_DEBUG("Checking if the cached response is expired");
+  
     static const auto now = [] {
         return posix_time::second_clock::universal_time();
     };
@@ -312,11 +315,19 @@ CacheControl::do_fetch(const Request& request, asio::yield_context yield)
     // If we're here that means that we were able to retrieve something
     // from the cache.
 
+    LOG_DEBUG("Response was retrieved from cache");
+
     if (has_cache_control_directive(cache_entry.response, "private")
         || is_older_than_max_cache_age(cache_entry.time_stamp)) {
         auto response = do_fetch_fresh(request, yield[ec]);
 
-        if (!ec) return response;
+        if (!ec) {
+          LOG_DEBUG("Response was served from injector: cached response is private");
+          return response;
+
+        }
+
+        LOG_DEBUG("Response was served from cached: cannot reach the injector");
 
         return is_expired(cache_entry)
              ? add_stale_warning(move(cache_entry.response))
@@ -324,7 +335,7 @@ CacheControl::do_fetch(const Request& request, asio::yield_context yield)
     }
 
     if (!is_expired(cache_entry)) {
-        LOG_DEBUG("Response was served from cache");
+        LOG_DEBUG("Response was served from cache: not expired");
         return cache_entry.response;
     }
 
@@ -332,6 +343,7 @@ CacheControl::do_fetch(const Request& request, asio::yield_context yield)
     auto rq_etag = get(request, http::field::if_none_match);
 
     if (cache_etag && !rq_etag) {
+      LOG_DEBUG("Attempting to revalidate cached response")
         auto rq = request; // Make a copy because `request` is const&.
 
         rq.set(http::field::if_none_match, *cache_etag);
@@ -339,21 +351,30 @@ CacheControl::do_fetch(const Request& request, asio::yield_context yield)
         auto response = do_fetch_fresh(rq, yield[ec]);
 
         if (ec) {
+          LOG_DEBUG("Response was served from cache: revalidation failed");
             return add_stale_warning(move(cache_entry.response));
         }
 
         if (response.result() == http::status::not_modified) {
+          LOG_DEBUG("Response was served from cache: not modified");
             return move(cache_entry.response);
         }
 
+        LOG_DEBUG("Response was served from injector: cached response is modified");
         return response;
     }
 
     auto response = do_fetch_fresh(request, yield[ec]);
 
-    return ec
-         ? add_stale_warning(move(cache_entry.response))
-         : response;
+    if (ec) {
+      LOG_DEBUG("Response was served from cache: requesting fresh response failed");
+      return add_stale_warning(move(cache_entry.response));
+        
+    } else {
+      LOG_DEBUG("Response was served from injector: cached expired without etag");
+      return response;
+      
+    }
 }
 
 void CacheControl::max_cached_age(const posix_time::time_duration& d)

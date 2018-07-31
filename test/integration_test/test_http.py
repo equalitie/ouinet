@@ -38,7 +38,7 @@ class OuinetTests(TestCase):
         pass
 
     def setUp(self):
-        logging.basicConfig(stream=sys.stdout, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=TestFixtures.LOGGING_LEVEL, )
+        logging.basicConfig(stream=sys.stderr, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=TestFixtures.LOGGING_LEVEL, )
 
         #you can't set the timout in the test method itself :-(
         self.timeout = TestFixtures.TEST_TIMEOUT[self._testMethodName]
@@ -86,7 +86,7 @@ class OuinetTests(TestCase):
         return client
 
     def run_cache_client(self, name, args, deferred_cache_ready):
-        client = OuinetIPFSClient(OuinetConfig(name, TestFixtures.TCP_TRANSPORT_TIMEOUT, args, benchmark_regexes=[TestFixtures.IPFS_CACHE_READY_REGEX]), [deferred_cache_ready])
+        client = OuinetIPFSClient(OuinetConfig(name, TestFixtures.IPFS_CACHE_TIMEOUT, args, benchmark_regexes=[TestFixtures.IPFS_CACHE_READY_REGEX]), [deferred_cache_ready])
         client.start()
         self.proc_list.append(client)
 
@@ -120,8 +120,6 @@ class OuinetTests(TestCase):
         and make sure it gets the correct echo. The unique request makes sure that
         the response is from the http server and is not cached.
         """
-        self.timeout = TestFixtures.I2P_TRANSPORT_TIMEOUT
-
         #injector
         i2pinjector_tunnel_ready = defer.Deferred()
         i2pinjector = self.run_i2p_injector(["--listen-on-i2p", "true"], i2pinjector_tunnel_ready)
@@ -158,8 +156,6 @@ class OuinetTests(TestCase):
         and make sure it gets the correct echo. The unique request makes sure that
         the response is from the http server and is not cached.
         """
-        self.timeout = TestFixtures.TCP_TRANSPORT_TIMEOUT
-
         #injector
         injector_tcp_port_ready = defer.Deferred()
         self.run_tcp_injector(["--listen-on-i2p", "false", "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)], injector_tcp_port_ready)
@@ -194,8 +190,6 @@ class OuinetTests(TestCase):
         Then the second client request the same request makes sure that
         the response is served from cache.
         """
-        self.timeout = TestFixtures.IPFS_CACHE_TIMEOUT
-
         #injector
         injector_tcp_port_ready = defer.Deferred()
         result_got_cached = defer.Deferred()
@@ -207,14 +201,13 @@ class OuinetTests(TestCase):
         #TODO: we are assuming that IPNS DB is announced before opening the port.
         # remove the is assumption.
         IPNS_end_point = ipfs_cache_injector.get_IPNS_ID()
+        assert(len(IPNS_end_point) > 0);
+        
+        print "IPNS end point is: " + IPNS_end_point
 
         #tcp client
         client_tcp_port_ready = defer.Deferred()
-        self.run_tcp_client(TestFixtures.CACHE_CLIENT[0]["name"], ["--listen-on-tcp", "127.0.0.1:"+str(TestFixtures.CACHE_CLIENT[0]["port"]), "--injector-ipns", IPNS_end_point, "--injector-ep", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT), "http://localhost/"], client_tcp_port_ready)
-
-        #cache client
-        client_cache_ready = defer.Deferred()
-        cache_client = self.run_cache_client(TestFixtures.CACHE_CLIENT[1]["name"], ["--listen-on-tcp", "127.0.0.1:"+str(TestFixtures.CACHE_CLIENT[1]["port"]), "--injector-ipns", IPNS_end_point, "--injector-ep", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT), "http://localhost/"], client_cache_ready)
+        self.run_tcp_client(TestFixtures.CACHE_CLIENT[0]["name"], ["--listen-on-tcp", "127.0.0.1:"+str(TestFixtures.CACHE_CLIENT[0]["port"]), "--injector-ep", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT), "http://localhost/"], client_tcp_port_ready)
 
         #http_server
         self.test_http_server = self.run_http_server(
@@ -230,25 +223,38 @@ class OuinetTests(TestCase):
 
         response_body = yield readBody(defered_response)
         self.assertEquals(response_body, TestFixtures.TEST_PAGE_BODY)
-
+        
         # now waiting or injector to annouce caching the request
         success = yield result_got_cached
         self.assertTrue(success)
 
-        # make sure that the client2 is ready to access the cache
-        pdb.set_trace()
-        success = yield client_cache_ready
-        self.assertTrue(success)
-        pdb.set_trace()
+        #start cache client which supposed to read the response from cache
+        client_cache_ready = defer.Deferred()
+        cache_client = self.run_cache_client(TestFixtures.CACHE_CLIENT[1]["name"], ["--listen-on-tcp", "127.0.0.1:"+str(TestFixtures.CACHE_CLIENT[1]["port"]), "--injector-ipns", IPNS_end_point, "--injector-ep", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT), "http://localhost/"], client_cache_ready)
 
-        #now request the same page from second client
-        defered_response = yield self.request_page(TestFixtures.CACHE_CLIENT[1]["port"], page_url)
+        import time
+
+        # make sure that the client2 is ready to access the cache
+        success = yield client_cache_ready
+        IPNS_resoultion_done_time_stamp = time.time()
+
+        self.assertTrue(success)
+        self.assertTrue(cache_client.IPNS_resolution_start_time() > 0)
+
+        logging.debug("IPNS resolution took: " + str(
+            IPNS_resoultion_done_time_stamp -
+            cache_client.IPNS_resolution_start_time()) + " seconds")
+
+        # now request the same page from second client
+        defered_response = yield self.request_page(
+            TestFixtures.CACHE_CLIENT[1]["port"], page_url)
+
         self.assertEquals(defered_response.code, 200)
 
         response_body = yield readBody(defered_response)
         self.assertEquals(response_body, TestFixtures.TEST_PAGE_BODY)
 
-        #make sure it was served from cache
+        # make sure it was served from cache
         self.assertTrue(cache_client.served_from_cache())
 
     def tearDown(self):
@@ -260,22 +266,4 @@ class OuinetTests(TestCase):
         if hasattr(self, 'test_http_server'):
             deferred_procs.append(self.test_http_server.stopListening())
             
-        return defer.gatherResults(deferred_procs) 
-    
-class BeginningPrinter(Protocol):
-    def __init__(self, finished):
-        self.finished = finished
-        self.remaining = 1024 * 10
-
-    def dataReceived(self, bytes):
-        if self.remaining:
-            display = bytes[:self.remaining]
-            print('Some data received:')
-            print(display)
-            self.remaining -= len(display)
-
-    def connectionLost(self, reason):
-        print('Finished receiving body:', reason.getErrorMessage())
-        self.finished.callback(None)
-
-
+        return defer.gatherResults(deferred_procs)

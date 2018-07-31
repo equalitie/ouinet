@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <iostream>
 
 #include "../logger.h"
 
@@ -114,7 +115,6 @@ ClientDb::ClientDb(asio_ipfs::node& ipfs_node, string path_to_repo, string ipns)
                                 , BTREE_NODE_SIZE))
 {
     auto d = _was_destroyed;
-
     asio::spawn(get_io_service(), [=](asio::yield_context yield) {
             if (*d) return;
             load_db(*_db_map, _path_to_repo, _ipns, yield);
@@ -202,16 +202,20 @@ void ClientDb::continuously_download_db(asio::yield_context yield)
     while(true) {
         sys::error_code ec;
 
+        LOG_DEBUG("resolving IPNS address: " + _ipns);
         auto ipfs_id = _ipfs_node.resolve(_ipns, yield[ec]);
         if (*d) return;
 
         if (!ec) {
           LOG_DEBUG("IPNS has been resolved successfully");
-            _ipfs = ipfs_id;
+          _ipfs = ipfs_id;
 
-            _db_map->load(ipfs_id, yield[ec]);
+          _db_map->load(ipfs_id, yield[ec]);
 
-            if (*d) return;
+          if (*d) return;
+        } else {
+          LOG_ERROR("Error in resolving IPNS: " + ec.message());
+          
         }
 
         save_db(_path_to_repo, _ipns, ipfs_id);
