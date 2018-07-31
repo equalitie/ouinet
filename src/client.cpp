@@ -497,14 +497,14 @@ Client::State::build_cache_control(request_route::Config& request_config)
 }
 
 //------------------------------------------------------------------------------
-static
-Response bad_gateway(const Request& req)
-{
-    Response res{http::status::bad_gateway, req.version()};
-    res.set(http::field::server, "Ouinet");
-    res.keep_alive(req.keep_alive());
-    return res;
-}
+//static
+//Response bad_gateway(const Request& req)
+//{
+//    Response res{http::status::bad_gateway, req.version()};
+//    res.set(http::field::server, "Ouinet");
+//    res.keep_alive(req.keep_alive());
+//    return res;
+//}
 
 //------------------------------------------------------------------------------
 void setup_ssl_context( asio::ssl::context& ssl_context
