@@ -1,7 +1,8 @@
 #pragma once
 
-#include <boost/beast/http.hpp>
+#include <boost/asio/error.hpp>
 #include <boost/asio/spawn.hpp>
+#include <boost/beast/http.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include "namespaces.h"
 

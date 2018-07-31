@@ -1,10 +1,10 @@
-#include <boost/beast/core.hpp>
-#include <boost/beast/http.hpp>
-#include <boost/beast/version.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/connect.hpp>
 #include <boost/asio/signal_set.hpp>
+#include <boost/beast/core.hpp>
+#include <boost/beast/http.hpp>
+#include <boost/beast/version.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/ssl/stream.hpp>
@@ -609,9 +609,8 @@ GenericConnection Client::State::ssl_mitm_handshake( GenericConnection&& con
 void Client::State::serve_request( GenericConnection&& con
                                  , asio::yield_context yield)
 {
-
     LOG_DEBUG("Request received ");
-  
+
     namespace rr = request_route;
     using rr::responder;
 
@@ -619,7 +618,6 @@ void Client::State::serve_request( GenericConnection&& con
         con.close();
     });
 
-    
     // These access mechanisms are attempted in order for requests by default.
     const rr::Config default_request_config
         { true
@@ -913,13 +911,12 @@ void Client::State::listen_tcp
 //------------------------------------------------------------------------------
 void Client::State::start(int argc, char* argv[])
 {
-  try {
-    _config = ClientConfig(argc, argv);
-
-  } catch(std::exception const& e) {
-    //explicit is better than implecit
-    LOG_ABORT(e.what());
-  }
+    try {
+        _config = ClientConfig(argc, argv);
+    } catch(std::exception const& e) {
+        //explicit is better than implecit
+        LOG_ABORT(e.what());
+    }
 
 #ifndef __ANDROID__
     auto pid_path = get_pid_path();
@@ -934,7 +931,6 @@ void Client::State::start(int argc, char* argv[])
     _pid_file = make_unique<util::PidFile>(pid_path);
 #endif
 
-#ifndef __ANDROID__
     auto ca_cert_path = _config.repo_root() / OUINET_CA_CERT_FILE;
     auto ca_key_path = _config.repo_root() / OUINET_CA_KEY_FILE;
     auto ca_dh_path = _config.repo_root() / OUINET_CA_DH_FILE;
@@ -959,7 +955,6 @@ void Client::State::start(int argc, char* argv[])
         boost::filesystem::ofstream(ca_dh_path)
             << _ca_certificate->pem_dh_param();
     }
-#endif
 
     asio::spawn
         ( _ios

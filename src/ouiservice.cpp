@@ -104,7 +104,6 @@ void OuiServiceServer::cancel_accept()
 //--------------------------------------------------------------------
 
 OuiServiceClient::OuiServiceClient(asio::io_service& ios):
-    _ios(ios),
     _started(false),
     _started_condition(ios)
 {}

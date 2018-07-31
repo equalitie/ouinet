@@ -25,6 +25,17 @@ option(WITH_INJECTOR "Compile injector" ON)
 add_definitions(-DBOOST_COROUTINES_NO_DEPRECATION_WARNING)
 add_definitions(-DBOOST_COROUTINE_NO_DEPRECATION_WARNING)
 
+# Asio has some trouble when multiple libraries are using the header only
+# version.  E.g. we've had problems that boost::asio::error returned from one
+# library wasn't equal to the same error from another library (because they had
+# different error categories).  The last problem before enabling this separate
+# compilation was when Android was running the io_service::run function, but
+# some handlers were not executed inside client.cpp (notably the
+# acceptor::async_accept function never called it's callback).
+#
+# https://www.boost.org/doc/libs/1_67_0/doc/html/boost_asio/using.html#boost_asio.using.optional_separate_compilation
+add_definitions(-DBOOST_ASIO_SEPARATE_COMPILATION)
+
 ################################################################################
 option(ASIO_IPFS_WITH_EXAMPLE_BINARIES "" OFF)
 
@@ -82,6 +93,8 @@ include_directories(
 
 file(GLOB client_sources
     "./src/client.cpp"
+    "./src/asio.cpp"
+    "./src/asio_ssl.cpp"
     "./src/connect_to_host.cpp"
     "./src/client_front_end.cpp"
     "./src/endpoint.cpp"
@@ -124,6 +137,8 @@ if (WITH_INJECTOR)
 
     file(GLOB injector_sources
         "./src/injector.cpp"
+        "./src/asio.cpp"
+        "./src/asio_ssl.cpp"
         "./src/connect_to_host.cpp"
         "./src/cache_control.cpp"
         "./src/ouiservice.cpp"
@@ -149,6 +164,7 @@ endif() # if WITH_INJECTOR
 if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
 
     file(GLOB test_dht_sources
+        "./src/asio.cpp"
         "./src/bittorrent/*.cpp"
     )
 
@@ -188,5 +204,7 @@ endif()
 
 ################################################################################
 # Tests
-add_subdirectory(test)
+if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
+    add_subdirectory(test)
+endif()
 ################################################################################
