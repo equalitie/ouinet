@@ -5,6 +5,8 @@
 #include <fstream>
 #include <thread>
 #include <boost/asio.hpp>
+#include <boost/asio/spawn.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <namespaces.h>
 #include <client.h>
 #include <util/signal.h>
