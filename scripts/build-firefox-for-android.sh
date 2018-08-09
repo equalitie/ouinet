@@ -28,39 +28,20 @@ function install_dependencies {
 }
 
 function maybe_download_moz_sources {
+    # Useful for debuggning when we often need to fetch unmodified versions
+    # of Mozilla's source tree (which is about 6GB big).
+    local keep_copy=0
+
     # https://developer.mozilla.org/en-US/docs/Mozilla/Developer_guide/Build_Instructions/Simple_Firefox_for_Android_build
     if [ ! -d mozilla-central ]; then
         if [ -d mozilla-central-orig ]; then
             cp -r mozilla-central-orig mozilla-central
         else
             hg clone https://hg.mozilla.org/mozilla-central
-            cp -r mozilla-central mozilla-central-orig
+            if [ $keep_copy == "1" ]; then
+                cp -r mozilla-central mozilla-central-orig
+            fi
         fi
-    fi
-}
-
-function maybe_install_sdk {
-    ######################################################################
-    # Install SDK dependencies.
-    local toolsfile=sdk-tools-linux-3859397.zip
-    local sdkmanager="$SDK_DIR/tools/bin/sdkmanager"
-    
-    if [ ! -f "$sdkmanager" ]; then
-        [ -d "$SDK_DIR/tools" ] || rm -rf "$SDK_DIR/tools"
-        if [ ! -f "$toolsfile" ]; then
-            # https://developer.android.com/studio/index.html#command-tools
-            wget "https://dl.google.com/android/repository/$toolsfile"
-        fi
-        unzip "$toolsfile" -d "$SDK_DIR"
-    fi
-}
-
-function maybe_install_ndk {
-    if [ ! -d $NDK_DIR ]; then
-        if [ ! -f $NDK_ZIP ]; then
-            wget https://dl.google.com/android/repository/$NDK_ZIP
-        fi
-        unzip $NDK_ZIP
     fi
 }
 
@@ -79,8 +60,6 @@ function maybe_install_rust {
 #clean
 install_dependencies
 (cd $DIR; maybe_install_rust)
-#(cd $DIR; maybe_install_sdk)
-#(cd $DIR; maybe_install_ndk)
 (cd $DIR; maybe_download_moz_sources)
 ################################################################################
 
