@@ -70,7 +70,8 @@ void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, stringstr
     ss << ca.pem_certificate();
 }
 
-void ClientFrontEnd::handle_upload(const Request& req, Response& res, stringstream& ss)
+void ClientFrontEnd::handle_upload( const Request& req, Response& res, stringstream& ss
+                                  , CacheClient* cache_client)
 {
     static const string req_ctype = "application/octet-stream";
 
@@ -93,6 +94,12 @@ void ClientFrontEnd::handle_upload(const Request& req, Response& res, stringstre
     if (!req[http::field::expect].empty()) {
         res.result(http::status::expectation_failed);
         ss << "{\"error\": \"sorry, request expectations are not supported\"}";
+        return;
+    }
+
+    if (!cache_client || !_ipfs_cache_enabled) {
+        res.result(http::status::service_unavailable);
+        ss << "{\"error\": \"cache access is not available\"}";
         return;
     }
 
@@ -220,7 +227,7 @@ Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
     if (url.path == "/ca.pem")
         handle_ca_pem(req, res, ss, ca);
     else if (url.path == "/upload")
-        handle_upload(req, res, ss);
+        handle_upload(req, res, ss, cache_client);
     else
         handle_portal(req, res, ss, injector_ep, cache_client);
 
