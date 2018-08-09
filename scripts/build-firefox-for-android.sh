@@ -4,12 +4,6 @@ set -e
 
 DIR=`pwd`
 
-SDK_DIR="$DIR/sdk"
-
-NDK=android-ndk-r15c
-NDK_DIR=$DIR/$NDK
-NDK_ZIP=${NDK}-linux-x86_64.zip
-
 function clean {
     rm -rf $HOME/.android
     rm -rf $HOME/.cargo
