@@ -70,6 +70,36 @@ void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, stringstr
     ss << ca.pem_certificate();
 }
 
+void ClientFrontEnd::handle_upload(const Request& req, Response& res, stringstream& ss)
+{
+    static const string req_ctype = "application/octet-stream";
+
+    res.set(http::field::content_type, "application/json");
+
+    if (req.method() != http::verb::post) {
+        res.result(http::status::method_not_allowed);
+        ss << "{\"error\": \"request method is not POST\"}";
+        return;
+    }
+
+    if (req[http::field::content_type] != req_ctype) {
+        res.result(http::status::bad_request);
+        ss << "{\"error\": \"request content type is not " << req_ctype << "\"}";
+        return;
+    }
+
+    // TODO: Support ``Expect: 100-continue`` as cURL does,
+    // e.g. to spot too big files before receiving the body.
+    if (!req[http::field::expect].empty()) {
+        res.result(http::status::expectation_failed);
+        ss << "{\"error\": \"sorry, request expectations are not supported\"}";
+        return;
+    }
+
+    // TODO: Actually upload data to IPFS.
+    ss << "{\"error\": null}";
+}
+
 void ClientFrontEnd::handle_portal( const Request& req, Response& res, stringstream& ss
                                   , const boost::optional<Endpoint>& injector_ep
                                   , CacheClient* cache_client)
@@ -189,6 +219,8 @@ Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
     match_http_url(req.target().to_string(), url);
     if (url.path == "/ca.pem")
         handle_ca_pem(req, res, ss, ca);
+    else if (url.path == "/upload")
+        handle_upload(req, res, ss);
     else
         handle_portal(req, res, ss, injector_ep, cache_client);
 

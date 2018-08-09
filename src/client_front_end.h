@@ -95,6 +95,8 @@ private:
     void handle_ca_pem( const Request&, Response&, std::stringstream&
                       , const CACertificate& );
 
+    void handle_upload(const Request&, Response&, std::stringstream&);
+
     void handle_portal( const Request&, Response&, std::stringstream&
                       , const boost::optional<Endpoint>&, CacheClient*);
 };
