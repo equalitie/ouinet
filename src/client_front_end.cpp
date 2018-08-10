@@ -75,43 +75,38 @@ void ClientFrontEnd::handle_upload( const Request& req, Response& res, stringstr
 {
     static const string req_ctype = "application/octet-stream";
 
+    auto result = http::status::ok;
     res.set(http::field::content_type, "application/json");
+    string err, cid;
 
     if (req.method() != http::verb::post) {
-        res.result(http::status::method_not_allowed);
-        ss << "{\"error\": \"request method is not POST\"}";
-        return;
+        result = http::status::method_not_allowed;
+        err = "request method is not POST";
+    } else if (req[http::field::content_type] != req_ctype) {
+        result = http::status::bad_request;
+        err = "request content type is not " + req_ctype;
+    } else if (!req[http::field::expect].empty()) {
+        // TODO: Support ``Expect: 100-continue`` as cURL does,
+        // e.g. to spot too big files before receiving the body.
+        result = http::status::expectation_failed;
+        err = "sorry, request expectations are not supported";
+    } else if (!cache_client || !_ipfs_cache_enabled) {
+        result = http::status::service_unavailable;
+        err = "cache access is not available";
+    } else {  // perform the upload
+        sys::error_code ec;
+        cid = cache_client->ipfs_add(req.body(), yield[ec]);
+        if (ec) {
+            result = http::status::internal_server_error;
+            err = "failed to seed data to the cache";
+        }
     }
 
-    if (req[http::field::content_type] != req_ctype) {
-        res.result(http::status::bad_request);
-        ss << "{\"error\": \"request content type is not " << req_ctype << "\"}";
-        return;
-    }
-
-    // TODO: Support ``Expect: 100-continue`` as cURL does,
-    // e.g. to spot too big files before receiving the body.
-    if (!req[http::field::expect].empty()) {
-        res.result(http::status::expectation_failed);
-        ss << "{\"error\": \"sorry, request expectations are not supported\"}";
-        return;
-    }
-
-    if (!cache_client || !_ipfs_cache_enabled) {
-        res.result(http::status::service_unavailable);
-        ss << "{\"error\": \"cache access is not available\"}";
-        return;
-    }
-
-    sys::error_code ec;
-    auto cid = cache_client->ipfs_add(req.body(), yield[ec]);
-    if (ec) {
-        res.result(http::status::internal_server_error);
-        ss << "{\"error\": \"failed to seed data to the cache\"}";
-        return;
-    }
-
-    ss << "{\"error\": null, \"data_links\": [\"ipfs:/ipfs/" << cid << "\"]}";
+    res.result(result);
+    if (err.empty())
+        ss << "{\"data_links\": [\"ipfs:/ipfs/" << cid << "\"]}";
+    else
+        ss << "{\"error\": \"" << err << "\"}";
 }
 
 void ClientFrontEnd::handle_portal( const Request& req, Response& res, stringstream& ss
