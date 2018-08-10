@@ -71,7 +71,7 @@ void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, stringstr
 }
 
 void ClientFrontEnd::handle_upload( const Request& req, Response& res, stringstream& ss
-                                  , CacheClient* cache_client)
+                                  , CacheClient* cache_client, asio::yield_context yield)
 {
     static const string req_ctype = "application/octet-stream";
 
@@ -103,7 +103,14 @@ void ClientFrontEnd::handle_upload( const Request& req, Response& res, stringstr
         return;
     }
 
-    // TODO: Actually upload data to IPFS.
+    sys::error_code ec;
+    cache_client->ipfs_add(req.body(), yield[ec]);
+    if (ec) {
+        res.result(http::status::internal_server_error);
+        ss << "{\"error\": \"failed to seed data to the cache\"}";
+        return;
+    }
+
     ss << "{\"error\": null}";
 }
 
@@ -214,7 +221,8 @@ void ClientFrontEnd::handle_portal( const Request& req, Response& res, stringstr
 Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
                               , const Request& req
                               , CacheClient* cache_client
-                              , const CACertificate& ca)
+                              , const CACertificate& ca
+                              , asio::yield_context yield)
 {
     Response res{http::status::ok, req.version()};
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
@@ -226,9 +234,10 @@ Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
     match_http_url(req.target().to_string(), url);
     if (url.path == "/ca.pem")
         handle_ca_pem(req, res, ss, ca);
-    else if (url.path == "/upload")
-        handle_upload(req, res, ss, cache_client);
-    else
+    else if (url.path == "/upload") {
+        sys::error_code ec_;  // shouldn't throw, but just in case
+        handle_upload(req, res, ss, cache_client, yield[ec_]);
+    } else
         handle_portal(req, res, ss, injector_ep, cache_client);
 
     Response::body_type::reader reader(res, res.body());
