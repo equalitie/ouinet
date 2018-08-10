@@ -442,10 +442,18 @@ Response Client::State::fetch_fresh( const Request& request
                 return res;
             }
             case responder::_front_end: {
-                return _front_end.serve( _config.injector_endpoint()
-                                       , request
-                                       , _ipfs_cache.get()
-                                       , *_ca_certificate);
+                sys::error_code ec;
+                auto res = _front_end.serve( _config.injector_endpoint()
+                                           , request
+                                           , _ipfs_cache.get()
+                                           , *_ca_certificate
+                                           , yield[ec]);
+                if (ec) {
+                    last_error = ec;
+                    continue;
+                }
+
+                return res;
             }
         }
     }
@@ -1004,7 +1012,9 @@ void Client::State::start(int argc, char* argv[])
                         auto rs = _front_end.serve( _config.injector_endpoint()
                                                   , rq
                                                   , _ipfs_cache.get()
-                                                  , *_ca_certificate);
+                                                  , *_ca_certificate
+                                                  , yield[ec]);
+                        if (ec) return;
 
                         http::async_write(c, rs, yield[ec]);
                   });
