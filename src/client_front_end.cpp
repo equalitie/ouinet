@@ -104,14 +104,14 @@ void ClientFrontEnd::handle_upload( const Request& req, Response& res, stringstr
     }
 
     sys::error_code ec;
-    cache_client->ipfs_add(req.body(), yield[ec]);
+    auto cid = cache_client->ipfs_add(req.body(), yield[ec]);
     if (ec) {
         res.result(http::status::internal_server_error);
         ss << "{\"error\": \"failed to seed data to the cache\"}";
         return;
     }
 
-    ss << "{\"error\": null}";
+    ss << "{\"error\": null, \"data_links\": [\"ipfs:/ipfs/" << cid << "\"]}";
 }
 
 void ClientFrontEnd::handle_portal( const Request& req, Response& res, stringstream& ss
