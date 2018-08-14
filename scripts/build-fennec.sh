@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# (Fennec = Firefox For Android)
+
 set -e
 
 DIR=`pwd`
