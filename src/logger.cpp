@@ -120,7 +120,7 @@ void Logger::log(log_level_t level, std::string msg, std::string function_name)
 
     if (log_to_stderr) {
         std::cerr << msg << std::endl;
-        std::cerr.flush();
+        //std::cerr.flush();
     }
     if (log_to_file && log_file.is_open()) {
         log_file << msg << std::endl;

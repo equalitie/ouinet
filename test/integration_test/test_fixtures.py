@@ -65,7 +65,7 @@ class TestFixtures:
 
     IPNS_ID_ANNOUNCE_REGEX = "[\s\S]*IPNS DB: ([A-Za-z0-9]+)[\s\S]*"
     START_OF_IPNS_RESOLUTION_REGEX = r'[\s\S]*resolving IPNS address: [\s\S]*'
-    IPFS_CACHE_READY_REGEX = r'[\s\S]*IPNS has been resolved successfully[\s\S]*'
+    IPFS_CACHE_READY_REGEX = r'[\s\S]*IPNS ID has been resolved successfully[\s\S]*'
     REQUEST_CACHED_REGEX = r'[\s\S]*Request was successfully published to cache[\s\S]*'
     NO_OF_CACHED_MESSAGES_REQUIRED = 1
     RETRIEVED_FROM_CACHE_REGEX = r'[\s\S]*Response was retrieved from cache[\s\S]*'

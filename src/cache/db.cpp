@@ -207,7 +207,7 @@ void ClientDb::continuously_download_db(asio::yield_context yield)
         if (*d) return;
 
         if (!ec) {
-          LOG_DEBUG("IPNS has been resolved successfully");
+          LOG_DEBUG("IPNS ID has been resolved successfully to " + ipfs_id);
           _ipfs = ipfs_id;
 
           _db_map->load(ipfs_id, yield[ec]);

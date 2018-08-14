@@ -65,9 +65,7 @@ void Republisher::start_publishing()
     _ipfs_node.publish(_to_publish, publish_duration,
         [this, d = _was_destroyed, last_i, id = _to_publish] (sys::error_code ec) {
             if (*d) return;
-
-            cout << "Published DB: " << id << endl;
-            LOG_DEBUG("Request was successfully published to cache");
+            LOG_DEBUG("Request was successfully published to cache under id " + id);
 
             while (true) {
                 bool is_last = last_i == _callbacks.begin();
