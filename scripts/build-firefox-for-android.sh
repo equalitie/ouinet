@@ -3,6 +3,7 @@
 set -e
 
 DIR=`pwd`
+export PATH="$HOME/.cargo/bin:$PATH"
 
 function clean {
     rm -rf $HOME/.android
@@ -40,7 +41,6 @@ function maybe_download_moz_sources {
 }
 
 function maybe_install_rust {
-    export PATH="$HOME/.cargo/bin:$PATH"
     if ! which rustc; then
         # Install rust https://www.rust-lang.org/en-US/install.html
         curl https://sh.rustup.rs -sSf | sh
