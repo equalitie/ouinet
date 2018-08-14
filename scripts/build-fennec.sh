@@ -51,7 +51,7 @@ function maybe_download_moz_sources {
 function maybe_install_rust {
     if ! which rustc; then
         # Install rust https://www.rust-lang.org/en-US/install.html
-        curl https://sh.rustup.rs -sSf | sh
+        curl https://sh.rustup.rs -sSf | sh -s -- -y
         rustup update
         # https://bugzilla.mozilla.org/show_bug.cgi?id=1384231
         rustup target add armv7-linux-androideabi
