@@ -498,14 +498,14 @@ Client::State::build_cache_control(request_route::Config& request_config)
 }
 
 //------------------------------------------------------------------------------
-static
-Response bad_gateway(const Request& req)
-{
-    Response res{http::status::bad_gateway, req.version()};
-    res.set(http::field::server, "Ouinet");
-    res.keep_alive(req.keep_alive());
-    return res;
-}
+//static
+//Response bad_gateway(const Request& req)
+//{
+//    Response res{http::status::bad_gateway, req.version()};
+//    res.set(http::field::server, "Ouinet");
+//    res.keep_alive(req.keep_alive());
+//    return res;
+//}
 
 //------------------------------------------------------------------------------
 void setup_ssl_context( asio::ssl::context& ssl_context
@@ -694,7 +694,9 @@ void Client::State::serve_request( GenericConnection&& con
         // Read the (clear-text) HTTP request
         ASYNC_DEBUG(http::async_read(con, buffer, req, yield[ec]), "Read request");
 
-        if (ec == http::error::end_of_stream) break;
+        if ( ec == http::error::end_of_stream
+          || ec == asio::ssl::error::stream_truncated) break;
+
         if (ec) return fail(ec, "read");
 
         // Requests in the encrypted channel are not proxy-like
