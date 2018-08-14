@@ -33,9 +33,11 @@ function maybe_download_moz_sources {
             cp -r mozilla-central-orig mozilla-central
         else
             hg clone https://hg.mozilla.org/mozilla-central
+
             # I was getting some clang failures past this revision.
             # TODO: Check periodically whether it's been fixed.
-            hg update -r 056a3c3fcc42
+            (cd mozilla-central; hg update -r 056a3c3fcc42)
+
             if [ $keep_copy == "1" ]; then
                 cp -r mozilla-central mozilla-central-orig
             fi
