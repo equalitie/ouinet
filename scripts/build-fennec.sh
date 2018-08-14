@@ -74,8 +74,8 @@ ac_add_options --enable-application=mobile/android
 ac_add_options --target=arm-linux-androideabi
 
 # With the following Android SDK and NDK:
-ac_add_options --with-android-sdk="/home/vagrant/.mozbuild/android-sdk-linux"
-ac_add_options --with-android-ndk="/home/vagrant/.mozbuild/android-ndk-r15c"
+ac_add_options --with-android-sdk="$HOME/.mozbuild/android-sdk-linux"
+ac_add_options --with-android-ndk="$HOME/.mozbuild/android-ndk-r15c"
 EOL
 
 # Install some dependencies and configure Firefox build
