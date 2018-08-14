@@ -5,10 +5,17 @@
 set -e
 
 DIR=`pwd`
+MOZ_DIR=gecko-dev
+MOZ_GIT=https://github.com/mozilla/gecko-dev
+
 export PATH="$HOME/.cargo/bin:$PATH"
 
-MOZ_DIR=gecko-dev
-
+while getopts m:g: option; do
+    case "$option" in
+        m) MOZ_DIR=${OPTARG};;
+        g) MOZ_GIT=${OPTARG};;
+    esac
+done
 
 function install_dependencies {
     sudo apt-get update
@@ -27,7 +34,7 @@ function maybe_download_moz_sources {
         if [ -d ${MOZ_DIR}-orig ]; then
             cp -r ${MOZ_DIR}-orig $MOZ_DIR
         else
-            git clone https://github.com/mozilla/gecko-dev --recursive
+            git clone $MOZ_GIT $MOZ_DIR --recursive
 
             # I was getting some clang failures past this revision.
             # TODO: Check periodically whether it's been fixed.
