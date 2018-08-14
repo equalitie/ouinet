@@ -9,14 +9,6 @@ export PATH="$HOME/.cargo/bin:$PATH"
 
 MOZ_DIR=gecko-dev
 
-function clean {
-    rm -rf $HOME/.android
-    rm -rf $HOME/.cargo
-    rm -rf $HOME/.mozbuild
-    rm -rf $HOME/.multirust
-    rm -rf $HOME/.rustup
-    rm -rf $HOME/.cache
-}
 
 function install_dependencies {
     sudo apt-get update
@@ -59,7 +51,6 @@ function maybe_install_rust {
 }
 
 ################################################################################
-#clean
 install_dependencies
 (cd $DIR; maybe_install_rust)
 (cd $DIR; maybe_download_moz_sources)
