@@ -7,6 +7,8 @@ set -e
 DIR=`pwd`
 export PATH="$HOME/.cargo/bin:$PATH"
 
+MOZ_DIR=mozilla-central
+
 function clean {
     rm -rf $HOME/.android
     rm -rf $HOME/.cargo
@@ -14,7 +16,6 @@ function clean {
     rm -rf $HOME/.multirust
     rm -rf $HOME/.rustup
     rm -rf $HOME/.cache
-    rm -rf $DIR/mozilla-central
 }
 
 function install_dependencies {
@@ -30,18 +31,18 @@ function maybe_download_moz_sources {
     local keep_copy=0
 
     # https://developer.mozilla.org/en-US/docs/Mozilla/Developer_guide/Build_Instructions/Simple_Firefox_for_Android_build
-    if [ ! -d mozilla-central ]; then
-        if [ -d mozilla-central-orig ]; then
-            cp -r mozilla-central-orig mozilla-central
+    if [ ! -d $MOZ_DIR ]; then
+        if [ -d ${MOZ_DIR}-orig ]; then
+            cp -r ${MOZ_DIR}-orig $MOZ_DIR
         else
             hg clone https://hg.mozilla.org/mozilla-central
 
             # I was getting some clang failures past this revision.
             # TODO: Check periodically whether it's been fixed.
-            (cd mozilla-central; hg update -r 056a3c3fcc42)
+            (cd $MOZ_DIR; hg update -r 056a3c3fcc42)
 
             if [ $keep_copy == "1" ]; then
-                cp -r mozilla-central mozilla-central-orig
+                cp -r $MOZ_DIR ${MOZ_DIR}-orig
             fi
         fi
     fi
@@ -64,7 +65,7 @@ install_dependencies
 (cd $DIR; maybe_download_moz_sources)
 ################################################################################
 
-cd mozilla-central
+cd ${MOZ_DIR}
 
 # https://developer.mozilla.org/en-US/docs/Mozilla/Developer_guide/Build_Instructions/Simple_Firefox_for_Android_build#I_want_to_work_on_the_back-end
 cat > mozconfig <<EOL
