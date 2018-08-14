@@ -19,7 +19,7 @@ function install_dependencies {
     sudo apt-get update
     sudo apt-get -y install curl mercurial libpulse-dev libpango1.0-dev \
         libgtk-3-dev libgtk2.0-dev libgconf2-dev libdbus-glib-1-dev \
-        yasm libnotify-dev clang-4.0
+        yasm libnotify-dev libnotify-bin clang-4.0
 }
 
 function maybe_download_moz_sources {
