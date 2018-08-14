@@ -7,7 +7,7 @@ set -e
 DIR=`pwd`
 export PATH="$HOME/.cargo/bin:$PATH"
 
-MOZ_DIR=mozilla-central
+MOZ_DIR=gecko-dev
 
 function clean {
     rm -rf $HOME/.android
@@ -35,11 +35,11 @@ function maybe_download_moz_sources {
         if [ -d ${MOZ_DIR}-orig ]; then
             cp -r ${MOZ_DIR}-orig $MOZ_DIR
         else
-            hg clone https://hg.mozilla.org/mozilla-central
+            git clone https://github.com/mozilla/gecko-dev --recursive
 
             # I was getting some clang failures past this revision.
             # TODO: Check periodically whether it's been fixed.
-            (cd $MOZ_DIR; hg update -r 056a3c3fcc42)
+            (cd $MOZ_DIR; git checkout 1d1b8fc55142de)
 
             if [ $keep_copy == "1" ]; then
                 cp -r $MOZ_DIR ${MOZ_DIR}-orig
