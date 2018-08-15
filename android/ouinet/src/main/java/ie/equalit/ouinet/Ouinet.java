@@ -33,17 +33,34 @@ public class Ouinet {
 
         new File(dir()).mkdirs();
 
-        WifiManager wifi = (WifiManager)ctx.getSystemService(Context.WIFI_SERVICE);
-        if (wifi != null){
-            _lock = wifi.createMulticastLock("mylock");
-            _lock.acquire();
-        }
-
         nStartClient(dir(),
                 injector_ep,
                 ipns,
                 credentials,
                 false);
+    }
+
+    // If this succeeds, we should be able to do UDP multicasts
+    // from inside ouinet (currently know to be needed by IPFS' mDNS
+    // but that's not essential for WAN).
+    public boolean acquireMulticastLock()
+    {
+        WifiManager wifi = (WifiManager) _ctx.getSystemService(Context.WIFI_SERVICE);
+
+        if (wifi == null){
+            return false;
+        }
+
+        _lock = wifi.createMulticastLock("mylock");
+
+        try {
+            _lock.acquire();
+        } catch (Exception e) {
+            _lock = null;
+            return false;
+        }
+
+        return true;
     }
 
     // Stop the internal ouinet/client threads. Once this function returns, the
