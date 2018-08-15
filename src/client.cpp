@@ -84,6 +84,7 @@ public:
     void stop() {
         _ipfs_cache = nullptr;
         _shutdown_signal();
+        if (_injector) _injector->stop();
     }
 
     void setup_ipfs_cache();
@@ -806,9 +807,11 @@ void Client::State::setup_ipfs_cache()
         const string ipns = _config.ipns();
 
         {
+            LOG_DEBUG("Starting IPFS Cache with IPNS ID: " + ipns);
             auto on_exit = defer([&] { _is_ipns_being_setup = false; });
 
             if (ipns.empty()) {
+                LOG_WARN("Support for IPFS Cache is disabled because we have not been provided with an IPNS id");
                 _ipfs_cache = nullptr;
                 return;
             }
@@ -826,7 +829,6 @@ void Client::State::setup_ipfs_cache()
             });
 
             sys::error_code ec;
-
             _ipfs_cache = CacheClient::build(_ios
                                             , ipns
                                             , move(repo_root)
@@ -875,6 +877,7 @@ void Client::State::listen_tcp
         acceptor.close();
     });
 
+    LOG_DEBUG("Successfully listening on TCP Port");
     cout << "Client accepting on " << acceptor.local_endpoint() << endl;
 
     WaitCondition wait_condition(_ios);
@@ -929,7 +932,7 @@ void Client::State::start(int argc, char* argv[])
     auto pid_path = get_pid_path();
     if (exists(pid_path)) {
         throw runtime_error(util::str
-             ( "Existing PID file ", pid_path
+             ( "[ABORT] Existing PID file ", pid_path
              , "; another client process may be running"
              , ", otherwise please remove the file."));
     }
@@ -972,11 +975,16 @@ void Client::State::start(int argc, char* argv[])
               sys::error_code ec;
 
               setup_injector(yield[ec]);
-              setup_ipfs_cache();
+
+              if (was_stopped()) return;
 
               if (ec) {
-                  cerr << "Failed to setup injector" << endl;
+                  cerr << "Failed to setup injector: "
+                       << ec.message()
+                       << endl;
               }
+
+              setup_ipfs_cache();
 
               listen_tcp( yield[ec]
                         , _config.local_endpoint()

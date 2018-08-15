@@ -34,6 +34,8 @@
 
 #include "util/signal.h"
 
+#include "logger.h"
+
 using namespace std;
 using namespace ouinet;
 
@@ -232,6 +234,7 @@ void serve( InjectorConfig& config
         beast::flat_buffer buffer;
         http::async_read(con, buffer, req, yield[ec]);
 
+        cerr << req;
         if (ec) break;
 
         if (!authenticate(req, con, config.credentials(), yield[ec])) {
@@ -348,9 +351,9 @@ int main(int argc, const char* argv[])
     }
 
     if (exists(config.repo_root()/OUINET_PID_FILE)) {
-        cerr << "Existing PID file " << config.repo_root()/OUINET_PID_FILE
-             << "; another injector process may be running"
-             << ", otherwise please remove the file." << endl;
+      LOG_ABORT("Existing PID file ", config.repo_root()/OUINET_PID_FILE,
+                "; another injector process may be running" ,
+                ", otherwise please remove the file.\n");
         return 1;
     }
     // Acquire a PID file for the life of the process
@@ -378,7 +381,7 @@ int main(int argc, const char* argv[])
     // Although the IPNS ID is already in IPFS's config file,
     // this just helps put all info relevant to the user right in the repo root.
     auto ipns_id = cache_injector->id();
-    cout << "IPNS DB: " << ipns_id << endl;
+    LOG_DEBUG("IPNS DB: " + ipns_id);
     util::create_state_file(config.repo_root()/"cache-ipns", ipns_id);
 
     OuiServiceServer proxy_server(ios);

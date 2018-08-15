@@ -58,6 +58,7 @@ private:
 private:
     boost::posix_time::time_duration _max_cached_age
         = boost::posix_time::hours(7*24);  // one week
+    uint64_t fetch_id = 0;
 };
 
 } // ouinet namespace
