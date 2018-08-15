@@ -18,10 +18,20 @@ while getopts m:g: option; do
 done
 
 function install_dependencies {
-    sudo apt-get update
-    sudo apt-get -y install curl mercurial libpulse-dev libpango1.0-dev \
-        libgtk-3-dev libgtk2.0-dev libgconf2-dev libdbus-glib-1-dev \
-        yasm libnotify-dev libnotify-bin clang-4.0
+    local deps="curl mercurial libpulse-dev libpango1.0-dev \
+               libgtk-3-dev libgtk2.0-dev libgconf2-dev libdbus-glib-1-dev \
+               yasm libnotify-dev libnotify-bin clang-4.0"
+
+    local need_install=0
+
+    for d in $deps; do
+        dpkg -s $d >/dev/null || (need_install=1 && break)
+    done
+
+    if [ "$need_install" == "1" ]; then
+        sudo apt-get update
+        sudo apt-get -y install $deps
+    fi
 }
 
 function maybe_download_moz_sources {
@@ -34,7 +44,7 @@ function maybe_download_moz_sources {
         if [ -d ${MOZ_DIR}-orig ]; then
             cp -r ${MOZ_DIR}-orig $MOZ_DIR
         else
-            git clone $MOZ_GIT $MOZ_DIR --recursive
+            git clone --recursive $MOZ_GIT $MOZ_DIR
 
             # I was getting some clang failures past this revision.
             # TODO: Check periodically whether it's been fixed.
@@ -59,8 +69,8 @@ function maybe_install_rust {
 
 ################################################################################
 install_dependencies
-(cd $DIR; maybe_install_rust)
-(cd $DIR; maybe_download_moz_sources)
+cd $DIR; maybe_install_rust; cd -
+cd $DIR; maybe_download_moz_sources; cd -
 ################################################################################
 
 cd ${MOZ_DIR}
