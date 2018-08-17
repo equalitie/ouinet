@@ -167,6 +167,16 @@ private:
         ss << rs;
         auto key = rq.target().to_string();
 
+        // Seed body data to IPFS.
+        // TODO: Do it more efficiently, perform descriptor insertion in callback.
+        injector->insert_content("", beast::buffers_to_string(rs.body().data()),
+            [key] (const sys::error_code& ec, auto ipfs_id) {
+                if (ec) {
+                    cout << "!Data seeding failed: " << key
+                         << " " << ec.message() << endl;
+                }
+            });
+
         injector->insert_content(key, ss.str(),
             [key] (const sys::error_code& ec, auto) {
                 if (ec) {

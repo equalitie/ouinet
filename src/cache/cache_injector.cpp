@@ -64,12 +64,15 @@ void CacheInjector::insert_content_from_queue()
                                          if (*wd) return;
 
                                          sys::error_code ec;
-                                         Json json;
 
-                                         json["value"] = ipfs_id;
-                                         json["ts"]    = boost::posix_time::to_iso_extended_string(ts) + 'Z';
+                                         if (!key.empty()) {  // not a raw data insertion, store in database
+                                             Json json;
 
-                                         _db->update(move(key), json.dump(), yield[ec]);
+                                             json["value"] = ipfs_id;
+                                             json["ts"]    = boost::posix_time::to_iso_extended_string(ts) + 'Z';
+
+                                             _db->update(move(key), json.dump(), yield[ec]);
+                                         }
                                          cb(ec, ipfs_id);
                                      });
                    });

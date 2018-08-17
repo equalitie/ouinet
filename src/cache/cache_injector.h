@@ -42,6 +42,10 @@ public:
     // database. The IPFS ID is also returned as a parameter to the callback
     // function.
     //
+    // If `url` is empty, just insert `content` into IPFS and pass
+    // the resulting IPFS ID to the callback without storing anything
+    // in the database.
+    //
     // When testing or debugging, the content can be found here:
     // "https://ipfs.io/ipfs/" + <IPFS ID>
     void insert_content( std::string url
