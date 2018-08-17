@@ -67,15 +67,7 @@ function maybe_install_rust {
     fi
 }
 
-################################################################################
-install_dependencies
-cd $DIR; maybe_install_rust; cd -
-cd $DIR; maybe_download_moz_sources; cd -
-################################################################################
-
-cd ${MOZ_DIR}
-
-# https://developer.mozilla.org/en-US/docs/Mozilla/Developer_guide/Build_Instructions/Simple_Firefox_for_Android_build#I_want_to_work_on_the_back-end
+function write_mozconfig {
 cat > mozconfig <<EOL
 # Build Firefox for Android:
 ac_add_options --enable-application=mobile/android
@@ -85,9 +77,23 @@ ac_add_options --target=arm-linux-androideabi
 ac_add_options --with-android-sdk="$HOME/.mozbuild/android-sdk-linux"
 ac_add_options --with-android-ndk="$HOME/.mozbuild/android-ndk-r15c"
 EOL
+}
 
-# Install some dependencies and configure Firefox build
-./mach bootstrap --application-choice=mobile_android --no-interactive
+################################################################################
+install_dependencies
+cd $DIR; maybe_install_rust; cd -
+cd $DIR; maybe_download_moz_sources; cd -
+################################################################################
+
+cd ${MOZ_DIR}
+
+## https://developer.mozilla.org/en-US/docs/Mozilla/Developer_guide/Build_Instructions/Simple_Firefox_for_Android_build#I_want_to_work_on_the_back-end
+
+if [ ! -f mozconfig ]; then
+    # Install some dependencies and configure Firefox build
+    ./mach bootstrap --application-choice=mobile_android --no-interactive
+    write_mozconfig
+fi
 
 # Note: If during building clang crashes, try increasing vagrant's RAM
 ./mach build
