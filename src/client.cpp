@@ -129,6 +129,10 @@ private:
         return _shutdown_signal.call_count() != 0;
     }
 
+    boost::filesystem::path ca_cert_path() const { return _config.repo_root() / OUINET_CA_CERT_FILE; }
+    boost::filesystem::path ca_key_path()  const { return _config.repo_root() / OUINET_CA_KEY_FILE;  }
+    boost::filesystem::path ca_dh_path()   const { return _config.repo_root() / OUINET_CA_DH_FILE;   }
+
 private:
     asio::io_service& _ios;
     std::unique_ptr<CACertificate> _ca_certificate;
@@ -930,28 +934,28 @@ void Client::State::start(int argc, char* argv[])
     _pid_file = make_unique<util::PidFile>(pid_path);
 #endif
 
-    auto ca_cert_path = _config.repo_root() / OUINET_CA_CERT_FILE;
-    auto ca_key_path = _config.repo_root() / OUINET_CA_KEY_FILE;
-    auto ca_dh_path = _config.repo_root() / OUINET_CA_DH_FILE;
-    if (exists(ca_cert_path) && exists(ca_key_path) && exists(ca_dh_path)) {
+    if (exists(ca_cert_path()) && exists(ca_key_path()) && exists(ca_dh_path())) {
         cout << "Loading existing CA certificate..." << endl;
         auto read_pem = [](auto path) {
             std::stringstream ss;
             ss << boost::filesystem::ifstream(path).rdbuf();
             return ss.str();
         };
-        auto cert = read_pem(ca_cert_path);
-        auto key = read_pem(ca_key_path);
-        auto dh = read_pem(ca_dh_path);
+        auto cert = read_pem(ca_cert_path());
+        auto key = read_pem(ca_key_path());
+        auto dh = read_pem(ca_dh_path());
         _ca_certificate = make_unique<CACertificate>(cert, key, dh);
     } else {
         cout << "Generating and storing CA certificate..." << endl;
         _ca_certificate = make_unique<CACertificate>();
-        boost::filesystem::ofstream(ca_cert_path)
+
+        boost::filesystem::ofstream(ca_cert_path())
             << _ca_certificate->pem_certificate();
-        boost::filesystem::ofstream(ca_key_path)
+
+        boost::filesystem::ofstream(ca_key_path())
             << _ca_certificate->pem_private_key();
-        boost::filesystem::ofstream(ca_dh_path)
+
+        boost::filesystem::ofstream(ca_dh_path())
             << _ca_certificate->pem_dh_param();
     }
 
@@ -1109,6 +1113,11 @@ void Client::set_credentials(const char* injector, const char* cred)
 boost::filesystem::path Client::get_pid_path() const
 {
     return _state->get_pid_path();
+}
+
+boost::filesystem::path Client::ca_cert_path() const
+{
+    return _state->ca_cert_path();
 }
 
 //------------------------------------------------------------------------------
