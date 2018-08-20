@@ -42,6 +42,11 @@ public:
 
     std::string ipfs_add(const std::string& content, boost::asio::yield_context);
 
+    // Gets the data stored in IPFS under `/ipfs/<ipfs_id>`.
+    //
+    // TODO: This should accept a generic storage URI instead.
+    std::string get_data(const std::string& ipfs_id, boost::asio::yield_context);
+
     // Find the content previously stored by the injector under `url`.
     // The content is returned in the parameter of the callback function.
     //
