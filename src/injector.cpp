@@ -6,6 +6,7 @@
 #include <boost/beast/version.hpp>
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
+#include <json.hpp>
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -129,7 +130,7 @@ void handle_connect_request( GenericConnection& client_c
 }
 
 //------------------------------------------------------------------------------
-struct InjectorCacheControl {
+struct InjectorCacheControl : public enable_shared_from_this<InjectorCacheControl> {
 public:
     // TODO: Replace this with cancellation support in which fetch_ operations
     // get a signal parameter
@@ -163,26 +164,38 @@ private:
     {
         if (!injector) return;
 
-        stringstream ss;
-        ss << rs;
         auto key = rq.target().to_string();
+        stringstream rsh_ss;
+        rsh_ss << rs.base();
 
-        // Seed body data to IPFS.
-        // TODO: Do it more efficiently, perform descriptor insertion in callback.
+        // Seed body data to IPFS, then create a descriptor for the URI and insert it.
+        // TODO: Do it more efficiently?
         injector->insert_content("", beast::buffers_to_string(rs.body().data()),
-            [key] (const sys::error_code& ec, auto ipfs_id) {
+            [ key, rsh_s = rsh_ss.str()
+            , this, self = shared_from_this()
+            ] (const sys::error_code& ec, auto ipfs_id) {
                 if (ec) {
                     cout << "!Data seeding failed: " << key
                          << " " << ec.message() << endl;
+                    return;
                 }
-            });
 
-        injector->insert_content(key, ss.str(),
-            [key] (const sys::error_code& ec, auto) {
-                if (ec) {
-                    cout << "!Insert failed: " << key
-                         << " " << ec.message() << endl;
-                }
+                // Create the descriptor.
+                // TODO: This is a *temporary format* with the bare minimum to test
+                // head/body splitting of HTTP responses.  See `doc/descriptor-*.json`
+                // for the target format.
+                nlohmann::json desc;
+                desc["head"] = rsh_s;
+                desc["body_link"] = ipfs_id;
+
+                // Insert a URI->descriptor mapping in the db.
+                injector->insert_content(key, desc.dump(),
+                    [key] (const sys::error_code& ec, auto) {
+                        if (ec) {
+                            cout << "!Insert failed: " << key
+                                 << " " << ec.message() << endl;
+                        }
+                    });
             });
     }
 
