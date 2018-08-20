@@ -24,7 +24,7 @@ class ReqExpr {
 
 class RegexReqExpr : public ReqExpr {  // can match a request field against a regular expression
     private:
-        const field_getter& get_field;
+        const field_getter get_field;
         const boost::regex regexp;
 
     public:

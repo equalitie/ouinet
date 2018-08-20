@@ -2,7 +2,7 @@
 
 #include "../../ouiservice.h"
 
-#include "connectionlist.h"
+#include "tunnel.h"
 
 namespace i2p { namespace data {
     class PrivateKeys;
@@ -25,7 +25,7 @@ private:
 
     Server( std::shared_ptr<Service> service
           , const std::string& private_key_filename
-          , uint32_t timeout, asio::io_service& ios);
+            , uint32_t timeout, asio::io_service& ios);
 
     void load_private_key(const std::string& key_file_name);
 
@@ -45,9 +45,8 @@ private:
     std::unique_ptr<i2p::data::PrivateKeys> _private_keys;
     uint32_t _timeout;
 
-    std::unique_ptr<i2p::client::I2PServerTunnel> _i2p_tunnel;
+    std::unique_ptr<Tunnel> _server_tunnel;
     asio::ip::tcp::acceptor _tcp_acceptor;
-    ConnectionList _connections;
 };
 
 } // i2poui namespace

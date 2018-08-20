@@ -1,7 +1,7 @@
 # Copyright 2018 eQualit.ie
 # See LICENSE for other credits and copying information
 
-# Integration tests for Ouinet
+# Integration tests for Ouinet - test for http communication offered through different transports and caches
 import os
 import os.path
 
@@ -21,11 +21,16 @@ import urllib
 import string
 import random
 
-from itestlib import OuinetClient, OuinetInjector
+import pdb
+
+from ouinet_process_controler import OuinetConfig
+from ouinet_process_controler import OuinetInjector, OuinetI2PInjector, OuinetIPFSCacheInjector
+from ouinet_process_controler import OuinetClient, OuinetIPFSClient
 from test_fixtures import TestFixtures
 from test_http_server import TestHttpServer
 
-import pdb
+import sys
+import logging
 
 class OuinetTests(TestCase):
     @classmethod
@@ -33,134 +38,232 @@ class OuinetTests(TestCase):
         pass
 
     def setUp(self):
+        logging.basicConfig(stream=sys.stderr, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=TestFixtures.LOGGING_LEVEL, )
+
+        #you can't set the timout in the test method itself :-(
+        self.timeout = TestFixtures.TEST_TIMEOUT[self._testMethodName]
+        logging.debug("setting timeout for " + self._testMethodName + " at " + str(TestFixtures.TEST_TIMEOUT[self._testMethodName]))
+
         self.proc_list = [] #keep track of all process we start for clean tear down
 
     def safe_random_str(self, length):
-        letters = string.ascii_lowercase                             
+        letters = string.ascii_lowercase
         return ''.join(random.choice(letters) for i in range(length))
     
-    def run_client(self, name, args):
-        client = OuinetClient(name, TestFixtures.TIMEOUT_LEN, args)
-        self.proc_list.append(client)
-
-        return client
-
-    def run_injector(self, injector_args):
-        #we first need to run our http server
-        injector = OuinetInjector("injector", TestFixtures.TIMEOUT_LEN, injector_args)
+    def run_tcp_injector(self, injector_args, deffered_tcp_port_ready):
+        injector = OuinetInjector(OuinetConfig(app_name=TestFixtures.TCP_INJECTOR_NAME + "_tcp", timeout=TestFixtures.TCP_TRANSPORT_TIMEOUT, argv=injector_args, benchmark_regexes=[TestFixtures.TCP_PORT_READY_REGEX]), [deffered_tcp_port_ready])
+        injector.start()
         self.proc_list.append(injector)
 
         return injector
 
+    def run_i2p_injector(self, injector_args, deferred_i2p_ready):
+        injector = OuinetI2PInjector(OuinetConfig(TestFixtures.I2P_INJECTOR_NAME + "_i2p", TestFixtures.I2P_TRANSPORT_TIMEOUT, injector_args, benchmark_regexes=[TestFixtures.I2P_TUNNEL_READY_REGEX]), [deferred_i2p_ready])
+        injector.start()
+        self.proc_list.append(injector)
+
+        return injector
+
+    def run_cache_injector(self, injector_args, deferred_tcp_port_ready, deferred_result_got_cached):
+        injector = OuinetIPFSCacheInjector(OuinetConfig(TestFixtures.CACHE_INJECTOR_NAME, TestFixtures.IPFS_CACHE_TIMEOUT, injector_args, benchmark_regexes=[TestFixtures.TCP_PORT_READY_REGEX, TestFixtures.REQUEST_CACHED_REGEX]), [deferred_tcp_port_ready, deferred_result_got_cached])
+        injector.start()
+        self.proc_list.append(injector)
+
+        return injector
+
+    def run_tcp_client(self, name, args, deffered_tcp_port_ready):
+        client = OuinetClient(OuinetConfig(name, TestFixtures.TCP_TRANSPORT_TIMEOUT, args, benchmark_regexes=[TestFixtures.TCP_PORT_READY_REGEX]), [deffered_tcp_port_ready])
+        client.start()
+        self.proc_list.append(client)
+
+        return client
+
+    def run_i2p_client(self, name, args, deferred_i2p_ready):
+        client = OuinetClient(OuinetConfig(name, TestFixtures.I2P_TRANSPORT_TIMEOUT, args, benchmark_regexes=[TestFixtures.I2P_TUNNEL_READY_REGEX]), [deferred_i2p_ready])
+        client.start()
+        self.proc_list.append(client)
+
+        return client
+
+    def run_cache_client(self, name, args, deferred_cache_ready):
+        client = OuinetIPFSClient(OuinetConfig(name, TestFixtures.IPFS_CACHE_TIMEOUT, args, benchmark_regexes=[TestFixtures.IPFS_CACHE_READY_REGEX]), [deferred_cache_ready])
+        client.start()
+        self.proc_list.append(client)
+
+        return client
+
     def run_http_server(self, port):
         return TestHttpServer(port)
 
-    def request_echo(self, content):
+    def request_echo(self, port, content):
         """
-        Send a get request to request the test server to echo the content 
+        Send a get request to request the test server to echo the content
         """
-        ouinet_client_endpoint = TCP4ClientEndpoint(reactor, "127.0.0.1", TestFixtures.FIRST_CLIENT["port"])
+        return self.request_url(port, "http://127.0.0.1:"+str(TestFixtures.TEST_HTTP_SERVER_PORT)+"/?content="+content)
+
+    def request_page(self, port, page_url):
+        """
+        Send a get request to request test content as a page on a specific sub url
+        """
+        return self.request_url(port, "http://127.0.0.1:"+str(TestFixtures.TEST_HTTP_SERVER_PORT)+"/" + page_url)
+    
+    def request_url(self, port, url):
+        ouinet_client_endpoint = TCP4ClientEndpoint(reactor, "127.0.0.1", port)
         agent = ProxyAgent(ouinet_client_endpoint)
-        return agent.request(
-            "GET",
-            "http://127.0.0.1:"+str(TestFixtures.TEST_HTTP_SERVER_PORT)+"/?content="+content)
-
-    def wait_for_port_to_get_open(self, server, port, timeout=None):
-        """ Wait for network service to appear 
-            @param timeout: in seconds, if None or 0 wait forever
-            @return: True of False, if timeout is None may return only True or
-            throw unhandled network exception
-        """
-        import socket
-        import errno
-
-        s = socket.socket()
-        if timeout:
-            from time import time as now
-            # time module is needed to calc timeout shared between two exceptions
-            end = now() + timeout
-
-        while True:
-            try:
-                if timeout:
-                    next_timeout = end - now()
-                    if next_timeout < 0:
-                        return False
-                    else:
-                        s.settimeout(next_timeout)
-
-                s.connect((server, port))
-
-            except socket.timeout, err:
-                # this exception occurs only if timeout is set
-                if timeout:
-                    return False
-
-            except socket.error, err:
-                # catch timeout exception from underlying network library
-                # this one is different from socket.timeout
-                # we need to capture and ignore 111 connection refused
-                # because it also says that the app has not opened the
-                # socket yet
-                if type(err.args) != tuple or (err[0] != errno.ETIMEDOUT and err[0] != errno.ECONNREFUSED):
-                    raise
-            else:
-                s.close()
-                return True
-
+        return agent.request("GET", url)
 
     @inlineCallbacks
-    def test_tcp_transport(self):
+    def test_i2p_transport(self):
         """
         Starts an echoing http server, a injector and a client and send a unique http 
-        request to the echoing http server through the client -> injector -> http server
+        request to the echoing http server through the client --i2p--> injector -> http server
         and make sure it gets the correct echo. The unique request makes sure that
         the response is from the http server and is not cached.
         """
         #injector
-        self.run_injector(["--listen-on-i2p", "true", "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.INJECTOR_PORT)])
+        i2pinjector_tunnel_ready = defer.Deferred()
+        i2pinjector = self.run_i2p_injector(["--listen-on-i2p", "true"], i2pinjector_tunnel_ready)
+
+        #wait for the injector tunnel to be advertised
+        success = yield i2pinjector_tunnel_ready## self.wait_for_i2p_tunnel_to_get_connected(i2pinjector_tunnel_ready)
 
         #client
-        self.run_client(TestFixtures.FIRST_CLIENT["name"], ["--listen-on-tcp", "127.0.0.1:"+str(TestFixtures.FIRST_CLIENT["port"]), "--injector-ipns", TestFixtures.INJECTOR_IPNS_PERSISTANT_IDENTITY["Identity"]["PeerID"], "--injector-ep", "127.0.0.1:" + str(TestFixtures.INJECTOR_PORT), "http://localhost/"])
+        i2pclient_tunnel_ready = defer.Deferred()
+        i2pclient = self.run_i2p_client(TestFixtures.I2P_CLIENT["name"], ["--listen-on-tcp", "127.0.0.1:"+str(TestFixtures.I2P_CLIENT["port"]), "--injector-ep", TestFixtures.INJECTOR_I2P_PUBLIC_ID, "http://localhost/"], i2pclient_tunnel_ready)
 
         #http_server
         self.test_http_server = self.run_http_server(TestFixtures.TEST_HTTP_SERVER_PORT)
-
-        #wait for the injector to open the port
-        self.wait_for_port_to_get_open("127.0.0.1", TestFixtures.INJECTOR_PORT);
-
-        #wait for the client to open the port
-        self.wait_for_port_to_get_open("127.0.0.1", TestFixtures.FIRST_CLIENT["port"]);
+        
+        #wait for the client tunnel to connect to the injector
+        success = yield i2pclient_tunnel_ready
 
         content = self.safe_random_str(TestFixtures.RESPONSE_LENGTH)
-        defered_response = yield  self.request_echo(content)
+        for i in range(1,TestFixtures.MAX_NO_OF_TRIAL_I2P_REQUESTS):
+            defered_response = yield  self.request_echo(TestFixtures.I2P_CLIENT["port"], content)
+            if defered_response.code == 200:
+                break
 
         self.assertEquals(defered_response.code, 200)
 
         response_body = yield readBody(defered_response)
         self.assertEquals(response_body, content)
 
+    @inlineCallbacks
+    def test_tcp_transport(self):
+        """
+        Starts an echoing http server, a injector and a client and send a unique http 
+        request to the echoing http server through the g client --tcp--> injector -> http server
+        and make sure it gets the correct echo. The unique request makes sure that
+        the response is from the http server and is not cached.
+        """
+        #injector
+        injector_tcp_port_ready = defer.Deferred()
+        self.run_tcp_injector(["--listen-on-i2p", "false", "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)], injector_tcp_port_ready)
+
+        #wait for the injector to open the port
+        success = yield injector_tcp_port_ready
+
+        #client
+        client_tcp_port_ready = defer.Deferred()
+        self.run_tcp_client(TestFixtures.TCP_CLIENT["name"], ["--listen-on-tcp", "127.0.0.1:"+str(TestFixtures.TCP_CLIENT["port"]), "--injector-ep", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT), "http://localhost/"], client_tcp_port_ready)
+
+        #http_server
+        self.test_http_server = self.run_http_server(TestFixtures.TEST_HTTP_SERVER_PORT)
+
+        #wait for the client to open the port
+        success = yield client_tcp_port_ready
+
+        content = self.safe_random_str(TestFixtures.RESPONSE_LENGTH)
+        defered_response = yield  self.request_echo(TestFixtures.TCP_CLIENT["port"], content)
+
+        self.assertEquals(defered_response.code, 200)
+
+        response_body = yield readBody(defered_response)
+        self.assertEquals(response_body, content)
+
+    @inlineCallbacks
+    def test_ipfs_cache(self):
+        """
+        Starts an echoing http server, a injector and a two clients and client1 send a unique http 
+        request to the echoing http server through the g client --tcp--> injector -> http server
+        and make sure it gets the correct echo. The test waits for the response to be cached. 
+        Then the second client request the same request makes sure that
+        the response is served from cache.
+        """
+        #injector
+        injector_tcp_port_ready = defer.Deferred()
+        result_got_cached = defer.Deferred()
+        ipfs_cache_injector = self.run_cache_injector(["--listen-on-i2p", "false", "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)], injector_tcp_port_ready, result_got_cached)
+        
+        #wait for the injector to open the port
+        success = yield injector_tcp_port_ready
+
+        #TODO: we are assuming that IPNS DB is announced before opening the port.
+        # remove the is assumption.
+        IPNS_end_point = ipfs_cache_injector.get_IPNS_ID()
+        assert(len(IPNS_end_point) > 0);
+        
+        print "IPNS end point is: " + IPNS_end_point
+
+        #tcp client
+        client_tcp_port_ready = defer.Deferred()
+        self.run_tcp_client(TestFixtures.CACHE_CLIENT[0]["name"], ["--listen-on-tcp", "127.0.0.1:"+str(TestFixtures.CACHE_CLIENT[0]["port"]), "--injector-ep", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT), "http://localhost/"], client_tcp_port_ready)
+
+        #http_server
+        self.test_http_server = self.run_http_server(
+            TestFixtures.TEST_HTTP_SERVER_PORT)
+
+        #wait for the client to open the port
+        success = yield defer.gatherResults([client_tcp_port_ready])
+        self.assertTrue(success)
+
+        page_url = self.safe_random_str(TestFixtures.RESPONSE_LENGTH)
+        defered_response = yield self.request_page(TestFixtures.CACHE_CLIENT[0]["port"], page_url)
+        self.assertEquals(defered_response.code, 200)
+
+        response_body = yield readBody(defered_response)
+        self.assertEquals(response_body, TestFixtures.TEST_PAGE_BODY)
+        
+        # now waiting or injector to annouce caching the request
+        success = yield result_got_cached
+        self.assertTrue(success)
+
+        #start cache client which supposed to read the response from cache
+        client_cache_ready = defer.Deferred()
+        cache_client = self.run_cache_client(TestFixtures.CACHE_CLIENT[1]["name"], ["--listen-on-tcp", "127.0.0.1:"+str(TestFixtures.CACHE_CLIENT[1]["port"]), "--injector-ipns", IPNS_end_point, "--injector-ep", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT), "http://localhost/"], client_cache_ready)
+
+        import time
+
+        # make sure that the client2 is ready to access the cache
+        success = yield client_cache_ready
+        IPNS_resoultion_done_time_stamp = time.time()
+
+        self.assertTrue(success)
+        self.assertTrue(cache_client.IPNS_resolution_start_time() > 0)
+
+        logging.debug("IPNS resolution took: " + str(
+            IPNS_resoultion_done_time_stamp -
+            cache_client.IPNS_resolution_start_time()) + " seconds")
+
+        # now request the same page from second client
+        defered_response = yield self.request_page(
+            TestFixtures.CACHE_CLIENT[1]["port"], page_url)
+
+        self.assertEquals(defered_response.code, 200)
+
+        response_body = yield readBody(defered_response)
+        self.assertEquals(response_body, TestFixtures.TEST_PAGE_BODY)
+
+        # make sure it was served from cache
+        self.assertTrue(cache_client.served_from_cache())
 
     def tearDown(self):
-        deferred_procs = [] 
+        deferred_procs = []
         for cur_proc in self.proc_list:
             deferred_procs.append(cur_proc.proc_end)
             cur_proc.stop()
-        deferred_procs.append(self.test_http_server.stopListening())
-        return defer.gatherResults(deferred_procs) 
-    
-class BeginningPrinter(Protocol):
-    def __init__(self, finished):
-        self.finished = finished
-        self.remaining = 1024 * 10
 
-    def dataReceived(self, bytes):
-        if self.remaining:
-            display = bytes[:self.remaining]
-            print('Some data received:')
-            print(display)
-            self.remaining -= len(display)
-
-    def connectionLost(self, reason):
-        print('Finished receiving body:', reason.getErrorMessage())
-        self.finished.callback(None)
+        if hasattr(self, 'test_http_server'):
+            deferred_procs.append(self.test_http_server.stopListening())
+            
+        return defer.gatherResults(deferred_procs)

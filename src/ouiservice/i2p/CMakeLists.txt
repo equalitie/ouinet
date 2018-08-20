@@ -27,16 +27,19 @@ include_directories(
 )
 
 set(sources
+    "./tunnel.cpp"
     "./client.cpp"
     "./server.cpp"
     "./service.cpp"
+    "../../logger.cpp"
 )
+
 
 add_library(ouiservice-i2p ${sources})
 add_dependencies(ouiservice-i2p i2pd ${IFADDRS_TARGET})
 
 target_link_libraries(ouiservice-i2p
-    i2pdclient
+    libi2pdclient
     libi2pd
     z
     ${OPENSSL_LIBRARIES}
