@@ -185,6 +185,7 @@ private:
                 // head/body splitting of HTTP responses.  See `doc/descriptor-*.json`
                 // for the target format.
                 nlohmann::json desc;
+                desc["url"] = key;
                 desc["head"] = rsh_s;
                 desc["body_link"] = ipfs_id;
 
