@@ -49,7 +49,7 @@ public:
 
     // Gets the data stored in IPFS under `/ipfs/<ipfs_id>`.
     //
-    // TODO: This should get a generic storage URI instead.
+    // TODO: This should accept a generic storage URI instead.
     std::string get_data(const std::string& ipfs_id, boost::asio::yield_context);
 
     // Insert `content` into IPFS and store its IPFS ID under the `url` in the
