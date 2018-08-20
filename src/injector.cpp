@@ -13,6 +13,7 @@
 #include <cstdlib>  // for atexit()
 
 #include "cache/cache_injector.h"
+#include "cache/http_desc.h"
 
 #include "namespaces.h"
 #include "util.h"
@@ -212,24 +213,10 @@ private:
         sys::error_code ec;
 
         auto content = injector->get_content(rq.target().to_string(), yield[ec]);
-
         if (ec) return or_throw<CacheEntry>(yield, ec);
 
-        http::response_parser<Response::body_type> parser;
-        parser.eager(true);
-        parser.put(asio::buffer(content.data), ec);
-        assert(!ec && "Malformed cache entry");
-
-        if (!parser.is_done()) {
-            cerr << "------- WARNING: Unfinished message in cache --------" << endl;
-            assert(parser.is_header_done() && "Malformed response head did not cause error");
-            auto rp = parser.get();
-            cerr << rq << rp.base() << "<" << rp.body().size() << " bytes in body>" << endl;
-            cerr << "-----------------------------------------------------" << endl;
-            ec = asio::error::not_found;
-        }
-
-        return or_throw(yield, ec, CacheEntry{content.ts, parser.release()});
+        auto res = descriptor::http_parse_json(*injector, content.data, yield[ec]);
+        return or_throw(yield, ec, CacheEntry{content.ts, res});
     }
 
 private:

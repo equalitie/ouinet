@@ -14,6 +14,8 @@
 #include <cstdlib>  // for atexit()
 
 #include "cache/cache_client.h"
+#include "cache/http_desc.h"
+
 #include "namespaces.h"
 #include "fetch_http_page.h"
 #include "client_front_end.h"
@@ -281,26 +283,8 @@ Client::State::fetch_stored( const Request& request
     // an error should have been reported.
     assert(!content.ts.is_not_a_date_time());
 
-    http::response_parser<Response::body_type> parser;
-    parser.eager(true);
-    parser.put(asio::buffer(content.data), ec);
-
-    assert(!ec && "Malformed cache entry");
-
-    if (!parser.is_done()) {
-#ifndef NDEBUG
-        cerr << "------- WARNING: Unfinished message in cache --------" << endl;
-        assert(parser.is_header_done() && "Malformed response head did not cause error");
-        auto response = parser.get();
-        cerr << request << response.base() << "<" << response.body().size() << " bytes in body>" << endl;
-        cerr << "-----------------------------------------------------" << endl;
-#endif
-        ec = asio::error::not_found;
-    }
-
-    if (ec) return or_throw<CacheEntry>(yield, ec);
-
-    return CacheEntry{content.ts, parser.release()};
+    auto res = descriptor::http_parse_json(*_ipfs_cache, content.data, yield[ec]);
+    return or_throw(yield, ec, CacheEntry{content.ts, res});
 }
 
 //------------------------------------------------------------------------------
