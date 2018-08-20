@@ -790,6 +790,12 @@ void Client::State::serve_request( GenericConnection&& con
           break;
         }
         if (ec) return fail(ec, "write");
+
+        if (!res.keep_alive()) {
+            con.close();
+            break;
+        }
+
         LOG_DEBUG("request served");
     }
 }

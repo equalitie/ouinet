@@ -271,7 +271,10 @@ void serve( InjectorConfig& config
 
         // Forward back the response
         http::async_write(con, res, yield[ec]);
-        if (ec) {
+        if (ec) break;
+
+        if (!res.keep_alive()) {
+            con.close();
             break;
         }
     }
