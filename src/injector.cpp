@@ -170,7 +170,7 @@ private:
 
         // Seed body data to IPFS, then create a descriptor for the URI and insert it.
         // TODO: Do it more efficiently?
-        injector->insert_content("", beast::buffers_to_string(rs.body().data()),
+        injector->put_data(beast::buffers_to_string(rs.body().data()),
             [ key, rsh_s = rsh_ss.str()
             , this, self = shared_from_this()
             ] (const sys::error_code& ec, auto ipfs_id) {

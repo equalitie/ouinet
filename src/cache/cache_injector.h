@@ -38,13 +38,15 @@ public:
     // "https://ipfs.io/ipns/" + ipfs.id()
     std::string id() const;
 
+    // Insert `data` into IPFS and pass the resulting IPFS ID to the callback.
+    //
+    // When testing or debugging, the content can be found here:
+    // "https://ipfs.io/ipfs/" + <IPFS ID>
+    void put_data(const std::string& data, OnInsert);
+
     // Insert `content` into IPFS and store its IPFS ID under the `url` in the
     // database. The IPFS ID is also returned as a parameter to the callback
     // function.
-    //
-    // If `url` is empty, just insert `content` into IPFS and pass
-    // the resulting IPFS ID to the callback without storing anything
-    // in the database.
     //
     // When testing or debugging, the content can be found here:
     // "https://ipfs.io/ipfs/" + <IPFS ID>

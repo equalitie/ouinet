@@ -78,6 +78,12 @@ void CacheInjector::insert_content_from_queue()
                    });
 }
 
+void CacheInjector::put_data( const string& data
+                            , function<void(sys::error_code, string)> cb)
+{
+    insert_content("", move(data), move(cb));
+}
+
 void CacheInjector::insert_content( string key
                                   , const string& value
                                   , function<void(sys::error_code, string)> cb)
