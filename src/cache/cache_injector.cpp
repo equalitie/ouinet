@@ -119,6 +119,11 @@ string CacheInjector::insert_content( string key
     return result.get();
 }
 
+string CacheInjector::get_data(const string &ipfs_id, asio::yield_context yield)
+{
+    return _ipfs_node->cat(ipfs_id, yield);
+}
+
 CachedContent CacheInjector::get_content(string url, asio::yield_context yield)
 {
     return ouinet::get_content(*_db, url, yield);

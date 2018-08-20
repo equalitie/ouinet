@@ -40,9 +40,17 @@ public:
 
     // Insert `data` into IPFS and pass the resulting IPFS ID to the callback.
     //
+    // TODO: This should store into a variety of systems
+    // and pass a set of storage URIs to the callback.
+    //
     // When testing or debugging, the content can be found here:
     // "https://ipfs.io/ipfs/" + <IPFS ID>
     void put_data(const std::string& data, OnInsert);
+
+    // Gets the data stored in IPFS under `/ipfs/<ipfs_id>`.
+    //
+    // TODO: This should get a generic storage URI instead.
+    std::string get_data(const std::string& ipfs_id, boost::asio::yield_context);
 
     // Insert `content` into IPFS and store its IPFS ID under the `url` in the
     // database. The IPFS ID is also returned as a parameter to the callback
