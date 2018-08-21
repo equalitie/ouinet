@@ -270,8 +270,8 @@ void serve( InjectorConfig& config
         } else {
             // Ouinet header found, behave like a Ouinet injector.
             req2.erase(ouinet_version_hdr);  // do not propagate or cache the header
-            InjectorCacheControl cc(con.get_io_service(), injector, close_connection_signal);
-            res = cc.fetch(req2, yield[ec]);
+            auto cc = make_shared<InjectorCacheControl>(con.get_io_service(), injector, close_connection_signal);
+            res = cc->fetch(req2, yield[ec]);
         }
         if (ec) {
             handle_bad_request( con, req
