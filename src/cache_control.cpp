@@ -220,6 +220,7 @@ Response bad_gateway(const Request& req)
     Response res{http::status::bad_gateway, req.version()};
     res.set(http::field::server, "Ouinet");
     res.keep_alive(req.keep_alive());
+    res.prepare_payload();
     return res;
 }
 
