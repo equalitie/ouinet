@@ -33,6 +33,7 @@ find_library(GCRYPT_LIBRARIES NAMES gcrypt libgcrypt)
 file(GLOB bt_cpp_files "../src/bittorrent/bencoding.cpp"
                        "../src/bittorrent/dht.cpp"
                        "../src/bittorrent/dht_storage.cpp"
+                       "../src/bittorrent/mutable_data.cpp"
                        "../src/bittorrent/node_id.cpp"
                        "../src/bittorrent/routing_table.cpp"
                        "../src/util/crypto.cpp"

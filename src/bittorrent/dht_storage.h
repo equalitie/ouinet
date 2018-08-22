@@ -9,6 +9,7 @@
 #include <string>
 
 #include "bencoding.h"
+#include "mutable_data.h"
 #include "node_id.h"
 
 #include "../util/crypto.h"
@@ -119,27 +120,13 @@ class DataStore {
         return _token_storage.verify_token(address, id, token);
     }
 
-    NodeID immutable_get_id(BencodedValue value);
+    static NodeID immutable_get_id(BencodedValue value);
     void put_immutable(BencodedValue value);
     boost::optional<BencodedValue> get_immutable(NodeID id);
 
-    struct MutableDataItem {
-        util::Ed25519PublicKey public_key;
-        std::string salt;
-        BencodedValue value;
-        int64_t sequence_number;
-        std::array<uint8_t, 64> signature;
-    };
-    NodeID mutable_get_id(util::Ed25519PublicKey public_key, const std::string& salt);
+    static NodeID mutable_get_id(util::Ed25519PublicKey public_key, const std::string& salt);
     void put_mutable(MutableDataItem item);
     boost::optional<MutableDataItem> get_mutable(NodeID id);
-    std::array<uint8_t, 64> sign_mutable(
-        BencodedValue value,
-        int64_t sequence_number,
-        const std::string& salt,
-        util::Ed25519PrivateKey private_key
-    );
-    bool verify_mutable(MutableDataItem item);
 
     private:
     struct ImmutableStoredItem {

@@ -10,6 +10,7 @@
 
 #include "bencoding.h"
 #include "dht_storage.h"
+#include "mutable_data.h"
 #include "node_id.h"
 #include "routing_table.h"
 #include "contact.h"
@@ -82,11 +83,21 @@ class DhtNode {
      *
      * TODO: Implement minimum sequence number if we ever need it.
      */
-    boost::optional<BencodedValue> data_get_mutable(
+    boost::optional<MutableDataItem> data_get_mutable(
         const util::Ed25519PublicKey& public_key,
         const std::string& salt,
         asio::yield_context yield
     );
+
+    /**
+     * Store a pre-signed BEP-44 mutable data item in the DHT. The data item
+     * can be found when searching for the combination of (public key, salt).
+     *
+     * @return The ID as which this data is known in the DHT.
+     *
+     * TODO: Implement compare-and-swap if we ever need it.
+     */
+    NodeID data_put_mutable(MutableDataItem data, asio::yield_context yield);
 
     /**
      * Store $data in the DHT as a BEP-44 mutable data item. The data item
@@ -229,6 +240,39 @@ class DhtNode {
     std::vector<udp::endpoint> _bootstrap_endpoints;
 };
 
+struct DhtPublications
+{
+    /*
+     * There does not seem to be any spec for this. 20 minute based on
+     * what other implementations seem to do.
+     */
+    const int ANNOUNCE_INTERVAL_SECONDS = 60 * 20;
+    /*
+     * http://www.bittorrent.org/beps/bep_0044.html#expiration recommends
+     * republish every hour, and expiring after two hours. We'll republish
+     * slightly faster, to avoid unfortunate rounding errors.
+     */
+    const int PUT_INTERVAL_SECONDS = 60 * 50;
+
+    struct TrackerPublication {
+        boost::optional<int> port;
+        std::chrono::steady_clock::time_point last_sent;
+    };
+    std::map<NodeID, TrackerPublication> tracker_publications;
+
+    struct ImmutablePublication {
+        BencodedValue data;
+        std::chrono::steady_clock::time_point last_sent;
+    };
+    std::map<NodeID, ImmutablePublication> immutable_publications;
+
+    struct MutablePublication {
+        MutableDataItem data;
+        std::chrono::steady_clock::time_point last_sent;
+    };
+    std::map<NodeID, MutablePublication> mutable_publications;
+};
+
 } // dht namespace
 
 class MainlineDht {
@@ -236,14 +280,47 @@ class MainlineDht {
     MainlineDht(asio::io_service& ios);
     ~MainlineDht();
 
-    std::vector<tcp::endpoint> tracker_get_peers(NodeID infohash, asio::yield_context);
     void set_interfaces(const std::vector<asio::ip::address>& addresses, asio::yield_context);
-    std::vector<asio::ip::tcp::endpoint> find_peers(NodeID torrent_id, Signal<void()>& cancel, asio::yield_context yield);
-    void announce(NodeID torrent_id, Signal<void()>& cancel, asio::yield_context yield);
+
+    /*
+     * TODO: These _start functions probably need cancellation support.
+     * When cancelled, the publication still goes through and will be refreshed
+     * until _stop()ped, but the _start() will not wait for successful completion.
+     */
+    /*
+     * TODO: announce() and put() functions don't have any real error detection.
+     */
+    std::set<tcp::endpoint> tracker_announce_start(NodeID infohash, boost::optional<int> port, asio::yield_context yield);
+    void tracker_announce_stop(NodeID infohash);
+    NodeID immutable_put_start(const BencodedValue& data, asio::yield_context yield);
+    void immutable_put_stop(NodeID key);
+    NodeID mutable_put_start(const MutableDataItem& data, asio::yield_context yield);
+    void mutable_put_stop(NodeID key);
+
+    /*
+     * TODO: We definitely need cancellation on these functions.
+     */
+    std::set<tcp::endpoint> tracker_get_peers(NodeID infohash, asio::yield_context yield);
+    boost::optional<BencodedValue> immutable_get(NodeID key, asio::yield_context yield);
+    /*
+     * TODO:
+     *
+     * Ideally, this interface should provide some way for the user to signal
+     * when the best result found so far is good (that is, recent) enough, and
+     * when to keep searching in the hopes of finding a more recent entry.
+     * The current version is a quick-and-dirty good-enough-for-now.
+     */
+    boost::optional<MutableDataItem> mutable_get(
+        const util::Ed25519PublicKey& public_key,
+        const std::string& salt,
+        asio::yield_context yield
+    );
 
     private:
     asio::io_service& _ios;
     std::map<asio::ip::address, std::unique_ptr<dht::DhtNode>> _nodes;
+    dht::DhtPublications _publications;
+    Signal<void()> _terminate_signal;
 };
 
 } // bittorrent namespace

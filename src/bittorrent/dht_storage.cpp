@@ -241,65 +241,13 @@ void DataStore::put_mutable(MutableDataItem item)
     };
 }
 
-boost::optional<DataStore::MutableDataItem> DataStore::get_mutable(NodeID id)
+boost::optional<MutableDataItem> DataStore::get_mutable(NodeID id)
 {
     auto it = _mutable_data.find(id);
     if (it == _mutable_data.end()) {
         return boost::none;
     }
     return it->second.item;
-}
-
-static std::string mutable_data_signature_buffer(
-    const BencodedValue& data,
-    const std::string& salt,
-    int64_t sequence_number
-) {
-    std::string encoded_data = bencoding_encode(data);
-
-    /*
-     * Low-level buffer computation is mandated by
-     * http://bittorrent.org/beps/bep_0044.html#signature-verification
-     *
-     * This is a concatenation of three key/value pairs encoded as they are in
-     * a BencodedMap, but in a nonstandard way, and as specified not actually
-     * implemented using the BencodedMap logic.
-     */
-    std::string signature_buffer;
-    if (!salt.empty()) {
-        signature_buffer += "4:salt";
-        signature_buffer += std::to_string(salt.size());
-        signature_buffer += ":";
-        signature_buffer += salt;
-    }
-    signature_buffer += "3:seqi";
-    signature_buffer += std::to_string(sequence_number);
-    signature_buffer += "e1:v";
-    signature_buffer += encoded_data;
-    return signature_buffer;
-}
-
-std::array<uint8_t, 64> DataStore::sign_mutable(
-    BencodedValue value,
-    int64_t sequence_number,
-    const std::string& salt,
-    util::Ed25519PrivateKey private_key
-) {
-    return private_key.sign(
-        mutable_data_signature_buffer(value, salt, sequence_number)
-    );
-}
-
-bool DataStore::verify_mutable(MutableDataItem item)
-{
-    return item.public_key.verify(
-        mutable_data_signature_buffer(
-            item.value,
-            item.salt,
-            item.sequence_number
-        ),
-        item.signature
-    );
 }
 
 } // dht namespace

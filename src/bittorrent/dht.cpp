@@ -4,10 +4,12 @@
 #include "collect.h"
 #include "proximity_map.h"
 
+#include "../async_sleep.h"
 #include "../or_throw.h"
 #include "../util/bytes.h"
 #include "../util/condition_variable.h"
 #include "../util/crypto.h"
+#include "../util/success_condition.h"
 #include "../util/wait_condition.h"
 
 #include <boost/asio/buffer.hpp>
@@ -236,15 +238,14 @@ NodeID dht::DhtNode::data_put_immutable(const BencodedValue& data, asio::yield_c
     return key;
 }
 
-boost::optional<BencodedValue> dht::DhtNode::data_get_mutable(
+boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
     const util::Ed25519PublicKey& public_key,
     const std::string& salt,
     asio::yield_context yield
 ) {
     NodeID target_id = _data_store->mutable_get_id(public_key, salt);
 
-    boost::optional<BencodedValue> data;
-    boost::optional<int64_t> highest_sequence_number;
+    boost::optional<MutableDataItem> data;
 
     collect(target_id, [&](const Contact& candidate, asio::yield_context yield)
                        -> boost::optional<Candidates>
@@ -277,17 +278,16 @@ boost::optional<BencodedValue> dht::DhtNode::data_get_mutable(
                 return closer_nodes;
             }
 
-            DataStore::MutableDataItem item {
+            MutableDataItem item {
                 public_key,
                 salt,
                 response["v"],
                 *sequence_number,
                 util::bytes::to_array<uint8_t, 64>(*signature)
             };
-            if (_data_store->verify_mutable(item)) {
-                if (!highest_sequence_number || *sequence_number > *highest_sequence_number) {
-                    highest_sequence_number = *sequence_number;
-                    data = response["v"];
+            if (item.verify()) {
+                if (!data || *sequence_number > data->sequence_number) {
+                    data = item;
                 }
             }
 
@@ -298,21 +298,9 @@ boost::optional<BencodedValue> dht::DhtNode::data_get_mutable(
     return data;
 }
 
-NodeID dht::DhtNode::data_put_mutable(
-    const BencodedValue& data,
-    const util::Ed25519PrivateKey& private_key,
-    const std::string& salt,
-    int64_t sequence_number,
-    asio::yield_context yield
-) {
-    std::array<uint8_t, 64> signature = _data_store->sign_mutable(
-        data,
-        sequence_number,
-        salt,
-        private_key
-    );
-    util::Ed25519PublicKey public_key(private_key.public_key());
-    NodeID target_id = _data_store->mutable_get_id(public_key, salt);
+NodeID dht::DhtNode::data_put_mutable(MutableDataItem data, asio::yield_context yield)
+{
+    NodeID target_id = _data_store->mutable_get_id(data.public_key, data.salt);
 
     struct ResponsibleNode {
         asio::ip::udp::endpoint node_endpoint;
@@ -354,7 +342,7 @@ NodeID dht::DhtNode::data_put_mutable(
                 responsible_nodes.insert({*candidate.id, std::move(data_node)});
             }
 
-            if (response["k"] != util::bytes::to_string(public_key.serialize())) {
+            if (response["k"] != util::bytes::to_string(data.public_key.serialize())) {
                 return closer_nodes;
             }
             boost::optional<int64_t> existing_sequence_number = response["seq"].as_int();
@@ -366,15 +354,15 @@ NodeID dht::DhtNode::data_put_mutable(
                 return closer_nodes;
             }
 
-            DataStore::MutableDataItem item {
-                public_key,
-                salt,
+            MutableDataItem item {
+                data.public_key,
+                data.salt,
                 response["v"],
                 *existing_sequence_number,
                 util::bytes::to_array<uint8_t, 64>(*existing_signature)
             };
-            if (_data_store->verify_mutable(item)) {
-                if (*existing_sequence_number < sequence_number) {
+            if (item.verify()) {
+                if (*existing_sequence_number < data.sequence_number) {
                     /*
                      * This node has an old version of this data entry.
                      * Update it even if it is no longer responsible.
@@ -399,15 +387,15 @@ NodeID dht::DhtNode::data_put_mutable(
         asio::spawn(_ios, [=, lock = wc.lock()] (asio::yield_context yield) {
             BencodedMap put_message {
                 { "id", _node_id.to_bytestring() },
-                { "k", util::bytes::to_string(public_key.serialize()) },
-                { "seq", sequence_number },
-                { "sig", util::bytes::to_string(signature) },
-                { "v", data },
+                { "k", util::bytes::to_string(data.public_key.serialize()) },
+                { "seq", data.sequence_number },
+                { "sig", util::bytes::to_string(data.signature) },
+                { "v", data.value },
                 { "token", i.second->put_token }
             };
 
-            if (!salt.empty()) {
-                put_message["salt"] = salt;
+            if (!data.salt.empty()) {
+                put_message["salt"] = data.salt;
             }
 
             send_write_query(
@@ -422,6 +410,21 @@ NodeID dht::DhtNode::data_put_mutable(
     wc.wait(yield);
 
     return target_id;
+}
+
+NodeID dht::DhtNode::data_put_mutable(
+    const BencodedValue& data,
+    const util::Ed25519PrivateKey& private_key,
+    const std::string& salt,
+    int64_t sequence_number,
+    asio::yield_context yield
+) {
+    return data_put_mutable(MutableDataItem::sign(
+        data,
+        sequence_number,
+        salt,
+        private_key
+    ), yield);
 }
 
 
@@ -872,7 +875,7 @@ void dht::DhtNode::handle_query( udp::endpoint sender
             }
         }
 
-        boost::optional<DataStore::MutableDataItem> mutable_item = _data_store->get_mutable(target);
+        boost::optional<MutableDataItem> mutable_item = _data_store->get_mutable(target);
         if (mutable_item) {
             if (sequence_number_ && *sequence_number_ <= mutable_item->sequence_number) {
                 send_reply(reply);
@@ -980,19 +983,19 @@ void dht::DhtNode::handle_query( udp::endpoint sender
                 }
             }
 
-            DataStore::MutableDataItem item {
+            MutableDataItem item {
                 public_key,
                 salt,
                 value,
                 sequence_number,
                 signature
             };
-            if (!_data_store->verify_mutable(item)) {
+            if (!item.verify()) {
                 send_error(206, "Invalid signature");
                 return;
             }
 
-            boost::optional<DataStore::MutableDataItem> existing_item = _data_store->get_mutable(target);
+            boost::optional<MutableDataItem> existing_item = _data_store->get_mutable(target);
             if (existing_item) {
                 if (sequence_number < existing_item->sequence_number) {
                     send_error(302, "Sequence number less than current");
@@ -1282,7 +1285,7 @@ void dht::DhtNode::send_ping(NodeContact contact)
 
 /*
  * Send a query that writes data to the DHT. Repeat up to 5 times until we
- * get a positive response. Return immediately without waiting for results.
+ * get a positive response.
  */
 void dht::DhtNode::send_write_query(
     udp::endpoint destination,
@@ -1799,35 +1802,66 @@ void dht::DhtNode::routing_bucket_fail_node( RoutingBucket* bucket
     }
 }
 
+
+
 MainlineDht::MainlineDht(asio::io_service& ios):
     _ios(ios)
 {
+    /*
+     * Refresh publications periodically.
+     */
+    asio::spawn(_ios, [this] (asio::yield_context yield) {
+        while (true) {
+            if (!async_sleep(_ios, std::chrono::seconds(60), _terminate_signal, yield)) {
+                break;
+            }
+
+            std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+
+            /*
+             * TODO: This needs proper cancellation support, as soon as DhtNode supports that.
+             */
+
+            for (auto& i : _publications.tracker_publications) {
+                if (i.second.last_sent + std::chrono::seconds(_publications.ANNOUNCE_INTERVAL_SECONDS) < now) {
+                    i.second.last_sent = now;
+                    for (auto& j : _nodes) {
+                        asio::spawn(_ios, [&] (asio::yield_context yield) {
+                            j.second->tracker_announce(i.first, i.second.port, yield);
+                        });
+                    }
+                }
+            }
+
+            for (auto& i : _publications.immutable_publications) {
+                if (i.second.last_sent + std::chrono::seconds(_publications.PUT_INTERVAL_SECONDS) < now) {
+                    i.second.last_sent = now;
+                    for (auto& j : _nodes) {
+                        asio::spawn(_ios, [&] (asio::yield_context yield) {
+                            j.second->data_put_immutable(i.second.data, yield);
+                        });
+                    }
+                }
+            }
+
+            for (auto& i : _publications.mutable_publications) {
+                if (i.second.last_sent + std::chrono::seconds(_publications.PUT_INTERVAL_SECONDS) < now) {
+                    i.second.last_sent = now;
+                    for (auto& j : _nodes) {
+                        asio::spawn(_ios, [&] (asio::yield_context yield) {
+                            j.second->data_put_mutable(i.second.data, yield);
+                        });
+                    }
+                }
+            }
+        }
+    });
+
 }
 
 MainlineDht::~MainlineDht()
 {
-}
-
-std::vector<tcp::endpoint> MainlineDht::tracker_get_peers( NodeID infohash
-                                                         , asio::yield_context yield)
-{
-    WaitCondition wc(_ios);
-
-    std::vector<tcp::endpoint> retval;
-
-    for (auto& node : _nodes) {
-        asio::spawn(_ios, [&, lock = wc.lock()] (asio::yield_context yield) {
-            sys::error_code ec;
-            auto trackers = node.second->tracker_get_peers(infohash, yield[ec]);
-            if (ec) {
-                return;
-            }
-            retval.insert(retval.end(), trackers.begin(), trackers.end());
-        });
-    }
-
-    wc.wait(yield);
-    return retval;
+    _terminate_signal();
 }
 
 void MainlineDht::set_interfaces( const std::vector<asio::ip::address>& addresses
@@ -1861,6 +1895,160 @@ void MainlineDht::set_interfaces( const std::vector<asio::ip::address>& addresse
             it = _nodes.erase(it);
         }
     }
+}
+
+
+
+std::set<tcp::endpoint> MainlineDht::tracker_announce_start(NodeID infohash, boost::optional<int> port, asio::yield_context yield)
+{
+    dht::DhtPublications::TrackerPublication publication { port, std::chrono::steady_clock::now() };
+    _publications.tracker_publications[infohash] = publication;
+
+    std::set<tcp::endpoint> output;
+
+    SuccessCondition condition(_ios);
+    for (auto& i : _nodes) {
+        asio::spawn(_ios, [&, lock = condition.lock()] (asio::yield_context yield) {
+            std::set<tcp::endpoint> peers = i.second->tracker_announce(infohash, port, yield);
+
+            /*
+             * TODO: We should distinguish here between
+             * "did not query successfully" and "did not find any peers".
+             * This needs error detection in _announce(), which does not exist.
+             */
+            if (peers.size()) {
+                output = peers;
+                lock.release(true);
+            }
+        });
+    }
+    condition.wait_for_success(yield);
+
+    return output;
+}
+
+void MainlineDht::tracker_announce_stop(NodeID infohash)
+{
+    _publications.tracker_publications.erase(infohash);
+}
+
+NodeID MainlineDht::immutable_put_start(const BencodedValue& data, asio::yield_context yield)
+{
+    NodeID key = dht::DataStore::immutable_get_id(data);
+    dht::DhtPublications::ImmutablePublication publication { data, std::chrono::steady_clock::now() };
+    _publications.immutable_publications[key] = publication;
+
+    SuccessCondition condition(_ios);
+    for (auto& i : _nodes) {
+        asio::spawn(_ios, [&, lock = condition.lock()] (asio::yield_context yield) {
+            /* TODO error handling -- should wait for one node to succeed */
+            i.second->data_put_immutable(data, yield);
+
+            lock.release(true);
+        });
+    }
+    condition.wait_for_success(yield);
+
+    return key;
+}
+
+void MainlineDht::immutable_put_stop(NodeID key)
+{
+    _publications.immutable_publications.erase(key);
+}
+
+NodeID MainlineDht::mutable_put_start(const MutableDataItem& data, asio::yield_context yield)
+{
+    NodeID key = dht::DataStore::mutable_get_id(data.public_key, data.salt);
+    dht::DhtPublications::MutablePublication publication { data, std::chrono::steady_clock::now() };
+    _publications.mutable_publications[key] = publication;
+
+    SuccessCondition condition(_ios);
+    for (auto& i : _nodes) {
+        asio::spawn(_ios, [&, lock = condition.lock()] (asio::yield_context yield) {
+            /* TODO error handling -- should wait for one node to succeed */
+            i.second->data_put_mutable(data, yield);
+
+            lock.release(true);
+        });
+    }
+    condition.wait_for_success(yield);
+
+    return key;
+}
+
+void MainlineDht::mutable_put_stop(NodeID key)
+{
+    _publications.mutable_publications.erase(key);
+}
+
+std::set<tcp::endpoint> MainlineDht::tracker_get_peers(NodeID infohash, asio::yield_context yield)
+{
+    std::set<tcp::endpoint> output;
+
+    SuccessCondition condition(_ios);
+    for (auto& i : _nodes) {
+        asio::spawn(_ios, [&, lock = condition.lock()] (asio::yield_context yield) {
+            std::set<tcp::endpoint> peers = i.second->tracker_get_peers(infohash, yield);
+
+            if (peers.size()) {
+                output = peers;
+                lock.release(true);
+            }
+        });
+    }
+    condition.wait_for_success(yield);
+
+    /* TODO: cancel parallel find_peers operations */
+
+    return output;
+}
+
+boost::optional<BencodedValue> MainlineDht::immutable_get(NodeID key, asio::yield_context yield)
+{
+    boost::optional<BencodedValue> output;
+
+    SuccessCondition condition(_ios);
+    for (auto& i : _nodes) {
+        asio::spawn(_ios, [&, lock = condition.lock()] (asio::yield_context yield) {
+            boost::optional<BencodedValue> data = i.second->data_get_immutable(key, yield);
+
+            if (data) {
+                output = data;
+                lock.release(true);
+            }
+        });
+    }
+    condition.wait_for_success(yield);
+
+    /* TODO: cancel parallel get_immutable operations */
+
+    return output;
+}
+
+boost::optional<MutableDataItem> MainlineDht::mutable_get(
+    const util::Ed25519PublicKey& public_key,
+    const std::string& salt,
+    asio::yield_context yield
+) {
+    boost::optional<MutableDataItem> output;
+
+    SuccessCondition condition(_ios);
+    for (auto& i : _nodes) {
+        asio::spawn(_ios, [&, lock = condition.lock()] (asio::yield_context yield) {
+            boost::optional<MutableDataItem> data = i.second->data_get_mutable(public_key, salt, yield);
+
+            if (data) {
+                output = data;
+                lock.release(true);
+            }
+        });
+    }
+    condition.wait_for_success(yield);
+
+    /* TODO: cancel parallel get_mutable operations */
+
+    return output;
 }
 
 
