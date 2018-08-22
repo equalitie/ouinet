@@ -1,6 +1,6 @@
 #include "client_front_end.h"
 #include "generic_connection.h"
-#include "cache/cache_client.h"
+#include "cache-ipfs-bep44/cache_client.h"
 #include "util.h"
 #include <boost/optional/optional_io.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>

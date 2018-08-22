@@ -11,7 +11,7 @@
 #include <string>
 #include <cstdlib>  // for atexit()
 
-#include "cache/cache_injector.h"
+#include "cache-ipfs-bep44/cache_injector.h"
 
 #include "namespaces.h"
 #include "util.h"

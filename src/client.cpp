@@ -13,7 +13,7 @@
 #include <fstream>
 #include <cstdlib>  // for atexit()
 
-#include "cache/cache_client.h"
+#include "cache-ipfs-bep44/cache_client.h"
 #include "namespaces.h"
 #include "fetch_http_page.h"
 #include "client_front_end.h"

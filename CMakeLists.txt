@@ -105,7 +105,7 @@ file(GLOB client_sources
     "./src/ssl/dummy_certificate.cpp"
     "./src/ouiservice/tcp.cpp"
     "./src/logger.cpp"
-    "./src/cache/*.cpp"
+    "./src/cache-ipfs-bep44/*.cpp"
 )
 
 if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
@@ -144,7 +144,7 @@ if (WITH_INJECTOR)
         "./src/ouiservice.cpp"
         "./src/ouiservice/tcp.cpp"
         "./src/logger.cpp"
-        "./src/cache/*.cpp"
+        "./src/cache-ipfs-bep44/*.cpp"
     )
 
     add_executable(injector ${injector_sources})
