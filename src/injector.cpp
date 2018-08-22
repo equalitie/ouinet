@@ -131,7 +131,7 @@ void handle_connect_request( GenericConnection& client_c
 }
 
 //------------------------------------------------------------------------------
-struct InjectorCacheControl : public enable_shared_from_this<InjectorCacheControl> {
+struct InjectorCacheControl {
 public:
     // TODO: Replace this with cancellation support in which fetch_ operations
     // get a signal parameter
@@ -173,7 +173,7 @@ private:
         // TODO: Do it more efficiently?
         injector->put_data(beast::buffers_to_string(rs.body().data()),
             [ key, rsh_s = rsh_ss.str()
-            , this, self = shared_from_this()
+            , injector = injector.get()
             ] (const sys::error_code& ec, auto ipfs_id) {
                 if (ec) {
                     cout << "!Data seeding failed: " << key
@@ -270,8 +270,8 @@ void serve( InjectorConfig& config
         } else {
             // Ouinet header found, behave like a Ouinet injector.
             req2.erase(ouinet_version_hdr);  // do not propagate or cache the header
-            auto cc = make_shared<InjectorCacheControl>(con.get_io_service(), injector, close_connection_signal);
-            res = cc->fetch(req2, yield[ec]);
+            InjectorCacheControl cc(con.get_io_service(), injector, close_connection_signal);
+            res = cc.fetch(req2, yield[ec]);
         }
         if (ec) {
             handle_bad_request( con, req
