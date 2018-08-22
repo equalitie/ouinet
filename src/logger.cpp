@@ -22,13 +22,14 @@
 #include <iostream>
 #include <fstream>
 
+#include "namespaces.h"
 #include "logger.h"
 
 Logger logger(DEBUG);
 
-const std::string log_level_announce[] = {"SILLY"        , "DEBUG"     , "VERBOSE"   , "INFO"      , "WARN"        , "ERROR"      , "ABORT"};
-const std::string log_level_color_prefix[] =   {"\033[1;35;47m", "\033[1;32m", "\033[1;37m", "\033[1;34m", "\033[90;103m", "\033[91;40m", "\033[91;40m"};
-const bool log_level_colored_msg[] =          {true           , false       , false       , false       , true        , true          , true};
+const std::string log_level_announce[] =       {"SILLY"        , "DEBUG"     , "VERBOSE"   , "INFO"      , "WARN"        , "ERROR"      , "ABORT"};
+const std::string log_level_color_prefix[] =   {"\033[1;35;47m", "\033[1;32m", "\033[1;37m", "\033[1;34m", "\033[90;103m", "\033[31;40m", "\033[1;31;40m"};
+const bool log_level_colored_msg[] =           {true           , false       , false       , false       , true        , true          , true};
 
 void Logger::initiate_textual_conversions()
 {
@@ -119,6 +120,7 @@ void Logger::log(log_level_t level, std::string msg, std::string function_name)
 
     if (log_to_stderr) {
         std::cerr << msg << std::endl;
+        //std::cerr.flush();
     }
     if (log_to_file && log_file.is_open()) {
         log_file << msg << std::endl;

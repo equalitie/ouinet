@@ -1,9 +1,9 @@
-#include <boost/beast/core.hpp>
-#include <boost/beast/http.hpp>
-#include <boost/beast/version.hpp>
 #include <boost/asio/connect.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/signal_set.hpp>
+#include <boost/beast/core.hpp>
+#include <boost/beast/http.hpp>
+#include <boost/beast/version.hpp>
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
 #include <iostream>
@@ -33,6 +33,8 @@
 #include "ouiservice/tcp.h"
 
 #include "util/signal.h"
+
+#include "logger.h"
 
 using namespace std;
 using namespace ouinet;
@@ -268,7 +270,10 @@ void serve( InjectorConfig& config
 
         // Forward back the response
         http::async_write(con, res, yield[ec]);
-        if (ec) {
+        if (ec) break;
+
+        if (!res.keep_alive()) {
+            con.close();
             break;
         }
     }
@@ -348,9 +353,9 @@ int main(int argc, const char* argv[])
     }
 
     if (exists(config.repo_root()/OUINET_PID_FILE)) {
-        cerr << "Existing PID file " << config.repo_root()/OUINET_PID_FILE
-             << "; another injector process may be running"
-             << ", otherwise please remove the file." << endl;
+      LOG_ABORT("Existing PID file ", config.repo_root()/OUINET_PID_FILE,
+                "; another injector process may be running" ,
+                ", otherwise please remove the file.\n");
         return 1;
     }
     // Acquire a PID file for the life of the process
@@ -378,7 +383,7 @@ int main(int argc, const char* argv[])
     // Although the IPNS ID is already in IPFS's config file,
     // this just helps put all info relevant to the user right in the repo root.
     auto ipns_id = cache_injector->id();
-    cout << "IPNS DB: " << ipns_id << endl;
+    LOG_DEBUG("IPNS DB: " + ipns_id);
     util::create_state_file(config.repo_root()/"cache-ipns", ipns_id);
 
     OuiServiceServer proxy_server(ios);

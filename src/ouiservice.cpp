@@ -31,16 +31,16 @@ void OuiServiceServer::start_listen(asio::yield_context yield)
         asio::spawn(_ios, [this, implementation = implementation.get(), lock = success_condition.lock()] (asio::yield_context yield) mutable {
             sys::error_code ec;
 
+            auto slot_connection = _stop_listen.connect([implementation] () {
+                implementation->stop_listen();
+            });
+
             implementation->start_listen(yield[ec]);
             if (ec) {
                 return;
             }
 
             lock.release(true);
-
-            auto slot_connection = _stop_listen.connect([implementation] () {
-                implementation->stop_listen();
-            });
 
             while (true) {
                 GenericConnection connection = implementation->accept(yield[ec]);
@@ -91,7 +91,7 @@ GenericConnection OuiServiceServer::accept(asio::yield_context yield)
 
     GenericConnection connection = std::move(_connection_queue.front());
     _connection_queue.pop_front();
-    return std::move(connection);
+    return connection;
 }
 
 void OuiServiceServer::cancel_accept()
@@ -104,7 +104,6 @@ void OuiServiceServer::cancel_accept()
 //--------------------------------------------------------------------
 
 OuiServiceClient::OuiServiceClient(asio::io_service& ios):
-    _ios(ios),
     _started(false),
     _started_condition(ios)
 {}

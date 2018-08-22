@@ -2,7 +2,7 @@
 
 #include "../../ouiservice.h"
 
-#include "connectionlist.h"
+#include "tunnel.h"
 
 namespace i2p { namespace client {
     class I2PClientTunnel;
@@ -40,9 +40,9 @@ private:
     std::string _target_id;
     uint32_t _timeout;
 
-    std::unique_ptr<i2p::client::I2PClientTunnel> _i2p_tunnel;
+    std::unique_ptr<Tunnel> _client_tunnel; //the tunnel is a pointer because
+    //the client can be stopped (tunnel gets destroyed) and started again
     uint16_t _port;
-    ConnectionList _connections;
 };
 
 } // i2poui namespace

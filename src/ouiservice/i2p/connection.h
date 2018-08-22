@@ -7,6 +7,8 @@
 #include <boost/intrusive/list.hpp>
 
 #include "../../namespaces.h"
+#include "../../logger.h"
+#include "../../timeout_stream.h"
 
 namespace ouinet {
 namespace ouiservice {
@@ -16,8 +18,12 @@ class Connection : public boost::intrusive::list_base_hook<boost::intrusive::lin
 public:
     Connection(boost::asio::io_service& ios)
         : _ios(ios)
-        , _socket(_ios)
-    {}
+        , _socket(asio::ip::tcp::socket(_ios))
+    {
+        _socket.set_read_timeout    (std::chrono::minutes(1));
+        _socket.set_write_timeout   (std::chrono::minutes(1));
+        _socket.set_connect_timeout (std::chrono::minutes(1));
+    }
 
     Connection(const Connection&) = delete;
     Connection& operator=(const Connection&) = delete;
@@ -26,9 +32,11 @@ public:
     Connection& operator=(Connection&&) = default;
 
     asio::io_service& get_io_service() { return _ios; }
-    asio::io_context::executor_type get_executor()   { return _socket.get_executor(); }
 
-    asio::ip::tcp::socket& socket() { return _socket; }
+#if BOOST_VERSION >= 106700
+    asio::io_context::executor_type get_executor()   { return _socket.get_executor(); }
+#endif
+
 
     template< class MutableBufferSequence
             , class ReadHandler>
@@ -41,8 +49,14 @@ public:
     void close();
 
 private:
+    friend class Client;
+    friend class Server;
+
+    asio::ip::tcp::socket& socket() { return _socket.next_layer(); }
+
+private:
     asio::io_service& _ios;
-    asio::ip::tcp::socket _socket;
+    TimeoutStream<asio::ip::tcp::socket> _socket;
 };
 
 template< class MutableBufferSequence
@@ -50,6 +64,7 @@ template< class MutableBufferSequence
 inline void Connection::async_read_some( const MutableBufferSequence& bufs
                                 , ReadHandler&& h)
 {
+  LOG_DEBUG("Reading from i2p tunnel.");
     _socket.async_read_some(bufs, std::forward<ReadHandler>(h));
 }
 
@@ -58,6 +73,7 @@ template< class ConstBufferSequence
 inline void Connection::async_write_some( const ConstBufferSequence& bufs
                                  , WriteHandler&& h)
 {
+  LOG_DEBUG("Writing into i2p tunnel.");
     _socket.async_write_some(bufs, std::forward<WriteHandler>(h));
 }
 

@@ -5,6 +5,8 @@
 #include <fstream>
 #include <thread>
 #include <boost/asio.hpp>
+#include <boost/asio/spawn.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <namespaces.h>
 #include <client.h>
 #include <util/signal.h>
@@ -188,4 +190,28 @@ Java_ie_equalit_ouinet_Ouinet_nSetCredentialsFor(
         });
 
     cv.wait(lk, [&]{ return done; });
+}
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_ie_equalit_ouinet_Ouinet_nPathToCARootCert(
+        JNIEnv* env,
+        jobject /* this */)
+{
+    mutex m;
+    unique_lock<mutex> lk(m);
+    condition_variable cv;
+    bool done = false;
+
+    string cert_path;
+
+    g_ios.post([env, &cert_path, &cv, &done] {
+            Defer on_exit([&] { done = true; cv.notify_one(); });
+            if (!g_client) return;
+            cert_path = g_client->ca_cert_path().string();
+        });
+
+    cv.wait(lk, [&]{ return done; });
+
+    return env->NewStringUTF(cert_path.c_str());
 }

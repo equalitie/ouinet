@@ -1,10 +1,10 @@
-#include <boost/beast/core.hpp>
-#include <boost/beast/http.hpp>
-#include <boost/beast/version.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/connect.hpp>
 #include <boost/asio/signal_set.hpp>
+#include <boost/beast/core.hpp>
+#include <boost/beast/http.hpp>
+#include <boost/beast/version.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/ssl/stream.hpp>
@@ -84,6 +84,7 @@ public:
     void stop() {
         _ipfs_cache = nullptr;
         _shutdown_signal();
+        if (_injector) _injector->stop();
     }
 
     void setup_ipfs_cache();
@@ -128,6 +129,10 @@ private:
     bool was_stopped() const {
         return _shutdown_signal.call_count() != 0;
     }
+
+    boost::filesystem::path ca_cert_path() const { return _config.repo_root() / OUINET_CA_CERT_FILE; }
+    boost::filesystem::path ca_key_path()  const { return _config.repo_root() / OUINET_CA_KEY_FILE;  }
+    boost::filesystem::path ca_dh_path()   const { return _config.repo_root() / OUINET_CA_DH_FILE;   }
 
 private:
     asio::io_service& _ios;
@@ -442,10 +447,18 @@ Response Client::State::fetch_fresh( const Request& request
                 return res;
             }
             case responder::_front_end: {
-                return _front_end.serve( _config.injector_endpoint()
-                                       , request
-                                       , _ipfs_cache.get()
-                                       , *_ca_certificate);
+                sys::error_code ec;
+                auto res = _front_end.serve( _config.injector_endpoint()
+                                           , request
+                                           , _ipfs_cache.get()
+                                           , *_ca_certificate
+                                           , yield[ec]);
+                if (ec) {
+                    last_error = ec;
+                    continue;
+                }
+
+                return res;
             }
         }
     }
@@ -497,14 +510,14 @@ Client::State::build_cache_control(request_route::Config& request_config)
 }
 
 //------------------------------------------------------------------------------
-static
-Response bad_gateway(const Request& req)
-{
-    Response res{http::status::bad_gateway, req.version()};
-    res.set(http::field::server, "Ouinet");
-    res.keep_alive(req.keep_alive());
-    return res;
-}
+//static
+//Response bad_gateway(const Request& req)
+//{
+//    Response res{http::status::bad_gateway, req.version()};
+//    res.set(http::field::server, "Ouinet");
+//    res.keep_alive(req.keep_alive());
+//    return res;
+//}
 
 //------------------------------------------------------------------------------
 void setup_ssl_context( asio::ssl::context& ssl_context
@@ -608,9 +621,8 @@ GenericConnection Client::State::ssl_mitm_handshake( GenericConnection&& con
 void Client::State::serve_request( GenericConnection&& con
                                  , asio::yield_context yield)
 {
-
     LOG_DEBUG("Request received ");
-  
+
     namespace rr = request_route;
     using rr::responder;
 
@@ -618,7 +630,6 @@ void Client::State::serve_request( GenericConnection&& con
         con.close();
     });
 
-    
     // These access mechanisms are attempted in order for requests by default.
     const rr::Config default_request_config
         { true
@@ -695,7 +706,9 @@ void Client::State::serve_request( GenericConnection&& con
         // Read the (clear-text) HTTP request
         ASYNC_DEBUG(http::async_read(con, buffer, req, yield[ec]), "Read request");
 
-        if (ec == http::error::end_of_stream) break;
+        if ( ec == http::error::end_of_stream
+          || ec == asio::ssl::error::stream_truncated) break;
+
         if (ec) return fail(ec, "read");
 
         // Requests in the encrypted channel are not proxy-like
@@ -777,6 +790,12 @@ void Client::State::serve_request( GenericConnection&& con
           break;
         }
         if (ec) return fail(ec, "write");
+
+        if (!res.keep_alive()) {
+            con.close();
+            break;
+        }
+
         LOG_DEBUG("request served");
     }
 }
@@ -798,9 +817,11 @@ void Client::State::setup_ipfs_cache()
         const string ipns = _config.ipns();
 
         {
+            LOG_DEBUG("Starting IPFS Cache with IPNS ID: " + ipns);
             auto on_exit = defer([&] { _is_ipns_being_setup = false; });
 
             if (ipns.empty()) {
+                LOG_WARN("Support for IPFS Cache is disabled because we have not been provided with an IPNS id");
                 _ipfs_cache = nullptr;
                 return;
             }
@@ -818,7 +839,6 @@ void Client::State::setup_ipfs_cache()
             });
 
             sys::error_code ec;
-
             _ipfs_cache = CacheClient::build(_ios
                                             , ipns
                                             , move(repo_root)
@@ -867,6 +887,7 @@ void Client::State::listen_tcp
         acceptor.close();
     });
 
+    LOG_DEBUG("Successfully listening on TCP Port");
     cout << "Client accepting on " << acceptor.local_endpoint() << endl;
 
     WaitCondition wait_condition(_ios);
@@ -910,19 +931,18 @@ void Client::State::listen_tcp
 //------------------------------------------------------------------------------
 void Client::State::start(int argc, char* argv[])
 {
-  try {
-    _config = ClientConfig(argc, argv);
-
-  } catch(std::exception const& e) {
-    //explicit is better than implecit
-    LOG_ABORT(e.what());
-  }
+    try {
+        _config = ClientConfig(argc, argv);
+    } catch(std::exception const& e) {
+        //explicit is better than implecit
+        LOG_ABORT(e.what());
+    }
 
 #ifndef __ANDROID__
     auto pid_path = get_pid_path();
     if (exists(pid_path)) {
         throw runtime_error(util::str
-             ( "Existing PID file ", pid_path
+             ( "[ABORT] Existing PID file ", pid_path
              , "; another client process may be running"
              , ", otherwise please remove the file."));
     }
@@ -931,32 +951,30 @@ void Client::State::start(int argc, char* argv[])
     _pid_file = make_unique<util::PidFile>(pid_path);
 #endif
 
-#ifndef __ANDROID__
-    auto ca_cert_path = _config.repo_root() / OUINET_CA_CERT_FILE;
-    auto ca_key_path = _config.repo_root() / OUINET_CA_KEY_FILE;
-    auto ca_dh_path = _config.repo_root() / OUINET_CA_DH_FILE;
-    if (exists(ca_cert_path) && exists(ca_key_path) && exists(ca_dh_path)) {
+    if (exists(ca_cert_path()) && exists(ca_key_path()) && exists(ca_dh_path())) {
         cout << "Loading existing CA certificate..." << endl;
         auto read_pem = [](auto path) {
             std::stringstream ss;
             ss << boost::filesystem::ifstream(path).rdbuf();
             return ss.str();
         };
-        auto cert = read_pem(ca_cert_path);
-        auto key = read_pem(ca_key_path);
-        auto dh = read_pem(ca_dh_path);
+        auto cert = read_pem(ca_cert_path());
+        auto key = read_pem(ca_key_path());
+        auto dh = read_pem(ca_dh_path());
         _ca_certificate = make_unique<CACertificate>(cert, key, dh);
     } else {
         cout << "Generating and storing CA certificate..." << endl;
         _ca_certificate = make_unique<CACertificate>();
-        boost::filesystem::ofstream(ca_cert_path)
+
+        boost::filesystem::ofstream(ca_cert_path())
             << _ca_certificate->pem_certificate();
-        boost::filesystem::ofstream(ca_key_path)
+
+        boost::filesystem::ofstream(ca_key_path())
             << _ca_certificate->pem_private_key();
-        boost::filesystem::ofstream(ca_dh_path)
+
+        boost::filesystem::ofstream(ca_dh_path())
             << _ca_certificate->pem_dh_param();
     }
-#endif
 
     asio::spawn
         ( _ios
@@ -967,11 +985,16 @@ void Client::State::start(int argc, char* argv[])
               sys::error_code ec;
 
               setup_injector(yield[ec]);
-              setup_ipfs_cache();
+
+              if (was_stopped()) return;
 
               if (ec) {
-                  cerr << "Failed to setup injector" << endl;
+                  cerr << "Failed to setup injector: "
+                       << ec.message()
+                       << endl;
               }
+
+              setup_ipfs_cache();
 
               listen_tcp( yield[ec]
                         , _config.local_endpoint()
@@ -1007,7 +1030,9 @@ void Client::State::start(int argc, char* argv[])
                         auto rs = _front_end.serve( _config.injector_endpoint()
                                                   , rq
                                                   , _ipfs_cache.get()
-                                                  , *_ca_certificate);
+                                                  , *_ca_certificate
+                                                  , yield[ec]);
+                        if (ec) return;
 
                         http::async_write(c, rs, yield[ec]);
                   });
@@ -1112,6 +1137,11 @@ void Client::set_credentials(const char* injector, const char* cred)
 boost::filesystem::path Client::get_pid_path() const
 {
     return _state->get_pid_path();
+}
+
+boost::filesystem::path Client::ca_cert_path() const
+{
+    return _state->ca_cert_path();
 }
 
 //------------------------------------------------------------------------------

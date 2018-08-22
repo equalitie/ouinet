@@ -7,6 +7,7 @@ else()
 endif()
 
 set(BOOST_VERSION 1.67)
+
 include(ExternalProject)
 ################################################################################
 # Configurable options
@@ -23,6 +24,17 @@ option(WITH_INJECTOR "Compile injector" ON)
 # For some reason we need to define both of these
 add_definitions(-DBOOST_COROUTINES_NO_DEPRECATION_WARNING)
 add_definitions(-DBOOST_COROUTINE_NO_DEPRECATION_WARNING)
+
+# Asio has some trouble when multiple libraries are using the header only
+# version.  E.g. we've had problems that boost::asio::error returned from one
+# library wasn't equal to the same error from another library (because they had
+# different error categories).  The last problem before enabling this separate
+# compilation was when Android was running the io_service::run function, but
+# some handlers were not executed inside client.cpp (notably the
+# acceptor::async_accept function never called it's callback).
+#
+# https://www.boost.org/doc/libs/1_67_0/doc/html/boost_asio/using.html#boost_asio.using.optional_separate_compilation
+add_definitions(-DBOOST_ASIO_SEPARATE_COMPILATION)
 
 ################################################################################
 option(ASIO_IPFS_WITH_EXAMPLE_BINARIES "" OFF)
@@ -45,7 +57,7 @@ find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS filesystem
                                                         system)
 find_package(Threads)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -Wall -ggdb ${SANITIZE}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -Wall -O0 -ggdb ${SANITIZE}")
 
 ################################################################################
 externalproject_add(json
@@ -81,6 +93,8 @@ include_directories(
 
 file(GLOB client_sources
     "./src/client.cpp"
+    "./src/asio.cpp"
+    "./src/asio_ssl.cpp"
     "./src/connect_to_host.cpp"
     "./src/client_front_end.cpp"
     "./src/endpoint.cpp"
@@ -123,6 +137,8 @@ if (WITH_INJECTOR)
 
     file(GLOB injector_sources
         "./src/injector.cpp"
+        "./src/asio.cpp"
+        "./src/asio_ssl.cpp"
         "./src/connect_to_host.cpp"
         "./src/cache_control.cpp"
         "./src/ouiservice.cpp"
@@ -151,6 +167,7 @@ if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
     find_library(GCRYPT_LIBRARIES NAMES gcrypt libgcrypt)
 
     file(GLOB test_dht_sources
+        "./src/asio.cpp"
         "./src/bittorrent/*.cpp"
         "./src/util/crypto.cpp"
     )

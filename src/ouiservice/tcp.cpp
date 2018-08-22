@@ -1,6 +1,7 @@
 #include "tcp.h"
 #include "../or_throw.h"
 #include "../util.h"
+#include "../logger.h"
 
 namespace ouinet {
 namespace ouiservice {
@@ -33,6 +34,9 @@ void TcpOuiServiceServer::start_listen(asio::yield_context yield)
         _acceptor.close();
         return or_throw(yield, ec);
     }
+
+    LOG_DEBUG("Successfully listening on TCP Port");
+
 }
 
 void TcpOuiServiceServer::stop_listen()

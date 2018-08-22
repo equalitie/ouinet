@@ -70,6 +70,45 @@ void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, stringstr
     ss << ca.pem_certificate();
 }
 
+void ClientFrontEnd::handle_upload( const Request& req, Response& res, stringstream& ss
+                                  , CacheClient* cache_client, asio::yield_context yield)
+{
+    static const string req_ctype = "application/octet-stream";
+
+    auto result = http::status::ok;
+    res.set(http::field::content_type, "application/json");
+    string err, cid;
+
+    if (req.method() != http::verb::post) {
+        result = http::status::method_not_allowed;
+        err = "request method is not POST";
+    } else if (req[http::field::content_type] != req_ctype) {
+        result = http::status::bad_request;
+        err = "request content type is not " + req_ctype;
+    } else if (!req[http::field::expect].empty()) {
+        // TODO: Support ``Expect: 100-continue`` as cURL does,
+        // e.g. to spot too big files before receiving the body.
+        result = http::status::expectation_failed;
+        err = "sorry, request expectations are not supported";
+    } else if (!cache_client || !_ipfs_cache_enabled) {
+        result = http::status::service_unavailable;
+        err = "cache access is not available";
+    } else {  // perform the upload
+        sys::error_code ec;
+        cid = cache_client->ipfs_add(req.body(), yield[ec]);
+        if (ec) {
+            result = http::status::internal_server_error;
+            err = "failed to seed data to the cache";
+        }
+    }
+
+    res.result(result);
+    if (err.empty())
+        ss << "{\"data_links\": [\"ipfs:/ipfs/" << cid << "\"]}";
+    else
+        ss << "{\"error\": \"" << err << "\"}";
+}
+
 void ClientFrontEnd::handle_portal( const Request& req, Response& res, stringstream& ss
                                   , const boost::optional<Endpoint>& injector_ep
                                   , CacheClient* cache_client)
@@ -177,7 +216,8 @@ void ClientFrontEnd::handle_portal( const Request& req, Response& res, stringstr
 Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
                               , const Request& req
                               , CacheClient* cache_client
-                              , const CACertificate& ca)
+                              , const CACertificate& ca
+                              , asio::yield_context yield)
 {
     Response res{http::status::ok, req.version()};
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
@@ -189,7 +229,10 @@ Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
     match_http_url(req.target().to_string(), url);
     if (url.path == "/ca.pem")
         handle_ca_pem(req, res, ss, ca);
-    else
+    else if (url.path == "/upload") {
+        sys::error_code ec_;  // shouldn't throw, but just in case
+        handle_upload(req, res, ss, cache_client, yield[ec_]);
+    } else
         handle_portal(req, res, ss, injector_ep, cache_client);
 
     Response::body_type::reader reader(res, res.body());
