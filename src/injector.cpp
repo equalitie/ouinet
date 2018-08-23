@@ -165,16 +165,13 @@ private:
     {
         if (!injector) return;
 
-        auto key = rq.target().to_string();
-        stringstream rsh_ss;
-        rsh_ss << rs.base();
-
         // Seed body data to IPFS, then create a descriptor for the URI and insert it.
         // TODO: Do it more efficiently?
         injector->put_data(beast::buffers_to_string(rs.body().data()),
-            [ key, rsh_s = rsh_ss.str()
+            [ rq, rsh = rs.base()
             , injector = injector.get()
             ] (const sys::error_code& ec, auto ipfs_id) {
+                auto key = rq.target().to_string();
                 if (ec) {
                     cout << "!Data seeding failed: " << key
                          << " " << ec.message() << endl;
@@ -185,9 +182,12 @@ private:
                 // TODO: This is a *temporary format* with the bare minimum to test
                 // head/body splitting of HTTP responses.  See `doc/descriptor-*.json`
                 // for the target format.
+                stringstream rsh_ss;
+                rsh_ss << rsh;
+
                 nlohmann::json desc;
                 desc["url"] = key;
-                desc["head"] = rsh_s;
+                desc["head"] = rsh_ss.str();
                 desc["body_link"] = ipfs_id;
 
                 // Insert a URI->descriptor mapping in the db.
