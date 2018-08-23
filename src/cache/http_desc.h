@@ -1,4 +1,6 @@
 // Temporary, simplified URI descriptor format for a single HTTP response.
+//
+// See `doc/descriptor-*.json` for the target format.
 #pragma once
 
 #include <sstream>
@@ -13,6 +15,9 @@ namespace ouinet {
 
 namespace descriptor {
 
+// For the given HTTP request `rq` and response `rs`, seed body data to the `cache`,
+// then create an HTTP descriptor for the URL and response,
+// and pass it to the given callback.
 template<class Cache>
 inline
 void
@@ -21,7 +26,6 @@ http_create( Cache& cache
            , const http::response<http::dynamic_body>& rs
            , std::function<void(sys::error_code, std::string)> cb) {
 
-    // Seed body data to IPFS, then create a descriptor for the URI and return it.
     // TODO: Do it more efficiently?
     cache.put_data(beast::buffers_to_string(rs.body().data()),
         [rq, rsh = rs.base(), cb = std::move(cb)] (const sys::error_code& ec, auto ipfs_id) {
@@ -34,8 +38,7 @@ http_create( Cache& cache
 
             // Create the descriptor.
             // TODO: This is a *temporary format* with the bare minimum to test
-            // head/body splitting of HTTP responses.  See `doc/descriptor-*.json`
-            // for the target format.
+            // head/body splitting of HTTP responses.
             std::stringstream rsh_ss;
             rsh_ss << rsh;
 
@@ -48,6 +51,9 @@ http_create( Cache& cache
         });
 }
 
+// For the given HTTP descriptor serialized in `desc_data`,
+// retrieve the head from the descriptor and the body data from the `cache`,
+// assemble and return the HTTP response.
 template<class Cache>
 inline
 http::response<http::dynamic_body>
