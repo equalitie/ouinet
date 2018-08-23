@@ -16,10 +16,10 @@ namespace descriptor {
 template<class Cache>
 inline
 void
-http_create_json( Cache& cache
-                , const http::request<http::string_body>& rq
-                , const http::response<http::dynamic_body>& rs
-                , std::function<void(sys::error_code, std::string)> cb) {
+http_create( Cache& cache
+           , const http::request<http::string_body>& rq
+           , const http::response<http::dynamic_body>& rs
+           , std::function<void(sys::error_code, std::string)> cb) {
 
     // Seed body data to IPFS, then create a descriptor for the URI and return it.
     // TODO: Do it more efficiently?
@@ -51,8 +51,8 @@ http_create_json( Cache& cache
 template<class Cache>
 inline
 http::response<http::dynamic_body>
-http_parse_json( Cache& cache, const std::string& raw_json
-               , asio::yield_context yield) {
+http_parse( Cache& cache, const std::string& desc_data
+          , asio::yield_context yield) {
 
     using Response = http::response<http::dynamic_body>;
 
@@ -61,14 +61,14 @@ http_parse_json( Cache& cache, const std::string& raw_json
 
     // Parse the JSON HTTP descriptor, extract useful info.
     try {
-        auto json = nlohmann::json::parse(raw_json);
+        auto json = nlohmann::json::parse(desc_data);
         url = json["url"];
         head = json["head"];
         body_link = json["body_link"];
     } catch (const std::exception& e) {
         std::cerr << "WARNING: Malformed or invalid HTTP descriptor: " << e.what() << std::endl;
         std::cerr << "----------------" << std::endl;
-        std::cerr << raw_json << std::endl;
+        std::cerr << desc_data << std::endl;
         std::cerr << "----------------" << std::endl;
         ec = asio::error::invalid_argument;  // though ``bad_descriptor`` would rock
     }

@@ -165,11 +165,11 @@ private:
     {
         if (!injector) return;
 
-        descriptor::http_create_json(*injector, rq, rs,
+        descriptor::http_create(*injector, rq, rs,
             [ key = rq.target().to_string()
-            , injector = injector.get()] (const sys::error_code& ec, string raw_json) {
+            , injector = injector.get()] (const sys::error_code& ec, string desc_data) {
                 if (ec) return;
-                injector->insert_content(key, raw_json,
+                injector->insert_content(key, desc_data,
                     [key] (const sys::error_code& ec, auto) {
                         if (ec) {
                             cout << "!Insert failed: " << key
@@ -193,7 +193,7 @@ private:
         auto content = injector->get_content(rq.target().to_string(), yield[ec]);
         if (ec) return or_throw<CacheEntry>(yield, ec);
 
-        auto res = descriptor::http_parse_json(*injector, content.data, yield[ec]);
+        auto res = descriptor::http_parse(*injector, content.data, yield[ec]);
         return or_throw(yield, ec, CacheEntry{content.ts, res});
     }
 

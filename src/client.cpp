@@ -283,7 +283,7 @@ Client::State::fetch_stored( const Request& request
     // an error should have been reported.
     assert(!content.ts.is_not_a_date_time());
 
-    auto res = descriptor::http_parse_json(*_ipfs_cache, content.data, yield[ec]);
+    auto res = descriptor::http_parse(*_ipfs_cache, content.data, yield[ec]);
     return or_throw(yield, ec, CacheEntry{content.ts, res});
 }
 
