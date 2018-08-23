@@ -1,6 +1,8 @@
 // Temporary, simplified URI descriptor format for a single HTTP response.
 #pragma once
 
+#include <sstream>
+
 #include <boost/format.hpp>
 #include <json.hpp>
 
@@ -10,6 +12,41 @@
 namespace ouinet {
 
 namespace descriptor {
+
+template<class Cache>
+inline
+void
+http_create_json( Cache& cache
+                , const http::request<http::string_body>& rq
+                , const http::response<http::dynamic_body>& rs
+                , std::function<void(sys::error_code, std::string)> cb) {
+
+    // Seed body data to IPFS, then create a descriptor for the URI and return it.
+    // TODO: Do it more efficiently?
+    cache.put_data(beast::buffers_to_string(rs.body().data()),
+        [rq, rsh = rs.base(), cb = std::move(cb)] (const sys::error_code& ec, auto ipfs_id) {
+            auto url = rq.target().to_string();
+            if (ec) {
+                std::cout << "!Data seeding failed: " << url
+                          << " " << ec.message() << std::endl;
+                return cb(ec, "");
+            }
+
+            // Create the descriptor.
+            // TODO: This is a *temporary format* with the bare minimum to test
+            // head/body splitting of HTTP responses.  See `doc/descriptor-*.json`
+            // for the target format.
+            std::stringstream rsh_ss;
+            rsh_ss << rsh;
+
+            nlohmann::json desc;
+            desc["url"] = url;
+            desc["head"] = rsh_ss.str();
+            desc["body_link"] = ipfs_id;
+
+            cb(ec, std::move(desc.dump()));
+        });
+}
 
 template<class Cache>
 inline
