@@ -101,8 +101,11 @@ http_parse( Cache& cache, const std::string& desc_data
         return or_throw<Response>(yield, ec);
     }
 
-    // - Add the response body.
-    parser.put(asio::buffer(body), ec);
+    // - Add the response body (if needed).
+    if (body.length() > 0)
+        parser.put(asio::buffer(body), ec);
+    else
+        parser.put_eof(ec);
     if (ec || !parser.is_done()) {
         std::cerr
           << (boost::format
