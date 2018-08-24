@@ -32,6 +32,7 @@
 #include "ouiservice/i2p.h"
 #include "ouiservice/tcp.h"
 
+#include "util/bytes.h"
 #include "util/signal.h"
 
 #include "logger.h"
@@ -332,6 +333,8 @@ void listen( InjectorConfig& config
 //------------------------------------------------------------------------------
 int main(int argc, const char* argv[])
 {
+    util::crypto_init();
+
     InjectorConfig config;
 
     try {
@@ -373,8 +376,15 @@ int main(int argc, const char* argv[])
 
     Signal<void()> shutdown_signal;
 
+    if (config.cache_private_key().empty()) {
+        LOG_ABORT("Missing cache private key\n");
+        return 1;
+    }
+    util::Ed25519PrivateKey private_key = util::Ed25519PrivateKey(util::bytes::to_array<uint8_t, 32>(util::bytes::from_hex(config.cache_private_key())));
+    cout << "Cache private key: " << util::bytes::to_hex(private_key.serialize()) << "\n";
+
     auto cache_injector
-        = make_unique<CacheInjector>(ios, (config.repo_root()/"ipfs").native());
+        = make_unique<CacheInjector>(ios, (config.repo_root()/"ipfs").native(), private_key);
 
     auto shutdown_ipfs_slot = shutdown_signal.connect([&] {
         cache_injector = nullptr;
@@ -382,9 +392,9 @@ int main(int argc, const char* argv[])
 
     // Although the IPNS ID is already in IPFS's config file,
     // this just helps put all info relevant to the user right in the repo root.
-    auto ipns_id = cache_injector->id();
-    LOG_DEBUG("IPNS DB: " + ipns_id);
-    util::create_state_file(config.repo_root()/"cache-ipns", ipns_id);
+    auto cache_public_key = cache_injector->public_key();
+    LOG_DEBUG("Cache public key:  " + cache_public_key);
+    util::create_state_file(config.repo_root()/"cache-ipns", cache_public_key);
 
     OuiServiceServer proxy_server(ios);
 

@@ -28,6 +28,14 @@ public:
     boost::optional<asio::ip::tcp::endpoint> tcp_endpoint() const
     { return _tcp_endpoint; }
 
+    const std::string& cache_private_key() const {
+        return _cache_private_key;
+    }
+
+    void set_cache_private_key(std::string cache_private_key) {
+        _cache_private_key = move(cache_private_key);
+    }
+
     static boost::program_options::options_description
     options_description();
 
@@ -40,6 +48,7 @@ private:
     boost::optional<size_t> _open_file_limit;
     bool _listen_on_i2p = false;
     boost::optional<asio::ip::tcp::endpoint> _tcp_endpoint;
+    std::string _cache_private_key;
     boost::filesystem::path OUINET_CONF_FILE = "ouinet-injector.conf";
     std::string _credentials;
 };
@@ -60,6 +69,9 @@ InjectorConfig::options_description()
         ("listen-on-i2p",
          po::value<string>(),
          "Whether we should be listening on I2P (true/false)")
+        ("cache-private-key"
+         , po::value<string>()->default_value("")
+         , "Private key of the BEP44 cache")
         ("open-file-limit"
          , po::value<unsigned int>()
          , "To increase the maximum number of open files")
@@ -144,6 +156,20 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
     if (vm.count("listen-on-tcp")) {
         _tcp_endpoint = util::parse_tcp_endpoint(vm["listen-on-tcp"].as<string>());
+    }
+
+    if (vm.count("cache-private-key")) {
+        _cache_private_key = vm["cache-private-key"].as<string>();
+        if (_cache_private_key.size() != 64) {
+            _cache_private_key = "";
+        } else {
+            for (size_t i = 0; i < _cache_private_key.size(); i++) {
+                if (std::string("0123456789abcdefABCDEF").find(_cache_private_key[i]) == std::string::npos) {
+                    _cache_private_key = "";
+                    break;
+                }
+            }
+        }
     }
 }
 

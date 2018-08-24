@@ -814,20 +814,20 @@ void Client::State::setup_ipfs_cache()
                       ] (asio::yield_context yield) {
         if (was_stopped()) return;
 
-        const string ipns = _config.ipns();
+        const string cache_public_key = _config.cache_public_key();
 
         {
-            LOG_DEBUG("Starting IPFS Cache with IPNS ID: " + ipns);
+            LOG_DEBUG("Starting IPFS Cache with public key: " + cache_public_key);
             auto on_exit = defer([&] { _is_ipns_being_setup = false; });
 
-            if (ipns.empty()) {
+            if (cache_public_key.empty()) {
                 LOG_WARN("Support for IPFS Cache is disabled because we have not been provided with an IPNS id");
                 _ipfs_cache = nullptr;
                 return;
             }
 
             if (_ipfs_cache) {
-                return _ipfs_cache->set_ipns(move(ipns));
+                //return _ipfs_cache->set_ipns(move(ipns));
             }
 
             string repo_root = (_config.repo_root()/"ipfs").native();
@@ -838,9 +838,11 @@ void Client::State::setup_ipfs_cache()
                 if (cancel) cancel();
             });
 
+            util::Ed25519PublicKey public_key(util::bytes::to_array<uint8_t, 32>(util::bytes::from_hex(cache_public_key)));
+
             sys::error_code ec;
             _ipfs_cache = CacheClient::build(_ios
-                                            , ipns
+                                            , public_key
                                             , move(repo_root)
                                             , cancel
                                             , yield[ec]);
@@ -852,7 +854,7 @@ void Client::State::setup_ipfs_cache()
             }
         }
 
-        if (ipns != _config.ipns()) {
+        if (cache_public_key != _config.cache_public_key()) {
             // Use requested yet another IPNS
             setup_ipfs_cache();
         }
@@ -1123,11 +1125,13 @@ void Client::set_injector_endpoint(const char* injector_ep)
     _state->set_injector(injector_ep);
 }
 
+/*
 void Client::set_ipns(const char* ipns)
 {
     _state->_config.set_ipns(move(ipns));
     _state->setup_ipfs_cache();
 }
+*/
 
 void Client::set_credentials(const char* injector, const char* cred)
 {
@@ -1148,6 +1152,8 @@ boost::filesystem::path Client::ca_cert_path() const
 #ifndef __ANDROID__
 int main(int argc, char* argv[])
 {
+    util::crypto_init();
+
     asio::io_service ios;
 
     asio::signal_set signals(ios, SIGINT, SIGTERM);

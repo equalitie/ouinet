@@ -13,6 +13,8 @@ typedef gcry_sexp* gcry_sexp_t;
 namespace ouinet {
 namespace util {
 
+void crypto_init();
+
 std::string random(unsigned int size);
 
 std::array<uint8_t, 20> sha1(const std::string& data);
@@ -38,7 +40,7 @@ class Ed25519PublicKey {
 
 class Ed25519PrivateKey {
     public:
-    Ed25519PrivateKey(const std::array<uint8_t, 32>& key);
+    Ed25519PrivateKey(std::array<uint8_t, 32> key = {});
     ~Ed25519PrivateKey();
 
     Ed25519PrivateKey(const Ed25519PrivateKey& other);

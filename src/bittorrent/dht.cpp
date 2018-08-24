@@ -133,11 +133,25 @@ std::set<tcp::endpoint> dht::DhtNode::tracker_announce(NodeID infohash, boost::o
 
 boost::optional<BencodedValue> dht::DhtNode::data_get_immutable(const NodeID& key, asio::yield_context yield)
 {
+    /*
+     * This is a ProximitySet, really. The bool carries no data.
+     */
+    ProximityMap<bool> responsible_nodes(key, RESPONSIBLE_TRACKERS_PER_SWARM);
     boost::optional<BencodedValue> data;
 
     collect(key, [&](const Contact& candidate , asio::yield_context yield)
                  -> boost::optional<Candidates>
         {
+            if (!candidate.id && responsible_nodes.full()) {
+                return boost::none;
+            }
+            if (candidate.id && !responsible_nodes.would_insert(*candidate.id)) {
+                return boost::none;
+            }
+
+            /*
+             * As soon as we have found a valid data value, we can stop the search.
+             */
             if (data) {
                 return boost::none;
             }
@@ -153,6 +167,10 @@ boost::optional<BencodedValue> dht::DhtNode::data_get_immutable(const NodeID& ke
                 return closer_nodes;
             }
             BencodedMap& response = *response_;
+
+            if (candidate.id) {
+                responsible_nodes.insert({ *candidate.id, true });
+            }
 
             if (response.count("v")) {
                 BencodedValue value = response["v"];
@@ -245,11 +263,22 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
 ) {
     NodeID target_id = _data_store->mutable_get_id(public_key, salt);
 
+    /*
+     * This is a ProximitySet, really. The bool carries no data.
+     */
+    ProximityMap<bool> responsible_nodes(target_id, RESPONSIBLE_TRACKERS_PER_SWARM);
     boost::optional<MutableDataItem> data;
 
     collect(target_id, [&](const Contact& candidate, asio::yield_context yield)
                        -> boost::optional<Candidates>
         {
+            if (!candidate.id && responsible_nodes.full()) {
+                return boost::none;
+            }
+            if (candidate.id && !responsible_nodes.would_insert(*candidate.id)) {
+                return boost::none;
+            }
+
             /*
              * We want to find the latest version of the data, so don't stop early.
              */
@@ -265,6 +294,10 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
                 return closer_nodes;
             }
             BencodedMap& response = *response_;
+
+            if (candidate.id) {
+                responsible_nodes.insert({ *candidate.id, true });
+            }
 
             if (response["k"] != util::bytes::to_string(public_key.serialize())) {
                 return closer_nodes;

@@ -8,8 +8,17 @@ extern "C" {
 #include "gcrypt.h"
 }
 
+#include <iostream>
+
 namespace ouinet {
 namespace util {
+
+void crypto_init()
+{
+    if (!::gcry_check_version(GCRYPT_VERSION)) {
+        throw std::exception();
+    }
+}
 
 std::string random(unsigned int size)
 {
@@ -144,7 +153,7 @@ bool Ed25519PublicKey::verify(const std::string& data, const std::array<uint8_t,
 
 
 
-Ed25519PrivateKey::Ed25519PrivateKey(const std::array<uint8_t, 32>& key):
+Ed25519PrivateKey::Ed25519PrivateKey(std::array<uint8_t, 32> key):
     _private_key(nullptr)
 {
     if (::gcry_sexp_build(&_private_key, NULL, "(private-key (ecc (curve Ed25519) (flags eddsa) (d %b)))", key.size(), key.data())) {

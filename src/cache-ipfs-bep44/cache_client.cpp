@@ -1,6 +1,5 @@
 #include <asio_ipfs.h>
 #include "cache_client.h"
-#include "db.h"
 #include "get_content.h"
 #include "../or_throw.h"
 
@@ -11,7 +10,7 @@ namespace asio = boost::asio;
 namespace sys  = boost::system;
 
 unique_ptr<CacheClient> CacheClient::build( asio::io_service& ios
-                                          , string ipns
+                                          , util::Ed25519PublicKey public_key
                                           , string path_to_repo
                                           , function<void()>& cancel
                                           , asio::yield_context yield)
@@ -39,28 +38,55 @@ unique_ptr<CacheClient> CacheClient::build( asio::io_service& ios
     if (ec) return or_throw<ClientP>(yield, ec);
 
     return ClientP(new CacheClient(move(*ipfs_node)
-                  , move(ipns)
+                  , move(public_key)
                   , move(path_to_repo)));
 }
 
 CacheClient::CacheClient( asio_ipfs::node ipfs_node
-                        , string ipns
+                        , util::Ed25519PublicKey public_key
                         , string path_to_repo)
     : _path_to_repo(move(path_to_repo))
     , _ipfs_node(new asio_ipfs::node(move(ipfs_node)))
-    , _db(new ClientDb(*_ipfs_node, _path_to_repo, ipns))
+    , _dht(new bittorrent::MainlineDht(_ipfs_node->get_io_service()))
+    , _public_key(move(public_key))
 {
+    /*
+     * TODO: Replace this with platform-specific dynamic interface enumeration.
+     */
+    asio::spawn( _ipfs_node->get_io_service(), [this] (asio::yield_context yield) {
+        std::vector<asio::ip::address> addresses;
+        addresses.push_back(asio::ip::address::from_string("0.0.0.0"));
+        _dht->set_interfaces(addresses, yield);
+    });
 }
 
 CacheClient::CacheClient( boost::asio::io_service& ios
-                        , string ipns
+                        , util::Ed25519PublicKey public_key
                         , string path_to_repo)
     : _path_to_repo(move(path_to_repo))
     , _ipfs_node(new asio_ipfs::node(ios, _path_to_repo))
-    , _db(new ClientDb(*_ipfs_node, _path_to_repo, ipns))
+    , _dht(new bittorrent::MainlineDht(ios))
+    , _public_key(move(public_key))
 {
+    /*
+     * TODO: Replace this with platform-specific dynamic interface enumeration.
+     */
+    asio::spawn( _ipfs_node->get_io_service(), [this] (asio::yield_context yield) {
+        std::vector<asio::ip::address> addresses;
+        addresses.push_back(asio::ip::address::from_string("0.0.0.0"));
+        _dht->set_interfaces(addresses, yield);
+    });
 }
 
+std::string CacheClient::public_key() const
+{
+    return util::bytes::to_hex(_public_key.serialize());
+}
+
+/*
+ * TODO: This function should be replaced with one that doesn't just seed the
+ * data chunk, but also seeds the BEP44 entry.
+ */
 string CacheClient::ipfs_add(const string& data, asio::yield_context yield)
 {
     return _ipfs_node->add(data, yield);
@@ -68,48 +94,20 @@ string CacheClient::ipfs_add(const string& data, asio::yield_context yield)
 
 CachedContent CacheClient::get_content(string url, asio::yield_context yield)
 {
-    return ouinet::get_content(*_db, url, yield);
+    return ouinet::get_content(_ipfs_node.get(), _dht.get(), _public_key, url, yield);
 }
-
-void CacheClient::wait_for_db_update(boost::asio::yield_context yield)
-{
-    _db->wait_for_db_update(yield);
-}
-
-void CacheClient::set_ipns(std::string ipns)
-{
-    _db.reset(new ClientDb(*_ipfs_node, _path_to_repo, move(ipns)));
-}
-
-std::string CacheClient::id() const
-{
-    return _ipfs_node->id();
-}
-
-const string& CacheClient::ipns() const
-{
-    return _db->ipns();
-}
-
-const string& CacheClient::ipfs() const
-{
-    return _db->ipfs();
-}
-
-//const Json& Client::json_db() const
-//{
-//    return _db->json_db();
-//}
 
 CacheClient::CacheClient(CacheClient&& other)
     : _ipfs_node(move(other._ipfs_node))
-    , _db(move(other._db))
+    , _dht(move(other._dht))
+    , _public_key(move(other._public_key))
 {}
 
 CacheClient& CacheClient::operator=(CacheClient&& other)
 {
     _ipfs_node = move(other._ipfs_node);
-    _db = move(other._db);
+    _dht = move(other._dht);
+    _public_key = move(other._public_key);
     return *this;
 }
 

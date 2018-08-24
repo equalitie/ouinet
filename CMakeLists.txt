@@ -57,6 +57,10 @@ find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS filesystem
                                                         system)
 find_package(Threads)
 
+# TODO: turn this into a proper cmake package
+find_path(GCRYPT_INCLUDE_DIR gcrypt.h)
+find_library(GCRYPT_LIBRARIES NAMES gcrypt libgcrypt)
+
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -Wall -O0 -ggdb ${SANITIZE}")
 
 ################################################################################
@@ -87,6 +91,7 @@ set(LRU_INCLUDE_DIR "${CMAKE_BINARY_DIR}/lru/src/lru/include")
 include_directories(
     "${Boost_INCLUDE_DIR}"
     "${ASIO_IPFS_INCLUDE_DIR}"
+    "${GCRYPT_INCLUDE_DIR}"
     "${JSON_INCLUDE_DIR}"
     "${LRU_INCLUDE_DIR}"
 )
@@ -106,6 +111,8 @@ file(GLOB client_sources
     "./src/ouiservice/tcp.cpp"
     "./src/logger.cpp"
     "./src/cache-ipfs-bep44/*.cpp"
+    "./src/bittorrent/*.cpp"
+    "./src/util/crypto.cpp"
 )
 
 if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
@@ -124,6 +131,7 @@ target_link_libraries(client
     ouiservice-i2p
     ${Boost_LIBRARIES}
     ${ASIO_IPFS_LIBRARIES}
+    ${GCRYPT_LIBRARIES}
 )
 
 add_dependencies(client json lru ${ASIO_IPFS_TARGET})
@@ -133,6 +141,7 @@ if (WITH_INJECTOR)
     include_directories(
         "${Boost_INCLUDE_DIR}"
         "${ASIO_IPFS_INCLUDE_DIR}"
+        "${GCRYPT_INCLUDE_DIR}"
     )
 
     file(GLOB injector_sources
@@ -145,6 +154,8 @@ if (WITH_INJECTOR)
         "./src/ouiservice/tcp.cpp"
         "./src/logger.cpp"
         "./src/cache-ipfs-bep44/*.cpp"
+        "./src/bittorrent/*.cpp"
+        "./src/util/crypto.cpp"
     )
 
     add_executable(injector ${injector_sources})
@@ -154,34 +165,9 @@ if (WITH_INJECTOR)
         ouiservice-i2p
         ${Boost_LIBRARIES}
         ${ASIO_IPFS_LIBRARIES}
+        ${GCRYPT_LIBRARIES}
     )
 endif() # if WITH_INJECTOR
-
-################################################################################
-# Temporary, until we have proper dht tests. At which point it should move
-# to the ./test/ directory.
-
-if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
-    # TODO: turn this into a proper cmake package
-    find_path(GCRYPT_INCLUDE_DIR gcrypt.h)
-    find_library(GCRYPT_LIBRARIES NAMES gcrypt libgcrypt)
-
-    file(GLOB test_dht_sources
-        "./src/asio.cpp"
-        "./src/bittorrent/*.cpp"
-        "./src/util/crypto.cpp"
-    )
-
-    add_executable(test-dht ${test_dht_sources})
-
-    target_include_directories(test-dht PUBLIC
-        "${Boost_INCLUDE_DIR}"
-        "${GCRYPT_INCLUDE_DIR}"
-    )
-
-    target_link_libraries(test-dht ${Boost_LIBRARIES} ${GCRYPT_LIBRARIES})
-
-endif()
 
 ################################################################################
 # Config file directory

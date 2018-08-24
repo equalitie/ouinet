@@ -9,11 +9,12 @@
 
 #include "cached_content.h"
 
+#include "../bittorrent/dht.h"
+#include "../util/crypto.h"
+
 namespace asio_ipfs { class node; }
 
 namespace ouinet {
-
-class InjectorDb;
 
 class CacheInjector {
 public:
@@ -28,15 +29,13 @@ private:
     };
 
 public:
-    CacheInjector(boost::asio::io_service&, std::string path_to_repo);
+    CacheInjector(boost::asio::io_service&, std::string path_to_repo, util::Ed25519PrivateKey private_key);
 
     CacheInjector(const CacheInjector&) = delete;
     CacheInjector& operator=(const CacheInjector&) = delete;
 
-    // Returns the IPNS CID of the database.
-    // The database could be then looked up by e.g. pointing your browser to:
-    // "https://ipfs.io/ipns/" + ipfs.id()
-    std::string id() const;
+    // Returns a hex representation of the public key of the cache.
+    std::string public_key() const;
 
     // Insert `content` into IPFS and store its IPFS ID under the `url` in the
     // database. The IPFS ID is also returned as a parameter to the callback
@@ -67,7 +66,9 @@ private:
 
 private:
     std::unique_ptr<asio_ipfs::node> _ipfs_node;
-    std::unique_ptr<InjectorDb> _db;
+    std::unique_ptr<bittorrent::MainlineDht> _dht;
+    util::Ed25519PrivateKey _private_key;
+    util::Ed25519PublicKey _public_key;
     std::queue<InsertEntry> _insert_queue;
     const unsigned int _concurrency = 8;
     unsigned int _job_count = 0;

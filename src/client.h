@@ -21,7 +21,7 @@ public:
     void stop();
 
     void set_injector_endpoint(const char*);
-    void set_ipns(const char*);
+//    void set_ipns(const char*);
     void set_credentials(const char* injector, const char* cred);
 
     // Calling this only has meaning after client start.

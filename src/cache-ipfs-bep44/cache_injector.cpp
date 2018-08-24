@@ -6,8 +6,9 @@
 #include "cache_injector.h"
 
 #include <asio_ipfs.h>
-#include "db.h"
 #include "get_content.h"
+
+#include "../util/bytes.h"
 
 using namespace std;
 using namespace ouinet;
@@ -15,16 +16,26 @@ using namespace ouinet;
 namespace asio = boost::asio;
 namespace sys  = boost::system;
 
-CacheInjector::CacheInjector(asio::io_service& ios, string path_to_repo)
+CacheInjector::CacheInjector(asio::io_service& ios, string path_to_repo, util::Ed25519PrivateKey private_key)
     : _ipfs_node(new asio_ipfs::node(ios, path_to_repo))
-    , _db(new InjectorDb(*_ipfs_node, path_to_repo))
+    , _dht(new bittorrent::MainlineDht(ios))
+    , _private_key(private_key)
+    , _public_key(private_key.public_key())
     , _was_destroyed(make_shared<bool>(false))
 {
+    /*
+     * TODO: Replace this with platform-specific dynamic interface enumeration.
+     */
+    asio::spawn( _ipfs_node->get_io_service(), [this] (asio::yield_context yield) {
+        std::vector<asio::ip::address> addresses;
+        addresses.push_back(asio::ip::address::from_string("0.0.0.0"));
+        _dht->set_interfaces(addresses, yield);
+    });
 }
 
-string CacheInjector::id() const
+std::string CacheInjector::public_key() const
 {
-    return _ipfs_node->id();
+    return util::bytes::to_hex(_public_key.serialize());
 }
 
 void CacheInjector::insert_content_from_queue()
@@ -63,14 +74,26 @@ void CacheInjector::insert_content_from_queue()
                                      (asio::yield_context yield) {
                                          if (*wd) return;
 
-                                         sys::error_code ec;
-                                         Json json;
+                                         /*
+                                          * Use the sha1 of the URL as salt;
+                                          * Use the timestamp as a version ID.
+                                          */
 
-                                         json["value"] = ipfs_id;
-                                         json["ts"]    = boost::posix_time::to_iso_extended_string(ts) + 'Z';
+                                         bittorrent::BencodedValue value = ipfs_id;
+                                         boost::posix_time::ptime unix_epoch(boost::gregorian::date(1970, 1, 1));
+                                         int64_t timestamp_unix_ms = (ts - unix_epoch).total_milliseconds();
+                                         std::string key_hash = util::bytes::to_string(util::sha1(key));
 
-                                         _db->update(move(key), json.dump(), yield[ec]);
-                                         cb(ec, ipfs_id);
+                                         bittorrent::MutableDataItem item = bittorrent::MutableDataItem::sign(
+                                             value,
+                                             timestamp_unix_ms,
+                                             key_hash,
+                                             _private_key
+                                         );
+
+                                         _dht->mutable_put_start(item, yield);
+
+                                         cb(sys::error_code(), ipfs_id);
                                      });
                    });
 }
@@ -112,7 +135,7 @@ string CacheInjector::insert_content( string key
 
 CachedContent CacheInjector::get_content(string url, asio::yield_context yield)
 {
-    return ouinet::get_content(*_db, url, yield);
+    return ouinet::get_content(_ipfs_node.get(), _dht.get(), _public_key, url, yield);
 }
 
 CacheInjector::~CacheInjector()

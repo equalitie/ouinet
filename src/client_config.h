@@ -34,12 +34,12 @@ public:
         return _local_ep;
     }
 
-    const std::string& ipns() const {
-        return _ipns;
+    const std::string& cache_public_key() const {
+        return _cache_public_key;
     }
 
-    void set_ipns(std::string ipns) {
-        _ipns = std::move(ipns);
+    void set_cache_public_key(std::string cache_public_key) {
+        _cache_public_key = move(cache_public_key);
     }
 
     boost::posix_time::time_duration max_cached_age() const {
@@ -71,7 +71,7 @@ private:
     Path _ouinet_conf_file = "ouinet-client.conf";
     asio::ip::tcp::endpoint _local_ep;
     boost::optional<Endpoint> _injector_ep;
-    std::string _ipns;
+    std::string _cache_public_key;
     bool _enable_http_connect_requests = false;
     asio::ip::tcp::endpoint _front_end_endpoint;
 
@@ -100,9 +100,9 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         ("injector-ep"
          , po::value<string>()
          , "Injector's endpoint (either <IP>:<PORT> or I2P public key)")
-        ("injector-ipns"
+        ("cache-public-key"
          , po::value<string>()->default_value("")
-         , "IPNS of the injector's database")
+         , "Public key of the BEP44 cache")
         ("max-cached-age"
          , po::value<int>()->default_value(_max_cached_age.total_seconds())
          , "Discard cached content older than this many seconds "
@@ -201,8 +201,18 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         }
     }
 
-    if (vm.count("injector-ipns")) {
-        _ipns = vm["injector-ipns"].as<string>();
+    if (vm.count("cache-public-key")) {
+        _cache_public_key = vm["cache-public-key"].as<string>();
+        if (_cache_public_key.size() != 64) {
+            _cache_public_key = "";
+        } else {
+            for (size_t i = 0; i < _cache_public_key.size(); i++) {
+                if (std::string("0123456789abcdefABCDEF").find(_cache_public_key[i]) == std::string::npos) {
+                    _cache_public_key = "";
+                    break;
+                }
+            }
+        }
     }
 
     if (vm.count("injector-credentials")) {
