@@ -139,6 +139,7 @@ public:
                         , Signal<void()>& abort_signal)
         : ios(ios)
         , injector(injector)
+        , cc("Ouinet Injector")
     {
         cc.fetch_fresh = [&ios, &abort_signal]
                          (const Request& rq, asio::yield_context yield) {
@@ -218,7 +219,6 @@ private:
     asio::io_service& ios;
     unique_ptr<CacheInjector>& injector;
     CacheControl cc;
-    //RateLimiter _rate_limiter;
 };
 
 //------------------------------------------------------------------------------

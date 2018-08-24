@@ -114,9 +114,7 @@ private:
         return _config.repo_root()/OUINET_PID_FILE;
     }
 
-    string maybe_start_seeding( const Request&
-                              , const Response&
-                              , asio::yield_context);
+    string maybe_start_seeding(const Request&, const Response&, Yield);
 
     bool was_stopped() const {
         return _shutdown_signal.call_count() != 0;
@@ -145,18 +143,18 @@ private:
 //------------------------------------------------------------------------------
 string Client::State::maybe_start_seeding( const Request&  req
                                          , const Response& res
-                                         , asio::yield_context yield)
+                                         , Yield yield)
 {
     if (!_ipfs_cache)
         return or_throw<string>(yield, asio::error::operation_not_supported);
 
     const char* reason = "";
     if (!CacheControl::ok_to_cache(req, res, &reason)) {
-        cerr << "---------------------------------------" << endl;
-        cerr << "Not caching " << req.target() << endl;
-        cerr << "Because: \"" << reason << "\"" << endl;
-        cerr << req.base() << res.base();
-        cerr << "---------------------------------------" << endl;
+        yield.log("---------------------------------------");
+        yield.log("Not caching ", req.target());
+        yield.log("Because: \"", reason, "\"");
+        yield.log(req.base(), res.base());
+        yield.log("---------------------------------------");
         return {};
     }
 
@@ -470,7 +468,7 @@ Response Client::State::fetch_fresh( const Request& request
 CacheControl
 Client::State::build_cache_control(request_route::Config& request_config)
 {
-    CacheControl cache_control;
+    CacheControl cache_control("Ouinet Client");
 
     cache_control.fetch_stored =
         [&] (const Request& request, Yield yield) {
@@ -480,7 +478,11 @@ Client::State::build_cache_control(request_route::Config& request_config)
             sys::error_code ec;
             auto r = fetch_stored(request, request_config, yield[ec]);
 
-            yield.log("Fetched from cache ", ec.message(), " ", r.response.result());
+            if (!ec) {
+                yield.log("Fetched from cache success, status: ", r.response.result());
+            } else {
+                yield.log("Fetched from cache error: ", ec.message());
+            }
 
             return or_throw(yield, ec, move(r));
         };
@@ -493,7 +495,11 @@ Client::State::build_cache_control(request_route::Config& request_config)
             sys::error_code ec;
             auto r = fetch_fresh(request, request_config, yield[ec]);
 
-            yield.log("Fetched fresh ", ec.message(), " ", r.result());
+            if (!ec) {
+                yield.log("Fetched fresh success, status: ", r.result());
+            } else {
+                yield.log("Fetched fresh error:", ec.message());
+            }
 
             return or_throw(yield, ec, move(r));
         };

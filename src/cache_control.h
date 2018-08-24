@@ -25,6 +25,10 @@ public:
     using Store       = std::function<void(const Request&, const Response&)>;
 
 public:
+    CacheControl(std::string server_name)
+        : _server_name(std::move(server_name))
+    {}
+
     Response fetch(const Request&, Yield);
 
     FetchStored  fetch_stored;
@@ -56,7 +60,11 @@ private:
 
     bool is_older_than_max_cache_age(const boost::posix_time::ptime&) const;
 
+    Response bad_gateway(const Request&, beast::string_view reason);
+
 private:
+    std::string _server_name;
+
     boost::posix_time::time_duration _max_cached_age
         = boost::posix_time::hours(7*24);  // one week
 };

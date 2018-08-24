@@ -214,11 +214,11 @@ static bool has_correct_content_length(const Response& rs)
     return rs.body().size() == length;
 }
 
-static
-Response bad_gateway(const Request& req)
+Response CacheControl::bad_gateway(const Request& req, beast::string_view reason)
 {
     Response res{http::status::bad_gateway, req.version()};
-    res.set(http::field::server, "Ouinet");
+    res.set(http::field::server, _server_name);
+    res.set("X-Ouinet-Debug", reason);
     res.keep_alive(req.keep_alive());
     res.prepare_payload();
     return res;
@@ -232,9 +232,9 @@ CacheControl::fetch(const Request& request, Yield yield)
 
     if(!ec && !has_correct_content_length(response)) {
 #ifndef NDEBUG
-        cerr << "::::: CacheControl WARNING Incorrect content length :::::" << endl;
-        cerr << request << response;
-        cerr << ":::::::::::::::::::::::::::::::::::::::::::::::::::::::::" << endl;
+        yield.log("::::: CacheControl WARNING Incorrect content length :::::");
+        yield.log(request, response);
+        yield.log(":::::::::::::::::::::::::::::::::::::::::::::::::::::::::");
 #endif
     }
 
@@ -286,7 +286,9 @@ CacheControl::do_fetch(const Request& request, Yield yield)
             return or_throw(yield, err::operation_aborted, move(res));
         }
 
-        return bad_gateway(request);
+        return bad_gateway( request
+                          , util::str( "1: fresh: \"", ec1.message(), "\""
+                                     , " cache: \"",   ec2.message(), "\""));
     }
 
     auto cache_entry = do_fetch_stored(request, yield[ec]);
@@ -298,17 +300,19 @@ CacheControl::do_fetch(const Request& request, Yield yield)
 
     if (ec) {
         // Retrieving from cache failed.
-        sys::error_code fetch_ec;
+        sys::error_code fresh_ec;
 
-        auto res = do_fetch_fresh(request, yield[fetch_ec]);
+        auto res = do_fetch_fresh(request, yield[fresh_ec]);
 
-        if (!fetch_ec) return res;
+        if (!fresh_ec) return res;
 
-        if (fetch_ec == err::operation_aborted) {
+        if (fresh_ec == err::operation_aborted) {
             return or_throw<Response>(yield, ec);
         }
 
-        return bad_gateway(request);
+        return bad_gateway( request
+                          , util::str( "2: fresh: \"", fresh_ec.message(), "\""
+                                     , " cached: \"", ec.message(), "\""));
     }
 
     // If we're here that means that we were able to retrieve something
