@@ -61,12 +61,6 @@ static const boost::filesystem::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
 static const boost::filesystem::path OUINET_CA_DH_FILE = "ssl-ca-dh.pem";
 
 //------------------------------------------------------------------------------
-#define ASYNC_DEBUG(code, ...) [&] () mutable {\
-    auto task = _front_end.notify_task(util::str(__VA_ARGS__));\
-    return code;\
-}()
-
-//------------------------------------------------------------------------------
 class Client::State : public enable_shared_from_this<Client::State> {
     friend class Client;
 
@@ -106,9 +100,7 @@ private:
                 , request_route::Config& request_config
                 , asio::yield_context yield);
 
-    Response fetch_fresh( const Request& request
-                        , request_route::Config& request_config
-                        , asio::yield_context yield);
+    Response fetch_fresh(const Request&, request_route::Config&, Yield);
 
     CacheControl build_cache_control(request_route::Config& request_config);
 
@@ -202,11 +194,10 @@ void Client::State::handle_connect_request( GenericConnection& client_c
     sys::error_code ec;
 
     if (!_front_end.is_injector_proxying_enabled()) {
-        return ASYNC_DEBUG( handle_bad_request( client_c
-                                              , req
-                                              , "Forwarding disabled"
-                                              , yield[ec])
-                          , "Forwarding disabled");
+        return handle_bad_request( client_c
+                                 , req
+                                 , "Forwarding disabled"
+                                 , yield[ec]);
     }
 
     auto inj = _injector->connect(yield[ec], _shutdown_signal);
@@ -310,7 +301,7 @@ Client::State::fetch_stored( const Request& request
 //------------------------------------------------------------------------------
 Response Client::State::fetch_fresh( const Request& request
                                    , request_route::Config& request_config
-                                   , asio::yield_context yield)
+                                   , Yield yield)
 {
     using namespace asio::error;
     using request_route::responder;
@@ -332,7 +323,10 @@ Response Client::State::fetch_fresh( const Request& request
                 Response res;
 
                 // Send the request straight to the origin
-                res = fetch_http_page(_ios, request, _shutdown_signal, yield[ec]);
+                res = fetch_http_page( _ios
+                                     , request
+                                     , _shutdown_signal
+                                     , yield[ec].tag("fetch_origin"));
 
                 if (ec) {
                     last_error = ec;
@@ -358,7 +352,8 @@ Response Client::State::fetch_fresh( const Request& request
 
                     // Connect to the injector/proxy.
                     sys::error_code ec;
-                    auto inj = _injector->connect(yield[ec], _shutdown_signal);
+                    auto inj = _injector->connect( yield[ec].tag("connect_to_injector")
+                                                 , _shutdown_signal);
                     if (ec) {
                         last_error = ec;
                         continue;
@@ -384,7 +379,7 @@ Response Client::State::fetch_fresh( const Request& request
                                                   , inj.connection
                                                   , connreq
                                                   , _shutdown_signal
-                                                  , yield[ec]);
+                                                  , yield[ec].tag("connreq"));
                     if (connres.result() != http::status::ok) {
                         // This error code is quite fake, so log the error too.
                         last_error = asio::error::connection_refused;
@@ -397,7 +392,7 @@ Response Client::State::fetch_fresh( const Request& request
                     auto res = fetch_http_origin( _ios , inj.connection
                                                 , url, request
                                                 , _shutdown_signal
-                                                , yield[ec]);
+                                                , yield[ec].tag("send_req"));
                     if (ec) {
                         last_error = ec;
                         continue;
@@ -413,7 +408,8 @@ Response Client::State::fetch_fresh( const Request& request
 
                 // Connect to the injector.
                 sys::error_code ec;
-                auto inj = _injector->connect(yield[ec], _shutdown_signal);
+                auto inj = _injector->connect( yield[ec].tag("connect_to_injector2")
+                                             , _shutdown_signal);
                 if (ec) {
                     last_error = ec;
                     continue;
@@ -433,26 +429,30 @@ Response Client::State::fetch_fresh( const Request& request
                                           , inj.connection
                                           , injreq
                                           , _shutdown_signal
-                                          , yield[ec]);
+                                          , yield[ec].tag("fetch_http_page"));
                 if (ec) {
                     last_error = ec;
                     continue;
                 }
 
                 if (r == responder::injector) {
-                    sys::error_code ec_;  // seed the original request
-                    string ipfs = maybe_start_seeding(request, res, yield[ec_]);
+                    string ipfs
+                        = maybe_start_seeding( request
+                                             , res
+                                             , yield.ignore_error()
+                                                    .tag("start_seeding"));
                 }
 
                 return res;
             }
             case responder::_front_end: {
                 sys::error_code ec;
+
                 auto res = _front_end.serve( _config.injector_endpoint()
                                            , request
                                            , _ipfs_cache.get()
                                            , *_ca_certificate
-                                           , yield[ec]);
+                                           , yield[ec].tag("serve_frontend"));
                 if (ec) {
                     last_error = ec;
                     continue;
@@ -473,33 +473,27 @@ Client::State::build_cache_control(request_route::Config& request_config)
     CacheControl cache_control;
 
     cache_control.fetch_stored =
-        [&] (const Request& request, asio::yield_context yield) {
+        [&] (const Request& request, Yield yield) {
 
-            cerr << "Fetching from cache " << request.target() << endl;
+            yield.log("Fetching from cache");
 
             sys::error_code ec;
-            auto r = ASYNC_DEBUG( fetch_stored(request, request_config, yield[ec])
-                              , "Fetch from cache: " , request.target());
+            auto r = fetch_stored(request, request_config, yield[ec]);
 
-            cerr << "Fetched from cache " << request.target()
-                 << " " << ec.message() << " " << r.response.result()
-                 << endl;
+            yield.log("Fetched from cache ", ec.message(), " ", r.response.result());
 
             return or_throw(yield, ec, move(r));
         };
 
     cache_control.fetch_fresh =
-        [&] (const Request& request, asio::yield_context yield) {
+        [&] (const Request& request, Yield yield) {
 
-            cerr << "Fetching fresh " << request.target() << endl;
+            yield.log("Fetching fresh");
 
             sys::error_code ec;
-            auto r = ASYNC_DEBUG( fetch_fresh(request, request_config, yield[ec])
-                              , "Fetch from origin: ", request.target());
+            auto r = fetch_fresh(request, request_config, yield[ec]);
 
-            cerr << "Fetched fresh " << request.target()
-                 << " " << ec.message() << " " << r.result()
-                 << endl;
+            yield.log("Fetched fresh ", ec.message(), " ", r.result());
 
             return or_throw(yield, ec, move(r));
         };
@@ -619,7 +613,7 @@ GenericConnection Client::State::ssl_mitm_handshake( GenericConnection&& con
 
 //------------------------------------------------------------------------------
 void Client::State::serve_request( GenericConnection&& con
-                                 , asio::yield_context yield)
+                                 , asio::yield_context yield_)
 {
     LOG_DEBUG("Request received ");
 
@@ -704,12 +698,18 @@ void Client::State::serve_request( GenericConnection&& con
         Request req;
 
         // Read the (clear-text) HTTP request
-        ASYNC_DEBUG(http::async_read(con, buffer, req, yield[ec]), "Read request");
+        http::async_read(con, buffer, req, yield_[ec]);
+
+        Yield yield(con.get_io_service(), yield_);
 
         if ( ec == http::error::end_of_stream
           || ec == asio::ssl::error::stream_truncated) break;
 
         if (ec) return fail(ec, "read");
+
+        yield.log("=== New request ===");
+        yield.log(req.base());
+        auto on_exit = defer([&] { yield.log("Done"); });
 
         // Requests in the encrypted channel are not proxy-like
         // so the target is not "http://example.com/foo" but just "/foo".
@@ -722,16 +722,15 @@ void Client::State::serve_request( GenericConnection&& con
                           ? req[http::field::host].to_string()
                           : connect_hp)
                       + req.target().to_string());
-        cout << "Received request for: " << req.target() << endl;
 
         // Perform MitM for CONNECT requests (to be able to see encrypted requests)
         if (!mitm && req.method() == http::verb::connect) {
             try {
                 // Subsequent access to the connection will use the encrypted channel.
-                con = ssl_mitm_handshake(move(con), req, yield);
+                con = ssl_mitm_handshake(move(con), req, yield.tag("mitm_hanshake"));
             }
             catch(const std::exception& e) {
-                cerr << "Mitm exception: " << e.what() << endl;
+                yield.log("Mitm exception: ", e.what());
                 return;
             }
             mitm = true;
@@ -753,8 +752,7 @@ void Client::State::serve_request( GenericConnection&& con
         // done in the handle_connect_request function).
 
         //if (_config.enable_http_connect_requests()) {
-        //    ASYNC_DEBUG( handle_connect_request(con, req, yield)
-        //               , "Connect ", req.target());
+        //    handle_connect_request(con, req, yield);
         //}
         //else {
         //    auto res = bad_gateway(req);
@@ -762,29 +760,32 @@ void Client::State::serve_request( GenericConnection&& con
         //}
         request_config = route_choose_config(req, matches, default_request_config);
 
-        auto res = ASYNC_DEBUG( cache_control.fetch(req, yield[ec])
-                              , "Fetch "
-                              , req.target());
-
-        cout << "Sending back response: " << req.target() << " " << res.result() << endl;
+        auto res = cache_control.fetch(req, yield[ec].tag("cache_control.fetch"));
 
         if (ec) {
 #ifndef NDEBUG
-            cerr << "----- WARNING: Error fetching --------" << endl;
-            cerr << "Error Code: " << ec.message() << endl;
-            cerr << req.base() << res.base() << endl;
-            cerr << "--------------------------------------" << endl;
+            yield.log("----- WARNING: Error fetching --------");
+            yield.log("Error Code: ", ec.message());
+            yield.log(req.base(), res.base());
+            yield.log("--------------------------------------");
 #endif
 
             // TODO: Better error message.
-            ASYNC_DEBUG(handle_bad_request(con, req, "Not cached", yield), "Send error");
+            handle_bad_request( con
+                              , req
+                              , "Not cached"
+                              , yield.tag("handle_bad_request"));
+
             if (req.keep_alive()) continue;
             else return;
         }
 
-        cout << req.base() << res.base() << endl;
+        yield.log("=== Sending back response ===");
+        yield.log(res.base());
+
         // Forward the response back
-        ASYNC_DEBUG(http::async_write(con, res, yield[ec]), "Write response ", req.target());
+        http::async_write(con, res, yield[ec].tag("write_response"));
+
         if (ec == http::error::end_of_stream) {
           LOG_DEBUG("request served. Connection closed");
           break;

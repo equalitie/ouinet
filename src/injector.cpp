@@ -35,6 +35,7 @@
 #include "util/signal.h"
 
 #include "logger.h"
+#include "defer.h"
 
 using namespace std;
 using namespace ouinet;
@@ -153,7 +154,7 @@ public:
         };
     }
 
-    Response fetch(const Request& rq, asio::yield_context yield)
+    Response fetch(const Request& rq, Yield yield)
     {
         return cc.fetch(rq, yield);
     }
@@ -221,7 +222,7 @@ void serve( InjectorConfig& config
           , GenericConnection con
           , unique_ptr<CacheInjector>& injector
           , Signal<void()>& close_connection_signal
-          , asio::yield_context yield)
+          , asio::yield_context yield_)
 {
     auto close_connection_slot = close_connection_signal.connect([&con] {
         con.close();
@@ -232,16 +233,25 @@ void serve( InjectorConfig& config
 
         Request req;
         beast::flat_buffer buffer;
-        http::async_read(con, buffer, req, yield[ec]);
+        http::async_read(con, buffer, req, yield_[ec]);
+
+        Yield yield(con.get_io_service(), yield_);
 
         if (ec) break;
 
-        if (!authenticate(req, con, config.credentials(), yield[ec])) {
+        yield.log("=== New request ===");
+        yield.log(req.base());
+        auto on_exit = defer([&] { yield.log("Done"); });
+
+        if (!authenticate(req, con, config.credentials(), yield[ec].tag("auth"))) {
             continue;
         }
 
         if (req.method() == http::verb::connect) {
-            return handle_connect_request(con, req, close_connection_signal, yield);
+            return handle_connect_request( con
+                                         , req
+                                         , close_connection_signal
+                                         , yield.tag("handle_connect"));
         }
 
         // Check for a Ouinet version header hinting us on
@@ -254,22 +264,30 @@ void serve( InjectorConfig& config
             // TODO: Maybe reject requests for HTTPS URLS:
             // we are perfectly able to handle them (and do verification locally),
             // but the client should be using a CONNECT request instead!
-            res = fetch_http_page(con.get_io_service(), req2, close_connection_signal, yield[ec]);
+            res = fetch_http_page( con.get_io_service()
+                                 , req2
+                                 , close_connection_signal
+                                 , yield[ec].tag("fetch_http_page"));
         } else {
             // Ouinet header found, behave like a Ouinet injector.
             req2.erase(ouinet_version_hdr);  // do not propagate or cache the header
             InjectorCacheControl cc(con.get_io_service(), injector, close_connection_signal);
-            res = cc.fetch(req2, yield[ec]);
+            res = cc.fetch(req2, yield[ec].tag("cache_control.fetch"));
         }
         if (ec) {
             handle_bad_request( con, req
                               , "Failed to retrieve content from origin: " + ec.message()
-                              , yield[ec]);
+                              , yield[ec].tag("handle_bad_request"));
             continue;
         }
 
+
+        yield.log("=== Sending back response ===");
+        yield.log(res.base());
+
         // Forward back the response
-        http::async_write(con, res, yield[ec]);
+        http::async_write(con, res, yield[ec].tag("write_response"));
+
         if (ec) break;
 
         if (!res.keep_alive()) {

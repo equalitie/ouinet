@@ -4,6 +4,7 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include "util/yield.h"
 #include "namespaces.h"
 
 namespace ouinet {
@@ -19,18 +20,18 @@ public:
     };
 
     // TODO: Add cancellation support
-    using FetchStored = std::function<CacheEntry(const Request&, asio::yield_context)>;
-    using FetchFresh  = std::function<Response(const Request&, asio::yield_context)>;
+    using FetchStored = std::function<CacheEntry(const Request&, Yield)>;
+    using FetchFresh  = std::function<Response(const Request&, Yield)>;
     using Store       = std::function<void(const Request&, const Response&)>;
 
 public:
-    Response fetch(const Request&, asio::yield_context);
+    Response fetch(const Request&, Yield);
 
     FetchStored  fetch_stored;
     FetchFresh   fetch_fresh;
     Store        store;
 
-    void try_to_cache(const Request&, const Response&) const;
+    void try_to_cache(const Request&, const Response&, Yield&) const;
 
     void max_cached_age(const boost::posix_time::time_duration&);
     boost::posix_time::time_duration max_cached_age() const;
@@ -46,9 +47,9 @@ public:
 
 private:
     // TODO: Add cancellation support
-    Response do_fetch(const Request&, asio::yield_context);
-    Response do_fetch_fresh(const Request&, asio::yield_context);
-    CacheEntry do_fetch_stored(const Request&, asio::yield_context);
+    Response do_fetch(const Request&, Yield);
+    Response do_fetch_fresh(const Request&, Yield);
+    CacheEntry do_fetch_stored(const Request&, Yield);
 
     bool is_stale( const boost::posix_time::ptime& time_stamp
                  , const Response&) const;
@@ -58,7 +59,6 @@ private:
 private:
     boost::posix_time::time_duration _max_cached_age
         = boost::posix_time::hours(7*24);  // one week
-    uint64_t fetch_id = 0;
 };
 
 } // ouinet namespace

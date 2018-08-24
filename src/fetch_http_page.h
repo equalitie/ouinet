@@ -26,7 +26,7 @@ fetch_http_page( asio::io_service& ios
                , asio::yield_context yield)
 {
     http::response<http::dynamic_body> res;
-    return fetch_http(ios, con, req, move(res), abort_signal, yield);
+    return _fetch_http(ios, con, req, move(res), abort_signal, yield);
 }
 
 // Send the HTTP request `req` over the connection `con`
@@ -42,7 +42,7 @@ fetch_http_head( asio::io_service& ios
                , asio::yield_context yield)
 {
     http::response<http::empty_body> res;
-    return fetch_http(ios, con, req, move(res), abort_signal, yield);
+    return _fetch_http(ios, con, req, move(res), abort_signal, yield);
 }
 
 // Send the HTTP request `req` over the connection `con`
@@ -52,12 +52,12 @@ fetch_http_head( asio::io_service& ios
 template<class RequestType, class ResponseType>
 inline
 ResponseType
-fetch_http( asio::io_service& ios
-          , GenericConnection& con
-          , RequestType req
-          , ResponseType res
-          , Signal<void()>& abort_signal
-          , asio::yield_context yield)
+_fetch_http( asio::io_service& ios
+           , GenericConnection& con
+           , RequestType req
+           , ResponseType res
+           , Signal<void()>& abort_signal
+           , asio::yield_context yield)
 {
     sys::error_code ec;
 

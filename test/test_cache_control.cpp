@@ -36,9 +36,9 @@ static optional<string_view> get(const Request& rq, http::field f)
 
 template<class F> static void run_spawned(F&& f) {
     asio::io_service ios;
-    asio::spawn(ios, [f = forward<F>(f)](auto yield) {
+    asio::spawn(ios, [&ios, f = forward<F>(f)](auto yield) {
             try {
-                f(yield);
+                f(Yield(ios, yield));
             }
             catch (const std::exception& e) {
                 BOOST_ERROR(string("Test ended with exception: ") + e.what());
