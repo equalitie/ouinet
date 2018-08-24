@@ -32,7 +32,7 @@
 #include "ouiservice/i2p.h"
 #include "ouiservice/tcp.h"
 
-#include "util/signal.h"
+#include "util/timeout.h"
 
 #include "logger.h"
 #include "defer.h"
@@ -142,7 +142,12 @@ public:
     {
         cc.fetch_fresh = [&ios, &abort_signal]
                          (const Request& rq, asio::yield_context yield) {
-            return fetch_http_page(ios, rq, abort_signal, yield);
+            return util::with_timeout
+                (ios, abort_signal, std::chrono::minutes(1)
+                , [&] (auto& abort_signal, auto yield) {
+                     return fetch_http_page(ios, rq, abort_signal, yield);
+                  }
+                , yield);
         };
 
         cc.fetch_stored = [this](const Request& rq, asio::yield_context yield) {
