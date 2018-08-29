@@ -30,6 +30,7 @@
 #include "client.h"
 #include "authenticate.h"
 #include "defer.h"
+#include "default_timeout.h"
 #include "ssl/ca_certificate.h"
 #include "ssl/dummy_certificate.h"
 
@@ -323,6 +324,7 @@ Response Client::State::fetch_fresh( const Request& request
                 // Send the request straight to the origin
                 res = fetch_http_page( _ios
                                      , request
+                                     , default_timeout::fetch_http()
                                      , _shutdown_signal
                                      , yield[ec].tag("fetch_origin"));
 
@@ -376,8 +378,10 @@ Response Client::State::fetch_fresh( const Request& request
                     auto connres = fetch_http_head( _ios
                                                   , inj.connection
                                                   , connreq
+                                                  , default_timeout::fetch_http()
                                                   , _shutdown_signal
                                                   , yield[ec].tag("connreq"));
+
                     if (connres.result() != http::status::ok) {
                         // This error code is quite fake, so log the error too.
                         last_error = asio::error::connection_refused;
@@ -389,6 +393,7 @@ Response Client::State::fetch_fresh( const Request& request
                     // Send the request to the origin.
                     auto res = fetch_http_origin( _ios , inj.connection
                                                 , url, request
+                                                , default_timeout::fetch_http()
                                                 , _shutdown_signal
                                                 , yield[ec].tag("send_req"));
                     if (ec) {
@@ -426,6 +431,7 @@ Response Client::State::fetch_fresh( const Request& request
                 auto res = fetch_http_page( _ios
                                           , inj.connection
                                           , injreq
+                                          , default_timeout::fetch_http()
                                           , _shutdown_signal
                                           , yield[ec].tag("fetch_http_page"));
                 if (ec) {

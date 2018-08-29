@@ -2,6 +2,7 @@
 
 #include "util.h"
 #include "http_util.h"
+#include "util/timeout.h"
 
 #include <boost/asio/io_service.hpp>
 #include <boost/asio/connect.hpp>
@@ -10,12 +11,13 @@
 using namespace std;
 using namespace ouinet;
 
+static
 GenericConnection
-ouinet::connect_to_host( asio::io_service& ios
-                       , const string& host
-                       , const string& port
-                       , Signal<void()>& cancel_signal
-                       , asio::yield_context yield)
+connect_to_host_( asio::io_service& ios
+                , const string& host
+                , const string& port
+                , Signal<void()>& cancel_signal
+                , asio::yield_context yield)
 {
     using namespace std;
     using tcp = asio::ip::tcp;
@@ -43,3 +45,20 @@ ouinet::connect_to_host( asio::io_service& ios
     return GenericConnection(move(socket));
 }
 
+GenericConnection
+ouinet::connect_to_host( asio::io_service& ios
+                       , const string& host
+                       , const string& port
+                       , std::chrono::steady_clock::duration timeout
+                       , Signal<void()>& cancel_signal
+                       , asio::yield_context yield)
+{
+    return util::with_timeout
+        ( ios
+        , cancel_signal
+        , timeout
+        , [&] (auto& signal, auto yield) {
+              return connect_to_host_(ios, host, port, signal, yield);
+          }
+        , yield);
+}

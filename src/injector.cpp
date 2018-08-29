@@ -17,6 +17,7 @@
 #include "util.h"
 #include "fetch_http_page.h"
 #include "connect_to_host.h"
+#include "default_timeout.h"
 #include "cache_control.h"
 #include "generic_connection.h"
 #include "split_string.h"
@@ -104,7 +105,9 @@ void handle_connect_request( GenericConnection& client_c
                                  , yield[ec]);
     }
 
-    auto origin_c = connect_to_host(ios, host, port, disconnect_signal, yield[ec]);
+    auto origin_c = connect_to_host( ios, host, port
+                                   , default_timeout::tcp_connect()
+                                   , disconnect_signal, yield[ec]);
 
     if (ec) {
         return handle_bad_request( client_c, req
@@ -143,12 +146,11 @@ public:
     {
         cc.fetch_fresh = [&ios, &abort_signal]
                          (const Request& rq, asio::yield_context yield) {
-            return util::with_timeout
-                (ios, abort_signal, std::chrono::minutes(1)
-                , [&] (auto& abort_signal, auto yield) {
-                     return fetch_http_page(ios, rq, abort_signal, yield);
-                  }
-                , yield);
+            return fetch_http_page( ios
+                                  , rq
+                                  , default_timeout::fetch_http()
+                                  , abort_signal
+                                  , yield);
         };
 
         cc.fetch_stored = [this](const Request& rq, asio::yield_context yield) {
@@ -271,6 +273,7 @@ void serve( InjectorConfig& config
             // but the client should be using a CONNECT request instead!
             res = fetch_http_page( con.get_io_service()
                                  , req2
+                                 , default_timeout::fetch_http()
                                  , close_connection_signal
                                  , yield[ec].tag("fetch_http_page"));
         } else {
