@@ -25,12 +25,15 @@ ouinet::connect_to_host( asio::io_service& ios
     auto const lookup = util::tcp_async_resolve( host, port
                                                , ios, cancel_signal
                                                , yield[ec]);
+
     if (ec) return or_throw(yield, ec, GenericConnection());
 
     tcp::socket socket(ios);
+
     auto disconnect_slot = cancel_signal.connect([&socket] {
-        socket.shutdown(tcp::socket::shutdown_both);
-        socket.close();
+        sys::error_code ec;
+        socket.shutdown(tcp::socket::shutdown_both, ec);
+        socket.close(ec);
     });
 
     // Make the connection on the IP address we get from a lookup

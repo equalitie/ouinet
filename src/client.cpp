@@ -498,7 +498,7 @@ Client::State::build_cache_control(request_route::Config& request_config)
             if (!ec) {
                 yield.log("Fetched fresh success, status: ", r.result());
             } else {
-                yield.log("Fetched fresh error:", ec.message());
+                yield.log("Fetched fresh error: ", ec.message());
             }
 
             return or_throw(yield, ec, move(r));

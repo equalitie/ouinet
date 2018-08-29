@@ -70,7 +70,7 @@ auto with_timeout( asio::io_service& ios
                  , Signal<void()>& abort_signal
                  , Duration duration
                  , const F& f
-                 , asio::yield_context& yield)
+                 , asio::yield_context yield)
 {
     Timeout timeout(ios, abort_signal, std::chrono::seconds(30));
 
