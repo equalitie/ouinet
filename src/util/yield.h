@@ -15,16 +15,16 @@ class Yield : public boost::intrusive::list_base_hook
         <Yield, boost::intrusive::constant_time_size<false>>;
 
     struct TimeoutState {
-        bool stopped;
+        Yield* self;
         asio::steady_timer timer;
 
-        TimeoutState(asio::io_service& ios)
-            : stopped(false)
+        TimeoutState(asio::io_service& ios, Yield* self)
+            : self(self)
             , timer(ios)
         {}
 
         void stop() {
-            stopped = true;
+            self = nullptr;
             timer.cancel();
         }
     };
@@ -69,6 +69,10 @@ public:
         , _children(std::move(y._children))
         , _start_time(y._start_time)
     {
+        if (_timeout_state) {
+            _timeout_state->self = this;
+        }
+
         for (auto& ch : _children) {
             ch._parent = this;
         }
@@ -173,38 +177,38 @@ void Yield::start_timing()
 
     stop_timing();
 
-    _timeout_state = std::make_shared<TimeoutState>(_ios);
+    _timeout_state = std::make_shared<TimeoutState>(_ios, this);
 
     asio::spawn(_ios
-               , [ ts = _timeout_state, self = this, timeout]
+               , [ ts = _timeout_state, timeout]
                  (asio::yield_context yield) {
 
-            if (ts->stopped) return;
+            if (!ts->self) return;
 
-            auto notify = [self](Clock::duration d) {
-                std::cerr << self->tag()
+            auto notify = [&](Clock::duration d) {
+                std::cerr << ts->self->tag()
                           << " is still working after "
                           << Yield::duration_secs(d) << " seconds"
                           << std::endl;
             };
 
             boost::optional<Clock::duration> first_duration
-                = Clock::now() - self->_start_time;
+                = Clock::now() - ts->self->_start_time;
 
             if (*first_duration >= timeout) {
                 notify(*first_duration);
             }
 
-            while (!ts->stopped) {
+            while (ts->self) {
                 sys::error_code ec; // ignored
 
                 ts->timer.expires_from_now(timeout);
 
                 ts->timer.async_wait(yield[ec]);
 
-                if (!ts->stopped) {
-                    notify(Clock::now() - self->_start_time);
-                }
+                if (!ts->self) break;
+
+                notify(Clock::now() - ts->self->_start_time);
             }
         });
 }
