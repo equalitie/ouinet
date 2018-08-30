@@ -802,7 +802,11 @@ void Client::State::serve_request( GenericConnection&& con
           LOG_DEBUG("request served. Connection closed");
           break;
         }
-        if (ec) return fail(ec, "write");
+
+        if (ec) {
+            yield.log("error writing back response: ", ec.message());
+            return;
+        }
 
         if (!res.keep_alive()) {
             con.close();
