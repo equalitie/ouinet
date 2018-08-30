@@ -3,7 +3,6 @@
 #include <boost/asio/io_service.hpp>
 #include <boost/asio/spawn.hpp>
 
-#include "fail.h"
 #include "or_throw.h"
 #include "generic_connection.h"
 #include "util/signal.h"

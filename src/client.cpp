@@ -236,7 +236,10 @@ void Client::State::handle_connect_request( GenericConnection& client_c
 
     http::async_write(client_c, res, yield[ec]);
 
-    if (ec) return fail(ec, "sending connect response");
+    if (ec) {
+        cerr << "Failed to return CONNECT response: " << ec.message() << endl;
+        return;
+    }
 
     if (!(200 <= unsigned(res.result()) && unsigned(res.result()) < 300)) {
         return;
@@ -717,7 +720,10 @@ void Client::State::serve_request( GenericConnection&& con
         if ( ec == http::error::end_of_stream
           || ec == asio::ssl::error::stream_truncated) break;
 
-        if (ec) return fail(ec, "read");
+        if (ec) {
+            cerr << "Failed to read request: " << ec.message() << endl;
+            return;
+        }
 
         yield.log("=== New request ===");
         yield.log(req.base());
@@ -888,17 +894,26 @@ void Client::State::listen_tcp
     tcp::acceptor acceptor(_ios);
 
     acceptor.open(local_endpoint.protocol(), ec);
-    if (ec) return fail(ec, "open");
+    if (ec) {
+        cerr << "Failed to open tcp acceptor: " << ec.message() << endl;
+        return;
+    }
 
     acceptor.set_option(asio::socket_base::reuse_address(true));
 
     // Bind to the server address
     acceptor.bind(local_endpoint, ec);
-    if (ec) return fail(ec, "bind");
+    if (ec) {
+        cerr << "Failed to bind tcp acceptor: " << ec.message() << endl;
+        return;
+    }
 
     // Start listening for connections
     acceptor.listen(asio::socket_base::max_connections, ec);
-    if (ec) return fail(ec, "listen");
+    if (ec) {
+        cerr << "Failed to 'listen' on tcp acceptor: " << ec.message() << endl;
+        return;
+    }
 
     auto shutdown_acceptor_slot = _shutdown_signal.connect([&acceptor] {
         acceptor.close();
@@ -916,7 +931,9 @@ void Client::State::listen_tcp
 
         if(ec) {
             if (ec == asio::error::operation_aborted) break;
-            fail(ec, "accept");
+
+            cerr << "Accept failed on tcp acceptor: " << ec.message() << endl;
+
             if (!async_sleep(_ios, chrono::seconds(1), _shutdown_signal, yield)) {
                 break;
             }

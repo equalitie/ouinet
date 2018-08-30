@@ -127,7 +127,10 @@ void handle_connect_request( GenericConnection& client_c
 
     http::async_write(client_c, res, yield[ec]);
 
-    if (ec) return fail(ec, "sending connect response");
+    if (ec) {
+        cerr << "Failed sending CONNECT response: " << ec.message() << endl;
+        return;
+    }
 
     full_duplex(client_c, origin_c, yield);
 }
