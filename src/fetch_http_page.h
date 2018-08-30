@@ -193,8 +193,11 @@ fetch_http_origin( asio::io_service& ios
     if (url.scheme == "https") {
         con = util::with_timeout
                 ( ios, abort_signal, timeout
-                , [&] (auto&, auto yield) {
-                    return ssl::util::client_handshake(move(con), url.host, yield);
+                , [&] (auto& abort_signal, auto yield) {
+                    return ssl::util::client_handshake( move(con)
+                                                      , url.host
+                                                      , abort_signal
+                                                      , yield);
                   }
                 , yield[ec]);
 
