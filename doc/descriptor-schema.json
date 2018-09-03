@@ -7,7 +7,7 @@
         "uri": {
             "$id": "#uri",
             "type": "string",
-            "pattern": "^[a-z][\\+\\-\\.-0-9a-z]+:"
+            "pattern": "^[a-z][\\+\\-\\.0-9a-z]+:"
         },
         "date": {
             "$id": "#date",
