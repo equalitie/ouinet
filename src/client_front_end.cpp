@@ -5,6 +5,7 @@
 #include <boost/optional/optional_io.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/regex.hpp>
+#include <network/uri.hpp>
 
 
 using namespace std;
@@ -110,6 +111,15 @@ void ClientFrontEnd::handle_upload( const Request& req, Response& res, stringstr
         ss << "{\"error\": \"" << err << "\"}";
 }
 
+static bool percent_decode(const string in, string& out) {
+    try {
+        network::uri::decode(begin(in), end(in), back_inserter(out));
+    } catch (const network::percent_decoding_error&) {
+        return false;
+    }
+    return true;
+}
+
 void ClientFrontEnd::handle_descriptor( const Request& req, Response& res, stringstream& ss
                                       , CacheClient* cache_client, asio::yield_context yield)
 {
@@ -118,7 +128,8 @@ void ClientFrontEnd::handle_descriptor( const Request& req, Response& res, strin
     string err;
 
     static const boost::regex uriqarx("[\\?&]uri=([^&]*)");
-    boost::smatch urimatch;
+    boost::smatch urimatch;  // contains percent-encoded URI
+    string uri;  // after percent-decoding
     auto target = req.target().to_string();  // copy to preserve regex result
 
     CachedContent content;
@@ -129,7 +140,7 @@ void ClientFrontEnd::handle_descriptor( const Request& req, Response& res, strin
     } else if (!boost::regex_search(target, urimatch, uriqarx)) {
         result = http::status::bad_request;
         err = "missing \"uri\" query argument";
-    } else if (false /* TODO URL-decode URI */) {
+    } else if (!percent_decode(urimatch[1], uri)) {
         result = http::status::bad_request;
         err = "illegal encoding of URI argument";
     } else if (!cache_client || !_ipfs_cache_enabled) {
@@ -137,7 +148,7 @@ void ClientFrontEnd::handle_descriptor( const Request& req, Response& res, strin
         err = "cache access is not available";
     } else {  // perform the query
         sys::error_code ec;
-        content = cache_client->get_content(urimatch[1], yield[ec]);
+        content = cache_client->get_content(uri, yield[ec]);
         if (ec == asio::error::not_found) {
             result = http::status::not_found;
             err = "URI was not found in the cache";
