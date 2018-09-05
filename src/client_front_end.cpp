@@ -246,6 +246,12 @@ void ClientFrontEnd::handle_portal( const Request& req, Response& res, stringstr
     ss << ToggleInput{"IPFS Cache",     "ipfs_cache",     _ipfs_cache_enabled};
 
     ss << "<br>\n";
+    ss << "<form action=\"descriptor\" method=\"get\">\n"
+       << "    Query URI descriptor: <input name=\"uri\"/ placeholder=\"URI\" size=\"100\">\n"
+       << "    <input type=\"submit\" value=\"Submit\"/>\n"
+       << "</form>\n";
+
+    ss << "<br>\n";
     ss << "Now: " << now_as_string()  << "<br>\n";
     ss << "Injector endpoint: " << injector_ep << "<br>\n";
 
