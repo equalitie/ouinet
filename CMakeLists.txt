@@ -38,6 +38,8 @@ add_definitions(-DBOOST_ASIO_SEPARATE_COMPILATION)
 
 ################################################################################
 option(ASIO_IPFS_WITH_EXAMPLE_BINARIES "" OFF)
+option(URI_BUILD_TESTS "" OFF)
+option(URI_BUILD_DOCS "" OFF)
 
 add_subdirectory(./modules/asio-ipfs)
 add_subdirectory(./src/ouiservice/i2p)
@@ -84,11 +86,23 @@ externalproject_add(lru
 set(LRU_INCLUDE_DIR "${CMAKE_BINARY_DIR}/lru/src/lru/include")
 
 ################################################################################
+externalproject_add(uri
+    GIT_REPOSITORY https://github.com/cpp-netlib/uri
+    GIT_TAG 1.0.1
+    UPDATE_COMMAND ""
+    INSTALL_COMMAND ""
+    PREFIX "uri")
+
+set(URI_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri/include")
+find_library(URI_LIBRARIES network-uri PATHS "${CMAKE_CURRENT_BINARY_DIR}/uri")
+
+################################################################################
 include_directories(
     "${Boost_INCLUDE_DIR}"
     "${ASIO_IPFS_INCLUDE_DIR}"
     "${JSON_INCLUDE_DIR}"
     "${LRU_INCLUDE_DIR}"
+    "${URI_INCLUDE_DIR}"
 )
 
 file(GLOB client_sources
@@ -124,9 +138,10 @@ target_link_libraries(client
     ouiservice-i2p
     ${Boost_LIBRARIES}
     ${ASIO_IPFS_LIBRARIES}
+    ${URI_LIBRARIES}
 )
 
-add_dependencies(client json lru ${ASIO_IPFS_TARGET})
+add_dependencies(client json lru uri ${ASIO_IPFS_TARGET})
 
 ################################################################################
 if (WITH_INJECTOR)

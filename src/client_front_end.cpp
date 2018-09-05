@@ -4,6 +4,8 @@
 #include "util.h"
 #include <boost/optional/optional_io.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include <boost/regex.hpp>
+#include <network/uri.hpp>
 
 
 using namespace std;
@@ -105,6 +107,60 @@ void ClientFrontEnd::handle_upload( const Request& req, Response& res, stringstr
     res.result(result);
     if (err.empty())
         ss << "{\"data_links\": [\"ipfs:/ipfs/" << cid << "\"]}";
+    else
+        ss << "{\"error\": \"" << err << "\"}";
+}
+
+static bool percent_decode(const string in, string& out) {
+    try {
+        network::uri::decode(begin(in), end(in), back_inserter(out));
+    } catch (const network::percent_decoding_error&) {
+        return false;
+    }
+    return true;
+}
+
+void ClientFrontEnd::handle_descriptor( const Request& req, Response& res, stringstream& ss
+                                      , CacheClient* cache_client, asio::yield_context yield)
+{
+    auto result = http::status::ok;
+    res.set(http::field::content_type, "application/json");
+    string err;
+
+    static const boost::regex uriqarx("[\\?&]uri=([^&]*)");
+    boost::smatch urimatch;  // contains percent-encoded URI
+    string uri;  // after percent-decoding
+    auto target = req.target().to_string();  // copy to preserve regex result
+
+    CachedContent content;
+
+    if (req.method() != http::verb::get) {
+        result = http::status::method_not_allowed;
+        err = "request method is not GET";
+    } else if (!boost::regex_search(target, urimatch, uriqarx)) {
+        result = http::status::bad_request;
+        err = "missing \"uri\" query argument";
+    } else if (!percent_decode(urimatch[1], uri)) {
+        result = http::status::bad_request;
+        err = "illegal encoding of URI argument";
+    } else if (!cache_client || !_ipfs_cache_enabled) {
+        result = http::status::service_unavailable;
+        err = "cache access is not available";
+    } else {  // perform the query
+        sys::error_code ec;
+        content = cache_client->get_content(uri, yield[ec]);
+        if (ec == asio::error::not_found) {
+            result = http::status::not_found;
+            err = "URI was not found in the cache";
+        } else if (ec) {
+            result = http::status::internal_server_error;
+            err = "failed to look up URI descriptor in the cache";
+        }
+    }
+
+    res.result(result);
+    if (err.empty())
+        ss << content.data;
     else
         ss << "{\"error\": \"" << err << "\"}";
 }
@@ -232,6 +288,9 @@ Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
     else if (url.path == "/upload") {
         sys::error_code ec_;  // shouldn't throw, but just in case
         handle_upload(req, res, ss, cache_client, yield[ec_]);
+    } else if (url.path == "/descriptor") {
+        sys::error_code ec_;  // shouldn't throw, but just in case
+        handle_descriptor(req, res, ss, cache_client, yield[ec_]);
     } else
         handle_portal(req, res, ss, injector_ep, cache_client);
 

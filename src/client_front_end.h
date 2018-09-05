@@ -99,6 +99,9 @@ private:
     void handle_upload(const Request&, Response&, std::stringstream&
                       , CacheClient*, asio::yield_context);
 
+    void handle_descriptor(const Request&, Response&, std::stringstream&
+                          , CacheClient*, asio::yield_context);
+
     void handle_portal( const Request&, Response&, std::stringstream&
                       , const boost::optional<Endpoint>&, CacheClient*);
 };
