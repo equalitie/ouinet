@@ -42,7 +42,12 @@ option(URI_BUILD_TESTS "" OFF)
 option(URI_BUILD_DOCS "" OFF)
 
 add_subdirectory(./modules/asio-ipfs)
+add_subdirectory(./modules/uri)
 add_subdirectory(./src/ouiservice/i2p)
+
+set(URI_TARGET network-uri)
+set(URI_INCLUDE_DIR "./modules/uri/include")
+set(URI_LIBRARIES network-uri)
 
 ################################################################################
 project(ouinet)
@@ -84,17 +89,6 @@ externalproject_add(lru
     PREFIX "lru")
 
 set(LRU_INCLUDE_DIR "${CMAKE_BINARY_DIR}/lru/src/lru/include")
-
-################################################################################
-externalproject_add(uri
-    GIT_REPOSITORY https://github.com/cpp-netlib/uri
-    GIT_TAG 1.0.1
-    UPDATE_COMMAND ""
-    INSTALL_COMMAND ""
-    PREFIX "uri")
-
-set(URI_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri/include")
-find_library(URI_LIBRARIES network-uri PATHS "${CMAKE_CURRENT_BINARY_DIR}/uri")
 
 ################################################################################
 include_directories(
@@ -141,7 +135,7 @@ target_link_libraries(client
     ${URI_LIBRARIES}
 )
 
-add_dependencies(client json lru uri ${ASIO_IPFS_TARGET})
+add_dependencies(client json lru ${URI_TARGET} ${ASIO_IPFS_TARGET})
 
 ################################################################################
 if (WITH_INJECTOR)
