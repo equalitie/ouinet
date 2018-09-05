@@ -246,7 +246,7 @@ void ClientFrontEnd::handle_portal( const Request& req, Response& res, stringstr
     ss << ToggleInput{"IPFS Cache",     "ipfs_cache",     _ipfs_cache_enabled};
 
     ss << "<br>\n";
-    ss << "<form action=\"descriptor\" method=\"get\">\n"
+    ss << "<form action=\"/api/descriptor\" method=\"get\">\n"
        << "    Query URI descriptor: <input name=\"uri\"/ placeholder=\"URI\" size=\"100\">\n"
        << "    <input type=\"submit\" value=\"Submit\"/>\n"
        << "</form>\n";
@@ -291,10 +291,10 @@ Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
     match_http_url(req.target().to_string(), url);
     if (url.path == "/ca.pem")
         handle_ca_pem(req, res, ss, ca);
-    else if (url.path == "/upload") {
+    else if (url.path == "/api/upload") {
         sys::error_code ec_;  // shouldn't throw, but just in case
         handle_upload(req, res, ss, cache_client, yield[ec_]);
-    } else if (url.path == "/descriptor") {
+    } else if (url.path == "/api/descriptor") {
         sys::error_code ec_;  // shouldn't throw, but just in case
         handle_descriptor(req, res, ss, cache_client, yield[ec_]);
     } else
