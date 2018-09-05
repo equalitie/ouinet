@@ -38,8 +38,8 @@ add_definitions(-DBOOST_ASIO_SEPARATE_COMPILATION)
 
 ################################################################################
 option(ASIO_IPFS_WITH_EXAMPLE_BINARIES "" OFF)
-option(URI_BUILD_TESTS "" OFF)
-option(URI_BUILD_DOCS "" OFF)
+option(Uri_BUILD_TESTS "" OFF)
+option(Uri_BUILD_DOCS "" OFF)
 
 add_subdirectory(./modules/asio-ipfs)
 add_subdirectory(./modules/uri)
