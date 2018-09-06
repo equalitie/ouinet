@@ -69,7 +69,7 @@ template<class S> std::string to_hex(const S& bytestring)
 inline std::string from_hex(const std::string& hex)
 {
     std::string output;
-    for (unsigned int i = 0; i < hex.size(); i++) {
+    for (unsigned int i = 0; i * 2 < hex.size(); i++) {
         output += (unsigned char)std::stoi(hex.substr(2 * i, 2), nullptr, 16);
     }
     return output;
