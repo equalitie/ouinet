@@ -47,6 +47,15 @@ target_include_directories(test-bittorrent PUBLIC
 
 target_link_libraries(test-bittorrent ${Boost_LIBRARIES} ${GCRYPT_LIBRARIES})
 
+################################################################################
+add_executable(test-dht "test-dht.cpp" ${bt_cpp_files})
+
+target_include_directories(test-dht PUBLIC
+    "${Boost_INCLUDE_DIR}"
+    "${GCRYPT_INCLUDE_DIR}")
+
+target_link_libraries(test-dht ${Boost_LIBRARIES} ${GCRYPT_LIBRARIES})
+
 ######################################################################
 add_executable(test-logger "test_logger.cpp"
                            "../src/logger.cpp"

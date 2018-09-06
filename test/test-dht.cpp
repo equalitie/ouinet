@@ -1,4 +1,4 @@
-#include "dht.h"
+#include <bittorrent/dht.h>
 
 #include <iostream>
 
