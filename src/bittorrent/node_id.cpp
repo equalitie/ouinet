@@ -15,14 +15,8 @@ static void set_rbit(NodeID::Buffer& buffer, size_t n, bool value) {
 }
 
 static const NodeID::Buffer& zero_buffer() {
-    static bool was_zeroed = false;
+    // zero-initialized by static linkage
     static NodeID::Buffer buf;
-
-    if (!was_zeroed) {
-        memset(buf.data(), 0, buf.size());
-        was_zeroed = true;
-    }
-
     return buf;
 }
 
@@ -74,33 +68,9 @@ NodeID::Range NodeID::Range::reduce(bool bit) const {
     return ret;
 }
 
-std::string NodeID::to_hex() const
+NodeID NodeID::zero()
 {
-    std::string output;
-    for (unsigned int i = 0; i < buffer.size(); i++) {
-        const char* digits = "0123456789abcdef";
-        output += digits[(buffer[i] >> 4) & 0xf];
-        output += digits[(buffer[i] >> 0) & 0xf];
-    }
-    return output;
-}
-
-std::string NodeID::to_bytestring() const
-{
-    return std::string((char*) buffer.data(), buffer.size());
-}
-
-NodeID NodeID::from_bytestring(const std::string& bytestring)
-{
-    NodeID output;
-    std::copy(bytestring.begin(), bytestring.end(), output.buffer.begin());
-    return output;
-}
-
-const NodeID& NodeID::zero()
-{
-    static const NodeID ret = from_bytestring(std::string(20, '\0'));
-    return ret;
+    return NodeID{ zero_buffer() };
 }
 
 NodeID NodeID::generate(asio::ip::address address)
@@ -160,3 +130,22 @@ NodeID NodeID::generate( asio::ip::address address
     return node_id;
 }
 
+bool NodeID::closer_to(const NodeID& left, const NodeID& right) const
+{
+    for (size_t i = 0; i < sizeof(buffer); i++) {
+        uint8_t l = left .buffer[i] ^ buffer[i];
+        uint8_t r = right.buffer[i] ^ buffer[i];
+        if (l < r) {
+            return true;
+        }
+        if (r < l) {
+            return false;
+        }
+    }
+    return false;
+}
+
+std::ostream& ouinet::bittorrent::operator<<(std::ostream& os, const NodeID& id)
+{
+    return os << id.to_hex();
+}

@@ -180,19 +180,24 @@ endif() # if WITH_INJECTOR
 # to the ./test/ directory.
 
 if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
+    # TODO: turn this into a proper cmake package
+    find_path(GCRYPT_INCLUDE_DIR gcrypt.h)
+    find_library(GCRYPT_LIBRARIES NAMES gcrypt libgcrypt)
 
     file(GLOB test_dht_sources
         "./src/asio.cpp"
         "./src/bittorrent/*.cpp"
+        "./src/util/crypto.cpp"
     )
 
     add_executable(test-dht ${test_dht_sources})
 
     target_include_directories(test-dht PUBLIC
         "${Boost_INCLUDE_DIR}"
+        "${GCRYPT_INCLUDE_DIR}"
     )
 
-    target_link_libraries(test-dht ${Boost_LIBRARIES})
+    target_link_libraries(test-dht ${Boost_LIBRARIES} ${GCRYPT_LIBRARIES})
 
 endif()
 
