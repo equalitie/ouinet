@@ -655,10 +655,6 @@ void Client::State::serve_request( GenericConnection&& con
         // NOTE: The matching of HTTP methods below can be simplified,
         // leaving expanded for readability.
 
-        // NOTE: The injector mechanism is temporarily used in some matches
-        // instead of the mechanisms following it (commented out)
-        // since the later are not implemented yet.
-
         // Send unsafe HTTP method requests to the origin server
         // (or the proxy if that does not work).
         // NOTE: The cache need not be disabled as it should know not to
