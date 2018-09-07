@@ -326,6 +326,8 @@ cd -
 
 add_library $DIR/build-ouinet/libclient.so
 add_library $DIR/build-ouinet/modules/asio-ipfs/ipfs_bindings/libipfs_bindings.so
+add_library $DIR/build-ouinet/gcrypt/src/gcrypt/src/.libs/libgcrypt.so
+add_library $DIR/build-ouinet/gpg_error/out/lib/libgpg-error.so
 }
 
 ######################################################################

@@ -27,9 +27,9 @@ public:
     using Parent::begin;
     using Parent::end;
     using Parent::size;
-    using Parent::iterator;
-    using Parent::const_iterator;
     using Parent::erase;
+    using typename Parent::iterator;
+    using typename Parent::const_iterator;
 
     bool full() const {
         return Parent::size() >= _max_size;

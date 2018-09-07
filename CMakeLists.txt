@@ -57,11 +57,41 @@ find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS filesystem
                                                         system)
 find_package(Threads)
 
-# TODO: turn this into a proper cmake package
-find_path(GCRYPT_INCLUDE_DIR gcrypt.h)
-find_library(GCRYPT_LIBRARIES NAMES gcrypt libgcrypt)
+################################################################################
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -Wall -O0 -ggdb ${SANITIZE}")
+
+################################################################################
+if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
+    set(GCRYPT_HOST "--host=arm-unknown-linux-androideabi")
+endif()
+
+set(GPG_ERROR_PREFIX ${CMAKE_CURRENT_BINARY_DIR}/gpg_error/out)
+
+externalproject_add(gpg_error
+    URL https://www.gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-1.32.tar.bz2
+    BUILD_IN_SOURCE 1
+    CONFIGURE_COMMAND export CC=${CMAKE_C_COMPILER}
+                   && ./configure ${GCRYPT_HOST} --prefix=${GPG_ERROR_PREFIX}
+    BUILD_COMMAND $(MAKE)
+    PREFIX gpg_error)
+
+externalproject_add(gcrypt
+    DEPENDS gpg_error
+    URL https://www.gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.8.3.tar.bz2
+    BUILD_IN_SOURCE 1
+    CONFIGURE_COMMAND CC=${CMAKE_C_COMPILER}
+                      ./configure ${GCRYPT_HOST}
+                        --with-libgpg-error-prefix=${GPG_ERROR_PREFIX}
+    BUILD_COMMAND $(MAKE)
+    INSTALL_COMMAND ""
+    PREFIX gcrypt)
+
+set(GCRYPT_INCLUDE_DIR
+    "${CMAKE_CURRENT_BINARY_DIR}/gcrypt/src/gcrypt/src"
+    "${GPG_ERROR_PREFIX}/include")
+
+set(GCRYPT_LIBRARIES "${CMAKE_CURRENT_BINARY_DIR}/gcrypt/src/gcrypt/src/.libs/libgcrypt.so")
 
 ################################################################################
 externalproject_add(json
@@ -152,7 +182,7 @@ target_link_libraries(client
     ${GCRYPT_LIBRARIES}
 )
 
-add_dependencies(client json lru uri ${ASIO_IPFS_TARGET})
+add_dependencies(client json lru uri ${ASIO_IPFS_TARGET} gcrypt)
 
 ################################################################################
 if (WITH_INJECTOR)
@@ -177,7 +207,7 @@ if (WITH_INJECTOR)
     )
 
     add_executable(injector ${injector_sources})
-    add_dependencies(injector json ${ASIO_IPFS_TARGET})
+    add_dependencies(injector json ${ASIO_IPFS_TARGET} gcrypt)
 
     target_link_libraries(injector
         ouiservice-i2p
