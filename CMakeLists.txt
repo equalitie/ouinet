@@ -57,6 +57,10 @@ find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS filesystem
                                                         system)
 find_package(Threads)
 
+# TODO: turn this into a proper cmake package
+find_path(GCRYPT_INCLUDE_DIR gcrypt.h)
+find_library(GCRYPT_LIBRARIES NAMES gcrypt libgcrypt)
+
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -Wall -O0 -ggdb ${SANITIZE}")
 
 ################################################################################
@@ -103,6 +107,7 @@ set(URI_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri-build/src/libnetwork-ur
 include_directories(
     "${Boost_INCLUDE_DIR}"
     "${ASIO_IPFS_INCLUDE_DIR}"
+    "${GCRYPT_INCLUDE_DIR}"
     "${JSON_INCLUDE_DIR}"
     "${LRU_INCLUDE_DIR}"
     "${URI_INCLUDE_DIR}"
@@ -123,6 +128,8 @@ file(GLOB client_sources
     "./src/ouiservice/tcp.cpp"
     "./src/logger.cpp"
     "./src/cache/*.cpp"
+    "./src/bittorrent/*.cpp"
+    "./src/util/crypto.cpp"
 )
 
 if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
@@ -142,6 +149,7 @@ target_link_libraries(client
     ${Boost_LIBRARIES}
     ${ASIO_IPFS_LIBRARIES}
     ${URI_LIBRARY}
+    ${GCRYPT_LIBRARIES}
 )
 
 add_dependencies(client json lru uri ${ASIO_IPFS_TARGET})
@@ -151,6 +159,7 @@ if (WITH_INJECTOR)
     include_directories(
         "${Boost_INCLUDE_DIR}"
         "${ASIO_IPFS_INCLUDE_DIR}"
+        "${GCRYPT_INCLUDE_DIR}"
     )
 
     file(GLOB injector_sources
@@ -163,6 +172,8 @@ if (WITH_INJECTOR)
         "./src/ouiservice/tcp.cpp"
         "./src/logger.cpp"
         "./src/cache/*.cpp"
+        "./src/bittorrent/*.cpp"
+        "./src/util/crypto.cpp"
     )
 
     add_executable(injector ${injector_sources})
@@ -172,6 +183,7 @@ if (WITH_INJECTOR)
         ouiservice-i2p
         ${Boost_LIBRARIES}
         ${ASIO_IPFS_LIBRARIES}
+        ${GCRYPT_LIBRARIES}
     )
 endif() # if WITH_INJECTOR
 

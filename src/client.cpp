@@ -45,6 +45,7 @@
 #include "ouiservice/tcp.h"
 
 #include "util/signal.h"
+#include "util/crypto.h"
 
 #include "logger.h"
 
@@ -1166,6 +1167,8 @@ boost::filesystem::path Client::ca_cert_path() const
 #ifndef __ANDROID__
 int main(int argc, char* argv[])
 {
+    util::crypto_init();
+
     asio::io_service ios;
 
     asio::signal_set signals(ios, SIGINT, SIGTERM);

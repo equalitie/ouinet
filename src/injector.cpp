@@ -35,6 +35,7 @@
 #include "ouiservice/tcp.h"
 
 #include "util/timeout.h"
+#include "util/crypto.h"
 
 #include "logger.h"
 #include "defer.h"
@@ -349,6 +350,8 @@ void listen( InjectorConfig& config
 //------------------------------------------------------------------------------
 int main(int argc, const char* argv[])
 {
+    util::crypto_init();
+
     InjectorConfig config;
 
     try {
