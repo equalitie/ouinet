@@ -12,7 +12,7 @@
 #include <json.hpp>
 
 #include "../namespaces.h"
-#include "condition_variable.h"
+#include "../util/condition_variable.h"
 
 namespace asio_ipfs { class node; }
 
