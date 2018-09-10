@@ -59,10 +59,10 @@ using Request  = http::request<http::string_body>;
 using Response = http::response<http::dynamic_body>;
 using boost::optional;
 
-static const boost::filesystem::path OUINET_PID_FILE = "pid";
-static const boost::filesystem::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
-static const boost::filesystem::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
-static const boost::filesystem::path OUINET_CA_DH_FILE = "ssl-ca-dh.pem";
+static const fs::path OUINET_PID_FILE = "pid";
+static const fs::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
+static const fs::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
+static const fs::path OUINET_CA_DH_FILE = "ssl-ca-dh.pem";
 
 //------------------------------------------------------------------------------
 class Client::State : public enable_shared_from_this<Client::State> {
@@ -114,7 +114,7 @@ private:
 
     void setup_injector(asio::yield_context);
 
-    boost::filesystem::path get_pid_path() const {
+    fs::path get_pid_path() const {
         return _config.repo_root()/OUINET_PID_FILE;
     }
 
@@ -124,9 +124,9 @@ private:
         return _shutdown_signal.call_count() != 0;
     }
 
-    boost::filesystem::path ca_cert_path() const { return _config.repo_root() / OUINET_CA_CERT_FILE; }
-    boost::filesystem::path ca_key_path()  const { return _config.repo_root() / OUINET_CA_KEY_FILE;  }
-    boost::filesystem::path ca_dh_path()   const { return _config.repo_root() / OUINET_CA_DH_FILE;   }
+    fs::path ca_cert_path() const { return _config.repo_root() / OUINET_CA_CERT_FILE; }
+    fs::path ca_key_path()  const { return _config.repo_root() / OUINET_CA_KEY_FILE;  }
+    fs::path ca_dh_path()   const { return _config.repo_root() / OUINET_CA_DH_FILE;   }
 
 private:
     asio::io_service& _ios;
@@ -838,8 +838,6 @@ void Client::State::setup_ipfs_cache()
                 return _ipfs_cache->set_ipns(move(ipns));
             }
 
-            string repo_root = (_config.repo_root()/"ipfs").native();
-
             function<void()> cancel;
 
             auto cancel_slot = _shutdown_signal.connect([&] {
@@ -849,7 +847,7 @@ void Client::State::setup_ipfs_cache()
             sys::error_code ec;
             _ipfs_cache = CacheClient::build(_ios
                                             , ipns
-                                            , move(repo_root)
+                                            , _config.repo_root()
                                             , cancel
                                             , yield[ec]);
 
@@ -1153,12 +1151,12 @@ void Client::set_credentials(const char* injector, const char* cred)
     _state->_config.set_credentials(injector, cred);
 }
 
-boost::filesystem::path Client::get_pid_path() const
+fs::path Client::get_pid_path() const
 {
     return _state->get_pid_path();
 }
 
-boost::filesystem::path Client::ca_cert_path() const
+fs::path Client::ca_cert_path() const
 {
     return _state->ca_cert_path();
 }

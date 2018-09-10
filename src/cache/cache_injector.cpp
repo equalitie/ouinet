@@ -12,12 +12,9 @@
 using namespace std;
 using namespace ouinet;
 
-namespace asio = boost::asio;
-namespace sys  = boost::system;
-
-CacheInjector::CacheInjector(asio::io_service& ios, string path_to_repo)
-    : _ipfs_node(new asio_ipfs::node(ios, path_to_repo))
-    , _db(new InjectorDb(*_ipfs_node, path_to_repo))
+CacheInjector::CacheInjector(asio::io_service& ios, fs::path path_to_repo)
+    : _ipfs_node(new asio_ipfs::node(ios, (path_to_repo/"ipfs").native()))
+    , _db(new InjectorDb(*_ipfs_node, (path_to_repo/"ipfs").native()))
     , _was_destroyed(make_shared<bool>(false))
 {
 }

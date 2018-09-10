@@ -393,8 +393,7 @@ int main(int argc, const char* argv[])
 
     Signal<void()> shutdown_signal;
 
-    auto cache_injector
-        = make_unique<CacheInjector>(ios, (config.repo_root()/"ipfs").native());
+    auto cache_injector = make_unique<CacheInjector>(ios, config.repo_root());
 
     auto shutdown_ipfs_slot = shutdown_signal.connect([&] {
         cache_injector = nullptr;

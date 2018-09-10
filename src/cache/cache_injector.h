@@ -3,10 +3,12 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/io_service.hpp>
 #include <boost/system/error_code.hpp>
+#include <boost/filesystem.hpp>
 #include <functional>
 #include <memory>
 #include <queue>
 
+#include "../namespaces.h"
 #include "cached_content.h"
 
 namespace asio_ipfs { class node; }
@@ -28,7 +30,7 @@ private:
     };
 
 public:
-    CacheInjector(boost::asio::io_service&, std::string path_to_repo);
+    CacheInjector(boost::asio::io_service&, fs::path path_to_repo);
 
     CacheInjector(const CacheInjector&) = delete;
     CacheInjector& operator=(const CacheInjector&) = delete;

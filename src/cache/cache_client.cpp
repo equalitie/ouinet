@@ -12,7 +12,7 @@ namespace sys  = boost::system;
 
 unique_ptr<CacheClient> CacheClient::build( asio::io_service& ios
                                           , string ipns
-                                          , string path_to_repo
+                                          , fs::path path_to_repo
                                           , function<void()>& cancel
                                           , asio::yield_context yield)
 {
@@ -28,7 +28,9 @@ unique_ptr<CacheClient> CacheClient::build( asio::io_service& ios
     };
 
     sys::error_code ec;
-    auto ipfs_node = asio_ipfs::node::build(ios, path_to_repo, yield[ec]);
+    auto ipfs_node = asio_ipfs::node::build( ios
+                                           , (path_to_repo/"ipfs").native()
+                                           , yield[ec]);
 
     cancel = nullptr;
 
@@ -45,19 +47,19 @@ unique_ptr<CacheClient> CacheClient::build( asio::io_service& ios
 
 CacheClient::CacheClient( asio_ipfs::node ipfs_node
                         , string ipns
-                        , string path_to_repo)
+                        , fs::path path_to_repo)
     : _path_to_repo(move(path_to_repo))
     , _ipfs_node(new asio_ipfs::node(move(ipfs_node)))
-    , _db(new ClientDb(*_ipfs_node, _path_to_repo, ipns))
+    , _db(new ClientDb(*_ipfs_node, _path_to_repo/"ipfs", ipns))
 {
 }
 
 CacheClient::CacheClient( boost::asio::io_service& ios
                         , string ipns
-                        , string path_to_repo)
+                        , fs::path path_to_repo)
     : _path_to_repo(move(path_to_repo))
-    , _ipfs_node(new asio_ipfs::node(ios, _path_to_repo))
-    , _db(new ClientDb(*_ipfs_node, _path_to_repo, ipns))
+    , _ipfs_node(new asio_ipfs::node(ios, (_path_to_repo/"ipfs").native()))
+    , _db(new ClientDb(*_ipfs_node, _path_to_repo/"ipfs", ipns))
 {
 }
 
@@ -83,7 +85,7 @@ void CacheClient::wait_for_db_update(boost::asio::yield_context yield)
 
 void CacheClient::set_ipns(std::string ipns)
 {
-    _db.reset(new ClientDb(*_ipfs_node, _path_to_repo, move(ipns)));
+    _db.reset(new ClientDb(*_ipfs_node, _path_to_repo/"ipfs", move(ipns)));
 }
 
 std::string CacheClient::id() const

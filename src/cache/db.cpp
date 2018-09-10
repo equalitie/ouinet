@@ -46,13 +46,13 @@ static BTree::RemoveOp make_remove_operation(asio_ipfs::node& ipfs_node)
     };
 }
 
-static string path_to_db(const string& path_to_repo, const string& ipns)
+static string path_to_db(const fs::path& path_to_repo, const string& ipns)
 {
-    return path_to_repo + "/ipfs_cache_db." + ipns;
+    return (path_to_repo / ("ipfs_cache_db." + ipns)).native();
 }
 
 static void load_db( BTree& db_map
-                   , const string& path_to_repo
+                   , const fs::path& path_to_repo
                    , const string& ipns
                    , asio::yield_context yield)
 {
@@ -85,7 +85,7 @@ static void load_db( BTree& db_map
     }
 }
 
-static void save_db( const string& path_to_repo
+static void save_db( const fs::path& path_to_repo
                    , const string& ipns
                    , const string& ipfs)
 {
@@ -103,7 +103,7 @@ static void save_db( const string& path_to_repo
 }
 
 
-ClientDb::ClientDb(asio_ipfs::node& ipfs_node, string path_to_repo, string ipns)
+ClientDb::ClientDb(asio_ipfs::node& ipfs_node, fs::path path_to_repo, string ipns)
     : _path_to_repo(move(path_to_repo))
     , _ipns(move(ipns))
     , _ipfs_node(ipfs_node)
@@ -123,7 +123,7 @@ ClientDb::ClientDb(asio_ipfs::node& ipfs_node, string path_to_repo, string ipns)
         });
 }
 
-InjectorDb::InjectorDb(asio_ipfs::node& ipfs_node, string path_to_repo)
+InjectorDb::InjectorDb(asio_ipfs::node& ipfs_node, fs::path path_to_repo)
     : _path_to_repo(move(path_to_repo))
     , _ipns(ipfs_node.id())
     , _ipfs_node(ipfs_node)

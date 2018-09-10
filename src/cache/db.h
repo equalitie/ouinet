@@ -5,6 +5,7 @@
 #include <boost/asio/io_service.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include <boost/filesystem.hpp>
 #include <string>
 #include <queue>
 #include <list>
@@ -25,7 +26,7 @@ class ClientDb {
     using OnDbUpdate = std::function<void(const sys::error_code&)>;
 
 public:
-    ClientDb(asio_ipfs::node&, std::string path_to_repo, std::string ipns);
+    ClientDb(asio_ipfs::node&, fs::path path_to_repo, std::string ipns);
 
     std::string query(std::string key, asio::yield_context);
 
@@ -49,7 +50,7 @@ private:
     void flush_db_update_callbacks(const sys::error_code&);
 
 private:
-    const std::string _path_to_repo;
+    const fs::path _path_to_repo;
     std::string _ipns;
     std::string _ipfs; // Last known
     asio_ipfs::node& _ipfs_node;
@@ -61,7 +62,7 @@ private:
 
 class InjectorDb {
 public:
-    InjectorDb(asio_ipfs::node&, std::string path_to_repo);
+    InjectorDb(asio_ipfs::node&, fs::path path_to_repo);
 
     void update(std::string key, std::string content_hash, asio::yield_context);
 
@@ -80,7 +81,7 @@ private:
     void continuously_upload_db(asio::yield_context);
 
 private:
-    const std::string _path_to_repo;
+    const fs::path _path_to_repo;
     std::string _ipns;
     asio_ipfs::node& _ipfs_node;
     std::unique_ptr<Republisher> _republisher;
