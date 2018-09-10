@@ -1,4 +1,5 @@
 #include "crypto.h"
+#include "bytes.h"
 
 #include <cassert>
 #include <exception>
@@ -348,6 +349,16 @@ std::array<uint8_t, 64> Ed25519PrivateKey::sign(const std::string& data) const
     ::gcry_sexp_release(r_sexp);
 
     return output;
+}
+
+std::ostream& operator<<(std::ostream& os, const Ed25519PublicKey& k)
+{
+    return os << util::bytes::to_hex(k.serialize());
+}
+
+std::ostream& operator<<(std::ostream& os, const Ed25519PrivateKey& k)
+{
+    return os << util::bytes::to_hex(k.serialize());
 }
 
 } // util namespace

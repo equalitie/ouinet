@@ -59,5 +59,8 @@ class Ed25519PrivateKey {
     ::gcry_sexp_t _private_key;
 };
 
+std::ostream& operator<<(std::ostream&, const Ed25519PublicKey&);
+std::ostream& operator<<(std::ostream&, const Ed25519PrivateKey&);
+
 } // util namespace
 } // ouinet namespace
