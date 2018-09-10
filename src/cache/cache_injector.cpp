@@ -14,7 +14,7 @@ using namespace ouinet;
 
 CacheInjector::CacheInjector(asio::io_service& ios, fs::path path_to_repo)
     : _ipfs_node(new asio_ipfs::node(ios, (path_to_repo/"ipfs").native()))
-    , _db(new InjectorDb(*_ipfs_node, (path_to_repo/"ipfs").native()))
+    , _db(new InjectorDb(*_ipfs_node, path_to_repo))
     , _was_destroyed(make_shared<bool>(false))
 {
 }

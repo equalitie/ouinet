@@ -50,7 +50,7 @@ CacheClient::CacheClient( asio_ipfs::node ipfs_node
                         , fs::path path_to_repo)
     : _path_to_repo(move(path_to_repo))
     , _ipfs_node(new asio_ipfs::node(move(ipfs_node)))
-    , _db(new ClientDb(*_ipfs_node, _path_to_repo/"ipfs", ipns))
+    , _db(new ClientDb(*_ipfs_node, _path_to_repo, ipns))
 {
 }
 
@@ -59,7 +59,7 @@ CacheClient::CacheClient( boost::asio::io_service& ios
                         , fs::path path_to_repo)
     : _path_to_repo(move(path_to_repo))
     , _ipfs_node(new asio_ipfs::node(ios, (_path_to_repo/"ipfs").native()))
-    , _db(new ClientDb(*_ipfs_node, _path_to_repo/"ipfs", ipns))
+    , _db(new ClientDb(*_ipfs_node, _path_to_repo, ipns))
 {
 }
 
@@ -85,7 +85,7 @@ void CacheClient::wait_for_db_update(boost::asio::yield_context yield)
 
 void CacheClient::set_ipns(std::string ipns)
 {
-    _db.reset(new ClientDb(*_ipfs_node, _path_to_repo/"ipfs", move(ipns)));
+    _db.reset(new ClientDb(*_ipfs_node, _path_to_repo, move(ipns)));
 }
 
 std::string CacheClient::id() const
