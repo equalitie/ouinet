@@ -3,9 +3,12 @@
 #include <iostream>
 
 #include "../logger.h"
+#include "../bittorrent/dht.h"
 
 using namespace std;
 using namespace ouinet;
+
+namespace bt = ouinet::bittorrent;
 
 using Timer = asio::steady_timer;
 using Clock = chrono::steady_clock;
@@ -83,24 +86,61 @@ struct Republisher::Loop : public enable_shared_from_this<Loop> {
     }
 };
 
-Republisher::Republisher(asio_ipfs::node& ipfs_node)
+static
+bt::MutableDataItem bt_mutable_data( const string& cid
+                                   , const string& ipns
+                                   , const util::Ed25519PrivateKey& private_key)
+{
+    /*
+     * Use the sha1 of the URL as salt;
+     * Use the timestamp as a version ID.
+     */
+    using Time = boost::posix_time::ptime;
+
+    Time unix_epoch(boost::gregorian::date(1970, 1, 1));
+    Time ts = boost::posix_time::microsec_clock::universal_time();
+
+    string key_hash = util::bytes::to_string(util::sha1(ipns));
+
+    return bt::MutableDataItem::sign( cid
+                                    , (ts - unix_epoch).total_milliseconds()
+                                    , key_hash
+                                    , private_key);
+}
+
+Republisher::Republisher(asio_ipfs::node& ipfs_node, bt::MainlineDht& bt_dht)
     : _ios(ipfs_node.get_io_service())
     , _ipfs_node(ipfs_node)
+    , _bt_dht(bt_dht)
+    , _bt_private_key(util::Ed25519PrivateKey::generate())
     , _ipfs_loop(make_shared<Loop>(_ios))
+    , _bt_loop(make_shared<Loop>(_ios))
 {
+    cerr << "Republisher BT Private key: " << _bt_private_key << endl;
+    cerr << "Republisher BT Public  key: " << _bt_private_key.public_key() << endl;
+
     _ipfs_loop->publish_func = [this](auto cid, auto yield) {
         _ipfs_node.publish(cid, publish_duration, yield);
     };
 
+    _bt_loop->publish_func = [this](auto cid, auto yield) {
+        auto ipns = _ipfs_node.id();
+        auto item = bt_mutable_data(cid, ipns, _bt_private_key);
+        _bt_dht.mutable_put_start(item, yield);
+    };
+
     _ipfs_loop->start();
+    _bt_loop->start();
 }
 
 void Republisher::publish(const std::string& cid)
 {
     _ipfs_loop->publish(cid);
+    _bt_loop->publish(cid);
 }
 
 Republisher::~Republisher()
 {
     _ipfs_loop->stop();
+    _bt_loop->stop();
 }

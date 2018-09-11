@@ -14,6 +14,7 @@
 
 using namespace std;
 using namespace ouinet;
+namespace bt = ouinet::bittorrent;
 
 static const unsigned int BTREE_NODE_SIZE=64;
 
@@ -124,11 +125,13 @@ ClientDb::ClientDb(asio_ipfs::node& ipfs_node, fs::path path_to_repo, string ipn
         });
 }
 
-InjectorDb::InjectorDb(asio_ipfs::node& ipfs_node, fs::path path_to_repo)
+InjectorDb::InjectorDb( asio_ipfs::node& ipfs_node
+                      , bt::MainlineDht& bt_dht
+                      , fs::path path_to_repo)
     : _path_to_repo(move(path_to_repo))
     , _ipns(ipfs_node.id())
     , _ipfs_node(ipfs_node)
-    , _republisher(new Republisher(_ipfs_node))
+    , _republisher(new Republisher(_ipfs_node, bt_dht))
     , _has_callbacks(_ipfs_node.get_io_service())
     , _was_destroyed(make_shared<bool>(false))
     , _db_map(make_unique<BTree>( make_cat_operation(ipfs_node)

@@ -15,6 +15,7 @@
 #include "../util/condition_variable.h"
 
 namespace asio_ipfs { class node; }
+namespace ouinet { namespace bittorrent { class MainlineDht; }}
 
 namespace ouinet {
 
@@ -62,7 +63,9 @@ private:
 
 class InjectorDb {
 public:
-    InjectorDb(asio_ipfs::node&, fs::path path_to_repo);
+    InjectorDb( asio_ipfs::node&
+              , bittorrent::MainlineDht&
+              , fs::path path_to_repo);
 
     void update(std::string key, std::string content_hash, asio::yield_context);
 

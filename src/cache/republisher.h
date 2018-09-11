@@ -9,8 +9,10 @@
 #include <list>
 
 #include "../namespaces.h"
+#include "../util/crypto.h"
 
 namespace asio_ipfs { class node; }
+namespace ouinet { namespace bittorrent { class MainlineDht; } }
 
 namespace ouinet {
 
@@ -27,7 +29,7 @@ public:
     struct Loop;
 
 public:
-    Republisher(asio_ipfs::node&);
+    Republisher(asio_ipfs::node&, bittorrent::MainlineDht&);
     Republisher(const Republisher&) = delete;
 
     void publish(const std::string&);
@@ -37,8 +39,11 @@ public:
 private:
     asio::io_service& _ios;
     asio_ipfs::node& _ipfs_node;
+    bittorrent::MainlineDht& _bt_dht;
+    util::Ed25519PrivateKey _bt_private_key;
 
     std::shared_ptr<Loop> _ipfs_loop;
+    std::shared_ptr<Loop> _bt_loop;
 };
 
 }
