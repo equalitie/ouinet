@@ -2,6 +2,7 @@
 
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/spawn.hpp>
+#include <boost/asio/io_service.hpp>
 #include <boost/system/error_code.hpp>
 #include <string>
 #include <memory>
@@ -23,25 +24,21 @@ namespace ouinet {
  */
 class Republisher {
 public:
+    struct Loop;
+
+public:
     Republisher(asio_ipfs::node&);
+    Republisher(const Republisher&) = delete;
 
-    void publish( const std::string&
-                , std::function<void(boost::system::error_code)>);
-
-    void publish(const std::string&, asio::yield_context);
+    void publish(const std::string&);
 
     ~Republisher();
 
 private:
-    void start_publishing();
-
-private:
-    std::shared_ptr<bool> _was_destroyed;
+    asio::io_service& _ios;
     asio_ipfs::node& _ipfs_node;
-    boost::asio::steady_timer _timer;
-    bool _is_publishing = false;
-    std::string _to_publish;
-    std::list<std::function<void(boost::system::error_code)>> _callbacks;
+
+    std::shared_ptr<Loop> _ipfs_loop;
 };
 
 }

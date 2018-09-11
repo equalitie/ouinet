@@ -11,85 +11,96 @@ using Timer = asio::steady_timer;
 using Clock = chrono::steady_clock;
 static const Timer::duration publish_duration = chrono::minutes(10);
 
-Republisher::Republisher(asio_ipfs::node& ipfs_node)
-    : _was_destroyed(make_shared<bool>(false))
-    , _ipfs_node(ipfs_node)
-    , _timer(_ipfs_node.get_io_service())
-{}
+struct Republisher::Loop : public enable_shared_from_this<Loop> {
+    using PublishFunc = function<void(const string, asio::yield_context)>;
 
-void Republisher::publish(const std::string& cid, asio::yield_context yield)
-{
-    using Handler = asio::handler_type< asio::yield_context
-                                      , void(sys::error_code)>::type;
+    bool was_stopped = false;
+    boost::asio::steady_timer timer;
 
-    Handler handler(move(yield));
-    asio::async_result<Handler> result(handler);
-    publish(cid, move(handler));
-    result.get();
-}
+    std::string to_publish;
+    std::string last_value;
 
-void Republisher::publish(const std::string& cid, std::function<void(sys::error_code)> cb)
-{
-    _to_publish = cid;
+    PublishFunc publish_func;
 
-    _callbacks.push_back(move(cb));
+    Loop(asio::io_service& ios) : timer(ios) {}
 
-    if (_is_publishing) {
-        return;
+    void publish(string cid)
+    {
+        if (cid == last_value) return;
+
+        to_publish = move(cid);
+        last_value = to_publish;
+        timer.cancel();
     }
 
-    start_publishing();
-}
-
-void Republisher::start_publishing()
-{
-    if (_callbacks.empty()) {
-        _is_publishing = false;
-        _timer.expires_from_now(publish_duration / 2);
-        _timer.async_wait(
-            [this, d = _was_destroyed] (sys::error_code ec) {
-                if (*d) return;
-                if (ec || _is_publishing) return;
-                _callbacks.push_back(nullptr);
-                start_publishing();
-            });
-        return;
+    void start()
+    {
+        asio::spawn(timer.get_io_service(),
+                [this, self = shared_from_this()]
+                (asio::yield_context yield) {
+                    sys::error_code ec;
+                    start(yield[ec]);
+                });
     }
 
-    _is_publishing = true;
-    _timer.cancel();
+    void start(asio::yield_context yield)
+    {
+        auto self = shared_from_this();
 
-    auto last_i = --_callbacks.end();
+        if (was_stopped) return;
 
-    cout << "Publishing DB: " << _to_publish << endl;
-    _ipfs_node.publish(_to_publish, publish_duration,
-        [this, d = _was_destroyed, last_i, id = _to_publish] (sys::error_code ec) {
-            if (*d) return;
-            LOG_DEBUG("Request was successfully published to cache under id " + id);
+        while (true) {
+            while (to_publish.empty()) {
+                sys::error_code ec;
 
-            while (true) {
-                bool is_last = last_i == _callbacks.begin();
-                auto cb = move(_callbacks.front());
-                _callbacks.pop_front();
-                if (cb) cb(ec);
-                if (*d) return;
-                if (is_last) break;
+                timer.expires_from_now(publish_duration / 2);
+                timer.async_wait(yield[ec]);
+
+                if (was_stopped) return;
+
+                if (ec && to_publish.empty()) {
+                    // Timeout has been reached, force republish the value
+                    to_publish = last_value;
+                }
             }
 
-            start_publishing();
-        });
+            LOG_DEBUG("Publishing DB: ", to_publish);
+
+            auto cid = move(to_publish);
+
+            sys::error_code ec;
+            publish_func(cid, yield[ec]);
+
+            if (was_stopped) return;
+
+            LOG_DEBUG("Request was successfully published to cache under id " + cid);
+        }
+    }
+
+    void stop() {
+        was_stopped = true;
+        timer.cancel();
+    }
+};
+
+Republisher::Republisher(asio_ipfs::node& ipfs_node)
+    : _ios(ipfs_node.get_io_service())
+    , _ipfs_node(ipfs_node)
+    , _ipfs_loop(make_shared<Loop>(_ios))
+{
+    _ipfs_loop->publish_func = [this](auto cid, auto yield) {
+        _ipfs_node.publish(cid, publish_duration, yield);
+    };
+
+    _ipfs_loop->start();
+}
+
+void Republisher::publish(const std::string& cid)
+{
+    _ipfs_loop->publish(cid);
 }
 
 Republisher::~Republisher()
 {
-    *_was_destroyed = true;
-
-    auto& ios = _ipfs_node.get_io_service();
-    auto cbs = move(_callbacks);
-
-    for (auto& cb : cbs) {
-        ios.post([cb = move(cb)] {
-                cb(asio::error::operation_aborted);
-            });
-    }
+    _ipfs_loop->stop();
 }

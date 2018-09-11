@@ -61,7 +61,8 @@ static void load_db( BTree& db_map
     ifstream file(path);
 
     if (!file.is_open()) {
-        cerr << "Warning: Couldn't open " << path << endl;
+        cerr << "Warning: Couldn't open " << path
+             << "; Creating a new one" << endl;
         return;
     }
 
@@ -171,7 +172,7 @@ void InjectorDb::upload_database(asio::yield_context yield)
 
     save_db(_path_to_repo, _ipns, db_ipfs_id);
 
-    _republisher->publish(move(db_ipfs_id), yield);
+    _republisher->publish(move(db_ipfs_id));
 }
 
 static string query_(string key, BTree& db, asio::yield_context yield)
