@@ -1,4 +1,4 @@
-#include "republisher.h"
+#include "publisher.h"
 #include <asio_ipfs.h>
 #include <iostream>
 
@@ -14,7 +14,7 @@ using Timer = asio::steady_timer;
 using Clock = chrono::steady_clock;
 static const Timer::duration publish_duration = chrono::minutes(10);
 
-struct Republisher::Loop : public enable_shared_from_this<Loop> {
+struct Publisher::Loop : public enable_shared_from_this<Loop> {
     using PublishFunc = function<void(const string, asio::yield_context)>;
 
     bool was_stopped = false;
@@ -108,7 +108,7 @@ bt::MutableDataItem bt_mutable_data( const string& cid
                                     , private_key);
 }
 
-Republisher::Republisher(asio_ipfs::node& ipfs_node, bt::MainlineDht& bt_dht)
+Publisher::Publisher(asio_ipfs::node& ipfs_node, bt::MainlineDht& bt_dht)
     : _ios(ipfs_node.get_io_service())
     , _ipfs_node(ipfs_node)
     , _bt_dht(bt_dht)
@@ -116,8 +116,8 @@ Republisher::Republisher(asio_ipfs::node& ipfs_node, bt::MainlineDht& bt_dht)
     , _ipfs_loop(make_shared<Loop>(_ios))
     , _bt_loop(make_shared<Loop>(_ios))
 {
-    cerr << "Republisher BT Private key: " << _bt_private_key << endl;
-    cerr << "Republisher BT Public  key: " << _bt_private_key.public_key() << endl;
+    cerr << "Publisher BT Private key: " << _bt_private_key << endl;
+    cerr << "Publisher BT Public  key: " << _bt_private_key.public_key() << endl;
 
     _ipfs_loop->publish_func = [this](auto cid, auto yield) {
         _ipfs_node.publish(cid, publish_duration, yield);
@@ -133,13 +133,13 @@ Republisher::Republisher(asio_ipfs::node& ipfs_node, bt::MainlineDht& bt_dht)
     _bt_loop->start();
 }
 
-void Republisher::publish(const std::string& cid)
+void Publisher::publish(const std::string& cid)
 {
     _ipfs_loop->publish(cid);
     _bt_loop->publish(cid);
 }
 
-Republisher::~Republisher()
+Publisher::~Publisher()
 {
     _ipfs_loop->stop();
     _bt_loop->stop();

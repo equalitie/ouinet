@@ -22,19 +22,19 @@ namespace ouinet {
  * the value needs to be periodically re-published.
  *
  * This class periodically republished last value used in the
- * Republisher::publish function.
+ * Publisher::publish function.
  */
-class Republisher {
+class Publisher {
 public:
     struct Loop;
 
 public:
-    Republisher(asio_ipfs::node&, bittorrent::MainlineDht&);
-    Republisher(const Republisher&) = delete;
+    Publisher(asio_ipfs::node&, bittorrent::MainlineDht&);
+    Publisher(const Publisher&) = delete;
 
     void publish(const std::string&);
 
-    ~Republisher();
+    ~Publisher();
 
 private:
     asio::io_service& _ios;

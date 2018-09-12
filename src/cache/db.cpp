@@ -1,6 +1,6 @@
 #include "db.h"
 #include <asio_ipfs.h>
-#include "republisher.h"
+#include "publisher.h"
 #include "btree.h"
 #include "../or_throw.h"
 
@@ -126,12 +126,12 @@ ClientDb::ClientDb(asio_ipfs::node& ipfs_node, fs::path path_to_repo, string ipn
 }
 
 InjectorDb::InjectorDb( asio_ipfs::node& ipfs_node
-                      , Republisher& republisher
+                      , Publisher& publisher
                       , fs::path path_to_repo)
     : _path_to_repo(move(path_to_repo))
     , _ipns(ipfs_node.id())
     , _ipfs_node(ipfs_node)
-    , _republisher(republisher)
+    , _publisher(publisher)
     , _has_callbacks(_ipfs_node.get_io_service())
     , _was_destroyed(make_shared<bool>(false))
     , _db_map(make_unique<BTree>( make_cat_operation(ipfs_node)
@@ -175,7 +175,7 @@ void InjectorDb::upload_database(asio::yield_context yield)
 
     save_db(_path_to_repo, _ipns, db_ipfs_id);
 
-    _republisher.publish(move(db_ipfs_id));
+    _publisher.publish(move(db_ipfs_id));
 }
 
 static string query_(string key, BTree& db, asio::yield_context yield)
