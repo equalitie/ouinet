@@ -2,6 +2,7 @@
 #include <asio_ipfs.h>
 #include <iostream>
 
+#include "../util/crypto.h"
 #include "../logger.h"
 #include "../bittorrent/dht.h"
 
@@ -10,6 +11,7 @@ using namespace ouinet;
 
 namespace bt = ouinet::bittorrent;
 
+using boost::optional;
 using Timer = asio::steady_timer;
 using Clock = chrono::steady_clock;
 static const Timer::duration publish_duration = chrono::minutes(10);
@@ -108,11 +110,61 @@ bt::MutableDataItem bt_mutable_data( const string& cid
                                     , private_key);
 }
 
-Publisher::Publisher(asio_ipfs::node& ipfs_node, bt::MainlineDht& bt_dht)
+static util::Ed25519PrivateKey
+decide_private_key( const optional<util::Ed25519PrivateKey>& opt_key_
+                  , const fs::path& config_dir)
+{
+    if (!fs::is_directory(config_dir)) {
+        if (fs::exists(config_dir)) {
+            cerr << "Error: '" << config_dir << "' is not a directory" << endl;
+            exit(1);
+        }
+
+        if (!fs::create_directory(config_dir)) {
+            cerr << "Error: Failed to create '" << config_dir
+                 << "' directory" << endl;
+            exit(1);
+        }
+    }
+
+    fs::path config = config_dir/"bt_publish_private_key";
+
+    if (opt_key_) {
+        fs::ofstream(config) << *opt_key_;
+        return *opt_key_;
+    }
+
+    if (fs::exists(config)) {
+        string key_str;
+        fs::ifstream(config) >> key_str;
+
+        auto opt_key = util::Ed25519PrivateKey::from_hex(key_str);
+
+        if (!opt_key) {
+            cerr << "Failed reading Publisher BT Private key from "
+                 << config << endl;
+
+            exit(1);
+        }
+
+        return *opt_key;
+    }
+
+    auto key = util::Ed25519PrivateKey::generate();
+
+    fs::ofstream(config) << key;
+
+    return key;
+}
+
+Publisher::Publisher( asio_ipfs::node& ipfs_node
+                    , bt::MainlineDht& bt_dht
+                    , const optional<util::Ed25519PrivateKey>& bt_private_key
+                    , const fs::path& config_dir)
     : _ios(ipfs_node.get_io_service())
     , _ipfs_node(ipfs_node)
     , _bt_dht(bt_dht)
-    , _bt_private_key(util::Ed25519PrivateKey::generate())
+    , _bt_private_key(decide_private_key(bt_private_key, config_dir))
     , _ipfs_loop(make_shared<Loop>(_ios))
     , _bt_loop(make_shared<Loop>(_ios))
 {

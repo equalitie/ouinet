@@ -393,7 +393,10 @@ int main(int argc, const char* argv[])
 
     Signal<void()> shutdown_signal;
 
-    auto cache_injector = make_unique<CacheInjector>(ios, config.repo_root());
+    auto cache_injector = std::make_unique<CacheInjector>
+                            ( ios
+                            , config.bt_publisher_private_key()
+                            , config.repo_root());
 
     auto shutdown_ipfs_slot = shutdown_signal.connect([&] {
         cache_injector = nullptr;

@@ -15,10 +15,16 @@ using namespace std;
 using namespace ouinet;
 namespace bt = ouinet::bittorrent;
 
-CacheInjector::CacheInjector(asio::io_service& ios, fs::path path_to_repo)
+CacheInjector::CacheInjector
+        ( asio::io_service& ios
+        , const boost::optional<util::Ed25519PrivateKey>& bt_publish_key
+        , fs::path path_to_repo)
     : _ipfs_node(new asio_ipfs::node(ios, (path_to_repo/"ipfs").native()))
     , _bt_dht(new bt::MainlineDht(ios))
-    , _publisher(new Publisher(*_ipfs_node, *_bt_dht))
+    , _publisher(new Publisher( *_ipfs_node
+                              , *_bt_dht
+                              , bt_publish_key
+                              , path_to_repo/"publisher"))
     , _db(new InjectorDb(*_ipfs_node, *_publisher, path_to_repo))
     , _was_destroyed(make_shared<bool>(false))
 {

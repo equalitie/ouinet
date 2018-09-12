@@ -4,6 +4,7 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/io_service.hpp>
 #include <boost/system/error_code.hpp>
+#include <boost/filesystem.hpp>
 #include <string>
 #include <memory>
 #include <list>
@@ -29,7 +30,11 @@ public:
     struct Loop;
 
 public:
-    Publisher(asio_ipfs::node&, bittorrent::MainlineDht&);
+    Publisher( asio_ipfs::node&
+             , bittorrent::MainlineDht&
+             , const boost::optional<util::Ed25519PrivateKey>& bt_publish_key
+             , const fs::path& config_dir);
+
     Publisher(const Publisher&) = delete;
 
     void publish(const std::string&);
