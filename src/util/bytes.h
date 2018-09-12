@@ -3,6 +3,7 @@
 #include <array>
 #include <string>
 #include <vector>
+#include <boost/utility/string_view.hpp>
 
 namespace ouinet {
 namespace util {
@@ -53,6 +54,19 @@ template<class B, std::size_t N, class S> std::array<B, N> to_array(const S& byt
     return output;
 }
 
+inline bool is_hex(const boost::string_view& s)
+{
+    static const std::string hex_chars = "0123456789abcdefABCDEF";
+
+    for (size_t i = 0; i < s.size(); i++) {
+        if (hex_chars.find(s[i]) == std::string::npos) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 template<class S> std::string to_hex(const S& bytestring)
 {
     static_assert(is_bytestring_type<S>::value, "Not a bytestring type");
@@ -66,11 +80,14 @@ template<class S> std::string to_hex(const S& bytestring)
     return output;
 }
 
-inline std::string from_hex(const std::string& hex)
+inline std::string from_hex(const boost::string_view& hex)
 {
     std::string output;
     for (unsigned int i = 0; i * 2 < hex.size(); i++) {
-        output += (unsigned char)std::stoi(hex.substr(2 * i, 2), nullptr, 16);
+        output +=
+            (unsigned char)std::stoi( hex.substr(2 * i, 2).to_string()
+                                    , nullptr
+                                    , 16);
     }
     return output;
 }

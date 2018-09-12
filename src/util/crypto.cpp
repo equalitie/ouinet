@@ -86,6 +86,17 @@ Ed25519PublicKey::Ed25519PublicKey(Ed25519PublicKey&& other):
     (*this) = other;
 }
 
+boost::optional<Ed25519PublicKey>
+Ed25519PublicKey::from_hex(boost::string_view hex)
+{
+    if (hex.size() != 64 || !util::bytes::is_hex(hex)) {
+        return boost::none;
+    }
+
+    return Ed25519PublicKey(
+            util::bytes::to_array<uint8_t, 32>(util::bytes::from_hex(hex)));
+}
+
 Ed25519PublicKey& Ed25519PublicKey::operator=(const Ed25519PublicKey& other)
 {
     if (this != &other) {
@@ -225,6 +236,17 @@ std::array<uint8_t, 32> Ed25519PrivateKey::serialize() const
     memcpy(output.data(), d_buffer, output.size());
     ::gcry_sexp_release(d);
     return output;
+}
+
+boost::optional<Ed25519PrivateKey>
+Ed25519PrivateKey::from_hex(boost::string_view hex)
+{
+    if (hex.size() != 64 || !util::bytes::is_hex(hex)) {
+        return boost::none;
+    }
+
+    return Ed25519PrivateKey(
+            util::bytes::to_array<uint8_t, 32>(util::bytes::from_hex(hex)));
 }
 
 Ed25519PublicKey Ed25519PrivateKey::public_key() const

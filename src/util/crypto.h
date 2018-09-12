@@ -3,6 +3,8 @@
 #include <array>
 #include <string>
 #include <vector>
+#include <boost/optional.hpp>
+#include <boost/utility/string_view.hpp>
 
 /*
  * Forward declarations for opaque libgcrypt data structures.
@@ -34,6 +36,9 @@ class Ed25519PublicKey {
 
     bool verify(const std::string& data, const std::array<uint8_t, 64>& signature) const;
 
+    static
+    boost::optional<Ed25519PublicKey> from_hex(boost::string_view);
+
     private:
     ::gcry_sexp_t _public_key;
 };
@@ -54,6 +59,9 @@ class Ed25519PrivateKey {
     static Ed25519PrivateKey generate();
 
     std::array<uint8_t, 64> sign(const std::string& data) const;
+
+    static
+    boost::optional<Ed25519PrivateKey> from_hex(boost::string_view);
 
     private:
     ::gcry_sexp_t _private_key;

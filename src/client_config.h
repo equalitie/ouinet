@@ -5,12 +5,11 @@
 
 #include "namespaces.h"
 #include "util.h"
+#include "util/crypto.h"
 
 namespace ouinet {
 
 class ClientConfig {
-    using Path = boost::filesystem::path;
-
 public:
     ClientConfig();
 
@@ -20,7 +19,7 @@ public:
     ClientConfig(const ClientConfig&) = default;
     ClientConfig& operator=(const ClientConfig&) = default;
 
-    const Path& repo_root() const {
+    const fs::path& repo_root() const {
         return _repo_root;
     }
 
@@ -66,9 +65,13 @@ public:
         return _front_end_endpoint;
     }
 
+    boost::optional<util::Ed25519PublicKey> bt_resolver_pub_key() const {
+        return _bt_resolver_pub_key;
+    }
+
 private:
-    Path _repo_root;
-    Path _ouinet_conf_file = "ouinet-client.conf";
+    fs::path _repo_root;
+    fs::path _ouinet_conf_file = "ouinet-client.conf";
     asio::ip::tcp::endpoint _local_ep;
     boost::optional<Endpoint> _injector_ep;
     std::string _ipns;
@@ -79,6 +82,8 @@ private:
         = boost::posix_time::hours(7*24);  // one week
 
     std::map<std::string, std::string> _injector_credentials;
+
+    boost::optional<util::Ed25519PublicKey> _bt_resolver_pub_key;
 };
 
 inline
@@ -117,6 +122,9 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         ("front-end-ep"
          , po::value<string>()
          , "Front-end's endpoint (in <IP>:<PORT> format)")
+        ("bittorrent-resolver-public-key"
+         , po::value<string>()
+         , "Public key of the BitTorrent/BEP44 based resolver")
         ;
 
     po::variables_map vm;
@@ -223,6 +231,17 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         }
 
         set_credentials(util::str(*_injector_ep), cred);
+    }
+
+    if (vm.count("bittorrent-resolver-public-key")) {
+        string value = vm["bittorrent-resolver-public-key"].as<string>();
+
+        _bt_resolver_pub_key = util::Ed25519PublicKey::from_hex(value);
+
+        if (!_bt_resolver_pub_key) {
+            throw std::runtime_error(
+                    util::str("Failed parsing '", value, "' as Ed25519 public key"));
+        }
     }
 }
 
