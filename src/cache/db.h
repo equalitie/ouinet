@@ -63,9 +63,7 @@ private:
 
 class InjectorDb {
 public:
-    InjectorDb( asio_ipfs::node&
-              , bittorrent::MainlineDht&
-              , fs::path path_to_repo);
+    InjectorDb(asio_ipfs::node&, Republisher&, fs::path path_to_repo);
 
     void update(std::string key, std::string content_hash, asio::yield_context);
 
@@ -87,7 +85,7 @@ private:
     const fs::path _path_to_repo;
     std::string _ipns;
     asio_ipfs::node& _ipfs_node;
-    std::unique_ptr<Republisher> _republisher;
+    Republisher& _republisher;
     ConditionVariable _has_callbacks;
     std::list<std::function<void(sys::error_code)>> _upload_callbacks;
     std::shared_ptr<bool> _was_destroyed;

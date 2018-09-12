@@ -8,6 +8,7 @@
 #include <asio_ipfs.h>
 #include "db.h"
 #include "get_content.h"
+#include "republisher.h"
 #include "../bittorrent/dht.h"
 
 using namespace std;
@@ -17,7 +18,8 @@ namespace bt = ouinet::bittorrent;
 CacheInjector::CacheInjector(asio::io_service& ios, fs::path path_to_repo)
     : _ipfs_node(new asio_ipfs::node(ios, (path_to_repo/"ipfs").native()))
     , _bt_dht(new bt::MainlineDht(ios))
-    , _db(new InjectorDb(*_ipfs_node, *_bt_dht, path_to_repo))
+    , _republisher(new Republisher(*_ipfs_node, *_bt_dht))
+    , _db(new InjectorDb(*_ipfs_node, *_republisher, path_to_repo))
     , _was_destroyed(make_shared<bool>(false))
 {
     asio::spawn(ios, [this, wd = _was_destroyed] (asio::yield_context yield) {

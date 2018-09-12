@@ -17,6 +17,7 @@ namespace ouinet { namespace bittorrent { class MainlineDht; }}
 namespace ouinet {
 
 class InjectorDb;
+class Republisher;
 
 class CacheInjector {
 public:
@@ -85,6 +86,7 @@ private:
 private:
     std::unique_ptr<asio_ipfs::node> _ipfs_node;
     std::unique_ptr<bittorrent::MainlineDht> _bt_dht;
+    std::unique_ptr<Republisher> _republisher;
     std::unique_ptr<InjectorDb> _db;
     std::queue<InsertEntry> _insert_queue;
     const unsigned int _concurrency = 8;
