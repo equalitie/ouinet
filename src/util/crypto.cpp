@@ -17,7 +17,7 @@ namespace util {
 void crypto_init()
 {
     if (!::gcry_check_version(GCRYPT_VERSION)) {
-        throw std::exception();
+        throw std::runtime_error("Error: Incompatible gcrypt version");
     }
 }
 
