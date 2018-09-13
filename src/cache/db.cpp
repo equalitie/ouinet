@@ -159,16 +159,14 @@ void InjectorDb::update(string key, string value, asio::yield_context yield)
     if (!ec && *wd) ec = asio::error::operation_aborted;
     if (ec) return or_throw(yield, ec);
 
-    upload_database(yield[ec]);
+    publish(_db_map->root_hash());
 
     if (!ec && *wd) ec = asio::error::operation_aborted;
     return or_throw(yield, ec);
 }
 
-void InjectorDb::upload_database(asio::yield_context yield)
+void InjectorDb::publish(string db_ipfs_id)
 {
-    string db_ipfs_id = _db_map->root_hash();
-
     if (db_ipfs_id.empty()) {
         return;
     }

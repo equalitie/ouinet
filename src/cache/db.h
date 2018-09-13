@@ -78,7 +78,7 @@ public:
     ~InjectorDb();
 
 private:
-    void upload_database(asio::yield_context);
+    void publish(std::string);
     void continuously_upload_db(asio::yield_context);
 
 private:
