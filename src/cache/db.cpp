@@ -52,10 +52,10 @@ static string path_to_db(const fs::path& path_to_repo, const string& ipns)
     return (path_to_repo / ("ipfs_cache_db." + ipns)).native();
 }
 
-static void load_db( BTree& db_map
-                   , const fs::path& path_to_repo
-                   , const string& ipns
-                   , asio::yield_context yield)
+static void load_db_from_disk( BTree& db_map
+                             , const fs::path& path_to_repo
+                             , const string& ipns
+                             , asio::yield_context yield)
 {
     string path = path_to_db(path_to_repo, ipns);
 
@@ -87,9 +87,9 @@ static void load_db( BTree& db_map
     }
 }
 
-static void save_db( const fs::path& path_to_repo
-                   , const string& ipns
-                   , const string& ipfs)
+static void save_db_to_disk( const fs::path& path_to_repo
+                           , const string& ipns
+                           , const string& ipfs)
 {
     string path = path_to_db(path_to_repo, ipns);
 
@@ -115,13 +115,18 @@ ClientDb::ClientDb(asio_ipfs::node& ipfs_node, fs::path path_to_repo, string ipn
                                 , nullptr
                                 , nullptr
                                 , BTREE_NODE_SIZE))
+    , _resolver(ipfs_node, _ipns, [this](string cid, asio::yield_context yield)
+                                  { on_resolve(move(cid), yield); })
 {
     auto d = _was_destroyed;
+
     asio::spawn(get_io_service(), [=](asio::yield_context yield) {
             if (*d) return;
-            load_db(*_db_map, _path_to_repo, _ipns, yield);
-            if (*d) return;
-            continuously_download_db(yield);
+
+            // Already loaded?
+            if (!_db_map->root_hash().empty()) return;
+
+            load_db_from_disk(*_db_map, _path_to_repo, _ipns, yield);
         });
 }
 
@@ -143,7 +148,11 @@ InjectorDb::InjectorDb( asio_ipfs::node& ipfs_node
 
     asio::spawn(get_io_service(), [=](asio::yield_context yield) {
             if (*d) return;
-            load_db(*_db_map, _path_to_repo, _ipns, yield);
+
+            // Already loaded?
+            if (!_db_map->root_hash().empty()) return;
+
+            load_db_from_disk(*_db_map, _path_to_repo, _ipns, yield);
         });
 }
 
@@ -171,7 +180,7 @@ void InjectorDb::publish(string db_ipfs_id)
         return;
     }
 
-    save_db(_path_to_repo, _ipns, db_ipfs_id);
+    save_db_to_disk(_path_to_repo, _ipns, db_ipfs_id);
 
     _publisher.publish(move(db_ipfs_id));
 }
@@ -197,44 +206,23 @@ string ClientDb::query(string key, asio::yield_context yield)
     return query_(move(key), *_db_map, yield);
 }
 
-void ClientDb::continuously_download_db(asio::yield_context yield)
+void ClientDb::on_resolve(string ipfs_id, asio::yield_context yield)
 {
     auto d = _was_destroyed;
 
-    while(true) {
-        sys::error_code ec;
+    sys::error_code ec;
 
-        LOG_DEBUG("resolving IPNS address: " + _ipns);
-        auto ipfs_id = _ipfs_node.resolve(_ipns, yield[ec]);
-        if (*d) return;
+    LOG_DEBUG("IPNS ID has been resolved successfully to " + ipfs_id);
 
-        if (!ec) {
-          LOG_DEBUG("IPNS ID has been resolved successfully to " + ipfs_id);
-          _ipfs = ipfs_id;
+    _ipfs = ipfs_id;
 
-          _db_map->load(ipfs_id, yield[ec]);
+    _db_map->load(ipfs_id, yield[ec]);
 
-          if (*d) return;
-        } else {
-          LOG_ERROR("Error in resolving IPNS: " + ec.message());
-          
-        }
+    if (*d || ec) return;
 
-        save_db(_path_to_repo, _ipns, ipfs_id);
+    save_db_to_disk(_path_to_repo, _ipns, ipfs_id);
 
-        if (ec) {
-            _download_timer.expires_from_now(chrono::seconds(5));
-            _download_timer.async_wait(yield[ec]);
-            if (*d) return;
-            continue;
-        }
-
-        flush_db_update_callbacks(sys::error_code());
-
-        _download_timer.expires_from_now(chrono::seconds(5));
-        _download_timer.async_wait(yield[ec]);
-        if (*d) return;
-    }
+    flush_db_update_callbacks(sys::error_code());
 }
 
 void ClientDb::wait_for_db_update(asio::yield_context yield)

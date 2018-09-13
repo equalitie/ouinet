@@ -13,6 +13,7 @@
 
 #include "../namespaces.h"
 #include "../util/condition_variable.h"
+#include "resolver.h"
 
 namespace asio_ipfs { class node; }
 namespace ouinet { namespace bittorrent { class MainlineDht; }}
@@ -46,7 +47,7 @@ private:
     void merge(const Json&);
 
     Json download_database(const std::string& ipns, sys::error_code&, asio::yield_context);
-    void continuously_download_db(asio::yield_context);
+    void on_resolve(std::string cid, asio::yield_context);
 
     void flush_db_update_callbacks(const sys::error_code&);
 
@@ -59,6 +60,7 @@ private:
     asio::steady_timer _download_timer;
     std::queue<OnDbUpdate> _on_db_update_callbacks;
     std::unique_ptr<BTree> _db_map;
+    Resolver _resolver;
 };
 
 class InjectorDb {
