@@ -6,6 +6,7 @@
 #include <boost/asio/steady_timer.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/optional.hpp>
 #include <string>
 #include <queue>
 #include <list>
@@ -17,6 +18,7 @@
 
 namespace asio_ipfs { class node; }
 namespace ouinet { namespace bittorrent { class MainlineDht; }}
+namespace ouinet { namespace util { class Ed25519PublicKey; }}
 
 namespace ouinet {
 
@@ -28,7 +30,11 @@ class ClientDb {
     using OnDbUpdate = std::function<void(const sys::error_code&)>;
 
 public:
-    ClientDb(asio_ipfs::node&, fs::path path_to_repo, std::string ipns);
+    ClientDb( asio_ipfs::node&
+            , std::string ipns
+            , bittorrent::MainlineDht& bt_dht
+            , boost::optional<util::Ed25519PublicKey> bt_publish_pubkey
+            , fs::path path_to_repo);
 
     std::string query(std::string key, asio::yield_context);
 

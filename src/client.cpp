@@ -847,6 +847,7 @@ void Client::State::setup_ipfs_cache()
             sys::error_code ec;
             _ipfs_cache = CacheClient::build(_ios
                                             , ipns
+                                            , _config.bt_resolver_pub_key()
                                             , _config.repo_root()
                                             , cancel
                                             , yield[ec]);

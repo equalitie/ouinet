@@ -4,6 +4,7 @@
 #include <boost/asio/io_service.hpp>
 #include <boost/system/error_code.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/optional.hpp>
 #include <functional>
 #include <memory>
 #include <string>
@@ -12,9 +13,9 @@
 #include "cached_content.h"
 #include "../namespaces.h"
 
-namespace asio_ipfs {
-    class node;
-}
+namespace asio_ipfs { class node; }
+namespace ouinet { namespace bittorrent { class MainlineDht; }}
+namespace ouinet { namespace util { class Ed25519PublicKey; }}
 
 namespace ouinet {
 
@@ -23,17 +24,20 @@ using Json = nlohmann::json;
 
 class CacheClient {
 public:
-    static std::unique_ptr<CacheClient> build( boost::asio::io_service&
-                                             , std::string ipns
-                                             , fs::path path_to_repo
-                                             , std::function<void()>& cancel
-                                             , boost::asio::yield_context);
+    static std::unique_ptr<CacheClient>
+    build ( boost::asio::io_service&
+          , std::string ipns
+          , boost::optional<util::Ed25519PublicKey> bt_publish_pubkey
+          , fs::path path_to_repo
+          , std::function<void()>& cancel
+          , boost::asio::yield_context);
 
     // This constructor may do repository initialization disk IO and as such
     // may block for a second or more. If that is undesirable, use the above
     // static async `build` function instead.
     CacheClient( boost::asio::io_service&
                , std::string ipns
+               , boost::optional<util::Ed25519PublicKey> bt_publish_pubkey
                , fs::path path_to_repo);
 
     CacheClient(const CacheClient&) = delete;
@@ -69,11 +73,15 @@ public:
     ~CacheClient();
 
 private:
-    CacheClient(asio_ipfs::node, std::string ipns, fs::path path_to_repo);
+    CacheClient( asio_ipfs::node
+               , std::string ipns
+               , boost::optional<util::Ed25519PublicKey> bt_publish_pubkey
+               , fs::path path_to_repo);
 
 private:
     fs::path _path_to_repo;
     std::unique_ptr<asio_ipfs::node> _ipfs_node;
+    std::unique_ptr<bittorrent::MainlineDht> _bt_dht;
     std::unique_ptr<ClientDb> _db;
 };
 

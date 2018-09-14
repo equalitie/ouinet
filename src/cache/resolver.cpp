@@ -5,6 +5,7 @@
 
 using namespace std;
 using namespace ouinet;
+using boost::optional;
 
 struct Resolver::Loop : std::enable_shared_from_this<Loop> {
     bool was_stopped = false;
@@ -63,14 +64,15 @@ struct Resolver::Loop : std::enable_shared_from_this<Loop> {
 };
 
 Resolver::Resolver( asio_ipfs::node& ipfs_node
-                  , const string& key
+                  , const string& ipns
+                  , const optional<util::Ed25519PublicKey>&
                   , OnResolve on_resolve)
-    : _loop(make_shared<Loop>(key, ipfs_node, move(on_resolve)))
+    : _ipfs_loop(make_shared<Loop>(ipns, ipfs_node, move(on_resolve)))
 {
-    _loop->start();
+    _ipfs_loop->start();
 }
 
 Resolver::~Resolver()
 {
-    _loop->stop();
+    _ipfs_loop->stop();
 }

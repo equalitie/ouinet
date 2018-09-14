@@ -15,6 +15,7 @@
 using namespace std;
 using namespace ouinet;
 namespace bt = ouinet::bittorrent;
+using boost::optional;
 
 static const unsigned int BTREE_NODE_SIZE=64;
 
@@ -105,7 +106,11 @@ static void save_db_to_disk( const fs::path& path_to_repo
 }
 
 
-ClientDb::ClientDb(asio_ipfs::node& ipfs_node, fs::path path_to_repo, string ipns)
+ClientDb::ClientDb( asio_ipfs::node& ipfs_node
+                  , string ipns
+                  , bt::MainlineDht& bt_dht
+                  , optional<util::Ed25519PublicKey> bt_publish_pubkey
+                  , fs::path path_to_repo)
     : _path_to_repo(move(path_to_repo))
     , _ipns(move(ipns))
     , _ipfs_node(ipfs_node)
@@ -115,8 +120,11 @@ ClientDb::ClientDb(asio_ipfs::node& ipfs_node, fs::path path_to_repo, string ipn
                                 , nullptr
                                 , nullptr
                                 , BTREE_NODE_SIZE))
-    , _resolver(ipfs_node, _ipns, [this](string cid, asio::yield_context yield)
-                                  { on_resolve(move(cid), yield); })
+    , _resolver( ipfs_node
+               , _ipns
+               , bt_publish_pubkey
+               , [this](string cid, asio::yield_context yield)
+                 { on_resolve(move(cid), yield); })
 {
     auto d = _was_destroyed;
 
