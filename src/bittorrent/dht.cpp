@@ -1837,8 +1837,9 @@ void dht::DhtNode::routing_bucket_fail_node( RoutingBucket* bucket
 
 
 
-MainlineDht::MainlineDht(asio::io_service& ios):
-    _ios(ios)
+MainlineDht::MainlineDht(asio::io_service& ios)
+    : _ios(ios)
+    , _was_destroyed(std::make_shared<bool>(false))
 {
     /*
      * Refresh publications periodically.
@@ -1894,6 +1895,7 @@ MainlineDht::MainlineDht(asio::io_service& ios):
 
 MainlineDht::~MainlineDht()
 {
+    *_was_destroyed = true;
     _terminate_signal();
 }
 
@@ -1931,6 +1933,14 @@ void MainlineDht::set_interfaces( const std::vector<asio::ip::address>& addresse
 }
 
 
+void MainlineDht::set_interfaces(const std::vector<asio::ip::address>& addresses)
+{
+    asio::spawn(_ios, [=, wd = _was_destroyed] (asio::yield_context yield) {
+            if (*wd) return;
+            sys::error_code ec;
+            set_interfaces(addresses, yield[ec]);
+        });
+}
 
 std::set<tcp::endpoint> MainlineDht::tracker_announce_start(NodeID infohash, boost::optional<int> port, asio::yield_context yield)
 {

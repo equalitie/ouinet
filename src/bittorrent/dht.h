@@ -281,6 +281,7 @@ class MainlineDht {
     ~MainlineDht();
 
     void set_interfaces(const std::vector<asio::ip::address>& addresses, asio::yield_context);
+    void set_interfaces(const std::vector<asio::ip::address>& addresses);
 
     /*
      * TODO: These _start functions probably need cancellation support.
@@ -321,6 +322,7 @@ class MainlineDht {
     std::map<asio::ip::address, std::unique_ptr<dht::DhtNode>> _nodes;
     dht::DhtPublications _publications;
     Signal<void()> _terminate_signal;
+    std::shared_ptr<bool> _was_destroyed;
 };
 
 } // bittorrent namespace

@@ -28,11 +28,7 @@ CacheInjector::CacheInjector
     , _db(new InjectorDb(*_ipfs_node, *_publisher, path_to_repo))
     , _was_destroyed(make_shared<bool>(false))
 {
-    asio::spawn(ios, [this, wd = _was_destroyed] (asio::yield_context yield) {
-            if (*wd) return;
-            sys::error_code ec;
-            _bt_dht->set_interfaces({asio::ip::address_v4::any()}, yield[ec]);
-        });
+    _bt_dht->set_interfaces({asio::ip::address_v4::any()});
 }
 
 string CacheInjector::id() const
