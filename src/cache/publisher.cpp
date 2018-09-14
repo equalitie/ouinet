@@ -102,11 +102,9 @@ bt::MutableDataItem bt_mutable_data( const string& cid
     Time unix_epoch(boost::gregorian::date(1970, 1, 1));
     Time ts = boost::posix_time::microsec_clock::universal_time();
 
-    string key_hash = util::bytes::to_string(util::sha1(ipns));
-
     return bt::MutableDataItem::sign( cid
                                     , (ts - unix_epoch).total_milliseconds()
-                                    , key_hash
+                                    , ipns
                                     , private_key);
 }
 

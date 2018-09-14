@@ -122,6 +122,7 @@ ClientDb::ClientDb( asio_ipfs::node& ipfs_node
                                 , BTREE_NODE_SIZE))
     , _resolver( ipfs_node
                , _ipns
+               , bt_dht
                , bt_publish_pubkey
                , [this](string cid, asio::yield_context yield)
                  { on_resolve(move(cid), yield); })
@@ -220,7 +221,7 @@ void ClientDb::on_resolve(string ipfs_id, asio::yield_context yield)
 
     sys::error_code ec;
 
-    LOG_DEBUG("IPNS ID has been resolved successfully to " + ipfs_id);
+    if (_ipfs == ipfs_id) return;
 
     _ipfs = ipfs_id;
 

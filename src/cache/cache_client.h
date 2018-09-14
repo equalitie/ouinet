@@ -27,7 +27,7 @@ public:
     static std::unique_ptr<CacheClient>
     build ( boost::asio::io_service&
           , std::string ipns
-          , boost::optional<util::Ed25519PublicKey> bt_publish_pubkey
+          , boost::optional<util::Ed25519PublicKey> bt_bubkey
           , fs::path path_to_repo
           , std::function<void()>& cancel
           , boost::asio::yield_context);
@@ -37,7 +37,7 @@ public:
     // static async `build` function instead.
     CacheClient( boost::asio::io_service&
                , std::string ipns
-               , boost::optional<util::Ed25519PublicKey> bt_publish_pubkey
+               , boost::optional<util::Ed25519PublicKey> bt_bubkey
                , fs::path path_to_repo);
 
     CacheClient(const CacheClient&) = delete;
@@ -75,7 +75,7 @@ public:
 private:
     CacheClient( asio_ipfs::node
                , std::string ipns
-               , boost::optional<util::Ed25519PublicKey> bt_publish_pubkey
+               , boost::optional<util::Ed25519PublicKey> bt_bubkey
                , fs::path path_to_repo);
 
 private:
