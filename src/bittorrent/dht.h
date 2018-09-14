@@ -278,6 +278,10 @@ struct DhtPublications
 class MainlineDht {
     public:
     MainlineDht(asio::io_service& ios);
+
+    MainlineDht(const MainlineDht&) = delete;
+    MainlineDht& operator=(const MainlineDht&) = delete;
+
     ~MainlineDht();
 
     void set_interfaces(const std::vector<asio::ip::address>& addresses, asio::yield_context);

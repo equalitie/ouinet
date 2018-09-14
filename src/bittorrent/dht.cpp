@@ -134,9 +134,9 @@ std::set<tcp::endpoint> dht::DhtNode::tracker_announce(NodeID infohash, boost::o
 boost::optional<BencodedValue> dht::DhtNode::data_get_immutable(const NodeID& key, asio::yield_context yield)
 {
     /*
-     * This is a ProximitySet, really. The bool carries no data.
+     * This is a ProximitySet, really.
      */
-    ProximityMap<bool> responsible_nodes(key, RESPONSIBLE_TRACKERS_PER_SWARM);
+    ProximityMap<boost::none_t> responsible_nodes(key, RESPONSIBLE_TRACKERS_PER_SWARM);
     boost::optional<BencodedValue> data;
 
     collect(key, [&](const Contact& candidate , asio::yield_context yield)
@@ -169,7 +169,7 @@ boost::optional<BencodedValue> dht::DhtNode::data_get_immutable(const NodeID& ke
             BencodedMap& response = *response_;
 
             if (candidate.id) {
-                responsible_nodes.insert({ *candidate.id, true });
+                responsible_nodes.insert({ *candidate.id, boost::none });
             }
 
             if (response.count("v")) {
@@ -264,9 +264,9 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
     NodeID target_id = _data_store->mutable_get_id(public_key, salt);
 
     /*
-     * This is a ProximitySet, really. The bool carries no data.
+     * This is a ProximitySet, really.
      */
-    ProximityMap<bool> responsible_nodes(target_id, RESPONSIBLE_TRACKERS_PER_SWARM);
+    ProximityMap<boost::none_t> responsible_nodes(target_id, RESPONSIBLE_TRACKERS_PER_SWARM);
     boost::optional<MutableDataItem> data;
 
     collect(target_id, [&](const Contact& candidate, asio::yield_context yield)
@@ -296,7 +296,7 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
             BencodedMap& response = *response_;
 
             if (candidate.id) {
-                responsible_nodes.insert({ *candidate.id, true });
+                responsible_nodes.insert({ *candidate.id, boost::none });
             }
 
             if (response["k"] != util::bytes::to_string(public_key.serialize())) {
