@@ -57,14 +57,15 @@ void detail::DhtWriteTokenStorage::expire()
 
 void detail::Swarm::add(tcp::endpoint endpoint)
 {
-    std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+    auto now = std::chrono::steady_clock::now();
     auto it = _peer_indices.find(endpoint);
+
     if (it == _peer_indices.end()) {
         Peer peer;
         peer.endpoint = endpoint;
         peer.last_seen = now;
-        _peers.push_back(peer);
         _peer_indices[endpoint] = _peers.size();
+        _peers.push_back(peer);
     } else {
         size_t index = it->second;
         assert(_peers[index].endpoint == endpoint);
