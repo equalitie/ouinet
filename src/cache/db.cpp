@@ -162,6 +162,8 @@ InjectorDb::InjectorDb( asio_ipfs::node& ipfs_node
             if (!_db_map->root_hash().empty()) return;
 
             load_db_from_disk(*_db_map, _path_to_repo, _ipns, yield);
+
+            publish(_db_map->root_hash());
         });
 }
 
