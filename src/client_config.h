@@ -69,7 +69,49 @@ public:
         return _bt_resolver_pub_key;
     }
 
+    bool is_help() const { return _is_help; }
+
+    boost::program_options::options_description description()
+    {
+        using namespace std;
+        namespace po = boost::program_options;
+
+        po::options_description desc;
+
+        desc.add_options()
+           ("help", "Produce this help message")
+           ("repo", po::value<string>(), "Path to the repository root")
+           ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen")
+           ("injector-ep"
+            , po::value<string>()
+            , "Injector's endpoint (either <IP>:<PORT> or I2P public key)")
+           ("injector-ipns"
+            , po::value<string>()->default_value("")
+            , "IPNS of the injector's database")
+           ("max-cached-age"
+            , po::value<int>()->default_value(_max_cached_age.total_seconds())
+            , "Discard cached content older than this many seconds "
+              "(0: discard all; -1: discard none)")
+           ("open-file-limit"
+            , po::value<unsigned int>()
+            , "To increase the maximum number of open files")
+           ("injector-credentials", po::value<string>()
+            , "<username>:<password> authentication pair for the injector")
+           ("enable-http-connect-requests", po::bool_switch(&_enable_http_connect_requests)
+            , "Enable HTTP CONNECT requests")
+           ("front-end-ep"
+            , po::value<string>()
+            , "Front-end's endpoint (in <IP>:<PORT> format)")
+           ("bittorrent-resolver-public-key"
+            , po::value<string>()
+            , "Public key of the BitTorrent/BEP44 based resolver")
+           ;
+
+        return desc;
+    }
+
 private:
+    bool _is_help = false;
     fs::path _repo_root;
     fs::path _ouinet_conf_file = "ouinet-client.conf";
     asio::ip::tcp::endpoint _local_ep;
@@ -96,40 +138,16 @@ ClientConfig::ClientConfig(int argc, char* argv[])
     namespace po = boost::program_options;
     namespace fs = boost::filesystem;
 
-    po::options_description desc("\nOptions");
-
-    desc.add_options()
-        ("help", "Produce this help message")
-        ("repo", po::value<string>(), "Path to the repository root")
-        ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen")
-        ("injector-ep"
-         , po::value<string>()
-         , "Injector's endpoint (either <IP>:<PORT> or I2P public key)")
-        ("injector-ipns"
-         , po::value<string>()->default_value("")
-         , "IPNS of the injector's database")
-        ("max-cached-age"
-         , po::value<int>()->default_value(_max_cached_age.total_seconds())
-         , "Discard cached content older than this many seconds "
-           "(0: discard all; -1: discard none)")
-        ("open-file-limit"
-         , po::value<unsigned int>()
-         , "To increase the maximum number of open files")
-        ("injector-credentials", po::value<string>()
-         , "<username>:<password> authentication pair for the injector")
-        ("enable-http-connect-requests", po::bool_switch(&_enable_http_connect_requests)
-         , "Enable HTTP CONNECT requests")
-        ("front-end-ep"
-         , po::value<string>()
-         , "Front-end's endpoint (in <IP>:<PORT> format)")
-        ("bittorrent-resolver-public-key"
-         , po::value<string>()
-         , "Public key of the BitTorrent/BEP44 based resolver")
-        ;
+    auto desc = description();
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
     po::notify(vm);
+
+    if (vm.count("help")) {
+        _is_help = true;
+        return;
+    }
 
     if (!vm.count("repo")) {
         throw std::runtime_error(

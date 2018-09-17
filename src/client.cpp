@@ -956,6 +956,12 @@ void Client::State::start(int argc, char* argv[])
         LOG_ABORT(e.what());
     }
 
+    if (_config.is_help()) {
+        cout << "Usage:" << endl;
+        cout << _config.description() << endl;
+        return;
+    }
+
 #ifndef __ANDROID__
     auto pid_path = get_pid_path();
     if (exists(pid_path)) {
