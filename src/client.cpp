@@ -8,6 +8,7 @@
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/ssl/stream.hpp>
+#include <boost/optional/optional_io.hpp>
 #include <lrucache.hpp>
 #include <iostream>
 #include <fstream>
@@ -825,7 +826,9 @@ void Client::State::setup_ipfs_cache()
         const string ipns = _config.ipns();
 
         {
-            LOG_DEBUG("Starting IPFS Cache with IPNS ID: " + ipns);
+            LOG_DEBUG("Starting IPFS Cache with IPNS ID: ", ipns);
+            LOG_DEBUG("And BitTorrent pubkey: ", _config.bt_resolver_pub_key());
+
             auto on_exit = defer([&] { _is_ipns_being_setup = false; });
 
             if (ipns.empty()) {
