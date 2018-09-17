@@ -80,7 +80,7 @@ public:
     void start(int argc, char* argv[]);
 
     void stop() {
-        _ipfs_cache = nullptr;
+        _cache = nullptr;
         _shutdown_signal();
         if (_injector) _injector->stop();
     }
@@ -134,7 +134,7 @@ private:
     cache::lru_cache<string, string> _ssl_certificate_cache;
     ClientConfig _config;
     std::unique_ptr<OuiServiceClient> _injector;
-    std::unique_ptr<CacheClient> _ipfs_cache;
+    std::unique_ptr<CacheClient> _cache;
 
     ClientFrontEnd _front_end;
     Signal<void()> _shutdown_signal;
@@ -149,7 +149,7 @@ string Client::State::maybe_start_seeding( const Request&  req
                                          , const Response& res
                                          , Yield yield)
 {
-    if (!_ipfs_cache)
+    if (!_cache)
         return or_throw<string>(yield, asio::error::operation_not_supported);
 
     const char* reason = "";
@@ -162,7 +162,7 @@ string Client::State::maybe_start_seeding( const Request&  req
         return {};
     }
 
-    return _ipfs_cache->ipfs_add
+    return _cache->ipfs_add
             ( util::str(CacheControl::filter_before_store(res))
             , yield);
 }
@@ -261,7 +261,7 @@ Client::State::fetch_stored( const Request& request
 
     const bool cache_is_disabled
         = !request_config.enable_cache
-       || !_ipfs_cache
+       || !_cache
        || !_front_end.is_ipfs_cache_enabled();
 
     if (cache_is_disabled) {
@@ -273,7 +273,7 @@ Client::State::fetch_stored( const Request& request
     // Get the content from cache
     auto key = request.target();
 
-    auto content = _ipfs_cache->get_content(key.to_string(), yield[ec]);
+    auto content = _cache->get_content(key.to_string(), yield[ec]);
 
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
@@ -281,7 +281,7 @@ Client::State::fetch_stored( const Request& request
     // an error should have been reported.
     assert(!content.ts.is_not_a_date_time());
 
-    auto res = descriptor::http_parse(*_ipfs_cache, content.data, yield[ec]);
+    auto res = descriptor::http_parse(*_cache, content.data, yield[ec]);
     return or_throw(yield, ec, CacheEntry{content.ts, res});
 }
 
@@ -442,7 +442,7 @@ Response Client::State::fetch_fresh( const Request& request
 
                 auto res = _front_end.serve( _config.injector_endpoint()
                                            , request
-                                           , _ipfs_cache.get()
+                                           , _cache.get()
                                            , *_ca_certificate
                                            , yield[ec].tag("serve_frontend"));
                 if (ec) {
@@ -830,12 +830,12 @@ void Client::State::setup_ipfs_cache()
 
             if (ipns.empty()) {
                 LOG_WARN("Support for IPFS Cache is disabled because we have not been provided with an IPNS id");
-                _ipfs_cache = nullptr;
+                _cache = nullptr;
                 return;
             }
 
-            if (_ipfs_cache) {
-                return _ipfs_cache->set_ipns(move(ipns));
+            if (_cache) {
+                return _cache->set_ipns(move(ipns));
             }
 
             function<void()> cancel;
@@ -845,12 +845,12 @@ void Client::State::setup_ipfs_cache()
             });
 
             sys::error_code ec;
-            _ipfs_cache = CacheClient::build(_ios
-                                            , ipns
-                                            , _config.bt_resolver_pub_key()
-                                            , _config.repo_root()
-                                            , cancel
-                                            , yield[ec]);
+            _cache = CacheClient::build(_ios
+                                       , ipns
+                                       , _config.bt_resolver_pub_key()
+                                       , _config.repo_root()
+                                       , cancel
+                                       , yield[ec]);
 
             if (ec) {
                 cerr << "Failed to build CacheClient: "
@@ -1047,7 +1047,7 @@ void Client::State::start(int argc, char* argv[])
 
                         auto rs = _front_end.serve( _config.injector_endpoint()
                                                   , rq
-                                                  , _ipfs_cache.get()
+                                                  , _cache.get()
                                                   , *_ca_certificate
                                                   , yield[ec]);
                         if (ec) return;
