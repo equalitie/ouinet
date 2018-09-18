@@ -6,6 +6,7 @@
 #include <boost/beast/version.hpp>
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/uuid/random_generator.hpp>
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -45,6 +46,7 @@ using namespace ouinet;
 
 using tcp         = asio::ip::tcp;
 using string_view = beast::string_view;
+using uuid_generator = boost::uuids::random_generator;
 using Request     = http::request<http::string_body>;
 using Response    = http::response<http::dynamic_body>;
 
@@ -220,6 +222,7 @@ static
 void serve( InjectorConfig& config
           , GenericConnection con
           , unique_ptr<CacheInjector>& injector
+          , uuid_generator& genuuid
           , Signal<void()>& close_connection_signal
           , asio::yield_context yield_)
 {
@@ -305,6 +308,8 @@ void listen( InjectorConfig& config
            , Signal<void()>& shutdown_signal
            , asio::yield_context yield)
 {
+    uuid_generator genuuid;
+
     auto stop_proxy_slot = shutdown_signal.connect([&proxy_server] {
         proxy_server.stop_listen();
     });
@@ -336,11 +341,13 @@ void listen( InjectorConfig& config
             &cache_injector,
             &shutdown_signal,
             &config,
+            &genuuid,
             lock = shutdown_connections.lock()
         ] (boost::asio::yield_context yield) mutable {
             serve( config
                  , std::move(connection)
                  , cache_injector
+                 , genuuid
                  , shutdown_signal
                  , yield);
         });
