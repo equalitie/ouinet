@@ -35,6 +35,7 @@
 #include "ouiservice/tcp.h"
 
 #include "util/timeout.h"
+#include "util/crypto.h"
 
 #include "logger.h"
 #include "defer.h"
@@ -349,6 +350,8 @@ void listen( InjectorConfig& config
 //------------------------------------------------------------------------------
 int main(int argc, const char* argv[])
 {
+    util::crypto_init();
+
     InjectorConfig config;
 
     try {
@@ -390,8 +393,10 @@ int main(int argc, const char* argv[])
 
     Signal<void()> shutdown_signal;
 
-    auto cache_injector
-        = make_unique<CacheInjector>(ios, (config.repo_root()/"ipfs").native());
+    auto cache_injector = std::make_unique<CacheInjector>
+                            ( ios
+                            , config.bt_publisher_private_key()
+                            , config.repo_root());
 
     auto shutdown_ipfs_slot = shutdown_signal.connect([&] {
         cache_injector = nullptr;

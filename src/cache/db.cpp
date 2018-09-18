@@ -1,6 +1,6 @@
 #include "db.h"
 #include <asio_ipfs.h>
-#include "republisher.h"
+#include "publisher.h"
 #include "btree.h"
 #include "../or_throw.h"
 
@@ -14,6 +14,8 @@
 
 using namespace std;
 using namespace ouinet;
+namespace bt = ouinet::bittorrent;
+using boost::optional;
 
 static const unsigned int BTREE_NODE_SIZE=64;
 
@@ -46,22 +48,23 @@ static BTree::RemoveOp make_remove_operation(asio_ipfs::node& ipfs_node)
     };
 }
 
-static string path_to_db(const string& path_to_repo, const string& ipns)
+static string path_to_db(const fs::path& path_to_repo, const string& ipns)
 {
-    return path_to_repo + "/ipfs_cache_db." + ipns;
+    return (path_to_repo / ("ipfs_cache_db." + ipns)).native();
 }
 
-static void load_db( BTree& db_map
-                   , const string& path_to_repo
-                   , const string& ipns
-                   , asio::yield_context yield)
+static void load_db_from_disk( BTree& db_map
+                             , const fs::path& path_to_repo
+                             , const string& ipns
+                             , asio::yield_context yield)
 {
     string path = path_to_db(path_to_repo, ipns);
 
     ifstream file(path);
 
     if (!file.is_open()) {
-        cerr << "Warning: Couldn't open " << path << endl;
+        cerr << "Warning: Couldn't open " << path
+             << "; Creating a new one" << endl;
         return;
     }
 
@@ -85,9 +88,9 @@ static void load_db( BTree& db_map
     }
 }
 
-static void save_db( const string& path_to_repo
-                   , const string& ipns
-                   , const string& ipfs)
+static void save_db_to_disk( const fs::path& path_to_repo
+                           , const string& ipns
+                           , const string& ipfs)
 {
     string path = path_to_db(path_to_repo, ipns);
 
@@ -103,7 +106,11 @@ static void save_db( const string& path_to_repo
 }
 
 
-ClientDb::ClientDb(asio_ipfs::node& ipfs_node, string path_to_repo, string ipns)
+ClientDb::ClientDb( asio_ipfs::node& ipfs_node
+                  , string ipns
+                  , bt::MainlineDht& bt_dht
+                  , optional<util::Ed25519PublicKey> bt_publish_pubkey
+                  , fs::path path_to_repo)
     : _path_to_repo(move(path_to_repo))
     , _ipns(move(ipns))
     , _ipfs_node(ipfs_node)
@@ -113,21 +120,32 @@ ClientDb::ClientDb(asio_ipfs::node& ipfs_node, string path_to_repo, string ipns)
                                 , nullptr
                                 , nullptr
                                 , BTREE_NODE_SIZE))
+    , _resolver( ipfs_node
+               , _ipns
+               , bt_dht
+               , bt_publish_pubkey
+               , [this](string cid, asio::yield_context yield)
+                 { on_resolve(move(cid), yield); })
 {
     auto d = _was_destroyed;
+
     asio::spawn(get_io_service(), [=](asio::yield_context yield) {
             if (*d) return;
-            load_db(*_db_map, _path_to_repo, _ipns, yield);
-            if (*d) return;
-            continuously_download_db(yield);
+
+            // Already loaded?
+            if (!_db_map->root_hash().empty()) return;
+
+            load_db_from_disk(*_db_map, _path_to_repo, _ipns, yield);
         });
 }
 
-InjectorDb::InjectorDb(asio_ipfs::node& ipfs_node, string path_to_repo)
+InjectorDb::InjectorDb( asio_ipfs::node& ipfs_node
+                      , Publisher& publisher
+                      , fs::path path_to_repo)
     : _path_to_repo(move(path_to_repo))
     , _ipns(ipfs_node.id())
     , _ipfs_node(ipfs_node)
-    , _republisher(new Republisher(_ipfs_node))
+    , _publisher(publisher)
     , _has_callbacks(_ipfs_node.get_io_service())
     , _was_destroyed(make_shared<bool>(false))
     , _db_map(make_unique<BTree>( make_cat_operation(ipfs_node)
@@ -139,7 +157,13 @@ InjectorDb::InjectorDb(asio_ipfs::node& ipfs_node, string path_to_repo)
 
     asio::spawn(get_io_service(), [=](asio::yield_context yield) {
             if (*d) return;
-            load_db(*_db_map, _path_to_repo, _ipns, yield);
+
+            // Already loaded?
+            if (!_db_map->root_hash().empty()) return;
+
+            load_db_from_disk(*_db_map, _path_to_repo, _ipns, yield);
+
+            publish(_db_map->root_hash());
         });
 }
 
@@ -155,23 +179,21 @@ void InjectorDb::update(string key, string value, asio::yield_context yield)
     if (!ec && *wd) ec = asio::error::operation_aborted;
     if (ec) return or_throw(yield, ec);
 
-    upload_database(yield[ec]);
+    publish(_db_map->root_hash());
 
     if (!ec && *wd) ec = asio::error::operation_aborted;
     return or_throw(yield, ec);
 }
 
-void InjectorDb::upload_database(asio::yield_context yield)
+void InjectorDb::publish(string db_ipfs_id)
 {
-    string db_ipfs_id = _db_map->root_hash();
-
     if (db_ipfs_id.empty()) {
         return;
     }
 
-    save_db(_path_to_repo, _ipns, db_ipfs_id);
+    save_db_to_disk(_path_to_repo, _ipns, db_ipfs_id);
 
-    _republisher->publish(move(db_ipfs_id), yield);
+    _publisher.publish(move(db_ipfs_id));
 }
 
 static string query_(string key, BTree& db, asio::yield_context yield)
@@ -195,44 +217,23 @@ string ClientDb::query(string key, asio::yield_context yield)
     return query_(move(key), *_db_map, yield);
 }
 
-void ClientDb::continuously_download_db(asio::yield_context yield)
+void ClientDb::on_resolve(string ipfs_id, asio::yield_context yield)
 {
     auto d = _was_destroyed;
 
-    while(true) {
-        sys::error_code ec;
+    sys::error_code ec;
 
-        LOG_DEBUG("resolving IPNS address: " + _ipns);
-        auto ipfs_id = _ipfs_node.resolve(_ipns, yield[ec]);
-        if (*d) return;
+    if (_ipfs == ipfs_id) return;
 
-        if (!ec) {
-          LOG_DEBUG("IPNS ID has been resolved successfully to " + ipfs_id);
-          _ipfs = ipfs_id;
+    _ipfs = ipfs_id;
 
-          _db_map->load(ipfs_id, yield[ec]);
+    _db_map->load(ipfs_id, yield[ec]);
 
-          if (*d) return;
-        } else {
-          LOG_ERROR("Error in resolving IPNS: " + ec.message());
-          
-        }
+    if (*d || ec) return;
 
-        save_db(_path_to_repo, _ipns, ipfs_id);
+    save_db_to_disk(_path_to_repo, _ipns, ipfs_id);
 
-        if (ec) {
-            _download_timer.expires_from_now(chrono::seconds(5));
-            _download_timer.async_wait(yield[ec]);
-            if (*d) return;
-            continue;
-        }
-
-        flush_db_update_callbacks(sys::error_code());
-
-        _download_timer.expires_from_now(chrono::seconds(5));
-        _download_timer.async_wait(yield[ec]);
-        if (*d) return;
-    }
+    flush_db_update_callbacks(sys::error_code());
 }
 
 void ClientDb::wait_for_db_update(asio::yield_context yield)

@@ -8,6 +8,8 @@
 
 #define private public
 #include <bittorrent/node_id.h>
+#include <bittorrent/dht.h>
+#include <bittorrent/code.h>
 
 BOOST_AUTO_TEST_SUITE(bittorrent)
 
@@ -30,6 +32,40 @@ BOOST_AUTO_TEST_CASE(test_generate_node_id)
     auto id = NodeID::generate(ip, 1).to_hex();
     BOOST_REQUIRE_EQUAL(id.substr(0, 6), "5fbfbf");
     BOOST_REQUIRE_EQUAL(id.substr(38), "01");
+}
+
+static tcp::endpoint as_tcp(udp::endpoint ep) {
+    return { ep.address(), ep.port() };
+}
+
+BOOST_AUTO_TEST_CASE(test_bep_5)
+{
+    using namespace ouinet::bittorrent::dht;
+
+    asio::io_service ios;
+
+    DhtNode dht(ios, asio::ip::make_address("0.0.0.0")); // TODO: IPv6
+
+    asio::spawn(ios, [&] (auto yield) {
+        sys::error_code ec;
+
+        NodeID infohash = util::sha1("ouinet-test-" + to_string(time(0)));
+
+        dht.start(yield[ec]);
+        BOOST_REQUIRE(!ec);
+
+        dht.tracker_announce(infohash, dht.wan_endpoint().port(), yield[ec]);
+        BOOST_REQUIRE(!ec);
+
+        auto peers = dht.tracker_get_peers(infohash , yield[ec]);
+        BOOST_REQUIRE(!ec);
+
+        BOOST_REQUIRE(peers.count(as_tcp(dht.wan_endpoint())));
+
+        dht.stop();
+    });
+
+    ios.run();
 }
 
 BOOST_AUTO_TEST_SUITE_END()

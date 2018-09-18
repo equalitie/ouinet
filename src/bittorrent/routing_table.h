@@ -14,7 +14,14 @@ struct NodeContact {
     asio::ip::udp::endpoint endpoint;
 
     std::string to_string() const;
-    inline bool operator==(const NodeContact& other) const { return id == other.id && endpoint == other.endpoint; }
+
+    bool operator==(const NodeContact& other) const {
+        return id == other.id && endpoint == other.endpoint;
+    }
+
+    bool operator<(const NodeContact& other) const {
+        return std::tie(id, endpoint) < std::tie(other.id, other.endpoint);
+    }
 };
 
 struct RoutingNode {

@@ -1,11 +1,12 @@
 #include "bencoding.h"
+#include "../util/bytes.h"
 
 namespace ouinet {
 namespace bittorrent {
 
 struct BencodedValueVisitor : public boost::static_visitor<std::string> {
     std::string operator()(const int64_t& value) {
-        return std::string("i") + std::to_string(value) + std::string("d");
+        return std::string("i") + std::to_string(value) + std::string("e");
     }
 
     std::string operator()(const std::string& value) {
@@ -124,6 +125,14 @@ boost::optional<BencodedValue> destructive_parse_value(std::string& encoded)
             if (!value) {
                 return boost::none;
             }
+            /*
+             * key/value pairs MUST be in ascending key order.
+             */
+            if (!output.empty()) {
+                if (output.rbegin()->first >= key) {
+                    return boost::none;
+                }
+            }
             output[std::move(*key)] = std::move(*value);
         }
         if (encoded.size() == 0) {
@@ -140,6 +149,43 @@ boost::optional<BencodedValue> destructive_parse_value(std::string& encoded)
 boost::optional<BencodedValue> bencoding_decode(std::string encoded)
 {
     return destructive_parse_value(encoded);
+}
+
+std::ostream& operator<<(std::ostream& os, const BencodedValue& value)
+{
+    struct Visitor {
+        std::ostream& os;
+
+        void operator()(const int64_t& value) {
+            os << std::to_string(value);
+        }
+
+        void operator()(const std::string& value) {
+            os << "\"" << util::bytes::to_printable(value) << "\"";
+        }
+
+        void operator()(const BencodedList& value) {
+            os << "[";
+            for (auto i = value.begin(); i != value.end(); ++i) {
+                os << *i;
+                if (std::next(i) != value.end()) os << ", ";
+            }
+            os << "]";
+        }
+
+        void operator()(const BencodedMap& value) {
+            os << "{";
+            for (auto i = value.begin(); i != value.end(); ++i) {
+                os << i->first << ":" << i->second;
+                if (std::next(i) != value.end()) os << ", ";
+            }
+            os << "}";
+        }
+    };
+
+    Visitor visitor{os};
+    boost::apply_visitor(visitor, value);
+    return os;
 }
 
 } // bittorrent namespace

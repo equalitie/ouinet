@@ -1,5 +1,4 @@
 #include "request_routing.h"
-#include "error.h"
 
 using namespace ouinet;
 

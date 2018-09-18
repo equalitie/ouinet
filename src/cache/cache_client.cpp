@@ -3,18 +3,25 @@
 #include "db.h"
 #include "get_content.h"
 #include "../or_throw.h"
+#include "../bittorrent/dht.h"
+#include "../util/crypto.h"
 
 using namespace std;
 using namespace ouinet;
 
 namespace asio = boost::asio;
 namespace sys  = boost::system;
+namespace bt   = ouinet::bittorrent;
 
-unique_ptr<CacheClient> CacheClient::build( asio::io_service& ios
-                                          , string ipns
-                                          , string path_to_repo
-                                          , function<void()>& cancel
-                                          , asio::yield_context yield)
+using boost::optional;
+
+unique_ptr<CacheClient>
+CacheClient::build( asio::io_service& ios
+                  , string ipns
+                  , optional<util::Ed25519PublicKey> bt_bubkey
+                  , fs::path path_to_repo
+                  , function<void()>& cancel
+                  , asio::yield_context yield)
 {
     using ClientP = unique_ptr<CacheClient>;
 
@@ -28,7 +35,9 @@ unique_ptr<CacheClient> CacheClient::build( asio::io_service& ios
     };
 
     sys::error_code ec;
-    auto ipfs_node = asio_ipfs::node::build(ios, path_to_repo, yield[ec]);
+    auto ipfs_node = asio_ipfs::node::build( ios
+                                           , (path_to_repo/"ipfs").native()
+                                           , yield[ec]);
 
     cancel = nullptr;
 
@@ -38,27 +47,42 @@ unique_ptr<CacheClient> CacheClient::build( asio::io_service& ios
 
     if (ec) return or_throw<ClientP>(yield, ec);
 
-    return ClientP(new CacheClient(move(*ipfs_node)
-                  , move(ipns)
-                  , move(path_to_repo)));
+    return ClientP(new CacheClient( move(*ipfs_node)
+                                  , move(ipns)
+                                  , std::move(bt_bubkey)
+                                  , move(path_to_repo)));
 }
 
 CacheClient::CacheClient( asio_ipfs::node ipfs_node
                         , string ipns
-                        , string path_to_repo)
+                        , optional<util::Ed25519PublicKey> bt_bubkey
+                        , fs::path path_to_repo)
     : _path_to_repo(move(path_to_repo))
     , _ipfs_node(new asio_ipfs::node(move(ipfs_node)))
-    , _db(new ClientDb(*_ipfs_node, _path_to_repo, ipns))
+    , _bt_dht(new bt::MainlineDht(_ipfs_node->get_io_service()))
+    , _db(new ClientDb( *_ipfs_node
+                      , ipns
+                      , *_bt_dht
+                      , bt_bubkey
+                      , _path_to_repo))
 {
+    _bt_dht->set_interfaces({asio::ip::address_v4::any()});
 }
 
 CacheClient::CacheClient( boost::asio::io_service& ios
                         , string ipns
-                        , string path_to_repo)
+                        , optional<util::Ed25519PublicKey> bt_bubkey
+                        , fs::path path_to_repo)
     : _path_to_repo(move(path_to_repo))
-    , _ipfs_node(new asio_ipfs::node(ios, _path_to_repo))
-    , _db(new ClientDb(*_ipfs_node, _path_to_repo, ipns))
+    , _ipfs_node(new asio_ipfs::node(ios, (_path_to_repo/"ipfs").native()))
+    , _bt_dht(new bt::MainlineDht(ios))
+    , _db(new ClientDb( *_ipfs_node
+                      , ipns
+                      , *_bt_dht
+                      , bt_bubkey
+                      , _path_to_repo))
 {
+    _bt_dht->set_interfaces({asio::ip::address_v4::any()});
 }
 
 string CacheClient::ipfs_add(const string& data, asio::yield_context yield)
@@ -83,7 +107,8 @@ void CacheClient::wait_for_db_update(boost::asio::yield_context yield)
 
 void CacheClient::set_ipns(std::string ipns)
 {
-    _db.reset(new ClientDb(*_ipfs_node, _path_to_repo, move(ipns)));
+    assert(0 && "TODO");
+    //_db.reset(new ClientDb(*_ipfs_node, _path_to_repo, move(ipns)));
 }
 
 std::string CacheClient::id() const

@@ -99,6 +99,8 @@ void UdpMultiplexer::SendLoop::start() {
                 queue_cv.wait(yield[ec]);
             }
 
+            if (stopped) break;
+
             auto& entry = queue.front();
             queue.pop_front();
             entry(yield);

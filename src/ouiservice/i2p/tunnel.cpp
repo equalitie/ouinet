@@ -1,7 +1,5 @@
 #include <I2PService.h>
 
-#include "../../blocker.h"
-
 #include "../../logger.h"
 #include "../../defer.h"
 #include "../../or_throw.h"

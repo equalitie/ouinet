@@ -5,6 +5,7 @@
 #include <string>
 #include <array>
 #include "../namespaces.h"
+#include "../util/bytes.h"
 
 namespace ouinet { namespace bittorrent {
 
@@ -26,24 +27,36 @@ struct NodeID {
 
     Buffer buffer;
 
+    NodeID() = default;
+    NodeID(const NodeID& other) : buffer(other.buffer) {}
+    NodeID(const Buffer& buffer) : buffer(buffer) {}
+
     // XXX: `bit(0)` is the most signifficant, perhaps the function should be
     // called `rbit` ('r' for reverse)?
     bool bit(int n) const;
     void set_bit(int n, bool value);
 
-    std::string to_hex() const;
-    std::string to_bytestring() const;
-    static NodeID from_bytestring(const std::string& bytestring);
-    static const NodeID& zero();
+    std::string to_hex() const { return util::bytes::to_hex(buffer); }
+    static NodeID from_hex(const std::string& hex) { return NodeID{ util::bytes::to_array<uint8_t, size>(util::bytes::from_hex(hex)) }; }
+    std::string to_bytestring() const { return util::bytes::to_string(buffer); }
+    static NodeID from_bytestring(const std::string& bytestring) { return NodeID{ util::bytes::to_array<uint8_t, size>(bytestring) }; }
+    static NodeID zero();
 
     // http://bittorrent.org/beps/bep_0042.html
     static NodeID generate(asio::ip::address address);
 
     bool operator==(const NodeID& other) const { return buffer == other.buffer; }
+    bool operator<(const NodeID& other) const { return buffer < other.buffer; }
+
+    // Return true if `left` is closer to `this` than `right` is in the XOR
+    // metrics.
+    bool closer_to(const NodeID& left, const NodeID& right) const;
 
     private:
     static NodeID generate( asio::ip::address address
                           , boost::optional<uint8_t> test_rnd);
 };
+
+std::ostream& operator<<(std::ostream&, const NodeID&);
 
 }} // namespaces

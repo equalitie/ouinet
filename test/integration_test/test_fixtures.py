@@ -64,7 +64,7 @@ class TestFixtures:
     FIRST_CLIENT_CONF_FILE_CONTENT = "open-file-limit = 4096\n"
 
     IPNS_ID_ANNOUNCE_REGEX = "[\s\S]*IPNS DB: ([A-Za-z0-9]+)[\s\S]*"
-    START_OF_IPNS_RESOLUTION_REGEX = r'[\s\S]*resolving IPNS address: [\s\S]*'
+    START_OF_IPNS_RESOLUTION_REGEX = r'[\s\S]*Resolving IPNS address: [\s\S]*'
     IPFS_CACHE_READY_REGEX = r'[\s\S]*IPNS ID has been resolved successfully[\s\S]*'
     REQUEST_CACHED_REGEX = r'[\s\S]*Request was successfully published to cache[\s\S]*'
     NO_OF_CACHED_MESSAGES_REQUIRED = 1

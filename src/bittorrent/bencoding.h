@@ -10,6 +10,10 @@
 namespace ouinet {
 namespace bittorrent {
 
+/*
+ * http://www.bittorrent.org/beps/bep_0003.html#bencoding
+ */
+
 class BencodedValue;
 
 typedef std::vector<BencodedValue> BencodedList;
@@ -61,10 +65,30 @@ class BencodedValue : public detail::value {
         if (!v) return boost::none;
         return *v;
     }
+
+    bool operator==(const char* str) const {
+        auto opt_str = as_string();
+        return opt_str && *opt_str == str;
+    }
+
+    bool operator!=(const char* str) const {
+        return !(*this == str);
+    }
+
+    bool operator==(const std::string& str) const {
+        auto opt_str = as_string();
+        return opt_str && *opt_str == str;
+    }
+
+    bool operator!=(const std::string& str) const {
+        return !(*this == str);
+    }
 };
 
 std::string bencoding_encode(const BencodedValue& value);
 boost::optional<BencodedValue> bencoding_decode(std::string encoded);
+
+std::ostream& operator<<(std::ostream&, const BencodedValue&);
 
 } // bittorrent namespace
 } // ouinet namespace

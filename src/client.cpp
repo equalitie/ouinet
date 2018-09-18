@@ -8,6 +8,7 @@
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/ssl/stream.hpp>
+#include <boost/optional/optional_io.hpp>
 #include <lrucache.hpp>
 #include <iostream>
 #include <fstream>
@@ -45,6 +46,7 @@
 #include "ouiservice/tcp.h"
 
 #include "util/signal.h"
+#include "util/crypto.h"
 
 #include "logger.h"
 
@@ -58,10 +60,10 @@ using Request  = http::request<http::string_body>;
 using Response = http::response<http::dynamic_body>;
 using boost::optional;
 
-static const boost::filesystem::path OUINET_PID_FILE = "pid";
-static const boost::filesystem::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
-static const boost::filesystem::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
-static const boost::filesystem::path OUINET_CA_DH_FILE = "ssl-ca-dh.pem";
+static const fs::path OUINET_PID_FILE = "pid";
+static const fs::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
+static const fs::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
+static const fs::path OUINET_CA_DH_FILE = "ssl-ca-dh.pem";
 
 //------------------------------------------------------------------------------
 class Client::State : public enable_shared_from_this<Client::State> {
@@ -79,7 +81,7 @@ public:
     void start(int argc, char* argv[]);
 
     void stop() {
-        _ipfs_cache = nullptr;
+        _cache = nullptr;
         _shutdown_signal();
         if (_injector) _injector->stop();
     }
@@ -113,7 +115,7 @@ private:
 
     void setup_injector(asio::yield_context);
 
-    boost::filesystem::path get_pid_path() const {
+    fs::path get_pid_path() const {
         return _config.repo_root()/OUINET_PID_FILE;
     }
 
@@ -123,9 +125,9 @@ private:
         return _shutdown_signal.call_count() != 0;
     }
 
-    boost::filesystem::path ca_cert_path() const { return _config.repo_root() / OUINET_CA_CERT_FILE; }
-    boost::filesystem::path ca_key_path()  const { return _config.repo_root() / OUINET_CA_KEY_FILE;  }
-    boost::filesystem::path ca_dh_path()   const { return _config.repo_root() / OUINET_CA_DH_FILE;   }
+    fs::path ca_cert_path() const { return _config.repo_root() / OUINET_CA_CERT_FILE; }
+    fs::path ca_key_path()  const { return _config.repo_root() / OUINET_CA_KEY_FILE;  }
+    fs::path ca_dh_path()   const { return _config.repo_root() / OUINET_CA_DH_FILE;   }
 
 private:
     asio::io_service& _ios;
@@ -133,7 +135,7 @@ private:
     cache::lru_cache<string, string> _ssl_certificate_cache;
     ClientConfig _config;
     std::unique_ptr<OuiServiceClient> _injector;
-    std::unique_ptr<CacheClient> _ipfs_cache;
+    std::unique_ptr<CacheClient> _cache;
 
     ClientFrontEnd _front_end;
     Signal<void()> _shutdown_signal;
@@ -148,7 +150,7 @@ string Client::State::maybe_start_seeding( const Request&  req
                                          , const Response& res
                                          , Yield yield)
 {
-    if (!_ipfs_cache)
+    if (!_cache)
         return or_throw<string>(yield, asio::error::operation_not_supported);
 
     const char* reason = "";
@@ -161,7 +163,7 @@ string Client::State::maybe_start_seeding( const Request&  req
         return {};
     }
 
-    return _ipfs_cache->ipfs_add
+    return _cache->ipfs_add
             ( util::str(CacheControl::filter_before_store(res))
             , yield);
 }
@@ -260,7 +262,7 @@ Client::State::fetch_stored( const Request& request
 
     const bool cache_is_disabled
         = !request_config.enable_cache
-       || !_ipfs_cache
+       || !_cache
        || !_front_end.is_ipfs_cache_enabled();
 
     if (cache_is_disabled) {
@@ -272,7 +274,7 @@ Client::State::fetch_stored( const Request& request
     // Get the content from cache
     auto key = request.target();
 
-    auto content = _ipfs_cache->get_content(key.to_string(), yield[ec]);
+    auto content = _cache->get_content(key.to_string(), yield[ec]);
 
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
@@ -280,7 +282,7 @@ Client::State::fetch_stored( const Request& request
     // an error should have been reported.
     assert(!content.ts.is_not_a_date_time());
 
-    auto res = descriptor::http_parse(*_ipfs_cache, content.data, yield[ec]);
+    auto res = descriptor::http_parse(*_cache, content.data, yield[ec]);
     return or_throw(yield, ec, CacheEntry{content.ts, res});
 }
 
@@ -441,7 +443,7 @@ Response Client::State::fetch_fresh( const Request& request
 
                 auto res = _front_end.serve( _config.injector_endpoint()
                                            , request
-                                           , _ipfs_cache.get()
+                                           , _cache.get()
                                            , *_ca_certificate
                                            , yield[ec].tag("serve_frontend"));
                 if (ec) {
@@ -820,20 +822,20 @@ void Client::State::setup_ipfs_cache()
         const string ipns = _config.ipns();
 
         {
-            LOG_DEBUG("Starting IPFS Cache with IPNS ID: " + ipns);
+            LOG_DEBUG("Starting IPFS Cache with IPNS ID: ", ipns);
+            LOG_DEBUG("And BitTorrent pubkey: ", _config.bt_resolver_pub_key());
+
             auto on_exit = defer([&] { _is_ipns_being_setup = false; });
 
             if (ipns.empty()) {
                 LOG_WARN("Support for IPFS Cache is disabled because we have not been provided with an IPNS id");
-                _ipfs_cache = nullptr;
+                _cache = nullptr;
                 return;
             }
 
-            if (_ipfs_cache) {
-                return _ipfs_cache->set_ipns(move(ipns));
+            if (_cache) {
+                return _cache->set_ipns(move(ipns));
             }
-
-            string repo_root = (_config.repo_root()/"ipfs").native();
 
             function<void()> cancel;
 
@@ -842,11 +844,12 @@ void Client::State::setup_ipfs_cache()
             });
 
             sys::error_code ec;
-            _ipfs_cache = CacheClient::build(_ios
-                                            , ipns
-                                            , move(repo_root)
-                                            , cancel
-                                            , yield[ec]);
+            _cache = CacheClient::build(_ios
+                                       , ipns
+                                       , _config.bt_resolver_pub_key()
+                                       , _config.repo_root()
+                                       , cancel
+                                       , yield[ec]);
 
             if (ec) {
                 cerr << "Failed to build CacheClient: "
@@ -952,6 +955,12 @@ void Client::State::start(int argc, char* argv[])
         LOG_ABORT(e.what());
     }
 
+    if (_config.is_help()) {
+        cout << "Usage:" << endl;
+        cout << _config.description() << endl;
+        return;
+    }
+
 #ifndef __ANDROID__
     auto pid_path = get_pid_path();
     if (exists(pid_path)) {
@@ -1043,7 +1052,7 @@ void Client::State::start(int argc, char* argv[])
 
                         auto rs = _front_end.serve( _config.injector_endpoint()
                                                   , rq
-                                                  , _ipfs_cache.get()
+                                                  , _cache.get()
                                                   , *_ca_certificate
                                                   , yield[ec]);
                         if (ec) return;
@@ -1148,12 +1157,12 @@ void Client::set_credentials(const char* injector, const char* cred)
     _state->_config.set_credentials(injector, cred);
 }
 
-boost::filesystem::path Client::get_pid_path() const
+fs::path Client::get_pid_path() const
 {
     return _state->get_pid_path();
 }
 
-boost::filesystem::path Client::ca_cert_path() const
+fs::path Client::ca_cert_path() const
 {
     return _state->ca_cert_path();
 }
@@ -1162,6 +1171,8 @@ boost::filesystem::path Client::ca_cert_path() const
 #ifndef __ANDROID__
 int main(int argc, char* argv[])
 {
+    util::crypto_init();
+
     asio::io_service ios;
 
     asio::signal_set signals(ios, SIGINT, SIGTERM);
