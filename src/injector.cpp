@@ -7,6 +7,7 @@
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/uuid/random_generator.hpp>
+#include <boost/uuid/uuid_io.hpp>
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -150,18 +151,23 @@ public:
     // get a signal parameter
     InjectorCacheControl( asio::io_service& ios
                         , unique_ptr<CacheInjector>& injector
+                        , uuid_generator& genuuid
                         , Signal<void()>& abort_signal)
         : ios(ios)
         , injector(injector)
+        , genuuid(genuuid)
         , cc("Ouinet Injector")
     {
-        cc.fetch_fresh = [&ios, &abort_signal]
+        cc.fetch_fresh = [&ios, &abort_signal, &genuuid]
                          (const Request& rq, asio::yield_context yield) {
-            return fetch_http_page( ios
-                                  , rq
-                                  , default_timeout::fetch_http()
-                                  , abort_signal
-                                  , yield);
+            auto res = fetch_http_page( ios
+                                      , rq
+                                      , default_timeout::fetch_http()
+                                      , abort_signal
+                                      , yield);
+            // Add an injection identifier header.
+            res.set(response_injection_id_hdr, to_string(genuuid()));
+            return res;
         };
 
         cc.fetch_stored = [this](const Request& rq, asio::yield_context yield) {
@@ -218,6 +224,7 @@ private:
 private:
     asio::io_service& ios;
     unique_ptr<CacheInjector>& injector;
+    uuid_generator& genuuid;
     CacheControl cc;
 };
 
@@ -278,7 +285,8 @@ void serve( InjectorConfig& config
         } else {
             // Ouinet header found, behave like a Ouinet injector.
             req2.erase(ouinet_version_hdr);  // do not propagate or cache the header
-            InjectorCacheControl cc(con.get_io_service(), injector, close_connection_signal);
+            InjectorCacheControl cc( con.get_io_service(), injector, genuuid
+                                   , close_connection_signal);
             res = cc.fetch(req2, yield[ec].tag("cache_control.fetch"));
         }
         if (ec) {

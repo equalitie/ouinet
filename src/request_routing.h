@@ -20,6 +20,9 @@ namespace ouinet {
 static const std::string request_version_hdr = "X-Ouinet-Version";
 static const std::string request_version_hdr_v0 = "0";
 static const std::string request_version_hdr_latest = request_version_hdr_v0;
+// Such a request should get the following HTTP response header
+// with an opaque identifier for this insertion.
+static const std::string response_injection_id_hdr = "X-Ouinet-Injection-ID";
 
 //------------------------------------------------------------------------------
 namespace request_route {
