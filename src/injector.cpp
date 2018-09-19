@@ -46,7 +46,11 @@ using namespace ouinet;
 
 using tcp         = asio::ip::tcp;
 using string_view = beast::string_view;
-using uuid_generator = boost::uuids::random_generator;
+// We are more interested in an ID generator that can be
+// used concurrently and does not block by random pool exhaustion
+// than we are in getting unpredictable IDs;
+// thus we use a pseudo-random generator.
+using uuid_generator = boost::uuids::random_generator_mt19937;
 using Request     = http::request<http::string_body>;
 using Response    = http::response<http::dynamic_body>;
 
