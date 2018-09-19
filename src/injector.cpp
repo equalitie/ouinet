@@ -158,6 +158,14 @@ public:
         , genuuid(genuuid)
         , cc("Ouinet Injector")
     {
+        // The following operations take care of adding or removing
+        // a custom Ouinet HTTP response header with the injection identifier
+        // to enable the tracking of this particular injection.
+        // The header is added when fetching fresh content or retrieving from the cache,
+        // (so it is sent to the client in both cases)
+        // and it is removed just before saving to the cache
+        // (though it is still used to create the descriptor).
+
         cc.fetch_fresh = [&ios, &abort_signal, &genuuid]
                          (const Request& rq, asio::yield_context yield) {
             auto res = fetch_http_page( ios
