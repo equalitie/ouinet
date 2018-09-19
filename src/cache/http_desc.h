@@ -16,22 +16,23 @@ namespace ouinet {
 namespace descriptor {
 
 // For the given HTTP request `rq` and response `rs`, seed body data to the `cache`,
-// then create an HTTP descriptor for the URL and response,
+// then create an HTTP descriptor with the given `id` for the URL and response,
 // and pass it to the given callback.
 template<class Cache>
 inline
 void
 http_create( Cache& cache
+           , const std::string& id
            , const http::request<http::string_body>& rq
            , const http::response<http::dynamic_body>& rs
            , std::function<void(sys::error_code, std::string)> cb) {
 
     // TODO: Do it more efficiently?
     cache.put_data(beast::buffers_to_string(rs.body().data()),
-        [rq, rsh = rs.base(), cb = std::move(cb)] (const sys::error_code& ec, auto ipfs_id) {
+        [id, rq, rsh = rs.base(), cb = std::move(cb)] (const sys::error_code& ec, auto ipfs_id) {
             auto url = rq.target().to_string();
             if (ec) {
-                std::cout << "!Data seeding failed: " << url
+                std::cout << "!Data seeding failed: " << url << " " << id
                           << " " << ec.message() << std::endl;
                 return cb(ec, "");
             }
@@ -44,6 +45,7 @@ http_create( Cache& cache
 
             nlohmann::json desc;
             desc["url"] = url;
+            desc["id"] = id;
             desc["head"] = rsh_ss.str();
             desc["body_link"] = ipfs_id;
 
@@ -63,12 +65,13 @@ http_parse( Cache& cache, const std::string& desc_data
     using Response = http::response<http::dynamic_body>;
 
     sys::error_code ec;
-    std::string url, head, body_link, body;
+    std::string url, id, head, body_link, body;
 
     // Parse the JSON HTTP descriptor, extract useful info.
     try {
         auto json = nlohmann::json::parse(desc_data);
         url = json["url"];
+        id = json["id"];
         head = json["head"];
         body_link = json["body_link"];
     } catch (const std::exception& e) {
@@ -109,8 +112,8 @@ http_parse( Cache& cache, const std::string& desc_data
     if (ec || !parser.is_done()) {
         std::cerr
           << (boost::format
-              ("WARNING: Incomplete HTTP body in cache (%1% out of %2% bytes) for %3%")
-              % body.length() % parser.get()[http::field::content_length] % url)
+              ("WARNING: Incomplete HTTP body in cache (%1% out of %2% bytes) for %3% %4%")
+              % body.length() % parser.get()[http::field::content_length] % url % id)
           << std::endl;
         ec = asio::error::invalid_argument;
         return or_throw<Response>(yield, ec);

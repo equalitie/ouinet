@@ -175,7 +175,12 @@ public:
         };
 
         cc.store = [this](const Request& rq, const Response& rs) {
-            this->insert_content(rq, rs);
+            // Recover and pop out injection identifier.
+            auto id = rs[response_injection_id_hdr];
+            assert(!id.empty());
+            auto inj_rs(rs);
+            inj_rs.erase(response_injection_id_hdr);
+            this->insert_content(id.to_string(), rq, inj_rs);
         };
     }
 
@@ -185,11 +190,11 @@ public:
     }
 
 private:
-    void insert_content(const Request& rq, const Response& rs)
+    void insert_content(const string& id, const Request& rq, const Response& rs)
     {
         if (!injector) return;
 
-        descriptor::http_create(*injector, rq, rs,
+        descriptor::http_create(*injector, id, rq, rs,
             [ key = rq.target().to_string()
             , injector = injector.get()] (const sys::error_code& ec, string desc_data) {
                 if (ec) return;
