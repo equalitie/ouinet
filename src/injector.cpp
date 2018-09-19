@@ -222,8 +222,11 @@ private:
         auto content = injector->get_content(rq.target().to_string(), yield[ec]);
         if (ec) return or_throw<CacheEntry>(yield, ec);
 
+        // Assemble HTTP response from cached content
+        // and attach injection identifier header for injection tracking.
         auto res = descriptor::http_parse(*injector, content.data, yield[ec]);
-        return or_throw(yield, ec, CacheEntry{content.ts, res});
+        res.first.set(response_injection_id_hdr, res.second);
+        return or_throw(yield, ec, CacheEntry{content.ts, res.first});
     }
 
 private:

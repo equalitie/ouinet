@@ -55,10 +55,12 @@ http_create( Cache& cache
 
 // For the given HTTP descriptor serialized in `desc_data`,
 // retrieve the head from the descriptor and the body data from the `cache`,
-// assemble and return the HTTP response.
+// assemble and return the HTTP response along with its identifier.
 template<class Cache>
 inline
-http::response<http::dynamic_body>
+std::pair< http::response<http::dynamic_body>
+         , std::string
+         >
 http_parse( Cache& cache, const std::string& desc_data
           , asio::yield_context yield) {
 
@@ -87,7 +89,7 @@ http_parse( Cache& cache, const std::string& desc_data
         body = cache.get_data(body_link, yield[ec]);
 
     if (ec)
-        return or_throw<Response>(yield, ec);
+        return or_throw<std::pair<Response, std::string>>(yield, ec);
 
     // Build an HTTP response from the head in the descriptor and the retrieved body.
     http::response_parser<Response::body_type> parser;
@@ -101,7 +103,7 @@ http_parse( Cache& cache, const std::string& desc_data
         std::cerr << head << std::endl;
         std::cerr << "----------------" << std::endl;
         ec = asio::error::invalid_argument;
-        return or_throw<Response>(yield, ec);
+        return or_throw<std::pair<Response, std::string>>(yield, ec);
     }
 
     // - Add the response body (if needed).
@@ -116,10 +118,10 @@ http_parse( Cache& cache, const std::string& desc_data
               % body.length() % parser.get()[http::field::content_length] % url % id)
           << std::endl;
         ec = asio::error::invalid_argument;
-        return or_throw<Response>(yield, ec);
+        return or_throw<std::pair<Response, std::string>>(yield, ec);
     }
 
-    return parser.release();
+    return make_pair(parser.release(), id);
 }
 
 } // ouinet::descriptor namespace
