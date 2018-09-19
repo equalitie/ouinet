@@ -170,6 +170,10 @@ public:
             return res;
         };
 
+        // TODO: As happens in `ouinet::util::filter_fields()`,
+        // the functions called below add and remove headers to copies of responses,
+        // so some clever tricks could be used to avoid the extra copying.
+
         cc.fetch_stored = [this](const Request& rq, asio::yield_context yield) {
             return this->fetch_stored(rq, yield);
         };
