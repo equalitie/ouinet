@@ -63,8 +63,9 @@ public:
 
 private:
     friend class BTree;
+    friend class BTree::Iterator;
 
-    Node(BTree* tree) : _tree(tree) {}
+    Node(const BTree* tree) : _tree(tree) {}
 
     static std::pair<NodeId, Entry> make_inf_entry();
 
@@ -77,8 +78,155 @@ private:
     bool debug() const { return _tree->_debug; }
 
 private:
-    BTree* _tree;
+    const BTree* _tree;
 };
+
+//--------------------------------------------------------------------
+// Iterators
+//
+struct BTree::Iterator::Impl : std::enable_shared_from_this<Impl> {
+    const BTree* tree;
+    std::shared_ptr<BTree::Root> tree_root; // Helps preserving lifetime
+    std::shared_ptr<Iterator::Impl> parent;
+    std::unique_ptr<BTree::Node> node;
+    Entries::const_iterator entry_i;
+    CatOp cat_op;
+
+    Impl( const BTree* tree
+        , std::shared_ptr<BTree::Root> tree_root
+        , std::shared_ptr<Iterator::Impl> parent
+        , CatOp cat_op)
+        : tree(tree)
+        , tree_root(std::move(tree_root))
+        , parent(std::move(parent))
+        , cat_op(std::move(cat_op))
+    {}
+
+    bool is_end() const
+    {
+        if (entry_i == node->end()) {
+            assert(parent == nullptr);
+            return true;
+        }
+
+        return false;
+    }
+
+    void init(const std::string& hash, asio::yield_context yield)
+    {
+        if (node) return;
+
+        auto wd = tree->_was_destroyed;
+
+        node.reset(new Node(tree));
+
+        sys::error_code ec;
+        node->restore(hash, cat_op, yield[ec]);
+
+        if (!ec && *wd) ec = asio::error::operation_aborted;
+        if (ec) return or_throw(yield, ec);
+
+        entry_i = node->begin();
+    }
+
+    std::shared_ptr<Impl> find_leftmost_child(asio::yield_context yield)
+    {
+        auto wd = tree->_was_destroyed;
+
+        if (!node || node->empty() || entry_i->second.child_hash.empty()) {
+            return shared_from_this();
+        }
+
+        auto next = std::make_shared<Impl>(tree, tree_root, shared_from_this(), cat_op);
+
+        sys::error_code ec;
+
+        next->init(entry_i->second.child_hash, yield[ec]);
+
+        if (!ec && *wd) ec = asio::error::operation_aborted;
+        if (ec) return or_throw(yield, ec, nullptr);
+
+        return next->find_leftmost_child(yield);
+    }
+
+    std::shared_ptr<Impl> advance(asio::yield_context yield)
+    {
+        auto wd = tree->_was_destroyed;
+
+        assert(node);
+        assert(entry_i != node->end());
+
+        ++entry_i;
+
+        if (entry_i != node->end()) {
+            return find_leftmost_child(yield);
+        }
+
+        if (parent == nullptr) return shared_from_this();
+
+        if (!parent->entry_i->first) {
+            return parent->advance(yield);
+        }
+
+        return parent;
+    }
+};
+
+bool BTree::Iterator::is_end() const
+{
+    if (_impl == nullptr) return true;
+    return _impl->is_end();
+}
+
+void BTree::Iterator::advance(asio::yield_context yield)
+{
+    assert(!is_end());
+
+    auto wd = _impl->tree->_was_destroyed;
+
+    sys::error_code ec;
+
+    _impl = _impl->advance(yield[ec]);
+
+    if (!ec && *wd) ec = asio::error::operation_aborted;
+    if (ec) return or_throw(yield, ec);
+}
+
+Value BTree::Iterator::value() const
+{
+    assert(!is_end());
+    return _impl->entry_i->second.value;
+}
+
+BTree::Iterator::Iterator(std::shared_ptr<Impl> impl)
+    : _impl(std::move(impl))
+{ }
+
+BTree::Iterator BTree::begin(asio::yield_context yield) const
+{
+    auto end = [] { return Iterator(nullptr); };
+
+    if (!_root) return end();
+    if (_root->hash.empty()) return end();
+
+    auto wd = _was_destroyed;
+
+    sys::error_code ec;
+
+    auto top = std::make_shared<Iterator::Impl>(this, this->_root, nullptr, _cat_op);
+
+    top->init(this->_root->hash, yield[ec]);
+
+    if (!ec && *wd) ec = asio::error::operation_aborted;
+    if (ec) return or_throw(yield, ec, end());
+
+    auto begin = top->find_leftmost_child(yield[ec]);
+
+    if (!ec && *wd) ec = asio::error::operation_aborted;
+    if (ec) return or_throw(yield, ec, end());
+
+    return Iterator(begin);
+}
 
 //--------------------------------------------------------------------
 // IO
@@ -503,7 +651,7 @@ BTree::lazy_find( const Hash& hash
                 , std::unique_ptr<Node>& n
                 , const Key& key
                 , const CatOp& cat_op
-                , asio::yield_context yield)
+                , asio::yield_context yield) const
 {
     if (!n) {
         if (hash.empty()) {
@@ -621,7 +769,7 @@ void BTree::load(Hash hash, asio::yield_context yield) {
     _root->hash = move(hash);
 }
 
-void BTree::try_remove(Hash& h, asio::yield_context yield)
+void BTree::try_remove(Hash& h, asio::yield_context yield) const
 {
     if (h.empty()) return;
     auto h_ = std::move(h);
