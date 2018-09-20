@@ -92,9 +92,10 @@ bool field_is_one_of(const http::fields::value_type& e,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Remove all fields that are not listed in `keep_fields`.
+// Remove all fields that are not listed in `keep_fields`,
+// keep Ouinet internal headers if `keep_ouinet` is true.
 template<class Message, class... Fields>
-static Message filter_fields(const Message& message, const Fields&... keep_fields)
+static Message filter_fields(const Message& message, bool keep_ouinet, const Fields&... keep_fields)
 {
     // TODO: Instead creating a copy of the headers here, use the
     // erase function that uses iterators (for efficiency). It was broken
@@ -102,7 +103,8 @@ static Message filter_fields(const Message& message, const Fields&... keep_field
     auto copy = message;
 
     for (auto& f : message) {
-        if (!field_is_one_of(f, keep_fields...)) {
+        if (!( field_is_one_of(f, keep_fields...)  // TODO: do case insensitive cmp
+               || (keep_ouinet && f.name_string().starts_with("X-Ouinet-")))) {
             copy.erase(f.name_string());
         }
     }

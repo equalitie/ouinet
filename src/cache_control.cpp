@@ -549,13 +549,14 @@ bool CacheControl::ok_to_cache( const http::request_header<>&  request
 }
 
 //------------------------------------------------------------------------------
-Response CacheControl::filter_before_store(Response response)
+Response CacheControl::filter_before_store(Response response, bool keep_ouinet)
 {
     // TODO: This list was created by going through some 100 responses from
     // bbc.com. Careful selection from all possible (standard) fields is
     // needed.
     return
         util::filter_fields( response
+                           , keep_ouinet
                            , http::field::server
                            , http::field::retry_after
                            , http::field::content_length
