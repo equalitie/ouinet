@@ -218,7 +218,7 @@ Response CacheControl::bad_gateway(const Request& req, beast::string_view reason
 {
     Response res{http::status::bad_gateway, req.version()};
     res.set(http::field::server, _server_name);
-    res.set("X-Ouinet-Debug", reason);
+    res.set(http_header_prefix + "Debug", reason);
     res.keep_alive(req.keep_alive());
     res.prepare_payload();
     return res;

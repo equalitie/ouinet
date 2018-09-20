@@ -9,7 +9,11 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/beast/http/fields.hpp>
 
-namespace ouinet { namespace util {
+namespace ouinet {
+
+static const std::string http_header_prefix = "X-Ouinet-";
+
+namespace util {
 
 inline
 std::pair< beast::string_view
@@ -104,7 +108,7 @@ static Message filter_fields(const Message& message, bool keep_ouinet, const Fie
 
     for (auto& f : message) {
         if (!( field_is_one_of(f, keep_fields...)  // TODO: do case insensitive cmp
-               || (keep_ouinet && f.name_string().starts_with("X-Ouinet-")))) {
+               || (keep_ouinet && f.name_string().starts_with(http_header_prefix)))) {
             copy.erase(f.name_string());
         }
     }
