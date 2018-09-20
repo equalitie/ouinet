@@ -163,8 +163,8 @@ string Client::State::maybe_start_seeding( const Request&  req
         return {};
     }
 
-    return _cache->ipfs_add  // drop internal headers too
-            ( util::str(CacheControl::filter_before_store(res, false))
+    return _cache->ipfs_add
+            ( beast::buffers_to_string(res.body().data())
             , yield);
 }
 

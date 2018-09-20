@@ -47,9 +47,9 @@ public:
                            , const http::response_header<>& response
                            , const char** reason = nullptr);
 
-    // Keep only relevant headers (and Ouinet internal headers by default,
-    // to be managed by the lower level functions above).
-    static Response filter_before_store(Response, bool keep_ouinet = true);
+    // Keep only relevant headers and Ouinet internal headers,
+    // (to be managed by the lower level functions above).
+    static Response filter_before_store(Response);
 
 private:
     // TODO: Add cancellation support
