@@ -1,11 +1,14 @@
 #include "client_front_end.h"
 #include "generic_connection.h"
 #include "cache/cache_client.h"
+#include "cache/btree.h"
 #include "util.h"
+#include "defer.h"
 #include <boost/optional/optional_io.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/regex.hpp>
 #include <network/uri.hpp>
+#include <json.hpp>
 
 
 using namespace std;
@@ -118,6 +121,68 @@ static bool percent_decode(const string in, string& out) {
         return false;
     }
     return true;
+}
+
+void ClientFrontEnd::handle_enumerate_db( const Request& req
+                                        , Response& res
+                                        , stringstream& ss
+                                        , CacheClient* cache_client
+                                        , asio::yield_context yield)
+{
+    res.set(http::field::content_type, "text/html");
+
+    ss << "<!DOCTYPE html>\n"
+           "<html>\n"
+           "</html>\n"
+           "<body style=\"font-family:monospace;white-space:nowrap;font-size:small\">\n";
+
+    auto on_exit = defer([&] { ss << "</body></html>\n"; });
+
+    if (!cache_client) {
+        ss << "Cache is not initialized";
+        return;
+    }
+
+    auto btree = cache_client->get_btree();
+
+    if (!cache_client) {
+        ss << "Cache does not sport BTree";
+        return;
+    }
+
+    ss << "DB CID: " << btree->root_hash() << "<br/>\n";
+
+    sys::error_code ec;
+    auto iter = btree->begin(yield[ec]);
+
+    if (ec) {
+        ss << "Failed to retrieve BTree iterator: " << ec.message();
+        return;
+    }
+
+    while (!iter.is_end()) {
+        auto json = nlohmann::json::parse(iter.value());
+
+        auto ts = json["ts"];
+        auto ipfs_cid = json["value"];
+
+        if (!ts.is_string() || !ipfs_cid.is_string()) {
+            ss << "Failed to enumerate BTree value: " << iter.value();
+            return;
+        }
+
+        ss << ts.get<string>() << " <a href=\"https://ipfs.io/ipfs/"
+            << ipfs_cid.get<string>() << "\">"
+            << iter.key()
+            << "</a><br/>\n";
+
+        iter.advance(yield[ec]);
+
+        if (ec) {
+            ss << "Failed enumerate the entire BTree: " << ec.message();
+            return;
+        }
+    }
 }
 
 void ClientFrontEnd::handle_descriptor( const Request& req, Response& res, stringstream& ss
@@ -268,7 +333,7 @@ void ClientFrontEnd::handle_portal( const Request& req, Response& res, stringstr
         ss << "        Our IPFS ID (IPNS): " << cache_client->id() << "<br>\n";
         ss << "        <h2>Database</h2>\n";
         ss << "        IPNS: " << cache_client->ipns() << "<br>\n";
-        ss << "        IPFS: " << cache_client->ipfs() << "<br>\n";
+        ss << "        IPFS: <a href=\"db.html\">" << cache_client->ipfs() << "</a><br>\n";
     }
 
     ss << "    </body>\n"
@@ -289,16 +354,21 @@ Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
 
     util::url_match url;
     match_http_url(req.target().to_string(), url);
-    if (url.path == "/ca.pem")
+
+    if (url.path == "/ca.pem") {
         handle_ca_pem(req, res, ss, ca);
-    else if (url.path == "/api/upload") {
+    } else if (url.path == "/db.html") {
+        sys::error_code ec_;  // shouldn't throw, but just in case
+        handle_enumerate_db(req, res, ss, cache_client, yield[ec_]);
+    } else if (url.path == "/api/upload") {
         sys::error_code ec_;  // shouldn't throw, but just in case
         handle_upload(req, res, ss, cache_client, yield[ec_]);
     } else if (url.path == "/api/descriptor") {
         sys::error_code ec_;  // shouldn't throw, but just in case
         handle_descriptor(req, res, ss, cache_client, yield[ec_]);
-    } else
+    } else {
         handle_portal(req, res, ss, injector_ep, cache_client);
+    }
 
     Response::body_type::reader reader(res, res.body());
     sys::error_code ec;

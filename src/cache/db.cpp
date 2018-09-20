@@ -249,6 +249,11 @@ void ClientDb::wait_for_db_update(asio::yield_context yield)
     result.get();
 }
 
+const BTree* ClientDb::get_btree() const
+{
+    return _db_map.get();
+}
+
 void ClientDb::flush_db_update_callbacks(const sys::error_code& ec)
 {
     auto& q = _on_db_update_callbacks;

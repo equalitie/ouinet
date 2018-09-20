@@ -85,6 +85,12 @@ CacheClient::CacheClient( boost::asio::io_service& ios
     _bt_dht->set_interfaces({asio::ip::address_v4::any()});
 }
 
+const BTree* CacheClient::get_btree() const
+{
+    if (!_ipfs_node) return nullptr;
+    return _db->get_btree();
+}
+
 string CacheClient::ipfs_add(const string& data, asio::yield_context yield)
 {
     return _ipfs_node->add(data, yield);

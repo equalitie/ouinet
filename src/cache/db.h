@@ -47,6 +47,8 @@ public:
 
     asio_ipfs::node& ipfs_node() { return _ipfs_node; }
 
+    const BTree* get_btree() const;
+
     ~ClientDb();
 
 private:

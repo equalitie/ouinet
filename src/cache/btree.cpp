@@ -198,6 +198,13 @@ Value BTree::Iterator::value() const
     return _impl->entry_i->second.value;
 }
 
+Value BTree::Iterator::key() const
+{
+    assert(!is_end());
+    assert(_impl->entry_i->first);
+    return *_impl->entry_i->first;
+}
+
 BTree::Iterator::Iterator(std::shared_ptr<Impl> impl)
     : _impl(std::move(impl))
 { }

@@ -16,6 +16,7 @@
 namespace asio_ipfs { class node; }
 namespace ouinet { namespace bittorrent { class MainlineDht; }}
 namespace ouinet { namespace util { class Ed25519PublicKey; }}
+namespace ouinet { class BTree; }
 
 namespace ouinet {
 
@@ -71,6 +72,8 @@ public:
     const std::string& ipfs() const;
 
     ~CacheClient();
+
+    const BTree* get_btree() const;
 
 private:
     CacheClient( asio_ipfs::node
