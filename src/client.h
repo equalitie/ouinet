@@ -9,6 +9,7 @@ namespace ouinet {
 class Client {
 private:
     class State;
+    class ClientCacheControl;
 
 public:
     Client(asio::io_service& ios);

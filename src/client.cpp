@@ -460,49 +460,66 @@ Response Client::State::fetch_fresh( const Request& request
 }
 
 //------------------------------------------------------------------------------
-CacheControl
-Client::State::build_cache_control(request_route::Config& request_config)
-{
-    CacheControl cache_control("Ouinet Client");
-
-    cache_control.fetch_stored =
-        [&] (const Request& request, Yield yield) {
-
-            yield.log("Fetching from cache");
-
-            sys::error_code ec;
-            auto r = fetch_stored(request, request_config, yield[ec]);
-
-            if (!ec) {
-                yield.log("Fetched from cache success, status: ", r.response.result());
-            } else {
-                yield.log("Fetched from cache error: ", ec.message());
-            }
-
-            return or_throw(yield, ec, move(r));
+class Client::ClientCacheControl {
+public:
+    ClientCacheControl( Client::State& client_state
+                      , request_route::Config& request_config)
+        : client_state(client_state)
+        , request_config(request_config)
+        , cc("Ouinet Client")
+    {
+        cc.fetch_stored = [&] (const Request& rq, Yield yield) {
+            return fetch_stored(rq, yield);
         };
 
-    cache_control.fetch_fresh =
-        [&] (const Request& request, Yield yield) {
-
-            yield.log("Fetching fresh");
-
-            sys::error_code ec;
-            auto r = fetch_fresh(request, request_config, yield[ec]);
-
-            if (!ec) {
-                yield.log("Fetched fresh success, status: ", r.result());
-            } else {
-                yield.log("Fetched fresh error: ", ec.message());
-            }
-
-            return or_throw(yield, ec, move(r));
+        cc.fetch_fresh = [&] (const Request& rq, Yield yield) {
+            return fetch_fresh(rq, yield);
         };
 
-    cache_control.max_cached_age(_config.max_cached_age());
+        cc.max_cached_age(client_state._config.max_cached_age());
+    }
 
-    return cache_control;
-}
+    CacheControl::CacheEntry
+    fetch_stored(const Request& request, Yield yield) {
+        yield.log("Fetching from cache");
+
+        sys::error_code ec;
+        auto r = client_state.fetch_stored(request, request_config, yield[ec]);
+
+        if (!ec) {
+            yield.log("Fetched from cache success, status: ", r.response.result());
+        } else {
+            yield.log("Fetched from cache error: ", ec.message());
+        }
+
+        return or_throw(yield, ec, move(r));
+    }
+
+    Response fetch_fresh(const Request& request, Yield yield) {
+        yield.log("Fetching fresh");
+
+        sys::error_code ec;
+        auto r = client_state.fetch_fresh(request, request_config, yield[ec]);
+
+        if (!ec) {
+            yield.log("Fetched fresh success, status: ", r.result());
+        } else {
+            yield.log("Fetched fresh error: ", ec.message());
+        }
+
+        return or_throw(yield, ec, move(r));
+    }
+
+    Response fetch(const Request& rq, Yield yield)
+    {
+        return cc.fetch(rq, yield);
+    }
+
+private:
+    Client::State& client_state;
+    request_route::Config& request_config;
+    CacheControl cc;
+};
 
 //------------------------------------------------------------------------------
 //static
@@ -632,7 +649,7 @@ void Client::State::serve_request( GenericConnection&& con
 
     rr::Config request_config;
 
-    CacheControl cache_control = build_cache_control(request_config);
+    Client::ClientCacheControl cache_control(*this, request_config);
 
     sys::error_code ec;
     beast::flat_buffer buffer;
