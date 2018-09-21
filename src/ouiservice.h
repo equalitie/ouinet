@@ -77,6 +77,9 @@ class OuiServiceImplementationClient
 class OuiServiceClient
 {
     public:
+    using ConnectInfo = OuiServiceImplementationClient::ConnectInfo;
+
+    public:
     OuiServiceClient(asio::io_service& ios);
 
     void add(std::unique_ptr<OuiServiceImplementationClient> implementation);

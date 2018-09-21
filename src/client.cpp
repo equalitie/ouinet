@@ -105,7 +105,12 @@ private:
                 , request_route::Config& request_config
                 , asio::yield_context yield);
 
-    Response fetch_fresh(const Request&, request_route::Config&, Yield);
+    Response fetch_fresh( const Request&
+                        , request_route::Config&
+                        , optional<GenericConnection>& origin_c
+                        , optional<GenericConnection>& proxy_c
+                        , optional<OuiServiceClient::ConnectInfo>& injector_c
+                        , Yield);
 
     CacheControl build_cache_control(request_route::Config& request_config);
 
@@ -287,9 +292,13 @@ Client::State::fetch_stored( const Request& request
 }
 
 //------------------------------------------------------------------------------
-Response Client::State::fetch_fresh( const Request& request
-                                   , request_route::Config& request_config
-                                   , Yield yield)
+Response Client::State::fetch_fresh
+        ( const Request& request
+        , request_route::Config& request_config
+        , optional<GenericConnection>& origin_c
+        , optional<GenericConnection>& proxy_c
+        , optional<OuiServiceClient::ConnectInfo>& injector_c
+        , Yield yield)
 {
     using namespace asio::error;
     using request_route::responder;
@@ -400,8 +409,21 @@ Response Client::State::fetch_fresh( const Request& request
 
                 // Connect to the injector.
                 sys::error_code ec;
-                auto inj = _injector->connect( yield[ec].tag("connect_to_injector2")
-                                             , _shutdown_signal);
+
+                optional<OuiServiceClient::ConnectInfo> connect_info;
+
+                auto& inj = [&] () -> auto& {
+                    if (injector_c) {
+                        return *injector_c;
+                    } else {
+                        connect_info = _injector->connect
+                            ( yield[ec].tag("connect_to_injector2")
+                            , _shutdown_signal);
+
+                        return *connect_info;
+                    }
+                }();
+
                 if (ec) {
                     last_error = ec;
                     continue;
@@ -426,6 +448,12 @@ Response Client::State::fetch_fresh( const Request& request
                 if (ec) {
                     last_error = ec;
                     continue;
+                }
+
+                if (res.keep_alive()) {
+                    if (!injector_c) { injector_c = std::move(connect_info); }
+                } else {
+                    if (injector_c) { injector_c->connection.close(); }
                 }
 
                 if (r == responder::injector) {
@@ -499,7 +527,12 @@ public:
         yield.log("Fetching fresh");
 
         sys::error_code ec;
-        auto r = client_state.fetch_fresh(request, request_config, yield[ec]);
+        auto r = client_state.fetch_fresh( request
+                                         , request_config
+                                         , _origin_connection
+                                         , _proxy_connection
+                                         , _injector_connection
+                                         , yield[ec]);
 
         if (!ec) {
             yield.log("Fetched fresh success, status: ", r.result());
@@ -519,6 +552,13 @@ private:
     Client::State& client_state;
     request_route::Config& request_config;
     CacheControl cc;
+
+    // If a connection has been established, we keep it for reuse if the
+    // request and response contained the 'Connection: keep-alive' header
+    // field.
+    optional<GenericConnection> _origin_connection;
+    optional<GenericConnection> _proxy_connection;
+    optional<OuiServiceClient::ConnectInfo> _injector_connection;
 };
 
 //------------------------------------------------------------------------------
