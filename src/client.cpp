@@ -164,7 +164,7 @@ string Client::State::maybe_start_seeding( const Request&  req
     }
 
     return _cache->ipfs_add
-            ( util::str(CacheControl::filter_before_store(res))
+            ( beast::buffers_to_string(res.body().data())
             , yield);
 }
 
