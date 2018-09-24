@@ -72,7 +72,7 @@ auto with_timeout( asio::io_service& ios
                  , const F& f
                  , asio::yield_context yield)
 {
-    Timeout timeout(ios, abort_signal, std::chrono::seconds(30));
+    Timeout timeout(ios, abort_signal, duration);
 
     sys::error_code ec;
 
