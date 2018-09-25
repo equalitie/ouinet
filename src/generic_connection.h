@@ -168,6 +168,8 @@ public:
             , class Token>
     auto async_read_some(const MutableBufferSequence& bs, Token&& token)
     {
+        assert(_impl);
+
         using namespace std;
 
         namespace asio   = boost::asio;
@@ -213,6 +215,8 @@ public:
             , class Token>
     auto async_write_some(const ConstBufferSequence& bs, Token&& token)
     {
+        assert(_impl);
+
         using namespace std;
 
         namespace asio   = boost::asio;
