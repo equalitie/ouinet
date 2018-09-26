@@ -132,6 +132,9 @@ public:
 
     GenericConnection& lowest_layer() { return *this; }
 
+    bool has_implementation() const { return _impl != nullptr; }
+    void destroy_implementation() { _impl = nullptr; }
+
 public:
     GenericConnection() {}
 

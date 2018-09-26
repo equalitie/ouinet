@@ -107,8 +107,7 @@ private:
 
     Response fetch_fresh( const Request&
                         , request_route::Config&
-                        , optional<GenericConnection>& origin_c
-                        , optional<GenericConnection>& proxy_c
+                        , string& last_host
                         , optional<OuiServiceClient::ConnectInfo>& injector_c
                         , Yield);
 
@@ -295,8 +294,7 @@ Client::State::fetch_stored( const Request& request
 Response Client::State::fetch_fresh
         ( const Request& request
         , request_route::Config& request_config
-        , optional<GenericConnection>& origin_c
-        , optional<GenericConnection>& proxy_c
+        , string& last_host
         , optional<OuiServiceClient::ConnectInfo>& injector_c
         , Yield yield)
 {
@@ -319,8 +317,12 @@ Response Client::State::fetch_fresh
                 sys::error_code ec;
                 Response res;
 
+                // TODO: Reuse this connection if "Connection: keep-alive"
+                GenericConnection c;
+
                 // Send the request straight to the origin
                 res = fetch_http_page( _ios
+                                     , c
                                      , request
                                      , default_timeout::fetch_http()
                                      , _shutdown_signal
@@ -373,12 +375,13 @@ Response Client::State::fetch_fresh
                     // (otherwise we would get stuck waiting to read
                     // a body whose length we do not know
                     // since the respone should have no content length).
-                    auto connres = fetch_http_head( _ios
-                                                  , inj.connection
-                                                  , connreq
-                                                  , default_timeout::fetch_http()
-                                                  , _shutdown_signal
-                                                  , yield[ec].tag("connreq"));
+                    auto connres = fetch_http<http::empty_body>
+                                        ( _ios
+                                        , inj.connection
+                                        , connreq
+                                        , default_timeout::fetch_http()
+                                        , _shutdown_signal
+                                        , yield[ec].tag("connreq"));
 
                     if (connres.result() != http::status::ok) {
                         // This error code is quite fake, so log the error too.
@@ -413,9 +416,14 @@ Response Client::State::fetch_fresh
                 optional<OuiServiceClient::ConnectInfo> connect_info;
 
                 auto& inj = [&] () -> auto& {
-                    if (injector_c) {
+                    auto host = request[http::field::host];
+
+                    if (injector_c && host == last_host) {
                         return *injector_c;
                     } else {
+                        injector_c = boost::none;
+                        last_host = host.to_string();
+
                         connect_info = _injector->connect
                             ( yield[ec].tag("connect_to_injector2")
                             , _shutdown_signal);
@@ -445,6 +453,7 @@ Response Client::State::fetch_fresh
                                           , default_timeout::fetch_http()
                                           , _shutdown_signal
                                           , yield[ec].tag("fetch_http_page"));
+
                 if (ec) {
                     last_error = ec;
                     continue;
@@ -529,8 +538,7 @@ public:
         sys::error_code ec;
         auto r = client_state.fetch_fresh( request
                                          , request_config
-                                         , _origin_connection
-                                         , _proxy_connection
+                                         , last_host
                                          , _injector_connection
                                          , yield[ec]);
 
@@ -556,8 +564,9 @@ private:
     // If a connection has been established, we keep it for reuse if the
     // request and response contained the 'Connection: keep-alive' header
     // field.
-    optional<GenericConnection> _origin_connection;
-    optional<GenericConnection> _proxy_connection;
+    // TODO: Keep one for direct origin connection and one for proxy connection
+    // as well.
+    string last_host; // To which host the below connection was established.
     optional<OuiServiceClient::ConnectInfo> _injector_connection;
 };
 
