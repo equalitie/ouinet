@@ -93,6 +93,12 @@ void CacheInjector::put_data( const string& data
     insert_content("", move(data), move(cb));
 }
 
+std::string CacheInjector::put_data( const std::string& data
+                                   , boost::asio::yield_context yield)
+{
+    return insert_content("", move(data), yield);
+}
+
 void CacheInjector::insert_content( string key
                                   , const string& value
                                   , function<void(sys::error_code, string)> cb)

@@ -55,6 +55,9 @@ public:
     // "https://ipfs.io/ipfs/" + <IPFS ID>
     void put_data(const std::string& data, OnInsert);
 
+    // Coroutine version of the above, the IPFS ID is returned.
+    std::string put_data(const std::string& data, boost::asio::yield_context);
+
     // Gets the data stored in IPFS under `/ipfs/<ipfs_id>`.
     //
     // TODO: This should accept a generic storage URI instead.
