@@ -105,7 +105,6 @@ maybe_perform_ssl_handshake( GenericConnection&& con
 {
     using namespace std;
 
-    //auto target = req.target().to_string();
     sys::error_code ec;
 
     if (url.scheme == "https") {
@@ -115,8 +114,8 @@ maybe_perform_ssl_handshake( GenericConnection&& con
                                               , yield[ec]);
 
         if (ec) {
-            cerr << "SSL client handshake error: "
-                 << url.host << ": " << ec.message() << endl;
+            yield.log("SSL client handshake error: "
+                 , url.host, ": ", ec.message());
         }
 
         return or_throw(yield, ec, move(ret));
@@ -131,8 +130,10 @@ fetch_http_page( asio::io_service& ios
                , GenericConnection& optcon
                , RequestType req
                , Signal<void()>& abort_signal
-               , Yield yield)
+               , Yield yield_)
 {
+    Yield yield = yield_.tag("fetch_http_page");
+
     using Response = http::response<http::dynamic_body>;
 
     sys::error_code ec;
@@ -160,7 +161,10 @@ fetch_http_page( asio::io_service& ios
                                     , abort_signal
                                     , yield[ec]);
 
-            if (ec) return temp_con;
+            if (ec) {
+                yield.log("Failed in 'connect_to_host' ", ec.message());
+                return temp_con;
+            }
 
             auto cc = maybe_perform_ssl_handshake( std::move(c)
                                                  , url
@@ -168,7 +172,10 @@ fetch_http_page( asio::io_service& ios
                                                  , abort_signal
                                                  , yield[ec]);
 
-            if (ec) return temp_con;
+            if (ec) {
+                yield.log("Failed in ssl handshake: ", ec.message());
+                return temp_con;
+            }
 
             RequestType origin_req(req);
 
@@ -195,6 +202,10 @@ fetch_http_page( asio::io_service& ios
                                              , req
                                              , abort_signal
                                              , yield[ec]);
+
+    if (ec) {
+        yield.log("Failed in fetch_http ", ec.message());
+    }
 
     if (!ec && !optcon.has_implementation()) {
         optcon = std::move(temp_con);
