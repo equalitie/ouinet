@@ -17,40 +17,41 @@ namespace descriptor {
 
 // For the given HTTP request `rq` and response `rs`, seed body data to the `cache`,
 // then create an HTTP descriptor with the given `id` for the URL and response,
-// and pass it to the given callback.
+// and return it.
 template<class Cache>
 inline
-void
+std::string
 http_create( Cache& cache
            , const std::string& id
            , const http::request<http::string_body>& rq
            , const http::response<http::dynamic_body>& rs
-           , std::function<void(sys::error_code, std::string)> cb) {
+           , asio::yield_context yield) {
 
     // TODO: Do it more efficiently?
-    cache.put_data(beast::buffers_to_string(rs.body().data()),
-        [id, rq, rsh = rs.base(), cb = std::move(cb)] (const sys::error_code& ec, auto ipfs_id) {
-            auto url = rq.target().to_string();
-            if (ec) {
-                std::cout << "!Data seeding failed: " << url << " " << id
-                          << " " << ec.message() << std::endl;
-                return cb(ec, "");
-            }
+    sys::error_code ec;
+    auto ipfs_id = cache.put_data( beast::buffers_to_string(rs.body().data())
+                                 , yield[ec]);
 
-            // Create the descriptor.
-            // TODO: This is a *temporary format* with the bare minimum to test
-            // head/body splitting of HTTP responses.
-            std::stringstream rsh_ss;
-            rsh_ss << rsh;
+    auto url = rq.target().to_string();
+    if (ec) {
+        std::cout << "!Data seeding failed: " << url << " " << id
+                  << " " << ec.message() << std::endl;
+        return or_throw<std::string>(yield, ec);
+    }
 
-            nlohmann::json desc;
-            desc["url"] = url;
-            desc["id"] = id;
-            desc["head"] = rsh_ss.str();
-            desc["body_link"] = ipfs_id;
+    // Create the descriptor.
+    // TODO: This is a *temporary format* with the bare minimum to test
+    // head/body splitting of HTTP responses.
+    std::stringstream rsh_ss;
+    rsh_ss << rs.base();
 
-            cb(ec, std::move(desc.dump()));
-        });
+    nlohmann::json desc;
+    desc["url"] = url;
+    desc["id"] = id;
+    desc["head"] = rsh_ss.str();
+    desc["body_link"] = ipfs_id;
+
+    return std::move(desc.dump());
 }
 
 // For the given HTTP descriptor serialized in `desc_data`,
