@@ -9,7 +9,11 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/beast/http/fields.hpp>
 
-namespace ouinet { namespace util {
+namespace ouinet {
+
+static const std::string http_header_prefix = "X-Ouinet-";
+
+namespace util {
 
 inline
 std::pair< beast::string_view
@@ -92,7 +96,8 @@ bool field_is_one_of(const http::fields::value_type& e,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Remove all fields that are not listed in `keep_fields`.
+// Remove all fields that are not listed in `keep_fields`,
+// nor are Ouinet internal headers.
 template<class Message, class... Fields>
 static Message filter_fields(const Message& message, const Fields&... keep_fields)
 {
@@ -102,7 +107,8 @@ static Message filter_fields(const Message& message, const Fields&... keep_field
     auto copy = message;
 
     for (auto& f : message) {
-        if (!field_is_one_of(f, keep_fields...)) {
+        if (!( field_is_one_of(f, keep_fields...)  // TODO: do case insensitive cmp
+               || f.name_string().starts_with(http_header_prefix))) {
             copy.erase(f.name_string());
         }
     }

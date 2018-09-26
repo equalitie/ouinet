@@ -11,15 +11,19 @@
 #include <boost/regex.hpp>
 
 #include "namespaces.h"
+#include "http_util.h"
 
 
 namespace ouinet {
 // The presence of this (non-empty) HTTP request header
 // shows the protocol version used by the client
 // and hints the receiving injector to behave like an injector instead of a proxy.
-static const std::string request_version_hdr = "X-Ouinet-Version";
+static const std::string request_version_hdr = http_header_prefix + "Version";
 static const std::string request_version_hdr_v0 = "0";
 static const std::string request_version_hdr_latest = request_version_hdr_v0;
+// Such a request should get the following HTTP response header
+// with an opaque identifier for this insertion.
+static const std::string response_injection_id_hdr = http_header_prefix + "Injection-ID";
 
 //------------------------------------------------------------------------------
 namespace request_route {
