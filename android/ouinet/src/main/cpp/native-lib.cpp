@@ -10,6 +10,7 @@
 #include <namespaces.h>
 #include <client.h>
 #include <util/signal.h>
+#include <util/crypto.h>
 #include <condition_variable>
 
 #include <fcntl.h>
@@ -30,6 +31,7 @@ struct Defer {
 std::unique_ptr<ouinet::Client> g_client;
 ouinet::asio::io_service g_ios;
 thread g_client_thread;
+bool g_crypto_initialized = false;
 
 void start_client_thread( string repo_root
                         , string injector_ep
@@ -37,6 +39,11 @@ void start_client_thread( string repo_root
                         , string credentials
                         , bool enable_http_connect_requests)
 {
+    if (g_crypto_initialized) {
+        ouinet::util::crypto_init();
+        g_crypto_initialized = true;
+    }
+
     if (g_client_thread.get_id() != thread::id()) return;
 
     g_client_thread = thread([=] {
@@ -190,4 +197,28 @@ Java_ie_equalit_ouinet_Ouinet_nSetCredentialsFor(
         });
 
     cv.wait(lk, [&]{ return done; });
+}
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_ie_equalit_ouinet_Ouinet_nPathToCARootCert(
+        JNIEnv* env,
+        jobject /* this */)
+{
+    mutex m;
+    unique_lock<mutex> lk(m);
+    condition_variable cv;
+    bool done = false;
+
+    string cert_path;
+
+    g_ios.post([env, &cert_path, &cv, &done] {
+            Defer on_exit([&] { done = true; cv.notify_one(); });
+            if (!g_client) return;
+            cert_path = g_client->ca_cert_path().string();
+        });
+
+    cv.wait(lk, [&]{ return done; });
+
+    return env->NewStringUTF(cert_path.c_str());
 }

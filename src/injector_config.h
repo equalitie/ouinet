@@ -1,5 +1,7 @@
 #pragma once
 
+#include "util/crypto.h"
+
 namespace ouinet {
 
 class InjectorConfig {
@@ -34,6 +36,9 @@ public:
     std::string credentials() const
     { return _credentials; }
 
+    boost::optional<util::Ed25519PrivateKey> bt_publisher_private_key() const
+    { return _bt_publisher_private_key; }
+
 private:
     bool _is_help = false;
     boost::filesystem::path _repo_root;
@@ -42,6 +47,7 @@ private:
     boost::optional<asio::ip::tcp::endpoint> _tcp_endpoint;
     boost::filesystem::path OUINET_CONF_FILE = "ouinet-injector.conf";
     std::string _credentials;
+    boost::optional<util::Ed25519PrivateKey> _bt_publisher_private_key;
 };
 
 inline
@@ -66,6 +72,8 @@ InjectorConfig::options_description()
         ("credentials", po::value<string>()
          , "<username>:<password> authentication pair. "
            "If unused, this injector shall behave as an open proxy.")
+        ("bittorrent-publisher-private-key", po::value<string>()
+         , "Private key of the BitTorrent/BEP44 based publisher")
         ;
 
     return desc;
@@ -144,6 +152,17 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
     if (vm.count("listen-on-tcp")) {
         _tcp_endpoint = util::parse_tcp_endpoint(vm["listen-on-tcp"].as<string>());
+    }
+
+    if (vm.count("bittorrent-publisher-private-key")) {
+        string value = vm["bittorrent-publisher-private-key"].as<string>();
+
+        _bt_publisher_private_key = util::Ed25519PrivateKey::from_hex(value);
+
+        if (!_bt_publisher_private_key) {
+            throw std::runtime_error(
+                    util::str("Failed parsing '", value, "' as Ed25519 private key"));
+        }
     }
 }
 

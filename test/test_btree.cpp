@@ -174,6 +174,22 @@ BOOST_AUTO_TEST_CASE(test_3)
             BOOST_REQUIRE(!ec);
             BOOST_REQUIRE_EQUAL("v" + key, val);
         }
+
+        ec = sys::error_code();
+
+        auto i = db.begin(yield[ec]);
+
+        BOOST_REQUIRE(!ec);
+
+        while (!i.is_end()) {
+            BOOST_REQUIRE(!inserted.empty());
+            BOOST_REQUIRE_EQUAL("v" + *inserted.begin(), i.value());
+
+            i.advance(yield[ec]);
+
+            BOOST_REQUIRE(!ec);
+            inserted.erase(inserted.begin());
+        }
     });
 
     ios.run();

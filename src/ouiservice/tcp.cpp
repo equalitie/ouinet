@@ -1,6 +1,7 @@
 #include "tcp.h"
 #include "../or_throw.h"
 #include "../util.h"
+#include "../logger.h"
 
 namespace ouinet {
 namespace ouiservice {
@@ -33,6 +34,9 @@ void TcpOuiServiceServer::start_listen(asio::yield_context yield)
         _acceptor.close();
         return or_throw(yield, ec);
     }
+
+    LOG_DEBUG("Successfully listening on TCP Port");
+
 }
 
 void TcpOuiServiceServer::stop_listen()
@@ -55,8 +59,9 @@ GenericConnection TcpOuiServiceServer::accept(asio::yield_context yield)
     }
 
     static const auto tcp_shutter = [](asio::ip::tcp::socket& s) {
-        s.shutdown(asio::ip::tcp::socket::shutdown_both);
-        s.close();
+        sys::error_code ec;
+        s.shutdown(asio::ip::tcp::socket::shutdown_both, ec);
+        s.close(ec);
     };
 
     return GenericConnection(std::move(socket), tcp_shutter);

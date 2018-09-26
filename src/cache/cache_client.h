@@ -3,16 +3,20 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/io_service.hpp>
 #include <boost/system/error_code.hpp>
+#include <boost/filesystem.hpp>
+#include <boost/optional.hpp>
 #include <functional>
 #include <memory>
 #include <string>
 #include <json.hpp>
 
 #include "cached_content.h"
+#include "../namespaces.h"
 
-namespace asio_ipfs {
-    class node;
-}
+namespace asio_ipfs { class node; }
+namespace ouinet { namespace bittorrent { class MainlineDht; }}
+namespace ouinet { namespace util { class Ed25519PublicKey; }}
+namespace ouinet { class BTree; }
 
 namespace ouinet {
 
@@ -21,18 +25,21 @@ using Json = nlohmann::json;
 
 class CacheClient {
 public:
-    static std::unique_ptr<CacheClient> build( boost::asio::io_service&
-                                             , std::string ipns
-                                             , std::string path_to_repo
-                                             , std::function<void()>& cancel
-                                             , boost::asio::yield_context);
+    static std::unique_ptr<CacheClient>
+    build ( boost::asio::io_service&
+          , std::string ipns
+          , boost::optional<util::Ed25519PublicKey> bt_bubkey
+          , fs::path path_to_repo
+          , std::function<void()>& cancel
+          , boost::asio::yield_context);
 
     // This constructor may do repository initialization disk IO and as such
     // may block for a second or more. If that is undesirable, use the above
     // static async `build` function instead.
     CacheClient( boost::asio::io_service&
                , std::string ipns
-               , std::string path_to_repo);
+               , boost::optional<util::Ed25519PublicKey> bt_bubkey
+               , fs::path path_to_repo);
 
     CacheClient(const CacheClient&) = delete;
     CacheClient& operator=(const CacheClient&) = delete;
@@ -41,6 +48,11 @@ public:
     CacheClient& operator=(CacheClient&&);
 
     std::string ipfs_add(const std::string& content, boost::asio::yield_context);
+
+    // Gets the data stored in IPFS under `/ipfs/<ipfs_id>`.
+    //
+    // TODO: This should accept a generic storage URI instead.
+    std::string get_data(const std::string& ipfs_id, boost::asio::yield_context);
 
     // Find the content previously stored by the injector under `url`.
     // The content is returned in the parameter of the callback function.
@@ -61,12 +73,18 @@ public:
 
     ~CacheClient();
 
-private:
-    CacheClient(asio_ipfs::node, std::string ipns, std::string path_to_repo);
+    const BTree* get_btree() const;
 
 private:
-    std::string _path_to_repo;
+    CacheClient( asio_ipfs::node
+               , std::string ipns
+               , boost::optional<util::Ed25519PublicKey> bt_bubkey
+               , fs::path path_to_repo);
+
+private:
+    fs::path _path_to_repo;
     std::unique_ptr<asio_ipfs::node> _ipfs_node;
+    std::unique_ptr<bittorrent::MainlineDht> _bt_dht;
     std::unique_ptr<ClientDb> _db;
 };
 

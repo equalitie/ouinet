@@ -12,11 +12,13 @@
 #include <cstdlib>  // for atexit()
 
 #include "cache/cache_injector.h"
+#include "cache/http_desc.h"
 
 #include "namespaces.h"
 #include "util.h"
 #include "fetch_http_page.h"
 #include "connect_to_host.h"
+#include "default_timeout.h"
 #include "cache_control.h"
 #include "generic_connection.h"
 #include "split_string.h"
@@ -32,7 +34,11 @@
 #include "ouiservice/i2p.h"
 #include "ouiservice/tcp.h"
 
-#include "util/signal.h"
+#include "util/timeout.h"
+#include "util/crypto.h"
+
+#include "logger.h"
+#include "defer.h"
 
 using namespace std;
 using namespace ouinet;
@@ -101,7 +107,9 @@ void handle_connect_request( GenericConnection& client_c
                                  , yield[ec]);
     }
 
-    auto origin_c = connect_to_host(ios, host, port, disconnect_signal, yield[ec]);
+    auto origin_c = connect_to_host( ios, host, port
+                                   , default_timeout::tcp_connect()
+                                   , disconnect_signal, yield[ec]);
 
     if (ec) {
         return handle_bad_request( client_c, req
@@ -121,7 +129,10 @@ void handle_connect_request( GenericConnection& client_c
 
     http::async_write(client_c, res, yield[ec]);
 
-    if (ec) return fail(ec, "sending connect response");
+    if (ec) {
+        cerr << "Failed sending CONNECT response: " << ec.message() << endl;
+        return;
+    }
 
     full_duplex(client_c, origin_c, yield);
 }
@@ -136,10 +147,15 @@ public:
                         , Signal<void()>& abort_signal)
         : ios(ios)
         , injector(injector)
+        , cc("Ouinet Injector")
     {
         cc.fetch_fresh = [&ios, &abort_signal]
                          (const Request& rq, asio::yield_context yield) {
-            return fetch_http_page(ios, rq, abort_signal, yield);
+            return fetch_http_page( ios
+                                  , rq
+                                  , default_timeout::fetch_http()
+                                  , abort_signal
+                                  , yield);
         };
 
         cc.fetch_stored = [this](const Request& rq, asio::yield_context yield) {
@@ -151,7 +167,7 @@ public:
         };
     }
 
-    Response fetch(const Request& rq, asio::yield_context yield)
+    Response fetch(const Request& rq, Yield yield)
     {
         return cc.fetch(rq, yield);
     }
@@ -161,16 +177,17 @@ private:
     {
         if (!injector) return;
 
-        stringstream ss;
-        ss << rs;
-        auto key = rq.target().to_string();
-
-        injector->insert_content(key, ss.str(),
-            [key] (const sys::error_code& ec, auto) {
-                if (ec) {
-                    cout << "!Insert failed: " << key
-                         << " " << ec.message() << endl;
-                }
+        descriptor::http_create(*injector, rq, rs,
+            [ key = rq.target().to_string()
+            , injector = injector.get()] (const sys::error_code& ec, string desc_data) {
+                if (ec) return;
+                injector->insert_content(key, desc_data,
+                    [key] (const sys::error_code& ec, auto) {
+                        if (ec) {
+                            cout << "!Insert failed: " << key
+                                 << " " << ec.message() << endl;
+                        }
+                    });
             });
     }
 
@@ -186,31 +203,16 @@ private:
         sys::error_code ec;
 
         auto content = injector->get_content(rq.target().to_string(), yield[ec]);
-
         if (ec) return or_throw<CacheEntry>(yield, ec);
 
-        http::response_parser<Response::body_type> parser;
-        parser.eager(true);
-        parser.put(asio::buffer(content.data), ec);
-        assert(!ec && "Malformed cache entry");
-
-        if (!parser.is_done()) {
-            cerr << "------- WARNING: Unfinished message in cache --------" << endl;
-            assert(parser.is_header_done() && "Malformed response head did not cause error");
-            auto rp = parser.get();
-            cerr << rq << rp.base() << "<" << rp.body().size() << " bytes in body>" << endl;
-            cerr << "-----------------------------------------------------" << endl;
-            ec = asio::error::not_found;
-        }
-
-        return or_throw(yield, ec, CacheEntry{content.ts, parser.release()});
+        auto res = descriptor::http_parse(*injector, content.data, yield[ec]);
+        return or_throw(yield, ec, CacheEntry{content.ts, res});
     }
 
 private:
     asio::io_service& ios;
     unique_ptr<CacheInjector>& injector;
     CacheControl cc;
-    //RateLimiter _rate_limiter;
 };
 
 //------------------------------------------------------------------------------
@@ -219,7 +221,7 @@ void serve( InjectorConfig& config
           , GenericConnection con
           , unique_ptr<CacheInjector>& injector
           , Signal<void()>& close_connection_signal
-          , asio::yield_context yield)
+          , asio::yield_context yield_)
 {
     auto close_connection_slot = close_connection_signal.connect([&con] {
         con.close();
@@ -230,16 +232,25 @@ void serve( InjectorConfig& config
 
         Request req;
         beast::flat_buffer buffer;
-        http::async_read(con, buffer, req, yield[ec]);
+        http::async_read(con, buffer, req, yield_[ec]);
+
+        Yield yield(con.get_io_service(), yield_);
 
         if (ec) break;
 
-        if (!authenticate(req, con, config.credentials(), yield[ec])) {
+        yield.log("=== New request ===");
+        yield.log(req.base());
+        auto on_exit = defer([&] { yield.log("Done"); });
+
+        if (!authenticate(req, con, config.credentials(), yield[ec].tag("auth"))) {
             continue;
         }
 
         if (req.method() == http::verb::connect) {
-            return handle_connect_request(con, req, close_connection_signal, yield);
+            return handle_connect_request( con
+                                         , req
+                                         , close_connection_signal
+                                         , yield.tag("handle_connect"));
         }
 
         // Check for a Ouinet version header hinting us on
@@ -252,23 +263,35 @@ void serve( InjectorConfig& config
             // TODO: Maybe reject requests for HTTPS URLS:
             // we are perfectly able to handle them (and do verification locally),
             // but the client should be using a CONNECT request instead!
-            res = fetch_http_page(con.get_io_service(), req2, close_connection_signal, yield[ec]);
+            res = fetch_http_page( con.get_io_service()
+                                 , req2
+                                 , default_timeout::fetch_http()
+                                 , close_connection_signal
+                                 , yield[ec].tag("fetch_http_page"));
         } else {
             // Ouinet header found, behave like a Ouinet injector.
             req2.erase(ouinet_version_hdr);  // do not propagate or cache the header
             InjectorCacheControl cc(con.get_io_service(), injector, close_connection_signal);
-            res = cc.fetch(req2, yield[ec]);
+            res = cc.fetch(req2, yield[ec].tag("cache_control.fetch"));
         }
         if (ec) {
             handle_bad_request( con, req
                               , "Failed to retrieve content from origin: " + ec.message()
-                              , yield[ec]);
+                              , yield[ec].tag("handle_bad_request"));
             continue;
         }
 
+
+        yield.log("=== Sending back response ===");
+        yield.log(res.base());
+
         // Forward back the response
-        http::async_write(con, res, yield[ec]);
-        if (ec) {
+        http::async_write(con, res, yield[ec].tag("write_response"));
+
+        if (ec) break;
+
+        if (!res.keep_alive()) {
+            con.close();
             break;
         }
     }
@@ -327,6 +350,8 @@ void listen( InjectorConfig& config
 //------------------------------------------------------------------------------
 int main(int argc, const char* argv[])
 {
+    util::crypto_init();
+
     InjectorConfig config;
 
     try {
@@ -348,9 +373,9 @@ int main(int argc, const char* argv[])
     }
 
     if (exists(config.repo_root()/OUINET_PID_FILE)) {
-        cerr << "Existing PID file " << config.repo_root()/OUINET_PID_FILE
-             << "; another injector process may be running"
-             << ", otherwise please remove the file." << endl;
+      LOG_ABORT("Existing PID file ", config.repo_root()/OUINET_PID_FILE,
+                "; another injector process may be running" ,
+                ", otherwise please remove the file.\n");
         return 1;
     }
     // Acquire a PID file for the life of the process
@@ -368,8 +393,10 @@ int main(int argc, const char* argv[])
 
     Signal<void()> shutdown_signal;
 
-    auto cache_injector
-        = make_unique<CacheInjector>(ios, (config.repo_root()/"ipfs").native());
+    auto cache_injector = std::make_unique<CacheInjector>
+                            ( ios
+                            , config.bt_publisher_private_key()
+                            , config.repo_root());
 
     auto shutdown_ipfs_slot = shutdown_signal.connect([&] {
         cache_injector = nullptr;
@@ -378,7 +405,7 @@ int main(int argc, const char* argv[])
     // Although the IPNS ID is already in IPFS's config file,
     // this just helps put all info relevant to the user right in the repo root.
     auto ipns_id = cache_injector->id();
-    cout << "IPNS DB: " << ipns_id << endl;
+    LOG_DEBUG("IPNS DB: " + ipns_id);
     util::create_state_file(config.repo_root()/"cache-ipns", ipns_id);
 
     OuiServiceServer proxy_server(ios);

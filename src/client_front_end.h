@@ -50,7 +50,8 @@ public:
 public:
     Response serve( const boost::optional<Endpoint>& injector_ep
                   , const http::request<http::string_body>&
-                  , CacheClient*, const CACertificate&);
+                  , CacheClient*, const CACertificate&
+                  , asio::yield_context yield);
 
     bool is_origin_access_enabled() const
     {
@@ -94,6 +95,15 @@ private:
 
     void handle_ca_pem( const Request&, Response&, std::stringstream&
                       , const CACertificate& );
+
+    void handle_upload(const Request&, Response&, std::stringstream&
+                      , CacheClient*, asio::yield_context);
+
+    void handle_descriptor(const Request&, Response&, std::stringstream&
+                          , CacheClient*, asio::yield_context);
+
+    void handle_enumerate_db(const Request&, Response&, std::stringstream&
+                            , CacheClient*, asio::yield_context);
 
     void handle_portal( const Request&, Response&, std::stringstream&
                       , const boost::optional<Endpoint>&, CacheClient*);

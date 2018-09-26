@@ -7,7 +7,7 @@
         "uri": {
             "$id": "#uri",
             "type": "string",
-            "pattern": "^[a-z][\\+\\-\\.-0-9a-z]+:"
+            "pattern": "^[a-z][\\+\\-\\.0-9a-z]+:"
         },
         "date": {
             "$id": "#date",
@@ -25,6 +25,23 @@
             "type": "string",
             "$comment": "IPFS-like Base58-encoded multihash.",
             "pattern": "^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]+$"
+        },
+        "dlinks": {
+            "type": "object",
+            "$comment": "The pattern for property names is the same as mhash values.",
+            "patternProperties": {
+                "^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]+$": {
+                    "description": "A list of URIs for data retrieval.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/uri"
+                    },
+                    "minItems": 1,
+                    "uniqueItems": true
+                }
+            },
+            "additionalProperties": false,
+            "minProperties": 1
         }
     },
 
@@ -36,9 +53,14 @@
             "const": 0,
             "$comment": "The same number indicated at the schema's title."
         },
-        "uri": {
-            "description": "The URI that this descriptor describes.",
-            "$ref": "#/definitions/uri"
+        "uris": {
+            "description": "The URIs that this descriptor describes.",
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/uri"
+            },
+            "minItems": 1,
+            "uniqueItems": true
         },
         "ts": {
             "description": "The time when this descriptor was created.",
@@ -80,6 +102,10 @@
 
             "minItems": 1
         },
+        "data_links": {
+            "description": "If present, it maps data hashes to a list of URIs for data retrieval.",
+            "$ref": "#/definitions/dlinks"
+        },
         "signatures": {
             "description": "Signatures of injector services on this descriptor; public key and time stamp are used as signing entity.",
             "type": "object",
@@ -109,24 +135,11 @@
             "properties": {
                 "data_links": {
                     "description": "If present, it maps data hashes to a list of URIs for data retrieval.",
-                    "type": "object",
-                    "patternProperties": {
-                        "^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]+$": {
-                            "description": "A list of URIs for data retrieval.",
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/uri"
-                            },
-                            "minItems": 1,
-                            "uniqueItems": true
-                        }
-                    },
-                    "additionalProperties": false,
-                    "minProperties": 1
+                    "$ref": "#/definitions/dlinks"
                 }
             }
         }
     },
 
-    "required": ["ouinet_descriptor_version", "uri", "ts", "versions", "signatures"]
+    "required": ["ouinet_descriptor_version", "uris", "ts", "versions", "signatures"]
 }

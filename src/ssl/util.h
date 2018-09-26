@@ -9,6 +9,7 @@
 
 #include "../generic_connection.h"
 #include "../or_throw.h"
+#include "../util/signal.h"
 
 
 namespace ouinet { namespace ssl { namespace util {
@@ -50,6 +51,7 @@ static inline
 ouinet::GenericConnection
 client_handshake( ouinet::GenericConnection&& con
                 , const std::string& host
+                , Signal<void()>& abort_signal
                 , boost::asio::yield_context yield)
 {
     using namespace std;
@@ -69,8 +71,12 @@ client_handshake( ouinet::GenericConnection&& con
     // As seen in ``http_client_async_ssl.cpp`` Boost Beast example.
     if (!::SSL_set_tlsext_host_name(ssl_sock->native_handle(), host.c_str()))
         ec = {static_cast<int>(::ERR_get_error()), boost::asio::error::get_ssl_category()};
-    if (!ec)
+
+    if (!ec) {
+        auto slot = abort_signal.connect([&] { ssl_sock->next_layer().close(); });
         ssl_sock->async_handshake(ssl::stream_base::client, yield[ec]);
+    }
+
     if (ec) return or_throw<GenericConnection>(yield, ec);
 
     static const auto ssl_shutter = [](ssl::stream<GenericConnection>& s) {

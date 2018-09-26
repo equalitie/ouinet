@@ -24,6 +24,28 @@ public:
     struct Node; // public, but opaque
 
 public:
+    // Note: due to lazy-async nature of the nodes of this tree
+    // we can't use the standard std::iterator-like interface.
+    class Iterator {
+    private:
+        friend class BTree;
+        struct Impl;
+
+    public:
+        Key key() const;
+        Value value() const;
+
+        void advance(asio::yield_context);
+        bool is_end() const;
+
+    private:
+        Iterator(std::shared_ptr<Impl>);
+
+    private:
+        std::shared_ptr<Impl> _impl;
+    };
+
+public:
     BTree( CatOp    = nullptr
          , AddOp    = nullptr
          , RemoveOp = nullptr
@@ -48,6 +70,8 @@ public:
 
     size_t local_node_count() const;
 
+    Iterator begin(asio::yield_context) const;
+
 private:
     void raw_insert(Key, Value, asio::yield_context);
 
@@ -55,9 +79,9 @@ private:
                    , std::unique_ptr<Node>&
                    , const Key&
                    , const CatOp&
-                   , asio::yield_context);
+                   , asio::yield_context) const;
 
-    void try_remove(Hash&, asio::yield_context);
+    void try_remove(Hash&, asio::yield_context) const;
 
 private:
     size_t _max_node_size;

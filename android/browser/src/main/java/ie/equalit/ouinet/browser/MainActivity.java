@@ -137,6 +137,8 @@ public class MainActivity extends AppCompatActivity {
 
         _ouinet = new Ouinet(this, ipns, injector_ep, credentials);
 
+        _ouinet.acquireMulticastLock();
+
         setContentView(R.layout.activity_main);
 
         _webView = (WebView) findViewById(R.id.webview);

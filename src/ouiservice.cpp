@@ -31,16 +31,16 @@ void OuiServiceServer::start_listen(asio::yield_context yield)
         asio::spawn(_ios, [this, implementation = implementation.get(), lock = success_condition.lock()] (asio::yield_context yield) mutable {
             sys::error_code ec;
 
+            auto slot_connection = _stop_listen.connect([implementation] () {
+                implementation->stop_listen();
+            });
+
             implementation->start_listen(yield[ec]);
             if (ec) {
                 return;
             }
 
             lock.release(true);
-
-            auto slot_connection = _stop_listen.connect([implementation] () {
-                implementation->stop_listen();
-            });
 
             while (true) {
                 GenericConnection connection = implementation->accept(yield[ec]);

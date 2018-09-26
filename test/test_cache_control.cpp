@@ -36,9 +36,9 @@ static optional<string_view> get(const Request& rq, http::field f)
 
 template<class F> static void run_spawned(F&& f) {
     asio::io_service ios;
-    asio::spawn(ios, [f = forward<F>(f)](auto yield) {
+    asio::spawn(ios, [&ios, f = forward<F>(f)](auto yield) {
             try {
-                f(yield);
+                f(Yield(ios, yield));
             }
             catch (const std::exception& e) {
                 BOOST_ERROR(string("Test ended with exception: ") + e.what());
@@ -65,7 +65,7 @@ BOOST_AUTO_TEST_CASE(test_parse_date)
 
 BOOST_AUTO_TEST_CASE(test_cache_origin_fail)
 {
-    CacheControl cc;
+    CacheControl cc("test");
 
     unsigned cache_check = 0;
     unsigned origin_check = 0;
@@ -93,7 +93,7 @@ BOOST_AUTO_TEST_CASE(test_cache_origin_fail)
 
 BOOST_AUTO_TEST_CASE(test_max_cached_age)
 {
-    CacheControl cc;
+    CacheControl cc("test");
 
     unsigned cache_check = 0;
     unsigned origin_check = 0;
@@ -136,7 +136,7 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age)
 
 BOOST_AUTO_TEST_CASE(test_maxage)
 {
-    CacheControl cc;
+    CacheControl cc("test");
 
     unsigned cache_check = 0;
     unsigned origin_check = 0;
@@ -183,7 +183,7 @@ BOOST_AUTO_TEST_CASE(test_maxage)
 
 BOOST_AUTO_TEST_CASE(test_http10_expires)
 {
-    CacheControl cc;
+    CacheControl cc("test");
 
     unsigned cache_check = 0;
     unsigned origin_check = 0;
@@ -242,7 +242,7 @@ BOOST_AUTO_TEST_CASE(test_http10_expires)
 
 BOOST_AUTO_TEST_CASE(test_dont_load_cache_when_If_None_Match)
 {
-    CacheControl cc;
+    CacheControl cc("test");
 
     unsigned origin_check = 0;
 
@@ -270,7 +270,7 @@ BOOST_AUTO_TEST_CASE(test_dont_load_cache_when_If_None_Match)
 
 BOOST_AUTO_TEST_CASE(test_no_etag_override)
 {
-    CacheControl cc;
+    CacheControl cc("test");
 
     unsigned origin_check = 0;
 
@@ -301,7 +301,7 @@ BOOST_AUTO_TEST_CASE(test_no_etag_override)
 
 BOOST_AUTO_TEST_CASE(test_request_no_store)
 {
-    CacheControl cc;
+    CacheControl cc("test");
 
     unsigned origin_check = 0;
 
@@ -325,7 +325,7 @@ BOOST_AUTO_TEST_CASE(test_request_no_store)
 
 BOOST_AUTO_TEST_CASE(test_if_none_match)
 {
-    CacheControl cc;
+    CacheControl cc("test");
 
     unsigned cache_check = 0;
     unsigned origin_check = 0;
@@ -383,7 +383,7 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
 
 BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
 {
-    CacheControl cc;
+    CacheControl cc("test");
 
     unsigned cache_check = 0;
     unsigned origin_check = 0;

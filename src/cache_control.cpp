@@ -5,6 +5,9 @@
 #include "or_throw.h"
 #include "split_string.h"
 #include "util.h"
+#include "http_util.h"
+
+#include "logger.h"
 
 using namespace std;
 using namespace ouinet;
@@ -38,7 +41,9 @@ template<class R>
 static optional<beast::string_view> get(const R& r, http::field f)
 {
     auto i = r.find(f);
-    if (i == r.end()) return boost::none;
+    if (i == r.end())
+      return boost::none;
+        
     return i->value();
 }
 
@@ -143,7 +148,6 @@ static
 bool is_expired(const CacheControl::CacheEntry& entry)
 {
     // RFC2616: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.9.3
-
     static const auto now = [] {
         return posix_time::second_clock::universal_time();
     };
@@ -210,26 +214,27 @@ static bool has_correct_content_length(const Response& rs)
     return rs.body().size() == length;
 }
 
-static
-Response bad_gateway(const Request& req)
+Response CacheControl::bad_gateway(const Request& req, beast::string_view reason)
 {
     Response res{http::status::bad_gateway, req.version()};
-    res.set(http::field::server, "Ouinet");
+    res.set(http::field::server, _server_name);
+    res.set("X-Ouinet-Debug", reason);
     res.keep_alive(req.keep_alive());
+    res.prepare_payload();
     return res;
 }
 
 Response
-CacheControl::fetch(const Request& request, asio::yield_context yield)
+CacheControl::fetch(const Request& request, Yield yield)
 {
     sys::error_code ec;
     auto response = do_fetch(request, yield[ec]);
 
     if(!ec && !has_correct_content_length(response)) {
 #ifndef NDEBUG
-        cerr << "::::: CacheControl WARNING Incorrect content length :::::" << endl;
-        cerr << request << response;
-        cerr << ":::::::::::::::::::::::::::::::::::::::::::::::::::::::::" << endl;
+        yield.log("::::: CacheControl WARNING Incorrect content length :::::");
+        yield.log(request, response);
+        yield.log(":::::::::::::::::::::::::::::::::::::::::::::::::::::::::");
 #endif
     }
 
@@ -261,7 +266,7 @@ static bool must_revalidate(const Request& request)
 
 // TODO: This function is unfinished.
 Response
-CacheControl::do_fetch(const Request& request, asio::yield_context yield)
+CacheControl::do_fetch(const Request& request, Yield yield)
 {
     namespace err = asio::error;
 
@@ -281,7 +286,9 @@ CacheControl::do_fetch(const Request& request, asio::yield_context yield)
             return or_throw(yield, err::operation_aborted, move(res));
         }
 
-        return bad_gateway(request);
+        return bad_gateway( request
+                          , util::str( "1: fresh: \"", ec1.message(), "\""
+                                     , " cache: \"",   ec2.message(), "\""));
     }
 
     auto cache_entry = do_fetch_stored(request, yield[ec]);
@@ -293,27 +300,35 @@ CacheControl::do_fetch(const Request& request, asio::yield_context yield)
 
     if (ec) {
         // Retrieving from cache failed.
-        sys::error_code fetch_ec;
+        sys::error_code fresh_ec;
 
-        auto res = do_fetch_fresh(request, yield[fetch_ec]);
+        auto res = do_fetch_fresh(request, yield[fresh_ec]);
 
-        if (!fetch_ec) return res;
+        if (!fresh_ec) return res;
 
-        if (fetch_ec == err::operation_aborted) {
+        if (fresh_ec == err::operation_aborted) {
             return or_throw<Response>(yield, ec);
         }
 
-        return bad_gateway(request);
+        return bad_gateway( request
+                          , util::str( "2: fresh: \"", fresh_ec.message(), "\""
+                                     , " cached: \"", ec.message(), "\""));
     }
 
     // If we're here that means that we were able to retrieve something
     // from the cache.
+    LOG_DEBUG(yield.tag(), ": Response was retrieved from cache");
 
     if (has_cache_control_directive(cache_entry.response, "private")
         || is_older_than_max_cache_age(cache_entry.time_stamp)) {
         auto response = do_fetch_fresh(request, yield[ec]);
 
-        if (!ec) return response;
+        if (!ec) {
+            LOG_DEBUG(yield.tag(), ": Response was served from injector: cached response is private or too old");
+            return response;
+        }
+
+        LOG_DEBUG(yield.tag(), ": Response was served from cached: cannot reach the injector");
 
         return is_expired(cache_entry)
              ? add_stale_warning(move(cache_entry.response))
@@ -321,6 +336,7 @@ CacheControl::do_fetch(const Request& request, asio::yield_context yield)
     }
 
     if (!is_expired(cache_entry)) {
+        LOG_DEBUG(yield.tag(), ": Response was served from cache: not expired");
         return cache_entry.response;
     }
 
@@ -328,6 +344,7 @@ CacheControl::do_fetch(const Request& request, asio::yield_context yield)
     auto rq_etag = get(request, http::field::if_none_match);
 
     if (cache_etag && !rq_etag) {
+        LOG_DEBUG(yield.tag(), ": Attempting to revalidate cached response")
         auto rq = request; // Make a copy because `request` is const&.
 
         rq.set(http::field::if_none_match, *cache_etag);
@@ -335,21 +352,28 @@ CacheControl::do_fetch(const Request& request, asio::yield_context yield)
         auto response = do_fetch_fresh(rq, yield[ec]);
 
         if (ec) {
+            LOG_DEBUG(yield.tag(), ": Response was served from cache: revalidation failed");
             return add_stale_warning(move(cache_entry.response));
         }
 
         if (response.result() == http::status::not_modified) {
+            LOG_DEBUG(yield.tag(), ": Response was served from cache: not modified");
             return move(cache_entry.response);
         }
 
+        LOG_DEBUG(yield.tag(), ": Response was served from injector: cached response is modified");
         return response;
     }
 
     auto response = do_fetch_fresh(request, yield[ec]);
 
-    return ec
-         ? add_stale_warning(move(cache_entry.response))
-         : response;
+    if (ec) {
+        LOG_DEBUG(yield.tag(), ": Response was served from cache: requesting fresh response failed");
+        return add_stale_warning(move(cache_entry.response));
+    } else {
+        LOG_DEBUG(yield.tag(), ": Response was served from injector: cached expired without etag");
+        return response;
+    }
 }
 
 void CacheControl::max_cached_age(const posix_time::time_duration& d)
@@ -363,22 +387,22 @@ posix_time::time_duration CacheControl::max_cached_age() const
 }
 
 Response
-CacheControl::do_fetch_fresh(const Request& rq, asio::yield_context yield)
+CacheControl::do_fetch_fresh(const Request& rq, Yield yield)
 {
     if (fetch_fresh) {
         sys::error_code ec;
-        auto rs = fetch_fresh(rq, yield[ec]);
-        if (!ec) { try_to_cache(rq, rs); }
+        auto rs = fetch_fresh(rq, yield[ec].tag("fetch_fresh"));
+        if (!ec) { try_to_cache(rq, rs, yield); }
         return or_throw(yield, ec, move(rs));
     }
     return or_throw<Response>(yield, asio::error::operation_not_supported);
 }
 
 CacheControl::CacheEntry
-CacheControl::do_fetch_stored(const Request& rq, asio::yield_context yield)
+CacheControl::do_fetch_stored(const Request& rq, Yield yield)
 {
     if (fetch_stored) {
-        return fetch_stored(rq, yield);
+        return fetch_stored(rq, yield.tag("fetch_stored"));
     }
     return or_throw<CacheEntry>(yield, asio::error::operation_not_supported);
 }
@@ -575,7 +599,8 @@ Response CacheControl::filter_before_store(Response response)
 //------------------------------------------------------------------------------
 void
 CacheControl::try_to_cache( const Request& request
-                          , const Response& response) const
+                          , const Response& response
+                          , Yield& yield) const
 {
     if (!store) return;
 
@@ -583,10 +608,10 @@ CacheControl::try_to_cache( const Request& request
 
     if (!ok_to_cache(request, response, &reason)) {
 #ifndef NDEBUG
-        cerr << "::::: CacheControl: NOT CACHING :::::" << endl;
-        cerr << ":: " << reason << endl;
-        cerr << request.base() << response.base() << endl;
-        cerr << ":::::::::::::::::::::::::::::::::::::" << endl;
+        yield.log("::::: CacheControl: NOT CACHING :::::");
+        yield.log(":: ", reason);
+        yield.log(request.base(), response.base());
+        yield.log(":::::::::::::::::::::::::::::::::::::");
 #endif
         return;
     }

@@ -8,18 +8,27 @@
 #include <asio_ipfs.h>
 #include "db.h"
 #include "get_content.h"
+#include "publisher.h"
+#include "../bittorrent/dht.h"
 
 using namespace std;
 using namespace ouinet;
+namespace bt = ouinet::bittorrent;
 
-namespace asio = boost::asio;
-namespace sys  = boost::system;
-
-CacheInjector::CacheInjector(asio::io_service& ios, string path_to_repo)
-    : _ipfs_node(new asio_ipfs::node(ios, path_to_repo))
-    , _db(new InjectorDb(*_ipfs_node, path_to_repo))
+CacheInjector::CacheInjector
+        ( asio::io_service& ios
+        , const boost::optional<util::Ed25519PrivateKey>& bt_publish_key
+        , fs::path path_to_repo)
+    : _ipfs_node(new asio_ipfs::node(ios, (path_to_repo/"ipfs").native()))
+    , _bt_dht(new bt::MainlineDht(ios))
+    , _publisher(new Publisher( *_ipfs_node
+                              , *_bt_dht
+                              , bt_publish_key
+                              , path_to_repo/"publisher"))
+    , _db(new InjectorDb(*_ipfs_node, *_publisher, path_to_repo))
     , _was_destroyed(make_shared<bool>(false))
 {
+    _bt_dht->set_interfaces({asio::ip::address_v4::any()});
 }
 
 string CacheInjector::id() const
@@ -64,15 +73,24 @@ void CacheInjector::insert_content_from_queue()
                                          if (*wd) return;
 
                                          sys::error_code ec;
-                                         Json json;
 
-                                         json["value"] = ipfs_id;
-                                         json["ts"]    = boost::posix_time::to_iso_extended_string(ts) + 'Z';
+                                         if (!key.empty()) {  // not a raw data insertion, store in database
+                                             Json json;
 
-                                         _db->update(move(key), json.dump(), yield[ec]);
+                                             json["value"] = ipfs_id;
+                                             json["ts"]    = boost::posix_time::to_iso_extended_string(ts) + 'Z';
+
+                                             _db->update(move(key), json.dump(), yield[ec]);
+                                         }
                                          cb(ec, ipfs_id);
                                      });
                    });
+}
+
+void CacheInjector::put_data( const string& data
+                            , function<void(sys::error_code, string)> cb)
+{
+    insert_content("", move(data), move(cb));
 }
 
 void CacheInjector::insert_content( string key
@@ -108,6 +126,11 @@ string CacheInjector::insert_content( string key
         });
 
     return result.get();
+}
+
+string CacheInjector::get_data(const string &ipfs_id, asio::yield_context yield)
+{
+    return _ipfs_node->cat(ipfs_id, yield);
 }
 
 CachedContent CacheInjector::get_content(string url, asio::yield_context yield)

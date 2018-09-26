@@ -8,12 +8,15 @@
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/ssl/stream.hpp>
+#include <boost/optional/optional_io.hpp>
 #include <lrucache.hpp>
 #include <iostream>
 #include <fstream>
 #include <cstdlib>  // for atexit()
 
 #include "cache/cache_client.h"
+#include "cache/http_desc.h"
+
 #include "namespaces.h"
 #include "fetch_http_page.h"
 #include "client_front_end.h"
@@ -30,6 +33,7 @@
 #include "client.h"
 #include "authenticate.h"
 #include "defer.h"
+#include "default_timeout.h"
 #include "ssl/ca_certificate.h"
 #include "ssl/dummy_certificate.h"
 
@@ -42,6 +46,7 @@
 #include "ouiservice/tcp.h"
 
 #include "util/signal.h"
+#include "util/crypto.h"
 
 #include "logger.h"
 
@@ -55,16 +60,10 @@ using Request  = http::request<http::string_body>;
 using Response = http::response<http::dynamic_body>;
 using boost::optional;
 
-static const boost::filesystem::path OUINET_PID_FILE = "pid";
-static const boost::filesystem::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
-static const boost::filesystem::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
-static const boost::filesystem::path OUINET_CA_DH_FILE = "ssl-ca-dh.pem";
-
-//------------------------------------------------------------------------------
-#define ASYNC_DEBUG(code, ...) [&] () mutable {\
-    auto task = _front_end.notify_task(util::str(__VA_ARGS__));\
-    return code;\
-}()
+static const fs::path OUINET_PID_FILE = "pid";
+static const fs::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
+static const fs::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
+static const fs::path OUINET_CA_DH_FILE = "ssl-ca-dh.pem";
 
 //------------------------------------------------------------------------------
 class Client::State : public enable_shared_from_this<Client::State> {
@@ -82,8 +81,9 @@ public:
     void start(int argc, char* argv[]);
 
     void stop() {
-        _ipfs_cache = nullptr;
+        _cache = nullptr;
         _shutdown_signal();
+        if (_injector) _injector->stop();
     }
 
     void setup_ipfs_cache();
@@ -105,9 +105,7 @@ private:
                 , request_route::Config& request_config
                 , asio::yield_context yield);
 
-    Response fetch_fresh( const Request& request
-                        , request_route::Config& request_config
-                        , asio::yield_context yield);
+    Response fetch_fresh(const Request&, request_route::Config&, Yield);
 
     CacheControl build_cache_control(request_route::Config& request_config);
 
@@ -117,17 +115,19 @@ private:
 
     void setup_injector(asio::yield_context);
 
-    boost::filesystem::path get_pid_path() const {
+    fs::path get_pid_path() const {
         return _config.repo_root()/OUINET_PID_FILE;
     }
 
-    string maybe_start_seeding( const Request&
-                              , const Response&
-                              , asio::yield_context);
+    string maybe_start_seeding(const Request&, const Response&, Yield);
 
     bool was_stopped() const {
         return _shutdown_signal.call_count() != 0;
     }
+
+    fs::path ca_cert_path() const { return _config.repo_root() / OUINET_CA_CERT_FILE; }
+    fs::path ca_key_path()  const { return _config.repo_root() / OUINET_CA_KEY_FILE;  }
+    fs::path ca_dh_path()   const { return _config.repo_root() / OUINET_CA_DH_FILE;   }
 
 private:
     asio::io_service& _ios;
@@ -135,7 +135,7 @@ private:
     cache::lru_cache<string, string> _ssl_certificate_cache;
     ClientConfig _config;
     std::unique_ptr<OuiServiceClient> _injector;
-    std::unique_ptr<CacheClient> _ipfs_cache;
+    std::unique_ptr<CacheClient> _cache;
 
     ClientFrontEnd _front_end;
     Signal<void()> _shutdown_signal;
@@ -148,23 +148,23 @@ private:
 //------------------------------------------------------------------------------
 string Client::State::maybe_start_seeding( const Request&  req
                                          , const Response& res
-                                         , asio::yield_context yield)
+                                         , Yield yield)
 {
-    if (!_ipfs_cache)
+    if (!_cache)
         return or_throw<string>(yield, asio::error::operation_not_supported);
 
     const char* reason = "";
     if (!CacheControl::ok_to_cache(req, res, &reason)) {
-        cerr << "---------------------------------------" << endl;
-        cerr << "Not caching " << req.target() << endl;
-        cerr << "Because: \"" << reason << "\"" << endl;
-        cerr << req.base() << res.base();
-        cerr << "---------------------------------------" << endl;
+        yield.log("---------------------------------------");
+        yield.log("Not caching ", req.target());
+        yield.log("Because: \"", reason, "\"");
+        yield.log(req.base(), res.base());
+        yield.log("---------------------------------------");
         return {};
     }
 
-    return _ipfs_cache->ipfs_add
-            ( util::str(CacheControl::filter_before_store(res))
+    return _cache->ipfs_add
+            ( beast::buffers_to_string(res.body().data())
             , yield);
 }
 
@@ -197,11 +197,10 @@ void Client::State::handle_connect_request( GenericConnection& client_c
     sys::error_code ec;
 
     if (!_front_end.is_injector_proxying_enabled()) {
-        return ASYNC_DEBUG( handle_bad_request( client_c
-                                              , req
-                                              , "Forwarding disabled"
-                                              , yield[ec])
-                          , "Forwarding disabled");
+        return handle_bad_request( client_c
+                                 , req
+                                 , "Forwarding disabled"
+                                 , yield[ec]);
     }
 
     auto inj = _injector->connect(yield[ec], _shutdown_signal);
@@ -241,7 +240,10 @@ void Client::State::handle_connect_request( GenericConnection& client_c
 
     http::async_write(client_c, res, yield[ec]);
 
-    if (ec) return fail(ec, "sending connect response");
+    if (ec) {
+        cerr << "Failed to return CONNECT response: " << ec.message() << endl;
+        return;
+    }
 
     if (!(200 <= unsigned(res.result()) && unsigned(res.result()) < 300)) {
         return;
@@ -260,7 +262,7 @@ Client::State::fetch_stored( const Request& request
 
     const bool cache_is_disabled
         = !request_config.enable_cache
-       || !_ipfs_cache
+       || !_cache
        || !_front_end.is_ipfs_cache_enabled();
 
     if (cache_is_disabled) {
@@ -272,7 +274,7 @@ Client::State::fetch_stored( const Request& request
     // Get the content from cache
     auto key = request.target();
 
-    auto content = _ipfs_cache->get_content(key.to_string(), yield[ec]);
+    auto content = _cache->get_content(key.to_string(), yield[ec]);
 
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
@@ -280,32 +282,14 @@ Client::State::fetch_stored( const Request& request
     // an error should have been reported.
     assert(!content.ts.is_not_a_date_time());
 
-    http::response_parser<Response::body_type> parser;
-    parser.eager(true);
-    parser.put(asio::buffer(content.data), ec);
-
-    assert(!ec && "Malformed cache entry");
-
-    if (!parser.is_done()) {
-#ifndef NDEBUG
-        cerr << "------- WARNING: Unfinished message in cache --------" << endl;
-        assert(parser.is_header_done() && "Malformed response head did not cause error");
-        auto response = parser.get();
-        cerr << request << response.base() << "<" << response.body().size() << " bytes in body>" << endl;
-        cerr << "-----------------------------------------------------" << endl;
-#endif
-        ec = asio::error::not_found;
-    }
-
-    if (ec) return or_throw<CacheEntry>(yield, ec);
-
-    return CacheEntry{content.ts, parser.release()};
+    auto res = descriptor::http_parse(*_cache, content.data, yield[ec]);
+    return or_throw(yield, ec, CacheEntry{content.ts, res});
 }
 
 //------------------------------------------------------------------------------
 Response Client::State::fetch_fresh( const Request& request
                                    , request_route::Config& request_config
-                                   , asio::yield_context yield)
+                                   , Yield yield)
 {
     using namespace asio::error;
     using request_route::responder;
@@ -327,7 +311,11 @@ Response Client::State::fetch_fresh( const Request& request
                 Response res;
 
                 // Send the request straight to the origin
-                res = fetch_http_page(_ios, request, _shutdown_signal, yield[ec]);
+                res = fetch_http_page( _ios
+                                     , request
+                                     , default_timeout::fetch_http()
+                                     , _shutdown_signal
+                                     , yield[ec].tag("fetch_origin"));
 
                 if (ec) {
                     last_error = ec;
@@ -353,7 +341,8 @@ Response Client::State::fetch_fresh( const Request& request
 
                     // Connect to the injector/proxy.
                     sys::error_code ec;
-                    auto inj = _injector->connect(yield[ec], _shutdown_signal);
+                    auto inj = _injector->connect( yield[ec].tag("connect_to_injector")
+                                                 , _shutdown_signal);
                     if (ec) {
                         last_error = ec;
                         continue;
@@ -378,8 +367,10 @@ Response Client::State::fetch_fresh( const Request& request
                     auto connres = fetch_http_head( _ios
                                                   , inj.connection
                                                   , connreq
+                                                  , default_timeout::fetch_http()
                                                   , _shutdown_signal
-                                                  , yield[ec]);
+                                                  , yield[ec].tag("connreq"));
+
                     if (connres.result() != http::status::ok) {
                         // This error code is quite fake, so log the error too.
                         last_error = asio::error::connection_refused;
@@ -391,8 +382,9 @@ Response Client::State::fetch_fresh( const Request& request
                     // Send the request to the origin.
                     auto res = fetch_http_origin( _ios , inj.connection
                                                 , url, request
+                                                , default_timeout::fetch_http()
                                                 , _shutdown_signal
-                                                , yield[ec]);
+                                                , yield[ec].tag("send_req"));
                     if (ec) {
                         last_error = ec;
                         continue;
@@ -408,7 +400,8 @@ Response Client::State::fetch_fresh( const Request& request
 
                 // Connect to the injector.
                 sys::error_code ec;
-                auto inj = _injector->connect(yield[ec], _shutdown_signal);
+                auto inj = _injector->connect( yield[ec].tag("connect_to_injector2")
+                                             , _shutdown_signal);
                 if (ec) {
                     last_error = ec;
                     continue;
@@ -427,25 +420,38 @@ Response Client::State::fetch_fresh( const Request& request
                 auto res = fetch_http_page( _ios
                                           , inj.connection
                                           , injreq
+                                          , default_timeout::fetch_http()
                                           , _shutdown_signal
-                                          , yield[ec]);
+                                          , yield[ec].tag("fetch_http_page"));
                 if (ec) {
                     last_error = ec;
                     continue;
                 }
 
                 if (r == responder::injector) {
-                    sys::error_code ec_;  // seed the original request
-                    string ipfs = maybe_start_seeding(request, res, yield[ec_]);
+                    string ipfs
+                        = maybe_start_seeding( request
+                                             , res
+                                             , yield.ignore_error()
+                                                    .tag("start_seeding"));
                 }
 
                 return res;
             }
             case responder::_front_end: {
-                return _front_end.serve( _config.injector_endpoint()
-                                       , request
-                                       , _ipfs_cache.get()
-                                       , *_ca_certificate);
+                sys::error_code ec;
+
+                auto res = _front_end.serve( _config.injector_endpoint()
+                                           , request
+                                           , _cache.get()
+                                           , *_ca_certificate
+                                           , yield[ec].tag("serve_frontend"));
+                if (ec) {
+                    last_error = ec;
+                    continue;
+                }
+
+                return res;
             }
         }
     }
@@ -457,36 +463,38 @@ Response Client::State::fetch_fresh( const Request& request
 CacheControl
 Client::State::build_cache_control(request_route::Config& request_config)
 {
-    CacheControl cache_control;
+    CacheControl cache_control("Ouinet Client");
 
     cache_control.fetch_stored =
-        [&] (const Request& request, asio::yield_context yield) {
+        [&] (const Request& request, Yield yield) {
 
-            cerr << "Fetching from cache " << request.target() << endl;
+            yield.log("Fetching from cache");
 
             sys::error_code ec;
-            auto r = ASYNC_DEBUG( fetch_stored(request, request_config, yield[ec])
-                              , "Fetch from cache: " , request.target());
+            auto r = fetch_stored(request, request_config, yield[ec]);
 
-            cerr << "Fetched from cache " << request.target()
-                 << " " << ec.message() << " " << r.response.result()
-                 << endl;
+            if (!ec) {
+                yield.log("Fetched from cache success, status: ", r.response.result());
+            } else {
+                yield.log("Fetched from cache error: ", ec.message());
+            }
 
             return or_throw(yield, ec, move(r));
         };
 
     cache_control.fetch_fresh =
-        [&] (const Request& request, asio::yield_context yield) {
+        [&] (const Request& request, Yield yield) {
 
-            cerr << "Fetching fresh " << request.target() << endl;
+            yield.log("Fetching fresh");
 
             sys::error_code ec;
-            auto r = ASYNC_DEBUG( fetch_fresh(request, request_config, yield[ec])
-                              , "Fetch from origin: ", request.target());
+            auto r = fetch_fresh(request, request_config, yield[ec]);
 
-            cerr << "Fetched fresh " << request.target()
-                 << " " << ec.message() << " " << r.result()
-                 << endl;
+            if (!ec) {
+                yield.log("Fetched fresh success, status: ", r.result());
+            } else {
+                yield.log("Fetched fresh error: ", ec.message());
+            }
 
             return or_throw(yield, ec, move(r));
         };
@@ -606,7 +614,7 @@ GenericConnection Client::State::ssl_mitm_handshake( GenericConnection&& con
 
 //------------------------------------------------------------------------------
 void Client::State::serve_request( GenericConnection&& con
-                                 , asio::yield_context yield)
+                                 , asio::yield_context yield_)
 {
     LOG_DEBUG("Request received ");
 
@@ -649,10 +657,6 @@ void Client::State::serve_request( GenericConnection&& con
         // NOTE: The matching of HTTP methods below can be simplified,
         // leaving expanded for readability.
 
-        // NOTE: The injector mechanism is temporarily used in some matches
-        // instead of the mechanisms following it (commented out)
-        // since the later are not implemented yet.
-
         // Send unsafe HTTP method requests to the origin server
         // (or the proxy if that does not work).
         // NOTE: The cache need not be disabled as it should know not to
@@ -691,12 +695,21 @@ void Client::State::serve_request( GenericConnection&& con
         Request req;
 
         // Read the (clear-text) HTTP request
-        ASYNC_DEBUG(http::async_read(con, buffer, req, yield[ec]), "Read request");
+        http::async_read(con, buffer, req, yield_[ec]);
+
+        Yield yield(con.get_io_service(), yield_);
 
         if ( ec == http::error::end_of_stream
           || ec == asio::ssl::error::stream_truncated) break;
 
-        if (ec) return fail(ec, "read");
+        if (ec) {
+            cerr << "Failed to read request: " << ec.message() << endl;
+            return;
+        }
+
+        yield.log("=== New request ===");
+        yield.log(req.base());
+        auto on_exit = defer([&] { yield.log("Done"); });
 
         // Requests in the encrypted channel are not proxy-like
         // so the target is not "http://example.com/foo" but just "/foo".
@@ -709,16 +722,15 @@ void Client::State::serve_request( GenericConnection&& con
                           ? req[http::field::host].to_string()
                           : connect_hp)
                       + req.target().to_string());
-        cout << "Received request for: " << req.target() << endl;
 
         // Perform MitM for CONNECT requests (to be able to see encrypted requests)
         if (!mitm && req.method() == http::verb::connect) {
             try {
                 // Subsequent access to the connection will use the encrypted channel.
-                con = ssl_mitm_handshake(move(con), req, yield);
+                con = ssl_mitm_handshake(move(con), req, yield.tag("mitm_hanshake"));
             }
             catch(const std::exception& e) {
-                cerr << "Mitm exception: " << e.what() << endl;
+                yield.log("Mitm exception: ", e.what());
                 return;
             }
             mitm = true;
@@ -740,8 +752,7 @@ void Client::State::serve_request( GenericConnection&& con
         // done in the handle_connect_request function).
 
         //if (_config.enable_http_connect_requests()) {
-        //    ASYNC_DEBUG( handle_connect_request(con, req, yield)
-        //               , "Connect ", req.target());
+        //    handle_connect_request(con, req, yield);
         //}
         //else {
         //    auto res = bad_gateway(req);
@@ -749,34 +760,47 @@ void Client::State::serve_request( GenericConnection&& con
         //}
         request_config = route_choose_config(req, matches, default_request_config);
 
-        auto res = ASYNC_DEBUG( cache_control.fetch(req, yield[ec])
-                              , "Fetch "
-                              , req.target());
-
-        cout << "Sending back response: " << req.target() << " " << res.result() << endl;
+        auto res = cache_control.fetch(req, yield[ec].tag("cache_control.fetch"));
 
         if (ec) {
 #ifndef NDEBUG
-            cerr << "----- WARNING: Error fetching --------" << endl;
-            cerr << "Error Code: " << ec.message() << endl;
-            cerr << req.base() << res.base() << endl;
-            cerr << "--------------------------------------" << endl;
+            yield.log("----- WARNING: Error fetching --------");
+            yield.log("Error Code: ", ec.message());
+            yield.log(req.base(), res.base());
+            yield.log("--------------------------------------");
 #endif
 
             // TODO: Better error message.
-            ASYNC_DEBUG(handle_bad_request(con, req, "Not cached", yield), "Send error");
+            handle_bad_request( con
+                              , req
+                              , "Not cached"
+                              , yield.tag("handle_bad_request"));
+
             if (req.keep_alive()) continue;
             else return;
         }
 
-        cout << req.base() << res.base() << endl;
+        yield.log("=== Sending back response ===");
+        yield.log(res.base());
+
         // Forward the response back
-        ASYNC_DEBUG(http::async_write(con, res, yield[ec]), "Write response ", req.target());
+        http::async_write(con, res, yield[ec].tag("write_response"));
+
         if (ec == http::error::end_of_stream) {
           LOG_DEBUG("request served. Connection closed");
           break;
         }
-        if (ec) return fail(ec, "write");
+
+        if (ec) {
+            yield.log("error writing back response: ", ec.message());
+            return;
+        }
+
+        if (!res.keep_alive()) {
+            con.close();
+            break;
+        }
+
         LOG_DEBUG("request served");
     }
 }
@@ -798,18 +822,20 @@ void Client::State::setup_ipfs_cache()
         const string ipns = _config.ipns();
 
         {
+            LOG_DEBUG("Starting IPFS Cache with IPNS ID: ", ipns);
+            LOG_DEBUG("And BitTorrent pubkey: ", _config.bt_resolver_pub_key());
+
             auto on_exit = defer([&] { _is_ipns_being_setup = false; });
 
             if (ipns.empty()) {
-                _ipfs_cache = nullptr;
+                LOG_WARN("Support for IPFS Cache is disabled because we have not been provided with an IPNS id");
+                _cache = nullptr;
                 return;
             }
 
-            if (_ipfs_cache) {
-                return _ipfs_cache->set_ipns(move(ipns));
+            if (_cache) {
+                return _cache->set_ipns(move(ipns));
             }
-
-            string repo_root = (_config.repo_root()/"ipfs").native();
 
             function<void()> cancel;
 
@@ -818,12 +844,12 @@ void Client::State::setup_ipfs_cache()
             });
 
             sys::error_code ec;
-
-            _ipfs_cache = CacheClient::build(_ios
-                                            , ipns
-                                            , move(repo_root)
-                                            , cancel
-                                            , yield[ec]);
+            _cache = CacheClient::build(_ios
+                                       , ipns
+                                       , _config.bt_resolver_pub_key()
+                                       , _config.repo_root()
+                                       , cancel
+                                       , yield[ec]);
 
             if (ec) {
                 cerr << "Failed to build CacheClient: "
@@ -851,22 +877,32 @@ void Client::State::listen_tcp
     tcp::acceptor acceptor(_ios);
 
     acceptor.open(local_endpoint.protocol(), ec);
-    if (ec) return fail(ec, "open");
+    if (ec) {
+        cerr << "Failed to open tcp acceptor: " << ec.message() << endl;
+        return;
+    }
 
     acceptor.set_option(asio::socket_base::reuse_address(true));
 
     // Bind to the server address
     acceptor.bind(local_endpoint, ec);
-    if (ec) return fail(ec, "bind");
+    if (ec) {
+        cerr << "Failed to bind tcp acceptor: " << ec.message() << endl;
+        return;
+    }
 
     // Start listening for connections
     acceptor.listen(asio::socket_base::max_connections, ec);
-    if (ec) return fail(ec, "listen");
+    if (ec) {
+        cerr << "Failed to 'listen' on tcp acceptor: " << ec.message() << endl;
+        return;
+    }
 
     auto shutdown_acceptor_slot = _shutdown_signal.connect([&acceptor] {
         acceptor.close();
     });
 
+    LOG_DEBUG("Successfully listening on TCP Port");
     cout << "Client accepting on " << acceptor.local_endpoint() << endl;
 
     WaitCondition wait_condition(_ios);
@@ -878,7 +914,9 @@ void Client::State::listen_tcp
 
         if(ec) {
             if (ec == asio::error::operation_aborted) break;
-            fail(ec, "accept");
+
+            cerr << "Accept failed on tcp acceptor: " << ec.message() << endl;
+
             if (!async_sleep(_ios, chrono::seconds(1), _shutdown_signal, yield)) {
                 break;
             }
@@ -917,11 +955,17 @@ void Client::State::start(int argc, char* argv[])
         LOG_ABORT(e.what());
     }
 
+    if (_config.is_help()) {
+        cout << "Usage:" << endl;
+        cout << _config.description() << endl;
+        return;
+    }
+
 #ifndef __ANDROID__
     auto pid_path = get_pid_path();
     if (exists(pid_path)) {
         throw runtime_error(util::str
-             ( "Existing PID file ", pid_path
+             ( "[ABORT] Existing PID file ", pid_path
              , "; another client process may be running"
              , ", otherwise please remove the file."));
     }
@@ -930,28 +974,28 @@ void Client::State::start(int argc, char* argv[])
     _pid_file = make_unique<util::PidFile>(pid_path);
 #endif
 
-    auto ca_cert_path = _config.repo_root() / OUINET_CA_CERT_FILE;
-    auto ca_key_path = _config.repo_root() / OUINET_CA_KEY_FILE;
-    auto ca_dh_path = _config.repo_root() / OUINET_CA_DH_FILE;
-    if (exists(ca_cert_path) && exists(ca_key_path) && exists(ca_dh_path)) {
+    if (exists(ca_cert_path()) && exists(ca_key_path()) && exists(ca_dh_path())) {
         cout << "Loading existing CA certificate..." << endl;
         auto read_pem = [](auto path) {
             std::stringstream ss;
             ss << boost::filesystem::ifstream(path).rdbuf();
             return ss.str();
         };
-        auto cert = read_pem(ca_cert_path);
-        auto key = read_pem(ca_key_path);
-        auto dh = read_pem(ca_dh_path);
+        auto cert = read_pem(ca_cert_path());
+        auto key = read_pem(ca_key_path());
+        auto dh = read_pem(ca_dh_path());
         _ca_certificate = make_unique<CACertificate>(cert, key, dh);
     } else {
         cout << "Generating and storing CA certificate..." << endl;
         _ca_certificate = make_unique<CACertificate>();
-        boost::filesystem::ofstream(ca_cert_path)
+
+        boost::filesystem::ofstream(ca_cert_path())
             << _ca_certificate->pem_certificate();
-        boost::filesystem::ofstream(ca_key_path)
+
+        boost::filesystem::ofstream(ca_key_path())
             << _ca_certificate->pem_private_key();
-        boost::filesystem::ofstream(ca_dh_path)
+
+        boost::filesystem::ofstream(ca_dh_path())
             << _ca_certificate->pem_dh_param();
     }
 
@@ -964,11 +1008,16 @@ void Client::State::start(int argc, char* argv[])
               sys::error_code ec;
 
               setup_injector(yield[ec]);
-              setup_ipfs_cache();
+
+              if (was_stopped()) return;
 
               if (ec) {
-                  cerr << "Failed to setup injector" << endl;
+                  cerr << "Failed to setup injector: "
+                       << ec.message()
+                       << endl;
               }
+
+              setup_ipfs_cache();
 
               listen_tcp( yield[ec]
                         , _config.local_endpoint()
@@ -1003,8 +1052,10 @@ void Client::State::start(int argc, char* argv[])
 
                         auto rs = _front_end.serve( _config.injector_endpoint()
                                                   , rq
-                                                  , _ipfs_cache.get()
-                                                  , *_ca_certificate);
+                                                  , _cache.get()
+                                                  , *_ca_certificate
+                                                  , yield[ec]);
+                        if (ec) return;
 
                         http::async_write(c, rs, yield[ec]);
                   });
@@ -1106,15 +1157,22 @@ void Client::set_credentials(const char* injector, const char* cred)
     _state->_config.set_credentials(injector, cred);
 }
 
-boost::filesystem::path Client::get_pid_path() const
+fs::path Client::get_pid_path() const
 {
     return _state->get_pid_path();
+}
+
+fs::path Client::ca_cert_path() const
+{
+    return _state->ca_cert_path();
 }
 
 //------------------------------------------------------------------------------
 #ifndef __ANDROID__
 int main(int argc, char* argv[])
 {
+    util::crypto_init();
+
     asio::io_service ios;
 
     asio::signal_set signals(ios, SIGINT, SIGTERM);
