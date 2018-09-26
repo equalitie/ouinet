@@ -148,7 +148,7 @@ public:
         : injector(injector)
         , cc("Ouinet Injector")
     {
-        cc.fetch_fresh = [&] (const Request& rq, asio::yield_context yield) {
+        cc.fetch_fresh = [&] (const Request& rq, Yield yield) {
             if (connection.has_implementation()) {
                 if (last_host != rq[http::field::host]) {
                     connection.destroy_implementation();
@@ -173,7 +173,7 @@ public:
             return or_throw(yield, ec, move(ret));
         };
 
-        cc.fetch_stored = [this](const Request& rq, asio::yield_context yield) {
+        cc.fetch_stored = [this](const Request& rq, Yield yield) {
             return this->fetch_stored(rq, yield);
         };
 

@@ -7,6 +7,7 @@
 #include "generic_connection.h"
 #include "util/signal.h"
 #include "util/timeout.h"
+#include "util/yield.h"
 #include "util.h"
 #include "connect_to_host.h"
 #include "ssl/util.h"
@@ -24,7 +25,7 @@ fetch_http( asio::io_service& ios
           , GenericConnection& con
           , RequestType req
           , Signal<void()>& abort_signal
-          , asio::yield_context yield)
+          , Yield yield)
 {
     http::response<ResponseBodyType> res;
 
@@ -59,7 +60,7 @@ fetch_http( asio::io_service& ios
           , RequestType req
           , Duration timeout
           , Signal<void()>& abort_signal
-          , asio::yield_context yield)
+          , Yield yield)
 {
     return util::with_timeout
         ( ios
@@ -100,7 +101,7 @@ maybe_perform_ssl_handshake( GenericConnection&& con
                            , const util::url_match& url
                            , RequestType req
                            , Signal<void()>& abort_signal
-                           , asio::yield_context yield)
+                           , Yield yield)
 {
     using namespace std;
 
@@ -130,7 +131,7 @@ fetch_http_page( asio::io_service& ios
                , GenericConnection& optcon
                , RequestType req
                , Signal<void()>& abort_signal
-               , asio::yield_context yield)
+               , Yield yield)
 {
     using Response = http::response<http::dynamic_body>;
 
@@ -209,7 +210,7 @@ fetch_http_page( asio::io_service& ios
                , RequestType req
                , Duration timeout
                , Signal<void()>& abort_signal
-               , asio::yield_context yield)
+               , Yield yield)
 {
     return util::with_timeout
         ( ios
@@ -229,7 +230,7 @@ fetch_http_origin( asio::io_service& ios
                  , const util::url_match& url
                  , RequestType req
                  , Signal<void()>& abort_signal
-                 , asio::yield_context yield)
+                 , Yield yield)
 {
     using namespace std;
     using Response = http::response<http::dynamic_body>;
@@ -272,7 +273,7 @@ fetch_http_origin( asio::io_service& ios
                  , RequestType req
                  , Duration timeout
                  , Signal<void()>& abort_signal
-                 , asio::yield_context yield)
+                 , Yield yield)
 {
     return util::with_timeout
         ( ios
