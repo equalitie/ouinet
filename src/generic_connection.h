@@ -132,6 +132,9 @@ public:
 
     GenericConnection& lowest_layer() { return *this; }
 
+    bool has_implementation() const { return _impl != nullptr; }
+    void destroy_implementation() { _impl = nullptr; }
+
 public:
     GenericConnection() {}
 
@@ -168,6 +171,8 @@ public:
             , class Token>
     auto async_read_some(const MutableBufferSequence& bs, Token&& token)
     {
+        assert(_impl);
+
         using namespace std;
 
         namespace asio   = boost::asio;
@@ -213,6 +218,8 @@ public:
             , class Token>
     auto async_write_some(const ConstBufferSequence& bs, Token&& token)
     {
+        assert(_impl);
+
         using namespace std;
 
         namespace asio   = boost::asio;

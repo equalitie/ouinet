@@ -65,14 +65,14 @@ private:
     Signal<void()>::Connection _signal_connection;
 };
 
-template<class Duration, class F>
+template<class Duration, class F, class Yield>
 auto with_timeout( asio::io_service& ios
                  , Signal<void()>& abort_signal
                  , Duration duration
                  , const F& f
-                 , asio::yield_context yield)
+                 , Yield& yield)
 {
-    Timeout timeout(ios, abort_signal, std::chrono::seconds(30));
+    Timeout timeout(ios, abort_signal, duration);
 
     sys::error_code ec;
 

@@ -145,20 +145,35 @@ public:
     InjectorCacheControl( asio::io_service& ios
                         , unique_ptr<CacheInjector>& injector
                         , Signal<void()>& abort_signal)
-        : ios(ios)
-        , injector(injector)
+        : injector(injector)
         , cc("Ouinet Injector")
     {
-        cc.fetch_fresh = [&ios, &abort_signal]
-                         (const Request& rq, asio::yield_context yield) {
-            return fetch_http_page( ios
-                                  , rq
-                                  , default_timeout::fetch_http()
-                                  , abort_signal
-                                  , yield);
+        cc.fetch_fresh = [&] (const Request& rq, Yield yield) {
+            if (connection.has_implementation()) {
+                if (last_host != rq[http::field::host]) {
+                    connection.destroy_implementation();
+                }
+            }
+
+            sys::error_code ec;
+
+            auto ret = fetch_http_page( ios
+                                      , connection
+                                      , rq
+                                      , default_timeout::fetch_http()
+                                      , abort_signal
+                                      , yield[ec]);
+
+            if (ec || !ret.keep_alive() || !rq.keep_alive()) {
+                connection.destroy_implementation();
+            } else {
+                last_host = rq[http::field::host].to_string();
+            }
+
+            return or_throw(yield, ec, move(ret));
         };
 
-        cc.fetch_stored = [this](const Request& rq, asio::yield_context yield) {
+        cc.fetch_stored = [this](const Request& rq, Yield yield) {
             return this->fetch_stored(rq, yield);
         };
 
@@ -210,9 +225,10 @@ private:
     }
 
 private:
-    asio::io_service& ios;
     unique_ptr<CacheInjector>& injector;
     CacheControl cc;
+    string last_host; // A host to which the below connection was established
+    GenericConnection connection;
 };
 
 //------------------------------------------------------------------------------
@@ -226,6 +242,10 @@ void serve( InjectorConfig& config
     auto close_connection_slot = close_connection_signal.connect([&con] {
         con.close();
     });
+
+    InjectorCacheControl cc( con.get_io_service()
+                           , injector
+                           , close_connection_signal);
 
     for (;;) {
         sys::error_code ec;
@@ -263,7 +283,10 @@ void serve( InjectorConfig& config
             // TODO: Maybe reject requests for HTTPS URLS:
             // we are perfectly able to handle them (and do verification locally),
             // but the client should be using a CONNECT request instead!
+            // TODO: Reuse the connection c response contains "Connection: keep-alive"
+            GenericConnection c;
             res = fetch_http_page( con.get_io_service()
+                                 , c
                                  , req2
                                  , default_timeout::fetch_http()
                                  , close_connection_signal
@@ -271,7 +294,7 @@ void serve( InjectorConfig& config
         } else {
             // Ouinet header found, behave like a Ouinet injector.
             req2.erase(ouinet_version_hdr);  // do not propagate or cache the header
-            InjectorCacheControl cc(con.get_io_service(), injector, close_connection_signal);
+
             res = cc.fetch(req2, yield[ec].tag("cache_control.fetch"));
         }
         if (ec) {
