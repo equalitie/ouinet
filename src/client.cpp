@@ -107,7 +107,6 @@ private:
 
     Response fetch_fresh( const Request&
                         , request_route::Config&
-                        , string& last_host
                         , optional<OuiServiceClient::ConnectInfo>& injector_c
                         , Yield);
 
@@ -294,7 +293,6 @@ Client::State::fetch_stored( const Request& request
 Response Client::State::fetch_fresh
         ( const Request& request
         , request_route::Config& request_config
-        , string& last_host
         , optional<OuiServiceClient::ConnectInfo>& injector_c
         , Yield yield)
 {
@@ -416,14 +414,9 @@ Response Client::State::fetch_fresh
                 optional<OuiServiceClient::ConnectInfo> connect_info;
 
                 auto& inj = [&] () -> auto& {
-                    auto host = request[http::field::host];
-
-                    if (injector_c && host == last_host) {
+                    if (injector_c) {
                         return *injector_c;
                     } else {
-                        injector_c = boost::none;
-                        last_host = host.to_string();
-
                         connect_info = _injector->connect
                             ( yield[ec].tag("connect_to_injector2")
                             , _shutdown_signal);
@@ -538,7 +531,6 @@ public:
         sys::error_code ec;
         auto r = client_state.fetch_fresh( request
                                          , request_config
-                                         , last_host
                                          , _injector_connection
                                          , yield[ec]);
 
@@ -566,7 +558,6 @@ private:
     // field.
     // TODO: Keep one for direct origin connection and one for proxy connection
     // as well.
-    string last_host; // To which host the below connection was established.
     optional<OuiServiceClient::ConnectInfo> _injector_connection;
 };
 
