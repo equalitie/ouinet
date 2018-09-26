@@ -196,8 +196,9 @@ public:
             return this->fetch_stored(rq, yield);
         };
 
-        cc.store = [this](const Request& rq, const Response& rs) {
-            this->insert_content(rq, rs);
+        cc.store = [this]( const Request& rq, const Response& rs
+                         , Yield yield) {
+            this->insert_content(rq, rs, yield);
         };
     }
 
@@ -207,9 +208,10 @@ public:
     }
 
 private:
-    void insert_content(const Request& rq, const Response& rs)
+    void insert_content(const Request& rq, const Response& rs, Yield yield)
     {
         if (!injector) return;
+        // TODO: Handle synchronous insertion using yield argument.
 
         // Recover and pop out injection identifier.
         auto id = rs[response_injection_id_hdr];
