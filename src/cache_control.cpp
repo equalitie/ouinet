@@ -392,7 +392,10 @@ CacheControl::do_fetch_fresh(const Request& rq, Yield yield)
     if (fetch_fresh) {
         sys::error_code ec;
         auto rs = fetch_fresh(rq, yield[ec].tag("fetch_fresh"));
-        if (!ec) { try_to_cache(rq, rs, yield); }
+        if (!ec) {
+            sys::error_code ec2;
+            try_to_cache(rq, rs, yield[ec2].tag("try_to_cache"));
+        }
         return or_throw(yield, ec, move(rs));
     }
     return or_throw<Response>(yield, asio::error::operation_not_supported);
@@ -600,7 +603,7 @@ Response CacheControl::filter_before_store(Response response)
 void
 CacheControl::try_to_cache( const Request& request
                           , const Response& response
-                          , Yield& yield) const
+                          , Yield yield) const
 {
     if (!store) return;
 
@@ -617,6 +620,6 @@ CacheControl::try_to_cache( const Request& request
     }
 
     // TODO: Apply similar filter to the request.
-    store(request, filter_before_store(response));
+    store(request, filter_before_store(response), yield);
 }
 

@@ -310,7 +310,7 @@ BOOST_AUTO_TEST_CASE(test_request_no_store)
         return Response{http::status::ok, rq.version()};
     };
 
-    cc.store = [&](auto rq, auto rs) {
+    cc.store = [&](auto rq, auto rs, auto y) {
         BOOST_ERROR("Shouldn't store");
     };
 

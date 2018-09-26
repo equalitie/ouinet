@@ -177,8 +177,9 @@ public:
             return this->fetch_stored(rq, yield);
         };
 
-        cc.store = [this](const Request& rq, const Response& rs) {
-            this->insert_content(rq, rs);
+        cc.store = [this]( const Request& rq, const Response& rs
+                         , Yield yield) {
+            this->insert_content(rq, rs, yield);
         };
     }
 
@@ -188,9 +189,10 @@ public:
     }
 
 private:
-    void insert_content(const Request& rq, const Response& rs)
+    void insert_content(const Request& rq, const Response& rs, Yield yield)
     {
         if (!injector) return;
+        // TODO: Handle synchronous insertion using yield argument.
 
         descriptor::http_create(*injector, rq, rs,
             [ key = rq.target().to_string()
