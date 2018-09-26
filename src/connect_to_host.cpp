@@ -11,13 +11,12 @@
 using namespace std;
 using namespace ouinet;
 
-static
 GenericConnection
-connect_to_host_( asio::io_service& ios
-                , const string& host
-                , const string& port
-                , Signal<void()>& cancel_signal
-                , asio::yield_context yield)
+ouinet::connect_to_host( asio::io_service& ios
+                       , const string& host
+                       , const string& port
+                       , Signal<void()>& cancel_signal
+                       , asio::yield_context yield)
 {
     using namespace std;
     using tcp = asio::ip::tcp;
@@ -58,7 +57,7 @@ ouinet::connect_to_host( asio::io_service& ios
         , cancel_signal
         , timeout
         , [&] (auto& signal, auto yield) {
-              return connect_to_host_(ios, host, port, signal, yield);
+              return connect_to_host(ios, host, port, signal, yield);
           }
         , yield);
 }
