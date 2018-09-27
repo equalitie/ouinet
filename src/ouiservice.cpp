@@ -48,7 +48,8 @@ void OuiServiceServer::start_listen(asio::yield_context yield)
                  * TODO: Reconnect logic? There are errors other than operation_aborted.
                  */
                 if (ec) {
-                    assert(0 && "TODO: https://github.com/equalitie/ouinet/issues/16");
+                    assert(ec == asio::error::operation_aborted
+                            && "TODO: https://github.com/equalitie/ouinet/issues/16");
                     break;
                 }
 
