@@ -22,8 +22,8 @@ public:
     // TODO: Add cancellation support
     using FetchStored = std::function<CacheEntry(const Request&, Yield)>;
     using FetchFresh  = std::function<Response(const Request&, Yield)>;
-    // TODO: Support altering the (moved) response and returning it.
-    using Store       = std::function<void(const Request&, const Response&, Yield)>;
+    // This function may alter a (moved) response and return it.
+    using Store       = std::function<Response(const Request&, Response, Yield)>;
 
 public:
     CacheControl(std::string server_name)

@@ -196,9 +196,9 @@ public:
             return this->fetch_stored(rq, yield);
         };
 
-        cc.store = [this]( const Request& rq, const Response& rs
+        cc.store = [this]( const Request& rq, Response rs
                          , Yield yield) {
-            this->insert_content(rq, rs, yield);
+            return this->insert_content(rq, move(rs), yield);
         };
     }
 
@@ -208,9 +208,9 @@ public:
     }
 
 private:
-    void insert_content(const Request& rq, const Response& rs, Yield yield)
+    Response insert_content(const Request& rq, Response rs, Yield yield)
     {
-        if (!injector) return;
+        if (!injector) return rs;
 
         // Recover and pop out synchronous injection toggle.
         bool sync = ( rq[request_sync_injection_hdr]
@@ -247,11 +247,13 @@ private:
         LOG_DEBUG((sync ? "Sync inject: " : "Async inject: ")
                   + rq.target().to_string() + " " + id);
         if (sync) {
-            inject(yield);
+            auto desc_data = inject(yield);
             // TODO: Do something with the returned descriptor.
+            // rs.set(response_descriptor_hdr, BASE64(GZIP(desc_data)));
         } else {
             asio::spawn(asio::yield_context(yield), inject);
         }
+        return rs;
     }
 
     CacheControl::CacheEntry
