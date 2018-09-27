@@ -224,6 +224,7 @@ private:
         auto inj_rs(rs);
         inj_rs.erase(response_injection_id_hdr);
 
+        // This injection code logs errors but does not propagate them.
         auto inject = [
             id, inj_rq,
             inj_rs = move(inj_rs),
@@ -242,6 +243,7 @@ private:
             return desc_data;
         };
 
+        // Proceed to or program the real injection.
         LOG_DEBUG((sync ? "Sync inject: " : "Async inject: ")
                   + rq.target().to_string() + " " + id);
         if (sync) {
