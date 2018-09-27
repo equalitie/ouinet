@@ -313,7 +313,7 @@ function maybe_install_gradle {
                 echo "downloading gradle..."
                 wget https://services.gradle.org/distributions/$GRADLE_ZIP
             fi
-            TODO: Check SHA256
+            #TODO: Check SHA256
             unzip $GRADLE_ZIP
         fi
         export PATH="`pwd`/$GRADLE/bin:$PATH"
