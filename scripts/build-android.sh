@@ -398,7 +398,7 @@ cd -
 function run_emulator {
     echo "Starting Android emulator, first boot may take more than 10 minutes..."
     "$SDK_DIR/tools/emulator" -avd "$EMULATOR_AVD" -skin "$EMULATOR_SKIN" \
-nnn                              -use-system-libs "$@" &
+                              -use-system-libs "$@" &
     local emupid=$!
     # Inspired in <https://android.stackexchange.com/q/83726>.
     adb -e wait-for-device
