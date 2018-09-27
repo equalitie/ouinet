@@ -24,6 +24,11 @@ static const std::string request_version_hdr_latest = request_version_hdr_v0;
 // Such a request should get the following HTTP response header
 // with an opaque identifier for this insertion.
 static const std::string response_injection_id_hdr = http_header_prefix + "Injection-ID";
+// The presence of this HTTP request header with the true value below
+// instructs the injector to behave synchronously
+// and inline the resulting descriptor in response headers.
+static const std::string request_sync_injection_hdr = http_header_prefix + "Sync";
+static const std::string request_sync_injection_true = "true";
 
 //------------------------------------------------------------------------------
 namespace request_route {

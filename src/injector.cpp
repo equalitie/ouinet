@@ -211,7 +211,12 @@ private:
     void insert_content(const Request& rq, const Response& rs, Yield yield)
     {
         if (!injector) return;
-        // TODO: Handle synchronous insertion using yield argument.
+
+        // Recover and pop out synchronous injection toggle.
+        bool sync = ( rq[request_sync_injection_hdr]
+                      == request_sync_injection_true );
+        auto inj_rq(rq);
+        inj_rq.erase(request_sync_injection_hdr);
 
         // Recover and pop out injection identifier.
         auto id = rs[response_injection_id_hdr].to_string();
@@ -219,22 +224,32 @@ private:
         auto inj_rs(rs);
         inj_rs.erase(response_injection_id_hdr);
 
-        asio::spawn(asio::yield_context(yield), [
-            id, rq,
+        auto inject = [
+            id, inj_rq,
             inj_rs = move(inj_rs),
             injector = injector.get()
-        ] (boost::asio::yield_context yield) {
+        ] (boost::asio::yield_context yield) -> string {
             sys::error_code ec;
             string desc_data = descriptor::http_create
-                (*injector, id, rq, inj_rs, yield[ec]);
-            if (ec) return;
-            auto key = rq.target().to_string();
+                (*injector, id, inj_rq, inj_rs, yield[ec]);
+            if (ec) return "";
+            auto key = inj_rq.target().to_string();
             injector->insert_content(key, desc_data, yield[ec]);
             if (ec) {
                 cout << "!Insert failed: " << key
                      << " " << ec.message() << endl;
             }
-        });
+            return desc_data;
+        };
+
+        LOG_DEBUG((sync ? "Sync inject: " : "Async inject: ")
+                  + rq.target().to_string() + " " + id);
+        if (sync) {
+            inject(yield);
+            // TODO: Do something with the returned descriptor.
+        } else {
+            asio::spawn(asio::yield_context(yield), inject);
+        }
     }
 
     CacheControl::CacheEntry
