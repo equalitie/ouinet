@@ -9,7 +9,11 @@ APP_ROOT="${ROOT}/android/browser"
 APK="${DIR}"/build-android/builddir/browser/build-android/outputs/apk/debug/browser-debug.apk
 APK_ID=$(sed -En 's/^\s*\bapplicationId\s+"([^"]+)".*/\1/p' "${APP_ROOT}/build.gradle")
 
-DEBIAN=${DEBIAN:-true}
+if [ ! which apt-get 1> /dev/null 2>&1 ]; then
+    DEBIAN=true
+else
+    DEBIAN=false
+fi
 
 # https://developer.android.com/ndk/guides/abis.html
 ABI=${ABI:-armeabi-v7a}
@@ -137,9 +141,24 @@ function check_mode {
 
 ######################################################################
 function setup_deps {
+    if ! which unzip > /dev/null 2>&1; then
+        if [ $DEBIAN == true ] ; then
+            sudo apt-get install unzip
+        else
+            echo "Error: missing unzip";
+            return 1;
+        fi
+    fi
+    if ! which java > /dev/null 2>&1; then
+        if [ $DEBIAN == true ] ; then
+            sudo apt-get install default-jre
+        else
+            echo "Error: missing java";
+            return 1;
+        fi
+    fi
+
     if [ $DEBIAN == true ] ; then
-       which unzip > /dev/null || sudo apt-get install unzip
-       which java > /dev/null || sudo apt-get install default-jre
        dpkg-query -W default-jdk > /dev/null 2>&1 || sudo apt-get install default-jdk
     fi
 
@@ -261,7 +280,32 @@ function maybe_install_ndk_toolchain {
 
 ######################################################################
 function maybe_install_gradle {
-    if ! which gradle 1> /dev/null 2>1; then
+    GRADLE_REQUIRED_MAJOR_VERSION=4
+    GRADLE_REQUIRED_MINOR_VERSION=6
+    
+    NEED_GRADLE=false
+    
+    if ! which gradle 1> /dev/null 2>&1; then
+       NEED_GRADLE=true
+    else
+        GRADLE_VERSION=`gradle -v | grep Gradle | cut -d ' ' -f 2`
+        GRADLE_MAJOR_VERSION=`echo $GRADLE_VERSION | cut -d '.' -f1`
+        GRADLE_MINOR_VERSION=`echo $GRADLE_VERSION | cut -d '.' -f2`
+
+        if [ $GRADLE_REQUIRED_MAJOR_VERSION -gt $GRADLE_MAJOR_VERSION ]; then
+            NEED_GRADLE=true
+        else
+            if [ $GRADLE_REQUIRED_MAJOR_VERSION -eq $GRADLE_MAJOR_VERSION ]; then
+                 if [ $GRADLE_REQUIRED_MINOR_VERSION -gt $GRADLE_MINOR_VERSION ]; then
+                     NEED_GRADLE=true
+                 fi
+             fi
+        fi
+    fi
+
+    echo need gradle? $NEED_GRADLE
+
+    if [ $NEED_GRADLE == true ]; then
         local GRADLE=gradle-4.6
         local GRADLE_ZIP=$GRADLE-bin.zip
         if [ ! -d "$GRADLE" ]; then
