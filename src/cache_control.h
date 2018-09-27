@@ -22,6 +22,7 @@ public:
     // TODO: Add cancellation support
     using FetchStored = std::function<CacheEntry(const Request&, Yield)>;
     using FetchFresh  = std::function<Response(const Request&, Yield)>;
+    // TODO: Support altering the (moved) response and returning it.
     using Store       = std::function<void(const Request&, const Response&, Yield)>;
 
 public:
@@ -35,7 +36,7 @@ public:
     FetchFresh   fetch_fresh;
     Store        store;
 
-    void try_to_cache(const Request&, const Response&, Yield) const;
+    Response try_to_cache(const Request&, Response, Yield) const;
 
     void max_cached_age(const boost::posix_time::time_duration&);
     boost::posix_time::time_duration max_cached_age() const;

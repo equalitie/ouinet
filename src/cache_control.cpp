@@ -394,7 +394,8 @@ CacheControl::do_fetch_fresh(const Request& rq, Yield yield)
         auto rs = fetch_fresh(rq, yield[ec].tag("fetch_fresh"));
         if (!ec) {
             sys::error_code ec2;
-            try_to_cache(rq, rs, yield[ec2].tag("try_to_cache"));
+            // The storage operation may alter the response (e.g. add headers).
+            rs = try_to_cache(rq, move(rs), yield[ec2].tag("try_to_cache"));
         }
         return or_throw(yield, ec, move(rs));
     }
@@ -558,7 +559,7 @@ Response CacheControl::filter_before_store(Response response)
     // bbc.com. Careful selection from all possible (standard) fields is
     // needed.
     return
-        util::filter_fields( response
+        util::filter_fields( move(response)
                            , http::field::server
                            , http::field::retry_after
                            , http::field::content_length
@@ -600,12 +601,12 @@ Response CacheControl::filter_before_store(Response response)
 }
 
 //------------------------------------------------------------------------------
-void
+Response
 CacheControl::try_to_cache( const Request& request
-                          , const Response& response
+                          , Response response
                           , Yield yield) const
 {
-    if (!store) return;
+    if (!store) return response;
 
     const char* reason = "";
 
@@ -616,10 +617,14 @@ CacheControl::try_to_cache( const Request& request
         yield.log(request.base(), response.base());
         yield.log(":::::::::::::::::::::::::::::::::::::");
 #endif
-        return;
+        return response;
     }
 
     // TODO: Apply similar filter to the request.
-    store(request, filter_before_store(response), yield);
+    // TODO: Behave like this:
+    // return store(request, move(filter_before_store(move(response))), yield);
+    auto rs = filter_before_store(move(response));
+    store(request, rs, yield);
+    return rs;
 }
 
