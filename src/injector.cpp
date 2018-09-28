@@ -177,8 +177,9 @@ public:
             return this->fetch_stored(rq, yield);
         };
 
-        cc.store = [this](const Request& rq, const Response& rs) {
-            this->insert_content(rq, rs);
+        cc.store = [this]( const Request& rq, const Response& rs
+                         , Yield yield) {
+            this->insert_content(rq, rs, yield);
         };
     }
 
@@ -188,22 +189,26 @@ public:
     }
 
 private:
-    void insert_content(const Request& rq, const Response& rs)
+    void insert_content(const Request& rq, const Response& rs, Yield yield)
     {
         if (!injector) return;
 
-        descriptor::http_create(*injector, rq, rs,
-            [ key = rq.target().to_string()
-            , injector = injector.get()] (const sys::error_code& ec, string desc_data) {
-                if (ec) return;
-                injector->insert_content(key, desc_data,
-                    [key] (const sys::error_code& ec, auto) {
-                        if (ec) {
-                            cout << "!Insert failed: " << key
-                                 << " " << ec.message() << endl;
-                        }
-                    });
-            });
+        asio::spawn(asio::yield_context(yield), [
+            rq,
+            rs,
+            injector = injector.get()
+        ] (boost::asio::yield_context yield) {
+            sys::error_code ec;
+            string desc_data = descriptor::http_create
+                (*injector, rq, rs, yield[ec]);
+            if (ec) return;
+            auto key = rq.target().to_string();
+            injector->insert_content(key, desc_data, yield[ec]);
+            if (ec) {
+                cout << "!Insert failed: " << key
+                     << " " << ec.message() << endl;
+            }
+        });
     }
 
     CacheControl::CacheEntry

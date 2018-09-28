@@ -15,6 +15,11 @@ add_executable(test-wait-condition "test_wait_condition.cpp" "../src/asio.cpp")
 target_link_libraries(test-wait-condition ${Boost_LIBRARIES})
 
 ######################################################################
+add_executable(test-scheduler "test_scheduler.cpp" "../src/asio.cpp")
+target_include_directories(test-scheduler PUBLIC "${Boost_INCLUDE_DIR}")
+target_link_libraries(test-scheduler ${Boost_LIBRARIES})
+
+######################################################################
 add_executable(test-btree "test_btree.cpp"
                           "../src/cache/btree.cpp"
                           "../src/asio.cpp")
