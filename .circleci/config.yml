@@ -69,8 +69,8 @@ stages:
 
       - type: shell
         name: Build.Android
-        run: "echo 'export TERM=xterm' >> $BASH_ENV"
         command: |
+          export TERM=xterm
           mkdir build.android
           cd build.android
           export PATH="$CMAKE_PATH:$PATH"
