@@ -266,7 +266,7 @@ if [ ! -d "$BOOST_LIBRARYDIR" ]; then
     ./build-android.sh \
         --boost=${BOOST_V_DOT} \
         --arch=${ABI} \
-        --with-libraries=regex,context,coroutine,program_options,system,test,thread,filesystem,date_time \
+        --with-libraries=regex,context,coroutine,program_options,system,test,thread,filesystem,date_time,iostreams \
         --layout=system \
         $NDK_DIR
     cd -

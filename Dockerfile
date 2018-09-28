@@ -36,6 +36,7 @@ RUN wget "https://downloads.sourceforge.net/project/boost/boost/1.67.0/boost_1_6
          --with-filesystem \
          --with-date_time \
          --with-regex \
+         --with-iostreams \
          --prefix=/usr/local install
 # This version is a recommendation and this file has been tested to work for it,
 # but you may attempt to build other versions by overriding this argument.
