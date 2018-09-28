@@ -20,18 +20,11 @@ namespace ouinet {
 
 class InjectorDb;
 class Publisher;
+class Scheduler;
 
 class CacheInjector {
 public:
     using OnInsert = std::function<void(boost::system::error_code, std::string)>;
-
-private:
-    struct InsertEntry {
-        std::string key;
-        std::string value;
-        boost::posix_time::ptime ts;
-        OnInsert on_insert;
-    };
 
 public:
     CacheInjector( boost::asio::io_service&
@@ -69,10 +62,6 @@ public:
     //
     // When testing or debugging, the content can be found here:
     // "https://ipfs.io/ipfs/" + <IPFS ID>
-    void insert_content( std::string url
-                       , const std::string& content
-                       , OnInsert);
-
     std::string insert_content( std::string url
                               , const std::string& content
                               , boost::asio::yield_context);
@@ -88,16 +77,12 @@ public:
     ~CacheInjector();
 
 private:
-    void insert_content_from_queue();
-
-private:
     std::unique_ptr<asio_ipfs::node> _ipfs_node;
     std::unique_ptr<bittorrent::MainlineDht> _bt_dht;
     std::unique_ptr<Publisher> _publisher;
     std::unique_ptr<InjectorDb> _db;
-    std::queue<InsertEntry> _insert_queue;
     const unsigned int _concurrency = 8;
-    unsigned int _job_count = 0;
+    std::unique_ptr<Scheduler> _scheduler;
     std::shared_ptr<bool> _was_destroyed;
 };
 

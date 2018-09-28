@@ -2,7 +2,7 @@
 
 #include <boost/intrusive/list.hpp>
 #include "condition_variable.h"
-#include "or_throw.h"
+#include "../or_throw.h"
 
 namespace ouinet {
 
