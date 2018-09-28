@@ -247,9 +247,11 @@ private:
         LOG_DEBUG((sync ? "Sync inject: " : "Async inject: ")
                   + rq.target().to_string() + " " + id);
         if (sync) {
+            // Zlib-compress descriptor, Base64-encode and put in header.
             auto desc_data = inject(yield);
-            // TODO: Do something with the returned descriptor.
-            // rs.set(response_descriptor_hdr, BASE64(GZIP(desc_data)));
+            auto compressed_desc = util::zlib_compress(move(desc_data));
+            auto encoded_desc = util::base64_encode(move(compressed_desc));
+            rs.set(response_descriptor_hdr, move(encoded_desc));
         } else {
             asio::spawn(asio::yield_context(yield), inject);
         }

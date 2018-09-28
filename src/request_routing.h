@@ -29,6 +29,10 @@ static const std::string response_injection_id_hdr = http_header_prefix + "Injec
 // and inline the resulting descriptor in response headers.
 static const std::string request_sync_injection_hdr = http_header_prefix + "Sync";
 static const std::string request_sync_injection_true = "true";
+// If synchronous injection is enabled in an HTTP request,
+// this header is added to the resulting response
+// with the Base64-encoded, Zlib-compressed content of the descriptor.
+static const std::string response_descriptor_hdr = http_header_prefix + "Descriptor";
 
 //------------------------------------------------------------------------------
 namespace request_route {
