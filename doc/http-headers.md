@@ -52,11 +52,11 @@ i.e. the injector may complete the injection (or decide to avoid it) way after
 the response from the origin has been forwarded to the requesting Ouinet
 client.
 
-This avoids delays that may affect the browsing experience, but it also means
-that clients have no easy way of identifying and seeding the descriptor
-corresponding to the request/response whose content they are seeding (in fact,
-looking up its URI may yield a descriptor for different data or an unrelated
-request).
+This avoids delays that may affect the browsing experience (hence this is the
+default behaviour), but it also means that clients have no easy way of
+identifying and seeding the descriptor corresponding to the request/response
+whose content they are seeding (in fact, looking up its URI may yield a
+descriptor for different data or an unrelated request).
 
 To help identify the descriptor, injector HTTP responses (either from the
 origin or the cache) include an `X-Ouinet-Injection-ID`  header with an
