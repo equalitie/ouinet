@@ -60,7 +60,9 @@ public:
     // Basically it does this: Look into the database to find the IPFS_ID
     // correspoinding to the `url`, when found, fetch the content corresponding
     // to that IPFS_ID from IPFS.
-    CachedContent get_content(std::string url, boost::asio::yield_context);
+    CachedContentI get_content(std::string url, boost::asio::yield_context);
+
+    std::string get_descriptor(std::string url, asio::yield_context);
 
     void wait_for_db_update(boost::asio::yield_context);
 

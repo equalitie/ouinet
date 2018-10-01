@@ -197,7 +197,7 @@ void ClientFrontEnd::handle_descriptor( const Request& req, Response& res, strin
     string uri;  // after percent-decoding
     auto target = req.target().to_string();  // copy to preserve regex result
 
-    CachedContent content;
+    string file_descriptor;
 
     if (req.method() != http::verb::get) {
         result = http::status::method_not_allowed;
@@ -213,7 +213,7 @@ void ClientFrontEnd::handle_descriptor( const Request& req, Response& res, strin
         err = "cache access is not available";
     } else {  // perform the query
         sys::error_code ec;
-        content = cache_client->get_content(uri, yield[ec]);
+        file_descriptor = cache_client->get_descriptor(uri, yield[ec]);
         if (ec == asio::error::not_found) {
             result = http::status::not_found;
             err = "URI was not found in the cache";
@@ -224,8 +224,9 @@ void ClientFrontEnd::handle_descriptor( const Request& req, Response& res, strin
     }
 
     res.result(result);
+
     if (err.empty())
-        ss << content.data;
+        ss << file_descriptor;
     else
         ss << "{\"error\": \"" << err << "\"}";
 }
