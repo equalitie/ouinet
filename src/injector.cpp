@@ -14,7 +14,6 @@
 #include <cstdlib>  // for atexit()
 
 #include "cache/cache_injector.h"
-#include "cache/http_desc.h"
 
 #include "namespaces.h"
 #include "util.h"

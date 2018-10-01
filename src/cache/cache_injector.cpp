@@ -8,7 +8,6 @@
 
 #include <asio_ipfs.h>
 #include "db.h"
-#include "get_content.h"
 #include "publisher.h"
 #include "../request_routing.h"
 #include "../bittorrent/dht.h"
@@ -67,7 +66,6 @@ string CacheInjector::insert_content( Request rq
     auto ts = boost::posix_time::microsec_clock::universal_time();
 
     string desc_data;
-    string ipfs_id;
 
     {
         auto slot = _scheduler->wait_for_slot(yield[ec]);
@@ -75,25 +73,15 @@ string CacheInjector::insert_content( Request rq
         if (!ec && *wd) ec = asio::error::operation_aborted;
         if (ec) return or_throw<string>(yield, ec);
 
-        desc_data = descriptor::http_create(*this, id, rq, rs, yield[ec]);
-
-        if (!ec && *wd) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<string>(yield, ec);
-
-        ipfs_id = _ipfs_node->add(desc_data, yield[ec]);
+        desc_data = descriptor::http_create(*this, id, ts, rq, rs, yield[ec]);
 
         if (!ec && *wd) ec = asio::error::operation_aborted;
         if (ec) return or_throw<string>(yield, ec);
     }
 
-    Json json;
-
-    json["value"] = ipfs_id;
-    json["ts"]    = boost::posix_time::to_iso_extended_string(ts) + 'Z';
-
     // TODO: use string_view for key
     auto key = rq.target().to_string();
-    _db->update(move(key), json.dump(), yield[ec]);
+    _db->update(move(key), desc_data, yield[ec]);
 
     if (!ec && *wd) ec = asio::error::operation_aborted;
 
@@ -107,17 +95,18 @@ string CacheInjector::get_data(const string &ipfs_id, asio::yield_context yield)
 
 CacheEntry CacheInjector::get_content(string url, asio::yield_context yield)
 {
+    using std::get;
     sys::error_code ec;
 
-    auto content = ouinet::get_content(*_db, url, yield[ec]);
+    string desc_data = _db->query(url, yield[ec]);
 
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
     // Assemble HTTP response from cached content
     // and attach injection identifier header for injection tracking.
-    auto res = descriptor::http_parse(*this, content.data, yield[ec]);
-    res.first.set(response_injection_id_hdr, res.second);
-    return or_throw(yield, ec, CacheEntry{content.ts, move(res.first)});
+    auto res = descriptor::http_parse(*this, desc_data, yield[ec]);
+    get<0>(res).set(response_injection_id_hdr, get<1>(res));
+    return or_throw(yield, ec, CacheEntry{get<2>(res), move(get<0>(res))});
 }
 
 CacheInjector::~CacheInjector()
