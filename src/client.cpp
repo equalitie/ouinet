@@ -285,8 +285,11 @@ Client::State::fetch_stored( const Request& request
     // an error should have been reported.
     assert(!content.ts.is_not_a_date_time());
 
+    // Assemble HTTP response from cached content
+    // and attach injection identifier header for injection tracking.
     auto res = descriptor::http_parse(*_cache, content.data, yield[ec]);
-    return or_throw(yield, ec, CacheEntry{content.ts, res});
+    res.first.set(response_injection_id_hdr, res.second);
+    return or_throw(yield, ec, CacheEntry{content.ts, res.first});
 }
 
 //------------------------------------------------------------------------------

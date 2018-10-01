@@ -218,7 +218,7 @@ Response CacheControl::bad_gateway(const Request& req, beast::string_view reason
 {
     Response res{http::status::bad_gateway, req.version()};
     res.set(http::field::server, _server_name);
-    res.set("X-Ouinet-Debug", reason);
+    res.set(http_header_prefix + "Debug", reason);
     res.keep_alive(req.keep_alive());
     res.prepare_payload();
     return res;
@@ -394,7 +394,8 @@ CacheControl::do_fetch_fresh(const Request& rq, Yield yield)
         auto rs = fetch_fresh(rq, yield[ec].tag("fetch_fresh"));
         if (!ec) {
             sys::error_code ec2;
-            try_to_cache(rq, rs, yield[ec2].tag("try_to_cache"));
+            // The storage operation may alter the response (e.g. add headers).
+            rs = try_to_cache(rq, move(rs), yield[ec2].tag("try_to_cache"));
         }
         return or_throw(yield, ec, move(rs));
     }
@@ -558,7 +559,7 @@ Response CacheControl::filter_before_store(Response response)
     // bbc.com. Careful selection from all possible (standard) fields is
     // needed.
     return
-        util::filter_fields( response
+        util::filter_fields( move(response)
                            , http::field::server
                            , http::field::retry_after
                            , http::field::content_length
@@ -593,19 +594,18 @@ Response CacheControl::filter_before_store(Response response)
                            , http::field::access_control_allow_methods  // methods allowed in CORS request
                            , http::field::access_control_allow_headers  // headers allowed in CORS request
                            , http::field::access_control_max_age  // expiration of pre-flight response info
-                           //
-                           , "Access-Control-Expose-Headers"  // headers of response to be exposed
+                           , http::field::access_control_expose_headers  // headers of response to be exposed
                            );
 
 }
 
 //------------------------------------------------------------------------------
-void
+Response
 CacheControl::try_to_cache( const Request& request
-                          , const Response& response
+                          , Response response
                           , Yield yield) const
 {
-    if (!store) return;
+    if (!store) return response;
 
     const char* reason = "";
 
@@ -616,10 +616,10 @@ CacheControl::try_to_cache( const Request& request
         yield.log(request.base(), response.base());
         yield.log(":::::::::::::::::::::::::::::::::::::");
 #endif
-        return;
+        return response;
     }
 
     // TODO: Apply similar filter to the request.
-    store(request, filter_before_store(response), yield);
+    return store(request, move(filter_before_store(move(response))), yield);
 }
 

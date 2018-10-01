@@ -54,6 +54,7 @@ find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS filesystem
                                                         context
                                                         thread
                                                         date_time
+                                                        iostreams
                                                         system)
 find_package(Threads)
 

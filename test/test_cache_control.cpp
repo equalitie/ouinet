@@ -312,6 +312,7 @@ BOOST_AUTO_TEST_CASE(test_request_no_store)
 
     cc.store = [&](auto rq, auto rs, auto y) {
         BOOST_ERROR("Shouldn't store");
+        return rs;
     };
 
     run_spawned([&](auto yield) {

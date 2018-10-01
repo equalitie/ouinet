@@ -22,7 +22,8 @@ public:
     // TODO: Add cancellation support
     using FetchStored = std::function<CacheEntry(const Request&, Yield)>;
     using FetchFresh  = std::function<Response(const Request&, Yield)>;
-    using Store       = std::function<void(const Request&, const Response&, Yield)>;
+    // This function may alter a (moved) response and return it.
+    using Store       = std::function<Response(const Request&, Response, Yield)>;
 
 public:
     CacheControl(std::string server_name)
@@ -35,7 +36,7 @@ public:
     FetchFresh   fetch_fresh;
     Store        store;
 
-    void try_to_cache(const Request&, const Response&, Yield) const;
+    Response try_to_cache(const Request&, Response, Yield) const;
 
     void max_cached_age(const boost::posix_time::time_duration&);
     boost::posix_time::time_duration max_cached_age() const;
@@ -47,6 +48,8 @@ public:
                            , const http::response_header<>& response
                            , const char** reason = nullptr);
 
+    // Keep only relevant headers and Ouinet internal headers,
+    // (to be managed by the lower level functions above).
     static Response filter_before_store(Response);
 
 private:

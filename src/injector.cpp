@@ -6,6 +6,8 @@
 #include <boost/beast/version.hpp>
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/uuid/random_generator.hpp>
+#include <boost/uuid/uuid_io.hpp>
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -45,6 +47,11 @@ using namespace ouinet;
 
 using tcp         = asio::ip::tcp;
 using string_view = beast::string_view;
+// We are more interested in an ID generator that can be
+// used concurrently and does not block by random pool exhaustion
+// than we are in getting unpredictable IDs;
+// thus we use a pseudo-random generator.
+using uuid_generator = boost::uuids::random_generator_mt19937;
 using Request     = http::request<http::string_body>;
 using Response    = http::response<http::dynamic_body>;
 
@@ -144,10 +151,20 @@ public:
     // get a signal parameter
     InjectorCacheControl( asio::io_service& ios
                         , unique_ptr<CacheInjector>& injector
+                        , uuid_generator& genuuid
                         , Signal<void()>& abort_signal)
         : injector(injector)
+        , genuuid(genuuid)
         , cc("Ouinet Injector")
     {
+        // The following operations take care of adding or removing
+        // a custom Ouinet HTTP response header with the injection identifier
+        // to enable the tracking of this particular injection.
+        // The header is added when fetching fresh content or retrieving from the cache,
+        // (so it is sent to the client in both cases)
+        // and it is removed just before saving to the cache
+        // (though it is still used to create the descriptor).
+
         cc.fetch_fresh = [&] (const Request& rq, Yield yield) {
             if (connection.has_implementation()) {
                 if (last_host != rq[http::field::host]) {
@@ -163,6 +180,8 @@ public:
                                       , default_timeout::fetch_http()
                                       , abort_signal
                                       , yield[ec]);
+            // Add an injection identifier header.
+            ret.set(response_injection_id_hdr, to_string(genuuid()));
 
             if (ec || !ret.keep_alive() || !rq.keep_alive()) {
                 connection.destroy_implementation();
@@ -177,9 +196,9 @@ public:
             return this->fetch_stored(rq, yield);
         };
 
-        cc.store = [this]( const Request& rq, const Response& rs
+        cc.store = [this]( const Request& rq, Response rs
                          , Yield yield) {
-            this->insert_content(rq, rs, yield);
+            return this->insert_content(rq, rs, yield);
         };
     }
 
@@ -189,26 +208,54 @@ public:
     }
 
 private:
-    void insert_content(const Request& rq, const Response& rs, Yield yield)
+    Response insert_content(const Request& rq, Response rs, Yield yield)
     {
-        if (!injector) return;
+        if (!injector) return rs;
 
-        asio::spawn(asio::yield_context(yield), [
-            rq,
-            rs,
+        // Recover and pop out synchronous injection toggle.
+        bool sync = ( rq[request_sync_injection_hdr]
+                      == request_sync_injection_true );
+        auto inj_rq(rq);
+        inj_rq.erase(request_sync_injection_hdr);
+
+        // Recover and pop out injection identifier.
+        auto id = rs[response_injection_id_hdr].to_string();
+        assert(!id.empty());
+        auto inj_rs(rs);
+        inj_rs.erase(response_injection_id_hdr);
+
+        // This injection code logs errors but does not propagate them.
+        auto inject = [
+            id, inj_rq,
+            inj_rs = move(inj_rs),
             injector = injector.get()
-        ] (boost::asio::yield_context yield) {
+        ] (boost::asio::yield_context yield) -> string {
             sys::error_code ec;
             string desc_data = descriptor::http_create
-                (*injector, rq, rs, yield[ec]);
-            if (ec) return;
-            auto key = rq.target().to_string();
+                (*injector, id, inj_rq, inj_rs, yield[ec]);
+            if (ec) return "";
+            auto key = inj_rq.target().to_string();
             injector->insert_content(key, desc_data, yield[ec]);
             if (ec) {
                 cout << "!Insert failed: " << key
                      << " " << ec.message() << endl;
             }
-        });
+            return desc_data;
+        };
+
+        // Proceed to or program the real injection.
+        LOG_DEBUG((sync ? "Sync inject: " : "Async inject: ")
+                  + rq.target().to_string() + " " + id);
+        if (sync) {
+            // Zlib-compress descriptor, Base64-encode and put in header.
+            auto desc_data = inject(yield);
+            auto compressed_desc = util::zlib_compress(move(desc_data));
+            auto encoded_desc = util::base64_encode(move(compressed_desc));
+            rs.set(response_descriptor_hdr, move(encoded_desc));
+        } else {
+            asio::spawn(asio::yield_context(yield), inject);
+        }
+        return rs;
     }
 
     CacheControl::CacheEntry
@@ -225,12 +272,16 @@ private:
         auto content = injector->get_content(rq.target().to_string(), yield[ec]);
         if (ec) return or_throw<CacheEntry>(yield, ec);
 
+        // Assemble HTTP response from cached content
+        // and attach injection identifier header for injection tracking.
         auto res = descriptor::http_parse(*injector, content.data, yield[ec]);
-        return or_throw(yield, ec, CacheEntry{content.ts, res});
+        res.first.set(response_injection_id_hdr, res.second);
+        return or_throw(yield, ec, CacheEntry{content.ts, res.first});
     }
 
 private:
     unique_ptr<CacheInjector>& injector;
+    uuid_generator& genuuid;
     CacheControl cc;
     string last_host; // A host to which the below connection was established
     GenericConnection connection;
@@ -241,6 +292,7 @@ static
 void serve( InjectorConfig& config
           , GenericConnection con
           , unique_ptr<CacheInjector>& injector
+          , uuid_generator& genuuid
           , Signal<void()>& close_connection_signal
           , asio::yield_context yield_)
 {
@@ -250,6 +302,7 @@ void serve( InjectorConfig& config
 
     InjectorCacheControl cc( con.get_io_service()
                            , injector
+                           , genuuid
                            , close_connection_signal);
 
     for (;;) {
@@ -333,6 +386,8 @@ void listen( InjectorConfig& config
            , Signal<void()>& shutdown_signal
            , asio::yield_context yield)
 {
+    uuid_generator genuuid;
+
     auto stop_proxy_slot = shutdown_signal.connect([&proxy_server] {
         proxy_server.stop_listen();
     });
@@ -364,11 +419,13 @@ void listen( InjectorConfig& config
             &cache_injector,
             &shutdown_signal,
             &config,
+            &genuuid,
             lock = shutdown_connections.lock()
         ] (boost::asio::yield_context yield) mutable {
             serve( config
                  , std::move(connection)
                  , cache_injector
+                 , genuuid
                  , shutdown_signal
                  , yield);
         });
