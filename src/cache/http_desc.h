@@ -42,11 +42,15 @@ http_create( Cache& cache
         return or_throw<std::string>(yield, ec);
     }
 
+    auto rs_ = rs;
+
+    rs_.erase(http::field::transfer_encoding);
+
     // Create the descriptor.
     // TODO: This is a *temporary format* with the bare minimum to test
     // head/body splitting of HTTP responses.
     std::stringstream rsh_ss;
-    rsh_ss << rs.base();
+    rsh_ss << rs_.base();
 
     nlohmann::json desc;
 
@@ -122,20 +126,19 @@ http_parse( Cache& cache, const std::string& desc_data
         return or_throw<Ret>(yield, ec);
     }
 
-    // - Add the response body (if needed).
-    if (body.length() > 0)
-        parser.put(asio::buffer(body), ec);
-    else
-        parser.put_eof(ec);
-    if (ec || !parser.is_done()) {
-        std::cerr
-          << (boost::format
-              ("WARNING: Incomplete HTTP body in cache (%1% out of %2% bytes) for %3% %4%")
-              % body.length() % parser.get()[http::field::content_length] % url % id)
-          << std::endl;
+    Response res = parser.release();
+    Response::body_type::reader reader(res, res.body());
+    reader.put(asio::buffer(body), ec);
+
+    if (ec) {
+        std::cerr << "WARNING: Failed to put body into the response "
+            << ec.message() << std::endl
+
         ec = asio::error::invalid_argument;
         return or_throw<Ret>(yield, ec);
     }
+
+    res.prepare_payload();
 
     return make_tuple(parser.release(), id, ts);
 }
