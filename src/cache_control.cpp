@@ -574,7 +574,6 @@ Response CacheControl::filter_before_store(Response response)
                            , http::field::expires
                            , http::field::via
                            , http::field::vary
-                           , http::field::connection
                            , http::field::location
                            , http::field::cache_control
                            , http::field::warning
