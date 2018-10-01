@@ -132,7 +132,7 @@ http_parse( Cache& cache, const std::string& desc_data
 
     if (ec) {
         std::cerr << "WARNING: Failed to put body into the response "
-            << ec.message() << std::endl
+            << ec.message() << std::endl;
 
         ec = asio::error::invalid_argument;
         return or_throw<Ret>(yield, ec);
