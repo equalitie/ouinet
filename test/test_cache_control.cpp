@@ -15,7 +15,7 @@ using namespace std;
 using namespace ouinet;
 namespace error = asio::error;
 namespace posix_time = boost::posix_time;
-using Entry    = CacheControl::CacheEntry;
+using Entry    = CacheEntry;
 using Request  = CacheControl::Request;
 using Response = CacheControl::Response;
 using posix_time::seconds;

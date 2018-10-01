@@ -7,19 +7,12 @@
 
 namespace ouinet {
 
-struct CachedContent {
-    // Data time stamp, not a date/time on errors.
-    boost::posix_time::ptime ts;
-    // Cached data.
-    std::string data;
-};
-
 // TODO: This is temporary while a refactor is taking place
-struct CachedContentI {
+struct CacheEntry {
     using Response = http::response<http::dynamic_body>;
 
     // Data time stamp, not a date/time on errors.
-    boost::posix_time::ptime ts;
+    boost::posix_time::ptime time_stamp;
     // Cached data.
     Response response;
 };

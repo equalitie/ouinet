@@ -1,9 +1,15 @@
 #pragma once
 
-#include "cached_content.h"
 #include "../or_throw.h"
 
 namespace ouinet {
+
+struct CachedContent {
+    // Data time stamp, not a date/time on errors.
+    boost::posix_time::ptime ts;
+    // Cached data.
+    std::string data;
+};
 
 template<class Db>
 inline

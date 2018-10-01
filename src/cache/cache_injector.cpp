@@ -105,19 +105,19 @@ string CacheInjector::get_data(const string &ipfs_id, asio::yield_context yield)
     return _ipfs_node->cat(ipfs_id, yield);
 }
 
-CachedContentI CacheInjector::get_content(string url, asio::yield_context yield)
+CacheEntry CacheInjector::get_content(string url, asio::yield_context yield)
 {
     sys::error_code ec;
 
     auto content = ouinet::get_content(*_db, url, yield[ec]);
 
-    if (ec) return or_throw<CachedContentI>(yield, ec);
+    if (ec) return or_throw<CacheEntry>(yield, ec);
 
     // Assemble HTTP response from cached content
     // and attach injection identifier header for injection tracking.
     auto res = descriptor::http_parse(*this, content.data, yield[ec]);
     res.first.set(response_injection_id_hdr, res.second);
-    return or_throw(yield, ec, CachedContentI{content.ts, move(res.first)});
+    return or_throw(yield, ec, CacheEntry{content.ts, move(res.first)});
 }
 
 CacheInjector::~CacheInjector()

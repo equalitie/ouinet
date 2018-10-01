@@ -5,6 +5,7 @@
 #include <boost/beast/http.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include "util/yield.h"
+#include "cache/cache_entry.h"
 #include "namespaces.h"
 
 namespace ouinet {
@@ -13,11 +14,6 @@ class CacheControl {
 public:
     using Request  = http::request<http::string_body>;
     using Response = http::response<http::dynamic_body>;
-
-    struct CacheEntry {
-        boost::posix_time::ptime time_stamp;
-        Response response;
-    };
 
     // TODO: Add cancellation support
     using FetchStored = std::function<CacheEntry(const Request&, Yield)>;

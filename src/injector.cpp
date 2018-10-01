@@ -255,21 +255,15 @@ private:
         return rs;
     }
 
-    CacheControl::CacheEntry
+    CacheEntry
     fetch_stored(const Request& rq, asio::yield_context yield)
     {
-        using CacheEntry = CacheControl::CacheEntry;
-
         if (!injector)
             return or_throw<CacheEntry>( yield
                                        , asio::error::operation_not_supported);
 
-        sys::error_code ec;
-
-        auto content = injector->get_content(rq.target().to_string(), yield[ec]);
-
-        return or_throw(yield, ec, CacheEntry{ content.ts
-                                             , move(content.response)});
+        // TODO: use string_view
+        return injector->get_content(rq.target().to_string(), yield);
     }
 
 private:

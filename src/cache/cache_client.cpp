@@ -2,7 +2,7 @@
 #include "cache_client.h"
 #include "db.h"
 #include "get_content.h"
-#include "cached_content.h"
+#include "cache_entry.h"
 #include "http_desc.h"
 #include "../request_routing.h" // Included only for custom header fields
 #include "../or_throw.h"
@@ -111,13 +111,13 @@ string CacheClient::get_descriptor(string url, asio::yield_context yield)
     return or_throw(yield, ec, move(content.data));
 }
 
-CachedContentI CacheClient::get_content(string url, asio::yield_context yield)
+CacheEntry CacheClient::get_content(string url, asio::yield_context yield)
 {
     sys::error_code ec;
 
     auto content = ouinet::get_content(*_db, url, yield[ec]);
 
-    if (ec) return or_throw<CachedContentI>(yield, ec);
+    if (ec) return or_throw<CacheEntry>(yield, ec);
 
     // If the content does not have a meaningful time stamp,
     // an error should have been reported.
@@ -125,11 +125,11 @@ CachedContentI CacheClient::get_content(string url, asio::yield_context yield)
 
     auto res = descriptor::http_parse(*this, content.data, yield[ec]);
 
-    if (ec) return or_throw<CachedContentI>(yield, ec);
+    if (ec) return or_throw<CacheEntry>(yield, ec);
 
     res.first.set(response_injection_id_hdr, res.second);
 
-    return or_throw(yield, ec, CachedContentI{content.ts, move(res.first)});
+    return or_throw(yield, ec, CacheEntry{content.ts, move(res.first)});
 }
 
 void CacheClient::wait_for_db_update(boost::asio::yield_context yield)
