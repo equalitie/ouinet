@@ -161,20 +161,7 @@ void ClientFrontEnd::handle_enumerate_db( const Request& req
     }
 
     while (!iter.is_end()) {
-        auto json = nlohmann::json::parse(iter.value());
-
-        auto ts = json["ts"];
-        auto ipfs_cid = json["value"];
-
-        if (!ts.is_string() || !ipfs_cid.is_string()) {
-            ss << "Failed to enumerate BTree value: " << iter.value();
-            return;
-        }
-
-        ss << ts.get<string>() << " <a href=\"https://ipfs.io/ipfs/"
-            << ipfs_cid.get<string>() << "\">"
-            << iter.key()
-            << "</a><br/>\n";
+        ss << iter.value() << "<br/>\n";
 
         iter.advance(yield[ec]);
 
