@@ -39,7 +39,13 @@ public:
     // "https://ipfs.io/ipns/" + ipfs.id()
     std::string id() const;
 
-    // Coroutine version of the above, the IPFS ID is returned.
+    // Insert `data` into IPFS and return the resulting IPFS ID.
+    //
+    // TODO: This should store into a variety of systems
+    // and return a set of storage URIs to the callback.
+    //
+    // When testing or debugging, the content can be found here:
+    // "https://ipfs.io/ipfs/" + <IPFS ID>
     std::string put_data(const std::string& data, boost::asio::yield_context);
 
     // Gets the data stored in IPFS under `/ipfs/<ipfs_id>`.
