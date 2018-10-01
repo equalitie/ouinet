@@ -39,15 +39,6 @@ public:
     // "https://ipfs.io/ipns/" + ipfs.id()
     std::string id() const;
 
-    // Insert `data` into IPFS and pass the resulting IPFS ID to the callback.
-    //
-    // TODO: This should store into a variety of systems
-    // and pass a set of storage URIs to the callback.
-    //
-    // When testing or debugging, the content can be found here:
-    // "https://ipfs.io/ipfs/" + <IPFS ID>
-    void put_data(const std::string& data, OnInsert);
-
     // Coroutine version of the above, the IPFS ID is returned.
     std::string put_data(const std::string& data, boost::asio::yield_context);
 
