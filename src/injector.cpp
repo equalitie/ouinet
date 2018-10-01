@@ -208,44 +208,40 @@ public:
     }
 
 private:
-    Response insert_content(const Request& rq, Response rs, Yield yield)
+    Response insert_content(Request rq, Response rs, Yield yield)
     {
         if (!injector) return rs;
 
         // Recover and pop out synchronous injection toggle.
         bool sync = ( rq[request_sync_injection_hdr]
                       == request_sync_injection_true );
-        auto inj_rq(rq);
-        inj_rq.erase(request_sync_injection_hdr);
 
         // Recover and pop out injection identifier.
         auto id = rs[response_injection_id_hdr].to_string();
         assert(!id.empty());
-        auto inj_rs(rs);
-        inj_rs.erase(response_injection_id_hdr);
 
         // This injection code logs errors but does not propagate them.
         auto inject = [
-            id, inj_rq,
-            inj_rs = move(inj_rs),
+            rq, rs,
             injector = injector.get()
-        ] (boost::asio::yield_context yield) -> string {
+        ] (boost::asio::yield_context yield) mutable -> string {
+            rq.erase(request_sync_injection_hdr);
+
             sys::error_code ec;
-            string desc_data = descriptor::http_create
-                (*injector, id, inj_rq, inj_rs, yield[ec]);
-            if (ec) return "";
-            auto key = inj_rq.target().to_string();
-            injector->insert_content(key, desc_data, yield[ec]);
+            auto ret = injector->insert_content(move(rq), move(rs), yield[ec]);
+
             if (ec) {
-                cout << "!Insert failed: " << key
+                cout << "!Insert failed: " << rq.target()
                      << " " << ec.message() << endl;
             }
-            return desc_data;
+
+            return ret;
         };
 
         // Proceed to or program the real injection.
         LOG_DEBUG((sync ? "Sync inject: " : "Async inject: ")
-                  + rq.target().to_string() + " " + id);
+                  , rq.target(), " ", id);
+
         if (sync) {
             // Zlib-compress descriptor, Base64-encode and put in header.
             auto desc_data = inject(yield);
@@ -255,6 +251,7 @@ private:
         } else {
             asio::spawn(asio::yield_context(yield), inject);
         }
+
         return rs;
     }
 
@@ -270,13 +267,9 @@ private:
         sys::error_code ec;
 
         auto content = injector->get_content(rq.target().to_string(), yield[ec]);
-        if (ec) return or_throw<CacheEntry>(yield, ec);
 
-        // Assemble HTTP response from cached content
-        // and attach injection identifier header for injection tracking.
-        auto res = descriptor::http_parse(*injector, content.data, yield[ec]);
-        res.first.set(response_injection_id_hdr, res.second);
-        return or_throw(yield, ec, CacheEntry{content.ts, res.first});
+        return or_throw(yield, ec, CacheEntry{ content.ts
+                                             , move(content.response)});
     }
 
 private:

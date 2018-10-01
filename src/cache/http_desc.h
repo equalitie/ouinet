@@ -6,6 +6,7 @@
 #include <sstream>
 
 #include <boost/format.hpp>
+#include <boost/optional.hpp>
 #include <json.hpp>
 
 #include "../namespaces.h"
@@ -32,7 +33,8 @@ http_create( Cache& cache
     auto ipfs_id = cache.put_data( beast::buffers_to_string(rs.body().data())
                                  , yield[ec]);
 
-    auto url = rq.target().to_string();
+    auto url = rq.target();
+
     if (ec) {
         std::cout << "!Data seeding failed: " << url << " " << id
                   << " " << ec.message() << std::endl;
@@ -46,7 +48,7 @@ http_create( Cache& cache
     rsh_ss << rs.base();
 
     nlohmann::json desc;
-    desc["url"] = url;
+    desc["url"] = url.to_string();
     desc["id"] = id;
     desc["head"] = rsh_ss.str();
     desc["body_link"] = ipfs_id;
