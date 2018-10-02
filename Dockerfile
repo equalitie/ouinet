@@ -45,9 +45,13 @@ RUN git clone --recursive -b "$OUINET_VERSION" https://github.com/equalitie/ouin
 WORKDIR /opt/ouinet
 RUN cmake /usr/local/src/ouinet \
  && make
-RUN strip injector client test/test-* \
- && find . -name '*.so' -exec strip '{}' + \
- && find . -wholename '*/libexec/*' -executable -type f -exec strip '{}' +
+ARG OUINET_DEBUG=no
+RUN \
+if [ $OUINET_DEBUG != yes ]; then \
+    strip injector client test/test-* \
+        && find . -name '*.so' -exec strip '{}' + \
+        && find . -wholename '*/libexec/*' -executable -type f -exec strip '{}' + ; \
+fi
 
 FROM debian:stretch
 # To get the list of system library packages to install,
@@ -57,6 +61,9 @@ FROM debian:stretch
 #         | sed -En 's#^.* => (/lib/.*|/usr/lib/.*) \(.*#\1#p' | sort -u \
 #         | (while read l; do dpkg -S $l; done) | cut -f1 -d: | sort -u
 #
+ARG OUINET_DEBUG=no
+# This will also be used by the wrapper script.
+ENV OUINET_DEBUG=$OUINET_DEBUG
 RUN apt-get update && apt-get install -y \
     libc6 \
     libgcc1 \
@@ -65,6 +72,7 @@ RUN apt-get update && apt-get install -y \
     zlib1g \
     \
     ca-certificates \
+    $(echo $OUINET_DEBUG | sed -n 's/^yes$/gdb/p') \
  && rm -rf /var/lib/apt/lists/*
 # Manually install Boost libraries.
 COPY --from=builder /usr/local/lib/libboost_* /usr/local/lib/

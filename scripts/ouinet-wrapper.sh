@@ -56,8 +56,19 @@ if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
     cp -r "$INST/repo-templates/$PROG" "$REPO"
 fi
 
-if [ "$repo_arg" ]; then
-    exec "$INST/$PROG" "$@"
+if [ "$OUINET_DEBUG" = yes ]; then
+    run() {
+        exec gdb -batch -ex='handle SIGPIPE nostop noprint pass' -ex=r -ex=bt \
+                 --args "$INST/$PROG" "$@"
+    }
 else
-    exec "$INST/$PROG" --repo "$REPO" "$@"
+    run() {
+        exec "$INST/$PROG" "$@"
+    }
+fi
+
+if [ "$repo_arg" ]; then
+    run "$@"
+else
+    run --repo "$REPO" "$@"
 fi
