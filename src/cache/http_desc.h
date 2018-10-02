@@ -134,13 +134,12 @@ http_parse( Cache& cache, const std::string& desc_data
         std::cerr << "WARNING: Failed to put body into the response "
             << ec.message() << std::endl;
 
-        ec = asio::error::invalid_argument;
-        return or_throw<Ret>(yield, ec);
+        return or_throw<Ret>(yield, asio::error::invalid_argument);
     }
 
     res.prepare_payload();
 
-    return make_tuple(parser.release(), id, ts);
+    return make_tuple(std::move(res), id, ts);
 }
 
 } // ouinet::descriptor namespace
