@@ -293,8 +293,7 @@ CacheControl::do_fetch(const Request& request, Yield yield)
 
     auto cache_entry = do_fetch_stored(request, yield[ec]);
 
-    if (ec && ec != err::operation_not_supported
-           && ec != err::not_found) {
+    if (ec == err::operation_aborted) {
         return or_throw<Response>(yield, ec);
     }
 
