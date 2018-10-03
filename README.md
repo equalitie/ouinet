@@ -210,6 +210,18 @@ builder images (which may amount to a couple of GiB).
 
 [Dockerfile]: https://raw.githubusercontent.com/equalitie/ouinet/master/Dockerfile
 
+#### Debugging-enabled image
+
+You can also build an alternative version of the image where programs contain
+debugging symbols and they are run under `gdb`, which shows a backtrace in
+case of a crash.  Just add `--build-arg OUINET_DEBUG=yes` to the build
+command.  We recommend that you use a different tag for these images
+(e.g. `equalitie/ouinet:<VERSION>-debug`).
+
+Depending on your Docker setup, you may need to change the container's
+security profile and give it tracing capabilities.  For more information, see
+[this thread](https://stackoverflow.com/q/35860527).
+
 ### Deploying a client
 
 You may use [Docker Compose](https://docs.docker.com/compose/) with the
