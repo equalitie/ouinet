@@ -9,7 +9,7 @@
 #include <asio_ipfs.h>
 #include "db.h"
 #include "publisher.h"
-#include "../request_routing.h"
+#include "../http_util.h"
 #include "../bittorrent/dht.h"
 #include "../util/scheduler.h"
 
@@ -60,8 +60,8 @@ string CacheInjector::insert_content( Request rq
 
     sys::error_code ec;
 
-    auto id = rs[response_injection_id_hdr].to_string();
-    rs.erase(response_injection_id_hdr);
+    auto id = rs[http_::response_injection_id_hdr].to_string();
+    rs.erase(http_::response_injection_id_hdr);
 
     auto ts = boost::posix_time::microsec_clock::universal_time();
 
@@ -105,7 +105,7 @@ CacheEntry CacheInjector::get_content(string url, asio::yield_context yield)
     // Assemble HTTP response from cached content
     // and attach injection identifier header for injection tracking.
     auto res = descriptor::http_parse(*this, desc_data, yield[ec]);
-    get<0>(res).set(response_injection_id_hdr, get<1>(res));
+    get<0>(res).set(http_::response_injection_id_hdr, get<1>(res));
     return or_throw(yield, ec, CacheEntry{get<2>(res), move(get<0>(res))});
 }
 

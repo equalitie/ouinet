@@ -18,6 +18,7 @@
 #include "cache/http_desc.h"
 
 #include "namespaces.h"
+#include "http_util.h"
 #include "fetch_http_page.h"
 #include "client_front_end.h"
 #include "generic_connection.h"
@@ -422,7 +423,8 @@ Response Client::State::fetch_fresh
                 if (r == responder::injector)
                     // Add first a Ouinet version header
                     // to hint it to behave like an injector instead of a proxy.
-                    injreq.set(request_version_hdr, request_version_hdr_latest);
+                    injreq.set( http_::request_version_hdr
+                              , http_::request_version_hdr_latest);
                 if (auto credentials = _config.credentials_for(inj.remote_endpoint))
                     injreq = authorize(injreq, *credentials);
 

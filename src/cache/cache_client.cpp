@@ -3,7 +3,7 @@
 #include "db.h"
 #include "cache_entry.h"
 #include "http_desc.h"
-#include "../request_routing.h" // Included only for custom header fields
+#include "../http_util.h"
 #include "../or_throw.h"
 #include "../bittorrent/dht.h"
 #include "../util/crypto.h"
@@ -125,7 +125,7 @@ CacheEntry CacheClient::get_content(string url, asio::yield_context yield)
     // an error should have been reported.
     assert(!get<2>(res).is_not_a_date_time());
 
-    get<0>(res).set(response_injection_id_hdr, get<1>(res));
+    get<0>(res).set(http_::response_injection_id_hdr, get<1>(res));
 
     return or_throw(yield, ec, CacheEntry{get<2>(res), move(get<0>(res))});
 }

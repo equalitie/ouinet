@@ -29,7 +29,7 @@
 #include "injector_config.h"
 #include "authenticate.h"
 #include "force_exit_on_signal.h"
-#include "request_routing.h"
+#include "http_util.h"
 
 #include "ouiservice.h"
 #include "ouiservice/i2p.h"
@@ -180,7 +180,7 @@ public:
                                       , abort_signal
                                       , yield[ec]);
             // Add an injection identifier header.
-            ret.set(response_injection_id_hdr, to_string(genuuid()));
+            ret.set(http_::response_injection_id_hdr, to_string(genuuid()));
 
             if (ec || !ret.keep_alive() || !rq.keep_alive()) {
                 connection.destroy_implementation();
@@ -212,11 +212,11 @@ private:
         if (!injector) return rs;
 
         // Recover and pop out synchronous injection toggle.
-        bool sync = ( rq[request_sync_injection_hdr]
-                      == request_sync_injection_true );
+        bool sync = ( rq[http_::request_sync_injection_hdr]
+                      == http_::request_sync_injection_true );
 
         // Recover and pop out injection identifier.
-        auto id = rs[response_injection_id_hdr].to_string();
+        auto id = rs[http_::response_injection_id_hdr].to_string();
         assert(!id.empty());
 
         // This injection code logs errors but does not propagate them.
@@ -224,7 +224,7 @@ private:
             rq, rs,
             injector = injector.get()
         ] (boost::asio::yield_context yield) mutable -> string {
-            rq.erase(request_sync_injection_hdr);
+            rq.erase(http_::request_sync_injection_hdr);
 
             sys::error_code ec;
             auto ret = injector->insert_content(move(rq), move(rs), yield[ec]);
@@ -246,7 +246,7 @@ private:
             auto desc_data = inject(yield);
             auto compressed_desc = util::zlib_compress(move(desc_data));
             auto encoded_desc = util::base64_encode(move(compressed_desc));
-            rs.set(response_descriptor_hdr, move(encoded_desc));
+            rs.set(http_::response_descriptor_hdr, move(encoded_desc));
         } else {
             asio::spawn(asio::yield_context(yield), inject);
         }
@@ -321,7 +321,7 @@ void serve( InjectorConfig& config
         // whether to behave like an injector or a proxy.
         Response res;
         auto req2(req);
-        auto ouinet_version_hdr = req2.find(request_version_hdr);
+        auto ouinet_version_hdr = req2.find(http_::request_version_hdr);
         if (ouinet_version_hdr == req2.end()) {
             // No Ouinet header, behave like a (non-caching) proxy.
             // TODO: Maybe reject requests for HTTPS URLS:
