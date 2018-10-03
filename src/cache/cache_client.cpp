@@ -1,7 +1,9 @@
 #include <asio_ipfs.h>
 #include "cache_client.h"
 #include "db.h"
-#include "get_content.h"
+#include "cache_entry.h"
+#include "http_desc.h"
+#include "../request_routing.h" // Included only for custom header fields
 #include "../or_throw.h"
 #include "../bittorrent/dht.h"
 #include "../util/crypto.h"
@@ -101,9 +103,31 @@ string CacheClient::get_data(const string &ipfs_id, asio::yield_context yield)
     return _ipfs_node->cat(ipfs_id, yield);
 }
 
-CachedContent CacheClient::get_content(string url, asio::yield_context yield)
+string CacheClient::get_descriptor(string url, asio::yield_context yield)
 {
-    return ouinet::get_content(*_db, url, yield);
+    return _db->query(url, yield);
+}
+
+CacheEntry CacheClient::get_content(string url, asio::yield_context yield)
+{
+    using std::get;
+    sys::error_code ec;
+
+    auto desc_data = get_descriptor(url, yield[ec]);
+
+    if (ec) return or_throw<CacheEntry>(yield, ec);
+
+    auto res = descriptor::http_parse(*this, desc_data, yield[ec]);
+
+    if (ec) return or_throw<CacheEntry>(yield, ec);
+
+    // If the content does not have a meaningful time stamp,
+    // an error should have been reported.
+    assert(!get<2>(res).is_not_a_date_time());
+
+    get<0>(res).set(response_injection_id_hdr, get<1>(res));
+
+    return or_throw(yield, ec, CacheEntry{get<2>(res), move(get<0>(res))});
 }
 
 void CacheClient::wait_for_db_update(boost::asio::yield_context yield)
@@ -131,11 +155,6 @@ const string& CacheClient::ipfs() const
 {
     return _db->ipfs();
 }
-
-//const Json& Client::json_db() const
-//{
-//    return _db->json_db();
-//}
 
 CacheClient::CacheClient(CacheClient&& other)
     : _ipfs_node(move(other._ipfs_node))

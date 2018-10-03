@@ -100,7 +100,7 @@ private:
                                , const Request& req
                                , asio::yield_context yield);
 
-    CacheControl::CacheEntry
+    CacheEntry
     fetch_stored( const Request& request
                 , request_route::Config& request_config
                 , asio::yield_context yield);
@@ -256,40 +256,24 @@ void Client::State::handle_connect_request( GenericConnection& client_c
 }
 
 //------------------------------------------------------------------------------
-CacheControl::CacheEntry
+CacheEntry
 Client::State::fetch_stored( const Request& request
                            , request_route::Config& request_config
                            , asio::yield_context yield)
 {
-    using CacheEntry = CacheControl::CacheEntry;
-
     const bool cache_is_disabled
         = !request_config.enable_cache
        || !_cache
        || !_front_end.is_ipfs_cache_enabled();
 
     if (cache_is_disabled) {
-        return or_throw<CacheControl::CacheEntry>( yield ,
-                asio::error::operation_not_supported);
+        return or_throw<CacheEntry>( yield
+                                   , asio::error::operation_not_supported);
     }
 
-    sys::error_code ec;
-    // Get the content from cache
+    // TODO: use string_view for the key.
     auto key = request.target();
-
-    auto content = _cache->get_content(key.to_string(), yield[ec]);
-
-    if (ec) return or_throw<CacheEntry>(yield, ec);
-
-    // If the content does not have a meaningful time stamp,
-    // an error should have been reported.
-    assert(!content.ts.is_not_a_date_time());
-
-    // Assemble HTTP response from cached content
-    // and attach injection identifier header for injection tracking.
-    auto res = descriptor::http_parse(*_cache, content.data, yield[ec]);
-    res.first.set(response_injection_id_hdr, res.second);
-    return or_throw(yield, ec, CacheEntry{content.ts, res.first});
+    return _cache->get_content(key.to_string(), yield);
 }
 
 //------------------------------------------------------------------------------
@@ -512,7 +496,7 @@ public:
         cc.max_cached_age(client_state._config.max_cached_age());
     }
 
-    CacheControl::CacheEntry
+    CacheEntry
     fetch_stored(const Request& request, Yield yield) {
         yield.log("Fetching from cache");
 

@@ -145,7 +145,7 @@ optional<unsigned> get_max_age(const beast::string_view& cache_control_value)
 }
 
 static
-bool is_expired(const CacheControl::CacheEntry& entry)
+bool is_expired(const CacheEntry& entry)
 {
     // RFC2616: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.9.3
     static const auto now = [] {
@@ -402,7 +402,7 @@ CacheControl::do_fetch_fresh(const Request& rq, Yield yield)
     return or_throw<Response>(yield, asio::error::operation_not_supported);
 }
 
-CacheControl::CacheEntry
+CacheEntry
 CacheControl::do_fetch_stored(const Request& rq, Yield yield)
 {
     if (fetch_stored) {

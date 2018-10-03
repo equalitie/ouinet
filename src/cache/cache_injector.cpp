@@ -4,11 +4,12 @@
 #include <chrono>
 
 #include "cache_injector.h"
+#include "http_desc.h"
 
 #include <asio_ipfs.h>
 #include "db.h"
-#include "get_content.h"
 #include "publisher.h"
+#include "../request_routing.h"
 #include "../bittorrent/dht.h"
 #include "../util/scheduler.h"
 
@@ -41,19 +42,30 @@ string CacheInjector::id() const
 std::string CacheInjector::put_data( const std::string& data
                                    , boost::asio::yield_context yield)
 {
-    return insert_content("", move(data), yield);
+    auto wd = _was_destroyed;
+    sys::error_code ec;
+
+    string ipfs_id = _ipfs_node->add(data, yield[ec]);
+
+    if (!ec && *wd) ec = asio::error::operation_aborted;
+
+    return or_throw(yield, ec, move(ipfs_id));
 }
 
-string CacheInjector::insert_content( string key
-                                    , const string& value
+string CacheInjector::insert_content( Request rq
+                                    , Response rs
                                     , asio::yield_context yield)
 {
     auto wd = _was_destroyed;
 
     sys::error_code ec;
-    string ipfs_id;
+
+    auto id = rs[response_injection_id_hdr].to_string();
+    rs.erase(response_injection_id_hdr);
 
     auto ts = boost::posix_time::microsec_clock::universal_time();
+
+    string desc_data;
 
     {
         auto slot = _scheduler->wait_for_slot(yield[ec]);
@@ -61,24 +73,19 @@ string CacheInjector::insert_content( string key
         if (!ec && *wd) ec = asio::error::operation_aborted;
         if (ec) return or_throw<string>(yield, ec);
 
-        ipfs_id = _ipfs_node->add(value, yield[ec]);
+        desc_data = descriptor::http_create(*this, id, ts, rq, rs, yield[ec]);
 
         if (!ec && *wd) ec = asio::error::operation_aborted;
         if (ec) return or_throw<string>(yield, ec);
     }
 
-    if (!key.empty()) {  // not a raw data insertion, store in database
-        Json json;
+    // TODO: use string_view for key
+    auto key = rq.target().to_string();
+    _db->update(move(key), desc_data, yield[ec]);
 
-        json["value"] = ipfs_id;
-        json["ts"]    = boost::posix_time::to_iso_extended_string(ts) + 'Z';
+    if (!ec && *wd) ec = asio::error::operation_aborted;
 
-        _db->update(move(key), json.dump(), yield[ec]);
-
-        if (!ec && *wd) ec = asio::error::operation_aborted;
-    }
-
-    return or_throw(yield, ec, move(ipfs_id));
+    return or_throw(yield, ec, desc_data);
 }
 
 string CacheInjector::get_data(const string &ipfs_id, asio::yield_context yield)
@@ -86,9 +93,20 @@ string CacheInjector::get_data(const string &ipfs_id, asio::yield_context yield)
     return _ipfs_node->cat(ipfs_id, yield);
 }
 
-CachedContent CacheInjector::get_content(string url, asio::yield_context yield)
+CacheEntry CacheInjector::get_content(string url, asio::yield_context yield)
 {
-    return ouinet::get_content(*_db, url, yield);
+    using std::get;
+    sys::error_code ec;
+
+    string desc_data = _db->query(url, yield[ec]);
+
+    if (ec) return or_throw<CacheEntry>(yield, ec);
+
+    // Assemble HTTP response from cached content
+    // and attach injection identifier header for injection tracking.
+    auto res = descriptor::http_parse(*this, desc_data, yield[ec]);
+    get<0>(res).set(response_injection_id_hdr, get<1>(res));
+    return or_throw(yield, ec, CacheEntry{get<2>(res), move(get<0>(res))});
 }
 
 CacheInjector::~CacheInjector()

@@ -10,7 +10,7 @@
 #include <string>
 #include <json.hpp>
 
-#include "cached_content.h"
+#include "cache_entry.h"
 #include "../namespaces.h"
 
 namespace asio_ipfs { class node; }
@@ -60,7 +60,9 @@ public:
     // Basically it does this: Look into the database to find the IPFS_ID
     // correspoinding to the `url`, when found, fetch the content corresponding
     // to that IPFS_ID from IPFS.
-    CachedContent get_content(std::string url, boost::asio::yield_context);
+    CacheEntry get_content(std::string url, boost::asio::yield_context);
+
+    std::string get_descriptor(std::string url, asio::yield_context);
 
     void wait_for_db_update(boost::asio::yield_context);
 

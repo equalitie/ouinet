@@ -11,7 +11,7 @@
 
 #include "../namespaces.h"
 #include "../util/crypto.h"
-#include "cached_content.h"
+#include "cache_entry.h"
 
 namespace asio_ipfs { class node; }
 namespace ouinet { namespace bittorrent { class MainlineDht; }}
@@ -25,6 +25,8 @@ class Scheduler;
 class CacheInjector {
 public:
     using OnInsert = std::function<void(boost::system::error_code, std::string)>;
+    using Request  = http::request<http::string_body>;
+    using Response = http::response<http::dynamic_body>;
 
 public:
     CacheInjector( boost::asio::io_service&
@@ -54,14 +56,8 @@ public:
     std::string get_data(const std::string& ipfs_id, boost::asio::yield_context);
 
     // Insert `content` into IPFS and store its IPFS ID under the `url` in the
-    // database. The IPFS ID is also returned as a parameter to the callback
-    // function.
-    //
-    // When testing or debugging, the content can be found here:
-    // "https://ipfs.io/ipfs/" + <IPFS ID>
-    std::string insert_content( std::string url
-                              , const std::string& content
-                              , boost::asio::yield_context);
+    // database. On success, the function returns the file descriptor.
+    std::string insert_content(Request, Response, boost::asio::yield_context);
 
     // Find the content previously stored by the injector under `url`.
     // The content is returned in the parameter of the callback function.
@@ -69,7 +65,7 @@ public:
     // Basically it does this: Look into the database to find the IPFS_ID
     // correspoinding to the `url`, when found, fetch the content corresponding
     // to that IPFS_ID from IPFS.
-    CachedContent get_content(std::string url, boost::asio::yield_context);
+    CacheEntry get_content(std::string url, boost::asio::yield_context);
 
     ~CacheInjector();
 
