@@ -144,6 +144,17 @@ void handle_connect_request( GenericConnection& client_c
 }
 
 //------------------------------------------------------------------------------
+static Request erase_hop_by_hop_headers(Request rq) {
+    rq.erase(http::field::connection);
+    rq.erase(http::field::keep_alive);
+    rq.erase(http::field::public_);
+    rq.erase(http::field::proxy_authenticate);
+    rq.erase(http::field::transfer_encoding);
+    rq.erase(http::field::upgrade);
+    return rq;
+}
+
+//------------------------------------------------------------------------------
 struct InjectorCacheControl {
 public:
     // TODO: Replace this with cancellation support in which fetch_ operations
@@ -164,12 +175,15 @@ public:
         // and it is removed just before saving to the cache
         // (though it is still used to create the descriptor).
 
-        cc.fetch_fresh = [&] (const Request& rq, Yield yield) {
-            string host = rq[http::field::host].to_string();
+        cc.fetch_fresh = [&] (const Request& rq_, Yield yield) {
+            string host = rq_[http::field::host].to_string();
 
             auto& connection = connections[host];
 
             sys::error_code ec;
+
+            Request rq = erase_hop_by_hop_headers(rq_);
+            rq.keep_alive(true);
 
             auto ret = fetch_http_page( ios
                                       , connection
@@ -177,10 +191,11 @@ public:
                                       , default_timeout::fetch_http()
                                       , abort_signal
                                       , yield[ec]);
+
             // Add an injection identifier header.
             ret.set(http_::response_injection_id_hdr, to_string(genuuid()));
 
-            if (ec || !ret.keep_alive() || !rq.keep_alive()) {
+            if (ec || !ret.keep_alive() || !rq_.keep_alive()) {
                 connection.destroy_implementation();
             }
 
@@ -327,7 +342,7 @@ void serve( InjectorConfig& config
             GenericConnection c;
             res = fetch_http_page( con.get_io_service()
                                  , c
-                                 , req2
+                                 , erase_hop_by_hop_headers(move(req2))
                                  , default_timeout::fetch_http()
                                  , close_connection_signal
                                  , yield[ec].tag("fetch_http_page"));
@@ -353,7 +368,7 @@ void serve( InjectorConfig& config
 
         if (ec) break;
 
-        if (!res.keep_alive()) {
+        if (!req.keep_alive() || !res.keep_alive()) {
             con.close();
             break;
         }
