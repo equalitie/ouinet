@@ -165,11 +165,9 @@ public:
         // (though it is still used to create the descriptor).
 
         cc.fetch_fresh = [&] (const Request& rq, Yield yield) {
-            if (connection.has_implementation()) {
-                if (last_host != rq[http::field::host]) {
-                    connection.destroy_implementation();
-                }
-            }
+            string host = rq[http::field::host].to_string();
+
+            auto& connection = connections[host];
 
             sys::error_code ec;
 
@@ -184,8 +182,6 @@ public:
 
             if (ec || !ret.keep_alive() || !rq.keep_alive()) {
                 connection.destroy_implementation();
-            } else {
-                last_host = rq[http::field::host].to_string();
             }
 
             return or_throw(yield, ec, move(ret));
@@ -270,7 +266,7 @@ private:
     uuid_generator& genuuid;
     CacheControl cc;
     string last_host; // A host to which the below connection was established
-    GenericConnection connection;
+    map<string, GenericConnection> connections;
 };
 
 //------------------------------------------------------------------------------
