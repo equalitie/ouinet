@@ -11,10 +11,10 @@
 
 namespace ouinet {
 
+namespace http_ {
 // TODO: This should be called ``http``,
 // but it is already being used as an alias for ``boost::http``.
 
-namespace http_ {
 // Common prefix for all Ouinet-specific internal HTTP headers.
 static const std::string header_prefix = "X-Ouinet-";
 // The presence of this (non-empty) HTTP request header
@@ -35,7 +35,8 @@ static const std::string request_sync_injection_true = "true";
 // this header is added to the resulting response
 // with the Base64-encoded, Zlib-compressed content of the descriptor.
 static const std::string response_descriptor_hdr = header_prefix + "Descriptor";
-};
+
+} // ouinet::http_ namespace
 
 namespace util {
 
