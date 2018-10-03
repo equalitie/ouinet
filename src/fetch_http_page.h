@@ -25,8 +25,10 @@ fetch_http( asio::io_service& ios
           , GenericConnection& con
           , RequestType req
           , Signal<void()>& abort_signal
-          , Yield yield)
+          , Yield yield_)
 {
+    Yield yield = yield_.tag("fetch_http");
+
     http::response<ResponseBodyType> res;
 
     auto slot = abort_signal.connect([&con] { con.close(); });
@@ -35,6 +37,10 @@ fetch_http( asio::io_service& ios
 
     // Send the HTTP request to the remote host
     http::async_write(con, req, yield[ec]);
+
+    if (ec) {
+        yield.log("Failed to http::async_write ", ec.message());
+    }
 
     // Ignore end_of_stream error, there may still be data in
     // the receive buffer we can read.
@@ -48,6 +54,10 @@ fetch_http( asio::io_service& ios
 
     // Receive the HTTP response
     _recv_http_response(con, buffer, res, yield[ec]);
+
+    if (ec) {
+        yield.log("Failed to http::async_read ", ec.message());
+    }
 
     return or_throw(yield, ec, move(res));
 }
@@ -202,10 +212,6 @@ fetch_http_page( asio::io_service& ios
                                              , req
                                              , abort_signal
                                              , yield[ec]);
-
-    if (ec) {
-        yield.log("Failed in fetch_http ", ec.message());
-    }
 
     if (!ec && !optcon.has_implementation()) {
         optcon = std::move(temp_con);
