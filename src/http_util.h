@@ -1,8 +1,6 @@
 #pragma once
 
 #include "namespaces.h"
-#include <unistd.h>  // for getpid()
-#include <fstream>
 #include <string>
 
 #include <boost/lexical_cast.hpp>
