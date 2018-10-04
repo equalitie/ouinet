@@ -118,7 +118,8 @@ bool is_localhost( const std::string& host
     // so we can simplify the regular expression.`:)`
     static const boost::regex lhrx
       ( "^(?:"
-        IPV4_LOOP             // IPv4, e.g. 127.1.2.3
+        "(?:localhost|ip6-localhost|ip6-loopback)(?:\\.localdomain)?"
+        "|" IPV4_LOOP         // IPv4, e.g. 127.1.2.3
         "|::1"                // IPv6 loopback
         "|::ffff:" IPV4_LOOP  // IPv4-mapped IPv6
         "|::" IPV4_LOOP       // IPv4-compatible IPv6
