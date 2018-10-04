@@ -4,12 +4,9 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/io_service.hpp>
 #include <boost/asio/steady_timer.hpp>
-#include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/optional.hpp>
 #include <string>
-#include <queue>
-#include <list>
 #include <json.hpp>
 
 #include "../namespaces.h"
@@ -43,8 +40,6 @@ public:
     const std::string& ipns() const { return _ipns; }
     const std::string& ipfs() const { return _ipfs; }
 
-    void wait_for_db_update(boost::asio::yield_context);
-
     asio_ipfs::node& ipfs_node() { return _ipfs_node; }
 
     const BTree* get_btree() const;
@@ -52,30 +47,21 @@ public:
     ~ClientDb();
 
 private:
-    void merge(const Json&);
-
-    Json download_database(const std::string& ipns, sys::error_code&, asio::yield_context);
     void on_resolve(std::string cid, asio::yield_context);
-
-    void flush_db_update_callbacks(const sys::error_code&);
 
 private:
     const fs::path _path_to_repo;
     std::string _ipns;
     std::string _ipfs; // Last known
     asio_ipfs::node& _ipfs_node;
-    std::shared_ptr<bool> _was_destroyed;
-    asio::steady_timer _download_timer;
-    std::queue<OnDbUpdate> _on_db_update_callbacks;
     std::unique_ptr<BTree> _db_map;
     Resolver _resolver;
+    std::shared_ptr<bool> _was_destroyed;
 };
 
 class InjectorDb {
 public:
     InjectorDb(asio_ipfs::node&, Publisher&, fs::path path_to_repo);
-
-    void update(std::string key, std::string content_hash, asio::yield_context);
 
     std::string query(std::string key, asio::yield_context);
 
@@ -84,6 +70,8 @@ public:
     const std::string& ipns() const { return _ipns; }
 
     asio_ipfs::node& ipfs_node() { return _ipfs_node; }
+
+    void update(std::string key, std::string value, asio::yield_context);
 
     ~InjectorDb();
 
@@ -96,10 +84,8 @@ private:
     std::string _ipns;
     asio_ipfs::node& _ipfs_node;
     Publisher& _publisher;
-    ConditionVariable _has_callbacks;
-    std::list<std::function<void(sys::error_code)>> _upload_callbacks;
-    std::shared_ptr<bool> _was_destroyed;
     std::unique_ptr<BTree> _db_map;
+    std::shared_ptr<bool> _was_destroyed;
 };
 
 } // namespace

@@ -64,8 +64,6 @@ public:
 
     std::string get_descriptor(std::string url, asio::yield_context);
 
-    void wait_for_db_update(boost::asio::yield_context);
-
     void set_ipns(std::string ipns);
 
     std::string id() const;

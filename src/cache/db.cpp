@@ -114,8 +114,6 @@ ClientDb::ClientDb( asio_ipfs::node& ipfs_node
     : _path_to_repo(move(path_to_repo))
     , _ipns(move(ipns))
     , _ipfs_node(ipfs_node)
-    , _was_destroyed(make_shared<bool>(false))
-    , _download_timer(_ipfs_node.get_io_service())
     , _db_map(make_unique<BTree>( make_cat_operation(ipfs_node)
                                 , nullptr
                                 , nullptr
@@ -126,6 +124,7 @@ ClientDb::ClientDb( asio_ipfs::node& ipfs_node
                , bt_publish_pubkey
                , [this](string cid, asio::yield_context yield)
                  { on_resolve(move(cid), yield); })
+    , _was_destroyed(make_shared<bool>(false))
 {
     auto d = _was_destroyed;
 
@@ -146,12 +145,11 @@ InjectorDb::InjectorDb( asio_ipfs::node& ipfs_node
     , _ipns(ipfs_node.id())
     , _ipfs_node(ipfs_node)
     , _publisher(publisher)
-    , _has_callbacks(_ipfs_node.get_io_service())
-    , _was_destroyed(make_shared<bool>(false))
     , _db_map(make_unique<BTree>( make_cat_operation(ipfs_node)
                                 , make_add_operation(ipfs_node)
                                 , make_remove_operation(ipfs_node)
                                 , BTREE_NODE_SIZE))
+    , _was_destroyed(make_shared<bool>(false))
 {
     auto d = _was_destroyed;
 
@@ -232,37 +230,11 @@ void ClientDb::on_resolve(string ipfs_id, asio::yield_context yield)
     if (*d || ec) return;
 
     save_db_to_disk(_path_to_repo, _ipns, ipfs_id);
-
-    flush_db_update_callbacks(sys::error_code());
-}
-
-void ClientDb::wait_for_db_update(asio::yield_context yield)
-{
-    using Handler = asio::handler_type<asio::yield_context,
-          void(sys::error_code)>::type;
-
-    Handler h(yield);
-    asio::async_result<Handler> result(h);
-    _on_db_update_callbacks.push([ h = move(h)
-                                 , w = asio::io_service::work(get_io_service())
-                                 ] (auto ec) mutable { h(ec); });
-    result.get();
 }
 
 const BTree* ClientDb::get_btree() const
 {
     return _db_map.get();
-}
-
-void ClientDb::flush_db_update_callbacks(const sys::error_code& ec)
-{
-    auto& q = _on_db_update_callbacks;
-
-    while (!q.empty()) {
-        auto c = move(q.front());
-        q.pop();
-        get_io_service().post([c = move(c), ec] () mutable { c(ec); });
-    }
 }
 
 asio::io_service& ClientDb::get_io_service() {
@@ -275,15 +247,8 @@ asio::io_service& InjectorDb::get_io_service() {
 
 ClientDb::~ClientDb() {
     *_was_destroyed = true;
-    flush_db_update_callbacks(asio::error::operation_aborted);
 }
 
 InjectorDb::~InjectorDb() {
     *_was_destroyed = true;
-
-    for (auto& cb : _upload_callbacks) {
-        get_io_service().post([cb = move(cb)] {
-                cb(asio::error::operation_aborted);
-            });
-    }
 }

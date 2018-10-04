@@ -130,11 +130,6 @@ CacheEntry CacheClient::get_content(string url, asio::yield_context yield)
     return or_throw(yield, ec, CacheEntry{get<2>(res), move(get<0>(res))});
 }
 
-void CacheClient::wait_for_db_update(boost::asio::yield_context yield)
-{
-    _db->wait_for_db_update(yield);
-}
-
 void CacheClient::set_ipns(std::string ipns)
 {
     assert(0 && "TODO");
