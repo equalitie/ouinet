@@ -3,7 +3,6 @@
 #include "btree_db.h"
 #include "cache_entry.h"
 #include "http_desc.h"
-#include "../http_util.h"
 #include "../or_throw.h"
 #include "../bittorrent/dht.h"
 #include "../util/crypto.h"
@@ -117,17 +116,7 @@ CacheEntry CacheClient::get_content(string url, asio::yield_context yield)
 
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
-    auto res = descriptor::http_parse(*this, desc_data, yield[ec]);
-
-    if (ec) return or_throw<CacheEntry>(yield, ec);
-
-    // If the content does not have a meaningful time stamp,
-    // an error should have been reported.
-    assert(!get<2>(res).is_not_a_date_time());
-
-    get<0>(res).set(http_::response_injection_id_hdr, get<1>(res));
-
-    return or_throw(yield, ec, CacheEntry{get<2>(res), move(get<0>(res))});
+    return descriptor::http_parse(*this, desc_data, yield);
 }
 
 void CacheClient::set_ipns(std::string ipns)

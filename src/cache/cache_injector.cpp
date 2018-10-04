@@ -73,7 +73,8 @@ string CacheInjector::insert_content( Request rq
         if (!ec && *wd) ec = asio::error::operation_aborted;
         if (ec) return or_throw<string>(yield, ec);
 
-        desc_data = descriptor::http_create(*this, id, ts, rq, rs, yield[ec]);
+        desc_data = descriptor::http_create(*this, id, ts, rq, rs, yield[ec])
+                    .serialize();
 
         if (!ec && *wd) ec = asio::error::operation_aborted;
         if (ec) return or_throw<string>(yield, ec);
@@ -96,18 +97,13 @@ string CacheInjector::get_data(const string &ipfs_id, asio::yield_context yield)
 
 CacheEntry CacheInjector::get_content(string url, asio::yield_context yield)
 {
-    using std::get;
     sys::error_code ec;
 
     string desc_data = _db->find(url, yield[ec]);
 
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
-    // Assemble HTTP response from cached content
-    // and attach injection identifier header for injection tracking.
-    auto res = descriptor::http_parse(*this, desc_data, yield[ec]);
-    get<0>(res).set(http_::response_injection_id_hdr, get<1>(res));
-    return or_throw(yield, ec, CacheEntry{get<2>(res), move(get<0>(res))});
+    return descriptor::http_parse(*this, desc_data, yield);
 }
 
 CacheInjector::~CacheInjector()
