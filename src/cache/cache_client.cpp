@@ -1,6 +1,6 @@
 #include <asio_ipfs.h>
 #include "cache_client.h"
-#include "db.h"
+#include "btree_db.h"
 #include "cache_entry.h"
 #include "http_desc.h"
 #include "../http_util.h"
@@ -62,11 +62,11 @@ CacheClient::CacheClient( asio_ipfs::node ipfs_node
     : _path_to_repo(move(path_to_repo))
     , _ipfs_node(new asio_ipfs::node(move(ipfs_node)))
     , _bt_dht(new bt::MainlineDht(_ipfs_node->get_io_service()))
-    , _db(new ClientDb( *_ipfs_node
-                      , ipns
-                      , *_bt_dht
-                      , bt_bubkey
-                      , _path_to_repo))
+    , _db(new BTreeClientDb( *_ipfs_node
+                           , ipns
+                           , *_bt_dht
+                           , bt_bubkey
+                           , _path_to_repo))
 {
     _bt_dht->set_interfaces({asio::ip::address_v4::any()});
 }
@@ -78,11 +78,11 @@ CacheClient::CacheClient( boost::asio::io_service& ios
     : _path_to_repo(move(path_to_repo))
     , _ipfs_node(new asio_ipfs::node(ios, (_path_to_repo/"ipfs").native()))
     , _bt_dht(new bt::MainlineDht(ios))
-    , _db(new ClientDb( *_ipfs_node
-                      , ipns
-                      , *_bt_dht
-                      , bt_bubkey
-                      , _path_to_repo))
+    , _db(new BTreeClientDb( *_ipfs_node
+                           , ipns
+                           , *_bt_dht
+                           , bt_bubkey
+                           , _path_to_repo))
 {
     _bt_dht->set_interfaces({asio::ip::address_v4::any()});
 }

@@ -23,15 +23,15 @@ class BTree;
 class Publisher;
 using Json = nlohmann::json;
 
-class ClientDb {
+class BTreeClientDb {
     using OnDbUpdate = std::function<void(const sys::error_code&)>;
 
 public:
-    ClientDb( asio_ipfs::node&
-            , std::string ipns
-            , bittorrent::MainlineDht& bt_dht
-            , boost::optional<util::Ed25519PublicKey> bt_publish_pubkey
-            , fs::path path_to_repo);
+    BTreeClientDb( asio_ipfs::node&
+                 , std::string ipns
+                 , bittorrent::MainlineDht& bt_dht
+                 , boost::optional<util::Ed25519PublicKey> bt_publish_pubkey
+                 , fs::path path_to_repo);
 
     std::string query(std::string key, asio::yield_context);
 
@@ -44,7 +44,7 @@ public:
 
     const BTree* get_btree() const;
 
-    ~ClientDb();
+    ~BTreeClientDb();
 
 private:
     void on_resolve(std::string cid, asio::yield_context);
@@ -59,9 +59,9 @@ private:
     std::shared_ptr<bool> _was_destroyed;
 };
 
-class InjectorDb {
+class BTreeInjectorDb {
 public:
-    InjectorDb(asio_ipfs::node&, Publisher&, fs::path path_to_repo);
+    BTreeInjectorDb(asio_ipfs::node&, Publisher&, fs::path path_to_repo);
 
     std::string query(std::string key, asio::yield_context);
 
@@ -73,7 +73,7 @@ public:
 
     void update(std::string key, std::string value, asio::yield_context);
 
-    ~InjectorDb();
+    ~BTreeInjectorDb();
 
 private:
     void publish(std::string);

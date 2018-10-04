@@ -1,4 +1,4 @@
-#include "db.h"
+#include "btree_db.h"
 #include <asio_ipfs.h>
 #include "publisher.h"
 #include "btree.h"
@@ -106,11 +106,11 @@ static void save_db_to_disk( const fs::path& path_to_repo
 }
 
 
-ClientDb::ClientDb( asio_ipfs::node& ipfs_node
-                  , string ipns
-                  , bt::MainlineDht& bt_dht
-                  , optional<util::Ed25519PublicKey> bt_publish_pubkey
-                  , fs::path path_to_repo)
+BTreeClientDb::BTreeClientDb( asio_ipfs::node& ipfs_node
+                            , string ipns
+                            , bt::MainlineDht& bt_dht
+                            , optional<util::Ed25519PublicKey> bt_publish_pubkey
+                            , fs::path path_to_repo)
     : _path_to_repo(move(path_to_repo))
     , _ipns(move(ipns))
     , _ipfs_node(ipfs_node)
@@ -138,9 +138,9 @@ ClientDb::ClientDb( asio_ipfs::node& ipfs_node
         });
 }
 
-InjectorDb::InjectorDb( asio_ipfs::node& ipfs_node
-                      , Publisher& publisher
-                      , fs::path path_to_repo)
+BTreeInjectorDb::BTreeInjectorDb( asio_ipfs::node& ipfs_node
+                                , Publisher& publisher
+                                , fs::path path_to_repo)
     : _path_to_repo(move(path_to_repo))
     , _ipns(ipfs_node.id())
     , _ipfs_node(ipfs_node)
@@ -167,7 +167,9 @@ InjectorDb::InjectorDb( asio_ipfs::node& ipfs_node
 
 const string ipfs_uri_prefix = "ipfs:/ipfs/";
 
-void InjectorDb::update(string key, string value, asio::yield_context yield)
+void BTreeInjectorDb::update( string key
+                            , string value
+                            , asio::yield_context yield)
 {
     auto wd = _was_destroyed;
     sys::error_code ec;
@@ -183,7 +185,7 @@ void InjectorDb::update(string key, string value, asio::yield_context yield)
     return or_throw(yield, ec);
 }
 
-void InjectorDb::publish(string db_ipfs_id)
+void BTreeInjectorDb::publish(string db_ipfs_id)
 {
     if (db_ipfs_id.empty()) {
         return;
@@ -205,17 +207,17 @@ static string query_(string key, BTree& db, asio::yield_context yield)
     return val;
 }
 
-string InjectorDb::query(string key, asio::yield_context yield)
+string BTreeInjectorDb::query(string key, asio::yield_context yield)
 {
     return query_(move(key), *_db_map, yield);
 }
 
-string ClientDb::query(string key, asio::yield_context yield)
+string BTreeClientDb::query(string key, asio::yield_context yield)
 {
     return query_(move(key), *_db_map, yield);
 }
 
-void ClientDb::on_resolve(string ipfs_id, asio::yield_context yield)
+void BTreeClientDb::on_resolve(string ipfs_id, asio::yield_context yield)
 {
     auto d = _was_destroyed;
 
@@ -232,23 +234,23 @@ void ClientDb::on_resolve(string ipfs_id, asio::yield_context yield)
     save_db_to_disk(_path_to_repo, _ipns, ipfs_id);
 }
 
-const BTree* ClientDb::get_btree() const
+const BTree* BTreeClientDb::get_btree() const
 {
     return _db_map.get();
 }
 
-asio::io_service& ClientDb::get_io_service() {
+asio::io_service& BTreeClientDb::get_io_service() {
     return _ipfs_node.get_io_service();
 }
 
-asio::io_service& InjectorDb::get_io_service() {
+asio::io_service& BTreeInjectorDb::get_io_service() {
     return _ipfs_node.get_io_service();
 }
 
-ClientDb::~ClientDb() {
+BTreeClientDb::~BTreeClientDb() {
     *_was_destroyed = true;
 }
 
-InjectorDb::~InjectorDb() {
+BTreeInjectorDb::~BTreeInjectorDb() {
     *_was_destroyed = true;
 }

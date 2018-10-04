@@ -7,7 +7,7 @@
 #include "http_desc.h"
 
 #include <asio_ipfs.h>
-#include "db.h"
+#include "btree_db.h"
 #include "publisher.h"
 #include "../http_util.h"
 #include "../bittorrent/dht.h"
@@ -27,7 +27,7 @@ CacheInjector::CacheInjector
                               , *_bt_dht
                               , bt_publish_key
                               , path_to_repo/"publisher"))
-    , _db(new InjectorDb(*_ipfs_node, *_publisher, path_to_repo))
+    , _db(new BTreeInjectorDb(*_ipfs_node, *_publisher, path_to_repo))
     , _scheduler(new Scheduler(ios, _concurrency))
     , _was_destroyed(make_shared<bool>(false))
 {
