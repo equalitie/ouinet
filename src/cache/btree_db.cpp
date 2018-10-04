@@ -167,7 +167,7 @@ BTreeInjectorDb::BTreeInjectorDb( asio_ipfs::node& ipfs_node
 
 const string ipfs_uri_prefix = "ipfs:/ipfs/";
 
-void BTreeInjectorDb::update( string key
+void BTreeInjectorDb::insert( string key
                             , string value
                             , asio::yield_context yield)
 {
@@ -207,12 +207,12 @@ static string query_(string key, BTree& db, asio::yield_context yield)
     return val;
 }
 
-string BTreeInjectorDb::query(string key, asio::yield_context yield)
+string BTreeInjectorDb::find(string key, asio::yield_context yield)
 {
     return query_(move(key), *_db_map, yield);
 }
 
-string BTreeClientDb::query(string key, asio::yield_context yield)
+string BTreeClientDb::find(string key, asio::yield_context yield)
 {
     return query_(move(key), *_db_map, yield);
 }

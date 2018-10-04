@@ -33,7 +33,7 @@ public:
                  , boost::optional<util::Ed25519PublicKey> bt_publish_pubkey
                  , fs::path path_to_repo);
 
-    std::string query(std::string key, asio::yield_context);
+    std::string find(std::string key, asio::yield_context);
 
     boost::asio::io_service& get_io_service();
 
@@ -63,7 +63,9 @@ class BTreeInjectorDb {
 public:
     BTreeInjectorDb(asio_ipfs::node&, Publisher&, fs::path path_to_repo);
 
-    std::string query(std::string key, asio::yield_context);
+    std::string find(std::string key, asio::yield_context);
+
+    void insert(std::string key, std::string value, asio::yield_context);
 
     boost::asio::io_service& get_io_service();
 
@@ -71,7 +73,6 @@ public:
 
     asio_ipfs::node& ipfs_node() { return _ipfs_node; }
 
-    void update(std::string key, std::string value, asio::yield_context);
 
     ~BTreeInjectorDb();
 

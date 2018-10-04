@@ -105,7 +105,7 @@ string CacheClient::get_data(const string &ipfs_id, asio::yield_context yield)
 
 string CacheClient::get_descriptor(string url, asio::yield_context yield)
 {
-    return _db->query(url, yield);
+    return _db->find(url, yield);
 }
 
 CacheEntry CacheClient::get_content(string url, asio::yield_context yield)

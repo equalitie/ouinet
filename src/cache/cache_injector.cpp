@@ -81,7 +81,8 @@ string CacheInjector::insert_content( Request rq
 
     // TODO: use string_view for key
     auto key = rq.target().to_string();
-    _db->update(move(key), desc_data, yield[ec]);
+
+    _db->insert(move(key), desc_data, yield[ec]);
 
     if (!ec && *wd) ec = asio::error::operation_aborted;
 
@@ -98,7 +99,7 @@ CacheEntry CacheInjector::get_content(string url, asio::yield_context yield)
     using std::get;
     sys::error_code ec;
 
-    string desc_data = _db->query(url, yield[ec]);
+    string desc_data = _db->find(url, yield[ec]);
 
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
