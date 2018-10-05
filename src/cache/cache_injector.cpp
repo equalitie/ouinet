@@ -19,13 +19,13 @@ namespace bt = ouinet::bittorrent;
 
 CacheInjector::CacheInjector
         ( asio::io_service& ios
-        , const boost::optional<util::Ed25519PrivateKey>& bt_publish_key
+        , const boost::optional<util::Ed25519PrivateKey>& bt_privkey
         , fs::path path_to_repo)
     : _ipfs_node(new asio_ipfs::node(ios, (path_to_repo/"ipfs").native()))
     , _bt_dht(new bt::MainlineDht(ios))
     , _publisher(new Publisher( *_ipfs_node
                               , *_bt_dht
-                              , bt_publish_key
+                              , bt_privkey
                               , path_to_repo/"publisher"))
     , _db(new BTreeInjectorDb(*_ipfs_node, *_publisher, path_to_repo))
     , _scheduler(new Scheduler(ios, _concurrency))

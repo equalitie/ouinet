@@ -30,7 +30,7 @@ public:
 
 public:
     CacheInjector( boost::asio::io_service&
-                 , const boost::optional<util::Ed25519PrivateKey>& bt_publish_key
+                 , const boost::optional<util::Ed25519PrivateKey>& bt_privkey
                  , fs::path path_to_repo);
 
     CacheInjector(const CacheInjector&) = delete;

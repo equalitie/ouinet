@@ -65,8 +65,8 @@ public:
         return _front_end_endpoint;
     }
 
-    boost::optional<util::Ed25519PublicKey> bt_resolver_pub_key() const {
-        return _bt_resolver_pub_key;
+    boost::optional<util::Ed25519PublicKey> bt_pub_key() const {
+        return _bt_pubkey;
     }
 
     bool is_help() const { return _is_help; }
@@ -102,9 +102,9 @@ public:
            ("front-end-ep"
             , po::value<string>()
             , "Front-end's endpoint (in <IP>:<PORT> format)")
-           ("bittorrent-resolver-public-key"
+           ("bittorrent-public-key"
             , po::value<string>()
-            , "Public key of the BitTorrent/BEP44 based resolver")
+            , "Public key of the BitTorrent/BEP44 subsystem")
            ;
 
         return desc;
@@ -125,7 +125,7 @@ private:
 
     std::map<std::string, std::string> _injector_credentials;
 
-    boost::optional<util::Ed25519PublicKey> _bt_resolver_pub_key;
+    boost::optional<util::Ed25519PublicKey> _bt_pubkey;
 };
 
 inline
@@ -251,12 +251,12 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         set_credentials(util::str(*_injector_ep), cred);
     }
 
-    if (vm.count("bittorrent-resolver-public-key")) {
-        string value = vm["bittorrent-resolver-public-key"].as<string>();
+    if (vm.count("bittorrent-public-key")) {
+        string value = vm["bittorrent-public-key"].as<string>();
 
-        _bt_resolver_pub_key = util::Ed25519PublicKey::from_hex(value);
+        _bt_pubkey = util::Ed25519PublicKey::from_hex(value);
 
-        if (!_bt_resolver_pub_key) {
+        if (!_bt_pubkey) {
             throw std::runtime_error(
                     util::str("Failed parsing '", value, "' as Ed25519 public key"));
         }

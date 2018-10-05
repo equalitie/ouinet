@@ -477,7 +477,7 @@ int main(int argc, const char* argv[])
 
     auto cache_injector = std::make_unique<CacheInjector>
                             ( ios
-                            , config.bt_publisher_private_key()
+                            , config.bt_private_key()
                             , config.repo_root());
 
     auto shutdown_ipfs_slot = shutdown_signal.connect([&] {
