@@ -15,7 +15,6 @@
 #include <cstdlib>  // for atexit()
 
 #include "cache/cache_client.h"
-#include "cache/http_desc.h"
 
 #include "namespaces.h"
 #include "http_util.h"

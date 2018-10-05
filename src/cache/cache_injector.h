@@ -39,21 +39,7 @@ public:
     // Returns the IPNS CID of the database.
     // The database could be then looked up by e.g. pointing your browser to:
     // "https://ipfs.io/ipns/" + ipfs.id()
-    std::string id() const;
-
-    // Insert `data` into IPFS and return the resulting IPFS ID.
-    //
-    // TODO: This should store into a variety of systems
-    // and return a set of storage URIs to the callback.
-    //
-    // When testing or debugging, the content can be found here:
-    // "https://ipfs.io/ipfs/" + <IPFS ID>
-    std::string put_data(const std::string& data, boost::asio::yield_context);
-
-    // Gets the data stored in IPFS under `/ipfs/<ipfs_id>`.
-    //
-    // TODO: This should accept a generic storage URI instead.
-    std::string get_data(const std::string& ipfs_id, boost::asio::yield_context);
+    std::string ipfs_id() const;
 
     // Insert `content` into IPFS and store its IPFS ID under the `url` in the
     // database. On success, the function returns the file descriptor.

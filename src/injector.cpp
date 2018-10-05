@@ -486,7 +486,7 @@ int main(int argc, const char* argv[])
 
     // Although the IPNS ID is already in IPFS's config file,
     // this just helps put all info relevant to the user right in the repo root.
-    auto ipns_id = cache_injector->id();
+    auto ipns_id = cache_injector->ipfs_id();
     LOG_DEBUG("IPNS DB: " + ipns_id);
     util::create_state_file(config.repo_root()/"cache-ipns", ipns_id);
 

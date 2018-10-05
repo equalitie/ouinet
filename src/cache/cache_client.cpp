@@ -97,11 +97,6 @@ string CacheClient::ipfs_add(const string& data, asio::yield_context yield)
     return _ipfs_node->add(data, yield);
 }
 
-string CacheClient::get_data(const string &ipfs_id, asio::yield_context yield)
-{
-    return _ipfs_node->cat(ipfs_id, yield);
-}
-
 string CacheClient::get_descriptor(string url, asio::yield_context yield)
 {
     return _db->find(url, yield);
@@ -116,7 +111,7 @@ CacheEntry CacheClient::get_content(string url, asio::yield_context yield)
 
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
-    return descriptor::http_parse(*this, desc_data, yield);
+    return descriptor::http_parse(*_ipfs_node, desc_data, yield);
 }
 
 void CacheClient::set_ipns(std::string ipns)
@@ -125,7 +120,7 @@ void CacheClient::set_ipns(std::string ipns)
     //_db.reset(new ClientDb(*_ipfs_node, _path_to_repo, move(ipns)));
 }
 
-std::string CacheClient::id() const
+std::string CacheClient::ipfs_id() const
 {
     return _ipfs_node->id();
 }

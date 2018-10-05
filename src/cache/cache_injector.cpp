@@ -34,22 +34,9 @@ CacheInjector::CacheInjector
     _bt_dht->set_interfaces({asio::ip::address_v4::any()});
 }
 
-string CacheInjector::id() const
+string CacheInjector::ipfs_id() const
 {
     return _ipfs_node->id();
-}
-
-std::string CacheInjector::put_data( const std::string& data
-                                   , boost::asio::yield_context yield)
-{
-    auto wd = _was_destroyed;
-    sys::error_code ec;
-
-    string ipfs_id = _ipfs_node->add(data, yield[ec]);
-
-    if (!ec && *wd) ec = asio::error::operation_aborted;
-
-    return or_throw(yield, ec, move(ipfs_id));
 }
 
 string CacheInjector::insert_content( Request rq
@@ -73,7 +60,7 @@ string CacheInjector::insert_content( Request rq
         if (!ec && *wd) ec = asio::error::operation_aborted;
         if (ec) return or_throw<string>(yield, ec);
 
-        desc_data = descriptor::http_create(*this, id, ts, rq, rs, yield[ec])
+        desc_data = descriptor::http_create(*_ipfs_node, id, ts, rq, rs, yield[ec])
                     .serialize();
 
         if (!ec && *wd) ec = asio::error::operation_aborted;
@@ -90,11 +77,6 @@ string CacheInjector::insert_content( Request rq
     return or_throw(yield, ec, desc_data);
 }
 
-string CacheInjector::get_data(const string &ipfs_id, asio::yield_context yield)
-{
-    return _ipfs_node->cat(ipfs_id, yield);
-}
-
 CacheEntry CacheInjector::get_content(string url, asio::yield_context yield)
 {
     sys::error_code ec;
@@ -103,7 +85,7 @@ CacheEntry CacheInjector::get_content(string url, asio::yield_context yield)
 
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
-    return descriptor::http_parse(*this, desc_data, yield);
+    return descriptor::http_parse(*_ipfs_node, desc_data, yield);
 }
 
 CacheInjector::~CacheInjector()

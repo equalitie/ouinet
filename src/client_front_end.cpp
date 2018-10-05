@@ -318,7 +318,7 @@ void ClientFrontEnd::handle_portal( const Request& req, Response& res, stringstr
     }
 
     if (cache_client) {
-        ss << "        Our IPFS ID (IPNS): " << cache_client->id() << "<br>\n";
+        ss << "        Our IPFS ID (IPNS): " << cache_client->ipfs_id() << "<br>\n";
         ss << "        <h2>Database</h2>\n";
         ss << "        IPNS: " << cache_client->ipns() << "<br>\n";
         ss << "        IPFS: <a href=\"db.html\">" << cache_client->ipfs() << "</a><br>\n";

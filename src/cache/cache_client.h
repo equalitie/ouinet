@@ -38,7 +38,7 @@ public:
     // static async `build` function instead.
     CacheClient( boost::asio::io_service&
                , std::string ipns
-               , boost::optional<util::Ed25519PublicKey> bt_bubkey
+               , boost::optional<util::Ed25519PublicKey> bt_pubkey
                , fs::path path_to_repo);
 
     CacheClient(const CacheClient&) = delete;
@@ -48,11 +48,6 @@ public:
     CacheClient& operator=(CacheClient&&);
 
     std::string ipfs_add(const std::string& content, boost::asio::yield_context);
-
-    // Gets the data stored in IPFS under `/ipfs/<ipfs_id>`.
-    //
-    // TODO: This should accept a generic storage URI instead.
-    std::string get_data(const std::string& ipfs_id, boost::asio::yield_context);
 
     // Find the content previously stored by the injector under `url`.
     // The content is returned in the parameter of the callback function.
@@ -66,7 +61,7 @@ public:
 
     void set_ipns(std::string ipns);
 
-    std::string id() const;
+    std::string ipfs_id() const;
 
     const std::string& ipns() const;
     const std::string& ipfs() const;
