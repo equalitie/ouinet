@@ -161,6 +161,7 @@ file(GLOB client_sources
     "./src/cache/*.cpp"
     "./src/bittorrent/*.cpp"
     "./src/util/crypto.cpp"
+    "./src/util/sha1.cpp"
     "./src/util.cpp"
 )
 
@@ -206,6 +207,7 @@ if (WITH_INJECTOR)
         "./src/cache/*.cpp"
         "./src/bittorrent/*.cpp"
         "./src/util/crypto.cpp"
+        "./src/util/sha1.cpp"
         "./src/util.cpp"
     )
 
