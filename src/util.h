@@ -104,6 +104,7 @@ auto tcp_async_resolve( const std::string& host
 }
 
 // Return whether the given `host` points to a loopback address.
+// IPv6 addresses should be bracketed.
 // Please note that this implies a DNS lookup
 // to spot names that point to a loopback address.
 // No exceptions are raised (lookup failure returns false).
@@ -119,10 +120,10 @@ bool is_localhost( const std::string& host
     static const boost::regex lhrx
       ( "^(?:"
         "(?:localhost|ip6-localhost|ip6-loopback)(?:\\.localdomain)?"
-        "|" IPV4_LOOP         // IPv4, e.g. 127.1.2.3
-        "|::1"                // IPv6 loopback
-        "|::ffff:" IPV4_LOOP  // IPv4-mapped IPv6
-        "|::" IPV4_LOOP       // IPv4-compatible IPv6
+        "|" IPV4_LOOP                  // IPv4, e.g. 127.1.2.3
+        "|\\[::1\\]"                   // IPv6 loopback
+        "|\\[::ffff:" IPV4_LOOP "\\]"  // IPv4-mapped IPv6
+        "|\\[::" IPV4_LOOP "\\]"       // IPv4-compatible IPv6
         ")$" );
 
     // Avoid the DNS lookup for very evident loopback addresses.`;)`
