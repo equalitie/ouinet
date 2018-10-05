@@ -35,8 +35,8 @@ public:
     CacheClient(const CacheClient&) = delete;
     CacheClient& operator=(const CacheClient&) = delete;
 
-    CacheClient(CacheClient&&);
-    CacheClient& operator=(CacheClient&&);
+    CacheClient(CacheClient&&) = delete;
+    CacheClient& operator=(CacheClient&&) = delete;
 
     std::string ipfs_add(const std::string& content, boost::asio::yield_context);
 

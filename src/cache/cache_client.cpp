@@ -119,16 +119,4 @@ string CacheClient::ipfs() const
     return _btree_db->ipfs();
 }
 
-CacheClient::CacheClient(CacheClient&& other)
-    : _ipfs_node(move(other._ipfs_node))
-    , _btree_db(move(other._btree_db))
-{}
-
-CacheClient& CacheClient::operator=(CacheClient&& other)
-{
-    _ipfs_node = move(other._ipfs_node);
-    _btree_db = move(other._btree_db);
-    return *this;
-}
-
 CacheClient::~CacheClient() {}
