@@ -93,10 +93,10 @@ void handle_connect_request( GenericConnection& client_c
     // Get CONNECT target.
     string host, port;
     tie(host, port) = util::get_host_port(req);
-    // Restrict connections towards certain hosts and ports.
-    // TODO: Enhance this filter.
-    if (util::is_localhost(host, ios, disconnect_signal, yield[ec])
-        || (port != "80" && port != "443" && port != "8080" && port != "8443")) {
+    // Restrict connections to well-known ports.
+    // TODO: This is quite arbitrary;
+    // enhance this filter or remove the restriction altogether.
+    if (port != "80" && port != "443" && port != "8080" && port != "8443") {
         ec = asio::error::invalid_argument;
         return handle_bad_request( client_c, req
                                  , "Illegal CONNECT target: " + host + ":" + port
@@ -308,6 +308,20 @@ void serve( InjectorConfig& config
         auto on_exit = defer([&] { yield.log("Done"); });
 
         if (!authenticate(req, con, config.credentials(), yield[ec].tag("auth"))) {
+            continue;
+        }
+
+        // Restrict requests to loopback addresses to
+        // avoid sending requests to local services.
+        string host, port;
+        tie(host, port) = util::get_host_port(req);
+        // TODO: This will probably trigger a DNS request, reuse result.
+        if (util::is_localhost( host, con.get_io_service()
+                              , close_connection_signal, yield[ec])) {
+            ec = asio::error::invalid_argument;
+            handle_bad_request( con, req
+                              , "Illegal target host: " + host
+                              , yield[ec].tag("handle_bad_request"));
             continue;
         }
 
