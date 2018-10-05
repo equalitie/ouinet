@@ -6,8 +6,8 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/beast/http/fields.hpp>
-
-#include <network/uri.hpp>
+#include <boost/beast/http/message.hpp>
+#include <boost/beast/http/string_body.hpp>
 
 
 namespace ouinet {
@@ -43,34 +43,8 @@ namespace util {
 
 // Get the host and port a request refers to,
 // either from the ``Host:`` header or from the target URI.
-template<class Request>
-inline
 std::pair<std::string, std::string>
-get_host_port(const Request& req)
-{
-    // TODO: Split definition to implementation file.
-    using namespace std;
-
-    auto target = req.target();
-    auto defport = target.starts_with("https:") ? "443" : "80";
-
-    auto hp = req[http::field::host];
-    if (hp.empty() && req.version() == 10) {
-        // HTTP/1.0 proxy client with no ``Host:``, use URI.
-        network::uri uri(target.to_string());
-        return make_pair( uri.host().to_string()
-                        , uri.has_port() ? uri.port().to_string() : defport);
-    }
-
-    auto pos = hp.find(':');
-
-    if (pos == string::npos) {
-        return make_pair(hp.to_string(), defport);
-    }
-
-    return make_pair( hp.substr(0, pos).to_string()
-                    , hp.substr(pos + 1).to_string());
-}
+get_host_port(const http::request<http::string_body>&);
 
 ///////////////////////////////////////////////////////////////////////////////
 template<class Num>

@@ -162,6 +162,7 @@ file(GLOB client_sources
     "./src/bittorrent/*.cpp"
     "./src/util/crypto.cpp"
     "./src/util.cpp"
+    "./src/http_util.cpp"
 )
 
 if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
@@ -207,6 +208,7 @@ if (WITH_INJECTOR)
         "./src/bittorrent/*.cpp"
         "./src/util/crypto.cpp"
         "./src/util.cpp"
+        "./src/http_util.cpp"
     )
 
     add_executable(injector ${injector_sources})
