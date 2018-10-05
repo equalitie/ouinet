@@ -21,9 +21,10 @@ ouinet::util::get_host_port(const http::request<http::string_body>& req)
                         , uri.has_port() ? uri.port().to_string() : defport);
     }
 
-    auto pos = hp.find(':');
+    auto pos = hp.rfind(':');
 
-    if (pos == string::npos) {
+    // IPv6 addresses may have colons inside.
+    if (pos == string::npos || hp[hp.length() - 1] == ']') {
         return make_pair(hp.to_string(), defport);
     }
 
