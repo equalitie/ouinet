@@ -90,26 +90,16 @@ void handle_connect_request( GenericConnection& client_c
         client_c.close();
     });
 
-    // Split CONNECT target in host and port (443 i.e. HTTPS by default).
-    auto hp = req["host"];
-    if (hp.empty() && req.version() == 10)  // HTTP/1.0 proxy client with no ``Host:``
-        hp = req.target();
-    auto pos = hp.rfind(':');
+    // Get CONNECT target.
     string host, port;
-    if (pos != string::npos) {
-        host = hp.substr(0, pos).to_string();
-        port = hp.substr(pos + 1).to_string();
-    } else {
-        host = hp.to_string();
-        port = "443";  // HTTPS port by default
-    }
+    tie(host, port) = util::get_host_port(req);
     // Restrict connections towards certain hosts and ports.
     // TODO: Enhance this filter.
     if (util::is_localhost(host, ios, disconnect_signal, yield[ec])
         || (port != "80" && port != "443" && port != "8080" && port != "8443")) {
         ec = asio::error::invalid_argument;
         return handle_bad_request( client_c, req
-                                 , "Illegal CONNECT target: " + hp.to_string()
+                                 , "Illegal CONNECT target: " + host + ":" + port
                                  , yield[ec]);
     }
 

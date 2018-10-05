@@ -210,12 +210,13 @@ if (WITH_INJECTOR)
     )
 
     add_executable(injector ${injector_sources})
-    add_dependencies(injector json ${ASIO_IPFS_TARGET} gcrypt)
+    add_dependencies(injector json uri ${ASIO_IPFS_TARGET} gcrypt)
 
     target_link_libraries(injector
         ouiservice-i2p
         ${Boost_LIBRARIES}
         ${ASIO_IPFS_LIBRARIES}
+        ${URI_LIBRARY}
         ${GCRYPT_LIBRARIES}
     )
 endif() # if WITH_INJECTOR
