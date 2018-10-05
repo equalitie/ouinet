@@ -19,7 +19,7 @@ using boost::optional;
 unique_ptr<CacheClient>
 CacheClient::build( asio::io_service& ios
                   , string ipns
-                  , optional<util::Ed25519PublicKey> bt_bubkey
+                  , optional<util::Ed25519PublicKey> bt_pubkey
                   , fs::path path_to_repo
                   , function<void()>& cancel
                   , asio::yield_context yield)
@@ -50,13 +50,13 @@ CacheClient::build( asio::io_service& ios
 
     return ClientP(new CacheClient( move(*ipfs_node)
                                   , move(ipns)
-                                  , std::move(bt_bubkey)
+                                  , std::move(bt_pubkey)
                                   , move(path_to_repo)));
 }
 
 CacheClient::CacheClient( asio_ipfs::node ipfs_node
                         , string ipns
-                        , optional<util::Ed25519PublicKey> bt_bubkey
+                        , optional<util::Ed25519PublicKey> bt_pubkey
                         , fs::path path_to_repo)
     : _path_to_repo(move(path_to_repo))
     , _ipfs_node(new asio_ipfs::node(move(ipfs_node)))
@@ -64,7 +64,7 @@ CacheClient::CacheClient( asio_ipfs::node ipfs_node
     , _btree_db(new BTreeClientDb( *_ipfs_node
                                  , ipns
                                  , *_bt_dht
-                                 , bt_bubkey
+                                 , bt_pubkey
                                  , _path_to_repo))
 {
     _bt_dht->set_interfaces({asio::ip::address_v4::any()});
@@ -72,7 +72,7 @@ CacheClient::CacheClient( asio_ipfs::node ipfs_node
 
 CacheClient::CacheClient( boost::asio::io_service& ios
                         , string ipns
-                        , optional<util::Ed25519PublicKey> bt_bubkey
+                        , optional<util::Ed25519PublicKey> bt_pubkey
                         , fs::path path_to_repo)
     : _path_to_repo(move(path_to_repo))
     , _ipfs_node(new asio_ipfs::node(ios, (_path_to_repo/"ipfs").native()))
@@ -80,7 +80,7 @@ CacheClient::CacheClient( boost::asio::io_service& ios
     , _btree_db(new BTreeClientDb( *_ipfs_node
                                  , ipns
                                  , *_bt_dht
-                                 , bt_bubkey
+                                 , bt_pubkey
                                  , _path_to_repo))
 {
     _bt_dht->set_interfaces({asio::ip::address_v4::any()});

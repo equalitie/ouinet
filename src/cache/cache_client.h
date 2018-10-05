@@ -2,13 +2,11 @@
 
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/io_service.hpp>
-#include <boost/system/error_code.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/optional.hpp>
 #include <functional>
 #include <memory>
 #include <string>
-#include <json.hpp>
 
 #include "cache_entry.h"
 #include "../namespaces.h"
@@ -21,14 +19,13 @@ namespace ouinet { class BTree; }
 namespace ouinet {
 
 class BTreeClientDb;
-using Json = nlohmann::json;
 
 class CacheClient {
 public:
     static std::unique_ptr<CacheClient>
     build ( boost::asio::io_service&
           , std::string ipns
-          , boost::optional<util::Ed25519PublicKey> bt_bubkey
+          , boost::optional<util::Ed25519PublicKey> bt_pubkey
           , fs::path path_to_repo
           , std::function<void()>& cancel
           , boost::asio::yield_context);
@@ -73,7 +70,7 @@ public:
 private:
     CacheClient( asio_ipfs::node
                , std::string ipns
-               , boost::optional<util::Ed25519PublicKey> bt_bubkey
+               , boost::optional<util::Ed25519PublicKey> bt_pubkey
                , fs::path path_to_repo);
 
 private:
