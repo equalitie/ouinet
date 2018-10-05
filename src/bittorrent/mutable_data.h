@@ -23,7 +23,7 @@ struct MutableDataItem {
     static MutableDataItem sign(
         BencodedValue value,
         int64_t sequence_number,
-        const std::string& salt,
+        boost::string_view salt,
         util::Ed25519PrivateKey private_key
     );
 

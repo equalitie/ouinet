@@ -89,8 +89,8 @@ struct Publisher::Loop : public enable_shared_from_this<Loop> {
 };
 
 static
-bt::MutableDataItem bt_mutable_data( const string& cid
-                                   , const string& ipns
+bt::MutableDataItem bt_mutable_data( const string& value
+                                   , const string& salt
                                    , const util::Ed25519PrivateKey& private_key)
 {
     /*
@@ -102,9 +102,9 @@ bt::MutableDataItem bt_mutable_data( const string& cid
     Time unix_epoch(boost::gregorian::date(1970, 1, 1));
     Time ts = boost::posix_time::microsec_clock::universal_time();
 
-    return bt::MutableDataItem::sign( cid
+    return bt::MutableDataItem::sign( value
                                     , (ts - unix_epoch).total_milliseconds()
-                                    , ipns
+                                    , salt
                                     , private_key);
 }
 

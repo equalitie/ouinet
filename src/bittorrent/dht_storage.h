@@ -124,7 +124,7 @@ class DataStore {
     void put_immutable(BencodedValue value);
     boost::optional<BencodedValue> get_immutable(NodeID id);
 
-    static NodeID mutable_get_id(util::Ed25519PublicKey public_key, const std::string& salt);
+    static NodeID mutable_get_id(util::Ed25519PublicKey public_key, boost::string_view salt);
     void put_mutable(MutableDataItem item);
     boost::optional<MutableDataItem> get_mutable(NodeID id);
 

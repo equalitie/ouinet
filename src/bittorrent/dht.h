@@ -85,7 +85,7 @@ class DhtNode {
      */
     boost::optional<MutableDataItem> data_get_mutable(
         const util::Ed25519PublicKey& public_key,
-        const std::string& salt,
+        boost::string_view salt,
         asio::yield_context yield
     );
 
@@ -317,7 +317,7 @@ class MainlineDht {
      */
     boost::optional<MutableDataItem> mutable_get(
         const util::Ed25519PublicKey& public_key,
-        const std::string& salt,
+        boost::string_view salt,
         asio::yield_context yield
     );
 
