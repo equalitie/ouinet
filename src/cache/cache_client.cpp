@@ -70,22 +70,6 @@ CacheClient::CacheClient( asio_ipfs::node ipfs_node
     _bt_dht->set_interfaces({asio::ip::address_v4::any()});
 }
 
-CacheClient::CacheClient( boost::asio::io_service& ios
-                        , string ipns
-                        , optional<util::Ed25519PublicKey> bt_pubkey
-                        , fs::path path_to_repo)
-    : _path_to_repo(move(path_to_repo))
-    , _ipfs_node(new asio_ipfs::node(ios, (_path_to_repo/"ipfs").native()))
-    , _bt_dht(new bt::MainlineDht(ios))
-    , _btree_db(new BTreeClientDb( *_ipfs_node
-                                 , ipns
-                                 , *_bt_dht
-                                 , bt_pubkey
-                                 , _path_to_repo))
-{
-    _bt_dht->set_interfaces({asio::ip::address_v4::any()});
-}
-
 const BTree* CacheClient::get_btree() const
 {
     if (!_ipfs_node) return nullptr;

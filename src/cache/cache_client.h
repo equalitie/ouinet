@@ -22,6 +22,8 @@ class BTreeClientDb;
 
 class CacheClient {
 public:
+    // Construct the CacheClient without blocking the main thread as
+    // constructing asio_ipfs::node takes some time.
     static std::unique_ptr<CacheClient>
     build ( boost::asio::io_service&
           , std::string ipns
@@ -29,14 +31,6 @@ public:
           , fs::path path_to_repo
           , std::function<void()>& cancel
           , boost::asio::yield_context);
-
-    // This constructor may do repository initialization disk IO and as such
-    // may block for a second or more. If that is undesirable, use the above
-    // static async `build` function instead.
-    CacheClient( boost::asio::io_service&
-               , std::string ipns
-               , boost::optional<util::Ed25519PublicKey> bt_pubkey
-               , fs::path path_to_repo);
 
     CacheClient(const CacheClient&) = delete;
     CacheClient& operator=(const CacheClient&) = delete;
