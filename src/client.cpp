@@ -486,31 +486,15 @@ public:
         , request_config(request_config)
         , cc("Ouinet Client")
     {
-        cc.fetch_stored = [&] (const Request& rq, Yield yield) {
-            return fetch_stored(rq, yield);
-        };
-
         cc.fetch_fresh = [&] (const Request& rq, Yield yield) {
             return fetch_fresh(rq, yield);
         };
 
+        cc.fetch_stored = [&] (const Request& rq, Yield yield) {
+            return fetch_stored(rq, yield);
+        };
+
         cc.max_cached_age(client_state._config.max_cached_age());
-    }
-
-    CacheEntry
-    fetch_stored(const Request& request, Yield yield) {
-        yield.log("Fetching from cache");
-
-        sys::error_code ec;
-        auto r = client_state.fetch_stored(request, request_config, yield[ec]);
-
-        if (!ec) {
-            yield.log("Fetched from cache success, status: ", r.response.result());
-        } else {
-            yield.log("Fetched from cache error: ", ec.message());
-        }
-
-        return or_throw(yield, ec, move(r));
     }
 
     Response fetch_fresh(const Request& request, Yield yield) {
@@ -526,6 +510,22 @@ public:
             yield.log("Fetched fresh success, status: ", r.result());
         } else {
             yield.log("Fetched fresh error: ", ec.message());
+        }
+
+        return or_throw(yield, ec, move(r));
+    }
+
+    CacheEntry
+    fetch_stored(const Request& request, Yield yield) {
+        yield.log("Fetching from cache");
+
+        sys::error_code ec;
+        auto r = client_state.fetch_stored(request, request_config, yield[ec]);
+
+        if (!ec) {
+            yield.log("Fetched from cache success, status: ", r.response.result());
+        } else {
+            yield.log("Fetched from cache error: ", ec.message());
         }
 
         return or_throw(yield, ec, move(r));
