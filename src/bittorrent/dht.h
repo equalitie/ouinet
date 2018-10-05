@@ -321,6 +321,8 @@ class MainlineDht {
         asio::yield_context yield
     );
 
+    asio::io_service& get_io_service() { return _ios; }
+
     private:
     asio::io_service& _ios;
     std::map<asio::ip::address, std::unique_ptr<dht::DhtNode>> _nodes;
