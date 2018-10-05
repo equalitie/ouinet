@@ -109,12 +109,12 @@ std::string CacheClient::ipfs_id() const
     return _ipfs_node->id();
 }
 
-const string& CacheClient::ipns() const
+string CacheClient::ipns() const
 {
     return _btree_db->ipns();
 }
 
-const string& CacheClient::ipfs() const
+string CacheClient::ipfs() const
 {
     return _btree_db->ipfs();
 }

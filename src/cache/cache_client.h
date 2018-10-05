@@ -54,8 +54,8 @@ public:
 
     std::string ipfs_id() const;
 
-    const std::string& ipns() const;
-    const std::string& ipfs() const;
+    std::string ipns() const;
+    std::string ipfs() const;
 
     ~CacheClient();
 
