@@ -80,7 +80,7 @@ private:
     fs::path _path_to_repo;
     std::unique_ptr<asio_ipfs::node> _ipfs_node;
     std::unique_ptr<bittorrent::MainlineDht> _bt_dht;
-    std::unique_ptr<BTreeClientDb> _db;
+    std::unique_ptr<BTreeClientDb> _btree_db;
 };
 
 } // namespace

@@ -27,7 +27,7 @@ CacheInjector::CacheInjector
                               , *_bt_dht
                               , bt_privkey
                               , path_to_repo/"publisher"))
-    , _db(new BTreeInjectorDb(*_ipfs_node, *_publisher, path_to_repo))
+    , _btree_db(new BTreeInjectorDb(*_ipfs_node, *_publisher, path_to_repo))
     , _scheduler(new Scheduler(ios, _concurrency))
     , _was_destroyed(make_shared<bool>(false))
 {
@@ -70,7 +70,7 @@ string CacheInjector::insert_content( Request rq
     // TODO: use string_view for key
     auto key = rq.target().to_string();
 
-    _db->insert(move(key), desc_data, yield[ec]);
+    _btree_db->insert(move(key), desc_data, yield[ec]);
 
     if (!ec && *wd) ec = asio::error::operation_aborted;
 
@@ -81,7 +81,7 @@ CacheEntry CacheInjector::get_content(string url, asio::yield_context yield)
 {
     sys::error_code ec;
 
-    string desc_data = _db->find(url, yield[ec]);
+    string desc_data = _btree_db->find(url, yield[ec]);
 
     if (ec) return or_throw<CacheEntry>(yield, ec);
 

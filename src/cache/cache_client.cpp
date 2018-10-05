@@ -61,11 +61,11 @@ CacheClient::CacheClient( asio_ipfs::node ipfs_node
     : _path_to_repo(move(path_to_repo))
     , _ipfs_node(new asio_ipfs::node(move(ipfs_node)))
     , _bt_dht(new bt::MainlineDht(_ipfs_node->get_io_service()))
-    , _db(new BTreeClientDb( *_ipfs_node
-                           , ipns
-                           , *_bt_dht
-                           , bt_bubkey
-                           , _path_to_repo))
+    , _btree_db(new BTreeClientDb( *_ipfs_node
+                                 , ipns
+                                 , *_bt_dht
+                                 , bt_bubkey
+                                 , _path_to_repo))
 {
     _bt_dht->set_interfaces({asio::ip::address_v4::any()});
 }
@@ -77,11 +77,11 @@ CacheClient::CacheClient( boost::asio::io_service& ios
     : _path_to_repo(move(path_to_repo))
     , _ipfs_node(new asio_ipfs::node(ios, (_path_to_repo/"ipfs").native()))
     , _bt_dht(new bt::MainlineDht(ios))
-    , _db(new BTreeClientDb( *_ipfs_node
-                           , ipns
-                           , *_bt_dht
-                           , bt_bubkey
-                           , _path_to_repo))
+    , _btree_db(new BTreeClientDb( *_ipfs_node
+                                 , ipns
+                                 , *_bt_dht
+                                 , bt_bubkey
+                                 , _path_to_repo))
 {
     _bt_dht->set_interfaces({asio::ip::address_v4::any()});
 }
@@ -89,7 +89,7 @@ CacheClient::CacheClient( boost::asio::io_service& ios
 const BTree* CacheClient::get_btree() const
 {
     if (!_ipfs_node) return nullptr;
-    return _db->get_btree();
+    return _btree_db->get_btree();
 }
 
 string CacheClient::ipfs_add(const string& data, asio::yield_context yield)
@@ -99,7 +99,7 @@ string CacheClient::ipfs_add(const string& data, asio::yield_context yield)
 
 string CacheClient::get_descriptor(string url, asio::yield_context yield)
 {
-    return _db->find(url, yield);
+    return _btree_db->find(url, yield);
 }
 
 CacheEntry CacheClient::get_content(string url, asio::yield_context yield)
@@ -117,7 +117,7 @@ CacheEntry CacheClient::get_content(string url, asio::yield_context yield)
 void CacheClient::set_ipns(std::string ipns)
 {
     assert(0 && "TODO");
-    //_db.reset(new ClientDb(*_ipfs_node, _path_to_repo, move(ipns)));
+    //_btree_db.reset(new ClientDb(*_ipfs_node, _path_to_repo, move(ipns)));
 }
 
 std::string CacheClient::ipfs_id() const
@@ -127,23 +127,23 @@ std::string CacheClient::ipfs_id() const
 
 const string& CacheClient::ipns() const
 {
-    return _db->ipns();
+    return _btree_db->ipns();
 }
 
 const string& CacheClient::ipfs() const
 {
-    return _db->ipfs();
+    return _btree_db->ipfs();
 }
 
 CacheClient::CacheClient(CacheClient&& other)
     : _ipfs_node(move(other._ipfs_node))
-    , _db(move(other._db))
+    , _btree_db(move(other._btree_db))
 {}
 
 CacheClient& CacheClient::operator=(CacheClient&& other)
 {
     _ipfs_node = move(other._ipfs_node);
-    _db = move(other._db);
+    _btree_db = move(other._btree_db);
     return *this;
 }
 
