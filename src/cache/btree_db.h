@@ -3,14 +3,11 @@
 #include <boost/system/error_code.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/io_service.hpp>
-#include <boost/asio/steady_timer.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/optional.hpp>
 #include <string>
-#include <json.hpp>
 
 #include "../namespaces.h"
-#include "../util/condition_variable.h"
 #include "resolver.h"
 
 namespace asio_ipfs { class node; }
@@ -21,11 +18,8 @@ namespace ouinet {
 
 class BTree;
 class Publisher;
-using Json = nlohmann::json;
 
 class BTreeClientDb {
-    using OnDbUpdate = std::function<void(const sys::error_code&)>;
-
 public:
     BTreeClientDb( asio_ipfs::node&
                  , std::string ipns
@@ -39,8 +33,6 @@ public:
 
     const std::string& ipns() const { return _ipns; }
     const std::string& ipfs() const { return _ipfs; }
-
-    asio_ipfs::node& ipfs_node() { return _ipfs_node; }
 
     const BTree* get_btree() const;
 
@@ -70,9 +62,6 @@ public:
     boost::asio::io_service& get_io_service();
 
     const std::string& ipns() const { return _ipns; }
-
-    asio_ipfs::node& ipfs_node() { return _ipfs_node; }
-
 
     ~BTreeInjectorDb();
 
