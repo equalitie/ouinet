@@ -313,17 +313,39 @@ void serve( InjectorConfig& config
 
         // Restrict requests to loopback addresses to
         // avoid sending requests to local services.
-        string host, port;
-        tie(host, port) = util::get_host_port(req);
-        // TODO: This will probably trigger a DNS request, reuse result.
-        if (util::is_localhost( host, con.get_io_service()
-                              , close_connection_signal, yield[ec])) {
+        string host;
+        tie(host, ignore) = util::get_host_port(req);
+        // First test trivial cases (like "localhost" or "127.1.2.3").
+        bool local = util::is_localhost(host);
+        asio::ip::tcp::resolver::results_type lookup;
+
+        // Resolve address and also use result for more sophisticaded checking.
+        if (!local)
+            lookup = util::tcp_async_resolve( host, "0"  // not interested in port
+                                            , con.get_io_service()
+                                            , close_connection_signal
+                                            , yield[ec]);
+        if (ec) {
+            handle_bad_request( con, req
+                              , "Could not resolve host: " + host
+                              , yield[ec].tag("handle_bad_request"));
+            continue;
+        }
+
+        // Test non-trivial cases (like "[0::1]" or FQDNs pointing to loopback).
+        for (auto r : lookup)
+            if ((local = util::is_localhost(r.endpoint().address().to_string())))
+                break;
+
+        if (local) {
             ec = asio::error::invalid_argument;
             handle_bad_request( con, req
                               , "Illegal target host: " + host
                               , yield[ec].tag("handle_bad_request"));
             continue;
         }
+
+        // TODO: Reuse DNS lookup result.
 
         if (req.method() == http::verb::connect) {
             return handle_connect_request( con

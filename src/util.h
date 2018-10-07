@@ -105,14 +105,8 @@ auto tcp_async_resolve( const std::string& host
 
 // Return whether the given `host` points to a loopback address.
 // IPv6 addresses should be bracketed.
-// Please note that this implies a DNS lookup
-// to spot names that point to a loopback address.
-// No exceptions are raised (lookup failure returns false).
 inline
-bool is_localhost( const std::string& host
-                 , asio::io_service& ios
-                 , Signal<void()>& cancel_signal
-                 , asio::yield_context yield)
+bool is_localhost(const std::string& host)
 {
 #define IPV4_LOOP "127(?:\\.[0-9]{1,3}){3}"
     // Fortunately, resolving also canonicalizes IPv6 addresses
@@ -130,26 +124,6 @@ bool is_localhost( const std::string& host
     boost::smatch m;
     if (boost::regex_match(host, m, lhrx))
         return true;
-
-    // For the less evident ones, lookup DNS.
-    sys::error_code ec;
-    auto lookup = tcp_async_resolve( host, "0"  // not interested in port
-                                   , ios, cancel_signal
-                                   , yield[ec]);
-
-    if (ec) return false;
-
-#if BOOST_VERSION >= 106700
-    for (auto r : lookup)
-        if (boost::regex_match(r.endpoint().address().to_string(), m, lhrx))
-            return true;
-#else
-    while (*lookup != asio::ip::tcp::endpoint()) {
-        if (boost::regex_match(lookup->endpoint().address().to_string(), m, lhrx))
-            return true;
-        lookup++;
-    }
-#endif
 
     return false;
 }
