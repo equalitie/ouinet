@@ -74,7 +74,7 @@ namespace descriptor {
 // then create an HTTP descriptor with the given `id` for the URL and response,
 // and return it.
 static inline
-Descriptor
+std::pair<std::string /* ipfs */, std::string /* body */>
 http_create( asio_ipfs::node& ipfs
            , const std::string& id
            , boost::posix_time::ptime ts
@@ -82,33 +82,35 @@ http_create( asio_ipfs::node& ipfs
            , const http::response<http::dynamic_body>& rs
            , asio::yield_context yield) {
 
+    using namespace std;
+    using Ret = pair<string, string>;
+
     sys::error_code ec;
 
-    std::string ipfs_id = ipfs.add(
+    string ipfs_id = ipfs.add(
             beast::buffers_to_string(rs.body().data()), yield[ec]);
 
     auto url = rq.target();
 
-    if (ec) {
-        std::cout << "!Data seeding failed: " << url << " " << id
-                  << " " << ec.message() << std::endl;
-        return or_throw<Descriptor>(yield, ec);
-    }
+    if (ec) return or_throw<Ret>(yield, ec);
 
     auto rs_ = rs;
 
     rs_.erase(http::field::transfer_encoding);
 
-    std::stringstream rsh_ss;
+    stringstream rsh_ss;
     rsh_ss << rs_.base();
 
-    return Descriptor { url.to_string()
-                      , id
-                      , ts
-                      , rsh_ss.str()
-                      , ipfs_id
-                      };
+    string descriptor = Descriptor{ url.to_string()
+                                  , id
+                                  , ts
+                                  , rsh_ss.str()
+                                  , ipfs_id
+                                  }.serialize();
 
+    string cid = ipfs.add(descriptor, yield[ec]);
+
+    return or_throw<Ret>(yield, ec, { move(cid), move(descriptor) });
 }
 
 // For the given HTTP descriptor serialized in `desc_data`,
@@ -116,13 +118,17 @@ http_create( asio_ipfs::node& ipfs
 // assemble and return the HTTP response along with its identifier.
 static inline
 CacheEntry http_parse( asio_ipfs::node& ipfs
-                     , const std::string& desc_data
+                     , const std::string& desc_ipfs
                      , asio::yield_context yield)
 {
 
     using Response = http::response<http::dynamic_body>;
 
     sys::error_code ec;
+
+    std::string desc_data = ipfs.cat(desc_ipfs, yield[ec]);
+
+    if (ec) return or_throw<CacheEntry>(yield, ec);
 
     boost::optional<Descriptor> dsc = Descriptor::deserialize(desc_data);
 

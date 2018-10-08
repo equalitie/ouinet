@@ -91,11 +91,11 @@ CacheEntry CacheClient::get_content(string url, asio::yield_context yield)
     using std::get;
     sys::error_code ec;
 
-    auto desc_data = get_descriptor(url, yield[ec]);
+    auto desc_ipfs = get_descriptor(url, yield[ec]);
 
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
-    return descriptor::http_parse(*_ipfs_node, desc_data, yield);
+    return descriptor::http_parse(*_ipfs_node, desc_ipfs, yield);
 }
 
 void CacheClient::set_ipns(std::string ipns)
