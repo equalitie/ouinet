@@ -99,8 +99,9 @@ void handle_connect_request( GenericConnection& client_c
     // enhance this filter or remove the restriction altogether.
     if (port != "80" && port != "443" && port != "8080" && port != "8443") {
         ec = asio::error::invalid_argument;
+        auto ep = util::format_ep(host, port);
         return handle_bad_request( client_c, req
-                                 , "Illegal CONNECT target: " + host + ":" + port
+                                 , "Illegal CONNECT target: " + ep
                                  , yield[ec]);
     }
 

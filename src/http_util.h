@@ -43,6 +43,7 @@ namespace util {
 
 // Get the host and port a request refers to,
 // either from the ``Host:`` header or from the target URI.
+// IPv6 addresses are returned without brackets.
 std::pair<std::string, std::string>
 get_host_port(const http::request<http::string_body>&);
 
