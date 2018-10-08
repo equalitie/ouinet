@@ -326,6 +326,7 @@ resolve_target( const Request& req
     return or_throw(yield, ec, move(lookup));
 }
 
+//------------------------------------------------------------------------------
 static
 void serve( InjectorConfig& config
           , GenericConnection con
