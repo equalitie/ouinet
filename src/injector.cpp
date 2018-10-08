@@ -53,6 +53,7 @@ using string_view = beast::string_view;
 using uuid_generator = boost::uuids::random_generator_mt19937;
 using Request     = http::request<http::string_body>;
 using Response    = http::response<http::dynamic_body>;
+using TCPLookup   = asio::ip::tcp::resolver::results_type;
 
 static const boost::filesystem::path OUINET_PID_FILE = "pid";
 
@@ -275,6 +276,55 @@ private:
 };
 
 //------------------------------------------------------------------------------
+// Resolve request target address, check whether it is valid
+// and return lookup results.
+// If not valid, set error code and send an error message over `con`
+// (the returned lookup may not be usable then).
+static
+TCPLookup
+resolve_target( const Request& req
+              , GenericConnection& con
+              , Signal<void()>& shutdown_signal
+              , Yield yield)
+{
+    TCPLookup lookup;
+    sys::error_code ec;
+
+    string host, port;
+    tie(host, port) = util::get_host_port(req);
+
+    // First test trivial cases (like "localhost" or "127.1.2.3").
+    bool local = util::is_localhost(host);
+
+    // Resolve address and also use result for more sophisticaded checking.
+    if (!local)
+        lookup = util::tcp_async_resolve( host, port
+                                        , con.get_io_service()
+                                        , shutdown_signal
+                                        , yield[ec]);
+    if (ec) {
+        handle_bad_request( con, req
+                          , "Could not resolve host: " + host
+                          , yield[ec].tag("handle_bad_request"));
+        return or_throw<TCPLookup>(yield, ec);
+    }
+
+    // Test non-trivial cases (like "[0::1]" or FQDNs pointing to loopback).
+    for (auto r : lookup)
+        if ((local = util::is_localhost(r.endpoint().address().to_string())))
+            break;
+
+    if (local) {
+        ec = asio::error::invalid_argument;
+        handle_bad_request( con, req
+                          , "Illegal target host: " + host
+                          , yield[ec].tag("handle_bad_request"));
+        return or_throw<TCPLookup>(yield, ec);
+    }
+
+    return or_throw(yield, ec, move(lookup));
+}
+
 static
 void serve( InjectorConfig& config
           , GenericConnection con
@@ -311,39 +361,10 @@ void serve( InjectorConfig& config
             continue;
         }
 
-        // Restrict requests to loopback addresses to
-        // avoid sending requests to local services.
-        string host, port;
-        tie(host, port) = util::get_host_port(req);
-        // First test trivial cases (like "localhost" or "127.1.2.3").
-        bool local = util::is_localhost(host);
-        asio::ip::tcp::resolver::results_type lookup;
-
-        // Resolve address and also use result for more sophisticaded checking.
-        if (!local)
-            lookup = util::tcp_async_resolve( host, port
-                                            , con.get_io_service()
-                                            , close_connection_signal
-                                            , yield[ec]);
-        if (ec) {
-            handle_bad_request( con, req
-                              , "Could not resolve host: " + host
-                              , yield[ec].tag("handle_bad_request"));
-            continue;
-        }
-
-        // Test non-trivial cases (like "[0::1]" or FQDNs pointing to loopback).
-        for (auto r : lookup)
-            if ((local = util::is_localhost(r.endpoint().address().to_string())))
-                break;
-
-        if (local) {
-            ec = asio::error::invalid_argument;
-            handle_bad_request( con, req
-                              , "Illegal target host: " + host
-                              , yield[ec].tag("handle_bad_request"));
-            continue;
-        }
+        // Resolve target endpoint and check its validity.
+        TCPLookup lookup(resolve_target( req, con, close_connection_signal
+                                       , yield[ec]));
+        if (ec) continue;  // error message already sent to `con`
 
         // TODO: Reuse DNS lookup result.
 
