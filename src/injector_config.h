@@ -168,22 +168,26 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
 inline void InjectorConfig::setup_bt_private_key(const std::string& hex)
 {
-    fs::path config = _repo_root/"bt_private_key";
+    fs::path priv_config = _repo_root/"bt-private-key";
+    fs::path pub_config  = _repo_root/"bt-public-key";
 
     if (hex.empty()) {
-        if (fs::exists(config)) {
-            fs::ifstream(config) >> _bt_private_key;
+        if (fs::exists(priv_config)) {
+            fs::ifstream(priv_config) >> _bt_private_key;
+            fs::ofstream(pub_config)  << _bt_private_key.public_key();
             return;
         }
 
         _bt_private_key = util::Ed25519PrivateKey::generate();
 
-        fs::ofstream(config) << _bt_private_key;
+        fs::ofstream(priv_config) << _bt_private_key;
+        fs::ofstream(pub_config)  << _bt_private_key.public_key();
         return;
     }
 
     _bt_private_key = *util::Ed25519PrivateKey::from_hex(hex);
-    fs::ofstream(config) << _bt_private_key;
+    fs::ofstream(priv_config) << _bt_private_key;
+    fs::ofstream(pub_config)  << _bt_private_key.public_key();
 }
 
 } // ouinet namespace
