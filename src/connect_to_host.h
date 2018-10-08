@@ -27,14 +27,6 @@ connect_to_host( const asio::ip::tcp::resolver::results_type& lookup
                , asio::yield_context yield);
 
 GenericConnection
-connect_to_host( asio::io_service& ios
-               , const std::string& host
-               , const std::string& port
-               , std::chrono::steady_clock::duration timeout
-               , Signal<void()>& cancel_signal
-               , asio::yield_context yield);
-
-GenericConnection
 connect_to_host( const asio::ip::tcp::resolver::results_type& lookup
                , asio::io_service& ios
                , std::chrono::steady_clock::duration timeout

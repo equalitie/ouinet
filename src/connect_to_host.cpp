@@ -57,24 +57,6 @@ ouinet::connect_to_host( const TCPLookup& lookup
 }
 
 GenericConnection
-ouinet::connect_to_host( asio::io_service& ios
-                       , const string& host
-                       , const string& port
-                       , std::chrono::steady_clock::duration timeout
-                       , Signal<void()>& cancel_signal
-                       , asio::yield_context yield)
-{
-    return util::with_timeout
-        ( ios
-        , cancel_signal
-        , timeout
-        , [&] (auto& signal, auto yield) {
-              return connect_to_host(ios, host, port, signal, yield);
-          }
-        , yield);
-}
-
-GenericConnection
 ouinet::connect_to_host( const TCPLookup& lookup
                        , asio::io_service& ios
                        , std::chrono::steady_clock::duration timeout
