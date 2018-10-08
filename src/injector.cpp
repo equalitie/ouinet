@@ -313,15 +313,15 @@ void serve( InjectorConfig& config
 
         // Restrict requests to loopback addresses to
         // avoid sending requests to local services.
-        string host;
-        tie(host, ignore) = util::get_host_port(req);
+        string host, port;
+        tie(host, port) = util::get_host_port(req);
         // First test trivial cases (like "localhost" or "127.1.2.3").
         bool local = util::is_localhost(host);
         asio::ip::tcp::resolver::results_type lookup;
 
         // Resolve address and also use result for more sophisticaded checking.
         if (!local)
-            lookup = util::tcp_async_resolve( host, "0"  // not interested in port
+            lookup = util::tcp_async_resolve( host, port
                                             , con.get_io_service()
                                             , close_connection_signal
                                             , yield[ec]);
