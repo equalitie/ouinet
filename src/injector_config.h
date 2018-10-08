@@ -36,8 +36,11 @@ public:
     std::string credentials() const
     { return _credentials; }
 
-    boost::optional<util::Ed25519PrivateKey> bt_private_key() const
+    util::Ed25519PrivateKey bt_private_key() const
     { return _bt_private_key; }
+
+private:
+    void setup_bt_private_key(const std::string& hex);
 
 private:
     bool _is_help = false;
@@ -47,7 +50,7 @@ private:
     boost::optional<asio::ip::tcp::endpoint> _tcp_endpoint;
     boost::filesystem::path OUINET_CONF_FILE = "ouinet-injector.conf";
     std::string _credentials;
-    boost::optional<util::Ed25519PrivateKey> _bt_private_key;
+    util::Ed25519PrivateKey _bt_private_key;
 };
 
 inline
@@ -154,16 +157,33 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         _tcp_endpoint = util::parse_tcp_endpoint(vm["listen-on-tcp"].as<string>());
     }
 
-    if (vm.count("bittorrent-private-key")) {
-        string value = vm["bittorrent-private-key"].as<string>();
+    setup_bt_private_key( vm.count("bittorrent-private-key")
+                        ? vm["bittorrent-private-key"].as<string>()
+                        : string());
 
-        _bt_private_key = util::Ed25519PrivateKey::from_hex(value);
+    std::cerr << "Using BT Public key: "
+              << _bt_private_key.public_key() << std::endl;
 
-        if (!_bt_private_key) {
-            throw std::runtime_error(
-                    util::str("Failed parsing '", value, "' as Ed25519 private key"));
+}
+
+inline void InjectorConfig::setup_bt_private_key(const std::string& hex)
+{
+    fs::path config = _repo_root/"bt_private_key";
+
+    if (hex.empty()) {
+        if (fs::exists(config)) {
+            fs::ifstream(config) >> _bt_private_key;
+            return;
         }
+
+        _bt_private_key = util::Ed25519PrivateKey::generate();
+
+        fs::ofstream(config) << _bt_private_key;
+        return;
     }
+
+    _bt_private_key = *util::Ed25519PrivateKey::from_hex(hex);
+    fs::ofstream(config) << _bt_private_key;
 }
 
 } // ouinet namespace

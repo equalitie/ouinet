@@ -63,6 +63,8 @@ class Ed25519PrivateKey {
 
 std::ostream& operator<<(std::ostream&, const Ed25519PublicKey&);
 std::ostream& operator<<(std::ostream&, const Ed25519PrivateKey&);
+std::istream& operator>>(std::istream&, Ed25519PublicKey&);
+std::istream& operator>>(std::istream&, Ed25519PrivateKey&);
 
 } // util namespace
 } // ouinet namespace

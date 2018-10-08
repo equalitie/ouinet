@@ -353,5 +353,25 @@ std::ostream& operator<<(std::ostream& os, const Ed25519PrivateKey& k)
     return os << util::bytes::to_hex(k.serialize());
 }
 
+std::istream& operator>>(std::istream& os, Ed25519PublicKey& k)
+{
+    std::string str((std::istreambuf_iterator<char>(os)),
+                     std::istreambuf_iterator<char>());
+    auto opt_k = Ed25519PublicKey::from_hex(str);
+    if (!opt_k) throw std::runtime_error("Failed to parse Ed25519PublicKey");
+    k = *opt_k;
+    return os;
+}
+
+std::istream& operator>>(std::istream& os, Ed25519PrivateKey& k)
+{
+    std::string str((std::istreambuf_iterator<char>(os)),
+                     std::istreambuf_iterator<char>());
+    auto opt_k = Ed25519PrivateKey::from_hex(str);
+    if (!opt_k) throw std::runtime_error("Failed to parse Ed25519PrivateKey");
+    k = *opt_k;
+    return os;
+}
+
 } // util namespace
 } // ouinet namespace

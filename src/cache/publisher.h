@@ -32,8 +32,7 @@ public:
 public:
     Publisher( asio_ipfs::node&
              , bittorrent::MainlineDht&
-             , const boost::optional<util::Ed25519PrivateKey>& bt_publish_key
-             , const fs::path& config_dir);
+             , util::Ed25519PrivateKey bt_publish_key);
 
     Publisher(const Publisher&) = delete;
 
