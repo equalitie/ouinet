@@ -161,7 +161,8 @@ void ClientFrontEnd::handle_enumerate_db( const Request& req
     }
 
     while (!iter.is_end()) {
-        ss << iter.value() << "<br/>\n";
+        ss << "<a href=\"ipfs.io/ipfs/" << iter.value() << "\">"
+           << iter.key() << "</a><br/>\n";
 
         iter.advance(yield[ec]);
 
