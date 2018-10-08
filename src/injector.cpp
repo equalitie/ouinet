@@ -77,9 +77,12 @@ void handle_bad_request( GenericConnection& con
 }
 
 //------------------------------------------------------------------------------
+// Note: the connection is attempted towards
+// the already resolved endpoints in `lookup`,
+// only headers are used from `req`.
 static
 void handle_connect_request( GenericConnection& client_c
-                           , const Request& req
+                           , const Request& req, const TCPLookup& lookup
                            , Signal<void()>& disconnect_signal
                            , asio::yield_context yield)
 {
@@ -91,21 +94,22 @@ void handle_connect_request( GenericConnection& client_c
         client_c.close();
     });
 
-    // Get CONNECT target.
-    string host, port;
-    tie(host, port) = util::get_host_port(req);
     // Restrict connections to well-known ports.
-    // TODO: This is quite arbitrary;
-    // enhance this filter or remove the restriction altogether.
-    if (port != "80" && port != "443" && port != "8080" && port != "8443") {
-        ec = asio::error::invalid_argument;
-        auto ep = util::format_ep(host, port);
-        return handle_bad_request( client_c, req
-                                 , "Illegal CONNECT target: " + ep
-                                 , yield[ec]);
+    for (auto r : lookup) {
+        auto port = r.endpoint().port();
+        // TODO: This is quite arbitrary;
+        // enhance this filter or remove the restriction altogether.
+        if (port != 80 && port != 443 && port != 8080 && port != 8443) {
+            ec = asio::error::invalid_argument;
+            auto ep = util::format_ep(r.endpoint());
+            return handle_bad_request( client_c, req
+                                     , "Illegal CONNECT target: " + ep
+                                     , yield[ec]);
+        }
+        break;  // all lookup entries have the same port
     }
 
-    auto origin_c = connect_to_host( ios, host, port
+    auto origin_c = connect_to_host( lookup, ios
                                    , default_timeout::tcp_connect()
                                    , disconnect_signal, yield[ec]);
 
@@ -368,14 +372,14 @@ void serve( InjectorConfig& config
                                        , yield[ec]));
         if (ec) continue;  // error message already sent to `con`
 
-        // TODO: Reuse DNS lookup result.
-
         if (req.method() == http::verb::connect) {
             return handle_connect_request( con
-                                         , req
+                                         , req, lookup
                                          , close_connection_signal
                                          , yield.tag("handle_connect"));
         }
+
+        // TODO: Reuse DNS lookup result below.
 
         // Check for a Ouinet version header hinting us on
         // whether to behave like an injector or a proxy.

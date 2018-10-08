@@ -6,7 +6,10 @@
 #include "util/signal.h"
 
 #include <chrono>
+
+#include <boost/asio/ip/tcp.hpp>
 #include <boost/beast/core/string.hpp>
+
 
 namespace ouinet {
 
@@ -18,9 +21,22 @@ connect_to_host( asio::io_service& ios
                , asio::yield_context yield);
 
 GenericConnection
+connect_to_host( const asio::ip::tcp::resolver::results_type& lookup
+               , asio::io_service& ios
+               , Signal<void()>& cancel_signal
+               , asio::yield_context yield);
+
+GenericConnection
 connect_to_host( asio::io_service& ios
                , const std::string& host
                , const std::string& port
+               , std::chrono::steady_clock::duration timeout
+               , Signal<void()>& cancel_signal
+               , asio::yield_context yield);
+
+GenericConnection
+connect_to_host( const asio::ip::tcp::resolver::results_type& lookup
+               , asio::io_service& ios
                , std::chrono::steady_clock::duration timeout
                , Signal<void()>& cancel_signal
                , asio::yield_context yield);

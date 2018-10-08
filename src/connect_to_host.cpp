@@ -11,6 +11,9 @@
 using namespace std;
 using namespace ouinet;
 
+using TCPLookup = asio::ip::tcp::resolver::results_type;
+
+
 GenericConnection
 ouinet::connect_to_host( asio::io_service& ios
                        , const string& host
@@ -18,9 +21,6 @@ ouinet::connect_to_host( asio::io_service& ios
                        , Signal<void()>& cancel_signal
                        , asio::yield_context yield)
 {
-    using namespace std;
-    using tcp = asio::ip::tcp;
-
     sys::error_code ec;
 
     auto const lookup = util::tcp_async_resolve( host, port
@@ -29,6 +29,18 @@ ouinet::connect_to_host( asio::io_service& ios
 
     if (ec) return or_throw(yield, ec, GenericConnection());
 
+    return connect_to_host(lookup, ios, cancel_signal, yield);
+}
+
+GenericConnection
+ouinet::connect_to_host( const TCPLookup& lookup
+                       , asio::io_service& ios
+                       , Signal<void()>& cancel_signal
+                       , asio::yield_context yield)
+{
+    using tcp = asio::ip::tcp;
+
+    sys::error_code ec;
     tcp::socket socket(ios);
 
     auto disconnect_slot = cancel_signal.connect([&socket] {
@@ -58,6 +70,23 @@ ouinet::connect_to_host( asio::io_service& ios
         , timeout
         , [&] (auto& signal, auto yield) {
               return connect_to_host(ios, host, port, signal, yield);
+          }
+        , yield);
+}
+
+GenericConnection
+ouinet::connect_to_host( const TCPLookup& lookup
+                       , asio::io_service& ios
+                       , std::chrono::steady_clock::duration timeout
+                       , Signal<void()>& cancel_signal
+                       , asio::yield_context yield)
+{
+    return util::with_timeout
+        ( ios
+        , cancel_signal
+        , timeout
+        , [&] (auto& signal, auto yield) {
+              return connect_to_host(lookup, ios, signal, yield);
           }
         , yield);
 }

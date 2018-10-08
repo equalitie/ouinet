@@ -137,6 +137,11 @@ std::string format_ep(const std::string& host, const std::string& port) {
              + ":" + port);
 }
 
+inline
+std::string format_ep(const asio::ip::tcp::endpoint& ep) {
+    return format_ep(ep.address().to_string(), std::to_string(ep.port()));
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 std::string zlib_compress(const std::string&);
 std::string base64_encode(const std::string&);
