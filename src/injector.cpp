@@ -376,8 +376,6 @@ void serve( InjectorConfig& config
                                          , yield.tag("handle_connect"));
         }
 
-        // TODO: Reuse DNS lookup result below.
-
         // Check for a Ouinet version header hinting us on
         // whether to behave like an injector or a proxy.
         Response res;
@@ -393,11 +391,13 @@ void serve( InjectorConfig& config
             res = fetch_http_page( con.get_io_service()
                                  , c
                                  , erase_hop_by_hop_headers(move(req2))
+                                 , lookup
                                  , default_timeout::fetch_http()
                                  , close_connection_signal
                                  , yield[ec].tag("fetch_http_page"));
         } else {
             // Ouinet header found, behave like a Ouinet injector.
+            // TODO: Reuse DNS lookup result below.
             req2.erase(ouinet_version_hdr);  // do not propagate or cache the header
 
             res = cc.fetch(req2, yield[ec].tag("cache_control.fetch"));

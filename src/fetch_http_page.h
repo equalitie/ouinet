@@ -1,6 +1,7 @@
 #pragma once
 
 #include <boost/asio/io_service.hpp>
+#include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/spawn.hpp>
 
 #include "or_throw.h"
@@ -11,6 +12,7 @@
 #include "util.h"
 #include "connect_to_host.h"
 #include "ssl/util.h"
+#include "http_util.h"
 
 namespace ouinet {
 
@@ -140,6 +142,31 @@ fetch_http_page( asio::io_service& ios
                , GenericConnection& optcon
                , RequestType req
                , Signal<void()>& abort_signal
+               , Yield yield)
+{
+    using Response = http::response<http::dynamic_body>;
+
+    sys::error_code ec;
+    std::string host, port;
+    std::tie(host, port) = util::get_host_port(req);
+    auto lookup = util::tcp_async_resolve( host, port
+                                         , ios
+                                         , abort_signal
+                                         , yield[ec]);
+    if (ec) return or_throw<Response>(yield, ec);
+
+    return fetch_http_page( ios, optcon
+                          , req, std::move(lookup)
+                          , abort_signal, yield);
+}
+
+template<class RequestType>
+http::response<http::dynamic_body>
+fetch_http_page( asio::io_service& ios
+               , GenericConnection& optcon
+               , RequestType req
+               , const asio::ip::tcp::resolver::results_type& lookup
+               , Signal<void()>& abort_signal
                , Yield yield_)
 {
     Yield yield = yield_.tag("fetch_http_page");
@@ -154,9 +181,6 @@ fetch_http_page( asio::io_service& ios
         ec = asio::error::operation_not_supported;  // unsupported URL
         return or_throw<Response>(yield, ec);
     }
-    bool ssl(url.scheme == "https");
-    if (url.port.empty())
-        url.port = ssl ? "443" : "80";
 
     GenericConnection temp_con;
 
@@ -165,9 +189,8 @@ fetch_http_page( asio::io_service& ios
             return optcon;
         }
         else {
-            auto c = connect_to_host( ios
-                                    , url.host
-                                    , url.port
+            auto c = connect_to_host( lookup
+                                    , ios
                                     , abort_signal
                                     , yield[ec]);
 
@@ -236,6 +259,27 @@ fetch_http_page( asio::io_service& ios
         , [&] (auto& abort_signal, auto yield) {
               return fetch_http_page
                 (ios, optcon, req, abort_signal, yield);
+          }
+        , yield);
+}
+
+template<class Duration, class RequestType>
+http::response<http::dynamic_body>
+fetch_http_page( asio::io_service& ios
+               , GenericConnection& optcon
+               , RequestType req
+               , const asio::ip::tcp::resolver::results_type& lookup
+               , Duration timeout
+               , Signal<void()>& abort_signal
+               , Yield yield)
+{
+    return util::with_timeout
+        ( ios
+        , abort_signal
+        , timeout
+        , [&] (auto& abort_signal, auto yield) {
+              return fetch_http_page
+                (ios, optcon, req, lookup, abort_signal, yield);
           }
         , yield);
 }
