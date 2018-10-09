@@ -9,6 +9,7 @@
 #include <string>
 
 #include "cache_entry.h"
+#include "db_type.h"
 #include "../namespaces.h"
 
 namespace asio_ipfs { class node; }
@@ -19,6 +20,7 @@ namespace ouinet { class BTree; }
 namespace ouinet {
 
 class BTreeClientDb;
+class Bep44ClientDb;
 
 class CacheClient {
 public:
@@ -46,9 +48,11 @@ public:
     // Basically it does this: Look into the database to find the IPFS_ID
     // correspoinding to the `url`, when found, fetch the content corresponding
     // to that IPFS_ID from IPFS.
-    CacheEntry get_content(std::string url, boost::asio::yield_context);
+    CacheEntry get_content( std::string url
+                          , DbType
+                          , boost::asio::yield_context);
 
-    std::string get_descriptor(std::string url, asio::yield_context);
+    std::string get_descriptor(std::string url, DbType, asio::yield_context);
 
     void set_ipns(std::string ipns);
 
@@ -72,6 +76,7 @@ private:
     std::unique_ptr<asio_ipfs::node> _ipfs_node;
     std::unique_ptr<bittorrent::MainlineDht> _bt_dht;
     std::unique_ptr<BTreeClientDb> _btree_db;
+    std::unique_ptr<Bep44ClientDb> _bep44_db;
 };
 
 } // namespace

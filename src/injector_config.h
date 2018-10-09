@@ -1,6 +1,7 @@
 #pragma once
 
 #include "util/crypto.h"
+#include "cache/db_type.h"
 
 namespace ouinet {
 
@@ -39,6 +40,9 @@ public:
     util::Ed25519PrivateKey bt_private_key() const
     { return _bt_private_key; }
 
+    DbType default_db_type() const
+    { return _default_db_type; }
+
 private:
     void setup_bt_private_key(const std::string& hex);
 
@@ -51,6 +55,7 @@ private:
     boost::filesystem::path OUINET_CONF_FILE = "ouinet-injector.conf";
     std::string _credentials;
     util::Ed25519PrivateKey _bt_private_key;
+    DbType _default_db_type = DbType::btree;
 };
 
 inline
@@ -77,6 +82,9 @@ InjectorConfig::options_description()
            "If unused, this injector shall behave as an open proxy.")
         ("bittorrent-private-key", po::value<string>()
          , "Private key of the BitTorrent/BEP44 subsystem")
+        ("default-db"
+         , po::value<string>()->default_value("btree")
+         , "Default database type to use, can be either \"btree\" or \"bep44\"")
         ;
 
     return desc;
@@ -164,6 +172,19 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
     std::cerr << "Using BT Public key: "
               << _bt_private_key.public_key() << std::endl;
 
+    if (vm.count("default-db")) {
+        auto type = vm["default-db"].as<string>();
+
+        if (type == "btree") {
+            _default_db_type = DbType::btree;
+        }
+        else if (type == "bep44") {
+            _default_db_type = DbType::bep44;
+        }
+        else {
+            throw std::runtime_error("Invalid value for --default-db-type");
+        }
+    }
 }
 
 inline void InjectorConfig::setup_bt_private_key(const std::string& hex)

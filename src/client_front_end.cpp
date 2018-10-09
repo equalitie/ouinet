@@ -201,7 +201,11 @@ void ClientFrontEnd::handle_descriptor( const Request& req, Response& res, strin
         err = "cache access is not available";
     } else {  // perform the query
         sys::error_code ec;
-        file_descriptor = cache_client->get_descriptor(uri, yield[ec]);
+
+        file_descriptor = cache_client->get_descriptor( uri
+                                                      , DbType::btree
+                                                      , yield[ec]);
+
         if (ec == asio::error::not_found) {
             result = http::status::not_found;
             err = "URI was not found in the cache";

@@ -1,6 +1,7 @@
 #include <asio_ipfs.h>
 #include "cache_client.h"
 #include "btree_db.h"
+#include "bep44_db.h"
 #include "cache_entry.h"
 #include "http_desc.h"
 #include "../or_throw.h"
@@ -68,11 +69,16 @@ CacheClient::CacheClient( asio_ipfs::node ipfs_node
                                  , _path_to_repo))
 {
     _bt_dht->set_interfaces({asio::ip::address_v4::any()});
+
+    if (bt_pubkey) {
+        _bep44_db.reset(new Bep44ClientDb(*_bt_dht, *bt_pubkey));
+    }
 }
 
 const BTree* CacheClient::get_btree() const
 {
     if (!_ipfs_node) return nullptr;
+    if (!_btree_db) return nullptr;
     return _btree_db->get_btree();
 }
 
@@ -81,17 +87,36 @@ string CacheClient::ipfs_add(const string& data, asio::yield_context yield)
     return _ipfs_node->add(data, yield);
 }
 
-string CacheClient::get_descriptor(string url, asio::yield_context yield)
+string CacheClient::get_descriptor( string url
+                                  , DbType db_type
+                                  , asio::yield_context yield)
 {
-    return _btree_db->find(url, yield);
+    sys::error_code ec;
+
+    string ret;
+
+    switch (db_type) {
+        case DbType::btree:
+            if (!_btree_db) ec = asio::error::not_found;
+            ret = _btree_db->find(url, yield[ec]);
+            break;
+        case DbType::bep44:
+            if (!_bep44_db) ec = asio::error::not_found;
+            else ret = _bep44_db->find(url, yield[ec]);
+            break;
+    }
+
+    return or_throw(yield, ec, move(ret));
 }
 
-CacheEntry CacheClient::get_content(string url, asio::yield_context yield)
+CacheEntry CacheClient::get_content( string url
+                                   , DbType db_type
+                                   , asio::yield_context yield)
 {
     using std::get;
     sys::error_code ec;
 
-    auto desc_ipfs = get_descriptor(url, yield[ec]);
+    auto desc_ipfs = get_descriptor(url, db_type, yield[ec]);
 
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
@@ -111,11 +136,13 @@ std::string CacheClient::ipfs_id() const
 
 string CacheClient::ipns() const
 {
+    if (!_btree_db) return {};
     return _btree_db->ipns();
 }
 
 string CacheClient::ipfs() const
 {
+    if (!_btree_db) return {};
     return _btree_db->ipfs();
 }
 

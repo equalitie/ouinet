@@ -273,7 +273,10 @@ Client::State::fetch_stored( const Request& request
 
     // TODO: use string_view for the key.
     auto key = request.target();
-    return _cache->get_content(key.to_string(), yield);
+
+    return _cache->get_content( key.to_string()
+                              , _config.default_db_type()
+                              , yield);
 }
 
 //------------------------------------------------------------------------------
