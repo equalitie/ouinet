@@ -95,18 +95,15 @@ void handle_connect_request( GenericConnection& client_c
     });
 
     // Restrict connections to well-known ports.
-    for (auto r : lookup) {
-        auto port = r.endpoint().port();
-        // TODO: This is quite arbitrary;
-        // enhance this filter or remove the restriction altogether.
-        if (port != 80 && port != 443 && port != 8080 && port != 8443) {
-            ec = asio::error::invalid_argument;
-            auto ep = util::format_ep(r.endpoint());
-            return handle_bad_request( client_c, req
-                                     , "Illegal CONNECT target: " + ep
-                                     , yield[ec]);
-        }
-        break;  // all lookup entries have the same port
+    auto port = lookup.begin()->endpoint().port();  // all entries use same port
+    // TODO: This is quite arbitrary;
+    // enhance this filter or remove the restriction altogether.
+    if (port != 80 && port != 443 && port != 8080 && port != 8443) {
+        ec = asio::error::invalid_argument;
+        auto ep = util::format_ep(lookup.begin()->endpoint());
+        return handle_bad_request( client_c, req
+                                 , "Illegal CONNECT target: " + ep
+                                 , yield[ec]);
     }
 
     auto origin_c = connect_to_host( lookup, ios
