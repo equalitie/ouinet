@@ -9,7 +9,7 @@
 #include <string>
 
 #include "cache_entry.h"
-#include "db_type.h"
+#include "db.h"
 #include "../namespaces.h"
 
 namespace asio_ipfs { class node; }
@@ -70,6 +70,8 @@ private:
                , std::string ipns
                , boost::optional<util::Ed25519PublicKey> bt_pubkey
                , fs::path path_to_repo);
+
+    ClientDb* get_db(DbType);
 
 private:
     fs::path _path_to_repo;

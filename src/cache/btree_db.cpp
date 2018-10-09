@@ -196,7 +196,7 @@ void BTreeInjectorDb::publish(string db_ipfs_id)
     _publisher.publish(move(db_ipfs_id));
 }
 
-static string query_(string key, BTree& db, asio::yield_context yield)
+static string query_(const string& key, BTree& db, asio::yield_context yield)
 {
     sys::error_code ec;
 
@@ -207,14 +207,14 @@ static string query_(string key, BTree& db, asio::yield_context yield)
     return val;
 }
 
-string BTreeInjectorDb::find(string key, asio::yield_context yield)
+string BTreeInjectorDb::find(const string& key, asio::yield_context yield)
 {
-    return query_(move(key), *_db_map, yield);
+    return query_(key, *_db_map, yield);
 }
 
-string BTreeClientDb::find(string key, asio::yield_context yield)
+string BTreeClientDb::find(const string& key, asio::yield_context yield)
 {
-    return query_(move(key), *_db_map, yield);
+    return query_(key, *_db_map, yield);
 }
 
 void BTreeClientDb::on_resolve(string ipfs_id, asio::yield_context yield)

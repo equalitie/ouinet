@@ -1,7 +1,7 @@
 #pragma once
 
 #include "util/crypto.h"
-#include "cache/db_type.h"
+#include "cache/db.h"
 
 namespace ouinet {
 

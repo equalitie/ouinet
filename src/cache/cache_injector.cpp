@@ -38,6 +38,16 @@ string CacheInjector::ipfs_id() const
     return _ipfs_node->id();
 }
 
+InjectorDb* CacheInjector::get_db(DbType db_type) const
+{
+    switch (db_type) {
+        case DbType::btree: return _btree_db.get();
+        case DbType::bep44: return _bep44_db.get();
+    }
+
+    return nullptr;
+}
+
 string CacheInjector::insert_content( Request rq
                                     , Response rs
                                     , DbType db_type
@@ -69,18 +79,11 @@ string CacheInjector::insert_content( Request rq
     // TODO: use string_view for key
     auto key = rq.target().to_string();
 
-    switch (db_type) {
-        case DbType::btree:
-            _btree_db->insert(move(key), desc.first, yield[ec]);
-            break;
-        case DbType::bep44:
-            _bep44_db->insert(move(key), desc.first, yield[ec]);
-            break;
-    }
+    get_db(db_type)->insert(move(key), desc.first, yield[ec]);
 
     if (!ec && *wd) ec = asio::error::operation_aborted;
 
-    return or_throw(yield, ec, desc.second);
+    return or_throw(yield, ec, move(desc.second));
 }
 
 CacheEntry CacheInjector::get_content( string url
@@ -90,14 +93,7 @@ CacheEntry CacheInjector::get_content( string url
     sys::error_code ec;
     string desc_data;
 
-    switch (db_type) {
-        case DbType::btree:
-            desc_data = _btree_db->find(url, yield[ec]);
-            break;
-        case DbType::bep44:
-            desc_data = _bep44_db->find(url, yield[ec]);
-            break;
-    }
+    get_db(db_type)->find(url, yield[ec]);
 
     if (ec) return or_throw<CacheEntry>(yield, ec);
 

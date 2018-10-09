@@ -12,7 +12,7 @@
 #include "../namespaces.h"
 #include "../util/crypto.h"
 #include "cache_entry.h"
-#include "db_type.h"
+#include "db.h"
 
 namespace asio_ipfs { class node; }
 namespace ouinet { namespace bittorrent { class MainlineDht; }}
@@ -59,6 +59,9 @@ public:
     CacheEntry get_content(std::string url, DbType, boost::asio::yield_context);
 
     ~CacheInjector();
+
+private:
+    InjectorDb* get_db(DbType) const;
 
 private:
     std::unique_ptr<asio_ipfs::node> _ipfs_node;

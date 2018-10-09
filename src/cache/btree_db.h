@@ -9,6 +9,7 @@
 
 #include "../namespaces.h"
 #include "resolver.h"
+#include "db.h"
 
 namespace asio_ipfs { class node; }
 namespace ouinet { namespace bittorrent { class MainlineDht; }}
@@ -19,7 +20,7 @@ namespace ouinet {
 class BTree;
 class Publisher;
 
-class BTreeClientDb {
+class BTreeClientDb : public ClientDb {
 public:
     BTreeClientDb( asio_ipfs::node&
                  , std::string ipns
@@ -27,7 +28,7 @@ public:
                  , boost::optional<util::Ed25519PublicKey> bt_publish_pubkey
                  , fs::path path_to_repo);
 
-    std::string find(std::string key, asio::yield_context);
+    std::string find(const std::string& key, asio::yield_context) override;
 
     boost::asio::io_service& get_io_service();
 
@@ -51,13 +52,13 @@ private:
     std::shared_ptr<bool> _was_destroyed;
 };
 
-class BTreeInjectorDb {
+class BTreeInjectorDb : public InjectorDb {
 public:
     BTreeInjectorDb(asio_ipfs::node&, Publisher&, fs::path path_to_repo);
 
-    std::string find(std::string key, asio::yield_context);
+    std::string find(const std::string& key, asio::yield_context) override;
 
-    void insert(std::string key, std::string value, asio::yield_context);
+    void insert(std::string key, std::string value, asio::yield_context) override;
 
     boost::asio::io_service& get_io_service();
 

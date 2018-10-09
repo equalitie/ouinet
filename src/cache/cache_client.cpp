@@ -87,26 +87,26 @@ string CacheClient::ipfs_add(const string& data, asio::yield_context yield)
     return _ipfs_node->add(data, yield);
 }
 
+ClientDb* CacheClient::get_db(DbType db_type)
+{
+    switch (db_type) {
+        case DbType::btree: return _btree_db.get();
+        case DbType::bep44: return _bep44_db.get();
+    }
+
+    assert(0);
+    return nullptr;
+}
+
 string CacheClient::get_descriptor( string url
                                   , DbType db_type
                                   , asio::yield_context yield)
 {
-    sys::error_code ec;
+    ClientDb* db = get_db(db_type);
 
-    string ret;
+    if (!db) return or_throw<string>(yield, asio::error::not_found);
 
-    switch (db_type) {
-        case DbType::btree:
-            if (!_btree_db) ec = asio::error::not_found;
-            ret = _btree_db->find(url, yield[ec]);
-            break;
-        case DbType::bep44:
-            if (!_bep44_db) ec = asio::error::not_found;
-            else ret = _bep44_db->find(url, yield[ec]);
-            break;
-    }
-
-    return or_throw(yield, ec, move(ret));
+    return db->find(url, yield);
 }
 
 CacheEntry CacheClient::get_content( string url
