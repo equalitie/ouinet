@@ -108,7 +108,7 @@ Scheduler::Scheduler(asio::io_service& ios, size_t max_running_jobs)
 inline
 Scheduler::Slot Scheduler::wait_for_slot(asio::yield_context yield)
 {
-    if (_slots.size() >= _max_running_jobs) {
+    while (_slots.size() >= _max_running_jobs) {
         Waiter waiter(_ios);
 
         _waiters.push_back(waiter);
