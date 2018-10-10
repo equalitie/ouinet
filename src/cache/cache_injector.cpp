@@ -7,7 +7,8 @@
 #include "http_desc.h"
 
 #include <asio_ipfs.h>
-#include "db.h"
+#include "btree_db.h"
+#include "bep44_db.h"
 #include "publisher.h"
 #include "../http_util.h"
 #include "../bittorrent/dht.h"
@@ -19,41 +20,37 @@ namespace bt = ouinet::bittorrent;
 
 CacheInjector::CacheInjector
         ( asio::io_service& ios
-        , const boost::optional<util::Ed25519PrivateKey>& bt_publish_key
+        , util::Ed25519PrivateKey bt_privkey
         , fs::path path_to_repo)
     : _ipfs_node(new asio_ipfs::node(ios, (path_to_repo/"ipfs").native()))
     , _bt_dht(new bt::MainlineDht(ios))
-    , _publisher(new Publisher( *_ipfs_node
-                              , *_bt_dht
-                              , bt_publish_key
-                              , path_to_repo/"publisher"))
-    , _db(new InjectorDb(*_ipfs_node, *_publisher, path_to_repo))
+    , _publisher(new Publisher(*_ipfs_node, *_bt_dht, bt_privkey))
+    , _btree_db(new BTreeInjectorDb(*_ipfs_node, *_publisher, path_to_repo))
     , _scheduler(new Scheduler(ios, _concurrency))
     , _was_destroyed(make_shared<bool>(false))
 {
     _bt_dht->set_interfaces({asio::ip::address_v4::any()});
+    _bep44_db.reset(new Bep44InjectorDb(*_bt_dht, bt_privkey));
 }
 
-string CacheInjector::id() const
+string CacheInjector::ipfs_id() const
 {
     return _ipfs_node->id();
 }
 
-std::string CacheInjector::put_data( const std::string& data
-                                   , boost::asio::yield_context yield)
+InjectorDb* CacheInjector::get_db(DbType db_type) const
 {
-    auto wd = _was_destroyed;
-    sys::error_code ec;
+    switch (db_type) {
+        case DbType::btree: return _btree_db.get();
+        case DbType::bep44: return _bep44_db.get();
+    }
 
-    string ipfs_id = _ipfs_node->add(data, yield[ec]);
-
-    if (!ec && *wd) ec = asio::error::operation_aborted;
-
-    return or_throw(yield, ec, move(ipfs_id));
+    return nullptr;
 }
 
 string CacheInjector::insert_content( Request rq
                                     , Response rs
+                                    , DbType db_type
                                     , asio::yield_context yield)
 {
     auto wd = _was_destroyed;
@@ -65,7 +62,7 @@ string CacheInjector::insert_content( Request rq
 
     auto ts = boost::posix_time::microsec_clock::universal_time();
 
-    string desc_data;
+    pair<string, string> desc;
 
     {
         auto slot = _scheduler->wait_for_slot(yield[ec]);
@@ -73,7 +70,7 @@ string CacheInjector::insert_content( Request rq
         if (!ec && *wd) ec = asio::error::operation_aborted;
         if (ec) return or_throw<string>(yield, ec);
 
-        desc_data = descriptor::http_create(*this, id, ts, rq, rs, yield[ec]);
+        desc = descriptor::http_create(*_ipfs_node, id, ts, rq, rs, yield[ec]);
 
         if (!ec && *wd) ec = asio::error::operation_aborted;
         if (ec) return or_throw<string>(yield, ec);
@@ -81,32 +78,26 @@ string CacheInjector::insert_content( Request rq
 
     // TODO: use string_view for key
     auto key = rq.target().to_string();
-    _db->update(move(key), desc_data, yield[ec]);
+
+    get_db(db_type)->insert(move(key), desc.first, yield[ec]);
 
     if (!ec && *wd) ec = asio::error::operation_aborted;
 
-    return or_throw(yield, ec, desc_data);
+    return or_throw(yield, ec, move(desc.second));
 }
 
-string CacheInjector::get_data(const string &ipfs_id, asio::yield_context yield)
+CacheEntry CacheInjector::get_content( string url
+                                     , DbType db_type
+                                     , asio::yield_context yield)
 {
-    return _ipfs_node->cat(ipfs_id, yield);
-}
-
-CacheEntry CacheInjector::get_content(string url, asio::yield_context yield)
-{
-    using std::get;
     sys::error_code ec;
+    string desc_data;
 
-    string desc_data = _db->query(url, yield[ec]);
+    get_db(db_type)->find(url, yield[ec]);
 
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
-    // Assemble HTTP response from cached content
-    // and attach injection identifier header for injection tracking.
-    auto res = descriptor::http_parse(*this, desc_data, yield[ec]);
-    get<0>(res).set(http_::response_injection_id_hdr, get<1>(res));
-    return or_throw(yield, ec, CacheEntry{get<2>(res), move(get<0>(res))});
+    return descriptor::http_parse(*_ipfs_node, desc_data, yield);
 }
 
 CacheInjector::~CacheInjector()

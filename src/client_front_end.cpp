@@ -161,7 +161,8 @@ void ClientFrontEnd::handle_enumerate_db( const Request& req
     }
 
     while (!iter.is_end()) {
-        ss << iter.value() << "<br/>\n";
+        ss << "<a href=\"ipfs.io/ipfs/" << iter.value() << "\">"
+           << iter.key() << "</a><br/>\n";
 
         iter.advance(yield[ec]);
 
@@ -200,7 +201,11 @@ void ClientFrontEnd::handle_descriptor( const Request& req, Response& res, strin
         err = "cache access is not available";
     } else {  // perform the query
         sys::error_code ec;
-        file_descriptor = cache_client->get_descriptor(uri, yield[ec]);
+
+        file_descriptor = cache_client->get_descriptor( uri
+                                                      , DbType::btree
+                                                      , yield[ec]);
+
         if (ec == asio::error::not_found) {
             result = http::status::not_found;
             err = "URI was not found in the cache";
@@ -318,7 +323,7 @@ void ClientFrontEnd::handle_portal( const Request& req, Response& res, stringstr
     }
 
     if (cache_client) {
-        ss << "        Our IPFS ID (IPNS): " << cache_client->id() << "<br>\n";
+        ss << "        Our IPFS ID (IPNS): " << cache_client->ipfs_id() << "<br>\n";
         ss << "        <h2>Database</h2>\n";
         ss << "        IPNS: " << cache_client->ipns() << "<br>\n";
         ss << "        IPFS: <a href=\"db.html\">" << cache_client->ipfs() << "</a><br>\n";

@@ -89,8 +89,8 @@ struct Publisher::Loop : public enable_shared_from_this<Loop> {
 };
 
 static
-bt::MutableDataItem bt_mutable_data( const string& cid
-                                   , const string& ipns
+bt::MutableDataItem bt_mutable_data( const string& value
+                                   , const string& salt
                                    , const util::Ed25519PrivateKey& private_key)
 {
     /*
@@ -102,73 +102,22 @@ bt::MutableDataItem bt_mutable_data( const string& cid
     Time unix_epoch(boost::gregorian::date(1970, 1, 1));
     Time ts = boost::posix_time::microsec_clock::universal_time();
 
-    return bt::MutableDataItem::sign( cid
+    return bt::MutableDataItem::sign( value
                                     , (ts - unix_epoch).total_milliseconds()
-                                    , ipns
+                                    , salt
                                     , private_key);
-}
-
-static util::Ed25519PrivateKey
-decide_private_key( const optional<util::Ed25519PrivateKey>& opt_key_
-                  , const fs::path& config_dir)
-{
-    if (!fs::is_directory(config_dir)) {
-        if (fs::exists(config_dir)) {
-            cerr << "Error: '" << config_dir << "' is not a directory" << endl;
-            exit(1);
-        }
-
-        if (!fs::create_directory(config_dir)) {
-            cerr << "Error: Failed to create '" << config_dir
-                 << "' directory" << endl;
-            exit(1);
-        }
-    }
-
-    fs::path config = config_dir/"bt_publish_private_key";
-
-    if (opt_key_) {
-        fs::ofstream(config) << *opt_key_;
-        return *opt_key_;
-    }
-
-    if (fs::exists(config)) {
-        string key_str;
-        fs::ifstream(config) >> key_str;
-
-        auto opt_key = util::Ed25519PrivateKey::from_hex(key_str);
-
-        if (!opt_key) {
-            cerr << "Failed reading Publisher BT Private key from "
-                 << config << endl;
-
-            exit(1);
-        }
-
-        return *opt_key;
-    }
-
-    auto key = util::Ed25519PrivateKey::generate();
-
-    fs::ofstream(config) << key;
-
-    return key;
 }
 
 Publisher::Publisher( asio_ipfs::node& ipfs_node
                     , bt::MainlineDht& bt_dht
-                    , const optional<util::Ed25519PrivateKey>& bt_private_key
-                    , const fs::path& config_dir)
+                    , util::Ed25519PrivateKey bt_private_key)
     : _ios(ipfs_node.get_io_service())
     , _ipfs_node(ipfs_node)
     , _bt_dht(bt_dht)
-    , _bt_private_key(decide_private_key(bt_private_key, config_dir))
+    , _bt_private_key(bt_private_key)
     , _ipfs_loop(make_shared<Loop>(_ios))
     , _bt_loop(make_shared<Loop>(_ios))
 {
-    cerr << "Publisher BT Private key: " << _bt_private_key << endl;
-    cerr << "Publisher BT Public  key: " << _bt_private_key.public_key() << endl;
-
     _ipfs_loop->publish_func = [this](auto cid, auto yield) {
         _ipfs_node.publish(cid, publish_duration, yield);
     };

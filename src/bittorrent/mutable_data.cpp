@@ -8,7 +8,7 @@ namespace bittorrent {
 
 static std::string mutable_data_signature_buffer(
     const BencodedValue& data,
-    const std::string& salt,
+    boost::string_view salt,
     int64_t sequence_number
 ) {
     std::string encoded_data = bencoding_encode(data);
@@ -26,7 +26,7 @@ static std::string mutable_data_signature_buffer(
         signature_buffer += "4:salt";
         signature_buffer += std::to_string(salt.size());
         signature_buffer += ":";
-        signature_buffer += salt;
+        signature_buffer += salt.to_string();
     }
     signature_buffer += "3:seqi";
     signature_buffer += std::to_string(sequence_number);
@@ -38,12 +38,12 @@ static std::string mutable_data_signature_buffer(
 MutableDataItem MutableDataItem::sign(
     BencodedValue value,
     int64_t sequence_number,
-    const std::string& salt,
+    boost::string_view salt,
     util::Ed25519PrivateKey private_key
 ) {
     MutableDataItem output{
         private_key.public_key(),
-        salt,
+        salt.to_string(),
         value,
         sequence_number
     };

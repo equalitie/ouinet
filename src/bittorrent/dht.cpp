@@ -258,7 +258,7 @@ NodeID dht::DhtNode::data_put_immutable(const BencodedValue& data, asio::yield_c
 
 boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
     const util::Ed25519PublicKey& public_key,
-    const std::string& salt,
+    boost::string_view salt,
     asio::yield_context yield
 ) {
     NodeID target_id = _data_store->mutable_get_id(public_key, salt);
@@ -313,7 +313,7 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
 
             MutableDataItem item {
                 public_key,
-                salt,
+                salt.to_string(),
                 response["v"],
                 *sequence_number,
                 util::bytes::to_array<uint8_t, 64>(*signature)
@@ -2071,7 +2071,7 @@ boost::optional<BencodedValue> MainlineDht::immutable_get(NodeID key, asio::yiel
 
 boost::optional<MutableDataItem> MainlineDht::mutable_get(
     const util::Ed25519PublicKey& public_key,
-    const std::string& salt,
+    boost::string_view salt,
     asio::yield_context yield
 ) {
     boost::optional<MutableDataItem> output;

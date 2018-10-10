@@ -37,7 +37,8 @@ bool detail::DhtWriteTokenStorage::verify_token(asio::ip::address address, NodeI
 
     for (auto& i : _secrets) {
         auto hash = util::sha1(i.secret + address.to_string() + id.to_bytestring());
-        if (std::string((char *)hash.data(), hash.size()) == token) {
+
+        if (boost::string_view((char *)hash.data(), hash.size()) == token) {
             return true;
         }
     }
@@ -229,9 +230,10 @@ boost::optional<BencodedValue> DataStore::get_immutable(NodeID id)
     return it->second.value;
 }
 
-NodeID DataStore::mutable_get_id(util::Ed25519PublicKey public_key, const std::string& salt)
+NodeID DataStore::mutable_get_id( util::Ed25519PublicKey public_key
+                                , boost::string_view salt)
 {
-    return util::sha1(util::bytes::to_string(public_key.serialize()) + salt);
+    return util::sha1(public_key.serialize(), salt);
 }
 
 void DataStore::put_mutable(MutableDataItem item)

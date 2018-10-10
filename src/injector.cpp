@@ -160,10 +160,12 @@ public:
     // TODO: Replace this with cancellation support in which fetch_ operations
     // get a signal parameter
     InjectorCacheControl( asio::io_service& ios
+                        , const InjectorConfig& config
                         , unique_ptr<CacheInjector>& injector
                         , uuid_generator& genuuid
                         , Signal<void()>& abort_signal)
         : injector(injector)
+        , config(config)
         , genuuid(genuuid)
         , cc("Ouinet Injector")
     {
@@ -233,12 +235,16 @@ private:
         // This injection code logs errors but does not propagate them.
         auto inject = [
             rq, rs,
-            injector = injector.get()
+            injector = injector.get(),
+            db_type = config.default_db_type()
         ] (boost::asio::yield_context yield) mutable -> string {
             rq.erase(http_::request_sync_injection_hdr);
 
             sys::error_code ec;
-            auto ret = injector->insert_content(move(rq), move(rs), yield[ec]);
+            auto ret = injector->insert_content( move(rq)
+                                               , move(rs)
+                                               , db_type
+                                               , yield[ec]);
 
             if (ec) {
                 cout << "!Insert failed: " << rq.target()
@@ -273,11 +279,14 @@ private:
                                        , asio::error::operation_not_supported);
 
         // TODO: use string_view
-        return injector->get_content(rq.target().to_string(), yield);
+        return injector->get_content( rq.target().to_string()
+                                    , config.default_db_type()
+                                    , yield);
     }
 
 private:
     unique_ptr<CacheInjector>& injector;
+    const InjectorConfig& config;
     uuid_generator& genuuid;
     CacheControl cc;
     string last_host; // A host to which the below connection was established
@@ -298,6 +307,7 @@ void serve( InjectorConfig& config
     });
 
     InjectorCacheControl cc( con.get_io_service()
+                           , config
                            , injector
                            , genuuid
                            , close_connection_signal);
@@ -477,7 +487,7 @@ int main(int argc, const char* argv[])
 
     auto cache_injector = std::make_unique<CacheInjector>
                             ( ios
-                            , config.bt_publisher_private_key()
+                            , config.bt_private_key()
                             , config.repo_root());
 
     auto shutdown_ipfs_slot = shutdown_signal.connect([&] {
@@ -486,7 +496,7 @@ int main(int argc, const char* argv[])
 
     // Although the IPNS ID is already in IPFS's config file,
     // this just helps put all info relevant to the user right in the repo root.
-    auto ipns_id = cache_injector->id();
+    auto ipns_id = cache_injector->ipfs_id();
     LOG_DEBUG("IPNS DB: " + ipns_id);
     util::create_state_file(config.repo_root()/"cache-ipns", ipns_id);
 

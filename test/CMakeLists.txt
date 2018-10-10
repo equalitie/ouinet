@@ -34,6 +34,7 @@ target_link_libraries(test-timeout-stream ${Boost_LIBRARIES})
 ################################################################################
 file(GLOB bt_cpp_files "../src/bittorrent/*.cpp"
                        "../src/util/crypto.cpp"
+                       "../src/util/sha1.cpp"
                        "../src/asio.cpp")
 
 add_executable(test-bittorrent "test_bittorrent.cpp" ${bt_cpp_files})

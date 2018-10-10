@@ -1,10 +1,7 @@
 #pragma once
 
-#include <array>
-#include <string>
-#include <vector>
 #include <boost/optional.hpp>
-#include <boost/utility/string_view.hpp>
+#include "sha1.h"
 
 /*
  * Forward declarations for opaque libgcrypt data structures.
@@ -18,9 +15,6 @@ namespace util {
 void crypto_init();
 
 std::string random(unsigned int size);
-
-std::array<uint8_t, 20> sha1(const std::string& data);
-std::array<uint8_t, 20> sha1(const std::vector<unsigned char>& data);
 
 class Ed25519PublicKey {
     public:
@@ -69,6 +63,8 @@ class Ed25519PrivateKey {
 
 std::ostream& operator<<(std::ostream&, const Ed25519PublicKey&);
 std::ostream& operator<<(std::ostream&, const Ed25519PrivateKey&);
+std::istream& operator>>(std::istream&, Ed25519PublicKey&);
+std::istream& operator>>(std::istream&, Ed25519PrivateKey&);
 
 } // util namespace
 } // ouinet namespace

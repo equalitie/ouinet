@@ -1,6 +1,7 @@
 #pragma once
 
 #include "util/crypto.h"
+#include "cache/db.h"
 
 namespace ouinet {
 
@@ -36,8 +37,14 @@ public:
     std::string credentials() const
     { return _credentials; }
 
-    boost::optional<util::Ed25519PrivateKey> bt_publisher_private_key() const
-    { return _bt_publisher_private_key; }
+    util::Ed25519PrivateKey bt_private_key() const
+    { return _bt_private_key; }
+
+    DbType default_db_type() const
+    { return _default_db_type; }
+
+private:
+    void setup_bt_private_key(const std::string& hex);
 
 private:
     bool _is_help = false;
@@ -47,7 +54,8 @@ private:
     boost::optional<asio::ip::tcp::endpoint> _tcp_endpoint;
     boost::filesystem::path OUINET_CONF_FILE = "ouinet-injector.conf";
     std::string _credentials;
-    boost::optional<util::Ed25519PrivateKey> _bt_publisher_private_key;
+    util::Ed25519PrivateKey _bt_private_key;
+    DbType _default_db_type = DbType::btree;
 };
 
 inline
@@ -72,8 +80,11 @@ InjectorConfig::options_description()
         ("credentials", po::value<string>()
          , "<username>:<password> authentication pair. "
            "If unused, this injector shall behave as an open proxy.")
-        ("bittorrent-publisher-private-key", po::value<string>()
-         , "Private key of the BitTorrent/BEP44 based publisher")
+        ("bittorrent-private-key", po::value<string>()
+         , "Private key of the BitTorrent/BEP44 subsystem")
+        ("default-db"
+         , po::value<string>()->default_value("btree")
+         , "Default database type to use, can be either \"btree\" or \"bep44\"")
         ;
 
     return desc;
@@ -154,16 +165,50 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         _tcp_endpoint = util::parse_tcp_endpoint(vm["listen-on-tcp"].as<string>());
     }
 
-    if (vm.count("bittorrent-publisher-private-key")) {
-        string value = vm["bittorrent-publisher-private-key"].as<string>();
+    setup_bt_private_key( vm.count("bittorrent-private-key")
+                        ? vm["bittorrent-private-key"].as<string>()
+                        : string());
 
-        _bt_publisher_private_key = util::Ed25519PrivateKey::from_hex(value);
+    std::cerr << "Using BT Public key: "
+              << _bt_private_key.public_key() << std::endl;
 
-        if (!_bt_publisher_private_key) {
-            throw std::runtime_error(
-                    util::str("Failed parsing '", value, "' as Ed25519 private key"));
+    if (vm.count("default-db")) {
+        auto type = vm["default-db"].as<string>();
+
+        if (type == "btree") {
+            _default_db_type = DbType::btree;
+        }
+        else if (type == "bep44") {
+            _default_db_type = DbType::bep44;
+        }
+        else {
+            throw std::runtime_error("Invalid value for --default-db-type");
         }
     }
+}
+
+inline void InjectorConfig::setup_bt_private_key(const std::string& hex)
+{
+    fs::path priv_config = _repo_root/"bt-private-key";
+    fs::path pub_config  = _repo_root/"bt-public-key";
+
+    if (hex.empty()) {
+        if (fs::exists(priv_config)) {
+            fs::ifstream(priv_config) >> _bt_private_key;
+            fs::ofstream(pub_config)  << _bt_private_key.public_key();
+            return;
+        }
+
+        _bt_private_key = util::Ed25519PrivateKey::generate();
+
+        fs::ofstream(priv_config) << _bt_private_key;
+        fs::ofstream(pub_config)  << _bt_private_key.public_key();
+        return;
+    }
+
+    _bt_private_key = *util::Ed25519PrivateKey::from_hex(hex);
+    fs::ofstream(priv_config) << _bt_private_key;
+    fs::ofstream(pub_config)  << _bt_private_key.public_key();
 }
 
 } // ouinet namespace

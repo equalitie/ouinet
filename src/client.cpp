@@ -15,7 +15,6 @@
 #include <cstdlib>  // for atexit()
 
 #include "cache/cache_client.h"
-#include "cache/http_desc.h"
 
 #include "namespaces.h"
 #include "http_util.h"
@@ -274,7 +273,10 @@ Client::State::fetch_stored( const Request& request
 
     // TODO: use string_view for the key.
     auto key = request.target();
-    return _cache->get_content(key.to_string(), yield);
+
+    return _cache->get_content( key.to_string()
+                              , _config.default_db_type()
+                              , yield);
 }
 
 //------------------------------------------------------------------------------
@@ -487,31 +489,15 @@ public:
         , request_config(request_config)
         , cc("Ouinet Client")
     {
-        cc.fetch_stored = [&] (const Request& rq, Yield yield) {
-            return fetch_stored(rq, yield);
-        };
-
         cc.fetch_fresh = [&] (const Request& rq, Yield yield) {
             return fetch_fresh(rq, yield);
         };
 
+        cc.fetch_stored = [&] (const Request& rq, Yield yield) {
+            return fetch_stored(rq, yield);
+        };
+
         cc.max_cached_age(client_state._config.max_cached_age());
-    }
-
-    CacheEntry
-    fetch_stored(const Request& request, Yield yield) {
-        yield.log("Fetching from cache");
-
-        sys::error_code ec;
-        auto r = client_state.fetch_stored(request, request_config, yield[ec]);
-
-        if (!ec) {
-            yield.log("Fetched from cache success, status: ", r.response.result());
-        } else {
-            yield.log("Fetched from cache error: ", ec.message());
-        }
-
-        return or_throw(yield, ec, move(r));
     }
 
     Response fetch_fresh(const Request& request, Yield yield) {
@@ -527,6 +513,22 @@ public:
             yield.log("Fetched fresh success, status: ", r.result());
         } else {
             yield.log("Fetched fresh error: ", ec.message());
+        }
+
+        return or_throw(yield, ec, move(r));
+    }
+
+    CacheEntry
+    fetch_stored(const Request& request, Yield yield) {
+        yield.log("Fetching from cache");
+
+        sys::error_code ec;
+        auto r = client_state.fetch_stored(request, request_config, yield[ec]);
+
+        if (!ec) {
+            yield.log("Fetched from cache success, status: ", r.response.result());
+        } else {
+            yield.log("Fetched from cache error: ", ec.message());
         }
 
         return or_throw(yield, ec, move(r));
@@ -869,7 +871,7 @@ void Client::State::setup_ipfs_cache()
 
         {
             LOG_DEBUG("Starting IPFS Cache with IPNS ID: ", ipns);
-            LOG_DEBUG("And BitTorrent pubkey: ", _config.bt_resolver_pub_key());
+            LOG_DEBUG("And BitTorrent pubkey: ", _config.bt_pub_key());
 
             auto on_exit = defer([&] { _is_ipns_being_setup = false; });
 
@@ -892,7 +894,7 @@ void Client::State::setup_ipfs_cache()
             sys::error_code ec;
             _cache = CacheClient::build(_ios
                                        , ipns
-                                       , _config.bt_resolver_pub_key()
+                                       , _config.bt_pub_key()
                                        , _config.repo_root()
                                        , cancel
                                        , yield[ec]);

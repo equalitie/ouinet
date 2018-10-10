@@ -6,6 +6,7 @@
 #include "namespaces.h"
 #include "util.h"
 #include "util/crypto.h"
+#include "cache/db.h"
 
 namespace ouinet {
 
@@ -65,8 +66,8 @@ public:
         return _front_end_endpoint;
     }
 
-    boost::optional<util::Ed25519PublicKey> bt_resolver_pub_key() const {
-        return _bt_resolver_pub_key;
+    boost::optional<util::Ed25519PublicKey> bt_pub_key() const {
+        return _bt_pubkey;
     }
 
     bool is_help() const { return _is_help; }
@@ -102,13 +103,18 @@ public:
            ("front-end-ep"
             , po::value<string>()
             , "Front-end's endpoint (in <IP>:<PORT> format)")
-           ("bittorrent-resolver-public-key"
+           ("bittorrent-public-key"
             , po::value<string>()
-            , "Public key of the BitTorrent/BEP44 based resolver")
+            , "Public key of the BitTorrent/BEP44 subsystem")
+           ("default-db"
+            , po::value<string>()->default_value("btree")
+            , "Default database type to use, can be either \"btree\" or \"bep44\"")
            ;
 
         return desc;
     }
+
+    DbType default_db_type() const { return _default_db_type; }
 
 private:
     bool _is_help = false;
@@ -119,13 +125,14 @@ private:
     std::string _ipns;
     bool _enable_http_connect_requests = false;
     asio::ip::tcp::endpoint _front_end_endpoint;
+    DbType _default_db_type = DbType::btree;
 
     boost::posix_time::time_duration _max_cached_age
         = boost::posix_time::hours(7*24);  // one week
 
     std::map<std::string, std::string> _injector_credentials;
 
-    boost::optional<util::Ed25519PublicKey> _bt_resolver_pub_key;
+    boost::optional<util::Ed25519PublicKey> _bt_pubkey;
 };
 
 inline
@@ -251,14 +258,28 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         set_credentials(util::str(*_injector_ep), cred);
     }
 
-    if (vm.count("bittorrent-resolver-public-key")) {
-        string value = vm["bittorrent-resolver-public-key"].as<string>();
+    if (vm.count("bittorrent-public-key")) {
+        string value = vm["bittorrent-public-key"].as<string>();
 
-        _bt_resolver_pub_key = util::Ed25519PublicKey::from_hex(value);
+        _bt_pubkey = util::Ed25519PublicKey::from_hex(value);
 
-        if (!_bt_resolver_pub_key) {
+        if (!_bt_pubkey) {
             throw std::runtime_error(
                     util::str("Failed parsing '", value, "' as Ed25519 public key"));
+        }
+    }
+
+    if (vm.count("default-db")) {
+        auto type = vm["default-db"].as<string>();
+
+        if (type == "btree") {
+            _default_db_type = DbType::btree;
+        }
+        else if (type == "bep44") {
+            _default_db_type = DbType::bep44;
+        }
+        else {
+            throw std::runtime_error("Invalid value for --default-db-type");
         }
     }
 }
