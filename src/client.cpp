@@ -146,6 +146,9 @@ private:
     unique_ptr<util::PidFile> _pid_file;
 
     bool _is_ipns_being_setup = false;
+
+    // For debugging
+    uint64_t _next_connection_id = 0;
 };
 
 //------------------------------------------------------------------------------
@@ -737,6 +740,8 @@ void Client::State::serve_request( GenericConnection&& con
              , {true, queue<responder>({responder::injector})} ),
     });
 
+    auto connection_id = _next_connection_id++;
+
     // Is MitM active?
     bool mitm(false);
     // Saved host/port from CONNECT request.
@@ -748,7 +753,7 @@ void Client::State::serve_request( GenericConnection&& con
         // Read the (clear-text) HTTP request
         http::async_read(con, buffer, req, yield_[ec]);
 
-        Yield yield(con.get_io_service(), yield_);
+        Yield yield(con.get_io_service(), yield_, util::str('C', connection_id));
 
         if ( ec == http::error::end_of_stream
           || ec == asio::ssl::error::stream_truncated) break;

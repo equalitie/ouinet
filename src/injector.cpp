@@ -380,6 +380,7 @@ resolve_target( const Request& req
 //------------------------------------------------------------------------------
 static
 void serve( InjectorConfig& config
+          , uint64_t connection_id
           , GenericConnection con
           , unique_ptr<CacheInjector>& injector
           , uuid_generator& genuuid
@@ -403,7 +404,7 @@ void serve( InjectorConfig& config
         beast::flat_buffer buffer;
         http::async_read(con, buffer, req, yield_[ec]);
 
-        Yield yield(con.get_io_service(), yield_);
+        Yield yield(con.get_io_service(), yield_, util::str('C', connection_id));
 
         if (ec) break;
 
@@ -502,6 +503,8 @@ void listen( InjectorConfig& config
 
     WaitCondition shutdown_connections(ios);
 
+    uint64_t next_connection_id = 0;
+
     while (true) {
         GenericConnection connection = proxy_server.accept(yield[ec]);
         if (ec == boost::asio::error::operation_aborted) {
@@ -513,15 +516,19 @@ void listen( InjectorConfig& config
             continue;
         }
 
+        uint64_t connection_id = next_connection_id++;
+
         asio::spawn(ios, [
             connection = std::move(connection),
             &cache_injector,
             &shutdown_signal,
             &config,
             &genuuid,
+            connection_id,
             lock = shutdown_connections.lock()
         ] (boost::asio::yield_context yield) mutable {
             serve( config
+                 , connection_id
                  , std::move(connection)
                  , cache_injector
                  , genuuid
