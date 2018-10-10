@@ -148,6 +148,10 @@ static Request erase_hop_by_hop_headers(Request rq) {
 }
 
 //------------------------------------------------------------------------------
+static
+TCPLookup
+resolve_target(const Request&, asio::io_service&, Signal<void()>&, Yield yield);
+
 struct InjectorCacheControl {
 public:
     // TODO: Replace this with cancellation support in which fetch_ operations
@@ -178,12 +182,17 @@ public:
             Request rq = erase_hop_by_hop_headers(rq_);
             rq.keep_alive(true);
 
-            auto ret = fetch_http_page( ios
-                                      , connection
-                                      , rq
-                                      , default_timeout::fetch_http()
-                                      , abort_signal
-                                      , yield[ec]);
+            // Resolve target endpoint and check its validity.
+            TCPLookup lookup(resolve_target( rq, ios, abort_signal
+                                           , yield[ec]));
+            Response ret;
+            if (!ec)
+                ret = fetch_http_page( ios
+                                     , connection
+                                     , rq, lookup
+                                     , default_timeout::fetch_http()
+                                     , abort_signal
+                                     , yield[ec]);
 
             // Add an injection identifier header.
             ret.set(http_::response_injection_id_hdr, to_string(genuuid()));
@@ -289,6 +298,41 @@ resolve_target( const Request& req
               , Signal<void()>& shutdown_signal
               , Yield yield)
 {
+    sys::error_code ec;
+    auto lookup = resolve_target( req
+                                , con.get_io_service()
+                                , shutdown_signal
+                                , yield[ec]);
+    if (!ec)
+        return lookup;
+
+    // Prepare and send error message to `con`.
+    string host, err;
+    tie(host, ignore) = util::get_host_port(req);
+
+    if (ec == asio::error::netdb_errors::host_not_found)
+        err = "Could not resolve host: " + host;
+    else if (ec == asio::error::invalid_argument)
+        err = "Illegal target host: " + host;
+    else
+        err = "Unknown resolver error: " + ec.message();
+
+    handle_bad_request( con, req, err
+                      , yield[ec].tag("handle_bad_request"));
+    return or_throw<TCPLookup>(yield, ec);
+}
+
+// Resolve request target address, check whether it is valid
+// and return lookup results.
+// If not valid, set error code
+// (the returned lookup may not be usable then).
+static
+TCPLookup
+resolve_target( const Request& req
+              , asio::io_service& ios
+              , Signal<void()>& shutdown_signal
+              , Yield yield)
+{
     TCPLookup lookup;
     sys::error_code ec;
 
@@ -301,13 +345,10 @@ resolve_target( const Request& req
     // Resolve address and also use result for more sophisticaded checking.
     if (!local)
         lookup = util::tcp_async_resolve( host, port
-                                        , con.get_io_service()
+                                        , ios
                                         , shutdown_signal
                                         , yield[ec]);
     if (ec) {
-        handle_bad_request( con, req
-                          , "Could not resolve host: " + host
-                          , yield[ec].tag("handle_bad_request"));
         return or_throw<TCPLookup>(yield, ec);
     }
 
@@ -318,9 +359,6 @@ resolve_target( const Request& req
 
     if (local) {
         ec = asio::error::invalid_argument;
-        handle_bad_request( con, req
-                          , "Illegal target host: " + host
-                          , yield[ec].tag("handle_bad_request"));
         return or_throw<TCPLookup>(yield, ec);
     }
 
@@ -364,10 +402,14 @@ void serve( InjectorConfig& config
             continue;
         }
 
-        // Resolve target endpoint and check its validity.
-        TCPLookup lookup(resolve_target( req, con, close_connection_signal
-                                       , yield[ec]));
-        if (ec) continue;  // error message already sent to `con`
+        TCPLookup lookup;
+        bool inject = (req.find(http_::request_version_hdr) != req.end());
+        if (inject || req.method() == http::verb::connect) {
+            // Resolve target endpoint and check its validity.
+            lookup = resolve_target( req, con, close_connection_signal
+                                   , yield[ec]);
+            if (ec) continue;  // error message already sent to `con`
+        }
 
         if (req.method() == http::verb::connect) {
             return handle_connect_request( con
@@ -380,8 +422,7 @@ void serve( InjectorConfig& config
         // whether to behave like an injector or a proxy.
         Response res;
         auto req2(req);
-        auto ouinet_version_hdr = req2.find(http_::request_version_hdr);
-        if (ouinet_version_hdr == req2.end()) {
+        if (!inject) {
             // No Ouinet header, behave like a (non-caching) proxy.
             // TODO: Maybe reject requests for HTTPS URLS:
             // we are perfectly able to handle them (and do verification locally),
@@ -397,9 +438,7 @@ void serve( InjectorConfig& config
                                  , yield[ec].tag("fetch_http_page"));
         } else {
             // Ouinet header found, behave like a Ouinet injector.
-            // TODO: Reuse DNS lookup result below.
-            req2.erase(ouinet_version_hdr);  // do not propagate or cache the header
-
+            req2.erase(http_::request_version_hdr);  // do not propagate or cache the header
             res = cc.fetch(req2, yield[ec].tag("cache_control.fetch"));
         }
         if (ec) {
