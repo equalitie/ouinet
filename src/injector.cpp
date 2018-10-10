@@ -403,8 +403,8 @@ void serve( InjectorConfig& config
         }
 
         TCPLookup lookup;
-        bool inject = (req.find(http_::request_version_hdr) != req.end());
-        if (inject || req.method() == http::verb::connect) {
+        bool proxy = (req.find(http_::request_version_hdr) == req.end());
+        if (proxy || req.method() == http::verb::connect) {
             // Resolve target endpoint and check its validity.
             lookup = resolve_target( req, con, close_connection_signal
                                    , yield[ec]);
@@ -422,7 +422,7 @@ void serve( InjectorConfig& config
         // whether to behave like an injector or a proxy.
         Response res;
         auto req2(req);
-        if (!inject) {
+        if (proxy) {
             // No Ouinet header, behave like a (non-caching) proxy.
             // TODO: Maybe reject requests for HTTPS URLS:
             // we are perfectly able to handle them (and do verification locally),
