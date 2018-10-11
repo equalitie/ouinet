@@ -6,6 +6,9 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/beast/http/fields.hpp>
+#include <boost/beast/http/message.hpp>
+#include <boost/beast/http/string_body.hpp>
+
 
 namespace ouinet {
 
@@ -38,23 +41,11 @@ static const std::string response_descriptor_hdr = header_prefix + "Descriptor";
 
 namespace util {
 
-inline
-std::pair< beast::string_view
-         , beast::string_view
-         >
-split_host_port(const beast::string_view& hp)
-{
-    using namespace std;
-
-    auto pos = hp.find(':');
-
-    if (pos == string::npos) {
-        return make_pair(hp, "80");
-    }
-
-    return make_pair(hp.substr(0, pos), hp.substr(pos+1));
- 
- }
+// Get the host and port a request refers to,
+// either from the ``Host:`` header or from the target URI.
+// IPv6 addresses are returned without brackets.
+std::pair<std::string, std::string>
+get_host_port(const http::request<http::string_body>&);
 
 ///////////////////////////////////////////////////////////////////////////////
 template<class Num>
