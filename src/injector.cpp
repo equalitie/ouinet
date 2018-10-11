@@ -62,7 +62,7 @@ static
 void handle_bad_request( GenericConnection& con
                        , const Request& req
                        , string message
-                       , asio::yield_context yield)
+                       , Yield yield)
 {
     http::response<http::string_body> res{http::status::bad_request, req.version()};
 
@@ -71,6 +71,9 @@ void handle_bad_request( GenericConnection& con
     res.keep_alive(req.keep_alive());
     res.body() = message;
     res.prepare_payload();
+
+    yield.log("=== Sending back response ===");
+    yield.log(res);
 
     sys::error_code ec;
     http::async_write(con, res, yield[ec]);
@@ -84,7 +87,7 @@ static
 void handle_connect_request( GenericConnection& client_c
                            , const Request& req, const TCPLookup& lookup
                            , Signal<void()>& disconnect_signal
-                           , asio::yield_context yield)
+                           , Yield yield)
 {
     sys::error_code ec;
 
