@@ -376,9 +376,9 @@ Response Client::State::fetch_fresh
 
                     if (connres.result() != http::status::ok) {
                         // This error code is quite fake, so log the error too.
+                        // Unfortunately there is no body to show.
                         last_error = asio::error::connection_refused;
-                        cerr << "Failed HTTP CONNECT to " << connreq.target() << ": "
-                             << connres.result_int() << " " << connres.reason() << endl;
+                        yield.tag("proxy_connect").log(connres);
                         continue;
                     }
 
