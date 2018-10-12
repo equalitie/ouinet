@@ -15,6 +15,7 @@ from twisted.internet.defer import inlineCallbacks, Deferred
 from twisted.trial.unittest import TestCase
 from twisted.internet.base import DelayedCall
 
+import socket
 import urllib
 
 #making random requests not to relying on cache
@@ -49,6 +50,18 @@ class OuinetTests(TestCase):
     def safe_random_str(self, length):
         letters = string.ascii_lowercase
         return ''.join(random.choice(letters) for i in range(length))
+
+    def get_nonloopback_ip(self):
+        """Return a local IP which is not loopback.
+
+        This is needed since injectors may block such requests for security
+        reasons.
+        """
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('192.0.2.1', 1))  # no actual traffic here
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
     
     def run_tcp_injector(self, injector_args, deffered_tcp_port_ready):
         injector = OuinetInjector(OuinetConfig(app_name=TestFixtures.TCP_INJECTOR_NAME + "_tcp", timeout=TestFixtures.TCP_TRANSPORT_TIMEOUT, argv=injector_args, benchmark_regexes=[TestFixtures.TCP_PORT_READY_REGEX]), [deffered_tcp_port_ready])
@@ -99,13 +112,19 @@ class OuinetTests(TestCase):
         """
         Send a get request to request the test server to echo the content
         """
-        return self.request_url(port, "http://127.0.0.1:"+str(TestFixtures.TEST_HTTP_SERVER_PORT)+"/?content="+content)
+        url = "http://%s:%d/?content=%s" % (
+            self.get_nonloopback_ip(), TestFixtures.TEST_HTTP_SERVER_PORT, content
+        )
+        return self.request_url(port, url)
 
     def request_page(self, port, page_url):
         """
         Send a get request to request test content as a page on a specific sub url
         """
-        return self.request_url(port, "http://127.0.0.1:"+str(TestFixtures.TEST_HTTP_SERVER_PORT)+"/" + page_url)
+        url = "http://%s:%d/%s" % (
+            self.get_nonloopback_ip(), TestFixtures.TEST_HTTP_SERVER_PORT, page_url
+        )
+        return self.request_url(port, url)
     
     def request_url(self, port, url):
         ouinet_client_endpoint = TCP4ClientEndpoint(reactor, "127.0.0.1", port)

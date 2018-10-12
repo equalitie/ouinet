@@ -9,7 +9,7 @@ namespace ouinet {
 inline
 void full_duplex( GenericConnection& c1
                 , GenericConnection& c2
-                , asio::yield_context& yield)
+                , asio::yield_context yield)
 {
     static const auto half_duplex
         = []( GenericConnection& in

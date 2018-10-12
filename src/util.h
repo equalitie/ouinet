@@ -104,21 +104,17 @@ auto tcp_async_resolve( const std::string& host
 }
 
 // Return whether the given `host` points to a loopback address.
-// Please note that this implies a DNS lookup
-// to spot names that point to a loopback address.
-// No exceptions are raised (lookup failure returns false).
+// IPv6 addresses should not be bracketed.
 inline
-bool is_localhost( const std::string& host
-                 , asio::io_service& ios
-                 , Signal<void()>& cancel_signal
-                 , asio::yield_context yield)
+bool is_localhost(const std::string& host)
 {
 #define IPV4_LOOP "127(?:\\.[0-9]{1,3}){3}"
     // Fortunately, resolving also canonicalizes IPv6 addresses
     // so we can simplify the regular expression.`:)`
     static const boost::regex lhrx
       ( "^(?:"
-        IPV4_LOOP             // IPv4, e.g. 127.1.2.3
+        "(?:localhost|ip6-localhost|ip6-loopback)(?:\\.localdomain)?"
+        "|" IPV4_LOOP         // IPv4, e.g. 127.1.2.3
         "|::1"                // IPv6 loopback
         "|::ffff:" IPV4_LOOP  // IPv4-mapped IPv6
         "|::" IPV4_LOOP       // IPv4-compatible IPv6
@@ -129,27 +125,21 @@ bool is_localhost( const std::string& host
     if (boost::regex_match(host, m, lhrx))
         return true;
 
-    // For the less evident ones, lookup DNS.
-    sys::error_code ec;
-    auto lookup = tcp_async_resolve( host, "0"  // not interested in port
-                                   , ios, cancel_signal
-                                   , yield[ec]);
-
-    if (ec) return false;
-
-#if BOOST_VERSION >= 106700
-    for (auto r : lookup)
-        if (boost::regex_match(r.endpoint().address().to_string(), m, lhrx))
-            return true;
-#else
-    while (*lookup != asio::ip::tcp::endpoint()) {
-        if (boost::regex_match(lookup->endpoint().address().to_string(), m, lhrx))
-            return true;
-        lookup++;
-    }
-#endif
-
     return false;
+}
+
+// Format host/port pair taking IPv6 into account.
+inline
+std::string format_ep(const std::string& host, const std::string& port) {
+    return ( (host.find(':') == std::string::npos
+              ? host // IPv4/name
+              : "[" + host + "]")  // IPv6
+             + ":" + port);
+}
+
+inline
+std::string format_ep(const asio::ip::tcp::endpoint& ep) {
+    return format_ep(ep.address().to_string(), std::to_string(ep.port()));
 }
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -163,6 +163,7 @@ file(GLOB client_sources
     "./src/util/crypto.cpp"
     "./src/util/sha1.cpp"
     "./src/util.cpp"
+    "./src/http_util.cpp"
 )
 
 if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
@@ -209,15 +210,17 @@ if (WITH_INJECTOR)
         "./src/util/crypto.cpp"
         "./src/util/sha1.cpp"
         "./src/util.cpp"
+        "./src/http_util.cpp"
     )
 
     add_executable(injector ${injector_sources})
-    add_dependencies(injector json ${ASIO_IPFS_TARGET} gcrypt)
+    add_dependencies(injector json uri ${ASIO_IPFS_TARGET} gcrypt)
 
     target_link_libraries(injector
         ouiservice-i2p
         ${Boost_LIBRARIES}
         ${ASIO_IPFS_LIBRARIES}
+        ${URI_LIBRARY}
         ${GCRYPT_LIBRARIES}
     )
 endif() # if WITH_INJECTOR

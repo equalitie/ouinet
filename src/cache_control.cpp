@@ -618,6 +618,6 @@ CacheControl::try_to_cache( const Request& request
     }
 
     // TODO: Apply similar filter to the request.
-    return store(request, move(filter_before_store(move(response))), yield);
+    return store(request, filter_before_store(move(response)), yield);
 }
 

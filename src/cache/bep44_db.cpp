@@ -5,15 +5,13 @@
 using namespace std;
 using namespace ouinet;
 
-using boost::string_view;
-
 namespace bt = bittorrent;
 
 template<size_t N>
 static
-string_view as_string_view(const array<uint8_t, N>& a)
+boost::string_view as_string_view(const array<uint8_t, N>& a)
 {
-    return string_view((char*) a.data(), a.size());
+    return boost::string_view((char*) a.data(), a.size());
 }
 
 Bep44ClientDb::Bep44ClientDb( bt::MainlineDht& bt_dht

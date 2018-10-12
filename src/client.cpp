@@ -98,7 +98,7 @@ private:
 
     void handle_connect_request( GenericConnection& client_c
                                , const Request& req
-                               , asio::yield_context yield);
+                               , Yield yield);
 
     CacheEntry
     fetch_stored( const Request& request
@@ -176,7 +176,7 @@ static
 void handle_bad_request( GenericConnection& con
                        , const Request& req
                        , string message
-                       , asio::yield_context yield)
+                       , Yield yield)
 {
     http::response<http::string_body> res{http::status::bad_request, req.version()};
 
@@ -186,6 +186,9 @@ void handle_bad_request( GenericConnection& con
     res.body() = message;
     res.prepare_payload();
 
+    yield.log("=== Sending back response ===");
+    yield.log(res);
+
     sys::error_code ec;
     http::async_write(con, res, yield[ec]);
 }
@@ -193,7 +196,7 @@ void handle_bad_request( GenericConnection& con
 //------------------------------------------------------------------------------
 void Client::State::handle_connect_request( GenericConnection& client_c
                                           , const Request& req
-                                          , asio::yield_context yield)
+                                          , Yield yield)
 {
     // https://tools.ietf.org/html/rfc2817#section-5.2
 
@@ -373,9 +376,9 @@ Response Client::State::fetch_fresh
 
                     if (connres.result() != http::status::ok) {
                         // This error code is quite fake, so log the error too.
+                        // Unfortunately there is no body to show.
                         last_error = asio::error::connection_refused;
-                        cerr << "Failed HTTP CONNECT to " << connreq.target() << ": "
-                             << connres.result_int() << " " << connres.reason() << endl;
+                        yield.tag("proxy_connect").log(connres);
                         continue;
                     }
 
