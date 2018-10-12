@@ -872,6 +872,7 @@ void Client::State::setup_ipfs_cache()
 
         const string ipns = _config.ipns();
 
+        if (_config.cache_enabled())
         {
             LOG_DEBUG("Starting IPFS Cache with IPNS ID: ", ipns);
             LOG_DEBUG("And BitTorrent pubkey: ", _config.bt_pub_key());
