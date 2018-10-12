@@ -91,9 +91,8 @@ CacheEntry CacheInjector::get_content( string url
                                      , asio::yield_context yield)
 {
     sys::error_code ec;
-    string desc_data;
 
-    get_db(db_type)->find(url, yield[ec]);
+    string desc_data = get_db(db_type)->find(url, yield[ec]);
 
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
