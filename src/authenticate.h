@@ -11,24 +11,24 @@ namespace authenticate_detail {
     {
         while(encoded.starts_with(" ")) encoded.remove_prefix(1);
         while(encoded.ends_with(" "))   encoded.remove_suffix(1);
-    
+
         if (encoded.starts_with("Basic")) {
             encoded.remove_prefix(strlen("Basic"));
         } else {
             return {};
         }
-    
+
         while(encoded.starts_with(" ")) encoded.remove_prefix(1);
-    
+
         std::string decoded = beast::detail::base64_decode(encoded.to_string());
-    
+
         // Trim the Unicode character U+00A3 (POUND SIGN) from the end if present.
         if (const auto s = decoded.size() >= 2) {
             if (decoded[s - 1] == 0xa3 && decoded[s - 2] == 0xc2) {
                 decoded.resize(s - 2);
             }
         }
-    
+
         return decoded;
     }
 }
