@@ -17,6 +17,7 @@
 #include "cache/cache_client.h"
 
 #include "namespaces.h"
+#include "connection_pool.h"
 #include "http_util.h"
 #include "fetch_http_page.h"
 #include "client_front_end.h"
@@ -105,10 +106,7 @@ private:
                 , request_route::Config& request_config
                 , asio::yield_context yield);
 
-    Response fetch_fresh( const Request&
-                        , request_route::Config&
-                        , optional<OuiServiceClient::ConnectInfo>& injector_c
-                        , Yield);
+    Response fetch_fresh(const Request&, request_route::Config&, Yield);
 
     CacheControl build_cache_control(request_route::Config& request_config);
 
@@ -149,6 +147,7 @@ private:
 
     // For debugging
     uint64_t _next_connection_id = 0;
+    ConnectionPool<std::string> _injector_connections;
 };
 
 //------------------------------------------------------------------------------
@@ -289,7 +288,6 @@ Client::State::fetch_stored( const Request& request
 Response Client::State::fetch_fresh
         ( const Request& request
         , request_route::Config& request_config
-        , optional<OuiServiceClient::ConnectInfo>& injector_c
         , Yield yield)
 {
     using namespace asio::error;
@@ -407,42 +405,36 @@ Response Client::State::fetch_fresh
                 // Connect to the injector.
                 sys::error_code ec;
 
-                optional<OuiServiceClient::ConnectInfo> connect_info;
+                using Con = ConnectionPool<std::string>::Connection;
 
-                auto& inj = [&] () -> auto& {
-                    if (injector_c) {
-                        return *injector_c;
-                    } else {
-                        connect_info = _injector->connect
-                            ( yield[ec].tag("connect_to_injector2")
-                            , _shutdown_signal);
+                unique_ptr<Con> con = _injector_connections.pop_front();
 
-                        return *connect_info;
-                    }
-                }();
+                if (!con) {
+                    auto c = _injector->connect
+                        ( yield[ec].tag("connect_to_injector2")
+                        , _shutdown_signal);
 
-                if (ec) {
-                    last_error = ec;
-                    continue;
+                    if (ec) { last_error = ec; continue; }
+
+                    con = make_unique<Con>( move(c.connection)
+                                          , move(c.remote_endpoint) );
                 }
 
                 // Build the actual request to send to the injector.
-                Request injreq(request);
-                if (r == responder::injector)
+                Request injreq = request;
+
+                if (r == responder::injector) {
                     // Add first a Ouinet version header
                     // to hint it to behave like an injector instead of a proxy.
                     injreq.set( http_::request_version_hdr
                               , http_::request_version_hdr_latest);
-                if (auto credentials = _config.credentials_for(inj.remote_endpoint))
+                }
+
+                if (auto credentials = _config.credentials_for(con->aux))
                     injreq = authorize(injreq, *credentials);
 
                 // Send the request to the injector/proxy.
-                auto res = fetch_http_page( _ios
-                                          , inj.connection
-                                          , injreq
-                                          , default_timeout::fetch_http()
-                                          , _shutdown_signal
-                                          , yield[ec].tag("fetch_http_page"));
+                auto res = con->request(injreq, yield[ec]);
 
                 if (ec) {
                     last_error = ec;
@@ -450,9 +442,7 @@ Response Client::State::fetch_fresh
                 }
 
                 if (res.keep_alive()) {
-                    if (!injector_c) { injector_c = std::move(connect_info); }
-                } else {
-                    if (injector_c) { injector_c->connection.close(); }
+                    _injector_connections.push_back(std::move(con));
                 }
 
                 if (r == responder::injector) {
@@ -512,7 +502,6 @@ public:
         sys::error_code ec;
         auto r = client_state.fetch_fresh( request
                                          , request_config
-                                         , _injector_connection
                                          , yield[ec]);
 
         if (!ec) {
@@ -549,13 +538,6 @@ private:
     Client::State& client_state;
     request_route::Config& request_config;
     CacheControl cc;
-
-    // If a connection has been established, we keep it for reuse if the
-    // request and response contained the 'Connection: keep-alive' header
-    // field.
-    // TODO: Keep one for direct origin connection and one for proxy connection
-    // as well.
-    optional<OuiServiceClient::ConnectInfo> _injector_connection;
 };
 
 //------------------------------------------------------------------------------
