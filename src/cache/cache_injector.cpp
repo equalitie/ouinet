@@ -18,6 +18,10 @@ using namespace std;
 using namespace ouinet;
 namespace bt = ouinet::bittorrent;
 
+// TODO: Factor out descriptor cache encoding stuff,
+// along with IPFS storage of descriptors in `http_desc.h`.
+static const std::string desc_ipfs_prefix = "/ipfs/";
+
 CacheInjector::CacheInjector
         ( asio::io_service& ios
         , util::Ed25519PrivateKey bt_privkey
@@ -48,6 +52,8 @@ InjectorDb* CacheInjector::get_db(DbType db_type) const
     return nullptr;
 }
 
+// TODO: Factor out descriptor cache encoding stuff,
+// along with IPFS storage of descriptors in `http_desc.h`.
 string CacheInjector::insert_content( Request rq
                                     , Response rs
                                     , DbType db_type
@@ -79,13 +85,16 @@ string CacheInjector::insert_content( Request rq
     // TODO: use string_view for key
     auto key = rq.target().to_string();
 
-    get_db(db_type)->insert(move(key), desc.first, yield[ec]);
+    // Insert IPFS link to descriptor.
+    get_db(db_type)->insert(move(key), desc_ipfs_prefix + desc.first, yield[ec]);
 
     if (!ec && *wd) ec = asio::error::operation_aborted;
 
     return or_throw(yield, ec, move(desc.second));
 }
 
+// TODO: Factor out descriptor cache encoding stuff,
+// along with IPFS storage of descriptors in `http_desc.h`.
 CacheEntry CacheInjector::get_content( string url
                                      , DbType db_type
                                      , asio::yield_context yield)
@@ -94,9 +103,16 @@ CacheEntry CacheInjector::get_content( string url
 
     string desc_data = get_db(db_type)->find(url, yield[ec]);
 
+    // Retrieve descriptor from IPFS link.
+    if (!ec && desc_data.find(desc_ipfs_prefix) != 0) {
+        cerr << "WARNING: Invalid index entry for descriptor of " << url << endl;
+        ec = asio::error::not_found;
+    }
+
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
-    return descriptor::http_parse(*_ipfs_node, desc_data, yield);
+    string desc_ipfs(desc_data.substr(desc_ipfs_prefix.length()));
+    return descriptor::http_parse_ipfs(*_ipfs_node, desc_ipfs, yield);
 }
 
 CacheInjector::~CacheInjector()

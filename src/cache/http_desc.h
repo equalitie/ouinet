@@ -117,9 +117,9 @@ http_create( asio_ipfs::node& ipfs
 // retrieve the head from the descriptor and the body data from the `cache`,
 // assemble and return the HTTP response along with its identifier.
 static inline
-CacheEntry http_parse( asio_ipfs::node& ipfs
-                     , const std::string& desc_ipfs
-                     , asio::yield_context yield)
+CacheEntry http_parse_ipfs( asio_ipfs::node& ipfs
+                          , const std::string& desc_ipfs
+                          , asio::yield_context yield)
 {
 
     using Response = http::response<http::dynamic_body>;

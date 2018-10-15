@@ -17,6 +17,10 @@ namespace bt   = ouinet::bittorrent;
 
 using boost::optional;
 
+// TODO: Factor out descriptor cache encoding stuff,
+// along with IPFS storage of descriptors in `http_desc.h`.
+static const std::string desc_ipfs_prefix = "/ipfs/";
+
 unique_ptr<CacheClient>
 CacheClient::build( asio::io_service& ios
                   , string ipns
@@ -109,18 +113,26 @@ string CacheClient::get_descriptor( string url
     return db->find(url, yield);
 }
 
+// TODO: Factor out descriptor cache encoding stuff,
+// along with IPFS storage of descriptors in `http_desc.h`.
 CacheEntry CacheClient::get_content( string url
                                    , DbType db_type
                                    , asio::yield_context yield)
 {
-    using std::get;
     sys::error_code ec;
 
-    auto desc_ipfs = get_descriptor(url, db_type, yield[ec]);
+    string desc_data = get_descriptor(url, db_type, yield[ec]);
+
+    // Retrieve descriptor from IPFS link.
+    if (!ec && desc_data.find(desc_ipfs_prefix) != 0) {
+        cerr << "WARNING: Invalid index entry for descriptor of " << url << endl;
+        ec = asio::error::not_found;
+    }
 
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
-    return descriptor::http_parse(*_ipfs_node, desc_ipfs, yield);
+    string desc_ipfs(desc_data.substr(desc_ipfs_prefix.length()));
+    return descriptor::http_parse_ipfs(*_ipfs_node, desc_ipfs, yield);
 }
 
 void CacheClient::set_ipns(std::string ipns)
