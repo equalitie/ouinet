@@ -141,12 +141,13 @@ void handle_connect_request( GenericStream& client_c
 
 //------------------------------------------------------------------------------
 static Request erase_hop_by_hop_headers(Request rq) {
-    rq.erase(http::field::connection);
-    rq.erase(http::field::keep_alive);
-    rq.erase(http::field::public_);
+    //// TODO
+    //rq.erase(http::field::connection);
+    //rq.erase(http::field::keep_alive);
+    //rq.erase(http::field::public_);
+    //rq.erase(http::field::transfer_encoding);
+    //rq.erase(http::field::upgrade);
     rq.erase(http::field::proxy_authenticate);
-    rq.erase(http::field::transfer_encoding);
-    rq.erase(http::field::upgrade);
     return rq;
 }
 
