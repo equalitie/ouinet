@@ -584,20 +584,24 @@ int main(int argc, const char* argv[])
 
     Signal<void()> shutdown_signal;
 
-    auto cache_injector = std::make_unique<CacheInjector>
-                            ( ios
-                            , config.bt_private_key()
-                            , config.repo_root());
+    unique_ptr<CacheInjector> cache_injector;
 
-    auto shutdown_ipfs_slot = shutdown_signal.connect([&] {
-        cache_injector = nullptr;
-    });
+    if (config.cache_enabled()) {
+        cache_injector = make_unique<CacheInjector>
+                                ( ios
+                                , config.bt_private_key()
+                                , config.repo_root());
 
-    // Although the IPNS ID is already in IPFS's config file,
-    // this just helps put all info relevant to the user right in the repo root.
-    auto ipns_id = cache_injector->ipfs_id();
-    LOG_DEBUG("IPNS DB: " + ipns_id);
-    util::create_state_file(config.repo_root()/"cache-ipns", ipns_id);
+        auto shutdown_ipfs_slot = shutdown_signal.connect([&] {
+            cache_injector = nullptr;
+        });
+
+        // Although the IPNS ID is already in IPFS's config file,
+        // this just helps put all info relevant to the user right in the repo root.
+        auto ipns_id = cache_injector->ipfs_id();
+        LOG_DEBUG("IPNS DB: " + ipns_id);
+        util::create_state_file(config.repo_root()/"cache-ipns", ipns_id);
+    }
 
     OuiServiceServer proxy_server(ios);
 
