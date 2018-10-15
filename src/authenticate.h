@@ -2,7 +2,7 @@
 
 #include <boost/beast/core/detail/base64.hpp>
 #include "namespaces.h"
-#include "generic_connection.h"
+#include "generic_stream.h"
 
 namespace ouinet {
 
@@ -37,7 +37,7 @@ namespace authenticate_detail {
 template<class Request>
 inline
 bool authenticate( Request& req
-                 , GenericConnection& con
+                 , GenericStream& con
                  , beast::string_view credentials /* e.g.: "test:123" */
                  , asio::yield_context yield)
 {

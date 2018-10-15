@@ -47,7 +47,7 @@ void TcpOuiServiceServer::stop_listen()
     }
 }
 
-GenericConnection TcpOuiServiceServer::accept(asio::yield_context yield)
+GenericStream TcpOuiServiceServer::accept(asio::yield_context yield)
 {
     sys::error_code ec;
 
@@ -55,7 +55,7 @@ GenericConnection TcpOuiServiceServer::accept(asio::yield_context yield)
     _acceptor.async_accept(socket, yield[ec]);
 
     if (ec) {
-        return or_throw<GenericConnection>(yield, ec, GenericConnection());
+        return or_throw<GenericStream>(yield, ec);
     }
 
     static const auto tcp_shutter = [](asio::ip::tcp::socket& s) {
@@ -64,7 +64,7 @@ GenericConnection TcpOuiServiceServer::accept(asio::yield_context yield)
         s.close(ec);
     };
 
-    return GenericConnection(std::move(socket), tcp_shutter);
+    return GenericStream(std::move(socket), tcp_shutter);
 }
 
 TcpOuiServiceClient::TcpOuiServiceClient(asio::io_service& ios, asio::ip::tcp::endpoint endpoint):
@@ -95,7 +95,7 @@ TcpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
         s.close();
     };
 
-    return ConnectInfo{ GenericConnection(std::move(socket), tcp_shutter)
+    return ConnectInfo{ GenericStream(std::move(socket), tcp_shutter)
                       , util::str(_endpoint) };
 }
 

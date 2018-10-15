@@ -13,10 +13,10 @@
 
 namespace ouinet {
 
-namespace generic_connection_detail {
+namespace generic_stream_detail {
     // Some stream implementations (such as the asio::ssl::stream in Boost
     // <=1.67.0) are not movable. This template specialization shall allow us
-    // to move std::unique_ptr<NonMovableStream> into GenericConnection instead
+    // to move std::unique_ptr<NonMovableStream> into GenericStream instead
     // of NonMovableStream&& directly.
     template<class T> struct Deref {
         using type = T;
@@ -42,7 +42,7 @@ namespace generic_connection_detail {
 } // namespace
 
 
-class GenericConnection {
+class GenericStream {
 public:
 #if BOOST_VERSION >= 106700
     using executor_type = asio::io_context::executor_type;
@@ -83,7 +83,7 @@ private:
     template<class Impl>
     struct Wrapper : public Base {
         using Shutter = std::function<
-            void(typename generic_connection_detail::Deref<Impl>::type&)>;
+            void(typename generic_stream_detail::Deref<Impl>::type&)>;
 
         Wrapper(Impl&& impl)
             : _impl{std::move(impl)}
@@ -123,29 +123,29 @@ private:
         }
 
     private:
-        generic_connection_detail::Deref<Impl> _impl;
+        generic_stream_detail::Deref<Impl> _impl;
         Shutter _shutter;
     };
 
 public:
-    using lowest_layer_type = GenericConnection;
+    using lowest_layer_type = GenericStream;
 
-    GenericConnection& lowest_layer() { return *this; }
+    GenericStream& lowest_layer() { return *this; }
 
     bool has_implementation() const { return _impl != nullptr; }
     void destroy_implementation() { _impl = nullptr; }
 
 public:
-    GenericConnection() {}
+    GenericStream() {}
 
     template<class AsyncRWStream>
-    GenericConnection(AsyncRWStream&& impl)
+    GenericStream(AsyncRWStream&& impl)
         : _impl(new Wrapper<AsyncRWStream>(std::forward<AsyncRWStream>(impl)))
     {}
 
     template<class AsyncRWStream, class Shutter>
-    GenericConnection( AsyncRWStream&& impl
-                     , Shutter shutter)
+    GenericStream( AsyncRWStream&& impl
+                 , Shutter shutter)
         : _impl(new Wrapper<AsyncRWStream>( std::forward<AsyncRWStream>(impl)
                                           , std::move(shutter)))
     {}

@@ -21,7 +21,7 @@
 #include "connect_to_host.h"
 #include "default_timeout.h"
 #include "cache_control.h"
-#include "generic_connection.h"
+#include "generic_stream.h"
 #include "split_string.h"
 #include "async_sleep.h"
 #include "increase_open_file_limit.h"
@@ -59,7 +59,7 @@ static const boost::filesystem::path OUINET_PID_FILE = "pid";
 
 //------------------------------------------------------------------------------
 static
-void handle_bad_request( GenericConnection& con
+void handle_bad_request( GenericStream& con
                        , const Request& req
                        , string message
                        , Yield yield)
@@ -84,7 +84,7 @@ void handle_bad_request( GenericConnection& con
 // the already resolved endpoints in `lookup`,
 // only headers are used from `req`.
 static
-void handle_connect_request( GenericConnection& client_c
+void handle_connect_request( GenericStream& client_c
                            , const Request& req, const TCPLookup& lookup
                            , Signal<void()>& disconnect_signal
                            , Yield yield)
@@ -295,7 +295,7 @@ private:
     uuid_generator& genuuid;
     CacheControl cc;
     string last_host; // A host to which the below connection was established
-    map<string, GenericConnection> connections;
+    map<string, GenericStream> connections;
 };
 
 //------------------------------------------------------------------------------
@@ -306,7 +306,7 @@ private:
 static
 TCPLookup
 resolve_target( const Request& req
-              , GenericConnection& con
+              , GenericStream& con
               , Signal<void()>& shutdown_signal
               , Yield yield)
 {
@@ -381,7 +381,7 @@ resolve_target( const Request& req
 static
 void serve( InjectorConfig& config
           , uint64_t connection_id
-          , GenericConnection con
+          , GenericStream con
           , unique_ptr<CacheInjector>& injector
           , uuid_generator& genuuid
           , Signal<void()>& close_connection_signal
@@ -442,7 +442,7 @@ void serve( InjectorConfig& config
             // we are perfectly able to handle them (and do verification locally),
             // but the client should be using a CONNECT request instead!
             // TODO: Reuse the connection c response contains "Connection: keep-alive"
-            GenericConnection c;
+            GenericStream c;
             res = fetch_http_page( con.get_io_service()
                                  , c
                                  , erase_hop_by_hop_headers(move(req2))
@@ -506,7 +506,7 @@ void listen( InjectorConfig& config
     uint64_t next_connection_id = 0;
 
     while (true) {
-        GenericConnection connection = proxy_server.accept(yield[ec]);
+        GenericStream connection = proxy_server.accept(yield[ec]);
         if (ec == boost::asio::error::operation_aborted) {
             break;
         } else if (ec) {

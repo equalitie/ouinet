@@ -20,7 +20,7 @@
 #include "http_util.h"
 #include "fetch_http_page.h"
 #include "client_front_end.h"
-#include "generic_connection.h"
+#include "generic_stream.h"
 #include "util.h"
 #include "async_sleep.h"
 #include "increase_open_file_limit.h"
@@ -90,13 +90,13 @@ public:
     void set_injector(string);
 
 private:
-    GenericConnection ssl_mitm_handshake( GenericConnection&&
-                                        , const Request&
-                                        , asio::yield_context);
+    GenericStream ssl_mitm_handshake( GenericStream&&
+                                    , const Request&
+                                    , asio::yield_context);
 
-    void serve_request(GenericConnection&& con, asio::yield_context yield);
+    void serve_request(GenericStream&& con, asio::yield_context yield);
 
-    void handle_connect_request( GenericConnection& client_c
+    void handle_connect_request( GenericStream& client_c
                                , const Request& req
                                , Yield yield);
 
@@ -114,7 +114,7 @@ private:
 
     void listen_tcp( asio::yield_context
                    , tcp::endpoint
-                   , function<void(GenericConnection, asio::yield_context)>);
+                   , function<void(GenericStream, asio::yield_context)>);
 
     void setup_injector(asio::yield_context);
 
@@ -176,7 +176,7 @@ string Client::State::maybe_start_seeding( const Request&  req
 
 //------------------------------------------------------------------------------
 static
-void handle_bad_request( GenericConnection& con
+void handle_bad_request( GenericStream& con
                        , const Request& req
                        , string message
                        , Yield yield)
@@ -197,7 +197,7 @@ void handle_bad_request( GenericConnection& con
 }
 
 //------------------------------------------------------------------------------
-void Client::State::handle_connect_request( GenericConnection& client_c
+void Client::State::handle_connect_request( GenericStream& client_c
                                           , const Request& req
                                           , Yield yield)
 {
@@ -312,7 +312,7 @@ Response Client::State::fetch_fresh
                 Response res;
 
                 // TODO: Reuse this connection if "Connection: keep-alive"
-                GenericConnection c;
+                GenericStream c;
 
                 // Send the request straight to the origin
                 res = fetch_http_page( _ios
@@ -610,9 +610,9 @@ string base_domain_from_target(const beast::string_view& target)
 }
 
 //------------------------------------------------------------------------------
-GenericConnection Client::State::ssl_mitm_handshake( GenericConnection&& con
-                                                   , const Request& con_req
-                                                   , asio::yield_context yield)
+GenericStream Client::State::ssl_mitm_handshake( GenericStream&& con
+                                               , const Request& con_req
+                                               , asio::yield_context yield)
 {
     namespace ssl = boost::asio::ssl;
 
@@ -653,21 +653,21 @@ GenericConnection Client::State::ssl_mitm_handshake( GenericConnection&& con
 
     sys::error_code ec;
 
-    auto ssl_sock = make_unique<ssl::stream<GenericConnection>>(move(con), ssl_context);
+    auto ssl_sock = make_unique<ssl::stream<GenericStream>>(move(con), ssl_context);
     ssl_sock->async_handshake(ssl::stream_base::server, yield[ec]);
-    if (ec) return or_throw<GenericConnection>(yield, ec);
+    if (ec) return or_throw<GenericStream>(yield, ec);
 
-    static const auto ssl_shutter = [](ssl::stream<GenericConnection>& s) {
+    static const auto ssl_shutter = [](ssl::stream<GenericStream>& s) {
         // Just close the underlying connection
         // (TLS has no message exchange for shutdown).
         s.next_layer().close();
     };
 
-    return GenericConnection(move(ssl_sock), move(ssl_shutter));
+    return GenericStream(move(ssl_sock), move(ssl_shutter));
 }
 
 //------------------------------------------------------------------------------
-void Client::State::serve_request( GenericConnection&& con
+void Client::State::serve_request( GenericStream&& con
                                  , asio::yield_context yield_)
 {
     LOG_DEBUG("Request received ");
@@ -926,7 +926,7 @@ void Client::State::setup_ipfs_cache()
 void Client::State::listen_tcp
         ( asio::yield_context yield
         , tcp::endpoint local_endpoint
-        , function<void(GenericConnection, asio::yield_context)> handler)
+        , function<void(GenericStream, asio::yield_context)> handler)
 {
     sys::error_code ec;
 
@@ -984,7 +984,7 @@ void Client::State::listen_tcp
                 s.close(ec);
             };
 
-            GenericConnection connection(move(socket) , move(tcp_shutter));
+            GenericStream connection(move(socket) , move(tcp_shutter));
 
             asio::spawn( _ios
                        , [ this
@@ -1079,7 +1079,7 @@ void Client::State::start(int argc, char* argv[])
               listen_tcp( yield[ec]
                         , _config.local_endpoint()
                         , [this, self]
-                          (GenericConnection c, asio::yield_context yield) {
+                          (GenericStream c, asio::yield_context yield) {
                       serve_request(move(c), yield);
                   });
           });
@@ -1099,7 +1099,7 @@ void Client::State::start(int argc, char* argv[])
                   listen_tcp( yield[ec]
                             , ep
                             , [this, self]
-                              (GenericConnection c, asio::yield_context yield) {
+                              (GenericStream c, asio::yield_context yield) {
                         sys::error_code ec;
                         Request rq;
                         beast::flat_buffer buffer;

@@ -5,7 +5,7 @@
 #include <boost/asio/spawn.hpp>
 
 #include "or_throw.h"
-#include "generic_connection.h"
+#include "generic_stream.h"
 #include "util/signal.h"
 #include "util/timeout.h"
 #include "util/yield.h"
@@ -24,7 +24,7 @@ template<class ResponseBodyType, class RequestType>
 inline
 http::response<ResponseBodyType>
 fetch_http( asio::io_service& ios
-          , GenericConnection& con
+          , GenericStream& con
           , RequestType req
           , Signal<void()>& abort_signal
           , Yield yield_)
@@ -68,7 +68,7 @@ template<class ResponseBodyType, class Duration, class RequestType>
 inline
 http::response<ResponseBodyType>
 fetch_http( asio::io_service& ios
-          , GenericConnection& con
+          , GenericStream& con
           , RequestType req
           , Duration timeout
           , Signal<void()>& abort_signal
@@ -87,7 +87,7 @@ fetch_http( asio::io_service& ios
 
 inline
 void
-_recv_http_response( GenericConnection& con
+_recv_http_response( GenericStream& con
                    , beast::flat_buffer& buffer
                    , http::response<http::dynamic_body>& res
                    , asio::yield_context yield)
@@ -97,7 +97,7 @@ _recv_http_response( GenericConnection& con
 
 inline
 void
-_recv_http_response( GenericConnection& con
+_recv_http_response( GenericStream& con
                    , beast::flat_buffer& buffer
                    , http::response<http::empty_body>& res
                    , asio::yield_context yield)
@@ -108,8 +108,8 @@ _recv_http_response( GenericConnection& con
 }
 
 template<class RequestType>
-GenericConnection
-maybe_perform_ssl_handshake( GenericConnection&& con
+GenericStream
+maybe_perform_ssl_handshake( GenericStream&& con
                            , const util::url_match& url
                            , RequestType req
                            , Signal<void()>& abort_signal
@@ -139,7 +139,7 @@ maybe_perform_ssl_handshake( GenericConnection&& con
 template<class RequestType>
 http::response<http::dynamic_body>
 fetch_http_page( asio::io_service& ios
-               , GenericConnection& optcon
+               , GenericStream& optcon
                , RequestType req
                , Signal<void()>& abort_signal
                , Yield yield)
@@ -163,7 +163,7 @@ fetch_http_page( asio::io_service& ios
 template<class RequestType>
 http::response<http::dynamic_body>
 fetch_http_page( asio::io_service& ios
-               , GenericConnection& optcon
+               , GenericStream& optcon
                , RequestType req
                , const asio::ip::tcp::resolver::results_type& lookup
                , Signal<void()>& abort_signal
@@ -182,9 +182,9 @@ fetch_http_page( asio::io_service& ios
         return or_throw<Response>(yield, ec);
     }
 
-    GenericConnection temp_con;
+    GenericStream temp_con;
 
-    auto& con = [&] () -> GenericConnection& {
+    auto& con = [&] () -> GenericStream& {
         if (optcon.has_implementation()) {
             return optcon;
         }
@@ -246,7 +246,7 @@ fetch_http_page( asio::io_service& ios
 template<class Duration, class RequestType>
 http::response<http::dynamic_body>
 fetch_http_page( asio::io_service& ios
-               , GenericConnection& optcon
+               , GenericStream& optcon
                , RequestType req
                , Duration timeout
                , Signal<void()>& abort_signal
@@ -266,7 +266,7 @@ fetch_http_page( asio::io_service& ios
 template<class Duration, class RequestType>
 http::response<http::dynamic_body>
 fetch_http_page( asio::io_service& ios
-               , GenericConnection& optcon
+               , GenericStream& optcon
                , RequestType req
                , const asio::ip::tcp::resolver::results_type& lookup
                , Duration timeout
@@ -287,7 +287,7 @@ fetch_http_page( asio::io_service& ios
 template<class RequestType>
 http::response<http::dynamic_body>
 fetch_http_origin( asio::io_service& ios
-                 , GenericConnection& con_
+                 , GenericStream& con_
                  , const util::url_match& url
                  , RequestType req
                  , Signal<void()>& abort_signal
@@ -329,7 +329,7 @@ fetch_http_origin( asio::io_service& ios
 template<class Duration, class RequestType>
 http::response<http::dynamic_body>
 fetch_http_origin( asio::io_service& ios
-                 , GenericConnection& con
+                 , GenericStream& con
                  , const util::url_match& url
                  , RequestType req
                  , Duration timeout

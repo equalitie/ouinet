@@ -6,7 +6,7 @@
 
 #include <boost/asio/spawn.hpp>
 
-#include "generic_connection.h"
+#include "generic_stream.h"
 #include "util/condition_variable.h"
 #include "util/signal.h"
 
@@ -20,7 +20,7 @@ class OuiServiceImplementationServer
     virtual void start_listen(asio::yield_context yield) = 0;
     virtual void stop_listen() = 0;
 
-    virtual GenericConnection accept(asio::yield_context yield) = 0;
+    virtual GenericStream accept(asio::yield_context yield) = 0;
 };
 
 class OuiServiceServer
@@ -39,7 +39,7 @@ class OuiServiceServer
     void start_listen(asio::yield_context yield);
     void stop_listen();
 
-    GenericConnection accept(asio::yield_context yield);
+    GenericStream accept(asio::yield_context yield);
     void cancel_accept();
 
     private:
@@ -48,7 +48,7 @@ class OuiServiceServer
     std::vector<std::unique_ptr<OuiServiceImplementationServer>> _implementations;
 
     Signal<void()> _stop_listen;
-    std::list<GenericConnection> _connection_queue;
+    std::list<GenericStream> _connection_queue;
     ConditionVariable _connection_available;
 };
 
@@ -56,7 +56,7 @@ class OuiServiceImplementationClient
 {
     public:
     struct ConnectInfo {
-        GenericConnection connection;
+        GenericStream connection;
         std::string remote_endpoint;
     };
 

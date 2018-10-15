@@ -1,19 +1,19 @@
 #pragma once
 
 #include <boost/asio/read.hpp>
-#include "generic_connection.h"
+#include "generic_stream.h"
 #include "util/wait_condition.h"
 
 namespace ouinet {
 
 inline
-void full_duplex( GenericConnection& c1
-                , GenericConnection& c2
+void full_duplex( GenericStream& c1
+                , GenericStream& c2
                 , asio::yield_context yield)
 {
     static const auto half_duplex
-        = []( GenericConnection& in
-            , GenericConnection& out
+        = []( GenericStream& in
+            , GenericStream& out
             , asio::yield_context& yield)
     {
         sys::error_code ec;
@@ -22,7 +22,7 @@ void full_duplex( GenericConnection& c1
         for (;;) {
             // XXX: Workaround: For some reason calling in.async_read_some
             // directly throws the boost::coroutines::detail::forced_unwind
-            // exception from GenericConnection::async_read_some::result.get.
+            // exception from GenericStream::async_read_some::result.get.
             // When it's used indirectly through async_read then it doesn't.
             //
             // ¯\_(ツ)_/¯
