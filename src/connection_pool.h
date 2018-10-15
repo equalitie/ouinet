@@ -40,6 +40,9 @@ class ConnectionPool {
 
                         if (*wd) return;
 
+                        assert(_is_requesting || ec);
+                        if (!_is_requesting && !ec) break;
+
                         _res = std::move(res);
                         _cv.notify(ec);
                     }
@@ -54,7 +57,11 @@ class ConnectionPool {
 
         Response request(Request rq, asio::yield_context yield)
         {
+            assert(!_is_requesting);
             assert(!_res);
+
+            _is_requesting = true;
+            auto on_exit = defer([&] { _is_requesting = false; });
 
             if (!_stream.has_implementation()) {
                 return or_throw<Response>(yield, asio::error::bad_descriptor);
@@ -88,6 +95,7 @@ class ConnectionPool {
 
         private:
         friend class ConnectionPool;
+        bool _is_requesting = false;
         GenericStream _stream;
         ConditionVariable _cv;
         boost::optional<Response> _res;

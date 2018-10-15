@@ -214,8 +214,7 @@ public:
             return this->fetch_stored(rq, yield);
         };
 
-        cc.store = [this]( const Request& rq, Response rs
-                         , Yield yield) {
+        cc.store = [this](const Request& rq, Response rs, Yield yield) {
             return this->insert_content(rq, rs, yield);
         };
     }
