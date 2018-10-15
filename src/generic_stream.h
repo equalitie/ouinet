@@ -152,18 +152,21 @@ public:
 
     asio::io_service& get_io_service()
     {
+        assert(_impl);
         return _impl->get_io_service();
     }
 
 #if BOOST_VERSION >= 106700
     executor_type get_executor()
     {
+        assert(_impl);
         return _impl->get_executor();
     }
 #endif
 
     void close()
     {
+        assert(_impl);
         _impl->close();
     }
 
