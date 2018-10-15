@@ -455,6 +455,7 @@ void serve( InjectorConfig& config
             // Ouinet header found, behave like a Ouinet injector.
             req2.erase(http_::request_version_hdr);  // do not propagate or cache the header
             res = cc.fetch(req2, yield[ec].tag("cache_control.fetch"));
+            res.keep_alive(true);
         }
         if (ec) {
             handle_bad_request( con, req
