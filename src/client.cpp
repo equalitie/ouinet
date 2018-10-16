@@ -106,7 +106,10 @@ private:
                 , request_route::Config& request_config
                 , asio::yield_context yield);
 
-    Response fetch_fresh(const Request&, request_route::Config&, Yield);
+    Response fetch_fresh( const Request&
+                        , request_route::Config&
+                        , bool& out_can_store
+                        , Yield);
 
     CacheControl build_cache_control(request_route::Config& request_config);
 
@@ -119,8 +122,6 @@ private:
     fs::path get_pid_path() const {
         return _config.repo_root()/OUINET_PID_FILE;
     }
-
-    string maybe_start_seeding(const Request&, const Response&, Yield);
 
     bool was_stopped() const {
         return _shutdown_signal.call_count() != 0;
@@ -149,29 +150,6 @@ private:
     uint64_t _next_connection_id = 0;
     ConnectionPool<std::string> _injector_connections;
 };
-
-//------------------------------------------------------------------------------
-string Client::State::maybe_start_seeding( const Request&  req
-                                         , const Response& res
-                                         , Yield yield)
-{
-    if (!_cache)
-        return or_throw<string>(yield, asio::error::operation_not_supported);
-
-    const char* reason = "";
-    if (!CacheControl::ok_to_cache(req, res, &reason)) {
-        yield.log("---------------------------------------");
-        yield.log("Not caching ", req.target());
-        yield.log("Because: \"", reason, "\"");
-        yield.log(req.base(), res.base());
-        yield.log("---------------------------------------");
-        return {};
-    }
-
-    return _cache->ipfs_add
-            ( beast::buffers_to_string(res.body().data())
-            , yield);
-}
 
 //------------------------------------------------------------------------------
 static
@@ -288,10 +266,13 @@ Client::State::fetch_stored( const Request& request
 Response Client::State::fetch_fresh
         ( const Request& request
         , request_route::Config& request_config
+        , bool& out_can_store
         , Yield yield)
 {
     using namespace asio::error;
     using request_route::responder;
+
+    out_can_store = false;
 
     sys::error_code last_error = operation_not_supported;
 
@@ -389,6 +370,7 @@ Response Client::State::fetch_fresh
                                                 , default_timeout::fetch_http()
                                                 , _shutdown_signal
                                                 , yield[ec].tag("send_req"));
+
                     if (ec) {
                         last_error = ec;
                         continue;
@@ -441,16 +423,10 @@ Response Client::State::fetch_fresh
                     continue;
                 }
 
+                out_can_store = (r == responder::injector);
+
                 if (res.keep_alive()) {
                     _injector_connections.push_back(std::move(con));
-                }
-
-                if (r == responder::injector) {
-                    string ipfs
-                        = maybe_start_seeding( request
-                                             , res
-                                             , yield.ignore_error()
-                                                    .tag("start_seeding"));
                 }
 
                 return res;
@@ -493,6 +469,10 @@ public:
             return fetch_stored(rq, yield);
         };
 
+        cc.store = [&](const Request& rq, Response rs, Yield yield) {
+            return store(rq, move(rs), yield);
+        };
+
         cc.max_cached_age(client_state._config.max_cached_age());
     }
 
@@ -502,6 +482,7 @@ public:
         sys::error_code ec;
         auto r = client_state.fetch_fresh( request
                                          , request_config
+                                         , _can_store
                                          , yield[ec]);
 
         if (!ec) {
@@ -529,6 +510,24 @@ public:
         return or_throw(yield, ec, move(r));
     }
 
+    Response store(const Request& rq, Response rs, Yield yield)
+    {
+        sys::error_code ec;
+
+        auto& cache = client_state._cache;
+
+        if (!_can_store) ec = asio::error::invalid_argument;
+        if (!cache)      ec = asio::error::operation_not_supported;
+
+        if (ec) return or_throw(yield, ec, move(rs));
+
+        // Note: we have to "not throw" because the caller expects
+        // to get a valid response in return even if storing fails.
+        cache->ipfs_add(beast::buffers_to_string(rs.body().data()), yield[ec]);
+
+        return or_throw(yield, ec, move(rs));
+    }
+
     Response fetch(const Request& rq, Yield yield)
     {
         return cc.fetch(rq, yield);
@@ -537,6 +536,7 @@ public:
 private:
     Client::State& client_state;
     request_route::Config& request_config;
+    bool _can_store;
     CacheControl cc;
 };
 
