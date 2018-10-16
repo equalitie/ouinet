@@ -110,11 +110,23 @@ string CacheClient::get_descriptor( string url
 
     if (!db) return or_throw<string>(yield, asio::error::not_found);
 
-    return db->find(url, yield);
+    sys::error_code ec;
+
+    string desc_data = db->find(url, yield[ec]);
+
+    // Retrieve descriptor from IPFS link.
+    if (!ec && desc_data.find(desc_ipfs_prefix) != 0) {
+        cerr << "WARNING: Invalid index entry for descriptor of " << url << endl;
+        ec = asio::error::not_found;
+    }
+
+    if (ec)
+        return or_throw<string>(yield, ec);
+
+    string desc_ipfs(desc_data.substr(desc_ipfs_prefix.length()));
+    return _ipfs_node->cat(desc_ipfs, yield);
 }
 
-// TODO: Factor out descriptor cache encoding stuff,
-// along with IPFS storage of descriptors in `http_desc.h`.
 CacheEntry CacheClient::get_content( string url
                                    , DbType db_type
                                    , asio::yield_context yield)
@@ -123,16 +135,9 @@ CacheEntry CacheClient::get_content( string url
 
     string desc_data = get_descriptor(url, db_type, yield[ec]);
 
-    // Retrieve descriptor from IPFS link.
-    if (!ec && desc_data.find(desc_ipfs_prefix) != 0) {
-        cerr << "WARNING: Invalid index entry for descriptor of " << url << endl;
-        ec = asio::error::not_found;
-    }
-
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
-    string desc_ipfs(desc_data.substr(desc_ipfs_prefix.length()));
-    return descriptor::http_parse_ipfs(*_ipfs_node, desc_ipfs, yield);
+    return descriptor::http_parse(*_ipfs_node, desc_data, yield);
 }
 
 void CacheClient::set_ipns(std::string ipns)

@@ -93,11 +93,9 @@ string CacheInjector::insert_content( Request rq
     return or_throw(yield, ec, move(desc.second));
 }
 
-// TODO: Factor out descriptor cache encoding stuff,
-// along with IPFS storage of descriptors in `http_desc.h`.
-CacheEntry CacheInjector::get_content( string url
-                                     , DbType db_type
-                                     , asio::yield_context yield)
+string CacheInjector::get_descriptor( string url
+                                    , DbType db_type
+                                    , asio::yield_context yield)
 {
     sys::error_code ec;
 
@@ -109,10 +107,24 @@ CacheEntry CacheInjector::get_content( string url
         ec = asio::error::not_found;
     }
 
-    if (ec) return or_throw<CacheEntry>(yield, ec);
+    if (ec)
+        return or_throw<string>(yield, ec);
 
     string desc_ipfs(desc_data.substr(desc_ipfs_prefix.length()));
-    return descriptor::http_parse_ipfs(*_ipfs_node, desc_ipfs, yield);
+    return _ipfs_node->cat(desc_ipfs, yield);
+}
+
+CacheEntry CacheInjector::get_content( string url
+                                     , DbType db_type
+                                     , asio::yield_context yield)
+{
+    sys::error_code ec;
+
+    string desc_data = get_descriptor(url, db_type, yield[ec]);
+
+    if (ec) return or_throw<CacheEntry>(yield, ec);
+
+    return descriptor::http_parse(*_ipfs_node, desc_data, yield);
 }
 
 CacheInjector::~CacheInjector()
