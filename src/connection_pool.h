@@ -5,6 +5,7 @@
 #include "generic_stream.h"
 #include "util/condition_variable.h"
 #include "or_throw.h"
+#include "defer.h"
 
 namespace ouinet {
 
