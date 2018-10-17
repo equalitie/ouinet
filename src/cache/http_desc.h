@@ -70,11 +70,11 @@ struct Descriptor {
 
 namespace descriptor {
 
-// For the given HTTP request `rq` and response `rs`, seed body data to the `cache`,
+// For the given HTTP request `rq` and response `rs`, seed body data to `ipfs`,
 // then create an HTTP descriptor with the given `id` for the URL and response,
 // and return it.
 static inline
-std::pair<std::string /* ipfs */, std::string /* body */>
+std::string
 http_create( asio_ipfs::node& ipfs
            , const std::string& id
            , boost::posix_time::ptime ts
@@ -83,7 +83,6 @@ http_create( asio_ipfs::node& ipfs
            , asio::yield_context yield) {
 
     using namespace std;
-    using Ret = pair<string, string>;
 
     sys::error_code ec;
 
@@ -92,7 +91,7 @@ http_create( asio_ipfs::node& ipfs
 
     auto url = rq.target();
 
-    if (ec) return or_throw<Ret>(yield, ec);
+    if (ec) return or_throw<string>(yield, ec);
 
     auto rs_ = rs;
 
@@ -101,16 +100,12 @@ http_create( asio_ipfs::node& ipfs
     stringstream rsh_ss;
     rsh_ss << rs_.base();
 
-    string descriptor = Descriptor{ url.to_string()
-                                  , id
-                                  , ts
-                                  , rsh_ss.str()
-                                  , ipfs_id
-                                  }.serialize();
-
-    string cid = ipfs.add(descriptor, yield[ec]);
-
-    return or_throw<Ret>(yield, ec, { move(cid), move(descriptor) });
+    return Descriptor{ url.to_string()
+                     , id
+                     , ts
+                     , rsh_ss.str()
+                     , ipfs_id
+                     }.serialize();
 }
 
 // For the given HTTP descriptor serialized in `desc_data`,
