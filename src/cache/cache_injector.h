@@ -58,11 +58,6 @@ public:
     // to that IPFS_ID from IPFS.
     CacheEntry get_content(std::string url, DbType, boost::asio::yield_context);
 
-    void put_descriptor( std::string url
-                       , const std::string& desc_data
-                       , const std::string& desc_ipfs
-                       , DbType
-                       , boost::asio::yield_context);
     std::string get_descriptor(std::string url, DbType, boost::asio::yield_context);
 
     ~CacheInjector();

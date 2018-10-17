@@ -3,10 +3,10 @@
 #include "btree_db.h"
 #include "bep44_db.h"
 #include "cache_entry.h"
+#include "descdb.h"
 #include "http_desc.h"
 #include "../or_throw.h"
 #include "../bittorrent/dht.h"
-#include "../util.h"
 #include "../util/crypto.h"
 
 using namespace std;
@@ -17,11 +17,6 @@ namespace sys  = boost::system;
 namespace bt   = ouinet::bittorrent;
 
 using boost::optional;
-
-// TODO: Factor out descriptor cache encoding stuff,
-// along with IPFS storage of descriptors in `http_desc.h`.
-static const std::string desc_ipfs_prefix = "/ipfs/";
-static const std::string desc_zlib_prefix = "/zlib/";
 
 unique_ptr<CacheClient>
 CacheClient::build( asio::io_service& ios
@@ -108,32 +103,11 @@ string CacheClient::get_descriptor( string url
                                   , DbType db_type
                                   , asio::yield_context yield)
 {
-    ClientDb* db = get_db(db_type);
+    auto db = get_db(db_type);
 
     if (!db) return or_throw<string>(yield, asio::error::not_found);
 
-    sys::error_code ec;
-
-    string desc_data = db->find(url, yield[ec]);
-
-    if (ec)
-        return or_throw<string>(yield, ec);
-
-    string desc_str;
-    if (desc_data.find(desc_zlib_prefix) == 0) {
-        // Retrieve descriptor from inline zlib-compressed data.
-        string desc_zlib(move(desc_data.substr(desc_zlib_prefix.length())));
-        desc_str = util::zlib_decompress(desc_zlib, ec);
-    } else if (desc_data.find(desc_ipfs_prefix) == 0) {
-        // Retrieve descriptor from IPFS link.
-        string desc_ipfs(move(desc_data.substr(desc_ipfs_prefix.length())));
-        desc_str = _ipfs_node->cat(desc_ipfs, yield[ec]);
-    } else {
-        cerr << "WARNING: Invalid index entry for descriptor of " << url << endl;
-        ec = asio::error::not_found;
-    }
-
-    return or_throw(yield, ec, move(desc_str));
+    return descriptor::get_from_db(url, *db, *_ipfs_node, yield);
 }
 
 CacheEntry CacheClient::get_content( string url
