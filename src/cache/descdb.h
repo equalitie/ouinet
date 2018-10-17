@@ -39,7 +39,7 @@ bool db_can_inline(Bep44InjectorDb& db) {
 }
 
 inline
-std::string get_from_db( const std::string& url
+std::string get_from_db( const std::string& key
                        , ClientDb& db, asio_ipfs::node& ipfs
                        , asio::yield_context yield)
 {
@@ -47,7 +47,7 @@ std::string get_from_db( const std::string& url
 
     sys::error_code ec;
 
-    string desc_data = db.find(url, yield[ec]);
+    string desc_data = db.find(key, yield[ec]);
 
     if (ec)
         return or_throw<string>(yield, ec);
@@ -62,7 +62,7 @@ std::string get_from_db( const std::string& url
         string desc_ipfs(move(desc_data.substr(ipfs_prefix.length())));
         desc_str = ipfs.cat(desc_ipfs, yield[ec]);
     } else {
-        cerr << "WARNING: Invalid index entry for descriptor of " << url << endl;
+        cerr << "WARNING: Invalid index entry for descriptor of key: " << key << endl;
         ec = asio::error::not_found;
     }
 
@@ -70,7 +70,7 @@ std::string get_from_db( const std::string& url
 }
 
 inline
-void put_into_db( const std::string& url
+void put_into_db( const std::string& key
                 , const std::string& desc_data
                 , const std::string& desc_ipfs
                 , InjectorDb& db
@@ -82,11 +82,11 @@ void put_into_db( const std::string& url
     bool can_inline = db_can_inline(db);
     if (can_inline) {
         auto compressed_desc = util::zlib_compress(desc_data);
-        db.insert(url, zlib_prefix + compressed_desc, yield[ec]);
+        db.insert(key, zlib_prefix + compressed_desc, yield[ec]);
     }
     // Insert IPFS link to descriptor.
     if (!can_inline || ec == asio::error::message_size) {
-        db.insert(url, ipfs_prefix + desc_ipfs, yield[ec]);
+        db.insert(key, ipfs_prefix + desc_ipfs, yield[ec]);
     }
 
     return or_throw(yield, ec);
