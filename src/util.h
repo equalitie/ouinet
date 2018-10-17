@@ -144,6 +144,7 @@ std::string format_ep(const asio::ip::tcp::endpoint& ep) {
 
 ///////////////////////////////////////////////////////////////////////////////
 std::string zlib_compress(const std::string&);
+std::string zlib_decompress(const std::string&, sys::error_code&);
 std::string base64_encode(const std::string&);
 
 ///////////////////////////////////////////////////////////////////////////////

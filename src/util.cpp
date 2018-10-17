@@ -28,6 +28,21 @@ string ouinet::util::zlib_compress(const string& in) {
     return out_ss.str();
 }
 
+// TODO: Refactor with `zlib_compress`.
+// TODO: Catch and report decompression errors.
+string ouinet::util::zlib_decompress(const string& in, sys::error_code& ec) {
+    stringstream in_ss;
+    in_ss << in;
+
+    boost::iostreams::filtering_streambuf<boost::iostreams::input> unzip;
+    unzip.push(boost::iostreams::zlib_decompressor());
+    unzip.push(in_ss);
+
+    stringstream out_ss;
+    boost::iostreams::copy(unzip, out_ss);
+    return out_ss.str();
+}
+
 // Based on <https://stackoverflow.com/a/28471421> by user "ltc".
 string ouinet::util::base64_encode(const string& in) {
     using namespace boost::archive::iterators;
