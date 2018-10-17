@@ -472,7 +472,7 @@ void serve( InjectorConfig& config
 
         if (ec) break;
 
-        if (!req.keep_alive() || !res.keep_alive()) {
+        if (!req.keep_alive()) {
             con.close();
             break;
         }
