@@ -150,6 +150,18 @@ public:
                                           , std::move(shutter)))
     {}
 
+    GenericStream(GenericStream&&) = default;
+    GenericStream& operator=(GenericStream&&) = default;
+
+    ~GenericStream() {
+        try {
+            if (_impl) _impl->close();
+        }
+        catch (...) {
+            assert(0 && "Uncaught exception when closing GenericStream");
+        }
+    }
+
     asio::io_service& get_io_service()
     {
         assert(_impl);
@@ -198,7 +210,7 @@ public:
             , asio::buffer_sequence_end(bs)
             , _impl->read_buffers.begin());
 
-        _impl->read_impl([h = move(handler)]
+        _impl->read_impl([h = move(handler), impl = _impl]
                          (const system::error_code& ec, size_t size) {
                              (*h)(ec, size);
                          });
@@ -211,7 +223,10 @@ public:
         _impl->read_buffers.resize(distance(bs.begin(), bs.end()));
         copy(bs.begin(), bs.end(), _impl->read_buffers.begin());
 
-        _impl->read_impl(move(handler));
+        _impl->read_impl([h = move(handler), impl = _impl]
+                         (const system::error_code& ec, size_t size) {
+                             h(ec, size);
+                         });
 
         return result.get();
 #endif
@@ -245,7 +260,7 @@ public:
             , asio::buffer_sequence_end(bs)
             , _impl->write_buffers.begin());
 
-        _impl->write_impl([h = move(handler)]
+        _impl->write_impl([h = move(handler), impl = _impl]
                           (const system::error_code& ec, size_t size) {
                               (*h)(ec, size);
                           });
@@ -258,14 +273,20 @@ public:
         _impl->write_buffers.resize(distance(bs.begin(), bs.end()));
         copy(bs.begin(), bs.end(), _impl->write_buffers.begin());
 
-        _impl->write_impl(move(handler));
+        _impl->write_impl([h = move(handler), impl = _impl]
+                          (const system::error_code& ec, size_t size) {
+                              h(ec, size);
+                          });
 
         return result.get();
 #endif
     }
 
 private:
-    std::unique_ptr<Base> _impl;
+    // Note: we must use shared_ptr because some stream implementations (such
+    // as the asio::ssl::stream) require that their lifetime is preserved while
+    // an async action is pending on them.
+    std::shared_ptr<Base> _impl;
 };
 
 } // ouinet namespace

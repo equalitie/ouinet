@@ -81,7 +81,8 @@ TcpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
 
     auto cancel_slot = cancel.connect([&] {
         // tcp::socket::cancel() does not work properly on all platforms
-        socket.close();
+        sys::error_code ec;
+        socket.close(ec);
     });
 
     socket.async_connect(_endpoint, yield[ec]);
@@ -91,8 +92,9 @@ TcpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
     }
 
     static const auto tcp_shutter = [](asio::ip::tcp::socket& s) {
-        s.shutdown(asio::ip::tcp::socket::shutdown_both);
-        s.close();
+        sys::error_code ec;
+        s.shutdown(asio::ip::tcp::socket::shutdown_both, ec);
+        s.close(ec);
     };
 
     return ConnectInfo{ GenericStream(std::move(socket), tcp_shutter)
