@@ -9,7 +9,6 @@
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/ssl/stream.hpp>
 #include <boost/optional/optional_io.hpp>
-#include <lrucache.hpp>
 #include <iostream>
 #include <fstream>
 #include <cstdlib>  // for atexit()
@@ -48,6 +47,7 @@
 
 #include "util/signal.h"
 #include "util/crypto.h"
+#include "util/lru_cache.h"
 
 #include "logger.h"
 
@@ -134,7 +134,7 @@ private:
 private:
     asio::io_service& _ios;
     std::unique_ptr<CACertificate> _ca_certificate;
-    cache::lru_cache<string, string> _ssl_certificate_cache;
+    util::LruCache<string, string> _ssl_certificate_cache;
     ClientConfig _config;
     std::unique_ptr<OuiServiceClient> _injector;
     std::unique_ptr<CacheClient> _cache;
@@ -609,23 +609,19 @@ GenericStream Client::State::ssl_mitm_handshake( GenericStream&& con
     // a host name instead of an IP address or its reverse resolution.
     auto base_domain = base_domain_from_target(con_req.target());
 
-    string crt_chain;
-    // TODO: ASan gets confused when an exception is thrown inside a coroutine,
-    // the alternative is to check ``_ssl_certificate_cache.exists(base_domain)``
-    // (i.e. an additional lookup) then take one branch or the other.
-    try {
-        crt_chain = _ssl_certificate_cache.get(base_domain);
-    } catch(const std::range_error&) {
+    const string* crt_chain = _ssl_certificate_cache.get(base_domain);
+
+    if (!crt_chain) {
         DummyCertificate dummy_crt(*_ca_certificate, base_domain);
 
-        crt_chain = dummy_crt.pem_certificate()
-                  + _ca_certificate->pem_certificate();
-
-        _ssl_certificate_cache.put(move(base_domain), crt_chain);
+        crt_chain
+            = _ssl_certificate_cache.put(move(base_domain)
+                                        , dummy_crt.pem_certificate()
+                                          + _ca_certificate->pem_certificate());
     }
 
     setup_ssl_context( ssl_context
-                     , crt_chain
+                     , *crt_chain
                      , _ca_certificate->pem_private_key()
                      , _ca_certificate->pem_dh_param());
 
