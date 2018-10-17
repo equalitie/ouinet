@@ -30,6 +30,7 @@
 #include "authenticate.h"
 #include "force_exit_on_signal.h"
 #include "http_util.h"
+#include "connection_pool.h"
 
 #include "ouiservice.h"
 #include "ouiservice/i2p.h"
@@ -54,6 +55,19 @@ using uuid_generator = boost::uuids::random_generator_mt19937;
 using Request     = http::request<http::string_body>;
 using Response    = http::response<http::dynamic_body>;
 using TCPLookup   = asio::ip::tcp::resolver::results_type;
+
+struct PoolId {
+    bool is_ssl;
+    string host;
+
+    bool operator<(const PoolId& other) const {
+        return tie(is_ssl, host) < tie(other.is_ssl, other.host);
+    }
+};
+
+using ConPool = ConnectionPool<>;
+using Connection = ConPool::Connection;
+using ConPools = map<PoolId, ConPool>;
 
 static const boost::filesystem::path OUINET_PID_FILE = "pid";
 
@@ -158,9 +172,45 @@ resolve_target(const Request&, asio::io_service&, Signal<void()>&, Yield yield);
 
 struct InjectorCacheControl {
 public:
+    unique_ptr<Connection> connect( asio::io_service& ios
+                                  , const Request& rq
+                                  , const util::url_match& url
+                                  , Signal<void()>& abort_signal
+                                  , Yield yield)
+    {
+        using ConP = unique_ptr<Connection>;
+
+        sys::error_code ec;
+
+        // Resolve target endpoint and check its validity.
+        TCPLookup lookup(resolve_target( rq, ios, abort_signal
+                                       , yield[ec]));
+
+        if (ec) return or_throw<ConP>(yield, ec);
+
+        auto stream = connect_to_host( lookup
+                                     , ios
+                                     , abort_signal
+                                     , yield[ec]);
+
+        if (ec) return or_throw<ConP>(yield, ec);
+
+        if (url.scheme == "https") {
+            stream = ssl::util::client_handshake( move(stream)
+                                                , url.host
+                                                , abort_signal
+                                                , yield[ec]);
+        }
+
+        if (ec) return or_throw<ConP>(yield, ec);
+
+        return std::make_unique<Connection>(move(stream), boost::none);
+    }
+
     // TODO: Replace this with cancellation support in which fetch_ operations
     // get a signal parameter
     InjectorCacheControl( asio::io_service& ios
+                        , ConPools& connection_pools
                         , const InjectorConfig& config
                         , unique_ptr<CacheInjector>& injector
                         , uuid_generator& genuuid
@@ -169,6 +219,7 @@ public:
         , config(config)
         , genuuid(genuuid)
         , cc("Ouinet Injector")
+        , connection_pools(connection_pools)
     {
         // The following operations take care of adding or removing
         // a custom Ouinet HTTP response header with the injection identifier
@@ -179,32 +230,49 @@ public:
         // (though it is still used to create the descriptor).
 
         cc.fetch_fresh = [&] (const Request& rq_, Yield yield) {
-            string host = rq_[http::field::host].to_string();
-
-            auto& connection = connections[host];
-
             sys::error_code ec;
+
+            string host = rq_[http::field::host].to_string();
+            assert(!host.empty());
+
+            // Parse the URL to tell HTTP/HTTPS, host, port.
+            util::url_match url;
+
+            if (!util::match_http_url(rq_.target().to_string(), url)) {
+                return or_throw<Response>( yield
+                                         , asio::error::operation_not_supported);
+            }
+
+            bool is_ssl = url.scheme == "https";
+
+            PoolId pool_id{is_ssl, host};
+
+            auto& pool = connection_pools[pool_id];
+
+            auto connection = pool.pop_front();
+
+            auto on_exit = defer([&] {
+                if (pool.empty()) connection_pools.erase(pool_id);
+            });
+
+            if (!connection) {
+                connection = connect(ios, rq_, url, abort_signal, yield[ec]);
+            }
 
             Request rq = erase_hop_by_hop_headers(rq_);
             rq.keep_alive(true);
 
-            // Resolve target endpoint and check its validity.
-            TCPLookup lookup(resolve_target( rq, ios, abort_signal
-                                           , yield[ec]));
             Response ret;
-            if (!ec)
-                ret = fetch_http_page( ios
-                                     , connection
-                                     , rq, lookup
-                                     , default_timeout::fetch_http()
-                                     , abort_signal
-                                     , yield[ec]);
+
+            if (!ec) ret = connection->request(rq, yield[ec]);
 
             // Add an injection identifier header.
-            ret.set(http_::response_injection_id_hdr, to_string(genuuid()));
+            if (!ec) ret.set(http_::response_injection_id_hdr, to_string(genuuid()));
 
-            if (ec || !ret.keep_alive() || !rq_.keep_alive()) {
-                connection.destroy_implementation();
+            if (!ec && ret.keep_alive() && rq_.keep_alive()) {
+                // Note: we can't use the `pool` ref from above because that
+                // pool may have been destroyed in the mean time.
+                connection_pools[pool_id].push_back(move(connection));
             }
 
             return or_throw(yield, ec, move(ret));
@@ -295,7 +363,7 @@ private:
     uuid_generator& genuuid;
     CacheControl cc;
     string last_host; // A host to which the below connection was established
-    map<string, GenericStream> connections;
+    ConPools& connection_pools;
 };
 
 //------------------------------------------------------------------------------
@@ -383,6 +451,7 @@ void serve( InjectorConfig& config
           , uint64_t connection_id
           , GenericStream con
           , unique_ptr<CacheInjector>& injector
+          , ConPools& connection_pools
           , uuid_generator& genuuid
           , Signal<void()>& close_connection_signal
           , asio::yield_context yield_)
@@ -392,6 +461,7 @@ void serve( InjectorConfig& config
     });
 
     InjectorCacheControl cc( con.get_io_service()
+                           , connection_pools
                            , config
                            , injector
                            , genuuid
@@ -506,6 +576,8 @@ void listen( InjectorConfig& config
 
     uint64_t next_connection_id = 0;
 
+    ConPools connection_pools;
+
     while (true) {
         GenericStream connection = proxy_server.accept(yield[ec]);
         if (ec == boost::asio::error::operation_aborted) {
@@ -525,6 +597,7 @@ void listen( InjectorConfig& config
             &shutdown_signal,
             &config,
             &genuuid,
+            &connection_pools,
             connection_id,
             lock = shutdown_connections.lock()
         ] (boost::asio::yield_context yield) mutable {
@@ -532,6 +605,7 @@ void listen( InjectorConfig& config
                  , connection_id
                  , std::move(connection)
                  , cache_injector
+                 , connection_pools
                  , genuuid
                  , shutdown_signal
                  , yield);

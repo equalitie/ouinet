@@ -9,7 +9,7 @@
 
 namespace ouinet {
 
-template<class Aux>
+template<class Aux = boost::none_t>
 class ConnectionPool {
     using Request  = http::request<http::string_body>;
     using Response = http::response<http::dynamic_body>;
@@ -109,6 +109,7 @@ class ConnectionPool {
     public:
     void push_back(std::unique_ptr<Connection> c)
     {
+        assert(c);
         _connections.push_back(*c);
         c->_self = std::move(c);
     }
@@ -120,6 +121,8 @@ class ConnectionPool {
         _connections.pop_front();
         return std::move(front._self);
     }
+
+    bool empty() const { return _connections.empty(); }
 
     private:
     List<Connection> _connections;
