@@ -38,9 +38,13 @@ bool db_can_inline(Bep44InjectorDb& db) {
     return true;  // only attempt inlining with BEP44
 }
 
+// Get the serialized descriptor pointed to by an entry
+// in the given `db` under the given `key`.
+// The descriptor has been saved in the given stores (`ipfs`).
 inline
 std::string get_from_db( const std::string& key
-                       , ClientDb& db, asio_ipfs::node& ipfs
+                       , ClientDb& db
+                       , asio_ipfs::node& ipfs
                        , asio::yield_context yield)
 {
     using namespace std;
@@ -69,10 +73,13 @@ std::string get_from_db( const std::string& key
     return or_throw(yield, ec, move(desc_str));
 }
 
+// Add an entry for the serialized descriptor `desc_data`
+// in the given `db` under the given `key`.
+// The descriptor is to be saved in the given stores (`ipfs`).
 inline
-void put_into_db( const std::string& key
-                , const std::string& desc_data
-                , InjectorDb& db, asio_ipfs::node& ipfs
+void put_into_db( const std::string& key, const std::string& desc_data
+                , InjectorDb& db
+                , asio_ipfs::node& ipfs
                 , asio::yield_context yield)
 {
     sys::error_code ec;
