@@ -42,6 +42,7 @@ void Client::start(asio::yield_context yield)
   //i2ptunnel holding some connections but doesn't know how connections
   //are created.
   _port = dynamic_cast<i2p::client::I2PClientTunnel*>(_client_tunnel->_i2p_tunnel.get())->GetLocalEndpoint().port();
+  
 }
 
 void Client::stop()
@@ -58,6 +59,9 @@ Client::connect(asio::yield_context yield, Signal<void()>& cancel)
     using ConnectInfo = ouinet::OuiServiceImplementationClient::ConnectInfo;
 
     sys::error_code ec;
+
+    if ((not _client_tunnel) or (not _client_tunnel->is_ready()))
+      or_throw(yield, asio::error::operation_aborted);
 
     Connection connection(_ios);
     
