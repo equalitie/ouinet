@@ -72,15 +72,17 @@ std::string get_from_db( const std::string& key
 inline
 void put_into_db( const std::string& key
                 , const std::string& desc_data
-                , const std::string& desc_ipfs
-                , InjectorDb& db
+                , InjectorDb& db, asio_ipfs::node& ipfs
                 , asio::yield_context yield)
 {
     sys::error_code ec;
 
+    // Always store the descriptor itself in IPFS.
+    auto desc_ipfs = ipfs.add(desc_data, yield[ec]);
+
     // Insert descriptor inline (if possible).
     bool can_inline = db_can_inline(db);
-    if (can_inline) {
+    if (!ec && can_inline) {
         auto compressed_desc = util::zlib_compress(desc_data);
         db.insert(key, zlib_prefix + compressed_desc, yield[ec]);
     }

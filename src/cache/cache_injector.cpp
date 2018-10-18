@@ -63,7 +63,7 @@ string CacheInjector::insert_content( Request rq
 
     auto ts = boost::posix_time::microsec_clock::universal_time();
 
-    string desc, cid;
+    string desc;
 
     {
         auto slot = _scheduler->wait_for_slot(yield[ec]);
@@ -72,17 +72,14 @@ string CacheInjector::insert_content( Request rq
         if (ec) return or_throw<string>(yield, ec);
 
         desc = descriptor::http_create(*_ipfs_node, id, ts, rq, rs, yield[ec]);
-        if (!ec && !*wd)
-            cid = _ipfs_node->add(desc, yield[ec]);
 
         if (!ec && *wd) ec = asio::error::operation_aborted;
         if (ec) return or_throw<string>(yield, ec);
     }
 
     auto db = get_db(db_type);
-    descriptor::put_into_db( rq.target().to_string()
-                           , desc, cid
-                           , *db, yield[ec]);
+    descriptor::put_into_db( rq.target().to_string(), desc
+                           , *db, *_ipfs_node, yield[ec]);
 
     if (!ec && *wd) ec = asio::error::operation_aborted;
 
