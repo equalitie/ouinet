@@ -5,8 +5,6 @@
 #include <iostream>
 #include <string>
 
-#include <asio_ipfs.h>
-
 #include "../namespaces.h"
 #include "../or_throw.h"
 #include "../util.h"
@@ -40,11 +38,12 @@ bool db_can_inline(Bep44InjectorDb& db) {
 
 // Get the serialized descriptor pointed to by an entry
 // in the given `db` under the given `key`.
-// The descriptor has been saved in the given stores (`ipfs`).
+// The descriptor has been saved in the given stores (`ipfs_load`).
+template <class LoadFunc>
 inline
 std::string get_from_db( const std::string& key
                        , ClientDb& db
-                       , asio_ipfs::node& ipfs
+                       , LoadFunc ipfs_load
                        , asio::yield_context yield)
 {
     using namespace std;
@@ -64,7 +63,7 @@ std::string get_from_db( const std::string& key
     } else if (desc_data.find(ipfs_prefix) == 0) {
         // Retrieve descriptor from IPFS link.
         string desc_ipfs(move(desc_data.substr(ipfs_prefix.length())));
-        desc_str = ipfs.cat(desc_ipfs, yield[ec]);
+        desc_str = ipfs_load(desc_ipfs, yield[ec]);
     } else {
         cerr << "WARNING: Invalid index entry for descriptor of key: " << key << endl;
         ec = asio::error::not_found;

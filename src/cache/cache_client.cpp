@@ -107,7 +107,10 @@ string CacheClient::get_descriptor( string url
 
     if (!db) return or_throw<string>(yield, asio::error::not_found);
 
-    return descriptor::get_from_db(url, *db, *_ipfs_node, yield);
+    return descriptor::get_from_db
+      ( url, *db
+      , [&](auto h, auto y){ return _ipfs_node->cat(h, y); }
+      , yield);
 }
 
 CacheEntry CacheClient::get_content( string url

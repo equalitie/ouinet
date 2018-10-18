@@ -95,7 +95,10 @@ string CacheInjector::get_descriptor( string url
                                     , asio::yield_context yield)
 {
     auto db = get_db(db_type);
-    return descriptor::get_from_db(url, *db, *_ipfs_node, yield);
+    return descriptor::get_from_db
+      ( url, *db
+      , [&](auto h, auto y){ return _ipfs_node->cat(h, y); }
+      , yield);
 }
 
 CacheEntry CacheInjector::get_content( string url
