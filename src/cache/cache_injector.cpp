@@ -56,40 +56,38 @@ string CacheInjector::insert_content( Request rq
 {
     auto wd = _was_destroyed;
 
-    sys::error_code ec;
-
-    auto id = rs[http_::response_injection_id_hdr].to_string();
-    rs.erase(http_::response_injection_id_hdr);
-
-    auto ts = boost::posix_time::microsec_clock::universal_time();
-
-    string desc;
-
-    {
+    // Wraps IPFS add operation to wait for a slot first
+    auto ipfs_add = [&](auto data, auto yield) {
+        sys::error_code ec;
         auto slot = _scheduler->wait_for_slot(yield[ec]);
 
         if (!ec && *wd) ec = asio::error::operation_aborted;
         if (ec) return or_throw<string>(yield, ec);
 
-        desc = descriptor::http_create
-          ( id, ts, rq, rs
-          , [&](auto d, auto y) { return _ipfs_node->add(d, y); }
-          , yield[ec]);
+        auto cid = _ipfs_node->add(data, yield[ec]);
 
         if (!ec && *wd) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<string>(yield, ec);
-    }
+        return or_throw(yield, ec, move(cid));
+    };
 
+    sys::error_code ec;
+
+    // Prepare and create descriptor
+    auto id = rs[http_::response_injection_id_hdr].to_string();
+    rs.erase(http_::response_injection_id_hdr);
+    auto ts = boost::posix_time::microsec_clock::universal_time();
+    auto desc = descriptor::http_create( id, ts
+                                       , rq, rs
+                                       , ipfs_add
+                                       , yield[ec]);
+    if (!ec && *wd) ec = asio::error::operation_aborted;
+    if (ec) return or_throw<string>(yield, ec);
+
+    // Store descriptor
     auto db = get_db(db_type);
-    auto ipfs_add = [&](auto d, auto y) {
-                        auto slot = _scheduler->wait_for_slot(y);
-                        return _ipfs_node->add(d, y);
-                    };
     descriptor::put_into_db( rq.target().to_string(), desc
                            , *db, ipfs_add, yield[ec]);
-
     if (!ec && *wd) ec = asio::error::operation_aborted;
-
     return or_throw(yield, ec, move(desc));
 }
 
