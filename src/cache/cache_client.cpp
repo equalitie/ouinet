@@ -123,7 +123,10 @@ CacheEntry CacheClient::get_content( string url
 
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
-    return descriptor::http_parse(*_ipfs_node, desc_data, yield);
+    return descriptor::http_parse
+      ( desc_data
+      , [&](auto h, auto y){ return _ipfs_node->cat(h, y); }
+      , yield);
 }
 
 void CacheClient::set_ipns(std::string ipns)

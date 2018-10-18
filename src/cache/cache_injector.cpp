@@ -71,7 +71,10 @@ string CacheInjector::insert_content( Request rq
         if (!ec && *wd) ec = asio::error::operation_aborted;
         if (ec) return or_throw<string>(yield, ec);
 
-        desc = descriptor::http_create(*_ipfs_node, id, ts, rq, rs, yield[ec]);
+        desc = descriptor::http_create
+          ( id, ts, rq, rs
+          , [&](auto d, auto y) { return _ipfs_node->add(d, y); }
+          , yield[ec]);
 
         if (!ec && *wd) ec = asio::error::operation_aborted;
         if (ec) return or_throw<string>(yield, ec);
@@ -111,7 +114,10 @@ CacheEntry CacheInjector::get_content( string url
 
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
-    return descriptor::http_parse(*_ipfs_node, desc_data, yield);
+    return descriptor::http_parse
+      ( desc_data
+      , [&](auto h, auto y){ return _ipfs_node->cat(h, y); }
+      , yield);
 }
 
 CacheInjector::~CacheInjector()

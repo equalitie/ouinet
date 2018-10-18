@@ -8,7 +8,6 @@
 #include <boost/format.hpp>
 #include <boost/optional.hpp>
 #include <json.hpp>
-#include <asio_ipfs.h>
 
 #include "cache_entry.h"
 #include "../namespaces.h"
@@ -70,23 +69,25 @@ struct Descriptor {
 
 namespace descriptor {
 
-// For the given HTTP request `rq` and response `rs`, seed body data to `ipfs`,
+// For the given HTTP request `rq` and response `rs`,
+// seed body data using `ipfs_store`,
 // then create an HTTP descriptor with the given `id` for the URL and response,
 // and return it.
+template <class StoreFunc>
 static inline
 std::string
-http_create( asio_ipfs::node& ipfs
-           , const std::string& id
+http_create( const std::string& id
            , boost::posix_time::ptime ts
            , const http::request<http::string_body>& rq
            , const http::response<http::dynamic_body>& rs
+           , StoreFunc ipfs_store
            , asio::yield_context yield) {
 
     using namespace std;
 
     sys::error_code ec;
 
-    string ipfs_id = ipfs.add(
+    string ipfs_id = ipfs_store(
             beast::buffers_to_string(rs.body().data()), yield[ec]);
 
     auto url = rq.target();
@@ -109,12 +110,14 @@ http_create( asio_ipfs::node& ipfs
 }
 
 // For the given HTTP descriptor serialized in `desc_data`,
-// retrieve the head from the descriptor and the body data from the `cache`,
+// retrieve the head from the descriptor and the body data using `ipfs_load`,
 // assemble and return the HTTP response along with its identifier.
+template <class LoadFunc>
 static inline
-CacheEntry http_parse( asio_ipfs::node& ipfs
-                     , const std::string& desc_data
-                     , asio::yield_context yield)
+CacheEntry
+http_parse( const std::string& desc_data
+          , LoadFunc ipfs_load
+          , asio::yield_context yield)
 {
 
     using Response = http::response<http::dynamic_body>;
@@ -134,7 +137,7 @@ CacheEntry http_parse( asio_ipfs::node& ipfs
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
     // Get the HTTP response body (stored independently).
-    std::string body = ipfs.cat(dsc->body_link, yield[ec]);
+    std::string body = ipfs_load(dsc->body_link, yield[ec]);
 
     // Build an HTTP response from the head in the descriptor and the retrieved body.
     http::response_parser<Response::body_type> parser;
