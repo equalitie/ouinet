@@ -75,17 +75,18 @@ std::string get_from_db( const std::string& key
 
 // Add an entry for the serialized descriptor `desc_data`
 // in the given `db` under the given `key`.
-// The descriptor is to be saved in the given stores (`ipfs`).
+// The descriptor is to be saved in the given stores (`ipfs_store`).
+template <class StoreFunc>
 inline
 void put_into_db( const std::string& key, const std::string& desc_data
                 , InjectorDb& db
-                , asio_ipfs::node& ipfs
+                , StoreFunc ipfs_store
                 , asio::yield_context yield)
 {
     sys::error_code ec;
 
     // Always store the descriptor itself in IPFS.
-    auto desc_ipfs = ipfs.add(desc_data, yield[ec]);
+    auto desc_ipfs = ipfs_store(desc_data, yield[ec]);
 
     // Insert descriptor inline (if possible).
     bool can_inline = db_can_inline(db);

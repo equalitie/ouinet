@@ -78,8 +78,12 @@ string CacheInjector::insert_content( Request rq
     }
 
     auto db = get_db(db_type);
+    auto ipfs_add = [&](auto d, auto y) {
+                        auto slot = _scheduler->wait_for_slot(y);
+                        return _ipfs_node->add(d, y);
+                    };
     descriptor::put_into_db( rq.target().to_string(), desc
-                           , *db, *_ipfs_node, yield[ec]);
+                           , *db, ipfs_add, yield[ec]);
 
     if (!ec && *wd) ec = asio::error::operation_aborted;
 
