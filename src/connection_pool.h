@@ -48,7 +48,7 @@ class ConnectionPool {
                         _cv.notify(ec);
                     }
 
-                    _stream.destroy_implementation();
+                    _stream.close();
                     _self.reset();
                 });
         }
