@@ -7,7 +7,7 @@
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/ssl/stream.hpp>
 
-#include "../generic_connection.h"
+#include "../generic_stream.h"
 #include "../or_throw.h"
 #include "../util/signal.h"
 
@@ -43,13 +43,13 @@ static inline std::string read_bio(BIO* bio) {
     return std::string(data, length);
 };
 
-// Perform an SSL client handshake over the given connection `con`
-// and return an SSL-tunneled connection using it as a lower layer.
+// Perform an SSL client handshake over the given stream `con`
+// and return an SSL-tunneled stream using it as a lower layer.
 //
 // The verification is done for the given `host` name, using SNI.
 static inline
-ouinet::GenericConnection
-client_handshake( ouinet::GenericConnection&& con
+ouinet::GenericStream
+client_handshake( ouinet::GenericStream&& con
                 , const std::string& host
                 , Signal<void()>& abort_signal
                 , boost::asio::yield_context yield)
@@ -66,7 +66,7 @@ client_handshake( ouinet::GenericConnection&& con
 
     boost::system::error_code ec;
 
-    auto ssl_sock = make_unique<ssl::stream<GenericConnection>>(move(con), ssl_context);
+    auto ssl_sock = make_unique<ssl::stream<GenericStream>>(move(con), ssl_context);
     // Set Server Name Indication (SNI).
     // As seen in ``http_client_async_ssl.cpp`` Boost Beast example.
     if (!::SSL_set_tlsext_host_name(ssl_sock->native_handle(), host.c_str()))
@@ -77,15 +77,15 @@ client_handshake( ouinet::GenericConnection&& con
         ssl_sock->async_handshake(ssl::stream_base::client, yield[ec]);
     }
 
-    if (ec) return or_throw<GenericConnection>(yield, ec);
+    if (ec) return or_throw<GenericStream>(yield, ec);
 
-    static const auto ssl_shutter = [](ssl::stream<GenericConnection>& s) {
+    static const auto ssl_shutter = [](ssl::stream<GenericStream>& s) {
         // Just close the underlying connection
         // (TLS has no message exchange for shutdown).
         s.next_layer().close();
     };
 
-    return GenericConnection(move(ssl_sock), move(ssl_shutter));
+    return GenericStream(move(ssl_sock), move(ssl_shutter));
 }
 
 }}} // namespaces

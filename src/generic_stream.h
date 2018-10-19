@@ -7,16 +7,17 @@
 #include <boost/asio/io_service.hpp>
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/spawn.hpp>
+#include <boost/asio/error.hpp>
 #include <functional>
 #include <vector>
 #include <iostream>
 
 namespace ouinet {
 
-namespace generic_connection_detail {
+namespace generic_stream_detail {
     // Some stream implementations (such as the asio::ssl::stream in Boost
     // <=1.67.0) are not movable. This template specialization shall allow us
-    // to move std::unique_ptr<NonMovableStream> into GenericConnection instead
+    // to move std::unique_ptr<NonMovableStream> into GenericStream instead
     // of NonMovableStream&& directly.
     template<class T> struct Deref {
         using type = T;
@@ -39,10 +40,13 @@ namespace generic_connection_detail {
 
         std::unique_ptr<T> value;
     };
+
+    template<class T> T& deref(T& v) { return v; }
+    template<class T> T& deref(std::unique_ptr<T>& v) { return *v; }
 } // namespace
 
 
-class GenericConnection {
+class GenericStream {
 public:
 #if BOOST_VERSION >= 106700
     using executor_type = asio::io_context::executor_type;
@@ -83,7 +87,7 @@ private:
     template<class Impl>
     struct Wrapper : public Base {
         using Shutter = std::function<
-            void(typename generic_connection_detail::Deref<Impl>::type&)>;
+            void(typename generic_stream_detail::Deref<Impl>::type&)>;
 
         Wrapper(Impl&& impl)
             : _impl{std::move(impl)}
@@ -123,62 +127,136 @@ private:
         }
 
     private:
-        generic_connection_detail::Deref<Impl> _impl;
+        generic_stream_detail::Deref<Impl> _impl;
         Shutter _shutter;
     };
 
 public:
-    using lowest_layer_type = GenericConnection;
+    using lowest_layer_type = GenericStream;
 
-    GenericConnection& lowest_layer() { return *this; }
+    GenericStream& lowest_layer() { return *this; }
 
     bool has_implementation() const { return _impl != nullptr; }
-    void destroy_implementation() { _impl = nullptr; }
 
 public:
-    GenericConnection() {}
+    GenericStream() {
+        if (_debug) {
+            std::cerr << this << " " << _impl
+                      << " GenericStream::destroy_implementation()"
+                      << std::endl;
+        }
+    }
 
     template<class AsyncRWStream>
-    GenericConnection(AsyncRWStream&& impl)
-        : _impl(new Wrapper<AsyncRWStream>(std::forward<AsyncRWStream>(impl)))
-    {}
+    GenericStream(AsyncRWStream&& impl)
+        : _ios(&impl.get_io_service())
+        , _impl(new Wrapper<AsyncRWStream>(std::forward<AsyncRWStream>(impl)))
+    {
+        if (_debug) {
+            std::cerr << this << " " << (void*)nullptr
+                      << " GenericStream::GenericStream(&& "
+                      << typeid(AsyncRWStream).name() << " "
+                      << _impl << ")" << std::endl;
+        }
+    }
 
     template<class AsyncRWStream, class Shutter>
-    GenericConnection( AsyncRWStream&& impl
-                     , Shutter shutter)
-        : _impl(new Wrapper<AsyncRWStream>( std::forward<AsyncRWStream>(impl)
+    GenericStream( AsyncRWStream&& impl
+                 , Shutter shutter)
+        : _ios(&generic_stream_detail::deref(impl).get_io_service())
+        , _impl(new Wrapper<AsyncRWStream>( std::forward<AsyncRWStream>(impl)
                                           , std::move(shutter)))
-    {}
+    {
+        if (_debug) {
+            std::cerr << this << " " << (void*)nullptr
+                      << " GenericStream::GenericStream(&& "
+                      << typeid(AsyncRWStream).name() << " "
+                      << _impl <<  ", shutter)" << std::endl;
+        }
+    }
+
+    GenericStream(GenericStream&& other)
+        : _ios(other._ios)
+        , _impl(std::move(other._impl))
+    {
+        other._ios = nullptr;
+
+        if (_debug) {
+            std::cerr << this << " " << (void*)nullptr
+                      << " GenericStream::GenericStream(&& "
+                      << &other << " " << _impl <<  ")" << std::endl;
+        }
+    }
+
+    GenericStream& operator=(GenericStream&& other) {
+        assert(!_ios || _ios == other._ios);
+        _ios = other._ios;
+
+        if (_debug) {
+            std::cerr << this << " " << _impl
+                      << " GenericStream::operator=("
+                      << &other << " " << other._impl <<  ")" << std::endl;
+        }
+
+        other._ios = nullptr;
+        _impl = std::move(other._impl);
+        return *this;
+    }
+
+    ~GenericStream() {
+        if (_debug) {
+            std::cerr << this << " " << _impl
+                      << " GenericStream::~GenericStream()" << std::endl;
+        }
+        try {
+            if (_impl) _impl->close();
+        }
+        catch (...) {
+            assert(0 && "Uncaught exception when closing GenericStream");
+        }
+    }
 
     asio::io_service& get_io_service()
     {
-        return _impl->get_io_service();
+        assert(_ios);
+        return *_ios;
     }
 
 #if BOOST_VERSION >= 106700
     executor_type get_executor()
     {
+        assert(_impl);
         return _impl->get_executor();
     }
 #endif
 
     void close()
     {
+        if (_debug) {
+            std::cerr << this << " " << _impl
+                      << " GenericStream::close()" << std::endl;
+        }
+        assert(_impl);
         _impl->close();
+        _impl = nullptr;
     }
 
     template< class MutableBufferSequence
             , class Token>
     auto async_read_some(const MutableBufferSequence& bs, Token&& token)
     {
-        assert(_impl);
+        if (_debug) {
+            std::cerr << this << " " << _impl
+                      << " GenericStream::async_read_some()" << std::endl;
+        }
+
+        assert(_ios);
 
         using namespace std;
 
         namespace asio   = boost::asio;
         namespace system = boost::system;
 
-#if BOOST_VERSION >= 106700
         using Sig = void(system::error_code, size_t);
 
         boost::asio::async_completion<Token, Sig> init(token);
@@ -187,6 +265,11 @@ public:
 
         // XXX: Handler is non-copyable, but can we do this without allocation?
         auto handler = make_shared<Handler>(std::move(init.completion_handler));
+
+        if (!_impl) {
+            return _ios->post([h = move(handler)]
+                              { (*h)(asio::error::bad_descriptor, 0); });
+        }
 
         _impl->read_buffers.resize(distance( asio::buffer_sequence_begin(bs)
                                            , asio::buffer_sequence_end(bs)));
@@ -195,37 +278,29 @@ public:
             , asio::buffer_sequence_end(bs)
             , _impl->read_buffers.begin());
 
-        _impl->read_impl([h = move(handler)]
+        _impl->read_impl([h = move(handler), impl = _impl]
                          (const system::error_code& ec, size_t size) {
                              (*h)(ec, size);
                          });
 
         return init.result.get();
-#else
-        Handler<Token, size_t> handler(forward<Token>(token));
-        Result<Token, size_t> result(handler);
-
-        _impl->read_buffers.resize(distance(bs.begin(), bs.end()));
-        copy(bs.begin(), bs.end(), _impl->read_buffers.begin());
-
-        _impl->read_impl(move(handler));
-
-        return result.get();
-#endif
     }
 
     template< class ConstBufferSequence
             , class Token>
     auto async_write_some(const ConstBufferSequence& bs, Token&& token)
     {
-        assert(_impl);
+        if (_debug) {
+            std::cerr << this << " " << _impl
+                      << " GenericStream::async_write_some()" << std::endl;
+        }
+        assert(_ios);
 
         using namespace std;
 
         namespace asio   = boost::asio;
         namespace system = boost::system;
 
-#if BOOST_VERSION >= 106700
         using Sig = void(system::error_code, size_t);
 
         boost::asio::async_completion<Token, Sig> init(token);
@@ -235,6 +310,11 @@ public:
         // XXX: Handler is non-copyable, but can we do this without allocation?
         auto handler = make_shared<Handler>(std::move(init.completion_handler));
 
+        if (!_impl) {
+            return _ios->post([h = move(handler)]
+                              { (*h)(asio::error::bad_descriptor, 0); });
+        }
+
         _impl->write_buffers.resize(distance( asio::buffer_sequence_begin(bs)
                                             , asio::buffer_sequence_end(bs)));
 
@@ -242,27 +322,21 @@ public:
             , asio::buffer_sequence_end(bs)
             , _impl->write_buffers.begin());
 
-        _impl->write_impl([h = move(handler)]
+        _impl->write_impl([h = move(handler), impl = _impl]
                           (const system::error_code& ec, size_t size) {
                               (*h)(ec, size);
                           });
 
         return init.result.get();
-#else
-        Handler<Token, size_t> handler(forward<Token>(token));
-        Result<Token, size_t> result(handler);
-
-        _impl->write_buffers.resize(distance(bs.begin(), bs.end()));
-        copy(bs.begin(), bs.end(), _impl->write_buffers.begin());
-
-        _impl->write_impl(move(handler));
-
-        return result.get();
-#endif
     }
 
 private:
-    std::unique_ptr<Base> _impl;
+    asio::io_service* _ios = nullptr;
+    // Note: we must use shared_ptr because some stream implementations (such
+    // as the asio::ssl::stream) require that their lifetime is preserved while
+    // an async action is pending on them.
+    std::shared_ptr<Base> _impl;
+    bool _debug = false;
 };
 
 } // ouinet namespace

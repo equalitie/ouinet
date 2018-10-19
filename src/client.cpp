@@ -9,7 +9,6 @@
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/ssl/stream.hpp>
 #include <boost/optional/optional_io.hpp>
-#include <lrucache.hpp>
 #include <iostream>
 #include <fstream>
 #include <cstdlib>  // for atexit()
@@ -17,10 +16,11 @@
 #include "cache/cache_client.h"
 
 #include "namespaces.h"
+#include "connection_pool.h"
 #include "http_util.h"
 #include "fetch_http_page.h"
 #include "client_front_end.h"
-#include "generic_connection.h"
+#include "generic_stream.h"
 #include "util.h"
 #include "async_sleep.h"
 #include "increase_open_file_limit.h"
@@ -47,6 +47,7 @@
 
 #include "util/signal.h"
 #include "util/crypto.h"
+#include "util/lru_cache.h"
 
 #include "logger.h"
 
@@ -90,13 +91,13 @@ public:
     void set_injector(string);
 
 private:
-    GenericConnection ssl_mitm_handshake( GenericConnection&&
-                                        , const Request&
-                                        , asio::yield_context);
+    GenericStream ssl_mitm_handshake( GenericStream&&
+                                    , const Request&
+                                    , asio::yield_context);
 
-    void serve_request(GenericConnection&& con, asio::yield_context yield);
+    void serve_request(GenericStream&& con, asio::yield_context yield);
 
-    void handle_connect_request( GenericConnection& client_c
+    void handle_connect_request( GenericStream& client_c
                                , const Request& req
                                , Yield yield);
 
@@ -107,22 +108,20 @@ private:
 
     Response fetch_fresh( const Request&
                         , request_route::Config&
-                        , optional<OuiServiceClient::ConnectInfo>& injector_c
+                        , bool& out_can_store
                         , Yield);
 
     CacheControl build_cache_control(request_route::Config& request_config);
 
     void listen_tcp( asio::yield_context
                    , tcp::endpoint
-                   , function<void(GenericConnection, asio::yield_context)>);
+                   , function<void(GenericStream, asio::yield_context)>);
 
     void setup_injector(asio::yield_context);
 
     fs::path get_pid_path() const {
         return _config.repo_root()/OUINET_PID_FILE;
     }
-
-    string maybe_start_seeding(const Request&, const Response&, Yield);
 
     bool was_stopped() const {
         return _shutdown_signal.call_count() != 0;
@@ -135,7 +134,7 @@ private:
 private:
     asio::io_service& _ios;
     std::unique_ptr<CACertificate> _ca_certificate;
-    cache::lru_cache<string, string> _ssl_certificate_cache;
+    util::LruCache<string, string> _ssl_certificate_cache;
     ClientConfig _config;
     std::unique_ptr<OuiServiceClient> _injector;
     std::unique_ptr<CacheClient> _cache;
@@ -146,34 +145,15 @@ private:
     unique_ptr<util::PidFile> _pid_file;
 
     bool _is_ipns_being_setup = false;
+
+    // For debugging
+    uint64_t _next_connection_id = 0;
+    ConnectionPool<std::string> _injector_connections;
 };
 
 //------------------------------------------------------------------------------
-string Client::State::maybe_start_seeding( const Request&  req
-                                         , const Response& res
-                                         , Yield yield)
-{
-    if (!_cache)
-        return or_throw<string>(yield, asio::error::operation_not_supported);
-
-    const char* reason = "";
-    if (!CacheControl::ok_to_cache(req, res, &reason)) {
-        yield.log("---------------------------------------");
-        yield.log("Not caching ", req.target());
-        yield.log("Because: \"", reason, "\"");
-        yield.log(req.base(), res.base());
-        yield.log("---------------------------------------");
-        return {};
-    }
-
-    return _cache->ipfs_add
-            ( beast::buffers_to_string(res.body().data())
-            , yield);
-}
-
-//------------------------------------------------------------------------------
 static
-void handle_bad_request( GenericConnection& con
+void handle_bad_request( GenericStream& con
                        , const Request& req
                        , string message
                        , Yield yield)
@@ -194,7 +174,7 @@ void handle_bad_request( GenericConnection& con
 }
 
 //------------------------------------------------------------------------------
-void Client::State::handle_connect_request( GenericConnection& client_c
+void Client::State::handle_connect_request( GenericStream& client_c
                                           , const Request& req
                                           , Yield yield)
 {
@@ -286,11 +266,13 @@ Client::State::fetch_stored( const Request& request
 Response Client::State::fetch_fresh
         ( const Request& request
         , request_route::Config& request_config
-        , optional<OuiServiceClient::ConnectInfo>& injector_c
+        , bool& out_can_store
         , Yield yield)
 {
     using namespace asio::error;
     using request_route::responder;
+
+    out_can_store = false;
 
     sys::error_code last_error = operation_not_supported;
 
@@ -309,7 +291,7 @@ Response Client::State::fetch_fresh
                 Response res;
 
                 // TODO: Reuse this connection if "Connection: keep-alive"
-                GenericConnection c;
+                GenericStream c;
 
                 // Send the request straight to the origin
                 res = fetch_http_page( _ios
@@ -388,6 +370,7 @@ Response Client::State::fetch_fresh
                                                 , default_timeout::fetch_http()
                                                 , _shutdown_signal
                                                 , yield[ec].tag("send_req"));
+
                     if (ec) {
                         last_error = ec;
                         continue;
@@ -404,60 +387,46 @@ Response Client::State::fetch_fresh
                 // Connect to the injector.
                 sys::error_code ec;
 
-                optional<OuiServiceClient::ConnectInfo> connect_info;
+                using Con = ConnectionPool<std::string>::Connection;
 
-                auto& inj = [&] () -> auto& {
-                    if (injector_c) {
-                        return *injector_c;
-                    } else {
-                        connect_info = _injector->connect
-                            ( yield[ec].tag("connect_to_injector2")
-                            , _shutdown_signal);
+                unique_ptr<Con> con = _injector_connections.pop_front();
 
-                        return *connect_info;
-                    }
-                }();
+                if (!con) {
+                    auto c = _injector->connect
+                        ( yield[ec].tag("connect_to_injector2")
+                        , _shutdown_signal);
 
-                if (ec) {
-                    last_error = ec;
-                    continue;
+                    if (ec) { last_error = ec; continue; }
+
+                    con = make_unique<Con>( move(c.connection)
+                                          , move(c.remote_endpoint) );
                 }
 
                 // Build the actual request to send to the injector.
-                Request injreq(request);
-                if (r == responder::injector)
+                Request injreq = request;
+
+                if (r == responder::injector) {
                     // Add first a Ouinet version header
                     // to hint it to behave like an injector instead of a proxy.
                     injreq.set( http_::request_version_hdr
                               , http_::request_version_hdr_latest);
-                if (auto credentials = _config.credentials_for(inj.remote_endpoint))
+                }
+
+                if (auto credentials = _config.credentials_for(con->aux))
                     injreq = authorize(injreq, *credentials);
 
                 // Send the request to the injector/proxy.
-                auto res = fetch_http_page( _ios
-                                          , inj.connection
-                                          , injreq
-                                          , default_timeout::fetch_http()
-                                          , _shutdown_signal
-                                          , yield[ec].tag("fetch_http_page"));
+                auto res = con->request(injreq, yield[ec]);
 
                 if (ec) {
                     last_error = ec;
                     continue;
                 }
 
-                if (res.keep_alive()) {
-                    if (!injector_c) { injector_c = std::move(connect_info); }
-                } else {
-                    if (injector_c) { injector_c->connection.close(); }
-                }
+                out_can_store = (r == responder::injector);
 
-                if (r == responder::injector) {
-                    string ipfs
-                        = maybe_start_seeding( request
-                                             , res
-                                             , yield.ignore_error()
-                                                    .tag("start_seeding"));
+                if (res.keep_alive()) {
+                    _injector_connections.push_back(std::move(con));
                 }
 
                 return res;
@@ -500,6 +469,10 @@ public:
             return fetch_stored(rq, yield);
         };
 
+        cc.store = [&](const Request& rq, Response rs, Yield yield) {
+            return store(rq, move(rs), yield);
+        };
+
         cc.max_cached_age(client_state._config.max_cached_age());
     }
 
@@ -509,7 +482,7 @@ public:
         sys::error_code ec;
         auto r = client_state.fetch_fresh( request
                                          , request_config
-                                         , _injector_connection
+                                         , _can_store
                                          , yield[ec]);
 
         if (!ec) {
@@ -537,6 +510,24 @@ public:
         return or_throw(yield, ec, move(r));
     }
 
+    Response store(const Request& rq, Response rs, Yield yield)
+    {
+        sys::error_code ec;
+
+        auto& cache = client_state._cache;
+
+        if (!_can_store) ec = asio::error::invalid_argument;
+        if (!cache)      ec = asio::error::operation_not_supported;
+
+        if (ec) return or_throw(yield, ec, move(rs));
+
+        // Note: we have to "not throw" because the caller expects
+        // to get a valid response in return even if storing fails.
+        cache->ipfs_add(beast::buffers_to_string(rs.body().data()), yield[ec]);
+
+        return or_throw(yield, ec, move(rs));
+    }
+
     Response fetch(const Request& rq, Yield yield)
     {
         return cc.fetch(rq, yield);
@@ -545,14 +536,8 @@ public:
 private:
     Client::State& client_state;
     request_route::Config& request_config;
+    bool _can_store;
     CacheControl cc;
-
-    // If a connection has been established, we keep it for reuse if the
-    // request and response contained the 'Connection: keep-alive' header
-    // field.
-    // TODO: Keep one for direct origin connection and one for proxy connection
-    // as well.
-    optional<OuiServiceClient::ConnectInfo> _injector_connection;
 };
 
 //------------------------------------------------------------------------------
@@ -607,9 +592,9 @@ string base_domain_from_target(const beast::string_view& target)
 }
 
 //------------------------------------------------------------------------------
-GenericConnection Client::State::ssl_mitm_handshake( GenericConnection&& con
-                                                   , const Request& con_req
-                                                   , asio::yield_context yield)
+GenericStream Client::State::ssl_mitm_handshake( GenericStream&& con
+                                               , const Request& con_req
+                                               , asio::yield_context yield)
 {
     namespace ssl = boost::asio::ssl;
 
@@ -624,23 +609,19 @@ GenericConnection Client::State::ssl_mitm_handshake( GenericConnection&& con
     // a host name instead of an IP address or its reverse resolution.
     auto base_domain = base_domain_from_target(con_req.target());
 
-    string crt_chain;
-    // TODO: ASan gets confused when an exception is thrown inside a coroutine,
-    // the alternative is to check ``_ssl_certificate_cache.exists(base_domain)``
-    // (i.e. an additional lookup) then take one branch or the other.
-    try {
-        crt_chain = _ssl_certificate_cache.get(base_domain);
-    } catch(const std::range_error&) {
+    const string* crt_chain = _ssl_certificate_cache.get(base_domain);
+
+    if (!crt_chain) {
         DummyCertificate dummy_crt(*_ca_certificate, base_domain);
 
-        crt_chain = dummy_crt.pem_certificate()
-                  + _ca_certificate->pem_certificate();
-
-        _ssl_certificate_cache.put(move(base_domain), crt_chain);
+        crt_chain
+            = _ssl_certificate_cache.put(move(base_domain)
+                                        , dummy_crt.pem_certificate()
+                                          + _ca_certificate->pem_certificate());
     }
 
     setup_ssl_context( ssl_context
-                     , crt_chain
+                     , *crt_chain
                      , _ca_certificate->pem_private_key()
                      , _ca_certificate->pem_dh_param());
 
@@ -650,21 +631,21 @@ GenericConnection Client::State::ssl_mitm_handshake( GenericConnection&& con
 
     sys::error_code ec;
 
-    auto ssl_sock = make_unique<ssl::stream<GenericConnection>>(move(con), ssl_context);
+    auto ssl_sock = make_unique<ssl::stream<GenericStream>>(move(con), ssl_context);
     ssl_sock->async_handshake(ssl::stream_base::server, yield[ec]);
-    if (ec) return or_throw<GenericConnection>(yield, ec);
+    if (ec) return or_throw<GenericStream>(yield, ec);
 
-    static const auto ssl_shutter = [](ssl::stream<GenericConnection>& s) {
+    static const auto ssl_shutter = [](ssl::stream<GenericStream>& s) {
         // Just close the underlying connection
         // (TLS has no message exchange for shutdown).
         s.next_layer().close();
     };
 
-    return GenericConnection(move(ssl_sock), move(ssl_shutter));
+    return GenericStream(move(ssl_sock), move(ssl_shutter));
 }
 
 //------------------------------------------------------------------------------
-void Client::State::serve_request( GenericConnection&& con
+void Client::State::serve_request( GenericStream&& con
                                  , asio::yield_context yield_)
 {
     LOG_DEBUG("Request received ");
@@ -737,6 +718,8 @@ void Client::State::serve_request( GenericConnection&& con
              , {true, queue<responder>({responder::injector})} ),
     });
 
+    auto connection_id = _next_connection_id++;
+
     // Is MitM active?
     bool mitm(false);
     // Saved host/port from CONNECT request.
@@ -748,7 +731,7 @@ void Client::State::serve_request( GenericConnection&& con
         // Read the (clear-text) HTTP request
         http::async_read(con, buffer, req, yield_[ec]);
 
-        Yield yield(con.get_io_service(), yield_);
+        Yield yield(con.get_io_service(), yield_, util::str('C', connection_id));
 
         if ( ec == http::error::end_of_stream
           || ec == asio::ssl::error::stream_truncated) break;
@@ -921,7 +904,7 @@ void Client::State::setup_ipfs_cache()
 void Client::State::listen_tcp
         ( asio::yield_context yield
         , tcp::endpoint local_endpoint
-        , function<void(GenericConnection, asio::yield_context)> handler)
+        , function<void(GenericStream, asio::yield_context)> handler)
 {
     sys::error_code ec;
 
@@ -979,7 +962,7 @@ void Client::State::listen_tcp
                 s.close(ec);
             };
 
-            GenericConnection connection(move(socket) , move(tcp_shutter));
+            GenericStream connection(move(socket) , move(tcp_shutter));
 
             asio::spawn( _ios
                        , [ this
@@ -1074,7 +1057,7 @@ void Client::State::start(int argc, char* argv[])
               listen_tcp( yield[ec]
                         , _config.local_endpoint()
                         , [this, self]
-                          (GenericConnection c, asio::yield_context yield) {
+                          (GenericStream c, asio::yield_context yield) {
                       serve_request(move(c), yield);
                   });
           });
@@ -1094,7 +1077,7 @@ void Client::State::start(int argc, char* argv[])
                   listen_tcp( yield[ec]
                             , ep
                             , [this, self]
-                              (GenericConnection c, asio::yield_context yield) {
+                              (GenericStream c, asio::yield_context yield) {
                         sys::error_code ec;
                         Request rq;
                         beast::flat_buffer buffer;

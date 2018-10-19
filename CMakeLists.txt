@@ -106,19 +106,6 @@ externalproject_add(json
 set(JSON_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/json/src/json/src")
 
 ################################################################################
-externalproject_add(lru
-    # TODO: We only really need to download one header file.
-    GIT_REPOSITORY https://github.com/lamerman/cpp-lru-cache
-    GIT_TAG de1c4a03569bf3bd540e7f55ab5c2961411dbe22
-    UPDATE_COMMAND ""
-    CONFIGURE_COMMAND ""
-    INSTALL_COMMAND ""
-    BUILD_COMMAND ""
-    PREFIX "lru")
-
-set(LRU_INCLUDE_DIR "${CMAKE_BINARY_DIR}/lru/src/lru/include")
-
-################################################################################
 externalproject_add(uri
     GIT_REPOSITORY https://github.com/cpp-netlib/uri
     GIT_TAG 1.0.1
@@ -140,7 +127,6 @@ include_directories(
     "${ASIO_IPFS_INCLUDE_DIR}"
     "${GCRYPT_INCLUDE_DIR}"
     "${JSON_INCLUDE_DIR}"
-    "${LRU_INCLUDE_DIR}"
     "${URI_INCLUDE_DIR}"
 )
 
@@ -186,7 +172,7 @@ target_link_libraries(client
     ${GCRYPT_LIBRARIES}
 )
 
-add_dependencies(client json lru uri ${ASIO_IPFS_TARGET} gcrypt)
+add_dependencies(client json uri ${ASIO_IPFS_TARGET} gcrypt)
 
 ################################################################################
 if (WITH_INJECTOR)

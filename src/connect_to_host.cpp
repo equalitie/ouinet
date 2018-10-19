@@ -14,7 +14,7 @@ using namespace ouinet;
 using TCPLookup = asio::ip::tcp::resolver::results_type;
 
 
-GenericConnection
+GenericStream
 ouinet::connect_to_host( asio::io_service& ios
                        , const string& host
                        , const string& port
@@ -27,12 +27,12 @@ ouinet::connect_to_host( asio::io_service& ios
                                                , ios, cancel_signal
                                                , yield[ec]);
 
-    if (ec) return or_throw(yield, ec, GenericConnection());
+    if (ec) return or_throw(yield, ec, GenericStream());
 
     return connect_to_host(lookup, ios, cancel_signal, yield);
 }
 
-GenericConnection
+GenericStream
 ouinet::connect_to_host( const TCPLookup& lookup
                        , asio::io_service& ios
                        , Signal<void()>& cancel_signal
@@ -51,12 +51,12 @@ ouinet::connect_to_host( const TCPLookup& lookup
 
     // Make the connection on the IP address we get from a lookup
     asio::async_connect(socket, lookup, yield[ec]);
-    if (ec) return or_throw(yield, ec, GenericConnection());
+    if (ec) return or_throw(yield, ec, GenericStream());
 
-    return GenericConnection(move(socket));
+    return GenericStream(move(socket));
 }
 
-GenericConnection
+GenericStream
 ouinet::connect_to_host( const TCPLookup& lookup
                        , asio::io_service& ios
                        , std::chrono::steady_clock::duration timeout

@@ -13,7 +13,7 @@ namespace ouinet { class CacheClient; }
 
 namespace ouinet {
 
-class GenericConnection;
+class GenericStream;
 
 class ClientFrontEnd {
     using Clock = std::chrono::steady_clock;
