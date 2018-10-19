@@ -245,7 +245,7 @@ public:
 
             bool is_ssl = url.scheme == "https";
 
-            PoolId pool_id{is_ssl, host};
+            PoolId pool_id{is_ssl, move(host)};
 
             auto& pool = connection_pools[pool_id];
 
