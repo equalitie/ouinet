@@ -199,7 +199,8 @@ public:
                                      , abort_signal
                                      , yield[ec]);
 
-            // Add an injection identifier header.
+            // Add an injection identifier header
+            // to enable the client to track injection state.
             ret.set(http_::response_injection_id_hdr, to_string(genuuid()));
 
             if (ec || !ret.keep_alive() || !rq_.keep_alive()) {
@@ -229,25 +230,26 @@ private:
     {
         if (!injector) return rs;
 
-        // Recover and pop out synchronous injection toggle.
+        // Recover synchronous injection toggle.
         bool sync = ( rq[http_::request_sync_injection_hdr]
                       == http_::request_sync_injection_true );
 
-        // Recover and pop out injection identifier.
+        // Recover injection identifier.
         auto id = rs[http_::response_injection_id_hdr].to_string();
         assert(!id.empty());
 
         // This injection code logs errors but does not propagate them.
         auto inject = [
-            rq, rs,
+            rq, rs, id,
             injector = injector.get(),
             db_type = config.default_db_type()
         ] (boost::asio::yield_context yield) mutable -> string {
+            // Pop out Ouinet internal HTTP headers.
             rq.erase(http_::request_sync_injection_hdr);
+            rs.erase(http_::response_injection_id_hdr);
 
             sys::error_code ec;
-            auto ret = injector->insert_content( move(rq)
-                                               , move(rs)
+            auto ret = injector->insert_content( id, rq, rs
                                                , db_type
                                                , yield[ec]);
 
@@ -284,9 +286,14 @@ private:
                                        , asio::error::operation_not_supported);
 
         // TODO: use string_view
-        return injector->get_content( rq.target().to_string()
-                                    , config.default_db_type()
-                                    , yield);
+        sys::error_code ec;
+        auto ret = injector->get_content( rq.target().to_string()
+                                        , config.default_db_type()
+                                        , yield[ec]);
+        // Add an injection identifier header
+        // to enable the client to track injection state.
+        ret.response.set(http_::response_injection_id_hdr, ret.injection_id);
+        return or_throw(yield, ec, move(ret));
     }
 
 private:

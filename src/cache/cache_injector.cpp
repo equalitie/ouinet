@@ -11,7 +11,6 @@
 #include "bep44_db.h"
 #include "descdb.h"
 #include "publisher.h"
-#include "../http_util.h"
 #include "../bittorrent/dht.h"
 #include "../util/scheduler.h"
 
@@ -49,8 +48,9 @@ InjectorDb* CacheInjector::get_db(DbType db_type) const
     return nullptr;
 }
 
-string CacheInjector::insert_content( Request rq
-                                    , Response rs
+string CacheInjector::insert_content( const string& id
+                                    , const Request& rq
+                                    , const Response& rs
                                     , DbType db_type
                                     , asio::yield_context yield)
 {
@@ -73,8 +73,6 @@ string CacheInjector::insert_content( Request rq
     sys::error_code ec;
 
     // Prepare and create descriptor
-    auto id = rs[http_::response_injection_id_hdr].to_string();
-    rs.erase(http_::response_injection_id_hdr);
     auto ts = boost::posix_time::microsec_clock::universal_time();
     auto desc = descriptor::http_create( id, ts
                                        , rq, rs
@@ -112,13 +110,10 @@ CacheEntry CacheInjector::get_content( string url
 
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
-    auto ce = descriptor::http_parse
+    return descriptor::http_parse
       ( desc_data
       , [&](auto h, auto y){ return _ipfs_node->cat(h, y); }
-      , yield[ec]);
-    ce.response.set(http_::response_injection_id_hdr, ce.injection_id);
-
-    return or_throw(yield, ec, move(ce));
+      , yield);
 }
 
 CacheInjector::~CacheInjector()

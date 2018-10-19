@@ -43,10 +43,12 @@ public:
     // "https://ipfs.io/ipns/" + ipfs.id()
     std::string ipfs_id() const;
 
-    // Insert `content` into IPFS and store its IPFS ID under the `url` in the
-    // database. On success, the function returns the file descriptor.
-    std::string insert_content( Request
-                              , Response
+    // Insert a descriptor with the given `id` for the given request and response
+    // into the db given by `DbType`, along with data in distributed storage.
+    // On success, the function returns the file descriptor.
+    std::string insert_content( const std::string& id
+                              , const Request&
+                              , const Response&
                               , DbType
                               , boost::asio::yield_context);
 
