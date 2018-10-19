@@ -193,7 +193,6 @@ public:
         namespace asio   = boost::asio;
         namespace system = boost::system;
 
-#if BOOST_VERSION >= 106700
         using Sig = void(system::error_code, size_t);
 
         boost::asio::async_completion<Token, Sig> init(token);
@@ -216,20 +215,6 @@ public:
                          });
 
         return init.result.get();
-#else
-        Handler<Token, size_t> handler(forward<Token>(token));
-        Result<Token, size_t> result(handler);
-
-        _impl->read_buffers.resize(distance(bs.begin(), bs.end()));
-        copy(bs.begin(), bs.end(), _impl->read_buffers.begin());
-
-        _impl->read_impl([h = move(handler), impl = _impl]
-                         (const system::error_code& ec, size_t size) {
-                             h(ec, size);
-                         });
-
-        return result.get();
-#endif
     }
 
     template< class ConstBufferSequence
@@ -243,7 +228,6 @@ public:
         namespace asio   = boost::asio;
         namespace system = boost::system;
 
-#if BOOST_VERSION >= 106700
         using Sig = void(system::error_code, size_t);
 
         boost::asio::async_completion<Token, Sig> init(token);
@@ -266,20 +250,6 @@ public:
                           });
 
         return init.result.get();
-#else
-        Handler<Token, size_t> handler(forward<Token>(token));
-        Result<Token, size_t> result(handler);
-
-        _impl->write_buffers.resize(distance(bs.begin(), bs.end()));
-        copy(bs.begin(), bs.end(), _impl->write_buffers.begin());
-
-        _impl->write_impl([h = move(handler), impl = _impl]
-                          (const system::error_code& ec, size_t size) {
-                              h(ec, size);
-                          });
-
-        return result.get();
-#endif
     }
 
 private:
