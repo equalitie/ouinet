@@ -112,10 +112,13 @@ CacheEntry CacheInjector::get_content( string url
 
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
-    return descriptor::http_parse
+    auto ce = descriptor::http_parse
       ( desc_data
       , [&](auto h, auto y){ return _ipfs_node->cat(h, y); }
-      , yield);
+      , yield[ec]);
+    ce.response.set(http_::response_injection_id_hdr, ce.injection_id);
+
+    return or_throw(yield, ec, move(ce));
 }
 
 CacheInjector::~CacheInjector()

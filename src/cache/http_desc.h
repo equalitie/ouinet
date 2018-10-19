@@ -12,7 +12,6 @@
 #include "cache_entry.h"
 #include "../namespaces.h"
 #include "../or_throw.h"
-#include "../http_util.h"
 
 namespace ouinet {
 
@@ -169,11 +168,9 @@ http_parse( const std::string& desc_data
         return or_throw<CacheEntry>(yield, asio::error::invalid_argument);
     }
 
-    res.set(http_::response_injection_id_hdr, dsc->request_id);
-
     res.prepare_payload();
 
-    return CacheEntry{dsc->timestamp, std::move(res)};
+    return CacheEntry{dsc->timestamp, dsc->request_id, std::move(res)};
 }
 
 } // ouinet::descriptor namespace
