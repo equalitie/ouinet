@@ -110,6 +110,7 @@ _recv_http_response( GenericStream& con
 template<class RequestType>
 GenericStream
 maybe_perform_ssl_handshake( GenericStream&& con
+                           , asio::ssl::context& ssl_ctx
                            , const util::url_match& url
                            , RequestType req
                            , Signal<void()>& abort_signal
@@ -121,6 +122,7 @@ maybe_perform_ssl_handshake( GenericStream&& con
 
     if (url.scheme == "https") {
         auto ret = ssl::util::client_handshake( move(con)
+                                              , ssl_ctx
                                               , url.host
                                               , abort_signal
                                               , yield[ec]);
@@ -140,6 +142,7 @@ template<class RequestType>
 http::response<http::dynamic_body>
 fetch_http_page( asio::io_service& ios
                , GenericStream& optcon
+               , asio::ssl::context& ssl_ctx
                , RequestType req
                , Signal<void()>& abort_signal
                , Yield yield)
@@ -155,7 +158,7 @@ fetch_http_page( asio::io_service& ios
                                          , yield[ec]);
     if (ec) return or_throw<Response>(yield, ec);
 
-    return fetch_http_page( ios, optcon
+    return fetch_http_page( ios, optcon, ssl_ctx
                           , req, std::move(lookup)
                           , abort_signal, yield);
 }
@@ -164,6 +167,7 @@ template<class RequestType>
 http::response<http::dynamic_body>
 fetch_http_page( asio::io_service& ios
                , GenericStream& optcon
+               , asio::ssl::context& ssl_ctx
                , RequestType req
                , const asio::ip::tcp::resolver::results_type& lookup
                , Signal<void()>& abort_signal
@@ -200,6 +204,7 @@ fetch_http_page( asio::io_service& ios
             }
 
             auto cc = maybe_perform_ssl_handshake( std::move(c)
+                                                 , ssl_ctx
                                                  , url
                                                  , req
                                                  , abort_signal
@@ -247,6 +252,7 @@ template<class Duration, class RequestType>
 http::response<http::dynamic_body>
 fetch_http_page( asio::io_service& ios
                , GenericStream& optcon
+               , asio::ssl::context& ssl_ctx
                , RequestType req
                , Duration timeout
                , Signal<void()>& abort_signal
@@ -258,7 +264,7 @@ fetch_http_page( asio::io_service& ios
         , timeout
         , [&] (auto& abort_signal, auto yield) {
               return fetch_http_page
-                (ios, optcon, req, abort_signal, yield);
+                (ios, optcon, ssl_ctx, req, abort_signal, yield);
           }
         , yield);
 }
@@ -267,6 +273,7 @@ template<class Duration, class RequestType>
 http::response<http::dynamic_body>
 fetch_http_page( asio::io_service& ios
                , GenericStream& optcon
+               , asio::ssl::context& ssl_ctx
                , RequestType req
                , const asio::ip::tcp::resolver::results_type& lookup
                , Duration timeout
@@ -279,7 +286,7 @@ fetch_http_page( asio::io_service& ios
         , timeout
         , [&] (auto& abort_signal, auto yield) {
               return fetch_http_page
-                (ios, optcon, req, lookup, abort_signal, yield);
+                (ios, optcon, ssl_ctx, req, lookup, abort_signal, yield);
           }
         , yield);
 }
@@ -288,6 +295,7 @@ template<class RequestType>
 http::response<http::dynamic_body>
 fetch_http_origin( asio::io_service& ios
                  , GenericStream& con_
+                 , asio::ssl::context& ssl_ctx
                  , const util::url_match& url
                  , RequestType req
                  , Signal<void()>& abort_signal
@@ -299,6 +307,7 @@ fetch_http_origin( asio::io_service& ios
     sys::error_code ec;
 
     auto con = maybe_perform_ssl_handshake( move(con_)
+                                          , ssl_ctx
                                           , url
                                           , req
                                           , abort_signal
@@ -330,6 +339,7 @@ template<class Duration, class RequestType>
 http::response<http::dynamic_body>
 fetch_http_origin( asio::io_service& ios
                  , GenericStream& con
+                 , asio::ssl::context& ssl_ctx
                  , const util::url_match& url
                  , RequestType req
                  , Duration timeout
@@ -342,7 +352,7 @@ fetch_http_origin( asio::io_service& ios
         , timeout
         , [&] (auto& abort_signal, auto yield) {
               return fetch_http_origin
-                (ios, con, url, req, abort_signal, yield);
+                (ios, con, ssl_ctx, url, req, abort_signal, yield);
           }
         , yield);
 }

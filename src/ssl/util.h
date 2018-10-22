@@ -47,9 +47,11 @@ static inline std::string read_bio(BIO* bio) {
 // and return an SSL-tunneled stream using it as a lower layer.
 //
 // The verification is done for the given `host` name, using SNI.
+template<class Stream>
 static inline
 ouinet::GenericStream
-client_handshake( ouinet::GenericStream&& con
+client_handshake( Stream&& con
+                , boost::asio::ssl::context& ssl_context
                 , const std::string& host
                 , Signal<void()>& abort_signal
                 , boost::asio::yield_context yield)
@@ -58,15 +60,11 @@ client_handshake( ouinet::GenericStream&& con
     using namespace ouinet;
     namespace ssl = boost::asio::ssl;
 
-    // SSL contexts do not seem to be reusable.
-    ssl::context ssl_context{ssl::context::tls_client};
-    ssl_context.set_default_verify_paths();
-    ssl_context.set_verify_mode(ssl::verify_peer);
-    ssl_context.set_verify_callback(ssl::rfc2818_verification(host));
-
     boost::system::error_code ec;
 
-    auto ssl_sock = make_unique<ssl::stream<GenericStream>>(move(con), ssl_context);
+    auto ssl_sock = make_unique<ssl::stream<Stream>>(move(con), ssl_context);
+    ssl_sock->set_verify_callback(ssl::rfc2818_verification(host));
+
     // Set Server Name Indication (SNI).
     // As seen in ``http_client_async_ssl.cpp`` Boost Beast example.
     if (!::SSL_set_tlsext_host_name(ssl_sock->native_handle(), host.c_str()))
@@ -79,7 +77,7 @@ client_handshake( ouinet::GenericStream&& con
 
     if (ec) return or_throw<GenericStream>(yield, ec);
 
-    static const auto ssl_shutter = [](ssl::stream<GenericStream>& s) {
+    static const auto ssl_shutter = [](ssl::stream<Stream>& s) {
         // Just close the underlying connection
         // (TLS has no message exchange for shutdown).
         s.next_layer().close();

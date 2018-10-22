@@ -77,7 +77,11 @@ public:
         // can be around 2 KiB, so this would be around 2 MiB.
         // TODO: Fine tune if necessary.
         , _ssl_certificate_cache(1000)
-    { }
+        , ssl_ctx{asio::ssl::context::tls_client}
+    {
+        ssl_ctx.set_default_verify_paths();
+        ssl_ctx.set_verify_mode(asio::ssl::verify_peer);
+    }
 
     void start(int argc, char* argv[]);
 
@@ -149,6 +153,8 @@ private:
     // For debugging
     uint64_t _next_connection_id = 0;
     ConnectionPool<std::string> _injector_connections;
+
+    asio::ssl::context ssl_ctx;
 };
 
 //------------------------------------------------------------------------------
@@ -235,7 +241,7 @@ void Client::State::handle_connect_request( GenericStream& client_c
         return;
     }
 
-    full_duplex(client_c, inj.connection, yield);
+    full_duplex(move(client_c), move(inj.connection), yield);
 }
 
 //------------------------------------------------------------------------------
@@ -296,6 +302,7 @@ Response Client::State::fetch_fresh
                 // Send the request straight to the origin
                 res = fetch_http_page( _ios
                                      , c
+                                     , ssl_ctx
                                      , request
                                      , default_timeout::fetch_http()
                                      , _shutdown_signal
@@ -365,7 +372,7 @@ Response Client::State::fetch_fresh
                     }
 
                     // Send the request to the origin.
-                    auto res = fetch_http_origin( _ios , inj.connection
+                    auto res = fetch_http_origin( _ios , inj.connection, ssl_ctx
                                                 , url, request
                                                 , default_timeout::fetch_http()
                                                 , _shutdown_signal

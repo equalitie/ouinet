@@ -7,8 +7,8 @@
 namespace ouinet {
 
 inline
-void full_duplex( GenericStream& c1
-                , GenericStream& c2
+void full_duplex( GenericStream c1
+                , GenericStream c2
                 , asio::yield_context yield)
 {
     static const auto half_duplex
