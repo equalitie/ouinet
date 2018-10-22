@@ -266,22 +266,23 @@ public:
         // XXX: Handler is non-copyable, but can we do this without allocation?
         auto handler = make_shared<Handler>(std::move(init.completion_handler));
 
-        if (!_impl) {
-            return _ios->post([h = move(handler)]
-                              { (*h)(asio::error::bad_descriptor, 0); });
+        if (_impl) {
+            _impl->read_buffers.resize(distance( asio::buffer_sequence_begin(bs)
+                                               , asio::buffer_sequence_end(bs)));
+
+            copy( asio::buffer_sequence_begin(bs)
+                , asio::buffer_sequence_end(bs)
+                , _impl->read_buffers.begin());
+
+            _impl->read_impl([h = move(handler), impl = _impl]
+                             (const system::error_code& ec, size_t size) {
+                                 (*h)(ec, size);
+                             });
         }
-
-        _impl->read_buffers.resize(distance( asio::buffer_sequence_begin(bs)
-                                           , asio::buffer_sequence_end(bs)));
-
-        copy( asio::buffer_sequence_begin(bs)
-            , asio::buffer_sequence_end(bs)
-            , _impl->read_buffers.begin());
-
-        _impl->read_impl([h = move(handler), impl = _impl]
-                         (const system::error_code& ec, size_t size) {
-                             (*h)(ec, size);
-                         });
+        else {
+            _ios->post([h = move(handler)]
+                       { (*h)(asio::error::bad_descriptor, 0); });
+        }
 
         return init.result.get();
     }
@@ -310,22 +311,23 @@ public:
         // XXX: Handler is non-copyable, but can we do this without allocation?
         auto handler = make_shared<Handler>(std::move(init.completion_handler));
 
-        if (!_impl) {
-            return _ios->post([h = move(handler)]
-                              { (*h)(asio::error::bad_descriptor, 0); });
+        if (_impl) {
+            _impl->write_buffers.resize(distance( asio::buffer_sequence_begin(bs)
+                                                , asio::buffer_sequence_end(bs)));
+
+            copy( asio::buffer_sequence_begin(bs)
+                , asio::buffer_sequence_end(bs)
+                , _impl->write_buffers.begin());
+
+            _impl->write_impl([h = move(handler), impl = _impl]
+                              (const system::error_code& ec, size_t size) {
+                                  (*h)(ec, size);
+                              });
         }
-
-        _impl->write_buffers.resize(distance( asio::buffer_sequence_begin(bs)
-                                            , asio::buffer_sequence_end(bs)));
-
-        copy( asio::buffer_sequence_begin(bs)
-            , asio::buffer_sequence_end(bs)
-            , _impl->write_buffers.begin());
-
-        _impl->write_impl([h = move(handler), impl = _impl]
-                          (const system::error_code& ec, size_t size) {
-                              (*h)(ec, size);
-                          });
+        else {
+            _ios->post([h = move(handler)]
+                       { (*h)(asio::error::bad_descriptor, 0); });
+        }
 
         return init.result.get();
     }
