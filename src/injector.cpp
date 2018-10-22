@@ -150,7 +150,7 @@ void handle_connect_request( GenericStream client_c
         return;
     }
 
-    full_duplex(move(client_c), GenericStream(move(origin_c)), yield);
+    full_duplex(move(client_c), move(origin_c), yield);
 }
 
 //------------------------------------------------------------------------------
