@@ -326,8 +326,11 @@ function maybe_install_boost {
 BOOST_GIT=https://github.com/equalitie/Boost-for-Android
 
 if [ ! -d "$BOOST_SOURCE" ]; then
-    (cd "$(dirname "$BOOST_SOURCE")" \
-         && git clone $BOOST_GIT "$(basename "$BOOST_SOURCE")")
+    cd "$(dirname "$BOOST_SOURCE")"
+    git clone $BOOST_GIT "$(basename "$BOOST_SOURCE")"
+    cd $BOOST_SOURCE
+    git reset --hard 67ed5c6e8669073fd5cb939e5914662057514d00
+    cd $DIR
 fi
 
 if [ ! -d "$BOOST_LIBRARYDIR" ]; then

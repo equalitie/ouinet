@@ -78,7 +78,7 @@ Client::connect(asio::yield_context yield, Signal<void()>& cancel)
 
     _client_tunnel->_connections.add(connection);
 
-    return ConnectInfo({ GenericConnection(std::move(connection))
+    return ConnectInfo({ GenericStream(std::move(connection))
                        , _target_id
                        });
     

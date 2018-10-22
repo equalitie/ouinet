@@ -1,5 +1,5 @@
 #include "client_front_end.h"
-#include "generic_connection.h"
+#include "generic_stream.h"
 #include "cache/cache_client.h"
 #include "cache/btree.h"
 #include "util.h"
