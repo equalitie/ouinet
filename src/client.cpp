@@ -269,7 +269,7 @@ Client::State::fetch_stored( const Request& request
                                   , yield[ec]);
     // Add an injection identifier header
     // to enable the user to track injection state.
-    ret.response.set(http_::response_injection_id_hdr, ret.injection_id);
+    if (!ec) ret.response.set(http_::response_injection_id_hdr, ret.injection_id);
     return or_throw(yield, ec, move(ret));
 }
 
