@@ -162,7 +162,7 @@ class OuinetTests(TestCase):
         test_passed = False
         for i2p_client_id in range(0, TestFixtures.MAX_NO_OF_I2P_CLIENTS):
             i2pclient_tunnel_ready = defer.Deferred()
-            i2pclient = self.run_i2p_client(TestFixtures.I2P_CLIENT["name"], ["--listen-on-tcp", "127.0.0.1:"+str(TestFixtures.I2P_CLIENT["port"]), "--injector-ep", injector_i2p_public_id, "http://localhost/"], i2pclient_tunnel_ready)
+            self.run_i2p_client(TestFixtures.I2P_CLIENT["name"], ["--listen-on-tcp", "127.0.0.1:"+str(TestFixtures.I2P_CLIENT["port"]), "--injector-ep", injector_i2p_public_id, "http://localhost/"], i2pclient_tunnel_ready)
         
             #wait for the client tunnel to connect to the injector
             success = yield i2pclient_tunnel_ready
@@ -186,12 +186,13 @@ class OuinetTests(TestCase):
                 break;
             else:
                 #stop the i2p client so we can start a new one
-                i2pclient.stop()
+                i2pclient = self.proc_list.pop()
                 yield i2pclient.proc_end
 
+        self.assertTrue(test_passed)
 
     @inlineCallbacks
-    def no_test_tcp_transport(self):
+    def test_tcp_transport(self):
         """
         Starts an echoing http server, a injector and a client and send a unique http 
         request to the echoing http server through the g client --tcp--> injector -> http server
@@ -224,7 +225,7 @@ class OuinetTests(TestCase):
         self.assertEquals(response_body, content)
 
     @inlineCallbacks
-    def no_test_ipfs_cache(self):
+    def test_ipfs_cache(self):
         """
         Starts an echoing http server, a injector and a two clients and client1 send a unique http 
         request to the echoing http server through the g client --tcp--> injector -> http server
