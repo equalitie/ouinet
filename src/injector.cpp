@@ -35,6 +35,7 @@
 #include "ouiservice.h"
 #include "ouiservice/i2p.h"
 #include "ouiservice/tcp.h"
+#include "ssl/ca_certificate.h"
 
 #include "util/timeout.h"
 #include "util/crypto.h"
@@ -69,7 +70,10 @@ using ConPool = ConnectionPool<>;
 using Connection = ConPool::Connection;
 using ConPools = map<PoolId, ConPool>;
 
-static const boost::filesystem::path OUINET_PID_FILE = "pid";
+static const fs::path OUINET_PID_FILE = "pid";
+static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
+static const fs::path OUINET_TLS_KEY_FILE = "tls-key.pem";
+static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
 
 //------------------------------------------------------------------------------
 static
@@ -671,6 +675,38 @@ int main(int argc, const char* argv[])
             cerr << "Warning: not a clean exit" << endl;
             remove(pid_file_path);
         });
+
+    // Create or load the TLS certificate.
+    std::unique_ptr<EndCertificate> tls_certificate;
+
+    auto tls_cert_path = config.repo_root() / OUINET_TLS_CERT_FILE;
+    auto tls_key_path  = config.repo_root() / OUINET_TLS_KEY_FILE;
+    auto tls_dh_path   = config.repo_root() / OUINET_TLS_DH_FILE;
+
+    if (exists(tls_cert_path) && exists(tls_key_path) && exists(tls_dh_path)) {
+        cout << "Loading existing TLS certificate..." << endl;
+        auto read_pem = [](auto path) {
+            std::stringstream ss;
+            ss << boost::filesystem::ifstream(path).rdbuf();
+            return ss.str();
+        };
+        auto cert = read_pem(tls_cert_path);
+        auto key = read_pem(tls_key_path);
+        auto dh = read_pem(tls_dh_path);
+        tls_certificate = make_unique<EndCertificate>(cert, key, dh);
+    } else {
+        cout << "Generating and storing TLS certificate..." << endl;
+        tls_certificate = make_unique<EndCertificate>("localhost");
+
+        boost::filesystem::ofstream(tls_cert_path)
+            << tls_certificate->pem_certificate();
+
+        boost::filesystem::ofstream(tls_key_path)
+            << tls_certificate->pem_private_key();
+
+        boost::filesystem::ofstream(tls_dh_path)
+            << tls_certificate->pem_dh_param();
+    }
 
     // The io_service is required for all I/O
     asio::io_service ios;

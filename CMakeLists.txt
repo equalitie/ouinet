@@ -190,6 +190,7 @@ if (WITH_INJECTOR)
         "./src/cache_control.cpp"
         "./src/ouiservice.cpp"
         "./src/ouiservice/tcp.cpp"
+        "./src/ssl/ca_certificate.cpp"
         "./src/logger.cpp"
         "./src/cache/*.cpp"
         "./src/bittorrent/*.cpp"
