@@ -31,6 +31,9 @@ public:
     boost::optional<asio::ip::tcp::endpoint> tcp_endpoint() const
     { return _tcp_endpoint; }
 
+    boost::optional<asio::ip::tcp::endpoint> tls_endpoint() const
+    { return _tls_endpoint; }
+
     static boost::program_options::options_description
     options_description();
 
@@ -54,6 +57,7 @@ private:
     boost::optional<size_t> _open_file_limit;
     bool _listen_on_i2p = false;
     boost::optional<asio::ip::tcp::endpoint> _tcp_endpoint;
+    boost::optional<asio::ip::tcp::endpoint> _tls_endpoint;
     boost::filesystem::path OUINET_CONF_FILE = "ouinet-injector.conf";
     std::string _credentials;
     util::Ed25519PrivateKey _bt_private_key;
@@ -73,7 +77,8 @@ InjectorConfig::options_description()
     desc.add_options()
         ("help", "Produce this help message")
         ("repo", po::value<string>(), "Path to the repository root")
-        ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen")
+        ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen (cleartext)")
+        ("listen-on-tls", po::value<string>(), "IP:PORT endpoint on which we'll listen (encrypted)")
         ("listen-on-i2p",
          po::value<string>(),
          "Whether we should be listening on I2P (true/false)")
@@ -167,6 +172,10 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
     if (vm.count("listen-on-tcp")) {
         _tcp_endpoint = util::parse_tcp_endpoint(vm["listen-on-tcp"].as<string>());
+    }
+
+    if (vm.count("listen-on-tls")) {
+        _tls_endpoint = util::parse_tcp_endpoint(vm["listen-on-tls"].as<string>());
     }
 
     setup_bt_private_key( vm.count("bittorrent-private-key")
