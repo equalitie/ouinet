@@ -1029,7 +1029,8 @@ void Client::State::start(int argc, char* argv[])
         _ca_certificate = make_unique<CACertificate>(cert, key, dh);
     } else {
         cout << "Generating and storing CA certificate..." << endl;
-        _ca_certificate = make_unique<CACertificate>();
+        _ca_certificate = make_unique<CACertificate>
+            ("Your own local Ouinet client");
 
         boost::filesystem::ofstream(ca_cert_path())
             << _ca_certificate->pem_certificate();
