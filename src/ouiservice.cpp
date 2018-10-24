@@ -43,7 +43,7 @@ void OuiServiceServer::start_listen(asio::yield_context yield)
             lock.release(true);
 
             while (true) {
-                GenericConnection connection = implementation->accept(yield[ec]);
+                GenericStream connection = implementation->accept(yield[ec]);
                 /*
                  * TODO: Reconnect logic? There are errors other than operation_aborted.
                  */
@@ -81,17 +81,17 @@ void OuiServiceServer::stop_listen()
     _connection_available.notify();
 }
 
-GenericConnection OuiServiceServer::accept(asio::yield_context yield)
+GenericStream OuiServiceServer::accept(asio::yield_context yield)
 {
     if (_connection_queue.empty()) {
         _connection_available.wait(yield);
     }
 
     if (_connection_queue.empty()) {
-        return or_throw<GenericConnection>(yield, asio::error::operation_aborted);
+        return or_throw<GenericStream>(yield, asio::error::operation_aborted);
     }
 
-    GenericConnection connection = std::move(_connection_queue.front());
+    GenericStream connection = std::move(_connection_queue.front());
     _connection_queue.pop_front();
     return connection;
 }

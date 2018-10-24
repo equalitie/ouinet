@@ -58,7 +58,8 @@ fi
 
 if [ "$OUINET_DEBUG" = yes ]; then
     run() {
-        exec gdb -batch -ex='handle SIGPIPE nostop noprint pass' -ex=r -ex=bt \
+        exec gdb -return-child-result -batch \
+                 -ex='handle SIGPIPE nostop noprint pass' -ex=r -ex=bt \
                  --args "$INST/$PROG" "$@"
     }
 else

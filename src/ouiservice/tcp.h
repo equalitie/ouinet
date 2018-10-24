@@ -16,7 +16,7 @@ class TcpOuiServiceServer : public OuiServiceImplementationServer
     void start_listen(asio::yield_context yield) override;
     void stop_listen() override;
 
-    GenericConnection accept(asio::yield_context yield) override;
+    GenericStream accept(asio::yield_context yield) override;
 
     private:
     asio::io_service& _ios;

@@ -47,7 +47,7 @@ void TcpOuiServiceServer::stop_listen()
     }
 }
 
-GenericConnection TcpOuiServiceServer::accept(asio::yield_context yield)
+GenericStream TcpOuiServiceServer::accept(asio::yield_context yield)
 {
     sys::error_code ec;
 
@@ -55,7 +55,7 @@ GenericConnection TcpOuiServiceServer::accept(asio::yield_context yield)
     _acceptor.async_accept(socket, yield[ec]);
 
     if (ec) {
-        return or_throw<GenericConnection>(yield, ec, GenericConnection());
+        return or_throw<GenericStream>(yield, ec);
     }
 
     static const auto tcp_shutter = [](asio::ip::tcp::socket& s) {
@@ -64,7 +64,7 @@ GenericConnection TcpOuiServiceServer::accept(asio::yield_context yield)
         s.close(ec);
     };
 
-    return GenericConnection(std::move(socket), tcp_shutter);
+    return GenericStream(std::move(socket), tcp_shutter);
 }
 
 TcpOuiServiceClient::TcpOuiServiceClient(asio::io_service& ios, asio::ip::tcp::endpoint endpoint):
@@ -81,7 +81,8 @@ TcpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
 
     auto cancel_slot = cancel.connect([&] {
         // tcp::socket::cancel() does not work properly on all platforms
-        socket.close();
+        sys::error_code ec;
+        socket.close(ec);
     });
 
     socket.async_connect(_endpoint, yield[ec]);
@@ -91,11 +92,12 @@ TcpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
     }
 
     static const auto tcp_shutter = [](asio::ip::tcp::socket& s) {
-        s.shutdown(asio::ip::tcp::socket::shutdown_both);
-        s.close();
+        sys::error_code ec;
+        s.shutdown(asio::ip::tcp::socket::shutdown_both, ec);
+        s.close(ec);
     };
 
-    return ConnectInfo{ GenericConnection(std::move(socket), tcp_shutter)
+    return ConnectInfo{ GenericStream(std::move(socket), tcp_shutter)
                       , util::str(_endpoint) };
 }
 

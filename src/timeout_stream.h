@@ -181,12 +181,12 @@ public:
         else   _max_connect_duration = boost::none;
     }
 
-    void close()
+    void close(sys::error_code& ec)
     {
         if (!_state) return;
 
         if (_state->inner.is_open()) {
-            _state->inner.close();
+            _state->inner.close(ec);
         }
     }
 
@@ -194,8 +194,8 @@ public:
     const next_layer_type& next_layer() const { return _state->inner; }
 
     template<typename ShutdownType>
-    void shutdown(ShutdownType type) {
-        _state->inner.shutdown(type);
+    void shutdown(ShutdownType type, sys::error_code& ec) {
+        _state->inner.shutdown(type, ec);
     }
 
     ~TimeoutStream();
@@ -326,7 +326,8 @@ void TimeoutStream<InnerStream>::setup_deadline( boost::optional<Duration> d
 template<class InnerStream>
 inline TimeoutStream<InnerStream>::~TimeoutStream()
 {
-    close();
+    sys::error_code ec;
+    close(ec);
 }
 
 } // namespace
