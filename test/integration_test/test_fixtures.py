@@ -11,11 +11,11 @@ class TestFixtures:
     FATAL_ERROR_INDICATOR_REGEX = r'[\s\S]*\[ABORT\][\s\S]*'
     DEFAULT_PROCESS_TIMEOUT = 15 # seconds
     TCP_TRANSPORT_TIMEOUT = 15
-    I2P_TRANSPORT_TIMEOUT = 300
+    I2P_TRANSPORT_TIMEOUT = 600
     IPFS_CACHE_TIMEOUT = 900
     
     TEST_TIMEOUT = {
-        "test_i2p_transport":300,
+        "test_i2p_transport":600,
         "test_tcp_transport":15,
         "test_ipfs_cache":900}
 
@@ -33,12 +33,14 @@ class TestFixtures:
 
     INJECTOR_I2P_PRIVATE_KEY = "tR0ADsik-0Gn4F-t6WICzUT59H9NlUnejCknd4E4XZNha8B0zR8zFW6va~MpCzMdlE7FxChpHM9MjMnuR1PcakaKU9i5E0wJ~cP2oQd1GTCtMARmpsILysN4brfEvU2TAn1n7JZnHpMHSRPaPTqk7g-ReLR8jN5yQBOedxmmKIJspcOhTjRprqceKjoPpmHzqPgVtrspgQAOIUCcRQ3S44DGUfN603Woqlci6XDmMZW4gktHEygCoIbaXMbvt7gCY6S5PI5ENu-3xsKKZG5B7RUzDQGX5iQHfRLe9utGMRQf63RneFuXZ6hfMSSv7TXm7emUpw5gDXFoLK9GT3NDPPmjX3kU-SlNxF2BfI38YU8fuqguZEjQO0w89O8DbyKvqxBTS5scxucIw5Gu3qZX98If20QzVqk2ZaEeA8LTCIWsM4mi9Mmw~fD7fyX9fnmGNFHrDkXbNtZU-8K9TzB4Ka4KHJRBQIlNDKCT3LMKs5PJuW4TYtNb2M8UV2UsIFouBQAEAAEAAE7cmUpeDXDkMEy3Br08viGl5MDBvVe9DGRiGyg-WzIm8uQ0054Q2APSmljEDN21JFMnrvbYn1BgCzCOXKJjd4T9C7Ms~NR0XJGSUMiIiclKHBYNkP~SoFiBX2PD3CThfq56t7HikE9EtO1K9rLEh5uwoxqyyBdbqxEN6yzDZOX5znajTr~6rwZ0EebaNBG9cb76UAA69gc-9HfpYE0py~yb6qcfQuXoQy0m8gVMffJymNw-sXbNJMzb8qHAeH8i24LRleLU-MrvqmAw7RM1Tg3AlK4e3d0I3acgnGsPmqdir01F5Sbb3ETpmIU6sfngbs9pGwZ7ZKio2r1hzlZX7EkvaLJhUhGZJWwzxqHDhhX6llDF168OsJHlOoeqPU35Ug=="
 
+    I2P_REUSE_PREDEFINED_IDENTITY = False
     I2P_INJECTOR_NAME = "i2p_injector"
     I2P_TUNNEL_READY_REGEX = r'[\s\S]*I2P Tunnel has been established'
 
     I2P_CLIENT = {"name":"i2p_client",
                         "port": 8081}
 
+    MAX_NO_OF_I2P_CLIENTS = 5
     MAX_NO_OF_TRIAL_I2P_REQUESTS = 5
     
     TCP_INJECTOR_NAME = "tcp_injector"
@@ -69,5 +71,7 @@ class TestFixtures:
     REQUEST_CACHED_REGEX = r'[\s\S]*Request was successfully published to cache[\s\S]*'
     NO_OF_CACHED_MESSAGES_REQUIRED = 1
     RETRIEVED_FROM_CACHE_REGEX = r'[\s\S]*Response was retrieved from cache[\s\S]*'
-                                    
+    MAX_NO_OF_TRIAL_IPFS_CACHE_REQUESTS = 3
 
+    I2P_DHT_ADVERTIZE_WAIT_PERIOD = 30
+    I2P_TUNNEL_HEALING_PERIOD = 10

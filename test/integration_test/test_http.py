@@ -5,7 +5,7 @@
 import os
 import os.path
 
-from twisted.internet import reactor, defer
+from twisted.internet import reactor, defer, task
 from twisted.internet.endpoints import TCP4ClientEndpoint
 from twisted.internet.protocol import Protocol
 from twisted.web.client import ProxyAgent, Agent, readBody
@@ -71,7 +71,7 @@ class OuinetTests(TestCase):
         return injector
 
     def run_i2p_injector(self, injector_args, deferred_i2p_ready):
-        injector = OuinetI2PInjector(OuinetConfig(TestFixtures.I2P_INJECTOR_NAME + "_i2p", TestFixtures.I2P_TRANSPORT_TIMEOUT, injector_args, benchmark_regexes=[TestFixtures.I2P_TUNNEL_READY_REGEX]), [deferred_i2p_ready])
+        injector = OuinetI2PInjector(OuinetConfig(TestFixtures.I2P_INJECTOR_NAME + "_i2p", TestFixtures.I2P_TRANSPORT_TIMEOUT, injector_args, benchmark_regexes=[TestFixtures.I2P_TUNNEL_READY_REGEX]), [deferred_i2p_ready], TestFixtures.I2P_REUSE_PREDEFINED_IDENTITY and TestFixtures.INJECTOR_I2P_PRIVATE_KEY or None)
         injector.start()
         self.proc_list.append(injector)
 
@@ -139,33 +139,57 @@ class OuinetTests(TestCase):
         and make sure it gets the correct echo. The unique request makes sure that
         the response is from the http server and is not cached.
         """
-        #injector
+        # #injector
         i2pinjector_tunnel_ready = defer.Deferred()
         i2pinjector = self.run_i2p_injector(["--listen-on-i2p", "true"], i2pinjector_tunnel_ready)
 
         #wait for the injector tunnel to be advertised
-        success = yield i2pinjector_tunnel_ready## self.wait_for_i2p_tunnel_to_get_connected(i2pinjector_tunnel_ready)
+        success = yield i2pinjector_tunnel_ready
 
-        #client
-        i2pclient_tunnel_ready = defer.Deferred()
-        i2pclient = self.run_i2p_client(TestFixtures.I2P_CLIENT["name"], ["--listen-on-tcp", "127.0.0.1:"+str(TestFixtures.I2P_CLIENT["port"]), "--injector-ep", TestFixtures.INJECTOR_I2P_PUBLIC_ID, "http://localhost/"], i2pclient_tunnel_ready)
+        #we only can request that after injector is ready
+        injector_i2p_public_id = i2pinjector.get_I2P_public_ID()
+        # injector_i2p_public_id = TestFixtures.INJECTOR_I2P_PUBLIC_ID
+        self.assert_(injector_i2p_public_id) #empty public id means injector coludn't read the endpoint file
 
+        #wait so the injector id gets advertised on the DHT
+        logging.debug("waiting " + str(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD) + " secs for the tunnel to get advertised on the DHT...")
+        yield task.deferLater(reactor, TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD, lambda: None)
+        
         #http_server
         self.test_http_server = self.run_http_server(TestFixtures.TEST_HTTP_SERVER_PORT)
+
+        #client
+        test_passed = False
+        for i2p_client_id in range(0, TestFixtures.MAX_NO_OF_I2P_CLIENTS):
+            i2pclient_tunnel_ready = defer.Deferred()
+            self.run_i2p_client(TestFixtures.I2P_CLIENT["name"], ["--listen-on-tcp", "127.0.0.1:"+str(TestFixtures.I2P_CLIENT["port"]), "--injector-ep", injector_i2p_public_id, "http://localhost/"], i2pclient_tunnel_ready)
         
-        #wait for the client tunnel to connect to the injector
-        success = yield i2pclient_tunnel_ready
+            #wait for the client tunnel to connect to the injector
+            success = yield i2pclient_tunnel_ready
 
-        content = self.safe_random_str(TestFixtures.RESPONSE_LENGTH)
-        for i in range(1,TestFixtures.MAX_NO_OF_TRIAL_I2P_REQUESTS):
-            defered_response = yield  self.request_echo(TestFixtures.I2P_CLIENT["port"], content)
-            if defered_response.code == 200:
-                break
+            content = self.safe_random_str(TestFixtures.RESPONSE_LENGTH)
+            for i in range(0,TestFixtures.MAX_NO_OF_TRIAL_I2P_REQUESTS):
+                logging.debug("request attempt no " + str(i+1) + "...")
+                defered_response = yield  self.request_echo(TestFixtures.I2P_CLIENT["port"], content)
+                if defered_response.code == 200:
+                    self.assertEquals(defered_response.code, 200)
 
-        self.assertEquals(defered_response.code, 200)
+                    response_body = yield readBody(defered_response)
+                    self.assertEquals(response_body, content)
+                    test_passed = True
+                    break
+                else:
+                    logging.debug("request attempt no " + str(i+1) + " failed. with code " + str(defered_response.code))
+                    yield task.deferLater(reactor, TestFixtures.I2P_TUNNEL_HEALING_PERIOD, lambda: None)
 
-        response_body = yield readBody(defered_response)
-        self.assertEquals(response_body, content)
+            if test_passed:
+                break;
+            else:
+                #stop the i2p client so we can start a new one
+                i2pclient = self.proc_list.pop()
+                yield i2pclient.proc_end
+
+        self.assertTrue(test_passed)
 
     @inlineCallbacks
     def test_tcp_transport(self):
@@ -249,7 +273,7 @@ class OuinetTests(TestCase):
 
         #start cache client which supposed to read the response from cache
         client_cache_ready = defer.Deferred()
-        cache_client = self.run_cache_client(TestFixtures.CACHE_CLIENT[1]["name"], ["--listen-on-tcp", "127.0.0.1:"+str(TestFixtures.CACHE_CLIENT[1]["port"]), "--injector-ipns", IPNS_end_point, "--injector-ep", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT), "http://localhost/"], client_cache_ready)
+        cache_client = self.run_cache_client(TestFixtures.CACHE_CLIENT[1]["name"], ["--listen-on-tcp", "127.0.0.1:"+str(TestFixtures.CACHE_CLIENT[1]["port"]), "--injector-ipns", IPNS_end_point, "http://localhost/"], client_cache_ready)
 
         import time
 
@@ -265,8 +289,12 @@ class OuinetTests(TestCase):
             cache_client.IPNS_resolution_start_time()) + " seconds")
 
         # now request the same page from second client
-        defered_response = yield self.request_page(
-            TestFixtures.CACHE_CLIENT[1]["port"], page_url)
+        defered_response = defer.Deferred()
+        for i in range(0,TestFixtures.MAX_NO_OF_TRIAL_IPFS_CACHE_REQUESTS):
+            defered_response = yield self.request_page(
+                TestFixtures.CACHE_CLIENT[1]["port"], page_url)
+            if (defered_response.code == 200):
+                break
 
         self.assertEquals(defered_response.code, 200)
 

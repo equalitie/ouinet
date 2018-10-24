@@ -1217,6 +1217,11 @@ void dht::DhtNode::collect( const NodeID& target_id
                           , Evaluate&& evaluate
                           , asio::yield_context yield) const
 {
+    if (!_routing_table) {
+        // We're not yet bootstrapped.
+        return or_throw(yield, asio::error::try_again);
+    }
+
     // (Note: can't use lambda because we need default constructibility now)
     struct Compare {
         NodeID target_id;

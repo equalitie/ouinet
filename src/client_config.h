@@ -109,12 +109,15 @@ public:
            ("default-db"
             , po::value<string>()->default_value("btree")
             , "Default database type to use, can be either \"btree\" or \"bep44\"")
+           ("disable-cache", "Disable all cache operations (even initialization)")
            ;
 
         return desc;
     }
 
     DbType default_db_type() const { return _default_db_type; }
+
+    bool cache_enabled() const { return !_disable_cache; }
 
 private:
     bool _is_help = false;
@@ -133,6 +136,7 @@ private:
     std::map<std::string, std::string> _injector_credentials;
 
     boost::optional<util::Ed25519PublicKey> _bt_pubkey;
+    bool _disable_cache = false;
 };
 
 inline
@@ -281,6 +285,10 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         else {
             throw std::runtime_error("Invalid value for --default-db-type");
         }
+    }
+
+    if (vm.count("disable-cache")) {
+        _disable_cache = true;
     }
 }
 

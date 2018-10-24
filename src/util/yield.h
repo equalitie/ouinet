@@ -30,14 +30,20 @@ class Yield : public boost::intrusive::list_base_hook
     };
 
 public:
-    Yield(asio::io_service& ios, asio::yield_context asio_yield)
+    Yield(asio::io_service& ios
+         , asio::yield_context asio_yield
+         , std::string con_id = "")
         : _ios(ios)
         , _asio_yield(asio_yield)
         , _ignored_error(std::make_shared<sys::error_code>())
-        , _tag(util::str("Y_", generate_context_id()))
+        , _tag(util::str("R", generate_context_id()))
         , _parent(nullptr)
         , _start_time(Clock::now())
     {
+        if (!con_id.empty()) {
+            _tag = con_id + "/" + _tag;
+        }
+
         start_timing();
     }
 

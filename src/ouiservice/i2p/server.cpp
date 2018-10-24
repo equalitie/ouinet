@@ -100,7 +100,7 @@ void Server::stop_listen()
     }
 }
 
-ouinet::GenericConnection Server::accept(asio::yield_context yield)
+ouinet::GenericStream Server::accept(asio::yield_context yield)
 {
     sys::error_code ec;
 
@@ -109,11 +109,11 @@ ouinet::GenericConnection Server::accept(asio::yield_context yield)
     _tcp_acceptor.async_accept(connection.socket(), yield[ec]);
 
     if (ec || !_server_tunnel) {
-        return or_throw<GenericConnection>(yield, ec, GenericConnection());
+        return or_throw<GenericStream>(yield, ec);
     }
 
     _server_tunnel->_connections.add(connection);
-    return GenericConnection(std::move(connection));
+    return GenericStream(std::move(connection));
 }
 
 std::string Server::public_identity() const

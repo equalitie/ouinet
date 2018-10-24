@@ -79,8 +79,9 @@ inline void Connection::async_write_some( const ConstBufferSequence& bufs
 
 inline void Connection::close()
 {
-    _socket.shutdown(asio::ip::tcp::socket::shutdown_both);
-    _socket.close();
+    sys::error_code ec;
+    _socket.shutdown(asio::ip::tcp::socket::shutdown_both, ec);
+    _socket.close(ec);
     boost::intrusive::list_base_hook<boost::intrusive::link_mode<boost::intrusive::auto_unlink>>::unlink();
 }
 

@@ -43,6 +43,8 @@ public:
     DbType default_db_type() const
     { return _default_db_type; }
 
+    bool cache_enabled() const { return !_disable_cache; }
+
 private:
     void setup_bt_private_key(const std::string& hex);
 
@@ -56,6 +58,7 @@ private:
     std::string _credentials;
     util::Ed25519PrivateKey _bt_private_key;
     DbType _default_db_type = DbType::btree;
+    bool _disable_cache = false;
 };
 
 inline
@@ -85,6 +88,7 @@ InjectorConfig::options_description()
         ("default-db"
          , po::value<string>()->default_value("btree")
          , "Default database type to use, can be either \"btree\" or \"bep44\"")
+        ("disable-cache", "Disable all cache operations (even initialization)")
         ;
 
     return desc;
@@ -184,6 +188,10 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         else {
             throw std::runtime_error("Invalid value for --default-db-type");
         }
+    }
+
+    if (vm.count("disable-cache")) {
+        _disable_cache = true;
     }
 }
 
