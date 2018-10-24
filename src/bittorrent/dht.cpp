@@ -42,9 +42,9 @@ std::string dht::NodeContact::to_string() const
 dht::DhtNode::DhtNode(asio::io_service& ios, ip::address interface_address):
     _ios(ios),
     _interface_address(interface_address),
-    _initialized(false),
     _tracker(std::make_unique<Tracker>(_ios)),
-    _data_store(std::make_unique<DataStore>(_ios))
+    _data_store(std::make_unique<DataStore>(_ios)),
+    _ready(false)
 {
 }
 
@@ -83,9 +83,6 @@ void dht::DhtNode::start(asio::yield_context yield)
 
 void dht::DhtNode::stop()
 {
-    _stopped = true;
-    _tracker = nullptr;
-    _data_store = nullptr;
     _multiplexer = nullptr;
 }
 
@@ -1179,18 +1176,24 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
      */
 
     _bootstrap_endpoints.push_back(bootstrap_ep);
+
     /*
      * Lookup our own ID, constructing a basic path to ourselves.
      */
     find_closest_nodes(_node_id, yield);
 
     /*
+     * We now know enough nodes that general DHT queries should succeed. The
+     * remaining work is part of our participation in the DHT, but is not
+     * necessary for implementing queries.
+     */
+    _ready = true;
+
+    /*
      * For each bucket in the routing table, lookup a random ID in that range.
      * This ensures that every node that should route to us, knows about us.
      */
     refresh_routing_table(yield);
-
-    _initialized = true;
 }
 
 
@@ -1839,7 +1842,6 @@ void dht::DhtNode::routing_bucket_fail_node( RoutingBucket* bucket
 
 MainlineDht::MainlineDht(asio::io_service& ios)
     : _ios(ios)
-    , _was_destroyed(std::make_shared<bool>(false))
 {
     /*
      * Refresh publications periodically.
@@ -1895,7 +1897,6 @@ MainlineDht::MainlineDht(asio::io_service& ios)
 
 MainlineDht::~MainlineDht()
 {
-    *_was_destroyed = true;
     _terminate_signal();
 }
 
@@ -1935,8 +1936,7 @@ void MainlineDht::set_interfaces( const std::vector<asio::ip::address>& addresse
 
 void MainlineDht::set_interfaces(const std::vector<asio::ip::address>& addresses)
 {
-    asio::spawn(_ios, [=, wd = _was_destroyed] (asio::yield_context yield) {
-            if (*wd) return;
+    asio::spawn(_ios, [=] (asio::yield_context yield) {
             sys::error_code ec;
             set_interfaces(addresses, yield[ec]);
         });
@@ -1952,6 +1952,10 @@ std::set<tcp::endpoint> MainlineDht::tracker_announce_start(NodeID infohash, boo
     SuccessCondition condition(_ios);
     for (auto& i : _nodes) {
         asio::spawn(_ios, [&, lock = condition.lock()] (asio::yield_context yield) {
+            if (!i.second->ready()) {
+                return;
+            }
+
             std::set<tcp::endpoint> peers = i.second->tracker_announce(infohash, port, yield);
 
             /*
@@ -1965,7 +1969,9 @@ std::set<tcp::endpoint> MainlineDht::tracker_announce_start(NodeID infohash, boo
             }
         });
     }
-    condition.wait_for_success(yield);
+    if (!condition.wait_for_success(yield)) {
+        return or_throw<std::set<tcp::endpoint>>(yield, asio::error::network_unreachable);
+    }
 
     return output;
 }
@@ -1984,13 +1990,19 @@ NodeID MainlineDht::immutable_put_start(const BencodedValue& data, asio::yield_c
     SuccessCondition condition(_ios);
     for (auto& i : _nodes) {
         asio::spawn(_ios, [&, lock = condition.lock()] (asio::yield_context yield) {
+            if (!i.second->ready()) {
+                return;
+            }
+
             /* TODO error handling -- should wait for one node to succeed */
             i.second->data_put_immutable(data, yield);
 
             lock.release(true);
         });
     }
-    condition.wait_for_success(yield);
+    if (!condition.wait_for_success(yield)) {
+        return or_throw<NodeID>(yield, asio::error::network_unreachable);
+    }
 
     return key;
 }
@@ -2009,13 +2021,19 @@ NodeID MainlineDht::mutable_put_start(const MutableDataItem& data, asio::yield_c
     SuccessCondition condition(_ios);
     for (auto& i : _nodes) {
         asio::spawn(_ios, [&, lock = condition.lock()] (asio::yield_context yield) {
+            if (!i.second->ready()) {
+                return;
+            }
+
             /* TODO error handling -- should wait for one node to succeed */
             i.second->data_put_mutable(data, yield);
 
             lock.release(true);
         });
     }
-    condition.wait_for_success(yield);
+    if (!condition.wait_for_success(yield)) {
+        return or_throw<NodeID>(yield, asio::error::network_unreachable);
+    }
 
     return key;
 }
@@ -2032,6 +2050,10 @@ std::set<tcp::endpoint> MainlineDht::tracker_get_peers(NodeID infohash, asio::yi
     SuccessCondition condition(_ios);
     for (auto& i : _nodes) {
         asio::spawn(_ios, [&, lock = condition.lock()] (asio::yield_context yield) {
+            if (!i.second->ready()) {
+                return;
+            }
+
             std::set<tcp::endpoint> peers = i.second->tracker_get_peers(infohash, yield);
 
             if (peers.size()) {
@@ -2040,7 +2062,9 @@ std::set<tcp::endpoint> MainlineDht::tracker_get_peers(NodeID infohash, asio::yi
             }
         });
     }
-    condition.wait_for_success(yield);
+    if (!condition.wait_for_success(yield)) {
+        return or_throw<std::set<tcp::endpoint>>(yield, asio::error::network_unreachable);
+    }
 
     /* TODO: cancel parallel find_peers operations */
 
@@ -2054,6 +2078,10 @@ boost::optional<BencodedValue> MainlineDht::immutable_get(NodeID key, asio::yiel
     SuccessCondition condition(_ios);
     for (auto& i : _nodes) {
         asio::spawn(_ios, [&, lock = condition.lock()] (asio::yield_context yield) {
+            if (!i.second->ready()) {
+                return;
+            }
+
             boost::optional<BencodedValue> data = i.second->data_get_immutable(key, yield);
 
             if (data) {
@@ -2062,7 +2090,9 @@ boost::optional<BencodedValue> MainlineDht::immutable_get(NodeID key, asio::yiel
             }
         });
     }
-    condition.wait_for_success(yield);
+    if (!condition.wait_for_success(yield)) {
+        return or_throw<boost::optional<BencodedValue>>(yield, asio::error::network_unreachable);
+    }
 
     /* TODO: cancel parallel get_immutable operations */
 
@@ -2079,6 +2109,10 @@ boost::optional<MutableDataItem> MainlineDht::mutable_get(
     SuccessCondition condition(_ios);
     for (auto& i : _nodes) {
         asio::spawn(_ios, [&, lock = condition.lock()] (asio::yield_context yield) {
+            if (!i.second->ready()) {
+                return;
+            }
+
             boost::optional<MutableDataItem> data = i.second->data_get_mutable(public_key, salt, yield);
 
             if (data) {
@@ -2087,7 +2121,9 @@ boost::optional<MutableDataItem> MainlineDht::mutable_get(
             }
         });
     }
-    condition.wait_for_success(yield);
+    if (!condition.wait_for_success(yield)) {
+        return or_throw<boost::optional<MutableDataItem>>(yield, asio::error::network_unreachable);
+    }
 
     /* TODO: cancel parallel get_mutable operations */
 
