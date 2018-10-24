@@ -119,6 +119,7 @@ http_create( asio_ipfs::node& ipfs
 static inline
 CacheEntry http_parse( asio_ipfs::node& ipfs
                      , const std::string& desc_ipfs
+                     , Cancel& cancel
                      , asio::yield_context yield)
 {
 
@@ -126,7 +127,10 @@ CacheEntry http_parse( asio_ipfs::node& ipfs
 
     sys::error_code ec;
 
-    std::string desc_data = ipfs.cat(desc_ipfs, yield[ec]);
+    std::function<void()> cancel_fn;
+    auto cancel_handle = cancel.connect([&] { if (cancel_fn) cancel_fn(); });
+
+    std::string desc_data = ipfs.cat(desc_ipfs, cancel_fn, yield[ec]);
 
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
@@ -143,7 +147,7 @@ CacheEntry http_parse( asio_ipfs::node& ipfs
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
     // Get the HTTP response body (stored independently).
-    std::string body = ipfs.cat(dsc->body_link, yield[ec]);
+    std::string body = ipfs.cat(dsc->body_link, cancel_fn, yield[ec]);
 
     // Build an HTTP response from the head in the descriptor and the retrieved body.
     http::response_parser<Response::body_type> parser;

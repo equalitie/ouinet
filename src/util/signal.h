@@ -39,6 +39,8 @@ public:
 
     size_t call_count() const { return _call_count; }
 
+    operator bool() const { return call_count() != 0; }
+
     Connection connect(std::function<T> slot)
     {
         Connection connection;
@@ -51,5 +53,8 @@ private:
     boost::intrusive::list<Connection, boost::intrusive::constant_time_size<false>> _connections;
     size_t _call_count = 0;
 };
+
+// This is how we use it 99% (100%?) of the time.
+using Cancel = Signal<void()>;
 
 } // ouinet namespace

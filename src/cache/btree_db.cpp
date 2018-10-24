@@ -21,8 +21,15 @@ static const unsigned int BTREE_NODE_SIZE=64;
 
 static BTree::CatOp make_cat_operation(asio_ipfs::node& ipfs_node)
 {
-    return [&ipfs_node] (const BTree::Hash& hash, asio::yield_context yield) {
-        return ipfs_node.cat(hash, yield);
+    return [&ipfs_node] ( const BTree::Hash& hash
+                        , Cancel& cancel
+                        , asio::yield_context yield) {
+        sys::error_code ec;
+        function<void()> cancel_fn;
+        auto cancel_handle = cancel.connect([&] { if (cancel_fn) cancel_fn(); });
+        auto retval = ipfs_node.cat(hash, cancel_fn, yield[ec]);
+        if (!ec && cancel) ec = asio::error::operation_aborted;
+        return or_throw(yield, ec, move(retval));
     };
 }
 
@@ -196,25 +203,32 @@ void BTreeInjectorDb::publish(string db_ipfs_id)
     _publisher.publish(move(db_ipfs_id));
 }
 
-static string query_(const string& key, BTree& db, asio::yield_context yield)
+static string query_( const string& key
+                    , BTree& db
+                    , Cancel& cancel
+                    , asio::yield_context yield)
 {
     sys::error_code ec;
 
-    auto val = db.find(key, yield[ec]);
+    auto val = db.find(key, cancel, yield[ec]);
 
     if (ec) return or_throw<string>(yield, ec);
 
     return val;
 }
 
-string BTreeInjectorDb::find(const string& key, asio::yield_context yield)
+string BTreeInjectorDb::find( const string& key
+                            , Cancel& cancel
+                            , asio::yield_context yield)
 {
-    return query_(key, *_db_map, yield);
+    return query_(key, *_db_map, cancel, yield);
 }
 
-string BTreeClientDb::find(const string& key, asio::yield_context yield)
+string BTreeClientDb::find( const string& key
+                          , Cancel& cancel
+                          , asio::yield_context yield)
 {
-    return query_(key, *_db_map, yield);
+    return query_(key, *_db_map, cancel, yield);
 }
 
 void BTreeClientDb::on_resolve(string ipfs_id, asio::yield_context yield)

@@ -70,13 +70,13 @@ BOOST_AUTO_TEST_CASE(test_cache_origin_fail)
     unsigned cache_check = 0;
     unsigned origin_check = 0;
 
-    cc.fetch_stored = [&](auto rq, auto y) {
+    cc.fetch_stored = [&](auto rq, auto&, auto y) {
         cache_check++;
         Response rs{http::status::ok, rq.version()};
         return Entry{current_time(), rs};
     };
 
-    cc.fetch_fresh = [&](auto rq, auto y) {
+    cc.fetch_fresh = [&](auto rq, auto&, auto y) {
         origin_check++;
         return or_throw<Response>(y, asio::error::connection_reset);
     };
@@ -98,7 +98,7 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age)
     unsigned cache_check = 0;
     unsigned origin_check = 0;
 
-    cc.fetch_stored = [&](auto rq, auto y) {
+    cc.fetch_stored = [&](auto rq, auto&, auto y) {
         cache_check++;
 
         Response rs{http::status::ok, rq.version()};
@@ -113,7 +113,7 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age)
         return Entry{created, rs};
     };
 
-    cc.fetch_fresh = [&](auto rq, auto y) {
+    cc.fetch_fresh = [&](auto rq, auto&, auto y) {
         origin_check++;
         BOOST_CHECK_EQUAL(rq.target(), "old");
         return Response{http::status::ok, rq.version()};
@@ -141,7 +141,7 @@ BOOST_AUTO_TEST_CASE(test_maxage)
     unsigned cache_check = 0;
     unsigned origin_check = 0;
 
-    cc.fetch_stored = [&](auto rq, auto y) {
+    cc.fetch_stored = [&](auto rq, auto&, auto y) {
         cache_check++;
 
         Response rs{http::status::ok, rq.version()};
@@ -160,7 +160,7 @@ BOOST_AUTO_TEST_CASE(test_maxage)
         return Entry{created, rs};
     };
 
-    cc.fetch_fresh = [&](auto rq, auto y) {
+    cc.fetch_fresh = [&](auto rq, auto&, auto y) {
         origin_check++;
         Response rs{http::status::ok, rq.version()};
         return rs;
@@ -199,7 +199,7 @@ BOOST_AUTO_TEST_CASE(test_http10_expires)
         return ss.str();
     };
 
-    cc.fetch_stored = [&](auto rq, auto y) {
+    cc.fetch_stored = [&](auto rq, auto&, auto y) {
         cache_check++;
 
         Response rs{http::status::ok, rq.version()};
@@ -219,7 +219,7 @@ BOOST_AUTO_TEST_CASE(test_http10_expires)
         return Entry{created, rs};
     };
 
-    cc.fetch_fresh = [&](auto rq, auto y) {
+    cc.fetch_fresh = [&](auto rq, auto&, auto y) {
         origin_check++;
         Response rs{http::status::ok, rq.version()};
         return rs;
@@ -246,12 +246,12 @@ BOOST_AUTO_TEST_CASE(test_dont_load_cache_when_If_None_Match)
 
     unsigned origin_check = 0;
 
-    cc.fetch_stored = [&](auto rq, auto y) {
+    cc.fetch_stored = [&](auto rq, auto&, auto y) {
         BOOST_ERROR("Shouldn't go to cache");
         return Entry{current_time(), Response{}};
     };
 
-    cc.fetch_fresh = [&](auto rq, auto y) {
+    cc.fetch_fresh = [&](auto rq, auto&, auto y) {
         origin_check++;
         Response rs{http::status::ok, rq.version()};
         rs.set("X-Test", "from-origin");
@@ -274,12 +274,12 @@ BOOST_AUTO_TEST_CASE(test_no_etag_override)
 
     unsigned origin_check = 0;
 
-    cc.fetch_stored = [&](auto rq, auto y) {
+    cc.fetch_stored = [&](auto rq, auto&, auto y) {
         BOOST_ERROR("Shouldn't go to cache");
         return Entry{current_time(), Response{}};
     };
 
-    cc.fetch_fresh = [&](auto rq, auto y) {
+    cc.fetch_fresh = [&](auto rq, auto&, auto y) {
         origin_check++;
 
         auto etag = get(rq, http::field::if_none_match);
@@ -305,12 +305,12 @@ BOOST_AUTO_TEST_CASE(test_request_no_store)
 
     unsigned origin_check = 0;
 
-    cc.fetch_fresh = [&](auto rq, auto y) {
+    cc.fetch_fresh = [&](auto rq, auto&, auto y) {
         origin_check++;
         return Response{http::status::ok, rq.version()};
     };
 
-    cc.store = [&](auto rq, auto rs, auto y) {
+    cc.store = [&](auto rq, auto rs, auto&, auto y) {
         BOOST_ERROR("Shouldn't store");
         return rs;
     };
@@ -331,7 +331,7 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
     unsigned cache_check = 0;
     unsigned origin_check = 0;
 
-    cc.fetch_stored = [&](auto rq, auto y) {
+    cc.fetch_stored = [&](auto rq, auto&, auto y) {
         cache_check++;
 
         Response rs{http::status::ok, rq.version()};
@@ -342,7 +342,7 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
         return Entry{current_time() - seconds(20), rs};
     };
 
-    cc.fetch_fresh = [&](auto rq, auto y) {
+    cc.fetch_fresh = [&](auto rq, auto&, auto y) {
         origin_check++;
 
         auto etag = get(rq, http::field::if_none_match);
@@ -389,7 +389,7 @@ BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
     unsigned cache_check = 0;
     unsigned origin_check = 0;
 
-    cc.fetch_stored = [&](auto rq, auto y) {
+    cc.fetch_stored = [&](auto rq, auto&, auto y) {
         cache_check++;
         Response rs{http::status::ok, rq.version()};
         // Return a fresh cached version.
@@ -398,7 +398,7 @@ BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
         return Entry{current_time(), rs};
     };
 
-    cc.fetch_fresh = [&](auto rq, auto y) {
+    cc.fetch_fresh = [&](auto rq, auto&, auto y) {
         origin_check++;
         // Force using version from origin instead of validated version from cache
         // (i.e. not returning "304 Not Modified" here).

@@ -2,6 +2,7 @@
 
 #include <boost/asio/spawn.hpp>
 #include <string>
+#include "../util/signal.h"
 
 namespace ouinet {
 
@@ -9,7 +10,7 @@ enum class DbType { btree, bep44 };
 
 class ClientDb {
 public:
-    virtual std::string find(const std::string& key, asio::yield_context) = 0;
+    virtual std::string find(const std::string& key, Cancel&, asio::yield_context) = 0;
 };
 
 class InjectorDb : public ClientDb {

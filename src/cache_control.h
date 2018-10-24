@@ -16,10 +16,10 @@ public:
     using Response = http::response<http::dynamic_body>;
 
     // TODO: Add cancellation support
-    using FetchStored = std::function<CacheEntry(const Request&, Yield)>;
-    using FetchFresh  = std::function<Response(const Request&, Yield)>;
+    using FetchStored = std::function<CacheEntry(const Request&, Cancel&, Yield)>;
+    using FetchFresh  = std::function<Response(const Request&, Cancel&, Yield)>;
     // This function may alter a (moved) response and return it.
-    using Store       = std::function<Response(const Request&, Response, Yield)>;
+    using Store = std::function<Response(const Request&, Response, Cancel&, Yield)>;
 
 public:
     CacheControl(std::string server_name)

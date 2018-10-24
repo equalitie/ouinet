@@ -153,7 +153,8 @@ void ClientFrontEnd::handle_enumerate_db( const Request& req
     ss << "DB CID: " << btree->root_hash() << "<br/>\n";
 
     sys::error_code ec;
-    auto iter = btree->begin(yield[ec]);
+    Cancel cancel; // TODO: This should come from above
+    auto iter = btree->begin(cancel, yield[ec]);
 
     if (ec) {
         ss << "Failed to retrieve BTree iterator: " << ec.message();
@@ -164,7 +165,7 @@ void ClientFrontEnd::handle_enumerate_db( const Request& req
         ss << "<a href=\"ipfs.io/ipfs/" << iter.value() << "\">"
            << iter.key() << "</a><br/>\n";
 
-        iter.advance(yield[ec]);
+        iter.advance(cancel, yield[ec]);
 
         if (ec) {
             ss << "Failed enumerate the entire BTree: " << ec.message();
@@ -202,8 +203,10 @@ void ClientFrontEnd::handle_descriptor( const Request& req, Response& res, strin
     } else {  // perform the query
         sys::error_code ec;
 
+        Cancel cancel; // TODO: This should come from above
         file_descriptor = cache_client->get_descriptor( uri
                                                       , DbType::btree
+                                                      , cancel
                                                       , yield[ec]);
 
         if (ec == asio::error::not_found) {

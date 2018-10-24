@@ -108,11 +108,13 @@ private:
     CacheEntry
     fetch_stored( const Request& request
                 , request_route::Config& request_config
+                , Cancel& cancel
                 , asio::yield_context yield);
 
     Response fetch_fresh( const Request&
                         , request_route::Config&
                         , bool& out_can_store
+                        , Cancel& cancel
                         , Yield);
 
     CacheControl build_cache_control(request_route::Config& request_config);
@@ -248,6 +250,7 @@ void Client::State::handle_connect_request( GenericStream& client_c
 CacheEntry
 Client::State::fetch_stored( const Request& request
                            , request_route::Config& request_config
+                           , Cancel& cancel
                            , asio::yield_context yield)
 {
     const bool cache_is_disabled
@@ -265,6 +268,7 @@ Client::State::fetch_stored( const Request& request
 
     return _cache->get_content( key.to_string()
                               , _config.default_db_type()
+                              , cancel
                               , yield);
 }
 
@@ -273,10 +277,13 @@ Response Client::State::fetch_fresh
         ( const Request& request
         , request_route::Config& request_config
         , bool& out_can_store
+        , Cancel& cancel
         , Yield yield)
 {
     using namespace asio::error;
     using request_route::responder;
+
+    auto shutdown_slot = _shutdown_signal.connect([&] { cancel(); });
 
     out_can_store = false;
 
@@ -297,6 +304,7 @@ Response Client::State::fetch_fresh
                 Response res;
 
                 // TODO: Reuse this connection if "Connection: keep-alive"
+                // TODO: Cancel
                 GenericStream c;
 
                 // Send the request straight to the origin
@@ -305,7 +313,7 @@ Response Client::State::fetch_fresh
                                      , ssl_ctx
                                      , request
                                      , default_timeout::fetch_http()
-                                     , _shutdown_signal
+                                     , cancel
                                      , yield[ec].tag("fetch_origin"));
 
                 if (ec) {
@@ -333,7 +341,7 @@ Response Client::State::fetch_fresh
                     // Connect to the injector/proxy.
                     sys::error_code ec;
                     auto inj = _injector->connect( yield[ec].tag("connect_to_injector")
-                                                 , _shutdown_signal);
+                                                 , cancel);
                     if (ec) {
                         last_error = ec;
                         continue;
@@ -360,7 +368,7 @@ Response Client::State::fetch_fresh
                                         , inj.connection
                                         , connreq
                                         , default_timeout::fetch_http()
-                                        , _shutdown_signal
+                                        , cancel
                                         , yield[ec].tag("connreq"));
 
                     if (connres.result() != http::status::ok) {
@@ -375,7 +383,7 @@ Response Client::State::fetch_fresh
                     auto res = fetch_http_origin( _ios , inj.connection, ssl_ctx
                                                 , url, request
                                                 , default_timeout::fetch_http()
-                                                , _shutdown_signal
+                                                , cancel
                                                 , yield[ec].tag("send_req"));
 
                     if (ec) {
@@ -400,8 +408,7 @@ Response Client::State::fetch_fresh
 
                 if (!con) {
                     auto c = _injector->connect
-                        ( yield[ec].tag("connect_to_injector2")
-                        , _shutdown_signal);
+                        (yield[ec].tag("connect_to_injector2"), cancel);
 
                     if (ec) { last_error = ec; continue; }
 
@@ -423,7 +430,7 @@ Response Client::State::fetch_fresh
                     injreq = authorize(injreq, *credentials);
 
                 // Send the request to the injector/proxy.
-                auto res = con->request(injreq, yield[ec]);
+                auto res = con->request(injreq, cancel, yield[ec]);
 
                 if (ec) {
                     last_error = ec;
@@ -468,28 +475,29 @@ public:
         , request_config(request_config)
         , cc("Ouinet Client")
     {
-        cc.fetch_fresh = [&] (const Request& rq, Yield yield) {
-            return fetch_fresh(rq, yield);
+        cc.fetch_fresh = [&] (const Request& rq, Cancel& cancel, Yield yield) {
+            return fetch_fresh(rq, cancel, yield);
         };
 
-        cc.fetch_stored = [&] (const Request& rq, Yield yield) {
-            return fetch_stored(rq, yield);
+        cc.fetch_stored = [&] (const Request& rq, Cancel& cancel, Yield yield) {
+            return fetch_stored(rq, cancel, yield);
         };
 
-        cc.store = [&](const Request& rq, Response rs, Yield yield) {
-            return store(rq, move(rs), yield);
+        cc.store = [&](const Request& rq, Response rs, Cancel& cancel, Yield yield) {
+            return store(rq, move(rs), cancel, yield);
         };
 
         cc.max_cached_age(client_state._config.max_cached_age());
     }
 
-    Response fetch_fresh(const Request& request, Yield yield) {
+    Response fetch_fresh(const Request& request, Cancel& cancel, Yield yield) {
         yield.log("Fetching fresh");
 
         sys::error_code ec;
         auto r = client_state.fetch_fresh( request
                                          , request_config
                                          , _can_store
+                                         , cancel
                                          , yield[ec]);
 
         if (!ec) {
@@ -502,11 +510,14 @@ public:
     }
 
     CacheEntry
-    fetch_stored(const Request& request, Yield yield) {
+    fetch_stored(const Request& request, Cancel& cancel, Yield yield) {
         yield.log("Fetching from cache");
 
         sys::error_code ec;
-        auto r = client_state.fetch_stored(request, request_config, yield[ec]);
+        auto r = client_state.fetch_stored( request
+                                          , request_config
+                                          , cancel
+                                          , yield[ec]);
 
         if (!ec) {
             yield.log("Fetched from cache success, status: ", r.response.result());
@@ -517,7 +528,7 @@ public:
         return or_throw(yield, ec, move(r));
     }
 
-    Response store(const Request& rq, Response rs, Yield yield)
+    Response store(const Request& rq, Response rs, Cancel&, Yield yield)
     {
         sys::error_code ec;
 

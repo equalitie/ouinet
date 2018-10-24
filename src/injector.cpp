@@ -100,14 +100,14 @@ void handle_bad_request( GenericStream& con
 static
 void handle_connect_request( GenericStream client_c
                            , const Request& req, const TCPLookup& lookup
-                           , Signal<void()>& disconnect_signal
+                           , Cancel& cancel
                            , Yield yield)
 {
     sys::error_code ec;
 
     asio::io_service& ios = client_c.get_io_service();
 
-    auto disconnect_client_slot = disconnect_signal.connect([&client_c] {
+    auto disconnect_client_slot = cancel.connect([&client_c] {
         client_c.close();
     });
 
@@ -125,7 +125,7 @@ void handle_connect_request( GenericStream client_c
 
     auto origin_c = connect_to_host( lookup, ios
                                    , default_timeout::tcp_connect()
-                                   , disconnect_signal, yield[ec]);
+                                   , cancel, yield[ec]);
 
     if (ec) {
         return handle_bad_request( client_c, req
@@ -133,7 +133,7 @@ void handle_connect_request( GenericStream client_c
                                  , yield[ec]);
     }
 
-    auto disconnect_origin_slot = disconnect_signal.connect([&origin_c] {
+    auto disconnect_origin_slot = cancel.connect([&origin_c] {
         origin_c.close();
     });
 
@@ -168,14 +168,14 @@ static Request erase_hop_by_hop_headers(Request rq) {
 //------------------------------------------------------------------------------
 static
 TCPLookup
-resolve_target(const Request&, asio::io_service&, Signal<void()>&, Yield yield);
+resolve_target(const Request&, asio::io_service&, Cancel&, Yield yield);
 
 struct InjectorCacheControl {
 public:
     unique_ptr<Connection> connect( asio::io_service& ios
                                   , const Request& rq
                                   , const util::url_match& url
-                                  , Signal<void()>& abort_signal
+                                  , Cancel& cancel
                                   , Yield yield)
     {
         using ConP = unique_ptr<Connection>;
@@ -183,14 +183,13 @@ public:
         sys::error_code ec;
 
         // Resolve target endpoint and check its validity.
-        TCPLookup lookup(resolve_target( rq, ios, abort_signal
-                                       , yield[ec]));
+        TCPLookup lookup(resolve_target( rq, ios, cancel, yield[ec]));
 
         if (ec) return or_throw<ConP>(yield, ec);
 
         auto socket = connect_to_host( lookup
                                      , ios
-                                     , abort_signal
+                                     , cancel
                                      , yield[ec]);
 
         if (ec) return or_throw<ConP>(yield, ec);
@@ -201,7 +200,7 @@ public:
             stream = ssl::util::client_handshake( move(socket)
                                                 , ssl_ctx
                                                 , url.host
-                                                , abort_signal
+                                                , cancel
                                                 , yield[ec]);
 
             if (ec) return or_throw<ConP>(yield, ec);
@@ -221,7 +220,7 @@ public:
                         , const InjectorConfig& config
                         , unique_ptr<CacheInjector>& injector
                         , uuid_generator& genuuid
-                        , Signal<void()>& abort_signal)
+                        , Cancel& cancel)
         : ssl_ctx(ssl_ctx)
         , injector(injector)
         , config(config)
@@ -237,7 +236,7 @@ public:
         // and it is removed just before saving to the cache
         // (though it is still used to create the descriptor).
 
-        cc.fetch_fresh = [&] (const Request& rq_, Yield yield) {
+        cc.fetch_fresh = [&] (const Request& rq_, Cancel& cancel, Yield yield) {
             sys::error_code ec;
 
             string host = rq_[http::field::host].to_string();
@@ -264,7 +263,7 @@ public:
             });
 
             if (!connection) {
-                connection = connect(ios, rq_, url, abort_signal, yield[ec]);
+                connection = connect(ios, rq_, url, cancel, yield[ec]);
             }
 
             Request rq = erase_hop_by_hop_headers(rq_);
@@ -272,7 +271,7 @@ public:
 
             Response ret;
 
-            if (!ec) ret = connection->request(rq, yield[ec]);
+            if (!ec) ret = connection->request(rq, cancel, yield[ec]);
 
             // Add an injection identifier header.
             if (!ec) ret.set(http_::response_injection_id_hdr, to_string(genuuid()));
@@ -286,11 +285,13 @@ public:
             return or_throw(yield, ec, move(ret));
         };
 
-        cc.fetch_stored = [this](const Request& rq, Yield yield) {
-            return this->fetch_stored(rq, yield);
+        cc.fetch_stored = [this]( const Request& rq
+                                , Cancel& cancel
+                                , Yield yield) {
+            return this->fetch_stored(rq, cancel, yield);
         };
 
-        cc.store = [this](const Request& rq, Response rs, Yield yield) {
+        cc.store = [this](const Request& rq, Response rs, Cancel&, Yield yield) {
             return this->insert_content(rq, rs, yield);
         };
     }
@@ -353,7 +354,7 @@ private:
     }
 
     CacheEntry
-    fetch_stored(const Request& rq, asio::yield_context yield)
+    fetch_stored(const Request& rq, Cancel& cancel, asio::yield_context yield)
     {
         if (!injector)
             return or_throw<CacheEntry>( yield
@@ -362,6 +363,7 @@ private:
         // TODO: use string_view
         return injector->get_content( rq.target().to_string()
                                     , config.default_db_type()
+                                    , cancel
                                     , yield);
     }
 
@@ -384,13 +386,13 @@ static
 TCPLookup
 resolve_target( const Request& req
               , GenericStream& con
-              , Signal<void()>& shutdown_signal
+              , Cancel& cancel
               , Yield yield)
 {
     sys::error_code ec;
     auto lookup = resolve_target( req
                                 , con.get_io_service()
-                                , shutdown_signal
+                                , cancel
                                 , yield[ec]);
     if (!ec)
         return lookup;
@@ -419,7 +421,7 @@ static
 TCPLookup
 resolve_target( const Request& req
               , asio::io_service& ios
-              , Signal<void()>& shutdown_signal
+              , Cancel& cancel
               , Yield yield)
 {
     TCPLookup lookup;
@@ -435,7 +437,7 @@ resolve_target( const Request& req
     if (!local)
         lookup = util::tcp_async_resolve( host, port
                                         , ios
-                                        , shutdown_signal
+                                        , cancel
                                         , yield[ec]);
     if (ec) {
         return or_throw<TCPLookup>(yield, ec);
@@ -463,10 +465,10 @@ void serve( InjectorConfig& config
           , unique_ptr<CacheInjector>& injector
           , ConPools& connection_pools
           , uuid_generator& genuuid
-          , Signal<void()>& close_connection_signal
+          , Cancel& cancel
           , asio::yield_context yield_)
 {
-    auto close_connection_slot = close_connection_signal.connect([&con] {
+    auto close_connection_slot = cancel.connect([&con] {
         con.close();
     });
 
@@ -476,7 +478,7 @@ void serve( InjectorConfig& config
                            , config
                            , injector
                            , genuuid
-                           , close_connection_signal);
+                           , cancel);
 
     for (;;) {
         sys::error_code ec;
@@ -501,7 +503,7 @@ void serve( InjectorConfig& config
         bool proxy = (req.find(http_::request_version_hdr) == req.end());
         if (proxy || req.method() == http::verb::connect) {
             // Resolve target endpoint and check its validity.
-            lookup = resolve_target( req, con, close_connection_signal
+            lookup = resolve_target( req, con, cancel
                                    , yield[ec]);
             if (ec) continue;  // error message already sent to `con`
         }
@@ -509,7 +511,7 @@ void serve( InjectorConfig& config
         if (req.method() == http::verb::connect) {
             return handle_connect_request( move(con)
                                          , req, lookup
-                                         , close_connection_signal
+                                         , cancel
                                          , yield.tag("handle_connect"));
         }
 
@@ -530,7 +532,7 @@ void serve( InjectorConfig& config
                                  , erase_hop_by_hop_headers(move(req2))
                                  , lookup
                                  , default_timeout::fetch_http()
-                                 , close_connection_signal
+                                 , cancel
                                  , yield[ec].tag("fetch_http_page"));
         } else {
             // Ouinet header found, behave like a Ouinet injector.
@@ -566,12 +568,12 @@ static
 void listen( InjectorConfig& config
            , OuiServiceServer& proxy_server
            , unique_ptr<CacheInjector>& cache_injector
-           , Signal<void()>& shutdown_signal
+           , Cancel& cancel
            , asio::yield_context yield)
 {
     uuid_generator genuuid;
 
-    auto stop_proxy_slot = shutdown_signal.connect([&proxy_server] {
+    auto stop_proxy_slot = cancel.connect([&proxy_server] {
         proxy_server.stop_listen();
     });
 
@@ -599,7 +601,7 @@ void listen( InjectorConfig& config
         if (ec == boost::asio::error::operation_aborted) {
             break;
         } else if (ec) {
-            if (!async_sleep(ios, std::chrono::milliseconds(100), shutdown_signal, yield)) {
+            if (!async_sleep(ios, std::chrono::milliseconds(100), cancel, yield)) {
                 break;
             }
             continue;
@@ -611,7 +613,7 @@ void listen( InjectorConfig& config
             connection = std::move(connection),
             &ssl_ctx,
             &cache_injector,
-            &shutdown_signal,
+            &cancel,
             &config,
             &genuuid,
             &connection_pools,
@@ -625,7 +627,7 @@ void listen( InjectorConfig& config
                  , cache_injector
                  , connection_pools
                  , genuuid
-                 , shutdown_signal
+                 , cancel
                  , yield);
         });
     }
@@ -675,7 +677,7 @@ int main(int argc, const char* argv[])
     // The io_service is required for all I/O
     asio::io_service ios;
 
-    Signal<void()> shutdown_signal;
+    Cancel cancel;
 
     unique_ptr<CacheInjector> cache_injector;
 
@@ -685,7 +687,7 @@ int main(int argc, const char* argv[])
                                 , config.bt_private_key()
                                 , config.repo_root());
 
-        auto shutdown_ipfs_slot = shutdown_signal.connect([&] {
+        auto shutdown_ipfs_slot = cancel.connect([&] {
             cache_injector = nullptr;
         });
 
@@ -723,12 +725,12 @@ int main(int argc, const char* argv[])
         &proxy_server,
         &cache_injector,
         &config,
-        &shutdown_signal
+        &cancel
     ] (asio::yield_context yield) {
         listen( config
               , proxy_server
               , cache_injector
-              , shutdown_signal
+              , cancel
               , yield);
     });
 
@@ -736,9 +738,9 @@ int main(int argc, const char* argv[])
 
     unique_ptr<ForceExitOnSignal> force_exit;
 
-    signals.async_wait([&shutdown_signal, &signals, &ios, &force_exit]
+    signals.async_wait([&cancel, &signals, &ios, &force_exit]
                        (const sys::error_code& ec, int signal_number) {
-            shutdown_signal();
+            cancel();
             signals.clear();
             force_exit = make_unique<ForceExitOnSignal>();
         });

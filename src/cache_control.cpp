@@ -390,7 +390,8 @@ CacheControl::do_fetch_fresh(const Request& rq, Yield yield)
 {
     if (fetch_fresh) {
         sys::error_code ec;
-        auto rs = fetch_fresh(rq, yield[ec].tag("fetch_fresh"));
+        Cancel cancel;
+        auto rs = fetch_fresh(rq, cancel, yield[ec].tag("fetch_fresh"));
         if (!ec) {
             sys::error_code ec2;
             // The storage operation may alter the response (e.g. add headers).
@@ -405,7 +406,8 @@ CacheEntry
 CacheControl::do_fetch_stored(const Request& rq, Yield yield)
 {
     if (fetch_stored) {
-        return fetch_stored(rq, yield.tag("fetch_stored"));
+        Cancel cancel;
+        return fetch_stored(rq, cancel, yield.tag("fetch_stored"));
     }
     return or_throw<CacheEntry>(yield, asio::error::operation_not_supported);
 }
@@ -617,7 +619,8 @@ CacheControl::try_to_cache( const Request& request
         return response;
     }
 
+    Cancel cancel;
     // TODO: Apply similar filter to the request.
-    return store(request, filter_before_store(move(response)), yield);
+    return store(request, filter_before_store(move(response)), cancel, yield);
 }
 
