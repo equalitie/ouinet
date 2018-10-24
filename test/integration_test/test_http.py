@@ -132,7 +132,7 @@ class OuinetTests(TestCase):
         return agent.request("GET", url)
 
     @inlineCallbacks
-    def no_test_i2p_transport(self):
+    def test_i2p_transport(self):
         """
         Starts an echoing http server, a injector and a client and send a unique http 
         request to the echoing http server through the client --i2p--> injector -> http server
@@ -192,7 +192,7 @@ class OuinetTests(TestCase):
         self.assertTrue(test_passed)
 
     @inlineCallbacks
-    def no_test_tcp_transport(self):
+    def test_tcp_transport(self):
         """
         Starts an echoing http server, a injector and a client and send a unique http 
         request to the echoing http server through the g client --tcp--> injector -> http server
