@@ -777,12 +777,11 @@ void Client::State::serve_request( GenericStream&& con
 
         // Perform MitM for CONNECT requests (to be able to see encrypted requests)
         if (!mitm && req.method() == http::verb::connect) {
-            try {
-                // Subsequent access to the connection will use the encrypted channel.
-                con = ssl_mitm_handshake(move(con), req, yield.tag("mitm_hanshake"));
-            }
-            catch(const std::exception& e) {
-                yield.log("Mitm exception: ", e.what());
+            sys::error_code ec;
+            // Subsequent access to the connection will use the encrypted channel.
+            con = ssl_mitm_handshake(move(con), req, yield[ec].tag("mitm_hanshake"));
+            if (ec) {
+                yield.log("Mitm exception: ", ec.message());
                 return;
             }
             mitm = true;
