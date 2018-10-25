@@ -236,7 +236,7 @@ public:
             std::cerr << this << " " << _impl
                       << " GenericStream::close()" << std::endl;
         }
-        assert(_impl);
+        if (!_impl) return;
         _impl->close();
         _impl = nullptr;
     }
