@@ -74,20 +74,15 @@ public:
         , _asio_yield(y._asio_yield)
         , _ignored_error(std::move(y._ignored_error))
         , _tag(std::move(y._tag))
-        , _parent(y._parent)
+        , _parent(&y)
         , _timeout_state(std::move(y._timeout_state))
-        , _children(std::move(y._children))
         , _start_time(y._start_time)
     {
         if (_timeout_state) {
             _timeout_state->self = this;
         }
 
-        for (auto& ch : _children) {
-            ch._parent = this;
-        }
-
-        y._parent = nullptr;
+        y._children.push_back(*this);
     }
 
     Yield tag(std::string t)
