@@ -653,7 +653,7 @@ GenericStream Client::State::ssl_mitm_handshake( GenericStream&& con
     ssl_sock->async_handshake(ssl::stream_base::server, yield[ec]);
     if (ec) return or_throw<GenericStream>(yield, ec);
 
-    static const auto ssl_shutter = [](ssl::stream<GenericStream>& s) {
+    auto ssl_shutter = [](ssl::stream<GenericStream>& s) {
         // Just close the underlying connection
         // (TLS has no message exchange for shutdown).
         s.next_layer().close();
@@ -768,12 +768,13 @@ void Client::State::serve_request( GenericStream&& con
         // We expand the target again with the ``Host:`` header
         // (or the CONNECT target if the header is missing in HTTP/1.0)
         // so that "/foo" becomes "https://example.com/foo".
-        if (mitm)
+        if (mitm) {
             req.target( string("https://")
                       + ( (req[http::field::host].length() > 0)
                           ? req[http::field::host].to_string()
                           : connect_hp)
                       + req.target().to_string());
+        }
 
         // Perform MitM for CONNECT requests (to be able to see encrypted requests)
         if (!mitm && req.method() == http::verb::connect) {
