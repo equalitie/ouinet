@@ -551,6 +551,14 @@ void serve( InjectorConfig& config
         yield.log("=== Sending back response ===");
         yield.log(res.base());
 
+        // Note: Not 100% sure about this, but sometimes we got a HTTP 1.1
+        // response that did not contain the `Connection: close` header field
+        // nor any indicationi about the body size. Since in such cases we
+        // don't close connections to clients, clients keep waiting for the
+        // body indefinitely. The `prepare_payload` functions sets the body
+        // size so as to avoid such situations.
+        res.prepare_payload();
+
         // Forward back the response
         http::async_write(con, res, yield[ec].tag("write_response"));
 
