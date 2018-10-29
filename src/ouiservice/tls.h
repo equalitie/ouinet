@@ -2,25 +2,32 @@
 
 #include <boost/asio/ssl.hpp>
 
-#include "tcp.h"
+#include "../ouiservice.h"
 
 namespace ouinet {
 namespace ouiservice {
 
-// This only implements listening to TLS connections over TCP,
-// while ideally it should work over any stream.
-class TlsOuiServiceServer : public TcpOuiServiceServer
+// Wraps TLS over an existing service.
+class TlsOuiServiceServer : public OuiServiceImplementationServer
 {
     public:
-    TlsOuiServiceServer( asio::io_service& ios
-                       , asio::ip::tcp::endpoint endpoint
-                       , asio::ssl::context context):
-        TcpOuiServiceServer(ios, endpoint), ssl_context(std::move(context))
+    using BaseServicePtr = std::unique_ptr<OuiServiceImplementationServer>;
+
+    TlsOuiServiceServer( BaseServicePtr base_, asio::ssl::context context):
+        base(std::move(base_)), ssl_context(std::move(context))
     {};
+
+    void start_listen(asio::yield_context yield) override {
+        base->start_listen(yield);
+    };
+    void stop_listen() override {
+        base->stop_listen();
+    };
 
     GenericStream accept(asio::yield_context yield) override;
 
     private:
+    BaseServicePtr base;
     asio::ssl::context ssl_context;
 };
 

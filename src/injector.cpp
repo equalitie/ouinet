@@ -761,7 +761,8 @@ int main(int argc, const char* argv[])
         util::create_state_file( config.repo_root()/"endpoint-tls"
                                , util::str(endpoint));
 
-        proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(ios, endpoint, move(ssl_context)));
+        auto base = make_unique<ouiservice::TcpOuiServiceServer>(ios, endpoint);
+        proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(move(base), move(ssl_context)));
     }
 
     if (config.listen_on_i2p()) {

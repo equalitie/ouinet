@@ -9,12 +9,12 @@ GenericStream TlsOuiServiceServer::accept(asio::yield_context yield)
     using SslStream = asio::ssl::stream<GenericStream>;
     sys::error_code ec;
 
-    auto tcp_con = TcpOuiServiceServer::accept(yield[ec]);
+    auto base_con = base->accept(yield[ec]);
     if (ec) {
         return or_throw<GenericStream>(yield, ec);
     }
 
-    auto tls_sock = std::make_unique<SslStream>(std::move(tcp_con), ssl_context);
+    auto tls_sock = std::make_unique<SslStream>(std::move(base_con), ssl_context);
     tls_sock->async_handshake(asio::ssl::stream_base::server, yield[ec]);
     if (ec) {
         // See <https://github.com/equalitie/ouinet/issues/16>.
