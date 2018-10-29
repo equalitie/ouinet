@@ -35,6 +35,7 @@
 #include "ouiservice.h"
 #include "ouiservice/i2p.h"
 #include "ouiservice/tcp.h"
+#include "ouiservice/tls.h"
 #include "ssl/ca_certificate.h"
 
 #include "util/timeout.h"
@@ -636,6 +637,35 @@ void listen( InjectorConfig& config
 }
 
 //------------------------------------------------------------------------------
+void setup_ssl_context( asio::ssl::context& ssl_context
+                      , const string& cert_chain
+                      , const string& private_key
+                      , const string& dh)
+{
+    namespace ssl = boost::asio::ssl;
+
+    ssl_context.set_options( ssl::context::default_workarounds
+                           | ssl::context::no_sslv2
+                           | ssl::context::single_dh_use);
+
+    ssl_context.use_certificate_chain(
+            asio::buffer(cert_chain.data(), cert_chain.size()));
+
+    ssl_context.use_private_key( asio::buffer( private_key.data()
+                                             , private_key.size())
+                               , ssl::context::file_format::pem);
+
+    ssl_context.use_tmp_dh(asio::buffer(dh.data(), dh.size()));
+
+    ssl_context.set_password_callback(
+        [](std::size_t, ssl::context_base::password_purpose)
+        {
+            assert(0 && "TODO: Not yet supported");
+            return "";
+        });
+}
+
+//------------------------------------------------------------------------------
 int main(int argc, const char* argv[])
 {
     util::crypto_init();
@@ -717,6 +747,21 @@ int main(int argc, const char* argv[])
                                , util::str(endpoint));
 
         proxy_server.add(make_unique<ouiservice::TcpOuiServiceServer>(ios, endpoint));
+    }
+
+    if (config.tls_endpoint()) {
+        asio::ssl::context ssl_context{asio::ssl::context::tls_server};
+        setup_ssl_context( ssl_context
+                         , tls_certificate->pem_certificate()
+                         , tls_certificate->pem_private_key()
+                         , tls_certificate->pem_dh_param());
+
+        tcp::endpoint endpoint = *config.tls_endpoint();
+        cout << "TLS Address: " << endpoint << endl;
+        util::create_state_file( config.repo_root()/"endpoint-tls"
+                               , util::str(endpoint));
+
+        proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(ios, endpoint, move(ssl_context)));
     }
 
     if (config.listen_on_i2p()) {
