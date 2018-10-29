@@ -7,6 +7,8 @@
 #include <boost/filesystem.hpp>
 #include <openssl/x509v3.h>
 
+#include "../logger.h"
+
 
 namespace ouinet {
 
@@ -70,17 +72,17 @@ public:
 };
 
 inline void _report_load(const CACertificate&) {
-    std::cout << "Loading existing CA certificate..." << std::endl;
+    LOG_DEBUG("Loading existing CA certificate");
 }
 inline void _report_generate(const CACertificate&) {
-    std::cout << "Generating and storing CA certificate..." << std::endl;
+    LOG_DEBUG("Generating and storing CA certificate");
 }
 
 inline void _report_load(const EndCertificate&) {
-    std::cout << "Loading existing TLS end certificate..." << std::endl;
+    LOG_DEBUG("Loading existing TLS end certificate");
 }
 inline void _report_generate(const EndCertificate&) {
-    std::cout << "Generating and storing TLS end certificate..." << std::endl;
+    LOG_DEBUG("Generating and storing TLS end certificate");
 }
 
 // Load a TLS certificate of the given class `Cert`
