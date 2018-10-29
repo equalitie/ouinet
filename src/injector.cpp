@@ -677,36 +677,11 @@ int main(int argc, const char* argv[])
         });
 
     // Create or load the TLS certificate.
-    std::unique_ptr<EndCertificate> tls_certificate;
-
-    auto tls_cert_path = config.repo_root() / OUINET_TLS_CERT_FILE;
-    auto tls_key_path  = config.repo_root() / OUINET_TLS_KEY_FILE;
-    auto tls_dh_path   = config.repo_root() / OUINET_TLS_DH_FILE;
-
-    if (exists(tls_cert_path) && exists(tls_key_path) && exists(tls_dh_path)) {
-        cout << "Loading existing TLS certificate..." << endl;
-        auto read_pem = [](auto path) {
-            std::stringstream ss;
-            ss << boost::filesystem::ifstream(path).rdbuf();
-            return ss.str();
-        };
-        auto cert = read_pem(tls_cert_path);
-        auto key = read_pem(tls_key_path);
-        auto dh = read_pem(tls_dh_path);
-        tls_certificate = make_unique<EndCertificate>(cert, key, dh);
-    } else {
-        cout << "Generating and storing TLS certificate..." << endl;
-        tls_certificate = make_unique<EndCertificate>("localhost");
-
-        boost::filesystem::ofstream(tls_cert_path)
-            << tls_certificate->pem_certificate();
-
-        boost::filesystem::ofstream(tls_key_path)
-            << tls_certificate->pem_private_key();
-
-        boost::filesystem::ofstream(tls_dh_path)
-            << tls_certificate->pem_dh_param();
-    }
+    auto tls_certificate = get_or_gen_tls_cert<EndCertificate>
+        ( "localhost"
+        , config.repo_root() / OUINET_TLS_CERT_FILE
+        , config.repo_root() / OUINET_TLS_KEY_FILE
+        , config.repo_root() / OUINET_TLS_DH_FILE );
 
     // The io_service is required for all I/O
     asio::io_service ios;

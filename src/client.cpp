@@ -1016,31 +1016,9 @@ void Client::State::start(int argc, char* argv[])
     _pid_file = make_unique<util::PidFile>(pid_path);
 #endif
 
-    if (exists(ca_cert_path()) && exists(ca_key_path()) && exists(ca_dh_path())) {
-        cout << "Loading existing CA certificate..." << endl;
-        auto read_pem = [](auto path) {
-            std::stringstream ss;
-            ss << boost::filesystem::ifstream(path).rdbuf();
-            return ss.str();
-        };
-        auto cert = read_pem(ca_cert_path());
-        auto key = read_pem(ca_key_path());
-        auto dh = read_pem(ca_dh_path());
-        _ca_certificate = make_unique<CACertificate>(cert, key, dh);
-    } else {
-        cout << "Generating and storing CA certificate..." << endl;
-        _ca_certificate = make_unique<CACertificate>
-            ("Your own local Ouinet client");
-
-        boost::filesystem::ofstream(ca_cert_path())
-            << _ca_certificate->pem_certificate();
-
-        boost::filesystem::ofstream(ca_key_path())
-            << _ca_certificate->pem_private_key();
-
-        boost::filesystem::ofstream(ca_dh_path())
-            << _ca_certificate->pem_dh_param();
-    }
+    _ca_certificate = get_or_gen_tls_cert<CACertificate>
+        ( "Your own local Ouinet client"
+        , ca_cert_path(), ca_key_path(), ca_dh_path());
 
     asio::spawn
         ( _ios

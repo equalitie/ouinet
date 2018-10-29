@@ -1,7 +1,12 @@
 #pragma once
 
+#include <iostream>
+#include <sstream>
 #include <string>
+
+#include <boost/filesystem.hpp>
 #include <openssl/x509v3.h>
+
 
 namespace ouinet {
 
@@ -63,5 +68,44 @@ public:
         : BaseCertificate(pem_cert, pem_key, pem_dh) {};
     ~EndCertificate() {};
 };
+
+// Load a TLS certificate of the given class `Cert`
+// from the PEM files for certificate, key and Diffie-Hellman parameters
+// at the given paths.
+// If the files are missing,
+// generate a self-signed certificate with the given common name `cn`,
+// store its parts in the given paths and return it.
+template<class Cert>
+inline
+std::unique_ptr<Cert>
+get_or_gen_tls_cert( const std::string& cn
+                   , const boost::filesystem::path& tls_cert_path
+                   , const boost::filesystem::path& tls_key_path
+                   , const boost::filesystem::path& tls_dh_path )
+{
+    namespace fs = boost::filesystem;
+    std::unique_ptr<Cert> tls_certificate;
+
+    if (fs::exists(tls_cert_path) && fs::exists(tls_key_path) && fs::exists(tls_dh_path)) {
+        std::cout << "Loading existing TLS certificate..." << std::endl;
+        auto read_pem = [](auto path) {
+            std::stringstream ss;
+            ss << fs::ifstream(path).rdbuf();
+            return ss.str();
+        };
+        auto cert = read_pem(tls_cert_path);
+        auto key = read_pem(tls_key_path);
+        auto dh = read_pem(tls_dh_path);
+        tls_certificate = std::make_unique<Cert>(cert, key, dh);
+    } else {
+        std::cout << "Generating and storing TLS certificate..." << std::endl;
+        tls_certificate = std::make_unique<Cert>(cn);
+        fs::ofstream(tls_cert_path) << tls_certificate->pem_certificate();
+        fs::ofstream(tls_key_path) << tls_certificate->pem_private_key();
+        fs::ofstream(tls_dh_path) << tls_certificate->pem_dh_param();
+    }
+
+    return tls_certificate;
+}
 
 } // namespace
