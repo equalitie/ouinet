@@ -69,6 +69,20 @@ public:
     ~EndCertificate() {};
 };
 
+inline void _report_load(const CACertificate&) {
+    std::cout << "Loading existing CA certificate..." << std::endl;
+}
+inline void _report_generate(const CACertificate&) {
+    std::cout << "Generating and storing CA certificate..." << std::endl;
+}
+
+inline void _report_load(const EndCertificate&) {
+    std::cout << "Loading existing TLS end certificate..." << std::endl;
+}
+inline void _report_generate(const EndCertificate&) {
+    std::cout << "Generating and storing TLS end certificate..." << std::endl;
+}
+
 // Load a TLS certificate of the given class `Cert`
 // from the PEM files for certificate, key and Diffie-Hellman parameters
 // at the given paths.
@@ -87,7 +101,7 @@ get_or_gen_tls_cert( const std::string& cn
     std::unique_ptr<Cert> tls_certificate;
 
     if (fs::exists(tls_cert_path) && fs::exists(tls_key_path) && fs::exists(tls_dh_path)) {
-        std::cout << "Loading existing TLS certificate..." << std::endl;
+        _report_load(*tls_certificate);
         auto read_pem = [](auto path) {
             std::stringstream ss;
             ss << fs::ifstream(path).rdbuf();
@@ -98,7 +112,7 @@ get_or_gen_tls_cert( const std::string& cn
         auto dh = read_pem(tls_dh_path);
         tls_certificate = std::make_unique<Cert>(cert, key, dh);
     } else {
-        std::cout << "Generating and storing TLS certificate..." << std::endl;
+        _report_generate(*tls_certificate);
         tls_certificate = std::make_unique<Cert>(cn);
         fs::ofstream(tls_cert_path) << tls_certificate->pem_certificate();
         fs::ofstream(tls_key_path) << tls_certificate->pem_private_key();
