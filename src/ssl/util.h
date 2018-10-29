@@ -86,4 +86,36 @@ client_handshake( Stream&& con
     return GenericStream(move(ssl_sock), move(ssl_shutter));
 }
 
+static inline
+boost::asio::ssl::context
+get_server_context( const std::string& cert_chain
+                  , const std::string& private_key
+                  , const std::string& dh)
+{
+    namespace ssl = boost::asio::ssl;
+    ssl::context ssl_context{ssl::context::tls_server};
+
+    ssl_context.set_options( ssl::context::default_workarounds
+                           | ssl::context::no_sslv2
+                           | ssl::context::single_dh_use);
+
+    ssl_context.use_certificate_chain(
+            asio::buffer(cert_chain.data(), cert_chain.size()));
+
+    ssl_context.use_private_key( asio::buffer( private_key.data()
+                                             , private_key.size())
+                               , ssl::context::file_format::pem);
+
+    ssl_context.use_tmp_dh(asio::buffer(dh.data(), dh.size()));
+
+    ssl_context.set_password_callback(
+        [](std::size_t, ssl::context_base::password_purpose)
+        {
+            assert(0 && "TODO: Not yet supported");
+            return "";
+        });
+
+    return ssl_context;
+}
+
 }}} // namespaces

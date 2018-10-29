@@ -36,6 +36,7 @@
 #include "default_timeout.h"
 #include "ssl/ca_certificate.h"
 #include "ssl/dummy_certificate.h"
+#include "ssl/util.h"
 
 #ifndef __ANDROID__
 #  include "force_exit_on_signal.h"
@@ -558,34 +559,6 @@ private:
 //}
 
 //------------------------------------------------------------------------------
-void setup_ssl_context( asio::ssl::context& ssl_context
-                      , const string& cert_chain
-                      , const string& private_key
-                      , const string& dh)
-{
-    namespace ssl = boost::asio::ssl;
-
-    ssl_context.set_options( ssl::context::default_workarounds
-                           | ssl::context::no_sslv2
-                           | ssl::context::single_dh_use);
-
-    ssl_context.use_certificate_chain(
-            asio::buffer(cert_chain.data(), cert_chain.size()));
-
-    ssl_context.use_private_key( asio::buffer( private_key.data()
-                                             , private_key.size())
-                               , ssl::context::file_format::pem);
-
-    ssl_context.use_tmp_dh(asio::buffer(dh.data(), dh.size()));
-
-    ssl_context.set_password_callback(
-        [](std::size_t, ssl::context_base::password_purpose)
-        {
-            assert(0 && "TODO: Not yet supported");
-            return "";
-        });
-}
-
 static
 string base_domain_from_target(const beast::string_view& target)
 {
@@ -603,10 +576,6 @@ GenericStream Client::State::ssl_mitm_handshake( GenericStream&& con
                                                , const Request& con_req
                                                , asio::yield_context yield)
 {
-    namespace ssl = boost::asio::ssl;
-
-    ssl::context ssl_context{ssl::context::tls_server};
-
     // TODO: We really should be waiting for
     // the TLS Client Hello message to arrive at the clear text connection
     // (after we send back 200 OK),
@@ -627,10 +596,10 @@ GenericStream Client::State::ssl_mitm_handshake( GenericStream&& con
                                           + _ca_certificate->pem_certificate());
     }
 
-    setup_ssl_context( ssl_context
-                     , *crt_chain
-                     , _ca_certificate->pem_private_key()
-                     , _ca_certificate->pem_dh_param());
+    auto ssl_context = ssl::util::get_server_context
+        ( *crt_chain
+        , _ca_certificate->pem_private_key()
+        , _ca_certificate->pem_dh_param());
 
     // Send back OK to let the UA know we have the "tunnel"
     http::response<http::string_body> res{http::status::ok, con_req.version()};
@@ -638,11 +607,11 @@ GenericStream Client::State::ssl_mitm_handshake( GenericStream&& con
 
     sys::error_code ec;
 
-    auto ssl_sock = make_unique<ssl::stream<GenericStream>>(move(con), ssl_context);
-    ssl_sock->async_handshake(ssl::stream_base::server, yield[ec]);
+    auto ssl_sock = make_unique<asio::ssl::stream<GenericStream>>(move(con), ssl_context);
+    ssl_sock->async_handshake(asio::ssl::stream_base::server, yield[ec]);
     if (ec) return or_throw<GenericStream>(yield, ec);
 
-    static const auto ssl_shutter = [](ssl::stream<GenericStream>& s) {
+    static const auto ssl_shutter = [](asio::ssl::stream<GenericStream>& s) {
         // Just close the underlying connection
         // (TLS has no message exchange for shutdown).
         s.next_layer().close();
