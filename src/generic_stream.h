@@ -138,6 +138,8 @@ public:
 
     bool has_implementation() const { return _impl != nullptr; }
 
+    void* id() const { return _impl.get(); }
+
 public:
     GenericStream() {
         if (_debug) {

@@ -146,7 +146,7 @@ void handle_connect_request( GenericStream client_c
     http::async_write(client_c, res, yield[ec]);
 
     if (ec) {
-        cerr << "Failed sending CONNECT response: " << ec.message() << endl;
+        yield.log("Failed sending CONNECT response: ", ec.message());
         return;
     }
 
@@ -221,11 +221,12 @@ public:
                         , unique_ptr<CacheInjector>& injector
                         , uuid_generator& genuuid
                         , Cancel& cancel)
-        : ssl_ctx(ssl_ctx)
+        : ios(ios)
+        , ssl_ctx(ssl_ctx)
         , injector(injector)
         , config(config)
         , genuuid(genuuid)
-        , cc("Ouinet Injector")
+        , cc(ios, "Ouinet Injector")
         , connection_pools(connection_pools)
     {
         // The following operations take care of adding or removing
@@ -236,63 +237,16 @@ public:
         // and it is removed just before saving to the cache
         // (though it is still used to create the descriptor).
 
-        cc.fetch_fresh = [&] (const Request& rq_, Cancel& cancel, Yield yield) {
-            sys::error_code ec;
-
-            string host = rq_[http::field::host].to_string();
-            assert(!host.empty());
-
-            // Parse the URL to tell HTTP/HTTPS, host, port.
-            util::url_match url;
-
-            if (!util::match_http_url(rq_.target().to_string(), url)) {
-                return or_throw<Response>( yield
-                                         , asio::error::operation_not_supported);
-            }
-
-            bool is_ssl = url.scheme == "https";
-
-            PoolId pool_id{is_ssl, move(host)};
-
-            auto& pool = connection_pools[pool_id];
-
-            auto connection = pool.pop_front();
-
-            auto on_exit = defer([&] {
-                if (pool.empty()) connection_pools.erase(pool_id);
-            });
-
-            if (!connection) {
-                connection = connect(ios, rq_, url, cancel, yield[ec]);
-            }
-
-            Request rq = erase_hop_by_hop_headers(rq_);
-            rq.keep_alive(true);
-
-            Response ret;
-
-            if (!ec) ret = connection->request(rq, cancel, yield[ec]);
-
-            // Add an injection identifier header.
-            if (!ec) ret.set(http_::response_injection_id_hdr, to_string(genuuid()));
-
-            if (!ec && ret.keep_alive() && rq_.keep_alive()) {
-                // Note: we can't use the `pool` ref from above because that
-                // pool may have been destroyed in the mean time.
-                connection_pools[pool_id].push_back(move(connection));
-            }
-
-            return or_throw(yield, ec, move(ret));
+        cc.fetch_fresh = [&] (const Request& rq, Cancel& c, Yield y) {
+            return fetch_fresh(rq, c, y);
         };
 
-        cc.fetch_stored = [this]( const Request& rq
-                                , Cancel& cancel
-                                , Yield yield) {
-            return this->fetch_stored(rq, cancel, yield);
+        cc.fetch_stored = [&](const Request& rq, Cancel& c, Yield y) {
+            return fetch_stored(rq, c, y);
         };
 
-        cc.store = [this](const Request& rq, Response rs, Cancel&, Yield yield) {
-            return this->insert_content(rq, rs, yield);
+        cc.store = [&](const Request& rq, Response rs, Cancel& /* TODO */, Yield y) {
+            return store(rq, rs, y);
         };
     }
 
@@ -302,7 +256,70 @@ public:
     }
 
 private:
-    Response insert_content(Request rq, Response rs, Yield yield)
+    Response fetch_fresh(const Request& rq_, Cancel& cancel, Yield yield) {
+        sys::error_code ec;
+
+        string host = rq_[http::field::host].to_string();
+        assert(!host.empty());
+
+        // Parse the URL to tell HTTP/HTTPS, host, port.
+        util::url_match url;
+
+        if (!util::match_http_url(rq_.target().to_string(), url)) {
+            return or_throw<Response>( yield
+                                     , asio::error::operation_not_supported);
+        }
+
+        bool is_ssl = url.scheme == "https";
+
+        PoolId pool_id{is_ssl, move(host)};
+
+        auto& pool = connection_pools[pool_id];
+
+        auto connection = pool.pop_front();
+
+        auto on_exit = defer([&] {
+            if (pool.empty()) connection_pools.erase(pool_id);
+        });
+
+        if (!connection) {
+            connection = connect(ios, rq_, url, cancel, yield[ec]);
+        }
+
+        Request rq = erase_hop_by_hop_headers(rq_);
+        rq.keep_alive(true);
+
+        Response ret;
+
+        if (!ec) ret = connection->request(rq, cancel, yield[ec]);
+
+        // Add an injection identifier header.
+        if (!ec) ret.set(http_::response_injection_id_hdr, to_string(genuuid()));
+
+        if (!ec && ret.keep_alive() && rq_.keep_alive()) {
+            // Note: we can't use the `pool` ref from above because that
+            // pool may have been destroyed in the mean time.
+            connection_pools[pool_id].push_back(move(connection));
+        }
+
+        return or_throw(yield, ec, move(ret));
+    }
+
+    CacheEntry
+    fetch_stored(const Request& rq, Cancel& cancel, asio::yield_context yield)
+    {
+        if (!injector)
+            return or_throw<CacheEntry>( yield
+                                       , asio::error::operation_not_supported);
+
+        // TODO: use string_view
+        return injector->get_content( rq.target().to_string()
+                                    , config.default_db_type()
+                                    , cancel
+                                    , yield);
+    }
+
+    Response store(Request rq, Response rs, Yield yield)
     {
         if (!injector) return rs;
 
@@ -353,21 +370,8 @@ private:
         return rs;
     }
 
-    CacheEntry
-    fetch_stored(const Request& rq, Cancel& cancel, asio::yield_context yield)
-    {
-        if (!injector)
-            return or_throw<CacheEntry>( yield
-                                       , asio::error::operation_not_supported);
-
-        // TODO: use string_view
-        return injector->get_content( rq.target().to_string()
-                                    , config.default_db_type()
-                                    , cancel
-                                    , yield);
-    }
-
 private:
+    asio::io_service& ios;
     asio::ssl::context& ssl_ctx;
     unique_ptr<CacheInjector>& injector;
     const InjectorConfig& config;
@@ -735,6 +739,7 @@ int main(int argc, const char* argv[])
         &config,
         &cancel
     ] (asio::yield_context yield) {
+        //decltype(cache_injector) dummy;
         listen( config
               , proxy_server
               , cache_injector

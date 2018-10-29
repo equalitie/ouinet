@@ -105,6 +105,8 @@ class ConnectionPool {
             _stream.close();
         }
 
+        void* id() const { return _stream.id(); }
+
         // Auxilliary data per stream.
         Aux aux;
 

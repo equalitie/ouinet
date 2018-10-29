@@ -48,6 +48,7 @@
 #include "util/signal.h"
 #include "util/crypto.h"
 #include "util/lru_cache.h"
+#include "util/scheduler.h"
 
 #include "logger.h"
 
@@ -78,6 +79,7 @@ public:
         // TODO: Fine tune if necessary.
         , _ssl_certificate_cache(1000)
         , ssl_ctx{asio::ssl::context::tls_client}
+        , _fetch_stored_scheduler(_ios, 1)
     {
         ssl_ctx.set_default_verify_paths();
         ssl_ctx.set_verify_mode(asio::ssl::verify_peer);
@@ -137,6 +139,8 @@ private:
     fs::path ca_key_path()  const { return _config.repo_root() / OUINET_CA_KEY_FILE;  }
     fs::path ca_dh_path()   const { return _config.repo_root() / OUINET_CA_DH_FILE;   }
 
+    asio::io_service& get_io_service() { return _ios; }
+
 private:
     asio::io_service& _ios;
     std::unique_ptr<CACertificate> _ca_certificate;
@@ -157,6 +161,8 @@ private:
     ConnectionPool<std::string> _injector_connections;
 
     asio::ssl::context ssl_ctx;
+
+    Scheduler _fetch_stored_scheduler;
 };
 
 //------------------------------------------------------------------------------
@@ -430,7 +436,9 @@ Response Client::State::fetch_fresh
                     injreq = authorize(injreq, *credentials);
 
                 // Send the request to the injector/proxy.
-                auto res = con->request(injreq, cancel, yield[ec]);
+                auto res = con->request( injreq
+                                       , cancel
+                                       , yield[ec].tag("inj-request"));
 
                 if (ec) {
                     last_error = ec;
@@ -473,7 +481,7 @@ public:
                       , request_route::Config& request_config)
         : client_state(client_state)
         , request_config(request_config)
-        , cc("Ouinet Client")
+        , cc(client_state.get_io_service(), "Ouinet Client")
     {
         cc.fetch_fresh = [&] (const Request& rq, Cancel& cancel, Yield yield) {
             return fetch_fresh(rq, cancel, yield);
@@ -491,8 +499,6 @@ public:
     }
 
     Response fetch_fresh(const Request& request, Cancel& cancel, Yield yield) {
-        yield.log("Fetching fresh");
-
         sys::error_code ec;
         auto r = client_state.fetch_fresh( request
                                          , request_config

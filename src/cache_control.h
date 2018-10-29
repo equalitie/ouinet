@@ -11,19 +11,22 @@
 namespace ouinet {
 
 class CacheControl {
+private:
+    struct FetchState;
+
 public:
     using Request  = http::request<http::string_body>;
     using Response = http::response<http::dynamic_body>;
 
-    // TODO: Add cancellation support
     using FetchStored = std::function<CacheEntry(const Request&, Cancel&, Yield)>;
     using FetchFresh  = std::function<Response(const Request&, Cancel&, Yield)>;
     // This function may alter a (moved) response and return it.
     using Store = std::function<Response(const Request&, Response, Cancel&, Yield)>;
 
 public:
-    CacheControl(std::string server_name)
-        : _server_name(std::move(server_name))
+    CacheControl(asio::io_service& ios, std::string server_name)
+        : _ios(ios)
+        , _server_name(std::move(server_name))
     {}
 
     Response fetch(const Request&, Yield);
@@ -51,8 +54,8 @@ public:
 private:
     // TODO: Add cancellation support
     Response do_fetch(const Request&, Yield);
-    Response do_fetch_fresh(const Request&, Yield);
-    CacheEntry do_fetch_stored(const Request&, Yield);
+    Response do_fetch_fresh(FetchState&, const Request&, Yield);
+    CacheEntry do_fetch_stored(FetchState&, const Request&, Yield);
 
     bool is_stale( const boost::posix_time::ptime& time_stamp
                  , const Response&) const;
@@ -62,6 +65,7 @@ private:
     Response bad_gateway(const Request&, beast::string_view reason);
 
 private:
+    asio::io_service& _ios;
     std::string _server_name;
 
     boost::posix_time::time_duration _max_cached_age
