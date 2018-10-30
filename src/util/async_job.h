@@ -26,9 +26,10 @@ public:
         : _ios(other._ios)
         , _result(std::move(other._result))
         , _cancel_signal(other._cancel_signal)
+        , _self(other._self)
         , _on_finish(std::move(other._on_finish))
     {
-        if (other._self) { *other._self = this; }
+        if (_self) { *_self = this; }
 
         other._cancel_signal = nullptr;
         other._self = nullptr;
