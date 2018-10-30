@@ -44,12 +44,6 @@ void OuiServiceServer::start_listen(asio::yield_context yield)
 
             while (true) {
                 GenericStream connection = implementation->accept(yield[ec]);
-                if (ec == asio::error::connection_aborted) {
-                    // Accepting whis particular connection failed
-                    // but we should keep on listening.
-                    ec = sys::error_code();
-                    continue;
-                }
                 /*
                  * TODO: Reconnect logic? There are errors other than operation_aborted.
                  */
