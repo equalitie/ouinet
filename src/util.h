@@ -95,7 +95,7 @@ auto tcp_async_resolve( const std::string& host
                       , const std::string& port
                       , asio::io_service& ios
                       , Cancel& cancel
-                      , asio::yield_context yield, unsigned bbb = 0)
+                      , asio::yield_context yield)
 {
     using tcp = asio::ip::tcp;
     using Results = tcp::resolver::results_type;
