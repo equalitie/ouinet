@@ -545,10 +545,18 @@ public:
 
         if (ec) return or_throw(yield, ec, move(rs));
 
-        // Note: we have to "not throw" because the caller expects
-        // to get a valid response in return even if storing fails.
-        cache->ipfs_add(beast::buffers_to_string(rs.body().data()), yield[ec]);
+        asio::spawn(client_state.get_io_service(),
+            [&, rs] (asio::yield_context yield) {
+                // TODO: Use the scheduler here to only do some max number
+                // of `ipfs_add`s at a time. Also then trim that queue so
+                // that it doesn't grow indefinitely.
+                sys::error_code ec;
+                cache->ipfs_add( beast::buffers_to_string(rs.body().data())
+                               , yield[ec]);
+            });
 
+        // Note: we have to return a valid response even in case of error
+        // because CacheControl will use it.
         return or_throw(yield, ec, move(rs));
     }
 
