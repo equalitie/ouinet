@@ -24,6 +24,7 @@ public:
 
             {
                 auto on_exit = defer([&] {
+                        if (was_destroyed) return;
                         _was_destroyed = nullptr;
                         _timer = nullptr;
                         _deadline = nullptr;

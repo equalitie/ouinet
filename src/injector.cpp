@@ -183,7 +183,7 @@ public:
         sys::error_code ec;
 
         // Resolve target endpoint and check its validity.
-        TCPLookup lookup(resolve_target( rq, ios, cancel, yield[ec]));
+        TCPLookup lookup(resolve_target(rq, ios, cancel, yield[ec]));
 
         if (ec) return or_throw<ConP>(yield, ec);
 
