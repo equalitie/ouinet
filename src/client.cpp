@@ -66,6 +66,7 @@ static const fs::path OUINET_PID_FILE = "pid";
 static const fs::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
 static const fs::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
 static const fs::path OUINET_CA_DH_FILE = "ssl-ca-dh.pem";
+static const fs::path OUINET_INJ_CERT_FILE = "ssl-inj-cert.pem";
 
 //------------------------------------------------------------------------------
 class Client::State : public enable_shared_from_this<Client::State> {
@@ -79,9 +80,13 @@ public:
         // TODO: Fine tune if necessary.
         , _ssl_certificate_cache(1000)
         , ssl_ctx{asio::ssl::context::tls_client}
+        , inj_ctx{asio::ssl::context::tls_client}
     {
         ssl_ctx.set_default_verify_paths();
         ssl_ctx.set_verify_mode(asio::ssl::verify_peer);
+
+        inj_ctx.set_default_verify_paths();
+        inj_ctx.set_verify_mode(asio::ssl::verify_peer);
     }
 
     void start(int argc, char* argv[]);
@@ -156,6 +161,7 @@ private:
     ConnectionPool<std::string> _injector_connections;
 
     asio::ssl::context ssl_ctx;
+    asio::ssl::context inj_ctx;
 };
 
 //------------------------------------------------------------------------------
@@ -988,6 +994,18 @@ void Client::State::start(int argc, char* argv[])
     _ca_certificate = get_or_gen_tls_cert<CACertificate>
         ( "Your own local Ouinet client"
         , ca_cert_path(), ca_key_path(), ca_dh_path());
+
+    if (_config.enable_injector_tls()) {
+        sys::error_code ec;
+        auto inj_cert_path = _config.repo_root() / OUINET_INJ_CERT_FILE;
+        if (fs::exists(inj_cert_path)) {
+            LOG_DEBUG("Loading injector certificate file");
+            inj_ctx.load_verify_file(inj_cert_path.string());
+        } else {
+            LOG_DEBUG("Creating empty injector certificate file");
+            fs::ofstream(inj_cert_path) << "";
+        }
+    }
 
     asio::spawn
         ( _ios
