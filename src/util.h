@@ -1,8 +1,5 @@
 #pragma once
 
-#include "namespaces.h"
-#include "util/signal.h"
-
 #include <unistd.h>  // for getpid()
 #include <fstream>
 #include <string>
@@ -16,6 +13,11 @@
 #include <boost/regex.hpp>
 // Only available in Boost >= 1.64.0.
 ////#include <boost/process/environment.hpp>
+
+#include "namespaces.h"
+#include "util/signal.h"
+#include "util/condition_variable.h"
+#include "or_throw.h"
 
 namespace ouinet { namespace util {
 
@@ -92,15 +94,64 @@ inline
 auto tcp_async_resolve( const std::string& host
                       , const std::string& port
                       , asio::io_service& ios
-                      , Signal<void()>& cancel_signal
-                      , asio::yield_context yield)
+                      , Cancel& cancel
+                      , asio::yield_context yield, unsigned bbb = 0)
 {
-    asio::ip::tcp::resolver resolver{ios};
-    auto cancel_lookup_slot = cancel_signal.connect([&resolver] {
-        resolver.cancel();
+    using tcp = asio::ip::tcp;
+    using Results = tcp::resolver::results_type;
+
+    if (cancel) {
+        return or_throw<Results>(yield, asio::error::operation_aborted);
+    }
+
+    // Note: we're spawning a new coroutine here and deal with all this
+    // ConditionVariable machinery because - contrary to what Asio's
+    // documentation says - resolver::async_resolve isn't immediately
+    // cancelable. I.e.  when resolver::async_resolve is running and
+    // resolver::cancel is called, it is not guaranteed that the async_resolve
+    // call gets placed on the io_service queue immediately. Instead, it was
+    // observed that this can in some rare cases take more than 20 seconds.
+    //
+    // Also note that this is not Asio's fault. Asio uses internally the
+    // getaddrinfo() function which doesn't support cancellation.
+    //
+    // https://stackoverflow.com/questions/41352985/abort-a-call-to-getaddrinfo
+    sys::error_code ec;
+    Results results;
+    ConditionVariable cv(ios);
+    tcp::resolver* rp = nullptr;
+
+    auto cancel_lookup_slot = cancel.connect([&] {
+        ec = asio::error::operation_aborted;
+        cv.notify();
+        if (rp) rp->cancel();
     });
 
-    return resolver.async_resolve({host, port}, yield);
+    bool* finished_p = nullptr;
+
+    asio::spawn(ios, [&] (asio::yield_context yield) {
+        bool finished = false;
+        finished_p = &finished;
+
+        tcp::resolver resolver{ios};
+        rp = &resolver;
+        sys::error_code ec_;
+        auto r = resolver.async_resolve({host, port}, yield[ec_]);
+
+        if (finished) return;
+
+        rp = nullptr;
+        results = std::move(r);
+        ec = ec_;
+        finished_p = nullptr;
+        cv.notify();
+    });
+
+    cv.wait(yield);
+
+    if (finished_p) *finished_p = true;
+
+    return or_throw(yield, ec, std::move(results));
 }
 
 // Return whether the given `host` points to a loopback address.
