@@ -64,6 +64,8 @@ private:
 
     Response bad_gateway(const Request&, beast::string_view reason);
 
+    auto make_fetch_fresh_job(const Request&, Yield&);
+
 private:
     asio::io_service& _ios;
     std::string _server_name;

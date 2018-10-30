@@ -411,6 +411,28 @@ posix_time::time_duration CacheControl::max_cached_age() const
 }
 
 //------------------------------------------------------------------------------
+auto CacheControl::make_fetch_fresh_job(const Request& rq, Yield& yield)
+{
+    AsyncJob<Response> job(_ios);
+
+    job.start([&] (Cancel& cancel, asio::yield_context yield_) mutable {
+            auto y = yield.detach(yield_);
+
+            sys::error_code ec;
+            auto rs = fetch_fresh(rq, cancel, y[ec]);
+
+            if (!ec) {
+                sys::error_code ec_;
+                rs = try_to_cache(rq, move(rs), y[ec_].tag("try_to_cache"));
+            }
+
+            return or_throw(yield_, ec, move(rs));
+        });
+
+    return job;
+}
+
+//------------------------------------------------------------------------------
 Response
 CacheControl::do_fetch_fresh(FetchState& fs, const Request& rq, Yield yield)
 {
@@ -419,11 +441,7 @@ CacheControl::do_fetch_fresh(FetchState& fs, const Request& rq, Yield yield)
     }
 
     if (!fs.fetch_fresh) {
-        fs.fetch_fresh = AsyncJob<Response>(_ios);
-        fs.fetch_fresh->start(
-                [&] (Signal<void()>& cancel, asio::yield_context yield_) mutable {
-                    return fetch_fresh(rq, cancel, yield.detach(yield_));
-                });
+        fs.fetch_fresh = make_fetch_fresh_job(rq, yield);
     }
 
     ConditionVariable cv(_ios);
@@ -432,13 +450,6 @@ CacheControl::do_fetch_fresh(FetchState& fs, const Request& rq, Yield yield)
 
     auto result = move(fs.fetch_fresh->result());
     auto rs = move(result.retval);
-    //auto rs = fetch_fresh(rq, yield[ec].tag("fetch_fresh"));
-
-    if (!result.ec) {
-        sys::error_code ec;
-        // The storage operation may alter the response (e.g. add headers).
-        rs = try_to_cache(rq, move(rs), yield[ec].tag("try_to_cache"));
-    }
 
     return or_throw(yield, result.ec, move(rs));
 }
@@ -453,11 +464,7 @@ CacheControl::do_fetch_stored(FetchState& fs, const Request& rq, Yield yield)
     // Fetching from the distributed cache is often very slow and thus we need
     // to fetch from the origin im parallel and then return the first we get.
     if (!fs.fetch_fresh) {
-        fs.fetch_fresh = AsyncJob<Response>(_ios);
-        fs.fetch_fresh->start(
-                [&] (Cancel& cancel, asio::yield_context yield_) mutable {
-                    return fetch_fresh(rq, cancel, yield.detach(yield_));
-                });
+        fs.fetch_fresh = make_fetch_fresh_job(rq, yield);
     }
 
     if (!fs.fetch_stored) {
