@@ -44,13 +44,14 @@ inline
 std::string get_from_db( const std::string& key
                        , ClientDb& db
                        , LoadFunc ipfs_load
+                       , Cancel& cancel
                        , asio::yield_context yield)
 {
     using namespace std;
 
     sys::error_code ec;
 
-    string desc_data = db.find(key, yield[ec]);
+    string desc_data = db.find(key, cancel, yield[ec]);
 
     if (ec)
         return or_throw<string>(yield, ec);
@@ -63,7 +64,7 @@ std::string get_from_db( const std::string& key
     } else if (desc_data.find(ipfs_prefix) == 0) {
         // Retrieve descriptor from IPFS link.
         string desc_ipfs(move(desc_data.substr(ipfs_prefix.length())));
-        desc_str = ipfs_load(desc_ipfs, yield[ec]);
+        desc_str = ipfs_load(desc_ipfs, cancel, yield[ec]);
     } else {
         cerr << "WARNING: Invalid index entry for descriptor of key: " << key << endl;
         ec = asio::error::not_found;

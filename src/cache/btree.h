@@ -8,6 +8,7 @@
 #include <iostream>
 #include "../namespaces.h"
 #include "../defer.h"
+#include "../util/signal.h"
 
 namespace ouinet {
 
@@ -17,7 +18,7 @@ public:
     using Value = std::string;
     using Hash  = std::string;
 
-    using CatOp    = std::function<Value(const Hash&,  asio::yield_context)>;
+    using CatOp    = std::function<Value(const Hash&,  Cancel&, asio::yield_context)>;
     using AddOp    = std::function<Hash (const Value&, asio::yield_context)>;
     using RemoveOp = std::function<void (const Hash&,  asio::yield_context)>;
 
@@ -35,7 +36,7 @@ public:
         Key key() const;
         Value value() const;
 
-        void advance(asio::yield_context);
+        void advance(Cancel&, asio::yield_context);
         bool is_end() const;
 
     private:
@@ -51,7 +52,7 @@ public:
          , RemoveOp = nullptr
          , size_t max_node_size = 512);
 
-    Value find(const Key&, asio::yield_context);
+    Value find(const Key&, Cancel&, asio::yield_context);
 
     void insert(Key, Value, asio::yield_context);
 
@@ -70,7 +71,7 @@ public:
 
     size_t local_node_count() const;
 
-    Iterator begin(asio::yield_context) const;
+    Iterator begin(Cancel&, asio::yield_context) const;
 
 private:
     void raw_insert(Key, Value, asio::yield_context);
@@ -79,6 +80,7 @@ private:
                    , std::unique_ptr<Node>&
                    , const Key&
                    , const CatOp&
+                   , Cancel&
                    , asio::yield_context) const;
 
     void try_remove(Hash&, asio::yield_context) const;

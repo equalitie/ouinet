@@ -28,7 +28,9 @@ public:
                  , boost::optional<util::Ed25519PublicKey> bt_publish_pubkey
                  , fs::path path_to_repo);
 
-    std::string find(const std::string& key, asio::yield_context) override;
+    std::string find( const std::string& key
+                    , Cancel&
+                    , asio::yield_context) override;
 
     boost::asio::io_service& get_io_service();
 
@@ -56,7 +58,9 @@ class BTreeInjectorDb : public InjectorDb {
 public:
     BTreeInjectorDb(asio_ipfs::node&, Publisher&, fs::path path_to_repo);
 
-    std::string find(const std::string& key, asio::yield_context) override;
+    std::string find( const std::string& key
+                    , Cancel&
+                    , asio::yield_context) override;
 
     void insert(std::string key, std::string value, asio::yield_context) override;
 

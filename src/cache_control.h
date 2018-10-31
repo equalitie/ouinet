@@ -11,19 +11,22 @@
 namespace ouinet {
 
 class CacheControl {
+private:
+    struct FetchState;
+
 public:
     using Request  = http::request<http::string_body>;
     using Response = http::response<http::dynamic_body>;
 
-    // TODO: Add cancellation support
-    using FetchStored = std::function<CacheEntry(const Request&, Yield)>;
-    using FetchFresh  = std::function<Response(const Request&, Yield)>;
+    using FetchStored = std::function<CacheEntry(const Request&, Cancel&, Yield)>;
+    using FetchFresh  = std::function<Response(const Request&, Cancel&, Yield)>;
     // This function may alter a (moved) response and return it.
-    using Store       = std::function<Response(const Request&, Response, Yield)>;
+    using Store = std::function<Response(const Request&, Response, Cancel&, Yield)>;
 
 public:
-    CacheControl(std::string server_name)
-        : _server_name(std::move(server_name))
+    CacheControl(asio::io_service& ios, std::string server_name)
+        : _ios(ios)
+        , _server_name(std::move(server_name))
     {}
 
     Response fetch(const Request&, Yield);
@@ -48,11 +51,15 @@ public:
     // (to be managed by the lower level functions above).
     static Response filter_before_store(Response);
 
+    void enable_parallel_fetch(bool value) {
+        _parallel_fetch_enabled = value;
+    }
+
 private:
     // TODO: Add cancellation support
     Response do_fetch(const Request&, Yield);
-    Response do_fetch_fresh(const Request&, Yield);
-    CacheEntry do_fetch_stored(const Request&, Yield);
+    Response do_fetch_fresh(FetchState&, const Request&, Yield);
+    CacheEntry do_fetch_stored(FetchState&, const Request&, Yield);
 
     bool is_stale( const boost::posix_time::ptime& time_stamp
                  , const Response&) const;
@@ -61,8 +68,14 @@ private:
 
     Response bad_gateway(const Request&, beast::string_view reason);
 
+    auto make_fetch_fresh_job(const Request&, Yield&);
+
+    bool has_temporary_result(const Response&) const;
+
 private:
+    asio::io_service& _ios;
     std::string _server_name;
+    bool _parallel_fetch_enabled = true;
 
     boost::posix_time::time_duration _max_cached_age
         = boost::posix_time::hours(7*24);  // one week

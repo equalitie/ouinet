@@ -138,6 +138,8 @@ public:
 
     bool has_implementation() const { return _impl != nullptr; }
 
+    void* id() const { return _impl.get(); }
+
 public:
     GenericStream() {
         if (_debug) {
@@ -236,7 +238,7 @@ public:
             std::cerr << this << " " << _impl
                       << " GenericStream::close()" << std::endl;
         }
-        assert(_impl);
+        if (!_impl) return;
         _impl->close();
         _impl = nullptr;
     }

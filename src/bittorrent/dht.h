@@ -40,7 +40,14 @@ class DhtNode {
     DhtNode(asio::io_service& ios, ip::address interface_address);
     void start(asio::yield_context);
     void stop();
-    bool initialized() const { return _initialized; }
+
+    /**
+     * True iff this DhtNode knows enough about the structure of the DHT to
+     * reliably submit queries to it. The DHT operations below may be called
+     * only when the DhtNode is ready(). The DhtNode will be ready() when
+     * start() completes.
+     */
+    bool ready() const { return _ready; }
 
     /**
      * Query peers for a bittorrent swarm surrounding a particular infohash.
@@ -224,11 +231,11 @@ class DhtNode {
     std::unique_ptr<UdpMultiplexer> _multiplexer;
     NodeID _node_id;
     bool _initialized;
-    bool _stopped = false;
     udp::endpoint _wan_endpoint;
     std::unique_ptr<RoutingTable> _routing_table;
     std::unique_ptr<Tracker> _tracker;
     std::unique_ptr<DataStore> _data_store;
+    bool _ready;
 
     struct ActiveRequest {
         udp::endpoint destination;
@@ -328,7 +335,6 @@ class MainlineDht {
     std::map<asio::ip::address, std::unique_ptr<dht::DhtNode>> _nodes;
     dht::DhtPublications _publications;
     Signal<void()> _terminate_signal;
-    std::shared_ptr<bool> _was_destroyed;
 };
 
 } // bittorrent namespace

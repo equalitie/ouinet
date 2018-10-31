@@ -101,6 +101,7 @@ ClientDb* CacheClient::get_db(DbType db_type)
 
 string CacheClient::get_descriptor( string url
                                   , DbType db_type
+                                  , Cancel& cancel
                                   , asio::yield_context yield)
 {
     auto db = get_db(db_type);
@@ -109,24 +110,33 @@ string CacheClient::get_descriptor( string url
 
     return descriptor::get_from_db
       ( url, *db
-      , [&](auto h, auto y){ return _ipfs_node->cat(h, y); }
-      , yield);
+      , [&](auto h, auto& c, auto y) {
+            function<void()> cancel_fn;
+            auto cancel_handle = c.connect([&] { if (cancel_fn) cancel_fn(); });
+            return _ipfs_node->cat(h, cancel_fn, y);
+        }
+      , cancel, yield);
 }
 
 CacheEntry CacheClient::get_content( string url
                                    , DbType db_type
+                                   , Cancel& cancel
                                    , asio::yield_context yield)
 {
     sys::error_code ec;
 
-    string desc_data = get_descriptor(url, db_type, yield[ec]);
+    string desc_data = get_descriptor(url, db_type, cancel, yield[ec]);
 
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
     return descriptor::http_parse
       ( desc_data
-      , [&](auto h, auto y){ return _ipfs_node->cat(h, y); }
-      , yield);
+      , [&](auto h, auto& c, auto y) {
+            function<void()> cancel_fn;
+            auto cancel_handle = c.connect([&] { if (cancel_fn) cancel_fn(); });
+            return _ipfs_node->cat(h, cancel_fn, y);
+        }
+      , cancel, yield);
 }
 
 void CacheClient::set_ipns(std::string ipns)

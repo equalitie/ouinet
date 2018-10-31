@@ -58,9 +58,15 @@ public:
     // Basically it does this: Look into the database to find the IPFS_ID
     // correspoinding to the `url`, when found, fetch the content corresponding
     // to that IPFS_ID from IPFS.
-    CacheEntry get_content(std::string url, DbType, boost::asio::yield_context);
+    CacheEntry get_content( std::string url
+                          , DbType
+                          , Cancel&
+                          , boost::asio::yield_context);
 
-    std::string get_descriptor(std::string url, DbType, boost::asio::yield_context);
+    std::string get_descriptor( std::string url
+                              , DbType
+                              , Cancel&
+                              , boost::asio::yield_context);
 
     ~CacheInjector();
 

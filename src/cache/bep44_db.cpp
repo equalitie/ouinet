@@ -33,12 +33,18 @@ Bep44InjectorDb::Bep44InjectorDb( bt::MainlineDht& bt_dht
 static string find( bt::MainlineDht& dht
                   , util::Ed25519PublicKey pubkey
                   , const string& key
+                  , Cancel& cancel
                   , asio::yield_context yield)
 {
     sys::error_code ec;
 
     auto salt = util::sha1(key);
 
+    auto cancel_handle = cancel.connect([] {
+        assert(0 && "TODO: Bep44 index is not cancelable yet");
+    });
+
+    // TODO: Pass `cancel` to it
     auto opt_data = dht.mutable_get( pubkey
                                    , as_string_view(salt)
                                    , yield[ec]);
@@ -56,15 +62,19 @@ static string find( bt::MainlineDht& dht
 }
 
 
-string Bep44ClientDb::find(const string& key, asio::yield_context yield)
+string Bep44ClientDb::find( const string& key
+                          , Cancel& cancel
+                          , asio::yield_context yield)
 {
-    return ::find(_bt_dht, _bt_pubkey, key, yield);
+    return ::find(_bt_dht, _bt_pubkey, key, cancel, yield);
 }
 
 
-string Bep44InjectorDb::find(const string& key, asio::yield_context yield)
+string Bep44InjectorDb::find( const string& key
+                            , Cancel& cancel
+                            , asio::yield_context yield)
 {
-    return ::find(_bt_dht, _bt_privkey.public_key(), key, yield);
+    return ::find(_bt_dht, _bt_privkey.public_key(), key, cancel, yield);
 }
 
 

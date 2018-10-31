@@ -3,6 +3,7 @@
 #include <boost/intrusive/list.hpp>
 #include "condition_variable.h"
 #include "../or_throw.h"
+#include "signal.h"
 
 namespace ouinet {
 
@@ -84,6 +85,7 @@ public:
     Scheduler(asio::io_service& ios, size_t max_running_jobs = 1);
 
     Slot wait_for_slot(asio::yield_context yield);
+    Slot wait_for_slot(Cancel&, asio::yield_context yield);
 
     size_t max_running_jobs() const { return _max_running_jobs; }
 
@@ -108,13 +110,30 @@ Scheduler::Scheduler(asio::io_service& ios, size_t max_running_jobs)
 inline
 Scheduler::Slot Scheduler::wait_for_slot(asio::yield_context yield)
 {
+    Cancel unused_cancel;
+    return wait_for_slot(unused_cancel, yield);
+}
+
+inline
+Scheduler::Slot Scheduler::wait_for_slot( Cancel& cancel
+                                        , asio::yield_context yield)
+{
     while (_slots.size() >= _max_running_jobs) {
         Waiter waiter(_ios);
 
         _waiters.push_back(waiter);
 
         sys::error_code ec;
-        waiter.cv.wait(yield[ec]);
+
+        {
+            auto slot = cancel.connect([&] {
+                waiter.cv.notify(asio::error::operation_aborted);
+            });
+
+            waiter.cv.wait(yield[ec]);
+        }
+
+        if (!ec && cancel) ec = asio::error::operation_aborted;
 
         if (!waiter.is_linked()) {
             // `this` scheduler has been destroyed

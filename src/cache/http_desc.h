@@ -12,6 +12,7 @@
 #include "cache_entry.h"
 #include "../namespaces.h"
 #include "../or_throw.h"
+#include "../util/signal.h"
 
 namespace ouinet {
 
@@ -116,6 +117,7 @@ static inline
 CacheEntry
 http_parse( const std::string& desc_data
           , LoadFunc ipfs_load
+          , Cancel& cancel
           , asio::yield_context yield)
 {
 
@@ -136,7 +138,7 @@ http_parse( const std::string& desc_data
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
     // Get the HTTP response body (stored independently).
-    std::string body = ipfs_load(dsc->body_link, yield[ec]);
+    std::string body = ipfs_load(dsc->body_link, cancel, yield[ec]);
 
     // Build an HTTP response from the head in the descriptor and the retrieved body.
     http::response_parser<Response::body_type> parser;

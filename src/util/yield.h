@@ -52,6 +52,10 @@ public:
     {
     }
 
+    Yield detach(asio::yield_context yield) {
+        return Yield(*this, yield);
+    }
+
 private:
     Yield(Yield& parent, asio::yield_context asio_yield)
         : _ios(parent._ios)
@@ -70,20 +74,15 @@ public:
         , _asio_yield(y._asio_yield)
         , _ignored_error(std::move(y._ignored_error))
         , _tag(std::move(y._tag))
-        , _parent(y._parent)
+        , _parent(&y)
         , _timeout_state(std::move(y._timeout_state))
-        , _children(std::move(y._children))
         , _start_time(y._start_time)
     {
         if (_timeout_state) {
             _timeout_state->self = this;
         }
 
-        for (auto& ch : _children) {
-            ch._parent = this;
-        }
-
-        y._parent = nullptr;
+        y._children.push_back(*this);
     }
 
     Yield tag(std::string t)
@@ -120,11 +119,24 @@ public:
 
     ~Yield()
     {
-        // Chldren must be destroyed before this.
-        assert(_children.size() == 0);
-        stop_timing();
+        if (_children.empty()) {
+            stop_timing();
+        }
+
+        auto chs = std::move(_children);
+
+        for (auto& ch : chs) {
+            assert(ch._parent == this);
+            ch._parent = _parent;
+        }
 
         if (_parent) {
+            while (!chs.empty()) {
+                auto& ch = chs.front();
+                chs.pop_front();
+                _parent->_children.push_back(ch);
+            }
+
             // At least this node has to be on parent.
             assert(_parent->_children.size() >= 1);
 
