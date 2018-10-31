@@ -70,6 +70,8 @@ private:
 
     auto make_fetch_fresh_job(const Request&, Yield&);
 
+    bool has_temporary_result(const Response&) const;
+
 private:
     asio::io_service& _ios;
     std::string _server_name;

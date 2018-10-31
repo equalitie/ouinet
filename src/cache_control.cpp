@@ -268,6 +268,14 @@ static bool must_revalidate(const Request& request)
 }
 
 //------------------------------------------------------------------------------
+bool CacheControl::has_temporary_result(const Response& rs) const
+{
+    // TODO: More statuses
+    return rs.result() == http::status::found
+        || rs.result() == http::status::temporary_redirect;
+}
+
+//------------------------------------------------------------------------------
 struct CacheControl::FetchState {
     optional<AsyncJob<Response>> fetch_fresh;
     optional<AsyncJob<CacheEntry>> fetch_stored;
@@ -342,7 +350,8 @@ CacheControl::do_fetch(const Request& request, Yield yield)
     LOG_DEBUG(yield.tag(), ": Response was retrieved from cache");
 
     if (has_cache_control_directive(cache_entry.response, "private")
-        || is_older_than_max_cache_age(cache_entry.time_stamp)) {
+        || is_older_than_max_cache_age(cache_entry.time_stamp)
+        || has_temporary_result(cache_entry.response)) {
         auto response = do_fetch_fresh(fetch_state, request, yield[ec]);
 
         if (!ec) {
@@ -576,6 +585,8 @@ bool CacheControl::ok_to_cache( const http::request_header<>&  request
     switch (response.result()) {
         case http::status::ok:
         case http::status::moved_permanently:
+        case http::status::found:
+        case http::status::temporary_redirect:
             break;
         // TODO: Other response codes
         default:
