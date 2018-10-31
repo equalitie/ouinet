@@ -96,6 +96,8 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age)
     asio::io_service ios;
     CacheControl cc(ios, "test");
 
+    cc.enable_parallel_fetch(false);
+
     unsigned cache_check = 0;
     unsigned origin_check = 0;
 
@@ -140,6 +142,8 @@ BOOST_AUTO_TEST_CASE(test_maxage)
     asio::io_service ios;
 
     CacheControl cc(ios, "test");
+
+    cc.enable_parallel_fetch(false);
 
     unsigned cache_check = 0;
     unsigned origin_check = 0;
@@ -188,6 +192,8 @@ BOOST_AUTO_TEST_CASE(test_http10_expires)
 {
     asio::io_service ios;
     CacheControl cc(ios, "test");
+
+    cc.enable_parallel_fetch(false);
 
     unsigned cache_check = 0;
     unsigned origin_check = 0;
@@ -336,6 +342,8 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
     asio::io_service ios;
     CacheControl cc(ios, "test");
 
+    cc.enable_parallel_fetch(false);
+
     unsigned cache_check = 0;
     unsigned origin_check = 0;
 
@@ -394,6 +402,8 @@ BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
 {
     asio::io_service ios;
     CacheControl cc(ios, "test");
+
+    cc.enable_parallel_fetch(false);
 
     unsigned cache_check = 0;
     unsigned origin_check = 0;

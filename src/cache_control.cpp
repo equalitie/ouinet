@@ -463,7 +463,7 @@ CacheControl::do_fetch_stored(FetchState& fs, const Request& rq, Yield yield)
 
     // Fetching from the distributed cache is often very slow and thus we need
     // to fetch from the origin im parallel and then return the first we get.
-    if (!fs.fetch_fresh) {
+    if (_parallel_fetch_enabled && !fs.fetch_fresh) {
         fs.fetch_fresh = make_fetch_fresh_job(rq, yield);
     }
 
@@ -479,15 +479,17 @@ CacheControl::do_fetch_stored(FetchState& fs, const Request& rq, Yield yield)
     Which which = none;
     ConditionVariable cv(_ios);
 
-    fs.fetch_fresh ->on_finish([&] {
-            which = fresh;
-            fs.fetch_stored->on_finish(nullptr);
-            cv.notify();
-        });
+    if (fs.fetch_fresh) {
+        fs.fetch_fresh ->on_finish([&] {
+                which = fresh;
+                fs.fetch_stored->on_finish(nullptr);
+                cv.notify();
+            });
+    }
 
     fs.fetch_stored->on_finish([&] {
             which = stored;
-            fs.fetch_fresh->on_finish(nullptr);
+            if (fs.fetch_fresh) fs.fetch_fresh->on_finish(nullptr);
             cv.notify();
         });
 
