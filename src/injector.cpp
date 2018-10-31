@@ -739,7 +739,6 @@ int main(int argc, const char* argv[])
         &config,
         &cancel
     ] (asio::yield_context yield) {
-        //decltype(cache_injector) dummy;
         listen( config
               , proxy_server
               , cache_injector
