@@ -2,13 +2,13 @@
 
 namespace ouinet {
 
-class DeadManSwitch {
+class WatchDog {
 private:
     using Clock = std::chrono::steady_clock;
 
 public:
     template<class Duration, class OnTimeout>
-    DeadManSwitch(asio::io_service& ios, Duration d, OnTimeout on_timeout)
+    WatchDog(asio::io_service& ios, Duration d, OnTimeout on_timeout)
         : _ios(ios)
     {
         asio::spawn(ios, [&, d, on_timeout = std::move(on_timeout)]
@@ -57,7 +57,7 @@ public:
         }
     }
 
-    ~DeadManSwitch() {
+    ~WatchDog() {
         if (_was_destroyed) *_was_destroyed = true;
         if (_timer) _timer->cancel();
     }

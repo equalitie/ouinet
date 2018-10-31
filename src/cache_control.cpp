@@ -8,7 +8,7 @@
 #include "http_util.h"
 #include "util/async_job.h"
 #include "util/condition_variable.h"
-#include "util/dead_man_switch.h"
+#include "util/watch_dog.h"
 
 #include "logger.h"
 
@@ -282,11 +282,11 @@ CacheControl::do_fetch(const Request& request, Yield yield)
     auto on_exit = defer([&] {
         auto& fs = fetch_state;
         {
-            DeadManSwitch dms(_ios, std::chrono::seconds(10), [] { assert(0); });
+            WatchDog wdog(_ios, std::chrono::seconds(10), [] { assert(0); });
             if (fs.fetch_fresh)  fs.fetch_fresh ->stop(yield);
         }
         {
-            DeadManSwitch dms(_ios, std::chrono::seconds(10), [] { assert(0); });
+            WatchDog wdog(_ios, std::chrono::seconds(10), [] { assert(0); });
             if (fs.fetch_stored) fs.fetch_stored->stop(yield);
         }
     });
