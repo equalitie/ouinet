@@ -4,6 +4,7 @@
 #include <boost/optional.hpp>
 #include "generic_stream.h"
 #include "util/condition_variable.h"
+#include "util/signal.h"
 #include "or_throw.h"
 #include "defer.h"
 
@@ -56,10 +57,13 @@ class ConnectionPool {
         Connection(const Connection&) = delete;
         Connection(Connection&&) = delete;
 
-        Response request(Request rq, asio::yield_context yield)
+        Response request(Request rq, Cancel& cancel, asio::yield_context yield)
         {
             assert(!_is_requesting);
             assert(!_res);
+
+            if (cancel.call_count())
+                return or_throw<Response>(yield, asio::error::operation_aborted);
 
             _is_requesting = true;
             auto on_exit = defer([&] { _is_requesting = false; });
@@ -70,15 +74,21 @@ class ConnectionPool {
 
             auto wd = _was_destroyed;
 
+            auto cancel_slot = cancel.connect([&] { _stream.close(); });
+
             sys::error_code ec;
             http::async_write(_stream, rq, yield[ec]);
 
-            if (!ec && *wd) ec = asio::error::operation_aborted;
+            if (!ec && (*wd || cancel.call_count()))
+                    ec = asio::error::operation_aborted;
+
             if (ec) return or_throw<Response>(yield, ec);
 
             if (!_res) _cv.wait(yield[ec]);
 
-            if (!ec && *wd) ec = asio::error::operation_aborted;
+            if (!ec && (*wd || cancel.call_count()))
+                ec = asio::error::operation_aborted;
+
             if (ec) return or_throw<Response>(yield, ec);
 
             auto ret = std::move(*_res);
@@ -90,6 +100,12 @@ class ConnectionPool {
         {
             *_was_destroyed = true;
         }
+
+        void close() {
+            _stream.close();
+        }
+
+        void* id() const { return _stream.id(); }
 
         // Auxilliary data per stream.
         Aux aux;

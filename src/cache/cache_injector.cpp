@@ -88,15 +88,16 @@ string CacheInjector::insert_content( Request rq
 
 CacheEntry CacheInjector::get_content( string url
                                      , DbType db_type
+                                     , Cancel& cancel
                                      , asio::yield_context yield)
 {
     sys::error_code ec;
 
-    string desc_data = get_db(db_type)->find(url, yield[ec]);
+    string desc_data = get_db(db_type)->find(url, cancel, yield[ec]);
 
     if (ec) return or_throw<CacheEntry>(yield, ec);
 
-    return descriptor::http_parse(*_ipfs_node, desc_data, yield);
+    return descriptor::http_parse(*_ipfs_node, desc_data, cancel, yield);
 }
 
 CacheInjector::~CacheInjector()

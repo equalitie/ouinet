@@ -17,7 +17,9 @@ public:
     Bep44ClientDb( bittorrent::MainlineDht& bt_dht
                  , util::Ed25519PublicKey bt_pubkey);
 
-    std::string find(const std::string& key, asio::yield_context) override;
+    std::string find( const std::string& key
+                    , Cancel&
+                    , asio::yield_context) override;
 
     boost::asio::io_service& get_io_service();
 
@@ -34,7 +36,9 @@ public:
     Bep44InjectorDb( bittorrent::MainlineDht& bt_dht
                    , util::Ed25519PrivateKey bt_privkey);
 
-    std::string find(const std::string& key, asio::yield_context) override;
+    std::string find( const std::string& key
+                    , Cancel&
+                    , asio::yield_context) override;
 
     void insert(std::string key, std::string value, asio::yield_context) override;
 

@@ -50,9 +50,13 @@ public:
     // to that IPFS_ID from IPFS.
     CacheEntry get_content( std::string url
                           , DbType
+                          , Cancel&
                           , boost::asio::yield_context);
 
-    std::string get_descriptor(std::string url, DbType, asio::yield_context);
+    std::string get_descriptor( std::string url
+                              , DbType
+                              , Cancel&
+                              , asio::yield_context);
 
     void set_ipns(std::string ipns);
 

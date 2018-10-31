@@ -6,6 +6,9 @@
 #include "split_string.h"
 #include "util.h"
 #include "http_util.h"
+#include "util/async_job.h"
+#include "util/condition_variable.h"
+#include "util/watch_dog.h"
 
 #include "logger.h"
 
@@ -264,10 +267,38 @@ static bool must_revalidate(const Request& request)
     return false;
 }
 
-// TODO: This function is unfinished.
+//------------------------------------------------------------------------------
+bool CacheControl::has_temporary_result(const Response& rs) const
+{
+    // TODO: More statuses
+    return rs.result() == http::status::found
+        || rs.result() == http::status::temporary_redirect;
+}
+
+//------------------------------------------------------------------------------
+struct CacheControl::FetchState {
+    optional<AsyncJob<Response>> fetch_fresh;
+    optional<AsyncJob<CacheEntry>> fetch_stored;
+};
+
+//------------------------------------------------------------------------------
 Response
 CacheControl::do_fetch(const Request& request, Yield yield)
 {
+    FetchState fetch_state;
+
+    auto on_exit = defer([&] {
+        auto& fs = fetch_state;
+        {
+            WatchDog wdog(_ios, std::chrono::seconds(10), [] { assert(0); });
+            if (fs.fetch_fresh)  fs.fetch_fresh ->stop(yield);
+        }
+        {
+            WatchDog wdog(_ios, std::chrono::seconds(10), [] { assert(0); });
+            if (fs.fetch_stored) fs.fetch_stored->stop(yield);
+        }
+    });
+
     namespace err = asio::error;
 
     sys::error_code ec;
@@ -275,10 +306,10 @@ CacheControl::do_fetch(const Request& request, Yield yield)
     if (must_revalidate(request)) {
         sys::error_code ec1, ec2;
 
-        auto res = do_fetch_fresh(request, yield[ec1]);
+        auto res = do_fetch_fresh(fetch_state, request, yield[ec1]);
         if (!ec1) return res;
 
-        auto cache_entry = do_fetch_stored(request, yield[ec2]);
+        auto cache_entry = do_fetch_stored(fetch_state, request, yield[ec2]);
         if (!ec2) return add_warning( move(cache_entry.response)
                                     , "111 Ouinet \"Revalidation Failed\"");
 
@@ -291,7 +322,7 @@ CacheControl::do_fetch(const Request& request, Yield yield)
                                      , " cache: \"",   ec2.message(), "\""));
     }
 
-    auto cache_entry = do_fetch_stored(request, yield[ec]);
+    auto cache_entry = do_fetch_stored(fetch_state, request, yield[ec]);
 
     if (ec == err::operation_aborted) {
         return or_throw<Response>(yield, ec);
@@ -301,7 +332,7 @@ CacheControl::do_fetch(const Request& request, Yield yield)
         // Retrieving from cache failed.
         sys::error_code fresh_ec;
 
-        auto res = do_fetch_fresh(request, yield[fresh_ec]);
+        auto res = do_fetch_fresh(fetch_state, request, yield[fresh_ec]);
 
         if (!fresh_ec) return res;
 
@@ -319,8 +350,9 @@ CacheControl::do_fetch(const Request& request, Yield yield)
     LOG_DEBUG(yield.tag(), ": Response was retrieved from cache");
 
     if (has_cache_control_directive(cache_entry.response, "private")
-        || is_older_than_max_cache_age(cache_entry.time_stamp)) {
-        auto response = do_fetch_fresh(request, yield[ec]);
+        || is_older_than_max_cache_age(cache_entry.time_stamp)
+        || has_temporary_result(cache_entry.response)) {
+        auto response = do_fetch_fresh(fetch_state, request, yield[ec]);
 
         if (!ec) {
             LOG_DEBUG(yield.tag(), ": Response was served from injector: cached response is private or too old");
@@ -348,7 +380,7 @@ CacheControl::do_fetch(const Request& request, Yield yield)
 
         rq.set(http::field::if_none_match, *cache_etag);
 
-        auto response = do_fetch_fresh(rq, yield[ec]);
+        auto response = do_fetch_fresh(fetch_state, rq, yield[ec]);
 
         if (ec) {
             LOG_DEBUG(yield.tag(), ": Response was served from cache: revalidation failed");
@@ -364,7 +396,7 @@ CacheControl::do_fetch(const Request& request, Yield yield)
         return response;
     }
 
-    auto response = do_fetch_fresh(request, yield[ec]);
+    auto response = do_fetch_fresh(fetch_state, request, yield[ec]);
 
     if (ec) {
         LOG_DEBUG(yield.tag(), ": Response was served from cache: requesting fresh response failed");
@@ -375,39 +407,127 @@ CacheControl::do_fetch(const Request& request, Yield yield)
     }
 }
 
+//------------------------------------------------------------------------------
 void CacheControl::max_cached_age(const posix_time::time_duration& d)
 {
     _max_cached_age = d;
 }
 
+//------------------------------------------------------------------------------
 posix_time::time_duration CacheControl::max_cached_age() const
 {
     return _max_cached_age;
 }
 
-Response
-CacheControl::do_fetch_fresh(const Request& rq, Yield yield)
+//------------------------------------------------------------------------------
+auto CacheControl::make_fetch_fresh_job(const Request& rq, Yield& yield)
 {
-    if (fetch_fresh) {
-        sys::error_code ec;
-        auto rs = fetch_fresh(rq, yield[ec].tag("fetch_fresh"));
-        if (!ec) {
-            sys::error_code ec2;
-            // The storage operation may alter the response (e.g. add headers).
-            rs = try_to_cache(rq, move(rs), yield[ec2].tag("try_to_cache"));
-        }
-        return or_throw(yield, ec, move(rs));
+    AsyncJob<Response> job(_ios);
+
+    job.start([&] (Cancel& cancel, asio::yield_context yield_) mutable {
+            auto y = yield.detach(yield_);
+
+            sys::error_code ec;
+            auto rs = fetch_fresh(rq, cancel, y[ec]);
+
+            if (!ec) {
+                sys::error_code ec_;
+                rs = try_to_cache(rq, move(rs), y[ec_].tag("try_to_cache"));
+            }
+
+            return or_throw(yield_, ec, move(rs));
+        });
+
+    return job;
+}
+
+//------------------------------------------------------------------------------
+Response
+CacheControl::do_fetch_fresh(FetchState& fs, const Request& rq, Yield yield)
+{
+    if (!fetch_fresh) {
+        return or_throw<Response>(yield, asio::error::operation_not_supported);
     }
-    return or_throw<Response>(yield, asio::error::operation_not_supported);
+
+    if (!fs.fetch_fresh) {
+        fs.fetch_fresh = make_fetch_fresh_job(rq, yield);
+    }
+
+    ConditionVariable cv(_ios);
+    fs.fetch_fresh->on_finish([&cv] { cv.notify(); });
+    cv.wait(yield);
+
+    auto result = move(fs.fetch_fresh->result());
+    auto rs = move(result.retval);
+
+    return or_throw(yield, result.ec, move(rs));
 }
 
 CacheEntry
-CacheControl::do_fetch_stored(const Request& rq, Yield yield)
+CacheControl::do_fetch_stored(FetchState& fs, const Request& rq, Yield yield)
 {
-    if (fetch_stored) {
-        return fetch_stored(rq, yield.tag("fetch_stored"));
+    if (!fetch_stored) {
+        return or_throw<CacheEntry>(yield, asio::error::operation_not_supported);
     }
-    return or_throw<CacheEntry>(yield, asio::error::operation_not_supported);
+
+    // Fetching from the distributed cache is often very slow and thus we need
+    // to fetch from the origin im parallel and then return the first we get.
+    if (_parallel_fetch_enabled && !fs.fetch_fresh) {
+        fs.fetch_fresh = make_fetch_fresh_job(rq, yield);
+    }
+
+    if (!fs.fetch_stored) {
+        fs.fetch_stored = AsyncJob<CacheEntry>(_ios);
+        fs.fetch_stored->start(
+                [&] (Cancel& cancel, asio::yield_context yield_) mutable {
+                    return fetch_stored(rq, cancel, yield.detach(yield_));
+                });
+    }
+
+    enum Which { fresh, stored, none };
+    Which which = none;
+    ConditionVariable cv(_ios);
+
+    if (fs.fetch_fresh) {
+        fs.fetch_fresh ->on_finish([&] {
+                which = fresh;
+                fs.fetch_stored->on_finish(nullptr);
+                cv.notify();
+            });
+    }
+
+    fs.fetch_stored->on_finish([&] {
+            which = stored;
+            if (fs.fetch_fresh) fs.fetch_fresh->on_finish(nullptr);
+            cv.notify();
+        });
+
+    cv.wait(yield);
+
+    if (which == fresh) {
+        auto& r = fs.fetch_fresh->result();
+        if (!r.ec) {
+            return {
+                posix_time::second_clock::universal_time(),
+                r.retval
+            };
+        }
+
+        // fetch_fresh errored, wait for the stored version
+        ConditionVariable cv(_ios);
+        fs.fetch_stored->on_finish([&] { cv.notify(); });
+        cv.wait(yield);
+
+        auto& r2 = fs.fetch_stored->result();
+        return or_throw(yield, r2.ec, r2.retval);
+    }
+    else if (which == stored) {
+        auto& r = fs.fetch_stored->result();
+        return or_throw(yield, r.ec, r.retval);
+    }
+
+    assert(0);
+    return CacheEntry();
 }
 
 //------------------------------------------------------------------------------
@@ -465,6 +585,8 @@ bool CacheControl::ok_to_cache( const http::request_header<>&  request
     switch (response.result()) {
         case http::status::ok:
         case http::status::moved_permanently:
+        case http::status::found:
+        case http::status::temporary_redirect:
             break;
         // TODO: Other response codes
         default:
@@ -617,7 +739,8 @@ CacheControl::try_to_cache( const Request& request
         return response;
     }
 
+    Cancel cancel;
     // TODO: Apply similar filter to the request.
-    return store(request, filter_before_store(move(response)), yield);
+    return store(request, filter_before_store(move(response)), cancel, yield);
 }
 

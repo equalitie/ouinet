@@ -55,6 +55,25 @@ BOOST_AUTO_TEST_CASE(test_scheduler) {
     ios.run();
 }
 
+BOOST_AUTO_TEST_CASE(test_scheduler_cancel) {
+    asio::io_service ios;
+
+    Scheduler scheduler(ios, 0);
+
+    spawn(ios, [&ios, &scheduler](auto yield) {
+        Cancel cancel;
+        spawn(ios, [&ios, &scheduler, &cancel](auto yield) {
+            ios.post(yield);
+            cancel();
+        });
+        sys::error_code ec;
+        auto slot = scheduler.wait_for_slot(cancel, yield[ec]);
+        BOOST_REQUIRE_EQUAL(ec, asio::error::operation_aborted);
+    });
+
+    ios.run();
+}
+
 BOOST_AUTO_TEST_CASE(test_scheduler_destroy_mid_run) {
     asio::io_service ios;
 
