@@ -13,9 +13,6 @@ struct CacheEntry {
     // Data time stamp, not a date/time on errors.
     boost::posix_time::ptime time_stamp;
 
-    // Injection identifier, empty on errors.
-    std::string injection_id;
-
     // Cached data.
     Response response;
 };

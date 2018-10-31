@@ -73,7 +73,7 @@ BOOST_AUTO_TEST_CASE(test_cache_origin_fail)
     cc.fetch_stored = [&](auto rq, auto&, auto y) {
         cache_check++;
         Response rs{http::status::ok, rq.version()};
-        return Entry{current_time(), "", rs};
+        return Entry{current_time(), rs};
     };
 
     cc.fetch_fresh = [&](auto rq, auto&, auto y) {
@@ -113,7 +113,7 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age)
         if (rq.target() == "old") created -= seconds(5);
         else                      created += seconds(5);
 
-        return Entry{created, "", rs};
+        return Entry{created, rs};
     };
 
     cc.fetch_fresh = [&](auto rq, auto&, auto y) {
@@ -164,7 +164,7 @@ BOOST_AUTO_TEST_CASE(test_maxage)
             BOOST_CHECK(rq.target() == "new");
         }
 
-        return Entry{created, "", rs};
+        return Entry{created, rs};
     };
 
     cc.fetch_fresh = [&](auto rq, auto&, auto y) {
@@ -226,7 +226,7 @@ BOOST_AUTO_TEST_CASE(test_http10_expires)
                   , format_time(current_time() + posix_time::seconds(10)));
         }
 
-        return Entry{created, "", rs};
+        return Entry{created, rs};
     };
 
     cc.fetch_fresh = [&](auto rq, auto&, auto y) {
@@ -259,7 +259,7 @@ BOOST_AUTO_TEST_CASE(test_dont_load_cache_when_If_None_Match)
 
     cc.fetch_stored = [&](auto rq, auto&, auto y) {
         BOOST_ERROR("Shouldn't go to cache");
-        return Entry{current_time(), "", Response{}};
+        return Entry{current_time(), Response{}};
     };
 
     cc.fetch_fresh = [&](auto rq, auto&, auto y) {
@@ -288,7 +288,7 @@ BOOST_AUTO_TEST_CASE(test_no_etag_override)
 
     cc.fetch_stored = [&](auto rq, auto&, auto y) {
         BOOST_ERROR("Shouldn't go to cache");
-        return Entry{current_time(), "", Response{}};
+        return Entry{current_time(), Response{}};
     };
 
     cc.fetch_fresh = [&](auto rq, auto&, auto y) {
@@ -355,7 +355,7 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
         rs.set(http::field::etag, "123");
         rs.set("X-Test", "from-cache");
 
-        return Entry{current_time() - seconds(20), "", rs};
+        return Entry{current_time() - seconds(20), rs};
     };
 
     cc.fetch_fresh = [&](auto rq, auto&, auto y) {
@@ -414,7 +414,7 @@ BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
         // Return a fresh cached version.
         rs.set(http::field::cache_control, "max-age=3600");
         rs.set("X-Test", "from-cache");
-        return Entry{current_time(), "", rs};
+        return Entry{current_time(), rs};
     };
 
     cc.fetch_fresh = [&](auto rq, auto&, auto y) {

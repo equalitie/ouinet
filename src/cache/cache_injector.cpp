@@ -106,16 +106,17 @@ string CacheInjector::get_descriptor( string url
       , cancel, yield);
 }
 
-CacheEntry CacheInjector::get_content( string url
-                                     , DbType db_type
-                                     , Cancel& cancel
-                                     , asio::yield_context yield)
+pair<string, CacheEntry>
+CacheInjector::get_content( string url
+                          , DbType db_type
+                          , Cancel& cancel
+                          , asio::yield_context yield)
 {
     sys::error_code ec;
 
     string desc_data = get_descriptor(url, db_type, cancel, yield[ec]);
 
-    if (ec) return or_throw<CacheEntry>(yield, ec);
+    if (ec) return or_throw<pair<string, CacheEntry>>(yield, ec);
 
     return descriptor::http_parse
       ( desc_data

@@ -53,15 +53,15 @@ public:
                               , boost::asio::yield_context);
 
     // Find the content previously stored by the injector under `url`.
-    // The content is returned in the parameter of the callback function.
+    // The descriptor identifier and cached content are returned.
     //
     // Basically it does this: Look into the database to find the IPFS_ID
     // correspoinding to the `url`, when found, fetch the content corresponding
     // to that IPFS_ID from IPFS.
-    CacheEntry get_content( std::string url
-                          , DbType
-                          , Cancel&
-                          , boost::asio::yield_context);
+    std::pair<std::string, CacheEntry> get_content( std::string url
+                                                  , DbType
+                                                  , Cancel&
+                                                  , boost::asio::yield_context);
 
     std::string get_descriptor( std::string url
                               , DbType

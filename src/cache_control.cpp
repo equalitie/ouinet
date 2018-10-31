@@ -509,7 +509,6 @@ CacheControl::do_fetch_stored(FetchState& fs, const Request& rq, Yield yield)
         if (!r.ec) {
             return {
                 posix_time::second_clock::universal_time(),
-                "",  // unused
                 r.retval
             };
         }

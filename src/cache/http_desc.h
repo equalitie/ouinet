@@ -111,16 +111,20 @@ http_create( const std::string& id
 
 // For the given HTTP descriptor serialized in `desc_data`,
 // retrieve the head from the descriptor and the body data using `ipfs_load`,
-// assemble and return the HTTP response along with its identifier.
+// and return the descriptor identifier and HTTP response cache entry.
+//
+// TODO: Instead of the identifier,
+// the parsed `Descriptor` itself should probably be returned,
+// but the identifier suffices right now.
 template <class LoadFunc>
 static inline
-CacheEntry
+std::pair<std::string, CacheEntry>
 http_parse( const std::string& desc_data
           , LoadFunc ipfs_load
           , Cancel& cancel
           , asio::yield_context yield)
 {
-
+    using IdAndCE = std::pair<std::string, CacheEntry>;
     using Response = http::response<http::dynamic_body>;
 
     sys::error_code ec;
@@ -135,7 +139,7 @@ http_parse( const std::string& desc_data
         ec = asio::error::invalid_argument;
     }
 
-    if (ec) return or_throw<CacheEntry>(yield, ec);
+    if (ec) return or_throw<IdAndCE>(yield, ec);
 
     // Get the HTTP response body (stored independently).
     std::string body = ipfs_load(dsc->body_link, cancel, yield[ec]);
@@ -156,7 +160,7 @@ http_parse( const std::string& desc_data
         std::cerr << "----------------" << std::endl;
         std::cerr << dsc->head << std::endl;
         std::cerr << "----------------" << std::endl;
-        return or_throw<CacheEntry>(yield, ec);
+        return or_throw<IdAndCE>(yield, ec);
     }
 
     Response res = parser.release();
@@ -167,12 +171,13 @@ http_parse( const std::string& desc_data
         std::cerr << "WARNING: Failed to put body into the response "
             << ec.message() << std::endl;
 
-        return or_throw<CacheEntry>(yield, asio::error::invalid_argument);
+        return or_throw<IdAndCE>(yield, asio::error::invalid_argument);
     }
 
     res.prepare_payload();
 
-    return CacheEntry{dsc->timestamp, dsc->request_id, std::move(res)};
+    return IdAndCE( dsc->request_id
+                  , CacheEntry{dsc->timestamp, std::move(res)});
 }
 
 } // ouinet::descriptor namespace

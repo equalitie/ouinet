@@ -321,8 +321,9 @@ private:
 
         // Add an injection identifier header
         // to enable the client to track injection state.
-        if (!ec) ret.response.set(http_::response_injection_id_hdr, ret.injection_id);
-        return or_throw(yield, ec, move(ret));
+        if (!ec)
+            ret.second.response.set(http_::response_injection_id_hdr, ret.first);
+        return or_throw(yield, ec, move(ret.second));
     }
 
     Response store(Request rq, Response rs, Yield yield)
