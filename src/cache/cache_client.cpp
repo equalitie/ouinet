@@ -7,6 +7,7 @@
 #include "http_desc.h"
 #include "../or_throw.h"
 #include "../bittorrent/dht.h"
+#include "../ipfs_util.h"
 #include "../util/crypto.h"
 
 using namespace std;
@@ -109,13 +110,7 @@ string CacheClient::get_descriptor( string url
     if (!db) return or_throw<string>(yield, asio::error::not_found);
 
     return descriptor::get_from_db
-      ( url, *db
-      , [&](auto h, auto& c, auto y) {
-            function<void()> cancel_fn;
-            auto cancel_handle = c.connect([&] { if (cancel_fn) cancel_fn(); });
-            return _ipfs_node->cat(h, cancel_fn, y);
-        }
-      , cancel, yield);
+        ( url, *db, IPFS_LOAD_FUNC(*_ipfs_node), cancel, yield);
 }
 
 pair<string, CacheEntry>
@@ -131,13 +126,7 @@ CacheClient::get_content( string url
     if (ec) return or_throw<pair<string, CacheEntry>>(yield, ec);
 
     return descriptor::http_parse
-      ( desc_data
-      , [&](auto h, auto& c, auto y) {
-            function<void()> cancel_fn;
-            auto cancel_handle = c.connect([&] { if (cancel_fn) cancel_fn(); });
-            return _ipfs_node->cat(h, cancel_fn, y);
-        }
-      , cancel, yield);
+        ( desc_data, IPFS_LOAD_FUNC(*_ipfs_node), cancel, yield);
 }
 
 void CacheClient::set_ipns(std::string ipns)
