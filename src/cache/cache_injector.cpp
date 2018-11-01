@@ -9,9 +9,10 @@
 #include <asio_ipfs.h>
 #include "btree_db.h"
 #include "bep44_db.h"
+#include "descdb.h"
 #include "publisher.h"
-#include "../http_util.h"
 #include "../bittorrent/dht.h"
+#include "../ipfs_util.h"
 #include "../util/scheduler.h"
 
 using namespace std;
@@ -48,56 +49,72 @@ InjectorDb* CacheInjector::get_db(DbType db_type) const
     return nullptr;
 }
 
-string CacheInjector::insert_content( Request rq
-                                    , Response rs
+string CacheInjector::insert_content( const string& id
+                                    , const Request& rq
+                                    , const Response& rs
                                     , DbType db_type
                                     , asio::yield_context yield)
 {
     auto wd = _was_destroyed;
 
-    sys::error_code ec;
-
-    auto id = rs[http_::response_injection_id_hdr].to_string();
-    rs.erase(http_::response_injection_id_hdr);
-
-    auto ts = boost::posix_time::microsec_clock::universal_time();
-
-    pair<string, string> desc;
-
-    {
+    // Wraps IPFS add operation to wait for a slot first
+    auto ipfs_add = [&](auto data, auto yield) {
+        sys::error_code ec;
         auto slot = _scheduler->wait_for_slot(yield[ec]);
 
         if (!ec && *wd) ec = asio::error::operation_aborted;
         if (ec) return or_throw<string>(yield, ec);
 
-        desc = descriptor::http_create(*_ipfs_node, id, ts, rq, rs, yield[ec]);
+        auto cid = _ipfs_node->add(data, yield[ec]);
 
         if (!ec && *wd) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<string>(yield, ec);
-    }
+        return or_throw(yield, ec, move(cid));
+    };
 
-    // TODO: use string_view for key
-    auto key = rq.target().to_string();
+    sys::error_code ec;
 
-    get_db(db_type)->insert(move(key), desc.first, yield[ec]);
-
+    // Prepare and create descriptor
+    auto ts = boost::posix_time::microsec_clock::universal_time();
+    auto desc = descriptor::http_create( id, ts
+                                       , rq, rs
+                                       , ipfs_add
+                                       , yield[ec]);
     if (!ec && *wd) ec = asio::error::operation_aborted;
+    if (ec) return or_throw<string>(yield, ec);
 
-    return or_throw(yield, ec, move(desc.second));
+    // Store descriptor
+    auto db = get_db(db_type);
+    descriptor::put_into_db( rq.target().to_string(), desc
+                           , *db, ipfs_add, yield[ec]);
+    if (!ec && *wd) ec = asio::error::operation_aborted;
+    return or_throw(yield, ec, move(desc));
 }
 
-CacheEntry CacheInjector::get_content( string url
-                                     , DbType db_type
-                                     , Cancel& cancel
-                                     , asio::yield_context yield)
+string CacheInjector::get_descriptor( string url
+                                    , DbType db_type
+                                    , Cancel& cancel
+                                    , asio::yield_context yield)
+{
+    auto db = get_db(db_type);
+
+    return descriptor::get_from_db
+        ( url, *db, IPFS_LOAD_FUNC(*_ipfs_node), cancel, yield);
+}
+
+pair<string, CacheEntry>
+CacheInjector::get_content( string url
+                          , DbType db_type
+                          , Cancel& cancel
+                          , asio::yield_context yield)
 {
     sys::error_code ec;
 
-    string desc_data = get_db(db_type)->find(url, cancel, yield[ec]);
+    string desc_data = get_descriptor(url, db_type, cancel, yield[ec]);
 
-    if (ec) return or_throw<CacheEntry>(yield, ec);
+    if (ec) return or_throw<pair<string, CacheEntry>>(yield, ec);
 
-    return descriptor::http_parse(*_ipfs_node, desc_data, cancel, yield);
+    return descriptor::http_parse
+        ( desc_data, IPFS_LOAD_FUNC(*_ipfs_node), cancel, yield);
 }
 
 CacheInjector::~CacheInjector()

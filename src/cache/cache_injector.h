@@ -43,23 +43,30 @@ public:
     // "https://ipfs.io/ipns/" + ipfs.id()
     std::string ipfs_id() const;
 
-    // Insert `content` into IPFS and store its IPFS ID under the `url` in the
-    // database. On success, the function returns the file descriptor.
-    std::string insert_content( Request
-                              , Response
+    // Insert a descriptor with the given `id` for the given request and response
+    // into the db given by `DbType`, along with data in distributed storage.
+    // On success, the function returns the file descriptor.
+    std::string insert_content( const std::string& id
+                              , const Request&
+                              , const Response&
                               , DbType
                               , boost::asio::yield_context);
 
     // Find the content previously stored by the injector under `url`.
-    // The content is returned in the parameter of the callback function.
+    // The descriptor identifier and cached content are returned.
     //
     // Basically it does this: Look into the database to find the IPFS_ID
     // correspoinding to the `url`, when found, fetch the content corresponding
     // to that IPFS_ID from IPFS.
-    CacheEntry get_content( std::string url
-                          , DbType
-                          , Cancel&
-                          , boost::asio::yield_context);
+    std::pair<std::string, CacheEntry> get_content( std::string url
+                                                  , DbType
+                                                  , Cancel&
+                                                  , boost::asio::yield_context);
+
+    std::string get_descriptor( std::string url
+                              , DbType
+                              , Cancel&
+                              , boost::asio::yield_context);
 
     ~CacheInjector();
 

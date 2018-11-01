@@ -20,6 +20,7 @@ struct MutableDataItem {
     int64_t sequence_number;
     std::array<uint8_t, 64> signature;
 
+    // Throws `std::length_error` if the value is too big.
     static MutableDataItem sign(
         BencodedValue value,
         int64_t sequence_number,

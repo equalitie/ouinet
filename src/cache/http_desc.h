@@ -8,12 +8,11 @@
 #include <boost/format.hpp>
 #include <boost/optional.hpp>
 #include <json.hpp>
-#include <asio_ipfs.h>
 
 #include "cache_entry.h"
 #include "../namespaces.h"
 #include "../or_throw.h"
-#include "../http_util.h"
+#include "../util/signal.h"
 
 namespace ouinet {
 
@@ -70,29 +69,30 @@ struct Descriptor {
 
 namespace descriptor {
 
-// For the given HTTP request `rq` and response `rs`, seed body data to the `cache`,
+// For the given HTTP request `rq` and response `rs`,
+// seed body data using `ipfs_store`,
 // then create an HTTP descriptor with the given `id` for the URL and response,
 // and return it.
+template <class StoreFunc>
 static inline
-std::pair<std::string /* ipfs */, std::string /* body */>
-http_create( asio_ipfs::node& ipfs
-           , const std::string& id
+std::string
+http_create( const std::string& id
            , boost::posix_time::ptime ts
            , const http::request<http::string_body>& rq
            , const http::response<http::dynamic_body>& rs
+           , StoreFunc ipfs_store
            , asio::yield_context yield) {
 
     using namespace std;
-    using Ret = pair<string, string>;
 
     sys::error_code ec;
 
-    string ipfs_id = ipfs.add(
+    string ipfs_id = ipfs_store(
             beast::buffers_to_string(rs.body().data()), yield[ec]);
 
     auto url = rq.target();
 
-    if (ec) return or_throw<Ret>(yield, ec);
+    if (ec) return or_throw<string>(yield, ec);
 
     auto rs_ = rs;
 
@@ -101,38 +101,33 @@ http_create( asio_ipfs::node& ipfs
     stringstream rsh_ss;
     rsh_ss << rs_.base();
 
-    string descriptor = Descriptor{ url.to_string()
-                                  , id
-                                  , ts
-                                  , rsh_ss.str()
-                                  , ipfs_id
-                                  }.serialize();
-
-    string cid = ipfs.add(descriptor, yield[ec]);
-
-    return or_throw<Ret>(yield, ec, { move(cid), move(descriptor) });
+    return Descriptor{ url.to_string()
+                     , id
+                     , ts
+                     , rsh_ss.str()
+                     , ipfs_id
+                     }.serialize();
 }
 
 // For the given HTTP descriptor serialized in `desc_data`,
-// retrieve the head from the descriptor and the body data from the `cache`,
-// assemble and return the HTTP response along with its identifier.
+// retrieve the head from the descriptor and the body data using `ipfs_load`,
+// and return the descriptor identifier and HTTP response cache entry.
+//
+// TODO: Instead of the identifier,
+// the parsed `Descriptor` itself should probably be returned,
+// but the identifier suffices right now.
+template <class LoadFunc>
 static inline
-CacheEntry http_parse( asio_ipfs::node& ipfs
-                     , const std::string& desc_ipfs
-                     , Cancel& cancel
-                     , asio::yield_context yield)
+std::pair<std::string, CacheEntry>
+http_parse( const std::string& desc_data
+          , LoadFunc ipfs_load
+          , Cancel& cancel
+          , asio::yield_context yield)
 {
-
+    using IdAndCE = std::pair<std::string, CacheEntry>;
     using Response = http::response<http::dynamic_body>;
 
     sys::error_code ec;
-
-    std::function<void()> cancel_fn;
-    auto cancel_handle = cancel.connect([&] { if (cancel_fn) cancel_fn(); });
-
-    std::string desc_data = ipfs.cat(desc_ipfs, cancel_fn, yield[ec]);
-
-    if (ec) return or_throw<CacheEntry>(yield, ec);
 
     boost::optional<Descriptor> dsc = Descriptor::deserialize(desc_data);
 
@@ -144,10 +139,10 @@ CacheEntry http_parse( asio_ipfs::node& ipfs
         ec = asio::error::invalid_argument;
     }
 
-    if (ec) return or_throw<CacheEntry>(yield, ec);
+    if (ec) return or_throw<IdAndCE>(yield, ec);
 
     // Get the HTTP response body (stored independently).
-    std::string body = ipfs.cat(dsc->body_link, cancel_fn, yield[ec]);
+    std::string body = ipfs_load(dsc->body_link, cancel, yield[ec]);
 
     // Build an HTTP response from the head in the descriptor and the retrieved body.
     http::response_parser<Response::body_type> parser;
@@ -165,7 +160,7 @@ CacheEntry http_parse( asio_ipfs::node& ipfs
         std::cerr << "----------------" << std::endl;
         std::cerr << dsc->head << std::endl;
         std::cerr << "----------------" << std::endl;
-        return or_throw<CacheEntry>(yield, ec);
+        return or_throw<IdAndCE>(yield, ec);
     }
 
     Response res = parser.release();
@@ -176,14 +171,13 @@ CacheEntry http_parse( asio_ipfs::node& ipfs
         std::cerr << "WARNING: Failed to put body into the response "
             << ec.message() << std::endl;
 
-        return or_throw<CacheEntry>(yield, asio::error::invalid_argument);
+        return or_throw<IdAndCE>(yield, asio::error::invalid_argument);
     }
-
-    res.set(http_::response_injection_id_hdr, dsc->request_id);
 
     res.prepare_payload();
 
-    return CacheEntry{dsc->timestamp, std::move(res)};
+    return IdAndCE( dsc->request_id
+                  , CacheEntry{dsc->timestamp, std::move(res)});
 }
 
 } // ouinet::descriptor namespace

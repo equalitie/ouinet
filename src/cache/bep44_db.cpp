@@ -94,10 +94,15 @@ void Bep44InjectorDb::insert( string key
     Time unix_epoch(boost::gregorian::date(1970, 1, 1));
     Time ts = boost::posix_time::microsec_clock::universal_time();
 
-    auto item = bt::MutableDataItem::sign( value
-                                         , (ts - unix_epoch).total_milliseconds()
-                                         , as_string_view(salt)
-                                         , _bt_privkey);
+    bt::MutableDataItem item;
+    try {
+        item = bt::MutableDataItem::sign( value
+                                        , (ts - unix_epoch).total_milliseconds()
+                                        , as_string_view(salt)
+                                        , _bt_privkey);
+    } catch(length_error) {
+        return or_throw(yield, asio::error::message_size);
+    }
 
     _bt_dht.mutable_put_start(item, yield);
 }
