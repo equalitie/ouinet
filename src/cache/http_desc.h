@@ -32,12 +32,12 @@ struct Descriptor {
             return boost::posix_time::to_iso_extended_string(ts) + 'Z';
         };
 
-        return nlohmann::json { { "version"   , version() }
-                              , { "url"       , url }
-                              , { "id"        , request_id }
-                              , { "ts"        , ts_to_str(timestamp) }
-                              , { "head"      , head }
-                              , { "body_link" , body_link }
+        return nlohmann::json { { "!ouinet_version", version() }
+                              , { "url"            , url }
+                              , { "id"             , request_id }
+                              , { "ts"             , ts_to_str(timestamp) }
+                              , { "head"           , head }
+                              , { "body_link"      , body_link }
                               }
                               .dump();
     }
@@ -46,7 +46,7 @@ struct Descriptor {
         try {
             auto json = nlohmann::json::parse(data);
 
-            auto v = json["version"];
+            auto v = json["!ouinet_version"];
 
             if (!v.is_null() && unsigned(v) != version()) {
                 return boost::none;
