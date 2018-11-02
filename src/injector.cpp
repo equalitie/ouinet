@@ -69,8 +69,6 @@ using ConPool = ConnectionPool<>;
 using Connection = ConPool::Connection;
 using ConPools = map<PoolId, ConPool>;
 
-static const boost::filesystem::path OUINET_PID_FILE = "pid";
-
 //------------------------------------------------------------------------------
 static
 void handle_bad_request( GenericStream& con
@@ -680,22 +678,6 @@ int main(int argc, const char* argv[])
     if (config.open_file_limit()) {
         increase_open_file_limit(*config.open_file_limit());
     }
-
-    if (exists(config.repo_root()/OUINET_PID_FILE)) {
-      LOG_ABORT("Existing PID file ", config.repo_root()/OUINET_PID_FILE,
-                "; another injector process may be running" ,
-                ", otherwise please remove the file.\n");
-        return 1;
-    }
-    // Acquire a PID file for the life of the process
-    static const auto pid_file_path = config.repo_root()/OUINET_PID_FILE;
-    util::PidFile pid_file(pid_file_path);
-    // Force removal of PID file on abnormal exit
-    std::atexit([] {
-            if (!exists(pid_file_path)) return;
-            cerr << "Warning: not a clean exit" << endl;
-            remove(pid_file_path);
-        });
 
     // The io_service is required for all I/O
     asio::io_service ios;

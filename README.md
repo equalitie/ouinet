@@ -278,10 +278,6 @@ directly:
 This will create a throwaway container with a shell at the `/var/opt/ouinet`
 directory in the data volume.
 
-If the *injector or client crashes* for some reason, you may have to remove
-its PID file manually for it to start again.  Just use the shell container to
-remove `injector/pid` or `client/pid`.
-
 If you want to *transfer an existing repository* to `/var/opt/ouinet`, you
 first need to move away or remove the existing one using the shell container:
 

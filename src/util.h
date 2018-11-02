@@ -1,6 +1,5 @@
 #pragma once
 
-#include <unistd.h>  // for getpid()
 #include <fstream>
 #include <string>
 
@@ -11,8 +10,6 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/regex.hpp>
-// Only available in Boost >= 1.64.0.
-////#include <boost/process/environment.hpp>
 
 #include "namespaces.h"
 #include "util/signal.h"
@@ -230,27 +227,6 @@ void create_state_file(const boost::filesystem::path& path, const std::string& l
     fs << line << std::endl;
     fs.close();
 }
-
-///////////////////////////////////////////////////////////////////////////////
-class PidFile {
-    public:
-        PidFile(const boost::filesystem::path& path) : pid_path(path) {
-            // Only available in Boost >= 1.64.0.
-            ////auto pid = boost::this_process::get_pid();
-            // TODO: Check if this works under Windows (it is declared obsolete).
-            auto pid = ::getpid();
-            create_state_file(pid_path, std::to_string(pid));
-        }
-
-        ~PidFile() {
-            try {
-                remove(pid_path);
-            } catch (...) {
-            }
-        }
-    private:
-        boost::filesystem::path pid_path;
-};
 
 ///////////////////////////////////////////////////////////////////////////////
 

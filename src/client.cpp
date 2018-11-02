@@ -62,7 +62,6 @@ using Request  = http::request<http::string_body>;
 using Response = http::response<http::dynamic_body>;
 using boost::optional;
 
-static const fs::path OUINET_PID_FILE = "pid";
 static const fs::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
 static const fs::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
 static const fs::path OUINET_CA_DH_FILE = "ssl-ca-dh.pem";
@@ -127,10 +126,6 @@ private:
 
     void setup_injector(asio::yield_context);
 
-    fs::path get_pid_path() const {
-        return _config.repo_root()/OUINET_PID_FILE;
-    }
-
     bool was_stopped() const {
         return _shutdown_signal.call_count() != 0;
     }
@@ -151,8 +146,6 @@ private:
 
     ClientFrontEnd _front_end;
     Signal<void()> _shutdown_signal;
-
-    unique_ptr<util::PidFile> _pid_file;
 
     bool _is_ipns_being_setup = false;
 
@@ -1034,19 +1027,6 @@ void Client::State::start(int argc, char* argv[])
         return;
     }
 
-#ifndef __ANDROID__
-    auto pid_path = get_pid_path();
-    if (exists(pid_path)) {
-        throw runtime_error(util::str
-             ( "[ABORT] Existing PID file ", pid_path
-             , "; another client process may be running"
-             , ", otherwise please remove the file."));
-    }
-    // Acquire a PID file for the life of the process
-    assert(!_pid_file);
-    _pid_file = make_unique<util::PidFile>(pid_path);
-#endif
-
     if (exists(ca_cert_path()) && exists(ca_key_path()) && exists(ca_dh_path())) {
         cout << "Loading existing CA certificate..." << endl;
         auto read_pem = [](auto path) {
@@ -1230,11 +1210,6 @@ void Client::set_credentials(const char* injector, const char* cred)
     _state->_config.set_credentials(injector, cred);
 }
 
-fs::path Client::get_pid_path() const
-{
-    return _state->get_pid_path();
-}
-
 fs::path Client::ca_cert_path() const
 {
     return _state->ca_cert_path();
@@ -1263,14 +1238,6 @@ int main(int argc, char* argv[])
 
     try {
         client.start(argc, argv);
-
-        static auto pid_file_path = client.get_pid_path();
-        // Force removal of PID file on abnormal exit
-        std::atexit([] {
-                if (!exists(pid_file_path)) return;
-                cerr << "Warning: not a clean exit" << endl;
-                remove(pid_file_path);
-            });
     } catch (std::exception& e) {
         cerr << e.what() << endl;
         return 1;
