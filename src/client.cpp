@@ -45,6 +45,7 @@
 #include "ouiservice.h"
 #include "ouiservice/i2p.h"
 #include "ouiservice/tcp.h"
+#include "ouiservice/tls.h"
 
 #include "util/signal.h"
 #include "util/crypto.h"
@@ -1095,7 +1096,13 @@ void Client::State::setup_injector(asio::yield_context yield)
         auto tcp_client
             = make_unique<ouiservice::TcpOuiServiceClient>(_ios, tcp_endpoint);
 
-        _injector->add(std::move(tcp_client));
+        if (!_config.enable_injector_tls()) {
+            _injector->add(std::move(tcp_client));
+        } else {
+            auto tls_client
+                = make_unique<ouiservice::TlsOuiServiceClient>(move(tcp_client), move(inj_ctx));
+            _injector->add(std::move(tls_client));
+        }
     }
 
     _injector->start(yield);

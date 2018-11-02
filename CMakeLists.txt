@@ -143,6 +143,7 @@ file(GLOB client_sources
     "./src/ssl/ca_certificate.cpp"
     "./src/ssl/dummy_certificate.cpp"
     "./src/ouiservice/tcp.cpp"
+    "./src/ouiservice/tls.cpp"
     "./src/logger.cpp"
     "./src/cache/*.cpp"
     "./src/bittorrent/*.cpp"
