@@ -278,10 +278,6 @@ private:
 
         auto connection = pool.pop_front();
 
-        auto on_exit = defer([&] {
-            if (pool.empty()) connection_pools.erase(pool_id);
-        });
-
         if (!connection) {
             connection = connect(ios, rq_, url, cancel, yield[ec]);
         }
@@ -300,6 +296,13 @@ private:
             // Note: we can't use the `pool` ref from above because that
             // pool may have been destroyed in the mean time.
             connection_pools[pool_id].push_back(move(connection));
+        }
+        else {
+            auto pool_i = connection_pools.find(pool_id);
+
+            if (pool_i != connection_pools.end() && pool_i->second.empty()) {
+                connection_pools.erase(pool_i);
+            }
         }
 
         return or_throw(yield, ec, move(ret));
