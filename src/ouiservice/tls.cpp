@@ -1,5 +1,6 @@
 #include "tls.h"
 #include "../or_throw.h"
+#include "../ssl/util.h"
 
 namespace ouinet {
 namespace ouiservice {
@@ -33,6 +34,28 @@ GenericStream TlsOuiServiceServer::accept(asio::yield_context yield)
 
     return GenericStream(std::move(tls_sock), std::move(tls_shutter));
 }
+
+OuiServiceImplementationClient::ConnectInfo
+TlsOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
+{
+    sys::error_code ec;
+
+    auto base_coninfo = base->connect(yield[ec], cancel);
+    if (ec) {
+        return or_throw<ConnectInfo>(yield, ec);
+    }
+
+    // This also gets a configured shutter.
+    auto tls_con = ssl::util::client_handshake( std::move(base_coninfo.connection)
+                                              , ssl_context
+                                              , "localhost" // TODO: SNI used, disable?
+                                              , cancel
+                                              , yield[ec]);
+
+    ConnectInfo tls_coninfo{std::move(tls_con), base_coninfo.remote_endpoint};
+    return or_throw(yield, ec, std::move(tls_coninfo));
+}
+
 
 } // ouiservice namespace
 } // ouinet namespace
