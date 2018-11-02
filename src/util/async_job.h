@@ -42,7 +42,8 @@ public:
         _cancel_signal = other._cancel_signal;
         _on_finish = std::move(other._on_finish);
 
-        if (other._self) *other._self = this;
+        _self = other._self;
+        if (_self) *_self = this;
         other._cancel_signal = nullptr;
         other._self = nullptr;
 
@@ -63,16 +64,14 @@ public:
             self->_self = &self;
             self->_cancel_signal = &cancel;
 
-            auto on_exit = defer([&] {
-                if (self == nullptr) return;
-                self->_self = nullptr;
-                self->_cancel_signal = nullptr;
-            });
-
             sys::error_code ec;
             Retval retval = job(cancel, yield[ec]);
 
             if (!self) return;
+
+            self->_self = nullptr;
+            self->_cancel_signal = nullptr;
+
             if (!ec && cancel) ec = asio::error::operation_aborted;
 
             self->_result = Result{ ec, std::move(retval) };
