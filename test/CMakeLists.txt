@@ -62,3 +62,6 @@ add_executable(test-logger "test_logger.cpp"
                            "../src/asio.cpp")
                            
 target_link_libraries(test-logger ${Boost_LIBRARIES})
+######################################################################
+add_executable(test-semver "test-semver.cpp")
+target_link_libraries(test-semver ${Boost_LIBRARIES})
