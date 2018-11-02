@@ -9,7 +9,6 @@ private:
 public:
     template<class Duration, class OnTimeout>
     WatchDog(asio::io_service& ios, Duration d, OnTimeout on_timeout)
-        : _ios(ios)
     {
         asio::spawn(ios, [&, d, on_timeout = std::move(on_timeout)]
                          (asio::yield_context yield) {
@@ -63,7 +62,6 @@ public:
     }
 
 private:
-    asio::io_service& _ios;
     Clock::time_point* _deadline;
     bool* _was_destroyed = nullptr;
     asio::steady_timer* _timer;
