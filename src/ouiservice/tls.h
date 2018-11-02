@@ -14,8 +14,8 @@ class TlsOuiServiceServer : public OuiServiceImplementationServer
     public:
     using BaseServicePtr = std::unique_ptr<OuiServiceImplementationServer>;
 
-    TlsOuiServiceServer(BaseServicePtr base_, asio::ssl::context context):
-        base(std::move(base_)), ssl_context(std::move(context))
+    TlsOuiServiceServer(BaseServicePtr base_, asio::ssl::context& context):
+        base(std::move(base_)), ssl_context(context)
     {};
 
     void start_listen(asio::yield_context yield) override {
@@ -29,7 +29,7 @@ class TlsOuiServiceServer : public OuiServiceImplementationServer
 
     private:
     BaseServicePtr base;
-    asio::ssl::context ssl_context;
+    asio::ssl::context& ssl_context;
 };
 
 class TlsOuiServiceClient : public OuiServiceImplementationClient
@@ -39,8 +39,8 @@ class TlsOuiServiceClient : public OuiServiceImplementationClient
     using BaseServicePtr = std::unique_ptr<OuiServiceImplementationClient>;
 
     public:
-    TlsOuiServiceClient(BaseServicePtr base_, asio::ssl::context context):
-        base(std::move(base_)), ssl_context(std::move(context))
+    TlsOuiServiceClient(BaseServicePtr base_, asio::ssl::context& context):
+        base(std::move(base_)), ssl_context(context)
     {};
 
     void start(asio::yield_context yield) override {
@@ -55,7 +55,7 @@ class TlsOuiServiceClient : public OuiServiceImplementationClient
 
     private:
     BaseServicePtr base;
-    asio::ssl::context ssl_context;
+    asio::ssl::context& ssl_context;
 };
 
 } // ouiservice namespace

@@ -1100,7 +1100,7 @@ void Client::State::setup_injector(asio::yield_context yield)
             _injector->add(std::move(tcp_client));
         } else {
             auto tls_client
-                = make_unique<ouiservice::TlsOuiServiceClient>(move(tcp_client), move(inj_ctx));
+                = make_unique<ouiservice::TlsOuiServiceClient>(move(tcp_client), inj_ctx);
             _injector->add(std::move(tls_client));
         }
     }

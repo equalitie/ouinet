@@ -721,8 +721,9 @@ int main(int argc, const char* argv[])
         proxy_server.add(make_unique<ouiservice::TcpOuiServiceServer>(ios, endpoint));
     }
 
+    asio::ssl::context ssl_context{asio::ssl::context::tls_server};
     if (config.tls_endpoint()) {
-        auto ssl_context = ssl::util::get_server_context
+        ssl_context = ssl::util::get_server_context
             ( tls_certificate->pem_certificate()
             , tls_certificate->pem_private_key()
             , tls_certificate->pem_dh_param());
@@ -733,7 +734,7 @@ int main(int argc, const char* argv[])
                                , util::str(endpoint));
 
         auto base = make_unique<ouiservice::TcpOuiServiceServer>(ios, endpoint);
-        proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(move(base), move(ssl_context)));
+        proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(move(base), ssl_context));
     }
 
     if (config.listen_on_i2p()) {
