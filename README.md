@@ -241,7 +241,10 @@ convenience *shell container* (see below) to allow you to modify files in the
 data volume.  It will then run the containers (the shell container will exit
 immediately; this is normal).
 
-To **stop the node**, hit Ctrl+C or run `sudo docker-compose stop`.
+To **stop the node**, hit Ctrl+C or run `sudo docker-compose stop`.  Please
+note that with the default configuration in `docker-compose.yml`, the node
+will be automatically restarted whenever it crashes or the host is rebooted,
+until explicitly stopped.
 
 A new client node which starts with no configuration will get a default one
 from templates included in Ouinet's source code and it will be missing some
