@@ -46,9 +46,10 @@ TlsOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
     }
 
     // This also gets a configured shutter.
+    // The certificate host name is not checked since
+    // it may be missing (e.g. IP address) or meaningless (e.g. I2P identifier).
     auto tls_con = ssl::util::client_handshake( std::move(base_coninfo.connection)
-                                              , ssl_context
-                                              , "localhost" // TODO: SNI used, disable?
+                                              , ssl_context, ""
                                               , cancel
                                               , yield[ec]);
 

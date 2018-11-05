@@ -46,7 +46,8 @@ static inline std::string read_bio(BIO* bio) {
 // Perform an SSL client handshake over the given stream `con`
 // and return an SSL-tunneled stream using it as a lower layer.
 //
-// The verification is done for the given `host` name, using SNI.
+// The verification is done for the given `host` name (if non-empty),
+// using SNI.
 template<class Stream>
 static inline
 ouinet::GenericStream
@@ -63,11 +64,13 @@ client_handshake( Stream&& con
     boost::system::error_code ec;
 
     auto ssl_sock = make_unique<ssl::stream<Stream>>(move(con), ssl_context);
-    ssl_sock->set_verify_callback(ssl::rfc2818_verification(host));
+    bool check_host = host.length() > 0;
+    if (check_host)
+        ssl_sock->set_verify_callback(ssl::rfc2818_verification(host));
 
     // Set Server Name Indication (SNI).
     // As seen in ``http_client_async_ssl.cpp`` Boost Beast example.
-    if (!::SSL_set_tlsext_host_name(ssl_sock->native_handle(), host.c_str()))
+    if (check_host && !::SSL_set_tlsext_host_name(ssl_sock->native_handle(), host.c_str()))
         ec = {static_cast<int>(::ERR_get_error()), boost::asio::error::get_ssl_category()};
 
     if (!ec) {
