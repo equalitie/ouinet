@@ -997,7 +997,6 @@ void Client::State::start(int argc, char* argv[])
         , ca_cert_path(), ca_key_path(), ca_dh_path());
 
     if (_config.enable_injector_tls()) {
-        sys::error_code ec;
         auto inj_cert_path = _config.repo_root() / OUINET_INJ_CERT_FILE;
         if (fs::exists(inj_cert_path)) {
             LOG_DEBUG("Loading injector certificate file");
