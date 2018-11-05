@@ -299,6 +299,16 @@ container to inspect and note down the contents of `injector/endpoint-*`
 (injector endpoints) and `injector/cache-ipns` (cache index IPNS ID) to be
 used by clients.
 
+To start the injector in headless mode, you can run:
+
+    $ sudo docker-compose up -d
+
+You will need to use `sudo docker-compose stop` to stop the container.
+
+To be able to follow its logs, you can run:
+
+    $ sudo docker-compose logs --tail=100 -ft
+
 If you ever need to reset and empty the injector's cache index for some reason
 (e.g. testing) while keeping injector IDs and credentials, you may:
 
