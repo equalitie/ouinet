@@ -254,25 +254,6 @@ After you have set up your client's configuration, you can **restart it**.
 
 [docker-compose.yml]: https://raw.githubusercontent.com/equalitie/ouinet/master/docker-compose.yml
 
-### Other deployments
-
-If you plan on running several nodes on the same host you will need to use
-different explicit Docker Compose project names for them.  To make the node an
-injector instead of a client you need to set `OUINET_ROLE=injector`.  To make
-the container use a particular image version instead of `latest`, set
-`OUINET_VERSION`.
-
-An easy way to set all these parameters is to copy or link the
-`docker-compose.yml` file to a directory with the desired project name and
-populate its default environment file:
-
-    $ mkdir -p /path/to/ouinet-injector  # ouinet-injector is the project name
-    $ cd /path/to/ouinet-injector
-    $ cp /path/to/docker-compose.yml .
-    $ echo OUINET_ROLE=injector >> .env
-    $ echo OUINET_VERSION=v0.0.5-docker3 >> .env
-    $ sudo docker-compose up
-
 ### Using the shell container
 
 You may use the convenience *shell container* to access Ouinet node files
@@ -291,6 +272,25 @@ first need to move away or remove the existing one using the shell container:
 Then you may copy it in from the host using:
 
     $ sudo docker cp /path/to/REPO SHELL_CONTAINER:/var/opt/ouinet/REPO
+
+### Other deployments
+
+If you plan on running several nodes on the same host you will need to use
+different explicit Docker Compose project names for them.  To make the node an
+injector instead of a client you need to set `OUINET_ROLE=injector`.  To make
+the container use a particular image version instead of `latest`, set
+`OUINET_VERSION`.
+
+An easy way to set all these parameters is to copy or link the
+`docker-compose.yml` file to a directory with the desired project name and
+populate its default environment file:
+
+    $ mkdir -p /path/to/ouinet-injector  # ouinet-injector is the project name
+    $ cd /path/to/ouinet-injector
+    $ cp /path/to/docker-compose.yml .
+    $ echo OUINET_ROLE=injector >> .env
+    $ echo OUINET_VERSION=v0.0.5-docker3 >> .env
+    $ sudo docker-compose up
 
 ### Injector container
 
