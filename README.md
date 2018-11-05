@@ -226,8 +226,12 @@ security profile and give it tracing capabilities.  For more information, see
 
 You may use [Docker Compose](https://docs.docker.com/compose/) with the
 `docker-compose.yml` file included in Ouinet's source code (or you can just
-[download it][docker-compose.yml]).  If you just plan to run a single client
-with the latest code on you computer, you should be fine with:
+[download it][docker-compose.yml]).  Whenever you run `docker-compose`
+commands using that configuration file, you must be at the directory where the
+file resides.
+
+If you just plan to **run a single client** with the latest code on you
+computer, you should be fine with running the following command:
 
     $ sudo docker-compose up
 
@@ -237,15 +241,16 @@ convenience *shell container* (see below) to allow you to modify files in the
 data volume.  It will then run the containers (the shell container will exit
 immediately; this is normal).
 
-To stop the node, hit Ctrl+C.  Run `sudo docker-compose images` to see the
-names of the actual node and shell containers.
+To **stop the node**, hit Ctrl+C or run `sudo docker-compose stop`.
 
 A new client node which starts with no configuration will get a default one
 from templates included in Ouinet's source code and it will be missing some
-important parameters, so you may want to stop it and use the shell container
-to edit `client/ouinet-client.conf` and add configuration options for the
-injector endpoint `injector-ep` and credentials `injector-credentials`, and
-cache index IPNS ID `injector-ipns`, then restart the client.
+important parameters, so you may want to stop it (see above) and use the
+**shell container** (see below) to edit `client/ouinet-client.conf` and add
+configuration options for the injector endpoint `injector-ep` and credentials
+`injector-credentials`, and cache index IPNS ID `injector-ipns`.
+
+After you have set up your client's configuration, you can **restart it**.
 
 [docker-compose.yml]: https://raw.githubusercontent.com/equalitie/ouinet/master/docker-compose.yml
 
@@ -266,7 +271,7 @@ populate its default environment file:
     $ cp /path/to/docker-compose.yml .
     $ echo OUINET_ROLE=injector >> .env
     $ echo OUINET_VERSION=v0.0.5-docker3 >> .env
-    $ docker-compose up
+    $ sudo docker-compose up
 
 ### Using the shell container
 
