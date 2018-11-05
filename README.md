@@ -243,9 +243,15 @@ names of the actual node and shell containers.
 A new client node which starts with no configuration will get a default one
 from templates included in Ouinet's source code and it will be missing some
 important parameters, so you may want to stop it and use the shell container
-to edit `client/ouinet-client.conf` and add configuration options for the
-injector endpoint `injector-ep` and credentials `injector-credentials`, and
-cache index IPNS ID `injector-ipns`, then restart the client.
+to edit `client/ouinet-client.conf`:
+
+  - Add configuration options for the injector endpoint `injector-ep` and its
+    access credentials `injector-credentials`.
+  - If the injector endpoint uses TLS, set `enable-injector-tls` to `true` and
+    copy its certificate to `client/ssl-inj-cert.pem`.
+  - Set the IPNS ID of the cache index in option `injector-ipns`.
+
+When you are done with the configuration, restart the client.
 
 [docker-compose.yml]: https://raw.githubusercontent.com/equalitie/ouinet/master/docker-compose.yml
 
@@ -296,7 +302,9 @@ Then you may copy it in from the host using:
 After an injector has finished starting, you may want to use the shell
 container to inspect and note down the contents of `injector/endpoint-*`
 (injector endpoints) and `injector/cache-ipns` (cache index IPNS ID) to be
-used by clients.
+used by clients.  If `injector/ouinet-injector.conf` has `listen-on-tls`
+configured, the injector will also generate a `tls-cert.pem` file which you
+can distribute to clients for TLS access.
 
 If you ever need to reset and empty the injector's cache index for some reason
 (e.g. testing) while keeping injector IDs and credentials, you may:
