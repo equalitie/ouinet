@@ -32,12 +32,9 @@ services:
       - data:/var/opt/ouinet
     network_mode: host
     command: ["${OUINET_ROLE:-client}"]
-    # These do not work for ``docker-compose up``, including as hints.
-    deploy:
-      restart_policy:
-        condition: on-failure
-        max_attempts: 3
-        window: 30s
+    # The service will be restarted (also on reboot)
+    # until it is manually stopped.
+    restart: unless-stopped
 
 volumes:
   data:
