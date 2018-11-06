@@ -86,7 +86,11 @@ public:
         ssl_ctx.set_default_verify_paths();
         ssl_ctx.set_verify_mode(asio::ssl::verify_peer);
 
-        inj_ctx.set_default_verify_paths();
+        // We do *not* want to do this since
+        // we will not be checking certificate names,
+        // thus any certificate signed by a recognized CA
+        // would be accepted if presented by an injector.
+        //inj_ctx.set_default_verify_paths();
         inj_ctx.set_verify_mode(asio::ssl::verify_peer);
     }
 
