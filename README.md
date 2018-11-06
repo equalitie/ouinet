@@ -226,8 +226,12 @@ security profile and give it tracing capabilities.  For more information, see
 
 You may use [Docker Compose](https://docs.docker.com/compose/) with the
 `docker-compose.yml` file included in Ouinet's source code (or you can just
-[download it][docker-compose.yml]).  If you just plan to run a single client
-with the latest code on you computer, you should be fine with:
+[download it][docker-compose.yml]).  Whenever you run `docker-compose`
+commands using that configuration file, you must be at the directory where the
+file resides.
+
+If you just plan to **run a single client** with the latest code on you
+computer, you should be fine with running the following command:
 
     $ sudo docker-compose up
 
@@ -237,13 +241,15 @@ convenience *shell container* (see below) to allow you to modify files in the
 data volume.  It will then run the containers (the shell container will exit
 immediately; this is normal).
 
-To stop the node, hit Ctrl+C.  Run `sudo docker-compose images` to see the
-names of the actual node and shell containers.
+To **stop the node**, hit Ctrl+C or run `sudo docker-compose stop`.  Please
+note that with the default configuration in `docker-compose.yml`, the node
+will be automatically restarted whenever it crashes or the host is rebooted,
+until explicitly stopped.
 
 A new client node which starts with no configuration will get a default one
 from templates included in Ouinet's source code and it will be missing some
-important parameters, so you may want to stop it and use the shell container
-to edit `client/ouinet-client.conf`:
+important parameters, so you may want to stop it (see above) and use the
+**shell container** (see below) to edit `client/ouinet-client.conf`:
 
   - Add configuration options for the injector endpoint `injector-ep` and its
     access credentials `injector-credentials`.
@@ -251,9 +257,28 @@ to edit `client/ouinet-client.conf`:
     copy its certificate to `client/ssl-inj-cert.pem`.
   - Set the IPNS ID of the cache index in option `injector-ipns`.
 
-When you are done with the configuration, restart the client.
+After you have set up your client's configuration, you can **restart it**.
 
 [docker-compose.yml]: https://raw.githubusercontent.com/equalitie/ouinet/master/docker-compose.yml
+
+### Using the shell container
+
+You may use the convenience *shell container* to access Ouinet node files
+directly:
+
+    $ sudo docker-compose run --rm shell
+
+This will create a throwaway container with a shell at the `/var/opt/ouinet`
+directory in the data volume.
+
+If you want to *transfer an existing repository* to `/var/opt/ouinet`, you
+first need to move away or remove the existing one using the shell container:
+
+    # mv REPO REPO.old  # REPO is either 'injector' or 'client'
+
+Then you may copy it in from the host using:
+
+    $ sudo docker cp /path/to/REPO SHELL_CONTAINER:/var/opt/ouinet/REPO
 
 ### Other deployments
 
@@ -272,30 +297,7 @@ populate its default environment file:
     $ cp /path/to/docker-compose.yml .
     $ echo OUINET_ROLE=injector >> .env
     $ echo OUINET_VERSION=v0.0.5-docker3 >> .env
-    $ docker-compose up
-
-### Using the shell container
-
-You may use the convenience *shell container* to access Ouinet node files
-directly:
-
-    $ sudo docker-compose run --rm shell
-
-This will create a throwaway container with a shell at the `/var/opt/ouinet`
-directory in the data volume.
-
-If the *injector or client crashes* for some reason, you may have to remove
-its PID file manually for it to start again.  Just use the shell container to
-remove `injector/pid` or `client/pid`.
-
-If you want to *transfer an existing repository* to `/var/opt/ouinet`, you
-first need to move away or remove the existing one using the shell container:
-
-    # mv REPO REPO.old  # REPO is either 'injector' or 'client'
-
-Then you may copy it in from the host using:
-
-    $ sudo docker cp /path/to/REPO SHELL_CONTAINER:/var/opt/ouinet/REPO
+    $ sudo docker-compose up
 
 ### Injector container
 
@@ -305,6 +307,16 @@ container to inspect and note down the contents of `injector/endpoint-*`
 used by clients.  If `injector/ouinet-injector.conf` has `listen-on-tls`
 configured, the injector will also generate a `tls-cert.pem` file which you
 should distribute to clients for TLS access.
+
+To start the injector in headless mode, you can run:
+
+    $ sudo docker-compose up -d
+
+You will need to use `sudo docker-compose stop` to stop the container.
+
+To be able to follow its logs, you can run:
+
+    $ sudo docker-compose logs --tail=100 -ft
 
 If you ever need to reset and empty the injector's cache index for some reason
 (e.g. testing) while keeping injector IDs and credentials, you may:

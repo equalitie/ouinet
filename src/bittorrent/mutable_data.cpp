@@ -14,6 +14,13 @@ static std::string mutable_data_signature_buffer(
     std::string encoded_data = bencoding_encode(data);
 
     /*
+     * It's not safe to assume storing more than 1000 bytes will succeed,
+     * according to http://bittorrent.org/beps/bep_0044.html#messages
+     */
+    if (encoded_data.length() > 1000)
+        throw std::length_error("data too big for DHT storage");
+
+    /*
      * Low-level buffer computation is mandated by
      * http://bittorrent.org/beps/bep_0044.html#signature-verification
      *

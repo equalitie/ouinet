@@ -215,28 +215,28 @@ class OuinetInjector(OuinetProcess):
 class OuinetI2PInjector(OuinetInjector):
     """
     As above, but for the 'injector' 
-    It is a child of OuinetI24injector with i2p ouiservice
-
-    Args
-    injector_name: the name of the injector which determines the config folder
-                  name
-    timeout: how long before killing the injector process
-    args: list containing command line arguments passed directly to the 
-    injector
-    TODO: i2p_ready: is a Deferred object whose callback is being called when
-                      i2p tunnel is ready
+    It is a child of Ouinetinjector with i2p ouiservice
     """
-    def __init__(self, injector_config, deferred_events):
+    def __init__(self, injector_config, deferred_events, private_key_blob=None):
         super(OuinetI2PInjector, self).__init__(injector_config, deferred_events)
-        self._setup_i2p_private_key()
+        self._setup_i2p_private_key(private_key_blob)
 
-    def _setup_i2p_private_key(self):
+    def _setup_i2p_private_key(self, private_key_blob):
         if not os.path.exists(self.config.config_folder_name+"/i2p"):
             os.makedirs(self.config.config_folder_name+"/i2p")
 
-        with open(self.config.config_folder_name+"/i2p/i2p-private-key", "w") \
-          as private_key_file:
-            private_key_file.write(TestFixtures.INJECTOR_I2P_PRIVATE_KEY)
+        if (private_key_blob):
+            with open(self.config.config_folder_name+"/i2p/i2p-private-key", "w") \
+              as private_key_file:
+                private_key_file.write(private_key_blob)
+
+    def get_I2P_public_ID(self):
+        try:
+            with open(self.config.config_folder_name+"/endpoint-i2p", "r") \
+              as public_id_file:
+                return public_id_file.read().rstrip()
+        except:
+            return None
 
 class OuinetIPFSCacheInjector(OuinetInjector):
     """

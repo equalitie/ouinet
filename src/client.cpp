@@ -50,6 +50,7 @@
 #include "util/signal.h"
 #include "util/crypto.h"
 #include "util/lru_cache.h"
+#include "util/scheduler.h"
 
 #include "logger.h"
 
@@ -63,7 +64,6 @@ using Request  = http::request<http::string_body>;
 using Response = http::response<http::dynamic_body>;
 using boost::optional;
 
-static const fs::path OUINET_PID_FILE = "pid";
 static const fs::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
 static const fs::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
 static const fs::path OUINET_CA_DH_FILE = "ssl-ca-dh.pem";
@@ -82,6 +82,7 @@ public:
         , _ssl_certificate_cache(1000)
         , ssl_ctx{asio::ssl::context::tls_client}
         , inj_ctx{asio::ssl::context::tls_client}
+        , _fetch_stored_scheduler(_ios, 1)
     {
         ssl_ctx.set_default_verify_paths();
         ssl_ctx.set_verify_mode(asio::ssl::verify_peer);
@@ -119,11 +120,13 @@ private:
     CacheEntry
     fetch_stored( const Request& request
                 , request_route::Config& request_config
+                , Cancel& cancel
                 , asio::yield_context yield);
 
     Response fetch_fresh( const Request&
                         , request_route::Config&
                         , bool& out_can_store
+                        , Cancel& cancel
                         , Yield);
 
     CacheControl build_cache_control(request_route::Config& request_config);
@@ -134,10 +137,6 @@ private:
 
     void setup_injector(asio::yield_context);
 
-    fs::path get_pid_path() const {
-        return _config.repo_root()/OUINET_PID_FILE;
-    }
-
     bool was_stopped() const {
         return _shutdown_signal.call_count() != 0;
     }
@@ -145,6 +144,8 @@ private:
     fs::path ca_cert_path() const { return _config.repo_root() / OUINET_CA_CERT_FILE; }
     fs::path ca_key_path()  const { return _config.repo_root() / OUINET_CA_KEY_FILE;  }
     fs::path ca_dh_path()   const { return _config.repo_root() / OUINET_CA_DH_FILE;   }
+
+    asio::io_service& get_io_service() { return _ios; }
 
 private:
     asio::io_service& _ios;
@@ -157,8 +158,6 @@ private:
     ClientFrontEnd _front_end;
     Signal<void()> _shutdown_signal;
 
-    unique_ptr<util::PidFile> _pid_file;
-
     bool _is_ipns_being_setup = false;
 
     // For debugging
@@ -167,6 +166,8 @@ private:
 
     asio::ssl::context ssl_ctx;
     asio::ssl::context inj_ctx;
+
+    Scheduler _fetch_stored_scheduler;
 };
 
 //------------------------------------------------------------------------------
@@ -260,6 +261,7 @@ void Client::State::handle_connect_request( GenericStream& client_c
 CacheEntry
 Client::State::fetch_stored( const Request& request
                            , request_route::Config& request_config
+                           , Cancel& cancel
                            , asio::yield_context yield)
 {
     const bool cache_is_disabled
@@ -275,9 +277,16 @@ Client::State::fetch_stored( const Request& request
     // TODO: use string_view for the key.
     auto key = request.target();
 
-    return _cache->get_content( key.to_string()
-                              , _config.default_db_type()
-                              , yield);
+    sys::error_code ec;
+    auto ret = _cache->get_content( key.to_string()
+                                  , _config.default_db_type()
+                                  , cancel
+                                  , yield[ec]);
+    // Add an injection identifier header
+    // to enable the user to track injection state.
+    if (!ec)
+        ret.second.response.set(http_::response_injection_id_hdr, ret.first);
+    return or_throw(yield, ec, move(ret.second));
 }
 
 //------------------------------------------------------------------------------
@@ -285,10 +294,13 @@ Response Client::State::fetch_fresh
         ( const Request& request
         , request_route::Config& request_config
         , bool& out_can_store
+        , Cancel& cancel
         , Yield yield)
 {
     using namespace asio::error;
     using request_route::responder;
+
+    auto shutdown_slot = _shutdown_signal.connect([&] { cancel(); });
 
     out_can_store = false;
 
@@ -309,6 +321,7 @@ Response Client::State::fetch_fresh
                 Response res;
 
                 // TODO: Reuse this connection if "Connection: keep-alive"
+                // TODO: Cancel
                 GenericStream c;
 
                 // Send the request straight to the origin
@@ -317,7 +330,7 @@ Response Client::State::fetch_fresh
                                      , ssl_ctx
                                      , request
                                      , default_timeout::fetch_http()
-                                     , _shutdown_signal
+                                     , cancel
                                      , yield[ec].tag("fetch_origin"));
 
                 if (ec) {
@@ -345,7 +358,7 @@ Response Client::State::fetch_fresh
                     // Connect to the injector/proxy.
                     sys::error_code ec;
                     auto inj = _injector->connect( yield[ec].tag("connect_to_injector")
-                                                 , _shutdown_signal);
+                                                 , cancel);
                     if (ec) {
                         last_error = ec;
                         continue;
@@ -372,7 +385,7 @@ Response Client::State::fetch_fresh
                                         , inj.connection
                                         , connreq
                                         , default_timeout::fetch_http()
-                                        , _shutdown_signal
+                                        , cancel
                                         , yield[ec].tag("connreq"));
 
                     if (connres.result() != http::status::ok) {
@@ -387,7 +400,7 @@ Response Client::State::fetch_fresh
                     auto res = fetch_http_origin( _ios , inj.connection, ssl_ctx
                                                 , url, request
                                                 , default_timeout::fetch_http()
-                                                , _shutdown_signal
+                                                , cancel
                                                 , yield[ec].tag("send_req"));
 
                     if (ec) {
@@ -412,8 +425,7 @@ Response Client::State::fetch_fresh
 
                 if (!con) {
                     auto c = _injector->connect
-                        ( yield[ec].tag("connect_to_injector2")
-                        , _shutdown_signal);
+                        (yield[ec].tag("connect_to_injector2"), cancel);
 
                     if (ec) { last_error = ec; continue; }
 
@@ -435,7 +447,9 @@ Response Client::State::fetch_fresh
                     injreq = authorize(injreq, *credentials);
 
                 // Send the request to the injector/proxy.
-                auto res = con->request(injreq, yield[ec]);
+                auto res = con->request( injreq
+                                       , cancel
+                                       , yield[ec].tag("inj-request"));
 
                 if (ec) {
                     last_error = ec;
@@ -478,30 +492,29 @@ public:
                       , request_route::Config& request_config)
         : client_state(client_state)
         , request_config(request_config)
-        , cc("Ouinet Client")
+        , cc(client_state.get_io_service(), "Ouinet Client")
     {
-        cc.fetch_fresh = [&] (const Request& rq, Yield yield) {
-            return fetch_fresh(rq, yield);
+        cc.fetch_fresh = [&] (const Request& rq, Cancel& cancel, Yield yield) {
+            return fetch_fresh(rq, cancel, yield);
         };
 
-        cc.fetch_stored = [&] (const Request& rq, Yield yield) {
-            return fetch_stored(rq, yield);
+        cc.fetch_stored = [&] (const Request& rq, Cancel& cancel, Yield yield) {
+            return fetch_stored(rq, cancel, yield);
         };
 
-        cc.store = [&](const Request& rq, Response rs, Yield yield) {
-            return store(rq, move(rs), yield);
+        cc.store = [&](const Request& rq, Response rs, Cancel& cancel, Yield yield) {
+            return store(rq, move(rs), cancel, yield);
         };
 
         cc.max_cached_age(client_state._config.max_cached_age());
     }
 
-    Response fetch_fresh(const Request& request, Yield yield) {
-        yield.log("Fetching fresh");
-
+    Response fetch_fresh(const Request& request, Cancel& cancel, Yield yield) {
         sys::error_code ec;
         auto r = client_state.fetch_fresh( request
                                          , request_config
                                          , _can_store
+                                         , cancel
                                          , yield[ec]);
 
         if (!ec) {
@@ -514,11 +527,14 @@ public:
     }
 
     CacheEntry
-    fetch_stored(const Request& request, Yield yield) {
+    fetch_stored(const Request& request, Cancel& cancel, Yield yield) {
         yield.log("Fetching from cache");
 
         sys::error_code ec;
-        auto r = client_state.fetch_stored(request, request_config, yield[ec]);
+        auto r = client_state.fetch_stored( request
+                                          , request_config
+                                          , cancel
+                                          , yield[ec]);
 
         if (!ec) {
             yield.log("Fetched from cache success, status: ", r.response.result());
@@ -529,7 +545,7 @@ public:
         return or_throw(yield, ec, move(r));
     }
 
-    Response store(const Request& rq, Response rs, Yield yield)
+    Response store(const Request& rq, Response rs, Cancel&, Yield yield)
     {
         sys::error_code ec;
 
@@ -540,10 +556,18 @@ public:
 
         if (ec) return or_throw(yield, ec, move(rs));
 
-        // Note: we have to "not throw" because the caller expects
-        // to get a valid response in return even if storing fails.
-        cache->ipfs_add(beast::buffers_to_string(rs.body().data()), yield[ec]);
+        asio::spawn(client_state.get_io_service(),
+            [&, rs] (asio::yield_context yield) {
+                // TODO: Use the scheduler here to only do some max number
+                // of `ipfs_add`s at a time. Also then trim that queue so
+                // that it doesn't grow indefinitely.
+                sys::error_code ec;
+                cache->ipfs_add( beast::buffers_to_string(rs.body().data())
+                               , yield[ec]);
+            });
 
+        // Note: we have to return a valid response even in case of error
+        // because CacheControl will use it.
         return or_throw(yield, ec, move(rs));
     }
 
@@ -737,21 +761,21 @@ void Client::State::serve_request( GenericStream&& con
         // We expand the target again with the ``Host:`` header
         // (or the CONNECT target if the header is missing in HTTP/1.0)
         // so that "/foo" becomes "https://example.com/foo".
-        if (mitm)
+        if (mitm) {
             req.target( string("https://")
                       + ( (req[http::field::host].length() > 0)
                           ? req[http::field::host].to_string()
                           : connect_hp)
                       + req.target().to_string());
+        }
 
         // Perform MitM for CONNECT requests (to be able to see encrypted requests)
         if (!mitm && req.method() == http::verb::connect) {
-            try {
-                // Subsequent access to the connection will use the encrypted channel.
-                con = ssl_mitm_handshake(move(con), req, yield.tag("mitm_hanshake"));
-            }
-            catch(const std::exception& e) {
-                yield.log("Mitm exception: ", e.what());
+            sys::error_code ec;
+            // Subsequent access to the connection will use the encrypted channel.
+            con = ssl_mitm_handshake(move(con), req, yield[ec].tag("mitm_hanshake"));
+            if (ec) {
+                yield.log("Mitm exception: ", ec.message());
                 return;
             }
             mitm = true;
@@ -983,19 +1007,6 @@ void Client::State::start(int argc, char* argv[])
         return;
     }
 
-#ifndef __ANDROID__
-    auto pid_path = get_pid_path();
-    if (exists(pid_path)) {
-        throw runtime_error(util::str
-             ( "[ABORT] Existing PID file ", pid_path
-             , "; another client process may be running"
-             , ", otherwise please remove the file."));
-    }
-    // Acquire a PID file for the life of the process
-    assert(!_pid_file);
-    _pid_file = make_unique<util::PidFile>(pid_path);
-#endif
-
     _ca_certificate = get_or_gen_tls_cert<CACertificate>
         ( "Your own local Ouinet client"
         , ca_cert_path(), ca_key_path(), ca_dh_path());
@@ -1175,11 +1186,6 @@ void Client::set_credentials(const char* injector, const char* cred)
     _state->_config.set_credentials(injector, cred);
 }
 
-fs::path Client::get_pid_path() const
-{
-    return _state->get_pid_path();
-}
-
 fs::path Client::ca_cert_path() const
 {
     return _state->ca_cert_path();
@@ -1208,14 +1214,6 @@ int main(int argc, char* argv[])
 
     try {
         client.start(argc, argv);
-
-        static auto pid_file_path = client.get_pid_path();
-        // Force removal of PID file on abnormal exit
-        std::atexit([] {
-                if (!exists(pid_file_path)) return;
-                cerr << "Warning: not a clean exit" << endl;
-                remove(pid_file_path);
-            });
     } catch (std::exception& e) {
         cerr << e.what() << endl;
         return 1;

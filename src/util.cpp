@@ -15,17 +15,27 @@ using namespace std;
 // would be way cooler.`:)`
 
 // Based on <https://stackoverflow.com/a/27559848> by user "Zangetsu".
-string ouinet::util::zlib_compress(const string& in) {
+template <class Filter>
+string zlib_filter(const string& in) {
     stringstream in_ss;
     in_ss << in;
 
     boost::iostreams::filtering_streambuf<boost::iostreams::input> zip;
-    zip.push(boost::iostreams::zlib_compressor());
+    zip.push(Filter());
     zip.push(in_ss);
 
     stringstream out_ss;
     boost::iostreams::copy(zip, out_ss);
     return out_ss.str();
+}
+
+string ouinet::util::zlib_compress(const string& in) {
+    return zlib_filter<boost::iostreams::zlib_compressor>(in);
+}
+
+// TODO: Catch and report decompression errors.
+string ouinet::util::zlib_decompress(const string& in, sys::error_code& ec) {
+    return zlib_filter<boost::iostreams::zlib_decompressor>(in);
 }
 
 // Based on <https://stackoverflow.com/a/28471421> by user "ltc".

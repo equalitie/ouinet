@@ -3,6 +3,7 @@
 #include <boost/asio/read.hpp>
 #include "generic_stream.h"
 #include "util/wait_condition.h"
+#include "util/watch_dog.h"
 
 namespace ouinet {
 
@@ -10,8 +11,11 @@ template<class Stream1, class Stream2>
 inline
 void full_duplex(Stream1 c1, Stream2 c2, asio::yield_context yield)
 {
+    static const auto timeout = std::chrono::seconds(60);
+
     static const auto half_duplex = []( auto& in
                                       , auto& out
+                                      , auto& wdog
                                       , asio::yield_context& yield)
     {
         sys::error_code ec;
@@ -23,23 +27,29 @@ void full_duplex(Stream1 c1, Stream2 c2, asio::yield_context yield)
 
             asio::async_write(out, asio::buffer(data, length), yield[ec]);
             if (ec) break;
+
+            wdog.expires_after(timeout);
         }
     };
 
     assert(&c1.get_io_service() == &c2.get_io_service());
+
+    WatchDog wdog( c1.get_io_service()
+                 , timeout
+                 , [&] { c1.close(); c2.close(); });
 
     WaitCondition wait_condition(c1.get_io_service());
 
     asio::spawn
         ( yield
         , [&, lock = wait_condition.lock()](asio::yield_context yield) {
-              half_duplex(c1, c2, yield);
+              half_duplex(c1, c2, wdog, yield);
           });
 
     asio::spawn
         ( yield
         , [&, lock = wait_condition.lock()](asio::yield_context yield) {
-              half_duplex(c2, c1, yield);
+              half_duplex(c2, c1, wdog, yield);
           });
 
     wait_condition.wait(yield);

@@ -395,6 +395,7 @@ function build_ouinet_libs {
           -DOPENSSL_INCLUDE_DIR=${SSL_DIR}/include \
           -DCMAKE_CXX_FLAGS="-I ${DIR}/android-ifaddrs -I $SSL_DIR/include" \
           -DBOOST_ROOT="$BOOST_SOURCE" \
+          -DCMAKE_BUILD_TYPE=Release \
           ${ROOT}
     make VERBOSE=1
     cd -

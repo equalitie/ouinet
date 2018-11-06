@@ -26,7 +26,8 @@ BOOST_AUTO_TEST_CASE(test_1)
         sys::error_code ec;
         db.insert("key", "value", yield[ec]);
         BOOST_REQUIRE(!ec);
-        optional<string> v = db.find("key", yield[ec]);
+        Cancel cancel;
+        optional<string> v = db.find("key", cancel, yield[ec]);
         BOOST_REQUIRE(!ec);
         BOOST_REQUIRE(v);
         BOOST_REQUIRE_EQUAL(*v, "value");
@@ -60,7 +61,8 @@ BOOST_AUTO_TEST_CASE(test_2)
         BOOST_REQUIRE(db.check_invariants());
 
         for (auto& key : inserted) {
-            auto val = db.find(key, yield[ec]);
+            Cancel cancel;
+            auto val = db.find(key, cancel, yield[ec]);
             BOOST_REQUIRE(!ec);
             BOOST_REQUIRE_EQUAL(key, val);
         }
@@ -86,7 +88,7 @@ struct MockStorage : public std::map<BTree::Hash, BTree::Value> {
         , _async_deviation(async_deviation) {}
 
     BTree::CatOp cat_op() {
-        return [this] (BTree::Hash hash, asio::yield_context yield) {
+        return [this] (BTree::Hash hash, Cancel&, asio::yield_context yield) {
             random_wait(_async_deviation, _ios, yield);
 
             auto i = Map::find(hash);
@@ -159,7 +161,8 @@ BOOST_AUTO_TEST_CASE(test_3)
         BOOST_REQUIRE_EQUAL(storage.size(), db.local_node_count());
 
         for (auto& key : inserted) {
-            auto val = db.find(key, yield[ec]);
+            Cancel cancel;
+            auto val = db.find(key, cancel, yield[ec]);
             BOOST_REQUIRE(!ec);
             BOOST_REQUIRE_EQUAL("v" + key, val);
         }
@@ -170,14 +173,16 @@ BOOST_AUTO_TEST_CASE(test_3)
         BOOST_REQUIRE(!ec);
 
         for (auto& key : inserted) {
-            auto val = db2.find(key, yield[ec]);
+            Cancel cancel;
+            auto val = db2.find(key, cancel, yield[ec]);
             BOOST_REQUIRE(!ec);
             BOOST_REQUIRE_EQUAL("v" + key, val);
         }
 
         ec = sys::error_code();
 
-        auto i = db.begin(yield[ec]);
+        Cancel cancel;
+        auto i = db.begin(cancel, yield[ec]);
 
         BOOST_REQUIRE(!ec);
 
@@ -185,7 +190,8 @@ BOOST_AUTO_TEST_CASE(test_3)
             BOOST_REQUIRE(!inserted.empty());
             BOOST_REQUIRE_EQUAL("v" + *inserted.begin(), i.value());
 
-            i.advance(yield[ec]);
+            Cancel cancel;
+            i.advance(cancel, yield[ec]);
 
             BOOST_REQUIRE(!ec);
             inserted.erase(inserted.begin());
@@ -241,7 +247,8 @@ BOOST_AUTO_TEST_CASE(test_4)
             for (int i = 0; i < 1000; ++i) {
                 sys::error_code ec;
                 auto k = random_key(3);
-                db1.find(k, yield[ec]);
+                Cancel cancel;
+                db1.find(k, cancel, yield[ec]);
                 BOOST_REQUIRE(!ec);
                 ios.post(yield);
             }

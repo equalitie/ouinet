@@ -3,9 +3,11 @@
 #include "btree_db.h"
 #include "bep44_db.h"
 #include "cache_entry.h"
+#include "descdb.h"
 #include "http_desc.h"
 #include "../or_throw.h"
 #include "../bittorrent/dht.h"
+#include "../ipfs_util.h"
 #include "../util/crypto.h"
 
 using namespace std;
@@ -100,27 +102,31 @@ ClientDb* CacheClient::get_db(DbType db_type)
 
 string CacheClient::get_descriptor( string url
                                   , DbType db_type
+                                  , Cancel& cancel
                                   , asio::yield_context yield)
 {
-    ClientDb* db = get_db(db_type);
+    auto db = get_db(db_type);
 
     if (!db) return or_throw<string>(yield, asio::error::not_found);
 
-    return db->find(url, yield);
+    return descriptor::get_from_db
+        ( url, *db, IPFS_LOAD_FUNC(*_ipfs_node), cancel, yield);
 }
 
-CacheEntry CacheClient::get_content( string url
-                                   , DbType db_type
-                                   , asio::yield_context yield)
+pair<string, CacheEntry>
+CacheClient::get_content( string url
+                        , DbType db_type
+                        , Cancel& cancel
+                        , asio::yield_context yield)
 {
-    using std::get;
     sys::error_code ec;
 
-    auto desc_ipfs = get_descriptor(url, db_type, yield[ec]);
+    string desc_data = get_descriptor(url, db_type, cancel, yield[ec]);
 
-    if (ec) return or_throw<CacheEntry>(yield, ec);
+    if (ec) return or_throw<pair<string, CacheEntry>>(yield, ec);
 
-    return descriptor::http_parse(*_ipfs_node, desc_ipfs, yield);
+    return descriptor::http_parse
+        ( desc_data, IPFS_LOAD_FUNC(*_ipfs_node), cancel, yield);
 }
 
 void CacheClient::set_ipns(std::string ipns)
