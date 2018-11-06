@@ -290,11 +290,15 @@ CacheControl::do_fetch(const Request& request, Yield yield)
     auto on_exit = defer([&] {
         auto& fs = fetch_state;
         {
+#           ifndef _NDEBUG
             WatchDog wdog(_ios, std::chrono::seconds(10), [] { assert(0); });
+#           endif
             if (fs.fetch_fresh)  fs.fetch_fresh ->stop(yield);
         }
         {
+#           ifndef _NDEBUG
             WatchDog wdog(_ios, std::chrono::seconds(10), [] { assert(0); });
+#           endif
             if (fs.fetch_stored) fs.fetch_stored->stop(yield);
         }
     });
