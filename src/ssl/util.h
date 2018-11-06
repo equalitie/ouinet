@@ -47,7 +47,7 @@ static inline std::string read_bio(BIO* bio) {
 // and return an SSL-tunneled stream using it as a lower layer.
 //
 // The verification is done for the given `host` name (if non-empty),
-// using SNI.
+// using SNI.  Verification against a valid CA is done in any case.
 template<class Stream>
 static inline
 ouinet::GenericStream
