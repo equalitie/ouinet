@@ -304,7 +304,7 @@ container to inspect and note down the contents of `injector/endpoint-*`
 (injector endpoints) and `injector/cache-ipns` (cache index IPNS ID) to be
 used by clients.  If `injector/ouinet-injector.conf` has `listen-on-tls`
 configured, the injector will also generate a `tls-cert.pem` file which you
-can distribute to clients for TLS access.
+should distribute to clients for TLS access.
 
 If you ever need to reset and empty the injector's cache index for some reason
 (e.g. testing) while keeping injector IDs and credentials, you may:
