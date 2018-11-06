@@ -1,11 +1,17 @@
 #pragma once
 
+#include <boost/asio/buffer.hpp>
 #include <boost/utility/string_view.hpp>
 #include "../namespaces.h"
 #include "../or_throw.h"
 #include "../util/condition_variable.h"
 
 namespace ouinet { namespace bittorrent {
+
+static
+boost::asio::const_buffers_1 buffer(const std::string& s) {
+    return boost::asio::buffer(const_cast<const char*>(s.data()), s.size());
+}
 
 class UdpMultiplexer {
 private:
@@ -19,203 +25,209 @@ private:
     using IntrusiveList = boost::intrusive::list
         <T, boost::intrusive::constant_time_size<false>>;
 
-    struct SendEntry : IntrusiveHook {
-        virtual void operator()(asio::yield_context) = 0;
+    struct SendEntry {
+        std::string message;
+        udp::endpoint to;
+        Signal<void(sys::error_code)> sent_signal;
     };
-
-    using RecvHandlerSig = void( sys::error_code
-                               , std::pair< boost::string_view
-                                          , udp::endpoint>);
 
     struct RecvEntry : IntrusiveHook {
-        std::function<RecvHandlerSig> handler;
-    };
-
-    struct SendLoop : std::enable_shared_from_this<SendLoop> {
-        SendLoop(asio::io_service& ios) : queue_cv(ios) {}
-        void start();
-        bool stopped = false;
-        ConditionVariable queue_cv;
-        IntrusiveList<SendEntry> queue;
-    };
-
-    struct RecvLoop : std::enable_shared_from_this<RecvLoop> {
-        void start(std::shared_ptr<udp::socket>);
-        IntrusiveList<RecvEntry> queue;
+        std::function<void(
+            sys::error_code,
+            boost::string_view,
+            udp::endpoint
+        )> handler;
     };
 
 public:
-    UdpMultiplexer(udp::socket);
-
-    UdpMultiplexer(const UdpMultiplexer&) = delete;
+    UdpMultiplexer(udp::socket&&);
 
     asio::io_service& get_io_service();
 
-    template<class Buffers>
-    void send(const Buffers&, const udp::endpoint&, asio::yield_context);
+    void send(std::string&& message, const udp::endpoint& to, asio::yield_context yield, Signal<void()>& cancel_signal);
+    void send(std::string&& message, const udp::endpoint& to, asio::yield_context yield)
+        { Signal<void()> cancel_signal; send(std::move(message), to, yield, cancel_signal); }
+    void send(std::string&& message, const udp::endpoint& to);
 
-    // NOTE: The the pointer inside the returned string_view is guaranteed to
+    // NOTE: The pointer inside the returned string_view is guaranteed to
     // be valid only until the next coroutine based async IO call or until
     // the coroutine that runs this function exits (whichever comes first).
-    const boost::string_view receive(udp::endpoint&, asio::yield_context);
+    const boost::string_view receive(udp::endpoint& from, asio::yield_context yield, Signal<void()>& cancel_signal);
+    const boost::string_view receive(udp::endpoint& from, asio::yield_context yield)
+        { Signal<void()> cancel_signal; return receive(from, yield, cancel_signal); }
 
     ~UdpMultiplexer();
 
 private:
-    // XXX: Having three shared_ptrs is overkill.
-    std::shared_ptr<udp::socket> _socket;
-    std::shared_ptr<SendLoop> _send_loop;
-    std::shared_ptr<RecvLoop> _recv_loop;
+    udp::socket _socket;
+    std::list<SendEntry> _send_queue;
+    ConditionVariable _send_queue_nonempty;
+    IntrusiveList<RecvEntry> _receive_queue;
+    Signal<void()> _terminate_signal;
 };
 
 inline
-UdpMultiplexer::UdpMultiplexer(udp::socket s)
-    : _socket(std::make_shared<udp::socket>(std::move(s)))
-    , _send_loop(std::make_shared<SendLoop>(_socket->get_io_service()))
-    , _recv_loop(std::make_shared<RecvLoop>())
+UdpMultiplexer::UdpMultiplexer(udp::socket&& s):
+    _socket(std::move(s)),
+    _send_queue_nonempty(_socket.get_io_service())
 {
-    assert(_socket->is_open());
+    assert(_socket.is_open());
 
-    _send_loop->start();
-    _recv_loop->start(_socket);
-}
+    asio::spawn(get_io_service(), [this] (asio::yield_context yield) {
+        bool stopped = false;
+        auto terminate_slot = _terminate_signal.connect([&] {
+            stopped = true;
+            _send_queue_nonempty.notify();
+        });
 
-inline
-UdpMultiplexer::~UdpMultiplexer()
-{
-    _socket->close();
-    _send_loop->stopped = true;
-    if (_send_loop->queue.empty()) _send_loop->queue_cv.notify();
-}
-
-inline
-void UdpMultiplexer::SendLoop::start() {
-    asio::spawn( queue_cv.get_io_service()
-               , [this, self = shared_from_this()] (asio::yield_context yield) {
-        while (true) {
-            if (queue.empty()) {
-                if (stopped) break;
-                sys::error_code ec;
-                queue_cv.wait(yield[ec]);
+        while(true) {
+            if (stopped) {
+                break;
             }
 
-            if (stopped) break;
+            if (_send_queue.empty()) {
+                sys::error_code ec;
+                _send_queue_nonempty.wait(yield[ec]);
+                continue;
+            }
 
-            auto& entry = queue.front();
-            queue.pop_front();
-            entry(yield);
+            SendEntry& entry = _send_queue.front();
+
+            sys::error_code ec;
+            _socket.async_send_to(buffer(entry.message), entry.to, yield[ec]);
+            if (stopped) {
+                break;
+            }
+
+            _send_queue.front().sent_signal(ec);
+            _send_queue.pop_front();
         }
     });
-}
 
-template<class Buffers>
-inline
-void UdpMultiplexer::send( const Buffers& buf
-                         , const udp::endpoint& to
-                         , asio::yield_context yield)
-{
-    ConditionVariable write_cv(_socket->get_io_service());
-
-    struct SendEntry_ : SendEntry {
-        udp::socket& socket;
-        ConditionVariable& write_cv;
-        const Buffers& buf;
-        const udp::endpoint& to;
-
-        SendEntry_( udp::socket& socket
-                  , ConditionVariable& write_cv
-                  , const Buffers& buf
-                  , const udp::endpoint& to)
-            : socket(socket), write_cv(write_cv), buf(buf), to(to) {}
-
-        void operator()(asio::yield_context yield) override {
-            sys::error_code ec;
-            socket.async_send_to(buf, to, yield[ec]);
-            write_cv.notify(ec);
-        }
-    };
-
-    if (_send_loop->queue.empty()) {
-        _send_loop->queue_cv.notify();
-    }
-
-    SendEntry_ entry(*_socket, write_cv, buf, to); 
-    _send_loop->queue.push_back(entry);
-
-    sys::error_code ec;
-    write_cv.wait(yield[ec]);
-
-    return or_throw(yield, ec);
-}
-
-inline
-void UdpMultiplexer::RecvLoop::start(std::shared_ptr<udp::socket> socket)
-{
-    auto& ios = socket->get_io_service();
-
-    asio::spawn( ios
-               , [ this
-                 , socket = std::move(socket)
-                 , self = shared_from_this()
-                 ] (asio::yield_context yield) {
-        constexpr size_t max_buf_size = 65536;
+    asio::spawn(get_io_service(), [this] (asio::yield_context yield) {
+        bool stopped = false;
+        auto terminate_slot = _terminate_signal.connect([&] {
+            stopped = true;
+        });
 
         std::vector<uint8_t> buf;
-
         udp::endpoint from;
 
         while (true) {
             sys::error_code ec;
 
-            buf.resize(max_buf_size);
+            buf.resize(65536);
 
-            size_t size = socket->async_receive_from( asio::buffer(buf)
-                                                    , from
-                                                    , yield[ec]);
-
-            buf.resize(size);
-
-            // The handlers might add new entries into the queue and we don't
-            // want to execute those yet.
-            auto q = std::move(queue);
-
-            while (!q.empty()) {
-                auto& entry = q.front();
-                auto h = std::move(entry.handler);
-                q.pop_front();
-                h(ec, std::make_pair( boost::string_view((char*)&buf[0], size)
-                                    , from));
+            size_t size = _socket.async_receive_from( asio::buffer(buf), from, yield[ec]);
+            if (stopped) {
+                break;
             }
 
-            if (ec) break;
+            buf.resize(size);
+            for (auto& entry : std::move(_receive_queue)) {
+                entry.handler(ec, boost::string_view((char*)&buf[0], size), from);
+            }
         }
     });
 }
 
 inline
-const boost::string_view
-UdpMultiplexer::receive(udp::endpoint& from, asio::yield_context yield)
+UdpMultiplexer::~UdpMultiplexer()
 {
-    boost::asio::async_completion
-        < asio::yield_context
-        , RecvHandlerSig
-        > init(yield);
+    _terminate_signal();
+    _socket.close();
+}
+
+inline
+void UdpMultiplexer::send(
+    std::string&& message,
+    const udp::endpoint& to,
+    asio::yield_context yield,
+    Signal<void()>& cancel_signal
+) {
+    ConditionVariable condition(get_io_service());
+
+    sys::error_code ec;
+
+    _send_queue.emplace_back();
+    _send_queue.back().message = std::move(message);
+    _send_queue.back().to = to;
+    auto sent_slot = _send_queue.back().sent_signal.connect([&] (sys::error_code ec_) {
+        ec = ec_;
+        condition.notify();
+    });
+
+    auto cancel_slot = cancel_signal.connect([&] {
+        ec = boost::asio::error::operation_aborted;
+        condition.notify();
+    });
+
+    auto terminate_slot = _terminate_signal.connect([&] {
+        ec = boost::asio::error::operation_aborted;
+        condition.notify();
+    });
+
+    _send_queue_nonempty.notify();
+    condition.wait(yield);
+
+    if (ec) {
+        or_throw(yield, ec);
+    }
+}
+
+inline
+void UdpMultiplexer::send(
+    std::string&& message,
+    const udp::endpoint& to
+) {
+    _send_queue.emplace_back();
+    _send_queue.back().message = std::move(message);
+    _send_queue.back().to = to;
+
+    _send_queue_nonempty.notify();
+}
+
+inline
+const boost::string_view
+UdpMultiplexer::receive(udp::endpoint& from, asio::yield_context yield, Signal<void()>& cancel_signal)
+{
+    ConditionVariable condition(get_io_service());
+
+    sys::error_code ec;
+    boost::string_view buffer;
 
     RecvEntry recv_entry;
+    recv_entry.handler = [&](sys::error_code ec_, boost::string_view buffer_, udp::endpoint from_) {
+        ec = ec_;
+        buffer = buffer_;
+        from = from_;
+        condition.notify();
+    };
+    _receive_queue.push_back(recv_entry);
 
-    recv_entry.handler = std::move(init.completion_handler);
+    auto cancel_slot = cancel_signal.connect([&] {
+        ec = boost::asio::error::operation_aborted;
+        condition.notify();
+    });
 
-    _recv_loop->queue.push_back(recv_entry);
+    auto terminate_slot = _terminate_signal.connect([&] {
+        ec = boost::asio::error::operation_aborted;
+        condition.notify();
+    });
 
-    auto pair = init.result.get();
-    from = pair.second;
-    return pair.first;
+    condition.wait(yield);
+
+    if (ec) {
+        return or_throw<boost::string_view>(yield, ec);
+    }
+
+    return buffer;
 }
 
 inline
 asio::io_service& UdpMultiplexer::get_io_service()
 {
-    return _socket->get_io_service();
+    return _socket.get_io_service();
 }
 
 }} // namespaces

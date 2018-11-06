@@ -48,16 +48,17 @@ BOOST_AUTO_TEST_CASE(test_bep_5)
 
     asio::spawn(ios, [&] (auto yield) {
         sys::error_code ec;
+        Signal<void()> cancel_signal;
 
         NodeID infohash = util::sha1("ouinet-test-" + to_string(time(0)));
 
         dht.start(yield[ec]);
         BOOST_REQUIRE(!ec);
 
-        dht.tracker_announce(infohash, dht.wan_endpoint().port(), yield[ec]);
+        dht.tracker_announce(infohash, dht.wan_endpoint().port(), yield[ec], cancel_signal);
         BOOST_REQUIRE(!ec);
 
-        auto peers = dht.tracker_get_peers(infohash , yield[ec]);
+        auto peers = dht.tracker_get_peers(infohash , yield[ec], cancel_signal);
         BOOST_REQUIRE(!ec);
 
         BOOST_REQUIRE(peers.count(as_tcp(dht.wan_endpoint())));

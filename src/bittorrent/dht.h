@@ -38,7 +38,7 @@ class DhtNode {
 
     public:
     DhtNode(asio::io_service& ios, ip::address interface_address);
-    void start(asio::yield_context);
+    void start(asio::yield_context yield);
     void stop();
 
     /**
@@ -53,7 +53,11 @@ class DhtNode {
      * Query peers for a bittorrent swarm surrounding a particular infohash.
      * This returns a randomized subset of all such peers, not the entire swarm.
      */
-    std::set<tcp::endpoint> tracker_get_peers(NodeID infohash, asio::yield_context yield);
+    std::set<tcp::endpoint> tracker_get_peers(
+        NodeID infohash,
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
+    );
 
     /**
      * Announce yourself on the bittorrent swarm surrounding a particular
@@ -66,21 +70,34 @@ class DhtNode {
      *
      * TODO: [ruud] I am not clear to what degree this is actually followed in practice.
      */
-    std::set<tcp::endpoint> tracker_announce(NodeID infohash, boost::optional<int> port, asio::yield_context yield);
+    std::set<tcp::endpoint> tracker_announce(
+        NodeID infohash,
+        boost::optional<int> port,
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
+    );
 
     /**
      * Search the DHT for BEP-44 immutable data item with key $key.
      * @return The data stored in the DHT under $key, or boost::none if no such
      *         data was found.
      */
-    boost::optional<BencodedValue> data_get_immutable(const NodeID& key, asio::yield_context yield);
+    boost::optional<BencodedValue> data_get_immutable(
+        const NodeID& key,
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
+    );
 
     /**
      * Store $data in the DHT as a BEP-44 immutable data item.
      * @return The ID as which this data is known in the DHT, equal to the
      *         sha1 hash of the bencoded $data.
      */
-    NodeID data_put_immutable(const BencodedValue& data, asio::yield_context yield);
+    NodeID data_put_immutable(
+        const BencodedValue& data,
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
+    );
 
     /**
      * Search the DHT for BEP-44 mutable data item with a given (public key, salt)
@@ -93,7 +110,8 @@ class DhtNode {
     boost::optional<MutableDataItem> data_get_mutable(
         const util::Ed25519PublicKey& public_key,
         boost::string_view salt,
-        asio::yield_context yield
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
     );
 
     /**
@@ -104,7 +122,11 @@ class DhtNode {
      *
      * TODO: Implement compare-and-swap if we ever need it.
      */
-    NodeID data_put_mutable(MutableDataItem data, asio::yield_context yield);
+    NodeID data_put_mutable(
+        MutableDataItem data,
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
+    );
 
     /**
      * Store $data in the DHT as a BEP-44 mutable data item. The data item
@@ -123,7 +145,8 @@ class DhtNode {
         const util::Ed25519PrivateKey& private_key,
         const std::string& salt,
         int64_t sequence_number,
-        asio::yield_context yield
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
     );
 
     bool is_v4() const { return _interface_address.is_v4(); }
@@ -136,33 +159,45 @@ class DhtNode {
     private:
     void receive_loop(asio::yield_context yield);
 
-    void send( udp::endpoint destination
-             , const BencodedMap& query_arguments
-             , asio::yield_context yield);
+    void send_datagram(
+        udp::endpoint destination,
+        const BencodedMap& query_arguments
+    );
+    void send_datagram(
+        udp::endpoint destination,
+        const BencodedMap& query_arguments,
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
+    );
 
-    void send_query( udp::endpoint destination
-                   , std::string transaction
-                   , std::string query_type
-                   , BencodedMap query_arguments
-                   , asio::yield_context yield);
+    void send_query(
+        udp::endpoint destination,
+        std::string transaction,
+        std::string query_type,
+        BencodedMap query_arguments,
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
+    );
 
     BencodedMap send_query_await_reply(
         Contact,
         const std::string& query_type,
         const BencodedMap& query_arguments,
         asio::steady_timer::duration timeout,
-        asio::yield_context yield
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
     );
 
-    void handle_query(udp::endpoint sender, BencodedMap query, asio::yield_context);
+    void handle_query(udp::endpoint sender, BencodedMap query);
 
     void bootstrap(asio::yield_context yield);
 
-    void refresh_routing_table(asio::yield_context yield);
+    void refresh_routing_table();
 
     std::vector<NodeContact> find_closest_nodes(
         NodeID target_id,
-        asio::yield_context yield
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
     );
 
     std::string new_transaction_string();
@@ -175,7 +210,8 @@ class DhtNode {
         NodeID destination_id,
         const std::string& query_type,
         const BencodedMap& query_arguments,
-        asio::yield_context
+        asio::yield_context,
+        Signal<void()>& cancel_signal
     );
 
     // http://bittorrent.org/beps/bep_0005.html#find-node
@@ -183,7 +219,8 @@ class DhtNode {
         NodeID target_id,
         Contact node,
         std::vector<NodeContact>& closer_nodes,
-        asio::yield_context yield
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
     );
 
     // http://bittorrent.org/beps/bep_0005.html#get-peers
@@ -191,7 +228,8 @@ class DhtNode {
         NodeID infohash,
         Contact node,
         std::vector<NodeContact>& closer_nodes,
-        asio::yield_context yield
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
     );
 
     // http://bittorrent.org/beps/bep_0044.html#get-message
@@ -199,7 +237,8 @@ class DhtNode {
         NodeID key,
         Contact node,
         std::vector<NodeContact>& closer_nodes,
-        asio::yield_context yield
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
     );
 
 
@@ -211,19 +250,27 @@ class DhtNode {
         NodeID infohash,
         std::set<tcp::endpoint>& peers,
         std::map<NodeID, TrackerNode>& responsible_nodes,
-        asio::yield_context
+        asio::yield_context,
+        Signal<void()>& cancel_signal
     );
 
-    void routing_bucket_try_add_node( RoutingBucket*
-                                    , NodeContact
-                                    , bool is_verified);
+    void routing_bucket_try_add_node(
+        RoutingBucket*,
+        NodeContact,
+        bool is_verified
+    );
 
     void routing_bucket_fail_node(RoutingBucket*, NodeContact);
 
     static bool closer_to(const NodeID& reference, const NodeID& left, const NodeID& right);
 
     template<class Evaluate>
-    void collect(const NodeID& target, Evaluate&&, asio::yield_context) const;
+    void collect(
+        const NodeID& target,
+        Evaluate&&,
+        asio::yield_context,
+        Signal<void()>& cancel_signal
+    ) const;
 
     private:
     asio::io_service& _ios;
@@ -236,6 +283,7 @@ class DhtNode {
     std::unique_ptr<Tracker> _tracker;
     std::unique_ptr<DataStore> _data_store;
     bool _ready;
+    Signal<void()> _terminate_signal;
 
     struct ActiveRequest {
         udp::endpoint destination;
@@ -291,29 +339,59 @@ class MainlineDht {
 
     ~MainlineDht();
 
-    void set_interfaces(const std::vector<asio::ip::address>& addresses, asio::yield_context);
     void set_interfaces(const std::vector<asio::ip::address>& addresses);
 
     /*
-     * TODO: These _start functions probably need cancellation support.
      * When cancelled, the publication still goes through and will be refreshed
      * until _stop()ped, but the _start() will not wait for successful completion.
      */
     /*
      * TODO: announce() and put() functions don't have any real error detection.
      */
-    std::set<tcp::endpoint> tracker_announce_start(NodeID infohash, boost::optional<int> port, asio::yield_context yield);
+    std::set<tcp::endpoint> tracker_announce_start(
+        NodeID infohash,
+        boost::optional<int> port,
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
+    );
+    std::set<tcp::endpoint> tracker_announce_start(
+        NodeID infohash,
+        boost::optional<int> port,
+        asio::yield_context yield
+    )
+        { Signal<void()> cancel_signal; return tracker_announce_start(infohash, port, yield, cancel_signal); }
+    void tracker_announce_start(
+        NodeID infohash,
+        boost::optional<int> port
+    );
     void tracker_announce_stop(NodeID infohash);
-    NodeID immutable_put_start(const BencodedValue& data, asio::yield_context yield);
+
+    NodeID immutable_put_start(
+        const BencodedValue& data,
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
+    );
+    NodeID immutable_put_start(const BencodedValue& data, asio::yield_context yield)
+        { Signal<void()> cancel_signal; return immutable_put_start(data, yield, cancel_signal); }
+    NodeID immutable_put_start(const BencodedValue& data);
     void immutable_put_stop(NodeID key);
-    NodeID mutable_put_start(const MutableDataItem& data, asio::yield_context yield);
+
+    NodeID mutable_put_start(
+        const MutableDataItem& data,
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
+    );
+    NodeID mutable_put_start(const MutableDataItem& data, asio::yield_context yield)
+        { Signal<void()> cancel_signal; return mutable_put_start(data, yield, cancel_signal); }
+    NodeID mutable_put_start(const MutableDataItem& data);
     void mutable_put_stop(NodeID key);
 
-    /*
-     * TODO: We definitely need cancellation on these functions.
-     */
-    std::set<tcp::endpoint> tracker_get_peers(NodeID infohash, asio::yield_context yield);
-    boost::optional<BencodedValue> immutable_get(NodeID key, asio::yield_context yield);
+    std::set<tcp::endpoint> tracker_get_peers(NodeID infohash, asio::yield_context yield, Signal<void()>& cancel_signal);
+    std::set<tcp::endpoint> tracker_get_peers(NodeID infohash, asio::yield_context yield)
+        { Signal<void()> cancel_signal; return tracker_get_peers(infohash, yield, cancel_signal); }
+    boost::optional<BencodedValue> immutable_get(NodeID key, asio::yield_context yield, Signal<void()>& cancel_signal);
+    boost::optional<BencodedValue> immutable_get(NodeID key, asio::yield_context yield)
+        { Signal<void()> cancel_signal; return immutable_get(key, yield, cancel_signal); }
     /*
      * TODO:
      *
@@ -325,8 +403,15 @@ class MainlineDht {
     boost::optional<MutableDataItem> mutable_get(
         const util::Ed25519PublicKey& public_key,
         boost::string_view salt,
-        asio::yield_context yield
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
     );
+    boost::optional<MutableDataItem> mutable_get(
+        const util::Ed25519PublicKey& public_key,
+        boost::string_view salt,
+        asio::yield_context yield
+    )
+        { Signal<void()> cancel_signal; return mutable_get(public_key, salt, yield, cancel_signal); }
 
     asio::io_service& get_io_service() { return _ios; }
 

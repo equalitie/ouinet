@@ -76,9 +76,16 @@ public:
 
     Lock lock();
 
+    void cancel();
+    bool cancelled() {
+        return _cancelled;
+    }
+
 private:
     boost::asio::io_service& _ios;
     std::shared_ptr<WaitState> _wait_state;
+    Signal<void()> _cancel_signal;
+    bool _cancelled;
 };
 
 
@@ -137,7 +144,8 @@ void SuccessCondition::Lock::release(bool success) const
 
 inline
 SuccessCondition::SuccessCondition(boost::asio::io_service& ios):
-    _ios(ios)
+    _ios(ios),
+    _cancelled(false)
 {}
 
 inline
@@ -149,6 +157,9 @@ bool SuccessCondition::wait_for_success(boost::asio::yield_context yield)
 
     std::shared_ptr<WaitState> wait_state = std::move(_wait_state);
     if (wait_state->blocked()) {
+        auto cancel_slot = _cancel_signal.connect([&wait_state] {
+            wait_state->condition.notify();
+        });
         wait_state->condition.wait(yield);
     }
     return wait_state->success;
@@ -162,6 +173,13 @@ SuccessCondition::Lock SuccessCondition::lock()
     }
 
     return SuccessCondition::Lock(_wait_state);
+}
+
+inline
+void SuccessCondition::cancel()
+{
+    _cancelled = true;
+    _cancel_signal();
 }
 
 } // ouinet namespace
