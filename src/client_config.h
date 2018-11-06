@@ -30,6 +30,10 @@ public:
 
     void set_injector_endpoint(const Endpoint& ep);
 
+    bool enable_injector_tls() const {
+        return _enable_injector_tls;
+    }
+
     const asio::ip::tcp::endpoint& local_endpoint() const {
         return _local_ep;
     }
@@ -89,6 +93,8 @@ public:
            ("injector-ipns"
             , po::value<string>()->default_value("")
             , "IPNS of the injector's database")
+           ("enable-injector-tls", po::bool_switch(&_enable_injector_tls)
+            , "Enable TLS for injector TCP endpoint")
            ("max-cached-age"
             , po::value<int>()->default_value(_max_cached_age.total_seconds())
             , "Discard cached content older than this many seconds "
@@ -125,6 +131,7 @@ private:
     fs::path _ouinet_conf_file = "ouinet-client.conf";
     asio::ip::tcp::endpoint _local_ep;
     boost::optional<Endpoint> _injector_ep;
+    bool _enable_injector_tls = false;
     std::string _ipns;
     bool _enable_http_connect_requests = false;
     asio::ip::tcp::endpoint _front_end_endpoint;

@@ -36,6 +36,7 @@
 #include "default_timeout.h"
 #include "ssl/ca_certificate.h"
 #include "ssl/dummy_certificate.h"
+#include "ssl/util.h"
 
 #ifndef __ANDROID__
 #  include "force_exit_on_signal.h"
@@ -44,6 +45,7 @@
 #include "ouiservice.h"
 #include "ouiservice/i2p.h"
 #include "ouiservice/tcp.h"
+#include "ouiservice/tls.h"
 
 #include "util/signal.h"
 #include "util/crypto.h"
@@ -65,6 +67,7 @@ using boost::optional;
 static const fs::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
 static const fs::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
 static const fs::path OUINET_CA_DH_FILE = "ssl-ca-dh.pem";
+static const fs::path OUINET_INJ_CERT_FILE = "ssl-inj-cert.pem";
 
 //------------------------------------------------------------------------------
 class Client::State : public enable_shared_from_this<Client::State> {
@@ -78,10 +81,18 @@ public:
         // TODO: Fine tune if necessary.
         , _ssl_certificate_cache(1000)
         , ssl_ctx{asio::ssl::context::tls_client}
+        , inj_ctx{asio::ssl::context::tls_client}
         , _fetch_stored_scheduler(_ios, 1)
     {
         ssl_ctx.set_default_verify_paths();
         ssl_ctx.set_verify_mode(asio::ssl::verify_peer);
+
+        // We do *not* want to do this since
+        // we will not be checking certificate names,
+        // thus any certificate signed by a recognized CA
+        // would be accepted if presented by an injector.
+        //inj_ctx.set_default_verify_paths();
+        inj_ctx.set_verify_mode(asio::ssl::verify_peer);
     }
 
     void start(int argc, char* argv[]);
@@ -154,6 +165,7 @@ private:
     ConnectionPool<std::string> _injector_connections;
 
     asio::ssl::context ssl_ctx;
+    asio::ssl::context inj_ctx;
 
     Scheduler _fetch_stored_scheduler;
 };
@@ -582,34 +594,6 @@ private:
 //}
 
 //------------------------------------------------------------------------------
-void setup_ssl_context( asio::ssl::context& ssl_context
-                      , const string& cert_chain
-                      , const string& private_key
-                      , const string& dh)
-{
-    namespace ssl = boost::asio::ssl;
-
-    ssl_context.set_options( ssl::context::default_workarounds
-                           | ssl::context::no_sslv2
-                           | ssl::context::single_dh_use);
-
-    ssl_context.use_certificate_chain(
-            asio::buffer(cert_chain.data(), cert_chain.size()));
-
-    ssl_context.use_private_key( asio::buffer( private_key.data()
-                                             , private_key.size())
-                               , ssl::context::file_format::pem);
-
-    ssl_context.use_tmp_dh(asio::buffer(dh.data(), dh.size()));
-
-    ssl_context.set_password_callback(
-        [](std::size_t, ssl::context_base::password_purpose)
-        {
-            assert(0 && "TODO: Not yet supported");
-            return "";
-        });
-}
-
 static
 string base_domain_from_target(const beast::string_view& target)
 {
@@ -627,10 +611,6 @@ GenericStream Client::State::ssl_mitm_handshake( GenericStream&& con
                                                , const Request& con_req
                                                , asio::yield_context yield)
 {
-    namespace ssl = boost::asio::ssl;
-
-    ssl::context ssl_context{ssl::context::tls_server};
-
     // TODO: We really should be waiting for
     // the TLS Client Hello message to arrive at the clear text connection
     // (after we send back 200 OK),
@@ -651,10 +631,10 @@ GenericStream Client::State::ssl_mitm_handshake( GenericStream&& con
                                           + _ca_certificate->pem_certificate());
     }
 
-    setup_ssl_context( ssl_context
-                     , *crt_chain
-                     , _ca_certificate->pem_private_key()
-                     , _ca_certificate->pem_dh_param());
+    auto ssl_context = ssl::util::get_server_context
+        ( *crt_chain
+        , _ca_certificate->pem_private_key()
+        , _ca_certificate->pem_dh_param());
 
     // Send back OK to let the UA know we have the "tunnel"
     http::response<http::string_body> res{http::status::ok, con_req.version()};
@@ -662,11 +642,11 @@ GenericStream Client::State::ssl_mitm_handshake( GenericStream&& con
 
     sys::error_code ec;
 
-    auto ssl_sock = make_unique<ssl::stream<GenericStream>>(move(con), ssl_context);
-    ssl_sock->async_handshake(ssl::stream_base::server, yield[ec]);
+    auto ssl_sock = make_unique<asio::ssl::stream<GenericStream>>(move(con), ssl_context);
+    ssl_sock->async_handshake(asio::ssl::stream_base::server, yield[ec]);
     if (ec) return or_throw<GenericStream>(yield, ec);
 
-    auto ssl_shutter = [](ssl::stream<GenericStream>& s) {
+    static const auto ssl_shutter = [](asio::ssl::stream<GenericStream>& s) {
         // Just close the underlying connection
         // (TLS has no message exchange for shutdown).
         s.next_layer().close();
@@ -1027,29 +1007,19 @@ void Client::State::start(int argc, char* argv[])
         return;
     }
 
-    if (exists(ca_cert_path()) && exists(ca_key_path()) && exists(ca_dh_path())) {
-        cout << "Loading existing CA certificate..." << endl;
-        auto read_pem = [](auto path) {
-            std::stringstream ss;
-            ss << boost::filesystem::ifstream(path).rdbuf();
-            return ss.str();
-        };
-        auto cert = read_pem(ca_cert_path());
-        auto key = read_pem(ca_key_path());
-        auto dh = read_pem(ca_dh_path());
-        _ca_certificate = make_unique<CACertificate>(cert, key, dh);
-    } else {
-        cout << "Generating and storing CA certificate..." << endl;
-        _ca_certificate = make_unique<CACertificate>();
+    _ca_certificate = get_or_gen_tls_cert<CACertificate>
+        ( "Your own local Ouinet client"
+        , ca_cert_path(), ca_key_path(), ca_dh_path());
 
-        boost::filesystem::ofstream(ca_cert_path())
-            << _ca_certificate->pem_certificate();
-
-        boost::filesystem::ofstream(ca_key_path())
-            << _ca_certificate->pem_private_key();
-
-        boost::filesystem::ofstream(ca_dh_path())
-            << _ca_certificate->pem_dh_param();
+    if (_config.enable_injector_tls()) {
+        auto inj_cert_path = _config.repo_root() / OUINET_INJ_CERT_FILE;
+        if (fs::exists(inj_cert_path)) {
+            LOG_DEBUG("Loading injector certificate file");
+            inj_ctx.load_verify_file(inj_cert_path.string());
+        } else {
+            LOG_DEBUG("Creating empty injector certificate file");
+            fs::ofstream(inj_cert_path) << "";
+        }
     }
 
     asio::spawn
@@ -1140,7 +1110,13 @@ void Client::State::setup_injector(asio::yield_context yield)
         auto tcp_client
             = make_unique<ouiservice::TcpOuiServiceClient>(_ios, tcp_endpoint);
 
-        _injector->add(std::move(tcp_client));
+        if (!_config.enable_injector_tls()) {
+            _injector->add(std::move(tcp_client));
+        } else {
+            auto tls_client
+                = make_unique<ouiservice::TlsOuiServiceClient>(move(tcp_client), inj_ctx);
+            _injector->add(std::move(tls_client));
+        }
     }
 
     _injector->start(yield);

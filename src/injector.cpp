@@ -35,6 +35,9 @@
 #include "ouiservice.h"
 #include "ouiservice/i2p.h"
 #include "ouiservice/tcp.h"
+#include "ouiservice/tls.h"
+#include "ssl/ca_certificate.h"
+#include "ssl/util.h"
 
 #include "util/timeout.h"
 #include "util/crypto.h"
@@ -68,6 +71,11 @@ struct PoolId {
 using ConPool = ConnectionPool<>;
 using Connection = ConPool::Connection;
 using ConPools = map<PoolId, ConPool>;
+
+static const fs::path OUINET_PID_FILE = "pid";
+static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
+static const fs::path OUINET_TLS_KEY_FILE = "tls-key.pem";
+static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
 
 //------------------------------------------------------------------------------
 static
@@ -679,6 +687,13 @@ int main(int argc, const char* argv[])
         increase_open_file_limit(*config.open_file_limit());
     }
 
+    // Create or load the TLS certificate.
+    auto tls_certificate = get_or_gen_tls_cert<EndCertificate>
+        ( "localhost"
+        , config.repo_root() / OUINET_TLS_CERT_FILE
+        , config.repo_root() / OUINET_TLS_KEY_FILE
+        , config.repo_root() / OUINET_TLS_DH_FILE );
+
     // The io_service is required for all I/O
     asio::io_service ios;
 
@@ -713,6 +728,22 @@ int main(int argc, const char* argv[])
                                , util::str(endpoint));
 
         proxy_server.add(make_unique<ouiservice::TcpOuiServiceServer>(ios, endpoint));
+    }
+
+    asio::ssl::context ssl_context{asio::ssl::context::tls_server};
+    if (config.tls_endpoint()) {
+        ssl_context = ssl::util::get_server_context
+            ( tls_certificate->pem_certificate()
+            , tls_certificate->pem_private_key()
+            , tls_certificate->pem_dh_param());
+
+        tcp::endpoint endpoint = *config.tls_endpoint();
+        cout << "TLS Address: " << endpoint << endl;
+        util::create_state_file( config.repo_root()/"endpoint-tls"
+                               , util::str(endpoint));
+
+        auto base = make_unique<ouiservice::TcpOuiServiceServer>(ios, endpoint);
+        proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(move(base), ssl_context));
     }
 
     if (config.listen_on_i2p()) {

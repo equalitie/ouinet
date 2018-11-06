@@ -49,7 +49,7 @@ static string g_default_dh_param =
 static const int CERT_SERNUM_SCALE = 1000;
 
 
-CACertificate::CACertificate()
+BaseCertificate::BaseCertificate(const std::string& cn, bool is_ca)
     : _x(X509_new())
     , _pk(EVP_PKEY_new())
     , _next_serial_number(std::time(nullptr) * CERT_SERNUM_SCALE)
@@ -97,8 +97,8 @@ CACertificate::CACertificate()
     // Avoid signature issues because of time zone differences.
     // See [Mitmproxy can't record traffic when time set with 1 hour ago.](https://github.com/mitmproxy/mitmproxy/issues/200).
     X509_gmtime_adj(X509_get_notBefore(_x), -48*ssl::util::ONE_HOUR);
-    // A long-enough expiration for the CA (sort of everlasting).
-    // Please note that certificates emitted by this CA may not be more than 39 months old:
+    // A long-enough expiration for the certificate (sort of everlasting).
+    // Please note that certificates emitted by this as a CA may not be more than 39 months old:
     // [Validity Period, 9.4.1](https://cabforum.org/wp-content/uploads/BRv1.2.3.pdf).
     X509_gmtime_adj(X509_get_notAfter(_x), 15*ssl::util::ONE_YEAR);
     X509_set_pubkey(_x, _pk);
@@ -109,7 +109,7 @@ CACertificate::CACertificate()
     // correct string type and performing checks on its length.
     if (!X509_NAME_add_entry_by_txt( name, "CN"
                                    , MBSTRING_ASC
-                                   , (const unsigned char*) "Your own local Ouinet client"
+                                   , (const unsigned char*) cn.c_str()
                                    , -1, -1, 0))
         throw runtime_error("Failed in X509_NAME_add_entry_by_txt");
     
@@ -118,12 +118,16 @@ CACertificate::CACertificate()
     X509_set_issuer_name(_x, name);
 
     // Add various standard extensions
-    ssl::util::x509_add_ext(_x, NID_basic_constraints, "critical,CA:TRUE");
-    ssl::util::x509_add_ext(_x, NID_key_usage, "critical,keyCertSign,cRLSign");
+    if (is_ca) {
+        ssl::util::x509_add_ext(_x, NID_basic_constraints, "critical,CA:TRUE");
+        ssl::util::x509_add_ext(_x, NID_key_usage, "critical,keyCertSign,cRLSign");
+    }
     ssl::util::x509_add_ext(_x, NID_subject_key_identifier, "hash");
     
     // Some Netscape specific extensions
-    ssl::util::x509_add_ext(_x, NID_netscape_cert_type, "sslCA");
+    if (is_ca) {
+        ssl::util::x509_add_ext(_x, NID_netscape_cert_type, "sslCA");
+    }
     
     if (!X509_sign(_x, _pk, EVP_sha256()))
         throw runtime_error("Failed in X509_sign");
@@ -145,7 +149,7 @@ CACertificate::CACertificate()
     _pem_dh_param = g_default_dh_param;
 }
 
-CACertificate::CACertificate(std::string pem_cert, std::string pem_key, std::string pem_dh)
+BaseCertificate::BaseCertificate(std::string pem_cert, std::string pem_key, std::string pem_dh)
     : _pem_private_key(move(pem_key))
     , _pem_certificate(move(pem_cert))
     , _pem_dh_param(move(pem_dh))
@@ -156,7 +160,7 @@ CACertificate::CACertificate(std::string pem_cert, std::string pem_key, std::str
         EVP_PKEY* key = PEM_read_bio_PrivateKey(bio, nullptr, nullptr, nullptr);
         BIO_free_all(bio);
         if (!key)
-            throw runtime_error("Failed to parse CA PEM key");
+            throw runtime_error("Failed to parse PEM key");
         _pk = key;
     }
     {
@@ -164,7 +168,7 @@ CACertificate::CACertificate(std::string pem_cert, std::string pem_key, std::str
         X509* cert = PEM_read_bio_X509(bio, nullptr, nullptr, nullptr);
         BIO_free_all(bio);
         if (!cert)
-            throw runtime_error("Failed to parse CA PEM certificate");
+            throw runtime_error("Failed to parse PEM certificate");
         _x = cert;
     }
     {
@@ -172,25 +176,25 @@ CACertificate::CACertificate(std::string pem_cert, std::string pem_key, std::str
         DH* dh = PEM_read_bio_DHparams(bio, nullptr, nullptr, nullptr);
         BIO_free_all(bio);
         if (!dh)
-            throw runtime_error("Failed to parse CA PEM DH parameters");
+            throw runtime_error("Failed to parse PEM DH parameters");
         DH_free(dh);  // just to check it is correct
     }
 }
 
 
-X509_NAME* CACertificate::get_subject_name() const
+X509_NAME* BaseCertificate::get_subject_name() const
 {
     return X509_get_subject_name(_x);
 }
 
 
-EVP_PKEY* CACertificate::get_private_key() const
+EVP_PKEY* BaseCertificate::get_private_key() const
 {
     return _pk;
 }
 
 
-CACertificate::~CACertificate() {
+BaseCertificate::~BaseCertificate() {
     if (_x) X509_free(_x);
     if (_pk) EVP_PKEY_free(_pk);
 }

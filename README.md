@@ -249,9 +249,13 @@ until explicitly stopped.
 A new client node which starts with no configuration will get a default one
 from templates included in Ouinet's source code and it will be missing some
 important parameters, so you may want to stop it (see above) and use the
-**shell container** (see below) to edit `client/ouinet-client.conf` and add
-configuration options for the injector endpoint `injector-ep` and credentials
-`injector-credentials`, and cache index IPNS ID `injector-ipns`.
+**shell container** (see below) to edit `client/ouinet-client.conf`:
+
+  - Add configuration options for the injector endpoint `injector-ep` and its
+    access credentials `injector-credentials`.
+  - If the injector endpoint uses TLS, set `enable-injector-tls` to `true` and
+    copy its certificate to `client/ssl-inj-cert.pem`.
+  - Set the IPNS ID of the cache index in option `injector-ipns`.
 
 After you have set up your client's configuration, you can **restart it**.
 
@@ -300,7 +304,9 @@ populate its default environment file:
 After an injector has finished starting, you may want to use the shell
 container to inspect and note down the contents of `injector/endpoint-*`
 (injector endpoints) and `injector/cache-ipns` (cache index IPNS ID) to be
-used by clients.
+used by clients.  If `injector/ouinet-injector.conf` has `listen-on-tls`
+configured, the injector will also generate a `tls-cert.pem` file which you
+should distribute to clients for TLS access.
 
 To start the injector in headless mode, you can run:
 
