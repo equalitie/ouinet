@@ -170,31 +170,6 @@ fetch_http_page( asio::io_service& ios
                , GenericStream& optcon
                , asio::ssl::context& ssl_ctx
                , RequestType req
-               , Signal<void()>& abort_signal
-               , Yield yield)
-{
-    using Response = http::response<http::dynamic_body>;
-
-    sys::error_code ec;
-    std::string host, port;
-    std::tie(host, port) = util::get_host_port(req);
-    auto lookup = util::tcp_async_resolve( host, port
-                                         , ios
-                                         , abort_signal
-                                         , yield[ec]);
-    if (ec) return or_throw<Response>(yield, ec);
-
-    return fetch_http_page( ios, optcon, ssl_ctx
-                          , req, std::move(lookup)
-                          , abort_signal, yield);
-}
-
-template<class RequestType>
-http::response<http::dynamic_body>
-fetch_http_page( asio::io_service& ios
-               , GenericStream& optcon
-               , asio::ssl::context& ssl_ctx
-               , RequestType req
                , const asio::ip::tcp::resolver::results_type& lookup
                , Signal<void()>& abort_signal
                , Yield yield_)
@@ -261,27 +236,6 @@ fetch_http_page( asio::io_service& ios
     }
 
     return or_throw(yield, ec, std::move(ret));
-}
-
-template<class Duration, class RequestType>
-http::response<http::dynamic_body>
-fetch_http_page( asio::io_service& ios
-               , GenericStream& optcon
-               , asio::ssl::context& ssl_ctx
-               , RequestType req
-               , Duration timeout
-               , Signal<void()>& abort_signal
-               , Yield yield)
-{
-    return util::with_timeout
-        ( ios
-        , abort_signal
-        , timeout
-        , [&] (auto& abort_signal, auto yield) {
-              return fetch_http_page
-                (ios, optcon, ssl_ctx, req, abort_signal, yield);
-          }
-        , yield);
 }
 
 template<class Duration, class RequestType>
