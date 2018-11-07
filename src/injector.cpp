@@ -545,16 +545,14 @@ void serve( InjectorConfig& config
             // TODO: Maybe reject requests for HTTPS URLS:
             // we are perfectly able to handle them (and do verification locally),
             // but the client should be using a CONNECT request instead!
-            // TODO: Reuse the connection c response contains "Connection: keep-alive"
-            GenericStream c;
-            res = fetch_http_page( con.get_io_service()
-                                 , c
-                                 , ssl_ctx
-                                 , erase_hop_by_hop_headers(move(req2))
-                                 , lookup
-                                 , default_timeout::fetch_http()
-                                 , cancel
-                                 , yield[ec].tag("fetch_http_page"));
+            // TODO: Reuse the connection
+            res = fetch_http_origin( con.get_io_service()
+                                   , ssl_ctx
+                                   , erase_hop_by_hop_headers(move(req2))
+                                   , lookup
+                                   , default_timeout::fetch_http()
+                                   , cancel
+                                   , yield[ec].tag("fetch_http_page"));
         } else {
             // Ouinet header found, behave like a Ouinet injector.
             req2.erase(http_::request_version_hdr);  // do not propagate or cache the header
