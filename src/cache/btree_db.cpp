@@ -174,9 +174,9 @@ BTreeInjectorDb::BTreeInjectorDb( asio_ipfs::node& ipfs_node
 
 const string ipfs_uri_prefix = "ipfs:/ipfs/";
 
-void BTreeInjectorDb::insert( string key
-                            , string value
-                            , asio::yield_context yield)
+string BTreeInjectorDb::insert( string key
+                              , string value
+                              , asio::yield_context yield)
 {
     auto wd = _was_destroyed;
     sys::error_code ec;
@@ -184,12 +184,13 @@ void BTreeInjectorDb::insert( string key
     _db_map->insert(move(key), move(value), yield[ec]);
 
     if (!ec && *wd) ec = asio::error::operation_aborted;
-    if (ec) return or_throw(yield, ec);
+    if (ec) return or_throw<string>(yield, ec);
 
     publish(_db_map->root_hash());
 
     if (!ec && *wd) ec = asio::error::operation_aborted;
-    return or_throw(yield, ec);
+    // No data is returned to help with reinsertion.
+    return or_throw(yield, ec, "");
 }
 
 void BTreeInjectorDb::publish(string db_ipfs_id)

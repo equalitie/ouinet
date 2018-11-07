@@ -1,4 +1,5 @@
 #include "bep44_db.h"
+#include "../bittorrent/bencoding.h"
 #include "../bittorrent/dht.h"
 #include "../or_throw.h"
 
@@ -78,9 +79,9 @@ string Bep44InjectorDb::find( const string& key
 }
 
 
-void Bep44InjectorDb::insert( string key
-                            , string value
-                            , asio::yield_context yield)
+string Bep44InjectorDb::insert( string key
+                              , string value
+                              , asio::yield_context yield)
 {
     using Time = boost::posix_time::ptime;
 
@@ -101,10 +102,22 @@ void Bep44InjectorDb::insert( string key
                                         , as_string_view(salt)
                                         , _bt_privkey);
     } catch(length_error) {
-        return or_throw(yield, asio::error::message_size);
+        return or_throw<string>(yield, asio::error::message_size);
     }
 
     _bt_dht.mutable_put_start(item, yield);
+
+    // We follow the names used in the BEP44 document.
+    return bt::bencoding_encode(bt::BencodedMap{
+        // cas is not compulsory
+        // id depends on the publishing node
+        { "k"   , "" /* TODO: item.public_key.serialize() */ },
+        { "salt", item.salt },
+        { "seq" , item.sequence_number },
+        // token depends on the insertion
+        { "sig" , "" /* TODO: item.signature */ }
+        // v is already known by the caller
+    });
 }
 
 
