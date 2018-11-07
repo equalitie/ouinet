@@ -1,0 +1,58 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Ouinet URI descriptor v0",
+    "description": "A URI descriptor captures the state of a URI at a given moment, including its data and metadata, according to a particular injector service.",
+
+    "definitions": {
+        "uri": {
+            "$id": "#uri",
+            "type": "string",
+            "pattern": "^[a-z][\\+\\-\\.0-9a-z]+:"
+        },
+        "id": {
+            "$id": "#id",
+            "type": "string",
+            "minLength": 1
+        },
+        "date": {
+            "$id": "#date",
+            "type": "string",
+            "$comment": "Format: '<long ISO 8601 UTC date up to seconds>'",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$"
+        }
+    },
+
+    "type": "object",
+    "properties": {
+        "!ouinet_version": {
+            "description": "The version of the schema that this descriptor adheres to.",
+            "type": "integer",
+            "const": 0,
+            "$comment": "The same number indicated at the schema's title."
+        },
+        "url": {
+            "description": "The URL that this descriptor describes.",
+            "$ref": "#/definitions/uri"
+        },
+        "id": {
+            "description": "A unique identifier for this injection.",
+            "$ref": "#/definitions/id"
+        },
+        "ts": {
+            "description": "The time when this descriptor was created.",
+            "$ref": "#/definitions/date"
+        },
+        "head": {
+            "description": "Raw dump of the HTTP response head, including status, headers and final empty line.",
+            "type": "string",
+            "minLength": 1
+        },
+        "body_link": {
+            "description": "IPFS CID of the HTTP response body.",
+            "type": "string",
+            "minLength": 1
+        }
+    },
+
+    "required": ["!ouinet_version", "url", "id", "ts", "head", "body_link"]
+}
