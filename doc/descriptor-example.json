@@ -1,55 +1,36 @@
 {
-    "ouinet_descriptor_version": 0,
+    "!ouinet_version": 42,
     "uris": ["https://example.com/foo", "https://archive.example.com/2018/foo"],
+    "id": "15bb4f34-ca7e-4f42-9b01-f147e9abcce9",
     "ts": "2018-01-15T21:31:50Z",
-    "versions": [
-        {
-            "ts": "2018-01-15T21:31:44Z",
-            "meta_http_rqh": {"@method": "GET", "@target": "https://example.com/foo", "@version": "HTTP/1.1",
-                              "host": "example.com",
-                              "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"},
-            "meta_http_rph": {"@version": "HTTP/1.1", "@code": "200", "@reason": "OK",
-                              "date": "Mon, 15 Jan 2018 20:31:50 GMT", "server": "Apache",
-                              "content-type": "text/html",
-                              "content-disposition": "inline; filename=\"foo.html\""},
-            "data_length": 38,
-            "data_hash": "DATAHASH1"
-        },
-        {
-            "ts": "2018-01-20T12:13:42Z",
-            "meta_http_rqh": {"@method": "GET", "@target": "https://example.com/foo", "@version": "HTTP/1.1",
-                              "host": "example.com",
-                              "accept": "application/json"},
-            "meta_http_rph": {"@version": "HTTP/1.1", "@code": "200", "@reason": "OK",
-                              "date": "Sat, 20 Jan 2018 12:13:43 GMT", "server": "Apache",
-                              "content-type": "application/json",
-                              "content-disposition": "inline; filename=\"foo.json\""},
-            "data_length": 26,
-            "data_hash": "DATAHASH2"
-        }
+    "data_hash": "DATAHASH1",
+    "data_length": 38,
+    "data_links": [
+        "ipfs:/ipfs/QmXYZ…",
+        "data:,%3C%21DOCTYPE%20html%3E%0A%3Cp%3ETiny%20body%20here%21%3C%2Fp%3E"
     ],
-    "data_links": {
-        "DATAHASH1": ["ipfs:/ipfs/QmXYZ…",
-                      "data:,%3C%21DOCTYPE%20html%3E%0A%3Cp%3ETiny%20body%20here%21%3C%2Fp%3E"],
-        "DATAHASH2": ["ipfs:/ipfs/QmABC…",
-                      "data:,%7B%22text%22%3A%22Tiny%20body%20here%21%22%7D"]
-    },
+    "meta_http_rqh": {"@method": "GET", "@target": "https://example.com/foo", "@version": "HTTP/1.1",
+                      "host": "example.com",
+                      "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"},
+    "meta_http_rph": {"@version": "HTTP/1.1", "@code": "200", "@reason": "OK",
+                      "date": "Mon, 15 Jan 2018 20:31:50 GMT", "server": "Apache",
+                      "content-type": "text/html",
+                      "content-disposition": "inline; filename=\"foo.html\""},
     "signatures": {
-        "ed25519:1:XXXX1#2018-01-15T21:31:51Z#FooBar injector service": {
-            "ed25519:1": "YYYY1"
+        "ed25519:XXXX1": {
+            "ed25519:": "YYYY1", "ts": "2018-01-15T21:31:51Z",
+            "desc": "FooBar injector service"
         },
-        "ed25519:1:XXXX2#2018-01-15T21:45:10Z#XYZ injector service": {
-            "ed25519:1": "YYYY2"
+        "ed25519:XXXX2": {
+            "ed25519:": "YYYY2", "ts": "2018-01-15T21:45:10Z",
+            "desc": "XYZ injector service"
         }
     },
     "unsigned": {
-        "data_links": {
-            "DATAHASH1": ["ipfs:/ipfs/QmXYZ…", "magnet:?xt.1=urn.sha1:ZYX…",
-                          "data:,%3C%21DOCTYPE%20html%3E%0A%3Cp%3ETiny%20body%20here%21%3C%2Fp%3E",
-                          "http://…", "ftp://…", "file://./data/…"],
-            "DATAHASH2": ["ipfs:/ipfs/QmABC…", "magnet:?xt.1=urn.sha1:CAB…",
-                          "data:,%7B%22text%22%3A%22Tiny%20body%20here%21%22%7D",
-                          "http://…", "ftp://…", "file://./data/…"]
-        }
+        "data_links": [
+            "ipfs:/ipfs/QmXYZ…", "magnet:?xt.1=urn.sha1:ZYX…",
+            "data:,%3C%21DOCTYPE%20html%3E%0A%3Cp%3ETiny%20body%20here%21%3C%2Fp%3E",
+            "http://…", "ftp://…", "file://./data/…"
+        ]
     }
 }
