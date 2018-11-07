@@ -10,6 +10,7 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/regex.hpp>
+#include <boost/utility/string_view.hpp>
 
 #include "namespaces.h"
 #include "util/signal.h"
@@ -30,15 +31,15 @@ struct url_match {
 // Parse the HTTP URL to tell the different components.
 // If successful, the `match` is updated.
 inline
-bool match_http_url(const std::string& url, url_match& match) {
+bool match_http_url(const boost::string_view url, url_match& match) {
     static const boost::regex urlrx( "^(http|https)://"  // 1: scheme
                                      "([-\\.a-z0-9]+|\\[[:0-9a-fA-F]+\\])"  // 2: host
                                      "(:[0-9]{1,5})?"  // 3: :port (or empty)
                                      "(/[^?#]*)"  // 4: /path
                                      "(\\?[^#]*)?"  // 5: ?query (or empty)
                                      "(#.*)?");  // 6: #fragment (or empty)
-    boost::smatch m;
-    if (!boost::regex_match(url, m, urlrx))
+    boost::cmatch m;
+    if (!boost::regex_match(url.begin(), url.end(), m, urlrx))
         return false;
     match = { m[1]
             , m[2]

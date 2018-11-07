@@ -271,7 +271,7 @@ private:
         // Parse the URL to tell HTTP/HTTPS, host, port.
         util::url_match url;
 
-        if (!util::match_http_url(rq_.target().to_string(), url)) {
+        if (!util::match_http_url(rq_.target(), url)) {
             return or_throw<Response>( yield
                                      , asio::error::operation_not_supported);
         }

@@ -350,7 +350,7 @@ Response Client::State::fetch_fresh
                 if (target.starts_with("https://")) {
                     // Parse the URL to tell HTTP/HTTPS, host, port.
                     util::url_match url;
-                    if (!match_http_url(target.to_string(), url)) {
+                    if (!match_http_url(target, url)) {
                         last_error = asio::error::operation_not_supported;  // unsupported URL
                         continue;
                     }

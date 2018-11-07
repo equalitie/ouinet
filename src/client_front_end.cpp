@@ -349,7 +349,7 @@ Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
     stringstream ss;
 
     util::url_match url;
-    match_http_url(req.target().to_string(), url);
+    match_http_url(req.target(), url);
 
     if (url.path == "/ca.pem") {
         handle_ca_pem(req, res, ss, ca);

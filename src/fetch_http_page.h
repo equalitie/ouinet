@@ -181,7 +181,7 @@ fetch_http_page( asio::io_service& ios
 
     // Parse the URL to tell HTTP/HTTPS, host, port.
     util::url_match url;
-    if (!util::match_http_url(req.target().to_string(), url)) {
+    if (!util::match_http_url(req.target(), url)) {
         ec = asio::error::operation_not_supported;  // unsupported URL
         return or_throw<Response>(yield, ec);
     }
