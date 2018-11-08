@@ -178,6 +178,8 @@ void BTreeInjectorDb::insert( string key
                             , string value
                             , asio::yield_context yield)
 {
+    assert(!key.empty() && !value.empty());
+
     auto wd = _was_destroyed;
     sys::error_code ec;
 
