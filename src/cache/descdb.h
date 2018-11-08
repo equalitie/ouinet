@@ -87,12 +87,13 @@ put_into_db( const std::string& key, const std::string& desc_data
            , StoreFunc ipfs_store
            , asio::yield_context yield)
 {
+    using namespace std;
     sys::error_code ec;
 
     // Always store the descriptor itself in IPFS.
-    std::string desc_ipfs = ipfs_store(desc_data, yield[ec]);
+    string desc_ipfs = ipfs_store(desc_data, yield[ec]);
 
-    std::string ins_data;
+    string ins_data;
     // Insert descriptor inline (if possible).
     bool can_inline = db_can_inline(db);
     if (!ec && can_inline) {
@@ -104,9 +105,8 @@ put_into_db( const std::string& key, const std::string& desc_data
         ins_data = db.insert(key, ipfs_prefix + desc_ipfs, yield[ec]);
     }
 
-    std::pair<std::string, std::string> ret
-        (std::move(desc_ipfs), std::move(ins_data));
-    return or_throw(yield, ec, std::move(ret));
+    pair<string, string> ret(move(desc_ipfs), move(ins_data));
+    return or_throw(yield, ec, move(ret));
 }
 
 } // namespace descriptor
