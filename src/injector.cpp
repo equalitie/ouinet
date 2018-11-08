@@ -352,7 +352,8 @@ private:
             rq, rs, id,
             injector = injector.get(),
             db_type = config.default_db_type()
-        ] (boost::asio::yield_context yield) mutable -> string {
+        ] (boost::asio::yield_context yield) mutable
+          -> CacheInjector::InsertionResult {
             // Pop out Ouinet internal HTTP headers.
             rq.erase(http_::request_sync_injection_hdr);
             rs.erase(http_::response_injection_id_hdr);
@@ -376,7 +377,7 @@ private:
 
         if (sync) {
             // Zlib-compress descriptor, Base64-encode and put in header.
-            auto desc_data = inject(yield);
+            auto desc_data = inject(yield).desc_data;
             auto compressed_desc = util::zlib_compress(move(desc_data));
             auto encoded_desc = util::base64_encode(move(compressed_desc));
             rs.set(http_::response_descriptor_hdr, move(encoded_desc));
