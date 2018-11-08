@@ -104,7 +104,8 @@ put_into_db( const std::string& key, const std::string& desc_data
         ins_data = db.insert(key, ipfs_prefix + desc_ipfs, yield[ec]);
     }
 
-    std::pair<std::string, std::string> ret(desc_ipfs, ins_data);
+    std::pair<std::string, std::string> ret
+        (std::move(desc_ipfs), std::move(ins_data));
     return or_throw(yield, ec, std::move(ret));
 }
 

@@ -91,7 +91,8 @@ CacheInjector::insert_content( const string& id
     if (!ec && *wd) ec = asio::error::operation_aborted;
 
     CacheInjector::InsertionResult ret
-        {key, desc, "/ipfs/" + cid_insdata.first, cid_insdata.second};
+        { move(key), move(desc)
+        , "/ipfs/" + cid_insdata.first, move(cid_insdata.second)};
     return or_throw(yield, ec, move(ret));
 }
 
