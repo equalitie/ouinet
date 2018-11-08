@@ -37,8 +37,6 @@ std::string dht::NodeContact::to_string() const
 dht::DhtNode::DhtNode(asio::io_service& ios, ip::address interface_address):
     _ios(ios),
     _interface_address(interface_address),
-    _tracker(std::make_unique<Tracker>(_ios)),
-    _data_store(std::make_unique<DataStore>(_ios)),
     _ready(false)
 {
 }
@@ -65,6 +63,8 @@ void dht::DhtNode::start(asio::yield_context yield)
     }
 
     _multiplexer = std::make_unique<UdpMultiplexer>(std::move(socket));
+    _tracker = std::make_unique<Tracker>(_ios);
+    _data_store = std::make_unique<DataStore>(_ios);
 
     _node_id = NodeID::zero();
     _next_transaction_id = 1;
@@ -89,6 +89,8 @@ void dht::DhtNode::start(asio::yield_context yield)
 void dht::DhtNode::stop()
 {
     _multiplexer = nullptr;
+    _tracker = nullptr;
+    _data_store = nullptr;
     _terminate_signal();
 }
 
