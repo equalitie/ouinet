@@ -36,6 +36,8 @@ static const std::string request_sync_injection_true = "true";
 // this header is added to the resulting response
 // with the Base64-encoded, Zlib-compressed content of the descriptor.
 static const std::string response_descriptor_hdr = header_prefix + "Descriptor";
+// Also, this is added with a link to descriptor storage.
+static const std::string response_descriptor_link_hdr = header_prefix + "Descriptor-Link";
 
 } // ouinet::http_ namespace
 
