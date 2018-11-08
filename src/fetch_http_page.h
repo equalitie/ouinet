@@ -9,6 +9,7 @@
 #include "util/signal.h"
 #include "util/timeout.h"
 #include "util/yield.h"
+#include "util/watch_dog.h"
 #include "util.h"
 #include "connect_to_host.h"
 #include "ssl/util.h"
@@ -138,42 +139,45 @@ maybe_perform_ssl_handshake( GenericStream&& con
     return move(con);
 }
 
-template<class RequestType>
-http::response<http::dynamic_body>
-fetch_http_page( asio::io_service& ios
-               , GenericStream& optcon
-               , asio::ssl::context& ssl_ctx
-               , RequestType req
-               , Signal<void()>& abort_signal
-               , Yield yield)
+// Transform request from absolute-form to origin-form
+// https://tools.ietf.org/html/rfc7230#section-5.3
+template<class Request>
+Request req_form_from_absolute_to_origin(const Request& absolute_req)
 {
-    using Response = http::response<http::dynamic_body>;
+    // Parse the URL to tell HTTP/HTTPS, host, port.
+    util::url_match url;
 
-    sys::error_code ec;
-    std::string host, port;
-    std::tie(host, port) = util::get_host_port(req);
-    auto lookup = util::tcp_async_resolve( host, port
-                                         , ios
-                                         , abort_signal
-                                         , yield[ec]);
-    if (ec) return or_throw<Response>(yield, ec);
+    auto absolute_target = absolute_req.target();
 
-    return fetch_http_page( ios, optcon, ssl_ctx
-                          , req, std::move(lookup)
-                          , abort_signal, yield);
+    if (!util::match_http_url(absolute_target, url)) {
+        assert(0 && "Failed to parse url");
+        return absolute_req;
+    }
+
+    Request origin_req(absolute_req);
+
+    origin_req.target(absolute_target.substr(
+                absolute_target.find( url.path
+                                    // Length of "http://" or "https://",
+                                    // do not fail on "http(s)://FOO/FOO".
+                                    , url.scheme.length() + 3)));
+
+    return origin_req;
 }
 
-template<class RequestType>
+template<class RequestType, class Duration>
 http::response<http::dynamic_body>
-fetch_http_page( asio::io_service& ios
-               , GenericStream& optcon
-               , asio::ssl::context& ssl_ctx
-               , RequestType req
-               , const asio::ip::tcp::resolver::results_type& lookup
-               , Signal<void()>& abort_signal
-               , Yield yield_)
+fetch_http_origin( asio::io_service& ios
+                 , asio::ssl::context& ssl_ctx
+                 , RequestType req
+                 , const asio::ip::tcp::resolver::results_type& lookup
+                 , Duration timeout
+                 , Signal<void()>& abort_signal
+                 , Yield yield)
 {
-    Yield yield = yield_.tag("fetch_http_page");
+    Cancel cancel;
+    auto cancel_slot = abort_signal.connect([&] { cancel(); });
+    WatchDog wdog(ios, timeout, [&] { cancel(); });
 
     using Response = http::response<http::dynamic_body>;
 
@@ -181,114 +185,33 @@ fetch_http_page( asio::io_service& ios
 
     // Parse the URL to tell HTTP/HTTPS, host, port.
     util::url_match url;
-    if (!util::match_http_url(req.target().to_string(), url)) {
+    if (!util::match_http_url(req.target(), url)) {
         ec = asio::error::operation_not_supported;  // unsupported URL
         return or_throw<Response>(yield, ec);
     }
 
-    GenericStream temp_con;
+    auto c_ = connect_to_host(lookup, ios, cancel, yield[ec]);
 
-    auto& con = [&] () -> GenericStream& {
-        if (optcon.has_implementation()) {
-            return optcon;
-        }
-        else {
-            auto c = connect_to_host( lookup
-                                    , ios
-                                    , abort_signal
-                                    , yield[ec]);
-
-            if (ec) {
-                yield.log("Failed in 'connect_to_host' ", ec.message());
-                return temp_con;
-            }
-
-            auto cc = maybe_perform_ssl_handshake( std::move(c)
-                                                 , ssl_ctx
-                                                 , url
-                                                 , req
-                                                 , abort_signal
-                                                 , yield[ec]);
-
-            if (ec) {
-                yield.log("Failed in ssl handshake: ", ec.message());
-                return temp_con;
-            }
-
-            RequestType origin_req(req);
-
-            // Now that we have a connection to the origin we can send a
-            // non-proxy request to it (i.e. with target "/foo..." and not
-            // "http://example.com/foo...").  Actually some web servers do not
-            // like the full form.
-            auto target = req.target();
-            origin_req.target(target.substr(target.find( url.path
-                                                       // Length of "http://" or "https://",
-                                                       // do not fail on "http(s)://FOO/FOO".
-                                                       , url.scheme.length() + 3)));
-            req = origin_req;
-
-            temp_con = std::move(cc);
-            return temp_con;
-        }
-    }();
-
-    if (ec) return or_throw<Response>(yield, ec);
-
-    auto ret = fetch_http<http::dynamic_body>( ios
-                                             , con
-                                             , req
-                                             , abort_signal
-                                             , yield[ec]);
-
-    if (!ec && !optcon.has_implementation()) {
-        optcon = std::move(temp_con);
+    if (ec) {
+        yield.log("Failed in 'connect_to_host' ", ec.message());
+        return or_throw<Response>(yield, ec);
     }
 
-    return or_throw(yield, ec, std::move(ret));
-}
+    auto cc = maybe_perform_ssl_handshake( std::move(c_)
+                                         , ssl_ctx
+                                         , url
+                                         , req
+                                         , cancel
+                                         , yield[ec]);
 
-template<class Duration, class RequestType>
-http::response<http::dynamic_body>
-fetch_http_page( asio::io_service& ios
-               , GenericStream& optcon
-               , asio::ssl::context& ssl_ctx
-               , RequestType req
-               , Duration timeout
-               , Signal<void()>& abort_signal
-               , Yield yield)
-{
-    return util::with_timeout
-        ( ios
-        , abort_signal
-        , timeout
-        , [&] (auto& abort_signal, auto yield) {
-              return fetch_http_page
-                (ios, optcon, ssl_ctx, req, abort_signal, yield);
-          }
-        , yield);
-}
+    if (ec) {
+        yield.log("Failed in ssl handshake: ", ec.message());
+        return or_throw<Response>(yield, ec);
+    }
 
-template<class Duration, class RequestType>
-http::response<http::dynamic_body>
-fetch_http_page( asio::io_service& ios
-               , GenericStream& optcon
-               , asio::ssl::context& ssl_ctx
-               , RequestType req
-               , const asio::ip::tcp::resolver::results_type& lookup
-               , Duration timeout
-               , Signal<void()>& abort_signal
-               , Yield yield)
-{
-    return util::with_timeout
-        ( ios
-        , abort_signal
-        , timeout
-        , [&] (auto& abort_signal, auto yield) {
-              return fetch_http_page
-                (ios, optcon, ssl_ctx, req, lookup, abort_signal, yield);
-          }
-        , yield);
+    req = req_form_from_absolute_to_origin(req);
+
+    return fetch_http<http::dynamic_body>(ios, cc, req, cancel, yield);
 }
 
 template<class RequestType>
@@ -316,23 +239,9 @@ fetch_http_origin( asio::io_service& ios
         return or_throw<Response>(yield, ec);
     }
 
-    auto target = req.target();
+    req = req_form_from_absolute_to_origin(req);
 
-    // Now that we have a connection to the origin
-    // we can send a non-proxy request to it
-    // (i.e. with target "/foo..." and not "http://example.com/foo...").
-    // Actually some web servers do not like the full form.
-    RequestType origin_req(req);
-    origin_req.target(target.substr(target.find( url.path
-                                               // Length of "http://" or "https://",
-                                               // do not fail on "http(s)://FOO/FOO".
-                                               , url.scheme.length() + 3)));
-
-    return fetch_http<http::dynamic_body>( ios
-                                         , con
-                                         , origin_req
-                                         , abort_signal
-                                         , yield);
+    return fetch_http<http::dynamic_body>(ios, con, req, abort_signal, yield);
 }
 
 template<class Duration, class RequestType>

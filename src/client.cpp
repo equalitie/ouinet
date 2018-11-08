@@ -16,7 +16,7 @@
 #include "cache/cache_client.h"
 
 #include "namespaces.h"
-#include "connection_pool.h"
+#include "origin_pools.h"
 #include "http_util.h"
 #include "fetch_http_page.h"
 #include "client_front_end.h"
@@ -129,6 +129,8 @@ private:
                         , Cancel& cancel
                         , Yield);
 
+    Response fetch_fresh_from_origin(const Request&, Cancel&, Yield);
+
     CacheControl build_cache_control(request_route::Config& request_config);
 
     void listen_tcp( asio::yield_context
@@ -163,6 +165,7 @@ private:
     // For debugging
     uint64_t _next_connection_id = 0;
     ConnectionPool<std::string> _injector_connections;
+    OriginPools _origin_pools;
 
     asio::ssl::context ssl_ctx;
     asio::ssl::context inj_ctx;
@@ -290,6 +293,70 @@ Client::State::fetch_stored( const Request& request
 }
 
 //------------------------------------------------------------------------------
+Response Client::State::fetch_fresh_from_origin( const Request& rq
+                                               , Cancel& cancel_
+                                               , Yield yield)
+{
+    Cancel cancel;
+    auto cancel_slot = cancel_.connect([&] { cancel(); });
+
+    WatchDog watch_dog(_ios
+                      , default_timeout::fetch_http()
+                      , [&] { cancel(); });
+
+    auto con = _origin_pools.get_connection(rq);
+
+    if (!con) {
+        std::string host, port;
+        std::tie(host, port) = util::get_host_port(rq);
+
+        sys::error_code ec;
+
+        auto lookup = util::tcp_async_resolve( host, port
+                                             , _ios
+                                             , cancel
+                                             , yield[ec]);
+
+        if (ec) return or_throw<Response>(yield, ec);
+
+        auto sock = connect_to_host(lookup, _ios, cancel, yield[ec]);
+
+        if (ec) return or_throw<Response>(yield, ec);
+
+        GenericStream stream;
+
+        if (rq.target().starts_with("https:")) {
+            stream = ssl::util::client_handshake( move(sock)
+                                                , ssl_ctx
+                                                , host
+                                                , cancel
+                                                , yield[ec]);
+
+            if (ec) return or_throw<Response>(yield, ec);
+        }
+        else {
+            stream = move(sock);
+        }
+
+        con.reset(new ConnectionPool<>::Connection(move(stream), boost::none));
+    }
+
+    sys::error_code ec;
+
+    // Transform request from absolute-form to origin-form
+    // https://tools.ietf.org/html/rfc7230#section-5.3
+    auto rq_ = req_form_from_absolute_to_origin(rq);
+
+    auto res = con->request(rq_, cancel, yield[ec]);
+
+    if (!ec && res.keep_alive()) {
+        _origin_pools.insert_connection(rq, move(con));
+    }
+
+    return or_throw(yield, ec, move(res));
+}
+
+//------------------------------------------------------------------------------
 Response Client::State::fetch_fresh
         ( const Request& request
         , request_route::Config& request_config
@@ -317,21 +384,11 @@ Response Client::State::fetch_fresh
                 if (!_front_end.is_origin_access_enabled()) {
                     continue;
                 }
+
                 sys::error_code ec;
-                Response res;
-
-                // TODO: Reuse this connection if "Connection: keep-alive"
-                // TODO: Cancel
-                GenericStream c;
-
-                // Send the request straight to the origin
-                res = fetch_http_page( _ios
-                                     , c
-                                     , ssl_ctx
-                                     , request
-                                     , default_timeout::fetch_http()
-                                     , cancel
-                                     , yield[ec].tag("fetch_origin"));
+                Response res = fetch_fresh_from_origin( request
+                                                      , cancel
+                                                      , yield[ec]);
 
                 if (ec) {
                     last_error = ec;
@@ -350,7 +407,7 @@ Response Client::State::fetch_fresh
                 if (target.starts_with("https://")) {
                     // Parse the URL to tell HTTP/HTTPS, host, port.
                     util::url_match url;
-                    if (!match_http_url(target.to_string(), url)) {
+                    if (!match_http_url(target, url)) {
                         last_error = asio::error::operation_not_supported;  // unsupported URL
                         continue;
                     }
