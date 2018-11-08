@@ -1,12 +1,18 @@
 #pragma once
 
 #include <boost/asio/spawn.hpp>
+#include <map>
 #include <string>
 #include "../util/signal.h"
 
 namespace ouinet {
 
 enum class DbType { btree, bep44 };
+
+static const std::map<DbType, std::string> DbName = {
+    {DbType::btree, "Btree"},
+    {DbType::bep44, "BEP44"}
+};
 
 class ClientDb {
 public:
