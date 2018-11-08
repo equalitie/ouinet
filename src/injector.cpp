@@ -30,7 +30,7 @@
 #include "authenticate.h"
 #include "force_exit_on_signal.h"
 #include "http_util.h"
-#include "connection_pool.h"
+#include "origin_pools.h"
 
 #include "ouiservice.h"
 #include "ouiservice/i2p.h"
@@ -58,19 +58,6 @@ using uuid_generator = boost::uuids::random_generator_mt19937;
 using Request     = http::request<http::string_body>;
 using Response    = http::response<http::dynamic_body>;
 using TCPLookup   = asio::ip::tcp::resolver::results_type;
-
-struct PoolId {
-    bool is_ssl;
-    string host;
-
-    bool operator<(const PoolId& other) const {
-        return tie(is_ssl, host) < tie(other.is_ssl, other.host);
-    }
-};
-
-using ConPool = ConnectionPool<>;
-using Connection = ConPool::Connection;
-using ConPools = map<PoolId, ConPool>;
 
 static const fs::path OUINET_PID_FILE = "pid";
 static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
@@ -177,14 +164,23 @@ TCPLookup
 resolve_target(const Request&, asio::io_service&, Cancel&, Yield yield);
 
 struct InjectorCacheControl {
+    using Connection = OriginPools::Connection;
+
 public:
     unique_ptr<Connection> connect( asio::io_service& ios
                                   , const Request& rq
-                                  , const util::url_match& url
                                   , Cancel& cancel
                                   , Yield yield)
     {
         using ConP = unique_ptr<Connection>;
+
+        // Parse the URL to tell HTTP/HTTPS, host, port.
+        util::url_match url;
+
+        if (!util::match_http_url(rq.target(), url)) {
+            return or_throw<ConP>( yield
+                                 , asio::error::operation_not_supported);
+        }
 
         sys::error_code ec;
 
@@ -222,7 +218,7 @@ public:
     // get a signal parameter
     InjectorCacheControl( asio::io_service& ios
                         , asio::ssl::context& ssl_ctx
-                        , ConPools& connection_pools
+                        , OriginPools& origin_pools
                         , const InjectorConfig& config
                         , unique_ptr<CacheInjector>& injector
                         , uuid_generator& genuuid
@@ -233,7 +229,7 @@ public:
         , config(config)
         , genuuid(genuuid)
         , cc(ios, "Ouinet Injector")
-        , connection_pools(connection_pools)
+        , origin_pools(origin_pools)
     {
         // The following operations take care of adding or removing
         // a custom Ouinet HTTP response header with the injection identifier
@@ -265,53 +261,30 @@ private:
     Response fetch_fresh(const Request& rq_, Cancel& cancel, Yield yield) {
         sys::error_code ec;
 
-        string host = rq_[http::field::host].to_string();
-        assert(!host.empty());
-
-        // Parse the URL to tell HTTP/HTTPS, host, port.
-        util::url_match url;
-
-        if (!util::match_http_url(rq_.target(), url)) {
-            return or_throw<Response>( yield
-                                     , asio::error::operation_not_supported);
-        }
-
-        bool is_ssl = url.scheme == "https";
-
-        PoolId pool_id{is_ssl, move(host)};
-
-        auto& pool = connection_pools[pool_id];
-
-        auto connection = pool.pop_front();
+        auto connection = origin_pools.get_connection(rq_);
 
         if (!connection) {
-            connection = connect(ios, rq_, url, cancel, yield[ec]);
+            connection = connect(ios, rq_, cancel, yield[ec]);
         }
+
+        if (ec) return or_throw<Response>(yield, ec);
 
         Request rq = erase_hop_by_hop_headers(rq_);
         rq.keep_alive(true);
 
-        Response ret;
+        Response ret = connection->request(rq, cancel, yield[ec]);
 
-        if (!ec) ret = connection->request(rq, cancel, yield[ec]);
+        if (ec) return or_throw<Response>(yield, ec);
+
         // Add an injection identifier header
         // to enable the client to track injection state.
-        if (!ec) ret.set(http_::response_injection_id_hdr, to_string(genuuid()));
+        ret.set(http_::response_injection_id_hdr, to_string(genuuid()));
 
-        if (!ec && ret.keep_alive() && rq_.keep_alive()) {
-            // Note: we can't use the `pool` ref from above because that
-            // pool may have been destroyed in the mean time.
-            connection_pools[pool_id].push_back(move(connection));
-        }
-        else {
-            auto pool_i = connection_pools.find(pool_id);
-
-            if (pool_i != connection_pools.end() && pool_i->second.empty()) {
-                connection_pools.erase(pool_i);
-            }
+        if (ret.keep_alive() && rq_.keep_alive()) {
+            origin_pools.insert_connection(rq_, move(connection));
         }
 
-        return or_throw(yield, ec, move(ret));
+        return ret;
     }
 
     CacheEntry
@@ -321,18 +294,21 @@ private:
             return or_throw<CacheEntry>( yield
                                        , asio::error::operation_not_supported);
 
-        // TODO: use string_view
         sys::error_code ec;
+
+        // TODO: use string_view
         auto ret = injector->get_content( rq.target().to_string()
                                         , config.default_db_type()
                                         , cancel
                                         , yield[ec]);
 
+        if (ec) return or_throw(yield, ec, move(ret.second));
+
         // Add an injection identifier header
         // to enable the client to track injection state.
-        if (!ec)
-            ret.second.response.set(http_::response_injection_id_hdr, ret.first);
-        return or_throw(yield, ec, move(ret.second));
+        ret.second.response.set(http_::response_injection_id_hdr, ret.first);
+
+        return move(ret.second);
     }
 
     Response store(Request rq, Response rs, Yield yield)
@@ -395,7 +371,7 @@ private:
     uuid_generator& genuuid;
     CacheControl cc;
     string last_host; // A host to which the below connection was established
-    ConPools& connection_pools;
+    OriginPools& origin_pools;
 };
 
 //------------------------------------------------------------------------------
@@ -484,7 +460,7 @@ void serve( InjectorConfig& config
           , GenericStream con
           , asio::ssl::context& ssl_ctx
           , unique_ptr<CacheInjector>& injector
-          , ConPools& connection_pools
+          , OriginPools& origin_pools
           , uuid_generator& genuuid
           , Cancel& cancel
           , asio::yield_context yield_)
@@ -495,7 +471,7 @@ void serve( InjectorConfig& config
 
     InjectorCacheControl cc( con.get_io_service()
                            , ssl_ctx
-                           , connection_pools
+                           , origin_pools
                            , config
                            , injector
                            , genuuid
@@ -617,7 +593,7 @@ void listen( InjectorConfig& config
 
     uint64_t next_connection_id = 0;
 
-    ConPools connection_pools;
+    OriginPools origin_pools;
 
     asio::ssl::context ssl_ctx{asio::ssl::context::tls_client};
     ssl_ctx.set_default_verify_paths();
@@ -643,7 +619,7 @@ void listen( InjectorConfig& config
             &cancel,
             &config,
             &genuuid,
-            &connection_pools,
+            &origin_pools,
             connection_id,
             lock = shutdown_connections.lock()
         ] (boost::asio::yield_context yield) mutable {
@@ -652,7 +628,7 @@ void listen( InjectorConfig& config
                  , std::move(connection)
                  , ssl_ctx
                  , cache_injector
-                 , connection_pools
+                 , origin_pools
                  , genuuid
                  , cancel
                  , yield);
