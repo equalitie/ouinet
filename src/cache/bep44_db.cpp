@@ -108,14 +108,15 @@ string Bep44InjectorDb::insert( string key
     _bt_dht.mutable_put_start(item, yield);
 
     // We follow the names used in the BEP44 document.
+    auto pk = item.public_key.serialize();
     return bt::bencoding_encode(bt::BencodedMap{
         // cas is not compulsory
         // id depends on the publishing node
-        { "k"   , "" /* TODO: item.public_key.serialize() */ },
+        { "k"   , string(begin(pk), end(pk)) },
         { "salt", item.salt },
         { "seq" , item.sequence_number },
         // token depends on the insertion
-        { "sig" , "" /* TODO: item.signature */ }
+        { "sig" , string(begin(item.signature), end(item.signature)) }
         // v is already known by the caller
     });
 }
