@@ -570,7 +570,7 @@ Hash Node::store(const AddOp& add_op, asio::yield_context yield)
             auto child_hash = e.child->store(add_op, yield[ec]);
 
             if (!ec && *d) ec = asio::error::operation_aborted;
-            if (ec) return or_throw<Json>(yield, ec);
+            if (ec) return or_throw<Hash>(yield, ec);
 
             e.child_hash = std::move(child_hash);
 
