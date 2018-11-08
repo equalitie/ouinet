@@ -23,7 +23,6 @@
 #include "generic_stream.h"
 #include "util.h"
 #include "async_sleep.h"
-#include "increase_open_file_limit.h"
 #include "endpoint.h"
 #include "cache_control.h"
 #include "or_throw.h"
@@ -381,7 +380,7 @@ Response Client::State::fetch_fresh
 
         switch (r) {
             case responder::origin: {
-                if (!_front_end.is_origin_access_enabled()) {
+                if (!_config.is_origin_access_enabled()) {
                     continue;
                 }
 
@@ -524,7 +523,7 @@ Response Client::State::fetch_fresh
             case responder::_front_end: {
                 sys::error_code ec;
 
-                auto res = _front_end.serve( _config.injector_endpoint()
+                auto res = _front_end.serve( _config
                                            , request
                                            , _cache.get()
                                            , *_ca_certificate
@@ -728,7 +727,7 @@ void Client::State::serve_request( GenericStream&& con
     // These access mechanisms are attempted in order for requests by default.
     const rr::Config default_request_config
         { true
-        , queue<responder>({responder::injector})};
+        , queue<responder>({responder::origin, responder::injector})};
 
     rr::Config request_config;
 
@@ -1130,7 +1129,7 @@ void Client::State::start(int argc, char* argv[])
 
                         if (ec) return;
 
-                        auto rs = _front_end.serve( _config.injector_endpoint()
+                        auto rs = _front_end.serve( _config
                                                   , rq
                                                   , _cache.get()
                                                   , *_ca_certificate

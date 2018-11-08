@@ -4,6 +4,7 @@
 #include "cache/btree.h"
 #include "util.h"
 #include "defer.h"
+#include "client_config.h"
 #include <boost/optional/optional_io.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/regex.hpp>
@@ -226,8 +227,8 @@ void ClientFrontEnd::handle_descriptor( const Request& req, Response& res, strin
         ss << "{\"error\": \"" << err << "\"}";
 }
 
-void ClientFrontEnd::handle_portal( const Request& req, Response& res, stringstream& ss
-                                  , const boost::optional<Endpoint>& injector_ep
+void ClientFrontEnd::handle_portal( ClientConfig& config
+                                  , const Request& req, Response& res, stringstream& ss
                                   , CacheClient* cache_client)
 {
     res.set(http::field::content_type, "text/html");
@@ -237,10 +238,10 @@ void ClientFrontEnd::handle_portal( const Request& req, Response& res, stringstr
     if (target.find('?') != string::npos) {
         // XXX: Extra primitive value parsing.
         if (target.find("?origin_access=enable") != string::npos) {
-            _origin_access_enabled = true;
+            config.is_origin_access_enabled(true);
         }
         else if (target.find("?origin_access=disable") != string::npos) {
-            _origin_access_enabled = false;
+            config.is_origin_access_enabled(false);
         }
         else if (target.find("?proxy_access=enable") != string::npos) {
             _proxy_access_enabled = true;
@@ -301,7 +302,7 @@ void ClientFrontEnd::handle_portal( const Request& req, Response& res, stringstr
           "      using system-accepted Certification Authorities.</p>\n";
 
     ss << ToggleInput{"Auto refresh",   "auto_refresh",   _auto_refresh_enabled};
-    ss << ToggleInput{"Origin access", "origin_access", _origin_access_enabled};
+    ss << ToggleInput{"Origin access", "origin_access", config.is_origin_access_enabled()};
     ss << ToggleInput{"Proxy access", "proxy_access", _proxy_access_enabled};
     ss << ToggleInput{"Injector proxy", "injector_proxy", _injector_proxying_enabled};
     ss << ToggleInput{"IPFS Cache",     "ipfs_cache",     _ipfs_cache_enabled};
@@ -314,7 +315,7 @@ void ClientFrontEnd::handle_portal( const Request& req, Response& res, stringstr
 
     ss << "<br>\n";
     ss << "Now: " << now_as_string()  << "<br>\n";
-    ss << "Injector endpoint: " << injector_ep << "<br>\n";
+    ss << "Injector endpoint: " << config.injector_endpoint() << "<br>\n";
 
     if (_show_pending_tasks) {
         ss << "        <h2>Pending tasks " << _pending_tasks.size() << "</h2>\n";
@@ -336,7 +337,7 @@ void ClientFrontEnd::handle_portal( const Request& req, Response& res, stringstr
           "</html>\n";
 }
 
-Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
+Response ClientFrontEnd::serve( ClientConfig& config
                               , const Request& req
                               , CacheClient* cache_client
                               , const CACertificate& ca
@@ -363,7 +364,7 @@ Response ClientFrontEnd::serve( const boost::optional<Endpoint>& injector_ep
         sys::error_code ec_;  // shouldn't throw, but just in case
         handle_descriptor(req, res, ss, cache_client, yield[ec_]);
     } else {
-        handle_portal(req, res, ss, injector_ep, cache_client);
+        handle_portal(config, req, res, ss, cache_client);
     }
 
     Response::body_type::reader reader(res, res.body());

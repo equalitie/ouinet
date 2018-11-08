@@ -14,6 +14,7 @@ namespace ouinet { class CacheClient; }
 namespace ouinet {
 
 class GenericStream;
+class ClientConfig;
 
 class ClientFrontEnd {
     using Clock = std::chrono::steady_clock;
@@ -48,15 +49,10 @@ public:
     };
 
 public:
-    Response serve( const boost::optional<Endpoint>& injector_ep
+    Response serve( ClientConfig&
                   , const http::request<http::string_body>&
                   , CacheClient*, const CACertificate&
                   , asio::yield_context yield);
-
-    bool is_origin_access_enabled() const
-    {
-        return _origin_access_enabled;
-    }
 
     bool is_proxy_access_enabled() const
     {
@@ -82,7 +78,6 @@ public:
 
 private:
     bool _auto_refresh_enabled = true;
-    bool _origin_access_enabled = false;
     bool _proxy_access_enabled = true;
     bool _injector_proxying_enabled = true;
     bool _ipfs_cache_enabled = true;
@@ -105,8 +100,11 @@ private:
     void handle_enumerate_db(const Request&, Response&, std::stringstream&
                             , CacheClient*, asio::yield_context);
 
-    void handle_portal( const Request&, Response&, std::stringstream&
-                      , const boost::optional<Endpoint>&, CacheClient*);
+    void handle_portal( ClientConfig&
+                      , const Request&
+                      , Response&
+                      , std::stringstream&
+                      , CacheClient*);
 };
 
 } // ouinet namespace

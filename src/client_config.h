@@ -7,6 +7,7 @@
 #include "util.h"
 #include "util/crypto.h"
 #include "cache/db.h"
+#include "increase_open_file_limit.h"
 
 namespace ouinet {
 
@@ -95,6 +96,8 @@ public:
             , "IPNS of the injector's database")
            ("enable-injector-tls", po::bool_switch(&_enable_injector_tls)
             , "Enable TLS for injector TCP endpoint")
+           ("disable-origin-access", po::bool_switch(&_disable_origin_access)->default_value(false)
+            , "Disable direct access to the origin (forces use of injector and the cache)")
            ("max-cached-age"
             , po::value<int>()->default_value(_max_cached_age.total_seconds())
             , "Discard cached content older than this many seconds "
@@ -125,6 +128,9 @@ public:
 
     bool cache_enabled() const { return !_disable_cache; }
 
+    bool is_origin_access_enabled() const { return !_disable_origin_access; }
+    void is_origin_access_enabled(bool v) { _disable_origin_access = !v; }
+
 private:
     bool _is_help = false;
     fs::path _repo_root;
@@ -134,6 +140,7 @@ private:
     bool _enable_injector_tls = false;
     std::string _ipns;
     bool _enable_http_connect_requests = false;
+    bool _disable_origin_access = false;
     asio::ip::tcp::endpoint _front_end_endpoint;
     DbType _default_db_type = DbType::btree;
 
