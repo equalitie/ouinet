@@ -87,7 +87,47 @@ void handle_bad_request( GenericStream& con
 }
 
 //------------------------------------------------------------------------------
-static TCPLookup resolve_target(const Request&, asio::io_service&, Cancel&, Yield);
+// Resolve request target address, check whether it is valid
+// and return lookup results.
+// If not valid, set error code
+// (the returned lookup may not be usable then).
+static
+TCPLookup
+resolve_target( const Request& req
+              , asio::io_service& ios
+              , Cancel& cancel
+              , Yield yield)
+{
+    TCPLookup lookup;
+    sys::error_code ec;
+
+    string host, port;
+    tie(host, port) = util::get_host_port(req);
+
+    // First test trivial cases (like "localhost" or "127.1.2.3").
+    bool local = util::is_localhost(host);
+
+    // Resolve address and also use result for more sophisticaded checking.
+    if (!local)
+        lookup = util::tcp_async_resolve( host, port
+                                        , ios
+                                        , cancel
+                                        , yield[ec]);
+
+    if (ec) return or_throw<TCPLookup>(yield, ec);
+
+    // Test non-trivial cases (like "[0::1]" or FQDNs pointing to loopback).
+    for (auto r : lookup)
+        if ((local = util::is_localhost(r.endpoint().address().to_string())))
+            break;
+
+    if (local) {
+        ec = asio::error::invalid_argument;
+        return or_throw<TCPLookup>(yield, ec);
+    }
+
+    return or_throw(yield, ec, move(lookup));
+}
 
 //------------------------------------------------------------------------------
 // Note: the connection is attempted towards
@@ -396,50 +436,6 @@ private:
     string last_host; // A host to which the below connection was established
     OriginPools& origin_pools;
 };
-
-//------------------------------------------------------------------------------
-// Resolve request target address, check whether it is valid
-// and return lookup results.
-// If not valid, set error code
-// (the returned lookup may not be usable then).
-static
-TCPLookup
-resolve_target( const Request& req
-              , asio::io_service& ios
-              , Cancel& cancel
-              , Yield yield)
-{
-    TCPLookup lookup;
-    sys::error_code ec;
-
-    string host, port;
-    tie(host, port) = util::get_host_port(req);
-
-    // First test trivial cases (like "localhost" or "127.1.2.3").
-    bool local = util::is_localhost(host);
-
-    // Resolve address and also use result for more sophisticaded checking.
-    if (!local)
-        lookup = util::tcp_async_resolve( host, port
-                                        , ios
-                                        , cancel
-                                        , yield[ec]);
-    if (ec) {
-        return or_throw<TCPLookup>(yield, ec);
-    }
-
-    // Test non-trivial cases (like "[0::1]" or FQDNs pointing to loopback).
-    for (auto r : lookup)
-        if ((local = util::is_localhost(r.endpoint().address().to_string())))
-            break;
-
-    if (local) {
-        ec = asio::error::invalid_argument;
-        return or_throw<TCPLookup>(yield, ec);
-    }
-
-    return or_throw(yield, ec, move(lookup));
-}
 
 //------------------------------------------------------------------------------
 static
