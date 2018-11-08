@@ -257,7 +257,6 @@ public:
         return cc.fetch(rq, yield);
     }
 
-private:
     Response fetch_fresh(const Request& rq_, Cancel& cancel, Yield yield) {
         sys::error_code ec;
 
@@ -289,6 +288,7 @@ private:
         return ret;
     }
 
+private:
     CacheEntry
     fetch_stored(const Request& rq, Cancel& cancel, asio::yield_context yield)
     {
@@ -499,7 +499,9 @@ void serve( InjectorConfig& config
         }
 
         TCPLookup lookup;
+
         bool proxy = (req.find(http_::request_version_hdr) == req.end());
+
         if (proxy || req.method() == http::verb::connect) {
             // Resolve target endpoint and check its validity.
             lookup = resolve_target( req, con, cancel
@@ -523,14 +525,8 @@ void serve( InjectorConfig& config
             // TODO: Maybe reject requests for HTTPS URLS:
             // we are perfectly able to handle them (and do verification locally),
             // but the client should be using a CONNECT request instead!
-            // TODO: Reuse the connection
-            res = fetch_http_origin( con.get_io_service()
-                                   , ssl_ctx
-                                   , erase_hop_by_hop_headers(req)
-                                   , lookup
-                                   , default_timeout::fetch_http()
-                                   , cancel
-                                   , yield[ec].tag("fetch_http_page"));
+            // TODO: Reuse lookup
+            res = cc.fetch_fresh(req, cancel, yield[ec].tag("fetch_http_page"));
         } else {
             // Ouinet header found, behave like a Ouinet injector.
             auto req2 = req;
