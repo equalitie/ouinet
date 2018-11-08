@@ -87,12 +87,16 @@ void handle_bad_request( GenericStream& con
 }
 
 //------------------------------------------------------------------------------
+static TCPLookup resolve_target(const Request&, asio::io_service&, Cancel&, Yield);
+static TCPLookup resolve_target(const Request&, GenericStream&, Cancel&, Yield);
+
+//------------------------------------------------------------------------------
 // Note: the connection is attempted towards
 // the already resolved endpoints in `lookup`,
 // only headers are used from `req`.
 static
 void handle_connect_request( GenericStream client_c
-                           , const Request& req, const TCPLookup& lookup
+                           , const Request& req
                            , Cancel& cancel
                            , Yield yield)
 {
@@ -103,6 +107,10 @@ void handle_connect_request( GenericStream client_c
     auto disconnect_client_slot = cancel.connect([&client_c] {
         client_c.close();
     });
+
+    TCPLookup lookup = resolve_target(req, client_c, cancel, yield[ec]);
+
+    if (ec) return or_throw(yield, ec);
 
     // Restrict connections to well-known ports.
     auto port = lookup.begin()->endpoint().port();  // all entries use same port
@@ -159,10 +167,6 @@ static Request erase_hop_by_hop_headers(Request rq) {
 }
 
 //------------------------------------------------------------------------------
-static
-TCPLookup
-resolve_target(const Request&, asio::io_service&, Cancel&, Yield yield);
-
 struct InjectorCacheControl {
     using Connection = OriginPools::Connection;
 
@@ -185,7 +189,7 @@ public:
         sys::error_code ec;
 
         // Resolve target endpoint and check its validity.
-        TCPLookup lookup(resolve_target(rq, ios, cancel, yield[ec]));
+        TCPLookup lookup = resolve_target(rq, ios, cancel, yield[ec]);
 
         if (ec) return or_throw<ConP>(yield, ec);
 
@@ -409,6 +413,7 @@ resolve_target( const Request& req
 
     handle_bad_request( con, req, err
                       , yield[ec].tag("handle_bad_request"));
+
     return or_throw<TCPLookup>(yield, ec);
 }
 
@@ -498,26 +503,17 @@ void serve( InjectorConfig& config
             continue;
         }
 
-        TCPLookup lookup;
-
-        bool proxy = (req.find(http_::request_version_hdr) == req.end());
-
-        if (proxy || req.method() == http::verb::connect) {
-            // Resolve target endpoint and check its validity.
-            lookup = resolve_target( req, con, cancel
-                                   , yield[ec]);
-            if (ec) continue;  // error message already sent to `con`
-        }
-
         if (req.method() == http::verb::connect) {
             return handle_connect_request( move(con)
-                                         , req, lookup
+                                         , req
                                          , cancel
                                          , yield.tag("handle_connect"));
         }
 
         // Check for a Ouinet version header hinting us on
         // whether to behave like an injector or a proxy.
+        bool proxy = (req.find(http_::request_version_hdr) == req.end());
+
         Response res;
 
         if (proxy) {
@@ -525,7 +521,6 @@ void serve( InjectorConfig& config
             // TODO: Maybe reject requests for HTTPS URLS:
             // we are perfectly able to handle them (and do verification locally),
             // but the client should be using a CONNECT request instead!
-            // TODO: Reuse lookup
             res = cc.fetch_fresh(req, cancel, yield[ec].tag("fetch_http_page"));
         } else {
             // Ouinet header found, behave like a Ouinet injector.
@@ -541,7 +536,6 @@ void serve( InjectorConfig& config
                               , yield[ec].tag("handle_bad_request"));
             continue;
         }
-
 
         yield.log("=== Sending back response ===");
         yield.log(res.base());
