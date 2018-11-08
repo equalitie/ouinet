@@ -269,7 +269,9 @@ private:
 
         if (ec) return or_throw<Response>(yield, ec);
 
-        Request rq = erase_hop_by_hop_headers(rq_);
+        Request rq = req_form_from_absolute_to_origin(
+                        erase_hop_by_hop_headers(rq_));
+
         rq.keep_alive(true);
 
         Response ret = connection->request(rq, cancel, yield[ec]);
@@ -515,7 +517,7 @@ void serve( InjectorConfig& config
         // Check for a Ouinet version header hinting us on
         // whether to behave like an injector or a proxy.
         Response res;
-        auto req2(req);
+
         if (proxy) {
             // No Ouinet header, behave like a (non-caching) proxy.
             // TODO: Maybe reject requests for HTTPS URLS:
@@ -524,17 +526,19 @@ void serve( InjectorConfig& config
             // TODO: Reuse the connection
             res = fetch_http_origin( con.get_io_service()
                                    , ssl_ctx
-                                   , erase_hop_by_hop_headers(move(req2))
+                                   , erase_hop_by_hop_headers(req)
                                    , lookup
                                    , default_timeout::fetch_http()
                                    , cancel
                                    , yield[ec].tag("fetch_http_page"));
         } else {
             // Ouinet header found, behave like a Ouinet injector.
+            auto req2 = req;
             req2.erase(http_::request_version_hdr);  // do not propagate or cache the header
             res = cc.fetch(req2, yield[ec].tag("cache_control.fetch"));
             res.keep_alive(true);
         }
+
         if (ec) {
             handle_bad_request( con, req
                               , "Failed to retrieve content from origin: " + ec.message()
