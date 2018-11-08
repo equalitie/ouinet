@@ -88,7 +88,6 @@ void handle_bad_request( GenericStream& con
 
 //------------------------------------------------------------------------------
 static TCPLookup resolve_target(const Request&, asio::io_service&, Cancel&, Yield);
-static TCPLookup resolve_target(const Request&, GenericStream&, Cancel&, Yield);
 
 //------------------------------------------------------------------------------
 // Note: the connection is attempted towards
@@ -108,9 +107,27 @@ void handle_connect_request( GenericStream client_c
         client_c.close();
     });
 
-    TCPLookup lookup = resolve_target(req, client_c, cancel, yield[ec]);
+    TCPLookup lookup = resolve_target(req, ios, cancel, yield[ec]);
 
-    if (ec) return or_throw(yield, ec);
+    if (ec) {
+        // Prepare and send error message to `con`.
+        string host, err;
+        tie(host, ignore) = util::get_host_port(req);
+
+        if (ec == asio::error::netdb_errors::host_not_found)
+            err = "Could not resolve host: " + host;
+        else if (ec == asio::error::invalid_argument)
+            err = "Illegal target host: " + host;
+        else
+            err = "Unknown resolver error: " + ec.message();
+
+        handle_bad_request( client_c, req, err
+                          , yield[ec].tag("handle_bad_request"));
+
+        return;
+    }
+
+    assert(!lookup.empty());
 
     // Restrict connections to well-known ports.
     auto port = lookup.begin()->endpoint().port();  // all entries use same port
@@ -381,42 +398,6 @@ private:
 };
 
 //------------------------------------------------------------------------------
-// Resolve request target address, check whether it is valid
-// and return lookup results.
-// If not valid, set error code and send an error message over `con`
-// (the returned lookup may not be usable then).
-static
-TCPLookup
-resolve_target( const Request& req
-              , GenericStream& con
-              , Cancel& cancel
-              , Yield yield)
-{
-    sys::error_code ec;
-    auto lookup = resolve_target( req
-                                , con.get_io_service()
-                                , cancel
-                                , yield[ec]);
-    if (!ec)
-        return lookup;
-
-    // Prepare and send error message to `con`.
-    string host, err;
-    tie(host, ignore) = util::get_host_port(req);
-
-    if (ec == asio::error::netdb_errors::host_not_found)
-        err = "Could not resolve host: " + host;
-    else if (ec == asio::error::invalid_argument)
-        err = "Illegal target host: " + host;
-    else
-        err = "Unknown resolver error: " + ec.message();
-
-    handle_bad_request( con, req, err
-                      , yield[ec].tag("handle_bad_request"));
-
-    return or_throw<TCPLookup>(yield, ec);
-}
-
 // Resolve request target address, check whether it is valid
 // and return lookup results.
 // If not valid, set error code
