@@ -108,7 +108,7 @@ std::set<tcp::endpoint> dht::DhtNode::tracker_get_peers(
     std::set<tcp::endpoint> peers;
     std::map<NodeID, TrackerNode> responsible_nodes;
     tracker_do_search_peers(infohash, peers, responsible_nodes, yield[ec], cancel_signal);
-    return or_throw<std::set<tcp::endpoint>>(yield, ec, std::move(peers));
+    return or_throw(yield, ec, std::move(peers));
 }
 
 std::set<tcp::endpoint> dht::DhtNode::tracker_announce(
@@ -628,7 +628,7 @@ void dht::DhtNode::send_datagram(
 #   if DEBUG_SHOW_MESSAGES
     std::cerr << "send: " << destination << " " << message << std::endl;
 #   endif
-    _multiplexer->send(std::move(bencoding_encode(message)), destination);
+    _multiplexer->send(bencoding_encode(message), destination);
 }
 
 void dht::DhtNode::send_datagram(
@@ -640,7 +640,7 @@ void dht::DhtNode::send_datagram(
 #   if DEBUG_SHOW_MESSAGES
     std::cerr << "send: " << destination << " " << message << std::endl;
 #   endif
-    _multiplexer->send(std::move(bencoding_encode(message)), destination, yield, cancel_signal);
+    _multiplexer->send(bencoding_encode(message), destination, yield, cancel_signal);
 }
 
 void dht::DhtNode::send_query(
