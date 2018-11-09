@@ -7,6 +7,7 @@
 #include "client_config.h"
 #include <boost/optional/optional_io.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include <boost/format.hpp>
 #include <boost/regex.hpp>
 #include <network/uri.hpp>
 #include <json.hpp>
@@ -115,13 +116,32 @@ void ClientFrontEnd::handle_upload( const Request& req, Response& res, stringstr
         ss << "{\"error\": \"" << err << "\"}";
 }
 
-static bool percent_decode(const string in, string& out) {
+static bool percent_decode(const string& in, string& out) {
     try {
         network::uri::decode(begin(in), end(in), back_inserter(out));
     } catch (const network::percent_decoding_error&) {
         return false;
     }
     return true;
+}
+
+static string percent_encode_all(const string& in) {
+    // The URI library interface for doing this is really cumbersome
+    // and we do not need a minimal or canonical encoding,
+    // just something to allow passing the URI as a query argument
+    // and avoid HTML inlining issues.
+    // So we just encode everything but unreserved characters.
+    stringstream outss;
+    for (auto c : in)
+        // Taken from <https://en.wikipedia.org/wiki/Percent-encoding#Types_of_URI_characters>.
+        if ( (('0' <= c) && (c <= '9'))
+             || (('A' <= c) && (c <= 'Z'))
+             || (('a' <= c) && (c <= 'z'))
+             || (c == '-') || (c == '_') || (c == '.') || (c == '~') )
+            outss << c;
+        else
+            outss << boost::format("%%%02X") % static_cast<int>(c);
+    return outss.str();
 }
 
 void ClientFrontEnd::handle_enumerate_db( const Request& req
@@ -163,7 +183,7 @@ void ClientFrontEnd::handle_enumerate_db( const Request& req
     }
 
     while (!iter.is_end()) {
-        ss << "<a href=\"ipfs.io/ipfs/" << iter.value() << "\">"
+        ss << "<a href=\"/api/descriptor?uri=" << percent_encode_all(iter.key()) << "\">"
            << iter.key() << "</a><br/>\n";
 
         iter.advance(cancel, yield[ec]);
