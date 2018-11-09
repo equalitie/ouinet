@@ -383,10 +383,12 @@ private:
             rs.set(http_::response_descriptor_hdr, move(encoded_desc));
             // Add descriptor storage link as is.
             rs.set(http_::response_descriptor_link_hdr, move(ins.desc_link));
-            // Add Base64-encoded reinsertion data.
-            auto encoded_insd = util::base64_encode(move(ins.db_ins_data));
-            rs.set( http_::response_insert_hdr_pfx + DbName.at(db_type)
-                  , move(encoded_insd));
+            // Add Base64-encoded reinsertion data (if any).
+            if (ins.db_ins_data.length() > 0): {
+                auto encoded_insd = util::base64_encode(move(ins.db_ins_data));
+                rs.set( http_::response_insert_hdr_pfx + DbName.at(db_type)
+                      , move(encoded_insd));
+            }
         } else {
             asio::spawn(asio::yield_context(yield), inject);
         }
