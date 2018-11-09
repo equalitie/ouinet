@@ -433,7 +433,6 @@ private:
     const InjectorConfig& config;
     uuid_generator& genuuid;
     CacheControl cc;
-    string last_host; // A host to which the below connection was established
     OriginPools& origin_pools;
 };
 
@@ -468,9 +467,9 @@ void serve( InjectorConfig& config
         beast::flat_buffer buffer;
         http::async_read(con, buffer, req, yield_[ec]);
 
-        Yield yield(con.get_io_service(), yield_, util::str('C', connection_id));
-
         if (ec) break;
+
+        Yield yield(con.get_io_service(), yield_, util::str('C', connection_id));
 
         yield.log("=== New request ===");
         yield.log(req.base());
@@ -498,7 +497,7 @@ void serve( InjectorConfig& config
             // TODO: Maybe reject requests for HTTPS URLS:
             // we are perfectly able to handle them (and do verification locally),
             // but the client should be using a CONNECT request instead!
-            res = cc.fetch_fresh(req, cancel, yield[ec].tag("fetch_http_page"));
+            res = cc.fetch_fresh(req, cancel, yield[ec].tag("fetch_proxy"));
         } else {
             // Ouinet header found, behave like a Ouinet injector.
             auto req2 = req;
@@ -645,6 +644,7 @@ int main(int argc, const char* argv[])
     Cancel cancel;
 
     unique_ptr<CacheInjector> cache_injector;
+    boost::optional<Cancel::Connection> shutdown_ipfs_slot;
 
     if (config.cache_enabled()) {
         cache_injector = make_unique<CacheInjector>
@@ -652,7 +652,7 @@ int main(int argc, const char* argv[])
                                 , config.bt_private_key()
                                 , config.repo_root());
 
-        auto shutdown_ipfs_slot = cancel.connect([&] {
+        shutdown_ipfs_slot = cancel.connect([&] {
             cache_injector = nullptr;
         });
 
