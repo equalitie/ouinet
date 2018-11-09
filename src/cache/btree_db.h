@@ -62,7 +62,8 @@ public:
                     , Cancel&
                     , asio::yield_context) override;
 
-    void insert(std::string key, std::string value, asio::yield_context) override;
+    std::string insert( std::string key, std::string value
+                      , asio::yield_context) override;
 
     boost::asio::io_service& get_io_service();
 

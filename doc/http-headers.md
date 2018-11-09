@@ -17,8 +17,18 @@ published content along with the information that allows its reseeding.
 This behaviour is enabled by the user program adding the `X-Ouinet-Sync: true`
 header to the HTTP request.  If (and only if) the request causes a new
 injection, the HTTP response will contain an `X-Ouinet-Descriptor` header with
-the zlib-compressed, Base64-encoded descriptor.  Here is a request/response
-example:
+the zlib-compressed, Base64-encoded descriptor, as well as an
+`X-Ouinet-Descriptor-Link` header pointing to a distributed storage address
+where the descriptor can be retrieved from (currently an IPFS address).
+
+If the data base allows autonomous reinsertion of descriptors, an
+`X-Ouinet-Insert-<DB>` header is added with Base64-encoded data base-specific
+information to help reinsert.  If the data base supports storing the
+descriptor inline, the value of `X-Ouinet-Descriptor` should be used for
+reinsertion, otherwise the value of `X-Ouinet-Descriptor-Link` is used.
+
+Here is a request/response example with synchronous injection enabled on a
+BEP44 data base (which supports autonomous reinsertion):
 
     GET https://example.com/foo HTTP/1.1
     Host: example.com
@@ -32,6 +42,8 @@ example:
     Content-Disposition inline; filename="foo.html"
     Content-Length: 38
     X-Ouinet-Descriptor: <BASE64(ZLIB(DESCRIPTOR))>
+    X-Ouinet-Descriptor-Link: /ipfs/Qm…
+    X-Ouinet-Insertion-BEP44: <BASE64(BEP44_INSERTION_DATA))>
 
     <!DOCTYPE html>\n<p>Tiny body here!</p>
 

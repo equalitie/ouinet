@@ -387,11 +387,12 @@ private:
         assert(!id.empty());
 
         // This injection code logs errors but does not propagate them.
+        auto db_type = config.default_db_type();
         auto inject = [
-            rq, rs, id,
-            injector = injector.get(),
-            db_type = config.default_db_type()
-        ] (boost::asio::yield_context yield) mutable -> string {
+            rq, rs, id, db_type,
+            injector = injector.get()
+        ] (boost::asio::yield_context yield) mutable
+          -> CacheInjector::InsertionResult {
             // Pop out Ouinet internal HTTP headers.
             rq.erase(http_::request_sync_injection_hdr);
             rs.erase(http_::response_injection_id_hdr);
@@ -414,11 +415,19 @@ private:
                   , rq.target(), " ", id);
 
         if (sync) {
+            auto ins = inject(yield);
             // Zlib-compress descriptor, Base64-encode and put in header.
-            auto desc_data = inject(yield);
-            auto compressed_desc = util::zlib_compress(move(desc_data));
+            auto compressed_desc = util::zlib_compress(move(ins.desc_data));
             auto encoded_desc = util::base64_encode(move(compressed_desc));
             rs.set(http_::response_descriptor_hdr, move(encoded_desc));
+            // Add descriptor storage link as is.
+            rs.set(http_::response_descriptor_link_hdr, move(ins.desc_link));
+            // Add Base64-encoded reinsertion data (if any).
+            if (ins.db_ins_data.length() > 0) {
+                auto encoded_insd = util::base64_encode(move(ins.db_ins_data));
+                rs.set( http_::response_insert_hdr_pfx + DbName.at(db_type)
+                      , move(encoded_insd));
+            }
         } else {
             asio::spawn(asio::yield_context(yield), inject);
         }

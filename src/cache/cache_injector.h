@@ -30,6 +30,14 @@ public:
     using Request  = http::request<http::string_body>;
     using Response = http::response<http::dynamic_body>;
 
+    // Assorted data resulting from an insertion.
+    struct InsertionResult {
+        std::string key;  // key to look up descriptor
+        std::string desc_data;  // serialized descriptor
+        std::string desc_link;  // descriptor storage link
+        std::string db_ins_data;  // db-specific data to help reinsert
+    };
+
 public:
     CacheInjector( boost::asio::io_service&
                  , util::Ed25519PrivateKey bt_privkey
@@ -45,12 +53,11 @@ public:
 
     // Insert a descriptor with the given `id` for the given request and response
     // into the db given by `DbType`, along with data in distributed storage.
-    // On success, the function returns the file descriptor.
-    std::string insert_content( const std::string& id
-                              , const Request&
-                              , const Response&
-                              , DbType
-                              , boost::asio::yield_context);
+    InsertionResult insert_content( const std::string& id
+                                  , const Request&
+                                  , const Response&
+                                  , DbType
+                                  , boost::asio::yield_context);
 
     // Find the content previously stored by the injector under `url`.
     // The descriptor identifier and cached content are returned.

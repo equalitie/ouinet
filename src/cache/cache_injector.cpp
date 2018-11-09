@@ -49,11 +49,12 @@ InjectorDb* CacheInjector::get_db(DbType db_type) const
     return nullptr;
 }
 
-string CacheInjector::insert_content( const string& id
-                                    , const Request& rq
-                                    , const Response& rs
-                                    , DbType db_type
-                                    , asio::yield_context yield)
+CacheInjector::InsertionResult
+CacheInjector::insert_content( const string& id
+                             , const Request& rq
+                             , const Response& rs
+                             , DbType db_type
+                             , asio::yield_context yield)
 {
     auto wd = _was_destroyed;
 
@@ -80,14 +81,19 @@ string CacheInjector::insert_content( const string& id
                                        , ipfs_add
                                        , yield[ec]);
     if (!ec && *wd) ec = asio::error::operation_aborted;
-    if (ec) return or_throw<string>(yield, ec);
+    if (ec) return or_throw<CacheInjector::InsertionResult>(yield, ec);
 
     // Store descriptor
+    auto key = rq.target().to_string();  // TODO: canonical
     auto db = get_db(db_type);
-    descriptor::put_into_db( rq.target().to_string(), desc
-                           , *db, ipfs_add, yield[ec]);
+    auto cid_insdata = descriptor::put_into_db
+        (key, desc, *db, ipfs_add, yield[ec]);
     if (!ec && *wd) ec = asio::error::operation_aborted;
-    return or_throw(yield, ec, move(desc));
+
+    CacheInjector::InsertionResult ret
+        { move(key), move(desc)
+        , "/ipfs/" + cid_insdata.first, move(cid_insdata.second)};
+    return or_throw(yield, ec, move(ret));
 }
 
 string CacheInjector::get_descriptor( string url

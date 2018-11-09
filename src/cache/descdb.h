@@ -76,30 +76,37 @@ std::string get_from_db( const std::string& key
 // Add an entry for the serialized descriptor `desc_data`
 // in the given `db` under the given `key`.
 // The descriptor is to be saved in the given stores (`ipfs_store`).
+//
+// Returns the result of `ipfs_store` and
+// db-specific data to help reinsert the key->descriptor mapping.
 template <class StoreFunc>
 inline
-void put_into_db( const std::string& key, const std::string& desc_data
-                , InjectorDb& db
-                , StoreFunc ipfs_store
-                , asio::yield_context yield)
+std::pair<std::string, std::string>
+put_into_db( const std::string& key, const std::string& desc_data
+           , InjectorDb& db
+           , StoreFunc ipfs_store
+           , asio::yield_context yield)
 {
+    using namespace std;
     sys::error_code ec;
 
     // Always store the descriptor itself in IPFS.
-    auto desc_ipfs = ipfs_store(desc_data, yield[ec]);
+    string desc_ipfs = ipfs_store(desc_data, yield[ec]);
 
+    string ins_data;
     // Insert descriptor inline (if possible).
     bool can_inline = db_can_inline(db);
     if (!ec && can_inline) {
         auto compressed_desc = util::zlib_compress(desc_data);
-        db.insert(key, zlib_prefix + compressed_desc, yield[ec]);
+        ins_data = db.insert(key, zlib_prefix + compressed_desc, yield[ec]);
     }
     // Insert IPFS link to descriptor.
     if (!can_inline || ec == asio::error::message_size) {
-        db.insert(key, ipfs_prefix + desc_ipfs, yield[ec]);
+        ins_data = db.insert(key, ipfs_prefix + desc_ipfs, yield[ec]);
     }
 
-    return or_throw(yield, ec);
+    pair<string, string> ret(move(desc_ipfs), move(ins_data));
+    return or_throw(yield, ec, move(ret));
 }
 
 } // namespace descriptor
