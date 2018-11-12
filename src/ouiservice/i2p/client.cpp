@@ -28,21 +28,27 @@ void Client::start(asio::yield_context yield)
   sys::error_code ec;
 
   do {
-    std::unique_ptr<i2p::client::I2PClientTunnel> i2p_client_tunnel = std::make_unique<i2p::client::I2PClientTunnel>("i2p_oui_client", _target_id, "127.0.0.1", 0, nullptr);
-    _client_tunnel = std::make_unique<Tunnel>(_ios, std::move(i2p_client_tunnel), _timeout);
+      do {
+          std::unique_ptr<i2p::client::I2PClientTunnel> i2p_client_tunnel = std::make_unique<i2p::client::I2PClientTunnel>("i2p_oui_client", _target_id, "127.0.0.1", 0, nullptr);
+          _client_tunnel = std::make_unique<Tunnel>(_ios, std::move(i2p_client_tunnel), _timeout);
 
-    _client_tunnel->wait_to_get_ready(yield[ec]);
-  } while(_client_tunnel->has_timed_out());
+          _client_tunnel->wait_to_get_ready(yield[ec]);
+    
+      } while(_client_tunnel->has_timed_out());
 
-    if (!ec && !_client_tunnel) ec = asio::error::operation_aborted;
-    if (ec) return or_throw(yield, ec);
+      if (!ec && !_client_tunnel) ec = asio::error::operation_aborted;
+      if (ec) return or_throw(yield, ec);
 
-  //The client_tunnel can't return its port becaues it doesn't know
-  //that it is a client i2p tunnel, all it knows is that it is an
-  //i2ptunnel holding some connections but doesn't know how connections
-  //are created.
-  _port = dynamic_cast<i2p::client::I2PClientTunnel*>(_client_tunnel->_i2p_tunnel.get())->GetLocalEndpoint().port();
-  
+      //The client_tunnel can't return its port becaues it doesn't know
+      //that it is a client i2p tunnel, all it knows is that it is an
+      //i2ptunnel holding some connections but doesn't know how connections
+      //are created.
+      _port = dynamic_cast<i2p::client::I2PClientTunnel*>(_client_tunnel->_i2p_tunnel.get())->GetLocalEndpoint().port();
+
+      //now we will try a handshake and only start offering
+      //service only if the handshake gets acknowledged then accept the tunnel
+      //as a legitimate tunnel.
+  } while(not handshken);
 }
 
 void Client::stop()
@@ -50,7 +56,6 @@ void Client::stop()
   _client_tunnel.reset();
   //tunnel destructor will stop the i2p tunnel after the connections
   //are closed. (TODO: maybe we need to add a wait here)
-
 }
 
 ouinet::OuiServiceImplementationClient::ConnectInfo
