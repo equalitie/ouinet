@@ -33,6 +33,7 @@
 #include "authenticate.h"
 #include "defer.h"
 #include "default_timeout.h"
+#include "constants.h"
 #include "ssl/ca_certificate.h"
 #include "ssl/dummy_certificate.h"
 #include "ssl/util.h"
@@ -181,7 +182,7 @@ void handle_bad_request( GenericStream& con
 {
     http::response<http::string_body> res{http::status::bad_request, req.version()};
 
-    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
+    res.set(http::field::server, OUINET_CLIENT_SERVER_STRING);
     res.set(http::field::content_type, "text/html");
     res.keep_alive(req.keep_alive());
     res.body() = message;
@@ -496,7 +497,7 @@ Response Client::State::fetch_fresh
                     // Add first a Ouinet version header
                     // to hint it to behave like an injector instead of a proxy.
                     injreq.set( http_::request_version_hdr
-                              , http_::request_version_hdr_latest);
+                              , http_::request_version_hdr_current);
                 }
 
                 if (auto credentials = _config.credentials_for(con->aux))
@@ -548,7 +549,7 @@ public:
                       , request_route::Config& request_config)
         : client_state(client_state)
         , request_config(request_config)
-        , cc(client_state.get_io_service(), "Ouinet Client")
+        , cc(client_state.get_io_service(), OUINET_CLIENT_SERVER_STRING)
     {
         cc.fetch_fresh = [&] (const Request& rq, Cancel& cancel, Yield yield) {
             return fetch_fresh(rq, cancel, yield);
@@ -712,6 +713,37 @@ GenericStream Client::State::ssl_mitm_handshake( GenericStream&& con
 }
 
 //------------------------------------------------------------------------------
+void add_version_header_field(Request& rq)
+{
+    rq.set(http_::request_version_hdr, http_::request_version_hdr_current);
+}
+
+// Return true if res indicated an error from the injector
+bool handle_if_injector_error(GenericStream& con, Response& res_, Yield yield) {
+    auto err_hdr_i = res_.find(http_::response_error_hdr);
+
+    if (err_hdr_i == res_.end()) return false; // No error
+
+    Response res{http::status::ok, 11};
+    res.set(http::field::server, "Ouinet-Client");
+    res.set(http_::response_error_hdr, err_hdr_i->value());
+    res.keep_alive(false);
+
+    string body = "Incompatible Ouinet request version";
+
+    Response::body_type::reader reader(res, res.body());
+    sys::error_code ec;
+    reader.put(asio::buffer(body), ec);
+    assert(!ec);
+
+    res.prepare_payload();
+
+    http::async_write(con, res, yield[ec]);
+
+    return true;
+}
+
+//------------------------------------------------------------------------------
 void Client::State::serve_request( GenericStream&& con
                                  , asio::yield_context yield_)
 {
@@ -847,6 +879,8 @@ void Client::State::serve_request( GenericStream&& con
             continue;
         }
 
+        add_version_header_field(req);
+
         // TODO: If an HTTPS request contains any private data (cookies, GET,
         // POST arguments...) it should be either routed to the Origin or a
         // Proxy (which may be the injector) using a CONNECT request (as is
@@ -879,6 +913,11 @@ void Client::State::serve_request( GenericStream&& con
 
             if (req.keep_alive()) continue;
             else return;
+        }
+
+        if (handle_if_injector_error(con, res, yield[ec])) {
+            if (res.keep_alive()) continue;
+            break;
         }
 
         yield.log("=== Sending back response ===");
