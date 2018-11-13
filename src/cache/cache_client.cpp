@@ -5,9 +5,9 @@
 #include "cache_entry.h"
 #include "descdb.h"
 #include "http_desc.h"
+#include "ipfs_util.h"
 #include "../or_throw.h"
 #include "../bittorrent/dht.h"
-#include "../ipfs_util.h"
 #include "../util/crypto.h"
 
 using namespace std;

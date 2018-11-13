@@ -11,8 +11,8 @@
 #include "bep44_db.h"
 #include "descdb.h"
 #include "publisher.h"
+#include "ipfs_util.h"
 #include "../bittorrent/dht.h"
-#include "../ipfs_util.h"
 #include "../util/scheduler.h"
 
 using namespace std;
