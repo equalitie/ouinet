@@ -57,7 +57,7 @@ using string_view = beast::string_view;
 using uuid_generator = boost::uuids::random_generator_mt19937;
 using Request     = http::request<http::string_body>;
 using Response    = http::response<http::dynamic_body>;
-using TCPLookup   = asio::ip::tcp::resolver::results_type;
+using TcpLookup   = asio::ip::tcp::resolver::results_type;
 
 static const fs::path OUINET_PID_FILE = "pid";
 static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
@@ -92,13 +92,13 @@ void handle_bad_request( GenericStream& con
 // If not valid, set error code
 // (the returned lookup may not be usable then).
 static
-TCPLookup
+TcpLookup
 resolve_target( const Request& req
               , asio::io_service& ios
               , Cancel& cancel
               , Yield yield)
 {
-    TCPLookup lookup;
+    TcpLookup lookup;
     sys::error_code ec;
 
     string host, port;
@@ -114,7 +114,7 @@ resolve_target( const Request& req
                                         , cancel
                                         , yield[ec]);
 
-    if (ec) return or_throw<TCPLookup>(yield, ec);
+    if (ec) return or_throw<TcpLookup>(yield, ec);
 
     // Test non-trivial cases (like "[0::1]" or FQDNs pointing to loopback).
     for (auto r : lookup)
@@ -123,7 +123,7 @@ resolve_target( const Request& req
 
     if (local) {
         ec = asio::error::invalid_argument;
-        return or_throw<TCPLookup>(yield, ec);
+        return or_throw<TcpLookup>(yield, ec);
     }
 
     return or_throw(yield, ec, move(lookup));
@@ -147,7 +147,7 @@ void handle_connect_request( GenericStream client_c
         client_c.close();
     });
 
-    TCPLookup lookup = resolve_target(req, ios, cancel, yield[ec]);
+    TcpLookup lookup = resolve_target(req, ios, cancel, yield[ec]);
 
     if (ec) {
         // Prepare and send error message to `con`.
@@ -246,7 +246,7 @@ public:
         sys::error_code ec;
 
         // Resolve target endpoint and check its validity.
-        TCPLookup lookup = resolve_target(rq, ios, cancel, yield[ec]);
+        TcpLookup lookup = resolve_target(rq, ios, cancel, yield[ec]);
 
         if (ec) return or_throw<ConP>(yield, ec);
 

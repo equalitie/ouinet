@@ -12,7 +12,7 @@ using namespace std;
 using namespace ouinet;
 using tcp = asio::ip::tcp;
 
-using TCPLookup = asio::ip::tcp::resolver::results_type;
+using TcpLookup = asio::ip::tcp::resolver::results_type;
 
 
 tcp::socket
@@ -34,7 +34,7 @@ ouinet::connect_to_host( asio::io_service& ios
 }
 
 tcp::socket
-ouinet::connect_to_host( const TCPLookup& lookup
+ouinet::connect_to_host( const TcpLookup& lookup
                        , asio::io_service& ios
                        , Signal<void()>& cancel_signal
                        , asio::yield_context yield)
@@ -56,7 +56,7 @@ ouinet::connect_to_host( const TCPLookup& lookup
 }
 
 tcp::socket
-ouinet::connect_to_host( const TCPLookup& lookup
+ouinet::connect_to_host( const TcpLookup& lookup
                        , asio::io_service& ios
                        , std::chrono::steady_clock::duration timeout
                        , Signal<void()>& cancel_signal
