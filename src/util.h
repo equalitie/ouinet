@@ -157,17 +157,19 @@ auto tcp_async_resolve( const std::string& host
 inline
 bool is_localhost(const std::string& host)
 {
-#define IPV4_LOOP "127(?:\\.[0-9]{1,3}){3}"
     // Fortunately, resolving also canonicalizes IPv6 addresses
     // so we can simplify the regular expression.`:)`
-    static const boost::regex lhrx
-      ( "^(?:"
-        "(?:localhost|ip6-localhost|ip6-loopback)(?:\\.localdomain)?"
-        "|" IPV4_LOOP         // IPv4, e.g. 127.1.2.3
-        "|::1"                // IPv6 loopback
-        "|::ffff:" IPV4_LOOP  // IPv4-mapped IPv6
-        "|::" IPV4_LOOP       // IPv4-compatible IPv6
-        ")$" );
+    static const std::string ip4loopre = "127(?:\\.[0-9]{1,3}){3}";
+    static const std::string lhre =
+        std::string()
+        + "^(?:"
+        + "(?:localhost|ip6-localhost|ip6-loopback)(?:\\.localdomain)?"
+        + "|" + ip4loopre         // IPv4, e.g. 127.1.2.3
+        + "|::1"                  // IPv6 loopback
+        + "|::ffff:" + ip4loopre  // IPv4-mapped IPv6
+        + "|::" + ip4loopre       // IPv4-compatible IPv6
+        + ")$";
+    static const boost::regex lhrx(lhre);
 
     // Avoid the DNS lookup for very evident loopback addresses.`;)`
     boost::smatch m;
