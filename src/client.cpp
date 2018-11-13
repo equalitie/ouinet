@@ -725,7 +725,7 @@ bool handle_if_injector_error(GenericStream& con, Response& res_, Yield yield) {
     if (err_hdr_i == res_.end()) return false; // No error
 
     Response res{http::status::ok, 11};
-    res.set(http::field::server, "Ouinet-Client");
+    res.set(http::field::server, OUINET_CLIENT_SERVER_STRING);
     res.set(http_::response_error_hdr, err_hdr_i->value());
     res.keep_alive(false);
 
