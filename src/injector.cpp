@@ -59,7 +59,6 @@ using Request     = http::request<http::string_body>;
 using Response    = http::response<http::dynamic_body>;
 using TCPLookup   = asio::ip::tcp::resolver::results_type;
 
-static const fs::path OUINET_PID_FILE = "pid";
 static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
 static const fs::path OUINET_TLS_KEY_FILE = "tls-key.pem";
 static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
