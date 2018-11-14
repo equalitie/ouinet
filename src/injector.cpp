@@ -44,6 +44,7 @@
 
 #include "logger.h"
 #include "defer.h"
+#include "http_util.h"
 
 using namespace std;
 using namespace ouinet;
@@ -59,10 +60,41 @@ using Request     = http::request<http::string_body>;
 using Response    = http::response<http::dynamic_body>;
 using TcpLookup   = asio::ip::tcp::resolver::results_type;
 
-static const fs::path OUINET_PID_FILE = "pid";
 static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
 static const fs::path OUINET_TLS_KEY_FILE = "tls-key.pem";
 static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
+
+
+//------------------------------------------------------------------------------
+boost::optional<Response> version_error_response( const Request& rq
+                                                , string_view oui_version)
+{
+    unsigned version = util::parse_num<unsigned>(oui_version, 0);
+
+    unsigned supported_version
+        = util::parse_num<unsigned>(http_::request_version_hdr_current, -1);
+
+    assert(supported_version != (unsigned) -1);
+
+    if (version == supported_version) {
+        return boost::none;
+    }
+
+    Response res{http::status::bad_request, rq.version()};
+    res.set(http::field::server, OUINET_INJECTOR_SERVER_STRING);
+    res.keep_alive(false);
+
+    if (version < supported_version) {
+        res.set( http_::response_error_hdr
+               , http_::response_error_hdr_version_too_low);
+    }
+    else if (version > supported_version) {
+        res.set( http_::response_error_hdr
+               , http_::response_error_hdr_version_too_high);
+    }
+
+    return res;
+}
 
 //------------------------------------------------------------------------------
 static
@@ -289,7 +321,7 @@ public:
         , injector(injector)
         , config(config)
         , genuuid(genuuid)
-        , cc(ios, "Ouinet Injector")
+        , cc(ios, OUINET_INJECTOR_SERVER_STRING)
         , origin_pools(origin_pools)
     {
         // The following operations take care of adding or removing
@@ -338,6 +370,9 @@ public:
 
         if (ec) return or_throw<Response>(yield, ec);
 
+        // Prevent origin from inserting ouinet specific header fields.
+        ret = util::remove_ouinet_fields(move(ret));
+
         // Add an injection identifier header
         // to enable the client to track injection state.
         ret.set(http_::response_injection_id_hdr, to_string(genuuid()));
@@ -346,6 +381,7 @@ public:
             origin_pools.insert_connection(rq_, move(connection));
         }
 
+        // Prevent origin from inserting ouinet specific header fields.
         return ret;
     }
 
@@ -366,6 +402,8 @@ private:
                                         , yield[ec]);
 
         if (ec) return or_throw(yield, ec, move(ret.second));
+
+        ret.second.response = util::remove_ouinet_fields(move(ret.second.response));
 
         // Add an injection identifier header
         // to enable the client to track injection state.
@@ -495,9 +533,11 @@ void serve( InjectorConfig& config
                                          , yield.tag("handle_connect"));
         }
 
+        auto version_hdr_i = req.find(http_::request_version_hdr);
+
         // Check for a Ouinet version header hinting us on
         // whether to behave like an injector or a proxy.
-        bool proxy = (req.find(http_::request_version_hdr) == req.end());
+        bool proxy = (version_hdr_i == req.end());
 
         Response res;
 
@@ -509,10 +549,19 @@ void serve( InjectorConfig& config
             res = cc.fetch_fresh(req, cancel, yield[ec].tag("fetch_proxy"));
         } else {
             // Ouinet header found, behave like a Ouinet injector.
-            auto req2 = req;
-            req2.erase(http_::request_version_hdr);  // do not propagate or cache the header
-            res = cc.fetch(req2, yield[ec].tag("cache_control.fetch"));
-            res.keep_alive(true);
+            auto opt_err_res = version_error_response(req, version_hdr_i->value());
+
+            if (opt_err_res) {
+                res = *opt_err_res;
+            }
+            else {
+                auto req2 = req;
+                // do not propagate or cache the header
+                //req2.erase(http_::request_version_hdr);
+                req2.erase(version_hdr_i);
+                res = cc.fetch(req2, yield[ec].tag("cache_control.fetch"));
+                res.keep_alive(true);
+            }
         }
 
         if (ec) {

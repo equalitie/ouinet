@@ -9,40 +9,9 @@
 #include <boost/beast/http/message.hpp>
 #include <boost/beast/http/string_body.hpp>
 
+#include "constants.h"
 
 namespace ouinet {
-
-namespace http_ {
-// TODO: This should be called ``http``,
-// but it is already being used as an alias for ``boost::http``.
-
-// Common prefix for all Ouinet-specific internal HTTP headers.
-static const std::string header_prefix = "X-Ouinet-";
-// The presence of this (non-empty) HTTP request header
-// shows the protocol version used by the client
-// and hints the receiving injector to behave like an injector instead of a proxy.
-static const std::string request_version_hdr = header_prefix + "Version";
-static const std::string request_version_hdr_v0 = "0";
-static const std::string request_version_hdr_latest = request_version_hdr_v0;
-// Such a request should get the following HTTP response header
-// with an opaque identifier for this insertion.
-static const std::string response_injection_id_hdr = header_prefix + "Injection-ID";
-// The presence of this HTTP request header with the true value below
-// instructs the injector to behave synchronously
-// and inline the resulting descriptor in response headers.
-static const std::string request_sync_injection_hdr = header_prefix + "Sync";
-static const std::string request_sync_injection_true = "true";
-// If synchronous injection is enabled in an HTTP request,
-// this header is added to the resulting response
-// with the Base64-encoded, Zlib-compressed content of the descriptor.
-static const std::string response_descriptor_hdr = header_prefix + "Descriptor";
-// Also, this is added with a link to descriptor storage.
-static const std::string response_descriptor_link_hdr = header_prefix + "Descriptor-Link";
-// Also, this is added with Base64-encoded, db-specific data to help reinsert.
-// The name of the db is added at the end of the header name.
-static const std::string response_insert_hdr_pfx = header_prefix + "Insert-";
-
-} // ouinet::http_ namespace
 
 namespace util {
 
@@ -123,6 +92,18 @@ static Message filter_fields(Message message, const Fields&... keep_fields)
     for (auto fit = message.begin(); fit != message.end(); fit++) {
         if (!( field_is_one_of(*fit, keep_fields...)  // TODO: do case insensitive cmp
                || fit->name_string().starts_with(http_::header_prefix))) {
+            fit = message.erase(fit);
+        }
+    }
+
+    return message;
+}
+
+template<class Message>
+static Message remove_ouinet_fields(Message message)
+{
+    for (auto fit = message.begin(); fit != message.end(); fit++) {
+        if (fit->name_string().starts_with(http_::header_prefix)) {
             fit = message.erase(fit);
         }
     }
