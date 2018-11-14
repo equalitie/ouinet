@@ -370,7 +370,7 @@ public:
 
         if (ec) return or_throw<Response>(yield, ec);
 
-        // Prevent origin from inserting ouinet specific header fields.
+        // Prevent others from inserting ouinet specific header fields.
         ret = util::remove_ouinet_fields(move(ret));
 
         // Add an injection identifier header
@@ -403,6 +403,7 @@ private:
 
         if (ec) return or_throw(yield, ec, move(ret.second));
 
+        // Prevent others from inserting ouinet specific header fields.
         ret.second.response = util::remove_ouinet_fields(move(ret.second.response));
 
         // Add an injection identifier header

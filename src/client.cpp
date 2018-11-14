@@ -394,16 +394,13 @@ Response Client::State::fetch_fresh
                 Response res = fetch_fresh_from_origin( request
                                                       , cancel
                                                       , yield[ec]);
-
-                // Prevent others from inserting ouinet headers.
-                res = util::remove_ouinet_fields(move(res));
-
                 if (ec) {
                     last_error = ec;
                     continue;
                 }
 
-                return res;
+                // Prevent others from inserting ouinet headers.
+                return util::remove_ouinet_fields(move(res));
             }
             // Since the current implementation uses the injector as a proxy,
             // both cases are quite similar, so we only handle HTTPS requests here.
@@ -467,16 +464,13 @@ Response Client::State::fetch_fresh
                                                 , default_timeout::fetch_http()
                                                 , cancel
                                                 , yield[ec].tag("send_req"));
-
-                    // Prevent others from inserting ouinet headers.
-                    res = util::remove_ouinet_fields(move(res));
-
                     if (ec) {
                         last_error = ec;
                         continue;
                     }
 
-                    return res;
+                    // Prevent others from inserting ouinet headers.
+                    return util::remove_ouinet_fields(move(res));
                 }
             }
             // Fall through, the case below handles both injector and proxy with plain HTTP.
@@ -494,8 +488,10 @@ Response Client::State::fetch_fresh
                 if (!con) {
                     auto c = _injector->connect
                         (yield[ec].tag("connect_to_injector2"), cancel);
-
-                    if (ec) { last_error = ec; continue; }
+                    if (ec) {
+                        last_error = ec;
+                        continue;
+                    }
 
                     con = make_unique<Con>( move(c.connection)
                                           , move(c.remote_endpoint) );
@@ -514,12 +510,10 @@ Response Client::State::fetch_fresh
                 if (auto credentials = _config.credentials_for(con->aux))
                     injreq = authorize(injreq, *credentials);
 
-
                 // Send the request to the injector/proxy.
                 auto res = con->request( injreq
                                        , cancel
                                        , yield[ec].tag("inj-request"));
-
                 if (ec) {
                     last_error = ec;
                     continue;
