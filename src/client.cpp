@@ -713,11 +713,6 @@ GenericStream Client::State::ssl_mitm_handshake( GenericStream&& con
 }
 
 //------------------------------------------------------------------------------
-void add_version_header_field(Request& rq)
-{
-    rq.set(http_::request_version_hdr, http_::request_version_hdr_current);
-}
-
 // Return true if res indicated an error from the injector
 bool handle_if_injector_error(GenericStream& con, Response& res_, Yield yield) {
     auto err_hdr_i = res_.find(http_::response_error_hdr);
@@ -878,8 +873,6 @@ void Client::State::serve_request( GenericStream&& con
             // Go for requests in the encrypted channel.
             continue;
         }
-
-        add_version_header_field(req);
 
         // TODO: If an HTTPS request contains any private data (cookies, GET,
         // POST arguments...) it should be either routed to the Origin or a
