@@ -44,4 +44,6 @@ static const std::string response_insert_hdr_pfx = header_prefix + "Insert-";
 
 static const std::string response_error_hdr = header_prefix + "Error";
 
+static const std::string response_error_hdr_version_too_low  = "1 Client's version too low";
+static const std::string response_error_hdr_version_too_high = "2 Client's version too high";
 }} // namespaces

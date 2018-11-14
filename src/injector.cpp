@@ -85,10 +85,12 @@ boost::optional<Response> version_error_response( const Request& rq
     res.keep_alive(false);
 
     if (version < supported_version) {
-        res.set(http_::response_error_hdr, "1 Client's version too low");
+        res.set( http_::response_error_hdr
+               , http_::response_error_hdr_version_too_low);
     }
     else if (version > supported_version) {
-        res.set(http_::response_error_hdr, "2 Client's version too high");
+        res.set( http_::response_error_hdr
+               , http_::response_error_hdr_version_too_high);
     }
 
     return res;
