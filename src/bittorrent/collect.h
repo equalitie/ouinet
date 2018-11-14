@@ -3,11 +3,13 @@
 namespace ouinet { namespace bittorrent {
 
 template<class CandidateSet, class Evaluate>
-void collect( asio::io_service& ios
-            , CandidateSet candidates_
-            , Evaluate&& evaluate
-            , asio::yield_context yield)
-{
+void collect(
+    asio::io_service& ios,
+    CandidateSet candidates_,
+    Evaluate&& evaluate,
+    asio::yield_context yield,
+    Signal<void()>& cancel_signal
+) {
     enum Progress { unused, used };
 
     using Candidates = std::map< Contact
@@ -26,6 +28,11 @@ void collect( asio::io_service& ios
     const int THREADS = 64;
     WaitCondition all_done(ios);
     ConditionVariable candidate_available(ios);
+    bool cancelled = false;
+    auto cancel_slot = cancel_signal.connect([&] {
+        cancelled = true;
+        candidate_available.notify();
+    });
 
     // If set, every contact higher than *end will be ignored.
     boost::optional<Contact> end;
@@ -33,6 +40,10 @@ void collect( asio::io_service& ios
     for (int thread = 0; thread < THREADS; thread++) {
         asio::spawn(ios, [&, lock = all_done.lock()] (asio::yield_context yield) {
             while (true) {
+                if (cancelled) {
+                    break;
+                }
+
                 typename Candidates::iterator candidate_i = candidates.end();
 
                 /*
@@ -55,8 +66,13 @@ void collect( asio::io_service& ios
                 }
 
                 in_progress_endpoints++;
-                auto opt_new_candidates = evaluate(candidate_i->first, yield);
+                sys::error_code ec;
+                auto opt_new_candidates = evaluate(candidate_i->first, yield[ec], cancel_signal);
                 in_progress_endpoints--;
+
+                if (cancelled) {
+                    break;
+                }
 
                 if (!opt_new_candidates) {
                     if (!end || comp(candidate_i->first, *end)) {
@@ -75,6 +91,10 @@ void collect( asio::io_service& ios
     }
 
     all_done.wait(yield);
+
+    if (cancelled) {
+        or_throw(yield, asio::error::operation_aborted);
+    }
 }
 
 }} // namespaces
