@@ -80,7 +80,7 @@ boost::optional<Response> version_error_response( const Request& rq
         return boost::none;
     }
 
-    Response res{http::status::ok, rq.version()};
+    Response res{http::status::bad_request, rq.version()};
     res.set(http::field::server, OUINET_INJECTOR_SERVER_STRING);
     res.keep_alive(false);
 
