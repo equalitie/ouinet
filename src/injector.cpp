@@ -370,6 +370,9 @@ public:
 
         if (ec) return or_throw<Response>(yield, ec);
 
+        // Prevent origin from inserting ouinet specific header fields.
+        ret = util::remove_ouinet_fields(move(ret));
+
         // Add an injection identifier header
         // to enable the client to track injection state.
         ret.set(http_::response_injection_id_hdr, to_string(genuuid()));
@@ -379,7 +382,7 @@ public:
         }
 
         // Prevent origin from inserting ouinet specific header fields.
-        return util::remove_ouinet_fields(move(ret));
+        return ret;
     }
 
 private:
@@ -399,6 +402,8 @@ private:
                                         , yield[ec]);
 
         if (ec) return or_throw(yield, ec, move(ret.second));
+
+        ret.second.response = util::remove_ouinet_fields(move(ret.second.response));
 
         // Add an injection identifier header
         // to enable the client to track injection state.

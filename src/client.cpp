@@ -285,10 +285,15 @@ Client::State::fetch_stored( const Request& request
                                   , _config.default_db_type()
                                   , cancel
                                   , yield[ec]);
-    // Add an injection identifier header
-    // to enable the user to track injection state.
-    if (!ec)
+    if (!ec) {
+        // Prevent others from inserting ouinet headers.
+        ret.second.response = util::remove_ouinet_fields(move(ret.second.response));
+
+        // Add an injection identifier header
+        // to enable the user to track injection state.
         ret.second.response.set(http_::response_injection_id_hdr, ret.first);
+    }
+
     return or_throw(yield, ec, move(ret.second));
 }
 
@@ -390,6 +395,9 @@ Response Client::State::fetch_fresh
                                                       , cancel
                                                       , yield[ec]);
 
+                // Prevent others from inserting ouinet headers.
+                res = util::remove_ouinet_fields(move(res));
+
                 if (ec) {
                     last_error = ec;
                     continue;
@@ -460,6 +468,9 @@ Response Client::State::fetch_fresh
                                                 , cancel
                                                 , yield[ec].tag("send_req"));
 
+                    // Prevent others from inserting ouinet headers.
+                    res = util::remove_ouinet_fields(move(res));
+
                     if (ec) {
                         last_error = ec;
                         continue;
@@ -502,6 +513,7 @@ Response Client::State::fetch_fresh
 
                 if (auto credentials = _config.credentials_for(con->aux))
                     injreq = authorize(injreq, *credentials);
+
 
                 // Send the request to the injector/proxy.
                 auto res = con->request( injreq
