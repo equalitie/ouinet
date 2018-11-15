@@ -18,6 +18,9 @@ namespace bt = ouinet::bittorrent;
 using boost::optional;
 
 static const unsigned int BTREE_NODE_SIZE=64;
+// This should be enough to insert small values
+// and IPFS links to bigger values.
+static const unsigned int BTREE_DATA_MAX_SIZE=128;
 
 static BTree::CatOp make_cat_operation(asio_ipfs::node& ipfs_node)
 {
@@ -179,6 +182,8 @@ string BTreeInjectorDb::insert( string key
                               , asio::yield_context yield)
 {
     assert(!key.empty() && !value.empty());
+    if (value.size() > BTREE_DATA_MAX_SIZE)
+        return or_throw<string>(yield, asio::error::message_size);
 
     auto wd = _was_destroyed;
     sys::error_code ec;
