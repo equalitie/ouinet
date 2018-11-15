@@ -15,9 +15,9 @@ corresponding to the injections that it caused, and thus distribute the
 published content along with the information that allows its reseeding.
 
 This behaviour is enabled by the user program adding the `X-Ouinet-Sync: true`
-header to the HTTP request.  If (and only if) the request causes a new
-injection, the HTTP response will contain an `X-Ouinet-Descriptor` header with
-the zlib-compressed, Base64-encoded descriptor, as well as an
+header to the HTTP request.  If (and only if) the request causes a new and
+successful injection, the HTTP response will contain an `X-Ouinet-Descriptor`
+header with the zlib-compressed, Base64-encoded descriptor, as well as an
 `X-Ouinet-Descriptor-Link` header pointing to a distributed storage address
 where the descriptor can be retrieved from (currently an IPFS address).
 

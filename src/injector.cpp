@@ -425,7 +425,8 @@ private:
         auto id = rs[http_::response_injection_id_hdr].to_string();
         assert(!id.empty());
 
-        // This injection code logs errors but does not propagate them.
+        // This injection code logs errors but does not propagate them
+        // (the `desc_data` field is set to the empty string).
         auto db_type = config.default_db_type();
         auto inject = [
             rq, rs, id, db_type,
@@ -444,33 +445,37 @@ private:
             if (ec) {
                 cout << "!Insert failed: " << rq.target()
                      << " " << ec.message() << endl;
+                ret.desc_data = "";
             }
 
             return ret;
         };
 
-        // Proceed to or program the real injection.
-        LOG_DEBUG((sync ? "Sync inject: " : "Async inject: ")
-                  , rq.target(), " ", id);
+        // Program or proceed to the real injection.
 
-        if (sync) {
-            auto ins = inject(yield);
-            // Zlib-compress descriptor, Base64-encode and put in header.
-            auto compressed_desc = util::zlib_compress(move(ins.desc_data));
-            auto encoded_desc = util::base64_encode(move(compressed_desc));
-            rs.set(http_::response_descriptor_hdr, move(encoded_desc));
-            // Add descriptor storage link as is.
-            rs.set(http_::response_descriptor_link_hdr, move(ins.desc_link));
-            // Add Base64-encoded reinsertion data (if any).
-            if (ins.db_ins_data.length() > 0) {
-                auto encoded_insd = util::base64_encode(move(ins.db_ins_data));
-                rs.set( http_::response_insert_hdr_pfx + DbName.at(db_type)
-                      , move(encoded_insd));
-            }
-        } else {
+        if (!sync) {
+            LOG_DEBUG("Async inject: ", rq.target(), " ", id);
             asio::spawn(asio::yield_context(yield), inject);
+            return rs;
         }
 
+        LOG_DEBUG("Sync inject: ", rq.target(), " ", id);
+        auto ins = inject(yield);
+        if (ins.desc_data.length() == 0)
+            return rs;  // insertion failed
+
+        // Zlib-compress descriptor, Base64-encode and put in header.
+        auto compressed_desc = util::zlib_compress(move(ins.desc_data));
+        auto encoded_desc = util::base64_encode(move(compressed_desc));
+        rs.set(http_::response_descriptor_hdr, move(encoded_desc));
+        // Add descriptor storage link as is.
+        rs.set(http_::response_descriptor_link_hdr, move(ins.desc_link));
+        // Add Base64-encoded reinsertion data (if any).
+        if (ins.db_ins_data.length() > 0) {
+            auto encoded_insd = util::base64_encode(move(ins.db_ins_data));
+            rs.set( http_::response_insert_hdr_pfx + DbName.at(db_type)
+                  , move(encoded_insd));
+        }
         return rs;
     }
 
