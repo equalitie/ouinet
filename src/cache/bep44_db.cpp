@@ -92,7 +92,12 @@ string Bep44ClientDb::insert_mapping( const string& ins_data
     auto ins_map = ins->as_map();
     bt::MutableDataItem item;
     try {  // individual fields for mutable data item
-        //item.public_key = ins_map->at("k").as_string().value();  // TODO
+        auto k = ins_map->at("k").as_string().value();
+        if (k.size() == 32) {  // or let verification fail
+            array<uint8_t, 32> ka;
+            copy(begin(k), end(k), begin(ka));
+            item.public_key = move(ka);
+        }
         item.salt = ins_map->at("salt").as_string().value();
         item.value = ins_map->at("v");
         item.sequence_number = ins_map->at("seq").as_int().value();
