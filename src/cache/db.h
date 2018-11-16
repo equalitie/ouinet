@@ -1,8 +1,10 @@
 #pragma once
 
+#include <boost/asio/error.hpp>
 #include <boost/asio/spawn.hpp>
 #include <map>
 #include <string>
+#include "../or_throw.h"
 #include "../util/signal.h"
 
 namespace ouinet {
@@ -17,6 +19,13 @@ static const std::map<DbType, std::string> DbName = {
 class ClientDb {
 public:
     virtual std::string find(const std::string& key, Cancel&, asio::yield_context) = 0;
+
+    // Insert a signed URL->descriptor mapping.
+    // The parsing of the given data depends on the data base.
+    // Return a printable representation of the key resulting from insertion.
+    virtual std::string insert_mapping(const std::string&, asio::yield_context yield) {
+        return or_throw<std::string>(yield, asio::error::operation_not_supported);
+    };
 };
 
 class InjectorDb : public ClientDb {

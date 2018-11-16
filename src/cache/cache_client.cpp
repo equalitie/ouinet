@@ -93,7 +93,11 @@ string CacheClient::insert_mapping( const std::string& ins_data
                                   , DbType db_type
                                   , boost::asio::yield_context yield)
 {
-    return or_throw<string>(yield, asio::error::operation_not_supported);  // TODO
+    auto db = get_db(db_type);
+
+    if (!db) return or_throw<string>(yield, asio::error::operation_not_supported);
+
+    return db->insert_mapping(ins_data, yield);
 }
 
 ClientDb* CacheClient::get_db(DbType db_type)
