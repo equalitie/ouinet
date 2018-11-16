@@ -1,3 +1,5 @@
+#include <iterator>
+
 #include "bep44_db.h"
 #include "../bittorrent/bencoding.h"
 #include "../bittorrent/dht.h"
@@ -94,7 +96,9 @@ string Bep44ClientDb::insert_mapping( const string& ins_data
         item.salt = ins_map->at("salt").as_string().value();
         item.value = ins_map->at("v");
         item.sequence_number = ins_map->at("seq").as_int().value();
-        //item.signature = ins_map->at("sig").as_string.value();  // TODO
+        auto sig = ins_map->at("sig").as_string().value();
+        if (sig.size() == item.signature.size())  // or let verification fail
+            copy(begin(sig), end(sig), begin(item.signature));
     } catch (const exception& e) {
         return or_throw<string>(yield, asio::error::invalid_argument);
     }
