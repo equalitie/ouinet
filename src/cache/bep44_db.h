@@ -21,6 +21,9 @@ public:
                     , Cancel&
                     , asio::yield_context) override;
 
+    std::string insert_mapping( const std::string&
+                              , asio::yield_context) override;
+
     boost::asio::io_service& get_io_service();
 
     ~Bep44ClientDb();

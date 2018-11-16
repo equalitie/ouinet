@@ -79,6 +79,32 @@ string Bep44InjectorDb::find( const string& key
 }
 
 
+string Bep44ClientDb::insert_mapping( const string& ins_data
+                                    , asio::yield_context yield)
+{
+    auto ins = bt::bencoding_decode(ins_data);
+    if (!ins || !ins->is_map()) {  // general format and type of data
+        return or_throw<string>(yield, asio::error::invalid_argument);
+    }
+
+    auto ins_map = ins->as_map();
+    bt::MutableDataItem item;
+    try {  // individual fields for mutable data item
+        //item.public_key = ins_map->at("k").as_string().value();  // TODO
+        item.salt = ins_map->at("salt").as_string().value();
+        item.value = ins_map->at("v");
+        item.sequence_number = ins_map->at("seq").as_int().value();
+        //item.signature = ins_map->at("sig").as_string.value();  // TODO
+    } catch (const exception& e) {
+        return or_throw<string>(yield, asio::error::invalid_argument);
+    }
+    if (!item.verify()) {  // mutable data item signature
+        return or_throw<string>(yield, asio::error::invalid_argument);
+    }
+
+    return _bt_dht.mutable_put_start(item, yield).to_hex();
+}
+
 string Bep44InjectorDb::insert( string key
                               , string value
                               , asio::yield_context yield)
