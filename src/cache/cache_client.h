@@ -42,6 +42,13 @@ public:
 
     std::string ipfs_add(const std::string& content, boost::asio::yield_context);
 
+    // Insert a signed URL->descriptor mapping
+    // into the data base of the given type.
+    // The parsing of the given data depends on the data base.
+    // Return a printable representation of the key resulting from insertion.
+    std::string insert_mapping( const std::string&
+                              , DbType, boost::asio::yield_context);
+
     // Find the content previously stored by the injector under `url`.
     // The descriptor identifier and cached content are returned.
     //

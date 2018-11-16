@@ -89,6 +89,13 @@ string CacheClient::ipfs_add(const string& data, asio::yield_context yield)
     return _ipfs_node->add(data, yield);
 }
 
+string CacheClient::insert_mapping( const std::string& ins_data
+                                  , DbType db_type
+                                  , boost::asio::yield_context yield)
+{
+    return or_throw<string>(yield, asio::error::operation_not_supported);  // TODO
+}
+
 ClientDb* CacheClient::get_db(DbType db_type)
 {
     switch (db_type) {

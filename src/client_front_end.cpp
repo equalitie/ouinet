@@ -247,6 +247,45 @@ void ClientFrontEnd::handle_descriptor( const Request& req, Response& res, strin
         ss << "{\"error\": \"" << err << "\"}";
 }
 
+void ClientFrontEnd::handle_insert_bep44( const Request& req, Response& res, stringstream& ss
+                                        , CacheClient* cache_client, asio::yield_context yield)
+{
+    static const string req_ctype = "application/x-bittorrent";
+
+    auto result = http::status::ok;
+    res.set(http::field::content_type, "application/json");
+    string err, key;
+
+    if (req.method() != http::verb::post) {
+        result = http::status::method_not_allowed;
+        err = "request method is not POST";
+    } else if (req[http::field::content_type] != req_ctype) {
+        result = http::status::bad_request;
+        err = "request content type is not " + req_ctype;
+    } else if (!req[http::field::expect].empty()) {
+        // TODO: Support ``Expect: 100-continue`` as cURL does,
+        // e.g. to spot too big files before receiving the body.
+        result = http::status::expectation_failed;
+        err = "sorry, request expectations are not supported";
+    } else {  // perform the insertion
+        sys::error_code ec;
+        key = cache_client->insert_mapping(req.body(), DbType::bep44, yield[ec]);
+        if (ec == asio::error::operation_not_supported) {
+            result = http::status::service_unavailable;
+            err = "BEP44 data base is not enabled";
+        } else if (ec) {
+            result = http::status::internal_server_error;
+            err = "failed to insert entry in data base";
+        }
+    }
+
+    res.result(result);
+    if (err.empty())
+        ss << "{\"key\": \"" << key << "\"}";
+    else
+        ss << "{\"error\": \"" << err << "\"}";
+}
+
 void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , const Request& req, Response& res, stringstream& ss
                                   , CacheClient* cache_client)
@@ -383,6 +422,9 @@ Response ClientFrontEnd::serve( ClientConfig& config
     } else if (url.path == "/api/descriptor") {
         sys::error_code ec_;  // shouldn't throw, but just in case
         handle_descriptor(req, res, ss, cache_client, yield[ec_]);
+    } else if (url.path == "/api/insert/bep44") {
+        sys::error_code ec_;  // shouldn't throw, but just in case
+        handle_insert_bep44(req, res, ss, cache_client, yield[ec_]);
     } else {
         handle_portal(config, req, res, ss, cache_client);
     }
