@@ -116,8 +116,8 @@ string Bep44InjectorDb::insert( string key
         { "salt", item.salt },
         { "seq" , item.sequence_number },
         // token depends on the insertion
-        { "sig" , string(begin(item.signature), end(item.signature)) }
-        // v is already known by the caller
+        { "sig" , string(begin(item.signature), end(item.signature)) },
+        { "v"   , value }
     });
 }
 

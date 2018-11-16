@@ -22,10 +22,8 @@ header with the zlib-compressed, Base64-encoded descriptor, as well as an
 where the descriptor can be retrieved from (currently an IPFS address).
 
 If the data base allows autonomous reinsertion of descriptors, an
-`X-Ouinet-Insert-<DB>` header is added with Base64-encoded data base-specific
-information to help reinsert.  If the data base supports storing the
-descriptor inline, the value of `X-Ouinet-Descriptor` should be used for
-reinsertion, otherwise the value of `X-Ouinet-Descriptor-Link` is used.
+`X-Ouinet-Insert-<DB>` header is added with Base64-encoded, data base-specific
+information to help reinsert.
 
 Here is a request/response example with synchronous injection enabled on a
 BEP44 data base (which supports autonomous reinsertion):
