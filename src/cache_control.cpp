@@ -57,10 +57,17 @@ inline void trim_quotes(beast::string_view& v) {
 
 posix_time::ptime CacheControl::parse_date(beast::string_view s)
 {
+    namespace bt = boost::posix_time;
+
+    // The date parsing code below internally throws and catches exceptions.
+    // This confuses the address sanitizer when combined with Boost.Coroutine
+    // and causes the app exit with false positive log from Asan.
+#   ifdef __SANITIZE_ADDRESS__
+    return bt::ptime();
+#   endif
+
     // Trim quotes from the beginning
     while (s.starts_with('"')) s.remove_prefix(1);
-
-    namespace bt = boost::posix_time;
 
     static const auto format = [](const char* fmt) {
         using std::locale;
