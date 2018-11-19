@@ -121,7 +121,7 @@ private:
     fetch_stored( const Request& request
                 , request_route::Config& request_config
                 , Cancel& cancel
-                , asio::yield_context yield);
+                , Yield yield);
 
     Response fetch_fresh( const Request&
                         , request_route::Config&
@@ -265,7 +265,7 @@ CacheEntry
 Client::State::fetch_stored( const Request& request
                            , request_route::Config& request_config
                            , Cancel& cancel
-                           , asio::yield_context yield)
+                           , Yield yield)
 {
     const bool cache_is_disabled
         = !request_config.enable_cache
@@ -620,7 +620,7 @@ public:
         if (ec) return or_throw(yield, ec, move(rs));
 
         asio::spawn(client_state.get_io_service(),
-            [&, rs] (asio::yield_context yield) {
+            [&cache, rs] (asio::yield_context yield) {
                 // TODO: Use the scheduler here to only do some max number
                 // of `ipfs_add`s at a time. Also then trim that queue so
                 // that it doesn't grow indefinitely.

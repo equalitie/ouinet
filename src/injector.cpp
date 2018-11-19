@@ -387,7 +387,7 @@ public:
 
 private:
     CacheEntry
-    fetch_stored(const Request& rq, Cancel& cancel, asio::yield_context yield)
+    fetch_stored(const Request& rq, Cancel& cancel, Yield yield)
     {
         if (!injector)
             return or_throw<CacheEntry>( yield
