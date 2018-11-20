@@ -31,8 +31,8 @@ public:
 
     void set_injector_endpoint(const Endpoint& ep);
 
-    bool enable_injector_tls() const {
-        return _enable_injector_tls;
+    const std::string& tls_injector_cert_path() const {
+        return _tls_injector_cert_path;
     }
 
     const asio::ip::tcp::endpoint& local_endpoint() const {
@@ -94,8 +94,8 @@ public:
            ("injector-ipns"
             , po::value<string>()->default_value("")
             , "IPNS of the injector's database")
-           ("enable-injector-tls", po::bool_switch(&_enable_injector_tls)
-            , "Enable TLS for injector TCP endpoint")
+           ("injector-tls-cert-file", po::value<string>(&_tls_injector_cert_path)
+            , "Path to the Injector's TLS certificate")
            ("disable-origin-access", po::bool_switch(&_disable_origin_access)->default_value(false)
             , "Disable direct access to the origin (forces use of injector and the cache)")
            ("max-cached-age"
@@ -137,7 +137,7 @@ private:
     fs::path _ouinet_conf_file = "ouinet-client.conf";
     asio::ip::tcp::endpoint _local_ep;
     boost::optional<Endpoint> _injector_ep;
-    bool _enable_injector_tls = false;
+    std::string _tls_injector_cert_path;
     std::string _ipns;
     bool _enable_http_connect_requests = false;
     bool _disable_origin_access = false;

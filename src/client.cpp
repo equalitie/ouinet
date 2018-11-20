@@ -67,7 +67,6 @@ using boost::optional;
 static const fs::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
 static const fs::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
 static const fs::path OUINET_CA_DH_FILE = "ssl-ca-dh.pem";
-static const fs::path OUINET_INJ_CERT_FILE = "ssl-inj-cert.pem";
 
 //------------------------------------------------------------------------------
 class Client::State : public enable_shared_from_this<Client::State> {
@@ -1105,14 +1104,14 @@ void Client::State::start(int argc, char* argv[])
         ( "Your own local Ouinet client"
         , ca_cert_path(), ca_key_path(), ca_dh_path());
 
-    if (_config.enable_injector_tls()) {
-        auto inj_cert_path = _config.repo_root() / OUINET_INJ_CERT_FILE;
-        if (fs::exists(inj_cert_path)) {
+    if (!_config.tls_injector_cert_path().empty()) {
+        if (fs::exists(fs::path(_config.tls_injector_cert_path()))) {
             LOG_DEBUG("Loading injector certificate file");
-            inj_ctx.load_verify_file(inj_cert_path.string());
+            inj_ctx.load_verify_file(_config.tls_injector_cert_path());
         } else {
-            LOG_DEBUG("Creating empty injector certificate file");
-            fs::ofstream(inj_cert_path) << "";
+            throw runtime_error(
+                    util::str("Invalid path to Injector's TLS cert file: "
+                             , _config.tls_injector_cert_path()));
         }
     }
 
@@ -1204,7 +1203,9 @@ void Client::State::setup_injector(asio::yield_context yield)
         auto tcp_client
             = make_unique<ouiservice::TcpOuiServiceClient>(_ios, tcp_endpoint);
 
-        if (!_config.enable_injector_tls()) {
+        bool enable_injector_tls = !_config.tls_injector_cert_path().empty();
+
+        if (!enable_injector_tls) {
             _injector->add(std::move(tcp_client));
         } else {
             auto tls_client
