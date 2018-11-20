@@ -131,11 +131,13 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        String ipns        = readIPNS();
-        String injector_ep = readInjectorEP();
-        String credentials = readCredentialsFor(injector_ep);
+        Ouinet.Config conf = new Ouinet.Config();
 
-        _ouinet = new Ouinet(this, ipns, injector_ep, credentials);
+        conf.injector_ipfs_id     = readIPNS();
+        conf.injector_endpoint    = readInjectorEP();
+        conf.injector_credentials = readCredentialsFor(conf.injector_endpoint);
+
+        _ouinet = new Ouinet(this, conf);
 
         _ouinet.acquireMulticastLock();
 

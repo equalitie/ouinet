@@ -33,11 +33,7 @@ ouinet::asio::io_service g_ios;
 thread g_client_thread;
 bool g_crypto_initialized = false;
 
-void start_client_thread( string repo_root
-                        , string injector_ep
-                        , string ipns
-                        , string credentials
-                        , bool enable_http_connect_requests)
+void start_client_thread(const vector<string>& args)
 {
     if (g_crypto_initialized) {
         ouinet::util::crypto_init();
@@ -58,47 +54,15 @@ void start_client_thread( string repo_root
             // In case we're restarting.
             g_ios.reset();
 
-            {
-                // Just touch this file, as the client looks into the
-                // repository and fails if this conf file isn't there.
-                fstream conf( repo_root + "/ouinet-client.conf"
-                            , conf.binary | conf.out);
-            }
+            vector<const char*> args_;
+            args_.reserve(args.size());
 
-            string repo_arg        = "--repo="                 + repo_root;
-            string injector_ep_arg = "--injector-ep="          + injector_ep;
-            string ipns_arg        = "--injector-ipns="        + ipns;
-            string credentials_arg = "--injector-credentials=" + credentials;
-
-            vector<const char*> args;
-
-            args.push_back("ouinet-client");
-            args.push_back("--listen-on-tcp=127.0.0.1:8080");
-            args.push_back("--front-end-ep=0.0.0.0:8081");
-
-            // Temporary while the app is being tested.
-            args.push_back("--disable-origin-access");
-
-            args.push_back(repo_arg.c_str());
-
-            if (!injector_ep.empty()) {
-                args.push_back(injector_ep_arg.c_str());
-            }
-
-            if (!ipns.empty()) {
-                args.push_back(ipns_arg.c_str());
-            }
-
-            if (!credentials.empty()) {
-                args.push_back(credentials_arg.c_str());
-            }
-
-            if (enable_http_connect_requests) {
-                args.push_back("--enable-http-connect-requests");
+            for (const auto& arg : args) {
+                args_.push_back(arg.c_str());
             }
 
             try {
-                g_client->start(args.size(), (char**) args.data());
+                g_client->start(args_.size(), (char**) args_.data());
             }
             catch (std::exception& e) {
                 debug("Failed to start Ouinet client:");
@@ -118,30 +82,28 @@ JNIEXPORT void JNICALL
 Java_ie_equalit_ouinet_Ouinet_nStartClient(
         JNIEnv* env,
         jobject /* this */,
-        jstring j_repo_root,
-        jstring j_injector_ep,
-        jstring j_ipns,
-        jstring j_credentials,
-        jboolean enable_http_connect_requests)
+        jobjectArray jargs)
 {
-    const char* repo_root   = env->GetStringUTFChars(j_repo_root,   NULL);
-    const char* injector_ep = env->GetStringUTFChars(j_injector_ep, NULL);
-    const char* ipns        = env->GetStringUTFChars(j_ipns,        NULL);
-    const char* credentials = env->GetStringUTFChars(j_credentials, NULL);
+    size_t argn = env->GetArrayLength(jargs);
 
-    start_client_thread( repo_root
-                       , injector_ep
-                       , ipns
-                       , credentials
-                       , enable_http_connect_requests);
+    vector<string> args;
+    args.reserve(argn);
+
+    for (size_t i = 0; i < argn; ++i) {
+        jstring jstr = (jstring) env->GetObjectArrayElement(jargs, i);
+        const char* arg = env->GetStringUTFChars(jstr, 0);
+        args.push_back(arg);
+        env->ReleaseStringUTFChars(jstr, arg);
+    }
+
+    start_client_thread(args);
 }
 
 extern "C"
 JNIEXPORT void JNICALL
 Java_ie_equalit_ouinet_Ouinet_nStopClient(
         JNIEnv *env,
-        jobject /* this */,
-        jstring repo_root)
+        jobject /* this */)
 {
     g_ios.post([] { if (g_client) g_client->stop(); });
     g_client_thread.join();

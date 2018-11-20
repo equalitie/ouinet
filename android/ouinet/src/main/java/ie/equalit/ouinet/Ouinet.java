@@ -4,6 +4,9 @@ import android.content.Context;
 
 import android.net.wifi.WifiManager;
 import java.io.File;
+import java.util.*;
+import java.io.IOException;
+import android.util.Log;
 
 public class Ouinet {
     // Used to load the 'native-lib' library on application startup.
@@ -22,22 +25,41 @@ public class Ouinet {
     private Context _ctx;
     private WifiManager.MulticastLock _lock = null;
 
-    public Ouinet(Context ctx, String ipns,
-                               String injector_ep,
-                               String credentials) {
+    public static class Config {
+        public String injector_ipfs_id;
+        public String injector_endpoint;
+        public String injector_credentials;
+    }
+
+    public Ouinet(Context ctx, Config conf) {
         _ctx = ctx;
 
-        if (ipns        == null) ipns        = "";
-        if (injector_ep == null) injector_ep = "";
-        if (credentials == null) credentials = "";
+        Vector<String> args = new Vector<String>();
+
+        args.addElement("ouinet-client"); // App name
+        args.addElement("--repo=" + dir());
+        args.addElement("--listen-on-tcp=127.0.0.1:8080");
+        args.addElement("--front-end-ep=0.0.0.0:8081");
+
+        // Temporary while the app is being tested.
+        args.addElement("--disable-origin-access");
+
+        maybeAdd(args, "--injector-ep",          conf.injector_endpoint);
+        maybeAdd(args, "--injector-ipns",        conf.injector_ipfs_id);
+        maybeAdd(args, "--injector-credentials", conf.injector_credentials);
 
         new File(dir()).mkdirs();
 
-        nStartClient(dir(),
-                injector_ep,
-                ipns,
-                credentials,
-                false);
+        try {
+            // Just touch this file, as the client looks into the
+            // repository and fails if this conf file isn't there.
+            new File(dir() + "/ouinet-client.conf").createNewFile();
+        } catch (IOException e) {
+            Log.d("Ouinet",
+                    "Exception thrown while creating ouinet config file: " + e);
+        }
+
+        nStartClient(listToArray(args));
     }
 
     public String pathToCARootCert()
@@ -92,6 +114,19 @@ public class Ouinet {
     }
 
     //----------------------------------------------------------------
+    private String[] listToArray(List<String> list) {
+        String[] ret = new String[list.size()];
+        int i = 0;
+        for (String s : list) { ret[i] = s; i += 1; }
+        return ret;
+    }
+
+    private void maybeAdd(Vector<String> args, String key, String value) {
+        if (value == null) return;
+        args.addElement(key + "=" + value);
+    }
+
+    //----------------------------------------------------------------
     private String dir() {
         return _ctx.getFilesDir().getAbsolutePath() + "/ouinet";
     }
@@ -101,11 +136,7 @@ public class Ouinet {
      * A native method that is implemented by the 'native-lib' native library,
      * which is packaged with this application.
      */
-    private native void nStartClient( String repo_root
-                                    , String injector
-                                    , String ipns
-                                    , String credentials
-                                    , boolean enable_http_connect_requests);
+    private native void nStartClient(String[] args);
 
     private native void nStopClient();
     private native void nSetInjectorEP(String endpoint);
