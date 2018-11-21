@@ -487,6 +487,7 @@ Response Client::State::fetch_fresh
                 if (!con) {
                     auto c = _injector->connect
                         (yield[ec].tag("connect_to_injector2"), cancel);
+
                     if (ec) {
                         last_error = ec;
                         continue;
@@ -1108,6 +1109,7 @@ void Client::State::start(int argc, char* argv[])
         if (fs::exists(fs::path(_config.tls_injector_cert_path()))) {
             LOG_DEBUG("Loading injector certificate file");
             inj_ctx.load_verify_file(_config.tls_injector_cert_path());
+            LOG_DEBUG("Success");
         } else {
             throw runtime_error(
                     util::str("Invalid path to Injector's TLS cert file: "

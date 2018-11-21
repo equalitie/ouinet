@@ -1,11 +1,13 @@
 package ie.equalit.ouinet;
 
 import android.content.Context;
-
 import android.net.wifi.WifiManager;
+
 import java.io.File;
-import java.util.*;
 import java.io.IOException;
+import java.io.FileOutputStream;
+
+import java.util.*;
 import android.util.Log;
 
 public class Ouinet {
@@ -29,12 +31,24 @@ public class Ouinet {
         public String injector_ipfs_id;
         public String injector_endpoint;
         public String injector_credentials;
+        public String injector_tls_cert;
     }
 
     public Ouinet(Context ctx, Config conf) {
         _ctx = ctx;
 
         Vector<String> args = new Vector<String>();
+
+        new File(dir()).mkdirs();
+
+        try {
+            // Just touch this file, as the client looks into the
+            // repository and fails if this conf file isn't there.
+            new File(dir() + "/ouinet-client.conf").createNewFile();
+        } catch (IOException e) {
+            Log.d("Ouinet",
+                    "Exception thrown while creating ouinet config file: " + e);
+        }
 
         args.addElement("ouinet-client"); // App name
         args.addElement("--repo=" + dir());
@@ -48,15 +62,16 @@ public class Ouinet {
         maybeAdd(args, "--injector-ipns",        conf.injector_ipfs_id);
         maybeAdd(args, "--injector-credentials", conf.injector_credentials);
 
-        new File(dir()).mkdirs();
-
         try {
-            // Just touch this file, as the client looks into the
-            // repository and fails if this conf file isn't there.
-            new File(dir() + "/ouinet-client.conf").createNewFile();
+            if (conf.injector_tls_cert != null) {
+                String cert_path = dir() + "/injector-tls-cert.pem";
+                writeToFile(cert_path, conf.injector_tls_cert);
+                args.addElement("--injector-tls-cert-file=" + cert_path);
+            }
         } catch (IOException e) {
             Log.d("Ouinet",
-                    "Exception thrown while creating ouinet config file: " + e);
+                    "Exception thrown while creating injector's cert file: " + e);
+            e.printStackTrace();
         }
 
         nStartClient(listToArray(args));
@@ -124,6 +139,18 @@ public class Ouinet {
     private void maybeAdd(Vector<String> args, String key, String value) {
         if (value == null) return;
         args.addElement(key + "=" + value);
+    }
+
+    private void writeToFile(String path, String content) throws IOException {
+        File file = new File(path);
+
+        if (!file.exists()) {
+            file.createNewFile();
+        }
+
+        FileOutputStream stream = new FileOutputStream(file);
+        stream.write(content.getBytes());
+        stream.close();
     }
 
     //----------------------------------------------------------------
