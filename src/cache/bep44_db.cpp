@@ -101,7 +101,7 @@ string Bep44InjectorDb::insert( string key
                                         , (ts - unix_epoch).total_milliseconds()
                                         , as_string_view(salt)
                                         , _bt_privkey);
-    } catch(length_error) {
+    } catch(const length_error&) {
         return or_throw<string>(yield, asio::error::message_size);
     }
 
