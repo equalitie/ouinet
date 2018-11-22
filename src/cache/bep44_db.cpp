@@ -41,7 +41,7 @@ static string find( bt::MainlineDht& dht
 {
     sys::error_code ec;
 
-    auto salt = util::sha1(key);
+    auto salt = bep44_salt_from_key(key);
 
     auto cancel_handle = cancel.connect([] {
         assert(0 && "TODO: Bep44 index is not cancelable yet");
@@ -120,12 +120,11 @@ string Bep44InjectorDb::insert( string key
 {
     using Time = boost::posix_time::ptime;
 
+    auto salt = bep44_salt_from_key(key);
+
     /*
-     * Use the sha1 of the URL as salt;
      * Use the timestamp as a version ID.
      */
-
-    auto salt = util::sha1(key);
 
     Time unix_epoch(boost::gregorian::date(1970, 1, 1));
     Time ts = boost::posix_time::microsec_clock::universal_time();
