@@ -12,6 +12,14 @@ namespace ouinet { namespace util { class Ed25519PublicKey; }}
 
 namespace ouinet {
 
+inline
+std::array<uint8_t, 20> bep44_salt_from_key(const std::string& key)
+{
+    // This ensures short, fixed-size salts to be circulated
+    // (as e.g. keys containing HTTP URIs may be quite long).
+    return util::sha1(key);
+}
+
 class Bep44ClientDb : public ClientDb {
 public:
     Bep44ClientDb( bittorrent::MainlineDht& bt_dht
@@ -20,6 +28,9 @@ public:
     std::string find( const std::string& key
                     , Cancel&
                     , asio::yield_context) override;
+
+    std::string insert_mapping( const std::string&
+                              , asio::yield_context) override;
 
     boost::asio::io_service& get_io_service();
 

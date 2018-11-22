@@ -2478,7 +2478,7 @@ boost::optional<MutableDataItem> MainlineDht::mutable_get(
 
     completed_condition.wait(yield);
 
-    return or_throw<boost::optional<MutableDataItem>>(yield, ec);
+    return or_throw(yield, ec, std::move(output));
 }
 
 
