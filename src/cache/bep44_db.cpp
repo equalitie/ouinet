@@ -43,14 +43,9 @@ static string find( bt::MainlineDht& dht
 
     auto salt = bep44_salt_from_key(key);
 
-    auto cancel_handle = cancel.connect([] {
-        assert(0 && "TODO: Bep44 index is not cancelable yet");
-    });
-
-    // TODO: Pass `cancel` to it
     auto opt_data = dht.mutable_get( pubkey
                                    , as_string_view(salt)
-                                   , yield[ec]);
+                                   , yield[ec], cancel);
     
     if (!ec && !opt_data) {
         // TODO: This shouldn't happen (it does), the above
