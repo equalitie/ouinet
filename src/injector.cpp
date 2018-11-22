@@ -708,7 +708,7 @@ int main(int argc, const char* argv[])
     Cancel cancel;
 
     unique_ptr<CacheInjector> cache_injector;
-    boost::optional<Cancel::Connection> shutdown_ipfs_slot;
+    Cancel::Connection shutdown_ipfs_slot;
 
     if (config.cache_enabled()) {
         cache_injector = make_unique<CacheInjector>

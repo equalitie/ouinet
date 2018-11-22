@@ -18,6 +18,22 @@ public:
 
     class Connection : public Hook
     {
+    public:
+        Connection() = default;
+
+        Connection(Connection&& other)
+            : slot(std::move(other.slot))
+        {
+            other.swap_nodes(*this);
+        }
+
+        Connection& operator=(Connection&& other) {
+            slot = std::move(other.slot);
+            other.swap_nodes(*this);
+            return *this;
+        }
+
+    private:
         friend class Signal;
         std::function<T> slot;
     };
@@ -48,6 +64,8 @@ public:
         _connections.push_back(connection);
         return connection;
     }
+
+    size_t size() const { return _connections.size(); }
 
 private:
     boost::intrusive::list<Connection, boost::intrusive::constant_time_size<false>> _connections;
