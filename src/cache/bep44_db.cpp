@@ -106,7 +106,7 @@ string Bep44ClientDb::insert_mapping( const string& ins_data
         return or_throw<string>(yield, asio::error::invalid_argument);
     }
 
-    return _bt_dht.mutable_put_start(item, yield).to_hex();
+    return _bt_dht.mutable_put_start(item).to_hex();
 }
 
 string Bep44InjectorDb::insert( string key
