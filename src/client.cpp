@@ -846,20 +846,6 @@ void Client::State::serve_request( GenericStream&& con
         auto on_exit = defer([&] { yield.log("Done"); });
         auto target = req.target();
 
-        // Requests in the encrypted channel are usually not proxy-like
-        // so the target is not "http://example.com/foo" but just "/foo".
-        // We expand the target again with the ``Host:`` header
-        // (or the CONNECT target if the header is missing in HTTP/1.0)
-        // so that "/foo" becomes "https://example.com/foo".
-        if (mitm && !target.starts_with("https://") && !target.starts_with("http://")) {
-            req.target( string("https://")
-                      + ( (req[http::field::host].length() > 0)
-                          ? req[http::field::host].to_string()
-                          : connect_hp)
-                      + target.to_string());
-            target = req.target();
-        }
-
         // Perform MitM for CONNECT requests (to be able to see encrypted requests)
         if (!mitm && req.method() == http::verb::connect) {
             sys::error_code ec;
@@ -880,6 +866,33 @@ void Client::State::serve_request( GenericStream&& con
                 .to_string();
             // Go for requests in the encrypted channel.
             continue;
+        }
+
+        // Ensure that the request is proxy-like.
+        if (!(target.starts_with("https://") || target.starts_with("http://"))) {
+            if (mitm) {
+                // Requests in the encrypted channel are usually not proxy-like
+                // so the target is not "http://example.com/foo" but just "/foo".
+                // We expand the target again with the ``Host:`` header
+                // (or the CONNECT target if the header is missing in HTTP/1.0)
+                // so that "/foo" becomes "https://example.com/foo".
+                req.target( string("https://")
+                          + ( (req[http::field::host].length() > 0)
+                              ? req[http::field::host].to_string()
+                              : connect_hp)
+                          + target.to_string());
+                target = req.target();
+            } else {
+                // TODO: Maybe later we want to support front-end and API calls
+                // as plain HTTP requests (as if we were a plain HTTP server)
+                // but for the moment we only accept proxy requests.
+                handle_bad_request( con
+                                  , req
+                                  , "Not a proxy request"
+                                  , yield.tag("handle_bad_request"));
+                if (req.keep_alive()) continue;
+                else return;
+            }
         }
 
         // TODO: If an HTTPS request contains any private data (cookies, GET,
