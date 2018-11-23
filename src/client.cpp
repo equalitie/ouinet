@@ -844,18 +844,20 @@ void Client::State::serve_request( GenericStream&& con
         yield.log("=== New request ===");
         yield.log(req.base());
         auto on_exit = defer([&] { yield.log("Done"); });
+        auto target = req.target();
 
-        // Requests in the encrypted channel are not proxy-like
+        // Requests in the encrypted channel are usually not proxy-like
         // so the target is not "http://example.com/foo" but just "/foo".
         // We expand the target again with the ``Host:`` header
         // (or the CONNECT target if the header is missing in HTTP/1.0)
         // so that "/foo" becomes "https://example.com/foo".
-        if (mitm) {
+        if (mitm && !target.starts_with("https://") && !target.starts_with("http://")) {
             req.target( string("https://")
                       + ( (req[http::field::host].length() > 0)
                           ? req[http::field::host].to_string()
                           : connect_hp)
-                      + req.target().to_string());
+                      + target.to_string());
+            target = req.target();
         }
 
         // Perform MitM for CONNECT requests (to be able to see encrypted requests)
@@ -870,11 +872,11 @@ void Client::State::serve_request( GenericStream&& con
             mitm = true;
             // Save CONNECT target (minus standard HTTPS port ``:443`` if present)
             // in case of subsequent HTTP/1.0 requests with no ``Host:`` header.
-            auto port_pos = max( req.target().length() - 4 /* strlen(":443") */
+            auto port_pos = max( target.length() - 4 /* strlen(":443") */
                                , string::npos);
-            connect_hp = req.target()
+            connect_hp = target
                 // Do not to hit ``:443`` inside of an IPv6 address.
-                .substr(0, req.target().rfind(":443", port_pos))
+                .substr(0, target.rfind(":443", port_pos))
                 .to_string();
             // Go for requests in the encrypted channel.
             continue;
