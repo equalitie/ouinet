@@ -5,6 +5,7 @@
 
 #include "util/condition_variable.h"
 #include "util/success_condition.h"
+#include "async_sleep.h"
 
 using namespace std;
 using namespace ouinet;
@@ -25,10 +26,15 @@ void OuiServiceServer::add(std::unique_ptr<OuiServiceImplementationServer> imple
 
 void OuiServiceServer::start_listen(asio::yield_context yield)
 {
+    using namespace std::chrono_literals;
+
     SuccessCondition success_condition(_ios);
 
     for (auto& implementation : _implementations) {
-        asio::spawn(_ios, [this, implementation = implementation.get(), lock = success_condition.lock()] (asio::yield_context yield) mutable {
+        asio::spawn(_ios, [ this
+                          , implementation = implementation.get()
+                          , lock = success_condition.lock()
+                          ] (asio::yield_context yield) mutable {
             sys::error_code ec;
 
             auto slot_connection = _stop_listen.connect([implementation] () {
@@ -36,24 +42,26 @@ void OuiServiceServer::start_listen(asio::yield_context yield)
             });
 
             implementation->start_listen(yield[ec]);
-            if (ec) {
-                return;
-            }
+
+            if (ec) return;
 
             lock.release(true);
 
-            while (true) {
+            while (!_stop_listen) {
                 GenericStream connection = implementation->accept(yield[ec]);
-                /*
-                 * TODO: Reconnect logic? There are errors other than operation_aborted.
-                 */
-                if (ec) {
-                    assert(ec == asio::error::operation_aborted
-                            && "TODO: https://github.com/equalitie/ouinet/issues/16");
+
+                if (ec == asio::error::operation_aborted) {
                     break;
                 }
 
-                if (_stop_listen.call_count()) {
+                if (ec) {
+                    // Retry after a short while to avoid CPU hogging
+                    async_sleep(_ios, 1s, _stop_listen, yield);
+                    ec = sys::error_code();
+                    continue;
+                }
+
+                if (_stop_listen) {
                     connection.close();
                     break;
                 }
