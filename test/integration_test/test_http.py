@@ -71,7 +71,7 @@ class OuinetTests(TestCase):
         return injector
 
     def run_i2p_injector(self, injector_args, deferred_i2p_ready):
-        injector = OuinetI2PInjector(OuinetConfig(TestFixtures.I2P_INJECTOR_NAME + "_i2p", TestFixtures.I2P_TRANSPORT_TIMEOUT, injector_args, benchmark_regexes=[TestFixtures.I2P_TUNNEL_READY_REGEX]), [deferred_i2p_ready], TestFixtures.I2P_REUSE_PREDEFINED_IDENTITY and TestFixtures.INJECTOR_I2P_PRIVATE_KEY or None)
+        injector = OuinetI2PInjector(OuinetConfig(TestFixtures.I2P_INJECTOR_NAME + "_i2p", TestFixtures.I2P_TRANSPORT_TIMEOUT, injector_args, benchmark_regexes=[TestFixtures.I2P_TUNNEL_READY_REGEX]), [deferred_i2p_ready])
         injector.start()
         self.proc_list.append(injector)
 
