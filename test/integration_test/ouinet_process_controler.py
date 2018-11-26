@@ -156,7 +156,11 @@ class OuinetProcess(object):
             self.pulse_timer.stop()
 
             self.send_term_signal()
-            self._proc_protocol.transport.loseConnection()
+
+            # Don't do this because we may lose some important debug
+            # information that gets printed between now and when the app
+            # actually exits.
+            #self._proc_protocol.transport.loseConnection()
 
 class OuinetClient(OuinetProcess):
     def __init__(self, client_config, deferred_events):
