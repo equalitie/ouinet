@@ -563,8 +563,7 @@ void serve( InjectorConfig& config
             else {
                 auto req2 = req;
                 // do not propagate or cache the header
-                //req2.erase(http_::request_version_hdr);
-                req2.erase(version_hdr_i);
+                req2.erase(http_::request_version_hdr);
                 res = cc.fetch(req2, yield[ec].tag("cache_control.fetch"));
                 res.keep_alive(true);
             }
