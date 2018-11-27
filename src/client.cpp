@@ -148,6 +148,8 @@ private:
 
     asio::io_service& get_io_service() { return _ios; }
 
+    GenericStream connect_to_origin(const Request&, Cancel&, Yield);
+
 private:
     asio::io_service& _ios;
     std::unique_ptr<CACertificate> _ca_certificate;
@@ -297,6 +299,46 @@ Client::State::fetch_stored( const Request& request
 }
 
 //------------------------------------------------------------------------------
+GenericStream
+Client::State::connect_to_origin( const Request& rq
+                                , Cancel& cancel
+                                , Yield yield)
+{
+    std::string host, port;
+    std::tie(host, port) = util::get_host_port(rq);
+
+    sys::error_code ec;
+
+    auto lookup = util::tcp_async_resolve( host, port
+                                         , _ios
+                                         , cancel
+                                         , yield[ec]);
+
+    if (ec) return or_throw<GenericStream>(yield, ec);
+
+    auto sock = connect_to_host(lookup, _ios, cancel, yield[ec]);
+
+    if (ec) return or_throw<GenericStream>(yield, ec);
+
+    GenericStream stream;
+
+    if (rq.target().starts_with("https:")) {
+        stream = ssl::util::client_handshake( move(sock)
+                                            , ssl_ctx
+                                            , host
+                                            , cancel
+                                            , yield[ec]);
+
+        if (ec) return or_throw(yield, ec, move(stream));
+    }
+    else {
+        stream = move(sock);
+    }
+
+    return stream;
+}
+//------------------------------------------------------------------------------
+
 Response Client::State::fetch_fresh_from_origin( const Request& rq
                                                , Cancel& cancel_
                                                , Yield yield)
@@ -309,42 +351,16 @@ Response Client::State::fetch_fresh_from_origin( const Request& rq
 
     auto con = _origin_pools.get_connection(rq);
 
+    sys::error_code ec;
+
     if (!con) {
-        std::string host, port;
-        std::tie(host, port) = util::get_host_port(rq);
+        auto stream = connect_to_origin(rq, cancel, yield[ec]);
 
-        sys::error_code ec;
-
-        auto lookup = util::tcp_async_resolve( host, port
-                                             , _ios
-                                             , cancel
-                                             , yield[ec]);
-
+        if (!ec && cancel) ec = asio::error::timed_out;
         if (ec) return or_throw<Response>(yield, ec);
-
-        auto sock = connect_to_host(lookup, _ios, cancel, yield[ec]);
-
-        if (ec) return or_throw<Response>(yield, ec);
-
-        GenericStream stream;
-
-        if (rq.target().starts_with("https:")) {
-            stream = ssl::util::client_handshake( move(sock)
-                                                , ssl_ctx
-                                                , host
-                                                , cancel
-                                                , yield[ec]);
-
-            if (ec) return or_throw<Response>(yield, ec);
-        }
-        else {
-            stream = move(sock);
-        }
 
         con.reset(new ConnectionPool<>::Connection(move(stream), boost::none));
     }
-
-    sys::error_code ec;
 
     // Transform request from absolute-form to origin-form
     // https://tools.ietf.org/html/rfc7230#section-5.3
