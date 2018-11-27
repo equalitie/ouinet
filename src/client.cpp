@@ -301,8 +301,7 @@ Response Client::State::fetch_fresh_from_origin( const Request& rq
                                                , Cancel& cancel_
                                                , Yield yield)
 {
-    Cancel cancel;
-    auto cancel_slot = cancel_.connect([&] { cancel(); });
+    Cancel cancel(cancel_);
 
     WatchDog watch_dog(_ios
                       , default_timeout::fetch_http()
