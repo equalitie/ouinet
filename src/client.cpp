@@ -148,6 +148,8 @@ private:
 
     asio::io_service& get_io_service() { return _ios; }
 
+    bool maybe_handle_websocket_upgrade(GenericStream&, Request&, Yield);
+
     GenericStream connect_to_origin(const Request&, Cancel&, Yield);
 
 private:
@@ -760,6 +762,49 @@ bool handle_if_injector_error(GenericStream& con, Response& res_, Yield yield) {
 }
 
 //------------------------------------------------------------------------------
+bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
+                                                  , Request& rq
+                                                  , Yield yield)
+{
+    if (!boost::iequals(rq[http::field::upgrade], "websocket"))  return false;
+
+    bool has_upgrade = false;
+
+    for (auto s : SplitString(rq[http::field::connection], ',')) {
+        if (boost::iequals(s, "Upgrade")) { has_upgrade = true; break; }
+    }
+
+    if (!has_upgrade) return false;
+
+    Cancel cancel(_shutdown_signal);
+
+    sys::error_code ec;
+
+    // TODO: Reuse existing connections to origin and injectors.  Currently
+    // this is hard because those are stored not as streams but as
+    // ConnectionPool::Connection.
+    auto origin = connect_to_origin(rq, cancel, yield[ec]);
+
+    if (ec) return or_throw(yield, ec, true);
+
+    http::async_write(origin, rq, yield[ec]);
+
+    beast::flat_buffer buffer;
+    Response rs;
+    http::async_read(origin, buffer, rs, yield[ec]);
+
+    if (ec) return or_throw(yield, ec, true);
+
+    http::async_write(browser, rs, yield[ec]);
+
+    if (rs.result() != http::status::switching_protocols) return true;
+
+    full_duplex(move(browser), move(origin), yield[ec]);
+
+    return or_throw(yield, ec, true);
+}
+
+//------------------------------------------------------------------------------
 void Client::State::serve_request( GenericStream&& con
                                  , asio::yield_context yield_)
 {
@@ -881,6 +926,10 @@ void Client::State::serve_request( GenericStream&& con
                 .to_string();
             // Go for requests in the encrypted channel.
             continue;
+        }
+
+        if (maybe_handle_websocket_upgrade(con, req, yield[ec].tag("websocket"))) {
+            break;
         }
 
         // Ensure that the request is proxy-like.
