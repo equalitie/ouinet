@@ -9,13 +9,11 @@ namespace ouinet {
 template<typename T>
 class Signal {
 private:
+    template<class K>
+    using List = boost::intrusive::list<K, boost::intrusive::constant_time_size<false>>;
     using Hook = boost::intrusive::list_base_hook<boost::intrusive::link_mode<boost::intrusive::auto_unlink>>;
 
 public:
-    Signal() = default;
-    Signal(const Signal&) = delete;
-    Signal& operator=(const Signal&) = delete;
-
     class Connection : public Hook
     {
     public:
@@ -37,6 +35,17 @@ public:
         friend class Signal;
         std::function<T> slot;
     };
+
+public:
+    Signal() = default;
+    Signal(const Signal&) = delete;
+    Signal& operator=(const Signal&) = delete;
+
+    Signal(Signal& parent)
+        : _parent_connection(parent.connect([&] (auto&&... args) {
+                    (*this)(std::forward<decltype(args)>(args)...);
+                }))
+    {}
 
     template<typename... Args>
     void operator()(Args&&... args)
@@ -68,8 +77,9 @@ public:
     size_t size() const { return _connections.size(); }
 
 private:
-    boost::intrusive::list<Connection, boost::intrusive::constant_time_size<false>> _connections;
+    List<Connection> _connections;
     size_t _call_count = 0;
+    Connection _parent_connection;
 };
 
 // This is how we use it 99% (100%?) of the time.
