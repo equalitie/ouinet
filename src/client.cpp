@@ -112,10 +112,6 @@ private:
 
     void serve_request(GenericStream&& con, asio::yield_context yield);
 
-    void handle_connect_request( GenericStream& client_c
-                               , const Request& req
-                               , Yield yield);
-
     CacheEntry
     fetch_stored( const Request& request
                 , request_route::Config& request_config
@@ -196,71 +192,6 @@ void handle_bad_request( GenericStream& con
 
     sys::error_code ec;
     http::async_write(con, res, yield[ec]);
-}
-
-//------------------------------------------------------------------------------
-void Client::State::handle_connect_request( GenericStream& client_c
-                                          , const Request& req
-                                          , Yield yield)
-{
-    // https://tools.ietf.org/html/rfc2817#section-5.2
-
-    sys::error_code ec;
-
-    if (!_front_end.is_injector_proxying_enabled()) {
-        return handle_bad_request( client_c
-                                 , req
-                                 , "Forwarding disabled"
-                                 , yield[ec]);
-    }
-
-    auto inj = _injector->connect(yield[ec], _shutdown_signal);
-
-    if (ec) {
-        // TODO: Does an RFC dicate a particular HTTP status code?
-        return handle_bad_request(client_c, req, "Can't connect to injector", yield[ec]);
-    }
-
-    auto disconnect_injector_slot = _shutdown_signal.connect([&inj] {
-        inj.connection.close();
-    });
-
-    auto credentials = _config.credentials_for(inj.remote_endpoint);
-
-    if (credentials) {
-        auto auth_req = authorize(req, *credentials);
-        http::async_write(inj.connection, auth_req, yield[ec]);
-    }
-    else {
-        http::async_write(inj.connection, const_cast<Request&>(req), yield[ec]);
-    }
-
-    if (ec) {
-        // TODO: Does an RFC dicate a particular HTTP status code?
-        return handle_bad_request(client_c, req, "Can't contact the injector", yield[ec]);
-    }
-
-    beast::flat_buffer buffer;
-    Response res;
-    http::async_read(inj.connection, buffer, res, yield[ec]);
-
-    if (ec) {
-        // TODO: Does an RFC dicate a particular HTTP status code?
-        return handle_bad_request(client_c, req, "Can't contact the injector", yield[ec]);
-    }
-
-    http::async_write(client_c, res, yield[ec]);
-
-    if (ec) {
-        cerr << "Failed to return CONNECT response: " << ec.message() << endl;
-        return;
-    }
-
-    if (!(200 <= unsigned(res.result()) && unsigned(res.result()) < 300)) {
-        return;
-    }
-
-    full_duplex(move(client_c), move(inj.connection), yield);
 }
 
 //------------------------------------------------------------------------------
@@ -959,18 +890,6 @@ void Client::State::serve_request( GenericStream&& con
             }
         }
 
-        // TODO: If an HTTPS request contains any private data (cookies, GET,
-        // POST arguments...) it should be either routed to the Origin or a
-        // Proxy (which may be the injector) using a CONNECT request (as is
-        // done in the handle_connect_request function).
-
-        //if (_config.enable_http_connect_requests()) {
-        //    handle_connect_request(con, req, yield);
-        //}
-        //else {
-        //    auto res = bad_gateway(req);
-        //    http::async_write(con, res, yield[ec]);
-        //}
         request_config = route_choose_config(req, matches, default_request_config);
 
         auto res = cache_control.fetch(req, yield[ec].tag("cache_control.fetch"));
