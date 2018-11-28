@@ -30,7 +30,23 @@ services:
     image: "equalitie/ouinet:${OUINET_VERSION:-latest}"
     volumes:
       - data:/var/opt/ouinet
+    # Host networking is preferred over port forwarding
+    # if running on a Linux host (especially for injectors).
+    # Otherwise see below.
     network_mode: host
+    # If you get "connection refused" errors when
+    # accessing the client's HTTP proxy at ``127.111.117.105:8080``,
+    # comment the line above and uncomment the ones below
+    # to enable port forwarding.
+    #
+    #network_mode: bridge
+    #ports:
+    #  - "127.7.2.1:8080:8080"  # client HTTP proxy
+    #  - "7077:7077"  # injector TLS endpoint
+    #
+    # You will also need to modify ``listen-on-*`` options to
+    # use ``0.0.0.0`` instead of ``127.7.2.1`` (see readme).
+    #
     command: ["${OUINET_ROLE:-client}"]
     # The service will be restarted (also on reboot)
     # until it is manually stopped.

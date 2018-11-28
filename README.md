@@ -45,7 +45,9 @@ security or privacy-affecting issues might exist.  Please keep this in mind
 when using this software.
 
 **Note:** The steps described below have only been tested to work on GNU/Linux
-on AMD64 platforms.
+on AMD64 platforms.  Building and testing Ouinet on your computer requires
+familiarity with the command line.  At the moment there are no user-friendly
+packages for Ouinet on the desktop.
 
 ## Cloning the source tree
 
@@ -258,6 +260,17 @@ important parameters, so you may want to stop it (see above) and use the
   - Set the IPNS ID of the cache index in option `injector-ipns`.
 
 After you have set up your client's configuration, you can **restart it**.
+The client's HTTP proxy endpoint should be available to the host at
+`127.7.2.1` port 8080.
+
+If you get a "connection refused" error when using the client's proxy, your
+Docker setup may not support host networking.  To enable port forwarding,
+follow the instructions in `docker-compose.yml` and use the shell container
+(see below) to run this command and thus modify `listen-on-*` options:
+
+    # sed -i 's/127.7.2.1/0.0.0.0/' */ouinet-*.conf
+
+Finally, restart the client container.
 
 [docker-compose.yml]: https://raw.githubusercontent.com/equalitie/ouinet/master/docker-compose.yml
 
@@ -304,9 +317,9 @@ populate its default environment file:
 After an injector has finished starting, you may want to use the shell
 container to inspect and note down the contents of `injector/endpoint-*`
 (injector endpoints) and `injector/cache-ipns` (cache index IPNS ID) to be
-used by clients.  If `injector/ouinet-injector.conf` has `listen-on-tls`
-configured, the injector will also generate a `tls-cert.pem` file which you
-should distribute to clients for TLS access.
+used by clients.  The injector will also generate a `tls-cert.pem` file which
+you should distribute to clients for TLS access.  Other configuration
+information like credentials can be found in `injector/ouinet-injector.conf`.
 
 To start the injector in headless mode, you can run:
 

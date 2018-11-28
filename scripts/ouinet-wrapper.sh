@@ -52,8 +52,32 @@ REPO=$(dirname $CONF)
 repo_arg=$(get_repo_from_args "$@")
 REPO="${repo_arg:-$REPO}"
 
+LOCAL_ADDR=127.7.2.1
+CLIENT_PROXY_PORT=8080
+INJECTOR_TLS_PORT=7077
+
 if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
     cp -r "$INST/repo-templates/$PROG" "$REPO"
+
+    # Fix local listening addresses to a well-known, identifiable value
+    # that does (hopefully) not clash with other daemons.
+    sed -i -E "s/^(listen-on-\S+\s*=\s*)127\.0\.0\.1(:.*)/\1${LOCAL_ADDR}\2/" "$CONF"
+
+    # Set a well-known client HTTP proxy port.
+    if [ "$PROG" = client ]; then
+        sed -i -E "s/^(listen-on-tcp\s*=\s*${LOCAL_ADDR}:)[0-9]+(.*)/\1${CLIENT_PROXY_PORT}\2/" "$CONF"
+    fi
+
+    # Set a well-known injector TLS port (and enable it).
+    if [ "$PROG" = injector ]; then
+        sed -i -E "s/^#?(listen-on-tls\s*=\s*:::)[0-9]+(.*)/\1${INJECTOR_TLS_PORT}\2/" "$CONF"
+    fi
+
+    # Generate a random password for injector credentials.
+    if [ "$PROG" = injector ]; then
+        password=$(dd if=/dev/urandom bs=1024 count=1 status=none | md5sum | cut -f1 -d' ')
+        sed -i -E "s/^(credentials\s*=\s*).*/\1ouinet:$password/" "$CONF"
+    fi
 fi
 
 if [ "$OUINET_DEBUG" = yes ]; then
