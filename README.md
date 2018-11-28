@@ -45,7 +45,9 @@ security or privacy-affecting issues might exist.  Please keep this in mind
 when using this software.
 
 **Note:** The steps described below have only been tested to work on GNU/Linux
-on AMD64 platforms.
+on AMD64 platforms.  Building and testing Ouinet on your computer requires
+familiarity with the command line.  At the moment there are no user-friendly
+packages for Ouinet on the desktop.
 
 ## Cloning the source tree
 
