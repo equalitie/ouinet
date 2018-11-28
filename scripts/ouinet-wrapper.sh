@@ -72,6 +72,12 @@ if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
     if [ "$PROG" = injector ]; then
         sed -i -E "s/^#?(listen-on-tls\s*=\s*:::)[0-9]+(.*)/\1${INJECTOR_TLS_PORT}\2/" "$CONF"
     fi
+
+    # Generate a random password for injector credentials.
+    if [ "$PROG" = injector ]; then
+        password=$(dd if=/dev/urandom bs=1024 count=1 status=none | md5sum | cut -f1 -d' ')
+        sed -i -E "s/^(credentials\s*=\s*).*/\1ouinet:$password/" "$CONF"
+    fi
 fi
 
 if [ "$OUINET_DEBUG" = yes ]; then
