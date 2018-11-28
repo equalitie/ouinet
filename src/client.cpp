@@ -144,7 +144,10 @@ private:
 
     asio::io_service& get_io_service() { return _ios; }
 
-    bool maybe_handle_websocket_upgrade(GenericStream&, Request&, Yield);
+    bool maybe_handle_websocket_upgrade( GenericStream&
+                                       , beast::string_view connect_host_port
+                                       , Request&
+                                       , Yield);
 
     GenericStream connect_to_origin(const Request&, Cancel&, Yield);
 
@@ -255,7 +258,7 @@ Client::State::connect_to_origin( const Request& rq
 
     GenericStream stream;
 
-    if (rq.target().starts_with("https:")) {
+    if (rq.target().starts_with("https:") || rq.target().starts_with("wss:")) {
         stream = ssl::util::client_handshake( move(sock)
                                             , ssl_ctx
                                             , host
@@ -694,9 +697,12 @@ bool handle_if_injector_error(GenericStream& con, Response& res_, Yield yield) {
 
 //------------------------------------------------------------------------------
 bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
+                                                  , beast::string_view connect_hp
                                                   , Request& rq
                                                   , Yield yield)
 {
+    sys::error_code ec;
+
     if (!boost::iequals(rq[http::field::upgrade], "websocket"))  return false;
 
     bool has_upgrade = false;
@@ -707,9 +713,22 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
 
     if (!has_upgrade) return false;
 
-    Cancel cancel(_shutdown_signal);
+    if (!rq.target().starts_with("ws:") && !rq.target().starts_with("wss:")) {
+        if (connect_hp.empty()) {
+            handle_bad_request(browser, rq, "Not a websocket server", yield[ec]);
+            return true;
+        }
 
-    sys::error_code ec;
+        // Make this a "proxy" request. Among other things, this is important
+        // to let the consecurive code know we want encryption.
+        rq.target( string("wss://")
+                 + ( (rq[http::field::host].length() > 0)
+                     ? rq[http::field::host]
+                     : connect_hp).to_string()
+                 + rq.target().to_string());
+    }
+
+    Cancel cancel(_shutdown_signal);
 
     // TODO: Reuse existing connections to origin and injectors.  Currently
     // this is hard because those are stored not as streams but as
@@ -812,7 +831,8 @@ void Client::State::serve_request( GenericStream&& con
     auto connection_id = _next_connection_id++;
 
     // Is MitM active?
-    bool mitm(false);
+    bool mitm = false;
+
     // Saved host/port from CONNECT request.
     string connect_hp;
     // Process the different requests that may come over the same connection.
@@ -859,7 +879,10 @@ void Client::State::serve_request( GenericStream&& con
             continue;
         }
 
-        if (maybe_handle_websocket_upgrade(con, req, yield[ec].tag("websocket"))) {
+        if (maybe_handle_websocket_upgrade( con
+                                          , connect_hp
+                                          , req
+                                          , yield[ec].tag("websocket"))) {
             break;
         }
 

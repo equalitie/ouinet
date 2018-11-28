@@ -11,7 +11,9 @@ pair<string, string>
 ouinet::util::get_host_port(const http::request<http::string_body>& req)
 {
     auto target = req.target();
-    auto defport = target.starts_with("https:") ? "443" : "80";
+    auto defport = (target.starts_with("https:") || target.starts_with("wss:"))
+                 ? "443"
+                 : "80";
 
     auto hp = req[http::field::host];
     auto cpos = hp.rfind(':');
