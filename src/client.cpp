@@ -322,6 +322,8 @@ Response Client::State::fetch_fresh
     using namespace asio::error;
     using request_route::responder;
 
+    // TODO: This probably isn't necessary because cancel()
+    // is (should be?) called from above.
     auto shutdown_slot = _shutdown_signal.connect([&] { cancel(); });
 
     out_can_store = false;
