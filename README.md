@@ -255,8 +255,9 @@ important parameters, so you may want to stop it (see above) and use the
 
   - Add configuration options for the injector endpoint `injector-ep` and its
     access credentials `injector-credentials`.
-  - If the injector endpoint uses TLS, set `enable-injector-tls` to `true` and
-    copy its certificate to `client/ssl-inj-cert.pem`.
+  - If the injector endpoint uses TLS, set `injector-tls-cert-file` to
+    `/var/opt/ouinet/client/ssl-inj-cert.pem` and copy the injector's TLS
+    certificate to that file.
   - Set the IPNS ID of the cache index in option `injector-ipns`.
 
 After you have set up your client's configuration, you can **restart it**.
