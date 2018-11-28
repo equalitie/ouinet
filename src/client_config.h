@@ -98,6 +98,8 @@ public:
             , "Path to the Injector's TLS certificate")
            ("disable-origin-access", po::bool_switch(&_disable_origin_access)->default_value(false)
             , "Disable direct access to the origin (forces use of injector and the cache)")
+           ("disable-proxy-access", po::bool_switch(&_disable_proxy_access)->default_value(false)
+            , "Disable proxied access to the origin (via the injector)")
            ("max-cached-age"
             , po::value<int>()->default_value(_max_cached_age.total_seconds())
             , "Discard cached content older than this many seconds "
@@ -131,6 +133,9 @@ public:
     bool is_origin_access_enabled() const { return !_disable_origin_access; }
     void is_origin_access_enabled(bool v) { _disable_origin_access = !v; }
 
+    bool is_proxy_access_enabled() const { return !_disable_proxy_access; }
+    void is_proxy_access_enabled(bool v) { _disable_proxy_access = !v; }
+
 private:
     bool _is_help = false;
     fs::path _repo_root;
@@ -141,6 +146,7 @@ private:
     std::string _ipns;
     bool _enable_http_connect_requests = false;
     bool _disable_origin_access = false;
+    bool _disable_proxy_access = false;
     asio::ip::tcp::endpoint _front_end_endpoint;
     DbType _default_db_type = DbType::btree;
 

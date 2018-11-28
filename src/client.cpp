@@ -357,7 +357,7 @@ Response Client::State::fetch_fresh
             // Since the current implementation uses the injector as a proxy,
             // both cases are quite similar, so we only handle HTTPS requests here.
             case responder::proxy: {
-                if (!_front_end.is_proxy_access_enabled())
+                if (!_config.is_proxy_access_enabled())
                     continue;
 
                 auto target = request.target();
