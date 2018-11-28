@@ -90,7 +90,7 @@ void ClientFrontEnd::handle_upload( const Request& req, Response& res, stringstr
         result = http::status::method_not_allowed;
         err = "request method is not POST";
     } else if (req[http::field::content_type] != req_ctype) {
-        result = http::status::bad_request;
+        result = http::status::unsupported_media_type;
         err = "request content type is not " + req_ctype;
     } else if (!req[http::field::expect].empty()) {
         // TODO: Support ``Expect: 100-continue`` as cURL does,
@@ -260,7 +260,7 @@ void ClientFrontEnd::handle_insert_bep44( const Request& req, Response& res, str
         result = http::status::method_not_allowed;
         err = "request method is not POST";
     } else if (req[http::field::content_type] != req_ctype) {
-        result = http::status::bad_request;
+        result = http::status::unsupported_media_type;
         err = "request content type is not " + req_ctype;
     } else if (!req[http::field::expect].empty()) {
         // TODO: Support ``Expect: 100-continue`` as cURL does,
