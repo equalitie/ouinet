@@ -273,6 +273,9 @@ void ClientFrontEnd::handle_insert_bep44( const Request& req, Response& res, str
         if (ec == asio::error::operation_not_supported) {
             result = http::status::service_unavailable;
             err = "BEP44 data base is not enabled";
+        } else if (ec == asio::error::invalid_argument) {
+            result = http::status::unprocessable_entity;
+            err = "malformed, incomplete or forged insertion data";
         } else if (ec) {
             result = http::status::internal_server_error;
             err = "failed to insert entry in data base";
