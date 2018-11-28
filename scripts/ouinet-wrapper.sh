@@ -54,6 +54,7 @@ REPO="${repo_arg:-$REPO}"
 
 LOCAL_ADDR=127.7.2.1
 CLIENT_PROXY_PORT=8080
+INJECTOR_TLS_PORT=7077
 
 if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
     cp -r "$INST/repo-templates/$PROG" "$REPO"
@@ -65,6 +66,11 @@ if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
     # Set a well-known client HTTP proxy port.
     if [ "$PROG" = client ]; then
         sed -i -E "s/^(listen-on-tcp\s*=\s*${LOCAL_ADDR}:)[0-9]+(.*)/\1${CLIENT_PROXY_PORT}\2/" "$CONF"
+    fi
+
+    # Set a well-known injector TLS port (and enable it).
+    if [ "$PROG" = injector ]; then
+        sed -i -E "s/^#?(listen-on-tls\s*=\s*:::)[0-9]+(.*)/\1${INJECTOR_TLS_PORT}\2/" "$CONF"
     fi
 fi
 

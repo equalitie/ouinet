@@ -317,9 +317,8 @@ populate its default environment file:
 After an injector has finished starting, you may want to use the shell
 container to inspect and note down the contents of `injector/endpoint-*`
 (injector endpoints) and `injector/cache-ipns` (cache index IPNS ID) to be
-used by clients.  If `injector/ouinet-injector.conf` has `listen-on-tls`
-configured, the injector will also generate a `tls-cert.pem` file which you
-should distribute to clients for TLS access.
+used by clients.  The injector will also generate a `tls-cert.pem` file which
+you should distribute to clients for TLS access.
 
 To start the injector in headless mode, you can run:
 

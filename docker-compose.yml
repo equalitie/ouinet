@@ -42,6 +42,7 @@ services:
     #network_mode: bridge
     #ports:
     #  - "127.7.2.1:8080:8080"  # client HTTP proxy
+    #  - "7077:7077"  # injector TLS endpoint
     #
     # You will also need to modify ``listen-on-*`` options to
     # use ``0.0.0.0`` instead of ``127.7.2.1`` (see readme).
