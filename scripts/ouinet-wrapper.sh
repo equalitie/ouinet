@@ -56,6 +56,13 @@ if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
     cp -r "$INST/repo-templates/$PROG" "$REPO"
 fi
 
+# Fix local listening addresses to a well-knows, identifiable value
+# that does (hopefully) not clash with other daemons.
+LOCAL_ADDR=127.7.2.1
+if egrep -q '^listen-on-\S+\s*=\s*127\.0\.0\.1:' "$CONF"; then
+    sed -i -E "s/^(listen-on-\S+\s*=\s*)127\.0\.0\.1(:.*)/\1${LOCAL_ADDR}\2/" "$CONF"
+fi
+
 if [ "$OUINET_DEBUG" = yes ]; then
     run() {
         exec gdb -return-child-result -batch \

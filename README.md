@@ -260,6 +260,17 @@ important parameters, so you may want to stop it (see above) and use the
   - Set the IPNS ID of the cache index in option `injector-ipns`.
 
 After you have set up your client's configuration, you can **restart it**.
+The client's HTTP proxy endpoint should be available to the host at
+`127.7.2.1` port 8080.
+
+If you get a "connection refused" error when using the client's proxy, your
+Docker setup may not support host networking.  To enable port forwarding,
+follow the instructions in `docker-compose.yml` and use the shell container
+(see below) to run this command and thus modify `listen-on-*` options:
+
+    # sed -i 's/127.7.2.1/0.0.0.0/' */ouinet-*.conf
+
+Finally, restart the client container.
 
 [docker-compose.yml]: https://raw.githubusercontent.com/equalitie/ouinet/master/docker-compose.yml
 
