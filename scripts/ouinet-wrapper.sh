@@ -52,13 +52,20 @@ REPO=$(dirname $CONF)
 repo_arg=$(get_repo_from_args "$@")
 REPO="${repo_arg:-$REPO}"
 
+LOCAL_ADDR=127.7.2.1
+CLIENT_PROXY_PORT=8080
+
 if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
     cp -r "$INST/repo-templates/$PROG" "$REPO"
 
     # Fix local listening addresses to a well-known, identifiable value
     # that does (hopefully) not clash with other daemons.
-    LOCAL_ADDR=127.7.2.1
     sed -i -E "s/^(listen-on-\S+\s*=\s*)127\.0\.0\.1(:.*)/\1${LOCAL_ADDR}\2/" "$CONF"
+
+    # Set a well-known client HTTP proxy port.
+    if [ "$PROG" = client ]; then
+        sed -i -E "s/^(listen-on-tcp\s*=\s*${LOCAL_ADDR}:)[0-9]+(.*)/\1${CLIENT_PROXY_PORT}\2/" "$CONF"
+    fi
 fi
 
 if [ "$OUINET_DEBUG" = yes ]; then
