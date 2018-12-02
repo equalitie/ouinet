@@ -1,11 +1,19 @@
 #include <I2PTunnel.h>
 #include <I2PService.h>
 
+//for handshake
+#include <boost/beast/core.hpp>
+#include <boost/beast/http.hpp>
+#include <boost/beast/version.hpp>
+#include <boost/asio/connect.hpp>
+#include <boost/asio/ip/tcp.hpp>
+
 #include "client.h"
 
 #include "../../logger.h"
 #include "../../util/condition_variable.h"
 #include "../../or_throw.h"
+
 
 using namespace std;
 using namespace ouinet::ouiservice;
@@ -48,8 +56,57 @@ void Client::start(asio::yield_context yield)
       //now we will try a handshake and only start offering
       //service only if the handshake gets acknowledged then accept the tunnel
       //as a legitimate tunnel.
-  } while(not handshken);
+      shake_hand(yield);
+      
+  } while(not _handshaken);
 }
+
+//TODO: this has repetition of the code of ::connect we should
+//consolidate the repetition  in one function
+void Client::shake_hand(asio::yield_context yield) {
+    //first we start a tcp connection to the server.
+    sys::error_code ec;
+
+    if ((not _client_tunnel) or (not _client_tunnel->is_ready()))
+      or_throw(yield, asio::error::operation_aborted);
+
+    Connection connection(_ios);
+    
+    LOG_DEBUG("Connecting to the i2p injector to send handshake...");
+
+    connection._socket.async_connect(asio::ip::tcp::endpoint(asio::ip::address_v4::loopback(), _port), yield[ec]);
+
+    if (ec) {
+        or_throw<ConnectInfo>(yield, ec);
+    }
+
+    LOG_DEBUG("Handshake connection to the i2p injector is established");
+
+    //now that we have socket we can send a get http request
+
+    // Send the handshake HTTP GET request
+    http::request<http::string_body> handshake_req{http::verb::get, c_handshaking_url, 11};
+    handshake_req.set(http::field::host, c_handshaking_host);
+    handshake_req.set(http::field::user_agent, "i2p ouiservice");
+
+    // TODO write and read both need to be asynced
+    http::write(connection.socket(), handshake_req);
+
+    boost::beast::flat_buffer buffer;
+    http::response<http::dynamic_body> handshake_response;
+
+    // Receive the HTTP response
+    http::read(connection.socket(), buffer, handshake_response);
+
+    // Write the message to standard out
+    // LOG_DEBUG(handshake_response);
+
+    if(ec && ec != boost::system::errc::not_connected)
+        return;
+
+    _handshaken = true;
+
+}    
 
 void Client::stop()
 {
@@ -88,7 +145,6 @@ Client::connect(asio::yield_context yield, Signal<void()>& cancel)
     _client_tunnel->_connections.add(connection);
 
     return ConnectInfo({ GenericConnection(std::move(connection))
-                       , _target_id
-                       });
-    
+                         , _target_id
+        });
 }

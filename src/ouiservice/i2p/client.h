@@ -31,6 +31,9 @@ public:
     void start(asio::yield_context yield) override;
     void stop() override;
 
+
+    void shake_hand(asio::yield_context yield);
+    
     ouinet::OuiServiceImplementationClient::ConnectInfo
     connect(asio::yield_context yield, Signal<void()>& cancel) override;
 
@@ -43,6 +46,12 @@ private:
     std::unique_ptr<Tunnel> _client_tunnel; //the tunnel is a pointer because
     //the client can be stopped (tunnel gets destroyed) and started again
     uint16_t _port;
+
+    //handshake stuff
+    bool _handshaken = false; //indicate that we have handshaken with the server over the tunnel.
+    const std::string c_handshaking_host = "example.org"; //we example.com and .net have special treatment
+    const std::string c_handshaking_url = "http://example.org/"; //we example.com and .net have special treatment
+
 };
 
 } // i2poui namespace

@@ -66,7 +66,7 @@ private:
     std::shared_ptr<bool> _was_destroyed;
     
     // variables controlling the health of the tunnel
-    Connection control_connection;
+    //Connection control_connection;
     uint32_t _port = 0;
     
     bool sent_handshake = false;
@@ -80,7 +80,7 @@ private:
     double speed;
     
     //the hash of test blob sends on ping test
-    unit32_t speed_test_hash;
+    uint32_t speed_test_hash;
     
     bool _has_timed_out = false;
     

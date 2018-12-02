@@ -32,22 +32,6 @@ void Tunnel::set_timeout_to_get_ready(uint32_t timeout)
 }
 
 /**
-* uses the control connection to send handshake 
-* wait for the reply.
-* 
-* return true if it is successful or false otherwise
-*/
-bool do_handshake(boost::asio::yield_context yield) {
-    if (_port == 0) {
-        //either we are not client or the tunnel is not ready refuse
-        return false;
-    }
-
-    
-    
-}
-
-/**
    is called by GenericConnector::is_ready to set a callback when
    the acceptor is ready.
 
