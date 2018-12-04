@@ -561,7 +561,7 @@ public:
         return or_throw(yield, ec, move(r));
     }
 
-    Response store(const Request& rq, Response rs, Cancel& cancel, Yield yield)
+    Response store(const Request& rq, Response rs, Cancel&, Yield yield)
     {
         sys::error_code ec;
 
@@ -574,9 +574,10 @@ public:
 
         asio::spawn(client_state.get_io_service(),
             [ &cache, rs
+            , &ios = client_state.get_io_service()
             , url = rq.target().to_string()
             , dbtype = client_state._config.default_db_type()
-            , &cancel] (asio::yield_context yield) {
+            ] (asio::yield_context yield) {
                 // Seed content data itself.
                 // TODO: Use the scheduler here to only do some max number
                 // of `ipfs_add`s at a time. Also then trim that queue so
@@ -585,9 +586,11 @@ public:
                 cache->ipfs_add( beast::buffers_to_string(rs.body().data())
                                , yield[ec]);
 
+                Cancel cancel;
                 // Retrieve the descriptor (after some insertion delay)
                 // so that we help seed the URL->descriptor mapping too.
-                // TODO: Add a delay since mapping insertion may take a while.
+                if (!async_sleep(ios, chrono::seconds(30), cancel, yield))
+                    return;
                 ec = sys::error_code();
                 cache->get_descriptor(url, dbtype, cancel, yield[ec]);
                 // TODO: Check that injection ID matches request, warn otherwise.
