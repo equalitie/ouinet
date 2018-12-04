@@ -14,6 +14,7 @@
 #include <cstdlib>  // for atexit()
 
 #include "cache/cache_client.h"
+#include "cache/http_desc.h"
 
 #include "namespaces.h"
 #include "origin_pools.h"
@@ -583,19 +584,37 @@ public:
                 // of `ipfs_add`s at a time. Also then trim that queue so
                 // that it doesn't grow indefinitely.
                 sys::error_code ec;
-                cache->ipfs_add( beast::buffers_to_string(rs.body().data())
-                               , yield[ec]);
+                auto body_link = cache->ipfs_add
+                    (beast::buffers_to_string(rs.body().data()), yield[ec]);
 
                 // Retrieve the descriptor (after some insertion delay)
                 // so that we help seed the URL->descriptor mapping too.
                 asio::spawn(ios,  // use another coroutine to drop heavy response body
-                    [&cache, &ios, url, dbtype, rsh = rs.base()] (asio::yield_context yield) {
+                    [ &cache, &ios, url, dbtype
+                    , inj_id = rs[http_::response_injection_id_hdr].to_string()
+                    , body_link = move(body_link)] (asio::yield_context yield) {
                         Cancel cancel;
                         if (!async_sleep(ios, chrono::seconds(30), cancel, yield))
                             return;
                         sys::error_code ec;
-                        cache->get_descriptor(url, dbtype, cancel, yield[ec]);
-                        // TODO: Check that injection ID matches request, warn otherwise.
+                        auto desc_data = cache->get_descriptor(url, dbtype, cancel, yield[ec]);
+                        if (ec) {
+                            LOG_DEBUG( "Post-inject lookup: did not find descriptor: "
+                                     , url, " ", inj_id);
+                            return;
+                        }
+                        // Report whether we are seeding the same descriptor and data
+                        // that our injection triggered.
+                        auto desc = Descriptor::deserialize(desc_data);
+                        if (!desc) {
+                            LOG_DEBUG( "Post-inject lookup: invalid descriptor: "
+                                     , url, " ", inj_id);
+                            return;
+                        }
+                        LOG_DEBUG( "Post-inject lookup:"
+                                 , " same_desc=", inj_id == desc->request_id
+                                 , " same_data=", body_link == desc->body_link
+                                 , ": ", url, " ", inj_id);
                     });
             });
 
