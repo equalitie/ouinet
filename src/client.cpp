@@ -586,14 +586,17 @@ public:
                 cache->ipfs_add( beast::buffers_to_string(rs.body().data())
                                , yield[ec]);
 
-                Cancel cancel;
                 // Retrieve the descriptor (after some insertion delay)
                 // so that we help seed the URL->descriptor mapping too.
-                if (!async_sleep(ios, chrono::seconds(30), cancel, yield))
-                    return;
-                ec = sys::error_code();
-                cache->get_descriptor(url, dbtype, cancel, yield[ec]);
-                // TODO: Check that injection ID matches request, warn otherwise.
+                asio::spawn(ios,  // use another coroutine to drop heavy response body
+                    [&cache, &ios, url, dbtype, rsh = rs.base()] (asio::yield_context yield) {
+                        Cancel cancel;
+                        if (!async_sleep(ios, chrono::seconds(30), cancel, yield))
+                            return;
+                        sys::error_code ec;
+                        cache->get_descriptor(url, dbtype, cancel, yield[ec]);
+                        // TODO: Check that injection ID matches request, warn otherwise.
+                    });
             });
 
         // Note: we have to return a valid response even in case of error
