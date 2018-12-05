@@ -144,6 +144,7 @@ private:
     fs::path ca_dh_path()   const { return _config.repo_root() / OUINET_CA_DH_FILE;   }
 
     asio::io_service& get_io_service() { return _ios; }
+    Signal<void()>& get_shutdown_signal() { return _shutdown_signal; }
 
     bool maybe_handle_websocket_upgrade( GenericStream&
                                        , beast::string_view connect_host_port
@@ -576,6 +577,7 @@ public:
         asio::spawn(client_state.get_io_service(),
             [ &cache, rs
             , &ios = client_state.get_io_service()
+            , &cancel = client_state.get_shutdown_signal()
             , url = rq.target().to_string()
             , dbtype = client_state._config.default_db_type()
             ] (asio::yield_context yield) {
@@ -590,10 +592,10 @@ public:
                 // Retrieve the descriptor (after some insertion delay)
                 // so that we help seed the URL->descriptor mapping too.
                 asio::spawn(ios,  // use another coroutine to drop heavy response body
-                    [ &cache, &ios, url, dbtype
+                    [ &cache, &ios, &cancel, url, dbtype
                     , inj_id = rs[http_::response_injection_id_hdr].to_string()
-                    , body_link = move(body_link)] (asio::yield_context yield) {
-                        Cancel cancel;
+                    , body_link = move(body_link)
+                    ] (asio::yield_context yield) {
                         optional<Descriptor> desc;
 
                         // Try a few times to get the descriptor for
