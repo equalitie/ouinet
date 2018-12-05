@@ -6,6 +6,7 @@
 #include <boost/beast/http.hpp>
 #include <boost/beast/version.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include <boost/format.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/ssl/stream.hpp>
 #include <boost/optional/optional_io.hpp>
@@ -14,6 +15,7 @@
 #include <cstdlib>  // for atexit()
 
 #include "cache/cache_client.h"
+#include "cache/http_desc.h"
 
 #include "namespaces.h"
 #include "origin_pools.h"
@@ -143,6 +145,7 @@ private:
     fs::path ca_dh_path()   const { return _config.repo_root() / OUINET_CA_DH_FILE;   }
 
     asio::io_service& get_io_service() { return _ios; }
+    Signal<void()>& get_shutdown_signal() { return _shutdown_signal; }
 
     bool maybe_handle_websocket_upgrade( GenericStream&
                                        , beast::string_view connect_host_port
@@ -573,13 +576,70 @@ public:
         if (ec) return or_throw(yield, ec, move(rs));
 
         asio::spawn(client_state.get_io_service(),
-            [&cache, rs] (asio::yield_context yield) {
+            [ &cache, rs
+            , &ios = client_state.get_io_service()
+            , &cancel = client_state.get_shutdown_signal()
+            , key = rq.target().to_string()  // TODO: canonical
+            , dbtype = client_state._config.default_db_type()
+            ] (asio::yield_context yield) mutable {
+                // Seed content data itself.
                 // TODO: Use the scheduler here to only do some max number
                 // of `ipfs_add`s at a time. Also then trim that queue so
                 // that it doesn't grow indefinitely.
                 sys::error_code ec;
-                cache->ipfs_add( beast::buffers_to_string(rs.body().data())
-                               , yield[ec]);
+                auto body_link = cache->ipfs_add
+                    (beast::buffers_to_string(rs.body().data()), yield[ec]);
+
+                auto inj_id = rs[http_::response_injection_id_hdr].to_string();
+                rs = Response();  // drop heavy response body
+
+                static const int max_attempts = 3;
+                auto log_post_inject =
+                    [&] (int attempt, const string& msg){
+                        LOG_DEBUG( "Post-inject lookup id=", inj_id
+                                 , " (", attempt + 1, "/", max_attempts, "): "
+                                 , msg, "; key=", key);
+                    };
+
+                // Retrieve the descriptor for the injection that we triggered
+                // so that we help seed the URL->descriptor mapping too.
+                // Try a few times to get the descriptor
+                // (after some insertion delay, with exponential backoff).
+                optional<Descriptor> desc;
+                int attempt = 0;
+                for ( auto backoff = chrono::seconds(30);
+                      attempt < max_attempts; backoff *= 2, ++attempt) {
+                    if (!async_sleep(ios, backoff, cancel, yield))
+                        return;
+
+                    sys::error_code ec;
+                    auto desc_data = cache->get_descriptor(key, dbtype, cancel, yield[ec]);
+                    if (ec == asio::error::not_found) {  // not (yet) inserted
+                        log_post_inject(attempt, "not found, try again");
+                        continue;
+                    } else if (ec) {  // some other error
+                        log_post_inject(attempt, (boost::format("error=%s, giving up") % ec).str());
+                        return;
+                    }
+
+                    desc = Descriptor::deserialize(desc_data);
+                    if (!desc) {  // maybe incompatible cache index
+                        log_post_inject(attempt, "invalid descriptor, giving up");
+                        return;
+                    }
+
+                    if (inj_id == desc->request_id)
+                        break;  // found desired descriptor
+
+                    // different injection, try again
+                }
+
+                attempt = (attempt > max_attempts) ? max_attempts : attempt;
+                log_post_inject
+                    (attempt, desc ? ( boost::format("same_desc=%b same_data=%b")
+                                     % (inj_id == desc->request_id)
+                                     % (body_link == desc->body_link)).str()
+                                   : "did not find descriptor, giving up");
             });
 
         // Note: we have to return a valid response even in case of error
