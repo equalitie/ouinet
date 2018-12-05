@@ -604,7 +604,7 @@ public:
                             [&] (int attempt, const string& msg){
                                 LOG_DEBUG( "Post-inject lookup id=", inj_id
                                          , " (", attempt + 1, "/", max_attempts, "): "
-                                         , msg, " key=", key);
+                                         , msg, "; key=", key);
                             };
 
                         // Try a few times to get the descriptor for
