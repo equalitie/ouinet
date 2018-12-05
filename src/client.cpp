@@ -579,7 +579,7 @@ public:
             [ &cache, rs
             , &ios = client_state.get_io_service()
             , &cancel = client_state.get_shutdown_signal()
-            , url = rq.target().to_string()
+            , key = rq.target().to_string()  // TODO: canonical
             , dbtype = client_state._config.default_db_type()
             ] (asio::yield_context yield) {
                 // Seed content data itself.
@@ -593,7 +593,7 @@ public:
                 // Retrieve the descriptor (after some insertion delay)
                 // so that we help seed the URL->descriptor mapping too.
                 asio::spawn(ios,  // use another coroutine to drop heavy response body
-                    [ &cache, &ios, &cancel, url, dbtype
+                    [ &cache, &ios, &cancel, key, dbtype
                     , inj_id = rs[http_::response_injection_id_hdr].to_string()
                     , body_link = move(body_link)
                     ] (asio::yield_context yield) {
@@ -604,7 +604,7 @@ public:
                             [&] (int attempt, const string& msg){
                                 LOG_DEBUG( "Post-inject lookup id=", inj_id
                                          , " (", attempt + 1, "/", max_attempts, "): "
-                                         , msg, " url=", url);
+                                         , msg, " key=", key);
                             };
 
                         // Try a few times to get the descriptor for
@@ -616,7 +616,7 @@ public:
                                 return;
 
                             sys::error_code ec;
-                            auto desc_data = cache->get_descriptor(url, dbtype, cancel, yield[ec]);
+                            auto desc_data = cache->get_descriptor(key, dbtype, cancel, yield[ec]);
                             if (ec == asio::error::not_found) {  // not (yet) inserted
                                 log_post_inject(attempt, "not found, try again");
                                 continue;
