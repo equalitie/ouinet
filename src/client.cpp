@@ -6,6 +6,7 @@
 #include <boost/beast/http.hpp>
 #include <boost/beast/version.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include <boost/format.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/ssl/stream.hpp>
 #include <boost/optional/optional_io.hpp>
@@ -598,26 +599,35 @@ public:
                     ] (asio::yield_context yield) {
                         optional<Descriptor> desc;
 
+                        static const int max_attempts = 3;
+                        auto log_post_inject =
+                            [&] (int attempt, const string& msg){
+                                LOG_DEBUG( "Post-inject lookup "
+                                         , "(", attempt + 1, "/", max_attempts, "): "
+                                         , msg, ": ", url, " ", inj_id);
+                            };
+
                         // Try a few times to get the descriptor for
                         // the injection that we triggered (exponential backoff).
-                        auto backoff = chrono::seconds(30);
-                        for (int i = 0; i < 3; ++i, backoff *= 2) {
+                        int attempt = 0;
+                        for ( auto backoff = chrono::seconds(30);
+                              attempt < max_attempts; backoff *= 2, ++attempt) {
                             if (!async_sleep(ios, backoff, cancel, yield))
                                 return;
-                            LOG_DEBUG( "Post-inject lookup: attempt #", i
-                                     , ": ", url, " ", inj_id);
 
                             sys::error_code ec;
                             auto desc_data = cache->get_descriptor(url, dbtype, cancel, yield[ec]);
-                            if (ec == asio::error::not_found)  // not (yet) inserted, try again
+                            if (ec == asio::error::not_found) {  // not (yet) inserted
+                                log_post_inject(attempt, "not found, try again");
                                 continue;
-                            else if (ec)  // some other error, do not retry
+                            } else if (ec) {  // some other error
+                                log_post_inject(attempt, (boost::format("error=%s, giving up") % ec).str());
                                 return;
+                            }
 
                             desc = Descriptor::deserialize(desc_data);
                             if (!desc) {  // maybe incompatible cache index
-                                LOG_WARN( "Post-inject lookup: invalid descriptor: "
-                                        , url, " ", inj_id);
+                                log_post_inject(attempt, "invalid descriptor, giving up");
                                 return;
                             }
 
@@ -627,15 +637,11 @@ public:
                             // different injection, try again
                         }
 
-                        if (!desc) {
-                            LOG_DEBUG( "Post-inject lookup: did not find descriptor: "
-                                     , url, " ", inj_id);
-                        } else {
-                            LOG_DEBUG( "Post-inject lookup:"
-                                     , " same_desc=", inj_id == desc->request_id
-                                     , " same_data=", body_link == desc->body_link
-                                     , ": ", url, " ", inj_id);
-                        }
+                        log_post_inject
+                            (attempt, desc ? ( boost::format("same_desc=%b same_data=%b")
+                                             % (inj_id == desc->request_id)
+                                             % (body_link == desc->body_link)).str()
+                                           : "did not find descriptor, giving up");
                     });
             });
 
