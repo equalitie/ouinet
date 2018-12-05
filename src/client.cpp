@@ -634,6 +634,7 @@ public:
                     // different injection, try again
                 }
 
+                attempt = (attempt > max_attempts) ? max_attempts : attempt;
                 log_post_inject
                     (attempt, desc ? ( boost::format("same_desc=%b same_data=%b")
                                      % (inj_id == desc->request_id)
