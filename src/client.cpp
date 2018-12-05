@@ -602,9 +602,9 @@ public:
                         static const int max_attempts = 3;
                         auto log_post_inject =
                             [&] (int attempt, const string& msg){
-                                LOG_DEBUG( "Post-inject lookup "
-                                         , "(", attempt + 1, "/", max_attempts, "): "
-                                         , msg, ": ", url, " ", inj_id);
+                                LOG_DEBUG( "Post-inject lookup id=", inj_id
+                                         , " (", attempt + 1, "/", max_attempts, "): "
+                                         , msg, " url=", url);
                             };
 
                         // Try a few times to get the descriptor for
