@@ -581,7 +581,7 @@ public:
             , &cancel = client_state.get_shutdown_signal()
             , key = rq.target().to_string()  // TODO: canonical
             , dbtype = client_state._config.default_db_type()
-            ] (asio::yield_context yield) {
+            ] (asio::yield_context yield) mutable {
                 // Seed content data itself.
                 // TODO: Use the scheduler here to only do some max number
                 // of `ipfs_add`s at a time. Also then trim that queue so
@@ -590,59 +590,55 @@ public:
                 auto body_link = cache->ipfs_add
                     (beast::buffers_to_string(rs.body().data()), yield[ec]);
 
-                // Retrieve the descriptor (after some insertion delay)
+                auto inj_id = rs[http_::response_injection_id_hdr].to_string();
+                rs = Response();  // drop heavy response body
+
+                static const int max_attempts = 3;
+                auto log_post_inject =
+                    [&] (int attempt, const string& msg){
+                        LOG_DEBUG( "Post-inject lookup id=", inj_id
+                                 , " (", attempt + 1, "/", max_attempts, "): "
+                                 , msg, "; key=", key);
+                    };
+
+                // Retrieve the descriptor for the injection that we triggered
                 // so that we help seed the URL->descriptor mapping too.
-                asio::spawn(ios,  // use another coroutine to drop heavy response body
-                    [ &cache, &ios, &cancel, key, dbtype
-                    , inj_id = rs[http_::response_injection_id_hdr].to_string()
-                    , body_link = move(body_link)
-                    ] (asio::yield_context yield) {
-                        optional<Descriptor> desc;
+                // Try a few times to get the descriptor
+                // (after some insertion delay, with exponential backoff).
+                optional<Descriptor> desc;
+                int attempt = 0;
+                for ( auto backoff = chrono::seconds(30);
+                      attempt < max_attempts; backoff *= 2, ++attempt) {
+                    if (!async_sleep(ios, backoff, cancel, yield))
+                        return;
 
-                        static const int max_attempts = 3;
-                        auto log_post_inject =
-                            [&] (int attempt, const string& msg){
-                                LOG_DEBUG( "Post-inject lookup id=", inj_id
-                                         , " (", attempt + 1, "/", max_attempts, "): "
-                                         , msg, "; key=", key);
-                            };
+                    sys::error_code ec;
+                    auto desc_data = cache->get_descriptor(key, dbtype, cancel, yield[ec]);
+                    if (ec == asio::error::not_found) {  // not (yet) inserted
+                        log_post_inject(attempt, "not found, try again");
+                        continue;
+                    } else if (ec) {  // some other error
+                        log_post_inject(attempt, (boost::format("error=%s, giving up") % ec).str());
+                        return;
+                    }
 
-                        // Try a few times to get the descriptor for
-                        // the injection that we triggered (exponential backoff).
-                        int attempt = 0;
-                        for ( auto backoff = chrono::seconds(30);
-                              attempt < max_attempts; backoff *= 2, ++attempt) {
-                            if (!async_sleep(ios, backoff, cancel, yield))
-                                return;
+                    desc = Descriptor::deserialize(desc_data);
+                    if (!desc) {  // maybe incompatible cache index
+                        log_post_inject(attempt, "invalid descriptor, giving up");
+                        return;
+                    }
 
-                            sys::error_code ec;
-                            auto desc_data = cache->get_descriptor(key, dbtype, cancel, yield[ec]);
-                            if (ec == asio::error::not_found) {  // not (yet) inserted
-                                log_post_inject(attempt, "not found, try again");
-                                continue;
-                            } else if (ec) {  // some other error
-                                log_post_inject(attempt, (boost::format("error=%s, giving up") % ec).str());
-                                return;
-                            }
+                    if (inj_id == desc->request_id)
+                        break;  // found desired descriptor
 
-                            desc = Descriptor::deserialize(desc_data);
-                            if (!desc) {  // maybe incompatible cache index
-                                log_post_inject(attempt, "invalid descriptor, giving up");
-                                return;
-                            }
+                    // different injection, try again
+                }
 
-                            if (inj_id == desc->request_id)
-                                break;  // found desired descriptor
-
-                            // different injection, try again
-                        }
-
-                        log_post_inject
-                            (attempt, desc ? ( boost::format("same_desc=%b same_data=%b")
-                                             % (inj_id == desc->request_id)
-                                             % (body_link == desc->body_link)).str()
-                                           : "did not find descriptor, giving up");
-                    });
+                log_post_inject
+                    (attempt, desc ? ( boost::format("same_desc=%b same_data=%b")
+                                     % (inj_id == desc->request_id)
+                                     % (body_link == desc->body_link)).str()
+                                   : "did not find descriptor, giving up");
             });
 
         // Note: we have to return a valid response even in case of error
