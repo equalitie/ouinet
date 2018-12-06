@@ -85,8 +85,10 @@ put_into_db( const std::string& key, const std::string& desc_data
         return or_throw<dcid_insd>(yield, ec);
 
     // Insert IPFS link to descriptor.
-    if (ec == asio::error::message_size)
+    if (ec == asio::error::message_size) {
+        ec = sys::error_code();
         ins_data = db.insert(key, ipfs_prefix + desc_ipfs, yield[ec]);
+    }
 
     return or_throw(yield, ec, dcid_insd(move(desc_ipfs), move(ins_data)));
 }
