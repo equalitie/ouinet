@@ -32,6 +32,29 @@ using ip::udp;
 
 namespace dht {
 
+/**
+ * To ensure that cancellation and object destruction behave in a predictable
+ * way, all functions in this namespace follow the following invariant:
+ *
+ * Every function with a yield parameter and a cancel signal MUST report
+ * asio::error::operation_aborted if the cancel signal is called while the
+ * function is still on the stack, even if the operation has successfully
+ * completed in the meantime.
+ *
+ *   This requirement is trivial as long as all asynchronous operations are
+ *   calls to foreground coroutine functions with a cancel signal, and no
+ *   additional coroutines are spawned. It takes special attention otherwise.
+ *
+ * Every method with a yield parameter MUST report
+ * asio::error::operation_aborted if the object is destructed while the
+ * method is still on the stack, even if the operation has successfully
+ * completed in the meantime.
+ *
+ *   This requirement is trivial as long as all asynchronous operations are
+ *   calls to coroutine methods in the same object, or calls to coroutine
+ *   methods in member objects. It takes special attention otherwise.
+ */
+
 class DhtNode {
     public:
     const size_t RESPONSIBLE_TRACKERS_PER_SWARM = 8;
@@ -270,7 +293,7 @@ class DhtNode {
         Evaluate&&,
         asio::yield_context,
         Signal<void()>& cancel_signal
-    ) const;
+    );
 
     private:
     asio::io_service& _ios;

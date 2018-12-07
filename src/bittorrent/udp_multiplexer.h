@@ -74,14 +74,12 @@ UdpMultiplexer::UdpMultiplexer(udp::socket&& s):
     assert(_socket.is_open());
 
     asio::spawn(get_io_service(), [this] (asio::yield_context yield) {
-        bool stopped = false;
-        auto terminate_slot = _terminate_signal.connect([&] {
-            stopped = true;
+        auto terminated = _terminate_signal.connect([&] {
             _send_queue_nonempty.notify();
         });
 
         while(true) {
-            if (stopped) {
+            if (terminated) {
                 break;
             }
 
@@ -95,7 +93,7 @@ UdpMultiplexer::UdpMultiplexer(udp::socket&& s):
 
             sys::error_code ec;
             _socket.async_send_to(buffer(entry.message), entry.to, yield[ec]);
-            if (stopped) {
+            if (terminated) {
                 break;
             }
 
@@ -105,10 +103,7 @@ UdpMultiplexer::UdpMultiplexer(udp::socket&& s):
     });
 
     asio::spawn(get_io_service(), [this] (asio::yield_context yield) {
-        bool stopped = false;
-        auto terminate_slot = _terminate_signal.connect([&] {
-            stopped = true;
-        });
+        auto terminated = _terminate_signal.connect([]{});
 
         std::vector<uint8_t> buf;
         udp::endpoint from;
@@ -118,8 +113,8 @@ UdpMultiplexer::UdpMultiplexer(udp::socket&& s):
 
             buf.resize(65536);
 
-            size_t size = _socket.async_receive_from( asio::buffer(buf), from, yield[ec]);
-            if (stopped) {
+            size_t size = _socket.async_receive_from(asio::buffer(buf), from, yield[ec]);
+            if (terminated) {
                 break;
             }
 
@@ -157,18 +152,20 @@ void UdpMultiplexer::send(
         condition.notify();
     });
 
-    auto cancel_slot = cancel_signal.connect([&] {
-        ec = boost::asio::error::operation_aborted;
+    auto cancelled = cancel_signal.connect([&] {
         condition.notify();
     });
 
-    auto terminate_slot = _terminate_signal.connect([&] {
-        ec = boost::asio::error::operation_aborted;
+    auto terminated = _terminate_signal.connect([&] {
         condition.notify();
     });
 
     _send_queue_nonempty.notify();
     condition.wait(yield);
+
+    if (cancelled || terminated) {
+        or_throw(yield, asio::error::operation_aborted);
+    }
 
     if (ec) {
         or_throw(yield, ec);
@@ -205,17 +202,19 @@ UdpMultiplexer::receive(udp::endpoint& from, asio::yield_context yield, Signal<v
     };
     _receive_queue.push_back(recv_entry);
 
-    auto cancel_slot = cancel_signal.connect([&] {
-        ec = boost::asio::error::operation_aborted;
+    auto cancelled = cancel_signal.connect([&] {
         condition.notify();
     });
 
-    auto terminate_slot = _terminate_signal.connect([&] {
-        ec = boost::asio::error::operation_aborted;
+    auto terminated = _terminate_signal.connect([&] {
         condition.notify();
     });
 
     condition.wait(yield);
+
+    if (cancelled || terminated) {
+        return or_throw<boost::string_view>(yield, asio::error::operation_aborted);
+    }
 
     if (ec) {
         return or_throw<boost::string_view>(yield, ec);

@@ -20,20 +20,25 @@ public:
         Connection() = default;
 
         Connection(Connection&& other)
-            : slot(std::move(other.slot))
+            : _slot(std::move(other._slot))
         {
             other.swap_nodes(*this);
         }
 
         Connection& operator=(Connection&& other) {
-            slot = std::move(other.slot);
+            _slot = std::move(other._slot);
             other.swap_nodes(*this);
             return *this;
         }
 
+        size_t call_count() const { return _call_count; }
+
+        operator bool() const { return call_count() != 0; }
+
     private:
         friend class Signal;
-        std::function<T> slot;
+        std::function<T> _slot;
+        size_t _call_count = 0;
     };
 
 public:
@@ -55,7 +60,8 @@ public:
         auto connections = std::move(_connections);
         for (auto& connection : connections) {
             try {
-                connection.slot(std::forward<Args>(args)...);
+                ++connection._call_count;
+                connection._slot(std::forward<Args>(args)...);
             } catch (std::exception& e) {
                 assert(0);
             }
@@ -69,7 +75,7 @@ public:
     Connection connect(std::function<T> slot)
     {
         Connection connection;
-        connection.slot = std::move(slot);
+        connection._slot = std::move(slot);
         _connections.push_back(connection);
         return connection;
     }
