@@ -1,8 +1,12 @@
+#include <map>
+#include <string>
 #include "service.h"
 
 //i2p stuff
 #include <I2PTunnel.h>
 #include <Log.h>
+#include <Identity.h>
+#include <Destination.h>
 #include <api.h>
 
 using namespace std;
@@ -27,6 +31,19 @@ Service::Service(const string& datadir, boost::asio::io_service& ios)
 
     i2p::api::InitI2P(argv.size(), (char**) argv.data(), argv[0]);
     i2p::api::StartI2P();
+
+    // create local destination shared with client tunnels
+    auto keys = i2p::data::PrivateKeys::CreateRandomKeys (i2p::data::SIGNING_KEY_TYPE_EDDSA_SHA512_ED25519);
+    std::map<std::string, std::string> params =
+    {
+        { i2p::client::I2CP_PARAM_INBOUND_TUNNEL_LENGTH, "1"},
+        { i2p::client::I2CP_PARAM_INBOUND_TUNNELS_QUANTITY, "3"},
+        { i2p::client::I2CP_PARAM_OUTBOUND_TUNNEL_LENGTH, "1"},
+        { i2p::client::I2CP_PARAM_OUTBOUND_TUNNELS_QUANTITY, "3"},
+        { i2p::client::I2CP_PARAM_STREAMING_INITIAL_ACK_DELAY, "20"}
+    };
+    _local_destination = std::make_shared<i2p::client::ClientDestination>(keys, false, &params);
+    _local_destination->Start ();
 }
 
 Service::Service(Service&& other)
@@ -43,6 +60,7 @@ Service& Service::operator=(Service&& other)
 
 Service::~Service()
 {
+    if (_local_destination) _local_destination->Stop ();    
     i2p::api::StopI2P();
 }
 
