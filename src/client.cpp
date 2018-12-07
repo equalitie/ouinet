@@ -596,8 +596,10 @@ public:
                 static const int max_attempts = 3;
                 auto log_post_inject =
                     [&] (int attempt, const string& msg){
+                        // Adjust attempt number for meaningful 1-based logging.
+                        attempt = (attempt < max_attempts) ? attempt + 1 : max_attempts;
                         LOG_DEBUG( "Post-inject lookup id=", inj_id
-                                 , " (", attempt + 1, "/", max_attempts, "): "
+                                 , " (", attempt, "/", max_attempts, "): "
                                  , msg, "; key=", key);
                     };
 
@@ -634,7 +636,6 @@ public:
                     // different injection, try again
                 }
 
-                attempt = (attempt > max_attempts) ? max_attempts : attempt;
                 log_post_inject
                     (attempt, desc ? ( boost::format("same_desc=%b same_data=%b")
                                      % (inj_id == desc->request_id)
