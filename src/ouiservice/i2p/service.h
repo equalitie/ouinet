@@ -9,6 +9,10 @@
 
 #include "../../ouiservice.h"
 
+namespace i2p { namespace client {
+    class ClientDestination;
+}}
+
 namespace ouinet {
 namespace ouiservice {
 namespace i2poui {
@@ -29,12 +33,16 @@ public:
 
     asio::io_service& get_io_service() {   return _ios; };
 
+    std::shared_ptr<i2p::client::ClientDestination> get_local_destination () const { return _local_destination; };
+
     std::unique_ptr<Server> build_server(const std::string& private_key_filename);
     std::unique_ptr<Client> build_client(const std::string& target_id);
 
 protected:
     asio::io_service& _ios;
     std::string _data_dir;
+    // all client tunnels share local destination, because destination is expensive    
+    std::shared_ptr<i2p::client::ClientDestination> _local_destination;
 };
 
 } // i2poui namespace
