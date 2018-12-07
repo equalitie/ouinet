@@ -41,6 +41,7 @@ public:
 protected:
     asio::io_service& _ios;
     std::string _data_dir;
+    // all client tunnels share local destination, because destination is expensive    
     std::shared_ptr<i2p::client::ClientDestination> _local_destination;
 };
 

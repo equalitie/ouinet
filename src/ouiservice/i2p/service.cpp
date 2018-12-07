@@ -33,7 +33,11 @@ Service::Service(const string& datadir, boost::asio::io_service& ios)
     i2p::api::StartI2P();
 
     // create local destination shared with client tunnels
-    auto keys = i2p::data::PrivateKeys::CreateRandomKeys (i2p::data::SIGNING_KEY_TYPE_EDDSA_SHA512_ED25519);
+    // we might change CryptoType to ECIES or to x25519 once it's available in the network
+    auto keys = i2p::data::PrivateKeys::CreateRandomKeys (i2p::data::SIGNING_KEY_TYPE_EDDSA_SHA512_ED25519); 
+    // here we override default parameter, because we need to bypass censorship, rather then provide high-level of anominty
+    // hence we can set tunnel length to 1 (rather than 3 by default), that makes I2P connections faster
+    // we set ack delay to 20 ms, because this outnet is considered as low-latency
     std::map<std::string, std::string> params =
     {
         { i2p::client::I2CP_PARAM_INBOUND_TUNNEL_LENGTH, "1"},
@@ -43,6 +47,7 @@ Service::Service(const string& datadir, boost::asio::io_service& ios)
         { i2p::client::I2CP_PARAM_STREAMING_INITIAL_ACK_DELAY, "20"}
     };
     _local_destination = std::make_shared<i2p::client::ClientDestination>(keys, false, &params);
+    // start destination's thread and tunnel pool
     _local_destination->Start ();
 }
 
