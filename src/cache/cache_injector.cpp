@@ -84,7 +84,7 @@ CacheInjector::insert_content( const string& id
     if (ec) return or_throw<CacheInjector::InsertionResult>(yield, ec);
 
     // Store descriptor
-    auto key = rq.target().to_string();  // TODO: canonical
+    auto key = key_from_http_req(rq);
     auto db = get_db(db_type);
     auto cid_insdata = descriptor::put_into_db
         (key, desc, *db, ipfs_add, yield[ec]);
@@ -96,7 +96,7 @@ CacheInjector::insert_content( const string& id
     return or_throw(yield, ec, move(ret));
 }
 
-string CacheInjector::get_descriptor( string url
+string CacheInjector::get_descriptor( const string& key
                                     , DbType db_type
                                     , Cancel& cancel
                                     , asio::yield_context yield)
@@ -104,18 +104,18 @@ string CacheInjector::get_descriptor( string url
     auto db = get_db(db_type);
 
     return descriptor::get_from_db
-        ( url, *db, IPFS_LOAD_FUNC(*_ipfs_node), cancel, yield);
+        ( key, *db, IPFS_LOAD_FUNC(*_ipfs_node), cancel, yield);
 }
 
 pair<string, CacheEntry>
-CacheInjector::get_content( string url
+CacheInjector::get_content( const string& key
                           , DbType db_type
                           , Cancel& cancel
                           , asio::yield_context yield)
 {
     sys::error_code ec;
 
-    string desc_data = get_descriptor(url, db_type, cancel, yield[ec]);
+    string desc_data = get_descriptor(key, db_type, cancel, yield[ec]);
 
     if (ec) return or_throw<pair<string, CacheEntry>>(yield, ec);
 

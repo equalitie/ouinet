@@ -12,6 +12,7 @@
 #include "cache_entry.h"
 #include "../namespaces.h"
 #include "../or_throw.h"
+#include "../util.h"
 #include "../util/signal.h"
 
 namespace ouinet {
@@ -90,8 +91,6 @@ http_create( const std::string& id
     string ipfs_id = ipfs_store(
             beast::buffers_to_string(rs.body().data()), yield[ec]);
 
-    auto url = rq.target();
-
     if (ec) return or_throw<string>(yield, ec);
 
     auto rs_ = rs;
@@ -101,7 +100,7 @@ http_create( const std::string& id
     stringstream rsh_ss;
     rsh_ss << rs_.base();
 
-    return Descriptor{ url.to_string()
+    return Descriptor{ util::canonical_url(rq.target())
                      , id
                      , ts
                      , rsh_ss.str()

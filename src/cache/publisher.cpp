@@ -94,7 +94,6 @@ bt::MutableDataItem bt_mutable_data( const string& value
                                    , const util::Ed25519PrivateKey& private_key)
 {
     /*
-     * Use the sha1 of the URL as salt;
      * Use the timestamp as a version ID.
      */
     using Time = boost::posix_time::ptime;

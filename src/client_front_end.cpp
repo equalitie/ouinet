@@ -225,7 +225,7 @@ void ClientFrontEnd::handle_descriptor( const Request& req, Response& res, strin
         sys::error_code ec;
 
         Cancel cancel; // TODO: This should come from above
-        file_descriptor = cache_client->get_descriptor( uri
+        file_descriptor = cache_client->get_descriptor( key_from_http_url(uri)
                                                       , DbType::btree
                                                       , cancel
                                                       , yield[ec]);

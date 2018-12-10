@@ -20,7 +20,7 @@ class ClientDb {
 public:
     virtual std::string find(const std::string& key, Cancel&, asio::yield_context) = 0;
 
-    // Insert a signed URL->descriptor mapping.
+    // Insert a signed key->descriptor mapping.
     // The parsing of the given data depends on the data base.
     // Return a printable representation of the key resulting from insertion.
     virtual std::string insert_mapping(const std::string&, asio::yield_context yield) {
