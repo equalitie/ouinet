@@ -96,7 +96,7 @@ CacheInjector::insert_content( const string& id
     return or_throw(yield, ec, move(ret));
 }
 
-string CacheInjector::get_descriptor( string key
+string CacheInjector::get_descriptor( const string& key
                                     , DbType db_type
                                     , Cancel& cancel
                                     , asio::yield_context yield)
@@ -108,7 +108,7 @@ string CacheInjector::get_descriptor( string key
 }
 
 pair<string, CacheEntry>
-CacheInjector::get_content( string key
+CacheInjector::get_content( const string& key
                           , DbType db_type
                           , Cancel& cancel
                           , asio::yield_context yield)

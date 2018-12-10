@@ -111,7 +111,7 @@ ClientDb* CacheClient::get_db(DbType db_type)
     return nullptr;
 }
 
-string CacheClient::get_descriptor( string key
+string CacheClient::get_descriptor( const string& key
                                   , DbType db_type
                                   , Cancel& cancel
                                   , asio::yield_context yield)
@@ -125,7 +125,7 @@ string CacheClient::get_descriptor( string key
 }
 
 pair<string, CacheEntry>
-CacheClient::get_content( string key
+CacheClient::get_content( const string& key
                         , DbType db_type
                         , Cancel& cancel
                         , asio::yield_context yield)
