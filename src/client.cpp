@@ -783,7 +783,7 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
         }
 
         // Make this a "proxy" request. Among other things, this is important
-        // to let the consecurive code know we want encryption.
+        // to let the consecutive code know we want encryption.
         rq.target( string("wss://")
                  + ( (rq[http::field::host].length() > 0)
                      ? rq[http::field::host]
