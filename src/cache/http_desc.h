@@ -90,7 +90,7 @@ http_create( const std::string& id
     string ipfs_id = ipfs_store(
             beast::buffers_to_string(rs.body().data()), yield[ec]);
 
-    auto url = rq.target();
+    auto url = rq.target();  // TODO: canonical
 
     if (ec) return or_throw<string>(yield, ec);
 

@@ -396,7 +396,7 @@ private:
         sys::error_code ec;
 
         // TODO: use string_view
-        auto ret = injector->get_content( rq.target().to_string()
+        auto ret = injector->get_content( rq.target().to_string()  // TODO: canonical
                                         , config.default_db_type()
                                         , cancel
                                         , yield[ec]);

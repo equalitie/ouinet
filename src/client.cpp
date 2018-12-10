@@ -218,7 +218,7 @@ Client::State::fetch_stored( const Request& request
     }
 
     // TODO: use string_view for the key.
-    auto key = request.target();
+    auto key = request.target();  // TODO: canonical
 
     sys::error_code ec;
     auto ret = _cache->get_content( key.to_string()
