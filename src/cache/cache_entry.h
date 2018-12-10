@@ -7,6 +7,12 @@
 
 namespace ouinet {
 
+template <class Request>
+inline
+std::string key_from_http_req(const Request& req) {
+    return req.target().to_string();  // TODO: canonical
+}
+
 struct CacheEntry {
     using Response = http::response<http::dynamic_body>;
 

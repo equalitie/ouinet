@@ -84,7 +84,7 @@ CacheInjector::insert_content( const string& id
     if (ec) return or_throw<CacheInjector::InsertionResult>(yield, ec);
 
     // Store descriptor
-    auto key = rq.target().to_string();  // TODO: canonical
+    auto key = key_from_http_req(rq);
     auto db = get_db(db_type);
     auto cid_insdata = descriptor::put_into_db
         (key, desc, *db, ipfs_add, yield[ec]);

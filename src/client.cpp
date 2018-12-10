@@ -217,11 +217,8 @@ Client::State::fetch_stored( const Request& request
                                    , asio::error::operation_not_supported);
     }
 
-    // TODO: use string_view for the key.
-    auto key = request.target();  // TODO: canonical
-
     sys::error_code ec;
-    auto ret = _cache->get_content( key.to_string()
+    auto ret = _cache->get_content( key_from_http_req(request)
                                   , _config.default_db_type()
                                   , cancel
                                   , yield[ec]);
@@ -579,7 +576,7 @@ public:
             [ &cache, rs
             , &ios = client_state.get_io_service()
             , &cancel = client_state.get_shutdown_signal()
-            , key = rq.target().to_string()  // TODO: canonical
+            , key = key_from_http_req(rq)
             , dbtype = client_state._config.default_db_type()
             ] (asio::yield_context yield) mutable {
                 // Seed content data itself.
