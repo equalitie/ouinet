@@ -897,10 +897,9 @@ void Client::State::serve_request( GenericStream&& con
     string connect_hp;
     // Process the different requests that may come over the same connection.
     for (;;) {  // continue for next request; break for no more requests
-        Request req;
-
-        // Read the (clear-text) HTTP request
-        http::async_read(con, buffer, req, yield_[ec]);
+        // Read the (clear-text) HTTP request head
+        http::request_parser<Request::body_type> reqhp;
+        http::async_read_header(con, buffer, reqhp, yield_[ec]);
 
         Yield yield(con.get_io_service(), yield_, util::str('C', connection_id));
 
@@ -908,10 +907,11 @@ void Client::State::serve_request( GenericStream&& con
           || ec == asio::ssl::error::stream_truncated) break;
 
         if (ec) {
-            cerr << "Failed to read request: " << ec.message() << endl;
+            cerr << "Failed to read request head: " << ec.message() << endl;
             return;
         }
 
+        Request req = move(reqhp.get());  // do not read body
         yield.log("=== New request ===");
         yield.log(req.base());
         auto on_exit = defer([&] { yield.log("Done"); });
