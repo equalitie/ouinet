@@ -121,6 +121,7 @@ private:
                 , Yield yield);
 
     Response fetch_fresh( const Request&
+                        , GenericStream&
                         , request_route::Config&
                         , bool& out_can_store
                         , Cancel& cancel
@@ -314,6 +315,7 @@ Response Client::State::fetch_fresh_from_origin( const Request& rq
 //------------------------------------------------------------------------------
 Response Client::State::fetch_fresh
         ( const Request& request
+        , GenericStream& request_con
         , request_route::Config& request_config
         , bool& out_can_store
         , Cancel& cancel
@@ -484,7 +486,7 @@ Response Client::State::fetch_fresh
                 sys::error_code ec;
 
                 auto res = _front_end.serve( _config
-                                           , request
+                                           , request, request_con
                                            , _cache.get()
                                            , *_ca_certificate
                                            , yield[ec].tag("serve_frontend"));
@@ -505,8 +507,10 @@ Response Client::State::fetch_fresh
 class Client::ClientCacheControl {
 public:
     ClientCacheControl( Client::State& client_state
+                      , GenericStream& request_con
                       , request_route::Config& request_config)
         : client_state(client_state)
+        , request_con(request_con)
         , request_config(request_config)
         , cc(client_state.get_io_service(), OUINET_CLIENT_SERVER_STRING)
     {
@@ -527,7 +531,7 @@ public:
 
     Response fetch_fresh(const Request& request, Cancel& cancel, Yield yield) {
         sys::error_code ec;
-        auto r = client_state.fetch_fresh( request
+        auto r = client_state.fetch_fresh( request, request_con
                                          , request_config
                                          , _can_store
                                          , cancel
@@ -652,6 +656,7 @@ public:
 
 private:
     Client::State& client_state;
+    GenericStream& request_con;
     request_route::Config& request_config;
     bool _can_store;
     CacheControl cc;
@@ -834,7 +839,7 @@ void Client::State::serve_request( GenericStream&& con
 
     rr::Config request_config;
 
-    Client::ClientCacheControl cache_control(*this, request_config);
+    Client::ClientCacheControl cache_control(*this, con, request_config);
 
     sys::error_code ec;
     beast::flat_buffer buffer;
@@ -1250,7 +1255,7 @@ void Client::State::start(int argc, char* argv[])
                         if (ec) return;
 
                         auto rs = _front_end.serve( _config
-                                                  , rq
+                                                  , rq, c
                                                   , _cache.get()
                                                   , *_ca_certificate
                                                   , yield[ec]);

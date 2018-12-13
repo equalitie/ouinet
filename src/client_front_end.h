@@ -7,6 +7,7 @@
 #include <chrono>
 #include "namespaces.h"
 #include "endpoint.h"
+#include "generic_stream.h"
 #include "ssl/ca_certificate.h"
 
 namespace ouinet { class CacheClient; }
@@ -51,6 +52,7 @@ public:
 public:
     Response serve( ClientConfig&
                   , const http::request<http::string_body>&
+                  , GenericStream&
                   , CacheClient*, const CACertificate&
                   , asio::yield_context yield);
 

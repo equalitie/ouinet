@@ -401,6 +401,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
 Response ClientFrontEnd::serve( ClientConfig& config
                               , const Request& req
+                              , GenericStream& req_con
                               , CacheClient* cache_client
                               , const CACertificate& ca
                               , asio::yield_context yield)
