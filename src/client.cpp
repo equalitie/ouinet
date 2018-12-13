@@ -916,7 +916,7 @@ void Client::State::serve_request( GenericStream&& con
             return;
         }
 
-        Request req = move(reqhp.get());  // do not read body
+        Request req(reqhp.get());  // do not set body yet
         yield.log("=== New request ===");
         yield.log(req.base());
         auto on_exit = defer([&] { yield.log("Done"); });
@@ -979,6 +979,14 @@ void Client::State::serve_request( GenericStream&& con
         }
 
         request_config = route_choose_config(req, matches, default_request_config);
+
+        // Read the request body if necessary.
+        if ( request_config.responders.front() != responder::_front_end
+           && !reqhp.is_done()) {
+            // We only support streaming bodies for requests to the front-end
+            // (basically for uploading big files using the API).
+            // TODO: read body from `con`, append to `request`
+        }
 
         auto res = cache_control.fetch(req, yield[ec].tag("cache_control.fetch"));
 
