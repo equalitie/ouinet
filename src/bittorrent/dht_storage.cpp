@@ -126,8 +126,11 @@ Tracker::Tracker(asio::io_service& ios):
      * Every so often, remove expired peers from swarms.
      */
     asio::spawn(_ios, [this] (asio::yield_context yield) {
+        auto terminated = _terminate_signal.connect([]{});
+
         while (true) {
-            if (!async_sleep(_ios, std::chrono::seconds(60), _terminate_signal, yield)) {
+            async_sleep(_ios, std::chrono::seconds(60), _terminate_signal, yield);
+            if (terminated) {
                 break;
             }
 
@@ -175,8 +178,11 @@ DataStore::DataStore(asio::io_service& ios):
      * Every so often, remove expired data items.
      */
     asio::spawn(_ios, [this] (asio::yield_context yield) {
+        auto terminated = _terminate_signal.connect([]{});
+
         while (true) {
-            if (!async_sleep(_ios, std::chrono::seconds(60), _terminate_signal, yield)) {
+            async_sleep(_ios, std::chrono::seconds(60), _terminate_signal, yield);
+            if (terminated) {
                 break;
             }
 

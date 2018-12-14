@@ -19,6 +19,16 @@
 
 namespace ouinet { namespace util {
 
+inline
+std::string canonical_url(const std::string& url) {
+    return std::string(url);  // TODO: canonical
+}
+
+inline
+std::string canonical_url(const boost::string_view url) {
+    return url.to_string();  // TODO: canonical
+}
+
 struct url_match {
     std::string scheme;
     std::string host;

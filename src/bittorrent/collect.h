@@ -28,9 +28,7 @@ void collect(
     const int THREADS = 64;
     WaitCondition all_done(ios);
     ConditionVariable candidate_available(ios);
-    bool cancelled = false;
-    auto cancel_slot = cancel_signal.connect([&] {
-        cancelled = true;
+    auto cancelled = cancel_signal.connect([&] {
         candidate_available.notify();
     });
 

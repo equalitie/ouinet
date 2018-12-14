@@ -217,11 +217,8 @@ Client::State::fetch_stored( const Request& request
                                    , asio::error::operation_not_supported);
     }
 
-    // TODO: use string_view for the key.
-    auto key = request.target();
-
     sys::error_code ec;
-    auto ret = _cache->get_content( key.to_string()
+    auto ret = _cache->get_content( key_from_http_req(request)
                                   , _config.default_db_type()
                                   , cancel
                                   , yield[ec]);
@@ -579,7 +576,7 @@ public:
             [ &cache, rs
             , &ios = client_state.get_io_service()
             , &cancel = client_state.get_shutdown_signal()
-            , key = rq.target().to_string()  // TODO: canonical
+            , key = key_from_http_req(rq)
             , dbtype = client_state._config.default_db_type()
             ] (asio::yield_context yield) mutable {
                 // Seed content data itself.
@@ -596,8 +593,10 @@ public:
                 static const int max_attempts = 3;
                 auto log_post_inject =
                     [&] (int attempt, const string& msg){
+                        // Adjust attempt number for meaningful 1-based logging.
+                        attempt = (attempt < max_attempts) ? attempt + 1 : max_attempts;
                         LOG_DEBUG( "Post-inject lookup id=", inj_id
-                                 , " (", attempt + 1, "/", max_attempts, "): "
+                                 , " (", attempt, "/", max_attempts, "): "
                                  , msg, "; key=", key);
                     };
 
@@ -634,7 +633,6 @@ public:
                     // different injection, try again
                 }
 
-                attempt = (attempt > max_attempts) ? max_attempts : attempt;
                 log_post_inject
                     (attempt, desc ? ( boost::format("same_desc=%b same_data=%b")
                                      % (inj_id == desc->request_id)
@@ -782,7 +780,7 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
         }
 
         // Make this a "proxy" request. Among other things, this is important
-        // to let the consecurive code know we want encryption.
+        // to let the consecutive code know we want encryption.
         rq.target( string("wss://")
                  + ( (rq[http::field::host].length() > 0)
                      ? rq[http::field::host]
