@@ -897,10 +897,12 @@ void Client::State::serve_request( GenericStream&& con
     string connect_hp;
     // Process the different requests that may come over the same connection.
     for (;;) {  // continue for next request; break for no more requests
-        Request req;
-
         // Read the (clear-text) HTTP request
-        http::async_read(con, buffer, req, yield_[ec]);
+        // (without a size limit, in case we are uploading a big file).
+        // Based on <https://stackoverflow.com/a/50359998>.
+        http::request_parser<Request::body_type> reqhp;
+        reqhp.body_limit((std::numeric_limits<std::uint64_t>::max)());
+        http::async_read(con, buffer, reqhp, yield_[ec]);
 
         Yield yield(con.get_io_service(), yield_, util::str('C', connection_id));
 
@@ -912,6 +914,7 @@ void Client::State::serve_request( GenericStream&& con
             return;
         }
 
+        Request req(reqhp.release());
         yield.log("=== New request ===");
         yield.log(req.base());
         auto on_exit = defer([&] { yield.log("Done"); });
