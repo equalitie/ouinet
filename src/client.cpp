@@ -985,7 +985,12 @@ void Client::State::serve_request( GenericStream&& con
            && !reqhp.is_done()) {
             // We only support streaming bodies for requests to the front-end
             // (basically for uploading big files using the API).
-            // TODO: read body from `con`, append to `request`
+            http::async_read(con, buffer, reqhp, yield[ec]);
+            if (ec) {
+                cerr << "Failed to read request body: " << ec.message() << endl;
+                return;
+            }
+            req = reqhp.release();  // no longer used, release parser
         }
 
         auto res = cache_control.fetch(req, yield[ec].tag("cache_control.fetch"));
