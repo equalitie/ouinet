@@ -52,7 +52,7 @@ public:
 public:
     Response serve( ClientConfig&
                   , const http::request<http::string_body>&
-                  , GenericStream&
+                  , GenericStream&, beast::flat_buffer&
                   , CacheClient*, const CACertificate&
                   , asio::yield_context yield);
 

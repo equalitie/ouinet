@@ -121,7 +121,7 @@ private:
                 , Yield yield);
 
     Response fetch_fresh( const Request&
-                        , GenericStream&
+                        , GenericStream&, beast::flat_buffer&
                         , request_route::Config&
                         , bool& out_can_store
                         , Cancel& cancel
@@ -315,7 +315,7 @@ Response Client::State::fetch_fresh_from_origin( const Request& rq
 //------------------------------------------------------------------------------
 Response Client::State::fetch_fresh
         ( const Request& request
-        , GenericStream& request_con
+        , GenericStream& request_con, beast::flat_buffer& request_buf
         , request_route::Config& request_config
         , bool& out_can_store
         , Cancel& cancel
@@ -486,7 +486,7 @@ Response Client::State::fetch_fresh
                 sys::error_code ec;
 
                 auto res = _front_end.serve( _config
-                                           , request, request_con
+                                           , request, request_con, request_buf
                                            , _cache.get()
                                            , *_ca_certificate
                                            , yield[ec].tag("serve_frontend"));
@@ -508,9 +508,11 @@ class Client::ClientCacheControl {
 public:
     ClientCacheControl( Client::State& client_state
                       , GenericStream& request_con
+                      , beast::flat_buffer& request_buf
                       , request_route::Config& request_config)
         : client_state(client_state)
         , request_con(request_con)
+        , request_buf(request_buf)
         , request_config(request_config)
         , cc(client_state.get_io_service(), OUINET_CLIENT_SERVER_STRING)
     {
@@ -531,7 +533,7 @@ public:
 
     Response fetch_fresh(const Request& request, Cancel& cancel, Yield yield) {
         sys::error_code ec;
-        auto r = client_state.fetch_fresh( request, request_con
+        auto r = client_state.fetch_fresh( request, request_con, request_buf
                                          , request_config
                                          , _can_store
                                          , cancel
@@ -657,6 +659,7 @@ public:
 private:
     Client::State& client_state;
     GenericStream& request_con;
+    beast::flat_buffer& request_buf;
     request_route::Config& request_config;
     bool _can_store;
     CacheControl cc;
@@ -837,12 +840,12 @@ void Client::State::serve_request( GenericStream&& con
         { true
         , queue<responder>({responder::origin, responder::injector})};
 
+    beast::flat_buffer buffer;
     rr::Config request_config;
 
-    Client::ClientCacheControl cache_control(*this, con, request_config);
+    Client::ClientCacheControl cache_control(*this, con, buffer, request_config);
 
     sys::error_code ec;
-    beast::flat_buffer buffer;
 
     // Expressions to test the request against and mechanisms to be used.
     // TODO: Create once and reuse.
@@ -1268,7 +1271,7 @@ void Client::State::start(int argc, char* argv[])
                         if (ec) return;
 
                         auto rs = _front_end.serve( _config
-                                                  , rq, c
+                                                  , rq, c, buffer
                                                   , _cache.get()
                                                   , *_ca_certificate
                                                   , yield[ec]);
