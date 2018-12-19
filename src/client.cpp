@@ -11,7 +11,6 @@
 #include <boost/asio/ssl/stream.hpp>
 #include <boost/optional/optional_io.hpp>
 #include <iostream>
-#include <fstream>
 #include <cstdlib>  // for atexit()
 
 #include "cache/cache_client.h"
@@ -127,6 +126,8 @@ private:
                         , Yield);
 
     Response fetch_fresh_from_origin(const Request&, Cancel&, Yield);
+
+    Response fetch_fresh_through_connect_proxy(const Request&, Cancel&, Yield);
 
     CacheControl build_cache_control(request_route::Config& request_config);
 
@@ -312,6 +313,85 @@ Response Client::State::fetch_fresh_from_origin( const Request& rq
 }
 
 //------------------------------------------------------------------------------
+Response Client::State::fetch_fresh_through_connect_proxy( const Request& rq
+                                                         , Cancel& cancel_
+                                                         , Yield yield)
+{
+    Cancel cancel(cancel_);
+    WatchDog watch_dog(_ios, default_timeout::fetch_http(), [&]{ cancel(); });
+
+    // Parse the URL to tell HTTP/HTTPS, host, port.
+    util::url_match url;
+
+    if (!match_http_url(rq.target(), url)) {
+        // unsupported URL
+        return or_throw<Response>(yield, asio::error::operation_not_supported);
+    }
+
+    // Connect to the injector/proxy.
+    sys::error_code ec;
+    auto inj = _injector->connect(yield[ec].tag("connect_to_injector"), cancel);
+
+    if (ec) return or_throw<Response>(yield, ec);
+
+    // Build the actual request to send to the proxy.
+    Request connreq = { http::verb::connect
+                      , url.host + ":" + (url.port.empty() ? "443" : url.port)
+                      , 11 /* HTTP/1.1 */};
+
+    // HTTP/1.1 requires a ``Host:`` header in all requests:
+    // <https://tools.ietf.org/html/rfc7230#section-5.4>.
+    connreq.set(http::field::host, connreq.target());
+
+    if (auto credentials = _config.credentials_for(inj.remote_endpoint))
+        connreq = authorize(connreq, *credentials);
+
+    // Open a tunnel to the origin
+    // (to later perform the SSL handshake and send the request).
+    // Only get the head of the CONNECT response
+    // (otherwise we would get stuck waiting to read
+    // a body whose length we do not know
+    // since the respone should have no content length).
+    auto connres = fetch_http<http::empty_body>
+                        ( _ios
+                        , inj.connection
+                        , connreq
+                        , default_timeout::fetch_http()
+                        , cancel
+                        , yield[ec].tag("connreq"));
+
+    if (connres.result() != http::status::ok) {
+        // This error code is quite fake, so log the error too.
+        // Unfortunately there is no body to show.
+        yield.tag("proxy_connect").log(connres);
+        return or_throw<Response>(yield, asio::error::connection_refused);
+    }
+
+    GenericStream con;
+
+    if (url.scheme == "https") {
+        con = ssl::util::client_handshake( move(inj.connection)
+                                         , ssl_ctx
+                                         , url.host
+                                         , cancel
+                                         , yield[ec]);
+    } else {
+        con = move(inj.connection);
+    }
+
+    if (ec) return or_throw<Response>(yield, ec);
+
+    // TODO: move
+    auto rq_ = req_form_from_absolute_to_origin(rq);
+
+    auto res = fetch_http<http::dynamic_body>(_ios, con, rq_, cancel, yield[ec]);
+
+    if (ec) return or_throw(yield, ec, move(res));
+
+    // Prevent others from inserting ouinet headers.
+    return util::remove_ouinet_fields(move(res));
+}
+//------------------------------------------------------------------------------
 Response Client::State::fetch_fresh
         ( const Request& request
         , request_route::Config& request_config
@@ -346,6 +426,7 @@ Response Client::State::fetch_fresh
                 Response res = fetch_fresh_from_origin( request
                                                       , cancel
                                                       , yield[ec]);
+
                 if (ec) {
                     last_error = ec;
                     continue;
@@ -360,69 +441,19 @@ Response Client::State::fetch_fresh
                 if (!_config.is_proxy_access_enabled())
                     continue;
 
-                auto target = request.target();
-                if (target.starts_with("https://")) {
-                    // Parse the URL to tell HTTP/HTTPS, host, port.
-                    util::url_match url;
-                    if (!match_http_url(target, url)) {
-                        last_error = asio::error::operation_not_supported;  // unsupported URL
-                        continue;
-                    }
-
-                    // Connect to the injector/proxy.
+                if (request.target().starts_with("https://")) {
                     sys::error_code ec;
-                    auto inj = _injector->connect( yield[ec].tag("connect_to_injector")
-                                                 , cancel);
+
+                    auto res = fetch_fresh_through_connect_proxy( request
+                                                                , cancel
+                                                                , yield[ec]);
+
                     if (ec) {
                         last_error = ec;
                         continue;
                     }
 
-                    // Build the actual request to send to the proxy.
-                    Request connreq = { http::verb::connect
-                                      , url.host + ":" + (url.port.empty() ? "443" : url.port)
-                                      , 11 /* HTTP/1.1 */};
-                    // HTTP/1.1 requires a ``Host:`` header in all requests:
-                    // <https://tools.ietf.org/html/rfc7230#section-5.4>.
-                    connreq.set(http::field::host, connreq.target());
-                    if (auto credentials = _config.credentials_for(inj.remote_endpoint))
-                        connreq = authorize(connreq, *credentials);
-
-                    // Open a tunnel to the origin
-                    // (to later perform the SSL handshake and send the request).
-                    // Only get the head of the CONNECT response
-                    // (otherwise we would get stuck waiting to read
-                    // a body whose length we do not know
-                    // since the respone should have no content length).
-                    auto connres = fetch_http<http::empty_body>
-                                        ( _ios
-                                        , inj.connection
-                                        , connreq
-                                        , default_timeout::fetch_http()
-                                        , cancel
-                                        , yield[ec].tag("connreq"));
-
-                    if (connres.result() != http::status::ok) {
-                        // This error code is quite fake, so log the error too.
-                        // Unfortunately there is no body to show.
-                        last_error = asio::error::connection_refused;
-                        yield.tag("proxy_connect").log(connres);
-                        continue;
-                    }
-
-                    // Send the request to the origin.
-                    auto res = fetch_http_origin( _ios , inj.connection, ssl_ctx
-                                                , url, request
-                                                , default_timeout::fetch_http()
-                                                , cancel
-                                                , yield[ec].tag("send_req"));
-                    if (ec) {
-                        last_error = ec;
-                        continue;
-                    }
-
-                    // Prevent others from inserting ouinet headers.
-                    return util::remove_ouinet_fields(move(res));
+                    return res;
                 }
             }
             // Fall through, the case below handles both injector and proxy with plain HTTP.
