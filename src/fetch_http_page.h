@@ -108,37 +108,6 @@ _recv_http_response( GenericStream& con
     res = move(crph.get());
 }
 
-template<class RequestType>
-GenericStream
-maybe_perform_ssl_handshake( GenericStream&& con
-                           , asio::ssl::context& ssl_ctx
-                           , const util::url_match& url
-                           , RequestType req
-                           , Signal<void()>& abort_signal
-                           , Yield yield)
-{
-    using namespace std;
-
-    sys::error_code ec;
-
-    if (url.scheme == "https") {
-        auto ret = ssl::util::client_handshake( move(con)
-                                              , ssl_ctx
-                                              , url.host
-                                              , abort_signal
-                                              , yield[ec]);
-
-        if (ec) {
-            yield.log("SSL client handshake error: "
-                 , url.host, ": ", ec.message());
-        }
-
-        return or_throw(yield, ec, move(ret));
-    }
-
-    return move(con);
-}
-
 // Transform request from absolute-form to origin-form
 // https://tools.ietf.org/html/rfc7230#section-5.3
 template<class Request>
@@ -163,58 +132,6 @@ Request req_form_from_absolute_to_origin(const Request& absolute_req)
                                     , url.scheme.length() + 3)));
 
     return origin_req;
-}
-
-template<class RequestType>
-http::response<http::dynamic_body>
-fetch_http_origin( asio::io_service& ios
-                 , GenericStream& con_
-                 , asio::ssl::context& ssl_ctx
-                 , const util::url_match& url
-                 , RequestType req
-                 , Signal<void()>& abort_signal
-                 , Yield yield)
-{
-    using namespace std;
-    using Response = http::response<http::dynamic_body>;
-
-    sys::error_code ec;
-
-    auto con = maybe_perform_ssl_handshake( move(con_)
-                                          , ssl_ctx
-                                          , url
-                                          , req
-                                          , abort_signal
-                                          , yield[ec]);
-    if (ec) {
-        return or_throw<Response>(yield, ec);
-    }
-
-    req = req_form_from_absolute_to_origin(req);
-
-    return fetch_http<http::dynamic_body>(ios, con, req, abort_signal, yield);
-}
-
-template<class Duration, class RequestType>
-http::response<http::dynamic_body>
-fetch_http_origin( asio::io_service& ios
-                 , GenericStream& con
-                 , asio::ssl::context& ssl_ctx
-                 , const util::url_match& url
-                 , RequestType req
-                 , Duration timeout
-                 , Signal<void()>& abort_signal
-                 , Yield yield)
-{
-    return util::with_timeout
-        ( ios
-        , abort_signal
-        , timeout
-        , [&] (auto& abort_signal, auto yield) {
-              return fetch_http_origin
-                (ios, con, ssl_ctx, url, req, abort_signal, yield);
-          }
-        , yield);
 }
 
 } // namespace
