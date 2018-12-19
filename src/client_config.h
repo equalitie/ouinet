@@ -35,6 +35,10 @@ public:
         return _tls_injector_cert_path;
     }
 
+    const std::string& tls_ca_cert_store_path() const {
+        return _tls_ca_cert_store_path;
+    }
+
     const asio::ip::tcp::endpoint& local_endpoint() const {
         return _local_ep;
     }
@@ -96,6 +100,8 @@ public:
             , "IPNS of the injector's database")
            ("injector-tls-cert-file", po::value<string>(&_tls_injector_cert_path)
             , "Path to the Injector's TLS certificate")
+           ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
+            , "Path to the CA certificate store file")
            ("disable-origin-access", po::bool_switch(&_disable_origin_access)->default_value(false)
             , "Disable direct access to the origin (forces use of injector and the cache)")
            ("disable-proxy-access", po::bool_switch(&_disable_proxy_access)->default_value(false)
@@ -143,6 +149,7 @@ private:
     asio::ip::tcp::endpoint _local_ep;
     boost::optional<Endpoint> _injector_ep;
     std::string _tls_injector_cert_path;
+    std::string _tls_ca_cert_store_path;
     std::string _ipns;
     bool _enable_http_connect_requests = false;
     bool _disable_origin_access = false;

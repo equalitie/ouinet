@@ -1201,12 +1201,34 @@ void Client::State::listen_tcp
 }
 
 //------------------------------------------------------------------------------
+void load_tls_ca_certificates(asio::ssl::context& ctx, const string& path_str)
+{
+    if (path_str.empty()) return;
+
+    fs::path path = path_str;
+
+    if (!exists(path)) {
+        throw runtime_error(util::str(
+                    "Can not read CA certificates from \"", path, "\": "
+                    "No such file or directory"));
+    }
+
+    if (fs::is_directory(path)) {
+        ctx.add_verify_path(path_str);
+        return;
+    }
+
+    stringstream ss;
+    ss << fs::ifstream(path).rdbuf();
+    ctx.add_certificate_authority(asio::buffer(ss.str()));
+}
+
+//------------------------------------------------------------------------------
 void Client::State::start(int argc, char* argv[])
 {
     try {
         _config = ClientConfig(argc, argv);
     } catch(std::exception const& e) {
-        //explicit is better than implecit
         LOG_ABORT(e.what());
     }
 
@@ -1215,6 +1237,8 @@ void Client::State::start(int argc, char* argv[])
         cout << _config.description() << endl;
         return;
     }
+
+    load_tls_ca_certificates(ssl_ctx, _config.tls_ca_cert_store_path());
 
     _ca_certificate = get_or_gen_tls_cert<CACertificate>
         ( "Your own local Ouinet client"
