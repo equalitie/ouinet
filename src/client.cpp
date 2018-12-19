@@ -1230,6 +1230,7 @@ void Client::State::start(int argc, char* argv[])
         _config = ClientConfig(argc, argv);
     } catch(std::exception const& e) {
         LOG_ABORT(e.what());
+        throw;
     }
 
     if (_config.is_help()) {
