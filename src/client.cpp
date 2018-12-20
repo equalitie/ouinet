@@ -74,8 +74,9 @@ class Client::State : public enable_shared_from_this<Client::State> {
     friend class Client;
 
 public:
-    State(asio::io_service& ios)
+    State(asio::io_service& ios, ClientConfig cfg)
         : _ios(ios)
+        , _config(move(cfg))
         // A certificate chain with OUINET_CA + SUBJECT_CERT
         // can be around 2 KiB, so this would be around 2 MiB.
         // TODO: Fine tune if necessary.
@@ -95,7 +96,7 @@ public:
         inj_ctx.set_verify_mode(asio::ssl::verify_peer);
     }
 
-    void start(int argc, char* argv[]);
+    void start();
 
     void stop() {
         _cache = nullptr;
@@ -157,9 +158,9 @@ private:
 
 private:
     asio::io_service& _ios;
+    ClientConfig _config;
     std::unique_ptr<CACertificate> _ca_certificate;
     util::LruCache<string, string> _ssl_certificate_cache;
-    ClientConfig _config;
     std::unique_ptr<OuiServiceClient> _injector;
     std::unique_ptr<CacheClient> _cache;
 
@@ -1224,21 +1225,8 @@ void load_tls_ca_certificates(asio::ssl::context& ctx, const string& path_str)
 }
 
 //------------------------------------------------------------------------------
-void Client::State::start(int argc, char* argv[])
+void Client::State::start()
 {
-    try {
-        _config = ClientConfig(argc, argv);
-    } catch(std::exception const& e) {
-        LOG_ABORT(e.what());
-        throw;
-    }
-
-    if (_config.is_help()) {
-        cout << "Usage:" << endl;
-        cout << _config.description() << endl;
-        return;
-    }
-
     load_tls_ca_certificates(ssl_ctx, _config.tls_ca_cert_store_path());
 
     _ca_certificate = get_or_gen_tls_cert<CACertificate>
@@ -1389,17 +1377,17 @@ void Client::State::set_injector(string injector_ep_str)
 }
 
 //------------------------------------------------------------------------------
-Client::Client(asio::io_service& ios)
-    : _state(make_shared<State>(ios))
+Client::Client(asio::io_service& ios, ClientConfig cfg)
+    : _state(make_shared<State>(ios, move(cfg)))
 {}
 
 Client::~Client()
 {
 }
 
-void Client::start(int argc, char* argv[])
+void Client::start()
 {
-    _state->start(argc, argv);
+    _state->start();
 }
 
 void Client::stop()
@@ -1432,13 +1420,28 @@ fs::path Client::ca_cert_path() const
 #ifndef __ANDROID__
 int main(int argc, char* argv[])
 {
+    ClientConfig cfg;
+
+    try {
+        cfg = ClientConfig(argc, argv);
+    } catch(std::exception const& e) {
+        LOG_ABORT(e.what());
+        return 1;
+    }
+
+    if (cfg.is_help()) {
+        cout << "Usage:" << endl;
+        cout << cfg.description() << endl;
+        return 0;
+    }
+
     util::crypto_init();
 
     asio::io_service ios;
 
     asio::signal_set signals(ios, SIGINT, SIGTERM);
 
-    Client client(ios);
+    Client client(ios, move(cfg));
 
     unique_ptr<ForceExitOnSignal> force_exit;
 
@@ -1450,7 +1453,7 @@ int main(int argc, char* argv[])
         });
 
     try {
-        client.start(argc, argv);
+        client.start();
     } catch (std::exception& e) {
         cerr << e.what() << endl;
         return 1;

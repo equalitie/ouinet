@@ -6,19 +6,19 @@
 
 namespace ouinet {
 
+class ClientConfig;
+
 class Client {
 private:
     class State;
     class ClientCacheControl;
 
 public:
-    Client(asio::io_service& ios);
+    Client(asio::io_service& ios, ClientConfig);
 
     ~Client();
 
-    // May throw on error.
-    void start(int argc, char* argv[]);
-
+    void start();
     void stop();
 
     void set_injector_endpoint(const char*);

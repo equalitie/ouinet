@@ -8,6 +8,7 @@
 #include "util/crypto.h"
 #include "cache/db.h"
 #include "increase_open_file_limit.h"
+#include "endpoint.h"
 
 namespace ouinet {
 
