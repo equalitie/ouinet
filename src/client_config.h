@@ -315,6 +315,10 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         }
     }
 
+    if (_default_db_type == DbType::bep44 && !_bt_pubkey) {
+        throw std::runtime_error("BEP44 database selected but no BT public key specified");
+    }
+
     if (vm.count("disable-cache")) {
         _disable_cache = true;
     }
