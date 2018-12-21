@@ -84,7 +84,7 @@ if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
     if [ "$PROG" = injector ]; then
         sed -i -E 's/^#*\s*(ipv6\s*=\s*)false(\b.*)/\1true\2/' /etc/i2pd/i2pd.conf  # enable IPv6
         sed -i -E 's/^([^#].*)/#\1/' /etc/i2pd/tunnels.conf  # disable default tunnels
-        cat > /etc/i2pd/tunnels.conf.d/tunnels.d/ouinet-injector.conf <<- EOF
+        cat > /etc/i2pd/tunnels.conf.d/ouinet-injector.conf <<- EOF
 		[ouinet-injector]
 		type=server
 		host=127.0.0.1
