@@ -76,14 +76,14 @@ if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
 
     # Configure the I2P daemon.
     if [ "$PROG" = injector ]; then
-       sed -i -E 's/^#*\s*(ipv6\s*=\s*)false(\b.*)/\1true\2/' /etc/i2pd/i2pd.conf  # enable IPv6
-       sed -i -E 's/^([^#].*)/#\1/' /etc/i2pd/tunnels.conf  # disable default tunnels
+        sed -i -E 's/^#*\s*(ipv6\s*=\s*)false(\b.*)/\1true\2/' /etc/i2pd/i2pd.conf  # enable IPv6
+        sed -i -E 's/^([^#].*)/#\1/' /etc/i2pd/tunnels.conf  # disable default tunnels
     fi
 
     # Enable and start the I2P daemon.
     if [ "$PROG" = injector ]; then
-       systemctl enable i2pd
-       systemctl start i2pd
+        systemctl enable i2pd
+        systemctl start i2pd
     fi
 fi
 
