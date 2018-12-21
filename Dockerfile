@@ -73,7 +73,16 @@ RUN apt-get update && apt-get install -y \
     \
     ca-certificates \
     $(echo $OUINET_DEBUG | sed -n 's/^yes$/gdb/p') \
+    \
+    lsb-release \
+    wget \
  && rm -rf /var/lib/apt/lists/*
+# Fetch and install i2pd.
+ARG I2PD_VERSION=2.22.0
+RUN wget -q -P /tmp "https://github.com/PurpleI2P/i2pd/releases/download/${I2PD_VERSION}/i2pd_${I2PD_VERSION}-1$(lsb_release -sc)1_$(dpkg --print-architecture).deb" \
+ && apt install -y $(dpkg --info /tmp/i2pd_*.deb | sed -nE 's/^.*Depends: (.*)/\1/p' | sed -E 's/( \([^)]+\))?,//g') \
+ && dpkg -i /tmp/i2pd_*.deb \
+ && rm -f /tmp/i2pd_*.deb
 # Manually install Boost libraries.
 COPY --from=builder /usr/local/lib/libboost_* /usr/local/lib/
 WORKDIR /opt/ouinet
