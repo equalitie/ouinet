@@ -98,7 +98,6 @@ if [ "$PROG" = injector ]; then
 		type=server
 		host=127.0.0.1
 		port=$INJECTOR_TCP_PORT
-		inport=$INJECTOR_TCP_PORT
 		keys=ouinet-injector-keys.dat
 		signaturetype=7
 		inbound.quantity=3
