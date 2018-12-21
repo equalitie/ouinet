@@ -56,6 +56,7 @@ CLIENT_PROXY_PORT=8077
 INJECTOR_TCP_PORT=7070
 INJECTOR_TLS_PORT=7077
 
+# Fix some configuration parameters on repo creation.
 if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
     cp -r "$INST/repo-templates/$PROG" "$REPO"
 
@@ -79,11 +80,19 @@ if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
         password=$(dd if=/dev/urandom bs=1024 count=1 status=none | md5sum | cut -f1 -d' ')
         sed -i -E "s/^(credentials\s*=\s*).*/\1ouinet:$password/" "$CONF"
     fi
+fi
 
-    # Configure the I2P daemon.
-    if [ "$PROG" = injector ]; then
+# Configure the I2P daemon at the injector.
+if [ "$PROG" = injector ]; then
+    if ! grep -q '^\s*ipv6\s*=\s*true\b' /etc/i2pd/i2pd.conf; then
         sed -i -E 's/^#*\s*(ipv6\s*=\s*)false(\b.*)/\1true\2/' /etc/i2pd/i2pd.conf  # enable IPv6
+    fi
+
+    if grep -q '^[^#]' /etc/i2pd/tunnels.conf; then
         sed -i -E 's/^([^#].*)/#\1/' /etc/i2pd/tunnels.conf  # disable default tunnels
+    fi
+
+    if [ ! -e /etc/i2pd/tunnels.conf.d/ouinet-injector.conf ]; then
         cat > /etc/i2pd/tunnels.conf.d/ouinet-injector.conf <<- EOF
 		[ouinet-injector]
 		type=server
@@ -101,7 +110,7 @@ if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
     fi
 
     # Enable and start the I2P daemon.
-    if [ "$PROG" = injector ]; then
+    if ! systemctl is-enabled i2pd > /dev/null; then
         systemctl enable i2pd
         systemctl start i2pd
     fi
