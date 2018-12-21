@@ -82,7 +82,9 @@ ARG I2PD_VERSION=2.22.0
 RUN wget -q -P /tmp "https://github.com/PurpleI2P/i2pd/releases/download/${I2PD_VERSION}/i2pd_${I2PD_VERSION}-1$(lsb_release -sc)1_$(dpkg --print-architecture).deb" \
  && apt install -y $(dpkg --info /tmp/i2pd_*.deb | sed -nE 's/^.*Depends: (.*)/\1/p' | sed -E 's/( \([^)]+\))?,//g') \
  && dpkg -i /tmp/i2pd_*.deb \
- && rm -f /tmp/i2pd_*.deb
+ && rm -f /tmp/i2pd_*.deb \
+ && systemctl stop i2pd \
+ && systemctl disable i2pd
 # Manually install Boost libraries.
 COPY --from=builder /usr/local/lib/libboost_* /usr/local/lib/
 WORKDIR /opt/ouinet

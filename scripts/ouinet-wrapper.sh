@@ -73,6 +73,12 @@ if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
         password=$(dd if=/dev/urandom bs=1024 count=1 status=none | md5sum | cut -f1 -d' ')
         sed -i -E "s/^(credentials\s*=\s*).*/\1ouinet:$password/" "$CONF"
     fi
+
+    # Enable and start the I2P daemon.
+    if [ "$PROG" = injector ]; then
+       systemctl enable i2pd
+       systemctl start i2pd
+    fi
 fi
 
 if [ "$OUINET_DEBUG" = yes ]; then
