@@ -113,6 +113,16 @@ if [ "$PROG" = injector ]; then
         systemctl enable i2pd
         systemctl start i2pd
     fi
+
+    # Attempt to show injector I2P endpoint.
+    for _ in $(seq 10); do
+        i2p_ep=$(wget -qO- 'http://127.0.0.1:7070/?page=i2p_tunnels' | grep ouinet-injector | sed -nE 's/.*\b(\S+.b32.i2p:[0-9]+).*/\1/p')
+        if [ "$i2p_ep" ]; then
+            echo "Injector I2P endpoint:" "$i2p_ep"
+            break
+        fi
+        sleep 1
+    done
 fi
 
 if [ "$OUINET_DEBUG" = yes ]; then
