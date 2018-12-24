@@ -116,10 +116,14 @@ if [ "$PROG" = injector ]; then
     fi
 
     # Attempt to show injector I2P endpoint.
+    i2p_tuns_url='http://127.0.0.1:7070/?page=i2p_tunnels'
+    i2p_dests_pfx='http://127.0.0.1:7070/?page=local_destination&b32='
     for _ in $(seq 10); do
-        i2p_ep=$(wget -qO- 'http://127.0.0.1:7070/?page=i2p_tunnels' | grep ouinet-injector | sed -nE 's/.*\b(\S+.b32.i2p:[0-9]+).*/\1/p')
-        if [ "$i2p_ep" ]; then
-            echo "Injector I2P endpoint:" "$i2p_ep"
+        i2p_b32_ep=$(wget -qO- "$i2p_tuns_url" | sed -nE 's/.*\bouinet-injector\b.*\b(\S+.b32.i2p:[0-9]+).*/\1/p')
+        if [ "$i2p_b32_ep" ]; then
+            echo "Injector I2P endpoint (Base32): $i2p_b32_ep"
+            i2p_b64_ep=$(wget -qO- "$i2p_dests_pfx$i2p_b32_ep" | sed -nE 's#.*<textarea[^>]*>([^<]+)</textarea>.*#\1#p')
+            echo "Injector I2P endpoint (Base64): $i2p_b64_ep"
             break
         fi
         sleep 1
