@@ -53,6 +53,7 @@ repo_arg=$(get_repo_from_args "$@")
 REPO="${repo_arg:-$REPO}"
 
 CLIENT_PROXY_PORT=8077
+INJECTOR_LOOP_ADDR=127.7.2.1
 INJECTOR_TCP_PORT=7070
 INJECTOR_TLS_PORT=7077
 
@@ -67,7 +68,7 @@ if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
 
     # Set a well-known injector loopback TCP port (and enable it).
     if [ "$PROG" = injector ]; then
-        sed -i -E "s/^#?(listen-on-tcp\s*=\s*127.0.0.1:)[0-9]+(.*)/\1${INJECTOR_TCP_PORT}\2/" "$CONF"
+        sed -i -E "s/^#?(listen-on-tcp\s*=\s*)127.0.0.1:[0-9]+(.*)/\1${INJECTOR_LOOP_ADDR}:${INJECTOR_TCP_PORT}\2/" "$CONF"
     fi
 
     # Set a well-known injector TLS port (and enable it).
@@ -96,7 +97,7 @@ if [ "$PROG" = injector ]; then
         cat > /etc/i2pd/tunnels.conf.d/ouinet-injector.conf <<- EOF
 		[ouinet-injector]
 		type=server
-		host=127.0.0.1
+		host=$INJECTOR_LOOP_ADDR
 		port=$INJECTOR_TCP_PORT
 		keys=ouinet-injector-keys.dat
 		signaturetype=7
