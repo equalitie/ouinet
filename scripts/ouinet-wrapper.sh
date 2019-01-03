@@ -85,6 +85,10 @@ fi
 
 # Configure the I2P daemon at the injector.
 if [ "$PROG" = injector ]; then
+    if grep -q '^\s*listen-on-i2p\s*=\s*true\b' "$CONF"; then
+        sed -i -E 's/^(\s*listen-on-i2p\s*=\s*true\b.*)/##\1/' "$CONF"  # disable legacy I2P support
+    fi
+
     if ! grep -q '^\s*ipv6\s*=\s*true\b' /etc/i2pd/i2pd.conf; then
         sed -i -E 's/^#*\s*(ipv6\s*=\s*)false(\b.*)/\1true\2/' /etc/i2pd/i2pd.conf  # enable IPv6
     fi
