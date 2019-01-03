@@ -10,6 +10,7 @@
 #include <boost/beast/http/string_body.hpp>
 
 #include "constants.h"
+#include "util.h"
 
 namespace ouinet {
 
@@ -109,6 +110,32 @@ static Message remove_ouinet_fields(Message message)
     }
 
     return message;
+}
+
+// Transform request from absolute-form to origin-form
+// https://tools.ietf.org/html/rfc7230#section-5.3
+template<class Request>
+Request req_form_from_absolute_to_origin(const Request& absolute_req)
+{
+    // Parse the URL to tell HTTP/HTTPS, host, port.
+    url_match url;
+
+    auto absolute_target = absolute_req.target();
+
+    if (!match_http_url(absolute_target, url)) {
+        assert(0 && "Failed to parse url");
+        return absolute_req;
+    }
+
+    Request origin_req(absolute_req);
+
+    origin_req.target(absolute_target.substr(
+                absolute_target.find( url.path
+                                    // Length of "http://" or "https://",
+                                    // do not fail on "http(s)://FOO/FOO".
+                                    , url.scheme.length() + 3)));
+
+    return origin_req;
 }
 
 }} // ouinet::util namespace
