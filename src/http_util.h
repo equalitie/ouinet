@@ -142,7 +142,7 @@ Request req_form_from_absolute_to_origin(const Request& absolute_req)
 // This only leaves a minimum set of non-privacy sensitive headers,
 // and some of them may be altered for cacheability or privacy reasons.
 //
-// Internal Ouinet headers, proxy authentication headers and caching headers
+// Internal Ouinet headers, proxy authorization headers and caching headers
 // are also kept.
 template<class Request>
 static Request injector_request(Request rq) {
@@ -184,7 +184,7 @@ static Request injector_request(Request rq) {
                         , "Update-Insecure-Requests"
                         , http::field::user_agent
                         // PROXY AUTHENTICATION HEADERS (PASS)
-                        , http::field::proxy_authenticate
+                        , http::field::proxy_authorization
                         // CACHING AND RANGE HEADERS (PASS)
                         , http::field::cache_control
                         , http::field::if_match
@@ -200,14 +200,14 @@ static Request injector_request(Request rq) {
 // Make the given request ready to be sent to the origin by
 // using origin request target form (<https://tools.ietf.org/html/rfc7230#section-5.3.1>),
 // removing Ouinet-specific internal HTTP headers and
-// proxy authentication headers.
+// proxy authorization headers.
 //
 // The rest of headers are left intact.
 template<class Request>
 static Request origin_request(Request rq) {
     rq = req_form_from_absolute_to_origin(move(rq));
     rq = remove_ouinet_fields(move(rq));
-    rq.erase(http::field::proxy_authenticate);
+    rq.erase(http::field::proxy_authorization);
     return rq;
 }
 
