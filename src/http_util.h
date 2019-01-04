@@ -138,4 +138,63 @@ Request req_form_from_absolute_to_origin(const Request& absolute_req)
     return origin_req;
 }
 
+// Make the given request canonical to be sent to the injector.
+// This only leaves a minimum set of non-privacy sensitive headers,
+// and some of them may be altered for cacheability or privacy reasons.
+//
+// Internal Ouinet headers, proxy authentication headers and caching headers
+// are also kept.
+template<class Request>
+static Request injector_request(Request rq) {
+    auto url = canonical_url(rq.target());
+    rq.target(url);
+    rq.version(11);  // HTTP/1.1
+
+    // Some canonical header values that need PROCESS.
+    url_match urlm;
+    match_http_url(url, urlm);  // assume check by `canonical_url` above
+    rq.set(http::field::host, urlm.host);
+    rq.set(http::field::accept, "*/*");
+    rq.set(http::field::accept_encoding, "");
+    rq.set("DNT", "1");
+    rq.set("Upgrade-Insecure-Requests", "1");
+    rq.set( http::field::user_agent
+          , "Mozilla/5.0 (Windows NT 6.1; rv:60.0) Gecko/20100101 Firefox/60.0");
+
+    // The Ouinet version header hints the endpoint
+    // to behave like an injector instead of a proxy.
+    rq.set(http_::request_version_hdr, http_::request_version_hdr_current);
+
+    // Basically only keep headers which are absolutely necessary,
+    // do not break privacy and can not break browsing for others.
+    // For the moment we do not yet care about
+    // requests coming from Ouinet injector being fingerprinted as such.
+    return filter_fields( move(rq)
+                        // CANONICAL REQUEST HEADERS (ADD, KEEP, PROCESS)
+                        // Still DROP some fields that may break browsing for others
+                        // and which have no sensible default (for all).
+                        , http::field::host
+                        , http::field::accept
+                        //, http::field::accept_datetime
+                        , http::field::accept_encoding
+                        //, http::field::accept_language
+                        , "DNT"
+                        , http::field::from
+                        , http::field::origin
+                        , "Update-Insecure-Requests"
+                        , http::field::user_agent
+                        // PROXY AUTHENTICATION HEADERS (PASS)
+                        , http::field::proxy_authenticate
+                        // CACHING AND RANGE HEADERS (PASS)
+                        , http::field::cache_control
+                        , http::field::if_match
+                        , http::field::if_modified_since
+                        , http::field::if_none_match
+                        , http::field::if_range
+                        , http::field::if_unmodified_since
+                        , http::field::pragma
+                        , http::field::range
+                        );
+}
+
 }} // ouinet::util namespace

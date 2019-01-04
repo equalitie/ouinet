@@ -484,16 +484,11 @@ Response Client::State::fetch_fresh
 
                 // Build the actual request to send to the injector.
                 Request injreq = request;
-
-                if (r == responder::injector) {
-                    // Add first a Ouinet version header
-                    // to hint it to behave like an injector instead of a proxy.
-                    injreq.set( http_::request_version_hdr
-                              , http_::request_version_hdr_current);
-                }
-
                 if (auto credentials = _config.credentials_for(con->aux))
                     injreq = authorize(injreq, *credentials);
+                if (r == responder::injector)
+                    injreq = util::injector_request(move(request));
+                // TODO: Restore hop-by-hop or keepalive headers?
 
                 // Send the request to the injector/proxy.
                 auto res = con->request( injreq
@@ -595,6 +590,10 @@ public:
 
     Response store(const Request& rq, Response rs, Cancel&, Yield yield)
     {
+        // No need to filter request or response headers
+        // since we are not storing them here
+        // (they can be found at the descriptor).
+
         sys::error_code ec;
 
         auto& cache = client_state._cache;
