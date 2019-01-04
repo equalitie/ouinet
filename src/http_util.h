@@ -197,4 +197,18 @@ static Request injector_request(Request rq) {
                         );
 }
 
+// Make the given request ready to be sent to the origin by
+// using origin request target form (<https://tools.ietf.org/html/rfc7230#section-5.3.1>),
+// removing Ouinet-specific internal HTTP headers and
+// proxy authentication headers.
+//
+// The rest of headers are left intact.
+template<class Request>
+static Request origin_request(Request rq) {
+    rq = req_form_from_absolute_to_origin(move(rq));
+    rq = remove_ouinet_fields(move(rq));
+    rq.erase(http::field::proxy_authenticate);
+    return rq;
+}
+
 }} // ouinet::util namespace

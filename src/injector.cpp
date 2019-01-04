@@ -244,18 +244,6 @@ void handle_connect_request( GenericStream client_c
 }
 
 //------------------------------------------------------------------------------
-static Request erase_hop_by_hop_headers(Request rq) {
-    //// TODO
-    //rq.erase(http::field::connection);
-    //rq.erase(http::field::keep_alive);
-    //rq.erase(http::field::public_);
-    //rq.erase(http::field::transfer_encoding);
-    //rq.erase(http::field::upgrade);
-    rq.erase(http::field::proxy_authenticate);
-    return rq;
-}
-
-//------------------------------------------------------------------------------
 struct InjectorCacheControl {
     using Connection = OriginPools::Connection;
 
@@ -361,9 +349,13 @@ public:
 
         if (ec) return or_throw<Response>(yield, ec);
 
-        Request rq = req_form_from_absolute_to_origin(
-                        erase_hop_by_hop_headers(rq_));
-
+        // Base the request to be sent to the origin on
+        // either the full request minus hop-by-hop headers (if proxy)
+        // or the sanitized canonical injector request (if injector).
+        bool proxy = (rq_.find(http_::request_version_hdr) == rq_.end());
+        Request rq = util::origin_request
+            (proxy ? rq_ : util::injector_request(rq_));
+        // TODO: Restore hop-by-hop headers to injector request?
         rq.keep_alive(true);
 
         Response ret = connection->request(rq, cancel, yield[ec]);
