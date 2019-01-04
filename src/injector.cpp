@@ -349,15 +349,8 @@ public:
 
         if (ec) return or_throw<Response>(yield, ec);
 
-        // Base the request to be sent to the origin on
-        // either the full request minus hop-by-hop headers (if proxy)
-        // or the sanitized canonical injector request (if injector).
-        bool proxy = (rq_.find(http_::request_version_hdr) == rq_.end());
-        Request rq = util::origin_request
-            (proxy ? rq_ : util::injector_request(rq_));
-        // TODO: Restore hop-by-hop headers to injector request?
+        Request rq = util::origin_request(rq_);
         rq.keep_alive(true);
-
         Response ret = connection->request(rq, cancel, yield[ec]);
 
         if (ec) return or_throw<Response>(yield, ec);
@@ -426,6 +419,7 @@ private:
         ] (boost::asio::yield_context yield) mutable
           -> CacheInjector::InsertionResult {
             // Pop out Ouinet internal HTTP headers.
+            rq.erase(http_::request_version_hdr);
             rq.erase(http_::request_sync_injection_hdr);
             rs.erase(http_::response_injection_id_hdr);
 
@@ -553,11 +547,11 @@ void serve( InjectorConfig& config
                 res = *opt_err_res;
             }
             else {
-                auto req2 = req;
-                // do not propagate or cache the header
-                req2.erase(http_::request_version_hdr);
+                auto req2 = util::injector_request(req);  // sanitize
+                req2.keep_alive(req.keep_alive());
+                // TODO: Restore other hop-by-hop headers?
                 res = cc.fetch(req2, yield[ec].tag("cache_control.fetch"));
-                res.keep_alive(true);
+                res.keep_alive(req.keep_alive());
             }
         }
 
