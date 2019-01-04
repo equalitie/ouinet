@@ -125,10 +125,10 @@ if [ "$PROG" = injector ]; then
     for _ in $(seq 10); do
         i2p_b32_ep=$(wget -qO- "$i2p_tuns_url" | sed -nE 's/.*\bouinet-injector\b.*\b(\S+.b32.i2p):[0-9]+.*/\1/p')
         if [ "$i2p_b32_ep" ]; then
+            echo "$i2p_b32_ep" > "$REPO/endpoint-i2p"
             echo "Injector I2P endpoint (Base32): $i2p_b32_ep"
             i2p_b64_ep=$(wget -qO- "$i2p_dests_pfx$i2p_b32_ep" | sed -nE 's#.*<textarea[^>]*>([^<]+)</textarea>.*#\1#p')
             echo "Injector I2P endpoint (Base64): $i2p_b64_ep"
-            echo "$i2p_b64_ep" > "$REPO/endpoint-i2p"
             break
         fi
         sleep 1
