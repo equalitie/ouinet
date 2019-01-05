@@ -419,9 +419,8 @@ private:
         ] (boost::asio::yield_context yield) mutable
           -> CacheInjector::InsertionResult {
             // Pop out Ouinet internal HTTP headers.
-            rq.erase(http_::request_version_hdr);
-            rq.erase(http_::request_sync_injection_hdr);
-            rs.erase(http_::response_injection_id_hdr);
+            rq = util::cache_request(move(rq));
+            rs = util::remove_ouinet_fields(move(rs));
 
             sys::error_code ec;
             auto ret = injector->insert_content( id, rq, rs

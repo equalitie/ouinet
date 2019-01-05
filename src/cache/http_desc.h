@@ -93,12 +93,8 @@ http_create( const std::string& id
 
     if (ec) return or_throw<string>(yield, ec);
 
-    auto rs_ = rs;
-
-    rs_.erase(http::field::transfer_encoding);
-
     stringstream rsh_ss;
-    rsh_ss << rs_.base();
+    rsh_ss << rs.base();
 
     return Descriptor{ util::canonical_url(rq.target())
                      , id

@@ -211,4 +211,30 @@ static Request origin_request(Request rq) {
     return rq;
 }
 
+// Make the given request ready to be sent to the origin.
+//
+// This is basically the same as an injector request,
+// minus Internal Ouinet headers, proxy authorization headers and caching headers.
+template<class Request>
+static Request cache_request(Request rq) {
+    rq = injector_request(move(rq));
+    rq = remove_ouinet_fields(move(rq));
+    // TODO: Refactor with header list from `injector_request`.
+    return filter_fields( move(rq)
+                        // CANONICAL REQUEST HEADERS (ADD, KEEP, PROCESS)
+                        // Still DROP some fields that may break browsing for others
+                        // and which have no sensible default (for all).
+                        , http::field::host
+                        , http::field::accept
+                        //, http::field::accept_datetime
+                        , http::field::accept_encoding
+                        //, http::field::accept_language
+                        , "DNT"
+                        , http::field::from
+                        , http::field::origin
+                        , "Update-Insecure-Requests"
+                        , http::field::user_agent
+                        );
+}
+
 }} // ouinet::util namespace
