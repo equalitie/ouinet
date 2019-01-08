@@ -26,8 +26,7 @@ int main(int argc, const char* argv[])
 
     OuiServiceClient client(ios);
 
-    asio::ip::tcp::endpoint endpoint(asio::ip::address::from_string("127.0.0.1"), 10203);
-    client.add(make_unique<ouiservice::TcpOuiServiceClient>(ios, endpoint));
+    client.add(make_unique<ouiservice::TcpOuiServiceClient>(ios, "127.0.0.1:10203"));
 
     asio::spawn(ios, [&ios, &client, &message] (asio::yield_context yield) {
         sys::error_code ec;
