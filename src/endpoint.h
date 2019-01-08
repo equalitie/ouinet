@@ -7,71 +7,26 @@
 
 namespace ouinet {
 
-struct I2PEndpoint {
-    std::string pubkey;
-
-    bool operator==(const I2PEndpoint& other) const {
-        return pubkey == other.pubkey;
-    }
-};
-
-struct Obfs4Endpoint {
-    asio::ip::tcp::endpoint endpoint;
-    std::string certificate;
-    std::string iat_mode;
-
-    bool operator==(const Obfs4Endpoint& other) const {
-        return
-               endpoint == other.endpoint
-            && certificate == other.certificate
-            && iat_mode == other.iat_mode
-        ;
-    }
-};
-
-using Endpoint = boost::variant< asio::ip::tcp::endpoint
-                               , I2PEndpoint>;
-
-inline
-boost::optional<Endpoint> parse_endpoint(beast::string_view endpoint)
-{
-    using std::string;
-    using beast::string_view;
-    using asio::ip::tcp;
-
-    auto as_tcp_endpoint = []( string_view host
-                             , string_view port
-                             ) -> boost::optional<tcp::endpoint> {
-        sys::error_code ec;
-        auto ip = asio::ip::address::from_string(host.to_string(), ec);
-        if (ec) return boost::none;
-        return tcp::endpoint(ip, strtol(port.data(), 0, 10));
+struct Endpoint {
+    enum Type {
+        TcpEndpoint,
+        I2pEndpoint,
+#ifdef USE_GNUNET
+        GnunetEndpoint,
+#endif
+        Obfs4Endpoint
     };
 
-    sys::error_code ec;
+    Type type;
+    std::string endpoint_string;
 
-    string_view host;
-    string_view port;
-
-    std::tie(host, port) = split_string_pair(endpoint, ':');
-
-    if (port.empty()) {
-        return Endpoint{I2PEndpoint{endpoint.to_string()}};
+    bool operator==(const Endpoint& other) const {
+        return type == other.type && endpoint_string == other.endpoint_string;
     }
+};
 
-    if (auto ep = as_tcp_endpoint(host, port)) {
-        return Endpoint{*ep};
-    }
+boost::optional<Endpoint> parse_endpoint(beast::string_view endpoint);
 
-    return boost::none;
-}
-
-inline
-bool is_i2p_endpoint(const Endpoint& ep) {
-    return boost::get<I2PEndpoint>(&ep) ? true : false;
-}
-
-std::ostream& operator<<(std::ostream& os, const I2PEndpoint&);
 std::ostream& operator<<(std::ostream& os, const Endpoint&);
 
 } // ouinet namespace

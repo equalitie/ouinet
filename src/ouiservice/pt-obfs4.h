@@ -2,8 +2,8 @@
 
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/optional.hpp>
 
-#include "../endpoint.h"
 #include "../ouiservice.h"
 
 #include "pluggable-transports/pt-ouiservice.h"
@@ -38,10 +38,13 @@ class Obfs4OuiServiceClient : public pt::PtOuiServiceClient
     public:
     Obfs4OuiServiceClient(
         asio::io_service& ios,
-        Obfs4Endpoint endpoint,
+        std::string endpoint,
         fs::path state_directory
     );
 
+    bool verify_endpoint() const { return (bool)_endpoint; }
+
+    protected:
     std::unique_ptr<pt::ClientProcess> start_client_process(
         asio::io_service& ios,
         asio::yield_context yield,
@@ -56,7 +59,9 @@ class Obfs4OuiServiceClient : public pt::PtOuiServiceClient
     ) override;
 
     private:
-    Obfs4Endpoint _endpoint;
+    boost::optional<asio::ip::tcp::endpoint> _endpoint;
+    std::string _certificate;
+    std::string _iat_mode;
     fs::path _state_directory;
 };
 

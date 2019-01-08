@@ -1320,28 +1320,34 @@ void Client::State::setup_injector(asio::yield_context yield)
 
     cout << "Setting up injector: " << *injector_ep << endl;
 
-    if (is_i2p_endpoint(*injector_ep)) {
-        std::string ep = boost::get<I2PEndpoint>(*injector_ep).pubkey;
+    std::unique_ptr<OuiServiceImplementationClient> client;
+
+    if (injector_ep->type == Endpoint::I2pEndpoint) {
         auto i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ios);
-        std::unique_ptr<ouiservice::I2pOuiServiceClient> i2p_client = i2p_service->build_client(ep);
+        auto i2p_client = i2p_service->build_client(injector_ep->endpoint_string);
 
-        _injector->add(std::move(i2p_client));
-    } else {
-        tcp::endpoint tcp_endpoint
-            = boost::get<asio::ip::tcp::endpoint>(*injector_ep);
-
-        auto tcp_client
-            = make_unique<ouiservice::TcpOuiServiceClient>(_ios, tcp_endpoint);
-
-        bool enable_injector_tls = !_config.tls_injector_cert_path().empty();
-
-        if (!enable_injector_tls) {
-            _injector->add(std::move(tcp_client));
-        } else {
-            auto tls_client
-                = make_unique<ouiservice::TlsOuiServiceClient>(move(tcp_client), inj_ctx);
-            _injector->add(std::move(tls_client));
+        /*
+        if (!i2p_client->verify_endpoint()) {
+            return or_throw(yield, asio::error::invalid_argument);
         }
+        */
+        client = std::move(i2p_client);
+    } else if (injector_ep->type == Endpoint::TcpEndpoint) {
+        auto tcp_client = make_unique<ouiservice::TcpOuiServiceClient>(_ios, injector_ep->endpoint_string);
+
+        if (!tcp_client->verify_endpoint()) {
+            return or_throw(yield, asio::error::invalid_argument);
+        }
+        client = std::move(tcp_client);
+    }
+
+    bool enable_injector_tls = !_config.tls_injector_cert_path().empty();
+    if (!enable_injector_tls) {
+        _injector->add(std::move(client));
+    } else {
+        auto tls_client
+            = make_unique<ouiservice::TlsOuiServiceClient>(move(client), inj_ctx);
+        _injector->add(std::move(tls_client));
     }
 
     _injector->start(yield);
@@ -1369,10 +1375,14 @@ void Client::State::set_injector(string injector_ep_str)
 
     _config.set_injector_endpoint(*injector_ep);
 
-    asio::spawn(_ios, [self = shared_from_this()] (auto yield) {
+    asio::spawn(_ios, [self = shared_from_this(), injector_ep_str] (auto yield) {
             if (self->was_stopped()) return;
             sys::error_code ec;
             self->setup_injector(yield[ec]);
+
+            if (ec == asio::error::invalid_argument) {
+                cerr << "Failed to parse endpoint \"" << injector_ep_str << "\"" << endl;
+            }
         });
 }
 

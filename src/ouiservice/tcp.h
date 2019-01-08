@@ -2,6 +2,7 @@
 
 #include <list>
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/optional.hpp>
 
 #include "../ouiservice.h"
 
@@ -30,7 +31,7 @@ class TcpOuiServiceClient : public OuiServiceImplementationClient
     using ConnectInfo = OuiServiceImplementationClient::ConnectInfo;
 
     public:
-    TcpOuiServiceClient(asio::io_service& ios, asio::ip::tcp::endpoint endpoint);
+    TcpOuiServiceClient(asio::io_service& ios, std::string endpoint);
 
     // Tcp clients don't have any internal async IO to be started/stopped.
     void start(asio::yield_context yield) override {}
@@ -39,9 +40,11 @@ class TcpOuiServiceClient : public OuiServiceImplementationClient
     ConnectInfo connect( asio::yield_context yield
                        , Signal<void()>& cancel) override;
 
+    bool verify_endpoint() const { return (bool)_endpoint; }
+
     private:
     asio::io_service& _ios;
-    asio::ip::tcp::endpoint _endpoint;
+    boost::optional<asio::ip::tcp::endpoint> _endpoint;
 };
 
 } // ouiservice namespace

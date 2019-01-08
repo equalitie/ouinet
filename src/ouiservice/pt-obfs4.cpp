@@ -6,6 +6,8 @@
 #include "../or_throw.h"
 #include "../util.h"
 
+#include <boost/algorithm/string.hpp>
+
 namespace ouinet {
 namespace ouiservice {
 
@@ -47,21 +49,67 @@ std::unique_ptr<pt::ServerProcess> Obfs4OuiServiceServer::start_server_process(
 
 
 
+static void parse_endpoint(
+    std::string endpoint_string,
+    boost::optional<asio::ip::tcp::endpoint>& endpoint,
+    std::string& certificate,
+    std::string& iat_mode
+) {
+    endpoint = boost::none;
+    std::vector<std::string> parts;
+    boost::algorithm::split(parts, endpoint_string, [](char c) { return c == ','; });
+    if (parts.size() != 3) {
+        return;
+    }
+    if (parts[1].substr(0, 5) != "cert=") {
+        return;
+    }
+    certificate = parts[1].substr(5);
+    if (parts[2].substr(0, 9) != "iat-mode=") {
+        return;
+    }
+    iat_mode = parts[2].substr(9);
+
+
+    size_t pos = parts[0].rfind(':');
+    if (pos == std::string::npos) {
+        return;
+    }
+
+    int port;
+    try {
+        port = std::stoi(parts[0].substr(pos + 1));
+    } catch(...) {
+        return;
+    }
+    sys::error_code ec;
+    asio::ip::address address = asio::ip::address::from_string(parts[0].substr(0, pos), ec);
+    if (ec) {
+        return;
+    }
+    endpoint = asio::ip::tcp::endpoint(address, port);
+}
+
 Obfs4OuiServiceClient::Obfs4OuiServiceClient(
     asio::io_service& ios,
-    Obfs4Endpoint endpoint,
+    std::string endpoint,
     fs::path state_directory
 ):
     PtOuiServiceClient(ios),
-    _endpoint(endpoint),
     _state_directory(state_directory)
-{}
+{
+    parse_endpoint(endpoint, _endpoint, _certificate, _iat_mode);
+}
 
 std::unique_ptr<pt::ClientProcess> Obfs4OuiServiceClient::start_client_process(
     asio::io_service& ios,
     asio::yield_context yield,
     Signal<void()>& cancel_signal
 ) {
+    if (!_endpoint) {
+        return or_throw<std::unique_ptr<pt::ClientProcess>>(yield, asio::error::invalid_argument);
+    }
+
     auto client_process = std::make_unique<pt::ClientProcess>(
         ios,
         "obfs4proxy",
@@ -92,14 +140,14 @@ asio::ip::tcp::socket Obfs4OuiServiceClient::connect_through_transport(
     Signal<void()>& cancel_signal
 ) {
     std::map<std::string, std::string> connection_arguments;
-    connection_arguments["cert"] = _endpoint.certificate;
-    connection_arguments["iat-mode"] = _endpoint.iat_mode;
+    connection_arguments["cert"] = _certificate;
+    connection_arguments["iat-mode"] = _iat_mode;
 
-    remote_endpoint_string = util::str(_endpoint.endpoint);
+    remote_endpoint_string = util::str(*_endpoint);
 
     return pt::connect_socks5(
         transport_endpoint,
-        _endpoint.endpoint,
+        *_endpoint,
         connection_arguments,
         ios,
         yield,
