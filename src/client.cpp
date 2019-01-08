@@ -45,6 +45,7 @@
 
 #include "ouiservice.h"
 #include "ouiservice/i2p.h"
+#include "ouiservice/pt-obfs4.h"
 #include "ouiservice/tcp.h"
 #include "ouiservice/tls.h"
 
@@ -1339,6 +1340,13 @@ void Client::State::setup_injector(asio::yield_context yield)
             return or_throw(yield, asio::error::invalid_argument);
         }
         client = std::move(tcp_client);
+    } else if (injector_ep->type == Endpoint::Obfs4Endpoint) {
+        auto obfs4_client = make_unique<ouiservice::Obfs4OuiServiceClient>(_ios, injector_ep->endpoint_string, _config.repo_root()/"obfs4-client");
+
+        if (!obfs4_client->verify_endpoint()) {
+            return or_throw(yield, asio::error::invalid_argument);
+        }
+        client = std::move(obfs4_client);
     }
 
     bool enable_injector_tls = !_config.tls_injector_cert_path().empty();

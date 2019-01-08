@@ -44,6 +44,10 @@ std::unique_ptr<pt::ServerProcess> Obfs4OuiServiceServer::start_server_process(
     if (ec) {
         return or_throw<std::unique_ptr<pt::ServerProcess>>(yield, ec);
     }
+
+    // TODO: Move this to a sensible location
+    LOG_DEBUG("obfs4 connection arguments: " + util::str(_endpoint) + "," + server_process->connection_arguments());
+
     return std::move(server_process);
 }
 

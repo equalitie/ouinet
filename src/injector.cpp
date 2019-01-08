@@ -34,6 +34,7 @@
 
 #include "ouiservice.h"
 #include "ouiservice/i2p.h"
+#include "ouiservice/pt-obfs4.h"
 #include "ouiservice/tcp.h"
 #include "ouiservice/tls.h"
 #include "ssl/ca_certificate.h"
@@ -752,6 +753,15 @@ int main(int argc, const char* argv[])
 
         auto base = make_unique<ouiservice::TcpOuiServiceServer>(ios, endpoint);
         proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(move(base), ssl_context));
+    }
+
+    if (config.obfs4_endpoint()) {
+        tcp::endpoint endpoint = *config.obfs4_endpoint();
+
+        util::create_state_file( config.repo_root()/"endpoint-obfs4"
+                               , util::str(endpoint));
+
+        proxy_server.add(make_unique<ouiservice::Obfs4OuiServiceServer>(ios, endpoint, config.repo_root()/"obfs4-server"));
     }
 
     if (config.listen_on_i2p()) {
