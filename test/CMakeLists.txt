@@ -62,3 +62,24 @@ add_executable(test-logger "test_logger.cpp"
                            "../src/asio.cpp")
                            
 target_link_libraries(test-logger ${Boost_LIBRARIES})
+
+######################################################################
+add_executable(test-oui-server "ouiservice-server.cpp"
+                               "../src/asio.cpp"
+                               "../src/logger.cpp"
+                               "../src/ouiservice.cpp"
+                               "../src/ouiservice/tcp.cpp"
+)
+
+target_link_libraries(test-oui-server ${Boost_LIBRARIES})
+
+######################################################################
+add_executable(test-oui-client "ouiservice-client.cpp"
+                               "../src/asio.cpp"
+                               "../src/logger.cpp"
+                               "../src/ouiservice.cpp"
+                               "../src/ouiservice/tcp.cpp"
+)
+
+target_link_libraries(test-oui-client ${Boost_LIBRARIES})
+
