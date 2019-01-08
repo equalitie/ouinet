@@ -15,6 +15,20 @@ struct I2PEndpoint {
     }
 };
 
+struct Obfs4Endpoint {
+    asio::ip::tcp::endpoint endpoint;
+    std::string certificate;
+    std::string iat_mode;
+
+    bool operator==(const Obfs4Endpoint& other) const {
+        return
+               endpoint == other.endpoint
+            && certificate == other.certificate
+            && iat_mode == other.iat_mode
+        ;
+    }
+};
+
 using Endpoint = boost::variant< asio::ip::tcp::endpoint
                                , I2PEndpoint>;
 
