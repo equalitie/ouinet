@@ -487,7 +487,7 @@ Response Client::State::fetch_fresh
                 if (auto credentials = _config.credentials_for(con->aux))
                     injreq = authorize(injreq, *credentials);
                 if (r == responder::injector)
-                    injreq = util::injector_request(move(injreq));
+                    injreq = util::to_injector_request(move(injreq));
                 injreq.keep_alive(request.keep_alive());
 
                 // Send the request to the injector/proxy.
@@ -594,7 +594,7 @@ public:
         // since we are not storing them here
         // (they can be found at the descriptor).
         // Otherwise we should pass them through
-        // `util::cache_request` and `util::cache_response` (respectively).
+        // `util::to_cache_request` and `util::to_cache_response` (respectively).
 
         sys::error_code ec;
 

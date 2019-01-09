@@ -145,7 +145,7 @@ Request req_form_from_absolute_to_origin(const Request& absolute_req)
 // Internal Ouinet headers, proxy authorization headers and caching headers
 // are also kept.
 template<class Request>
-static Request injector_request(Request rq) {
+static Request to_injector_request(Request rq) {
     auto url = canonical_url(rq.target());
     rq.target(url);
     rq.version(11);  // HTTP/1.1
@@ -204,7 +204,7 @@ static Request injector_request(Request rq) {
 //
 // The rest of headers are left intact.
 template<class Request>
-static Request origin_request(Request rq) {
+static Request to_origin_request(Request rq) {
     rq = req_form_from_absolute_to_origin(move(rq));
     rq = remove_ouinet_fields(move(rq));
     rq.erase(http::field::proxy_authorization);
@@ -216,10 +216,10 @@ static Request origin_request(Request rq) {
 // This is basically the same as an injector request,
 // minus Internal Ouinet headers, proxy authorization headers and caching headers.
 template<class Request>
-static Request cache_request(Request rq) {
-    rq = injector_request(move(rq));
+static Request to_cache_request(Request rq) {
+    rq = to_injector_request(move(rq));
     rq = remove_ouinet_fields(move(rq));
-    // TODO: Refactor with header list from `injector_request`.
+    // TODO: Refactor with header list from `to_injector_request`.
     return filter_fields( move(rq)
                         // CANONICAL REQUEST HEADERS (ADD, KEEP, PROCESS)
                         // Still DROP some fields that may break browsing for others
@@ -240,7 +240,7 @@ static Request cache_request(Request rq) {
 // Make the given response ready to be sent to the cache.
 // This only leaves a minimum set of non-privacy sensitive headers.
 template<class Response>
-static Response cache_response(Response rs) {
+static Response to_cache_response(Response rs) {
     rs = remove_ouinet_fields(move(rs));
     // TODO: This list was created by going through some 100 responses from
     // bbc.com. Careful selection from all possible (standard) fields is

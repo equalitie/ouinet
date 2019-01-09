@@ -349,7 +349,7 @@ public:
 
         if (ec) return or_throw<Response>(yield, ec);
 
-        Request rq = util::origin_request(rq_);
+        Request rq = util::to_origin_request(rq_);
         rq.keep_alive(true);
         Response ret = connection->request(rq, cancel, yield[ec]);
 
@@ -419,8 +419,8 @@ private:
         ] (boost::asio::yield_context yield) mutable
           -> CacheInjector::InsertionResult {
             // Pop out Ouinet internal HTTP headers.
-            rq = util::cache_request(move(rq));
-            rs = util::cache_response(move(rs));
+            rq = util::to_cache_request(move(rq));
+            rs = util::to_cache_response(move(rs));
 
             sys::error_code ec;
             auto ret = injector->insert_content( id, rq, rs
@@ -546,7 +546,7 @@ void serve( InjectorConfig& config
                 res = *opt_err_res;
             }
             else {
-                auto req2 = util::injector_request(req);  // sanitize
+                auto req2 = util::to_injector_request(req);  // sanitize
                 req2.keep_alive(req.keep_alive());
                 res = cc.fetch(req2, yield[ec].tag("cache_control.fetch"));
                 res.keep_alive(req.keep_alive());
