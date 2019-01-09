@@ -211,7 +211,7 @@ static Request origin_request(Request rq) {
     return rq;
 }
 
-// Make the given request ready to be sent to the origin.
+// Make the given request ready to be sent to the cache.
 //
 // This is basically the same as an injector request,
 // minus Internal Ouinet headers, proxy authorization headers and caching headers.
