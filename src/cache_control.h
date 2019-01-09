@@ -47,10 +47,6 @@ public:
                            , const http::response_header<>& response
                            , const char** reason = nullptr);
 
-    // Keep only relevant headers and Ouinet internal headers,
-    // (to be managed by the lower level functions above).
-    static Response filter_before_store(Response);
-
     void enable_parallel_fetch(bool value) {
         _parallel_fetch_enabled = value;
     }

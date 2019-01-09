@@ -420,7 +420,7 @@ private:
           -> CacheInjector::InsertionResult {
             // Pop out Ouinet internal HTTP headers.
             rq = util::cache_request(move(rq));
-            rs = util::remove_ouinet_fields(move(rs));
+            rs = util::cache_response(move(rs));
 
             sys::error_code ec;
             auto ret = injector->insert_content( id, rq, rs

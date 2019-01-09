@@ -237,4 +237,50 @@ static Request cache_request(Request rq) {
                         );
 }
 
+// Make the given response ready to be sent to the cache.
+// This only leaves a minimum set of non-privacy sensitive headers.
+template<class Response>
+static Response cache_response(Response rs) {
+    rs = remove_ouinet_fields(move(rs));
+    // TODO: This list was created by going through some 100 responses from
+    // bbc.com. Careful selection from all possible (standard) fields is
+    // needed.
+    return filter_fields( move(rs)
+                        , http::field::server
+                        , http::field::retry_after
+                        , http::field::content_length
+                        , http::field::content_type
+                        , http::field::content_encoding
+                        , http::field::content_language
+                        , http::field::transfer_encoding
+                        , http::field::accept_ranges
+                        , http::field::etag
+                        , http::field::age
+                        , http::field::date
+                        , http::field::expires
+                        , http::field::via
+                        , http::field::vary
+                        , http::field::location
+                        , http::field::cache_control
+                        , http::field::warning
+                        , http::field::last_modified
+                        // # CORS response headers (following <https://fetch.spec.whatwg.org/#http-responses>)
+                        , http::field::access_control_allow_origin  // origins the response may be shared with
+                        // A request which caused a response with ``Access-Control-Allow-Credentials: true``
+                        // probably carried authentication tokens and it should not have been cached anyway,
+                        // however a server may erroneously include it for requests not using credentials,
+                        // and we do not want to block them.
+                        // See <https://stackoverflow.com/a/24689738> for an explanation of the header.
+                        , http::field::access_control_allow_credentials  // resp to req w/credentials may be shared
+                        // These response headers should only appear in
+                        // responses to pre-flight (OPTIONS) requests, which should not be cached.
+                        // However, some servers include them as part of responses to GET requests,
+                        // so include them since they are not problematic either.
+                        , http::field::access_control_allow_methods  // methods allowed in CORS request
+                        , http::field::access_control_allow_headers  // headers allowed in CORS request
+                        , http::field::access_control_max_age  // expiration of pre-flight response info
+                        , http::field::access_control_expose_headers  // headers of response to be exposed
+                        );
+}
+
 }} // ouinet::util namespace

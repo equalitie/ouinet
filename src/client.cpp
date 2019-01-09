@@ -593,6 +593,8 @@ public:
         // No need to filter request or response headers
         // since we are not storing them here
         // (they can be found at the descriptor).
+        // Otherwise we should pass them through
+        // `util::cache_request` and `util::cache_response` (respectively).
 
         sys::error_code ec;
 
