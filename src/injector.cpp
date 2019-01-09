@@ -548,7 +548,6 @@ void serve( InjectorConfig& config
             else {
                 auto req2 = util::injector_request(req);  // sanitize
                 req2.keep_alive(req.keep_alive());
-                // TODO: Restore other hop-by-hop headers?
                 res = cc.fetch(req2, yield[ec].tag("cache_control.fetch"));
                 res.keep_alive(req.keep_alive());
             }

@@ -488,7 +488,7 @@ Response Client::State::fetch_fresh
                     injreq = authorize(injreq, *credentials);
                 if (r == responder::injector)
                     injreq = util::injector_request(move(injreq));
-                // TODO: Restore hop-by-hop or keepalive headers?
+                injreq.keep_alive(request.keep_alive());
 
                 // Send the request to the injector/proxy.
                 auto res = con->request( injreq
