@@ -558,6 +558,8 @@ static bool contains_private_data(const http::request_header<>& request)
                 , http::field::accept
                 , http::field::accept_language
                 , http::field::accept_encoding
+                , http::field::from
+                , http::field::origin
                 , http::field::keep_alive
                 , http::field::connection
                 , http::field::referer
