@@ -551,7 +551,7 @@ CacheControl::do_fetch_stored(FetchState& fs, const Request& rq, Yield yield)
 static bool contains_private_data(const http::request_header<>& request)
 {
     for (auto& field : request) {
-        if(!util::field_is_one_of(field
+        if(!( util::field_is_one_of(field
                 , http::field::host
                 , http::field::user_agent
                 , http::field::cache_control
@@ -568,7 +568,8 @@ static bool contains_private_data(const http::request_header<>& request)
                 // https://www.w3.org/TR/upgrade-insecure-requests/
                 , "Upgrade-Insecure-Requests"
                 // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/DNT
-                , "DNT")) {
+                , "DNT")
+             || field.name_string().starts_with(http_::header_prefix))) {
             return true;
         }
     }
