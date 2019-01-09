@@ -249,8 +249,10 @@ auto TimeoutStream<InnerStream>::async_read_some
                                  , [s = _state]
                                    (const sys::error_code& ec, size_t size) {
                                        s->read_deadline->stop();
-                                       if (s->read_handler)
-                                           s->read_handler(ec, size);
+                                       if (s->read_handler) {
+                                           auto h = std::move(s->read_handler);
+                                           h(ec, size);
+                                       }
                                    });
 
     return init.result.get();
@@ -278,8 +280,10 @@ auto TimeoutStream<InnerStream>::async_write_some( const ConstBufferSequence& bs
                                   , [s = _state]
                                     (const sys::error_code& ec, size_t size) {
                                         s->write_deadline->stop();
-                                        if (s->write_handler)
-                                            s->write_handler(ec, size);
+                                        if (s->write_handler) {
+                                            auto h = std::move(s->write_handler);
+                                            h(ec, size);
+                                        }
                                     });
 
     return init.result.get();
@@ -307,8 +311,10 @@ auto TimeoutStream<InnerStream>::async_connect
                                , [s = _state]
                                  (const sys::error_code& ec) {
                                      s->connect_deadline->stop();
-                                     if (s->connect_handler)
-                                         s->connect_handler(ec);
+                                     if (s->connect_handler) {
+                                         auto h = std::move(s->connect_handler);
+                                         h(ec);
+                                     }
                                  });
 
     return init.result.get();

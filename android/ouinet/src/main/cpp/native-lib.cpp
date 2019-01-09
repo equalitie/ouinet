@@ -9,6 +9,7 @@
 #include <boost/asio/steady_timer.hpp>
 #include <namespaces.h>
 #include <client.h>
+#include <client_config.h>
 #include <util/signal.h>
 #include <util/crypto.h>
 #include <condition_variable>
@@ -20,6 +21,7 @@
 #include "std_scoped_redirect.h"
 
 using namespace std;
+using ouinet::ClientConfig;
 
 struct Defer {
     Defer(function<void()> f) : _f(move(f)) {}
@@ -49,8 +51,6 @@ void start_client_thread(const vector<string>& args)
 
             debug("Starting new ouinet client.");
 
-            g_client = make_unique<ouinet::Client>(g_ios);
-
             // In case we're restarting.
             g_ios.reset();
 
@@ -62,7 +62,9 @@ void start_client_thread(const vector<string>& args)
             }
 
             try {
-                g_client->start(args_.size(), (char**) args_.data());
+                ClientConfig cfg(args_.size(), (char**) args_.data());
+                g_client = make_unique<ouinet::Client>(g_ios, move(cfg));
+                g_client->start();
             }
             catch (std::exception& e) {
                 debug("Failed to start Ouinet client:");

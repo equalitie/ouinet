@@ -11,7 +11,6 @@
 #include <boost/asio/ssl/stream.hpp>
 #include <boost/optional/optional_io.hpp>
 #include <iostream>
-#include <fstream>
 #include <cstdlib>  // for atexit()
 
 #include "cache/cache_client.h"
@@ -75,8 +74,9 @@ class Client::State : public enable_shared_from_this<Client::State> {
     friend class Client;
 
 public:
-    State(asio::io_service& ios)
+    State(asio::io_service& ios, ClientConfig cfg)
         : _ios(ios)
+        , _config(move(cfg))
         // A certificate chain with OUINET_CA + SUBJECT_CERT
         // can be around 2 KiB, so this would be around 2 MiB.
         // TODO: Fine tune if necessary.
@@ -96,7 +96,7 @@ public:
         inj_ctx.set_verify_mode(asio::ssl::verify_peer);
     }
 
-    void start(int argc, char* argv[]);
+    void start();
 
     void stop() {
         _cache = nullptr;
@@ -128,6 +128,8 @@ private:
 
     Response fetch_fresh_from_origin(const Request&, Cancel&, Yield);
 
+    Response fetch_fresh_through_connect_proxy(const Request&, Cancel&, Yield);
+
     CacheControl build_cache_control(request_route::Config& request_config);
 
     void listen_tcp( asio::yield_context
@@ -156,9 +158,9 @@ private:
 
 private:
     asio::io_service& _ios;
+    ClientConfig _config;
     std::unique_ptr<CACertificate> _ca_certificate;
     util::LruCache<string, string> _ssl_certificate_cache;
-    ClientConfig _config;
     std::unique_ptr<OuiServiceClient> _injector;
     std::unique_ptr<CacheClient> _cache;
 
@@ -312,6 +314,85 @@ Response Client::State::fetch_fresh_from_origin( const Request& rq
 }
 
 //------------------------------------------------------------------------------
+Response Client::State::fetch_fresh_through_connect_proxy( const Request& rq
+                                                         , Cancel& cancel_
+                                                         , Yield yield)
+{
+    Cancel cancel(cancel_);
+    WatchDog watch_dog(_ios, default_timeout::fetch_http(), [&]{ cancel(); });
+
+    // Parse the URL to tell HTTP/HTTPS, host, port.
+    util::url_match url;
+
+    if (!match_http_url(rq.target(), url)) {
+        // unsupported URL
+        return or_throw<Response>(yield, asio::error::operation_not_supported);
+    }
+
+    // Connect to the injector/proxy.
+    sys::error_code ec;
+    auto inj = _injector->connect(yield[ec].tag("connect_to_injector"), cancel);
+
+    if (ec) return or_throw<Response>(yield, ec);
+
+    // Build the actual request to send to the proxy.
+    Request connreq = { http::verb::connect
+                      , url.host + ":" + (url.port.empty() ? "443" : url.port)
+                      , 11 /* HTTP/1.1 */};
+
+    // HTTP/1.1 requires a ``Host:`` header in all requests:
+    // <https://tools.ietf.org/html/rfc7230#section-5.4>.
+    connreq.set(http::field::host, connreq.target());
+
+    if (auto credentials = _config.credentials_for(inj.remote_endpoint))
+        connreq = authorize(connreq, *credentials);
+
+    // Open a tunnel to the origin
+    // (to later perform the SSL handshake and send the request).
+    // Only get the head of the CONNECT response
+    // (otherwise we would get stuck waiting to read
+    // a body whose length we do not know
+    // since the respone should have no content length).
+    auto connres = fetch_http<http::empty_body>
+                        ( _ios
+                        , inj.connection
+                        , connreq
+                        , default_timeout::fetch_http()
+                        , cancel
+                        , yield[ec].tag("connreq"));
+
+    if (connres.result() != http::status::ok) {
+        // This error code is quite fake, so log the error too.
+        // Unfortunately there is no body to show.
+        yield.tag("proxy_connect").log(connres);
+        return or_throw<Response>(yield, asio::error::connection_refused);
+    }
+
+    GenericStream con;
+
+    if (url.scheme == "https") {
+        con = ssl::util::client_handshake( move(inj.connection)
+                                         , ssl_ctx
+                                         , url.host
+                                         , cancel
+                                         , yield[ec]);
+    } else {
+        con = move(inj.connection);
+    }
+
+    if (ec) return or_throw<Response>(yield, ec);
+
+    // TODO: move
+    auto rq_ = req_form_from_absolute_to_origin(rq);
+
+    auto res = fetch_http<http::dynamic_body>(_ios, con, rq_, cancel, yield[ec]);
+
+    if (ec) return or_throw(yield, ec, move(res));
+
+    // Prevent others from inserting ouinet headers.
+    return util::remove_ouinet_fields(move(res));
+}
+//------------------------------------------------------------------------------
 Response Client::State::fetch_fresh
         ( const Request& request
         , request_route::Config& request_config
@@ -346,6 +427,7 @@ Response Client::State::fetch_fresh
                 Response res = fetch_fresh_from_origin( request
                                                       , cancel
                                                       , yield[ec]);
+
                 if (ec) {
                     last_error = ec;
                     continue;
@@ -360,69 +442,19 @@ Response Client::State::fetch_fresh
                 if (!_config.is_proxy_access_enabled())
                     continue;
 
-                auto target = request.target();
-                if (target.starts_with("https://")) {
-                    // Parse the URL to tell HTTP/HTTPS, host, port.
-                    util::url_match url;
-                    if (!match_http_url(target, url)) {
-                        last_error = asio::error::operation_not_supported;  // unsupported URL
-                        continue;
-                    }
-
-                    // Connect to the injector/proxy.
+                if (request.target().starts_with("https://")) {
                     sys::error_code ec;
-                    auto inj = _injector->connect( yield[ec].tag("connect_to_injector")
-                                                 , cancel);
+
+                    auto res = fetch_fresh_through_connect_proxy( request
+                                                                , cancel
+                                                                , yield[ec]);
+
                     if (ec) {
                         last_error = ec;
                         continue;
                     }
 
-                    // Build the actual request to send to the proxy.
-                    Request connreq = { http::verb::connect
-                                      , url.host + ":" + (url.port.empty() ? "443" : url.port)
-                                      , 11 /* HTTP/1.1 */};
-                    // HTTP/1.1 requires a ``Host:`` header in all requests:
-                    // <https://tools.ietf.org/html/rfc7230#section-5.4>.
-                    connreq.set(http::field::host, connreq.target());
-                    if (auto credentials = _config.credentials_for(inj.remote_endpoint))
-                        connreq = authorize(connreq, *credentials);
-
-                    // Open a tunnel to the origin
-                    // (to later perform the SSL handshake and send the request).
-                    // Only get the head of the CONNECT response
-                    // (otherwise we would get stuck waiting to read
-                    // a body whose length we do not know
-                    // since the respone should have no content length).
-                    auto connres = fetch_http<http::empty_body>
-                                        ( _ios
-                                        , inj.connection
-                                        , connreq
-                                        , default_timeout::fetch_http()
-                                        , cancel
-                                        , yield[ec].tag("connreq"));
-
-                    if (connres.result() != http::status::ok) {
-                        // This error code is quite fake, so log the error too.
-                        // Unfortunately there is no body to show.
-                        last_error = asio::error::connection_refused;
-                        yield.tag("proxy_connect").log(connres);
-                        continue;
-                    }
-
-                    // Send the request to the origin.
-                    auto res = fetch_http_origin( _ios , inj.connection, ssl_ctx
-                                                , url, request
-                                                , default_timeout::fetch_http()
-                                                , cancel
-                                                , yield[ec].tag("send_req"));
-                    if (ec) {
-                        last_error = ec;
-                        continue;
-                    }
-
-                    // Prevent others from inserting ouinet headers.
-                    return util::remove_ouinet_fields(move(res));
+                    return res;
                 }
             }
             // Fall through, the case below handles both injector and proxy with plain HTTP.
@@ -897,10 +929,12 @@ void Client::State::serve_request( GenericStream&& con
     string connect_hp;
     // Process the different requests that may come over the same connection.
     for (;;) {  // continue for next request; break for no more requests
-        Request req;
-
         // Read the (clear-text) HTTP request
-        http::async_read(con, buffer, req, yield_[ec]);
+        // (without a size limit, in case we are uploading a big file).
+        // Based on <https://stackoverflow.com/a/50359998>.
+        http::request_parser<Request::body_type> reqhp;
+        reqhp.body_limit((std::numeric_limits<std::uint64_t>::max)());
+        http::async_read(con, buffer, reqhp, yield_[ec]);
 
         Yield yield(con.get_io_service(), yield_, util::str('C', connection_id));
 
@@ -912,6 +946,7 @@ void Client::State::serve_request( GenericStream&& con
             return;
         }
 
+        Request req(reqhp.release());
         yield.log("=== New request ===");
         yield.log(req.base());
         auto on_exit = defer([&] { yield.log("Done"); });
@@ -1167,20 +1202,32 @@ void Client::State::listen_tcp
 }
 
 //------------------------------------------------------------------------------
-void Client::State::start(int argc, char* argv[])
+void load_tls_ca_certificates(asio::ssl::context& ctx, const string& path_str)
 {
-    try {
-        _config = ClientConfig(argc, argv);
-    } catch(std::exception const& e) {
-        //explicit is better than implecit
-        LOG_ABORT(e.what());
+    if (path_str.empty()) return;
+
+    fs::path path = path_str;
+
+    if (!exists(path)) {
+        throw runtime_error(util::str(
+                    "Can not read CA certificates from \"", path, "\": "
+                    "No such file or directory"));
     }
 
-    if (_config.is_help()) {
-        cout << "Usage:" << endl;
-        cout << _config.description() << endl;
+    if (fs::is_directory(path)) {
+        ctx.add_verify_path(path_str);
         return;
     }
+
+    stringstream ss;
+    ss << fs::ifstream(path).rdbuf();
+    ctx.add_certificate_authority(asio::buffer(ss.str()));
+}
+
+//------------------------------------------------------------------------------
+void Client::State::start()
+{
+    load_tls_ca_certificates(ssl_ctx, _config.tls_ca_cert_store_path());
 
     _ca_certificate = get_or_gen_tls_cert<CACertificate>
         ( "Your own local Ouinet client"
@@ -1330,17 +1377,17 @@ void Client::State::set_injector(string injector_ep_str)
 }
 
 //------------------------------------------------------------------------------
-Client::Client(asio::io_service& ios)
-    : _state(make_shared<State>(ios))
+Client::Client(asio::io_service& ios, ClientConfig cfg)
+    : _state(make_shared<State>(ios, move(cfg)))
 {}
 
 Client::~Client()
 {
 }
 
-void Client::start(int argc, char* argv[])
+void Client::start()
 {
-    _state->start(argc, argv);
+    _state->start();
 }
 
 void Client::stop()
@@ -1373,13 +1420,28 @@ fs::path Client::ca_cert_path() const
 #ifndef __ANDROID__
 int main(int argc, char* argv[])
 {
+    ClientConfig cfg;
+
+    try {
+        cfg = ClientConfig(argc, argv);
+    } catch(std::exception const& e) {
+        LOG_ABORT(e.what());
+        return 1;
+    }
+
+    if (cfg.is_help()) {
+        cout << "Usage:" << endl;
+        cout << cfg.description() << endl;
+        return 0;
+    }
+
     util::crypto_init();
 
     asio::io_service ios;
 
     asio::signal_set signals(ios, SIGINT, SIGTERM);
 
-    Client client(ios);
+    Client client(ios, move(cfg));
 
     unique_ptr<ForceExitOnSignal> force_exit;
 
@@ -1391,7 +1453,7 @@ int main(int argc, char* argv[])
         });
 
     try {
-        client.start(argc, argv);
+        client.start();
     } catch (std::exception& e) {
         cerr << e.what() << endl;
         return 1;
