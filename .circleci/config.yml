@@ -61,6 +61,7 @@ stages:
           ./build/test/test-btree          --log_level=test_suite
           ./build/test/test-bittorrent     --log_level=test_suite
           ./build/test/test-logger         --log_level=test_suite
+          ./build/test/test-http-util      --log_level=test_suite
 
           virtualenv .venv
           pip install twisted

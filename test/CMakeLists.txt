@@ -62,3 +62,8 @@ add_executable(test-logger "test_logger.cpp"
                            "../src/asio.cpp")
                            
 target_link_libraries(test-logger ${Boost_LIBRARIES})
+
+######################################################################
+add_executable(test-http-util "test_http_util.cpp" "../src/asio.cpp")
+target_include_directories(test-http-util PUBLIC "${Boost_INCLUDE_DIR}")
+target_link_libraries(test-http-util ${Boost_LIBRARIES})
