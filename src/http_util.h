@@ -181,7 +181,7 @@ static Request to_injector_request(Request rq) {
                         , "DNT"
                         , http::field::from
                         , http::field::origin
-                        , "Update-Insecure-Requests"
+                        , "Upgrade-Insecure-Requests"
                         , http::field::user_agent
                         // PROXY AUTHENTICATION HEADERS (PASS)
                         , http::field::proxy_authorization
@@ -232,7 +232,7 @@ static Request to_cache_request(Request rq) {
                         , "DNT"
                         , http::field::from
                         , http::field::origin
-                        , "Update-Insecure-Requests"
+                        , "Upgrade-Insecure-Requests"
                         , http::field::user_agent
                         );
 }
