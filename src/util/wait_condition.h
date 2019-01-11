@@ -66,6 +66,11 @@ public:
 
     Lock lock();
 
+    size_t size() const {
+        if (!_wait_state) return 0;
+        return _wait_state->remaining_locks;
+    }
+
 private:
     boost::asio::io_service& _ios;
     std::shared_ptr<WaitState> _wait_state;
