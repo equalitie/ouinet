@@ -90,10 +90,12 @@ bool field_is_one_of(const http::fields::value_type& e,
 template<class Message, class... Fields>
 static Message filter_fields(Message message, const Fields&... keep_fields)
 {
-    for (auto fit = message.begin(); fit != message.end(); fit++) {
+    for (auto fit = message.begin(); fit != message.end();) {
         if (!( field_is_one_of(*fit, keep_fields...)  // TODO: do case insensitive cmp
                || fit->name_string().starts_with(http_::header_prefix))) {
             fit = message.erase(fit);
+        } else {
+            fit++;
         }
     }
 
@@ -103,9 +105,11 @@ static Message filter_fields(Message message, const Fields&... keep_fields)
 template<class Message>
 static Message remove_ouinet_fields(Message message)
 {
-    for (auto fit = message.begin(); fit != message.end(); fit++) {
+    for (auto fit = message.begin(); fit != message.end();) {
         if (fit->name_string().starts_with(http_::header_prefix)) {
             fit = message.erase(fit);
+        } else {
+            fit++;
         }
     }
 
