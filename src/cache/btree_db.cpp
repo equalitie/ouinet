@@ -175,8 +175,6 @@ BTreeInjectorDb::BTreeInjectorDb( asio_ipfs::node& ipfs_node
         });
 }
 
-const string ipfs_uri_prefix = "ipfs:/ipfs/";
-
 string BTreeInjectorDb::insert( string key
                               , string value
                               , asio::yield_context yield)
