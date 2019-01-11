@@ -63,7 +63,7 @@ struct Publisher::Loop : public enable_shared_from_this<Loop> {
 
                 if (was_stopped) return;
 
-                if (ec && to_publish.empty()) {
+                if (to_publish.empty()) {
                     // Timeout has been reached, force republish the value
                     to_publish = last_value;
                 }
