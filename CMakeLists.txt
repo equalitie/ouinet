@@ -60,12 +60,6 @@ find_package(Threads)
 
 ################################################################################
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -Wall -O0 -ggdb ${SANITIZE}")
-
-# gcc 8 spits out warnings from Boost.Mpl about unnecessary parentheses
-# https://github.com/CauldronDevelopmentLLC/cbang/issues/26
-# TODO: Perhaps do a check for Boost and gcc version before adding this flag?
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-parentheses")
-
 ################################################################################
 if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
     set(GCRYPT_HOST "--host=arm-unknown-linux-androideabi")
@@ -120,6 +114,10 @@ externalproject_add(uri
         -DUri_BUILD_DOCS=OFF
         -DUri_DISABLE_LIBCXX=""
         -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+        # gcc 8 spits out warnings from Boost.Mpl about unnecessary parentheses
+        # https://github.com/CauldronDevelopmentLLC/cbang/issues/26
+        # TODO: Perhaps do a check for Boost and gcc version before adding this flag?
+	-DCMAKE_CXX_FLAGS="-Wno-parentheses"
     PREFIX "uri")
 
 set(URI_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri/include")
