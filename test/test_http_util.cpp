@@ -20,7 +20,7 @@ BOOST_AUTO_TEST_CASE(test_filter_fields) {
     orig_rq.set("X-Foo-Bar", "foo");
     orig_rq.set(http::field::referer, "example.net");
     orig_rq.set(http::field::host, "example.com");
-    orig_rq.set("X-Ouinet-Foo", "bar");
+    orig_rq.set("X-OuInEt-Foo", "bar");
 
     Request filt_rq = ouinet::util::filter_fields(orig_rq, http::field::host);
 
