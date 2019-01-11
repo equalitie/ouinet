@@ -5,6 +5,7 @@
 #include "../namespaces.h"
 #include "../or_throw.h"
 #include "../util/condition_variable.h"
+#include "rate_counter.h"
 
 namespace ouinet { namespace bittorrent {
 
@@ -59,17 +60,24 @@ public:
     ~UdpMultiplexer();
 
 private:
+    void maintain_max_rate_bytes_per_sec( float current_rate
+                                        , float max_rate
+                                        , asio::yield_context);
+
+private:
     udp::socket _socket;
     std::list<SendEntry> _send_queue;
     ConditionVariable _send_queue_nonempty;
     IntrusiveList<RecvEntry> _receive_queue;
     Signal<void()> _terminate_signal;
+    asio::steady_timer _rate_limiting_timer;
 };
 
 inline
 UdpMultiplexer::UdpMultiplexer(udp::socket&& s):
     _socket(std::move(s)),
-    _send_queue_nonempty(_socket.get_io_service())
+    _send_queue_nonempty(_socket.get_io_service()),
+    _rate_limiting_timer(_socket.get_io_service())
 {
     assert(_socket.is_open());
 
@@ -77,6 +85,10 @@ UdpMultiplexer::UdpMultiplexer(udp::socket&& s):
         auto terminated = _terminate_signal.connect([&] {
             _send_queue_nonempty.notify();
         });
+
+        RateCounter rc;
+
+        const float max_rate = (500 * 1000)/8; // 500K bits/sec
 
         while(true) {
             if (terminated) {
@@ -93,8 +105,13 @@ UdpMultiplexer::UdpMultiplexer(udp::socket&& s):
 
             sys::error_code ec;
             _socket.async_send_to(buffer(entry.message), entry.to, yield[ec]);
-            if (terminated) {
-                break;
+
+            if (terminated) break;
+
+            if (!ec) {
+                rc.update(entry.message.size());
+                maintain_max_rate_bytes_per_sec(rc.rate(), max_rate, yield[ec]);
+                if (terminated) break;
             }
 
             _send_queue.front().sent_signal(ec);
@@ -124,6 +141,20 @@ UdpMultiplexer::UdpMultiplexer(udp::socket&& s):
             }
         }
     });
+}
+
+inline
+void UdpMultiplexer::maintain_max_rate_bytes_per_sec( float current_rate
+                                                    , float max_rate
+                                                    , asio::yield_context yield)
+{
+    if (current_rate <= max_rate) return;
+
+    float delay_sec = current_rate/max_rate - 1;
+    auto delay = std::chrono::milliseconds(int(delay_sec*1000));
+
+    _rate_limiting_timer.expires_from_now(delay);
+    _rate_limiting_timer.async_wait(yield);
 }
 
 inline

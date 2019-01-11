@@ -1482,7 +1482,7 @@ void dht::DhtNode::send_ping(NodeContact contact)
             contact,
             "ping",
             BencodedMap{{ "id", _node_id.to_bytestring() }},
-            std::chrono::seconds(2),
+            std::chrono::seconds(15),
             yield[ec],
             cancel_signal
         );
@@ -1511,7 +1511,7 @@ void dht::DhtNode::send_write_query(
             { destination, destination_id },
             query_type,
             query_arguments,
-            std::chrono::seconds(5),
+            std::chrono::seconds(15),
             yield[ec],
             cancel_signal
         );
@@ -1546,7 +1546,7 @@ bool dht::DhtNode::query_find_node(
             { "id", _node_id.to_bytestring() },
             { "target", target_id.to_bytestring() }
         },
-        std::chrono::seconds(2),
+        std::chrono::seconds(15),
         yield[ec],
         cancel_signal
     );
@@ -1594,7 +1594,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_peers(
             { "id", _node_id.to_bytestring() },
             { "info_hash", infohash.to_bytestring() }
         },
-        std::chrono::seconds(2),
+        std::chrono::seconds(15),
         yield[ec],
         cancel_signal
     );
@@ -1660,7 +1660,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data(
             { "id", _node_id.to_bytestring() },
             { "target", key.to_bytestring() }
         },
-        std::chrono::seconds(2),
+        std::chrono::seconds(15),
         yield[ec],
         cancel_signal
     );
