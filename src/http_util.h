@@ -142,19 +142,19 @@ Request req_form_from_absolute_to_origin(const Request& absolute_req)
     return origin_req;
 }
 
-// Make the given request canonical to be sent to the injector.
+// Make the given request canonical.
+//
 // This only leaves a minimum set of non-privacy sensitive headers,
 // and some of them may be altered for cacheability or privacy reasons.
 //
-// Internal Ouinet headers, proxy authorization headers and caching headers
-// are also kept.
-template<class Request>
-static Request to_injector_request(Request rq) {
+// Internal Ouinet headers and headers in `keep_fields` are also kept.
+template<class Request, class... Fields>
+static Request to_canonical_request(Request rq, const Fields&... keep_fields) {
     auto url = canonical_url(rq.target());
     rq.target(url);
     rq.version(11);  // HTTP/1.1
 
-    // Some canonical header values that need PROCESS.
+    // Some canonical header values that need ADD, KEEP or PROCESS.
     url_match urlm;
     match_http_url(url, urlm);  // assume check by `canonical_url` above
     rq.set(http::field::host, urlm.host);
@@ -165,40 +165,49 @@ static Request to_injector_request(Request rq) {
     rq.set( http::field::user_agent
           , "Mozilla/5.0 (Windows NT 6.1; rv:60.0) Gecko/20100101 Firefox/60.0");
 
-    // The Ouinet version header hints the endpoint
-    // to behave like an injector instead of a proxy.
-    rq.set(http_::request_version_hdr, http_::request_version_hdr_current);
-
     // Basically only keep headers which are absolutely necessary,
     // do not break privacy and can not break browsing for others.
     // For the moment we do not yet care about
     // requests coming from Ouinet injector being fingerprinted as such.
     return filter_fields( move(rq)
-                        // CANONICAL REQUEST HEADERS (ADD, KEEP, PROCESS)
                         // Still DROP some fields that may break browsing for others
                         // and which have no sensible default (for all).
                         , http::field::host
                         , http::field::accept
-                        //, http::field::accept_datetime
+                        //, http::field::accept_datetime  // DROP
                         , http::field::accept_encoding
-                        //, http::field::accept_language
+                        //, http::field::accept_language  // DROP
                         , "DNT"
                         , http::field::from
                         , http::field::origin
                         , "Upgrade-Insecure-Requests"
                         , http::field::user_agent
-                        // PROXY AUTHENTICATION HEADERS (PASS)
-                        , http::field::proxy_authorization
-                        // CACHING AND RANGE HEADERS (PASS)
-                        , http::field::cache_control
-                        , http::field::if_match
-                        , http::field::if_modified_since
-                        , http::field::if_none_match
-                        , http::field::if_range
-                        , http::field::if_unmodified_since
-                        , http::field::pragma
-                        , http::field::range
+                        , keep_fields...
                         );
+}
+
+// Make the given request ready to be sent to the injector.
+//
+// This means a canonical request with internal Ouinet headers,
+// plus proxy authorization headers and caching headers.
+template<class Request>
+static Request to_injector_request(Request rq) {
+    // The Ouinet version header hints the endpoint
+    // to behave like an injector instead of a proxy.
+    rq.set(http_::request_version_hdr, http_::request_version_hdr_current);
+    return to_canonical_request( move(rq)
+                               // PROXY AUTHENTICATION HEADERS (PASS)
+                               , http::field::proxy_authorization
+                               // CACHING AND RANGE HEADERS (PASS)
+                               , http::field::cache_control
+                               , http::field::if_match
+                               , http::field::if_modified_since
+                               , http::field::if_none_match
+                               , http::field::if_range
+                               , http::field::if_unmodified_since
+                               , http::field::pragma
+                               , http::field::range
+                               );
 }
 
 // Make the given request ready to be sent to the origin by
@@ -210,35 +219,17 @@ static Request to_injector_request(Request rq) {
 template<class Request>
 static Request to_origin_request(Request rq) {
     rq = req_form_from_absolute_to_origin(move(rq));
-    rq = remove_ouinet_fields(move(rq));
     rq.erase(http::field::proxy_authorization);
-    return rq;
+    return remove_ouinet_fields(move(rq));
 }
 
 // Make the given request ready to be sent to the cache.
 //
-// This is basically the same as an injector request,
-// minus Internal Ouinet headers, proxy authorization headers and caching headers.
+// This means a canonical request with no additional headers.
 template<class Request>
 static Request to_cache_request(Request rq) {
-    rq = to_injector_request(move(rq));
     rq = remove_ouinet_fields(move(rq));
-    // TODO: Refactor with header list from `to_injector_request`.
-    return filter_fields( move(rq)
-                        // CANONICAL REQUEST HEADERS (ADD, KEEP, PROCESS)
-                        // Still DROP some fields that may break browsing for others
-                        // and which have no sensible default (for all).
-                        , http::field::host
-                        , http::field::accept
-                        //, http::field::accept_datetime
-                        , http::field::accept_encoding
-                        //, http::field::accept_language
-                        , "DNT"
-                        , http::field::from
-                        , http::field::origin
-                        , "Upgrade-Insecure-Requests"
-                        , http::field::user_agent
-                        );
+    return to_canonical_request(move(rq));
 }
 
 // Make the given response ready to be sent to the cache.
