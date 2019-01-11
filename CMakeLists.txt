@@ -103,6 +103,11 @@ externalproject_add(json
 
 set(JSON_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/json/src/json/src")
 
+# gcc 8 spits out warnings from Boost.Mpl about unnecessary parentheses
+# https://github.com/CauldronDevelopmentLLC/cbang/issues/26
+# TODO: Perhaps do a check for Boost and gcc version before adding this flag?
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-parentheses")
+
 ################################################################################
 externalproject_add(uri
     GIT_REPOSITORY https://github.com/cpp-netlib/uri
@@ -114,10 +119,7 @@ externalproject_add(uri
         -DUri_BUILD_DOCS=OFF
         -DUri_DISABLE_LIBCXX=""
         -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-        # gcc 8 spits out warnings from Boost.Mpl about unnecessary parentheses
-        # https://github.com/CauldronDevelopmentLLC/cbang/issues/26
-        # TODO: Perhaps do a check for Boost and gcc version before adding this flag?
-	-DCMAKE_CXX_FLAGS="-Wno-parentheses"
+        -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
     PREFIX "uri")
 
 set(URI_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri/include")
