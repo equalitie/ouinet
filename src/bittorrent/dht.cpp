@@ -2407,8 +2407,11 @@ std::set<tcp::endpoint> MainlineDht::tracker_get_peers(NodeID infohash, asio::yi
     return or_throw<std::set<tcp::endpoint>>(yield, ec);
 }
 
-boost::optional<BencodedValue> MainlineDht::immutable_get(NodeID key, asio::yield_context yield, Signal<void()>& cancel_signal)
-{
+boost::optional<BencodedValue> MainlineDht::immutable_get(
+        NodeID key,
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
+) {
     boost::optional<BencodedValue> output;
     sys::error_code ec;
 
@@ -2438,14 +2441,16 @@ boost::optional<BencodedValue> MainlineDht::immutable_get(NodeID key, asio::yiel
     auto cancelled = cancel_signal.connect([&] {
         success_condition.cancel();
     });
+
     auto terminated = _terminate_signal.connect([&] {
         success_condition.cancel();
     });
+
     if (!success_condition.wait_for_success(yield)) {
         if (success_condition.cancelled()) {
             ec = asio::error::operation_aborted;
         } else {
-            ec = asio::error::network_unreachable;
+            ec = asio::error::not_found;
         }
     }
 
@@ -2469,6 +2474,7 @@ boost::optional<MutableDataItem> MainlineDht::mutable_get(
 
     SuccessCondition success_condition(_ios);
     WaitCondition completed_condition(_ios);
+
     for (auto& i : _nodes) {
         asio::spawn(_ios, [
             &,
@@ -2499,11 +2505,12 @@ boost::optional<MutableDataItem> MainlineDht::mutable_get(
     auto terminated = _terminate_signal.connect([&] {
         success_condition.cancel();
     });
+
     if (!success_condition.wait_for_success(yield)) {
         if (success_condition.cancelled()) {
             ec = asio::error::operation_aborted;
         } else {
-            ec = asio::error::network_unreachable;
+            ec = asio::error::not_found;
         }
     }
 
