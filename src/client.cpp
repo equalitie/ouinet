@@ -302,7 +302,7 @@ Response Client::State::fetch_fresh_from_origin( const Request& rq
 
     // Transform request from absolute-form to origin-form
     // https://tools.ietf.org/html/rfc7230#section-5.3
-    auto rq_ = req_form_from_absolute_to_origin(rq);
+    auto rq_ = util::req_form_from_absolute_to_origin(rq);
 
     auto res = con->request(rq_, cancel, yield[ec]);
 
@@ -383,7 +383,7 @@ Response Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     if (ec) return or_throw<Response>(yield, ec);
 
     // TODO: move
-    auto rq_ = req_form_from_absolute_to_origin(rq);
+    auto rq_ = util::req_form_from_absolute_to_origin(rq);
 
     auto res = fetch_http<http::dynamic_body>(_ios, con, rq_, cancel, yield[ec]);
 
@@ -484,16 +484,11 @@ Response Client::State::fetch_fresh
 
                 // Build the actual request to send to the injector.
                 Request injreq = request;
-
-                if (r == responder::injector) {
-                    // Add first a Ouinet version header
-                    // to hint it to behave like an injector instead of a proxy.
-                    injreq.set( http_::request_version_hdr
-                              , http_::request_version_hdr_current);
-                }
-
                 if (auto credentials = _config.credentials_for(con->aux))
                     injreq = authorize(injreq, *credentials);
+                if (r == responder::injector)
+                    injreq = util::to_injector_request(move(injreq));
+                injreq.keep_alive(request.keep_alive());
 
                 // Send the request to the injector/proxy.
                 auto res = con->request( injreq
@@ -595,6 +590,12 @@ public:
 
     Response store(const Request& rq, Response rs, Cancel&, Yield yield)
     {
+        // No need to filter request or response headers
+        // since we are not storing them here
+        // (they can be found at the descriptor).
+        // Otherwise we should pass them through
+        // `util::to_cache_request` and `util::to_cache_response` (respectively).
+
         sys::error_code ec;
 
         auto& cache = client_state._cache;

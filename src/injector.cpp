@@ -244,18 +244,6 @@ void handle_connect_request( GenericStream client_c
 }
 
 //------------------------------------------------------------------------------
-static Request erase_hop_by_hop_headers(Request rq) {
-    //// TODO
-    //rq.erase(http::field::connection);
-    //rq.erase(http::field::keep_alive);
-    //rq.erase(http::field::public_);
-    //rq.erase(http::field::transfer_encoding);
-    //rq.erase(http::field::upgrade);
-    rq.erase(http::field::proxy_authenticate);
-    return rq;
-}
-
-//------------------------------------------------------------------------------
 struct InjectorCacheControl {
     using Connection = OriginPools::Connection;
 
@@ -361,11 +349,8 @@ public:
 
         if (ec) return or_throw<Response>(yield, ec);
 
-        Request rq = req_form_from_absolute_to_origin(
-                        erase_hop_by_hop_headers(rq_));
-
+        Request rq = util::to_origin_request(rq_);
         rq.keep_alive(true);
-
         Response ret = connection->request(rq, cancel, yield[ec]);
 
         if (ec) return or_throw<Response>(yield, ec);
@@ -434,8 +419,8 @@ private:
         ] (boost::asio::yield_context yield) mutable
           -> CacheInjector::InsertionResult {
             // Pop out Ouinet internal HTTP headers.
-            rq.erase(http_::request_sync_injection_hdr);
-            rs.erase(http_::response_injection_id_hdr);
+            rq = util::to_cache_request(move(rq));
+            rs = util::to_cache_response(move(rs));
 
             sys::error_code ec;
             auto ret = injector->insert_content( id, rq, rs
@@ -561,11 +546,10 @@ void serve( InjectorConfig& config
                 res = *opt_err_res;
             }
             else {
-                auto req2 = req;
-                // do not propagate or cache the header
-                req2.erase(http_::request_version_hdr);
+                auto req2 = util::to_injector_request(req);  // sanitize
+                req2.keep_alive(req.keep_alive());
                 res = cc.fetch(req2, yield[ec].tag("cache_control.fetch"));
-                res.keep_alive(true);
+                res.keep_alive(req.keep_alive());
             }
         }
 
