@@ -140,6 +140,7 @@ if [ "$PROG" = injector ]; then
             echo "Injector I2P endpoint (Base32): $i2p_b32_ep"
             i2p_b64_ep=$(wget -qO- "$i2p_dests_pfx$i2p_b32_ep" | sed -nE 's#.*<textarea[^>]*>([^<]+)</textarea>.*#\1#p')
             echo "Injector I2P endpoint (Base64): $i2p_b64_ep"
+            cp "$INJECTOR_I2P_KEY" "$REPO/i2p-private-key"  # ensure that it survives upgrades
             break
         fi
         sleep 1
