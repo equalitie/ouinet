@@ -5,7 +5,7 @@
 
 #include "../namespaces.h"
 #include "../util/crypto.h"
-#include "db.h"
+#include "index.h"
 
 namespace ouinet { namespace bittorrent { class MainlineDht; }}
 namespace ouinet { namespace util { class Ed25519PublicKey; }}
@@ -20,10 +20,10 @@ std::array<uint8_t, 20> bep44_salt_from_key(const std::string& key)
     return util::sha1(key);
 }
 
-class Bep44ClientDb : public ClientDb {
+class Bep44ClientIndex : public ClientIndex {
 public:
-    Bep44ClientDb( bittorrent::MainlineDht& bt_dht
-                 , util::Ed25519PublicKey bt_pubkey);
+    Bep44ClientIndex( bittorrent::MainlineDht& bt_dht
+                    , util::Ed25519PublicKey bt_pubkey);
 
     std::string find( const std::string& key
                     , Cancel&
@@ -34,7 +34,7 @@ public:
 
     boost::asio::io_service& get_io_service();
 
-    ~Bep44ClientDb();
+    ~Bep44ClientIndex();
 
 private:
     bittorrent::MainlineDht& _bt_dht;
@@ -42,10 +42,10 @@ private:
     std::shared_ptr<bool> _was_destroyed;
 };
 
-class Bep44InjectorDb : public InjectorDb {
+class Bep44InjectorIndex : public InjectorIndex {
 public:
-    Bep44InjectorDb( bittorrent::MainlineDht& bt_dht
-                   , util::Ed25519PrivateKey bt_privkey);
+    Bep44InjectorIndex( bittorrent::MainlineDht& bt_dht
+                      , util::Ed25519PrivateKey bt_privkey);
 
     std::string find( const std::string& key
                     , Cancel&
@@ -56,7 +56,7 @@ public:
 
     boost::asio::io_service& get_io_service();
 
-    ~Bep44InjectorDb();
+    ~Bep44InjectorIndex();
 
 private:
     bittorrent::MainlineDht& _bt_dht;

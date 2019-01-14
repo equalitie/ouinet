@@ -1,4 +1,4 @@
-#include "btree_db.h"
+#include "btree_index.h"
 #include <asio_ipfs.h>
 #include "publisher.h"
 #include "btree.h"
@@ -58,17 +58,17 @@ static BTree::RemoveOp make_remove_operation(asio_ipfs::node& ipfs_node)
     };
 }
 
-static string path_to_db(const fs::path& path_to_repo, const string& ipns)
+static string path_to_index(const fs::path& path_to_repo, const string& ipns)
 {
-    return (path_to_repo / ("ipfs_cache_db." + ipns)).native();
+    return (path_to_repo / ("ipfs_cache_index." + ipns)).native();
 }
 
-static void load_db_from_disk( BTree& db_map
-                             , const fs::path& path_to_repo
-                             , const string& ipns
-                             , asio::yield_context yield)
+static void load_index_from_disk( BTree& index_map
+                                , const fs::path& path_to_repo
+                                , const string& ipns
+                                , asio::yield_context yield)
 {
-    string path = path_to_db(path_to_repo, ipns);
+    string path = path_to_index(path_to_repo, ipns);
 
     ifstream file(path);
 
@@ -91,18 +91,18 @@ static void load_db_from_disk( BTree& db_map
         }
 
         sys::error_code ec;
-        db_map.load(ipfs, yield[ec]);
+        index_map.load(ipfs, yield[ec]);
     }
     catch (const std::exception& e) {
         cerr << "ERROR: parsing " << path << ": " << e.what() << endl;
     }
 }
 
-static void save_db_to_disk( const fs::path& path_to_repo
-                           , const string& ipns
-                           , const string& ipfs)
+static void save_index_to_disk( const fs::path& path_to_repo
+                              , const string& ipns
+                              , const string& ipfs)
 {
-    string path = path_to_db(path_to_repo, ipns);
+    string path = path_to_index(path_to_repo, ipns);
 
     ofstream file(path, std::ofstream::trunc);
 
@@ -116,18 +116,18 @@ static void save_db_to_disk( const fs::path& path_to_repo
 }
 
 
-BTreeClientDb::BTreeClientDb( asio_ipfs::node& ipfs_node
-                            , string ipns
-                            , bt::MainlineDht& bt_dht
-                            , optional<util::Ed25519PublicKey> bt_publish_pubkey
-                            , fs::path path_to_repo)
+BTreeClientIndex::BTreeClientIndex( asio_ipfs::node& ipfs_node
+                                  , string ipns
+                                  , bt::MainlineDht& bt_dht
+                                  , optional<util::Ed25519PublicKey> bt_publish_pubkey
+                                  , fs::path path_to_repo)
     : _path_to_repo(move(path_to_repo))
     , _ipns(move(ipns))
     , _ipfs_node(ipfs_node)
-    , _db_map(make_unique<BTree>( make_cat_operation(ipfs_node)
-                                , nullptr
-                                , nullptr
-                                , BTREE_NODE_SIZE))
+    , _index_map(make_unique<BTree>( make_cat_operation(ipfs_node)
+                                   , nullptr
+                                   , nullptr
+                                   , BTREE_NODE_SIZE))
     , _resolver( ipfs_node
                , _ipns
                , bt_dht
@@ -142,23 +142,23 @@ BTreeClientDb::BTreeClientDb( asio_ipfs::node& ipfs_node
             if (*d) return;
 
             // Already loaded?
-            if (!_db_map->root_hash().empty()) return;
+            if (!_index_map->root_hash().empty()) return;
 
-            load_db_from_disk(*_db_map, _path_to_repo, _ipns, yield);
+            load_index_from_disk(*_index_map, _path_to_repo, _ipns, yield);
         });
 }
 
-BTreeInjectorDb::BTreeInjectorDb( asio_ipfs::node& ipfs_node
-                                , Publisher& publisher
-                                , fs::path path_to_repo)
+BTreeInjectorIndex::BTreeInjectorIndex( asio_ipfs::node& ipfs_node
+                                      , Publisher& publisher
+                                      , fs::path path_to_repo)
     : _path_to_repo(move(path_to_repo))
     , _ipns(ipfs_node.id())
     , _ipfs_node(ipfs_node)
     , _publisher(publisher)
-    , _db_map(make_unique<BTree>( make_cat_operation(ipfs_node)
-                                , make_add_operation(ipfs_node)
-                                , make_remove_operation(ipfs_node)
-                                , BTREE_NODE_SIZE))
+    , _index_map(make_unique<BTree>( make_cat_operation(ipfs_node)
+                                   , make_add_operation(ipfs_node)
+                                   , make_remove_operation(ipfs_node)
+                                   , BTREE_NODE_SIZE))
     , _was_destroyed(make_shared<bool>(false))
 {
     auto d = _was_destroyed;
@@ -167,17 +167,17 @@ BTreeInjectorDb::BTreeInjectorDb( asio_ipfs::node& ipfs_node
             if (*d) return;
 
             // Already loaded?
-            if (!_db_map->root_hash().empty()) return;
+            if (!_index_map->root_hash().empty()) return;
 
-            load_db_from_disk(*_db_map, _path_to_repo, _ipns, yield);
+            load_index_from_disk(*_index_map, _path_to_repo, _ipns, yield);
 
-            publish(_db_map->root_hash());
+            publish(_index_map->root_hash());
         });
 }
 
-string BTreeInjectorDb::insert( string key
-                              , string value
-                              , asio::yield_context yield)
+string BTreeInjectorIndex::insert( string key
+                                 , string value
+                                 , asio::yield_context yield)
 {
     assert(!key.empty() && !value.empty());
     if (value.size() > BTREE_DATA_MAX_SIZE)
@@ -186,58 +186,58 @@ string BTreeInjectorDb::insert( string key
     auto wd = _was_destroyed;
     sys::error_code ec;
 
-    _db_map->insert(move(key), move(value), yield[ec]);
+    _index_map->insert(move(key), move(value), yield[ec]);
 
     if (!ec && *wd) ec = asio::error::operation_aborted;
     if (ec) return or_throw<string>(yield, ec);
 
-    publish(_db_map->root_hash());
+    publish(_index_map->root_hash());
 
     if (!ec && *wd) ec = asio::error::operation_aborted;
     // No data is returned to help with reinsertion.
     return or_throw(yield, ec, "");
 }
 
-void BTreeInjectorDb::publish(string db_ipfs_id)
+void BTreeInjectorIndex::publish(string index_ipfs_id)
 {
-    if (db_ipfs_id.empty()) {
+    if (index_ipfs_id.empty()) {
         return;
     }
 
-    save_db_to_disk(_path_to_repo, _ipns, db_ipfs_id);
+    save_index_to_disk(_path_to_repo, _ipns, index_ipfs_id);
 
-    _publisher.publish(move(db_ipfs_id));
+    _publisher.publish(move(index_ipfs_id));
 }
 
 static string query_( const string& key
-                    , BTree& db
+                    , BTree& index
                     , Cancel& cancel
                     , asio::yield_context yield)
 {
     sys::error_code ec;
 
-    auto val = db.find(key, cancel, yield[ec]);
+    auto val = index.find(key, cancel, yield[ec]);
 
     if (ec) return or_throw<string>(yield, ec);
 
     return val;
 }
 
-string BTreeInjectorDb::find( const string& key
+string BTreeInjectorIndex::find( const string& key
                             , Cancel& cancel
                             , asio::yield_context yield)
 {
-    return query_(key, *_db_map, cancel, yield);
+    return query_(key, *_index_map, cancel, yield);
 }
 
-string BTreeClientDb::find( const string& key
-                          , Cancel& cancel
-                          , asio::yield_context yield)
+string BTreeClientIndex::find( const string& key
+                             , Cancel& cancel
+                             , asio::yield_context yield)
 {
-    return query_(key, *_db_map, cancel, yield);
+    return query_(key, *_index_map, cancel, yield);
 }
 
-void BTreeClientDb::on_resolve(string ipfs_id, asio::yield_context yield)
+void BTreeClientIndex::on_resolve(string ipfs_id, asio::yield_context yield)
 {
     auto d = _was_destroyed;
 
@@ -247,30 +247,30 @@ void BTreeClientDb::on_resolve(string ipfs_id, asio::yield_context yield)
 
     _ipfs = ipfs_id;
 
-    _db_map->load(ipfs_id, yield[ec]);
+    _index_map->load(ipfs_id, yield[ec]);
 
     if (*d || ec) return;
 
-    save_db_to_disk(_path_to_repo, _ipns, ipfs_id);
+    save_index_to_disk(_path_to_repo, _ipns, ipfs_id);
 }
 
-const BTree* BTreeClientDb::get_btree() const
+const BTree* BTreeClientIndex::get_btree() const
 {
-    return _db_map.get();
+    return _index_map.get();
 }
 
-asio::io_service& BTreeClientDb::get_io_service() {
+asio::io_service& BTreeClientIndex::get_io_service() {
     return _ipfs_node.get_io_service();
 }
 
-asio::io_service& BTreeInjectorDb::get_io_service() {
+asio::io_service& BTreeInjectorIndex::get_io_service() {
     return _ipfs_node.get_io_service();
 }
 
-BTreeClientDb::~BTreeClientDb() {
+BTreeClientIndex::~BTreeClientIndex() {
     *_was_destroyed = true;
 }
 
-BTreeInjectorDb::~BTreeInjectorDb() {
+BTreeInjectorIndex::~BTreeInjectorIndex() {
     *_was_destroyed = true;
 }

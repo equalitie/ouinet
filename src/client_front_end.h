@@ -94,8 +94,8 @@ private:
     void handle_insert_bep44(const Request&, Response&, std::stringstream&
                             , CacheClient*, asio::yield_context);
 
-    void handle_enumerate_db(const Request&, Response&, std::stringstream&
-                            , CacheClient*, asio::yield_context);
+    void handle_enumerate_index(const Request&, Response&, std::stringstream&
+                               , CacheClient*, asio::yield_context);
 
     void handle_portal( ClientConfig&
                       , const Request&

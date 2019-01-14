@@ -9,14 +9,14 @@
 
 namespace ouinet {
 
-enum class DbType { btree, bep44 };
+enum class IndexType { btree, bep44 };
 
-static const std::map<DbType, std::string> DbName = {
-    {DbType::btree, "Btree"},
-    {DbType::bep44, "BEP44"}
+static const std::map<IndexType, std::string> IndexName = {
+    {IndexType::btree, "Btree"},
+    {IndexType::bep44, "BEP44"}
 };
 
-class ClientDb {
+class ClientIndex {
 public:
     virtual std::string find(const std::string& key, Cancel&, asio::yield_context) = 0;
 
@@ -28,7 +28,7 @@ public:
     };
 };
 
-class InjectorDb : public ClientDb {
+class InjectorIndex : public ClientIndex {
 public:
     // May set `asio::error::message_size` if the value is too big
     // to be stored directly in the data base.

@@ -221,7 +221,7 @@ Client::State::fetch_stored( const Request& request
 
     sys::error_code ec;
     auto ret = _cache->get_content( key_from_http_req(request)
-                                  , _config.default_db_type()
+                                  , _config.default_index_type()
                                   , cancel
                                   , yield[ec]);
     if (!ec) {
@@ -610,7 +610,7 @@ public:
             , &ios = client_state.get_io_service()
             , &cancel = client_state.get_shutdown_signal()
             , key = key_from_http_req(rq)
-            , dbtype = client_state._config.default_db_type()
+            , indextype = client_state._config.default_index_type()
             ] (asio::yield_context yield) mutable {
                 // Seed content data itself.
                 // TODO: Use the scheduler here to only do some max number
@@ -645,7 +645,7 @@ public:
                         return;
 
                     sys::error_code ec;
-                    auto desc_data = cache->get_descriptor(key, dbtype, cancel, yield[ec]);
+                    auto desc_data = cache->get_descriptor(key, indextype, cancel, yield[ec]);
                     if (ec == asio::error::not_found) {  // not (yet) inserted
                         log_post_inject(attempt, "not found, try again");
                         continue;

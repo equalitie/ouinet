@@ -1,7 +1,7 @@
 #pragma once
 
 #include "util/crypto.h"
-#include "cache/db.h"
+#include "cache/index.h"
 
 namespace ouinet {
 
@@ -43,8 +43,8 @@ public:
     util::Ed25519PrivateKey bt_private_key() const
     { return _bt_private_key; }
 
-    DbType default_db_type() const
-    { return _default_db_type; }
+    IndexType default_index_type() const
+    { return _default_index_type; }
 
     bool cache_enabled() const { return !_disable_cache; }
 
@@ -61,7 +61,7 @@ private:
     boost::filesystem::path OUINET_CONF_FILE = "ouinet-injector.conf";
     std::string _credentials;
     util::Ed25519PrivateKey _bt_private_key;
-    DbType _default_db_type = DbType::btree;
+    IndexType _default_index_type = IndexType::btree;
     bool _disable_cache = false;
 };
 
@@ -90,7 +90,7 @@ InjectorConfig::options_description()
            "If unused, this injector shall behave as an open proxy.")
         ("bittorrent-private-key", po::value<string>()
          , "Private key of the BitTorrent/BEP44 subsystem")
-        ("default-db"
+        ("default-index"
          , po::value<string>()->default_value("btree")
          , "Default database type to use, can be either \"btree\" or \"bep44\"")
         ("disable-cache", "Disable all cache operations (even initialization)")
@@ -185,17 +185,17 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
     std::cerr << "Using BT Public key: "
               << _bt_private_key.public_key() << std::endl;
 
-    if (vm.count("default-db")) {
-        auto type = vm["default-db"].as<string>();
+    if (vm.count("default-index")) {
+        auto type = vm["default-index"].as<string>();
 
         if (type == "btree") {
-            _default_db_type = DbType::btree;
+            _default_index_type = IndexType::btree;
         }
         else if (type == "bep44") {
-            _default_db_type = DbType::bep44;
+            _default_index_type = IndexType::bep44;
         }
         else {
-            throw std::runtime_error("Invalid value for --default-db-type");
+            throw std::runtime_error("Invalid value for --default-index-type");
         }
     }
 

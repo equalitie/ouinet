@@ -396,7 +396,7 @@ private:
 
         // TODO: use string_view
         auto ret = injector->get_content( key_from_http_req(rq)
-                                        , config.default_db_type()
+                                        , config.default_index_type()
                                         , cancel
                                         , yield[ec]);
 
@@ -426,9 +426,9 @@ private:
 
         // This injection code logs errors but does not propagate them
         // (the `desc_data` field is set to the empty string).
-        auto db_type = config.default_db_type();
+        auto index_type = config.default_index_type();
         auto inject = [
-            rq, rs, id, db_type,
+            rq, rs, id, index_type,
             injector = injector.get()
         ] (boost::asio::yield_context yield) mutable
           -> CacheInjector::InsertionResult {
@@ -438,7 +438,7 @@ private:
 
             sys::error_code ec;
             auto ret = injector->insert_content( id, rq, rs
-                                               , db_type
+                                               , index_type
                                                , yield[ec]);
 
             if (ec) {
@@ -470,9 +470,9 @@ private:
         // Add descriptor storage link as is.
         rs.set(http_::response_descriptor_link_hdr, move(ins.desc_link));
         // Add Base64-encoded reinsertion data (if any).
-        if (ins.db_ins_data.length() > 0) {
-            auto encoded_insd = util::base64_encode(move(ins.db_ins_data));
-            rs.set( http_::response_insert_hdr_pfx + DbName.at(db_type)
+        if (ins.index_ins_data.length() > 0) {
+            auto encoded_insd = util::base64_encode(move(ins.index_ins_data));
+            rs.set( http_::response_insert_hdr_pfx + IndexName.at(index_type)
                   , move(encoded_insd));
         }
         return rs;
@@ -720,7 +720,7 @@ int main(int argc, const char* argv[])
         // Although the IPNS ID is already in IPFS's config file,
         // this just helps put all info relevant to the user right in the repo root.
         auto ipns_id = cache_injector->ipfs_id();
-        LOG_DEBUG("IPNS DB: " + ipns_id);
+        LOG_DEBUG("IPNS Index: " + ipns_id);
         util::create_state_file(config.repo_root()/"cache-ipns", ipns_id);
     }
 
