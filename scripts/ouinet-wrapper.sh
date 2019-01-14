@@ -89,6 +89,17 @@ if [ "$PROG" = injector ]; then
         sed -i -E 's/^(\s*listen-on-i2p\s*=\s*true\b.*)/##\1/' "$CONF"  # disable legacy I2P support
     fi
 
+    # Convert legacy key so that it can be used by the daemon.
+    INJECTOR_I2P_LEGACY_KEY="$REPO/i2p/i2p-private-key"  # Base64-encoded
+    INJECTOR_I2P_KEY=/var/lib/i2pd/ouinet-injector-keys.dat  # raw
+    if [ -e "$INJECTOR_I2P_LEGACY_KEY" -a ! -e "$INJECTOR_I2P_KEY" ]; then
+        touch "$INJECTOR_I2P_KEY"
+        chown i2pd:i2pd "$INJECTOR_I2P_KEY"
+        chmod 0640 "$INJECTOR_I2P_KEY"
+        # The daemon uses non-standard Base64, see `T64` in `i2pd/libi2pd/Base.cpp`.
+        tr -- -~ +/ < "$INJECTOR_I2P_LEGACY_KEY" | base64 -d > "$INJECTOR_I2P_KEY"
+    fi
+
     if ! grep -q '^\s*ipv6\s*=\s*true\b' /etc/i2pd/i2pd.conf; then
         sed -i -E 's/^#*\s*(ipv6\s*=\s*)false(\b.*)/\1true\2/' /etc/i2pd/i2pd.conf  # enable IPv6
     fi
@@ -103,7 +114,7 @@ if [ "$PROG" = injector ]; then
 		type=server
 		host=$INJECTOR_LOOP_ADDR
 		port=$INJECTOR_TCP_PORT
-		keys=ouinet-injector-keys.dat
+		keys=$(basename "$INJECTOR_I2P_KEY")
 		signaturetype=7
 		inbound.quantity=3
 		outbound.quantity=3
