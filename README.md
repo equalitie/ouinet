@@ -96,6 +96,15 @@ above), you can run the tests as follows:
     $ export OUINET_BUILD_DIR=<BUILD DIR>
     $ ./scripts/run_integration_tests.sh
 
+## Using a Guix environment
+
+```sh
+guix environment -l ouinet.scm
+```
+
+This gives you a shell with cmake, boost, and other dependencies so you can proceed
+with hacking as if you installed them manually (see build requirements above).
+
 ## Using a Vagrant environment
 
 One of the easiest ways to build Ouinet from source code (e.g. for development
