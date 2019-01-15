@@ -157,7 +157,8 @@ static Request to_canonical_request(Request rq, const Fields&... keep_fields) {
     // Some canonical header values that need ADD, KEEP or PROCESS.
     url_match urlm;
     match_http_url(url, urlm);  // assume check by `canonical_url` above
-    rq.set(http::field::host, urlm.host);
+    rq.set( http::field::host
+          , (urlm.port.empty() ? urlm.host : urlm.host + ":" + urlm.port));
     rq.set(http::field::accept, "*/*");
     rq.set(http::field::accept_encoding, "");
     rq.set("DNT", "1");
