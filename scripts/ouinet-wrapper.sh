@@ -92,12 +92,19 @@ if [ "$PROG" = injector ]; then
     # Convert legacy key so that it can be used by the daemon.
     INJECTOR_I2P_LEGACY_KEY="$REPO/i2p/i2p-private-key"  # Base64-encoded
     INJECTOR_I2P_KEY=/var/lib/i2pd/ouinet-injector-keys.dat  # raw
+    INJECTOR_I2P_BACKUP_KEY="$REPO/i2p-private-key"  # a copy of the above
     if [ -e "$INJECTOR_I2P_LEGACY_KEY" -a ! -e "$INJECTOR_I2P_KEY" ]; then
         touch "$INJECTOR_I2P_KEY"
         chown i2pd:i2pd "$INJECTOR_I2P_KEY"
         chmod 0640 "$INJECTOR_I2P_KEY"
         # The daemon uses non-standard Base64, see `T64` in `i2pd/libi2pd/Base.cpp`.
         tr -- -~ +/ < "$INJECTOR_I2P_LEGACY_KEY" | base64 -d > "$INJECTOR_I2P_KEY"
+    fi
+    if [ -e "$INJECTOR_I2P_BACKUP_KEY" -a ! -e "$INJECTOR_I2P_KEY" ]; then
+        # Use backed-up I2P key (for container upgrades).
+        cp -a "$INJECTOR_I2P_BACKUP_KEY" "$INJECTOR_I2P_KEY"
+        chown i2pd:i2pd "$INJECTOR_I2P_KEY"
+        chmod 0640 "$INJECTOR_I2P_KEY"
     fi
 
     if ! grep -q '^\s*ipv6\s*=\s*true\b' /etc/i2pd/i2pd.conf; then
@@ -140,7 +147,7 @@ if [ "$PROG" = injector ]; then
             echo "Injector I2P endpoint (Base32): $i2p_b32_ep"
             i2p_b64_ep=$(wget -qO- "$i2p_dests_pfx$i2p_b32_ep" | sed -nE 's#.*<textarea[^>]*>([^<]+)</textarea>.*#\1#p')
             echo "Injector I2P endpoint (Base64): $i2p_b64_ep"
-            cp "$INJECTOR_I2P_KEY" "$REPO/i2p-private-key"  # ensure that it survives upgrades
+            cp "$INJECTOR_I2P_KEY" "$INJECTOR_I2P_BACKUP_KEY"  # ensure that it survives upgrades
             break
         fi
         sleep 1
