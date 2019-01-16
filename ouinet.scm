@@ -42,6 +42,7 @@
        ("libressl" , libressl)
        ("libtool" , libtool)
        ("libunistring" , libunistring)
+       ("libgpg-error" , libgpg-error)
        ("patch" , patch)
        ("pkg-config" , pkg-config)
        ("gcc-toolchain" , gcc-toolchain)
