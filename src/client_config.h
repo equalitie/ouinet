@@ -98,7 +98,7 @@ public:
             , "Injector's endpoint (either <IP>:<PORT> or I2P public key)")
            ("injector-ipns"
             , po::value<string>()->default_value("")
-            , "IPNS of the injector's database")
+            , "IPNS of the injector's index")
            ("injector-tls-cert-file", po::value<string>(&_tls_injector_cert_path)
             , "Path to the Injector's TLS certificate")
            ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
@@ -126,7 +126,7 @@ public:
             , "Public key of the BitTorrent/BEP44 subsystem")
            ("default-index"
             , po::value<string>()->default_value("btree")
-            , "Default database type to use, can be either \"btree\" or \"bep44\"")
+            , "Default index type to use, can be either \"btree\" or \"bep44\"")
            ("disable-cache", "Disable all cache operations (even initialization)")
            ;
 
@@ -316,7 +316,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
     }
 
     if (_default_index_type == IndexType::bep44 && !_bt_pubkey) {
-        throw std::runtime_error("BEP44 database selected but no BT public key specified");
+        throw std::runtime_error("BEP44 index selected but no BT public key specified");
     }
 
     if (vm.count("disable-cache")) {

@@ -46,8 +46,8 @@ public:
     CacheInjector(const CacheInjector&) = delete;
     CacheInjector& operator=(const CacheInjector&) = delete;
 
-    // Returns the IPNS CID of the database.
-    // The database could be then looked up by e.g. pointing your browser to:
+    // Returns the IPNS CID of the index.
+    // The index could be then looked up by e.g. pointing your browser to:
     // "https://ipfs.io/ipns/" + ipfs.id()
     std::string ipfs_id() const;
 
@@ -62,7 +62,7 @@ public:
     // Find the content previously stored by the injector under `key`.
     // The descriptor identifier and cached content are returned.
     //
-    // Basically it does this: Look into the database to find the IPFS_ID
+    // Basically it does this: Look into the index to find the IPFS_ID
     // correspoinding to the `key`, when found, fetch the content corresponding
     // to that IPFS_ID from IPFS.
     std::pair<std::string, CacheEntry> get_content( const std::string& key

@@ -43,8 +43,8 @@ public:
     std::string ipfs_add(const std::string& content, boost::asio::yield_context);
 
     // Insert a signed key->descriptor mapping
-    // into the data base of the given type.
-    // The parsing of the given data depends on the data base.
+    // into the index of the given type.
+    // The parsing of the given data depends on the index.
     // Return a printable representation of the key resulting from insertion.
     std::string insert_mapping( const std::string&
                               , IndexType, boost::asio::yield_context);
@@ -52,7 +52,7 @@ public:
     // Find the content previously stored by the injector under `key`.
     // The descriptor identifier and cached content are returned.
     //
-    // Basically it does this: Look into the database to find the IPFS_ID
+    // Basically it does this: Look into the index to find the IPFS_ID
     // correspoinding to the `key`, when found, fetch the content corresponding
     // to that IPFS_ID from IPFS.
     std::pair<std::string, CacheEntry> get_content( const std::string& key

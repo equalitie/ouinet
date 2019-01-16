@@ -3,7 +3,7 @@
 #include "btree_index.h"
 #include "bep44_index.h"
 #include "cache_entry.h"
-#include "descdb.h"
+#include "descidx.h"
 #include "http_desc.h"
 #include "ipfs_util.h"
 #include "../or_throw.h"

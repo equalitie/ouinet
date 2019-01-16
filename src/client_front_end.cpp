@@ -272,13 +272,13 @@ void ClientFrontEnd::handle_insert_bep44( const Request& req, Response& res, str
         key = cache_client->insert_mapping(req.body(), IndexType::bep44, yield[ec]);
         if (ec == asio::error::operation_not_supported) {
             result = http::status::service_unavailable;
-            err = "BEP44 data base is not enabled";
+            err = "BEP44 index is not enabled";
         } else if (ec == asio::error::invalid_argument) {
             result = http::status::unprocessable_entity;
             err = "malformed, incomplete or forged insertion data";
         } else if (ec) {
             result = http::status::internal_server_error;
-            err = "failed to insert entry in data base";
+            err = "failed to insert entry in index";
         }
     }
 
@@ -390,7 +390,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
     if (cache_client) {
         ss << "        Our IPFS ID (IPNS): " << cache_client->ipfs_id() << "<br>\n";
-        ss << "        <h2>Database</h2>\n";
+        ss << "        <h2>Index</h2>\n";
         ss << "        IPNS: " << cache_client->ipns() << "<br>\n";
         ss << "        IPFS: <a href=\"index.html\">" << cache_client->ipfs() << "</a><br>\n";
     }

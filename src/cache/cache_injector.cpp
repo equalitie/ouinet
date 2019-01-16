@@ -9,7 +9,7 @@
 #include <asio_ipfs.h>
 #include "btree_index.h"
 #include "bep44_index.h"
-#include "descdb.h"
+#include "descidx.h"
 #include "publisher.h"
 #include "ipfs_util.h"
 #include "../bittorrent/dht.h"

@@ -69,7 +69,7 @@ struct Publisher::Loop : public enable_shared_from_this<Loop> {
                 }
             }
 
-            LOG_DEBUG("Publishing DB: ", to_publish);
+            LOG_DEBUG("Publishing index: ", to_publish);
 
             auto cid = move(to_publish);
 

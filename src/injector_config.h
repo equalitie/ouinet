@@ -92,7 +92,7 @@ InjectorConfig::options_description()
          , "Private key of the BitTorrent/BEP44 subsystem")
         ("default-index"
          , po::value<string>()->default_value("btree")
-         , "Default database type to use, can be either \"btree\" or \"bep44\"")
+         , "Default index type to use, can be either \"btree\" or \"bep44\"")
         ("disable-cache", "Disable all cache operations (even initialization)")
         ;
 

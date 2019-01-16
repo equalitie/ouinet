@@ -1,4 +1,4 @@
-// Utility functions to handle storing descriptors in data bases.
+// Utility functions to handle storing descriptors in indexes.
 
 #pragma once
 
