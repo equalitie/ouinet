@@ -235,10 +235,10 @@ Response CacheControl::bad_gateway(const Request& req, beast::string_view reason
 }
 
 Response
-CacheControl::fetch(const Request& request, Yield yield)
+CacheControl::fetch(const Request& request, Cancel& cancel, Yield yield)
 {
     sys::error_code ec;
-    auto response = do_fetch(request, yield[ec]);
+    auto response = do_fetch(request, cancel, yield[ec]);
 
     if(!ec && !has_correct_content_length(response)) {
 #ifndef NDEBUG
@@ -290,9 +290,14 @@ struct CacheControl::FetchState {
 
 //------------------------------------------------------------------------------
 Response
-CacheControl::do_fetch(const Request& request, Yield yield)
+CacheControl::do_fetch(const Request& request, Cancel& cancel, Yield yield)
 {
     FetchState fetch_state;
+
+    auto cancel_slot = cancel.connect([&] {
+            if (fetch_state.fetch_fresh) fetch_state.fetch_fresh->cancel();
+            if (fetch_state.fetch_stored) fetch_state.fetch_stored->cancel();
+        });
 
     auto on_exit = defer([&] {
         auto& fs = fetch_state;

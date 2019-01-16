@@ -680,7 +680,23 @@ public:
 
     Response fetch(const Request& rq, Yield yield)
     {
-        return cc.fetch(rq, yield);
+        Cancel cancel;
+
+        bool timed_out = false;
+
+        WatchDog wd( client_state.get_io_service()
+                   , chrono::seconds(3*60)
+                   , [&] {
+                         timed_out = true;
+                         cancel();
+                   });
+
+        sys::error_code ec;
+        Response rs = cc.fetch(rq, cancel, yield[ec]);
+
+        if (timed_out) ec = asio::error::timed_out;
+
+        return or_throw(yield, ec, move(rs));
     }
 
 private:

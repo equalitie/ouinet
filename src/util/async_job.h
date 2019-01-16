@@ -113,12 +113,17 @@ public:
     void stop(asio::yield_context yield) {
         if (!_self) return;
         assert(!_on_finish);
-        assert(_cancel_signal);
-        (*_cancel_signal)();
-        _cancel_signal = nullptr;
+        cancel();
         ConditionVariable cv(_ios);
         _on_finish = [&cv] { cv.notify(); };
         cv.wait(yield);
+    }
+
+    void cancel() {
+        if (_cancel_signal) {
+            (*_cancel_signal)();
+            _cancel_signal = nullptr;
+        }
     }
 
 private:

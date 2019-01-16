@@ -29,7 +29,7 @@ public:
         , _server_name(std::move(server_name))
     {}
 
-    Response fetch(const Request&, Yield);
+    Response fetch(const Request&, Cancel&, Yield);
 
     FetchStored  fetch_stored;
     FetchFresh   fetch_fresh;
@@ -53,7 +53,7 @@ public:
 
 private:
     // TODO: Add cancellation support
-    Response do_fetch(const Request&, Yield);
+    Response do_fetch(const Request&, Cancel&, Yield);
     Response do_fetch_fresh(FetchState&, const Request&, Yield);
     CacheEntry do_fetch_stored(FetchState&, const Request&, Yield);
 

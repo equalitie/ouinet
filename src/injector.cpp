@@ -335,7 +335,21 @@ public:
 
     Response fetch(const Request& rq, Yield yield)
     {
-        return cc.fetch(rq, yield);
+        Cancel cancel;
+
+        bool timed_out = false;
+
+        WatchDog wd(ios, chrono::seconds(3*60), [&] {
+            timed_out = true;
+            cancel();
+        });
+
+        sys::error_code ec;
+        Response response = cc.fetch(rq, cancel, yield[ec]);
+
+        if (timed_out) ec = asio::error::timed_out;
+
+        return or_throw(yield, ec, move(response));
     }
 
     Response fetch_fresh(const Request& rq_, Cancel& cancel, Yield yield) {
@@ -344,7 +358,7 @@ public:
         auto connection = origin_pools.get_connection(rq_);
 
         if (!connection) {
-            connection = connect(ios, rq_, cancel, yield[ec]);
+            connection = connect(ios, rq_, cancel, yield[ec].tag("connect"));
         }
 
         if (ec) return or_throw<Response>(yield, ec);
