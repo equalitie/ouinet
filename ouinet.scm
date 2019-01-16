@@ -14,6 +14,7 @@
   #:use-module (gnu packages libidn)
   #:use-module (gnu packages libunistring)
   #:use-module (gnu packages pkg-config)
+  #:use-module (gnu packages gettext)
   #:use-module (gnu packages gnupg)
   #:use-module (gnu packages version-control))
 
@@ -46,6 +47,7 @@
        ("patch" , patch)
        ("pkg-config" , pkg-config)
        ("gcc-toolchain" , gcc-toolchain)
+       ("gettext" , gettext-minimal)
        ("texinfo" , texinfo)
        ("unzip" , unzip)
        ("zlib" , zlib)
