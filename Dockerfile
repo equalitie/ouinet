@@ -52,6 +52,14 @@ if [ $OUINET_DEBUG != yes ]; then \
         && find . -name '*.so' -exec strip '{}' + \
         && find . -wholename '*/libexec/*' -executable -type f -exec strip '{}' + ; \
 fi
+RUN cp -r /usr/local/src/ouinet/repos/ repo-templates/
+# Setting this to a different version allows to
+# use that version's Docker-specific files (e.g. wrapper scripts)
+# without having to rebuild source.
+# Maybe those Docker-specific files should go in a different repo.
+ARG OUINET_DOCKER_VERSION=$OUINET_VERSION
+RUN cd /usr/local/src/ouinet \
+ && git checkout "$OUINET_DOCKER_VERSION"
 
 FROM debian:stretch
 # To get the list of system library packages to install,
@@ -106,7 +114,9 @@ RUN ldconfig
 #COPY --from=builder /opt/ouinet/modules/gnunet-channels/gnunet-bin/share/gnunet/ modules/gnunet-channels/gnunet-bin/share/gnunet/
 #COPY --from=builder /opt/ouinet/modules/gnunet-channels/gnunet-bin/lib/ modules/gnunet-channels/gnunet-bin/lib/
 COPY --from=builder /opt/ouinet/injector /opt/ouinet/client ./
-COPY --from=builder /usr/local/src/ouinet/scripts/ouinet-wrapper.sh ouinet
 COPY --from=builder /opt/ouinet/test/test-* test/
-COPY --from=builder /usr/local/src/ouinet/repos/ repo-templates/
+COPY --from=builder /opt/ouinet/repo-templates/ ./
+# This ensures that we use the desired Docker-specific files.
+RUN echo "$OUINET_DOCKER_VERSION"
+COPY --from=builder /usr/local/src/ouinet/scripts/ouinet-wrapper.sh ouinet
 ENTRYPOINT ["/opt/ouinet/ouinet"]
