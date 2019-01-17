@@ -60,7 +60,7 @@ fi
 # Maybe those Docker-specific files should go in a different repo.
 ARG OUINET_DOCKER_VERSION=$OUINET_VERSION
 RUN cd /usr/local/src/ouinet \
- && git fetch \
+ && git fetch -t \
  && git checkout "$OUINET_DOCKER_VERSION"
 
 FROM debian:stretch
