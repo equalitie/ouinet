@@ -132,6 +132,8 @@ if [ "$PROG" = injector ]; then
     fi
 
     # Start the I2P daemon.
+    # Cron is used to allow rotation of logs via logrotate.
+    /etc/init.d/cron start
     /etc/init.d/i2pd start
 
     # Attempt to show injector I2P endpoint.
