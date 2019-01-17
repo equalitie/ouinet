@@ -45,6 +45,7 @@ RUN git clone --recursive -b "$OUINET_VERSION" https://github.com/equalitie/ouin
 WORKDIR /opt/ouinet
 RUN cmake /usr/local/src/ouinet \
  && make
+RUN cp -r /usr/local/src/ouinet/repos/ repo-templates/
 ARG OUINET_DEBUG=no
 RUN \
 if [ $OUINET_DEBUG != yes ]; then \
@@ -52,7 +53,6 @@ if [ $OUINET_DEBUG != yes ]; then \
         && find . -name '*.so' -exec strip '{}' + \
         && find . -wholename '*/libexec/*' -executable -type f -exec strip '{}' + ; \
 fi
-RUN cp -r /usr/local/src/ouinet/repos/ repo-templates/
 # Setting this to a different version allows to
 # use that version's Docker-specific files (e.g. wrapper scripts)
 # without having to rebuild source.
