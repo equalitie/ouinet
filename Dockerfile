@@ -115,7 +115,7 @@ RUN ldconfig
 #COPY --from=builder /opt/ouinet/modules/gnunet-channels/gnunet-bin/lib/ modules/gnunet-channels/gnunet-bin/lib/
 COPY --from=builder /opt/ouinet/injector /opt/ouinet/client ./
 COPY --from=builder /opt/ouinet/test/test-* test/
-COPY --from=builder /opt/ouinet/repo-templates/ ./
+COPY --from=builder /opt/ouinet/repo-templates/ repo-templates/
 # This ensures that we use the desired Docker-specific files.
 RUN echo "$OUINET_DOCKER_VERSION"
 COPY --from=builder /usr/local/src/ouinet/scripts/ouinet-wrapper.sh ouinet
