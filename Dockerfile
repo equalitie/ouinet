@@ -83,8 +83,6 @@ RUN wget -q -P /tmp "https://github.com/PurpleI2P/i2pd/releases/download/${I2PD_
  && apt-get update && apt-get install -y $(dpkg --info /tmp/i2pd_*.deb | sed -nE 's/^.*Depends: (.*)/\1/p' | sed -E 's/( \([^)]+\))?,//g') \
  && dpkg -i /tmp/i2pd_*.deb \
  && rm -f /tmp/i2pd_*.deb \
- && systemctl stop i2pd \
- && systemctl disable i2pd \
  && rm -rf /var/lib/apt/lists/*
 # Manually install Boost libraries.
 COPY --from=builder /usr/local/lib/libboost_* /usr/local/lib/

@@ -131,11 +131,8 @@ if [ "$PROG" = injector ]; then
 		EOF
     fi
 
-    # Enable and start the I2P daemon.
-    if ! systemctl is-enabled i2pd > /dev/null; then
-        systemctl enable i2pd
-        systemctl start i2pd
-    fi
+    # Start the I2P daemon.
+    /etc/init.d/i2pd start
 
     # Attempt to show injector I2P endpoint.
     i2p_tuns_url='http://127.0.0.1:7070/?page=i2p_tunnels'
