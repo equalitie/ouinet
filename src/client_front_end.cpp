@@ -428,6 +428,8 @@ Response ClientFrontEnd::serve( ClientConfig& config
     } else if (url.path == "/api/insert/bep44") {
         sys::error_code ec_;  // shouldn't throw, but just in case
         handle_insert_bep44(req, res, ss, cache_client, yield[ec_]);
+    } else if (url.path == "/api/status") {
+        handle_portal(config, req, res, ss, cache_client);
     } else {
         handle_portal(config, req, res, ss, cache_client);
     }
