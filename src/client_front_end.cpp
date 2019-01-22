@@ -404,54 +404,25 @@ void ClientFrontEnd::handle_status( ClientConfig& config
                                   , const Request& req, Response& res, stringstream& ss
                                   , CacheClient* cache_client)
 {
-    res.set(http::field::content_type, "text/html");
-
-    auto target = req.target();
-
-    ss << "<!DOCTYPE html>\n"
-          "<html>\n"
-          "    <head>\n"
-          "      <style>\n"
-          "        * {\n"
-          "            font-family: \"Courier New\";\n"
-          "            font-size: 10pt; }\n"
-          "          }\n"
-          "      </style>\n"
-          "    </head>\n"
-          "    <body>\n";
+    res.set(http::field::content_type, "application/json");
 
     json response = {
         {"auto_refresh", _auto_refresh_enabled},
         {"origin_access", config.is_origin_access_enabled()},
         {"proxy_access", config.is_proxy_access_enabled()},
         {"injector_proxy", _injector_proxying_enabled},
-        {"ipfs_cache", _ipfs_cache_enabled}
+        {"ipfs_cache", _ipfs_cache_enabled},
+     // https://github.com/nlohmann/json#arbitrary-types-conversions
+     // {"misc", {
+         // {"injector_endpoint", config.injector_endpoint()},
+         // {"pending_tasks", _pending_tasks},
+         // {"our_ipfs_id", cache_client->ipfs_id()},
+         // {"cache_ipns_id", cache_client->ipns()},
+         // {"cache_ipns_id", cache_client->ipfs()}
+     // }}
     };
 
     ss << response;
-
-    ss << "<br>\n";
-    ss << "Now: " << now_as_string()  << "<br>\n";
-    ss << "Injector endpoint: " << config.injector_endpoint() << "<br>\n";
-
-    if (_show_pending_tasks) {
-        ss << "        <h2>Pending tasks " << _pending_tasks.size() << "</h2>\n";
-        ss << "        <ul>\n";
-        for (auto& task : _pending_tasks) {
-            ss << "            <li><pre>" << task << "</pre></li>\n";
-        }
-        ss << "        </ul>\n";
-    }
-
-    if (cache_client) {
-        ss << "        Our IPFS ID (IPNS): " << cache_client->ipfs_id() << "<br>\n";
-        ss << "        <h2>Database</h2>\n";
-        ss << "        IPNS: " << cache_client->ipns() << "<br>\n";
-        ss << "        IPFS: <a href=\"db.html\">" << cache_client->ipfs() << "</a><br>\n";
-    }
-
-    ss << "    </body>\n"
-          "</html>\n";
 }
 
 Response ClientFrontEnd::serve( ClientConfig& config
