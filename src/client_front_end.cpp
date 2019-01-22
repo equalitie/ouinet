@@ -15,6 +15,7 @@
 
 using namespace std;
 using namespace ouinet;
+using json = nlohmann::json;
 
 using Request = ClientFrontEnd::Request;
 using Response = ClientFrontEnd::Response;
@@ -419,11 +420,15 @@ void ClientFrontEnd::handle_status( ClientConfig& config
           "    </head>\n"
           "    <body>\n";
 
-    ss << ToggleInput{"Auto refresh",   "auto_refresh",   _auto_refresh_enabled};
-    ss << ToggleInput{"Origin access", "origin_access", config.is_origin_access_enabled()};
-    ss << ToggleInput{"Proxy access", "proxy_access", config.is_proxy_access_enabled()};
-    ss << ToggleInput{"Injector proxy", "injector_proxy", _injector_proxying_enabled};
-    ss << ToggleInput{"IPFS Cache",     "ipfs_cache",     _ipfs_cache_enabled};
+    json response = {
+        {"auto_refresh", _auto_refresh_enabled},
+        {"origin_access", config.is_origin_access_enabled()},
+        {"proxy_access", config.is_proxy_access_enabled()},
+        {"injector_proxy", _injector_proxying_enabled},
+        {"ipfs_cache", _ipfs_cache_enabled}
+    };
+
+    ss << response;
 
     ss << "<br>\n";
     ss << "Now: " << now_as_string()  << "<br>\n";
