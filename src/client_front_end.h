@@ -102,6 +102,12 @@ private:
                       , Response&
                       , std::stringstream&
                       , CacheClient*);
+
+    void handle_status( ClientConfig&
+                      , const Request&
+                      , Response&
+                      , std::stringstream&
+                      , CacheClient*);
 };
 
 } // ouinet namespace
