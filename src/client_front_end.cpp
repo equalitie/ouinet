@@ -399,6 +399,56 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
           "</html>\n";
 }
 
+void ClientFrontEnd::handle_status( ClientConfig& config
+                                  , const Request& req, Response& res, stringstream& ss
+                                  , CacheClient* cache_client)
+{
+    res.set(http::field::content_type, "text/html");
+
+    auto target = req.target();
+
+    ss << "<!DOCTYPE html>\n"
+          "<html>\n"
+          "    <head>\n"
+          "      <style>\n"
+          "        * {\n"
+          "            font-family: \"Courier New\";\n"
+          "            font-size: 10pt; }\n"
+          "          }\n"
+          "      </style>\n"
+          "    </head>\n"
+          "    <body>\n";
+
+    ss << ToggleInput{"Auto refresh",   "auto_refresh",   _auto_refresh_enabled};
+    ss << ToggleInput{"Origin access", "origin_access", config.is_origin_access_enabled()};
+    ss << ToggleInput{"Proxy access", "proxy_access", config.is_proxy_access_enabled()};
+    ss << ToggleInput{"Injector proxy", "injector_proxy", _injector_proxying_enabled};
+    ss << ToggleInput{"IPFS Cache",     "ipfs_cache",     _ipfs_cache_enabled};
+
+    ss << "<br>\n";
+    ss << "Now: " << now_as_string()  << "<br>\n";
+    ss << "Injector endpoint: " << config.injector_endpoint() << "<br>\n";
+
+    if (_show_pending_tasks) {
+        ss << "        <h2>Pending tasks " << _pending_tasks.size() << "</h2>\n";
+        ss << "        <ul>\n";
+        for (auto& task : _pending_tasks) {
+            ss << "            <li><pre>" << task << "</pre></li>\n";
+        }
+        ss << "        </ul>\n";
+    }
+
+    if (cache_client) {
+        ss << "        Our IPFS ID (IPNS): " << cache_client->ipfs_id() << "<br>\n";
+        ss << "        <h2>Database</h2>\n";
+        ss << "        IPNS: " << cache_client->ipns() << "<br>\n";
+        ss << "        IPFS: <a href=\"db.html\">" << cache_client->ipfs() << "</a><br>\n";
+    }
+
+    ss << "    </body>\n"
+          "</html>\n";
+}
+
 Response ClientFrontEnd::serve( ClientConfig& config
                               , const Request& req
                               , CacheClient* cache_client
@@ -429,7 +479,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
         sys::error_code ec_;  // shouldn't throw, but just in case
         handle_insert_bep44(req, res, ss, cache_client, yield[ec_]);
     } else if (url.path == "/api/status") {
-        handle_portal(config, req, res, ss, cache_client);
+        handle_status(config, req, res, ss, cache_client);
     } else {
         handle_portal(config, req, res, ss, cache_client);
     }
