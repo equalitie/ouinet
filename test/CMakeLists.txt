@@ -3,6 +3,10 @@ include_directories(
     "${Boost_INCLUDE_DIR}"
     "../src")
 
+######################################################################
+add_executable(test-parser "test_parser.cpp")
+
+######################################################################
 add_executable(test-cache "test_cache_control.cpp"
                           "../src/cache_control.cpp"
                           "../src/asio.cpp"
