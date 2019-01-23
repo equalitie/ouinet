@@ -1138,9 +1138,7 @@ void Client::State::setup_ipfs_cache()
             auto on_exit = defer([&] { _is_ipns_being_setup = false; });
 
             if (ipns.empty()) {
-                LOG_WARN("Support for IPFS Cache is disabled because we have not been provided with an IPNS id");
-                _cache = nullptr;
-                return;
+                LOG_WARN("IPNS index shall be disabled because we have not been provided with an IPNS id");
             }
 
             if (_cache) {

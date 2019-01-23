@@ -64,12 +64,15 @@ CacheClient::CacheClient( asio_ipfs::node ipfs_node
     : _path_to_repo(move(path_to_repo))
     , _ipfs_node(new asio_ipfs::node(move(ipfs_node)))
     , _bt_dht(new bt::MainlineDht(_ipfs_node->get_io_service()))
-    , _btree_index(new BTreeClientIndex( *_ipfs_node
-                                       , ipns
-                                       , *_bt_dht
-                                       , bt_pubkey
-                                       , _path_to_repo))
 {
+    if (!ipns.empty()) {
+        _btree_index.reset(new BTreeClientIndex( *_ipfs_node
+                                               , ipns
+                                               , *_bt_dht
+                                               , bt_pubkey
+                                               , _path_to_repo));
+    }
+
     _bt_dht->set_interfaces({asio::ip::address_v4::any()});
 
     if (bt_pubkey) {
