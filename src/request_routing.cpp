@@ -149,7 +149,7 @@ route_choose_config( const http::request<http::string_body>& req
                    , const Config& default_config )
 {
     // Delegate to a simple router
-    // with the mechanisms associated with the matching expression (if any),
+    // with the channels associated with the matching expression (if any),
     // or with `default_config` if none does.
     for (auto mit = matches.begin(); mit != matches.end(); ++mit)
         if (mit->first.match(req))
