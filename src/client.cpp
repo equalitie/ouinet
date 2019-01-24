@@ -934,6 +934,12 @@ void Client::State::serve_request( GenericStream&& con
         Match( reqexpr::from_regex(x_oui_dest_getter, "OuiClient")
              , {false, queue<fresh_channel>({fresh_channel::_front_end})} ),
 
+        // Access to sites under the `.local` TLD are always accessible
+        // with good connectivity, so always use the Origin channel
+        // and never cache them.
+        Match( reqexpr::from_regex(target_getter, "https?://[^:/]+\\.local(:[0-9]+)?/.*")
+             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
+
         // NOTE: The matching of HTTP methods below can be simplified,
         // leaving expanded for readability.
 
