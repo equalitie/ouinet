@@ -19,17 +19,15 @@ namespace ouinet {
 //------------------------------------------------------------------------------
 namespace request_route {
 
-// TODO: Better name?
-//
-// TODO: It may make sense to split private/dynamic/non-cached mechanisms (origin, proxy)
-// from public/static/cached mechanisms (cache/injector)
-// so that mechanisms of different types cannot be mixed,
+// TODO: It may make sense to split private/dynamic/non-cached channels (origin, proxy)
+// from public/static/cached channels (cache/injector)
+// so that channels of different types cannot be mixed,
 // i.e. it makes no sense to attempt a request which was considered private
-// over a public mechanism like cache or injector,
+// over a public channel like cache or injector,
 // and similarly sending a public request to the origin
 // misses the opportunity to use the cache for it.
-enum class responder {
-    // These mechanisms may be configured by the user.
+enum class fresh_channel {
+    // These channels may be configured by the user.
     origin,      // send request to the origin HTTP server
     proxy,       // send request to proxy ouiservice
     injector,    // send request to injector ouiservice
@@ -43,11 +41,11 @@ enum class responder {
 struct Config {
     // When the cache control decides that the request may be so fullfilled,
     // enable looking up a cached response.
-    bool enable_cache = true;
+    bool enable_stored = true;
     // When the cache control decides that a fresh response is needed,
-    // attempt those mechanisms in order until one succeeds.
-    // If it was the Injector mechanism, the response may get cached.
-    std::queue<responder> responders;
+    // attempt those channels in order until one succeeds.
+    // If it was the Injector channel, the response may get cached.
+    std::queue<fresh_channel> fresh_channels;
 };
 } // request_route namespace
 
@@ -100,9 +98,9 @@ reqex operator||(const reqex&, const reqex&);
 
 //------------------------------------------------------------------------------
 namespace request_route {
-// Route the provided request according to the list of mechanisms associated
+// Route the provided request according to the list of channels associated
 // with the first matching expression in the given list,
-// otherwise route it according to the given list of default mechanisms.
+// otherwise route it according to the given list of default channels.
 const Config&
 route_choose_config( const http::request<http::string_body>& req
                    , const std::vector<std::pair<const reqexpr::reqex, const Config>>& matches
