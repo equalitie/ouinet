@@ -877,10 +877,39 @@ void Client::State::serve_request( GenericStream&& con
     });
 
     // This request router configuration will be used for requests by default.
+    //
+    // Looking up the cache when needed is allowed, while for fetching fresh
+    // content:
+    //
+    //  - the origin is first contacted directly,
+    //    for good overall speed and responsiveness
+    //  - if not available, the injector is used to
+    //    get the content and cache it for future accesses
+    //  - otherwise the content is fetched via the proxy
+    //
+    // So enabling the Injector channel will result in caching content
+    // when access to the origin is not possible,
+    // while disabling the Injector channel will resort to the proxy
+    // when access to the origin is not possible,
+    // but it will keep the browsing private and not cache anything.
+    //
+    // To also avoid getting content from the cache
+    // (so that browsing looks like using a normal non-caching proxy)
+    // the cache can be disabled.
     const rr::Config default_request_config
         { true
-        , queue<fresh_channel>({fresh_channel::origin, fresh_channel::injector})};
+        , queue<fresh_channel>({ fresh_channel::origin
+                               , fresh_channel::injector
+                               , fresh_channel::proxy})};
 
+    // This is the matching configuration for the one above,
+    // but for uncacheable requests.
+    const rr::Config nocache_request_config
+        { false
+        , queue<fresh_channel>({ fresh_channel::origin
+                               , fresh_channel::proxy})};
+
+    // The currently effective request router configuration.
     rr::Config request_config;
 
     Client::ClientCacheControl cache_control(*this, request_config);
@@ -913,15 +942,15 @@ void Client::State::serve_request( GenericStream&& con
         // NOTE: The cache need not be disabled as it should know not to
         // fetch requests in these cases.
         Match( !reqexpr::from_regex(method_getter, "(GET|HEAD|OPTIONS|TRACE)")
-             , {false, queue<fresh_channel>({fresh_channel::origin, fresh_channel::proxy})} ),
+             , nocache_request_config),
         // Do not use cache for safe but uncacheable HTTP method requests.
         // NOTE: same as above.
         Match( reqexpr::from_regex(method_getter, "(OPTIONS|TRACE)")
-             , {false, queue<fresh_channel>({fresh_channel::origin, fresh_channel::proxy})} ),
+             , nocache_request_config),
         // Do not use cache for validation HEADs.
         // Caching these is not yet supported.
         Match( reqexpr::from_regex(method_getter, "HEAD")
-             , {false, queue<fresh_channel>({fresh_channel::origin, fresh_channel::proxy})} ),
+             , nocache_request_config),
 
         // Disable cache and always go to origin for this site.
         Match( reqexpr::from_regex(target_getter, "https?://ident.me/.*")
