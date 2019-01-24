@@ -36,8 +36,17 @@ enum class responder {
     _front_end,  // handle the request internally
 };
 
+// A request router configuration will be
+// chosen by the client when receiving a request and
+// considered when serving calls from the cache control to
+// fetch fresh or cached content, or to cache it.
 struct Config {
+    // When the cache control decides that the request may be so fullfilled,
+    // enable looking up a cached response.
     bool enable_cache = true;
+    // When the cache control decides that a fresh response is needed,
+    // attempt those mechanisms in order until one succeeds.
+    // If it was the Injector mechanism, the response may get cached.
     std::queue<responder> responders;
 };
 } // request_route namespace
