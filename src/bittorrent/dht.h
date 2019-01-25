@@ -438,6 +438,13 @@ class MainlineDht {
 
     asio::io_service& get_io_service() { return _ios; }
 
+    bool all_ready() const {
+        for (const auto& n : _nodes) {
+            if (!n.second->ready()) return false;
+        }
+        return true;
+    }
+
     private:
     asio::io_service& _ios;
     std::map<asio::ip::address, std::unique_ptr<dht::DhtNode>> _nodes;
