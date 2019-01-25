@@ -322,6 +322,8 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
     ProximityMap<boost::none_t> responsible_nodes(target_id, RESPONSIBLE_TRACKERS_PER_SWARM);
     boost::optional<MutableDataItem> data;
 
+    Cancel internal_cancel(cancel_signal);
+
     collect(target_id, [&](
         const Contact& candidate,
         asio::yield_context yield,
@@ -330,6 +332,7 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
         if (!candidate.id && responsible_nodes.full()) {
             return boost::none;
         }
+
         if (candidate.id && !responsible_nodes.would_insert(*candidate.id)) {
             return boost::none;
         }
@@ -376,12 +379,31 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
         };
         if (item.verify()) {
             if (!data || *sequence_number > data->sequence_number) {
-                data = item;
+                data = std::move(item);
+                /*
+                 * XXX: This isn't correct! We shouldn't stop with the first
+                 * validly signed item we get. Ideally we would get the item
+                 * from some N closest nodes to `target_id`. But that is
+                 * impractical because many of the closest nodes won't respond
+                 * and make us wait for too long (and we sometimes time-out even
+                 * though there _is_ some value already).
+                 *
+                 * TODO: Make this function not return a single value, but a
+                 * "generator" of dht mutable items. Then the user of this
+                 * function can have a look at it and decide whether it's
+                 * "fresh enough" (e.g. if it's a http response, it may still
+                 * be fresh).
+                 */
+                cancel_signal();
             }
         }
 
         return closer_nodes;
-    }, yield[ec], cancel_signal);
+    }, yield[ec], internal_cancel);
+
+    if (ec == asio::error::operation_aborted && !cancel_signal && data) {
+        ec = sys::error_code();
+    }
 
     return or_throw(yield, ec, std::move(data));
 }
