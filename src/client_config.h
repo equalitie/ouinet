@@ -6,7 +6,7 @@
 #include "namespaces.h"
 #include "util.h"
 #include "util/crypto.h"
-#include "cache/db.h"
+#include "cache/index.h"
 #include "increase_open_file_limit.h"
 #include "endpoint.h"
 
@@ -98,7 +98,7 @@ public:
             , "Injector's endpoint (either <IP>:<PORT> or I2P public key)")
            ("injector-ipns"
             , po::value<string>()->default_value("")
-            , "IPNS of the injector's database")
+            , "IPNS of the injector's index")
            ("injector-tls-cert-file", po::value<string>(&_tls_injector_cert_path)
             , "Path to the Injector's TLS certificate")
            ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
@@ -124,16 +124,16 @@ public:
            ("bittorrent-public-key"
             , po::value<string>()
             , "Public key of the BitTorrent/BEP44 subsystem")
-           ("default-db"
+           ("default-index"
             , po::value<string>()->default_value("btree")
-            , "Default database type to use, can be either \"btree\" or \"bep44\"")
+            , "Default index type to use, can be either \"btree\" or \"bep44\"")
            ("disable-cache", "Disable all cache operations (even initialization)")
            ;
 
         return desc;
     }
 
-    DbType default_db_type() const { return _default_db_type; }
+    IndexType default_index_type() const { return _default_index_type; }
 
     bool cache_enabled() const { return !_disable_cache; }
 
@@ -156,7 +156,7 @@ private:
     bool _disable_origin_access = false;
     bool _disable_proxy_access = false;
     asio::ip::tcp::endpoint _front_end_endpoint;
-    DbType _default_db_type = DbType::btree;
+    IndexType _default_index_type = IndexType::btree;
 
     boost::posix_time::time_duration _max_cached_age
         = boost::posix_time::hours(7*24);  // one week
@@ -301,22 +301,22 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         }
     }
 
-    if (vm.count("default-db")) {
-        auto type = vm["default-db"].as<string>();
+    if (vm.count("default-index")) {
+        auto type = vm["default-index"].as<string>();
 
         if (type == "btree") {
-            _default_db_type = DbType::btree;
+            _default_index_type = IndexType::btree;
         }
         else if (type == "bep44") {
-            _default_db_type = DbType::bep44;
+            _default_index_type = IndexType::bep44;
         }
         else {
-            throw std::runtime_error("Invalid value for --default-db-type");
+            throw std::runtime_error("Invalid value for --default-index-type");
         }
     }
 
-    if (_default_db_type == DbType::bep44 && !_bt_pubkey) {
-        throw std::runtime_error("BEP44 database selected but no BT public key specified");
+    if (_default_index_type == IndexType::bep44 && !_bt_pubkey) {
+        throw std::runtime_error("BEP44 index selected but no BT public key specified");
     }
 
     if (vm.count("disable-cache")) {

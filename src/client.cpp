@@ -211,7 +211,7 @@ Client::State::fetch_stored( const Request& request
                            , Yield yield)
 {
     const bool cache_is_disabled
-        = !request_config.enable_cache
+        = !request_config.enable_stored
        || !_cache
        || !_front_end.is_ipfs_cache_enabled();
 
@@ -222,7 +222,7 @@ Client::State::fetch_stored( const Request& request
 
     sys::error_code ec;
     auto ret = _cache->get_content( key_from_http_req(request)
-                                  , _config.default_db_type()
+                                  , _config.default_index_type()
                                   , cancel
                                   , yield[ec]);
     if (!ec) {
@@ -303,7 +303,7 @@ Response Client::State::fetch_fresh_from_origin( const Request& rq
 
     // Transform request from absolute-form to origin-form
     // https://tools.ietf.org/html/rfc7230#section-5.3
-    auto rq_ = req_form_from_absolute_to_origin(rq);
+    auto rq_ = util::req_form_from_absolute_to_origin(rq);
 
     auto res = con->request(rq_, cancel, yield[ec]);
 
@@ -384,7 +384,7 @@ Response Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     if (ec) return or_throw<Response>(yield, ec);
 
     // TODO: move
-    auto rq_ = req_form_from_absolute_to_origin(rq);
+    auto rq_ = util::req_form_from_absolute_to_origin(rq);
 
     auto res = fetch_http<http::dynamic_body>(_ios, con, rq_, cancel, yield[ec]);
 
@@ -402,7 +402,7 @@ Response Client::State::fetch_fresh
         , Yield yield)
 {
     using namespace asio::error;
-    using request_route::responder;
+    using request_route::fresh_channel;
 
     // TODO: This probably isn't necessary because cancel()
     // is (should be?) called from above.
@@ -414,12 +414,12 @@ Response Client::State::fetch_fresh
 
     LOG_DEBUG("fetching fresh");
 
-    while (!request_config.responders.empty()) {
-        auto r = request_config.responders.front();
-        request_config.responders.pop();
+    while (!request_config.fresh_channels.empty()) {
+        auto r = request_config.fresh_channels.front();
+        request_config.fresh_channels.pop();
 
         switch (r) {
-            case responder::origin: {
+            case fresh_channel::origin: {
                 if (!_config.is_origin_access_enabled()) {
                     continue;
                 }
@@ -439,7 +439,7 @@ Response Client::State::fetch_fresh
             }
             // Since the current implementation uses the injector as a proxy,
             // both cases are quite similar, so we only handle HTTPS requests here.
-            case responder::proxy: {
+            case fresh_channel::proxy: {
                 if (!_config.is_proxy_access_enabled())
                     continue;
 
@@ -459,8 +459,8 @@ Response Client::State::fetch_fresh
                 }
             }
             // Fall through, the case below handles both injector and proxy with plain HTTP.
-            case responder::injector: {
-                if (r == responder::injector && !_front_end.is_injector_proxying_enabled())
+            case fresh_channel::injector: {
+                if (r == fresh_channel::injector && !_front_end.is_injector_proxying_enabled())
                     continue;
 
                 // Connect to the injector.
@@ -485,16 +485,11 @@ Response Client::State::fetch_fresh
 
                 // Build the actual request to send to the injector.
                 Request injreq = request;
-
-                if (r == responder::injector) {
-                    // Add first a Ouinet version header
-                    // to hint it to behave like an injector instead of a proxy.
-                    injreq.set( http_::request_version_hdr
-                              , http_::request_version_hdr_current);
-                }
-
                 if (auto credentials = _config.credentials_for(con->aux))
                     injreq = authorize(injreq, *credentials);
+                if (r == fresh_channel::injector)
+                    injreq = util::to_injector_request(move(injreq));
+                injreq.keep_alive(request.keep_alive());
 
                 // Send the request to the injector/proxy.
                 auto res = con->request( injreq
@@ -505,7 +500,7 @@ Response Client::State::fetch_fresh
                     continue;
                 }
 
-                out_can_store = (r == responder::injector);
+                out_can_store = (r == fresh_channel::injector);
 
                 if (res.keep_alive()) {
                     _injector_connections.push_back(std::move(con));
@@ -513,7 +508,7 @@ Response Client::State::fetch_fresh
 
                 return res;
             }
-            case responder::_front_end: {
+            case fresh_channel::_front_end: {
                 sys::error_code ec;
 
                 auto res = _front_end.serve( _config
@@ -596,6 +591,12 @@ public:
 
     Response store(const Request& rq, Response rs, Cancel&, Yield yield)
     {
+        // No need to filter request or response headers
+        // since we are not storing them here
+        // (they can be found at the descriptor).
+        // Otherwise we should pass them through
+        // `util::to_cache_request` and `util::to_cache_response` (respectively).
+
         sys::error_code ec;
 
         auto& cache = client_state._cache;
@@ -610,7 +611,7 @@ public:
             , &ios = client_state.get_io_service()
             , &cancel = client_state.get_shutdown_signal()
             , key = key_from_http_req(rq)
-            , dbtype = client_state._config.default_db_type()
+            , indextype = client_state._config.default_index_type()
             ] (asio::yield_context yield) mutable {
                 // Seed content data itself.
                 // TODO: Use the scheduler here to only do some max number
@@ -645,7 +646,7 @@ public:
                         return;
 
                     sys::error_code ec;
-                    auto desc_data = cache->get_descriptor(key, dbtype, cancel, yield[ec]);
+                    auto desc_data = cache->get_descriptor(key, indextype, cancel, yield[ec]);
                     if (ec == asio::error::not_found) {  // not (yet) inserted
                         log_post_inject(attempt, "not found, try again");
                         continue;
@@ -680,7 +681,23 @@ public:
 
     Response fetch(const Request& rq, Yield yield)
     {
-        return cc.fetch(rq, yield);
+        Cancel cancel;
+
+        bool timed_out = false;
+
+        WatchDog wd( client_state.get_io_service()
+                   , chrono::seconds(3*60)
+                   , [&] {
+                         timed_out = true;
+                         cancel();
+                   });
+
+        sys::error_code ec;
+        Response rs = cc.fetch(rq, cancel, yield[ec]);
+
+        if (timed_out) ec = asio::error::timed_out;
+
+        return or_throw(yield, ec, move(rs));
     }
 
 private:
@@ -854,17 +871,46 @@ void Client::State::serve_request( GenericStream&& con
     LOG_DEBUG("Request received ");
 
     namespace rr = request_route;
-    using rr::responder;
+    using rr::fresh_channel;
 
     auto close_con_slot = _shutdown_signal.connect([&con] {
         con.close();
     });
 
-    // These access mechanisms are attempted in order for requests by default.
+    // This request router configuration will be used for requests by default.
+    //
+    // Looking up the cache when needed is allowed, while for fetching fresh
+    // content:
+    //
+    //  - the origin is first contacted directly,
+    //    for good overall speed and responsiveness
+    //  - if not available, the injector is used to
+    //    get the content and cache it for future accesses
+    //  - otherwise the content is fetched via the proxy
+    //
+    // So enabling the Injector channel will result in caching content
+    // when access to the origin is not possible,
+    // while disabling the Injector channel will resort to the proxy
+    // when access to the origin is not possible,
+    // but it will keep the browsing private and not cache anything.
+    //
+    // To also avoid getting content from the cache
+    // (so that browsing looks like using a normal non-caching proxy)
+    // the cache can be disabled.
     const rr::Config default_request_config
         { true
-        , queue<responder>({responder::origin, responder::injector})};
+        , queue<fresh_channel>({ fresh_channel::origin
+                               , fresh_channel::injector
+                               , fresh_channel::proxy})};
 
+    // This is the matching configuration for the one above,
+    // but for uncacheable requests.
+    const rr::Config nocache_request_config
+        { false
+        , queue<fresh_channel>({ fresh_channel::origin
+                               , fresh_channel::proxy})};
+
+    // The currently effective request router configuration.
     rr::Config request_config;
 
     Client::ClientCacheControl cache_control(*this, request_config);
@@ -872,7 +918,7 @@ void Client::State::serve_request( GenericStream&& con
     sys::error_code ec;
     beast::flat_buffer buffer;
 
-    // Expressions to test the request against and mechanisms to be used.
+    // Expressions to test the request against and configurations to be used.
     // TODO: Create once and reuse.
     using Match = pair<const ouinet::reqexpr::reqex, const rr::Config>;
 
@@ -884,10 +930,16 @@ void Client::State::serve_request( GenericStream&& con
     const vector<Match> matches({
         // Handle requests to <http://localhost/> internally.
         Match( reqexpr::from_regex(host_getter, "localhost")
-             , {false, queue<responder>({responder::_front_end})} ),
+             , {false, queue<fresh_channel>({fresh_channel::_front_end})} ),
 
         Match( reqexpr::from_regex(x_oui_dest_getter, "OuiClient")
-             , {false, queue<responder>({responder::_front_end})} ),
+             , {false, queue<fresh_channel>({fresh_channel::_front_end})} ),
+
+        // Access to sites under the `.local` TLD are always accessible
+        // with good connectivity, so always use the Origin channel
+        // and never cache them.
+        Match( reqexpr::from_regex(target_getter, "https?://[^:/]+\\.local(:[0-9]+)?/.*")
+             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
 
         // NOTE: The matching of HTTP methods below can be simplified,
         // leaving expanded for readability.
@@ -897,28 +949,28 @@ void Client::State::serve_request( GenericStream&& con
         // NOTE: The cache need not be disabled as it should know not to
         // fetch requests in these cases.
         Match( !reqexpr::from_regex(method_getter, "(GET|HEAD|OPTIONS|TRACE)")
-             , {false, queue<responder>({responder::origin, responder::proxy})} ),
+             , nocache_request_config),
         // Do not use cache for safe but uncacheable HTTP method requests.
         // NOTE: same as above.
         Match( reqexpr::from_regex(method_getter, "(OPTIONS|TRACE)")
-             , {false, queue<responder>({responder::origin, responder::proxy})} ),
+             , nocache_request_config),
         // Do not use cache for validation HEADs.
         // Caching these is not yet supported.
         Match( reqexpr::from_regex(method_getter, "HEAD")
-             , {false, queue<responder>({responder::origin, responder::proxy})} ),
+             , nocache_request_config),
 
         // Disable cache and always go to origin for this site.
         Match( reqexpr::from_regex(target_getter, "https?://ident.me/.*")
-             , {false, queue<responder>({responder::origin})} ),
+             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
         // Disable cache and always go to proxy for this site.
         Match( reqexpr::from_regex(target_getter, "https?://ifconfig.co/.*")
-             , {false, queue<responder>({responder::proxy})} ),
-        // Force cache and default mechanisms for this site.
+             , {false, queue<fresh_channel>({fresh_channel::proxy})} ),
+        // Force cache and default channels for this site.
         Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example.com/.*")
-             , {true, queue<responder>()} ),
-        // Force cache and particular mechanisms for this site.
+             , {true, queue<fresh_channel>()} ),
+        // Force cache and particular channels for this site.
         Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example.net/.*")
-             , {true, queue<responder>({responder::injector})} ),
+             , {true, queue<fresh_channel>({fresh_channel::injector})} ),
     });
 
     auto connection_id = _next_connection_id++;

@@ -64,7 +64,7 @@ template< class MutableBufferSequence
 inline void Connection::async_read_some( const MutableBufferSequence& bufs
                                 , ReadHandler&& h)
 {
-  LOG_DEBUG("Reading from i2p tunnel.");
+  LOG_SILLY("Reading from i2p tunnel.");
     _socket.async_read_some(bufs, std::forward<ReadHandler>(h));
 }
 
@@ -73,7 +73,7 @@ template< class ConstBufferSequence
 inline void Connection::async_write_some( const ConstBufferSequence& bufs
                                  , WriteHandler&& h)
 {
-  LOG_DEBUG("Writing into i2p tunnel.");
+  LOG_SILLY("Writing into i2p tunnel.");
     _socket.async_write_some(bufs, std::forward<WriteHandler>(h));
 }
 

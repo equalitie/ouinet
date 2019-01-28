@@ -1,5 +1,6 @@
 #include "bencoding.h"
 #include "../util/bytes.h"
+#include "../parse/number.h"
 
 namespace ouinet {
 namespace bittorrent {
@@ -43,14 +44,11 @@ std::string bencoding_encode(const BencodedValue& value)
 
 boost::optional<int64_t> destructive_parse_int(std::string& encoded)
 {
-    try {
-        std::size_t pos;
-        int64_t value = std::stoll(encoded, &pos, 10);
-        encoded.erase(0, pos);
-        return value;
-    } catch(...) {
-        return boost::none;
-    }
+    boost::string_view sw = encoded;
+    auto opt_num = parse::number<int64_t>(sw);
+    if (!opt_num) return boost::none;
+    encoded.erase(0, encoded.size() - sw.size());
+    return opt_num;
 }
 
 boost::optional<std::string> destructive_parse_string(std::string& encoded)

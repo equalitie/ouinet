@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../defer.h"
+
 namespace ouinet {
 
 class WatchDog {

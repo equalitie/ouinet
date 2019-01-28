@@ -12,15 +12,15 @@
 #include "../namespaces.h"
 #include "../util/crypto.h"
 #include "cache_entry.h"
-#include "db.h"
+#include "index.h"
 
 namespace asio_ipfs { class node; }
 namespace ouinet { namespace bittorrent { class MainlineDht; }}
 
 namespace ouinet {
 
-class Bep44InjectorDb;
-class BTreeInjectorDb;
+class Bep44InjectorIndex;
+class BTreeInjectorIndex;
 class Publisher;
 class Scheduler;
 
@@ -35,7 +35,7 @@ public:
         std::string key;  // key to look up descriptor
         std::string desc_data;  // serialized descriptor
         std::string desc_link;  // descriptor storage link
-        std::string db_ins_data;  // db-specific data to help reinsert
+        std::string index_ins_data;  // index-specific data to help reinsert
     };
 
 public:
@@ -46,46 +46,46 @@ public:
     CacheInjector(const CacheInjector&) = delete;
     CacheInjector& operator=(const CacheInjector&) = delete;
 
-    // Returns the IPNS CID of the database.
-    // The database could be then looked up by e.g. pointing your browser to:
+    // Returns the IPNS CID of the index.
+    // The index could be then looked up by e.g. pointing your browser to:
     // "https://ipfs.io/ipns/" + ipfs.id()
     std::string ipfs_id() const;
 
     // Insert a descriptor with the given `id` for the given request and response
-    // into the db given by `DbType`, along with data in distributed storage.
+    // into the index given by `IndexType`, along with data in distributed storage.
     InsertionResult insert_content( const std::string& id
                                   , const Request&
                                   , const Response&
-                                  , DbType
+                                  , IndexType
                                   , boost::asio::yield_context);
 
     // Find the content previously stored by the injector under `key`.
     // The descriptor identifier and cached content are returned.
     //
-    // Basically it does this: Look into the database to find the IPFS_ID
+    // Basically it does this: Look into the index to find the IPFS_ID
     // correspoinding to the `key`, when found, fetch the content corresponding
     // to that IPFS_ID from IPFS.
     std::pair<std::string, CacheEntry> get_content( const std::string& key
-                                                  , DbType
+                                                  , IndexType
                                                   , Cancel&
                                                   , boost::asio::yield_context);
 
     std::string get_descriptor( const std::string& key
-                              , DbType
+                              , IndexType
                               , Cancel&
                               , boost::asio::yield_context);
 
     ~CacheInjector();
 
 private:
-    InjectorDb* get_db(DbType) const;
+    InjectorIndex* get_index(IndexType) const;
 
 private:
     std::unique_ptr<asio_ipfs::node> _ipfs_node;
     std::unique_ptr<bittorrent::MainlineDht> _bt_dht;
     std::unique_ptr<Publisher> _publisher;
-    std::unique_ptr<BTreeInjectorDb> _btree_db;
-    std::unique_ptr<Bep44InjectorDb> _bep44_db;
+    std::unique_ptr<BTreeInjectorIndex> _btree_index;
+    std::unique_ptr<Bep44InjectorIndex> _bep44_index;
     const unsigned int _concurrency = 8;
     std::unique_ptr<Scheduler> _scheduler;
     std::shared_ptr<bool> _was_destroyed;

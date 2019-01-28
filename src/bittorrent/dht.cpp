@@ -383,7 +383,7 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
         return closer_nodes;
     }, yield[ec], cancel_signal);
 
-    return or_throw<boost::optional<MutableDataItem>>(yield, ec, std::move(data));
+    return or_throw(yield, ec, std::move(data));
 }
 
 NodeID dht::DhtNode::data_put_mutable(
@@ -690,7 +690,11 @@ BencodedMap dht::DhtNode::send_query_await_reply(
 
     asio::steady_timer timeout_timer(_ios);
     timeout_timer.expires_from_now(timeout);
+
+    bool timer_handler_executed = false;
+
     timeout_timer.async_wait([&] (const sys::error_code&) {
+        timer_handler_executed = true;
         if (!first_error_code) {
             first_error_code = asio::error::timed_out;
         }
@@ -734,12 +738,15 @@ BencodedMap dht::DhtNode::send_query_await_reply(
         yield[ec],
         cancel_signal
     );
+
     if (ec) {
         first_error_code = ec;
         timeout_timer.cancel();
     }
 
-    reply_and_timeout_condition.wait(yield);
+    if (!timer_handler_executed) {
+        reply_and_timeout_condition.wait(yield);
+    }
 
     if (terminated) {
         return or_throw<BencodedMap>(yield, asio::error::operation_aborted);
@@ -1482,7 +1489,7 @@ void dht::DhtNode::send_ping(NodeContact contact)
             contact,
             "ping",
             BencodedMap{{ "id", _node_id.to_bytestring() }},
-            std::chrono::seconds(2),
+            std::chrono::seconds(15),
             yield[ec],
             cancel_signal
         );
@@ -1511,7 +1518,7 @@ void dht::DhtNode::send_write_query(
             { destination, destination_id },
             query_type,
             query_arguments,
-            std::chrono::seconds(5),
+            std::chrono::seconds(15),
             yield[ec],
             cancel_signal
         );
@@ -1546,7 +1553,7 @@ bool dht::DhtNode::query_find_node(
             { "id", _node_id.to_bytestring() },
             { "target", target_id.to_bytestring() }
         },
-        std::chrono::seconds(2),
+        std::chrono::seconds(15),
         yield[ec],
         cancel_signal
     );
@@ -1594,7 +1601,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_peers(
             { "id", _node_id.to_bytestring() },
             { "info_hash", infohash.to_bytestring() }
         },
-        std::chrono::seconds(2),
+        std::chrono::seconds(15),
         yield[ec],
         cancel_signal
     );
@@ -1660,7 +1667,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data(
             { "id", _node_id.to_bytestring() },
             { "target", key.to_bytestring() }
         },
-        std::chrono::seconds(2),
+        std::chrono::seconds(15),
         yield[ec],
         cancel_signal
     );
@@ -2400,8 +2407,11 @@ std::set<tcp::endpoint> MainlineDht::tracker_get_peers(NodeID infohash, asio::yi
     return or_throw<std::set<tcp::endpoint>>(yield, ec);
 }
 
-boost::optional<BencodedValue> MainlineDht::immutable_get(NodeID key, asio::yield_context yield, Signal<void()>& cancel_signal)
-{
+boost::optional<BencodedValue> MainlineDht::immutable_get(
+        NodeID key,
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
+) {
     boost::optional<BencodedValue> output;
     sys::error_code ec;
 
@@ -2431,14 +2441,16 @@ boost::optional<BencodedValue> MainlineDht::immutable_get(NodeID key, asio::yiel
     auto cancelled = cancel_signal.connect([&] {
         success_condition.cancel();
     });
+
     auto terminated = _terminate_signal.connect([&] {
         success_condition.cancel();
     });
+
     if (!success_condition.wait_for_success(yield)) {
         if (success_condition.cancelled()) {
             ec = asio::error::operation_aborted;
         } else {
-            ec = asio::error::network_unreachable;
+            ec = asio::error::not_found;
         }
     }
 
@@ -2462,6 +2474,7 @@ boost::optional<MutableDataItem> MainlineDht::mutable_get(
 
     SuccessCondition success_condition(_ios);
     WaitCondition completed_condition(_ios);
+
     for (auto& i : _nodes) {
         asio::spawn(_ios, [
             &,
@@ -2492,11 +2505,12 @@ boost::optional<MutableDataItem> MainlineDht::mutable_get(
     auto terminated = _terminate_signal.connect([&] {
         success_condition.cancel();
     });
+
     if (!success_condition.wait_for_success(yield)) {
         if (success_condition.cancelled()) {
             ec = asio::error::operation_aborted;
         } else {
-            ec = asio::error::network_unreachable;
+            ec = asio::error::not_found;
         }
     }
 

@@ -77,6 +77,7 @@ private:
     void raw_insert(Key, Value, asio::yield_context);
 
     Value lazy_find( const Hash&
+                   , bool is_root
                    , std::unique_ptr<Node>&
                    , const Key&
                    , const CatOp&

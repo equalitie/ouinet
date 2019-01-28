@@ -1,6 +1,6 @@
 #include <iterator>
 
-#include "bep44_db.h"
+#include "bep44_index.h"
 #include "../bittorrent/bencoding.h"
 #include "../bittorrent/dht.h"
 #include "../or_throw.h"
@@ -17,16 +17,16 @@ boost::string_view as_string_view(const array<uint8_t, N>& a)
     return boost::string_view((char*) a.data(), a.size());
 }
 
-Bep44ClientDb::Bep44ClientDb( bt::MainlineDht& bt_dht
-                            , util::Ed25519PublicKey bt_pubkey)
+Bep44ClientIndex::Bep44ClientIndex( bt::MainlineDht& bt_dht
+                                  , util::Ed25519PublicKey bt_pubkey)
     : _bt_dht(bt_dht)
     , _bt_pubkey(bt_pubkey)
     , _was_destroyed(make_shared<bool>(false))
 {}
 
 
-Bep44InjectorDb::Bep44InjectorDb( bt::MainlineDht& bt_dht
-                                , util::Ed25519PrivateKey bt_privkey)
+Bep44InjectorIndex::Bep44InjectorIndex( bt::MainlineDht& bt_dht
+                                      , util::Ed25519PrivateKey bt_privkey)
     : _bt_dht(bt_dht)
     , _bt_privkey(bt_privkey)
     , _was_destroyed(make_shared<bool>(false))
@@ -60,24 +60,24 @@ static string find( bt::MainlineDht& dht
 }
 
 
-string Bep44ClientDb::find( const string& key
-                          , Cancel& cancel
-                          , asio::yield_context yield)
+string Bep44ClientIndex::find( const string& key
+                             , Cancel& cancel
+                             , asio::yield_context yield)
 {
     return ::find(_bt_dht, _bt_pubkey, key, cancel, yield);
 }
 
 
-string Bep44InjectorDb::find( const string& key
-                            , Cancel& cancel
-                            , asio::yield_context yield)
+string Bep44InjectorIndex::find( const string& key
+                               , Cancel& cancel
+                               , asio::yield_context yield)
 {
     return ::find(_bt_dht, _bt_privkey.public_key(), key, cancel, yield);
 }
 
 
-string Bep44ClientDb::insert_mapping( const string& ins_data
-                                    , asio::yield_context yield)
+string Bep44ClientIndex::insert_mapping( const string& ins_data
+                                       , asio::yield_context yield)
 {
     auto ins = bt::bencoding_decode(ins_data);
     if (!ins || !ins->is_map()) {  // general format and type of data
@@ -109,9 +109,9 @@ string Bep44ClientDb::insert_mapping( const string& ins_data
     return _bt_dht.mutable_put_start(item).to_hex();
 }
 
-string Bep44InjectorDb::insert( string key
-                              , string value
-                              , asio::yield_context yield)
+string Bep44InjectorIndex::insert( string key
+                                 , string value
+                                 , asio::yield_context yield)
 {
     using Time = boost::posix_time::ptime;
 
@@ -151,25 +151,25 @@ string Bep44InjectorDb::insert( string key
 }
 
 
-boost::asio::io_service& Bep44ClientDb::get_io_service()
+boost::asio::io_service& Bep44ClientIndex::get_io_service()
 {
     return _bt_dht.get_io_service();
 }
 
 
-boost::asio::io_service& Bep44InjectorDb::get_io_service()
+boost::asio::io_service& Bep44InjectorIndex::get_io_service()
 {
     return _bt_dht.get_io_service();
 }
 
 
-Bep44ClientDb::~Bep44ClientDb()
+Bep44ClientIndex::~Bep44ClientIndex()
 {
     *_was_destroyed = true;
 }
 
 
-Bep44InjectorDb::~Bep44InjectorDb()
+Bep44InjectorIndex::~Bep44InjectorIndex()
 {
     *_was_destroyed = true;
 }

@@ -144,11 +144,11 @@ static string percent_encode_all(const string& in) {
     return outss.str();
 }
 
-void ClientFrontEnd::handle_enumerate_db( const Request& req
-                                        , Response& res
-                                        , stringstream& ss
-                                        , CacheClient* cache_client
-                                        , asio::yield_context yield)
+void ClientFrontEnd::handle_enumerate_index( const Request& req
+                                           , Response& res
+                                           , stringstream& ss
+                                           , CacheClient* cache_client
+                                           , asio::yield_context yield)
 {
     res.set(http::field::content_type, "text/html");
 
@@ -171,7 +171,7 @@ void ClientFrontEnd::handle_enumerate_db( const Request& req
         return;
     }
 
-    ss << "DB CID: " << btree->root_hash() << "<br/>\n";
+    ss << "Index CID: " << btree->root_hash() << "<br/>\n";
 
     sys::error_code ec;
     Cancel cancel; // TODO: This should come from above
@@ -226,7 +226,7 @@ void ClientFrontEnd::handle_descriptor( const Request& req, Response& res, strin
 
         Cancel cancel; // TODO: This should come from above
         file_descriptor = cache_client->get_descriptor( key_from_http_url(uri)
-                                                      , DbType::btree
+                                                      , IndexType::btree
                                                       , cancel
                                                       , yield[ec]);
 
@@ -269,16 +269,16 @@ void ClientFrontEnd::handle_insert_bep44( const Request& req, Response& res, str
         err = "sorry, request expectations are not supported";
     } else {  // perform the insertion
         sys::error_code ec;
-        key = cache_client->insert_mapping(req.body(), DbType::bep44, yield[ec]);
+        key = cache_client->insert_mapping(req.body(), IndexType::bep44, yield[ec]);
         if (ec == asio::error::operation_not_supported) {
             result = http::status::service_unavailable;
-            err = "BEP44 data base is not enabled";
+            err = "BEP44 index is not enabled";
         } else if (ec == asio::error::invalid_argument) {
             result = http::status::unprocessable_entity;
             err = "malformed, incomplete or forged insertion data";
         } else if (ec) {
             result = http::status::internal_server_error;
-            err = "failed to insert entry in data base";
+            err = "failed to insert entry in index";
         }
     }
 
@@ -390,9 +390,9 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
     if (cache_client) {
         ss << "        Our IPFS ID (IPNS): " << cache_client->ipfs_id() << "<br>\n";
-        ss << "        <h2>Database</h2>\n";
+        ss << "        <h2>Index</h2>\n";
         ss << "        IPNS: " << cache_client->ipns() << "<br>\n";
-        ss << "        IPFS: <a href=\"db.html\">" << cache_client->ipfs() << "</a><br>\n";
+        ss << "        IPFS: <a href=\"index.html\">" << cache_client->ipfs() << "</a><br>\n";
     }
 
     ss << "    </body>\n"
@@ -416,9 +416,9 @@ Response ClientFrontEnd::serve( ClientConfig& config
 
     if (url.path == "/ca.pem") {
         handle_ca_pem(req, res, ss, ca);
-    } else if (url.path == "/db.html") {
+    } else if (url.path == "/index.html") {
         sys::error_code ec_;  // shouldn't throw, but just in case
-        handle_enumerate_db(req, res, ss, cache_client, yield[ec_]);
+        handle_enumerate_index(req, res, ss, cache_client, yield[ec_]);
     } else if (url.path == "/api/upload") {
         sys::error_code ec_;  // shouldn't throw, but just in case
         handle_upload(req, res, ss, cache_client, yield[ec_]);

@@ -245,18 +245,6 @@ void handle_connect_request( GenericStream client_c
 }
 
 //------------------------------------------------------------------------------
-static Request erase_hop_by_hop_headers(Request rq) {
-    //// TODO
-    //rq.erase(http::field::connection);
-    //rq.erase(http::field::keep_alive);
-    //rq.erase(http::field::public_);
-    //rq.erase(http::field::transfer_encoding);
-    //rq.erase(http::field::upgrade);
-    rq.erase(http::field::proxy_authenticate);
-    return rq;
-}
-
-//------------------------------------------------------------------------------
 struct InjectorCacheControl {
     using Connection = OriginPools::Connection;
 
@@ -348,7 +336,21 @@ public:
 
     Response fetch(const Request& rq, Yield yield)
     {
-        return cc.fetch(rq, yield);
+        Cancel cancel;
+
+        bool timed_out = false;
+
+        WatchDog wd(ios, chrono::seconds(3*60), [&] {
+            timed_out = true;
+            cancel();
+        });
+
+        sys::error_code ec;
+        Response response = cc.fetch(rq, cancel, yield[ec]);
+
+        if (timed_out) ec = asio::error::timed_out;
+
+        return or_throw(yield, ec, move(response));
     }
 
     Response fetch_fresh(const Request& rq_, Cancel& cancel, Yield yield) {
@@ -357,16 +359,13 @@ public:
         auto connection = origin_pools.get_connection(rq_);
 
         if (!connection) {
-            connection = connect(ios, rq_, cancel, yield[ec]);
+            connection = connect(ios, rq_, cancel, yield[ec].tag("connect"));
         }
 
         if (ec) return or_throw<Response>(yield, ec);
 
-        Request rq = req_form_from_absolute_to_origin(
-                        erase_hop_by_hop_headers(rq_));
-
+        Request rq = util::to_origin_request(rq_);
         rq.keep_alive(true);
-
         Response ret = connection->request(rq, cancel, yield[ec]);
 
         if (ec) return or_throw<Response>(yield, ec);
@@ -398,7 +397,7 @@ private:
 
         // TODO: use string_view
         auto ret = injector->get_content( key_from_http_req(rq)
-                                        , config.default_db_type()
+                                        , config.default_index_type()
                                         , cancel
                                         , yield[ec]);
 
@@ -428,19 +427,19 @@ private:
 
         // This injection code logs errors but does not propagate them
         // (the `desc_data` field is set to the empty string).
-        auto db_type = config.default_db_type();
+        auto index_type = config.default_index_type();
         auto inject = [
-            rq, rs, id, db_type,
+            rq, rs, id, index_type,
             injector = injector.get()
         ] (boost::asio::yield_context yield) mutable
           -> CacheInjector::InsertionResult {
             // Pop out Ouinet internal HTTP headers.
-            rq.erase(http_::request_sync_injection_hdr);
-            rs.erase(http_::response_injection_id_hdr);
+            rq = util::to_cache_request(move(rq));
+            rs = util::to_cache_response(move(rs));
 
             sys::error_code ec;
             auto ret = injector->insert_content( id, rq, rs
-                                               , db_type
+                                               , index_type
                                                , yield[ec]);
 
             if (ec) {
@@ -472,9 +471,9 @@ private:
         // Add descriptor storage link as is.
         rs.set(http_::response_descriptor_link_hdr, move(ins.desc_link));
         // Add Base64-encoded reinsertion data (if any).
-        if (ins.db_ins_data.length() > 0) {
-            auto encoded_insd = util::base64_encode(move(ins.db_ins_data));
-            rs.set( http_::response_insert_hdr_pfx + DbName.at(db_type)
+        if (ins.index_ins_data.length() > 0) {
+            auto encoded_insd = util::base64_encode(move(ins.index_ins_data));
+            rs.set( http_::response_insert_hdr_pfx + IndexName.at(index_type)
                   , move(encoded_insd));
         }
         return rs;
@@ -562,11 +561,10 @@ void serve( InjectorConfig& config
                 res = *opt_err_res;
             }
             else {
-                auto req2 = req;
-                // do not propagate or cache the header
-                req2.erase(http_::request_version_hdr);
+                auto req2 = util::to_injector_request(req);  // sanitize
+                req2.keep_alive(req.keep_alive());
                 res = cc.fetch(req2, yield[ec].tag("cache_control.fetch"));
-                res.keep_alive(true);
+                res.keep_alive(req.keep_alive());
             }
         }
 
@@ -723,7 +721,7 @@ int main(int argc, const char* argv[])
         // Although the IPNS ID is already in IPFS's config file,
         // this just helps put all info relevant to the user right in the repo root.
         auto ipns_id = cache_injector->ipfs_id();
-        LOG_DEBUG("IPNS DB: " + ipns_id);
+        LOG_DEBUG("IPNS Index: " + ipns_id);
         util::create_state_file(config.repo_root()/"cache-ipns", ipns_id);
     }
 
