@@ -157,7 +157,6 @@ void DispatcherProcess::start_process(
         initialization
     ] (asio::yield_context yield) {
         std::string output_buffer;
-        bool initialized = false;
         /*
          * The output processing coroutine can finish initialization in three forms:
          * - successful initialization;
@@ -171,11 +170,18 @@ void DispatcherProcess::start_process(
          * either successful or not, further output is ignored.
          */
 
+        /*
+         * Reading from an async_pipe doesn't work well in boost 1.67. The
+         * source and sink endpoints are standard boost::asio components, and
+         * they don't cause problems, so using them works around the issue.
+         */
+        auto standard_output_source = std::move(*standard_output).source();
+
         while (true) {
             char buffer[4096];
             sys::error_code ec;
 
-            size_t read = standard_output->async_read_some(
+            size_t read = standard_output_source.async_read_some(
                 asio::mutable_buffers_1(buffer, sizeof(buffer)),
                 yield[ec]
             );
@@ -184,7 +190,7 @@ void DispatcherProcess::start_process(
                 break;
             }
 
-            if (initialized) {
+            if (initialization->ec) {
                 continue;
             }
 
@@ -199,26 +205,22 @@ void DispatcherProcess::start_process(
                 std::vector<std::string> args;
                 parse_output_line(line, command, args);
 
+                bool initialized = false;
                 process_output_line(command, args, ec, initialized);
                 if (ec || initialized) {
-                    if (!initialization->ec) {
-                        initialization->ec = ec;
-                    }
+                    assert(!initialization->ec);
+                    initialization->ec = ec;
                     initialization->stop_condition.notify();
                     output_buffer.clear();
-                    initialized = true;
-                    ec = sys::error_code();
                     break;
                 }
             }
         }
 
-        standard_output->close();
+        standard_output_source.close();
 
-        if (!initialized) {
-            if (!initialization->ec) {
-                initialization->ec = asio::error::broken_pipe;
-            }
+        if (!initialization->ec) {
+            initialization->ec = asio::error::broken_pipe;
             initialization->stop_condition.notify();
         }
     });
