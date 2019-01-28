@@ -926,6 +926,8 @@ void Client::State::serve_request( GenericStream&& con
     auto x_oui_dest_getter([](const Request& r) {return r["X-Oui-Destination"];});
     auto target_getter([](const Request& r) {return r.target();});
 
+    auto local_rx = util::str("https?://[^:/]+\\.", _config.local_domain(), "(:[0-9]+)?/.*");
+
     const vector<Match> matches({
         // Handle requests to <http://localhost/> internally.
         Match( reqexpr::from_regex(host_getter, "localhost")
@@ -934,10 +936,10 @@ void Client::State::serve_request( GenericStream&& con
         Match( reqexpr::from_regex(x_oui_dest_getter, "OuiClient")
              , {false, queue<fresh_channel>({fresh_channel::_front_end})} ),
 
-        // Access to sites under the `.local` TLD are always accessible
+        // Access to sites under the local TLD are always accessible
         // with good connectivity, so always use the Origin channel
         // and never cache them.
-        Match( reqexpr::from_regex(target_getter, "https?://[^:/]+\\.local(:[0-9]+)?/.*")
+        Match( reqexpr::from_regex(target_getter, local_rx)
              , {false, queue<fresh_channel>({fresh_channel::origin})} ),
 
         // NOTE: The matching of HTTP methods below can be simplified,

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <boost/algorithm/string/case_conv.hpp>
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
 
@@ -128,6 +129,9 @@ public:
             , po::value<string>()->default_value("btree")
             , "Default index type to use, can be either \"btree\" or \"bep44\"")
            ("disable-cache", "Disable all cache operations (even initialization)")
+           ("local-domain"
+            , po::value<string>()->default_value("local")
+            , "Always use origin access and never use cache for this TLD")
            ;
 
         return desc;
@@ -142,6 +146,8 @@ public:
 
     bool is_proxy_access_enabled() const { return !_disable_proxy_access; }
     void is_proxy_access_enabled(bool v) { _disable_proxy_access = !v; }
+
+    std::string local_domain() const { return _local_domain; }
 
 private:
     bool _is_help = false;
@@ -165,6 +171,7 @@ private:
 
     boost::optional<util::Ed25519PublicKey> _bt_pubkey;
     bool _disable_cache = false;
+    std::string _local_domain;
 };
 
 inline
@@ -321,6 +328,15 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
     if (vm.count("disable-cache")) {
         _disable_cache = true;
+    }
+
+    if (vm.count("local-domain")) {
+        auto tld_rx = boost::regex("[-0-9a-zA-Z]+");
+        auto local_domain = vm["local-domain"].as<string>();
+        if (!boost::regex_match(local_domain, tld_rx)) {
+            throw std::runtime_error("Invalid TLD for --local-domain");
+        }
+        _local_domain = boost::algorithm::to_lower_copy(local_domain);
     }
 }
 
