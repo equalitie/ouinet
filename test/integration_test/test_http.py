@@ -139,6 +139,9 @@ class OuinetTests(TestCase):
         and make sure it gets the correct echo. The unique request makes sure that
         the response is from the http server and is not cached.
         """
+        logging.debug("################################################")
+        logging.debug("test_i2p_transport");
+        logging.debug("################################################")
         # #injector
         i2pinjector_tunnel_ready = defer.Deferred()
         i2pinjector = self.run_i2p_injector(["--listen-on-i2p", "true"], i2pinjector_tunnel_ready)
@@ -204,6 +207,9 @@ class OuinetTests(TestCase):
         and make sure it gets the correct echo. The unique request makes sure that
         the response is from the http server and is not cached.
         """
+        logging.debug("################################################")
+        logging.debug("test_tcp_transport");
+        logging.debug("################################################")
         #injector
         injector_tcp_port_ready = defer.Deferred()
         self.run_tcp_injector(["--listen-on-i2p", "false", "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)], injector_tcp_port_ready)
@@ -245,6 +251,9 @@ class OuinetTests(TestCase):
         Then the second client request the same request makes sure that
         the response is served from cache.
         """
+        logging.debug("################################################")
+        logging.debug("test_ipfs_cache");
+        logging.debug("################################################")
         #injector
         injector_tcp_port_ready = defer.Deferred()
         result_got_cached = defer.Deferred()
