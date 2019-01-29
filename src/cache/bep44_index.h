@@ -20,6 +20,8 @@ std::array<uint8_t, 20> bep44_salt_from_key(const std::string& key)
     return util::sha1(key);
 }
 
+class Bep44EntryUpdater;
+
 class Bep44ClientIndex : public ClientIndex {
 public:
     Bep44ClientIndex( bittorrent::MainlineDht& bt_dht
@@ -39,6 +41,7 @@ public:
 private:
     bittorrent::MainlineDht& _bt_dht;
     util::Ed25519PublicKey _bt_pubkey;
+    std::unique_ptr<Bep44EntryUpdater> _updater;
     std::shared_ptr<bool> _was_destroyed;
 };
 
@@ -61,6 +64,7 @@ public:
 private:
     bittorrent::MainlineDht& _bt_dht;
     util::Ed25519PrivateKey _bt_privkey;
+    std::unique_ptr<Bep44EntryUpdater> _updater;
     std::shared_ptr<bool> _was_destroyed;
 };
 
