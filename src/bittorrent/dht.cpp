@@ -14,6 +14,7 @@
 
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/steady_timer.hpp>
+//#include <boost/optional/optional_io.hpp>
 
 #include <chrono>
 #include <set>
@@ -2305,6 +2306,56 @@ NodeID MainlineDht::immutable_put_start(
 void MainlineDht::immutable_put_stop(NodeID key)
 {
     _publications.immutable_publications.erase(key);
+}
+
+void MainlineDht::mutable_put(
+    const MutableDataItem& data,
+    Cancel& top_cancel,
+    asio::yield_context yield
+) {
+    Cancel cancel(top_cancel);
+
+    SuccessCondition condition(_ios);
+    WaitCondition wait_all(_ios);
+
+    for (auto& i : _nodes) {
+        asio::spawn(_ios, [ &
+                          , lock = condition.lock()
+                          , lock_all = wait_all.lock()
+                          ] (asio::yield_context yield) {
+            if (!i.second->ready()) {
+                return;
+            }
+
+            sys::error_code ec;
+            i.second->data_put_mutable(data, yield[ec], cancel);
+
+            if (ec) return;
+
+            lock.release(true);
+        });
+    }
+
+    auto cancelled = cancel.connect([&] {
+        condition.cancel();
+    });
+
+    auto terminated = _terminate_signal.connect([&] {
+        condition.cancel();
+    });
+
+    sys::error_code ec;
+
+    if (condition.wait_for_success(yield)) {
+        cancel();
+    } else {
+        if (condition.cancelled()) { ec = asio::error::operation_aborted;   }
+        else                       { ec = asio::error::network_unreachable; }
+    }
+
+    wait_all.wait(yield);
+
+    return or_throw(yield, ec);
 }
 
 NodeID MainlineDht::mutable_put_start(

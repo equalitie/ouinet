@@ -399,6 +399,8 @@ class MainlineDht {
     NodeID immutable_put_start(const BencodedValue& data);
     void immutable_put_stop(NodeID key);
 
+    void mutable_put(const MutableDataItem&, Cancel&, asio::yield_context);
+
     NodeID mutable_put_start(
         const MutableDataItem& data,
         asio::yield_context yield,
