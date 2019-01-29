@@ -22,9 +22,11 @@ bool async_sleep( asio::io_service& ios
     });
 
     timer.async_wait(yield[ec]);
-    if (ec) {
+
+    if (ec || cancel) {
         return false;
     }
+
     return true;
 }
 
