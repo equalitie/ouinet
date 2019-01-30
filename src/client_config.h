@@ -126,8 +126,8 @@ public:
             , po::value<string>()
             , "Public key of the BitTorrent/BEP44 subsystem")
            ("default-index"
-            , po::value<string>()->default_value("btree")
-            , "Default index type to use, can be either \"btree\" or \"bep44\"")
+            , po::value<string>()->default_value("bep44")
+            , "Default index type to use, can be either \"bep44\" or \"btree\"")
            ("disable-cache", "Disable all cache operations (even initialization)")
            ("local-domain"
             , po::value<string>()->default_value("local")
