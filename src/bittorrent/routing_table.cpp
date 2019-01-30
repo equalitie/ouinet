@@ -2,6 +2,7 @@
 
 #include <set>
 
+using namespace std;
 using namespace ouinet::bittorrent::dht;
 
 RoutingTable::RoutingTable(NodeID node_id) :
@@ -20,8 +21,9 @@ void RoutingTable::TreeNode::split() {
      * Buckets that may be split are never supposed to have candidates
      * in them.
      */
-    assert(bucket->verified_candidates.empty());
-    assert(bucket->unverified_candidates.empty());
+    // TODO: Should this hold true?
+    //assert(bucket->verified_candidates.empty());
+    //assert(bucket->unverified_candidates.empty());
 
     /*
      * Split the bucket.
@@ -39,6 +41,26 @@ void RoutingTable::TreeNode::split() {
             left_child->bucket->nodes.push_back(node);
         }
     }
+
+    auto move_candidates = [&] ( deque<RoutingNode>& src
+                               , deque<RoutingNode>& left
+                               , deque<RoutingNode>& right ) {
+        while (!src.empty()) {
+            auto node = move(src.front());
+            src.pop_front();
+
+            if (node.contact.id.bit(depth())) { right.push_back(node); }
+            else                              { left.push_back(node);  }
+        }
+    };
+
+    move_candidates( bucket->verified_candidates
+                   , left_child ->bucket->verified_candidates
+                   , right_child->bucket->verified_candidates);
+
+    move_candidates( bucket->unverified_candidates
+                   , left_child ->bucket->unverified_candidates
+                   , right_child->bucket->unverified_candidates);
 
     bucket = nullptr;
 }
