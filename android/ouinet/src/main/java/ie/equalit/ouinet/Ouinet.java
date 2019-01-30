@@ -179,7 +179,7 @@ public class Ouinet {
     }
 
     private void maybeAdd(Vector<String> args, String key, String value) {
-        if (value == null) return;
+        if (value == null || value.isEmpty()) return;
         args.addElement(key + "=" + value);
     }
 
