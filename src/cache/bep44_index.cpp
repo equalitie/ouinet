@@ -73,9 +73,11 @@ public:
         start();
     }
 
-    void insert(string key, bt::MutableDataItem data)
+    void insert(bt::MutableDataItem data)
     {
-        _entries.put(move(key), Entry{ move(data)
+        // For different entries *signed by the same key*,
+        // their salt is the differentiating key.
+        _entries.put(data.salt, Entry{ move(data)
                                      , Clock::now() - chrono::minutes(15)});
     }
 
@@ -190,7 +192,7 @@ string Bep44ClientIndex::find( const string& key
 
     if (ec) return or_throw<string>(yield, ec);
 
-    _updater->insert(key, data);
+    _updater->insert(data);
 
     assert(data.value.is_string());
     return *data.value.as_string();
@@ -207,7 +209,7 @@ string Bep44InjectorIndex::find( const string& key
     if (ec) return or_throw<string>(yield, ec);
 
     // TODO: Don't do this once we have a bootstrapped network.
-    _updater->insert(key, data);
+    _updater->insert(data);
 
     assert(data.value.is_string());
     return *data.value.as_string();
