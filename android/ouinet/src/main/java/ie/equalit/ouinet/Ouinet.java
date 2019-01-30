@@ -59,9 +59,6 @@ public class Ouinet {
         args.addElement("--listen-on-tcp=127.0.0.1:8080");
         args.addElement("--front-end-ep=0.0.0.0:8081");
 
-        // Temporary while the app is being tested.
-        args.addElement("--disable-origin-access");
-
         maybeAdd(args, "--injector-ep",          conf.injector_endpoint);
         maybeAdd(args, "--injector-ipns",        conf.injector_ipfs_id);
         maybeAdd(args, "--bittorrent-public-key",conf.injector_bt_pubkey);
