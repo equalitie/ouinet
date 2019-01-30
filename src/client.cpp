@@ -51,7 +51,6 @@
 #include "util/signal.h"
 #include "util/crypto.h"
 #include "util/lru_cache.h"
-#include "util/scheduler.h"
 
 #include "logger.h"
 
@@ -83,7 +82,6 @@ public:
         , _ssl_certificate_cache(1000)
         , ssl_ctx{asio::ssl::context::tls_client}
         , inj_ctx{asio::ssl::context::tls_client}
-        , _fetch_stored_scheduler(_ios, 1)
     {
         ssl_ctx.set_default_verify_paths();
         ssl_ctx.set_verify_mode(asio::ssl::verify_peer);
@@ -176,8 +174,6 @@ private:
 
     asio::ssl::context ssl_ctx;
     asio::ssl::context inj_ctx;
-
-    Scheduler _fetch_stored_scheduler;
 };
 
 //------------------------------------------------------------------------------
