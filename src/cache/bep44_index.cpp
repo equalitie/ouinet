@@ -25,16 +25,13 @@ boost::string_view as_string_view(const array<uint8_t, N>& a)
 //--------------------------------------------------------------------
 static bt::MutableDataItem find( bt::MainlineDht& dht
                                , util::Ed25519PublicKey pubkey
-                               , const string& key
+                               , const string& salt
                                , Cancel& cancel
                                , asio::yield_context yield)
 {
     sys::error_code ec;
 
-    auto salt = bep44_salt_from_key(key);
-
-    auto opt_data = dht.mutable_get( pubkey
-                                   , as_string_view(salt)
+    auto opt_data = dht.mutable_get( pubkey, salt
                                    , yield[ec], cancel);
     
     if (!ec && !opt_data) {
@@ -106,7 +103,7 @@ private:
 
                 auto new_data = find(_dht
                                     , old.data.public_key
-                                    , i->first
+                                    , i->first  // the salt
                                     , cancel
                                     , yield[ec]);
 
@@ -188,7 +185,9 @@ string Bep44ClientIndex::find( const string& key
                              , asio::yield_context yield)
 {
     sys::error_code ec;
-    auto data = ::find(_bt_dht, _bt_pubkey, key, cancel, yield[ec]);
+    auto data = ::find( _bt_dht
+                      , _bt_pubkey, bep44_salt_from_key(key)
+                      , cancel, yield[ec]);
 
     if (ec) return or_throw<string>(yield, ec);
 
@@ -204,7 +203,9 @@ string Bep44InjectorIndex::find( const string& key
                                , asio::yield_context yield)
 {
     sys::error_code ec;
-    auto data = ::find(_bt_dht, _bt_privkey.public_key(), key, cancel, yield[ec]);
+    auto data = ::find( _bt_dht
+                      , _bt_privkey.public_key(), bep44_salt_from_key(key)
+                      , cancel, yield[ec]);
 
     if (ec) return or_throw<string>(yield, ec);
 
@@ -268,7 +269,7 @@ string Bep44InjectorIndex::insert( string key
     try {
         item = bt::MutableDataItem::sign( value
                                         , (ts - unix_epoch).total_milliseconds()
-                                        , as_string_view(salt)
+                                        , move(salt)
                                         , _bt_privkey);
     } catch(const length_error&) {
         return or_throw<string>(yield, asio::error::message_size);

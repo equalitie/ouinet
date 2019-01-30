@@ -13,11 +13,12 @@ namespace ouinet { namespace util { class Ed25519PublicKey; }}
 namespace ouinet {
 
 inline
-std::array<uint8_t, 20> bep44_salt_from_key(const std::string& key)
+std::string bep44_salt_from_key(const std::string& key)
 {
     // This ensures short, fixed-size salts to be circulated
     // (as e.g. keys containing HTTP URIs may be quite long).
-    return util::sha1(key);
+    auto ret = util::sha1(key);
+    return std::string(ret.begin(), ret.end());
 }
 
 class Bep44EntryUpdater;
