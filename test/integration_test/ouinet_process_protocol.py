@@ -21,12 +21,6 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
     from ouinet client/injector process and report failure
     in case of fatal error
     """
-    """
-    Protocols are the way to communicate with different players
-    in a system in Twisted. This protocol is receiving outputs
-    from ouinet client/injector process and report failure
-    in case of fatal error
-    """
     def __init__(self, proc_config, ready_benchmark_regex="", ready_deferred=None):
         super(OuinetProcessProtocol, self).__init__()
         self._ready_benchmark_regex = ready_benchmark_regex
@@ -72,9 +66,6 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
 
 
 class OuinetIPFSCacheProcessProtocol(OuinetProcessProtocol, object):
-    """
-    Child of OuinetProcessProtocol
-    """
     def __init__(self, proc_config, benchmark_regexes=[], benchmark_deferreds=None):
         super(OuinetIPFSCacheProcessProtocol, self).__init__(proc_config,
                 benchmark_regexes[TestFixtures.READY_REGEX_INDEX],
