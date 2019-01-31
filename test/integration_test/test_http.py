@@ -299,7 +299,11 @@ class OuinetTests(TestCase):
 
         #start cache client which supposed to read the response from cache
         client_cache_ready = defer.Deferred()
-        cache_client = self.run_cache_client(TestFixtures.CACHE_CLIENT[1]["name"], ["--listen-on-tcp", "127.0.0.1:"+str(TestFixtures.CACHE_CLIENT[1]["port"]), "--injector-ipns", IPNS_end_point, "http://localhost/"], client_cache_ready)
+        cache_client = self.run_cache_client(
+            TestFixtures.CACHE_CLIENT[1]["name"],
+            ["--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["port"]),
+             "--default-index", "btree", "--injector-ipns", IPNS_end_point, "http://localhost/"],
+            client_cache_ready)
 
         import time
 
