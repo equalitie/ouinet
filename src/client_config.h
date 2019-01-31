@@ -322,12 +322,12 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         }
     }
 
-    if (_default_index_type == IndexType::bep44 && !_bt_pubkey) {
-        throw std::runtime_error("BEP44 index selected but no BT public key specified");
-    }
-
     if (vm.count("disable-cache")) {
         _disable_cache = true;
+    }
+
+    if (!_disable_cache && _default_index_type == IndexType::bep44 && !_bt_pubkey) {
+        throw std::runtime_error("BEP44 index selected but no BT public key specified");
     }
 
     if (vm.count("local-domain")) {
