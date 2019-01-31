@@ -1,4 +1,4 @@
-# Copyright 2018 eQualit.ie
+# Copyright 2018, 2019 eQualit.ie, Inc.
 # See LICENSE for other credits and copying information
 
 # Integration tests for Ouinet - test for http communication offered through different transports and caches
