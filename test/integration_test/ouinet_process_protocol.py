@@ -65,9 +65,9 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
             os.remove(process_pid_file)
 
 
-class OuinetIPFSCacheProcessProtocol(OuinetProcessProtocol, object):
+class OuinetCacheProcessProtocol(OuinetProcessProtocol, object):
     def __init__(self, proc_config, benchmark_regexes=[], benchmark_deferreds=None):
-        super(OuinetIPFSCacheProcessProtocol, self).__init__(proc_config,
+        super(OuinetCacheProcessProtocol, self).__init__(proc_config,
                 benchmark_regexes[TestFixtures.READY_REGEX_INDEX],
                 benchmark_deferreds[TestFixtures.READY_REGEX_INDEX])
 
@@ -79,8 +79,6 @@ class OuinetIPFSCacheProcessProtocol(OuinetProcessProtocol, object):
             self._request_cached_deferred = benchmark_deferreds[TestFixtures.REQUEST_CACHED_REGEX_INDEX]
         self._number_of_cache_db_updates = 0
         self._served_from_cache = False
-        self.IPNS_ID = ""
-        self.IPNS_resolution_start_time = 0
 
     def errReceived(self, data):
         """
@@ -88,11 +86,9 @@ class OuinetIPFSCacheProcessProtocol(OuinetProcessProtocol, object):
         """
         #checking for specifc strings before calling back any deferred object
         #because the reaction to the deferred might depend on these data
-        self.Mark_start_of_first_IPNS_resolution(data)
-        self.look_for_IPNS_ID(data)
         self.check_response_served_from_cached(data)
 
-        super(OuinetIPFSCacheProcessProtocol, self).errReceived(data)
+        super(OuinetCacheProcessProtocol, self).errReceived(data)
 
         if self._request_cached_deferred and self.check_request_got_cached(data):
             self._number_of_cache_db_updates += 1
@@ -104,6 +100,31 @@ class OuinetIPFSCacheProcessProtocol(OuinetProcessProtocol, object):
         if self._request_cached_regex:
             return re.match(self._request_cached_regex, data)
 
+    def check_response_served_from_cached(self, data):
+        if re.match(TestFixtures.RETRIEVED_FROM_CACHE_REGEX, data):
+            self._served_from_cache = True
+
+    def served_from_cache(self):
+        return self._served_from_cache
+
+
+class OuinetIPFSCacheProcessProtocol(OuinetCacheProcessProtocol, object):
+    def __init__(self, proc_config, benchmark_regexes=[], benchmark_deferreds=None):
+        super(OuinetIPFSCacheProcessProtocol, self).__init__(
+            proc_config, benchmark_regexes, benchmark_deferreds)
+        self.IPNS_ID = ""
+        self.IPNS_resolution_start_time = 0
+
+    def errReceived(self, data):
+        """
+        listen for the debugger output calls the parent function and then react to cached request cached
+        """
+        #checking for specifc strings before calling back any deferred object
+        #because the reaction to the deferred might depend on these data
+        self.Mark_start_of_first_IPNS_resolution(data)
+        self.look_for_IPNS_ID(data)
+        super(OuinetIPFSCacheProcessProtocol, self).errReceived(data)
+
     def look_for_IPNS_ID(self, data):
         IPNS_ID_search_result = re.match(TestFixtures.IPNS_ID_ANNOUNCE_REGEX, data)
         if IPNS_ID_search_result:
@@ -112,10 +133,3 @@ class OuinetIPFSCacheProcessProtocol(OuinetProcessProtocol, object):
     def Mark_start_of_first_IPNS_resolution(self, data):
         if self.IPNS_resolution_start_time == 0 and re.match(TestFixtures.START_OF_IPNS_RESOLUTION_REGEX, data):
             self.IPNS_resolution_start_time = time.time()
-
-    def check_response_served_from_cached(self, data):
-        if re.match(TestFixtures.RETRIEVED_FROM_CACHE_REGEX, data):
-            self._served_from_cache = True
-
-    def served_from_cache(self):
-        return self._served_from_cache
