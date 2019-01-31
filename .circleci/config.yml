@@ -64,6 +64,7 @@ stages:
           ./build/test/test-http-util      --log_level=test_suite
 
           virtualenv .venv
+          . .venv/bin/activate
           pip install twisted
           export OUINET_BUILD_DIR=~/project/build
           ./scripts/run_integration_tests.sh
