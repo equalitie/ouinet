@@ -168,7 +168,7 @@ class OuinetClient(OuinetProcess):
         client_config.config_file_content = TestFixtures.FIRST_CLIENT_CONF_FILE_CONTENT
         super(OuinetClient, self).__init__(client_config, deferred_events)
 
-        self.config.argv = [ouinet_env['OUINET_BUILD_DIR' ] + "/client",
+        self.config.argv = [os.path.join(ouinet_env['OUINET_BUILD_DIR'], "client"),
                                 "--repo",
                                 self.config.config_folder_name] + self.config.argv
 
@@ -212,7 +212,7 @@ class OuinetInjector(OuinetProcess):
         injector_config.config_file_content = \
           TestFixtures.INJECTOR_CONF_FILE_CONTENT
         super(OuinetInjector, self).__init__(injector_config, deferred_events)
-        self.config.argv = [ouinet_env['OUINET_BUILD_DIR'] + "injector",
+        self.config.argv = [os.path.join(ouinet_env['OUINET_BUILD_DIR'], "injector"),
                             "--repo",
                             self.config.config_folder_name] + self.config.argv
 

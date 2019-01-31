@@ -65,7 +65,7 @@ stages:
 
           virtualenv .venv
           pip install twisted
-          export OUINET_BUILD_DIR=~/project/build/
+          export OUINET_BUILD_DIR=~/project/build
           ./scripts/run_integration_tests.sh
 
       - type: shell
