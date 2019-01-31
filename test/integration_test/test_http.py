@@ -166,10 +166,12 @@ class OuinetTests(TestCase):
         for i2p_client_id in range(0, TestFixtures.MAX_NO_OF_I2P_CLIENTS):
             i2pclient_tunnel_ready = defer.Deferred()
 
+            #use only Proxy or Injector mechanisms
             self.run_i2p_client( TestFixtures.I2P_CLIENT["name"]
-                               , [ "--disable-origin-access"
-                                 , "--listen-on-tcp", "127.0.0.1:"+str(TestFixtures.I2P_CLIENT["port"])
-                                 , "--injector-ep", injector_i2p_public_id, "http://localhost/"]
+                               , [ "--disable-origin-access", "--disable-cache"
+                                 , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"])
+                                 , "--injector-ep", injector_i2p_public_id
+                                 , "http://localhost/"]
                                , i2pclient_tunnel_ready)
         
             #wait for the client tunnel to connect to the injector
@@ -220,10 +222,10 @@ class OuinetTests(TestCase):
         #client
         client_tcp_port_ready = defer.Deferred()
 
+        #use only Proxy or Injector mechanisms
         self.run_tcp_client( TestFixtures.TCP_CLIENT["name"]
-                           , [ "--disable-origin-access"
-                             , "--listen-on-tcp"
-                             , "127.0.0.1:"+str(TestFixtures.TCP_CLIENT["port"])
+                           , [ "--disable-origin-access", "--disable-cache"
+                             , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_CLIENT["port"])
                              , "--injector-ep", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)
                              , "http://localhost/"]
                            , client_tcp_port_ready)
@@ -269,11 +271,11 @@ class OuinetTests(TestCase):
         
         print "IPNS end point is: " + IPNS_end_point
 
-        #tcp client
+        #tcp client, use only Injector mechanism
         client_tcp_port_ready = defer.Deferred()
         self.run_tcp_client( TestFixtures.CACHE_CLIENT[0]["name"]
-                           , [ "--disable-origin-access"
-                             , "--listen-on-tcp", "127.0.0.1:"+str(TestFixtures.CACHE_CLIENT[0]["port"])
+                           , [ "--disable-origin-access", "--disable-proxy-access", "--disable-cache"
+                             , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[0]["port"])
                              , "--injector-ep", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)
                              , "http://localhost/"]
                            , client_tcp_port_ready)
@@ -297,12 +299,14 @@ class OuinetTests(TestCase):
         success = yield result_got_cached
         self.assertTrue(success)
 
-        #start cache client which supposed to read the response from cache
+        #start cache client which supposed to read the response from cache, use only Cache mechanism
         client_cache_ready = defer.Deferred()
         cache_client = self.run_cache_client(
             TestFixtures.CACHE_CLIENT[1]["name"],
-            ["--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["port"]),
-             "--default-index", "btree", "--injector-ipns", IPNS_end_point, "http://localhost/"],
+            [ "--disable-origin-access", "--disable-proxy-access"
+            , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["port"])
+            , "--default-index", "btree", "--injector-ipns", IPNS_end_point
+            , "http://localhost/"],
             client_cache_ready)
 
         import time
