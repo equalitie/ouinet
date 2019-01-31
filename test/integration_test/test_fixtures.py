@@ -32,7 +32,7 @@ class TestFixtures:
     I2P_INJECTOR_NAME = "i2p_injector"
     I2P_TUNNEL_READY_REGEX = r'[\s\S]*I2P Tunnel has been established'
 
-    I2P_CLIENT = {"name":"i2p_client", "port": 8081}
+    I2P_CLIENT = {"name":"i2p_client", "port": 8076}
 
     MAX_NO_OF_I2P_CLIENTS = 5
     MAX_NO_OF_TRIAL_I2P_REQUESTS = 5
@@ -50,12 +50,12 @@ class TestFixtures:
     CLIENT_CONFIG_FILE_NAME = "ouinet-client.conf"
 
     TCP_CLIENT = { "name": "tcp_client",
-                         "port": 8081}
+                         "port": 8075}
 
     CACHE_CLIENT = [{ "name": "cache_client_1",
-                         "port": 8084},
+                         "port": 8074},
                       { "name": "cache_client_2",
-                         "port": 8085}]
+                         "port": 8073}]
 
     FIRST_CLIENT_CONF_FILE_CONTENT = "open-file-limit = 4096\n"
 
