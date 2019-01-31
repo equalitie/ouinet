@@ -259,14 +259,14 @@ class OuinetTests(TestCase):
         #injector
         injector_tcp_port_ready = defer.Deferred()
         result_got_cached = defer.Deferred()
-        ipfs_cache_injector = self.run_cache_injector(["--listen-on-i2p", "false", "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)], injector_tcp_port_ready, result_got_cached)
+        cache_injector = self.run_cache_injector(["--listen-on-i2p", "false", "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)], injector_tcp_port_ready, result_got_cached)
         
         #wait for the injector to open the port
         success = yield injector_tcp_port_ready
 
         #TODO: we are assuming that IPNS DB is announced before opening the port.
         # remove the is assumption.
-        IPNS_end_point = ipfs_cache_injector.get_IPNS_ID()
+        IPNS_end_point = cache_injector.get_IPNS_ID()
         assert(len(IPNS_end_point) > 0);
         
         print "IPNS end point is: " + IPNS_end_point
@@ -324,7 +324,7 @@ class OuinetTests(TestCase):
 
         # now request the same page from second client
         defered_response = defer.Deferred()
-        for i in range(0,TestFixtures.MAX_NO_OF_TRIAL_IPFS_CACHE_REQUESTS):
+        for i in range(0,TestFixtures.MAX_NO_OF_TRIAL_CACHE_REQUESTS):
             defered_response = yield self.request_page(
                 TestFixtures.CACHE_CLIENT[1]["port"], page_url)
             if (defered_response.code == 200):
