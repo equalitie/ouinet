@@ -216,6 +216,10 @@ class OuinetInjector(OuinetProcess):
                             "--repo",
                             self.config.config_folder_name] + self.config.argv
 
+    def get_index_key(self):
+        """Return a key string used to access the cache index created by this injector."""
+        raise NotImplementedError
+
 class OuinetI2PInjector(OuinetInjector):
     """
     As above, but for the 'injector' 
@@ -250,7 +254,7 @@ class OuinetIPFSCacheInjector(OuinetInjector):
         super(OuinetIPFSCacheInjector, self).__init__(injector_config, deferred_events)
         self.set_process_protocol(OuinetIPFSCacheProcessProtocol(proc_config = self.config, benchmark_regexes = injector_config.benchmark_regexes, benchmark_deferreds=deferred_events)) # change default protocol to one understand ipfs cache outputs
 
-    def get_IPNS_ID(self):
+    def get_index_key(self):
         return self._proc_protocol.IPNS_ID
     #   self._setup_ipfs_identity()
         

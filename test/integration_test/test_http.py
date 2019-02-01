@@ -285,12 +285,12 @@ class OuinetTests(TestCase):
         #wait for the injector to open the port
         success = yield injector_tcp_port_ready
 
-        #TODO: we are assuming that IPNS DB is announced before opening the port.
+        #TODO: we are assuming that the index key is announced before opening the port.
         # remove the is assumption.
-        IPNS_end_point = cache_injector.get_IPNS_ID()
-        assert(len(IPNS_end_point) > 0);
+        index_key = cache_injector.get_index_key()
+        assert(len(index_key) > 0);
         
-        print "IPNS end point is: " + IPNS_end_point
+        print "Index key is: " + index_key
 
         #tcp client, use only Injector mechanism
         client_tcp_port_ready = defer.Deferred()
@@ -323,7 +323,7 @@ class OuinetTests(TestCase):
         #start cache client which supposed to read the response from cache, use only Cache mechanism
         client_cache_ready = defer.Deferred()
         cache_client = run_cache_client(
-            TestFixtures.CACHE_CLIENT[1]["name"], IPNS_end_point,
+            TestFixtures.CACHE_CLIENT[1]["name"], index_key,
             [ "--disable-origin-access", "--disable-proxy-access"
             , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["port"])
             , "http://localhost/"],
