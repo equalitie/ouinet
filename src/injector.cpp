@@ -365,7 +365,7 @@ public:
 
         Request rq = util::to_origin_request(rq_);
         rq.keep_alive(true);
-        Response ret = connection->request(rq, cancel, yield[ec]);
+        Response ret = connection->request(rq, cancel, yield[ec].tag("request"));
 
         if (ec) return or_throw<Response>(yield, ec);
 
@@ -398,7 +398,7 @@ private:
         auto ret = injector->get_content( key_from_http_req(rq)
                                         , config.default_index_type()
                                         , cancel
-                                        , yield[ec]);
+                                        , yield[ec].tag("injector.get_content"));
 
         if (ec) return or_throw(yield, ec, move(ret.second));
 

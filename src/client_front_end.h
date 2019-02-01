@@ -72,6 +72,8 @@ public:
     }
 
 private:
+    // TODO: This structure shouldn't hold these variables.
+    // Instead we should use those defined in ClientConfig.
     bool _auto_refresh_enabled = true;
     bool _injector_proxying_enabled = true;
     bool _ipfs_cache_enabled = true;
