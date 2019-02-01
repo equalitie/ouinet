@@ -966,6 +966,13 @@ void Client::State::serve_request( GenericStream&& con
         // Disable cache and always go to origin for this site.
         Match( reqexpr::from_regex(target_getter, "https?://ident.me/.*")
              , {false, queue<fresh_channel>({fresh_channel::origin})} ),
+
+        // Disable cache and always go to origin for these google sites.
+        Match( reqexpr::from_regex(target_getter, "https?://(www\\.)google.com/complete/.*")
+             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
+        Match( reqexpr::from_regex(target_getter, "https://safebrowsing.googleapis.com/.*")
+             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
+
         // Disable cache and always go to proxy for this site.
         Match( reqexpr::from_regex(target_getter, "https?://ifconfig.co/.*")
              , {false, queue<fresh_channel>({fresh_channel::proxy})} ),
