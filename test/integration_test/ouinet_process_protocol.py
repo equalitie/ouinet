@@ -116,11 +116,6 @@ class OuinetIPFSCacheProcessProtocol(OuinetCacheProcessProtocol, object):
         self.IPNS_resolution_start_time = 0
 
     def errReceived(self, data):
-        """
-        listen for the debugger output calls the parent function and then react to cached request cached
-        """
-        #checking for specifc strings before calling back any deferred object
-        #because the reaction to the deferred might depend on these data
         self.Mark_start_of_first_IPNS_resolution(data)
         self.look_for_IPNS_ID(data)
         super(OuinetIPFSCacheProcessProtocol, self).errReceived(data)
@@ -142,11 +137,6 @@ class OuinetBEP44CacheProcessProtocol(OuinetCacheProcessProtocol, object):
         self.BEP44_pubk = ""
 
     def errReceived(self, data):
-        """
-        listen for the debugger output calls the parent function and then react to cached request cached
-        """
-        #checking for specifc strings before calling back any deferred object
-        #because the reaction to the deferred might depend on these data
         self.look_for_BEP44_pubk(data)
         super(OuinetBEP44CacheProcessProtocol, self).errReceived(data)
 
