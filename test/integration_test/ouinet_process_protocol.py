@@ -133,3 +133,24 @@ class OuinetIPFSCacheProcessProtocol(OuinetCacheProcessProtocol, object):
     def Mark_start_of_first_IPNS_resolution(self, data):
         if self.IPNS_resolution_start_time == 0 and re.match(TestFixtures.START_OF_IPNS_RESOLUTION_REGEX, data):
             self.IPNS_resolution_start_time = time.time()
+
+
+class OuinetBEP44CacheProcessProtocol(OuinetCacheProcessProtocol, object):
+    def __init__(self, proc_config, benchmark_regexes=[], benchmark_deferreds=None):
+        super(OuinetBEP44CacheProcessProtocol, self).__init__(
+            proc_config, benchmark_regexes, benchmark_deferreds)
+        self.BEP44_pubk = ""
+
+    def errReceived(self, data):
+        """
+        listen for the debugger output calls the parent function and then react to cached request cached
+        """
+        #checking for specifc strings before calling back any deferred object
+        #because the reaction to the deferred might depend on these data
+        self.look_for_BEP44_pubk(data)
+        super(OuinetBEP44CacheProcessProtocol, self).errReceived(data)
+
+    def look_for_BEP44_pubk(self, data):
+        BEP44_pubk_search_result = re.match(TestFixtures.BEP44_PUBK_ANNOUNCE_REGEX, data)
+        if BEP44_pubk_search_result:
+            self.BEP44_pubk = BEP44_pubk_search_result.group(1)
