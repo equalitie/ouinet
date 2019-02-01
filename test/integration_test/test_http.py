@@ -337,7 +337,7 @@ class OuinetTests(TestCase):
         self.assertTrue(success)
 
         try:
-            index_resolution_start = cache_client.index_resolution_start_time
+            index_resolution_start = cache_client.index_resolution_start_time()
             self.assertTrue(index_resolution_start > 0)
 
             logging.debug("Index resolution took: " + str(

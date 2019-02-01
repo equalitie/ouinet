@@ -188,7 +188,7 @@ class OuinetIPFSClient(OuinetClient):
 
         return False
 
-    def IPNS_resolution_start_time(self):
+    def index_resolution_start_time(self):
         if (self._proc_protocol):
             return self._proc_protocol.IPNS_resolution_start_time
 
