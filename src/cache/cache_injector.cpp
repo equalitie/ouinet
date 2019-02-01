@@ -26,7 +26,7 @@ CacheInjector::CacheInjector
     : _ipfs_node(new asio_ipfs::node(ios, (path_to_repo/"ipfs").native()))
     , _bt_dht(new bt::MainlineDht(ios))
     , _publisher(new Publisher(*_ipfs_node, *_bt_dht, bt_privkey))
-    , _btree_index(new BTreeInjectorIndex(*_ipfs_node, *_publisher, path_to_repo))
+    //, _btree_index(new BTreeInjectorIndex(*_ipfs_node, *_publisher, path_to_repo))
     , _scheduler(new Scheduler(ios, _concurrency))
     , _was_destroyed(make_shared<bool>(false))
 {

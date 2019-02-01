@@ -84,6 +84,7 @@ public:
         , ssl_ctx{asio::ssl::context::tls_client}
         , inj_ctx{asio::ssl::context::tls_client}
         , _fetch_stored_scheduler(_ios, 8)
+        , _store_scheduler(_ios, 4)
     {
         ssl_ctx.set_default_verify_paths();
         ssl_ctx.set_verify_mode(asio::ssl::verify_peer);
@@ -182,6 +183,7 @@ private:
     asio::ssl::context inj_ctx;
 
     Scheduler _fetch_stored_scheduler;
+    Scheduler _store_scheduler;
 };
 
 //------------------------------------------------------------------------------
@@ -533,7 +535,7 @@ public:
         return or_throw(yield, ec, move(r));
     }
 
-    Response store(const Request& rq, Response rs, Cancel&, Yield yield)
+    Response store(const Request& rq, Response rs, Cancel& cancel, Yield yield)
     {
         namespace err = asio::error;
 
@@ -542,8 +544,6 @@ public:
         // (they can be found at the descriptor).
         // Otherwise we should pass them through
         // `util::to_cache_request` and `util::to_cache_response` (respectively).
-
-        sys::error_code ec;
 
         auto& cache = client_state._cache;
 
@@ -555,14 +555,24 @@ public:
             [ &cache, rs
             , &ios = client_state.get_io_service()
             , &cancel = client_state.get_shutdown_signal()
+            , &scheduler = client_state._store_scheduler
             , key = key_from_http_req(rq)
             , indextype = client_state._config.default_index_type()
             ] (asio::yield_context yield) mutable {
+                sys::error_code ec;
+
+                // TODO: Be smarter about what we're storing here. I.e. don't
+                // attempt to store what is currently being stored in another
+                // coroutine or has been stored just recently.
+                auto slot = scheduler.wait_for_slot(cancel, yield[ec]);
+
+                if (cancel) ec = err::operation_aborted;
+                if (ec) return;
+
                 // Seed content data itself.
                 // TODO: Use the scheduler here to only do some max number
                 // of `ipfs_add`s at a time. Also then trim that queue so
                 // that it doesn't grow indefinitely.
-                sys::error_code ec;
                 auto body_link = cache->ipfs_add
                     (beast::buffers_to_string(rs.body().data()), yield[ec]);
 
@@ -621,7 +631,7 @@ public:
 
         // Note: we have to return a valid response even in case of error
         // because CacheControl will use it.
-        return or_throw(yield, ec, move(rs));
+        return rs;
     }
 
     Response fetch(const Request& rq, Yield yield)
