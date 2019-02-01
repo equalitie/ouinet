@@ -13,11 +13,13 @@ class TestFixtures:
     TCP_TRANSPORT_TIMEOUT = 15
     I2P_TRANSPORT_TIMEOUT = 600
     IPFS_CACHE_TIMEOUT = 900
+    BEP44_CACHE_TIMEOUT = 900
     
     TEST_TIMEOUT = {
         "test_i2p_transport": I2P_TRANSPORT_TIMEOUT,
         "test_tcp_transport": TCP_TRANSPORT_TIMEOUT,
-        "test_ipfs_cache": IPFS_CACHE_TIMEOUT}
+        "test_ipfs_cache": IPFS_CACHE_TIMEOUT,
+        "test_bep44_cache": BEP44_CACHE_TIMEOUT}
 
     #BENCHMARK REGEX INDICES
     READY_REGEX_INDEX = 0
@@ -60,6 +62,7 @@ class TestFixtures:
     FIRST_CLIENT_CONF_FILE_CONTENT = "open-file-limit = 4096\n"
 
     IPNS_ID_ANNOUNCE_REGEX = "[\s\S]*IPNS Index: ([A-Za-z0-9]+)[\s\S]*"
+    BEP44_PUBK_ANNOUNCE_REGEX = "[\s\S]*Using BT Public key: ([0-9A-Fa-f]+)[\s\S]*"
     START_OF_IPNS_RESOLUTION_REGEX = r'[\s\S]*Resolving IPNS address: [\s\S]*'
     IPFS_CACHE_READY_REGEX = r'[\s\S]*IPNS ID has been resolved successfully[\s\S]*'
     REQUEST_CACHED_REGEX = r'[\s\S]*Request was successfully published to cache[\s\S]*'
