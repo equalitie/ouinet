@@ -25,8 +25,10 @@ import random
 import pdb
 
 from ouinet_process_controler import OuinetConfig
-from ouinet_process_controler import OuinetInjector, OuinetI2PInjector, OuinetIPFSCacheInjector
-from ouinet_process_controler import OuinetClient, OuinetIPFSClient
+from ouinet_process_controler import (
+    OuinetInjector, OuinetI2PInjector, OuinetIPFSCacheInjector, OuinetBEP44CacheInjector)
+from ouinet_process_controler import (
+    OuinetClient, OuinetIPFSClient, OuinetBEP44Client)
 from test_fixtures import TestFixtures
 from test_http_server import TestHttpServer
 
@@ -84,6 +86,13 @@ class OuinetTests(TestCase):
             OuinetIPFSCacheInjector, config,
             deferred_tcp_port_ready, deferred_result_got_cached)
 
+    def run_bep44_injector(self, injector_args, deferred_tcp_port_ready, deferred_result_got_cached):
+        config = self._cache_injector_config(TestFixtures.BEP44_CACHE_TIMEOUT,
+                                             ["--default-index", "bep44"] + injector_args)
+        return self._run_cache_injector(
+            OuinetBEP44CacheInjector, config,
+            deferred_tcp_port_ready, deferred_result_got_cached)
+
     def _cache_injector_config(self, timeout, args):
         return OuinetConfig(TestFixtures.CACHE_INJECTOR_NAME, timeout, args,
                             benchmark_regexes=[TestFixtures.TCP_PORT_READY_REGEX,
@@ -115,6 +124,12 @@ class OuinetTests(TestCase):
                               ["--default-index", "btree", "--injector-ipns", idx_key] + args,
                               benchmark_regexes=[TestFixtures.IPFS_CACHE_READY_REGEX])
         return self._run_cache_client(OuinetIPFSClient, config, deferred_cache_ready)
+
+    def run_bep44_client(self, name, idx_key, args, deferred_cache_ready):
+        config = OuinetConfig(name, TestFixtures.BEP44_CACHE_TIMEOUT,
+                              ["--default-index", "bep44", "--bittorrent-public-key", idx_key] + args,
+                              benchmark_regexes=[TestFixtures.BEP44_CACHE_READY_REGEX])
+        return self._run_cache_client(OuinetBEP44Client, config, deferred_cache_ready)
 
     def _run_cache_client(self, proc_class, config, deferred_cache_ready):
         client = proc_class(config, [deferred_cache_ready])
@@ -268,6 +283,13 @@ class OuinetTests(TestCase):
         logging.debug("test_ipfs_cache");
         logging.debug("################################################")
         return self._test_cache(self.run_ipfs_injector, self.run_ipfs_client)
+
+    @inlineCallbacks
+    def test_bep44_cache(self):
+        logging.debug("################################################")
+        logging.debug("test_bep44_cache");
+        logging.debug("################################################")
+        return self._test_cache(self.run_bep44_injector, self.run_bep44_client)
 
     def _test_cache(self, run_cache_injector, run_cache_client):
         """
