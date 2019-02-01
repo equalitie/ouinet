@@ -15,9 +15,9 @@ class TestFixtures:
     IPFS_CACHE_TIMEOUT = 900
     
     TEST_TIMEOUT = {
-        "test_i2p_transport":600,
-        "test_tcp_transport":15,
-        "test_ipfs_cache":900}
+        "test_i2p_transport": I2P_TRANSPORT_TIMEOUT,
+        "test_tcp_transport": TCP_TRANSPORT_TIMEOUT,
+        "test_ipfs_cache": IPFS_CACHE_TIMEOUT}
 
     #BENCHMARK REGEX INDICES
     READY_REGEX_INDEX = 0
