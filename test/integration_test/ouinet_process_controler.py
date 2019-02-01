@@ -172,12 +172,7 @@ class OuinetClient(OuinetProcess):
                                 "--repo",
                                 self.config.config_folder_name] + self.config.argv
 
-class OuinetIPFSClient(OuinetClient):
-    def __init__(self, client_config, deferred_events):
-        super(OuinetIPFSClient, self).__init__(client_config, deferred_events)
-
-        self.set_process_protocol(OuinetIPFSCacheProcessProtocol(proc_config = self.config, benchmark_regexes = client_config.benchmark_regexes, benchmark_deferreds=deferred_events))
-
+class OuinetCacheClient(OuinetClient):
     def served_from_cache(self):
         """
         returns true if any request has been served from cache
@@ -187,6 +182,12 @@ class OuinetIPFSClient(OuinetClient):
             return self._proc_protocol.served_from_cache()
 
         return False
+
+class OuinetIPFSClient(OuinetCacheClient):
+    def __init__(self, client_config, deferred_events):
+        super(OuinetIPFSClient, self).__init__(client_config, deferred_events)
+
+        self.set_process_protocol(OuinetIPFSCacheProcessProtocol(proc_config = self.config, benchmark_regexes = client_config.benchmark_regexes, benchmark_deferreds=deferred_events))
 
     def index_resolution_start_time(self):
         if (self._proc_protocol):
