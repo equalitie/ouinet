@@ -333,14 +333,18 @@ class OuinetTests(TestCase):
 
         # make sure that the client2 is ready to access the cache
         success = yield client_cache_ready
-        IPNS_resoultion_done_time_stamp = time.time()
-
+        index_resolution_done_time_stamp = time.time()
         self.assertTrue(success)
-        self.assertTrue(cache_client.IPNS_resolution_start_time() > 0)
 
-        logging.debug("IPNS resolution took: " + str(
-            IPNS_resoultion_done_time_stamp -
-            cache_client.IPNS_resolution_start_time()) + " seconds")
+        try:
+            index_resolution_start = cache_client.index_resolution_start_time
+            self.assertTrue(index_resolution_start > 0)
+
+            logging.debug("Index resolution took: " + str(
+                index_resolution_done_time_stamp -
+                index_resolution_start) + " seconds")
+        except AttributeError:  # index has no global resolution
+            pass
 
         # now request the same page from second client
         defered_response = defer.Deferred()
