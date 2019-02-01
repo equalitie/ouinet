@@ -291,6 +291,19 @@ class OuinetBEP44CacheInjector(OuinetInjector):
             proc_config=self.config,
             benchmark_regexes=injector_config.benchmark_regexes,
             benchmark_deferreds=deferred_events))
+        # DHT bootstrap needs some time,
+        # otherwise insertions will fail with a "Network unreachable" error.
+        # See ``ouinet::bittorrent::dht::DhtNode::bootstrap()``.
+        # TODO: Make asynchronous, report completed BT DHT bootstrap
+        # in ``ouinet::CacheInjector`` constructor and
+        # use it to unlock a deferred.
+        self._bootstrap_ready_time = time.time() + 20
+
+    def _wait_for_bootstrap(self):
+        pending = self._bootstrap_ready_time - time.time()
+        if pending > 0:
+            time.sleep(pending)
 
     def get_index_key(self):
+        self._wait_for_bootstrap()
         return self._proc_protocol.BEP44_pubk
