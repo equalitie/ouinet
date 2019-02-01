@@ -339,7 +339,7 @@ public:
 
         bool timed_out = false;
 
-        WatchDog wd(ios, chrono::seconds(3*60), [&] {
+        WatchDog wd(ios, chrono::minutes(3), [&] {
             timed_out = true;
             cancel();
         });
