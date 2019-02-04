@@ -65,7 +65,8 @@ class TestFixtures:
     BEP44_PUBK_ANNOUNCE_REGEX = "[\s\S]*Using BT Public key: ([0-9A-Fa-f]+)[\s\S]*"
     START_OF_IPNS_RESOLUTION_REGEX = r'[\s\S]*Resolving IPNS address: [\s\S]*'
     IPFS_CACHE_READY_REGEX = r'[\s\S]*IPNS ID has been resolved successfully[\s\S]*'
-    REQUEST_CACHED_REGEX = r'[\s\S]*Request was successfully published to cache[\s\S]*'
+    IPFS_REQUEST_CACHED_REGEX = r'[\s\S]*Request was successfully published to cache[\s\S]*'
+    BEP44_REQUEST_CACHED_REGEX = r'[\s\S]*BEP44 index: inserted key[\s\S]*'
     NO_OF_CACHED_MESSAGES_REQUIRED = 1
     RETRIEVED_FROM_CACHE_REGEX = r'[\s\S]*Response was retrieved from cache[\s\S]*'
     MAX_NO_OF_TRIAL_CACHE_REQUESTS = 3

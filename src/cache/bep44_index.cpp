@@ -1,6 +1,7 @@
 #include <iterator>
 
 #include "bep44_index.h"
+#include "../logger.h"
 #include "../util/lru_cache.h"
 #include "../bittorrent/bencoding.h"
 #include "../bittorrent/dht.h"
@@ -279,6 +280,7 @@ string Bep44InjectorIndex::insert( string key
 
     Cancel cancel; // TODO: Get from above
     _bt_dht.mutable_put(item, cancel, yield[ec]);
+    LOG_DEBUG("BEP44 index: inserted key=", key);  // used by integration tests
     _updater->insert(item);
 
     if (cancel) ec = asio::error::operation_aborted;

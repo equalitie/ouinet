@@ -81,6 +81,7 @@ class OuinetTests(TestCase):
 
     def run_ipfs_injector(self, injector_args, deferred_tcp_port_ready, deferred_result_got_cached):
         config = self._cache_injector_config(TestFixtures.IPFS_CACHE_TIMEOUT,
+                                             TestFixtures.IPFS_REQUEST_CACHED_REGEX,
                                              ["--default-index", "btree"] + injector_args)
         return self._run_cache_injector(
             OuinetIPFSCacheInjector, config,
@@ -88,15 +89,15 @@ class OuinetTests(TestCase):
 
     def run_bep44_injector(self, injector_args, deferred_tcp_port_ready, deferred_result_got_cached):
         config = self._cache_injector_config(TestFixtures.BEP44_CACHE_TIMEOUT,
+                                             TestFixtures.BEP44_REQUEST_CACHED_REGEX,
                                              ["--default-index", "bep44"] + injector_args)
         return self._run_cache_injector(
             OuinetBEP44CacheInjector, config,
             deferred_tcp_port_ready, deferred_result_got_cached)
 
-    def _cache_injector_config(self, timeout, args):
+    def _cache_injector_config(self, timeout, ready_regex, args):
         return OuinetConfig(TestFixtures.CACHE_INJECTOR_NAME, timeout, args,
-                            benchmark_regexes=[TestFixtures.TCP_PORT_READY_REGEX,
-                                               TestFixtures.REQUEST_CACHED_REGEX])
+                            benchmark_regexes=[TestFixtures.TCP_PORT_READY_REGEX, ready_regex])
 
     def _run_cache_injector(self, proc_class, config, deferred_tcp_port_ready, deferred_result_got_cached):
         injector = proc_class(config, [deferred_tcp_port_ready, deferred_result_got_cached])
