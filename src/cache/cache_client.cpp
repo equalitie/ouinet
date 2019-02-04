@@ -8,6 +8,7 @@
 #include "ipfs_util.h"
 #include "../or_throw.h"
 #include "../bittorrent/dht.h"
+#include "../logger.h"
 #include "../util/crypto.h"
 
 using namespace std;
@@ -74,6 +75,7 @@ CacheClient::CacheClient( asio_ipfs::node ipfs_node
     }
 
     _bt_dht->set_interfaces({asio::ip::address_v4::any()});
+    LOG_DEBUG("BEP44 index: bootstrapped BitTorrent DHT");  // used by integration tests
 
     if (bt_pubkey) {
         _bep44_index.reset(new Bep44ClientIndex(*_bt_dht, *bt_pubkey));
