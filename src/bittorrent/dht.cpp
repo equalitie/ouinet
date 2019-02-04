@@ -2594,6 +2594,16 @@ boost::optional<MutableDataItem> MainlineDht::mutable_get(
     return or_throw(yield, ec, std::move(output));
 }
 
+std::ostream& operator<<(std::ostream& os, const Contact& c)
+{
+    os << "(Contact " << c.endpoint << " id:";
+    if (c.id) {
+        os << *c.id;
+    } else {
+        os << "none";
+    }
+    return os << ")";
+}
 
 } // bittorrent namespace
 } // ouinet namespace
