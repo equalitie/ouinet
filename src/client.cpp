@@ -83,7 +83,7 @@ public:
         , _ssl_certificate_cache(1000)
         , ssl_ctx{asio::ssl::context::tls_client}
         , inj_ctx{asio::ssl::context::tls_client}
-        , _fetch_stored_scheduler(_ios, 8)
+        , _fetch_stored_scheduler(_ios, 16)
         , _store_scheduler(_ios, 4)
     {
         ssl_ctx.set_default_verify_paths();
