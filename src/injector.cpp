@@ -339,7 +339,7 @@ public:
 
         bool timed_out = false;
 
-        WatchDog wd(ios, chrono::seconds(3*60), [&] {
+        WatchDog wd(ios, chrono::minutes(3), [&] {
             timed_out = true;
             cancel();
         });
@@ -365,7 +365,7 @@ public:
 
         Request rq = util::to_origin_request(rq_);
         rq.keep_alive(true);
-        Response ret = connection->request(rq, cancel, yield[ec]);
+        Response ret = connection->request(rq, cancel, yield[ec].tag("request"));
 
         if (ec) return or_throw<Response>(yield, ec);
 
@@ -388,6 +388,16 @@ private:
     CacheEntry
     fetch_stored(const Request& rq, Cancel& cancel, Yield yield)
     {
+        /*
+         * Currently fetching a resource from the distributed cache is a lot
+         * more resource hungry than simply fetching it from the origin.
+         *
+         * TODO: Perhaps modify the cache on the injector so that it only does
+         * storing and fething on local disk (that used to be the case with the
+         * B-tree database, but isn't with BEP44 one). Then re-enable this
+         * code.
+         */
+#if 0
         if (!injector)
             return or_throw<CacheEntry>( yield
                                        , asio::error::operation_not_supported);
@@ -398,7 +408,7 @@ private:
         auto ret = injector->get_content( key_from_http_req(rq)
                                         , config.default_index_type()
                                         , cancel
-                                        , yield[ec]);
+                                        , yield[ec].tag("injector.get_content"));
 
         if (ec) return or_throw(yield, ec, move(ret.second));
 
@@ -410,6 +420,10 @@ private:
         ret.second.response.set(http_::response_injection_id_hdr, ret.first);
 
         return move(ret.second);
+#else
+        return or_throw<CacheEntry>( yield
+                                   , asio::error::operation_not_supported);
+#endif
     }
 
     Response store(Request rq, Response rs, Yield yield)

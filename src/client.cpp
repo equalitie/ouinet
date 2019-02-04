@@ -51,6 +51,7 @@
 #include "util/signal.h"
 #include "util/crypto.h"
 #include "util/lru_cache.h"
+#include "util/scheduler.h"
 
 #include "logger.h"
 
@@ -82,6 +83,8 @@ public:
         , _ssl_certificate_cache(1000)
         , ssl_ctx{asio::ssl::context::tls_client}
         , inj_ctx{asio::ssl::context::tls_client}
+        , _fetch_stored_scheduler(_ios, 16)
+        , _store_scheduler(_ios, 4)
     {
         ssl_ctx.set_default_verify_paths();
         ssl_ctx.set_verify_mode(asio::ssl::verify_peer);
@@ -118,15 +121,15 @@ private:
                 , Cancel& cancel
                 , Yield yield);
 
-    Response fetch_fresh( const Request&
-                        , request_route::Config&
-                        , bool& out_can_store
-                        , Cancel& cancel
-                        , Yield);
-
-    Response fetch_fresh_from_origin(const Request&, Cancel&, Yield);
+    Response fetch_fresh_from_front_end(const Request&, Yield);
+    Response fetch_fresh_from_origin(const Request&, Yield);
 
     Response fetch_fresh_through_connect_proxy(const Request&, Cancel&, Yield);
+
+    Response fetch_fresh_through_simple_proxy( const Request&
+                                             , bool can_inject
+                                             , Cancel& cancel
+                                             , Yield);
 
     CacheControl build_cache_control(request_route::Config& request_config);
 
@@ -154,6 +157,10 @@ private:
 
     GenericStream connect_to_origin(const Request&, Cancel&, Yield);
 
+    bool is_injector_proxying_enabled() const {
+        return _front_end.is_injector_proxying_enabled();
+    }
+
 private:
     asio::io_service& _ios;
     ClientConfig _config;
@@ -174,6 +181,9 @@ private:
 
     asio::ssl::context ssl_ctx;
     asio::ssl::context inj_ctx;
+
+    Scheduler _fetch_stored_scheduler;
+    Scheduler _store_scheduler;
 };
 
 //------------------------------------------------------------------------------
@@ -205,6 +215,12 @@ Client::State::fetch_stored( const Request& request
                            , Cancel& cancel
                            , Yield yield)
 {
+    sys::error_code ec;
+    auto slot = _fetch_stored_scheduler.wait_for_slot(cancel, yield);
+
+    if (cancel) ec = asio::error::operation_aborted;
+    if (ec) return or_throw<CacheEntry>(yield, ec);
+
     const bool cache_is_disabled
         = !request_config.enable_stored
        || !_cache
@@ -215,7 +231,6 @@ Client::State::fetch_stored( const Request& request
                                    , asio::error::operation_not_supported);
     }
 
-    sys::error_code ec;
     auto ret = _cache->get_content( key_from_http_req(request)
                                   , _config.default_index_type()
                                   , cancel
@@ -272,12 +287,23 @@ Client::State::connect_to_origin( const Request& rq
     return stream;
 }
 //------------------------------------------------------------------------------
-
-Response Client::State::fetch_fresh_from_origin( const Request& rq
-                                               , Cancel& cancel_
-                                               , Yield yield)
+Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yield)
 {
-    Cancel cancel(cancel_);
+    return _front_end.serve( _config
+                           , rq
+                           , _cache.get()
+                           , *_ca_certificate
+                           , yield.tag("serve_frontend"));
+}
+
+//------------------------------------------------------------------------------
+Response Client::State::fetch_fresh_from_origin(const Request& rq, Yield yield)
+{
+    if (!_config.is_origin_access_enabled()) {
+        return or_throw<Response>(yield, asio::error::operation_not_supported);
+    }
+
+    Cancel cancel;
 
     WatchDog watch_dog(_ios
                       , default_timeout::fetch_http()
@@ -306,6 +332,10 @@ Response Client::State::fetch_fresh_from_origin( const Request& rq
         _origin_pools.insert_connection(rq, move(con));
     }
 
+    if (!ec) {
+        res = util::remove_ouinet_fields(move(res));
+    }
+
     return or_throw(yield, ec, move(res));
 }
 
@@ -314,6 +344,10 @@ Response Client::State::fetch_fresh_through_connect_proxy( const Request& rq
                                                          , Cancel& cancel_
                                                          , Yield yield)
 {
+    // TODO: We're not re-using connections here. It's because the
+    // ConnectionPool as it is right now can only work with http requests
+    // and responses and thus can't be used for full-dupplex forwarding.
+
     Cancel cancel(cancel_);
     WatchDog watch_dog(_ios, default_timeout::fetch_http(), [&]{ cancel(); });
 
@@ -389,139 +423,52 @@ Response Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     return util::remove_ouinet_fields(move(res));
 }
 //------------------------------------------------------------------------------
-Response Client::State::fetch_fresh
+Response Client::State::fetch_fresh_through_simple_proxy
         ( const Request& request
-        , request_route::Config& request_config
-        , bool& out_can_store
+        , bool can_inject
         , Cancel& cancel
         , Yield yield)
 {
-    using namespace asio::error;
-    using request_route::fresh_channel;
+    // Connect to the injector.
+    sys::error_code ec;
 
-    // TODO: This probably isn't necessary because cancel()
-    // is (should be?) called from above.
-    auto shutdown_slot = _shutdown_signal.connect([&] { cancel(); });
+    using Con = ConnectionPool<std::string>::Connection;
 
-    out_can_store = false;
+    unique_ptr<Con> con = _injector_connections.pop_front();
 
-    sys::error_code last_error = operation_not_supported;
+    if (!con) {
+        auto c = _injector->connect
+            (yield[ec].tag("connect_to_injector2"), cancel);
 
-    LOG_DEBUG("fetching fresh");
+        if (ec) return or_throw<Response>(yield, ec);
 
-    while (!request_config.fresh_channels.empty()) {
-        auto r = request_config.fresh_channels.front();
-        request_config.fresh_channels.pop();
-
-        switch (r) {
-            case fresh_channel::origin: {
-                if (!_config.is_origin_access_enabled()) {
-                    continue;
-                }
-
-                sys::error_code ec;
-                Response res = fetch_fresh_from_origin( request
-                                                      , cancel
-                                                      , yield[ec]);
-
-                if (ec) {
-                    last_error = ec;
-                    continue;
-                }
-
-                // Prevent others from inserting ouinet headers.
-                return util::remove_ouinet_fields(move(res));
-            }
-            // Since the current implementation uses the injector as a proxy,
-            // both cases are quite similar, so we only handle HTTPS requests here.
-            case fresh_channel::proxy: {
-                if (!_config.is_proxy_access_enabled())
-                    continue;
-
-                if (request.target().starts_with("https://")) {
-                    sys::error_code ec;
-
-                    auto res = fetch_fresh_through_connect_proxy( request
-                                                                , cancel
-                                                                , yield[ec]);
-
-                    if (ec) {
-                        last_error = ec;
-                        continue;
-                    }
-
-                    return res;
-                }
-            }
-            // Fall through, the case below handles both injector and proxy with plain HTTP.
-            case fresh_channel::injector: {
-                if (r == fresh_channel::injector && !_front_end.is_injector_proxying_enabled())
-                    continue;
-
-                // Connect to the injector.
-                sys::error_code ec;
-
-                using Con = ConnectionPool<std::string>::Connection;
-
-                unique_ptr<Con> con = _injector_connections.pop_front();
-
-                if (!con) {
-                    auto c = _injector->connect
-                        (yield[ec].tag("connect_to_injector2"), cancel);
-
-                    if (ec) {
-                        last_error = ec;
-                        continue;
-                    }
-
-                    con = make_unique<Con>( move(c.connection)
-                                          , move(c.remote_endpoint) );
-                }
-
-                // Build the actual request to send to the injector.
-                Request injreq = request;
-                if (auto credentials = _config.credentials_for(con->aux))
-                    injreq = authorize(injreq, *credentials);
-                if (r == fresh_channel::injector)
-                    injreq = util::to_injector_request(move(injreq));
-                injreq.keep_alive(request.keep_alive());
-
-                // Send the request to the injector/proxy.
-                auto res = con->request( injreq
-                                       , cancel
-                                       , yield[ec].tag("inj-request"));
-                if (ec) {
-                    last_error = ec;
-                    continue;
-                }
-
-                out_can_store = (r == fresh_channel::injector);
-
-                if (res.keep_alive()) {
-                    _injector_connections.push_back(std::move(con));
-                }
-
-                return res;
-            }
-            case fresh_channel::_front_end: {
-                sys::error_code ec;
-
-                auto res = _front_end.serve( _config
-                                           , request
-                                           , _cache.get()
-                                           , *_ca_certificate
-                                           , yield[ec].tag("serve_frontend"));
-                if (ec) {
-                    last_error = ec;
-                    continue;
-                }
-
-                return res;
-            }
-        }
+        con = make_unique<Con>( move(c.connection)
+                              , move(c.remote_endpoint) );
     }
 
-    return or_throw<Response>(yield, last_error);
+    // Build the actual request to send to the injector.
+    Request injreq = request;
+
+    if (auto credentials = _config.credentials_for(con->aux))
+        injreq = authorize(injreq, *credentials);
+
+    if (can_inject)
+        injreq = util::to_injector_request(move(injreq));
+
+    injreq.keep_alive(request.keep_alive());
+
+    // Send the request to the injector/proxy.
+    auto res = con->request( injreq
+                           , cancel
+                           , yield[ec].tag("inj-request"));
+
+    if (ec) return or_throw(yield, ec, move(res));
+
+    if (res.keep_alive()) {
+        _injector_connections.push_back(std::move(con));
+    }
+
+    return res;
 }
 
 //------------------------------------------------------------------------------
@@ -549,12 +496,16 @@ public:
     }
 
     Response fetch_fresh(const Request& request, Cancel& cancel, Yield yield) {
+        namespace err = asio::error;
+
+        if (!client_state.is_injector_proxying_enabled())
+            return or_throw<Response>(yield, err::operation_not_supported);
+
         sys::error_code ec;
-        auto r = client_state.fetch_fresh( request
-                                         , request_config
-                                         , _can_store
-                                         , cancel
-                                         , yield[ec]);
+        auto r = client_state.fetch_fresh_through_simple_proxy( request
+                                                              , true
+                                                              , cancel
+                                                              , yield[ec]);
 
         if (!ec) {
             yield.log("Fetched fresh success, status: ", r.result());
@@ -584,35 +535,44 @@ public:
         return or_throw(yield, ec, move(r));
     }
 
-    Response store(const Request& rq, Response rs, Cancel&, Yield yield)
+    Response store(const Request& rq, Response rs, Cancel& cancel, Yield yield)
     {
+        namespace err = asio::error;
+
         // No need to filter request or response headers
         // since we are not storing them here
         // (they can be found at the descriptor).
         // Otherwise we should pass them through
         // `util::to_cache_request` and `util::to_cache_response` (respectively).
 
-        sys::error_code ec;
-
         auto& cache = client_state._cache;
 
-        if (!_can_store) ec = asio::error::invalid_argument;
-        if (!cache)      ec = asio::error::operation_not_supported;
-
-        if (ec) return or_throw(yield, ec, move(rs));
+        if (!cache) {
+            return or_throw(yield, err::operation_not_supported, move(rs));
+        }
 
         asio::spawn(client_state.get_io_service(),
             [ &cache, rs
             , &ios = client_state.get_io_service()
             , &cancel = client_state.get_shutdown_signal()
+            , &scheduler = client_state._store_scheduler
             , key = key_from_http_req(rq)
             , indextype = client_state._config.default_index_type()
             ] (asio::yield_context yield) mutable {
+                sys::error_code ec;
+
+                // TODO: Be smarter about what we're storing here. I.e. don't
+                // attempt to store what is currently being stored in another
+                // coroutine or has been stored just recently.
+                auto slot = scheduler.wait_for_slot(cancel, yield[ec]);
+
+                if (cancel) ec = err::operation_aborted;
+                if (ec) return;
+
                 // Seed content data itself.
                 // TODO: Use the scheduler here to only do some max number
                 // of `ipfs_add`s at a time. Also then trim that queue so
                 // that it doesn't grow indefinitely.
-                sys::error_code ec;
                 auto body_link = cache->ipfs_add
                     (beast::buffers_to_string(rs.body().data()), yield[ec]);
 
@@ -642,7 +602,7 @@ public:
 
                     sys::error_code ec;
                     auto desc_data = cache->get_descriptor(key, indextype, cancel, yield[ec]);
-                    if (ec == asio::error::not_found) {  // not (yet) inserted
+                    if (ec == err::not_found) {  // not (yet) inserted
                         log_post_inject(attempt, "not found, try again");
                         continue;
                     } else if (ec) {  // some other error
@@ -671,34 +631,81 @@ public:
 
         // Note: we have to return a valid response even in case of error
         // because CacheControl will use it.
-        return or_throw(yield, ec, move(rs));
+        return rs;
     }
 
     Response fetch(const Request& rq, Yield yield)
     {
-        Cancel cancel;
+        namespace err = asio::error;
+        using request_route::fresh_channel;
 
-        bool timed_out = false;
+        sys::error_code last_error = err::operation_not_supported;
 
-        WatchDog wd( client_state.get_io_service()
-                   , chrono::seconds(3*60)
-                   , [&] {
-                         timed_out = true;
-                         cancel();
-                   });
+        while (!request_config.fresh_channels.empty()) {
+            if (client_state._shutdown_signal)
+                return or_throw<Response>(yield, err::operation_aborted);
 
-        sys::error_code ec;
-        Response rs = cc.fetch(rq, cancel, yield[ec]);
+            auto r = request_config.fresh_channels.front();
+            request_config.fresh_channels.pop();
 
-        if (timed_out) ec = asio::error::timed_out;
+            Cancel cancel(client_state._shutdown_signal);
 
-        return or_throw(yield, ec, move(rs));
+            WatchDog wd( client_state.get_io_service()
+                       , chrono::minutes(3)
+                       , [&] { cancel(); });
+
+            sys::error_code ec;
+
+            Response res;
+
+            switch (r) {
+                case fresh_channel::_front_end:
+                    return client_state.fetch_fresh_from_front_end(rq, yield);
+
+                case fresh_channel::origin:
+                    res = client_state.fetch_fresh_from_origin(rq, yield[ec]);
+                    break;
+
+                case fresh_channel::proxy:
+                    if (!client_state._config.is_proxy_access_enabled()) {
+                        continue;
+                    }
+
+                    if (rq.target().starts_with("https://")) {
+                        res = client_state.fetch_fresh_through_connect_proxy
+                                (rq, cancel, yield[ec]);
+                    }
+                    else {
+                        res = client_state.fetch_fresh_through_simple_proxy
+                                (rq, false, cancel, yield[ec]);
+                    }
+                    break;
+
+                case fresh_channel::injector:
+                    res = cc.fetch(rq, cancel, yield[ec]);
+
+                    if (res.result() == http::status::bad_gateway
+                            && !request_config.fresh_channels.empty()) {
+                        // XXX: Arbitrary error, but we want to continue
+                        // trying other request_route channels.
+                        ec = err::service_not_found;
+                    }
+
+                    break;
+            }
+
+            if (cancel) ec = err::timed_out;
+            if (!ec) return res;
+            last_error = ec;
+        }
+
+        assert(last_error);
+        return or_throw<Response>(yield, last_error);
     }
 
 private:
     Client::State& client_state;
     request_route::Config& request_config;
-    bool _can_store;
     CacheControl cc;
 };
 
@@ -959,6 +966,13 @@ void Client::State::serve_request( GenericStream&& con
         // Disable cache and always go to origin for this site.
         Match( reqexpr::from_regex(target_getter, "https?://ident.me/.*")
              , {false, queue<fresh_channel>({fresh_channel::origin})} ),
+
+        // Disable cache and always go to origin for these google sites.
+        Match( reqexpr::from_regex(target_getter, "https?://(www\\.)google.com/complete/.*")
+             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
+        Match( reqexpr::from_regex(target_getter, "https://safebrowsing.googleapis.com/.*")
+             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
+
         // Disable cache and always go to proxy for this site.
         Match( reqexpr::from_regex(target_getter, "https?://ifconfig.co/.*")
              , {false, queue<fresh_channel>({fresh_channel::proxy})} ),

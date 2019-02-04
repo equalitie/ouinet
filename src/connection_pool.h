@@ -42,7 +42,12 @@ class ConnectionPool {
 
                         if (*wd) return;
 
-                        assert(_is_requesting || ec);
+                        if (!_is_requesting && !ec) {
+                            std::cerr << "Remote sent a response without "
+                                      << " us requesting anything: " << std::endl
+                                      << res;
+                            assert(0);
+                        }
                         if (!_is_requesting && !ec) break;
 
                         _res = std::move(res);

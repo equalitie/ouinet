@@ -275,7 +275,14 @@ string Bep44InjectorIndex::insert( string key
         return or_throw<string>(yield, asio::error::message_size);
     }
 
-    _bt_dht.mutable_put_start(item, yield);
+    sys::error_code ec;
+
+    Cancel cancel; // TODO: Get from above
+    _bt_dht.mutable_put(item, cancel, yield[ec]);
+    _updater->insert(item);
+
+    if (cancel) ec = asio::error::operation_aborted;
+    if (ec) return or_throw<string>(yield, ec);
 
     // We follow the names used in the BEP44 document.
     auto pk = item.public_key.serialize();
