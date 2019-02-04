@@ -376,6 +376,7 @@ class OuinetTests(TestCase):
                 TestFixtures.CACHE_CLIENT[1]["port"], page_url)
             if (defered_response.code == 200):
                 break
+            yield task.deferLater(reactor, TestFixtures.TRIAL_CACHE_REQUESTS_WAIT, lambda: None)
 
         self.assertEquals(defered_response.code, 200)
 
