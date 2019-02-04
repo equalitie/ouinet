@@ -11,6 +11,7 @@
 #include "../util/crypto.h"
 #include "../util/success_condition.h"
 #include "../util/wait_condition.h"
+#include "../util/watch_dog.h"
 
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/steady_timer.hpp>
@@ -24,6 +25,7 @@
 namespace ouinet {
 namespace bittorrent {
 
+using std::cerr; using std::endl;
 using dht::NodeContact;
 using Candidates = std::vector<NodeContact>;
 
@@ -325,10 +327,12 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
 
     Cancel internal_cancel(cancel_signal);
 
+    boost::optional<WatchDog> cancel_wd;
+
     collect(target_id, [&](
         const Contact& candidate,
         asio::yield_context yield,
-        Signal<void()>& cancel_signal
+        Signal<void()>& cancel
     ) -> boost::optional<Candidates> {
         if (!candidate.id && responsible_nodes.full()) {
             return boost::none;
@@ -348,7 +352,7 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
             candidate,
             closer_nodes,
             yield,
-            cancel_signal
+            cancel
         );
         if (!response_) {
             return closer_nodes;
@@ -395,7 +399,11 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
                  * "fresh enough" (e.g. if it's a http response, it may still
                  * be fresh).
                  */
-                cancel_signal();
+                if (!cancel_wd) {
+                    cancel_wd = WatchDog(_ios
+                                        , std::chrono::seconds(5)
+                                        , [&] { cancel(); });
+                }
             }
         }
 
@@ -403,6 +411,7 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
     }, yield[ec], internal_cancel);
 
     if (ec == asio::error::operation_aborted && !cancel_signal && data) {
+        // Only internal cancel was called to indicate we're done
         ec = sys::error_code();
     }
 
