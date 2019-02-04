@@ -297,7 +297,7 @@ class OuinetBEP44CacheInjector(OuinetInjector):
         # TODO: Make asynchronous, report completed BT DHT bootstrap
         # in ``ouinet::CacheInjector`` constructor and
         # use it to unlock a deferred.
-        self._bootstrap_ready_time = time.time() + 20
+        self._bootstrap_ready_time = time.time() + 40
 
     def _wait_for_bootstrap(self):
         pending = self._bootstrap_ready_time - time.time()
