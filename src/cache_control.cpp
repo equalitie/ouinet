@@ -369,7 +369,7 @@ CacheControl::do_fetch(const Request& request, Cancel& cancel, Yield yield)
 
     // If we're here that means that we were able to retrieve something
     // from the cache.
-    LOG_DEBUG(yield.tag(), ": Response was retrieved from cache");
+    LOG_DEBUG(yield.tag(), ": Response was retrieved from cache");  // used by integration tests
 
     if (has_cache_control_directive(cache_entry.response, "private")
         || is_older_than_max_cache_age(cache_entry.time_stamp)
