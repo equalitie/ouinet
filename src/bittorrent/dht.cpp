@@ -423,20 +423,43 @@ NodeID dht::DhtNode::data_put_mutable(
     asio::yield_context yield,
     Signal<void()>& cancel_signal
 ) {
+    Cancel local_cancel(cancel_signal);
+
     NodeID target_id = DataStore::mutable_get_id(data.public_key, data.salt);
 
     sys::error_code ec;
-    struct ResponsibleNode {
-        asio::ip::udp::endpoint node_endpoint;
-        std::string put_token;
+    ProximityMap<boost::none_t> responsible_nodes(target_id, RESPONSIBLE_TRACKERS_PER_SWARM);
+
+    auto write_to_node = [&] ( const NodeID& id
+                             , udp::endpoint ep
+                             , const std::string& put_token
+                             , Cancel& cancel
+                             , asio::yield_context yield) -> bool {
+            BencodedMap put_message {
+                { "id", _node_id.to_bytestring() },
+                { "k", util::bytes::to_string(data.public_key.serialize()) },
+                { "seq", data.sequence_number },
+                { "sig", util::bytes::to_string(data.signature) },
+                { "v", data.value },
+                { "token", put_token }
+            };
+
+            if (!data.salt.empty()) {
+                put_message["salt"] = data.salt;
+            }
+
+            sys::error_code ec;
+            send_write_query(ep, id, "put", put_message, yield[ec], cancel);
+
+            if (cancel) ec = asio::error::operation_aborted;
+
+            return !ec ? true : false;
     };
-    ProximityMap<ResponsibleNode> responsible_nodes(target_id, RESPONSIBLE_TRACKERS_PER_SWARM);
-    std::map<NodeID, ResponsibleNode> outdated_nodes;
 
     collect(target_id, [&](
         const Contact& candidate,
         asio::yield_context yield,
-        Signal<void()>& cancel_signal
+        Signal<void()>& cancel
     ) -> boost::optional<Candidates> {
         if (!candidate.id && responsible_nodes.full()) {
             return boost::none;
@@ -447,16 +470,16 @@ NodeID dht::DhtNode::data_put_mutable(
         }
 
         std::vector<NodeContact> closer_nodes;
+
         boost::optional<BencodedMap> response_ = query_get_data(
             target_id,
             candidate,
             closer_nodes,
             yield,
-            cancel_signal
+            cancel
         );
-        if (!response_) {
-            return closer_nodes;
-        }
+
+        if (!response_) return closer_nodes;
         BencodedMap& response = *response_;
 
         boost::optional<std::string> put_token = response["token"].as_string();
@@ -464,9 +487,15 @@ NodeID dht::DhtNode::data_put_mutable(
             return closer_nodes;
         }
 
-        ResponsibleNode data_node{ candidate.endpoint, *put_token };
         if (candidate.id) {
-            responsible_nodes.insert({*candidate.id, std::move(data_node)});
+            if (responsible_nodes.would_insert(*candidate.id)
+                    && write_to_node( *candidate.id
+                                    , candidate.endpoint
+                                    , *put_token
+                                    , cancel
+                                    , yield)) {
+                responsible_nodes.insert({*candidate.id, boost::none});
+            }
         }
 
         if (response["k"] != util::bytes::to_string(data.public_key.serialize())) {
@@ -494,59 +523,22 @@ NodeID dht::DhtNode::data_put_mutable(
                  * This node has an old version of this data entry.
                  * Update it even if it is no longer responsible.
                  */
-                if (candidate.id) {
-                    outdated_nodes[*candidate.id] = data_node;
-                }
+                write_to_node( *candidate.id
+                             , candidate.endpoint
+                             , *put_token
+                             , cancel
+                             , yield);
             }
         }
 
         return closer_nodes;
-    }, yield[ec], cancel_signal);
+    }, yield[ec], local_cancel);
 
-    if (ec) {
-        return or_throw<NodeID>(yield, ec, std::move(target_id));
+    if (cancel_signal) {
+        ec = asio::error::operation_aborted;
+    } else if (responsible_nodes.empty()) {
+        ec = asio::error::network_down;
     }
-
-    std::map<NodeID, ResponsibleNode*> all_nodes;
-
-    for (auto& i : responsible_nodes) { all_nodes.insert({i.first, &i.second}); }
-    for (auto& i : outdated_nodes)    { all_nodes.insert({i.first, &i.second}); }
-
-    bool success = false;
-    auto cancelled = cancel_signal.connect([]{});
-    WaitCondition wc(_ios);
-    for (auto& i : all_nodes) {
-        asio::spawn(_ios, [&, lock = wc.lock()] (asio::yield_context yield) {
-            BencodedMap put_message {
-                { "id", _node_id.to_bytestring() },
-                { "k", util::bytes::to_string(data.public_key.serialize()) },
-                { "seq", data.sequence_number },
-                { "sig", util::bytes::to_string(data.signature) },
-                { "v", data.value },
-                { "token", i.second->put_token }
-            };
-
-            if (!data.salt.empty()) {
-                put_message["salt"] = data.salt;
-            }
-
-            sys::error_code ec;
-            send_write_query(
-                i.second->node_endpoint,
-                i.first,
-                "put",
-                put_message,
-                yield[ec],
-                cancel_signal
-            );
-            if (!ec) {
-                success = true;
-            }
-        });
-    }
-    wc.wait(yield);
-
-    ec = cancelled ? boost::asio::error::operation_aborted : success ? sys::error_code() : boost::asio::error::network_down;
 
     return or_throw<NodeID>(yield, ec, std::move(target_id));
 }
