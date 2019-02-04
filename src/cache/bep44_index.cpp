@@ -280,11 +280,11 @@ string Bep44InjectorIndex::insert( string key
 
     Cancel cancel; // TODO: Get from above
     _bt_dht.mutable_put(item, cancel, yield[ec]);
-    LOG_DEBUG("BEP44 index: inserted key=", key);  // used by integration tests
     _updater->insert(item);
 
     if (cancel) ec = asio::error::operation_aborted;
     if (ec) return or_throw<string>(yield, ec);
+    LOG_DEBUG("BEP44 index: inserted key=", key);  // used by integration tests
 
     // We follow the names used in the BEP44 document.
     auto pk = item.public_key.serialize();
