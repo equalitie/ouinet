@@ -79,28 +79,34 @@ class OuinetTests(TestCase):
 
         return injector
 
-    def run_ipfs_injector(self, injector_args, deferred_tcp_port_ready, deferred_result_got_cached):
+    def run_ipfs_injector(self, injector_args,
+                          deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached):
         config = self._cache_injector_config(TestFixtures.IPFS_CACHE_TIMEOUT,
+                                             TestFixtures.IPNS_ID_ANNOUNCE_REGEX,
                                              TestFixtures.IPFS_REQUEST_CACHED_REGEX,
                                              ["--default-index", "btree"] + injector_args)
         return self._run_cache_injector(
             OuinetIPFSCacheInjector, config,
-            deferred_tcp_port_ready, deferred_result_got_cached)
+            deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached)
 
-    def run_bep44_injector(self, injector_args, deferred_tcp_port_ready, deferred_result_got_cached):
+    def run_bep44_injector(self, injector_args,
+                           deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached):
         config = self._cache_injector_config(TestFixtures.BEP44_CACHE_TIMEOUT,
+                                             TestFixtures.BEP44_CACHE_READY_REGEX,
                                              TestFixtures.BEP44_REQUEST_CACHED_REGEX,
                                              ["--default-index", "bep44"] + injector_args)
         return self._run_cache_injector(
             OuinetBEP44CacheInjector, config,
-            deferred_tcp_port_ready, deferred_result_got_cached)
+            deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached)
 
-    def _cache_injector_config(self, timeout, ready_regex, args):
+    def _cache_injector_config(self, timeout, ready_regex, cached_regex, args):
         return OuinetConfig(TestFixtures.CACHE_INJECTOR_NAME, timeout, args,
-                            benchmark_regexes=[TestFixtures.TCP_PORT_READY_REGEX, ready_regex])
+                            benchmark_regexes=[TestFixtures.TCP_PORT_READY_REGEX, ready_regex, cached_regex])
 
-    def _run_cache_injector(self, proc_class, config, deferred_tcp_port_ready, deferred_result_got_cached):
-        injector = proc_class(config, [deferred_tcp_port_ready, deferred_result_got_cached])
+    def _run_cache_injector(self, proc_class, config,
+                            deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached):
+        injector = proc_class(config,
+                              [deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached])
         injector.start()
         self.proc_list.append(injector)
 
@@ -302,14 +308,17 @@ class OuinetTests(TestCase):
         """
         #injector
         injector_tcp_port_ready = defer.Deferred()
+        index_ready = defer.Deferred()
         result_got_cached = defer.Deferred()
-        cache_injector = run_cache_injector(["--listen-on-i2p", "false", "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)], injector_tcp_port_ready, result_got_cached)
+        cache_injector = run_cache_injector(["--listen-on-i2p", "false", "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)], injector_tcp_port_ready, index_ready, result_got_cached)
         
         #wait for the injector to open the port
         success = yield injector_tcp_port_ready
 
-        #TODO: we are assuming that the index key is announced before opening the port.
-        # remove the is assumption.
+        #wait for the index to be ready
+        success = yield index_ready
+        self.assertTrue(success)
+
         index_key = cache_injector.get_index_key()
         assert(len(index_key) > 0);
         

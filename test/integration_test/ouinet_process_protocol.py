@@ -71,9 +71,13 @@ class OuinetCacheProcessProtocol(OuinetProcessProtocol, object):
                 benchmark_regexes[TestFixtures.READY_REGEX_INDEX],
                 benchmark_deferreds[TestFixtures.READY_REGEX_INDEX])
 
+        self._index_ready_deferred = None
         self._request_cached_deferred = None
        
         # TODO: this need to change to dictionary
+        if (len(benchmark_regexes) > TestFixtures.INDEX_READY_REGEX_INDEX):
+            self._index_ready_regex = benchmark_regexes[TestFixtures.INDEX_READY_REGEX_INDEX]
+            self._index_ready_deferred = benchmark_deferreds[TestFixtures.INDEX_READY_REGEX_INDEX]
         if (len(benchmark_regexes) > TestFixtures.REQUEST_CACHED_REGEX_INDEX):
             self._request_cached_regex = benchmark_regexes[TestFixtures.REQUEST_CACHED_REGEX_INDEX]
             self._request_cached_deferred = benchmark_deferreds[TestFixtures.REQUEST_CACHED_REGEX_INDEX]
@@ -90,11 +94,18 @@ class OuinetCacheProcessProtocol(OuinetProcessProtocol, object):
 
         super(OuinetCacheProcessProtocol, self).errReceived(data)
 
+        if self._index_ready_deferred and self.check_index_ready(data):
+            self._index_ready_deferred.callback(self)
+
         if self._request_cached_deferred and self.check_request_got_cached(data):
             self._number_of_cache_db_updates += 1
             if self._number_of_cache_db_updates == \
                TestFixtures.NO_OF_CACHED_MESSAGES_REQUIRED:
                 self._request_cached_deferred.callback(self)
+
+    def check_index_ready(self, data):
+        if self._index_ready_regex:
+            return re.match(self._index_ready_regex, data)
 
     def check_request_got_cached(self, data):
         if self._request_cached_regex:
