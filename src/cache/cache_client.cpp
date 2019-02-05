@@ -75,7 +75,6 @@ CacheClient::CacheClient( asio_ipfs::node ipfs_node
     }
 
     _bt_dht->set_interfaces({asio::ip::address_v4::any()});
-    LOG_DEBUG("BEP44 index: bootstrapped BitTorrent DHT");  // used by integration tests
 
     if (bt_pubkey) {
         _bep44_index.reset(new Bep44ClientIndex(*_bt_dht, *bt_pubkey));
@@ -167,6 +166,26 @@ string CacheClient::ipfs() const
 {
     if (!_btree_index) return {};
     return _btree_index->ipfs();
+}
+
+bool
+CacheClient::wait_for_ready(asio::yield_context yield) const
+{
+    // TODO: Wait for IPFS cache to be ready, if needed.
+    sys::error_code ec;
+    asio::steady_timer timer(_bt_dht->get_io_service());
+
+    LOG_DEBUG("BEP44 index: waiting for BitTorrent DHT bootstrap...");
+    while (!_bt_dht->all_ready() && !ec) {
+        timer.expires_from_now(chrono::seconds(1));
+        timer.async_wait(yield[ec]);
+    }
+
+    if (ec)
+        return false;
+
+    LOG_DEBUG("BEP44 index: bootstrapped BitTorrent DHT");  // used by integration tests
+    return true;
 }
 
 CacheClient::~CacheClient() {}

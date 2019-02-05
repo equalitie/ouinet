@@ -1163,6 +1163,8 @@ void Client::State::setup_ipfs_cache()
                 cerr << "Failed to build CacheClient: "
                      << ec.message()
                      << endl;
+            } else {
+                _cache->wait_for_ready(yield[ec]);
             }
         }
 

@@ -72,6 +72,8 @@ public:
     std::string ipns() const;
     std::string ipfs() const;
 
+    bool wait_for_ready(boost::asio::yield_context) const;
+
     ~CacheClient();
 
     const BTree* get_btree() const;
