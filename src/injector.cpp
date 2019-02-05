@@ -769,6 +769,7 @@ int main(int argc, const char* argv[])
         &config,
         &cancel
     ] (asio::yield_context yield) {
+        cache_injector->wait_for_ready(yield);
         listen( config
               , proxy_server
               , cache_injector
