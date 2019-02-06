@@ -12,6 +12,7 @@ include(ExternalProject)
 ################################################################################
 # Configurable options
 option(WITH_INJECTOR "Compile injector" ON)
+option(WITH_ASAN "Build with Address sanitizer" OFF)
 
 ################################################################################
 # NOTE: https://stackoverflow.com/questions/37603238/fsanitize-not-using-gold-linker-in-gcc-6-1
@@ -19,7 +20,9 @@ option(WITH_INJECTOR "Compile injector" ON)
 #        because trowing (and catching) exceptions inside a coroutine confuses
 #        ASan. More info:
 #        https://github.com/boostorg/coroutine/issues/30#issuecomment-325574878
-#set(SANITIZE "-fsanitize=address -fuse-ld=gold")
+if (WITH_ASAN)
+    set(SANITIZE "-fsanitize=address -fuse-ld=gold")
+endif() # if WITH_ASAN
 
 # For some reason we need to define both of these
 add_definitions(-DBOOST_COROUTINES_NO_DEPRECATION_WARNING)
