@@ -52,6 +52,7 @@ externalproject_add(golang
 option(ASIO_IPFS_WITH_EXAMPLE_BINARIES "" OFF)
 
 add_subdirectory(./modules/asio-ipfs)
+add_subdirectory(./modules/obfs4proxy)
 add_subdirectory(./src/ouiservice/i2p)
 
 ################################################################################
