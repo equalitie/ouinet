@@ -1167,7 +1167,7 @@ void Client::State::setup_ipfs_cache()
 #ifndef NDEBUG
                 // Since this code is spawned,
                 // we only wait in order to trigger debugging messages.
-                _cache->wait_for_ready(yield[ec]);
+                _cache->wait_for_ready(_shutdown_signal, yield[ec]);
 #endif
             }
         }

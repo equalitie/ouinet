@@ -7,6 +7,7 @@
 #include "http_desc.h"
 #include "ipfs_util.h"
 #include "../or_throw.h"
+#include "../async_sleep.h"
 #include "../bittorrent/dht.h"
 #include "../logger.h"
 #include "../util/crypto.h"
@@ -169,16 +170,15 @@ string CacheClient::ipfs() const
 }
 
 bool
-CacheClient::wait_for_ready(asio::yield_context yield) const
+CacheClient::wait_for_ready(Cancel& cancel, asio::yield_context yield) const
 {
     // TODO: Wait for IPFS cache to be ready, if needed.
     sys::error_code ec;
-    asio::steady_timer timer(_bt_dht->get_io_service());
+    auto& ios = _bt_dht->get_io_service();
 
     LOG_DEBUG("BEP44 index: waiting for BitTorrent DHT bootstrap...");
     while (!_bt_dht->all_ready() && !ec) {
-        timer.expires_from_now(chrono::seconds(1));
-        timer.async_wait(yield[ec]);
+        async_sleep(ios, chrono::seconds(1), cancel, yield[ec]);
     }
 
     if (ec)

@@ -75,7 +75,7 @@ public:
                               , Cancel&
                               , boost::asio::yield_context);
 
-    bool wait_for_ready(boost::asio::yield_context) const;
+    bool wait_for_ready(Cancel&, boost::asio::yield_context) const;
 
     ~CacheInjector();
 
