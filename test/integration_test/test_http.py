@@ -184,7 +184,8 @@ class OuinetTests(TestCase):
         logging.debug("################################################")
         # #injector
         i2pinjector_tunnel_ready = defer.Deferred()
-        i2pinjector = self.run_i2p_injector(["--listen-on-i2p", "true"], i2pinjector_tunnel_ready)
+        i2pinjector = self.run_i2p_injector(["--listen-on-i2p", "true",
+                                             "--disable-cache"], i2pinjector_tunnel_ready)
 
         #wait for the injector tunnel to be advertised
         success = yield i2pinjector_tunnel_ready
@@ -254,7 +255,9 @@ class OuinetTests(TestCase):
         logging.debug("################################################")
         #injector
         injector_tcp_port_ready = defer.Deferred()
-        self.run_tcp_injector(["--listen-on-i2p", "false", "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)], injector_tcp_port_ready)
+        self.run_tcp_injector(["--listen-on-i2p", "false",
+                               "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT),
+                               "--disable-cache"], injector_tcp_port_ready)
 
         #wait for the injector to open the port
         success = yield injector_tcp_port_ready
