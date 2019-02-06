@@ -63,7 +63,7 @@ class TestFixtures:
     FIRST_CLIENT_CONF_FILE_CONTENT = "open-file-limit = 4096\n"
 
     IPNS_ID_ANNOUNCE_REGEX = "[\s\S]*IPNS Index: ([A-Za-z0-9]+)[\s\S]*"
-    BEP44_PUBK_ANNOUNCE_REGEX = "[\s\S]*Using BT Public key: ([0-9A-Fa-f]+)[\s\S]*"
+    BEP44_PUBK_ANNOUNCE_REGEX = "[\s\S]*BEP44 Index: ([0-9A-Fa-f]+)[\s\S]*"
     START_OF_IPNS_RESOLUTION_REGEX = r'[\s\S]*Resolving IPNS address: [\s\S]*'
     IPFS_CACHE_READY_REGEX = r'[\s\S]*IPNS ID has been resolved successfully[\s\S]*'
     BEP44_CACHE_READY_REGEX = r'[\s\S]*BEP44 index: bootstrapped BitTorrent DHT[\s\S]*'

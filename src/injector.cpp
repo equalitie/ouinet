@@ -41,6 +41,7 @@
 
 #include "util/timeout.h"
 #include "util/crypto.h"
+#include "util/bytes.h"
 
 #include "logger.h"
 #include "defer.h"
@@ -708,9 +709,10 @@ int main(int argc, const char* argv[])
     Cancel::Connection shutdown_ipfs_slot;
 
     if (config.cache_enabled()) {
+        auto bep44_privk = config.bt_private_key();
         cache_injector = make_unique<CacheInjector>
                                 ( ios
-                                , config.bt_private_key()
+                                , bep44_privk
                                 , config.repo_root());
 
         shutdown_ipfs_slot = cancel.connect([&] {
@@ -722,6 +724,11 @@ int main(int argc, const char* argv[])
         auto ipns_id = cache_injector->ipfs_id();
         LOG_DEBUG("IPNS Index: " + ipns_id);  // used by integration tests
         util::create_state_file(config.repo_root()/"cache-ipns", ipns_id);
+
+        // Same for BEP44.
+        auto bep44_pubk = util::bytes::to_hex(bep44_privk.public_key().serialize());
+        LOG_DEBUG("BEP44 Index: " + bep44_pubk);  // used by integration tests
+        util::create_state_file(config.repo_root()/"cache-bep44", bep44_pubk);
     }
 
     OuiServiceServer proxy_server(ios);

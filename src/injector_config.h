@@ -182,9 +182,6 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
                         ? vm["bittorrent-private-key"].as<string>()
                         : string());
 
-    std::cerr << "Using BT Public key: "  // used by integration tests
-              << _bt_private_key.public_key() << std::endl;
-
     if (vm.count("default-index")) {
         auto type = vm["default-index"].as<string>();
 
