@@ -125,24 +125,13 @@ CacheInjector::get_content( const string& key
         ( desc_data, IPFS_LOAD_FUNC(*_ipfs_node), cancel, yield);
 }
 
-// TODO: Refactor with `CacheClient::wait_for_ready`.
-bool
+void
 CacheInjector::wait_for_ready(Cancel& cancel, asio::yield_context yield) const
 {
     // TODO: Wait for IPFS cache to be ready, if needed.
-    sys::error_code ec;
-    auto& ios = _bt_dht->get_io_service();
-
     LOG_DEBUG("BEP44 index: waiting for BitTorrent DHT bootstrap...");
-    while (!_bt_dht->all_ready() && !ec) {
-        async_sleep(ios, chrono::seconds(1), cancel, yield[ec]);
-    }
-
-    if (ec)
-        return false;
-
+    _bt_dht->wait_all_ready(yield, cancel);
     LOG_DEBUG("BEP44 index: bootstrapped BitTorrent DHT");  // used by integration tests
-    return true;
 }
 
 CacheInjector::~CacheInjector()
