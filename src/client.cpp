@@ -115,6 +115,9 @@ private:
 
     void serve_request(GenericStream&& con, asio::yield_context yield);
 
+    // All `fetch_*` functions below take care of keeping or dropping
+    // Ouinet-specific internal HTTP headers as expected by upper layers.
+
     CacheEntry
     fetch_stored( const Request& request
                 , request_route::Config& request_config
@@ -469,6 +472,11 @@ Response Client::State::fetch_fresh_through_simple_proxy
 
     if (res.keep_alive()) {
         _injector_connections.push_back(std::move(con));
+    }
+
+    if (!can_inject) {
+        // Prevent others from inserting ouinet headers.
+        res = util::remove_ouinet_fields(move(res));
     }
 
     return res;
