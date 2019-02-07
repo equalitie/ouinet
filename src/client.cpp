@@ -333,6 +333,7 @@ Response Client::State::fetch_fresh_from_origin(const Request& rq, Yield yield)
     }
 
     if (!ec) {
+        // Prevent others from inserting ouinet headers.
         res = util::remove_ouinet_fields(move(res));
     }
 
@@ -417,10 +418,12 @@ Response Client::State::fetch_fresh_through_connect_proxy( const Request& rq
 
     auto res = fetch_http<http::dynamic_body>(_ios, con, rq_, cancel, yield[ec]);
 
-    if (ec) return or_throw(yield, ec, move(res));
+    if (!ec) {
+        // Prevent others from inserting ouinet headers.
+        res = util::remove_ouinet_fields(move(res));
+    }
 
-    // Prevent others from inserting ouinet headers.
-    return util::remove_ouinet_fields(move(res));
+    return or_throw(yield, ec, move(res));
 }
 //------------------------------------------------------------------------------
 Response Client::State::fetch_fresh_through_simple_proxy
