@@ -78,7 +78,7 @@ struct Publisher::Loop : public enable_shared_from_this<Loop> {
 
             if (was_stopped) return;
 
-            LOG_DEBUG("Request was successfully published to cache under id " + cid);
+            LOG_DEBUG("Request was successfully published to cache under id " + cid);  // used by integration tests
         }
     }
 

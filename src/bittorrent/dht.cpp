@@ -2595,6 +2595,20 @@ boost::optional<MutableDataItem> MainlineDht::mutable_get(
     return or_throw(yield, ec, std::move(output));
 }
 
+
+void MainlineDht::wait_all_ready(
+    asio::yield_context yield,
+    Signal<void()>& cancel_signal
+) {
+    auto cancelled = _terminate_signal.connect([&] {
+        cancel_signal();
+    });
+    while (!all_ready()) {
+        async_sleep(_ios, std::chrono::milliseconds(200), cancel_signal, yield);
+    }
+}
+
+
 std::ostream& operator<<(std::ostream& os, const Contact& c)
 {
     os << "(Contact " << c.endpoint << " id:";
@@ -2605,6 +2619,7 @@ std::ostream& operator<<(std::ostream& os, const Contact& c)
     }
     return os << ")";
 }
+
 
 } // bittorrent namespace
 } // ouinet namespace

@@ -66,7 +66,7 @@ void Tunnel::wait_to_get_ready(boost::asio::yield_context yield) {
   }
   
   if (!*wd) {
-      LOG_DEBUG("I2P Tunnel has been established");
+      LOG_DEBUG("I2P Tunnel has been established");  // used by integration tests
   }
   else {
       return or_throw(yield, asio::error::operation_aborted);

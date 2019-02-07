@@ -7,7 +7,9 @@
 #include "http_desc.h"
 #include "ipfs_util.h"
 #include "../or_throw.h"
+#include "../async_sleep.h"
 #include "../bittorrent/dht.h"
+#include "../logger.h"
 #include "../util/crypto.h"
 
 using namespace std;
@@ -165,6 +167,15 @@ string CacheClient::ipfs() const
 {
     if (!_btree_index) return {};
     return _btree_index->ipfs();
+}
+
+void
+CacheClient::wait_for_ready(Cancel& cancel, asio::yield_context yield) const
+{
+    // TODO: Wait for IPFS cache to be ready, if needed.
+    LOG_DEBUG("BEP44 index: waiting for BitTorrent DHT bootstrap...");
+    _bt_dht->wait_all_ready(yield, cancel);
+    LOG_DEBUG("BEP44 index: bootstrapped BitTorrent DHT");  // used by integration tests
 }
 
 CacheClient::~CacheClient() {}

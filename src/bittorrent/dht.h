@@ -446,6 +446,10 @@ class MainlineDht {
         }
         return true;
     }
+    void wait_all_ready(
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
+    );
 
     private:
     asio::io_service& _ios;

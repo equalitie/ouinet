@@ -72,13 +72,13 @@ Resolver::Resolver( asio_ipfs::node& ipfs_node
     // chose one and switch to the other one if the first one fails.
 
     _ipfs_loop->start([ipns, &ipfs_node] (asio::yield_context yield) {
-            LOG_DEBUG("Resolving IPNS address: " + ipns + " (IPFS)");
+            LOG_DEBUG("Resolving IPNS address: " + ipns + " (IPFS)");  // used by integration tests
             sys::error_code ec;
 
             auto cid = ipfs_node.resolve(ipns, yield[ec]);
 
             if (!ec) {
-                LOG_DEBUG("IPNS ID has been resolved successfully to "
+                LOG_DEBUG("IPNS ID has been resolved successfully to "  // used by integration tests
                          + cid + " (IPFS)");
             } else {
                 LOG_ERROR("Error in resolving IPNS: "
@@ -93,7 +93,7 @@ Resolver::Resolver( asio_ipfs::node& ipfs_node
                         , ipns
                         , pubkey = *bt_pubkey
                         ] (asio::yield_context yield) {
-                LOG_DEBUG("Resolving IPNS address: ", ipns + " (BitTorrent)");
+                LOG_DEBUG("Resolving IPNS address: ", ipns + " (BitTorrent)");  // used by integration tests
                 sys::error_code ec;
 
                 auto opt_data = bt_dht.mutable_get(pubkey, ipns, yield[ec]);
@@ -116,7 +116,7 @@ Resolver::Resolver( asio_ipfs::node& ipfs_node
                 }
 
                 if (!ec) {
-                    LOG_DEBUG("IPNS ID has been resolved successfully to "
+                    LOG_DEBUG("IPNS ID has been resolved successfully to "  // used by integration tests
                              + value + " (BitTorrent)");
                 } else {
                     LOG_ERROR("Error in resolving IPNS address: "

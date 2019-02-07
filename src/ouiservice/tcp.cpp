@@ -35,7 +35,7 @@ void TcpOuiServiceServer::start_listen(asio::yield_context yield)
         return or_throw(yield, ec);
     }
 
-    LOG_DEBUG("Successfully listening on TCP Port");
+    LOG_DEBUG("Successfully listening on TCP Port");  // used by integration tests
 
 }
 

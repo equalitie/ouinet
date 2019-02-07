@@ -1,6 +1,7 @@
 #include <iterator>
 
 #include "bep44_index.h"
+#include "../logger.h"
 #include "../util/lru_cache.h"
 #include "../bittorrent/bencoding.h"
 #include "../bittorrent/dht.h"
@@ -283,6 +284,7 @@ string Bep44InjectorIndex::insert( string key
 
     if (cancel) ec = asio::error::operation_aborted;
     if (ec) return or_throw<string>(yield, ec);
+    LOG_DEBUG("BEP44 index: inserted key=", key);  // used by integration tests
 
     // We follow the names used in the BEP44 document.
     auto pk = item.public_key.serialize();

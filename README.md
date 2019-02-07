@@ -314,10 +314,10 @@ populate its default environment file:
 
 After an injector has finished starting, you may want to use the shell
 container to inspect and note down the contents of `injector/endpoint-*`
-(injector endpoints) and `injector/cache-ipns` (cache index IPNS ID) to be
-used by clients.  The injector will also generate a `tls-cert.pem` file which
-you should distribute to clients for TLS access.  Other configuration
-information like credentials can be found in `injector/ouinet-injector.conf`.
+(injector endpoints) and `injector/cache-*` (cache index keys) to be used by
+clients.  The injector will also generate a `tls-cert.pem` file which you
+should distribute to clients for TLS access.  Other configuration information
+like credentials can be found in `injector/ouinet-injector.conf`.
 
 To start the injector in headless mode, you can run:
 
@@ -346,7 +346,7 @@ If you ever need to reset and empty the injector's cache index for some reason
  4. In the container, run:
 
         # cd /mnt
-        # rm injector/ipfs/ipfs_cache_db.*
+        # rm injector/ipfs/ipfs_cache_index.*
         # alias ipfs='./ipfs -Lc injector/ipfs'
         # ipfs pin ls --type recursive | cut -d' ' -f1 | xargs ipfs pin rm
         # ipfs repo gc
@@ -392,12 +392,13 @@ point it to the repository created above:
     Swarm listening on /ip4/127.0.0.1/tcp/4001
     Swarm listening on /ip4/192.168.0.136/tcp/4001
     Swarm listening on /ip6/::1/tcp/4001
-    IPNS DB: <DB IPNS>
+    IPNS Index: <IPNS IDX>
+    BEP44 Index: <BEP44 IDX>
     ...
 
-Note down the `<DB IPNS>` string in the above output since clients will need
-that as the *distributed cache index*.  You may also find this value in the
-`cache-ipns` file in the injector repository.
+Note down the `<IPNS IDX>` and `<BEP44 IDX>` strings in the above output since
+clients will need those as the *distributed cache index*.  You may also find
+these values in the `cache-*` files in the injector repository.
 
 When you are done testing the Ouinet injector, you may shut it down by hitting
 Ctrl+C.
