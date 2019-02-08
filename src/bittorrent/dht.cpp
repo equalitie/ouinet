@@ -2603,9 +2603,11 @@ void MainlineDht::wait_all_ready(
     auto cancelled = _terminate_signal.connect([&] {
         cancel_signal();
     });
-    while (!all_ready()) {
-        async_sleep(_ios, std::chrono::milliseconds(200), cancel_signal, yield);
+    sys::error_code ec;
+    while (!ec && !all_ready()) {
+        async_sleep(_ios, std::chrono::milliseconds(200), cancel_signal, yield[ec]);
     }
+    return or_throw(yield, ec);
 }
 
 
