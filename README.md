@@ -297,7 +297,9 @@ If you plan on running several nodes on the same host you will need to use
 different explicit Docker Compose project names for them.  To make the node an
 injector instead of a client you need to set `OUINET_ROLE=injector`.  To make
 the container use a particular image version instead of `latest`, set
-`OUINET_VERSION`.
+`OUINET_VERSION`.  To limit the amount of memory that the container may use,
+set `OUINET_MEM_LIMIT`, but you will need to pass the `--compatibility` option
+to `docker-compose`.
 
 An easy way to set all these parameters is to copy or link the
 `docker-compose.yml` file to a directory with the desired project name and
@@ -308,7 +310,8 @@ populate its default environment file:
     $ cp /path/to/docker-compose.yml .
     $ echo OUINET_ROLE=injector >> .env
     $ echo OUINET_VERSION=v0.0.5-docker3 >> .env
-    $ sudo docker-compose up
+    $ echo OUINET_MEM_LIMIT=4g >> .env
+    $ sudo docker-compose --compatibility up
 
 ### Injector container
 

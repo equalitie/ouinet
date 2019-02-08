@@ -2,6 +2,8 @@
 #
 #   - OUINET_VERSION: Optional version tag (default 'latest').
 #   - OUINET_ROLE: Optional node role: 'injector' or 'client' (default).
+#   - OUINET_MEM_LIMIT: Optional memory limit (default '8g'),
+#     may require the ``--compatibility`` option (see below).
 #
 # Usage example for client (with default environment file):
 #
@@ -53,6 +55,18 @@ services:
     # The service will be restarted (also on reboot)
     # until it is manually stopped.
     restart: unless-stopped
+    # These do not work for non-swarm deployments
+    # unless you use the ``--compatibility`` option,
+    # see <https://github.com/docker/compose/issues/4513>
+    # and <https://github.com/docker/compose/pull/5684>.
+    deploy:
+      restart_policy:
+        condition: unless-stopped
+        max_attempts: 3
+        window: 30s
+      resources:
+        limits:
+          memory: "${OUINET_MEM_LIMIT:-8g}"
 
 volumes:
   data:
