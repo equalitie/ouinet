@@ -61,7 +61,7 @@ services:
     # and <https://github.com/docker/compose/pull/5684>.
     deploy:
       restart_policy:
-        condition: unless-stopped
+        condition: on-failure
         max_attempts: 3
         window: 30s
       resources:
