@@ -57,6 +57,7 @@ find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS filesystem
                                                         iostreams
                                                         system)
 find_package(Threads)
+find_package(nlohmann_json)
 
 ################################################################################
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -Wall -O0 -ggdb ${SANITIZE}")
@@ -66,18 +67,8 @@ if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
 endif()
 
 find_library(GPG_ERROR gpg-error)
-find_library(GCRYPT gcrypt)
+find_library(GCRYPT_LIBRARIES gcrypt)
 ################################################################################
-externalproject_add(json
-    # TODO: We only really need to download one header file.
-    URL https://github.com/nlohmann/json/archive/v2.1.1.tar.gz
-    BUILD_COMMAND ""
-    UPDATE_COMMAND ""
-    INSTALL_COMMAND ""
-    PREFIX json)
-
-set(JSON_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/json/src/json/src")
-
 # gcc 8 spits out warnings from Boost.Mpl about unnecessary parentheses
 # https://github.com/CauldronDevelopmentLLC/cbang/issues/26
 # TODO: Perhaps do a check for Boost and gcc version before adding this flag?
@@ -101,6 +92,12 @@ set(URI_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri/include")
 set(URI_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri-build/src/libnetwork-uri.a")
 
 ################################################################################
+include_directories(
+    "${ASIO_IPFS_INCLUDE_DIR}"
+    "${JSON_INCLUDE_DIR}"
+    "${URI_INCLUDE_DIR}"
+)
+
 file(GLOB client_sources
     "./src/client.cpp"
     "./src/asio.cpp"
@@ -144,7 +141,7 @@ target_link_libraries(client
     ${GCRYPT_LIBRARIES}
 )
 
-add_dependencies(client json uri ${ASIO_IPFS_TARGET})
+add_dependencies(client uri ${ASIO_IPFS_TARGET})
 
 ################################################################################
 if (WITH_INJECTOR)
@@ -168,7 +165,7 @@ if (WITH_INJECTOR)
     )
 
     add_executable(injector ${injector_sources})
-    add_dependencies(injector json uri ${ASIO_IPFS_TARGET})
+    add_dependencies(injector uri ${ASIO_IPFS_TARGET})
 
     target_link_libraries(injector
         ouiservice-i2p
