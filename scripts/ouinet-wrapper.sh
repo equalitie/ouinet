@@ -60,6 +60,7 @@ INJECTOR_TLS_PORT=7077
 # Fix some configuration parameters on repo creation.
 if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
     cp -r "$INST/repo-templates/$PROG" "$REPO"
+    chmod o-rwx "$REPO"
 
     # Set a well-known client HTTP proxy port.
     if [ "$PROG" = client ]; then
