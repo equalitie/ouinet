@@ -85,7 +85,7 @@ if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
 fi
 
 # Configure the I2P daemon at the injector.
-if [ "$PROG" = injector ]; then
+if [ "$PROG" = injector ] && ! has_help_arg "$@"; then
     if grep -q '^\s*listen-on-i2p\s*=\s*true\b' "$CONF"; then
         sed -i -E 's/^(\s*listen-on-i2p\s*=\s*true\b.*)/##\1/' "$CONF"  # disable legacy I2P support
     fi
