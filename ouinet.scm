@@ -64,7 +64,7 @@
        ("texinfo" , texinfo)
        ("unzip" , unzip)
        ("zlib" , zlib)
-       ("boost-cxx14" , boost-cxx14)))
+       ("boost" , boost)))
     (synopsis "")
     (description "")
     (home-page "https://github.com/equalitie/ouinet")
