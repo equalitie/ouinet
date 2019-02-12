@@ -25,18 +25,22 @@ CacheInjector::CacheInjector
         ( asio::io_service& ios
         , util::Ed25519PrivateKey bt_privkey
         , fs::path path_to_repo
-        , bool enable_btree)
+        , bool enable_btree
+        , bool enable_bep44)
     : _ipfs_node(new asio_ipfs::node(ios, (path_to_repo/"ipfs").native()))
-    , _bt_dht(new bt::MainlineDht(ios))
+    , _bt_dht(new bt::MainlineDht(ios))  // used by either B-tree over BEP44, or BEP44
     , _scheduler(new Scheduler(ios, _concurrency))
     , _was_destroyed(make_shared<bool>(false))
 {
+    // TODO: Check that at least one index is enabled.
     if (enable_btree) {
         _publisher.reset(new Publisher(*_ipfs_node, *_bt_dht, bt_privkey));
         _btree_index.reset(new BTreeInjectorIndex(*_ipfs_node, *_publisher, path_to_repo));
     }
     _bt_dht->set_interfaces({asio::ip::address_v4::any()});
-    _bep44_index.reset(new Bep44InjectorIndex(*_bt_dht, bt_privkey));
+    if (enable_bep44) {
+        _bep44_index.reset(new Bep44InjectorIndex(*_bt_dht, bt_privkey));
+    }
 }
 
 string CacheInjector::ipfs_id() const
@@ -138,9 +142,11 @@ void
 CacheInjector::wait_for_ready(Cancel& cancel, asio::yield_context yield) const
 {
     // TODO: Wait for IPFS cache to be ready, if needed.
-    LOG_DEBUG("BEP44 index: waiting for BitTorrent DHT bootstrap...");
-    _bt_dht->wait_all_ready(yield, cancel);
-    LOG_DEBUG("BEP44 index: bootstrapped BitTorrent DHT");  // used by integration tests
+    if (_bep44_index) {
+        LOG_DEBUG("BEP44 index: waiting for BitTorrent DHT bootstrap...");
+        _bt_dht->wait_all_ready(yield, cancel);
+        LOG_DEBUG("BEP44 index: bootstrapped BitTorrent DHT");  // used by integration tests
+    }
 }
 
 CacheInjector::~CacheInjector()
