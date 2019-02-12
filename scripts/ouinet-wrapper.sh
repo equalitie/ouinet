@@ -98,11 +98,13 @@ if [ "$PROG" = injector ] && ! has_help_arg "$@"; then
         # The daemon uses non-standard Base64, see `T64` in `i2pd/libi2pd/Base.cpp`.
         tr -- -~ +/ < "$INJECTOR_I2P_LEGACY_KEY" | base64 -d > "$INJECTOR_I2P_BACKUP_KEY"
     fi
-    # Always use backed-up I2P key (for container upgrades).
-    touch "$INJECTOR_I2P_DAEMON_KEY"
-    chown i2pd:i2pd "$INJECTOR_I2P_DAEMON_KEY"
-    chmod 0640 "$INJECTOR_I2P_DAEMON_KEY"
-    cat "$INJECTOR_I2P_BACKUP_KEY" > "$INJECTOR_I2P_DAEMON_KEY"
+    if [ -e "$INJECTOR_I2P_BACKUP_KEY" ]; then
+        # Always use backed-up I2P key (for container upgrades).
+        touch "$INJECTOR_I2P_DAEMON_KEY"
+        chown i2pd:i2pd "$INJECTOR_I2P_DAEMON_KEY"
+        chmod 0640 "$INJECTOR_I2P_DAEMON_KEY"
+        cat "$INJECTOR_I2P_BACKUP_KEY" > "$INJECTOR_I2P_DAEMON_KEY"
+    fi
 
     if ! grep -q '^\s*ipv6\s*=\s*true\b' /etc/i2pd/i2pd.conf; then
         sed -i -E 's/^#*\s*(ipv6\s*=\s*)false(\b.*)/\1true\2/' /etc/i2pd/i2pd.conf  # enable IPv6
