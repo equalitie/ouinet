@@ -36,6 +36,17 @@ add_executable(test-timeout-stream "test_timeout_stream.cpp"
 target_link_libraries(test-timeout-stream ${Boost_LIBRARIES})
 
 ################################################################################
+add_executable(test-persistent-lru-cache "test_persistent_lru_cache.cpp"
+                                         "../src/util/persistent_lru_cache.cpp"
+                                         "../src/asio.cpp"
+                                         "../src/util/sha1.cpp"
+                                         "../src/util/crypto.cpp")
+
+target_include_directories(test-persistent-lru-cache PUBLIC "${Boost_INCLUDE_DIR}")
+add_dependencies(test-persistent-lru-cache gcrypt)
+target_link_libraries(test-persistent-lru-cache ${Boost_LIBRARIES} ${GCRYPT_LIBRARIES})
+
+################################################################################
 file(GLOB bt_cpp_files "../src/bittorrent/*.cpp"
                        "../src/util/crypto.cpp"
                        "../src/util/sha1.cpp"
