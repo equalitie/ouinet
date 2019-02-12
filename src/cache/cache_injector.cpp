@@ -58,6 +58,11 @@ CacheInjector::insert_content( const string& id
                              , IndexType index_type
                              , asio::yield_context yield)
 {
+    auto index = get_index(index_type);
+    if (!index)
+        return or_throw<CacheInjector::InsertionResult>
+            (yield, asio::error::operation_not_supported);
+
     auto wd = _was_destroyed;
 
     // Wraps IPFS add operation to wait for a slot first
@@ -87,7 +92,6 @@ CacheInjector::insert_content( const string& id
 
     // Store descriptor
     auto key = key_from_http_req(rq);
-    auto index = get_index(index_type);
     auto cid_insdata = descriptor::put_into_index
         (key, desc, *index, ipfs_add, yield[ec]);
     if (!ec && *wd) ec = asio::error::operation_aborted;
@@ -104,6 +108,8 @@ string CacheInjector::get_descriptor( const string& key
                                     , asio::yield_context yield)
 {
     auto index = get_index(index_type);
+    if (!index)
+        return or_throw<string>(yield, asio::error::operation_not_supported);
 
     return descriptor::get_from_index
         ( key, *index, IPFS_LOAD_FUNC(*_ipfs_node), cancel, yield);
