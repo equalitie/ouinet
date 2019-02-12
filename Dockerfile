@@ -58,7 +58,7 @@ fi
 # use that version's Docker-specific files (e.g. wrapper scripts)
 # without having to rebuild source.
 # Maybe those Docker-specific files should go in a different repo.
-ARG OUINET_DOCKER_VERSION=$OUINET_VERSION
+ARG OUINET_DOCKER_VERSION=$OUINET_VERSION-docker1
 RUN cd /usr/local/src/ouinet \
  && git fetch -t \
  && git checkout "$OUINET_DOCKER_VERSION"
