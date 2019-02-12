@@ -83,6 +83,8 @@ private:
     CacheClient( asio_ipfs::node
                , std::string ipns
                , boost::optional<util::Ed25519PublicKey> bt_pubkey
+               , std::unique_ptr<bittorrent::MainlineDht>
+               , std::unique_ptr<Bep44ClientIndex>
                , fs::path path_to_repo);
 
     ClientIndex* get_index(IndexType);

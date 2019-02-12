@@ -163,12 +163,24 @@ private:
 
 
 //--------------------------------------------------------------------
+// private
 Bep44ClientIndex::Bep44ClientIndex( bt::MainlineDht& bt_dht
                                   , util::Ed25519PublicKey bt_pubkey)
     : _bt_dht(bt_dht)
     , _bt_pubkey(bt_pubkey)
     , _updater(new Bep44EntryUpdater(bt_dht))
 {}
+
+// static
+unique_ptr<Bep44ClientIndex>
+Bep44ClientIndex::build( bt::MainlineDht& bt_dht
+                       , util::Ed25519PublicKey bt_pubkey
+                       , const boost::filesystem::path& storage_path
+                       , Cancel&
+                       , asio::yield_context)
+{
+    return unique_ptr<Bep44ClientIndex>(new Bep44ClientIndex(bt_dht, bt_pubkey));
+}
 
 
 Bep44InjectorIndex::Bep44InjectorIndex( bt::MainlineDht& bt_dht
