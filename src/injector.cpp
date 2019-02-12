@@ -724,10 +724,12 @@ int main(int argc, const char* argv[])
 
     if (config.cache_enabled()) {
         auto bep44_privk = config.bt_private_key();
+        auto enable_btree = config.default_index_type() == IndexType::btree;
         cache_injector = make_unique<CacheInjector>
                                 ( ios
                                 , bep44_privk
-                                , config.repo_root());
+                                , config.repo_root()
+                                , enable_btree);
 
         shutdown_ipfs_slot = cancel.connect([&] {
             cache_injector = nullptr;

@@ -41,7 +41,8 @@ public:
 public:
     CacheInjector( boost::asio::io_service&
                  , util::Ed25519PrivateKey bt_privkey
-                 , fs::path path_to_repo);
+                 , fs::path path_to_repo
+                 , bool enable_btree);
 
     CacheInjector(const CacheInjector&) = delete;
     CacheInjector& operator=(const CacheInjector&) = delete;

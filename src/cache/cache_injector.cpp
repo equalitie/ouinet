@@ -24,14 +24,17 @@ namespace bt = ouinet::bittorrent;
 CacheInjector::CacheInjector
         ( asio::io_service& ios
         , util::Ed25519PrivateKey bt_privkey
-        , fs::path path_to_repo)
+        , fs::path path_to_repo
+        , bool enable_btree)
     : _ipfs_node(new asio_ipfs::node(ios, (path_to_repo/"ipfs").native()))
     , _bt_dht(new bt::MainlineDht(ios))
-    , _publisher(new Publisher(*_ipfs_node, *_bt_dht, bt_privkey))
-    , _btree_index(new BTreeInjectorIndex(*_ipfs_node, *_publisher, path_to_repo))
     , _scheduler(new Scheduler(ios, _concurrency))
     , _was_destroyed(make_shared<bool>(false))
 {
+    if (enable_btree) {
+        _publisher.reset(new Publisher(*_ipfs_node, *_bt_dht, bt_privkey));
+        _btree_index.reset(new BTreeInjectorIndex(*_ipfs_node, *_publisher, path_to_repo));
+    }
     _bt_dht->set_interfaces({asio::ip::address_v4::any()});
     _bep44_index.reset(new Bep44InjectorIndex(*_bt_dht, bt_privkey));
 }
