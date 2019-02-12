@@ -20,6 +20,11 @@ namespace sha1_detail {
         update(digest, sv.data(), sv.size());
     }
 
+    inline void update(Sha1* digest, const char* c)
+    {
+        update(digest, boost::string_view(c));
+    }
+
     inline void update(Sha1* digest, const std::string& data)
     {
         update(digest, data.data(), data.size());
