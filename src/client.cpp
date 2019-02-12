@@ -1183,18 +1183,12 @@ void Client::State::setup_ipfs_cache()
                 return _cache->set_ipns(move(ipns));
             }
 
-            function<void()> cancel;
-
-            auto cancel_slot = _shutdown_signal.connect([&] {
-                if (cancel) cancel();
-            });
-
             sys::error_code ec;
             _cache = CacheClient::build(_ios
                                        , ipns
                                        , _config.index_bep44_pub_key()
                                        , _config.repo_root()
-                                       , cancel
+                                       , _shutdown_signal
                                        , yield[ec]);
 
             if (ec) {

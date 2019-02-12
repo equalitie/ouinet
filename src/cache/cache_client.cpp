@@ -26,31 +26,27 @@ CacheClient::build( asio::io_service& ios
                   , string ipns
                   , optional<util::Ed25519PublicKey> bt_pubkey
                   , fs::path path_to_repo
-                  , function<void()>& cancel
+                  , Cancel& cancel
                   , asio::yield_context yield)
 {
     using ClientP = unique_ptr<CacheClient>;
 
-    bool canceled = false;
-
-    cancel = [&canceled] {
-        cout << "TODO: Canceling Client::build doesn't immediately stop "
-             << "IO tasks" << endl;;
-
-        canceled = true;
-    };
-
     sys::error_code ec;
-    auto ipfs_node = asio_ipfs::node::build( ios
-                                           , (path_to_repo/"ipfs").native()
-                                           , yield[ec]);
 
-    cancel = nullptr;
+    unique_ptr<asio_ipfs::node> ipfs_node;
 
-    if (canceled) {
-        ec = asio::error::operation_aborted;
+    {
+        auto slot = cancel.connect([&] {
+            cerr << "TODO: Canceling Client::build doesn't immediately stop "
+                 << "IO tasks\n";
+        });
+
+        ipfs_node = asio_ipfs::node::build( ios
+                                          , (path_to_repo/"ipfs").native()
+                                          , yield[ec]);
     }
 
+    if (cancel) ec = asio::error::operation_aborted;
     if (ec) return or_throw<ClientP>(yield, ec);
 
     return ClientP(new CacheClient( move(*ipfs_node)
