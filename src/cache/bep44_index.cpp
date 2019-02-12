@@ -168,7 +168,6 @@ Bep44ClientIndex::Bep44ClientIndex( bt::MainlineDht& bt_dht
     : _bt_dht(bt_dht)
     , _bt_pubkey(bt_pubkey)
     , _updater(new Bep44EntryUpdater(bt_dht))
-    , _was_destroyed(make_shared<bool>(false))
 {}
 
 
@@ -177,14 +176,17 @@ Bep44InjectorIndex::Bep44InjectorIndex( bt::MainlineDht& bt_dht
     : _bt_dht(bt_dht)
     , _bt_privkey(bt_privkey)
     , _updater(new Bep44EntryUpdater(bt_dht))
-    , _was_destroyed(make_shared<bool>(false))
 {}
 
 
 string Bep44ClientIndex::find( const string& key
-                             , Cancel& cancel
+                             , Cancel& cancel_
                              , asio::yield_context yield)
 {
+    Cancel cancel;
+    auto slot1 = cancel_.connect([&] { cancel(); });
+    auto slot2 = _cancel.connect([&] { cancel(); });
+
     sys::error_code ec;
     auto data = ::find( _bt_dht
                       , _bt_pubkey, bep44_salt_from_key(key)
@@ -200,9 +202,13 @@ string Bep44ClientIndex::find( const string& key
 
 
 string Bep44InjectorIndex::find( const string& key
-                               , Cancel& cancel
+                               , Cancel& cancel_
                                , asio::yield_context yield)
 {
+    Cancel cancel;
+    auto slot1 = cancel_.connect([&] { cancel(); });
+    auto slot2 = _cancel.connect([&] { cancel(); });
+
     sys::error_code ec;
     auto data = ::find( _bt_dht
                       , _bt_privkey.public_key(), bep44_salt_from_key(key)
@@ -248,6 +254,7 @@ string Bep44ClientIndex::insert_mapping( const string& ins_data
         return or_throw<string>(yield, asio::error::invalid_argument);
     }
 
+    // TODO: Replace this with the Updater logic
     return _bt_dht.mutable_put_start(item).to_hex();
 }
 
@@ -278,7 +285,7 @@ string Bep44InjectorIndex::insert( string key
 
     sys::error_code ec;
 
-    Cancel cancel; // TODO: Get from above
+    Cancel cancel(_cancel);
     _bt_dht.mutable_put(item, cancel, yield[ec]);
 
     if (cancel) ec = asio::error::operation_aborted;
@@ -315,11 +322,9 @@ boost::asio::io_service& Bep44InjectorIndex::get_io_service()
 
 Bep44ClientIndex::~Bep44ClientIndex()
 {
-    *_was_destroyed = true;
 }
 
 
 Bep44InjectorIndex::~Bep44InjectorIndex()
 {
-    *_was_destroyed = true;
 }

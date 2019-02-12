@@ -43,7 +43,7 @@ private:
     bittorrent::MainlineDht& _bt_dht;
     util::Ed25519PublicKey _bt_pubkey;
     std::unique_ptr<Bep44EntryUpdater> _updater;
-    std::shared_ptr<bool> _was_destroyed;
+    Cancel _cancel;
 };
 
 class Bep44InjectorIndex : public InjectorIndex {
@@ -66,7 +66,7 @@ private:
     bittorrent::MainlineDht& _bt_dht;
     util::Ed25519PrivateKey _bt_privkey;
     std::unique_ptr<Bep44EntryUpdater> _updater;
-    std::shared_ptr<bool> _was_destroyed;
+    Cancel _cancel;
 };
 
 } // namespace
