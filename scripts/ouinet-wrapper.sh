@@ -92,17 +92,17 @@ if [ "$PROG" = injector ] && ! has_help_arg "$@"; then
 
     # Convert legacy key so that it can be used by the daemon.
     INJECTOR_I2P_LEGACY_KEY="$REPO/i2p/i2p-private-key"  # Base64-encoded
-    INJECTOR_I2P_KEY=/var/lib/i2pd/ouinet-injector-keys.dat  # raw
+    INJECTOR_I2P_DAEMON_KEY=/var/lib/i2pd/ouinet-injector-keys.dat  # raw
     INJECTOR_I2P_BACKUP_KEY="$REPO/i2p-private-key"  # a copy of the above
     if [ -e "$INJECTOR_I2P_LEGACY_KEY" -a ! -e "$INJECTOR_I2P_BACKUP_KEY" ]; then
         # The daemon uses non-standard Base64, see `T64` in `i2pd/libi2pd/Base.cpp`.
         tr -- -~ +/ < "$INJECTOR_I2P_LEGACY_KEY" | base64 -d > "$INJECTOR_I2P_BACKUP_KEY"
     fi
     # Always use backed-up I2P key (for container upgrades).
-    touch "$INJECTOR_I2P_KEY"
-    chown i2pd:i2pd "$INJECTOR_I2P_KEY"
-    chmod 0640 "$INJECTOR_I2P_KEY"
-    cat "$INJECTOR_I2P_BACKUP_KEY" > "$INJECTOR_I2P_KEY"
+    touch "$INJECTOR_I2P_DAEMON_KEY"
+    chown i2pd:i2pd "$INJECTOR_I2P_DAEMON_KEY"
+    chmod 0640 "$INJECTOR_I2P_DAEMON_KEY"
+    cat "$INJECTOR_I2P_BACKUP_KEY" > "$INJECTOR_I2P_DAEMON_KEY"
 
     if ! grep -q '^\s*ipv6\s*=\s*true\b' /etc/i2pd/i2pd.conf; then
         sed -i -E 's/^#*\s*(ipv6\s*=\s*)false(\b.*)/\1true\2/' /etc/i2pd/i2pd.conf  # enable IPv6
@@ -118,7 +118,7 @@ if [ "$PROG" = injector ] && ! has_help_arg "$@"; then
 		type=server
 		host=$INJECTOR_LOOP_ADDR
 		port=$INJECTOR_TCP_PORT
-		keys=$(basename "$INJECTOR_I2P_KEY")
+		keys=$(basename "$INJECTOR_I2P_DAEMON_KEY")
 		signaturetype=7
 		inbound.quantity=3
 		outbound.quantity=3
@@ -144,7 +144,7 @@ if [ "$PROG" = injector ] && ! has_help_arg "$@"; then
             i2p_b64_ep=$(wget -qO- "$i2p_dests_pfx$i2p_b32_ep" | sed -nE 's#.*<textarea[^>]*>([^<]+)</textarea>.*#\1#p')
             echo "Injector I2P endpoint (Base64): $i2p_b64_ep"
             if [ ! -e "$INJECTOR_I2P_BACKUP_KEY" ]; then
-                cat "$INJECTOR_I2P_KEY" > "$INJECTOR_I2P_BACKUP_KEY"  # ensure that it survives upgrades
+                cat "$INJECTOR_I2P_DAEMON_KEY" > "$INJECTOR_I2P_BACKUP_KEY"  # ensure that it survives upgrades
             fi
             break
         fi
