@@ -32,7 +32,7 @@ public:
 public:
     Publisher( asio_ipfs::node&
              , bittorrent::MainlineDht&
-             , util::Ed25519PrivateKey bt_publish_key);
+             , util::Ed25519PrivateKey bep44_publish_key);
 
     Publisher(const Publisher&) = delete;
 
@@ -44,7 +44,7 @@ private:
     asio::io_service& _ios;
     asio_ipfs::node& _ipfs_node;
     bittorrent::MainlineDht& _bt_dht;
-    util::Ed25519PrivateKey _bt_private_key;
+    util::Ed25519PrivateKey _bep44_private_key;
 
     std::shared_ptr<Loop> _ipfs_loop;
     std::shared_ptr<Loop> _bt_loop;

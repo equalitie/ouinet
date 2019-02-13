@@ -723,7 +723,7 @@ int main(int argc, const char* argv[])
     Cancel::Connection shutdown_ipfs_slot;
 
     if (config.cache_enabled()) {
-        auto bep44_privk = config.bt_private_key();
+        auto bep44_privk = config.bep44_private_key();
         auto enable_btree = config.index_type() == IndexType::btree;
         auto enable_bep44 = config.index_type() == IndexType::bep44;
         cache_injector = make_unique<CacheInjector>
