@@ -45,6 +45,8 @@
 
 #include "ouiservice.h"
 #include "ouiservice/i2p.h"
+#include "ouiservice/pt-obfs2.h"
+#include "ouiservice/pt-obfs3.h"
 #include "ouiservice/pt-obfs4.h"
 #include "ouiservice/tcp.h"
 #include "ouiservice/tls.h"
@@ -1392,6 +1394,20 @@ void Client::State::setup_injector(asio::yield_context yield)
             return or_throw(yield, asio::error::invalid_argument);
         }
         client = std::move(tcp_client);
+    } else if (injector_ep->type == Endpoint::Obfs2Endpoint) {
+        auto obfs2_client = make_unique<ouiservice::Obfs2OuiServiceClient>(_ios, injector_ep->endpoint_string, _config.repo_root()/"obfs2-client");
+
+        if (!obfs2_client->verify_endpoint()) {
+            return or_throw(yield, asio::error::invalid_argument);
+        }
+        client = std::move(obfs2_client);
+    } else if (injector_ep->type == Endpoint::Obfs3Endpoint) {
+        auto obfs3_client = make_unique<ouiservice::Obfs3OuiServiceClient>(_ios, injector_ep->endpoint_string, _config.repo_root()/"obfs3-client");
+
+        if (!obfs3_client->verify_endpoint()) {
+            return or_throw(yield, asio::error::invalid_argument);
+        }
+        client = std::move(obfs3_client);
     } else if (injector_ep->type == Endpoint::Obfs4Endpoint) {
         auto obfs4_client = make_unique<ouiservice::Obfs4OuiServiceClient>(_ios, injector_ep->endpoint_string, _config.repo_root()/"obfs4-client");
 

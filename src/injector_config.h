@@ -34,6 +34,12 @@ public:
     boost::optional<asio::ip::tcp::endpoint> tls_endpoint() const
     { return _tls_endpoint; }
 
+    boost::optional<asio::ip::tcp::endpoint> obfs2_endpoint() const
+    { return _obfs2_endpoint; }
+
+    boost::optional<asio::ip::tcp::endpoint> obfs3_endpoint() const
+    { return _obfs3_endpoint; }
+
     boost::optional<asio::ip::tcp::endpoint> obfs4_endpoint() const
     { return _obfs4_endpoint; }
 
@@ -61,6 +67,8 @@ private:
     bool _listen_on_i2p = false;
     boost::optional<asio::ip::tcp::endpoint> _tcp_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _tls_endpoint;
+    boost::optional<asio::ip::tcp::endpoint> _obfs2_endpoint;
+    boost::optional<asio::ip::tcp::endpoint> _obfs3_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _obfs4_endpoint;
     boost::filesystem::path OUINET_CONF_FILE = "ouinet-injector.conf";
     std::string _credentials;
@@ -83,6 +91,8 @@ InjectorConfig::options_description()
         ("repo", po::value<string>(), "Path to the repository root")
         ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen (cleartext)")
         ("listen-on-tls", po::value<string>(), "IP:PORT endpoint on which we'll listen (encrypted)")
+        ("listen-on-obfs2", po::value<string>(), "IP:PORT endpoint on which we'll listen using the obfs2 pluggable transport")
+        ("listen-on-obfs3", po::value<string>(), "IP:PORT endpoint on which we'll listen using the obfs3 pluggable transport")
         ("listen-on-obfs4", po::value<string>(), "IP:PORT endpoint on which we'll listen using the obfs4 pluggable transport")
         ("listen-on-i2p",
          po::value<string>(),
@@ -181,6 +191,14 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
     if (vm.count("listen-on-tls")) {
         _tls_endpoint = util::parse_tcp_endpoint(vm["listen-on-tls"].as<string>());
+    }
+
+    if (vm.count("listen-on-obfs2")) {
+        _obfs2_endpoint = util::parse_tcp_endpoint(vm["listen-on-obfs2"].as<string>());
+    }
+
+    if (vm.count("listen-on-obfs3")) {
+        _obfs3_endpoint = util::parse_tcp_endpoint(vm["listen-on-obfs3"].as<string>());
     }
 
     if (vm.count("listen-on-obfs4")) {

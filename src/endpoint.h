@@ -14,6 +14,8 @@ struct Endpoint {
 #ifdef USE_GNUNET
         GnunetEndpoint,
 #endif
+        Obfs2Endpoint,
+        Obfs3Endpoint,
         Obfs4Endpoint
     };
 
