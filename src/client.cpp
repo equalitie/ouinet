@@ -1149,7 +1149,7 @@ void Client::State::setup_ipfs_cache()
                       ] (asio::yield_context yield) {
         if (was_stopped()) return;
 
-        const string ipns = _config.ipns();
+        const string ipns = _config.injector_ipns_id();
 
         if (_config.cache_enabled())
         {
@@ -1193,7 +1193,7 @@ void Client::State::setup_ipfs_cache()
             }
         }
 
-        if (ipns != _config.ipns()) {
+        if (ipns != _config.injector_ipns_id()) {
             // Use requested yet another IPNS
             setup_ipfs_cache();
         }
@@ -1481,7 +1481,7 @@ void Client::set_injector_endpoint(const char* injector_ep)
 
 void Client::set_ipns(const char* ipns)
 {
-    _state->_config.set_ipns(move(ipns));
+    _state->_config.set_injector_ipns_id(move(ipns));
     _state->setup_ipfs_cache();
 }
 

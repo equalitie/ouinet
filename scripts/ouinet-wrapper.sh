@@ -85,9 +85,10 @@ if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
 fi
 
 # Update some renamed configuration parameters.
-if grep -qE '^#*\s*(default-index)\s*=' "$CONF" && ! has_help_arg "$@"; then
+if grep -qE '^#*\s*(default-index|injector-ipns)\s*=' "$CONF" && ! has_help_arg "$@"; then
     sed -i -E \
         -e 's/^(#*\s*)default-index(\s*=.*)/\1index\2/g' \
+        -e 's/^(#*\s*)injector-ipns(\s*=.*)/\1injector-ipns-id\2/g' \
         "$CONF"
 fi
 

@@ -133,7 +133,7 @@ public class MainActivity extends AppCompatActivity {
 
         Ouinet.Config conf = new Ouinet.Config();
 
-        conf.injector_ipfs_id     = readIPNS();
+        conf.injector_ipns_id     = readIPNS();
         conf.injector_endpoint    = readInjectorEP();
         conf.injector_credentials = readCredentialsFor(conf.injector_endpoint);
 
