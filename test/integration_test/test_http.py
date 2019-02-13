@@ -134,7 +134,7 @@ class OuinetTests(TestCase):
 
     def run_bep44_client(self, name, idx_key, args, deferred_cache_ready):
         config = OuinetConfig(name, TestFixtures.BEP44_CACHE_TIMEOUT,
-                              ["--index", "bep44", "--bittorrent-public-key", idx_key] + args,
+                              ["--index", "bep44", "--injector-bep44-public-key", idx_key] + args,
                               benchmark_regexes=[TestFixtures.BEP44_CACHE_READY_REGEX])
         return self._run_cache_client(OuinetBEP44Client, config, deferred_cache_ready)
 

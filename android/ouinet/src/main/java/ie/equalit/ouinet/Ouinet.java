@@ -59,10 +59,10 @@ public class Ouinet {
         args.addElement("--listen-on-tcp=127.0.0.1:8080");
         args.addElement("--front-end-ep=0.0.0.0:8081");
 
-        maybeAdd(args, "--injector-ep",          conf.injector_endpoint);
-        maybeAdd(args, "--injector-ipns-id",     conf.injector_ipns_id);
-        maybeAdd(args, "--bittorrent-public-key",conf.injector_bt_pubkey);
-        maybeAdd(args, "--injector-credentials", conf.injector_credentials);
+        maybeAdd(args, "--injector-ep",               conf.injector_endpoint);
+        maybeAdd(args, "--injector-ipns-id",          conf.injector_ipns_id);
+        maybeAdd(args, "--injector-bep44-public-key", conf.injector_bt_pubkey);
+        maybeAdd(args, "--injector-credentials",      conf.injector_credentials);
 
         if (conf.tls_ca_cert_store_path != null) {
             String ca_cert_path;

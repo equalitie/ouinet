@@ -77,8 +77,8 @@ public:
         return _front_end_endpoint;
     }
 
-    boost::optional<util::Ed25519PublicKey> bt_pub_key() const {
-        return _bt_pubkey;
+    boost::optional<util::Ed25519PublicKey> inj_bep44_pub_key() const {
+        return _inj_bep44_pubkey;
     }
 
     bool is_help() const { return _is_help; }
@@ -122,9 +122,9 @@ public:
            ("front-end-ep"
             , po::value<string>()
             , "Front-end's endpoint (in <IP>:<PORT> format)")
-           ("bittorrent-public-key"
+           ("injector-bep44-public-key"
             , po::value<string>()
-            , "Public key of the BitTorrent/BEP44 subsystem")
+            , "Injector's public key for the BitTorrent BEP44 subsystem")
            ("index"
             , po::value<string>()->default_value("bep44")
             , "Cache index to use, can be either \"bep44\" or \"btree\"")
@@ -169,7 +169,7 @@ private:
 
     std::map<std::string, std::string> _injector_credentials;
 
-    boost::optional<util::Ed25519PublicKey> _bt_pubkey;
+    boost::optional<util::Ed25519PublicKey> _inj_bep44_pubkey;
     bool _disable_cache = false;
     std::string _local_domain;
 };
@@ -297,12 +297,12 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         set_credentials(util::str(*_injector_ep), cred);
     }
 
-    if (vm.count("bittorrent-public-key")) {
-        string value = vm["bittorrent-public-key"].as<string>();
+    if (vm.count("injector-bep44-public-key")) {
+        string value = vm["injector-bep44-public-key"].as<string>();
 
-        _bt_pubkey = util::Ed25519PublicKey::from_hex(value);
+        _inj_bep44_pubkey = util::Ed25519PublicKey::from_hex(value);
 
-        if (!_bt_pubkey) {
+        if (!_inj_bep44_pubkey) {
             throw std::runtime_error(
                     util::str("Failed parsing '", value, "' as Ed25519 public key"));
         }
@@ -326,8 +326,8 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         _disable_cache = true;
     }
 
-    if (!_disable_cache && _index_type == IndexType::bep44 && !_bt_pubkey) {
-        throw std::runtime_error("BEP44 index selected but no BT public key specified");
+    if (!_disable_cache && _index_type == IndexType::bep44 && !_inj_bep44_pubkey) {
+        throw std::runtime_error("BEP44 index selected but no injector BEP44 public key specified");
     }
 
     if (vm.count("local-domain")) {
