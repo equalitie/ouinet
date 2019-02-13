@@ -85,9 +85,9 @@ if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
 fi
 
 # Update some renamed configuration parameters.
-if grep -qE '\b(default-index)\b' "$CONF" && ! has_help_arg "$@"; then
+if grep -qE '^#*\s*(default-index)\s*=' "$CONF" && ! has_help_arg "$@"; then
     sed -i -E \
-        -e 's/\bdefault-index\b/index/g' \
+        -e 's/^(#*\s*)default-index(\s*=.*)/\1index\2/g' \
         "$CONF"
 fi
 
