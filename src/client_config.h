@@ -99,7 +99,7 @@ public:
             , "Injector's endpoint (either <IP>:<PORT> or I2P public key)")
            ("injector-ipns-id"
             , po::value<string>()->default_value("")
-            , "IPNS ID of the injector's index")
+            , "Injector's ID for the IPFS IPNS subsystem")
            ("injector-tls-cert-file", po::value<string>(&_tls_injector_cert_path)
             , "Path to the Injector's TLS certificate")
            ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
