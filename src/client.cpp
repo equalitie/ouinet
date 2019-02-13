@@ -235,7 +235,7 @@ Client::State::fetch_stored( const Request& request
     }
 
     auto ret = _cache->get_content( key_from_http_req(request)
-                                  , _config.default_index_type()
+                                  , _config.index_type()
                                   , cancel
                                   , yield[ec]);
     if (!ec) {
@@ -568,7 +568,7 @@ public:
             , &cancel = client_state.get_shutdown_signal()
             , &scheduler = client_state._store_scheduler
             , key = key_from_http_req(rq)
-            , indextype = client_state._config.default_index_type()
+            , indextype = client_state._config.index_type()
             ] (asio::yield_context yield) mutable {
                 sys::error_code ec;
 

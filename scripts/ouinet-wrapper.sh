@@ -84,6 +84,13 @@ if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
     fi
 fi
 
+# Update some renamed configuration parameters.
+if grep -qE '\b(default-index)\b' "$CONF" && ! has_help_arg "$@"; then
+    sed -i -E \
+        -e 's/\bdefault-index\b/index/g' \
+        "$CONF"
+fi
+
 # Configure the I2P daemon at the injector.
 if [ "$PROG" = injector ] && ! has_help_arg "$@"; then
     if grep -q '^\s*listen-on-i2p\s*=\s*true\b' "$CONF"; then

@@ -43,8 +43,8 @@ public:
     util::Ed25519PrivateKey bt_private_key() const
     { return _bt_private_key; }
 
-    IndexType default_index_type() const
-    { return _default_index_type; }
+    IndexType index_type() const
+    { return _index_type; }
 
     bool cache_enabled() const { return !_disable_cache; }
 
@@ -61,7 +61,7 @@ private:
     boost::filesystem::path OUINET_CONF_FILE = "ouinet-injector.conf";
     std::string _credentials;
     util::Ed25519PrivateKey _bt_private_key;
-    IndexType _default_index_type = IndexType::btree;
+    IndexType _index_type = IndexType::btree;
     bool _disable_cache = false;
 };
 
@@ -90,9 +90,9 @@ InjectorConfig::options_description()
            "If unused, this injector shall behave as an open proxy.")
         ("bittorrent-private-key", po::value<string>()
          , "Private key of the BitTorrent/BEP44 subsystem")
-        ("default-index"
+        ("index"
          , po::value<string>()->default_value("btree")
-         , "Default index type to use, can be either \"btree\" or \"bep44\"")
+         , "Cache index to use, can be either \"btree\" or \"bep44\"")
         ("disable-cache", "Disable all cache operations (even initialization)")
         ;
 
@@ -182,17 +182,17 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
                         ? vm["bittorrent-private-key"].as<string>()
                         : string());
 
-    if (vm.count("default-index")) {
-        auto type = vm["default-index"].as<string>();
+    if (vm.count("index")) {
+        auto type = vm["index"].as<string>();
 
         if (type == "btree") {
-            _default_index_type = IndexType::btree;
+            _index_type = IndexType::btree;
         }
         else if (type == "bep44") {
-            _default_index_type = IndexType::bep44;
+            _index_type = IndexType::bep44;
         }
         else {
-            throw std::runtime_error("Invalid value for --default-index-type");
+            throw std::runtime_error("Invalid value for --index");
         }
     }
 
