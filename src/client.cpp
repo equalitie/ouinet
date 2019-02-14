@@ -1154,7 +1154,7 @@ void Client::State::setup_ipfs_cache()
         if (_config.cache_enabled())
         {
             LOG_DEBUG("Starting IPFS Cache with IPNS ID: ", ipns);
-            LOG_DEBUG("And BitTorrent pubkey: ", _config.inj_bep44_pub_key());
+            LOG_DEBUG("And BitTorrent pubkey: ", _config.index_bep44_pub_key());
 
             auto on_exit = defer([&] { _is_ipns_being_setup = false; });
 
@@ -1175,7 +1175,7 @@ void Client::State::setup_ipfs_cache()
             sys::error_code ec;
             _cache = CacheClient::build(_ios
                                        , ipns
-                                       , _config.inj_bep44_pub_key()
+                                       , _config.index_bep44_pub_key()
                                        , _config.repo_root()
                                        , cancel
                                        , yield[ec]);

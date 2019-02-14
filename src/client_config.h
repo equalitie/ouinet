@@ -77,8 +77,8 @@ public:
         return _front_end_endpoint;
     }
 
-    boost::optional<util::Ed25519PublicKey> inj_bep44_pub_key() const {
-        return _inj_bep44_pubkey;
+    boost::optional<util::Ed25519PublicKey> index_bep44_pub_key() const {
+        return _index_bep44_pubkey;
     }
 
     bool is_help() const { return _is_help; }
@@ -122,9 +122,9 @@ public:
            ("front-end-ep"
             , po::value<string>()
             , "Front-end's endpoint (in <IP>:<PORT> format)")
-           ("injector-bep44-public-key"
+           ("index-bep44-public-key"
             , po::value<string>()
-            , "Injector's public key for the BitTorrent BEP44 subsystem")
+            , "Index public key for the BitTorrent BEP44 subsystem")
            ("cache-index"
             , po::value<string>()->default_value("bep44")
             , "Cache index to use, can be either \"bep44\" or \"btree\"")
@@ -169,7 +169,7 @@ private:
 
     std::map<std::string, std::string> _injector_credentials;
 
-    boost::optional<util::Ed25519PublicKey> _inj_bep44_pubkey;
+    boost::optional<util::Ed25519PublicKey> _index_bep44_pubkey;
     bool _disable_cache = false;
     std::string _local_domain;
 };
@@ -297,12 +297,12 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         set_credentials(util::str(*_injector_ep), cred);
     }
 
-    if (vm.count("injector-bep44-public-key")) {
-        string value = vm["injector-bep44-public-key"].as<string>();
+    if (vm.count("index-bep44-public-key")) {
+        string value = vm["index-bep44-public-key"].as<string>();
 
-        _inj_bep44_pubkey = util::Ed25519PublicKey::from_hex(value);
+        _index_bep44_pubkey = util::Ed25519PublicKey::from_hex(value);
 
-        if (!_inj_bep44_pubkey) {
+        if (!_index_bep44_pubkey) {
             throw std::runtime_error(
                     util::str("Failed parsing '", value, "' as Ed25519 public key"));
         }
@@ -326,7 +326,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         _disable_cache = true;
     }
 
-    if (!_disable_cache && _cache_index_type == IndexType::bep44 && !_inj_bep44_pubkey) {
+    if (!_disable_cache && _cache_index_type == IndexType::bep44 && !_index_bep44_pubkey) {
         throw std::runtime_error("BEP44 index selected but no injector BEP44 public key specified");
     }
 
