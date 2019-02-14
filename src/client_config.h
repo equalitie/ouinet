@@ -125,7 +125,7 @@ public:
            ("injector-bep44-public-key"
             , po::value<string>()
             , "Injector's public key for the BitTorrent BEP44 subsystem")
-           ("index"
+           ("cache-index"
             , po::value<string>()->default_value("bep44")
             , "Cache index to use, can be either \"bep44\" or \"btree\"")
            ("disable-cache", "Disable all cache operations (even initialization)")
@@ -137,7 +137,7 @@ public:
         return desc;
     }
 
-    IndexType index_type() const { return _index_type; }
+    IndexType cache_index_type() const { return _cache_index_type; }
 
     bool cache_enabled() const { return !_disable_cache; }
 
@@ -162,7 +162,7 @@ private:
     bool _disable_origin_access = false;
     bool _disable_proxy_access = false;
     asio::ip::tcp::endpoint _front_end_endpoint;
-    IndexType _index_type = IndexType::btree;
+    IndexType _cache_index_type = IndexType::btree;
 
     boost::posix_time::time_duration _max_cached_age
         = boost::posix_time::hours(7*24);  // one week
@@ -308,17 +308,17 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         }
     }
 
-    if (vm.count("index")) {
-        auto type = vm["index"].as<string>();
+    if (vm.count("cache-index")) {
+        auto type = vm["cache-index"].as<string>();
 
         if (type == "btree") {
-            _index_type = IndexType::btree;
+            _cache_index_type = IndexType::btree;
         }
         else if (type == "bep44") {
-            _index_type = IndexType::bep44;
+            _cache_index_type = IndexType::bep44;
         }
         else {
-            throw std::runtime_error("Invalid value for --index");
+            throw std::runtime_error("Invalid value for --cache-index");
         }
     }
 
@@ -326,7 +326,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         _disable_cache = true;
     }
 
-    if (!_disable_cache && _index_type == IndexType::bep44 && !_inj_bep44_pubkey) {
+    if (!_disable_cache && _cache_index_type == IndexType::bep44 && !_inj_bep44_pubkey) {
         throw std::runtime_error("BEP44 index selected but no injector BEP44 public key specified");
     }
 

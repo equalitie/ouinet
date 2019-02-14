@@ -87,7 +87,7 @@ fi
 # Update some renamed configuration parameters.
 if grep -qE '^#*\s*(default-index|bittorrent-private-key|bittorrent-public-key|injector-ipns)\s*=' "$CONF" && ! has_help_arg "$@"; then
     sed -i -E \
-        -e 's/^(#*\s*)default-index(\s*=.*)/\1index\2/g' \
+        -e 's/^(#*\s*)default-index(\s*=.*)/\1cache-index\2/g' \
         -e 's/^(#*\s*)bittorrent-private-key(\s*=.*)/\1bep44-private-key\2/g' \
         -e 's/^(#*\s*)bittorrent-public-key(\s*=.*)/\1injector-bep44-public-key\2/g' \
         -e 's/^(#*\s*)injector-ipns(\s*=.*)/\1injector-ipns-id\2/g' \
