@@ -93,45 +93,53 @@ public:
         desc.add_options()
            ("help", "Produce this help message")
            ("repo", po::value<string>(), "Path to the repository root")
+
+           // Client options
            ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen")
+           ("front-end-ep"
+            , po::value<string>()
+            , "Front-end's endpoint (in <IP>:<PORT> format)")
+           ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
+            , "Path to the CA certificate store file")
+           ("open-file-limit"
+            , po::value<unsigned int>()
+            , "To increase the maximum number of open files")
+
+           // Transport options
            ("injector-ep"
             , po::value<string>()
             , "Injector's endpoint (either <IP>:<PORT> or I2P public key)")
+           ("injector-credentials", po::value<string>()
+            , "<username>:<password> authentication pair for the injector")
+           ("injector-tls-cert-file", po::value<string>(&_tls_injector_cert_path)
+            , "Path to the Injector's TLS certificate")
+
+           // Cache options
+           ("disable-cache", "Disable all cache operations (even initialization)")
+           ("cache-index"
+            , po::value<string>()->default_value("bep44")
+            , "Cache index to use, can be either \"bep44\" or \"btree\"")
            ("index-ipns-id"
             , po::value<string>()->default_value("")
             , "Index ID for the IPFS IPNS subsystem")
-           ("injector-tls-cert-file", po::value<string>(&_tls_injector_cert_path)
-            , "Path to the Injector's TLS certificate")
-           ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
-            , "Path to the CA certificate store file")
-           ("disable-origin-access", po::bool_switch(&_disable_origin_access)->default_value(false)
-            , "Disable direct access to the origin (forces use of injector and the cache)")
-           ("disable-proxy-access", po::bool_switch(&_disable_proxy_access)->default_value(false)
-            , "Disable proxied access to the origin (via the injector)")
+           ("index-bep44-public-key"
+            , po::value<string>()
+            , "Index public key for the BitTorrent BEP44 subsystem")
            ("max-cached-age"
             , po::value<int>()->default_value(_max_cached_age.total_seconds())
             , "Discard cached content older than this many seconds "
               "(0: discard all; -1: discard none)")
-           ("open-file-limit"
-            , po::value<unsigned int>()
-            , "To increase the maximum number of open files")
-           ("injector-credentials", po::value<string>()
-            , "<username>:<password> authentication pair for the injector")
-           ("enable-http-connect-requests", po::bool_switch(&_enable_http_connect_requests)
-            , "Enable HTTP CONNECT requests")
-           ("front-end-ep"
-            , po::value<string>()
-            , "Front-end's endpoint (in <IP>:<PORT> format)")
-           ("index-bep44-public-key"
-            , po::value<string>()
-            , "Index public key for the BitTorrent BEP44 subsystem")
-           ("cache-index"
-            , po::value<string>()->default_value("bep44")
-            , "Cache index to use, can be either \"bep44\" or \"btree\"")
-           ("disable-cache", "Disable all cache operations (even initialization)")
+
+           // Request routing options
+           ("disable-origin-access", po::bool_switch(&_disable_origin_access)->default_value(false)
+            , "Disable direct access to the origin (forces use of injector and the cache)")
+           ("disable-proxy-access", po::bool_switch(&_disable_proxy_access)->default_value(false)
+            , "Disable proxied access to the origin (via the injector)")
            ("local-domain"
             , po::value<string>()->default_value("local")
             , "Always use origin access and never use cache for this TLD")
+           ("enable-http-connect-requests", po::bool_switch(&_enable_http_connect_requests)
+            , "Enable HTTP CONNECT requests")
            ;
 
         return desc;

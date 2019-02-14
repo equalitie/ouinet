@@ -77,23 +77,29 @@ InjectorConfig::options_description()
     desc.add_options()
         ("help", "Produce this help message")
         ("repo", po::value<string>(), "Path to the repository root")
+
+        // Injector options
+        ("open-file-limit"
+         , po::value<unsigned int>()
+         , "To increase the maximum number of open files")
+
+        // Transport options
         ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen (cleartext)")
         ("listen-on-tls", po::value<string>(), "IP:PORT endpoint on which we'll listen (encrypted)")
         ("listen-on-i2p",
          po::value<string>(),
          "Whether we should be listening on I2P (true/false)")
-        ("open-file-limit"
-         , po::value<unsigned int>()
-         , "To increase the maximum number of open files")
         ("credentials", po::value<string>()
          , "<username>:<password> authentication pair. "
            "If unused, this injector shall behave as an open proxy.")
-        ("index-bep44-private-key", po::value<string>()
-         , "Index private key for the BitTorrent BEP44 subsystem")
+
+        // Cache options
+        ("disable-cache", "Disable all cache operations (even initialization)")
         ("cache-index"
          , po::value<string>()->default_value("btree")
          , "Cache index to use, can be either \"btree\" or \"bep44\"")
-        ("disable-cache", "Disable all cache operations (even initialization)")
+        ("index-bep44-private-key", po::value<string>()
+         , "Index private key for the BitTorrent BEP44 subsystem")
         ;
 
     return desc;
