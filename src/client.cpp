@@ -235,7 +235,7 @@ Client::State::fetch_stored( const Request& request
     }
 
     auto ret = _cache->get_content( key_from_http_req(request)
-                                  , _config.default_index_type()
+                                  , _config.cache_index_type()
                                   , cancel
                                   , yield[ec]);
     if (!ec) {
@@ -568,7 +568,7 @@ public:
             , &cancel = client_state.get_shutdown_signal()
             , &scheduler = client_state._store_scheduler
             , key = key_from_http_req(rq)
-            , indextype = client_state._config.default_index_type()
+            , indextype = client_state._config.cache_index_type()
             ] (asio::yield_context yield) mutable {
                 sys::error_code ec;
 
@@ -1149,12 +1149,12 @@ void Client::State::setup_ipfs_cache()
                       ] (asio::yield_context yield) {
         if (was_stopped()) return;
 
-        const string ipns = _config.ipns();
+        const string ipns = _config.index_ipns_id();
 
         if (_config.cache_enabled())
         {
             LOG_DEBUG("Starting IPFS Cache with IPNS ID: ", ipns);
-            LOG_DEBUG("And BitTorrent pubkey: ", _config.bt_pub_key());
+            LOG_DEBUG("And BitTorrent pubkey: ", _config.index_bep44_pub_key());
 
             auto on_exit = defer([&] { _is_ipns_being_setup = false; });
 
@@ -1175,7 +1175,7 @@ void Client::State::setup_ipfs_cache()
             sys::error_code ec;
             _cache = CacheClient::build(_ios
                                        , ipns
-                                       , _config.bt_pub_key()
+                                       , _config.index_bep44_pub_key()
                                        , _config.repo_root()
                                        , cancel
                                        , yield[ec]);
@@ -1193,7 +1193,7 @@ void Client::State::setup_ipfs_cache()
             }
         }
 
-        if (ipns != _config.ipns()) {
+        if (ipns != _config.index_ipns_id()) {
             // Use requested yet another IPNS
             setup_ipfs_cache();
         }
@@ -1481,7 +1481,7 @@ void Client::set_injector_endpoint(const char* injector_ep)
 
 void Client::set_ipns(const char* ipns)
 {
-    _state->_config.set_ipns(move(ipns));
+    _state->_config.set_index_ipns_id(move(ipns));
     _state->setup_ipfs_cache();
 }
 

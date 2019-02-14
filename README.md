@@ -258,7 +258,7 @@ important parameters, so you may want to stop it (see above) and use the
   - If the injector endpoint uses TLS, set `injector-tls-cert-file` to
     `/var/opt/ouinet/client/ssl-inj-cert.pem` and copy the injector's TLS
     certificate to that file.
-  - Set the IPNS ID of the cache index in option `injector-ipns`.
+  - Set the IPNS ID of the cache index in option `index-ipns-id`.
 
 After you have set up your client's configuration, you can **restart it**.
 The client's HTTP proxy endpoint should be available to the host at
@@ -430,7 +430,7 @@ replace the values with your own:
 
     injector-ep = 127.0.0.1:7070
     injector-credentials = injector_user:injector_password
-    injector-ipns = Qm0123456789abcdefghijklmnopqrstuvwxyzABCDEFGI
+    index-ipns-id = Qm0123456789abcdefghijklmnopqrstuvwxyzABCDEFGI
 
 All the steps above only need to be done once.
 

@@ -28,8 +28,8 @@ public class Ouinet {
     private WifiManager.MulticastLock _lock = null;
 
     public static class Config {
-        public String injector_ipfs_id;
-        public String injector_bt_pubkey;
+        public String index_bep44_pubkey;
+        public String index_ipns_id;
         public String injector_endpoint;
         public String injector_credentials;
         public String injector_tls_cert;
@@ -59,10 +59,10 @@ public class Ouinet {
         args.addElement("--listen-on-tcp=127.0.0.1:8080");
         args.addElement("--front-end-ep=0.0.0.0:8081");
 
-        maybeAdd(args, "--injector-ep",          conf.injector_endpoint);
-        maybeAdd(args, "--injector-ipns",        conf.injector_ipfs_id);
-        maybeAdd(args, "--bittorrent-public-key",conf.injector_bt_pubkey);
-        maybeAdd(args, "--injector-credentials", conf.injector_credentials);
+        maybeAdd(args, "--injector-ep",            conf.injector_endpoint);
+        maybeAdd(args, "--injector-credentials",   conf.injector_credentials);
+        maybeAdd(args, "--index-bep44-public-key", conf.index_bep44_pubkey);
+        maybeAdd(args, "--index-ipns-id",          conf.index_ipns_id);
 
         if (conf.tls_ca_cert_store_path != null) {
             String ca_cert_path;

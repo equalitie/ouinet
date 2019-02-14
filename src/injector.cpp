@@ -407,7 +407,7 @@ private:
 
         // TODO: use string_view
         auto ret = injector->get_content( key_from_http_req(rq)
-                                        , config.default_index_type()
+                                        , config.cache_index_type()
                                         , cancel
                                         , yield[ec].tag("injector.get_content"));
 
@@ -441,7 +441,7 @@ private:
 
         // This injection code logs errors but does not propagate them
         // (the `desc_data` field is set to the empty string).
-        auto index_type = config.default_index_type();
+        auto index_type = config.cache_index_type();
         auto inject = [
             rq, rs, id, index_type,
             injector = injector.get()
@@ -723,9 +723,9 @@ int main(int argc, const char* argv[])
     Cancel::Connection shutdown_ipfs_slot;
 
     if (config.cache_enabled()) {
-        auto bep44_privk = config.bt_private_key();
-        auto enable_btree = config.default_index_type() == IndexType::btree;
-        auto enable_bep44 = config.default_index_type() == IndexType::bep44;
+        auto bep44_privk = config.index_bep44_private_key();
+        auto enable_btree = config.cache_index_type() == IndexType::btree;
+        auto enable_bep44 = config.cache_index_type() == IndexType::bep44;
         cache_injector = make_unique<CacheInjector>
                                 ( ios
                                 , bep44_privk

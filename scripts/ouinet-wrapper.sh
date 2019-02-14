@@ -84,6 +84,26 @@ if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
     fi
 fi
 
+# Update some renamed configuration parameters.
+if grep -qE '^#*\s*(default-index|bittorrent-private-key|bittorrent-public-key|injector-ipns)\s*=' "$CONF" && ! has_help_arg "$@"; then
+    sed -i -E \
+        -e 's/^(#*\s*)default-index(\s*=.*)/\1cache-index\2/g' \
+        -e 's/^(#*\s*)bittorrent-private-key(\s*=.*)/\1index-bep44-private-key\2/g' \
+        -e 's/^(#*\s*)bittorrent-public-key(\s*=.*)/\1index-bep44-public-key\2/g' \
+        -e 's/^(#*\s*)injector-ipns(\s*=.*)/\1index-ipns-id\2/g' \
+        "$CONF"
+fi
+
+# Update BEP44 key file names.
+if ! has_help_arg "$@"; then
+    if [ -e "$REPO/bt-private-key" ]; then
+        mv "$REPO/bt-private-key" "$REPO/bep44-private-key"
+    fi
+    if [ -e "$REPO/bt-public-key" ]; then
+        mv "$REPO/bt-public-key" "$REPO/bep44-public-key"
+    fi
+fi
+
 # Configure the I2P daemon at the injector.
 if [ "$PROG" = injector ] && ! has_help_arg "$@"; then
     if grep -q '^\s*listen-on-i2p\s*=\s*true\b' "$CONF"; then
