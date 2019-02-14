@@ -94,6 +94,16 @@ if grep -qE '^#*\s*(default-index|bittorrent-private-key|bittorrent-public-key|i
         "$CONF"
 fi
 
+# Update BEP44 key file names.
+if ! has_help_arg "$@"; then
+    if [ -e "$REPO/bt-private-key" ]; then
+        mv "$REPO/bt-private-key" "$REPO/bep44-private-key"
+    fi
+    if [ -e "$REPO/bt-public-key" ]; then
+        mv "$REPO/bt-public-key" "$REPO/bep44-public-key"
+    fi
+fi
+
 # Configure the I2P daemon at the injector.
 if [ "$PROG" = injector ] && ! has_help_arg "$@"; then
     if grep -q '^\s*listen-on-i2p\s*=\s*true\b' "$CONF"; then

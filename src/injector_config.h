@@ -203,8 +203,8 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
 inline void InjectorConfig::setup_index_bep44_private_key(const std::string& hex)
 {
-    fs::path priv_config = _repo_root/"bt-private-key";
-    fs::path pub_config  = _repo_root/"bt-public-key";
+    fs::path priv_config = _repo_root/"bep44-private-key";
+    fs::path pub_config  = _repo_root/"bep44-public-key";
 
     if (hex.empty()) {
         if (fs::exists(priv_config)) {
