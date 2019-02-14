@@ -40,8 +40,8 @@ public:
     std::string credentials() const
     { return _credentials; }
 
-    util::Ed25519PrivateKey bep44_private_key() const
-    { return _bep44_private_key; }
+    util::Ed25519PrivateKey index_bep44_private_key() const
+    { return _index_bep44_private_key; }
 
     IndexType cache_index_type() const
     { return _cache_index_type; }
@@ -49,7 +49,7 @@ public:
     bool cache_enabled() const { return !_disable_cache; }
 
 private:
-    void setup_bep44_private_key(const std::string& hex);
+    void setup_index_bep44_private_key(const std::string& hex);
 
 private:
     bool _is_help = false;
@@ -60,7 +60,7 @@ private:
     boost::optional<asio::ip::tcp::endpoint> _tls_endpoint;
     boost::filesystem::path OUINET_CONF_FILE = "ouinet-injector.conf";
     std::string _credentials;
-    util::Ed25519PrivateKey _bep44_private_key;
+    util::Ed25519PrivateKey _index_bep44_private_key;
     IndexType _cache_index_type = IndexType::btree;
     bool _disable_cache = false;
 };
@@ -88,8 +88,8 @@ InjectorConfig::options_description()
         ("credentials", po::value<string>()
          , "<username>:<password> authentication pair. "
            "If unused, this injector shall behave as an open proxy.")
-        ("bep44-private-key", po::value<string>()
-         , "Private key for the BitTorrent BEP44 subsystem")
+        ("index-bep44-private-key", po::value<string>()
+         , "Index private key for the BitTorrent BEP44 subsystem")
         ("cache-index"
          , po::value<string>()->default_value("btree")
          , "Cache index to use, can be either \"btree\" or \"bep44\"")
@@ -178,9 +178,9 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         _tls_endpoint = util::parse_tcp_endpoint(vm["listen-on-tls"].as<string>());
     }
 
-    setup_bep44_private_key( vm.count("bep44-private-key")
-                           ? vm["bep44-private-key"].as<string>()
-                           : string());
+    setup_index_bep44_private_key( vm.count("index-bep44-private-key")
+                                 ? vm["index-bep44-private-key"].as<string>()
+                                 : string());
 
     if (vm.count("cache-index")) {
         auto type = vm["cache-index"].as<string>();
@@ -201,28 +201,28 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
     }
 }
 
-inline void InjectorConfig::setup_bep44_private_key(const std::string& hex)
+inline void InjectorConfig::setup_index_bep44_private_key(const std::string& hex)
 {
     fs::path priv_config = _repo_root/"bt-private-key";
     fs::path pub_config  = _repo_root/"bt-public-key";
 
     if (hex.empty()) {
         if (fs::exists(priv_config)) {
-            fs::ifstream(priv_config) >> _bep44_private_key;
-            fs::ofstream(pub_config)  << _bep44_private_key.public_key();
+            fs::ifstream(priv_config) >> _index_bep44_private_key;
+            fs::ofstream(pub_config)  << _index_bep44_private_key.public_key();
             return;
         }
 
-        _bep44_private_key = util::Ed25519PrivateKey::generate();
+        _index_bep44_private_key = util::Ed25519PrivateKey::generate();
 
-        fs::ofstream(priv_config) << _bep44_private_key;
-        fs::ofstream(pub_config)  << _bep44_private_key.public_key();
+        fs::ofstream(priv_config) << _index_bep44_private_key;
+        fs::ofstream(pub_config)  << _index_bep44_private_key.public_key();
         return;
     }
 
-    _bep44_private_key = *util::Ed25519PrivateKey::from_hex(hex);
-    fs::ofstream(priv_config) << _bep44_private_key;
-    fs::ofstream(pub_config)  << _bep44_private_key.public_key();
+    _index_bep44_private_key = *util::Ed25519PrivateKey::from_hex(hex);
+    fs::ofstream(priv_config) << _index_bep44_private_key;
+    fs::ofstream(pub_config)  << _index_bep44_private_key.public_key();
 }
 
 } // ouinet namespace
