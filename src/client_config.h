@@ -45,12 +45,12 @@ public:
         return _local_ep;
     }
 
-    const std::string& injector_ipns_id() const {
-        return _injector_ipns_id;
+    const std::string& index_ipns_id() const {
+        return _index_ipns_id;
     }
 
-    void set_injector_ipns_id(std::string ipns_id) {
-        _injector_ipns_id = std::move(ipns_id);
+    void set_index_ipns_id(std::string ipns_id) {
+        _index_ipns_id = std::move(ipns_id);
     }
 
     boost::posix_time::time_duration max_cached_age() const {
@@ -97,9 +97,9 @@ public:
            ("injector-ep"
             , po::value<string>()
             , "Injector's endpoint (either <IP>:<PORT> or I2P public key)")
-           ("injector-ipns-id"
+           ("index-ipns-id"
             , po::value<string>()->default_value("")
-            , "Injector's ID for the IPFS IPNS subsystem")
+            , "Index ID for the IPFS IPNS subsystem")
            ("injector-tls-cert-file", po::value<string>(&_tls_injector_cert_path)
             , "Path to the Injector's TLS certificate")
            ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
@@ -157,7 +157,7 @@ private:
     boost::optional<Endpoint> _injector_ep;
     std::string _tls_injector_cert_path;
     std::string _tls_ca_cert_store_path;
-    std::string _injector_ipns_id;
+    std::string _index_ipns_id;
     bool _enable_http_connect_requests = false;
     bool _disable_origin_access = false;
     bool _disable_proxy_access = false;
@@ -273,8 +273,8 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         }
     }
 
-    if (vm.count("injector-ipns-id")) {
-        _injector_ipns_id = vm["injector-ipns-id"].as<string>();
+    if (vm.count("index-ipns-id")) {
+        _index_ipns_id = vm["index-ipns-id"].as<string>();
     }
 
     if (vm.count("injector-credentials")) {

@@ -128,7 +128,7 @@ class OuinetTests(TestCase):
 
     def run_ipfs_client(self, name, idx_key, args, deferred_cache_ready):
         config = OuinetConfig(name, TestFixtures.IPFS_CACHE_TIMEOUT,
-                              ["--cache-index", "btree", "--injector-ipns-id", idx_key] + args,
+                              ["--cache-index", "btree", "--index-ipns-id", idx_key] + args,
                               benchmark_regexes=[TestFixtures.IPFS_CACHE_READY_REGEX])
         return self._run_cache_client(OuinetIPFSClient, config, deferred_cache_ready)
 

@@ -28,7 +28,7 @@ public class Ouinet {
     private WifiManager.MulticastLock _lock = null;
 
     public static class Config {
-        public String injector_ipns_id;
+        public String index_ipns_id;
         public String injector_bt_pubkey;
         public String injector_endpoint;
         public String injector_credentials;
@@ -60,9 +60,9 @@ public class Ouinet {
         args.addElement("--front-end-ep=0.0.0.0:8081");
 
         maybeAdd(args, "--injector-ep",               conf.injector_endpoint);
-        maybeAdd(args, "--injector-ipns-id",          conf.injector_ipns_id);
         maybeAdd(args, "--injector-bep44-public-key", conf.injector_bt_pubkey);
         maybeAdd(args, "--injector-credentials",      conf.injector_credentials);
+        maybeAdd(args, "--index-ipns-id",             conf.index_ipns_id);
 
         if (conf.tls_ca_cert_store_path != null) {
             String ca_cert_path;
