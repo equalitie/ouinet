@@ -399,6 +399,8 @@ class MainlineDht {
     NodeID immutable_put_start(const BencodedValue& data);
     void immutable_put_stop(NodeID key);
 
+    void mutable_put(const MutableDataItem&, Cancel&, asio::yield_context);
+
     NodeID mutable_put_start(
         const MutableDataItem& data,
         asio::yield_context yield,
@@ -437,6 +439,17 @@ class MainlineDht {
         { Signal<void()> cancel_signal; return mutable_get(public_key, salt, yield, cancel_signal); }
 
     asio::io_service& get_io_service() { return _ios; }
+
+    bool all_ready() const {
+        for (const auto& n : _nodes) {
+            if (!n.second->ready()) return false;
+        }
+        return true;
+    }
+    void wait_all_ready(
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
+    );
 
     private:
     asio::io_service& _ios;

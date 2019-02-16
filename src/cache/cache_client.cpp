@@ -1,13 +1,15 @@
 #include <asio_ipfs.h>
 #include "cache_client.h"
-#include "btree_db.h"
-#include "bep44_db.h"
+#include "btree_index.h"
+#include "bep44_index.h"
 #include "cache_entry.h"
-#include "descdb.h"
+#include "descidx.h"
 #include "http_desc.h"
 #include "ipfs_util.h"
 #include "../or_throw.h"
+#include "../async_sleep.h"
 #include "../bittorrent/dht.h"
+#include "../logger.h"
 #include "../util/crypto.h"
 
 using namespace std;
@@ -64,24 +66,27 @@ CacheClient::CacheClient( asio_ipfs::node ipfs_node
     : _path_to_repo(move(path_to_repo))
     , _ipfs_node(new asio_ipfs::node(move(ipfs_node)))
     , _bt_dht(new bt::MainlineDht(_ipfs_node->get_io_service()))
-    , _btree_db(new BTreeClientDb( *_ipfs_node
-                                 , ipns
-                                 , *_bt_dht
-                                 , bt_pubkey
-                                 , _path_to_repo))
 {
+    if (!ipns.empty()) {
+        _btree_index.reset(new BTreeClientIndex( *_ipfs_node
+                                               , ipns
+                                               , *_bt_dht
+                                               , bt_pubkey
+                                               , _path_to_repo));
+    }
+
     _bt_dht->set_interfaces({asio::ip::address_v4::any()});
 
     if (bt_pubkey) {
-        _bep44_db.reset(new Bep44ClientDb(*_bt_dht, *bt_pubkey));
+        _bep44_index.reset(new Bep44ClientIndex(*_bt_dht, *bt_pubkey));
     }
 }
 
 const BTree* CacheClient::get_btree() const
 {
     if (!_ipfs_node) return nullptr;
-    if (!_btree_db) return nullptr;
-    return _btree_db->get_btree();
+    if (!_btree_index) return nullptr;
+    return _btree_index->get_btree();
 }
 
 string CacheClient::ipfs_add(const string& data, asio::yield_context yield)
@@ -90,21 +95,22 @@ string CacheClient::ipfs_add(const string& data, asio::yield_context yield)
 }
 
 string CacheClient::insert_mapping( const std::string& ins_data
-                                  , DbType db_type
+                                  , IndexType index_type
                                   , boost::asio::yield_context yield)
 {
-    auto db = get_db(db_type);
+    auto index = get_index(index_type);
 
-    if (!db) return or_throw<string>(yield, asio::error::operation_not_supported);
+    if (!index) return or_throw<string>( yield
+                                       , asio::error::operation_not_supported);
 
-    return db->insert_mapping(ins_data, yield);
+    return index->insert_mapping(ins_data, yield);
 }
 
-ClientDb* CacheClient::get_db(DbType db_type)
+ClientIndex* CacheClient::get_index(IndexType index_type)
 {
-    switch (db_type) {
-        case DbType::btree: return _btree_db.get();
-        case DbType::bep44: return _bep44_db.get();
+    switch (index_type) {
+        case IndexType::btree: return _btree_index.get();
+        case IndexType::bep44: return _bep44_index.get();
     }
 
     assert(0);
@@ -112,27 +118,27 @@ ClientDb* CacheClient::get_db(DbType db_type)
 }
 
 string CacheClient::get_descriptor( const string& key
-                                  , DbType db_type
+                                  , IndexType index_type
                                   , Cancel& cancel
                                   , asio::yield_context yield)
 {
-    auto db = get_db(db_type);
+    auto index = get_index(index_type);
 
-    if (!db) return or_throw<string>(yield, asio::error::not_found);
+    if (!index) return or_throw<string>(yield, asio::error::not_found);
 
-    return descriptor::get_from_db
-        ( key, *db, IPFS_LOAD_FUNC(*_ipfs_node), cancel, yield);
+    return descriptor::get_from_index
+        ( key, *index, IPFS_LOAD_FUNC(*_ipfs_node), cancel, yield);
 }
 
 pair<string, CacheEntry>
 CacheClient::get_content( const string& key
-                        , DbType db_type
+                        , IndexType index_type
                         , Cancel& cancel
                         , asio::yield_context yield)
 {
     sys::error_code ec;
 
-    string desc_data = get_descriptor(key, db_type, cancel, yield[ec]);
+    string desc_data = get_descriptor(key, index_type, cancel, yield[ec]);
 
     if (ec) return or_throw<pair<string, CacheEntry>>(yield, ec);
 
@@ -143,7 +149,7 @@ CacheClient::get_content( const string& key
 void CacheClient::set_ipns(std::string ipns)
 {
     assert(0 && "TODO");
-    //_btree_db.reset(new ClientDb(*_ipfs_node, _path_to_repo, move(ipns)));
+    //_btree_index.reset(new ClientIndex(*_ipfs_node, _path_to_repo, move(ipns)));
 }
 
 std::string CacheClient::ipfs_id() const
@@ -153,14 +159,23 @@ std::string CacheClient::ipfs_id() const
 
 string CacheClient::ipns() const
 {
-    if (!_btree_db) return {};
-    return _btree_db->ipns();
+    if (!_btree_index) return {};
+    return _btree_index->ipns();
 }
 
 string CacheClient::ipfs() const
 {
-    if (!_btree_db) return {};
-    return _btree_db->ipfs();
+    if (!_btree_index) return {};
+    return _btree_index->ipfs();
+}
+
+void
+CacheClient::wait_for_ready(Cancel& cancel, asio::yield_context yield) const
+{
+    // TODO: Wait for IPFS cache to be ready, if needed.
+    LOG_DEBUG("BEP44 index: waiting for BitTorrent DHT bootstrap...");
+    _bt_dht->wait_all_ready(yield, cancel);
+    LOG_DEBUG("BEP44 index: bootstrapped BitTorrent DHT");  // used by integration tests
 }
 
 CacheClient::~CacheClient() {}

@@ -12,6 +12,7 @@ include(ExternalProject)
 ################################################################################
 # Configurable options
 option(WITH_INJECTOR "Compile injector" ON)
+option(WITH_ASAN "Build with Address sanitizer" OFF)
 
 ################################################################################
 # NOTE: https://stackoverflow.com/questions/37603238/fsanitize-not-using-gold-linker-in-gcc-6-1
@@ -19,7 +20,9 @@ option(WITH_INJECTOR "Compile injector" ON)
 #        because trowing (and catching) exceptions inside a coroutine confuses
 #        ASan. More info:
 #        https://github.com/boostorg/coroutine/issues/30#issuecomment-325574878
-#set(SANITIZE "-fsanitize=address -fuse-ld=gold")
+if (WITH_ASAN)
+    set(SANITIZE "-fsanitize=address -fuse-ld=gold")
+endif() # if WITH_ASAN
 
 # For some reason we need to define both of these
 add_definitions(-DBOOST_COROUTINES_NO_DEPRECATION_WARNING)
@@ -60,12 +63,6 @@ find_package(Threads)
 
 ################################################################################
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -Wall -O0 -ggdb ${SANITIZE}")
-
-# gcc 8 spits out warnings from Boost.Mpl about unnecessary parentheses
-# https://github.com/CauldronDevelopmentLLC/cbang/issues/26
-# TODO: Perhaps do a check for Boost and gcc version before adding this flag?
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-parentheses")
-
 ################################################################################
 if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
     set(GCRYPT_HOST "--host=arm-unknown-linux-androideabi")
@@ -109,6 +106,11 @@ externalproject_add(json
 
 set(JSON_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/json/src/json/src")
 
+# gcc 8 spits out warnings from Boost.Mpl about unnecessary parentheses
+# https://github.com/CauldronDevelopmentLLC/cbang/issues/26
+# TODO: Perhaps do a check for Boost and gcc version before adding this flag?
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-parentheses")
+
 ################################################################################
 externalproject_add(uri
     GIT_REPOSITORY https://github.com/cpp-netlib/uri
@@ -120,6 +122,7 @@ externalproject_add(uri
         -DUri_BUILD_DOCS=OFF
         -DUri_DISABLE_LIBCXX=""
         -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+        -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
     PREFIX "uri")
 
 set(URI_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri/include")

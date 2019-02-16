@@ -28,6 +28,7 @@ public:
     using Parent::end;
     using Parent::size;
     using Parent::erase;
+    using Parent::empty;
     using typename Parent::iterator;
     using typename Parent::const_iterator;
 

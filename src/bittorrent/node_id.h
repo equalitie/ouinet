@@ -51,6 +51,7 @@ struct NodeID {
     // Return true if `left` is closer to `this` than `right` is in the XOR
     // metrics.
     bool closer_to(const NodeID& left, const NodeID& right) const;
+    NodeID distance_to(const NodeID&) const;
 
     private:
     static NodeID generate( asio::ip::address address

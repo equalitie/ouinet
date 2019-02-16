@@ -83,7 +83,8 @@ BOOST_AUTO_TEST_CASE(test_cache_origin_fail)
 
     run_spawned(ios, [&](auto yield) {
             Request req{http::verb::get, "foo", 11};
-            auto rs = cc.fetch(req, yield);
+            Cancel cancel;
+            auto rs = cc.fetch(req, cancel, yield);
             BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
         });
 
@@ -125,11 +126,13 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age)
     run_spawned(ios, [&](auto yield) {
             {
                 Request req{http::verb::get, "old", 11};
-                cc.fetch(req, yield);
+                Cancel cancel;
+                cc.fetch(req, cancel, yield);
             }
             {
                 Request req{http::verb::get, "new", 11};
-                cc.fetch(req, yield);
+                Cancel cancel;
+                cc.fetch(req, cancel, yield);
             }
         });
 
@@ -176,11 +179,13 @@ BOOST_AUTO_TEST_CASE(test_maxage)
     run_spawned(ios, [&](auto yield) {
             {
                 Request req{http::verb::get, "old", 11};
-                cc.fetch(req, yield);
+                Cancel cancel;
+                cc.fetch(req, cancel, yield);
             }
             {
                 Request req{http::verb::get, "new", 11};
-                cc.fetch(req, yield);
+                Cancel cancel;
+                cc.fetch(req, cancel, yield);
             }
         });
 
@@ -238,11 +243,13 @@ BOOST_AUTO_TEST_CASE(test_http10_expires)
     run_spawned(ios, [&](auto yield) {
             {
                 Request req{http::verb::get, "old", 11};
-                cc.fetch(req, yield);
+                Cancel cancel;
+                cc.fetch(req, cancel, yield);
             }
             {
                 Request req{http::verb::get, "new", 11};
-                cc.fetch(req, yield);
+                Cancel cancel;
+                cc.fetch(req, cancel, yield);
             }
         });
 
@@ -272,7 +279,8 @@ BOOST_AUTO_TEST_CASE(test_dont_load_cache_when_If_None_Match)
     run_spawned(ios, [&](auto yield) {
             Request req{http::verb::get, "foo", 11};
             req.set(http::field::if_none_match, "abc");
-            auto rs = cc.fetch(req, yield);
+            Cancel cancel;
+            auto rs = cc.fetch(req, cancel, yield);
             BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
         });
 
@@ -305,7 +313,8 @@ BOOST_AUTO_TEST_CASE(test_no_etag_override)
             // In this test, the user agent provides its own etag.
             Request rq{http::verb::get, "mypage", 11};
             rq.set(http::field::if_none_match, "origin-etag");
-            cc.fetch(rq, yield);
+            Cancel cancel;
+            cc.fetch(rq, cancel, yield);
         });
 
     BOOST_CHECK_EQUAL(origin_check, 1u);
@@ -331,7 +340,8 @@ BOOST_AUTO_TEST_CASE(test_request_no_store)
     run_spawned(ios, [&](auto yield) {
             Request rq{http::verb::get, "mypage", 11};
             rq.set(http::field::cache_control, "no-store");
-            cc.fetch(rq, yield);
+            Cancel cancel;
+            cc.fetch(rq, cancel, yield);
         });
 
     BOOST_CHECK_EQUAL(origin_check, 1u);
@@ -379,7 +389,8 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
     run_spawned(ios, [&](auto yield) {
             {
                 Request rq{http::verb::get, "mypage", 11};
-                auto rs = cc.fetch(rq, yield);
+                Cancel cancel;
+                auto rs = cc.fetch(rq, cancel, yield);
                 BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
                 BOOST_CHECK_EQUAL(rs["X-Test"], "from-cache");
             }
@@ -388,7 +399,8 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
                 // In this test, the user agent provides its own etag.
                 Request rq{http::verb::get, "mypage", 11};
                 rq.set(http::field::if_none_match, "abc");
-                auto rs = cc.fetch(rq, yield);
+                Cancel cancel;
+                auto rs = cc.fetch(rq, cancel, yield);
                 BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
                 BOOST_CHECK_EQUAL(rs["X-Test"], "from-origin-ok");
             }
@@ -431,7 +443,8 @@ BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
                 // Cached resources requested without "no-cache" should come from the cache
                 // since the cached version is fresh enough.
                 Request req{http::verb::get, "foo", 11};
-                auto rs = cc.fetch(req, yield);
+                Cancel cancel;
+                auto rs = cc.fetch(req, cancel, yield);
                 BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
                 BOOST_CHECK_EQUAL(rs["X-Test"], "from-cache");
             }
@@ -440,7 +453,8 @@ BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
                 // In this test we know it will be the origin.
                 Request req{http::verb::get, "foo", 11};
                 req.set(http::field::cache_control, "no-cache");
-                auto rs = cc.fetch(req, yield);
+                Cancel cancel;
+                auto rs = cc.fetch(req, cancel, yield);
                 BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
                 BOOST_CHECK_EQUAL(rs["X-Test"], "from-origin");
             }

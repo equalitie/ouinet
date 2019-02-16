@@ -19,4 +19,6 @@ struct Contact {
     {}
 };
 
+std::ostream& operator<<(std::ostream&, const Contact&);
+
 }} // namespaces

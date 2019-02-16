@@ -258,7 +258,7 @@ important parameters, so you may want to stop it (see above) and use the
   - If the injector endpoint uses TLS, set `injector-tls-cert-file` to
     `/var/opt/ouinet/client/ssl-inj-cert.pem` and copy the injector's TLS
     certificate to that file.
-  - Set the IPNS ID of the cache index in option `injector-ipns`.
+  - Set the IPNS ID of the cache index in option `index-ipns-id`.
 
 After you have set up your client's configuration, you can **restart it**.
 The client's HTTP proxy endpoint should be available to the host at
@@ -297,7 +297,9 @@ If you plan on running several nodes on the same host you will need to use
 different explicit Docker Compose project names for them.  To make the node an
 injector instead of a client you need to set `OUINET_ROLE=injector`.  To make
 the container use a particular image version instead of `latest`, set
-`OUINET_VERSION`.
+`OUINET_VERSION`.  To limit the amount of memory that the container may use,
+set `OUINET_MEM_LIMIT`, but you will need to pass the `--compatibility` option
+to `docker-compose`.
 
 An easy way to set all these parameters is to copy or link the
 `docker-compose.yml` file to a directory with the desired project name and
@@ -308,16 +310,17 @@ populate its default environment file:
     $ cp /path/to/docker-compose.yml .
     $ echo OUINET_ROLE=injector >> .env
     $ echo OUINET_VERSION=v0.0.5-docker3 >> .env
-    $ sudo docker-compose up
+    $ echo OUINET_MEM_LIMIT=4g >> .env
+    $ sudo docker-compose --compatibility up
 
 ### Injector container
 
 After an injector has finished starting, you may want to use the shell
 container to inspect and note down the contents of `injector/endpoint-*`
-(injector endpoints) and `injector/cache-ipns` (cache index IPNS ID) to be
-used by clients.  The injector will also generate a `tls-cert.pem` file which
-you should distribute to clients for TLS access.  Other configuration
-information like credentials can be found in `injector/ouinet-injector.conf`.
+(injector endpoints) and `injector/cache-*` (cache index keys) to be used by
+clients.  The injector will also generate a `tls-cert.pem` file which you
+should distribute to clients for TLS access.  Other configuration information
+like credentials can be found in `injector/ouinet-injector.conf`.
 
 To start the injector in headless mode, you can run:
 
@@ -346,7 +349,7 @@ If you ever need to reset and empty the injector's cache index for some reason
  4. In the container, run:
 
         # cd /mnt
-        # rm injector/ipfs/ipfs_cache_db.*
+        # rm injector/ipfs/ipfs_cache_index.*
         # alias ipfs='./ipfs -Lc injector/ipfs'
         # ipfs pin ls --type recursive | cut -d' ' -f1 | xargs ipfs pin rm
         # ipfs repo gc
@@ -392,12 +395,13 @@ point it to the repository created above:
     Swarm listening on /ip4/127.0.0.1/tcp/4001
     Swarm listening on /ip4/192.168.0.136/tcp/4001
     Swarm listening on /ip6/::1/tcp/4001
-    IPNS DB: <DB IPNS>
+    IPNS Index: <IPNS IDX>
+    BEP44 Index: <BEP44 IDX>
     ...
 
-Note down the `<DB IPNS>` string in the above output since clients will need
-that as the *distributed cache index*.  You may also find this value in the
-`cache-ipns` file in the injector repository.
+Note down the `<IPNS IDX>` and `<BEP44 IDX>` strings in the above output since
+clients will need those as the *distributed cache index*.  You may also find
+these values in the `cache-*` files in the injector repository.
 
 When you are done testing the Ouinet injector, you may shut it down by hitting
 Ctrl+C.
@@ -426,7 +430,7 @@ replace the values with your own:
 
     injector-ep = 127.0.0.1:7070
     injector-credentials = injector_user:injector_password
-    injector-ipns = Qm0123456789abcdefghijklmnopqrstuvwxyzABCDEFGI
+    index-ipns-id = Qm0123456789abcdefghijklmnopqrstuvwxyzABCDEFGI
 
 All the steps above only need to be done once.
 

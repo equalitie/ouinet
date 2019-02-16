@@ -41,6 +41,7 @@
 
 #include "util/timeout.h"
 #include "util/crypto.h"
+#include "util/bytes.h"
 
 #include "logger.h"
 #include "defer.h"
@@ -244,18 +245,6 @@ void handle_connect_request( GenericStream client_c
 }
 
 //------------------------------------------------------------------------------
-static Request erase_hop_by_hop_headers(Request rq) {
-    //// TODO
-    //rq.erase(http::field::connection);
-    //rq.erase(http::field::keep_alive);
-    //rq.erase(http::field::public_);
-    //rq.erase(http::field::transfer_encoding);
-    //rq.erase(http::field::upgrade);
-    rq.erase(http::field::proxy_authenticate);
-    return rq;
-}
-
-//------------------------------------------------------------------------------
 struct InjectorCacheControl {
     using Connection = OriginPools::Connection;
 
@@ -347,7 +336,21 @@ public:
 
     Response fetch(const Request& rq, Yield yield)
     {
-        return cc.fetch(rq, yield);
+        Cancel cancel;
+
+        bool timed_out = false;
+
+        WatchDog wd(ios, chrono::minutes(3), [&] {
+            timed_out = true;
+            cancel();
+        });
+
+        sys::error_code ec;
+        Response response = cc.fetch(rq, cancel, yield[ec]);
+
+        if (timed_out) ec = asio::error::timed_out;
+
+        return or_throw(yield, ec, move(response));
     }
 
     Response fetch_fresh(const Request& rq_, Cancel& cancel, Yield yield) {
@@ -356,17 +359,14 @@ public:
         auto connection = origin_pools.get_connection(rq_);
 
         if (!connection) {
-            connection = connect(ios, rq_, cancel, yield[ec]);
+            connection = connect(ios, rq_, cancel, yield[ec].tag("connect"));
         }
 
         if (ec) return or_throw<Response>(yield, ec);
 
-        Request rq = req_form_from_absolute_to_origin(
-                        erase_hop_by_hop_headers(rq_));
-
+        Request rq = util::to_origin_request(rq_);
         rq.keep_alive(true);
-
-        Response ret = connection->request(rq, cancel, yield[ec]);
+        Response ret = connection->request(rq, cancel, yield[ec].tag("request"));
 
         if (ec) return or_throw<Response>(yield, ec);
 
@@ -389,6 +389,16 @@ private:
     CacheEntry
     fetch_stored(const Request& rq, Cancel& cancel, Yield yield)
     {
+        /*
+         * Currently fetching a resource from the distributed cache is a lot
+         * more resource hungry than simply fetching it from the origin.
+         *
+         * TODO: Perhaps modify the cache on the injector so that it only does
+         * storing and fething on local disk (that used to be the case with the
+         * B-tree database, but isn't with BEP44 one). Then re-enable this
+         * code.
+         */
+#if 0
         if (!injector)
             return or_throw<CacheEntry>( yield
                                        , asio::error::operation_not_supported);
@@ -397,9 +407,9 @@ private:
 
         // TODO: use string_view
         auto ret = injector->get_content( key_from_http_req(rq)
-                                        , config.default_db_type()
+                                        , config.cache_index_type()
                                         , cancel
-                                        , yield[ec]);
+                                        , yield[ec].tag("injector.get_content"));
 
         if (ec) return or_throw(yield, ec, move(ret.second));
 
@@ -411,6 +421,10 @@ private:
         ret.second.response.set(http_::response_injection_id_hdr, ret.first);
 
         return move(ret.second);
+#else
+        return or_throw<CacheEntry>( yield
+                                   , asio::error::operation_not_supported);
+#endif
     }
 
     Response store(Request rq, Response rs, Yield yield)
@@ -427,19 +441,19 @@ private:
 
         // This injection code logs errors but does not propagate them
         // (the `desc_data` field is set to the empty string).
-        auto db_type = config.default_db_type();
+        auto index_type = config.cache_index_type();
         auto inject = [
-            rq, rs, id, db_type,
+            rq, rs, id, index_type,
             injector = injector.get()
         ] (boost::asio::yield_context yield) mutable
           -> CacheInjector::InsertionResult {
             // Pop out Ouinet internal HTTP headers.
-            rq.erase(http_::request_sync_injection_hdr);
-            rs.erase(http_::response_injection_id_hdr);
+            rq = util::to_cache_request(move(rq));
+            rs = util::to_cache_response(move(rs));
 
             sys::error_code ec;
             auto ret = injector->insert_content( id, rq, rs
-                                               , db_type
+                                               , index_type
                                                , yield[ec]);
 
             if (ec) {
@@ -471,9 +485,9 @@ private:
         // Add descriptor storage link as is.
         rs.set(http_::response_descriptor_link_hdr, move(ins.desc_link));
         // Add Base64-encoded reinsertion data (if any).
-        if (ins.db_ins_data.length() > 0) {
-            auto encoded_insd = util::base64_encode(move(ins.db_ins_data));
-            rs.set( http_::response_insert_hdr_pfx + DbName.at(db_type)
+        if (ins.index_ins_data.length() > 0) {
+            auto encoded_insd = util::base64_encode(move(ins.index_ins_data));
+            rs.set( http_::response_insert_hdr_pfx + IndexName.at(index_type)
                   , move(encoded_insd));
         }
         return rs;
@@ -561,11 +575,10 @@ void serve( InjectorConfig& config
                 res = *opt_err_res;
             }
             else {
-                auto req2 = req;
-                // do not propagate or cache the header
-                req2.erase(http_::request_version_hdr);
+                auto req2 = util::to_injector_request(req);  // sanitize
+                req2.keep_alive(req.keep_alive());
                 res = cc.fetch(req2, yield[ec].tag("cache_control.fetch"));
-                res.keep_alive(true);
+                res.keep_alive(req.keep_alive());
             }
         }
 
@@ -710,10 +723,14 @@ int main(int argc, const char* argv[])
     Cancel::Connection shutdown_ipfs_slot;
 
     if (config.cache_enabled()) {
+        auto bep44_privk = config.index_bep44_private_key();
+        auto enable_btree = config.cache_index_type() == IndexType::btree;
+        auto enable_bep44 = config.cache_index_type() == IndexType::bep44;
         cache_injector = make_unique<CacheInjector>
                                 ( ios
-                                , config.bt_private_key()
-                                , config.repo_root());
+                                , bep44_privk
+                                , config.repo_root()
+                                , enable_btree, enable_bep44);
 
         shutdown_ipfs_slot = cancel.connect([&] {
             cache_injector = nullptr;
@@ -722,8 +739,13 @@ int main(int argc, const char* argv[])
         // Although the IPNS ID is already in IPFS's config file,
         // this just helps put all info relevant to the user right in the repo root.
         auto ipns_id = cache_injector->ipfs_id();
-        LOG_DEBUG("IPNS DB: " + ipns_id);
+        LOG_DEBUG("IPNS Index: " + ipns_id);  // used by integration tests
         util::create_state_file(config.repo_root()/"cache-ipns", ipns_id);
+
+        // Same for BEP44.
+        auto bep44_pubk = util::bytes::to_hex(bep44_privk.public_key().serialize());
+        LOG_DEBUG("BEP44 Index: " + bep44_pubk);  // used by integration tests
+        util::create_state_file(config.repo_root()/"cache-bep44", bep44_pubk);
     }
 
     OuiServiceServer proxy_server(ios);
@@ -771,6 +793,8 @@ int main(int argc, const char* argv[])
         &config,
         &cancel
     ] (asio::yield_context yield) {
+        if (config.cache_enabled())
+            cache_injector->wait_for_ready(cancel, yield);
         listen( config
               , proxy_server
               , cache_injector

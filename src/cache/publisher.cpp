@@ -63,13 +63,13 @@ struct Publisher::Loop : public enable_shared_from_this<Loop> {
 
                 if (was_stopped) return;
 
-                if (ec && to_publish.empty()) {
+                if (to_publish.empty()) {
                     // Timeout has been reached, force republish the value
                     to_publish = last_value;
                 }
             }
 
-            LOG_DEBUG("Publishing DB: ", to_publish);
+            LOG_DEBUG("Publishing index: ", to_publish);
 
             auto cid = move(to_publish);
 
@@ -78,7 +78,7 @@ struct Publisher::Loop : public enable_shared_from_this<Loop> {
 
             if (was_stopped) return;
 
-            LOG_DEBUG("Request was successfully published to cache under id " + cid);
+            LOG_DEBUG("Request was successfully published to cache under id " + cid);  // used by integration tests
         }
     }
 
@@ -109,11 +109,11 @@ bt::MutableDataItem bt_mutable_data( const string& value
 
 Publisher::Publisher( asio_ipfs::node& ipfs_node
                     , bt::MainlineDht& bt_dht
-                    , util::Ed25519PrivateKey bt_private_key)
+                    , util::Ed25519PrivateKey bep44_private_key)
     : _ios(ipfs_node.get_io_service())
     , _ipfs_node(ipfs_node)
     , _bt_dht(bt_dht)
-    , _bt_private_key(bt_private_key)
+    , _bep44_private_key(bep44_private_key)
     , _ipfs_loop(make_shared<Loop>(_ios))
     , _bt_loop(make_shared<Loop>(_ios))
 {
@@ -123,7 +123,7 @@ Publisher::Publisher( asio_ipfs::node& ipfs_node
 
     _bt_loop->publish_func = [this](auto cid, auto yield) {
         auto ipns = _ipfs_node.id();
-        auto item = bt_mutable_data(cid, ipns, _bt_private_key);
+        auto item = bt_mutable_data(cid, ipns, _bep44_private_key);
         _bt_dht.mutable_put_start(item, yield);
     };
 

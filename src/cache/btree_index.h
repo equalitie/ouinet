@@ -9,7 +9,7 @@
 
 #include "../namespaces.h"
 #include "resolver.h"
-#include "db.h"
+#include "index.h"
 
 namespace asio_ipfs { class node; }
 namespace ouinet { namespace bittorrent { class MainlineDht; }}
@@ -20,13 +20,13 @@ namespace ouinet {
 class BTree;
 class Publisher;
 
-class BTreeClientDb : public ClientDb {
+class BTreeClientIndex : public ClientIndex {
 public:
-    BTreeClientDb( asio_ipfs::node&
-                 , std::string ipns
-                 , bittorrent::MainlineDht& bt_dht
-                 , boost::optional<util::Ed25519PublicKey> bt_publish_pubkey
-                 , fs::path path_to_repo);
+    BTreeClientIndex( asio_ipfs::node&
+                    , std::string ipns
+                    , bittorrent::MainlineDht& bt_dht
+                    , boost::optional<util::Ed25519PublicKey> bt_publish_pubkey
+                    , fs::path path_to_repo);
 
     std::string find( const std::string& key
                     , Cancel&
@@ -39,7 +39,7 @@ public:
 
     const BTree* get_btree() const;
 
-    ~BTreeClientDb();
+    ~BTreeClientIndex();
 
 private:
     void on_resolve(std::string cid, asio::yield_context);
@@ -49,14 +49,14 @@ private:
     std::string _ipns;
     std::string _ipfs; // Last known
     asio_ipfs::node& _ipfs_node;
-    std::unique_ptr<BTree> _db_map;
+    std::unique_ptr<BTree> _index_map;
     Resolver _resolver;
     std::shared_ptr<bool> _was_destroyed;
 };
 
-class BTreeInjectorDb : public InjectorDb {
+class BTreeInjectorIndex : public InjectorIndex {
 public:
-    BTreeInjectorDb(asio_ipfs::node&, Publisher&, fs::path path_to_repo);
+    BTreeInjectorIndex(asio_ipfs::node&, Publisher&, fs::path path_to_repo);
 
     std::string find( const std::string& key
                     , Cancel&
@@ -69,18 +69,18 @@ public:
 
     const std::string& ipns() const { return _ipns; }
 
-    ~BTreeInjectorDb();
+    ~BTreeInjectorIndex();
 
 private:
     void publish(std::string);
-    void continuously_upload_db(asio::yield_context);
+    void continuously_upload_index(asio::yield_context);
 
 private:
     const fs::path _path_to_repo;
     std::string _ipns;
     asio_ipfs::node& _ipfs_node;
     Publisher& _publisher;
-    std::unique_ptr<BTree> _db_map;
+    std::unique_ptr<BTree> _index_map;
     std::shared_ptr<bool> _was_destroyed;
 };
 

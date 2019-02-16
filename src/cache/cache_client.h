@@ -9,7 +9,7 @@
 #include <string>
 
 #include "cache_entry.h"
-#include "db.h"
+#include "index.h"
 #include "../namespaces.h"
 
 namespace asio_ipfs { class node; }
@@ -19,8 +19,8 @@ namespace ouinet { class BTree; }
 
 namespace ouinet {
 
-class BTreeClientDb;
-class Bep44ClientDb;
+class BTreeClientIndex;
+class Bep44ClientIndex;
 
 class CacheClient {
 public:
@@ -43,25 +43,25 @@ public:
     std::string ipfs_add(const std::string& content, boost::asio::yield_context);
 
     // Insert a signed key->descriptor mapping
-    // into the data base of the given type.
-    // The parsing of the given data depends on the data base.
+    // into the index of the given type.
+    // The parsing of the given data depends on the index.
     // Return a printable representation of the key resulting from insertion.
     std::string insert_mapping( const std::string&
-                              , DbType, boost::asio::yield_context);
+                              , IndexType, boost::asio::yield_context);
 
     // Find the content previously stored by the injector under `key`.
     // The descriptor identifier and cached content are returned.
     //
-    // Basically it does this: Look into the database to find the IPFS_ID
+    // Basically it does this: Look into the index to find the IPFS_ID
     // correspoinding to the `key`, when found, fetch the content corresponding
     // to that IPFS_ID from IPFS.
     std::pair<std::string, CacheEntry> get_content( const std::string& key
-                                                  , DbType
+                                                  , IndexType
                                                   , Cancel&
                                                   , boost::asio::yield_context);
 
     std::string get_descriptor( const std::string& key
-                              , DbType
+                              , IndexType
                               , Cancel&
                               , asio::yield_context);
 
@@ -71,6 +71,8 @@ public:
 
     std::string ipns() const;
     std::string ipfs() const;
+
+    void wait_for_ready(Cancel&, boost::asio::yield_context) const;
 
     ~CacheClient();
 
@@ -82,14 +84,14 @@ private:
                , boost::optional<util::Ed25519PublicKey> bt_pubkey
                , fs::path path_to_repo);
 
-    ClientDb* get_db(DbType);
+    ClientIndex* get_index(IndexType);
 
 private:
     fs::path _path_to_repo;
     std::unique_ptr<asio_ipfs::node> _ipfs_node;
     std::unique_ptr<bittorrent::MainlineDht> _bt_dht;
-    std::unique_ptr<BTreeClientDb> _btree_db;
-    std::unique_ptr<Bep44ClientDb> _bep44_db;
+    std::unique_ptr<BTreeClientIndex> _btree_index;
+    std::unique_ptr<Bep44ClientIndex> _bep44_index;
 };
 
 } // namespace

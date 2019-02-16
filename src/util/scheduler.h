@@ -133,7 +133,7 @@ Scheduler::Slot Scheduler::wait_for_slot( Cancel& cancel
             waiter.cv.wait(yield[ec]);
         }
 
-        if (!ec && cancel) ec = asio::error::operation_aborted;
+        if (cancel) ec = asio::error::operation_aborted;
 
         if (!waiter.is_linked()) {
             // `this` scheduler has been destroyed

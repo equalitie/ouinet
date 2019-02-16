@@ -15,6 +15,9 @@ using Json  = nlohmann::json;
 
 using std::cout;
 using std::endl;
+
+static const unsigned CURRENT_VERSION = 1;
+
 //--------------------------------------------------------------------
 //                       Node
 //        +--------------------------------+
@@ -56,8 +59,8 @@ public:
 
     typename Entries::iterator find_or_create_lower_bound(const Key&);
 
-    Hash store(const AddOp&, asio::yield_context);
-    void restore(Hash, const CatOp&, Cancel&, asio::yield_context);
+    Hash store(const AddOp&, bool is_root, asio::yield_context);
+    void restore(Hash, bool is_root, const CatOp&, Cancel&, asio::yield_context);
 
     size_t local_node_count() const;
 
@@ -112,7 +115,7 @@ struct BTree::Iterator::Impl : std::enable_shared_from_this<Impl> {
         return false;
     }
 
-    void init(const std::string& hash, Cancel& cancel, asio::yield_context yield)
+    void init(const std::string& hash, bool is_root, Cancel& cancel, asio::yield_context yield)
     {
         if (node) return;
 
@@ -121,7 +124,7 @@ struct BTree::Iterator::Impl : std::enable_shared_from_this<Impl> {
         node.reset(new Node(tree));
 
         sys::error_code ec;
-        node->restore(hash, cat_op, cancel, yield[ec]);
+        node->restore(hash, is_root, cat_op, cancel, yield[ec]);
 
         if (!ec && *wd) ec = asio::error::operation_aborted;
         if (ec) return or_throw(yield, ec);
@@ -142,7 +145,7 @@ struct BTree::Iterator::Impl : std::enable_shared_from_this<Impl> {
 
         sys::error_code ec;
 
-        next->init(entry_i->second.child_hash, cancel, yield[ec]);
+        next->init(entry_i->second.child_hash, false, cancel, yield[ec]);
 
         if (!ec && *wd) ec = asio::error::operation_aborted;
         if (ec) return or_throw(yield, ec, nullptr);
@@ -223,7 +226,7 @@ BTree::Iterator BTree::begin(Cancel& cancel, asio::yield_context yield) const
 
     auto top = std::make_shared<Iterator::Impl>(this, this->_root, nullptr, _cat_op);
 
-    top->init(this->_root->hash, cancel, yield[ec]);
+    top->init(this->_root->hash, true, cancel, yield[ec]);
 
     if (!ec && (*wd || cancel)) ec = asio::error::operation_aborted;
     if (ec) return or_throw(yield, ec, end());
@@ -476,6 +479,7 @@ Value Node::find( const Key& key
             }
 
             return _tree->lazy_find( e.child_hash
+                                   , false
                                    , e.child
                                    , key
                                    , cat_op
@@ -545,7 +549,7 @@ bool Node::check_invariants() const {
     return true;
 }
 
-Hash Node::store(const AddOp& add_op, asio::yield_context yield)
+Hash Node::store(const AddOp& add_op, bool is_root, asio::yield_context yield)
 {
     assert(add_op);
 
@@ -567,7 +571,7 @@ Hash Node::store(const AddOp& add_op, asio::yield_context yield)
         else if (e.child) {
             sys::error_code ec;
 
-            auto child_hash = e.child->store(add_op, yield[ec]);
+            auto child_hash = e.child->store(add_op, false, yield[ec]);
 
             if (!ec && *d) ec = asio::error::operation_aborted;
             if (ec) return or_throw<Hash>(yield, ec);
@@ -579,10 +583,18 @@ Hash Node::store(const AddOp& add_op, asio::yield_context yield)
     }
 
     assert_every_node_has_hash();
+
+    if (is_root) {
+        json = { { "version", CURRENT_VERSION }
+               , { "root", move(json) }
+               };
+    }
+
     return add_op(json.dump(), yield);
 }
 
 void Node::restore( Hash hash
+                  , bool is_root
                   , const CatOp& cat_op
                   , Cancel& cancel
                   , asio::yield_context yield)
@@ -597,6 +609,22 @@ void Node::restore( Hash hash
 
     try {
         auto json = Json::parse(data);
+
+        if (is_root) {
+            if (!json.is_object()) {
+                return or_throw(yield, asio::error::no_protocol_option);
+            }
+            if (!json["version"].is_number()) {
+                return or_throw(yield, asio::error::no_protocol_option);
+            }
+            if (int(json["version"]) != CURRENT_VERSION) {
+                return or_throw(yield, asio::error::no_protocol_option);
+            }
+            if (!json["root"].is_object()) {
+                return or_throw(yield, asio::error::no_protocol_option);
+            }
+            json = json["root"];
+        }
 
         Entries::clear();
 
@@ -661,6 +689,7 @@ BTree::BTree( CatOp cat_op
 
 Value
 BTree::lazy_find( const Hash& hash
+                , bool is_root
                 , std::unique_ptr<Node>& n
                 , const Key& key
                 , const CatOp& cat_op
@@ -677,7 +706,7 @@ BTree::lazy_find( const Hash& hash
             auto d = _was_destroyed;
 
             sys::error_code ec;
-            n->restore(hash, cat_op, cancel, yield[ec]);
+            n->restore(hash, is_root, cat_op, cancel, yield[ec]);
 
             if (!ec && *d) ec = asio::error::operation_aborted;
             if (ec) return or_throw<Value>(yield, ec);
@@ -701,7 +730,13 @@ BTree::find(const Key& key, Cancel& cancel, asio::yield_context yield)
     // Copying `_root` into `root` prevents the _root->hash and _root->node
     // from being destroyed in case the user calls BTree::load
     auto root = _root;
-    return lazy_find(root->hash, root->node, key, CatOp(_cat_op), cancel, yield);
+    return lazy_find( root->hash
+                    , true
+                    , root->node
+                    , key
+                    , CatOp(_cat_op)
+                    , cancel
+                    , yield);
 }
 
 void BTree::raw_insert(Key key, Value value, asio::yield_context yield)
@@ -752,7 +787,7 @@ void BTree::insert(Key key, Value value, asio::yield_context yield)
         if (_root && _root->node && _add_op) {
             // We must use a copy of _add_op to handle the case where `this`
             // get's destroyed while the store operation is running.
-            Hash root_hash = _root->node->store(AddOp(_add_op), yield[ec]);
+            Hash root_hash = _root->node->store(AddOp(_add_op), true, yield[ec]);
 
             if (!ec && *d) ec = asio::error::operation_aborted;
             if (ec) return or_throw(yield, ec);
