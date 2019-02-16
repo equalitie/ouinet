@@ -40,7 +40,9 @@ public class Ouinet {
     public Ouinet(Context ctx, Config conf) {
         _ctx = ctx;
 
-        Vector<String> args = new Vector<String>();
+        List<String> args = new ArrayList<String>();
+        List<String> path = new ArrayList<String>();
+
 
         new File(dir()).mkdirs();
 
@@ -52,13 +54,13 @@ public class Ouinet {
             Log.d(TAG, "Exception thrown while creating ouinet config file: ", e);
         }
 
-        args.addElement("ouinet-client"); // App name
-        args.addElement("--repo=" + dir());
-        args.addElement("--listen-on-tcp=127.0.0.1:8080");
-        args.addElement("--front-end-ep=0.0.0.0:8081");
+        args.add("ouinet-client"); // App name
+        args.add("--repo=" + dir());
+        args.add("--listen-on-tcp=127.0.0.1:8080");
+        args.add("--front-end-ep=0.0.0.0:8081");
 
         // Temporary while the app is being tested.
-        args.addElement("--disable-origin-access");
+        args.add("--disable-origin-access");
 
         maybeAdd(args, "--injector-ep",          conf.injector_endpoint);
         maybeAdd(args, "--injector-ipns",        conf.injector_ipfs_id);
@@ -89,7 +91,7 @@ public class Ouinet {
             if (conf.injector_tls_cert != null) {
                 String cert_path = dir() + "/injector-tls-cert.pem";
                 writeToFile(cert_path, conf.injector_tls_cert.getBytes());
-                args.addElement("--injector-tls-cert-file=" + cert_path);
+                args.add("--injector-tls-cert-file=" + cert_path);
             }
         } catch (IOException e) {
             Log.d(TAG, "Exception thrown while creating injector's cert file: ", e);
@@ -98,12 +100,12 @@ public class Ouinet {
         String objfs4proxy_path = dir() + "/objfs4proxy";
         if (copyExecutableToFile("obfs4proxy", objfs4proxy_path)) {
             Log.d(TAG, "objfs4proxy copied to " + objfs4proxy_path);
-            //args.addElement("--obfs4proxy-path=" + objfs4proxy_path);
+            path.add(dir());
         } else {
             Log.d(TAG, "objfs4proxy not copied");
         }
 
-        nStartClient(args.toArray(new String[0]));
+        nStartClient(args.toArray(new String[0]), path.toArray(new String[0]));
     }
 
     public String pathToCARootCert()
@@ -187,9 +189,9 @@ public class Ouinet {
     }
 
     //----------------------------------------------------------------
-    private void maybeAdd(Vector<String> args, String key, String value) {
+    private void maybeAdd(List<String> args, String key, String value) {
         if (value == null) return;
-        args.addElement(key + "=" + value);
+        args.add(key + "=" + value);
     }
 
     private void writeToFile(String path, byte[] bytes) throws IOException {
@@ -216,7 +218,7 @@ public class Ouinet {
      * A native method that is implemented by the 'native-lib' native library,
      * which is packaged with this application.
      */
-    private native void nStartClient(String[] args);
+    private native void nStartClient(String[] args, String[] path);
 
     private native void nStopClient();
     private native void nSetInjectorEP(String endpoint);
