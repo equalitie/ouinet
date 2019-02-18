@@ -23,7 +23,7 @@ public class Ouinet {
         System.setProperty("https.proxyHost", "127.0.0.1");
         System.setProperty("https.proxyPort", "8080");
     }
-    private static final String TAG = "Ouinet";
+
     private Context _ctx;
     private WifiManager.MulticastLock _lock = null;
 
@@ -41,9 +41,7 @@ public class Ouinet {
     public Ouinet(Context ctx, Config conf) {
         _ctx = ctx;
 
-        List<String> args = new ArrayList<String>();
-        List<String> path = new ArrayList<String>();
-
+        Vector<String> args = new Vector<String>();
 
         new File(dir()).mkdirs();
 
@@ -52,13 +50,14 @@ public class Ouinet {
             // repository and fails if this conf file isn't there.
             new File(dir() + "/ouinet-client.conf").createNewFile();
         } catch (IOException e) {
-            Log.d(TAG, "Exception thrown while creating ouinet config file: ", e);
+            Log.d("Ouinet",
+                    "Exception thrown while creating ouinet config file: " + e);
         }
 
-        args.add("ouinet-client"); // App name
-        args.add("--repo=" + dir());
-        args.add("--listen-on-tcp=127.0.0.1:8080");
-        args.add("--front-end-ep=0.0.0.0:8081");
+        args.addElement("ouinet-client"); // App name
+        args.addElement("--repo=" + dir());
+        args.addElement("--listen-on-tcp=127.0.0.1:8080");
+        args.addElement("--front-end-ep=0.0.0.0:8081");
 
         maybeAdd(args, "--injector-ep",            conf.injector_endpoint);
         maybeAdd(args, "--injector-credentials",   conf.injector_credentials);
@@ -77,7 +76,7 @@ public class Ouinet {
                 String asset = conf.tls_ca_cert_store_path.substring(assetPrefix.length());
                 ca_cert_path = dir() + "/assets/" + asset;
 
-                if (copyAssetToFile(asset, ca_cert_path)) {
+                if (copyAssetToFile(ctx, asset, ca_cert_path)) {
                     maybeAdd(args, "--tls-ca-cert-store-path", ca_cert_path);
                 }
             }
@@ -90,21 +89,15 @@ public class Ouinet {
             if (conf.injector_tls_cert != null) {
                 String cert_path = dir() + "/injector-tls-cert.pem";
                 writeToFile(cert_path, conf.injector_tls_cert.getBytes());
-                args.add("--injector-tls-cert-file=" + cert_path);
+                args.addElement("--injector-tls-cert-file=" + cert_path);
             }
         } catch (IOException e) {
-            Log.d(TAG, "Exception thrown while creating injector's cert file: ", e);
+            Log.d("Ouinet",
+                    "Exception thrown while creating injector's cert file: " + e);
+            e.printStackTrace();
         }
 
-        String objfs4proxy_path = dir() + "/objfs4proxy";
-        if (copyExecutableToFile("obfs4proxy", objfs4proxy_path)) {
-            Log.d(TAG, "objfs4proxy copied to " + objfs4proxy_path);
-            path.add(dir());
-        } else {
-            Log.d(TAG, "objfs4proxy not copied");
-        }
-
-        nStartClient(args.toArray(new String[0]), path.toArray(new String[0]));
+        nStartClient(listToArray(args));
     }
 
     public String pathToCARootCert()
@@ -112,32 +105,21 @@ public class Ouinet {
         return nPathToCARootCert();
     }
 
-    public boolean copyAssetToFile(String asset, String path)
+    public boolean copyAssetToFile(Context ctx, String asset, String path)
     {
         try {
-            java.io.InputStream stream = _ctx.getAssets().open(asset);
+            java.io.InputStream stream = ctx.getAssets().open(asset);
             int size = stream.available();
             byte[] buffer = new byte[size];
             stream.read(buffer);
             stream.close();
             writeToFile(path, buffer);
         } catch (IOException e) {
-            Log.d(TAG, "Failed to write asset \"" + asset + "\" to file \"" + path + "\"", e);
+            Log.d("Ouinet", "Failed to write asset \"" + asset + "\" to file \"" + path + "\"");
+            e.printStackTrace();
             return false;
         }
 
-        return true;
-    }
-
-    public boolean copyExecutableToFile(String asset, String path) {
-        if (!copyAssetToFile(asset, path)) {
-            return false;
-        }
-        File executable = new File(path);
-        if (!executable.setExecutable(true)) {
-            Log.d(TAG, "Failed to set executable for file: " + path);
-            return false;
-        }
         return true;
     }
 
@@ -188,9 +170,16 @@ public class Ouinet {
     }
 
     //----------------------------------------------------------------
-    private void maybeAdd(List<String> args, String key, String value) {
+    private String[] listToArray(List<String> list) {
+        String[] ret = new String[list.size()];
+        int i = 0;
+        for (String s : list) { ret[i] = s; i += 1; }
+        return ret;
+    }
+
+    private void maybeAdd(Vector<String> args, String key, String value) {
         if (value == null || value.isEmpty()) return;
-        args.add(key + "=" + value);
+        args.addElement(key + "=" + value);
     }
 
     private void writeToFile(String path, byte[] bytes) throws IOException {
@@ -217,7 +206,7 @@ public class Ouinet {
      * A native method that is implemented by the 'native-lib' native library,
      * which is packaged with this application.
      */
-    private native void nStartClient(String[] args, String[] path);
+    private native void nStartClient(String[] args);
 
     private native void nStopClient();
     private native void nSetInjectorEP(String endpoint);

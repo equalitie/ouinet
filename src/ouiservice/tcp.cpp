@@ -67,39 +67,14 @@ GenericStream TcpOuiServiceServer::accept(asio::yield_context yield)
     return GenericStream(std::move(socket), tcp_shutter);
 }
 
-static boost::optional<asio::ip::tcp::endpoint> parse_endpoint(std::string endpoint)
-{
-    size_t pos = endpoint.rfind(':');
-    if (pos == std::string::npos) {
-        return boost::none;
-    }
-
-    int port;
-    try {
-        port = std::stoi(endpoint.substr(pos + 1));
-    } catch(...) {
-        return boost::none;
-    }
-    sys::error_code ec;
-    asio::ip::address address = asio::ip::address::from_string(endpoint.substr(0, pos), ec);
-    if (ec) {
-        return boost::none;
-    }
-    return asio::ip::tcp::endpoint(address, port);
-}
-
-TcpOuiServiceClient::TcpOuiServiceClient(asio::io_service& ios, std::string endpoint):
+TcpOuiServiceClient::TcpOuiServiceClient(asio::io_service& ios, asio::ip::tcp::endpoint endpoint):
     _ios(ios),
-    _endpoint(parse_endpoint(endpoint))
+    _endpoint(endpoint)
 {}
 
 OuiServiceImplementationClient::ConnectInfo
 TcpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
 {
-    if (!_endpoint) {
-        return or_throw<ConnectInfo>(yield, asio::error::invalid_argument);
-    }
-
     sys::error_code ec;
 
     asio::ip::tcp::socket socket(_ios);
@@ -110,7 +85,7 @@ TcpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
         socket.close(ec);
     });
 
-    socket.async_connect(*_endpoint, yield[ec]);
+    socket.async_connect(_endpoint, yield[ec]);
 
     if (ec) {
         return or_throw<ConnectInfo>(yield, ec);
@@ -123,7 +98,7 @@ TcpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
     };
 
     return ConnectInfo{ GenericStream(std::move(socket), tcp_shutter)
-                      , util::str(*_endpoint) };
+                      , util::str(_endpoint) };
 }
 
 } // ouiservice namespace
