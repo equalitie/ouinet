@@ -11,7 +11,8 @@ namespace pt {
 
 PtOuiServiceServer::PtOuiServiceServer(asio::io_service& ios):
     _ios(ios),
-    _acceptor(ios)
+    _acceptor(ios),
+    _start_listen_condition(ios)
 {}
 
 PtOuiServiceServer::~PtOuiServiceServer()
@@ -19,8 +20,12 @@ PtOuiServiceServer::~PtOuiServiceServer()
 
 void PtOuiServiceServer::start_listen(asio::yield_context yield)
 {
+    sys::error_code ec;
+
     if (_server_process) {
-        return or_throw(yield, asio::error::in_progress);
+        ec = asio::error::in_progress;
+        _start_listen_condition.notify(ec);
+        return or_throw(yield, ec);
     }
 
     asio::ip::tcp::endpoint tcp_endpoint(
@@ -28,10 +33,9 @@ void PtOuiServiceServer::start_listen(asio::yield_context yield)
         0
     );
 
-    sys::error_code ec;
-
     _acceptor.open(tcp_endpoint.protocol(), ec);
     if (ec) {
+        _start_listen_condition.notify(ec);
         return or_throw(yield, ec);
     }
 
@@ -40,12 +44,14 @@ void PtOuiServiceServer::start_listen(asio::yield_context yield)
     _acceptor.bind(tcp_endpoint, ec);
     if (ec) {
         _acceptor.close();
+        _start_listen_condition.notify(ec);
         return or_throw(yield, ec);
     }
 
     _acceptor.listen(asio::socket_base::max_connections, ec);
     if (ec) {
         _acceptor.close();
+        _start_listen_condition.notify(ec);
         return or_throw(yield, ec);
     }
 
@@ -61,8 +67,11 @@ void PtOuiServiceServer::start_listen(asio::yield_context yield)
         _acceptor.cancel();
         _acceptor.close();
         _server_process.reset();
+        _start_listen_condition.notify(ec);
         return or_throw(yield, ec);
     }
+
+    _start_listen_condition.notify(ec);
 }
 
 void PtOuiServiceServer::stop_listen()
@@ -92,6 +101,11 @@ GenericStream PtOuiServiceServer::accept(asio::yield_context yield)
     };
 
     return GenericStream(std::move(socket), tcp_shutter);
+}
+
+void PtOuiServiceServer::wait_for_running(asio::yield_context yield)
+{
+    _start_listen_condition.wait(yield);
 }
 
 std::string PtOuiServiceServer::connection_arguments() const

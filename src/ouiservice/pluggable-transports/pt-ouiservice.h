@@ -2,6 +2,7 @@
 
 #include <boost/asio/ip/tcp.hpp>
 #include "../../ouiservice.h"
+#include "../../util/condition_variable.h"
 
 namespace ouinet {
 namespace ouiservice {
@@ -21,6 +22,11 @@ class PtOuiServiceServer : public OuiServiceImplementationServer
 
     GenericStream accept(asio::yield_context yield) final;
 
+    /*
+     * Wait for the next start_listen() call to complete.
+     * Reports the same error condition as start_listen() itself.
+     */
+    void wait_for_running(asio::yield_context yield);
     std::string connection_arguments() const;
 
     protected:
@@ -36,6 +42,7 @@ class PtOuiServiceServer : public OuiServiceImplementationServer
 
     asio::ip::tcp::acceptor _acceptor;
     std::unique_ptr<pt::ServerProcess> _server_process;
+    ConditionVariable _start_listen_condition;
 };
 
 class PtOuiServiceClient : public OuiServiceImplementationClient

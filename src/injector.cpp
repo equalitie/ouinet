@@ -757,7 +757,7 @@ int main(int argc, const char* argv[])
 
     if (config.obfs2_endpoint()) {
         tcp::endpoint endpoint = *config.obfs2_endpoint();
-
+        cout << "obfs2 Address: " << util::str(endpoint) << endl;
         util::create_state_file( config.repo_root()/"endpoint-obfs2"
                                , util::str(endpoint));
 
@@ -766,7 +766,7 @@ int main(int argc, const char* argv[])
 
     if (config.obfs3_endpoint()) {
         tcp::endpoint endpoint = *config.obfs3_endpoint();
-
+        cout << "obfs3 Address: " << util::str(endpoint) << endl;
         util::create_state_file( config.repo_root()/"endpoint-obfs3"
                                , util::str(endpoint));
 
@@ -779,7 +779,19 @@ int main(int argc, const char* argv[])
         util::create_state_file( config.repo_root()/"endpoint-obfs4"
                                , util::str(endpoint));
 
-        proxy_server.add(make_unique<ouiservice::Obfs4OuiServiceServer>(ios, endpoint, config.repo_root()/"obfs4-server"));
+        unique_ptr<ouiservice::Obfs4OuiServiceServer> server =
+            make_unique<ouiservice::Obfs4OuiServiceServer>(ios, endpoint, config.repo_root()/"obfs4-server");
+        asio::spawn(ios, [
+            obfs4 = server.get(),
+            endpoint
+        ] (asio::yield_context yield) {
+            sys::error_code ec;
+            obfs4->wait_for_running(yield[ec]);
+            if (!ec) {
+                cout << "obfs4 Address: " << util::str(endpoint) << "," << obfs4->connection_arguments() << endl;
+            }
+        });
+        proxy_server.add(std::move(server));
     }
 
     if (config.listen_on_i2p()) {
