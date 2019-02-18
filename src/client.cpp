@@ -45,9 +45,6 @@
 
 #include "ouiservice.h"
 #include "ouiservice/i2p.h"
-#include "ouiservice/pt-obfs2.h"
-#include "ouiservice/pt-obfs3.h"
-#include "ouiservice/pt-obfs4.h"
 #include "ouiservice/tcp.h"
 #include "ouiservice/tls.h"
 
@@ -1402,55 +1399,28 @@ void Client::State::setup_injector(asio::yield_context yield)
 
     cout << "Setting up injector: " << *injector_ep << endl;
 
-    std::unique_ptr<OuiServiceImplementationClient> client;
-
-    if (injector_ep->type == Endpoint::I2pEndpoint) {
+    if (is_i2p_endpoint(*injector_ep)) {
+        std::string ep = boost::get<I2PEndpoint>(*injector_ep).pubkey;
         auto i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ios);
-        auto i2p_client = i2p_service->build_client(injector_ep->endpoint_string);
+        std::unique_ptr<ouiservice::I2pOuiServiceClient> i2p_client = i2p_service->build_client(ep);
 
-        /*
-        if (!i2p_client->verify_endpoint()) {
-            return or_throw(yield, asio::error::invalid_argument);
-        }
-        */
-        client = std::move(i2p_client);
-    } else if (injector_ep->type == Endpoint::TcpEndpoint) {
-        auto tcp_client = make_unique<ouiservice::TcpOuiServiceClient>(_ios, injector_ep->endpoint_string);
-
-        if (!tcp_client->verify_endpoint()) {
-            return or_throw(yield, asio::error::invalid_argument);
-        }
-        client = std::move(tcp_client);
-    } else if (injector_ep->type == Endpoint::Obfs2Endpoint) {
-        auto obfs2_client = make_unique<ouiservice::Obfs2OuiServiceClient>(_ios, injector_ep->endpoint_string, _config.repo_root()/"obfs2-client");
-
-        if (!obfs2_client->verify_endpoint()) {
-            return or_throw(yield, asio::error::invalid_argument);
-        }
-        client = std::move(obfs2_client);
-    } else if (injector_ep->type == Endpoint::Obfs3Endpoint) {
-        auto obfs3_client = make_unique<ouiservice::Obfs3OuiServiceClient>(_ios, injector_ep->endpoint_string, _config.repo_root()/"obfs3-client");
-
-        if (!obfs3_client->verify_endpoint()) {
-            return or_throw(yield, asio::error::invalid_argument);
-        }
-        client = std::move(obfs3_client);
-    } else if (injector_ep->type == Endpoint::Obfs4Endpoint) {
-        auto obfs4_client = make_unique<ouiservice::Obfs4OuiServiceClient>(_ios, injector_ep->endpoint_string, _config.repo_root()/"obfs4-client");
-
-        if (!obfs4_client->verify_endpoint()) {
-            return or_throw(yield, asio::error::invalid_argument);
-        }
-        client = std::move(obfs4_client);
-    }
-
-    bool enable_injector_tls = !_config.tls_injector_cert_path().empty();
-    if (!enable_injector_tls) {
-        _injector->add(std::move(client));
+        _injector->add(std::move(i2p_client));
     } else {
-        auto tls_client
-            = make_unique<ouiservice::TlsOuiServiceClient>(move(client), inj_ctx);
-        _injector->add(std::move(tls_client));
+        tcp::endpoint tcp_endpoint
+            = boost::get<asio::ip::tcp::endpoint>(*injector_ep);
+
+        auto tcp_client
+            = make_unique<ouiservice::TcpOuiServiceClient>(_ios, tcp_endpoint);
+
+        bool enable_injector_tls = !_config.tls_injector_cert_path().empty();
+
+        if (!enable_injector_tls) {
+            _injector->add(std::move(tcp_client));
+        } else {
+            auto tls_client
+                = make_unique<ouiservice::TlsOuiServiceClient>(move(tcp_client), inj_ctx);
+            _injector->add(std::move(tls_client));
+        }
     }
 
     _injector->start(yield);
@@ -1478,14 +1448,10 @@ void Client::State::set_injector(string injector_ep_str)
 
     _config.set_injector_endpoint(*injector_ep);
 
-    asio::spawn(_ios, [self = shared_from_this(), injector_ep_str] (auto yield) {
+    asio::spawn(_ios, [self = shared_from_this()] (auto yield) {
             if (self->was_stopped()) return;
             sys::error_code ec;
             self->setup_injector(yield[ec]);
-
-            if (ec == asio::error::invalid_argument) {
-                cerr << "Failed to parse endpoint \"" << injector_ep_str << "\"" << endl;
-            }
         });
 }
 

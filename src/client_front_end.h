@@ -6,6 +6,7 @@
 #include <boost/intrusive/list.hpp>
 #include <chrono>
 #include "namespaces.h"
+#include "endpoint.h"
 #include "ssl/ca_certificate.h"
 
 namespace ouinet { class CacheClient; }
