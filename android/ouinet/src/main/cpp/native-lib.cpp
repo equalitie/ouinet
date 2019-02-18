@@ -15,6 +15,7 @@
 #include <condition_variable>
 
 #include <fcntl.h>
+#include <stdlib.h>
 #include <unistd.h>
 
 #include "debug.h"
@@ -35,11 +36,38 @@ ouinet::asio::io_service g_ios;
 thread g_client_thread;
 bool g_crypto_initialized = false;
 
-void start_client_thread(const vector<string>& args)
+void start_client_thread(const vector<string>& args, const vector<string>& extra_path)
 {
     if (g_crypto_initialized) {
         ouinet::util::crypto_init();
         g_crypto_initialized = true;
+    }
+
+    char* old_path_c = getenv("PATH");
+    if (old_path_c) {
+        std::string old_path(old_path_c);
+        std::set<std::string> old_path_entries;
+        size_t index = 0;
+        while (true) {
+            size_t pos = old_path.find(':', index);
+            if (pos == std::string::npos) {
+                old_path_entries.insert(old_path.substr(index));
+                break;
+            } else {
+                old_path_entries.insert(old_path.substr(index, pos - index));
+                index = pos;
+            }
+        }
+
+        std::string new_path;
+        for (size_t i = 0; i < extra_path.size(); i++) {
+            if (!old_path_entries.count(extra_path[i])) {
+                new_path += extra_path[i];
+                new_path += ":";
+            }
+        }
+        new_path += old_path;
+        setenv("PATH", new_path.c_str(), 1);
     }
 
     if (g_client_thread.get_id() != thread::id()) return;
@@ -85,10 +113,9 @@ Java_ie_equalit_ouinet_Ouinet_nStartClient(
         JNIEnv* env,
         jobject /* this */,
         jobjectArray jargs,
-        jobjectArray path)
+        jobjectArray jpath)
 {
     size_t argn = env->GetArrayLength(jargs);
-
     vector<string> args;
     args.reserve(argn);
 
@@ -99,7 +126,19 @@ Java_ie_equalit_ouinet_Ouinet_nStartClient(
         env->ReleaseStringUTFChars(jstr, arg);
     }
 
-    start_client_thread(args);
+
+    size_t pathn = env->GetArrayLength(jpath);
+    vector<string> path;
+    path.reserve(pathn);
+
+    for (size_t i = 0; i < pathn; ++i) {
+        jstring jstr = (jstring) env->GetObjectArrayElement(jpath, i);
+        const char* dir = env->GetStringUTFChars(jstr, 0);
+        path.push_back(dir);
+        env->ReleaseStringUTFChars(jstr, dir);
+    }
+
+    start_client_thread(args, path);
 }
 
 extern "C"
