@@ -1,5 +1,6 @@
 #pragma once
 
+#include <boost/algorithm/string/case_conv.hpp>
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
 
@@ -44,12 +45,12 @@ public:
         return _local_ep;
     }
 
-    const std::string& ipns() const {
-        return _ipns;
+    const std::string& index_ipns_id() const {
+        return _index_ipns_id;
     }
 
-    void set_ipns(std::string ipns) {
-        _ipns = std::move(ipns);
+    void set_index_ipns_id(std::string ipns_id) {
+        _index_ipns_id = std::move(ipns_id);
     }
 
     boost::posix_time::time_duration max_cached_age() const {
@@ -76,8 +77,8 @@ public:
         return _front_end_endpoint;
     }
 
-    boost::optional<util::Ed25519PublicKey> bt_pub_key() const {
-        return _bt_pubkey;
+    boost::optional<util::Ed25519PublicKey> index_bep44_pub_key() const {
+        return _index_bep44_pubkey;
     }
 
     bool is_help() const { return _is_help; }
@@ -92,48 +93,59 @@ public:
         desc.add_options()
            ("help", "Produce this help message")
            ("repo", po::value<string>(), "Path to the repository root")
+
+           // Client options
            ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen")
+           ("front-end-ep"
+            , po::value<string>()
+            , "Front-end's endpoint (in <IP>:<PORT> format)")
+           ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
+            , "Path to the CA certificate store file")
+           ("open-file-limit"
+            , po::value<unsigned int>()
+            , "To increase the maximum number of open files")
+
+           // Transport options
            ("injector-ep"
             , po::value<string>()
             , "Injector's endpoint (either <IP>:<PORT> or I2P public key)")
-           ("injector-ipns"
-            , po::value<string>()->default_value("")
-            , "IPNS of the injector's index")
+           ("injector-credentials", po::value<string>()
+            , "<username>:<password> authentication pair for the injector")
            ("injector-tls-cert-file", po::value<string>(&_tls_injector_cert_path)
             , "Path to the Injector's TLS certificate")
-           ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
-            , "Path to the CA certificate store file")
-           ("disable-origin-access", po::bool_switch(&_disable_origin_access)->default_value(false)
-            , "Disable direct access to the origin (forces use of injector and the cache)")
-           ("disable-proxy-access", po::bool_switch(&_disable_proxy_access)->default_value(false)
-            , "Disable proxied access to the origin (via the injector)")
+
+           // Cache options
+           ("disable-cache", "Disable all cache operations (even initialization)")
+           ("cache-index"
+            , po::value<string>()->default_value("bep44")
+            , "Cache index to use, can be either \"bep44\" or \"btree\"")
+           ("index-ipns-id"
+            , po::value<string>()->default_value("")
+            , "Index ID for the IPFS IPNS subsystem")
+           ("index-bep44-public-key"
+            , po::value<string>()
+            , "Index public key for the BitTorrent BEP44 subsystem")
            ("max-cached-age"
             , po::value<int>()->default_value(_max_cached_age.total_seconds())
             , "Discard cached content older than this many seconds "
               "(0: discard all; -1: discard none)")
-           ("open-file-limit"
-            , po::value<unsigned int>()
-            , "To increase the maximum number of open files")
-           ("injector-credentials", po::value<string>()
-            , "<username>:<password> authentication pair for the injector")
+
+           // Request routing options
+           ("disable-origin-access", po::bool_switch(&_disable_origin_access)->default_value(false)
+            , "Disable direct access to the origin (forces use of injector and the cache)")
+           ("disable-proxy-access", po::bool_switch(&_disable_proxy_access)->default_value(false)
+            , "Disable proxied access to the origin (via the injector)")
+           ("local-domain"
+            , po::value<string>()->default_value("local")
+            , "Always use origin access and never use cache for this TLD")
            ("enable-http-connect-requests", po::bool_switch(&_enable_http_connect_requests)
             , "Enable HTTP CONNECT requests")
-           ("front-end-ep"
-            , po::value<string>()
-            , "Front-end's endpoint (in <IP>:<PORT> format)")
-           ("bittorrent-public-key"
-            , po::value<string>()
-            , "Public key of the BitTorrent/BEP44 subsystem")
-           ("default-index"
-            , po::value<string>()->default_value("btree")
-            , "Default index type to use, can be either \"btree\" or \"bep44\"")
-           ("disable-cache", "Disable all cache operations (even initialization)")
            ;
 
         return desc;
     }
 
-    IndexType default_index_type() const { return _default_index_type; }
+    IndexType cache_index_type() const { return _cache_index_type; }
 
     bool cache_enabled() const { return !_disable_cache; }
 
@@ -143,6 +155,8 @@ public:
     bool is_proxy_access_enabled() const { return !_disable_proxy_access; }
     void is_proxy_access_enabled(bool v) { _disable_proxy_access = !v; }
 
+    std::string local_domain() const { return _local_domain; }
+
 private:
     bool _is_help = false;
     fs::path _repo_root;
@@ -151,20 +165,21 @@ private:
     boost::optional<Endpoint> _injector_ep;
     std::string _tls_injector_cert_path;
     std::string _tls_ca_cert_store_path;
-    std::string _ipns;
+    std::string _index_ipns_id;
     bool _enable_http_connect_requests = false;
     bool _disable_origin_access = false;
     bool _disable_proxy_access = false;
     asio::ip::tcp::endpoint _front_end_endpoint;
-    IndexType _default_index_type = IndexType::btree;
+    IndexType _cache_index_type = IndexType::btree;
 
     boost::posix_time::time_duration _max_cached_age
         = boost::posix_time::hours(7*24);  // one week
 
     std::map<std::string, std::string> _injector_credentials;
 
-    boost::optional<util::Ed25519PublicKey> _bt_pubkey;
+    boost::optional<util::Ed25519PublicKey> _index_bep44_pubkey;
     bool _disable_cache = false;
+    std::string _local_domain;
 };
 
 inline
@@ -266,8 +281,8 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         }
     }
 
-    if (vm.count("injector-ipns")) {
-        _ipns = vm["injector-ipns"].as<string>();
+    if (vm.count("index-ipns-id")) {
+        _index_ipns_id = vm["index-ipns-id"].as<string>();
     }
 
     if (vm.count("injector-credentials")) {
@@ -290,37 +305,46 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         set_credentials(util::str(*_injector_ep), cred);
     }
 
-    if (vm.count("bittorrent-public-key")) {
-        string value = vm["bittorrent-public-key"].as<string>();
+    if (vm.count("index-bep44-public-key")) {
+        string value = vm["index-bep44-public-key"].as<string>();
 
-        _bt_pubkey = util::Ed25519PublicKey::from_hex(value);
+        _index_bep44_pubkey = util::Ed25519PublicKey::from_hex(value);
 
-        if (!_bt_pubkey) {
+        if (!_index_bep44_pubkey) {
             throw std::runtime_error(
                     util::str("Failed parsing '", value, "' as Ed25519 public key"));
         }
     }
 
-    if (vm.count("default-index")) {
-        auto type = vm["default-index"].as<string>();
+    if (vm.count("cache-index")) {
+        auto type = vm["cache-index"].as<string>();
 
         if (type == "btree") {
-            _default_index_type = IndexType::btree;
+            _cache_index_type = IndexType::btree;
         }
         else if (type == "bep44") {
-            _default_index_type = IndexType::bep44;
+            _cache_index_type = IndexType::bep44;
         }
         else {
-            throw std::runtime_error("Invalid value for --default-index-type");
+            throw std::runtime_error("Invalid value for --cache-index");
         }
-    }
-
-    if (_default_index_type == IndexType::bep44 && !_bt_pubkey) {
-        throw std::runtime_error("BEP44 index selected but no BT public key specified");
     }
 
     if (vm.count("disable-cache")) {
         _disable_cache = true;
+    }
+
+    if (!_disable_cache && _cache_index_type == IndexType::bep44 && !_index_bep44_pubkey) {
+        throw std::runtime_error("BEP44 index selected but no injector BEP44 public key specified");
+    }
+
+    if (vm.count("local-domain")) {
+        auto tld_rx = boost::regex("[-0-9a-zA-Z]+");
+        auto local_domain = vm["local-domain"].as<string>();
+        if (!boost::regex_match(local_domain, tld_rx)) {
+            throw std::runtime_error("Invalid TLD for --local-domain");
+        }
+        _local_domain = boost::algorithm::to_lower_copy(local_domain);
     }
 }
 

@@ -60,6 +60,7 @@ INJECTOR_TLS_PORT=7077
 # Fix some configuration parameters on repo creation.
 if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
     cp -r "$INST/repo-templates/$PROG" "$REPO"
+    chmod o-rwx "$REPO"
 
     # Set a well-known client HTTP proxy port.
     if [ "$PROG" = client ]; then
@@ -83,28 +84,46 @@ if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
     fi
 fi
 
+# Update some renamed configuration parameters.
+if grep -qE '^#*\s*(default-index|bittorrent-private-key|bittorrent-public-key|injector-ipns)\s*=' "$CONF" && ! has_help_arg "$@"; then
+    sed -i -E \
+        -e 's/^(#*\s*)default-index(\s*=.*)/\1cache-index\2/g' \
+        -e 's/^(#*\s*)bittorrent-private-key(\s*=.*)/\1index-bep44-private-key\2/g' \
+        -e 's/^(#*\s*)bittorrent-public-key(\s*=.*)/\1index-bep44-public-key\2/g' \
+        -e 's/^(#*\s*)injector-ipns(\s*=.*)/\1index-ipns-id\2/g' \
+        "$CONF"
+fi
+
+# Update BEP44 key file names.
+if ! has_help_arg "$@"; then
+    if [ -e "$REPO/bt-private-key" ]; then
+        mv "$REPO/bt-private-key" "$REPO/bep44-private-key"
+    fi
+    if [ -e "$REPO/bt-public-key" ]; then
+        mv "$REPO/bt-public-key" "$REPO/bep44-public-key"
+    fi
+fi
+
 # Configure the I2P daemon at the injector.
-if [ "$PROG" = injector ]; then
+if [ "$PROG" = injector ] && ! has_help_arg "$@"; then
     if grep -q '^\s*listen-on-i2p\s*=\s*true\b' "$CONF"; then
         sed -i -E 's/^(\s*listen-on-i2p\s*=\s*true\b.*)/##\1/' "$CONF"  # disable legacy I2P support
     fi
 
     # Convert legacy key so that it can be used by the daemon.
     INJECTOR_I2P_LEGACY_KEY="$REPO/i2p/i2p-private-key"  # Base64-encoded
-    INJECTOR_I2P_KEY=/var/lib/i2pd/ouinet-injector-keys.dat  # raw
+    INJECTOR_I2P_DAEMON_KEY=/var/lib/i2pd/ouinet-injector-keys.dat  # raw
     INJECTOR_I2P_BACKUP_KEY="$REPO/i2p-private-key"  # a copy of the above
-    if [ -e "$INJECTOR_I2P_LEGACY_KEY" -a ! -e "$INJECTOR_I2P_KEY" ]; then
-        touch "$INJECTOR_I2P_KEY"
-        chown i2pd:i2pd "$INJECTOR_I2P_KEY"
-        chmod 0640 "$INJECTOR_I2P_KEY"
+    if [ -e "$INJECTOR_I2P_LEGACY_KEY" -a ! -e "$INJECTOR_I2P_BACKUP_KEY" ]; then
         # The daemon uses non-standard Base64, see `T64` in `i2pd/libi2pd/Base.cpp`.
-        tr -- -~ +/ < "$INJECTOR_I2P_LEGACY_KEY" | base64 -d > "$INJECTOR_I2P_KEY"
+        tr -- -~ +/ < "$INJECTOR_I2P_LEGACY_KEY" | base64 -d > "$INJECTOR_I2P_BACKUP_KEY"
     fi
-    if [ -e "$INJECTOR_I2P_BACKUP_KEY" -a ! -e "$INJECTOR_I2P_KEY" ]; then
-        # Use backed-up I2P key (for container upgrades).
-        cp -a "$INJECTOR_I2P_BACKUP_KEY" "$INJECTOR_I2P_KEY"
-        chown i2pd:i2pd "$INJECTOR_I2P_KEY"
-        chmod 0640 "$INJECTOR_I2P_KEY"
+    if [ -e "$INJECTOR_I2P_BACKUP_KEY" ]; then
+        # Always use backed-up I2P key (for container upgrades).
+        touch "$INJECTOR_I2P_DAEMON_KEY"
+        chown i2pd:i2pd "$INJECTOR_I2P_DAEMON_KEY"
+        chmod 0640 "$INJECTOR_I2P_DAEMON_KEY"
+        cat "$INJECTOR_I2P_BACKUP_KEY" > "$INJECTOR_I2P_DAEMON_KEY"
     fi
 
     if ! grep -q '^\s*ipv6\s*=\s*true\b' /etc/i2pd/i2pd.conf; then
@@ -121,7 +140,7 @@ if [ "$PROG" = injector ]; then
 		type=server
 		host=$INJECTOR_LOOP_ADDR
 		port=$INJECTOR_TCP_PORT
-		keys=$(basename "$INJECTOR_I2P_KEY")
+		keys=$(basename "$INJECTOR_I2P_DAEMON_KEY")
 		signaturetype=7
 		inbound.quantity=3
 		outbound.quantity=3
@@ -146,7 +165,9 @@ if [ "$PROG" = injector ]; then
             echo "Injector I2P endpoint (Base32): $i2p_b32_ep"
             i2p_b64_ep=$(wget -qO- "$i2p_dests_pfx$i2p_b32_ep" | sed -nE 's#.*<textarea[^>]*>([^<]+)</textarea>.*#\1#p')
             echo "Injector I2P endpoint (Base64): $i2p_b64_ep"
-            cp "$INJECTOR_I2P_KEY" "$INJECTOR_I2P_BACKUP_KEY"  # ensure that it survives upgrades
+            if [ ! -e "$INJECTOR_I2P_BACKUP_KEY" ]; then
+                cat "$INJECTOR_I2P_DAEMON_KEY" > "$INJECTOR_I2P_BACKUP_KEY"  # ensure that it survives upgrades
+            fi
             break
         fi
         sleep 1

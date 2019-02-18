@@ -7,7 +7,9 @@
 #include "http_desc.h"
 #include "ipfs_util.h"
 #include "../or_throw.h"
+#include "../async_sleep.h"
 #include "../bittorrent/dht.h"
+#include "../logger.h"
 #include "../util/crypto.h"
 
 using namespace std;
@@ -64,12 +66,15 @@ CacheClient::CacheClient( asio_ipfs::node ipfs_node
     : _path_to_repo(move(path_to_repo))
     , _ipfs_node(new asio_ipfs::node(move(ipfs_node)))
     , _bt_dht(new bt::MainlineDht(_ipfs_node->get_io_service()))
-    , _btree_index(new BTreeClientIndex( *_ipfs_node
-                                       , ipns
-                                       , *_bt_dht
-                                       , bt_pubkey
-                                       , _path_to_repo))
 {
+    if (!ipns.empty()) {
+        _btree_index.reset(new BTreeClientIndex( *_ipfs_node
+                                               , ipns
+                                               , *_bt_dht
+                                               , bt_pubkey
+                                               , _path_to_repo));
+    }
+
     _bt_dht->set_interfaces({asio::ip::address_v4::any()});
 
     if (bt_pubkey) {
@@ -162,6 +167,15 @@ string CacheClient::ipfs() const
 {
     if (!_btree_index) return {};
     return _btree_index->ipfs();
+}
+
+void
+CacheClient::wait_for_ready(Cancel& cancel, asio::yield_context yield) const
+{
+    // TODO: Wait for IPFS cache to be ready, if needed.
+    LOG_DEBUG("BEP44 index: waiting for BitTorrent DHT bootstrap...");
+    _bt_dht->wait_all_ready(yield, cancel);
+    LOG_DEBUG("BEP44 index: bootstrapped BitTorrent DHT");  // used by integration tests
 }
 
 CacheClient::~CacheClient() {}

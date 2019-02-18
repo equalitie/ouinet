@@ -9,26 +9,55 @@ private:
     using Clock = std::chrono::steady_clock;
 
 public:
+    WatchDog(const WatchDog&) = delete;
+
+    WatchDog(WatchDog&& other)
+        : _deadline(other._deadline)
+        , _self_in_lambda(other._self_in_lambda)
+        , _timer(other._timer)
+    {
+        other._deadline = nullptr;
+        other._self_in_lambda = nullptr;
+        other._timer = nullptr;
+
+        *_self_in_lambda = this;
+    }
+
+    WatchDog& operator=(WatchDog&& other)
+    {
+        _deadline = other._deadline;
+        _self_in_lambda = other._self_in_lambda;
+        _timer = other._timer;
+
+        *_self_in_lambda = this;
+
+        other._deadline = nullptr;
+        other._self_in_lambda = nullptr;
+        other._timer = nullptr;
+
+        return *this;
+    }
+
     template<class Duration, class OnTimeout>
     WatchDog(asio::io_service& ios, Duration d, OnTimeout on_timeout)
     {
-        asio::spawn(ios, [&, d, on_timeout = std::move(on_timeout)]
+        asio::spawn(ios, [self_ = this, &ios, d, on_timeout = std::move(on_timeout)]
                          (asio::yield_context yield) {
             Clock::time_point deadline = Clock::now() + d;
-            bool was_destroyed         = false;
+            WatchDog* self = self_;
 
             asio::steady_timer timer(ios);
 
-            _was_destroyed = &was_destroyed;
-            _timer         = &timer;
-            _deadline      = &deadline;
+            self->_self_in_lambda = &self;
+            self->_timer          = &timer;
+            self->_deadline       = &deadline;
 
             {
                 auto on_exit = defer([&] {
-                        if (was_destroyed) return;
-                        _was_destroyed = nullptr;
-                        _timer = nullptr;
-                        _deadline = nullptr;
+                        if (!self) return;
+                        self->_self_in_lambda = nullptr;
+                        self->_timer = nullptr;
+                        self->_deadline = nullptr;
                     });
 
                 auto now = Clock::now();
@@ -36,7 +65,7 @@ public:
                     timer.expires_after(deadline - now);
                     sys::error_code ec;
                     timer.async_wait(yield[ec]);
-                    if (was_destroyed) return;
+                    if (!self) return;
                     now = Clock::now();
                 }
             }
@@ -59,13 +88,15 @@ public:
     }
 
     ~WatchDog() {
-        if (_was_destroyed) *_was_destroyed = true;
-        if (_timer) _timer->cancel();
+        if (_self_in_lambda) {
+            _timer->cancel();
+            *_self_in_lambda = nullptr;
+        }
     }
 
 private:
     Clock::time_point* _deadline;
-    bool* _was_destroyed = nullptr;
+    WatchDog** _self_in_lambda = nullptr;
     asio::steady_timer* _timer;
 };
 

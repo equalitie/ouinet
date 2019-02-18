@@ -145,6 +145,15 @@ bool NodeID::closer_to(const NodeID& left, const NodeID& right) const
     return false;
 }
 
+NodeID NodeID::distance_to(const NodeID& other) const
+{
+    NodeID ret = NodeID::zero();
+    for (size_t i = 0; i < sizeof(buffer); i++) {
+        ret.buffer[i] = buffer[i] ^ other.buffer[i];
+    }
+    return ret;
+}
+
 std::ostream& ouinet::bittorrent::operator<<(std::ostream& os, const NodeID& id)
 {
     return os << id.to_hex();

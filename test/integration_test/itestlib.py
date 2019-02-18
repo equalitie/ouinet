@@ -126,7 +126,7 @@ class OuinetClient(OuinetProcess):
     def __init__(self, client_name, i2p_ready = None):
         super(OuinetClient(client_name, "ouinet-client.conf", TestFixtures.FIRST_CLIENT_CONF_FILE_CONTENT, timeout)
 
-        argv = [ouinet_env['OUINET_BUILD_DIR'] + "client", "--repo", self.config_folder]
+        argv = [os.path.join(ouinet_env['OUINET_BUILD_DIR'], "client"), "--repo", self.config_folder]
         argv.extend(args)
 
         self.start(argv)
@@ -147,7 +147,7 @@ class OuinetInjector(OuinetProcess):
     def __init__(self, injector_name, timeout, args, ready_deferred = None):
         self.setup_config(injector_name, timeout, "ouinet-injector.conf", TestFixtures.INJECTOR_CONF_FILE_CONTENT, ready_deferred)
 
-        argv = [ouinet_env['OUINET_BUILD_DIR'] + "injector", "--repo", self.config_folder]
+        argv = [os.path.join(ouinet_env['OUINET_BUILD_DIR'], "injector"), "--repo", self.config_folder]
         argv.extend(args)
 
         self.start(argv)

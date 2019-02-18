@@ -11,9 +11,11 @@
 #include "../util/crypto.h"
 #include "../util/success_condition.h"
 #include "../util/wait_condition.h"
+#include "../util/watch_dog.h"
 
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/steady_timer.hpp>
+//#include <boost/optional/optional_io.hpp>
 
 #include <chrono>
 #include <set>
@@ -23,6 +25,7 @@
 namespace ouinet {
 namespace bittorrent {
 
+using std::cerr; using std::endl;
 using dht::NodeContact;
 using Candidates = std::vector<NodeContact>;
 
@@ -322,14 +325,19 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
     ProximityMap<boost::none_t> responsible_nodes(target_id, RESPONSIBLE_TRACKERS_PER_SWARM);
     boost::optional<MutableDataItem> data;
 
+    Cancel internal_cancel(cancel_signal);
+
+    boost::optional<WatchDog> cancel_wd;
+
     collect(target_id, [&](
         const Contact& candidate,
         asio::yield_context yield,
-        Signal<void()>& cancel_signal
+        Signal<void()>& cancel
     ) -> boost::optional<Candidates> {
         if (!candidate.id && responsible_nodes.full()) {
             return boost::none;
         }
+
         if (candidate.id && !responsible_nodes.would_insert(*candidate.id)) {
             return boost::none;
         }
@@ -344,7 +352,7 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
             candidate,
             closer_nodes,
             yield,
-            cancel_signal
+            cancel
         );
         if (!response_) {
             return closer_nodes;
@@ -376,12 +384,36 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
         };
         if (item.verify()) {
             if (!data || *sequence_number > data->sequence_number) {
-                data = item;
+                data = std::move(item);
+                /*
+                 * XXX: This isn't correct! We shouldn't stop with the first
+                 * validly signed item we get. Ideally we would get the item
+                 * from some N closest nodes to `target_id`. But that is
+                 * impractical because many of the closest nodes won't respond
+                 * and make us wait for too long (and we sometimes time-out even
+                 * though there _is_ some value already).
+                 *
+                 * TODO: Make this function not return a single value, but a
+                 * "generator" of dht mutable items. Then the user of this
+                 * function can have a look at it and decide whether it's
+                 * "fresh enough" (e.g. if it's a http response, it may still
+                 * be fresh).
+                 */
+                if (!cancel_wd) {
+                    cancel_wd = WatchDog(_ios
+                                        , std::chrono::seconds(5)
+                                        , [&] { cancel(); });
+                }
             }
         }
 
         return closer_nodes;
-    }, yield[ec], cancel_signal);
+    }, yield[ec], internal_cancel);
+
+    if (ec == asio::error::operation_aborted && !cancel_signal && data) {
+        // Only internal cancel was called to indicate we're done
+        ec = sys::error_code();
+    }
 
     return or_throw(yield, ec, std::move(data));
 }
@@ -391,20 +423,43 @@ NodeID dht::DhtNode::data_put_mutable(
     asio::yield_context yield,
     Signal<void()>& cancel_signal
 ) {
+    Cancel local_cancel(cancel_signal);
+
     NodeID target_id = DataStore::mutable_get_id(data.public_key, data.salt);
 
     sys::error_code ec;
-    struct ResponsibleNode {
-        asio::ip::udp::endpoint node_endpoint;
-        std::string put_token;
+    ProximityMap<boost::none_t> responsible_nodes(target_id, RESPONSIBLE_TRACKERS_PER_SWARM);
+
+    auto write_to_node = [&] ( const NodeID& id
+                             , udp::endpoint ep
+                             , const std::string& put_token
+                             , Cancel& cancel
+                             , asio::yield_context yield) -> bool {
+            BencodedMap put_message {
+                { "id", _node_id.to_bytestring() },
+                { "k", util::bytes::to_string(data.public_key.serialize()) },
+                { "seq", data.sequence_number },
+                { "sig", util::bytes::to_string(data.signature) },
+                { "v", data.value },
+                { "token", put_token }
+            };
+
+            if (!data.salt.empty()) {
+                put_message["salt"] = data.salt;
+            }
+
+            sys::error_code ec;
+            send_write_query(ep, id, "put", put_message, yield[ec], cancel);
+
+            if (cancel) ec = asio::error::operation_aborted;
+
+            return !ec ? true : false;
     };
-    ProximityMap<ResponsibleNode> responsible_nodes(target_id, RESPONSIBLE_TRACKERS_PER_SWARM);
-    std::map<NodeID, ResponsibleNode> outdated_nodes;
 
     collect(target_id, [&](
         const Contact& candidate,
         asio::yield_context yield,
-        Signal<void()>& cancel_signal
+        Signal<void()>& cancel
     ) -> boost::optional<Candidates> {
         if (!candidate.id && responsible_nodes.full()) {
             return boost::none;
@@ -415,16 +470,16 @@ NodeID dht::DhtNode::data_put_mutable(
         }
 
         std::vector<NodeContact> closer_nodes;
+
         boost::optional<BencodedMap> response_ = query_get_data(
             target_id,
             candidate,
             closer_nodes,
             yield,
-            cancel_signal
+            cancel
         );
-        if (!response_) {
-            return closer_nodes;
-        }
+
+        if (!response_) return closer_nodes;
         BencodedMap& response = *response_;
 
         boost::optional<std::string> put_token = response["token"].as_string();
@@ -432,9 +487,15 @@ NodeID dht::DhtNode::data_put_mutable(
             return closer_nodes;
         }
 
-        ResponsibleNode data_node{ candidate.endpoint, *put_token };
         if (candidate.id) {
-            responsible_nodes.insert({*candidate.id, std::move(data_node)});
+            if (responsible_nodes.would_insert(*candidate.id)
+                    && write_to_node( *candidate.id
+                                    , candidate.endpoint
+                                    , *put_token
+                                    , cancel
+                                    , yield)) {
+                responsible_nodes.insert({*candidate.id, boost::none});
+            }
         }
 
         if (response["k"] != util::bytes::to_string(data.public_key.serialize())) {
@@ -462,59 +523,22 @@ NodeID dht::DhtNode::data_put_mutable(
                  * This node has an old version of this data entry.
                  * Update it even if it is no longer responsible.
                  */
-                if (candidate.id) {
-                    outdated_nodes[*candidate.id] = data_node;
-                }
+                write_to_node( *candidate.id
+                             , candidate.endpoint
+                             , *put_token
+                             , cancel
+                             , yield);
             }
         }
 
         return closer_nodes;
-    }, yield[ec], cancel_signal);
+    }, yield[ec], local_cancel);
 
-    if (ec) {
-        return or_throw<NodeID>(yield, ec, std::move(target_id));
+    if (cancel_signal) {
+        ec = asio::error::operation_aborted;
+    } else if (responsible_nodes.empty()) {
+        ec = asio::error::network_down;
     }
-
-    std::map<NodeID, ResponsibleNode*> all_nodes;
-
-    for (auto& i : responsible_nodes) { all_nodes.insert({i.first, &i.second}); }
-    for (auto& i : outdated_nodes)    { all_nodes.insert({i.first, &i.second}); }
-
-    bool success = false;
-    auto cancelled = cancel_signal.connect([]{});
-    WaitCondition wc(_ios);
-    for (auto& i : all_nodes) {
-        asio::spawn(_ios, [&, lock = wc.lock()] (asio::yield_context yield) {
-            BencodedMap put_message {
-                { "id", _node_id.to_bytestring() },
-                { "k", util::bytes::to_string(data.public_key.serialize()) },
-                { "seq", data.sequence_number },
-                { "sig", util::bytes::to_string(data.signature) },
-                { "v", data.value },
-                { "token", i.second->put_token }
-            };
-
-            if (!data.salt.empty()) {
-                put_message["salt"] = data.salt;
-            }
-
-            sys::error_code ec;
-            send_write_query(
-                i.second->node_endpoint,
-                i.first,
-                "put",
-                put_message,
-                yield[ec],
-                cancel_signal
-            );
-            if (!ec) {
-                success = true;
-            }
-        });
-    }
-    wc.wait(yield);
-
-    ec = cancelled ? boost::asio::error::operation_aborted : success ? sys::error_code() : boost::asio::error::network_down;
 
     return or_throw<NodeID>(yield, ec, std::move(target_id));
 }
@@ -2285,6 +2309,56 @@ void MainlineDht::immutable_put_stop(NodeID key)
     _publications.immutable_publications.erase(key);
 }
 
+void MainlineDht::mutable_put(
+    const MutableDataItem& data,
+    Cancel& top_cancel,
+    asio::yield_context yield
+) {
+    Cancel cancel(top_cancel);
+
+    SuccessCondition condition(_ios);
+    WaitCondition wait_all(_ios);
+
+    for (auto& i : _nodes) {
+        asio::spawn(_ios, [ &
+                          , lock = condition.lock()
+                          , lock_all = wait_all.lock()
+                          ] (asio::yield_context yield) {
+            if (!i.second->ready()) {
+                return;
+            }
+
+            sys::error_code ec;
+            i.second->data_put_mutable(data, yield[ec], cancel);
+
+            if (ec) return;
+
+            lock.release(true);
+        });
+    }
+
+    auto cancelled = cancel.connect([&] {
+        condition.cancel();
+    });
+
+    auto terminated = _terminate_signal.connect([&] {
+        condition.cancel();
+    });
+
+    sys::error_code ec;
+
+    if (condition.wait_for_success(yield)) {
+        cancel();
+    } else {
+        if (condition.cancelled()) { ec = asio::error::operation_aborted;   }
+        else                       { ec = asio::error::network_unreachable; }
+    }
+
+    wait_all.wait(yield);
+
+    return or_throw(yield, ec);
+}
+
 NodeID MainlineDht::mutable_put_start(
     const MutableDataItem& data,
     asio::yield_context yield,
@@ -2519,6 +2593,33 @@ boost::optional<MutableDataItem> MainlineDht::mutable_get(
     completed_condition.wait(yield);
 
     return or_throw(yield, ec, std::move(output));
+}
+
+
+void MainlineDht::wait_all_ready(
+    asio::yield_context yield,
+    Signal<void()>& cancel_signal
+) {
+    auto cancelled = _terminate_signal.connect([&] {
+        cancel_signal();
+    });
+    sys::error_code ec;
+    while (!ec && !all_ready()) {
+        async_sleep(_ios, std::chrono::milliseconds(200), cancel_signal, yield[ec]);
+    }
+    return or_throw(yield, ec);
+}
+
+
+std::ostream& operator<<(std::ostream& os, const Contact& c)
+{
+    os << "(Contact " << c.endpoint << " id:";
+    if (c.id) {
+        os << *c.id;
+    } else {
+        os << "none";
+    }
+    return os << ")";
 }
 
 

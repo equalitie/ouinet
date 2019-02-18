@@ -44,6 +44,7 @@
 
 #include "util/timeout.h"
 #include "util/crypto.h"
+#include "util/bytes.h"
 
 #include "logger.h"
 #include "defer.h"
@@ -342,7 +343,7 @@ public:
 
         bool timed_out = false;
 
-        WatchDog wd(ios, chrono::seconds(3*60), [&] {
+        WatchDog wd(ios, chrono::minutes(3), [&] {
             timed_out = true;
             cancel();
         });
@@ -368,7 +369,7 @@ public:
 
         Request rq = util::to_origin_request(rq_);
         rq.keep_alive(true);
-        Response ret = connection->request(rq, cancel, yield[ec]);
+        Response ret = connection->request(rq, cancel, yield[ec].tag("request"));
 
         if (ec) return or_throw<Response>(yield, ec);
 
@@ -391,6 +392,16 @@ private:
     CacheEntry
     fetch_stored(const Request& rq, Cancel& cancel, Yield yield)
     {
+        /*
+         * Currently fetching a resource from the distributed cache is a lot
+         * more resource hungry than simply fetching it from the origin.
+         *
+         * TODO: Perhaps modify the cache on the injector so that it only does
+         * storing and fething on local disk (that used to be the case with the
+         * B-tree database, but isn't with BEP44 one). Then re-enable this
+         * code.
+         */
+#if 0
         if (!injector)
             return or_throw<CacheEntry>( yield
                                        , asio::error::operation_not_supported);
@@ -399,9 +410,9 @@ private:
 
         // TODO: use string_view
         auto ret = injector->get_content( key_from_http_req(rq)
-                                        , config.default_index_type()
+                                        , config.cache_index_type()
                                         , cancel
-                                        , yield[ec]);
+                                        , yield[ec].tag("injector.get_content"));
 
         if (ec) return or_throw(yield, ec, move(ret.second));
 
@@ -413,6 +424,10 @@ private:
         ret.second.response.set(http_::response_injection_id_hdr, ret.first);
 
         return move(ret.second);
+#else
+        return or_throw<CacheEntry>( yield
+                                   , asio::error::operation_not_supported);
+#endif
     }
 
     Response store(Request rq, Response rs, Yield yield)
@@ -429,7 +444,7 @@ private:
 
         // This injection code logs errors but does not propagate them
         // (the `desc_data` field is set to the empty string).
-        auto index_type = config.default_index_type();
+        auto index_type = config.cache_index_type();
         auto inject = [
             rq, rs, id, index_type,
             injector = injector.get()
@@ -711,10 +726,14 @@ int main(int argc, const char* argv[])
     Cancel::Connection shutdown_ipfs_slot;
 
     if (config.cache_enabled()) {
+        auto bep44_privk = config.index_bep44_private_key();
+        auto enable_btree = config.cache_index_type() == IndexType::btree;
+        auto enable_bep44 = config.cache_index_type() == IndexType::bep44;
         cache_injector = make_unique<CacheInjector>
                                 ( ios
-                                , config.bt_private_key()
-                                , config.repo_root());
+                                , bep44_privk
+                                , config.repo_root()
+                                , enable_btree, enable_bep44);
 
         shutdown_ipfs_slot = cancel.connect([&] {
             cache_injector = nullptr;
@@ -723,8 +742,13 @@ int main(int argc, const char* argv[])
         // Although the IPNS ID is already in IPFS's config file,
         // this just helps put all info relevant to the user right in the repo root.
         auto ipns_id = cache_injector->ipfs_id();
-        LOG_DEBUG("IPNS Index: " + ipns_id);
+        LOG_DEBUG("IPNS Index: " + ipns_id);  // used by integration tests
         util::create_state_file(config.repo_root()/"cache-ipns", ipns_id);
+
+        // Same for BEP44.
+        auto bep44_pubk = util::bytes::to_hex(bep44_privk.public_key().serialize());
+        LOG_DEBUG("BEP44 Index: " + bep44_pubk);  // used by integration tests
+        util::create_state_file(config.repo_root()/"cache-bep44", bep44_pubk);
     }
 
     OuiServiceServer proxy_server(ios);
@@ -811,6 +835,8 @@ int main(int argc, const char* argv[])
         &config,
         &cancel
     ] (asio::yield_context yield) {
+        if (config.cache_enabled())
+            cache_injector->wait_for_ready(cancel, yield);
         listen( config
               , proxy_server
               , cache_injector

@@ -15,6 +15,7 @@
 
 using namespace std;
 using namespace ouinet;
+using json = nlohmann::json;
 
 using Request = ClientFrontEnd::Request;
 using Response = ClientFrontEnd::Response;
@@ -399,6 +400,31 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
           "</html>\n";
 }
 
+void ClientFrontEnd::handle_status( ClientConfig& config
+                                  , const Request& req, Response& res, stringstream& ss
+                                  , CacheClient* cache_client)
+{
+    res.set(http::field::content_type, "application/json");
+
+    json response = {
+        {"auto_refresh", _auto_refresh_enabled},
+        {"origin_access", config.is_origin_access_enabled()},
+        {"proxy_access", config.is_proxy_access_enabled()},
+        {"injector_proxy", _injector_proxying_enabled},
+        {"ipfs_cache", _ipfs_cache_enabled},
+     // https://github.com/nlohmann/json#arbitrary-types-conversions
+     // {"misc", {
+         // {"injector_endpoint", config.injector_endpoint()},
+         // {"pending_tasks", _pending_tasks},
+         // {"our_ipfs_id", cache_client->ipfs_id()},
+         // {"cache_ipns_id", cache_client->ipns()},
+         // {"cache_ipns_id", cache_client->ipfs()}
+     // }}
+    };
+
+    ss << response;
+}
+
 Response ClientFrontEnd::serve( ClientConfig& config
                               , const Request& req
                               , CacheClient* cache_client
@@ -428,6 +454,8 @@ Response ClientFrontEnd::serve( ClientConfig& config
     } else if (url.path == "/api/insert/bep44") {
         sys::error_code ec_;  // shouldn't throw, but just in case
         handle_insert_bep44(req, res, ss, cache_client, yield[ec_]);
+    } else if (url.path == "/api/status") {
+        handle_status(config, req, res, ss, cache_client);
     } else {
         handle_portal(config, req, res, ss, cache_client);
     }

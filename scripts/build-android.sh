@@ -10,7 +10,7 @@ APP_ROOT="${ROOT}/android/browser"
 APK="${DIR}"/build-android/builddir/browser/build-android/outputs/apk/debug/browser-debug.apk
 APK_ID=$(sed -En 's/^\s*\bapplicationId\s+"([^"]+)".*/\1/p' "${APP_ROOT}/build.gradle")
 
-if [ ! which apt-get 1> /dev/null 2>&1 ]; then
+if which apt-get 1> /dev/null 2>&1; then
     DEBIAN=true
 else
     DEBIAN=false
