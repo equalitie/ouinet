@@ -84,7 +84,8 @@ JNIEXPORT void JNICALL
 Java_ie_equalit_ouinet_Ouinet_nStartClient(
         JNIEnv* env,
         jobject /* this */,
-        jobjectArray jargs)
+        jobjectArray jargs,
+        jobjectArray path)
 {
     size_t argn = env->GetArrayLength(jargs);
 
