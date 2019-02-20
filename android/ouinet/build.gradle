@@ -23,9 +23,7 @@ android {
     sourceSets {
         main {
             jniLibs.srcDirs = ["$libdir"]
-            assets.srcDirs = ["$assetsdir"]
         }
-
     }
     buildTypes {
         release {

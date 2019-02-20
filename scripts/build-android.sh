@@ -1,7 +1,6 @@
 #!/bin/bash
 
 set -e
-set -x
 
 DIR=`pwd`
 SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
@@ -125,22 +124,6 @@ function add_library {
             exit 1
         fi
         OUT_LIBS+=("$lib")
-    done
-}
-
-######################################################################
-# This variable shall contain paths to generated binaries which
-# must all be included in the final Android package.
-OUT_BINARIES=()
-
-function add_binary {
-    local binaries=("$@") binaries
-    for binary in "${binaries[@]}"; do
-        if [ ! -f "$binary" ]; then
-            echo "Cannot add binary \"$binary\": File doesn't exist"
-            exit 1
-        fi
-        OUT_BINARIES+=("$binary")
     done
 }
 
@@ -299,9 +282,9 @@ function maybe_install_ndk_toolchain {
 function maybe_install_gradle {
     GRADLE_REQUIRED_MAJOR_VERSION=4
     GRADLE_REQUIRED_MINOR_VERSION=6
-
+    
     NEED_GRADLE=false
-
+    
     if ! which gradle 1> /dev/null 2>&1; then
        NEED_GRADLE=true
     else
@@ -421,7 +404,6 @@ add_library $DIR/build-ouinet/libclient.so
 add_library $DIR/build-ouinet/modules/asio-ipfs/ipfs_bindings/libipfs_bindings.so
 add_library $DIR/build-ouinet/gcrypt/src/gcrypt/src/.libs/libgcrypt.so
 add_library $DIR/build-ouinet/gpg_error/out/lib/libgpg-error.so
-add_binary $DIR/build-ouinet/modules/obfs4proxy/obfs4proxy
 }
 
 ######################################################################
@@ -437,18 +419,6 @@ done
 }
 
 ######################################################################
-function copy_binaries {
-local binary_dst_dir="${DIR}"/build-android/builddir/assets/
-rm -rf "${binary_dst_dir}"
-mkdir -p "${binary_dst_dir}"
-local binary
-for binary in "${OUT_BINARIES[@]}"; do
-    echo "Copying $binary to $binary_dst_dir"
-    cp $binary $binary_dst_dir/
-done
-}
-
-######################################################################
 # Unpolished code to build the debug APK
 function build_ouinet_apk {
 mkdir -p "${DIR}"/build-android
@@ -459,8 +429,7 @@ gradle --no-daemon build \
     -Pboost_includedir=${BOOST_INCLUDEDIR} \
     -Pandroid_abi=${ABI} \
     -Pouinet_clientlib_path="${DIR}"/build-android/builddir/deps/${ABI}/libclient.so \
-    -Plibdir="${DIR}"/build-android/builddir/deps \
-    -Passetsdir="${DIR}"/build-android/builddir/assets
+    -Plibdir="${DIR}"/build-android/builddir/deps
 
 echo "---------------------------------"
 echo "Your Android package is ready at:"
@@ -538,7 +507,6 @@ if check_mode build; then
     # TODO: miniupnp
     build_ouinet_libs
     copy_jni_libs
-    copy_binaries
     build_ouinet_apk
 fi
 
