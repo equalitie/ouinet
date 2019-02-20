@@ -211,7 +211,7 @@ class OuinetTests(TestCase):
             self.run_i2p_client( TestFixtures.I2P_CLIENT["name"]
                                , [ "--disable-origin-access", "--disable-cache"
                                  , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"])
-                                 , "--injector-ep", injector_i2p_public_id
+                                 , "--injector-ep", "i2p:" + injector_i2p_public_id
                                  , "http://localhost/"]
                                , i2pclient_tunnel_ready)
         
@@ -269,7 +269,7 @@ class OuinetTests(TestCase):
         self.run_tcp_client( TestFixtures.TCP_CLIENT["name"]
                            , [ "--disable-origin-access", "--disable-cache"
                              , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_CLIENT["port"])
-                             , "--injector-ep", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)
+                             , "--injector-ep", "tcp:127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)
                              , "http://localhost/"]
                            , client_tcp_port_ready)
 
@@ -332,7 +332,7 @@ class OuinetTests(TestCase):
         self.run_tcp_client( TestFixtures.CACHE_CLIENT[0]["name"]
                            , [ "--disable-origin-access", "--disable-proxy-access", "--disable-cache"
                              , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[0]["port"])
-                             , "--injector-ep", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)
+                             , "--injector-ep", "tcp:127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)
                              , "http://localhost/"]
                            , client_tcp_port_ready)
 
