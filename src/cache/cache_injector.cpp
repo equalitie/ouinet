@@ -21,25 +21,71 @@ using namespace std;
 using namespace ouinet;
 namespace bt = ouinet::bittorrent;
 
+// static
+unique_ptr<CacheInjector> CacheInjector::build( boost::asio::io_service& ios
+                                              , util::Ed25519PrivateKey bt_privkey
+                                              , fs::path path_to_repo
+                                              , bool enable_btree
+                                              , bool enable_bep44
+                                              , Cancel& cancel
+                                              , boost::asio::yield_context yield)
+{
+    using Ret = unique_ptr<CacheInjector>;
+
+    sys::error_code ec;
+
+    unique_ptr<bt::MainlineDht> bt_dht(new bt::MainlineDht(ios));
+    bt_dht->set_interfaces({asio::ip::address_v4::any()});
+
+    unique_ptr<Bep44InjectorIndex> bep44_index;
+
+    if (enable_bep44) {
+        bep44_index = Bep44InjectorIndex::build(*bt_dht
+                                               , bt_privkey
+                                               , path_to_repo / "bep44-index"
+                                               , cancel
+                                               , yield[ec]);
+    }
+
+    assert(!cancel || ec == asio::error::operation_aborted);
+    if (cancel) ec = asio::error::operation_aborted;
+    if (ec) return or_throw<Ret>(yield, ec);
+
+    Ret ci(new CacheInjector( ios
+                            , bt_privkey
+                            , path_to_repo
+                            , enable_btree
+                            , move(bt_dht)
+                            , move(bep44_index)));
+
+    ci->wait_for_ready(cancel, yield[ec]);
+
+    assert(!cancel || ec == asio::error::operation_aborted);
+    if (cancel) ec = asio::error::operation_aborted;
+    if (ec) return or_throw<Ret>(yield, ec);
+
+    return or_throw(yield, ec, move(ci));
+}
+
+
 CacheInjector::CacheInjector
         ( asio::io_service& ios
         , util::Ed25519PrivateKey bt_privkey
         , fs::path path_to_repo
         , bool enable_btree
-        , bool enable_bep44)
+        , unique_ptr<bt::MainlineDht> bt_dht
+        , unique_ptr<Bep44InjectorIndex> bep44_index)
     : _ipfs_node(new asio_ipfs::node(ios, (path_to_repo/"ipfs").native()))
-    , _bt_dht(new bt::MainlineDht(ios))  // used by either B-tree over BEP44, or BEP44
+    , _bt_dht(move(bt_dht))  // used by either B-tree over BEP44, or BEP44
+    , _bep44_index(move(bep44_index))
     , _scheduler(new Scheduler(ios, _concurrency))
     , _was_destroyed(make_shared<bool>(false))
 {
-    assert((enable_btree || enable_bep44) && "At least one index type must be enabled");
+    assert((enable_btree || _bep44_index) && "At least one index type must be enabled");
+
     if (enable_btree) {
         _publisher.reset(new Publisher(*_ipfs_node, *_bt_dht, bt_privkey));
         _btree_index.reset(new BTreeInjectorIndex(*_ipfs_node, *_publisher, path_to_repo));
-    }
-    _bt_dht->set_interfaces({asio::ip::address_v4::any()});
-    if (enable_bep44) {
-        _bep44_index.reset(new Bep44InjectorIndex(*_bt_dht, bt_privkey));
     }
 }
 

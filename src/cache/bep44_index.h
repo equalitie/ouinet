@@ -59,8 +59,13 @@ private:
 
 class Bep44InjectorIndex : public InjectorIndex {
 public:
-    Bep44InjectorIndex( bittorrent::MainlineDht& bt_dht
-                      , util::Ed25519PrivateKey bt_privkey);
+    static
+    std::unique_ptr<Bep44InjectorIndex>
+    build( bittorrent::MainlineDht&
+         , util::Ed25519PrivateKey
+         , const boost::filesystem::path& storage_path
+         , Cancel&
+         , asio::yield_context);
 
     std::string find( const std::string& key
                     , Cancel&
@@ -72,6 +77,10 @@ public:
     boost::asio::io_service& get_io_service();
 
     ~Bep44InjectorIndex();
+
+private:
+    Bep44InjectorIndex( bittorrent::MainlineDht& bt_dht
+                      , util::Ed25519PrivateKey bt_privkey);
 
 private:
     bittorrent::MainlineDht& _bt_dht;

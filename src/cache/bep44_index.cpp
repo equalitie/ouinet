@@ -171,6 +171,7 @@ Bep44ClientIndex::Bep44ClientIndex( bt::MainlineDht& bt_dht
     , _updater(new Bep44EntryUpdater(bt_dht))
 {}
 
+
 // static
 unique_ptr<Bep44ClientIndex>
 Bep44ClientIndex::build( bt::MainlineDht& bt_dht
@@ -189,6 +190,18 @@ Bep44InjectorIndex::Bep44InjectorIndex( bt::MainlineDht& bt_dht
     , _bt_privkey(bt_privkey)
     , _updater(new Bep44EntryUpdater(bt_dht))
 {}
+
+
+// static
+unique_ptr<Bep44InjectorIndex>
+Bep44InjectorIndex::build( bt::MainlineDht& bt_dht
+                         , util::Ed25519PrivateKey bt_privkey
+                         , const boost::filesystem::path& storage_path
+                         , Cancel&
+                         , asio::yield_context)
+{
+    return unique_ptr<Bep44InjectorIndex>(new Bep44InjectorIndex(bt_dht, bt_privkey));
+}
 
 
 string Bep44ClientIndex::find( const string& key

@@ -61,6 +61,7 @@ CacheClient::build( asio::io_service& ios
                                              , cancel
                                              , yield[ec]);
 
+        assert(!cancel || ec == asio::error::operation_aborted);
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw<ClientP>(yield, ec);
     }
