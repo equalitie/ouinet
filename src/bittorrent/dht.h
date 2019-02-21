@@ -181,6 +181,14 @@ class DhtNode {
         Signal<void()>& cancel_signal
     );
 
+    // http://bittorrent.org/beps/bep_0005.html#ping
+    BencodedMap send_ping(
+        NodeContact contact,
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
+    );
+    void send_ping(NodeContact contact);
+
     bool is_v4() const { return _interface_address.is_v4(); }
     bool is_v6() const { return _interface_address.is_v6(); }
 
@@ -233,9 +241,6 @@ class DhtNode {
     );
 
     std::string new_transaction_string();
-
-    // http://bittorrent.org/beps/bep_0005.html#ping
-    void send_ping(NodeContact contact);
 
     void send_write_query(
         udp::endpoint destination,
