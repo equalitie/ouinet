@@ -1,5 +1,6 @@
 #pragma once
 
+#include <list>
 #include <boost/asio/buffer.hpp>
 #include <boost/utility/string_view.hpp>
 #include "../namespaces.h"

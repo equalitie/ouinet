@@ -7,6 +7,7 @@
 
 #include <chrono>
 #include <vector>
+#include <set>
 
 #include "bencoding.h"
 #include "dht_storage.h"
