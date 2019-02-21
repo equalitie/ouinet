@@ -26,6 +26,14 @@ namespace bittorrent {
 
 class UdpMultiplexer;
 
+asio::ip::udp::endpoint resolve(
+    asio::io_context& ioc,
+    const std::string& addr,
+    const std::string& port,
+    asio::yield_context yield,
+    Signal<void()>& cancel_signal
+);
+
 namespace ip = asio::ip;
 using ip::tcp;
 using ip::udp;

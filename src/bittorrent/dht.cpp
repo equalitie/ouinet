@@ -1258,7 +1258,6 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
 }
 
 
-static
 asio::ip::udp::endpoint resolve(
     asio::io_context& ioc,
     const std::string& addr,
