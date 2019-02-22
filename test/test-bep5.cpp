@@ -1,4 +1,5 @@
 #include <bittorrent/dht.h>
+#include <bittorrent/routing_table.h>
 
 #include <iostream>
 
@@ -10,10 +11,10 @@
 #include <boost/optional/optional_io.hpp>
 #include "../src/util/crypto.h"
 
-
 using namespace ouinet;
 using namespace std;
 using namespace ouinet::bittorrent;
+using namespace ouinet::bittorrent::dht;
 using boost::string_view;
 using udp = asio::ip::udp;
 using boost::optional;
@@ -78,7 +79,7 @@ void usage(std::ostream& os, const string& app_name, const char* what = nullptr)
        << "  " << app_name << " [interface-address]" << endl
        << "E.g.:" << endl
        << "  " << app_name << " all          [<get>|<put>] # All non loopback interfaces" << endl
-       << "  " << app_name << " 0.0.0.0      [<get>|<put>] # Any ipv4 interface" << endl
+       << "  " << app_name << " 0.0.0.0      [<get>|<put>|<ping>] # Any ipv4 interface" << endl
        << "  " << app_name << " 192.168.0.1  [<get>|<put>] # Concrete interface" << endl
        << "Where:" << endl
        << "  <get>: get <public-key> <dht-key>" << endl
@@ -165,6 +166,8 @@ int main(int argc, const char** argv)
 
     MainlineDht dht(ios);
 
+    DhtNode dht_ {ios, asio::ip::make_address("0.0.0.0")};
+
     vector<string> args;
 
     for (int i = 0; i < argc; ++i) {
@@ -178,17 +181,20 @@ int main(int argc, const char** argv)
 
     parse_args(args, &ifaddrs, &get_cmd, &put_cmd);
 
-    for (auto addr : ifaddrs) {
-        std::cout << "Spawning DHT node on " << addr << std::endl;
-    }
+    // for (auto addr : ifaddrs) {
+    //     std::cout << "Spawning DHT node on " << addr << std::endl;
+    // }
 
-    dht.set_interfaces(ifaddrs);
+    // dht.set_interfaces(ifaddrs);
 
     asio::spawn(ios, [&] (asio::yield_context yield) {
         sys::error_code ec;
+
+        dht_.start(yield[ec]);
+
         asio::steady_timer timer(ios);
 
-        while (!dht.all_ready() && !ec) {
+        while (!dht_.ready() && !ec) {
             cerr << "Not ready yet..." << endl;
             timer.expires_from_now(chrono::seconds(1));
             timer.async_wait(yield[ec]);
@@ -202,6 +208,23 @@ int main(int argc, const char** argv)
         cerr << "Start" << endl;
 
         Cancel cancel;
+
+        {
+          auto ping_ep = resolve(
+                ios,
+                "router.bittorrent.com",
+                "6881",
+                yield[ec],
+                cancel
+                );
+          NodeID nid = NodeID::generate(ping_ep.address());
+          NodeContact nc {nid, ping_ep};
+
+          BencodedMap initial_ping_reply = dht_.send_ping(nc, yield[ec], cancel);
+          std::cout << initial_ping_reply << endl;
+
+          // TODO: check reply id == expected id
+        }
 
         if (get_cmd) {
             auto salt = ouinet::util::sha1(get_cmd->dht_key);
