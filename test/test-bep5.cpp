@@ -222,8 +222,11 @@ int main(int argc, const char** argv)
 
           BencodedMap initial_ping_reply = dht_.send_ping(nc, yield[ec], cancel);
           std::cout << initial_ping_reply << endl;
-
-          // TODO: check reply id == expected id
+          if (!initial_ping_reply.empty()) {
+              NodeID their_id = NodeID::from_bytestring(*((*initial_ping_reply["r"].as_map())["id"].as_string()));
+              std::cout << their_id.to_hex() << endl;
+              std::cout << "reply id == expected id: " << (nid == their_id) << endl;
+          }
         }
 
         if (get_cmd) {
