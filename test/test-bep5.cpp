@@ -107,6 +107,7 @@ struct PutCmd {
 
 void parse_args( const vector<string>& args
                , vector<asio::ip::address>* ifaddrs
+               , bool* ping_cmd
                , optional<GetCmd>* get_cmd
                , optional<PutCmd>* put_cmd)
 {
@@ -137,6 +138,9 @@ void parse_args( const vector<string>& args
         }
     }
 
+    if (args[2] == "ping") {
+        *ping_cmd = true;
+    }
     if (args[2] == "get") {
         if (args.size() != 5) {
             usage(std::cerr, args[0]);
@@ -176,10 +180,11 @@ int main(int argc, const char** argv)
 
     vector<asio::ip::address> ifaddrs;
 
+    bool ping_cmd = false;
     optional<GetCmd> get_cmd;
     optional<PutCmd> put_cmd;
 
-    parse_args(args, &ifaddrs, &get_cmd, &put_cmd);
+    parse_args(args, &ifaddrs, &ping_cmd, &get_cmd, &put_cmd);
 
     // for (auto addr : ifaddrs) {
     //     std::cout << "Spawning DHT node on " << addr << std::endl;
@@ -209,7 +214,7 @@ int main(int argc, const char** argv)
 
         Cancel cancel;
 
-        {
+        if (ping_cmd) {
             auto ping_ep = resolve(
                 ios,
                 "router.bittorrent.com",
