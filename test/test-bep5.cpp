@@ -210,23 +210,23 @@ int main(int argc, const char** argv)
         Cancel cancel;
 
         {
-          auto ping_ep = resolve(
+            auto ping_ep = resolve(
                 ios,
                 "router.bittorrent.com",
                 "6881",
                 yield[ec],
                 cancel
                 );
-          NodeID nid = NodeID::generate(ping_ep.address());
-          NodeContact nc {nid, ping_ep};
+            NodeID nid = NodeID::generate(ping_ep.address());
+            NodeContact nc {nid, ping_ep};
 
-          BencodedMap initial_ping_reply = dht_.send_ping(nc, yield[ec], cancel);
-          std::cout << initial_ping_reply << endl;
-          if (!initial_ping_reply.empty()) {
-              NodeID their_id = NodeID::from_bytestring(*((*initial_ping_reply["r"].as_map())["id"].as_string()));
-              std::cout << their_id.to_hex() << endl;
-              std::cout << "reply id == expected id: " << (nid == their_id) << endl;
-          }
+            BencodedMap initial_ping_reply = dht_.send_ping(nc, yield[ec], cancel);
+            std::cout << initial_ping_reply << endl;
+            if (!initial_ping_reply.empty()) {
+                NodeID their_id = NodeID::from_bytestring(*((*initial_ping_reply["r"].as_map())["id"].as_string()));
+                std::cout << their_id.to_hex() << endl;
+                std::cout << "reply id == expected id: " << (nid == their_id) << endl;
+            }
         }
 
         if (get_cmd) {
