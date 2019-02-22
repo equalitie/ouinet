@@ -51,6 +51,7 @@ externalproject_add(obfs4proxy
     BUILD_IN_SOURCE 1
     BUILD_COMMAND mkdir -p ${GOPATH}
                && export PATH=${GOROOT}/bin:$ENV{PATH}
+               && export GOROOT=${GOROOT}
                && export GOPATH=${GOPATH}
                && export GOOS=${GOOS}
                && export GOARCH=${GOARCH}
