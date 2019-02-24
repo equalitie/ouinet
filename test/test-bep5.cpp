@@ -109,6 +109,7 @@ void parse_args( const vector<string>& args
                , vector<asio::ip::address>* ifaddrs
                , bool* ping_cmd
                , bool* find_node_cmd
+               , bool* get_peers_cmd
                , optional<GetCmd>* get_cmd
                , optional<PutCmd>* put_cmd)
 {
@@ -144,6 +145,9 @@ void parse_args( const vector<string>& args
     }
     if (args[2] == "find_node") {
         *find_node_cmd = true;
+    }
+    if (args[2] == "get_peers") {
+        *get_peers_cmd = true;
     }
     if (args[2] == "get") {
         if (args.size() != 5) {
@@ -186,10 +190,11 @@ int main(int argc, const char** argv)
 
     bool ping_cmd = false;
     bool find_node_cmd = false;
+    bool get_peers_cmd = false;
     optional<GetCmd> get_cmd;
     optional<PutCmd> put_cmd;
 
-    parse_args(args, &ifaddrs, &ping_cmd, &find_node_cmd, &get_cmd, &put_cmd);
+    parse_args(args, &ifaddrs, &ping_cmd, &find_node_cmd, &get_peers_cmd, &get_cmd, &put_cmd);
 
     // for (auto addr : ifaddrs) {
     //     std::cout << "Spawning DHT node on " << addr << std::endl;
@@ -258,6 +263,26 @@ int main(int argc, const char** argv)
                 std::cout << i << ' ';
             }
             std::cout << endl;
+        }
+
+        if (get_peers_cmd) {
+            auto ep = resolve(
+                ios,
+                "router.bittorrent.com",
+                "6881",
+                yield[ec],
+                cancel
+                );
+            NodeID nid = NodeID::generate(ep.address());
+            Contact nc {ep, nid};
+
+            std::vector<ouinet::bittorrent::dht::NodeContact> v = {};
+            boost::optional<BencodedMap> peers = dht_.query_get_peers(nid, nc, v, yield[ec], cancel);
+
+            if (peers) {
+                std::cout << "Nodes: " << (*peers)["nodes"] << endl;
+                std::cout << "Token: " << (*peers)["token"] << endl;
+            }
         }
 
         if (get_cmd) {
