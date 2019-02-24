@@ -94,24 +94,11 @@ boost::string_view as_string_view(const std::array<uint8_t, N>& a)
     return boost::string_view((char*) a.data(), a.size());
 }
 
-struct GetCmd {
-    util::Ed25519PublicKey public_key;
-    string dht_key;
-};
-
-struct PutCmd {
-    util::Ed25519PrivateKey private_key;
-    string dht_key;
-    string dht_value;
-};
-
 void parse_args( const vector<string>& args
                , vector<asio::ip::address>* ifaddrs
                , bool* ping_cmd
                , bool* find_node_cmd
-               , bool* get_peers_cmd
-               , optional<GetCmd>* get_cmd
-               , optional<PutCmd>* put_cmd)
+               , bool* get_peers_cmd)
 {
     if (args.size() == 2 && args[1] == "-h") {
         usage(std::cout, args[0]);
@@ -149,34 +136,11 @@ void parse_args( const vector<string>& args
     if (args[2] == "get_peers") {
         *get_peers_cmd = true;
     }
-    if (args[2] == "get") {
-        if (args.size() != 5) {
-            usage(std::cerr, args[0]);
-            exit(1);
-        }
-        GetCmd c;
-        c.public_key = *util::Ed25519PublicKey::from_hex(args[3]);
-        c.dht_key = args[4];
-        *get_cmd = move(c);
-    }
-    if (args[2] == "put") {
-        if (args.size() != 6) {
-            usage(std::cerr, args[0]);
-            exit(1);
-        }
-        PutCmd c;
-        c.private_key = *util::Ed25519PrivateKey::from_hex(args[3]);
-        c.dht_key = args[4];
-        c.dht_value = args[5];
-        *put_cmd = move(c);
-    }
 }
 
 int main(int argc, const char** argv)
 {
     asio::io_service ios;
-
-    MainlineDht dht(ios);
 
     DhtNode dht_ {ios, asio::ip::make_address("0.0.0.0")};
 
@@ -191,10 +155,8 @@ int main(int argc, const char** argv)
     bool ping_cmd = false;
     bool find_node_cmd = false;
     bool get_peers_cmd = false;
-    optional<GetCmd> get_cmd;
-    optional<PutCmd> put_cmd;
 
-    parse_args(args, &ifaddrs, &ping_cmd, &find_node_cmd, &get_peers_cmd, &get_cmd, &put_cmd);
+    parse_args(args, &ifaddrs, &ping_cmd, &find_node_cmd, &get_peers_cmd);
 
     // for (auto addr : ifaddrs) {
     //     std::cout << "Spawning DHT node on " << addr << std::endl;
@@ -282,51 +244,6 @@ int main(int argc, const char** argv)
             if (peers) {
                 std::cout << "Nodes: " << (*peers)["nodes"] << endl;
                 std::cout << "Token: " << (*peers)["token"] << endl;
-            }
-        }
-
-        if (get_cmd) {
-            auto salt = ouinet::util::sha1(get_cmd->dht_key);
-
-            auto opt_data = dht.mutable_get( get_cmd->public_key
-                                           , as_string_view(salt)
-                                           , yield[ec], cancel);
-
-            if (ec) {
-                cerr << "Error dht.mutable_get " << ec.message() << endl;
-            }
-            else {
-                if (opt_data) {
-                    cerr << "Got Data!" << endl;
-                    cerr << "seq:   " << opt_data->sequence_number << endl;
-                    cerr << "value: " << opt_data->value << endl;
-                }
-                else {
-                    cerr << "No error, but also no data!" << endl;
-                }
-            }
-        }
-
-        if (put_cmd) {
-            auto salt = ouinet::util::sha1(put_cmd->dht_key);
-
-            using Time = boost::posix_time::ptime;
-            Time unix_epoch(boost::gregorian::date(1970, 1, 1));
-            Time ts = boost::posix_time::microsec_clock::universal_time();
-
-            auto seq = (ts - unix_epoch).total_milliseconds();
-
-            cerr << "seq: " << seq << endl;
-
-            auto item = MutableDataItem::sign( put_cmd->dht_value
-                                             , seq
-                                             , as_string_view(salt)
-                                             , put_cmd->private_key);
-
-            dht.mutable_put(item, cancel, yield[ec]);
-
-            if (ec) {
-                cerr << "Error dht.mutable_put " << ec.message() << endl;
             }
         }
 
