@@ -53,11 +53,9 @@ void Client::stop()
 
 }
 
-ouinet::OuiServiceImplementationClient::ConnectInfo
+::ouinet::GenericStream
 Client::connect(asio::yield_context yield, Signal<void()>& cancel)
 {
-    using ConnectInfo = ouinet::OuiServiceImplementationClient::ConnectInfo;
-
     sys::error_code ec;
 
     Connection connection(_ios);
@@ -72,15 +70,13 @@ Client::connect(asio::yield_context yield, Signal<void()>& cancel)
     connection._socket.async_connect(asio::ip::tcp::endpoint(asio::ip::address_v4::loopback(), _port), yield[ec]);
 
     if (ec) {
-        return or_throw<ConnectInfo>(yield, ec);
+        return or_throw<GenericStream>(yield, ec);
     }
 
     LOG_DEBUG("Connection to the i2p injector is established");
 
     _client_tunnel->_connections.add(connection);
 
-    return ConnectInfo({ GenericStream(std::move(connection))
-                       , _target_id
-                       });
+    return connection;
     
 }

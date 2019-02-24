@@ -5,6 +5,7 @@
 
 #include "util/condition_variable.h"
 #include "util/success_condition.h"
+#include "util.h"
 #include "async_sleep.h"
 
 using namespace std;
@@ -118,7 +119,8 @@ OuiServiceClient::OuiServiceClient(asio::io_service& ios):
     _started_condition(ios)
 {}
 
-void OuiServiceClient::add(std::unique_ptr<OuiServiceImplementationClient> implementation)
+void OuiServiceClient::add( Endpoint endpoint
+                          , std::unique_ptr<OuiServiceImplementationClient> implementation)
 {
     // TODO: Currently _adding_ with actually _swap_ the previous
     // implementation for the new one.
@@ -127,6 +129,7 @@ void OuiServiceClient::add(std::unique_ptr<OuiServiceImplementationClient> imple
         _implementation->stop();
     }
 
+    _endpoint = std::move(endpoint);
     _implementation = std::move(implementation);
 }
 
@@ -161,11 +164,9 @@ void OuiServiceClient::stop()
     _started_condition.notify();
 }
 
-OuiServiceImplementationClient::ConnectInfo
+OuiServiceClient::ConnectInfo
 OuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
 {
-    using ConnectInfo = OuiServiceImplementationClient::ConnectInfo;
-
     namespace err = asio::error;
 
     if (!_implementation) {
@@ -179,16 +180,16 @@ OuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
         }
     }
 
-    ConnectInfo retval;
+    GenericStream con;
     sys::error_code ec;
     decltype(_implementation) impl;
 
     do {
         ec = sys::error_code();
         impl = _implementation;
-        retval = _implementation->connect(yield[ec], cancel);
+        con = _implementation->connect(yield[ec], cancel);
     }
     while (_implementation && impl != _implementation);
 
-    return or_throw(yield, ec, move(retval));
+    return or_throw<ConnectInfo>(yield, ec, {move(con), util::str(_endpoint)});
 }

@@ -93,11 +93,11 @@ TcpOuiServiceClient::TcpOuiServiceClient(asio::io_service& ios, std::string endp
     _endpoint(parse_endpoint(endpoint))
 {}
 
-OuiServiceImplementationClient::ConnectInfo
+GenericStream
 TcpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
 {
     if (!_endpoint) {
-        return or_throw<ConnectInfo>(yield, asio::error::invalid_argument);
+        return or_throw<GenericStream>(yield, asio::error::invalid_argument);
     }
 
     sys::error_code ec;
@@ -113,7 +113,7 @@ TcpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
     socket.async_connect(*_endpoint, yield[ec]);
 
     if (ec) {
-        return or_throw<ConnectInfo>(yield, ec);
+        return or_throw<GenericStream>(yield, ec);
     }
 
     static const auto tcp_shutter = [](asio::ip::tcp::socket& s) {
@@ -122,8 +122,7 @@ TcpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
         s.close(ec);
     };
 
-    return ConnectInfo{ GenericStream(std::move(socket), tcp_shutter)
-                      , util::str(*_endpoint) };
+    return GenericStream(std::move(socket), tcp_shutter);
 }
 
 } // ouiservice namespace

@@ -7,6 +7,7 @@
 #include <boost/asio/spawn.hpp>
 
 #include "generic_stream.h"
+#include "endpoint.h"
 #include "util/condition_variable.h"
 #include "util/signal.h"
 
@@ -55,18 +56,12 @@ class OuiServiceServer
 class OuiServiceImplementationClient
 {
     public:
-    struct ConnectInfo {
-        GenericStream connection;
-        std::string remote_endpoint;
-    };
-
-    public:
     virtual ~OuiServiceImplementationClient() {}
 
     virtual void start(asio::yield_context yield) = 0;
     virtual void stop() = 0;
 
-    virtual ConnectInfo connect(asio::yield_context yield, Signal<void()>& cancel) = 0;
+    virtual GenericStream connect(asio::yield_context yield, Signal<void()>& cancel) = 0;
 };
 
 /*
@@ -77,20 +72,24 @@ class OuiServiceImplementationClient
 class OuiServiceClient
 {
     public:
-    using ConnectInfo = OuiServiceImplementationClient::ConnectInfo;
+    struct ConnectInfo {
+        GenericStream connection;
+        std::string remote_endpoint;
+    };
 
     public:
     OuiServiceClient(asio::io_service& ios);
 
-    void add(std::unique_ptr<OuiServiceImplementationClient> implementation);
+    void add(Endpoint, std::unique_ptr<OuiServiceImplementationClient>);
 
     void start(asio::yield_context yield);
     void stop();
 
-    OuiServiceImplementationClient::ConnectInfo
+    ConnectInfo
     connect(asio::yield_context yield, Signal<void()>& cancel);
 
     private:
+    Endpoint _endpoint;
     std::shared_ptr<OuiServiceImplementationClient> _implementation;
     bool _started;
     ConditionVariable _started_condition;

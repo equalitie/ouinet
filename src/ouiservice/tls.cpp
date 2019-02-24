@@ -35,26 +35,24 @@ GenericStream TlsOuiServiceServer::accept(asio::yield_context yield)
     return GenericStream(std::move(tls_sock), std::move(tls_shutter));
 }
 
-OuiServiceImplementationClient::ConnectInfo
+GenericStream
 TlsOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
 {
     sys::error_code ec;
 
-    auto base_coninfo = base->connect(yield[ec], cancel);
+    auto connection = base->connect(yield[ec], cancel);
+
     if (ec) {
-        return or_throw<ConnectInfo>(yield, ec);
+        return or_throw<GenericStream>(yield, ec);
     }
 
     // This also gets a configured shutter.
     // The certificate host name is not checked since
     // it may be missing (e.g. IP address) or meaningless (e.g. I2P identifier).
-    auto tls_con = ssl::util::client_handshake( std::move(base_coninfo.connection)
-                                              , ssl_context, ""
-                                              , cancel
-                                              , yield[ec]);
-
-    ConnectInfo tls_coninfo{std::move(tls_con), base_coninfo.remote_endpoint};
-    return or_throw(yield, ec, std::move(tls_coninfo));
+    return ssl::util::client_handshake( std::move(connection)
+                                      , ssl_context, ""
+                                      , cancel
+                                      , yield);
 }
 
 

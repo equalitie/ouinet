@@ -26,7 +26,8 @@ int main(int argc, const char* argv[])
 
     OuiServiceClient client(ios);
 
-    client.add(make_unique<ouiservice::TcpOuiServiceClient>(ios, "127.0.0.1:10203"));
+    auto endpoint = Endpoint{Endpoint::TcpEndpoint, "127.0.0.1:10203"};
+    client.add(endpoint, make_unique<ouiservice::TcpOuiServiceClient>(ios, endpoint.endpoint_string));
 
     asio::spawn(ios, [&ios, &client, &message] (asio::yield_context yield) {
         sys::error_code ec;
@@ -38,13 +39,12 @@ int main(int argc, const char* argv[])
         }
 
         Signal<void()> cancel;
-        auto out = client.connect(yield[ec], cancel);
+        auto connection = client.connect(yield[ec], cancel).connection;
         if (ec) {
             std::cerr << "Failed to connect to server: " << ec.message() << endl;
             return;
         }
 
-        GenericStream connection = std::move(out.connection);
         while (message.size()) {
             size_t written = connection.async_write_some(asio::const_buffers_1(message.data(), message.size()), yield[ec]);
             if (ec || !written) {

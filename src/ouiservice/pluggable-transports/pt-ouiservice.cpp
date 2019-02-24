@@ -146,12 +146,12 @@ void PtOuiServiceClient::stop()
     _client_process.reset();
 }
 
-OuiServiceImplementationClient::ConnectInfo PtOuiServiceClient::connect(
+GenericStream PtOuiServiceClient::connect(
     asio::yield_context yield,
     Signal<void()>& cancel
 ) {
     if (!_client_process) {
-        return or_throw<OuiServiceImplementationClient::ConnectInfo>(yield, asio::error::not_connected);
+        return or_throw<GenericStream>(yield, asio::error::not_connected);
     }
 
     sys::error_code ec;
@@ -165,7 +165,7 @@ OuiServiceImplementationClient::ConnectInfo PtOuiServiceClient::connect(
     );
 
     if (ec) {
-        return or_throw<OuiServiceImplementationClient::ConnectInfo>(yield, ec);
+        return or_throw<GenericStream>(yield, ec);
     }
 
     static const auto tcp_shutter = [](asio::ip::tcp::socket& s) {
@@ -174,10 +174,7 @@ OuiServiceImplementationClient::ConnectInfo PtOuiServiceClient::connect(
         s.close(ec);
     };
 
-    return ConnectInfo{
-        GenericStream(std::move(socket), tcp_shutter),
-        remote_endpoint_string
-    };
+    return GenericStream(std::move(socket), tcp_shutter);
 }
 
 } // pt namespace

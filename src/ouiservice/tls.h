@@ -35,7 +35,6 @@ class TlsOuiServiceServer : public OuiServiceImplementationServer
 class TlsOuiServiceClient : public OuiServiceImplementationClient
 {
     public:
-    using ConnectInfo = OuiServiceImplementationClient::ConnectInfo;
     using BaseServicePtr = std::unique_ptr<OuiServiceImplementationClient>;
 
     public:
@@ -50,8 +49,8 @@ class TlsOuiServiceClient : public OuiServiceImplementationClient
         base->stop();
     }
 
-    ConnectInfo connect( asio::yield_context yield
-                       , Signal<void()>& cancel) override;
+    GenericStream connect( asio::yield_context yield
+                         , Signal<void()>& cancel) override;
 
     private:
     BaseServicePtr base;

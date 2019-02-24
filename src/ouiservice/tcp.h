@@ -28,17 +28,14 @@ class TcpOuiServiceServer : public OuiServiceImplementationServer
 class TcpOuiServiceClient : public OuiServiceImplementationClient
 {
     public:
-    using ConnectInfo = OuiServiceImplementationClient::ConnectInfo;
-
-    public:
     TcpOuiServiceClient(asio::io_service& ios, std::string endpoint);
 
     // Tcp clients don't have any internal async IO to be started/stopped.
     void start(asio::yield_context yield) override {}
     void stop() override {}
 
-    ConnectInfo connect( asio::yield_context yield
-                       , Signal<void()>& cancel) override;
+    GenericStream connect( asio::yield_context yield
+                         , Signal<void()>& cancel) override;
 
     bool verify_endpoint() const { return (bool)_endpoint; }
 

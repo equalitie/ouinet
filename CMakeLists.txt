@@ -222,6 +222,7 @@ if (WITH_INJECTOR)
         "./src/ouiservice/pluggable-transports/*.cpp"
         "./src/ssl/ca_certificate.cpp"
         "./src/logger.cpp"
+        "./src/endpoint.cpp"
         "./src/cache/*.cpp"
         "./src/bittorrent/*.cpp"
         "./src/util/crypto.cpp"

@@ -54,7 +54,7 @@ class PtOuiServiceClient : public OuiServiceImplementationClient
     void start(asio::yield_context yield) final;
     void stop() final;
 
-    OuiServiceImplementationClient::ConnectInfo connect(
+    GenericStream connect(
         asio::yield_context yield,
         Signal<void()>& cancel
     ) final;

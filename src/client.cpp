@@ -1446,11 +1446,11 @@ void Client::State::setup_injector(asio::yield_context yield)
 
     bool enable_injector_tls = !_config.tls_injector_cert_path().empty();
     if (!enable_injector_tls) {
-        _injector->add(std::move(client));
+        _injector->add(*injector_ep, std::move(client));
     } else {
         auto tls_client
             = make_unique<ouiservice::TlsOuiServiceClient>(move(client), inj_ctx);
-        _injector->add(std::move(tls_client));
+        _injector->add(*injector_ep, std::move(tls_client));
     }
 
     _injector->start(yield);
