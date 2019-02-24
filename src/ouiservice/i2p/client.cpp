@@ -77,6 +77,5 @@ Client::connect(asio::yield_context yield, Signal<void()>& cancel)
 
     _client_tunnel->_connections.add(connection);
 
-    return connection;
-    
+    return GenericStream{move(connection)};
 }
