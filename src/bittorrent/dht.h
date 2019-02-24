@@ -189,6 +189,15 @@ class DhtNode {
     );
     void send_ping(NodeContact contact);
 
+    // http://bittorrent.org/beps/bep_0005.html#find-node
+    bool query_find_node(
+        NodeID target_id,
+        Contact node,
+        std::vector<NodeContact>& closer_nodes,
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
+    );
+
     bool is_v4() const { return _interface_address.is_v4(); }
     bool is_v6() const { return _interface_address.is_v6(); }
 
@@ -248,15 +257,6 @@ class DhtNode {
         const std::string& query_type,
         const BencodedMap& query_arguments,
         asio::yield_context,
-        Signal<void()>& cancel_signal
-    );
-
-    // http://bittorrent.org/beps/bep_0005.html#find-node
-    bool query_find_node(
-        NodeID target_id,
-        Contact node,
-        std::vector<NodeContact>& closer_nodes,
-        asio::yield_context yield,
         Signal<void()>& cancel_signal
     );
 
