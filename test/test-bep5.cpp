@@ -108,6 +108,7 @@ struct PutCmd {
 void parse_args( const vector<string>& args
                , vector<asio::ip::address>* ifaddrs
                , bool* ping_cmd
+               , bool* find_node_cmd
                , optional<GetCmd>* get_cmd
                , optional<PutCmd>* put_cmd)
 {
@@ -140,6 +141,9 @@ void parse_args( const vector<string>& args
 
     if (args[2] == "ping") {
         *ping_cmd = true;
+    }
+    if (args[2] == "find_node") {
+        *find_node_cmd = true;
     }
     if (args[2] == "get") {
         if (args.size() != 5) {
@@ -181,10 +185,11 @@ int main(int argc, const char** argv)
     vector<asio::ip::address> ifaddrs;
 
     bool ping_cmd = false;
+    bool find_node_cmd = false;
     optional<GetCmd> get_cmd;
     optional<PutCmd> put_cmd;
 
-    parse_args(args, &ifaddrs, &ping_cmd, &get_cmd, &put_cmd);
+    parse_args(args, &ifaddrs, &ping_cmd, &find_node_cmd, &get_cmd, &put_cmd);
 
     // for (auto addr : ifaddrs) {
     //     std::cout << "Spawning DHT node on " << addr << std::endl;
@@ -232,6 +237,27 @@ int main(int argc, const char** argv)
                 std::cout << their_id.to_hex() << endl;
                 std::cout << "reply id == expected id: " << (nid == their_id) << endl;
             }
+        }
+
+        if (find_node_cmd) {
+            auto ep = resolve(
+                ios,
+                "router.bittorrent.com",
+                "6881",
+                yield[ec],
+                cancel
+                );
+            NodeID nid = NodeID::generate(ep.address());
+            Contact nc {ep, nid};
+
+            std::vector<ouinet::bittorrent::dht::NodeContact> v = {};
+            bool is_found = dht_.query_find_node(nid, nc, v, yield[ec], cancel);
+
+            std::cout << is_found << endl;
+            for (const auto& i: v) {
+                std::cout << i << ' ';
+            }
+            std::cout << endl;
         }
 
         if (get_cmd) {
