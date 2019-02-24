@@ -1337,12 +1337,12 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
     boost::optional<std::string> my_ip = initial_ping_reply["ip"].as_string();
     if (!my_ip) {
         std::cout << "Unexpected bootstrap server reply, giving up\n";
-        return or_throw(yield, ec);
+        return or_throw(yield, asio::error::fault);
     }
     boost::optional<asio::ip::udp::endpoint> my_endpoint = decode_endpoint(*my_ip);
     if (!my_endpoint) {
         std::cout << "Unexpected bootstrap server reply, giving up\n";
-        return or_throw(yield, ec);
+        return or_throw(yield, asio::error::fault);
     }
 
     _node_id = NodeID::generate(my_endpoint->address());
