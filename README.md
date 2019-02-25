@@ -2,6 +2,8 @@
 
 # Ouinet
 
+See [lightning talk at the Decentralized Web Summit 2018](http://archive.org/details/dweb-8_2_18_Lightning_Talks_New_Discoveries_5?start=547).
+
 **Ouinet** is a Free/Open Source technology which allows web content to be
 served with the help of an entire network of cooperating nodes using
 peer-to-peer routing and distributed caching of responses.  This helps
