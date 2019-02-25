@@ -11,13 +11,15 @@ pair<string, string>
 ouinet::util::get_host_port(const http::request<http::string_body>& req)
 {
     auto target = req.target();
+    string host, port;
     auto defport = (target.starts_with("https:") || target.starts_with("wss:"))
                  ? "443"
                  : "80";
 
-    auto hp = req[http::field::host];
+    auto hp = (req.method() == http::verb::connect)
+            ? target
+            : req[http::field::host];
     auto cpos = hp.rfind(':');
-    string host, port;
 
     if (hp.empty() && req.version() == 10) {
         // HTTP/1.0 proxy client with no ``Host:``, use URI.
@@ -29,7 +31,7 @@ ouinet::util::get_host_port(const http::request<http::string_body>& req)
         host = hp.to_string();
         port = defport;
     } else {
-        // ``Host:`` header present, explicit port.
+        // ``Host:`` header present, explicit port (or CONNECT request).
         host = hp.substr(0, cpos).to_string();
         port = hp.substr(cpos + 1).to_string();
     }
