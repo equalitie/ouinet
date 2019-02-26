@@ -1294,25 +1294,24 @@ asio::ip::udp::endpoint resolve(
     return or_throw<udp::endpoint>(yield, asio::error::not_found);
 }
 
-void dht::DhtNode::bootstrap(asio::yield_context yield)
-{
+using T = std::pair<asio::ip::udp::endpoint, asio::ip::udp::endpoint>;
+T dht::DhtNode::bootstrap_single(asio::yield_context yield, std::string bootstrap_domain) {
     sys::error_code ec;
 
-    // Other servers include router.utorrent.com:6881 and dht.transmissionbt.com:6881
     auto bootstrap_ep = resolve(
         _ios,
-        "router.bittorrent.com",
+        bootstrap_domain,
         "6881",
         yield[ec],
         _terminate_signal
     );
 
     if (ec == asio::error::operation_aborted) {
-        return or_throw(yield, asio::error::operation_aborted);
+        return or_throw<T>(yield, asio::error::operation_aborted);
     }
     if (ec) {
         std::cout << "Unable to resolve bootstrap server, giving up\n";
-        return or_throw(yield, ec);
+        return or_throw<T>(yield, ec);
     }
 
     BencodedMap initial_ping_message;
@@ -1327,26 +1326,37 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
         _terminate_signal
     );
     if (ec == asio::error::operation_aborted) {
-        return or_throw(yield, asio::error::operation_aborted);
+        return or_throw<T>(yield, asio::error::operation_aborted);
     }
     if (ec) {
         std::cout << "Bootstrap server does not reply, giving up\n";
-        return or_throw(yield, ec);
+        return or_throw<T>(yield, ec);
     }
 
     boost::optional<std::string> my_ip = initial_ping_reply["ip"].as_string();
     if (!my_ip) {
         std::cout << "Unexpected bootstrap server reply, giving up\n";
-        return or_throw(yield, asio::error::fault);
+        return or_throw<T>(yield, asio::error::fault);
     }
     boost::optional<asio::ip::udp::endpoint> my_endpoint = decode_endpoint(*my_ip);
     if (!my_endpoint) {
         std::cout << "Unexpected bootstrap server reply, giving up\n";
-        return or_throw(yield, asio::error::fault);
+        return or_throw<T>(yield, asio::error::fault);
     }
 
-    _node_id = NodeID::generate(my_endpoint->address());
-    _wan_endpoint = *my_endpoint;
+    return std::make_pair(bootstrap_ep, *my_endpoint);
+}
+
+void dht::DhtNode::bootstrap(asio::yield_context yield)
+{
+    sys::error_code ec;
+
+    asio::ip::udp::endpoint my_endpoint;
+    asio::ip::udp::endpoint bootstrap_ep;
+    std::tie(my_endpoint, bootstrap_ep) = bootstrap_single(yield, "router.bittorrent.com");
+
+    _node_id = NodeID::generate(my_endpoint.address());
+    _wan_endpoint = my_endpoint;
     _routing_table = std::make_unique<RoutingTable>(_node_id);
 
     /*
