@@ -55,7 +55,7 @@ void start_client_thread(const vector<string>& args, const vector<string>& extra
                 break;
             } else {
                 old_path_entries.insert(old_path.substr(index, pos - index));
-                index = pos;
+                index = pos + 1;
             }
         }
 
