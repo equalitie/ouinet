@@ -3,6 +3,6 @@
     "url": "https://example.com/foo",
     "id": "15bb4f34-ca7e-4f42-9b01-f147e9abcce9",
     "ts": "2018-01-15T21:31:50Z",
-    "head": "HTTP/1.1 200 OK\r\nDate: Mon, 15 Jan 2018 20:31:50 GMT\r\nServer: Apache\r\nContent-Type: text/html\r\nContent-Disposition: inline; filename=\"foo.html\"\r\n\r\n",
+    "head": "HTTP/1.1 200 OK\r\nDate: Mon, 15 Jan 2018 20:31:50 GMT\r\nServer: Apache\r\nContent-Type: text/html\r\nContent-Disposition: inline; filename=\"foo.html\"\r\nContent-Length: 38\r\n\r\n",
     "body_link": "QmXYZ…"
 }
