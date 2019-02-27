@@ -1353,7 +1353,23 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
 
     asio::ip::udp::endpoint my_endpoint;
     asio::ip::udp::endpoint bootstrap_ep;
-    std::tie(my_endpoint, bootstrap_ep) = bootstrap_single(yield, "router.bittorrent.com");
+
+    // Ad-hoc circular iteration over @bootstraps@
+    std::array<std::string,3> bootstraps {"router.bittorrent.com", "router.utorrent.com", "router.transmissionbt.com"};
+    {
+        size_t i = 0;
+        do {
+            std::tie(my_endpoint, bootstrap_ep) = bootstrap_single(yield[ec], bootstraps[i]);
+            i = (i + 1) % bootstraps.size();
+            if (!ec) { break; }
+            else {
+                cerr << "Skipping bootstrap node " << bootstraps[i] << ": " << ec << endl;
+                ec = sys::error_code();
+                continue;
+            }
+        }
+        while (true);
+    }
 
     _node_id = NodeID::generate(my_endpoint.address());
     _wan_endpoint = my_endpoint;
