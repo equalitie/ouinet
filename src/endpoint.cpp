@@ -40,7 +40,7 @@ std::ostream& operator<<(std::ostream& os, const Endpoint& ep)
         os << "i2p";
 #ifdef USE_GNUNET
     } else if (ep.type == Endpoint::GnunetEndpoint) {
-        os << "i2p";
+        os << "gnunet";
 #endif
     } else if (ep.type == Endpoint::Obfs2Endpoint) {
         os << "obfs2";
