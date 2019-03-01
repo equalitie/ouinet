@@ -1294,8 +1294,8 @@ asio::ip::udp::endpoint resolve(
     return or_throw<udp::endpoint>(yield, asio::error::not_found);
 }
 
-using T = std::pair<asio::ip::udp::endpoint, asio::ip::udp::endpoint>;
-T dht::DhtNode::bootstrap_single(asio::yield_context yield, std::string bootstrap_domain) {
+std::pair<asio::ip::udp::endpoint, asio::ip::udp::endpoint> dht::DhtNode::bootstrap_single(asio::yield_context yield, std::string bootstrap_domain) {
+    using T = std::pair<asio::ip::udp::endpoint, asio::ip::udp::endpoint>;
     sys::error_code ec;
 
     auto bootstrap_ep = resolve(
