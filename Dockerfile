@@ -50,7 +50,7 @@ RUN cp -r /usr/local/src/ouinet/repos/ repo-templates/
 ARG OUINET_DEBUG=no
 RUN \
 if [ $OUINET_DEBUG != yes ]; then \
-    strip injector client test/test-* \
+    strip injector client modules/obfs4proxy/obfs4proxy test/test-* \
         && find . -name '*.so' -exec strip '{}' + \
         && find . -wholename '*/libexec/*' -executable -type f -exec strip '{}' + ; \
 fi
