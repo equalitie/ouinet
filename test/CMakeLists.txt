@@ -72,6 +72,16 @@ target_include_directories(test-dht PUBLIC
 target_link_libraries(test-dht ${Boost_LIBRARIES} ${GCRYPT_LIBRARIES})
 add_dependencies(test-dht gcrypt)
 
+################################################################################
+add_executable(test-bep5 "test-bep5.cpp" ${bt_cpp_files})
+
+target_include_directories(test-bep5 PUBLIC
+    "${Boost_INCLUDE_DIR}"
+    "${GCRYPT_INCLUDE_DIR}")
+
+target_link_libraries(test-bep5 ${Boost_LIBRARIES} ${GCRYPT_LIBRARIES})
+add_dependencies(test-bep5 gcrypt)
+
 ######################################################################
 add_executable(test-logger "test_logger.cpp"
                            "../src/logger.cpp"

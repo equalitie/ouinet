@@ -1258,7 +1258,6 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
 }
 
 
-static
 asio::ip::udp::endpoint resolve(
     asio::io_context& ioc,
     const std::string& addr,
@@ -1522,6 +1521,23 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
     return or_throw<std::vector<dht::NodeContact>>(yield, ec, std::move(output_set));
 }
 
+BencodedMap dht::DhtNode::send_ping(
+    NodeContact contact,
+    asio::yield_context yield,
+    Signal<void()>& cancel_signal
+) {
+    sys::error_code ec;
+
+    return send_query_await_reply(
+	contact,
+	"ping",
+	BencodedMap{{ "id", _node_id.to_bytestring() }},
+	std::chrono::seconds(15),
+	yield[ec],
+	cancel_signal
+    );
+}
+
 void dht::DhtNode::send_ping(NodeContact contact)
 {
     // It is currently expected that this function returns immediately, due to
@@ -1532,17 +1548,7 @@ void dht::DhtNode::send_ping(NodeContact contact)
         sys::error_code ec;
         Signal<void()> cancel_signal;
 
-        // Note that even though we're not explicitly using the reply here,
-        // it's still being used internally by the `send_query_await_reply`
-        // function to update validity of the contact inside the routing table.
-        send_query_await_reply(
-            contact,
-            "ping",
-            BencodedMap{{ "id", _node_id.to_bytestring() }},
-            std::chrono::seconds(15),
-            yield[ec],
-            cancel_signal
-        );
+	send_ping(contact, yield[ec], cancel_signal);
     });
 }
 

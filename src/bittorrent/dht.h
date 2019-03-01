@@ -26,6 +26,14 @@ namespace bittorrent {
 
 class UdpMultiplexer;
 
+asio::ip::udp::endpoint resolve(
+    asio::io_context& ioc,
+    const std::string& addr,
+    const std::string& port,
+    asio::yield_context yield,
+    Signal<void()>& cancel_signal
+);
+
 namespace ip = asio::ip;
 using ip::tcp;
 using ip::udp;
@@ -173,6 +181,32 @@ class DhtNode {
         Signal<void()>& cancel_signal
     );
 
+    // http://bittorrent.org/beps/bep_0005.html#ping
+    BencodedMap send_ping(
+        NodeContact contact,
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
+    );
+    void send_ping(NodeContact contact);
+
+    // http://bittorrent.org/beps/bep_0005.html#find-node
+    bool query_find_node(
+        NodeID target_id,
+        Contact node,
+        std::vector<NodeContact>& closer_nodes,
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
+    );
+
+    // http://bittorrent.org/beps/bep_0005.html#get-peers
+    boost::optional<BencodedMap> query_get_peers(
+        NodeID infohash,
+        Contact node,
+        std::vector<NodeContact>& closer_nodes,
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
+    );
+
     bool is_v4() const { return _interface_address.is_v4(); }
     bool is_v6() const { return _interface_address.is_v6(); }
 
@@ -226,33 +260,12 @@ class DhtNode {
 
     std::string new_transaction_string();
 
-    // http://bittorrent.org/beps/bep_0005.html#ping
-    void send_ping(NodeContact contact);
-
     void send_write_query(
         udp::endpoint destination,
         NodeID destination_id,
         const std::string& query_type,
         const BencodedMap& query_arguments,
         asio::yield_context,
-        Signal<void()>& cancel_signal
-    );
-
-    // http://bittorrent.org/beps/bep_0005.html#find-node
-    bool query_find_node(
-        NodeID target_id,
-        Contact node,
-        std::vector<NodeContact>& closer_nodes,
-        asio::yield_context yield,
-        Signal<void()>& cancel_signal
-    );
-
-    // http://bittorrent.org/beps/bep_0005.html#get-peers
-    boost::optional<BencodedMap> query_get_peers(
-        NodeID infohash,
-        Contact node,
-        std::vector<NodeContact>& closer_nodes,
-        asio::yield_context yield,
         Signal<void()>& cancel_signal
     );
 
