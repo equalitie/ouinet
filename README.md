@@ -430,7 +430,7 @@ shell container to edit `client/ouinet-client.conf`) and add options for the
 injector endpoint and credentials and the distributed cache name.  Remember to
 replace the values with your own:
 
-    injector-ep = 127.0.0.1:7070
+    injector-ep = tcp:127.0.0.1:7070
     injector-credentials = injector_user:injector_password
     index-ipns-id = Qm0123456789abcdefghijklmnopqrstuvwxyzABCDEFGI
 
