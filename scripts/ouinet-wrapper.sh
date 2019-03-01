@@ -200,6 +200,8 @@ else
     }
 fi
 
+# Prepend the installation path to use supporting binaries in there.
+export PATH="$INST:$PATH"
 if [ "$repo_arg" ]; then
     run "$@"
 else
