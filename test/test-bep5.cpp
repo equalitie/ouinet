@@ -22,7 +22,7 @@ void usage(std::ostream& os, const string& app_name, const char* what = nullptr)
     }
 
     os << "Usage:" << endl
-       << "  " << app_name << " 0.0.0.0      [<get>|<put>|<ping>] # Any ipv4 interface" << endl
+       << "  " << app_name << " 0.0.0.0      [<get>|<put>|<ping>|<find_node>|<get_peers>]" << endl;
 
 }
 
