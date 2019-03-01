@@ -317,6 +317,8 @@ class DhtNode {
     std::map<std::string, ActiveRequest> _active_requests;
 
     std::vector<udp::endpoint> _bootstrap_endpoints;
+
+    std::pair<asio::ip::udp::endpoint, asio::ip::udp::endpoint> bootstrap_single(asio::yield_context yield, std::string bootstrap_domain);
 };
 
 struct DhtPublications
