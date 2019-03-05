@@ -96,13 +96,8 @@ fi
 
 # Update the values of some configuration parameters.
 if grep -qP '^\s*injector-ep\s*=(?!\s*[A-Za-z][-\+\.0-9A-Za-z]*:)' "$CONF" && ! has_help_arg "$@"; then
-    if grep -qE '^\s*injector-tls-cert-file\s*=\s*\S+' "$CONF"; then
-        tcp_prefix='tls:'
-    else
-        tcp_prefix='tcp:'
-    fi
     sed -i -E \
-        -e "s/^(\s*injector-ep\s*=\s*)([][\.\:0-9A-Fa-f]+:[0-9]+\s*)(#.*)?$/\1$tcp_prefix\2\3/g" \
+        -e 's/^(\s*injector-ep\s*=\s*)([][\.\:0-9A-Fa-f]+:[0-9]+\s*)(#.*)?$/\1tcp:\2\3/g' \
         -e 's/^(\s*injector-ep\s*=\s*)([2-7A-Za-z]+\.b32\.i2p\s*)(#.*)?$/\1i2p:\2\3/g' \
         -e 's/^(\s*injector-ep\s*=\s*)([-~0-9A-Za-z]+=*\s*)(#.*)?$/\1i2p:\2\3/g' \
         "$CONF"

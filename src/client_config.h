@@ -109,9 +109,9 @@ public:
            ("injector-ep"
             , po::value<string>()
             , "Injector's endpoint as <TYPE>:<EP>, "
-              "where <TYPE> can be \"tcp\", \"tls\", \"obfs2\", \"obfs3\", \"obfs4\" or \"i2p\", "
+              "where <TYPE> can be \"tcp\", \"obfs2\", \"obfs3\", \"obfs4\" or \"i2p\", "
               "and <EP> depends on the type of endpoint: "
-              "<IP>:<PORT> for TCP and TLS, <IP>:<PORT>[,<OPTION>=<VALUE>...] for OBFS, "
+              "<IP>:<PORT> for TCP (and TLS), <IP>:<PORT>[,<OPTION>=<VALUE>...] for OBFS, "
               "<B32_PUBKEY>.b32.i2p or <B64_PUBKEY> for I2P")
            ("injector-credentials", po::value<string>()
             , "<username>:<password> authentication pair for the injector")
