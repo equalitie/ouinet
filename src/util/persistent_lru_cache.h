@@ -18,9 +18,11 @@ private:
     struct Element;
 
     using Key = std::string;
-    using Value = std::shared_ptr<Element>;
-    using KeyVal = std::pair<Key, Value>;
-    using ListIter = typename std::list<KeyVal>::iterator;
+    using KeyVal = std::pair<Key, std::shared_ptr<Element>>;
+
+    using List = typename std::list<KeyVal>;
+    using ListIter = typename List::iterator;
+
     using Map = std::map<Key, ListIter>;
     using MapIter = typename Map::iterator;
 
@@ -113,8 +115,8 @@ private:
 private:
     asio::io_service& _ios;
     boost::filesystem::path _dir;
-    std::list<KeyVal> _list;
-    std::map<Key, ListIter> _map;
+    List _list;
+    Map _map;
     size_t _max_size;
 };
 
