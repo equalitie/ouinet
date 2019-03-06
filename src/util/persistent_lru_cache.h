@@ -12,8 +12,15 @@
 #include "signal.h"
 #include "file_io.h"
 #include "scheduler.h"
+#include "sha1.h"
+#include "bytes.h"
 
 namespace ouinet { namespace util {
+
+namespace persisten_lru_cache_detail {
+    void create_or_check_directory(const fs::path&, sys::error_code&);
+    uint64_t ms_since_epoch();
+} // detail namespace
 
 class PersistentLruCache {
 private:
@@ -114,9 +121,6 @@ public:
 private:
     fs::path path_from_key(const std::string&);
 
-    static void create_or_check_directory(const fs::path&, sys::error_code&);
-    static uint64_t ms_since_epoch();
-
 private:
     asio::io_service& _ios;
     boost::filesystem::path _dir;
@@ -162,6 +166,8 @@ public:
                , Cancel& cancel
                , asio::yield_context yield)
     {
+        using namespace persisten_lru_cache_detail;
+
         auto ts = ms_since_epoch();
 
         sys::error_code ec;
@@ -182,6 +188,8 @@ public:
 
     void update(Cancel& cancel, asio::yield_context yield)
     {
+        using namespace persisten_lru_cache_detail;
+
         auto ts = ms_since_epoch();
 
         sys::error_code ec;
@@ -198,6 +206,8 @@ public:
 
     std::string value(Cancel& cancel, asio::yield_context yield)
     {
+        using namespace persisten_lru_cache_detail;
+
         auto ts = ms_since_epoch();
 
         sys::error_code ec;
@@ -268,4 +278,154 @@ private:
     bool _remove_on_destruct = false;
 };
 
+inline
+std::unique_ptr<PersistentLruCache>
+PersistentLruCache::load( asio::io_service& ios
+                        , boost::filesystem::path dir
+                        , size_t max_size
+                        , Cancel& cancel
+                        , asio::yield_context yield)
+{
+    using namespace persisten_lru_cache_detail;
+
+    using Ret = std::unique_ptr<PersistentLruCache>;
+
+    sys::error_code ec;
+
+    if (!dir.is_absolute()) {
+        dir = fs::absolute(dir);
+    }
+
+    if (!ec) create_or_check_directory(dir, ec);
+    if (ec) return or_throw<Ret>(yield, ec);
+
+    Ret lru(new PersistentLruCache(ios, dir, max_size));
+
+    // Id helps us resolve the case when two entries have the same timestamp
+    using Id = std::pair<uint64_t, uint64_t>;
+
+    std::map<Id, std::shared_ptr<Element>> elements;
+
+    uint64_t i = 0;
+    for (auto file : fs::directory_iterator(dir)) {
+        uint64_t ts;
+        auto e = Element::open(ios, file, &ts, cancel, yield[ec]);
+
+        if (cancel) {
+            return or_throw<Ret>(yield, asio::error::operation_aborted);
+        }
+
+        if (ec) continue;
+
+        elements.insert({Id{ts, i++}, e});
+    }
+
+    while (elements.size() > max_size) {
+        auto i = elements.begin();
+        i->second->remove_file_on_destruct();
+        elements.erase(i);
+    }
+
+    for (auto p : elements) {
+        auto e = p.second;
+
+        auto map_i = lru->_map.find(e->key());
+        assert(map_i == lru->_map.end());
+        lru->_list.push_front({e->key(), e});
+        lru->_map[e->key()] = lru->_list.begin();
+    }
+
+    return lru;
+}
+
+inline
+PersistentLruCache::PersistentLruCache( asio::io_service& ios
+                                      , boost::filesystem::path dir
+                                      , size_t max_size)
+    : _ios(ios)
+    , _dir(std::move(dir))
+    , _max_size(max_size)
+{
+}
+
+inline
+void PersistentLruCache::insert( std::string key
+                               , std::string value
+                               , Cancel& cancel
+                               , asio::yield_context yield)
+{
+    auto it = _map.find(key);
+
+    std::shared_ptr<Element> e;
+
+    if (it == _map.end()) {
+        e = std::make_shared<Element>(_ios, key, path_from_key(key));
+    } else {
+        e = std::move(it->second->second);
+    }
+
+    _list.push_front({key, e});
+
+    if (it != _map.end()) {
+        it->second->second->remove_file_on_destruct();
+        _list.erase(it->second);
+        it->second = _list.begin();
+    }
+    else {
+        it = _map.insert({key, _list.begin()}).first;
+    }
+
+    if (_map.size() > _max_size) {
+        auto last = prev(_list.end());
+        if (last->first == it->first) e = nullptr;
+        last->second->remove_file_on_destruct();
+        _map.erase(last->first);
+        _list.pop_back();
+    }
+
+    if (!e) return;
+
+    sys::error_code ec;
+    auto slot = e->lock(cancel, yield[ec]);
+    if (ec) return or_throw(yield, ec);
+    e->update(std::move(value), cancel, yield);
+}
+
+inline
+PersistentLruCache::iterator PersistentLruCache::find(const std::string& key)
+{
+    auto it = _map.find(key);
+
+    if (it == _map.end()) return it;
+
+    auto list_it = it->second;
+
+    _list.splice(_list.begin(), _list, list_it);
+
+    assert(list_it == _list.begin());
+
+    return it;
+}
+
+inline
+fs::path PersistentLruCache::path_from_key(const std::string& key)
+{
+    return _dir / util::bytes::to_hex(sha1(key));
+}
+
+inline
+std::string
+PersistentLruCache::iterator::value(Cancel& cancel, asio::yield_context yield)
+{
+    // Capture shared_ptr here to make sure element doesn't
+    // get deleted while reading from the file.
+    std::shared_ptr<Element> e = i->second->second;
+
+    sys::error_code ec;
+
+    auto lock = e->lock(cancel, yield[ec]);
+    if (ec) return or_throw<std::string>(yield, ec);
+
+    return e->value(cancel, yield);
+}
 }} // namespaces
