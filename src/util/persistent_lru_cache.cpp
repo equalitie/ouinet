@@ -1,14 +1,11 @@
 #include "persistent_lru_cache.h"
 #include "scheduler.h"
 #include "../namespaces.h"
-#include "../or_throw.h"
 #include "../defer.h"
 #include "bytes.h"
 #include "sha1.h"
+#include "file_io.h"
 
-#include <boost/asio/posix/stream_descriptor.hpp>
-#include <boost/asio/read.hpp>
-#include <boost/asio/write.hpp>
 #include <chrono>
 #include <iostream>
 
@@ -23,16 +20,17 @@ using boost::string_view;
 
 // https://www.boost.org/doc/libs/1_69_0/libs/system/doc/html/system.html#ref_boostsystemerror_code_hpp
 namespace errc = boost::system::errc;
-namespace posix = asio::posix;
 
 // TODO: In order to keep memory requirements low, it would be better
 // to return a new kind of file stream that users would be required to
 // lock before read/write operations. Then return that instead of
 // raw memory chunks.
 
-static void create_or_check_directory(const fs::path& dir, sys::error_code& ec)
+// static
+void PersistentLruCache::create_or_check_directory( const fs::path& dir
+                                                  , sys::error_code& ec)
 {
-    if (exists(dir)) {
+    if (fs::exists(dir)) {
         if (!is_directory(dir)) {
             ec = make_error_code(errc::not_a_directory);
             return;
@@ -48,117 +46,12 @@ static void create_or_check_directory(const fs::path& dir, sys::error_code& ec)
     }
 }
 
-static uint64_t ms_since_epoch()
+// static
+uint64_t PersistentLruCache::ms_since_epoch()
 {
     using namespace std::chrono;
     auto now = system_clock::now();
     return duration_cast<milliseconds>(now.time_since_epoch()).count();
-}
-
-static
-sys::error_code last_error()
-{
-    return make_error_code(static_cast<errc::errc_t>(errno));
-}
-
-static void fseek(posix::stream_descriptor& f, size_t pos, sys::error_code& ec)
-{
-    if (lseek(f.native_handle(), pos, SEEK_SET) == -1) {
-        ec = last_error();
-        if (!ec) ec = make_error_code(errc::no_message);
-    }
-}
-
-static
-posix::stream_descriptor open( asio::io_service& ios
-                             , const fs::path& p
-                             , sys::error_code& ec)
-{
-    int file = open(p.c_str(), O_RDWR | O_CREAT , S_IRUSR | S_IWUSR);
-
-    if (file == -1) {
-        ec = last_error();
-        if (!ec) ec = make_error_code(errc::no_message);
-        return asio::posix::stream_descriptor(ios);
-    }
-
-    asio::posix::stream_descriptor f(ios, file);
-    fseek(f, 0, ec);
-
-    return f;
-}
-
-static
-void truncate( posix::stream_descriptor& f
-             , size_t new_length
-             , sys::error_code& ec)
-{
-    if (ftruncate(f.native_handle(), new_length) != 0) {
-        ec = last_error();
-        if (!ec) ec = make_error_code(errc::no_message);
-    }
-}
-
-static
-void read_data( posix::stream_descriptor& f
-              , asio::mutable_buffer b
-              , Cancel& cancel
-              , asio::yield_context yield)
-{
-    auto cancel_slot = cancel.connect([&] { f.close(); });
-    sys::error_code ec;
-    asio::async_read(f, b, yield[ec]);
-    if (cancel) ec = asio::error::operation_aborted;
-    return or_throw(yield, ec);
-}
-
-static
-void write_data( posix::stream_descriptor& f
-               , asio::const_buffer b
-               , Cancel& cancel
-               , asio::yield_context yield)
-{
-    auto cancel_slot = cancel.connect([&] { f.close(); });
-    sys::error_code ec;
-    asio::async_write(f, b, yield[ec]);
-    if (cancel) ec = asio::error::operation_aborted;
-    return or_throw(yield, ec);
-}
-
-template<typename T>
-static
-T read_number( posix::stream_descriptor& f
-             , Cancel& cancel
-             , asio::yield_context yield)
-{
-    T num;
-    sys::error_code ec;
-    // TODO: endianness? (also for writing)
-    read_data(f, asio::buffer(&num, sizeof(num)), cancel, yield[ec]);
-    return or_throw<T>(yield, ec, move(num));
-}
-
-template<typename T>
-static
-void write_number( posix::stream_descriptor& f
-                 , T num
-                 , Cancel& cancel
-                 , asio::yield_context yield)
-{
-    sys::error_code ec;
-    // TODO: endianness? (also for reading)
-    write_data(f, asio::buffer(&num, sizeof(num)), cancel, yield[ec]);
-    return or_throw(yield, ec);
-}
-
-static
-void remove_file(const fs::path& p)
-{
-    if (!exists(p)) return;
-    assert(is_regular_file(p));
-    if (!is_regular_file(p)) return;
-    sys::error_code ignored_ec;
-    fs::remove(p, ignored_ec);
 }
 
 class PersistentLruCache::Element {
@@ -174,21 +67,21 @@ public:
 
         sys::error_code ec;
 
-        auto on_exit = defer([&] { if (ec) remove_file(path); });
+        auto on_exit = defer([&] { if (ec) file_io::remove_file(path); });
 
-        auto file = ::open(ios, path, ec);
+        auto file = file_io::open(ios, path, ec);
         if (ec) return or_throw<Ret>(yield, ec);
 
-        auto ts = read_number<uint64_t>(file, cancel, yield[ec]);
+        auto ts = file_io::read_number<uint64_t>(file, cancel, yield[ec]);
         if (ec) return or_throw<Ret>(yield, ec);
 
         if (ts_out) *ts_out = ts;
 
-        auto key_size = read_number<uint32_t>(file, cancel, yield[ec]);
+        auto key_size = file_io::read_number<uint32_t>(file, cancel, yield[ec]);
         if (ec) return or_throw<Ret>(yield, ec);
 
         string key(key_size, '\0');
-        read_data(file, asio::buffer(key), cancel, yield[ec]);
+        file_io::read(file, asio::buffer(key), cancel, yield[ec]);
         if (ec) return or_throw<Ret>(yield, ec);
 
         return make_shared<Element>(ios, move(key), move(path));
@@ -202,13 +95,13 @@ public:
 
         sys::error_code ec;
 
-        auto f = ::open(_ios, _path, ec);
-        if (!ec) truncate(f, content_start() + value.size(), ec);
-        if (!ec) fseek(f, 0, ec);
-        if (!ec) write_number<uint64_t>(f, ts, cancel, yield[ec]);
-        if (!ec) write_number<uint32_t>(f, _key.size(), cancel, yield[ec]);
-        if (!ec) write_data(f, asio::buffer(_key), cancel, yield[ec]);
-        if (!ec) write_data(f, asio::buffer(value), cancel, yield[ec]);
+        auto f = file_io::open(_ios, _path, ec);
+        if (!ec) file_io::truncate(f, content_start() + value.size(), ec);
+        if (!ec) file_io::fseek(f, 0, ec);
+        if (!ec) file_io::write_number<uint64_t>(f, ts, cancel, yield[ec]);
+        if (!ec) file_io::write_number<uint32_t>(f, _key.size(), cancel, yield[ec]);
+        if (!ec) file_io::write(f, asio::buffer(_key), cancel, yield[ec]);
+        if (!ec) file_io::write(f, asio::buffer(value), cancel, yield[ec]);
 
         if (ec) _remove_on_destruct = true;
         else _remove_on_destruct = false;
@@ -222,9 +115,9 @@ public:
 
         sys::error_code ec;
 
-        auto f = ::open(_ios, _path, ec);
-        if (!ec) fseek(f, 0, ec);
-        if (!ec) write_number<uint64_t>(f, ts, cancel, yield[ec]);
+        auto f = file_io::open(_ios, _path, ec);
+        if (!ec) file_io::fseek(f, 0, ec);
+        if (!ec) file_io::write_number<uint64_t>(f, ts, cancel, yield[ec]);
 
         if (ec) _remove_on_destruct = true;
         else _remove_on_destruct = false;
@@ -241,20 +134,20 @@ public:
         size_t f_size = fs::file_size(_path, ec);
         string ret;
 
-        auto f = ::open(_ios, _path, ec);
+        auto f = file_io::open(_ios, _path, ec);
         if (ec) goto finish;
 
-        fseek(f, 0, ec);
+        file_io::fseek(f, 0, ec);
         if (ec) goto finish;
 
-        write_number<uint64_t>(f, ts, cancel, yield[ec]);
+        file_io::write_number<uint64_t>(f, ts, cancel, yield[ec]);
         if (ec) goto finish;
 
-        fseek(f, content_start(), ec);
+        file_io::fseek(f, content_start(), ec);
         if (ec) goto finish;
 
         ret.resize(f_size - content_start());
-        read_data(f, asio::buffer(ret), cancel, yield[ec]);
+        file_io::read(f, asio::buffer(ret), cancel, yield[ec]);
 
         finish:
 
@@ -266,7 +159,7 @@ public:
 
     ~Element()
     {
-        if (_remove_on_destruct) remove_file(_path);
+        if (_remove_on_destruct) file_io::remove_file(_path);
     }
 
     Element( asio::io_service& ios

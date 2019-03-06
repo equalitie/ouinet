@@ -112,6 +112,9 @@ public:
 private:
     fs::path path_from_key(const std::string&);
 
+    static void create_or_check_directory(const fs::path&, sys::error_code&);
+    static uint64_t ms_since_epoch();
+
 private:
     asio::io_service& _ios;
     boost::filesystem::path _dir;
