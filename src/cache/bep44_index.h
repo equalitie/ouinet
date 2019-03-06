@@ -48,7 +48,8 @@ public:
 private:
     // Private, use the async `build` fn instead.
     Bep44ClientIndex( bittorrent::MainlineDht& bt_dht
-                    , util::Ed25519PublicKey bt_pubkey);
+                    , util::Ed25519PublicKey bt_pubkey
+                    , std::unique_ptr<Bep44EntryUpdater>);
 
 private:
     bittorrent::MainlineDht& _bt_dht;
@@ -80,7 +81,8 @@ public:
 
 private:
     Bep44InjectorIndex( bittorrent::MainlineDht& bt_dht
-                      , util::Ed25519PrivateKey bt_privkey);
+                      , util::Ed25519PrivateKey bt_privkey
+                      , std::unique_ptr<Bep44EntryUpdater>);
 
 private:
     bittorrent::MainlineDht& _bt_dht;

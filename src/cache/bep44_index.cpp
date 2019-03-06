@@ -1,8 +1,10 @@
 #include <iterator>
+#include <json.hpp>
 
 #include "bep44_index.h"
 #include "../logger.h"
 #include "../util/lru_cache.h"
+#include "../util/persistent_lru_cache.h"
 #include "../bittorrent/bencoding.h"
 #include "../bittorrent/dht.h"
 #include "../or_throw.h"
@@ -13,6 +15,49 @@ using namespace std;
 using namespace ouinet;
 
 namespace bt = bittorrent;
+
+//--------------------------------------------------------------------
+nlohmann::json to_json(const bt::MutableDataItem& item)
+{
+    using util::bytes::to_hex;
+
+    return nlohmann::json {
+        { "public_key"      , to_hex(item.public_key.serialize())  },
+        { "salt"            , to_hex(item.salt)                    },
+        { "value"           , to_hex(bencoding_encode(item.value)) },
+        { "sequence_number" , item.sequence_number                 },
+        { "signature"       , to_hex(item.signature)               },
+    };
+}
+
+boost::optional<bt::MutableDataItem> from_json(const nlohmann::json& json)
+{
+    using util::bytes::from_hex;
+
+    bt::MutableDataItem ret;
+
+    try {
+        auto pubkey = util::Ed25519PublicKey::from_hex(json["public_key"].get<string>());
+
+        if (!pubkey) return boost::none;
+
+        ret.public_key      = *pubkey;
+        ret.salt            = from_hex(json["salt"].get<string>());
+        ret.value           = from_hex(json["value"].get<string>());
+        ret.sequence_number = json["sequence_number"];
+
+        auto sig = from_hex(json["signature"].get<string>());
+
+        if (sig.size() != ret.signature.size()) return boost::none;
+
+        ret.signature = util::bytes::to_array<uint8_t, 64>(sig);
+    }
+    catch (...) {
+        return boost::none;
+    }
+
+    return ret;
+}
 
 //--------------------------------------------------------------------
 template<size_t N>
@@ -32,8 +77,7 @@ static bt::MutableDataItem find( bt::MainlineDht& dht
 {
     sys::error_code ec;
 
-    auto opt_data = dht.mutable_get( pubkey, salt
-                                   , yield[ec], cancel);
+    auto opt_data = dht.mutable_get(pubkey, salt, yield[ec], cancel);
     
     if (!ec && !opt_data) {
         // TODO: This shouldn't happen (it does), the above
@@ -50,33 +94,45 @@ static bt::MutableDataItem find( bt::MainlineDht& dht
 //--------------------------------------------------------------------
 class ouinet::Bep44EntryUpdater
 {
-    using Clock = std::chrono::steady_clock;
-
+public:
     // Arbitrarily chosen
     static const size_t CAPACITY = 1000;
 
+private:
+    using Clock = std::chrono::steady_clock;
+
     struct Entry {
-        bt::MutableDataItem data;
         Clock::time_point last_update;
     };
 
     using Entries = util::LruCache<string, Entry>;
+    using LruPtr = unique_ptr<util::PersistentLruCache>;
 
 public:
-    Bep44EntryUpdater(bt::MainlineDht& dht)
+    Bep44EntryUpdater(bt::MainlineDht& dht, LruPtr lru)
         : _ios(dht.get_io_service())
         , _dht(dht)
         , _entries(CAPACITY)
+        , _lru(move(lru))
     {
         start();
     }
 
-    void insert(bt::MutableDataItem data)
+    void insert( const bt::MutableDataItem& data
+               , Cancel& cancel
+               , asio::yield_context yield)
     {
-        // For different entries *signed by the same key*,
-        // their salt is the differentiating key.
-        _entries.put(data.salt, Entry{ move(data)
-                                     , Clock::now() - chrono::minutes(15)});
+        auto slot = _cancel.connect([&] { cancel(); });
+
+        sys::error_code ec;
+
+        _lru->insert(data.salt, to_json(data).dump(), cancel, yield[ec]);
+
+        return_or_throw_on_error(yield, cancel, ec);
+        
+        _entries.put(data.salt, Entry{ Clock::now() - chrono::minutes(15)});
+
+        return or_throw(yield, ec);
     }
 
     ~Bep44EntryUpdater() {
@@ -102,9 +158,32 @@ private:
 
                 sys::error_code ec;
 
+                util::PersistentLruCache::iterator old_data_i = _lru->find(i->first);
+
+                if (old_data_i == _lru->end()) {
+                    _entries.erase(i);
+                    continue;
+                }
+
+                auto old_data_s = old_data_i.value(cancel, yield[ec]);
+
+                if (cancel) return;
+
+                if (ec) {
+                    _entries.erase(i);
+                    continue;
+                }
+
+                auto old_data = from_json(old_data_s);
+
+                if (!old_data) {
+                    _entries.erase(i);
+                    continue;
+                }
+
                 auto new_data = find(_dht
-                                    , old.data.public_key
-                                    , i->first  // the salt
+                                    , old_data->public_key
+                                    , old_data->salt
                                     , cancel
                                     , yield[ec]);
 
@@ -112,7 +191,7 @@ private:
 
                 if (ec) {
                     if (ec == asio::error::not_found) {
-                        _dht.mutable_put(old.data, cancel, yield[ec]);
+                        _dht.mutable_put(*old_data, cancel, yield[ec]);
                         if (cancel) return;
                         old.last_update = Clock::now();
                     } else {
@@ -121,9 +200,9 @@ private:
                         if (cancel) return;
                     }
                 } else {
-                    if (new_data.sequence_number > old.data.sequence_number)
+                    if (new_data.sequence_number > old_data->sequence_number)
                     {
-                        old.data = move(new_data);
+                        // TODO: Store new data
                         old.last_update = Clock::now() - chrono::minutes(15);
                     }
                 }
@@ -158,52 +237,85 @@ private:
     asio::io_service& _ios;
     bt::MainlineDht& _dht;
     Entries _entries;
+    LruPtr _lru;
     Cancel _cancel;
 };
 
 
 //--------------------------------------------------------------------
-// private
-Bep44ClientIndex::Bep44ClientIndex( bt::MainlineDht& bt_dht
-                                  , util::Ed25519PublicKey bt_pubkey)
-    : _bt_dht(bt_dht)
-    , _bt_pubkey(bt_pubkey)
-    , _updater(new Bep44EntryUpdater(bt_dht))
-{}
-
-
 // static
 unique_ptr<Bep44ClientIndex>
 Bep44ClientIndex::build( bt::MainlineDht& bt_dht
                        , util::Ed25519PublicKey bt_pubkey
                        , const boost::filesystem::path& storage_path
-                       , Cancel&
-                       , asio::yield_context)
+                       , Cancel& cancel
+                       , asio::yield_context yield)
 {
-    return unique_ptr<Bep44ClientIndex>(new Bep44ClientIndex(bt_dht, bt_pubkey));
+    using Ret = unique_ptr<Bep44ClientIndex>;
+
+    sys::error_code ec;
+
+    auto lru = util::PersistentLruCache::load( bt_dht.get_io_service()
+                                             , storage_path / "push-lru"
+                                             , Bep44EntryUpdater::CAPACITY
+                                             , cancel
+                                             , yield[ec]);
+
+    return_or_throw_on_error(yield, cancel, ec, Ret());
+
+    auto updater = make_unique<Bep44EntryUpdater>(bt_dht, move(lru));
+
+    return Ret(new Bep44ClientIndex(bt_dht, bt_pubkey, move(updater)));
 }
 
 
-Bep44InjectorIndex::Bep44InjectorIndex( bt::MainlineDht& bt_dht
-                                      , util::Ed25519PrivateKey bt_privkey)
+// private
+Bep44ClientIndex::Bep44ClientIndex( bt::MainlineDht& bt_dht
+                                  , util::Ed25519PublicKey bt_pubkey
+                                  , unique_ptr<Bep44EntryUpdater> updater)
     : _bt_dht(bt_dht)
-    , _bt_privkey(bt_privkey)
-    , _updater(new Bep44EntryUpdater(bt_dht))
+    , _bt_pubkey(bt_pubkey)
+    , _updater(move(updater))
 {}
 
 
+//--------------------------------------------------------------------
 // static
 unique_ptr<Bep44InjectorIndex>
 Bep44InjectorIndex::build( bt::MainlineDht& bt_dht
                          , util::Ed25519PrivateKey bt_privkey
                          , const boost::filesystem::path& storage_path
-                         , Cancel&
-                         , asio::yield_context)
+                         , Cancel& cancel
+                         , asio::yield_context yield)
 {
-    return unique_ptr<Bep44InjectorIndex>(new Bep44InjectorIndex(bt_dht, bt_privkey));
+    using Ret = unique_ptr<Bep44InjectorIndex>;
+
+    sys::error_code ec;
+
+    auto lru = util::PersistentLruCache::load( bt_dht.get_io_service()
+                                             , storage_path / "push-lru"
+                                             , Bep44EntryUpdater::CAPACITY
+                                             , cancel
+                                             , yield[ec]);
+
+    return_or_throw_on_error(yield, cancel, ec, Ret());
+
+    auto updater = make_unique<Bep44EntryUpdater>(bt_dht, move(lru));
+
+    return Ret(new Bep44InjectorIndex(bt_dht, bt_privkey, move(updater)));
 }
 
 
+Bep44InjectorIndex::Bep44InjectorIndex( bt::MainlineDht& bt_dht
+                                      , util::Ed25519PrivateKey bt_privkey
+                                      , unique_ptr<Bep44EntryUpdater> updater)
+    : _bt_dht(bt_dht)
+    , _bt_privkey(bt_privkey)
+    , _updater(move(updater))
+{}
+
+
+//--------------------------------------------------------------------
 string Bep44ClientIndex::find( const string& key
                              , Cancel& cancel_
                              , asio::yield_context yield)
@@ -217,15 +329,22 @@ string Bep44ClientIndex::find( const string& key
                       , _bt_pubkey, bep44_salt_from_key(key)
                       , cancel, yield[ec]);
 
-    if (ec) return or_throw<string>(yield, ec);
+    return_or_throw_on_error(yield, cancel, ec, string());
 
-    _updater->insert(data);
+    sys::error_code ec2;
+    _updater->insert(data, cancel, yield[ec2]);
+
+    // Ignore all errors except operation_aborted
+    if (ec2 == asio::error::operation_aborted) {
+        return or_throw<string>(yield, ec2);
+    }
 
     assert(data.value.is_string());
     return *data.value.as_string();
 }
 
 
+//--------------------------------------------------------------------
 string Bep44InjectorIndex::find( const string& key
                                , Cancel& cancel_
                                , asio::yield_context yield)
@@ -239,16 +358,22 @@ string Bep44InjectorIndex::find( const string& key
                       , _bt_privkey.public_key(), bep44_salt_from_key(key)
                       , cancel, yield[ec]);
 
-    if (ec) return or_throw<string>(yield, ec);
+    return_or_throw_on_error(yield, cancel, ec, string());
 
-    // TODO: Don't do this once we have a bootstrapped network.
-    _updater->insert(data);
+    sys::error_code ec2;
+    _updater->insert(data, cancel, yield[ec2]);
+
+    // Ignore all errors except operation_aborted
+    if (ec2 == asio::error::operation_aborted) {
+        return or_throw<string>(yield, ec2);
+    }
 
     assert(data.value.is_string());
     return *data.value.as_string();
 }
 
 
+//--------------------------------------------------------------------
 string Bep44ClientIndex::insert_mapping( const string& ins_data
                                        , asio::yield_context yield)
 {
@@ -313,9 +438,11 @@ string Bep44InjectorIndex::insert( string key
     Cancel cancel(_cancel);
     _bt_dht.mutable_put(item, cancel, yield[ec]);
 
-    if (cancel) ec = asio::error::operation_aborted;
-    if (ec) return or_throw<string>(yield, ec);
-    _updater->insert(item);
+    return_or_throw_on_error(yield, cancel, ec, string());
+
+    sys::error_code ec_ignored;
+    _updater->insert(item, cancel, yield[ec_ignored]);
+
     LOG_DEBUG("BEP44 index: inserted key=", key);  // used by integration tests
 
     // We follow the names used in the BEP44 document.
