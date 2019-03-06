@@ -111,9 +111,10 @@ public:
     }
 
     iterator erase(iterator i) {
-        auto j = std::next(i);
-        _list->erase(i.i->second);
-        _map->erase(i.i);
+        auto j = i;
+        ++j;
+        _list.erase(i.i->second);
+        _map.erase(i.i);
         return j;
     }
 
