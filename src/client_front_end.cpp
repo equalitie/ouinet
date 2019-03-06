@@ -440,21 +440,23 @@ Response ClientFrontEnd::serve( ClientConfig& config
     util::url_match url;
     match_http_url(req.target(), url);
 
-    if (url.path == "/ca.pem") {
+    auto path = !url.path.empty() ? url.path : req.target().to_string();
+
+    if (path == "/ca.pem") {
         handle_ca_pem(req, res, ss, ca);
-    } else if (url.path == "/index.html") {
+    } else if (path == "/index.html") {
         sys::error_code ec_;  // shouldn't throw, but just in case
         handle_enumerate_index(req, res, ss, cache_client, yield[ec_]);
-    } else if (url.path == "/api/upload") {
+    } else if (path == "/api/upload") {
         sys::error_code ec_;  // shouldn't throw, but just in case
         handle_upload(req, res, ss, cache_client, yield[ec_]);
-    } else if (url.path == "/api/descriptor") {
+    } else if (path == "/api/descriptor") {
         sys::error_code ec_;  // shouldn't throw, but just in case
         handle_descriptor(req, res, ss, cache_client, yield[ec_]);
-    } else if (url.path == "/api/insert/bep44") {
+    } else if (path == "/api/insert/bep44") {
         sys::error_code ec_;  // shouldn't throw, but just in case
         handle_insert_bep44(req, res, ss, cache_client, yield[ec_]);
-    } else if (url.path == "/api/status") {
+    } else if (path == "/api/status") {
         handle_status(config, req, res, ss, cache_client);
     } else {
         handle_portal(config, req, res, ss, cache_client);
