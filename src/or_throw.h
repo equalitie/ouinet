@@ -64,4 +64,11 @@ void or_throw(asio::yield_context yield, const sys::error_code& ec)
     else { throw sys::system_error(ec); }
 }
 
+#define return_or_throw_on_error(yield, cancel, ec, ...) \
+    if (cancel || ec) {\
+        assert(!cancel || ec == asio::error::operation_aborted); \
+        if (cancel) ec = asio::error::operation_aborted; \
+        return or_throw(yield, ec, ##__VA_ARGS__); \
+    }
+
 }
