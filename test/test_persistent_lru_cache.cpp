@@ -13,12 +13,6 @@ using namespace ouinet;
 using namespace ouinet::util;
 namespace fs = boost::filesystem;
 
-vector<uint8_t> to_vec(const char* c)
-{
-    auto uc = (const uint8_t*) c;
-    return vector<uint8_t>(uc, uc + strlen(c));
-}
-
 unsigned count_files_in_dir(const fs::path& dir)
 {
     unsigned ret = 0;
@@ -63,7 +57,7 @@ BOOST_AUTO_TEST_CASE(test_initialize)
 
             BOOST_REQUIRE(!ec);
 
-            lru->insert("hello1", to_vec("world1"), cancel, yield[ec]);
+            lru->insert("hello1", "world1", cancel, yield[ec]);
             BOOST_REQUIRE(!ec);
 
             BOOST_REQUIRE(lru->find("not-there") == lru->end());
@@ -73,12 +67,12 @@ BOOST_AUTO_TEST_CASE(test_initialize)
                 BOOST_REQUIRE(i != lru->end());
             }
 
-            lru->insert("hello2", to_vec("world2"), cancel, yield[ec]);
+            lru->insert("hello2", "world2", cancel, yield[ec]);
             BOOST_REQUIRE(!ec);
 
             BOOST_REQUIRE_EQUAL(count_files_in_dir(dir), max_cache_size);
 
-            lru->insert("hello3", to_vec("world3"), cancel, yield[ec]);
+            lru->insert("hello3", "world3", cancel, yield[ec]);
             BOOST_REQUIRE(!ec);
 
             BOOST_REQUIRE_EQUAL(count_files_in_dir(dir), max_cache_size);
@@ -97,7 +91,7 @@ BOOST_AUTO_TEST_CASE(test_initialize)
 
                 auto data = i.value(cancel, yield[ec]);
                 BOOST_REQUIRE(!ec);
-                BOOST_REQUIRE(data == to_vec("world2"));
+                BOOST_REQUIRE(data == "world2");
             }
 
             BOOST_REQUIRE_EQUAL(count_files_in_dir(dir), max_cache_size);

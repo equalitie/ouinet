@@ -194,7 +194,7 @@ public:
         return make_shared<Element>(ios, move(key), move(path));
     }
 
-    void update( vector<uint8_t> value
+    void update( string value
                , Cancel& cancel
                , asio::yield_context yield)
     {
@@ -232,14 +232,14 @@ public:
         return or_throw(yield, ec);
     }
 
-    vector<uint8_t> value(Cancel& cancel, asio::yield_context yield)
+    string value(Cancel& cancel, asio::yield_context yield)
     {
         auto ts = ms_since_epoch();
 
         sys::error_code ec;
 
         size_t f_size = fs::file_size(_path, ec);
-        vector<uint8_t> ret;
+        string ret;
 
         auto f = ::open(_ios, _path, ec);
         if (ec) goto finish;
@@ -377,7 +377,7 @@ PersistentLruCache::PersistentLruCache( asio::io_service& ios
 }
 
 void PersistentLruCache::insert( string key
-                               , std::vector<uint8_t> value
+                               , string value
                                , Cancel& cancel
                                , asio::yield_context yield)
 {
@@ -438,7 +438,7 @@ fs::path PersistentLruCache::path_from_key(const std::string& key)
     return _dir / bytes::to_hex(sha1(key));
 }
 
-vector<uint8_t>
+string
 PersistentLruCache::iterator::value(Cancel& cancel, asio::yield_context yield)
 {
     // Capture shared_ptr here to make sure element doesn't
@@ -448,7 +448,7 @@ PersistentLruCache::iterator::value(Cancel& cancel, asio::yield_context yield)
     sys::error_code ec;
 
     auto lock = e->lock(cancel, yield[ec]);
-    if (ec) return or_throw<vector<uint8_t>>(yield, ec);
+    if (ec) return or_throw<string>(yield, ec);
 
     return e->value(cancel, yield);
 }

@@ -30,8 +30,6 @@ public:
         MapIter i;
     public:
         iterator(MapIter i) : i(i) {}
-        KeyVal& operator*() { return *i->second; }
-        KeyVal* operator->() { return &*i->second; }
 
         iterator& operator++() {
             ++i;
@@ -52,7 +50,7 @@ public:
             return i != j.i;
         }
 
-        std::vector<uint8_t> value(Cancel&, asio::yield_context);
+        std::string value(Cancel&, asio::yield_context);
     };
 
 private:
@@ -73,7 +71,7 @@ public:
                                             , asio::yield_context);
 
     void insert( std::string key
-               , std::vector<uint8_t> value
+               , std::string value
                , Cancel&
                , asio::yield_context);
 
