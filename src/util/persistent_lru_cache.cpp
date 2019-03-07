@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <iostream>
+#include "sha1.h"
 
 using namespace std;
 using boost::string_view;
@@ -40,6 +41,10 @@ uint64_t ms_since_epoch()
     using namespace std::chrono;
     auto now = system_clock::now();
     return duration_cast<milliseconds>(now.time_since_epoch()).count();
+}
+
+fs::path path_from_key(const fs::path& dir, const std::string& key) {
+    return dir / util::bytes::to_hex(util::sha1(key));
 }
 
 }}} // namespaces

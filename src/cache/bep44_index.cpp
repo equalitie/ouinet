@@ -2,6 +2,7 @@
 #include <json.hpp>
 
 #include "bep44_index.h"
+#include "../util/file_io.h"
 #include "../logger.h"
 #include "../util/lru_cache.h"
 #include "../util/persistent_lru_cache.h"
@@ -15,13 +16,20 @@ using namespace std;
 using namespace ouinet;
 
 namespace bt = bittorrent;
+namespace file_io = util::file_io;
+
+using Clock = std::chrono::steady_clock;
 
 //--------------------------------------------------------------------
-nlohmann::json to_json(const bt::MutableDataItem& item)
+nlohmann::json entry_to_json(Clock::time_point t, const bt::MutableDataItem& item)
 {
     using util::bytes::to_hex;
+    using namespace std::chrono;
+
+    uint64_t ms = duration_cast<milliseconds>(t.time_since_epoch()).count();
 
     return nlohmann::json {
+        { "last_update"     , ms                                   },
         { "public_key"      , to_hex(item.public_key.serialize())  },
         { "salt"            , to_hex(item.salt)                    },
         { "value"           , to_hex(bencoding_encode(item.value)) },
@@ -30,16 +38,22 @@ nlohmann::json to_json(const bt::MutableDataItem& item)
     };
 }
 
-boost::optional<bt::MutableDataItem> from_json(const nlohmann::json& json)
+boost::optional<std::pair<Clock::time_point, bt::MutableDataItem>>
+entry_from_json(const nlohmann::json& json)
 {
     using util::bytes::from_hex;
+    using chrono::milliseconds;
 
+    Clock::time_point last_update;
     bt::MutableDataItem ret;
 
     try {
         auto pubkey = util::Ed25519PublicKey::from_hex(json["public_key"].get<string>());
 
         if (!pubkey) return boost::none;
+
+        auto since_epoch = milliseconds(json["last_update"].get<uint64_t>());
+        last_update = Clock::time_point() + since_epoch;
 
         ret.public_key      = *pubkey;
         ret.salt            = from_hex(json["salt"].get<string>());
@@ -56,7 +70,7 @@ boost::optional<bt::MutableDataItem> from_json(const nlohmann::json& json)
         return boost::none;
     }
 
-    return ret;
+    return make_pair(last_update, move(ret));
 }
 
 //--------------------------------------------------------------------
@@ -78,7 +92,7 @@ static bt::MutableDataItem find( bt::MainlineDht& dht
     sys::error_code ec;
 
     auto opt_data = dht.mutable_get(pubkey, salt, yield[ec], cancel);
-    
+
     if (!ec && !opt_data) {
         // TODO: This shouldn't happen (it does), the above
         // function should return an error if not successful.
@@ -99,20 +113,48 @@ public:
     static const size_t CAPACITY = 1000;
 
 private:
-    using Clock = std::chrono::steady_clock;
-
     struct Entry {
         Clock::time_point last_update;
+        bt::MutableDataItem data;
+
+        template<class File>
+        void write(File& f, Cancel& cancel, asio::yield_context yield) {
+            auto s = entry_to_json(last_update, data).dump();
+            file_io::write(f, asio::buffer(s), cancel, yield);
+        }
+
+        template<class File>
+        void read(File& f, Cancel& cancel, asio::yield_context yield) {
+            sys::error_code ec;
+            auto size = file_io::file_remaining_size(f, ec);
+            return_or_throw_on_error(yield, cancel, ec);
+
+            string s(size, '\0');
+            file_io::read(f, asio::buffer(s), cancel, yield[ec]);
+            return_or_throw_on_error(yield, cancel, ec);
+
+            try {
+                auto json = nlohmann::json::parse(s);
+                auto opt = entry_from_json(json);
+                if (!opt) ec = asio::error::fault;
+                return_or_throw_on_error(yield, cancel, ec);
+
+                last_update = opt->first;
+                data = move(opt->second);
+            } catch (...) {
+                return_or_throw_on_error(yield, cancel, asio::error::fault);
+            }
+        }
     };
 
-    using Entries = util::LruCache<string, Entry>;
-    using LruPtr = unique_ptr<util::PersistentLruCache>;
+public:
+    using Lru = util::PersistentLruCache<Entry>;
+    using LruPtr = unique_ptr<Lru>;
 
 public:
     Bep44EntryUpdater(bt::MainlineDht& dht, LruPtr lru)
         : _ios(dht.get_io_service())
         , _dht(dht)
-        , _entries(CAPACITY)
         , _lru(move(lru))
     {
         start();
@@ -124,15 +166,10 @@ public:
     {
         auto slot = _cancel.connect([&] { cancel(); });
 
-        sys::error_code ec;
-
-        _lru->insert(data.salt, to_json(data).dump(), cancel, yield[ec]);
-
-        return_or_throw_on_error(yield, cancel, ec);
-        
-        _entries.put(data.salt, Entry{ Clock::now() - chrono::minutes(15)});
-
-        return or_throw(yield, ec);
+        auto key = data.salt;
+        _lru->insert( std::move(key)
+                    , Entry{Clock::now() - chrono::minutes(15), std::move(data)}
+                    , cancel, yield);
     }
 
     ~Bep44EntryUpdater() {
@@ -148,42 +185,19 @@ private:
             while (true) {
                 auto i = pick_entry_to_update();
 
-                if (i == _entries.end()) {
+                if (i == _lru->end()) {
                     async_sleep(_ios, chrono::minutes(1), cancel, yield);
                     if (cancel) return;
                     continue;
                 }
 
-                auto& old = i->second;
+                auto old = i.value();
 
                 sys::error_code ec;
 
-                util::PersistentLruCache::iterator old_data_i = _lru->find(i->first);
-
-                if (old_data_i == _lru->end()) {
-                    _entries.erase(i);
-                    continue;
-                }
-
-                auto old_data_s = old_data_i.value(cancel, yield[ec]);
-
-                if (cancel) return;
-
-                if (ec) {
-                    _entries.erase(i);
-                    continue;
-                }
-
-                auto old_data = from_json(old_data_s);
-
-                if (!old_data) {
-                    _entries.erase(i);
-                    continue;
-                }
-
                 auto new_data = find(_dht
-                                    , old_data->public_key
-                                    , old_data->salt
+                                    , old.data.public_key
+                                    , old.data.salt
                                     , cancel
                                     , yield[ec]);
 
@@ -191,37 +205,49 @@ private:
 
                 if (ec) {
                     if (ec == asio::error::not_found) {
-                        _dht.mutable_put(*old_data, cancel, yield[ec]);
-                        if (cancel) return;
-                        old.last_update = Clock::now();
+                        _dht.mutable_put(old.data, cancel, yield[ec]);
                     } else {
                         // Some network error
                         async_sleep(_ios, chrono::seconds(5), cancel, yield);
-                        if (cancel) return;
                     }
-                } else {
-                    if (new_data.sequence_number > old_data->sequence_number)
+
+                    if (cancel) return;
+
+                    // Even if there was some network error we update the
+                    // `last_update` ts just to make sure we don't end up in an
+                    // infinite loop of updating the same item over and over.
+                    old.last_update = Clock::now();
+
+                    _lru->insert(i.key(), old, cancel, yield[ec]);
+                }
+                else {
+                    if (new_data.sequence_number > old.data.sequence_number)
                     {
                         // TODO: Store new data
+                        old.data = move(new_data);
                         old.last_update = Clock::now() - chrono::minutes(15);
+
+                        _lru->insert(i.key(), move(old), cancel, yield[ec]);
                     }
                 }
+
+                if (cancel) return;
             }
         });
     }
 
-    Entries::iterator pick_entry_to_update() {
-        auto oldest_i = _entries.end();
+    Lru::iterator pick_entry_to_update() {
+        auto oldest_i = _lru->end();
 
-        for (auto i = _entries.begin(); i != _entries.end(); ++i) {
-            if (!needs_update(i->second)) continue;
+        for (auto i = _lru->begin(); i != _lru->end(); ++i) {
+            if (!needs_update(i.value())) continue;
 
-            if (oldest_i == _entries.end()) {
+            if (oldest_i == _lru->end()) {
                 oldest_i = i;
                 continue;
             }
 
-            if (i->second.last_update < oldest_i->second.last_update) {
+            if (i.value().last_update < oldest_i.value().last_update) {
                 oldest_i = i;
             }
         }
@@ -236,7 +262,6 @@ private:
 private:
     asio::io_service& _ios;
     bt::MainlineDht& _dht;
-    Entries _entries;
     LruPtr _lru;
     Cancel _cancel;
 };
@@ -255,11 +280,11 @@ Bep44ClientIndex::build( bt::MainlineDht& bt_dht
 
     sys::error_code ec;
 
-    auto lru = util::PersistentLruCache::load( bt_dht.get_io_service()
-                                             , storage_path / "push-lru"
-                                             , Bep44EntryUpdater::CAPACITY
-                                             , cancel
-                                             , yield[ec]);
+    auto lru = Bep44EntryUpdater::Lru::load( bt_dht.get_io_service()
+                                           , storage_path / "push-lru"
+                                           , Bep44EntryUpdater::CAPACITY
+                                           , cancel
+                                           , yield[ec]);
 
     return_or_throw_on_error(yield, cancel, ec, Ret());
 
@@ -292,11 +317,11 @@ Bep44InjectorIndex::build( bt::MainlineDht& bt_dht
 
     sys::error_code ec;
 
-    auto lru = util::PersistentLruCache::load( bt_dht.get_io_service()
-                                             , storage_path / "push-lru"
-                                             , Bep44EntryUpdater::CAPACITY
-                                             , cancel
-                                             , yield[ec]);
+    auto lru = Bep44EntryUpdater::Lru::load( bt_dht.get_io_service()
+                                           , storage_path / "push-lru"
+                                           , Bep44EntryUpdater::CAPACITY
+                                           , cancel
+                                           , yield[ec]);
 
     return_or_throw_on_error(yield, cancel, ec, Ret());
 

@@ -12,7 +12,6 @@
 #include "signal.h"
 #include "file_io.h"
 #include "scheduler.h"
-#include "sha1.h"
 #include "bytes.h"
 
 namespace ouinet { namespace util {
@@ -20,8 +19,10 @@ namespace ouinet { namespace util {
 namespace persisten_lru_cache_detail {
     void create_or_check_directory(const fs::path&, sys::error_code&);
     uint64_t ms_since_epoch();
+    fs::path path_from_key(const fs::path&, const std::string&);
 } // detail namespace
 
+template<class Value>
 class PersistentLruCache {
 private:
     struct Element;
@@ -29,7 +30,7 @@ private:
     using Key = std::string;
     using KeyVal = std::pair<Key, std::shared_ptr<Element>>;
 
-    using List = typename std::list<KeyVal>;
+    using List = std::list<KeyVal>;
     using ListIter = typename List::iterator;
 
     using Map = std::map<Key, ListIter>;
@@ -61,7 +62,9 @@ public:
             return i != j.i;
         }
 
-        std::string value(Cancel&, asio::yield_context);
+        //Value value(Cancel&, asio::yield_context);
+        const Value& value() const;
+        const Key& key() const;
     };
 
 private:
@@ -82,7 +85,7 @@ public:
                                             , asio::yield_context);
 
     void insert( std::string key
-               , std::string value
+               , Value value
                , Cancel&
                , asio::yield_context);
 
@@ -129,7 +132,8 @@ private:
     size_t _max_size;
 };
 
-class PersistentLruCache::Element {
+template<class Value>
+class PersistentLruCache<Value>::Element {
 public:
     static
     std::shared_ptr<Element> open( asio::io_service& ios
@@ -159,26 +163,36 @@ public:
         file_io::read(file, asio::buffer(key), cancel, yield[ec]);
         if (ec) return or_throw<Ret>(yield, ec);
 
-        return std::make_shared<Element>(ios, std::move(key), std::move(path));
+        Value value;
+
+        value.read(file, cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, Ret());
+
+        return std::make_shared<Element>( ios
+                                        , std::move(key)
+                                        , std::move(path)
+                                        , std::move(value));
     }
 
-    void update( std::string value
-               , Cancel& cancel
-               , asio::yield_context yield)
+    void update(Value value, Cancel& cancel, asio::yield_context yield)
     {
         using namespace persisten_lru_cache_detail;
+
+        _value = std::move(value);
 
         auto ts = ms_since_epoch();
 
         sys::error_code ec;
 
         auto f = file_io::open(_ios, _path, ec);
-        if (!ec) file_io::truncate(f, content_start() + value.size(), ec);
+        //if (!ec) file_io::truncate(f, content_start() + value.size(), ec);
+        if (!ec) file_io::truncate(f, content_start(), ec);
         if (!ec) file_io::fseek(f, 0, ec);
         if (!ec) file_io::write_number<uint64_t>(f, ts, cancel, yield[ec]);
         if (!ec) file_io::write_number<uint32_t>(f, _key.size(), cancel, yield[ec]);
         if (!ec) file_io::write(f, asio::buffer(_key), cancel, yield[ec]);
-        if (!ec) file_io::write(f, asio::buffer(value), cancel, yield[ec]);
+        //if (!ec) file_io::write(f, asio::buffer(value), cancel, yield[ec]);
+        if (!ec) _value.write(f, cancel, yield[ec]);
 
         if (ec) _remove_on_destruct = true;
         else _remove_on_destruct = false;
@@ -186,56 +200,8 @@ public:
         return or_throw(yield, ec);
     }
 
-    void update(Cancel& cancel, asio::yield_context yield)
-    {
-        using namespace persisten_lru_cache_detail;
-
-        auto ts = ms_since_epoch();
-
-        sys::error_code ec;
-
-        auto f = file_io::open(_ios, _path, ec);
-        if (!ec) file_io::fseek(f, 0, ec);
-        if (!ec) file_io::write_number<uint64_t>(f, ts, cancel, yield[ec]);
-
-        if (ec) _remove_on_destruct = true;
-        else _remove_on_destruct = false;
-
-        return or_throw(yield, ec);
-    }
-
-    std::string value(Cancel& cancel, asio::yield_context yield)
-    {
-        using namespace persisten_lru_cache_detail;
-
-        auto ts = ms_since_epoch();
-
-        sys::error_code ec;
-
-        size_t f_size = fs::file_size(_path, ec);
-        std::string ret;
-
-        auto f = file_io::open(_ios, _path, ec);
-        if (ec) goto finish;
-
-        file_io::fseek(f, 0, ec);
-        if (ec) goto finish;
-
-        file_io::write_number<uint64_t>(f, ts, cancel, yield[ec]);
-        if (ec) goto finish;
-
-        file_io::fseek(f, content_start(), ec);
-        if (ec) goto finish;
-
-        ret.resize(f_size - content_start());
-        file_io::read(f, asio::buffer(ret), cancel, yield[ec]);
-
-        finish:
-
-        if (ec) _remove_on_destruct = true;
-        else _remove_on_destruct = false;
-
-        return or_throw(yield, ec, std::move(ret));
+    const Value& value() const {
+        return _value;
     }
 
     ~Element()
@@ -245,11 +211,13 @@ public:
 
     Element( asio::io_service& ios
            , std::string key
-           , fs::path path)
+           , fs::path path
+           , Value value)
         : _ios(ios)
         , _scheduler(ios, 1)
         , _key(std::move(key))
         , _path(std::move(path))
+        , _value(std::move(value))
     {}
 
     void remove_file_on_destruct() {
@@ -275,20 +243,22 @@ private:
     Scheduler _scheduler;
     std::string _key;
     fs::path _path;
+    Value _value;
     bool _remove_on_destruct = false;
 };
 
+template<class Value>
 inline
-std::unique_ptr<PersistentLruCache>
-PersistentLruCache::load( asio::io_service& ios
-                        , boost::filesystem::path dir
-                        , size_t max_size
-                        , Cancel& cancel
-                        , asio::yield_context yield)
+std::unique_ptr<PersistentLruCache<Value>>
+PersistentLruCache<Value>::load( asio::io_service& ios
+                               , boost::filesystem::path dir
+                               , size_t max_size
+                               , Cancel& cancel
+                               , asio::yield_context yield)
 {
     using namespace persisten_lru_cache_detail;
 
-    using Ret = std::unique_ptr<PersistentLruCache>;
+    using Ret = std::unique_ptr<PersistentLruCache<Value>>;
 
     sys::error_code ec;
 
@@ -299,7 +269,7 @@ PersistentLruCache::load( asio::io_service& ios
     if (!ec) create_or_check_directory(dir, ec);
     if (ec) return or_throw<Ret>(yield, ec);
 
-    Ret lru(new PersistentLruCache(ios, dir, max_size));
+    Ret lru(new PersistentLruCache<Value>(ios, dir, max_size));
 
     // Id helps us resolve the case when two entries have the same timestamp
     using Id = std::pair<uint64_t, uint64_t>;
@@ -338,28 +308,31 @@ PersistentLruCache::load( asio::io_service& ios
     return lru;
 }
 
+template<class Value>
 inline
-PersistentLruCache::PersistentLruCache( asio::io_service& ios
-                                      , boost::filesystem::path dir
-                                      , size_t max_size)
+PersistentLruCache<Value>::PersistentLruCache( asio::io_service& ios
+                                             , boost::filesystem::path dir
+                                             , size_t max_size)
     : _ios(ios)
     , _dir(std::move(dir))
     , _max_size(max_size)
 {
 }
 
+template<class Value>
 inline
-void PersistentLruCache::insert( std::string key
-                               , std::string value
-                               , Cancel& cancel
-                               , asio::yield_context yield)
+void PersistentLruCache<Value>::insert( std::string key
+                                      , Value value
+                                      , Cancel& cancel
+                                      , asio::yield_context yield)
 {
     auto it = _map.find(key);
 
     std::shared_ptr<Element> e;
 
     if (it == _map.end()) {
-        e = std::make_shared<Element>(_ios, key, path_from_key(key));
+        // TODO: Value is set twice, here and at the end of this fn
+        e = std::make_shared<Element>(_ios, key, path_from_key(key), value);
     } else {
         e = std::move(it->second->second);
     }
@@ -391,41 +364,44 @@ void PersistentLruCache::insert( std::string key
     e->update(std::move(value), cancel, yield);
 }
 
+template<class Value>
 inline
-PersistentLruCache::iterator PersistentLruCache::find(const std::string& key)
+typename PersistentLruCache<Value>::iterator
+PersistentLruCache<Value>::find(const std::string& key)
 {
     auto it = _map.find(key);
 
     if (it == _map.end()) return it;
 
+    // Move it to the front
     auto list_it = it->second;
-
     _list.splice(_list.begin(), _list, list_it);
-
     assert(list_it == _list.begin());
 
     return it;
 }
 
+template<class Value>
 inline
-fs::path PersistentLruCache::path_from_key(const std::string& key)
+fs::path PersistentLruCache<Value>::path_from_key(const std::string& key)
 {
-    return _dir / util::bytes::to_hex(sha1(key));
+    return persisten_lru_cache_detail::path_from_key(_dir, key);
 }
 
+template<class Value>
 inline
-std::string
-PersistentLruCache::iterator::value(Cancel& cancel, asio::yield_context yield)
+const Value&
+PersistentLruCache<Value>::iterator::value() const
 {
-    // Capture shared_ptr here to make sure element doesn't
-    // get deleted while reading from the file.
-    std::shared_ptr<Element> e = i->second->second;
-
-    sys::error_code ec;
-
-    auto lock = e->lock(cancel, yield[ec]);
-    if (ec) return or_throw<std::string>(yield, ec);
-
-    return e->value(cancel, yield);
+    return i->second->second->value();
 }
+
+template<class Value>
+inline
+const typename PersistentLruCache<Value>::Key&
+PersistentLruCache<Value>::iterator::key() const
+{
+    return i->first;
+}
+
 }} // namespaces
