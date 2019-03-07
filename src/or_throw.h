@@ -64,11 +64,29 @@ void or_throw(asio::yield_context yield, const sys::error_code& ec)
     else { throw sys::system_error(ec); }
 }
 
-#define return_or_throw_on_error(yield, cancel, ec, ...) \
-    if (cancel || ec) {\
-        assert(!cancel || ec == asio::error::operation_aborted); \
-        if (cancel) ec = asio::error::operation_aborted; \
-        return or_throw(yield, ec, ##__VA_ARGS__); \
-    }
+// Doing error checking is quite cumbersome. One has to check whether `cancel`
+// is true, make sure that if `cancel` is indeed true, that ec is set
+// appropriately and then return if any of the two is set. Instead of doing it
+// after each async operation, this macro is ought to help with it.
+//
+// Usage:
+//
+// int foo(Cancel& cancel, yield_context yield) {
+//     sys::error_code ec;
+//     int ret = my_async_operation(cancel, yield[ec]);
+//     return_or_throw_on_error(yield, cancel, ec, int(0));
+//
+//     // ... other async operations
+//
+//     return ret;
+// }
+//
+#define return_or_throw_on_error(yield, cancel, ec, ...) { \
+    sys::error_code ec_ = ec; \
+    if (cancel || ec_) {\
+        assert(!cancel || ec_ == asio::error::operation_aborted); \
+        if (cancel) ec_ = asio::error::operation_aborted; \
+        return or_throw(yield, ec_, ##__VA_ARGS__); \
+    }}
 
 }
