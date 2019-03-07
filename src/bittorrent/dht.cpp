@@ -1343,7 +1343,7 @@ std::pair<asio::ip::udp::endpoint, asio::ip::udp::endpoint> dht::DhtNode::bootst
         return or_throw<T>(yield, asio::error::fault);
     }
 
-    return std::make_pair(bootstrap_ep, *my_endpoint);
+    return std::make_pair(*my_endpoint, bootstrap_ep);
 }
 
 void dht::DhtNode::bootstrap(asio::yield_context yield)
