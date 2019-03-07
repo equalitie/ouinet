@@ -22,6 +22,49 @@ void fseek(posix::stream_descriptor& f, size_t pos, sys::error_code& ec)
     }
 }
 
+size_t current_position(posix::stream_descriptor& f, sys::error_code& ec)
+{
+    off_t offset = lseek(f.native_handle(), 0, SEEK_CUR);
+
+    if (offset == -1) {
+        ec = last_error();
+        if (!ec) ec = make_error_code(errc::no_message);
+        return size_t(-1);
+    }
+
+    return offset;
+}
+
+size_t file_size(posix::stream_descriptor& f, sys::error_code& ec)
+{
+    auto start_pos = current_position(f, ec);
+    if (ec) return size_t(-1);
+
+    if (lseek(f.native_handle(), 0, SEEK_END) == -1) {
+        ec = last_error();
+        if (!ec) ec = make_error_code(errc::no_message);
+    }
+
+    auto end = current_position(f, ec);
+    if (ec) return size_t(-1);
+
+    fseek(f, start_pos, ec);
+    if (ec) return size_t(-1);
+
+    return end;
+}
+
+size_t file_remaining_size(posix::stream_descriptor& f, sys::error_code& ec)
+{
+    auto size = file_size(f, ec);
+    if (ec) return 0;
+
+    auto pos = current_position(f, ec);
+    if (ec) return 0;
+
+    return size - pos;
+}
+
 posix::stream_descriptor open( asio::io_service& ios
                              , const fs::path& p
                              , sys::error_code& ec)
