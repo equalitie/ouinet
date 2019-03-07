@@ -250,6 +250,11 @@ class DhtNode {
 
     void bootstrap(asio::yield_context yield);
 
+    std::pair< asio::ip::udp::endpoint
+             , asio::ip::udp::endpoint
+             >
+    bootstrap_single(std::string bootstrap_domain, asio::yield_context);
+
     void refresh_routing_table();
 
     std::vector<NodeContact> find_closest_nodes(
@@ -330,8 +335,6 @@ class DhtNode {
     std::map<std::string, ActiveRequest> _active_requests;
 
     std::vector<udp::endpoint> _bootstrap_endpoints;
-
-    std::pair<asio::ip::udp::endpoint, asio::ip::udp::endpoint> bootstrap_single(asio::yield_context yield, std::string bootstrap_domain);
 };
 
 struct DhtPublications
