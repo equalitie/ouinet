@@ -1293,7 +1293,12 @@ asio::ip::udp::endpoint resolve(
     return or_throw<udp::endpoint>(yield, asio::error::not_found);
 }
 
-std::pair<asio::ip::udp::endpoint, asio::ip::udp::endpoint> dht::DhtNode::bootstrap_single(asio::yield_context yield, std::string bootstrap_domain) {
+std::pair< asio::ip::udp::endpoint
+         , asio::ip::udp::endpoint
+         >
+dht::DhtNode::bootstrap_single( std::string bootstrap_domain
+                              , asio::yield_context yield)
+{
     using T = std::pair<asio::ip::udp::endpoint, asio::ip::udp::endpoint>;
     sys::error_code ec;
 
@@ -1353,12 +1358,14 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
     asio::ip::udp::endpoint my_endpoint;
     asio::ip::udp::endpoint bootstrap_ep;
 
-    const std::array<std::string,3> bootstraps {"router.bittorrent.com", "router.utorrent.com", "router.transmissionbt.com"};
+    const std::array<std::string,3> bootstraps { "router.bittorrent.com"
+                                               , "router.utorrent.com"
+                                               , "router.transmissionbt.com" };
     {
         bool done = false;
         do {
             for (const auto bs : bootstraps) {
-                std::tie(my_endpoint, bootstrap_ep) = bootstrap_single(yield[ec], bs);
+                std::tie(my_endpoint, bootstrap_ep) = bootstrap_single(bs, yield[ec]);
                 if (!ec) { done = true; break; }
                 else {
                     cerr << "Skipping bootstrap node " << bs << ": " << ec << endl;
