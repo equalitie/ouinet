@@ -21,7 +21,9 @@ namespace file_io = util::file_io;
 using Clock = std::chrono::steady_clock;
 
 //--------------------------------------------------------------------
-nlohmann::json entry_to_json(Clock::time_point t, const bt::MutableDataItem& item)
+nlohmann::json entry_to_json( Clock::time_point t
+                            , const string& key
+                            , const bt::MutableDataItem& item)
 {
     using util::bytes::to_hex;
     using namespace std::chrono;
@@ -29,6 +31,7 @@ nlohmann::json entry_to_json(Clock::time_point t, const bt::MutableDataItem& ite
     uint64_t ms = duration_cast<milliseconds>(t.time_since_epoch()).count();
 
     return nlohmann::json {
+        { "key"             , key                                  },
         { "last_update"     , ms                                   },
         { "public_key"      , to_hex(item.public_key.serialize())  },
         { "salt"            , to_hex(item.salt)                    },
@@ -114,12 +117,13 @@ public:
 
 private:
     struct Entry {
+        string url; // Mainly for debugging
         Clock::time_point last_update;
         bt::MutableDataItem data;
 
         template<class File>
         void write(File& f, Cancel& cancel, asio::yield_context yield) {
-            auto s = entry_to_json(last_update, data).dump();
+            auto s = entry_to_json(last_update, url, data).dump();
             file_io::write(f, asio::buffer(s), cancel, yield);
         }
 
@@ -160,7 +164,8 @@ public:
         start();
     }
 
-    void insert( const bt::MutableDataItem& data
+    void insert( const string& url
+               , const bt::MutableDataItem& data
                , Cancel& cancel
                , asio::yield_context yield)
     {
@@ -168,7 +173,9 @@ public:
 
         auto key = data.salt;
         _lru->insert( std::move(key)
-                    , Entry{Clock::now() - chrono::minutes(15), std::move(data)}
+                    , Entry{ url
+                           , Clock::now() - chrono::minutes(15)
+                           , std::move(data)}
                     , cancel, yield);
     }
 
@@ -357,7 +364,7 @@ string Bep44ClientIndex::find( const string& key
     return_or_throw_on_error(yield, cancel, ec, string());
 
     sys::error_code ec2;
-    _updater->insert(data, cancel, yield[ec2]);
+    _updater->insert(key, data, cancel, yield[ec2]);
 
     // Ignore all errors except operation_aborted
     if (ec2 == asio::error::operation_aborted) {
@@ -386,7 +393,7 @@ string Bep44InjectorIndex::find( const string& key
     return_or_throw_on_error(yield, cancel, ec, string());
 
     sys::error_code ec2;
-    _updater->insert(data, cancel, yield[ec2]);
+    _updater->insert(key, data, cancel, yield[ec2]);
 
     // Ignore all errors except operation_aborted
     if (ec2 == asio::error::operation_aborted) {
@@ -466,7 +473,7 @@ string Bep44InjectorIndex::insert( string key
     return_or_throw_on_error(yield, cancel, ec, string());
 
     sys::error_code ec_ignored;
-    _updater->insert(item, cancel, yield[ec_ignored]);
+    _updater->insert(key, item, cancel, yield[ec_ignored]);
 
     LOG_DEBUG("BEP44 index: inserted key=", key);  // used by integration tests
 
