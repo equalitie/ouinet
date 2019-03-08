@@ -120,6 +120,8 @@ public:
         return _dir;
     }
 
+    ~PersistentLruCache();
+
 private:
     fs::path path_from_key(const std::string&);
 
@@ -193,9 +195,6 @@ public:
         //if (!ec) file_io::write(f, asio::buffer(value), cancel, yield[ec]);
         if (!ec) _value.write(f, cancel, yield[ec]);
 
-        if (ec) _remove_on_destruct = true;
-        else _remove_on_destruct = false;
-
         return or_throw(yield, ec);
     }
 
@@ -205,7 +204,9 @@ public:
 
     ~Element()
     {
-        if (_remove_on_destruct) file_io::remove_file(_path);
+        if (!_keep_file_on_destruct) {
+            file_io::remove_file(_path);
+        }
     }
 
     Element( asio::io_service& ios
@@ -219,8 +220,8 @@ public:
         , _value(std::move(value))
     {}
 
-    void remove_file_on_destruct() {
-        _remove_on_destruct = true;
+    void keep_file_on_destruct() {
+        _keep_file_on_destruct = true;
     }
 
     Scheduler::Slot lock(Cancel& cancel, asio::yield_context yield)
@@ -243,7 +244,7 @@ private:
     std::string _key;
     fs::path _path;
     Value _value;
-    bool _remove_on_destruct = false;
+    bool _keep_file_on_destruct = false;
 };
 
 template<class Value>
@@ -291,7 +292,6 @@ PersistentLruCache<Value>::load( asio::io_service& ios
 
     while (elements.size() > max_size) {
         auto i = elements.begin();
-        i->second->remove_file_on_destruct();
         elements.erase(i);
     }
 
@@ -349,7 +349,6 @@ void PersistentLruCache<Value>::insert( std::string key
     if (_map.size() > _max_size) {
         auto last = prev(_list.end());
         if (last->first == it->first) e = nullptr;
-        last->second->remove_file_on_destruct();
         _map.erase(last->first);
         _list.pop_back();
     }
@@ -400,6 +399,15 @@ const typename PersistentLruCache<Value>::Key&
 PersistentLruCache<Value>::iterator::key() const
 {
     return i->first;
+}
+
+template<class Value>
+inline
+PersistentLruCache<Value>::~PersistentLruCache()
+{
+    for (auto& kv : _list) {
+        kv.second->keep_file_on_destruct();
+    }
 }
 
 }} // namespaces
