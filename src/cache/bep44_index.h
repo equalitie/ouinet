@@ -2,6 +2,7 @@
 
 #include <boost/system/error_code.hpp>
 #include <boost/asio/io_service.hpp>
+#include <boost/filesystem.hpp>
 
 #include "../namespaces.h"
 #include "../util/crypto.h"
@@ -25,8 +26,13 @@ class Bep44EntryUpdater;
 
 class Bep44ClientIndex : public ClientIndex {
 public:
-    Bep44ClientIndex( bittorrent::MainlineDht& bt_dht
-                    , util::Ed25519PublicKey bt_pubkey);
+    static
+    std::unique_ptr<Bep44ClientIndex>
+    build( bittorrent::MainlineDht&
+         , util::Ed25519PublicKey
+         , const boost::filesystem::path& storage_path
+         , Cancel&
+         , asio::yield_context);
 
     std::string find( const std::string& key
                     , Cancel&
@@ -40,6 +46,12 @@ public:
     ~Bep44ClientIndex();
 
 private:
+    // Private, use the async `build` fn instead.
+    Bep44ClientIndex( bittorrent::MainlineDht& bt_dht
+                    , util::Ed25519PublicKey bt_pubkey
+                    , std::unique_ptr<Bep44EntryUpdater>);
+
+private:
     bittorrent::MainlineDht& _bt_dht;
     util::Ed25519PublicKey _bt_pubkey;
     std::unique_ptr<Bep44EntryUpdater> _updater;
@@ -48,8 +60,13 @@ private:
 
 class Bep44InjectorIndex : public InjectorIndex {
 public:
-    Bep44InjectorIndex( bittorrent::MainlineDht& bt_dht
-                      , util::Ed25519PrivateKey bt_privkey);
+    static
+    std::unique_ptr<Bep44InjectorIndex>
+    build( bittorrent::MainlineDht&
+         , util::Ed25519PrivateKey
+         , const boost::filesystem::path& storage_path
+         , Cancel&
+         , asio::yield_context);
 
     std::string find( const std::string& key
                     , Cancel&
@@ -61,6 +78,11 @@ public:
     boost::asio::io_service& get_io_service();
 
     ~Bep44InjectorIndex();
+
+private:
+    Bep44InjectorIndex( bittorrent::MainlineDht& bt_dht
+                      , util::Ed25519PrivateKey bt_privkey
+                      , std::unique_ptr<Bep44EntryUpdater>);
 
 private:
     bittorrent::MainlineDht& _bt_dht;

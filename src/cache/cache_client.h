@@ -31,7 +31,7 @@ public:
           , std::string ipns
           , boost::optional<util::Ed25519PublicKey> bt_pubkey
           , fs::path path_to_repo
-          , std::function<void()>& cancel
+          , Cancel& cancel
           , boost::asio::yield_context);
 
     CacheClient(const CacheClient&) = delete;
@@ -79,9 +79,12 @@ public:
     const BTree* get_btree() const;
 
 private:
+    // Private, use the static `build` function instead
     CacheClient( asio_ipfs::node
                , std::string ipns
                , boost::optional<util::Ed25519PublicKey> bt_pubkey
+               , std::unique_ptr<bittorrent::MainlineDht>
+               , std::unique_ptr<Bep44ClientIndex>
                , fs::path path_to_repo);
 
     ClientIndex* get_index(IndexType);

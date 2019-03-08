@@ -686,6 +686,45 @@ void listen( InjectorConfig& config
 }
 
 //------------------------------------------------------------------------------
+unique_ptr<CacheInjector> build_cache( asio::io_service& ios
+                                     , const InjectorConfig& config
+                                     , Cancel& cancel
+                                     , asio::yield_context yield)
+{
+    auto bep44_privk = config.index_bep44_private_key();
+
+    auto enable_btree = config.cache_index_type() == IndexType::btree;
+    auto enable_bep44 = config.cache_index_type() == IndexType::bep44;
+
+    sys::error_code ec;
+
+    auto cache_injector = CacheInjector::build( ios
+                                              , bep44_privk
+                                              , config.repo_root()
+                                              , enable_btree
+                                              , enable_bep44
+                                              , cancel
+                                              , yield[ec]);
+
+    assert(!cancel || ec == asio::error::operation_aborted);
+    if (cancel) ec = asio::error::operation_aborted;
+    if (ec) return or_throw(yield, ec, move(cache_injector));
+
+    // Although the IPNS ID is already in IPFS's config file,
+    // this just helps put all info relevant to the user right in the repo root.
+    auto ipns_id = cache_injector->ipfs_id();
+    LOG_DEBUG("IPNS Index: " + ipns_id);  // used by integration tests
+    util::create_state_file(config.repo_root()/"cache-ipns", ipns_id);
+
+    // Same for BEP44.
+    auto bep44_pubk = util::bytes::to_hex(bep44_privk.public_key().serialize());
+    LOG_DEBUG("BEP44 Index: " + bep44_pubk);  // used by integration tests
+    util::create_state_file(config.repo_root()/"cache-bep44", bep44_pubk);
+
+    return cache_injector;
+}
+
+//------------------------------------------------------------------------------
 int main(int argc, const char* argv[])
 {
     util::crypto_init();
@@ -719,37 +758,6 @@ int main(int argc, const char* argv[])
 
     // The io_service is required for all I/O
     asio::io_service ios;
-
-    Cancel cancel;
-
-    unique_ptr<CacheInjector> cache_injector;
-    Cancel::Connection shutdown_ipfs_slot;
-
-    if (config.cache_enabled()) {
-        auto bep44_privk = config.index_bep44_private_key();
-        auto enable_btree = config.cache_index_type() == IndexType::btree;
-        auto enable_bep44 = config.cache_index_type() == IndexType::bep44;
-        cache_injector = make_unique<CacheInjector>
-                                ( ios
-                                , bep44_privk
-                                , config.repo_root()
-                                , enable_btree, enable_bep44);
-
-        shutdown_ipfs_slot = cancel.connect([&] {
-            cache_injector = nullptr;
-        });
-
-        // Although the IPNS ID is already in IPFS's config file,
-        // this just helps put all info relevant to the user right in the repo root.
-        auto ipns_id = cache_injector->ipfs_id();
-        LOG_DEBUG("IPNS Index: " + ipns_id);  // used by integration tests
-        util::create_state_file(config.repo_root()/"cache-ipns", ipns_id);
-
-        // Same for BEP44.
-        auto bep44_pubk = util::bytes::to_hex(bep44_privk.public_key().serialize());
-        LOG_DEBUG("BEP44 Index: " + bep44_pubk);  // used by integration tests
-        util::create_state_file(config.repo_root()/"cache-bep44", bep44_pubk);
-    }
 
     OuiServiceServer proxy_server(ios);
 
@@ -829,14 +837,37 @@ int main(int argc, const char* argv[])
         proxy_server.add(std::move(i2p_server));
     }
 
+    Cancel cancel;
+
+    Cancel::Connection shutdown_ipfs_slot;
+
     asio::spawn(ios, [
+        &ios,
+        &shutdown_ipfs_slot,
         &proxy_server,
-        &cache_injector,
         &config,
         &cancel
     ] (asio::yield_context yield) {
-        if (config.cache_enabled())
-            cache_injector->wait_for_ready(cancel, yield);
+        sys::error_code ec;
+
+        unique_ptr<CacheInjector> cache_injector;
+
+        if (config.cache_enabled()) {
+            cache_injector = build_cache( ios
+                                        , config
+                                        , cancel
+                                        , yield[ec]);
+
+            if (ec) {
+                cerr << "Failed to build the cache: " << ec.message() << "\n";
+                return;
+            }
+
+            shutdown_ipfs_slot = cancel.connect([&] {
+                cache_injector = nullptr;
+            });
+        }
+
         listen( config
               , proxy_server
               , cache_injector

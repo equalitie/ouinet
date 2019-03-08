@@ -26,46 +26,65 @@ CacheClient::build( asio::io_service& ios
                   , string ipns
                   , optional<util::Ed25519PublicKey> bt_pubkey
                   , fs::path path_to_repo
-                  , function<void()>& cancel
+                  , Cancel& cancel
                   , asio::yield_context yield)
 {
     using ClientP = unique_ptr<CacheClient>;
 
-    bool canceled = false;
-
-    cancel = [&canceled] {
-        cout << "TODO: Canceling Client::build doesn't immediately stop "
-             << "IO tasks" << endl;;
-
-        canceled = true;
-    };
-
     sys::error_code ec;
-    auto ipfs_node = asio_ipfs::node::build( ios
-                                           , (path_to_repo/"ipfs").native()
-                                           , yield[ec]);
 
-    cancel = nullptr;
+    unique_ptr<asio_ipfs::node> ipfs_node;
 
-    if (canceled) {
-        ec = asio::error::operation_aborted;
+    {
+        auto slot = cancel.connect([&] {
+            cerr << "TODO: Canceling Client::build doesn't immediately stop "
+                 << "IO tasks\n";
+        });
+
+        ipfs_node = asio_ipfs::node::build( ios
+                                          , (path_to_repo/"ipfs").native()
+                                          , yield[ec]);
     }
 
+    if (cancel) ec = asio::error::operation_aborted;
     if (ec) return or_throw<ClientP>(yield, ec);
+
+    auto bt_dht = make_unique<bt::MainlineDht>(ios);
+
+    bt_dht->set_interfaces({asio::ip::address_v4::any()});
+
+    unique_ptr<Bep44ClientIndex> bep44_index;
+
+    if (bt_pubkey) {
+        bep44_index = Bep44ClientIndex::build(*bt_dht, *bt_pubkey
+                                             , path_to_repo / "bep44-index"
+                                             , cancel
+                                             , yield[ec]);
+
+        assert(!cancel || ec == asio::error::operation_aborted);
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec) return or_throw<ClientP>(yield, ec);
+    }
 
     return ClientP(new CacheClient( move(*ipfs_node)
                                   , move(ipns)
                                   , std::move(bt_pubkey)
+                                  , std::move(bt_dht)
+                                  , std::move(bep44_index)
                                   , move(path_to_repo)));
 }
 
+// private
 CacheClient::CacheClient( asio_ipfs::node ipfs_node
                         , string ipns
                         , optional<util::Ed25519PublicKey> bt_pubkey
+                        , unique_ptr<bittorrent::MainlineDht> bt_dht
+                        , unique_ptr<Bep44ClientIndex> bep44_index
                         , fs::path path_to_repo)
     : _path_to_repo(move(path_to_repo))
     , _ipfs_node(new asio_ipfs::node(move(ipfs_node)))
-    , _bt_dht(new bt::MainlineDht(_ipfs_node->get_io_service()))
+    , _bt_dht(move(bt_dht))
+    , _bep44_index(move(bep44_index))
 {
     if (!ipns.empty()) {
         _btree_index.reset(new BTreeClientIndex( *_ipfs_node
@@ -73,12 +92,6 @@ CacheClient::CacheClient( asio_ipfs::node ipfs_node
                                                , *_bt_dht
                                                , bt_pubkey
                                                , _path_to_repo));
-    }
-
-    _bt_dht->set_interfaces({asio::ip::address_v4::any()});
-
-    if (bt_pubkey) {
-        _bep44_index.reset(new Bep44ClientIndex(*_bt_dht, *bt_pubkey));
     }
 }
 

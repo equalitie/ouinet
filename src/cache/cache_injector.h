@@ -38,12 +38,24 @@ public:
         std::string index_ins_data;  // index-specific data to help reinsert
     };
 
-public:
+private:
+    // Private: use the static async `build` function
     CacheInjector( boost::asio::io_service&
                  , util::Ed25519PrivateKey bt_privkey
                  , fs::path path_to_repo
                  , bool enable_btree
-                 , bool enable_bep44);
+                 , std::unique_ptr<bittorrent::MainlineDht>
+                 , std::unique_ptr<Bep44InjectorIndex>);
+
+public:
+    static std::unique_ptr<CacheInjector>
+    build( boost::asio::io_service&
+         , util::Ed25519PrivateKey bt_privkey
+         , fs::path path_to_repo
+         , bool enable_btree
+         , bool enable_bep44
+         , Cancel&
+         , boost::asio::yield_context);
 
     CacheInjector(const CacheInjector&) = delete;
     CacheInjector& operator=(const CacheInjector&) = delete;

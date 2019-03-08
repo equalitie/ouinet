@@ -5,19 +5,16 @@
 #include <defer.h>
 #include <namespaces.h>
 #include <iostream>
+#include <util/file_io.h>
 
 BOOST_AUTO_TEST_SUITE(persistent_lru_cache)
 
 using namespace std;
 using namespace ouinet;
 using namespace ouinet::util;
-namespace fs = boost::filesystem;
+using File = asio::posix::stream_descriptor;
 
-vector<uint8_t> to_vec(const char* c)
-{
-    auto uc = (const uint8_t*) c;
-    return vector<uint8_t>(uc, uc + strlen(c));
-}
+namespace fs = boost::filesystem;
 
 unsigned count_files_in_dir(const fs::path& dir)
 {
@@ -27,6 +24,34 @@ unsigned count_files_in_dir(const fs::path& dir)
     }
     return ret;
 }
+
+struct StringEntry : public std::string {
+
+    using std::string::string;
+
+    void write(File& f, Cancel& cancel, asio::yield_context yield) const
+    {
+        sys::error_code ec;
+
+        file_io::write_number<uint64_t>(f, size(), cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec);
+
+        file_io::write(f, asio::buffer(*this), cancel, yield[ec]);
+    }
+
+    void read(File& f, Cancel& cancel, asio::yield_context yield)
+    {
+        sys::error_code ec;
+
+        auto s = file_io::read_number<uint64_t>(f, cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec);
+
+        resize(s);
+        file_io::read(f, asio::buffer(*this), cancel, yield[ec]);
+    }
+};
+
+using Lru = PersistentLruCache<StringEntry>;
 
 BOOST_AUTO_TEST_CASE(test_initialize)
 {
@@ -55,15 +80,11 @@ BOOST_AUTO_TEST_CASE(test_initialize)
         sys::error_code ec;
 
         {
-            auto lru = PersistentLruCache::load( ios
-                                               , dir
-                                               , max_cache_size
-                                               , cancel
-                                               , yield[ec]);
+            auto lru = Lru::load(ios, dir, max_cache_size, cancel, yield[ec]);
 
             BOOST_REQUIRE(!ec);
 
-            lru->insert("hello1", to_vec("world1"), cancel, yield[ec]);
+            lru->insert("hello1", "world1", cancel, yield[ec]);
             BOOST_REQUIRE(!ec);
 
             BOOST_REQUIRE(lru->find("not-there") == lru->end());
@@ -73,12 +94,12 @@ BOOST_AUTO_TEST_CASE(test_initialize)
                 BOOST_REQUIRE(i != lru->end());
             }
 
-            lru->insert("hello2", to_vec("world2"), cancel, yield[ec]);
+            lru->insert("hello2", "world2", cancel, yield[ec]);
             BOOST_REQUIRE(!ec);
 
             BOOST_REQUIRE_EQUAL(count_files_in_dir(dir), max_cache_size);
 
-            lru->insert("hello3", to_vec("world3"), cancel, yield[ec]);
+            lru->insert("hello3", "world3", cancel, yield[ec]);
             BOOST_REQUIRE(!ec);
 
             BOOST_REQUIRE_EQUAL(count_files_in_dir(dir), max_cache_size);
@@ -94,10 +115,7 @@ BOOST_AUTO_TEST_CASE(test_initialize)
             {
                 auto i = lru->find("hello2");
                 BOOST_REQUIRE(i != lru->end());
-
-                auto data = i.value(cancel, yield[ec]);
-                BOOST_REQUIRE(!ec);
-                BOOST_REQUIRE(data == to_vec("world2"));
+                BOOST_REQUIRE(i.value() == "world2");
             }
 
             BOOST_REQUIRE_EQUAL(count_files_in_dir(dir), max_cache_size);
@@ -107,11 +125,7 @@ BOOST_AUTO_TEST_CASE(test_initialize)
         {
             BOOST_REQUIRE_EQUAL(count_files_in_dir(dir), max_cache_size);
 
-            auto lru = PersistentLruCache::load( ios
-                                               , dir
-                                               , max_cache_size
-                                               , cancel
-                                               , yield[ec]);
+            auto lru = Lru::load(ios, dir, max_cache_size, cancel, yield[ec]);
 
             BOOST_REQUIRE_EQUAL(count_files_in_dir(dir), max_cache_size);
             BOOST_REQUIRE_EQUAL(lru->size(), count_files_in_dir(dir));
@@ -125,11 +139,7 @@ BOOST_AUTO_TEST_CASE(test_initialize)
 
             BOOST_REQUIRE_EQUAL(count_files_in_dir(dir), max_cache_size);
 
-            auto lru = PersistentLruCache::load( ios
-                                               , dir
-                                               , new_max_cache_size
-                                               , cancel
-                                               , yield[ec]);
+            auto lru = Lru::load(ios, dir, new_max_cache_size, cancel, yield[ec]);
 
             BOOST_REQUIRE_EQUAL(count_files_in_dir(dir), new_max_cache_size);
             BOOST_REQUIRE_EQUAL(lru->size(), count_files_in_dir(dir));
