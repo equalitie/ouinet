@@ -62,7 +62,6 @@ public:
             return i != j.i;
         }
 
-        //Value value(Cancel&, asio::yield_context);
         const Value& value() const;
         const Key& key() const;
     };
@@ -330,17 +329,16 @@ void PersistentLruCache<Value>::insert( std::string key
 
     std::shared_ptr<Element> e;
 
-    if (it == _map.end()) {
+    if (it != _map.end()) {
+        e = it->second->second;
+    } else {
         // TODO: Value is set twice, here and at the end of this fn
         e = std::make_shared<Element>(_ios, key, path_from_key(key), value);
-    } else {
-        e = std::move(it->second->second);
     }
 
     _list.push_front({key, e});
 
     if (it != _map.end()) {
-        it->second->second->remove_file_on_destruct();
         _list.erase(it->second);
         it->second = _list.begin();
     }
