@@ -978,37 +978,37 @@ void Client::State::serve_request( GenericStream&& con
              , nocache_request_config),
 
         // Disable cache and always go to origin for this site.
-        Match( reqexpr::from_regex(target_getter, "https?://ident.me/.*")
+        Match( reqexpr::from_regex(target_getter, "https?://ident\\.me/.*")
              , {false, queue<fresh_channel>({fresh_channel::origin})} ),
 
         // Disable cache and always go to origin for these google sites.
-        Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?google.com/complete/.*")
+        Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?google\\.com/complete/.*")
              , {false, queue<fresh_channel>({fresh_channel::origin})} ),
-        Match( reqexpr::from_regex(target_getter, "https://safebrowsing.googleapis.com/.*")
+        Match( reqexpr::from_regex(target_getter, "https://safebrowsing\\.googleapis\\.com/.*")
              , {false, queue<fresh_channel>({fresh_channel::origin})} ),
-        Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?google-analytics.com/.*")
+        Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?google-analytics\\.com/.*")
              , {false, queue<fresh_channel>({fresh_channel::origin})} ),
 
         // Disable cache and always go to origin for these mozilla sites.
-        Match( reqexpr::from_regex(target_getter, "https?://content-signature.cdn.mozilla.net/.*")
+        Match( reqexpr::from_regex(target_getter, "https?://content-signature\\.cdn\\.mozilla\\.net/.*")
              , {false, queue<fresh_channel>({fresh_channel::origin})} ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*services.mozilla.com/.*")
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*services\\.mozilla\\.com/.*")
              , {false, queue<fresh_channel>({fresh_channel::origin})} ),
-        Match( reqexpr::from_regex(target_getter, "https?://services.addons.mozilla.org/.*")
+        Match( reqexpr::from_regex(target_getter, "https?://services\\.addons\\.mozilla\\.org/.*")
              , {false, queue<fresh_channel>({fresh_channel::origin})} ),
-        Match( reqexpr::from_regex(target_getter, "https?://versioncheck-bg.addons.mozilla.org/.*")
+        Match( reqexpr::from_regex(target_getter, "https?://versioncheck-bg\\.addons\\.mozilla\\.org/.*")
              , {false, queue<fresh_channel>({fresh_channel::origin})} ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*cdn.mozilla.net/.*")
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*cdn\\.mozilla\\.net/.*")
              , {false, queue<fresh_channel>({fresh_channel::origin})} ),
 
         // Disable cache and always go to proxy for this site.
-        Match( reqexpr::from_regex(target_getter, "https?://ifconfig.co/.*")
+        Match( reqexpr::from_regex(target_getter, "https?://ifconfig\\.co/.*")
              , {false, queue<fresh_channel>({fresh_channel::proxy})} ),
         // Force cache and default channels for this site.
-        Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example.com/.*")
+        Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example\\.com/.*")
              , {true, queue<fresh_channel>()} ),
         // Force cache and particular channels for this site.
-        Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example.net/.*")
+        Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example\\.net/.*")
              , {true, queue<fresh_channel>({fresh_channel::injector})} ),
     });
 
