@@ -61,9 +61,7 @@ NDK=android-ndk-r16b
 NDK_DIR=${NDK_DIR:-"$DIR/$NDK"}
 NDK_ZIP=${NDK}-linux-x86_64.zip
 
-# `posix_fadvise`, required by Boost.Beast is was only added in LOLLIPOP
-# https://developer.android.com/guide/topics/manifest/uses-sdk-element.html#ApiLevels
-NDK_PLATFORM=${NDK_PLATFORM:-21}
+NDK_PLATFORM=${NDK_PLATFORM:-19}
 NDK_STL='libc++'
 NDK_TOOLCHAIN_DIR=${NDK_TOOLCHAIN_DIR:-${DIR}/${NDK}-toolchain-android$NDK_PLATFORM-$NDK_ARCH-$NDK_STL}
 

@@ -39,6 +39,12 @@ add_definitions(-DBOOST_COROUTINE_NO_DEPRECATION_WARNING)
 # https://www.boost.org/doc/libs/1_67_0/doc/html/boost_asio/using.html#boost_asio.using.optional_separate_compilation
 add_definitions(-DBOOST_ASIO_SEPARATE_COMPILATION)
 
+if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
+    # Boost.Beast has a patch that uses the ANDROID definition
+    # instead of the implicit __ANDROID__ one.
+    # https://github.com/boostorg/beast/blob/44f37d1a11d/include/boost/beast/core/impl/file_posix.ipp#L27
+    add_definitions(-DANDROID)
+endif()
 ################################################################################
 
 set(GOROOT "${CMAKE_BINARY_DIR}/golang")
