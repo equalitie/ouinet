@@ -21,7 +21,7 @@ option(WITH_ASAN "Build with Address sanitizer" OFF)
 #        ASan. More info:
 #        https://github.com/boostorg/coroutine/issues/30#issuecomment-325574878
 if (WITH_ASAN)
-    set(SANITIZE "-fsanitize=address -fuse-ld=gold")
+    set(SANITIZE "-fsanitize=address -fuse-ld=gold -fno-omit-frame-pointer")
 endif() # if WITH_ASAN
 
 # For some reason we need to define both of these
