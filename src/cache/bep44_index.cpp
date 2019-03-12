@@ -165,7 +165,7 @@ public:
     }
 
     void insert( const string& url
-               , const bt::MutableDataItem& data
+               , bt::MutableDataItem data
                , Cancel& cancel
                , asio::yield_context yield)
     {
@@ -409,14 +409,19 @@ string Bep44InjectorIndex::find( const string& key
 string Bep44ClientIndex::insert_mapping( const string& ins_data
                                        , asio::yield_context yield)
 {
+    Cancel cancel(_cancel);
+
     auto ins = bt::bencoding_decode(ins_data);
     if (!ins || !ins->is_map()) {  // general format and type of data
         return or_throw<string>(yield, asio::error::invalid_argument);
     }
 
-    auto ins_map = ins->as_map();
+    sys::error_code ec;
+    string hex_key;
+
     bt::MutableDataItem item;
     try {  // individual fields for mutable data item
+        auto ins_map = ins->as_map();
         auto k = ins_map->at("k").as_string().value();
         if (k.size() == 32) {  // or let verification fail
             array<uint8_t, 32> ka;
@@ -429,15 +434,21 @@ string Bep44ClientIndex::insert_mapping( const string& ins_data
         auto sig = ins_map->at("sig").as_string().value();
         if (sig.size() == item.signature.size())  // or let verification fail
             copy(begin(sig), end(sig), begin(item.signature));
-    } catch (const exception& e) {
-        return or_throw<string>(yield, asio::error::invalid_argument);
+
+        _updater->insert("?", item, cancel, yield[ec]);
+
+        auto key = util::sha1(item.public_key.serialize(), item.salt);
+        hex_key = util::bytes::to_hex(key);
     }
-    if (!item.verify()) {  // mutable data item signature
-        return or_throw<string>(yield, asio::error::invalid_argument);
+    catch (const exception& e) {
+        ec = asio::error::invalid_argument;
     }
 
-    // TODO: Replace this with the Updater logic
-    return _bt_dht.mutable_put_start(item).to_hex();
+    if (!item.verify()) {  // mutable data item signature
+        ec = asio::error::invalid_argument;
+    }
+
+    return or_throw(yield, ec, move(hex_key));
 }
 
 string Bep44InjectorIndex::insert( string key
