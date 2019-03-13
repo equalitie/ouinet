@@ -62,8 +62,9 @@ ARG OUINET_DOCKER_VERSION=$OUINET_VERSION
 RUN cd /usr/local/src/ouinet \
  && git fetch -t \
  && git checkout "$OUINET_DOCKER_VERSION"
-# Populate the licenses directory.
-RUN /usr/local/src/ouinet/scripts/add-licenses-dir.sh /usr/local/src/ouinet .
+# Populate the licenses directory (avoid version numbers in source paths).
+RUN ln -s /usr/local/src/boost_1_67_0 /usr/local/src/boost \
+ && /usr/local/src/ouinet/scripts/add-licenses-dir.sh /usr/local/src/ouinet .
 
 FROM debian:stretch
 # To get the list of system library packages to install,

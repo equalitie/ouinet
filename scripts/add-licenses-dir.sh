@@ -18,7 +18,7 @@ LICENSE_DATA="\
 ouinet;eQualit.ie, Inc.;${SRC}/LICENSE
 asio-ipfs;eQualit.ie, Inc.;${SRC}/modules/asio-ipfs/LICENSE
 obfs4proxy;Yawning Angel;${BUILD}/modules/obfs4proxy/obfs4proxy-prefix/src/obfs4proxy/LICENSE
-boost;various;/usr/local/src/boost_1_67_0/LICENSE_1_0.txt
+boost;various;/usr/local/src/boost/LICENSE_1_0.txt
 golang;${BUILD}/golang/AUTHORS;${BUILD}/golang/LICENSE
 go-ipfs;various;${BUILD}/modules/asio-ipfs/go-ipfs-prefix/src/go-ipfs/LICENSE
 i2pd;The PurpleI2P Project;${SRC}/src/ouiservice/i2p/i2pd/LICENSE
