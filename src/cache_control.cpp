@@ -553,6 +553,9 @@ CacheControl::do_fetch_stored(FetchState& fs, const Request& rq, Yield yield)
 }
 
 //------------------------------------------------------------------------------
+// NOTE: This is *not* used to decide the cacheability of arbitrary responses,
+// its is only used as a last resort when
+// the origin server already declared the response as private.
 static bool contains_private_data(const http::request_header<>& request)
 {
     for (auto& field : request) {
