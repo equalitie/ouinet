@@ -41,7 +41,7 @@ RUN wget -q "https://downloads.sourceforge.net/project/boost/boost/1.67.0/boost_
 # This version is a recommendation and this file has been tested to work for it,
 # but you may attempt to build other versions by overriding this argument.
 # Also see `OUINET_DOCKER_VERSION` below.
-ARG OUINET_VERSION=v0.0.28
+ARG OUINET_VERSION=v0.0.30
 RUN git clone --recursive -b "$OUINET_VERSION" https://github.com/equalitie/ouinet.git
 WORKDIR /opt/ouinet
 RUN cmake /usr/local/src/ouinet \
@@ -62,6 +62,8 @@ ARG OUINET_DOCKER_VERSION=$OUINET_VERSION
 RUN cd /usr/local/src/ouinet \
  && git fetch -t \
  && git checkout "$OUINET_DOCKER_VERSION"
+# Populate the licenses directory.
+RUN /usr/local/src/ouinet/scripts/add-licenses-dir.sh /usr/local/src/ouinet .
 
 FROM debian:stretch
 # To get the list of system library packages to install,
@@ -125,4 +127,5 @@ COPY --from=builder /opt/ouinet/repo-templates/ repo-templates/
 # This ensures that we use the desired Docker-specific files.
 RUN echo "$OUINET_DOCKER_VERSION"
 COPY --from=builder /usr/local/src/ouinet/scripts/ouinet-wrapper.sh ouinet
+COPY --from=builder /opt/ouinet/licenses/ licenses/
 ENTRYPOINT ["/opt/ouinet/ouinet"]
