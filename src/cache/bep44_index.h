@@ -31,6 +31,7 @@ public:
     build( bittorrent::MainlineDht&
          , util::Ed25519PublicKey
          , const boost::filesystem::path& storage_path
+         , unsigned int capacity
          , Cancel&
          , asio::yield_context);
 

@@ -280,6 +280,7 @@ unique_ptr<Bep44ClientIndex>
 Bep44ClientIndex::build( bt::MainlineDht& bt_dht
                        , util::Ed25519PublicKey bt_pubkey
                        , const boost::filesystem::path& storage_path
+                       , unsigned int capacity
                        , Cancel& cancel
                        , asio::yield_context yield)
 {
@@ -289,7 +290,7 @@ Bep44ClientIndex::build( bt::MainlineDht& bt_dht
 
     auto lru = Bep44EntryUpdater::Lru::load( bt_dht.get_io_service()
                                            , storage_path / "push-lru"
-                                           , Bep44EntryUpdater::CAPACITY
+                                           , capacity
                                            , cancel
                                            , yield[ec]);
 

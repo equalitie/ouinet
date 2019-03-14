@@ -1190,6 +1190,7 @@ void Client::State::setup_ipfs_cache()
                                        , ipns
                                        , _config.index_bep44_pub_key()
                                        , _config.repo_root()
+                                       , _config.index_bep44_capacity()
                                        , _shutdown_signal
                                        , yield[ec]);
 
