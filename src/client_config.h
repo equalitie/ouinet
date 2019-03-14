@@ -81,6 +81,10 @@ public:
         return _index_bep44_pubkey;
     }
 
+    unsigned int index_bep44_capacity() const {
+        return _index_bep44_capacity;
+    }
+
     bool is_help() const { return _is_help; }
 
     boost::program_options::options_description description()
@@ -129,6 +133,9 @@ public:
            ("index-bep44-public-key"
             , po::value<string>()
             , "Index public key for the BitTorrent BEP44 subsystem")
+           ("index-bep44-capacity"
+            , po::value<unsigned int>()->default_value(_index_bep44_capacity)
+            , "Maximum number of entries to be kept (and persisted) in the BEP44 index")
            ("max-cached-age"
             , po::value<int>()->default_value(_max_cached_age.total_seconds())
             , "Discard cached content older than this many seconds "
@@ -182,6 +189,7 @@ private:
     std::map<std::string, std::string> _injector_credentials;
 
     boost::optional<util::Ed25519PublicKey> _index_bep44_pubkey;
+    unsigned int _index_bep44_capacity = 1000;
     bool _disable_cache = false;
     std::string _local_domain;
 };
@@ -318,6 +326,10 @@ ClientConfig::ClientConfig(int argc, char* argv[])
             throw std::runtime_error(
                     util::str("Failed parsing '", value, "' as Ed25519 public key"));
         }
+    }
+
+    if (vm.count("index-bep44-capacity")) {
+        _index_bep44_capacity = vm["index-bep44-capacity"].as<unsigned int>();
     }
 
     if (vm.count("cache-index")) {
