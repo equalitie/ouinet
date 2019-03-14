@@ -6,6 +6,7 @@
 #include "split_string.h"
 #include "util.h"
 #include "http_util.h"
+#include "generic_stream.h"
 #include "util/async_job.h"
 #include "util/condition_variable.h"
 #include "util/watch_dog.h"
@@ -249,6 +250,32 @@ CacheControl::fetch(const Request& request, Cancel& cancel, Yield yield)
     }
 
     return or_throw(yield, ec, move(response));
+}
+
+bool
+CacheControl::fetch( GenericStream& con
+                   , const Request& request
+                   , Cancel& cancel
+                   , Yield yield)
+{
+    sys::error_code ec;
+    auto response = do_fetch(request, cancel, yield[ec]);
+
+    if(!ec && !has_correct_content_length(response)) {
+#ifndef NDEBUG
+        yield.log("::::: CacheControl WARNING Incorrect content length :::::");
+        yield.log(request, response);
+        yield.log(":::::::::::::::::::::::::::::::::::::::::::::::::::::::::");
+#endif
+    }
+
+    return_or_throw_on_error(yield, cancel, ec, false);
+
+    response.keep_alive(request.keep_alive());
+
+    http::async_write(con, response, yield[ec].tag("write_response"));
+
+    return request.keep_alive();
 }
 
 static bool must_revalidate(const Request& request)
