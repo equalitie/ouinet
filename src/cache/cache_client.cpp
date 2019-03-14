@@ -26,6 +26,7 @@ CacheClient::build( asio::io_service& ios
                   , string ipns
                   , optional<util::Ed25519PublicKey> bt_pubkey
                   , fs::path path_to_repo
+                  , unsigned int bep44_index_capacity
                   , Cancel& cancel
                   , asio::yield_context yield)
 {
@@ -58,6 +59,7 @@ CacheClient::build( asio::io_service& ios
     if (bt_pubkey) {
         bep44_index = Bep44ClientIndex::build(*bt_dht, *bt_pubkey
                                              , path_to_repo / "bep44-index"
+                                             , bep44_index_capacity
                                              , cancel
                                              , yield[ec]);
 

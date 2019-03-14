@@ -703,6 +703,7 @@ unique_ptr<CacheInjector> build_cache( asio::io_service& ios
                                               , config.repo_root()
                                               , enable_btree
                                               , enable_bep44
+                                              , config.index_bep44_capacity()
                                               , cancel
                                               , yield[ec]);
 

@@ -111,10 +111,6 @@ static bt::MutableDataItem find( bt::MainlineDht& dht
 //--------------------------------------------------------------------
 class ouinet::Bep44EntryUpdater
 {
-public:
-    // Arbitrarily chosen
-    static const size_t CAPACITY = 1000;
-
 private:
     struct Entry {
         string url; // Mainly for debugging
@@ -280,6 +276,7 @@ unique_ptr<Bep44ClientIndex>
 Bep44ClientIndex::build( bt::MainlineDht& bt_dht
                        , util::Ed25519PublicKey bt_pubkey
                        , const boost::filesystem::path& storage_path
+                       , unsigned int capacity
                        , Cancel& cancel
                        , asio::yield_context yield)
 {
@@ -289,7 +286,7 @@ Bep44ClientIndex::build( bt::MainlineDht& bt_dht
 
     auto lru = Bep44EntryUpdater::Lru::load( bt_dht.get_io_service()
                                            , storage_path / "push-lru"
-                                           , Bep44EntryUpdater::CAPACITY
+                                           , capacity
                                            , cancel
                                            , yield[ec]);
 
@@ -317,6 +314,7 @@ unique_ptr<Bep44InjectorIndex>
 Bep44InjectorIndex::build( bt::MainlineDht& bt_dht
                          , util::Ed25519PrivateKey bt_privkey
                          , const boost::filesystem::path& storage_path
+                         , unsigned int capacity
                          , Cancel& cancel
                          , asio::yield_context yield)
 {
@@ -326,7 +324,7 @@ Bep44InjectorIndex::build( bt::MainlineDht& bt_dht
 
     auto lru = Bep44EntryUpdater::Lru::load( bt_dht.get_io_service()
                                            , storage_path / "push-lru"
-                                           , Bep44EntryUpdater::CAPACITY
+                                           , capacity
                                            , cancel
                                            , yield[ec]);
 

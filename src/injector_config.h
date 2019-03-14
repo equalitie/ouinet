@@ -52,6 +52,9 @@ public:
     util::Ed25519PrivateKey index_bep44_private_key() const
     { return _index_bep44_private_key; }
 
+    unsigned int index_bep44_capacity() const
+    { return _index_bep44_capacity; }
+
     IndexType cache_index_type() const
     { return _cache_index_type; }
 
@@ -73,6 +76,7 @@ private:
     boost::filesystem::path OUINET_CONF_FILE = "ouinet-injector.conf";
     std::string _credentials;
     util::Ed25519PrivateKey _index_bep44_private_key;
+    unsigned int _index_bep44_capacity;
     IndexType _cache_index_type = IndexType::btree;
     bool _disable_cache = false;
 };
@@ -115,6 +119,9 @@ InjectorConfig::options_description()
          , "Cache index to use, can be either \"btree\" or \"bep44\"")
         ("index-bep44-private-key", po::value<string>()
          , "Index private key for the BitTorrent BEP44 subsystem")
+        ("index-bep44-capacity"
+         , po::value<unsigned int>()->default_value(1000)  // arbitrarily chosen default
+         , "Maximum number of entries to be kept (and persisted) in the BEP44 index")
         ;
 
     return desc;
@@ -214,6 +221,10 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
     setup_index_bep44_private_key( vm.count("index-bep44-private-key")
                                  ? vm["index-bep44-private-key"].as<string>()
                                  : string());
+
+    if (vm.count("index-bep44-capacity")) {
+        _index_bep44_capacity = vm["index-bep44-capacity"].as<unsigned int>();
+    }
 
     if (vm.count("cache-index")) {
         auto type = vm["cache-index"].as<string>();

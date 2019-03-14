@@ -27,6 +27,7 @@ unique_ptr<CacheInjector> CacheInjector::build( boost::asio::io_service& ios
                                               , fs::path path_to_repo
                                               , bool enable_btree
                                               , bool enable_bep44
+                                              , unsigned int bep44_index_capacity
                                               , Cancel& cancel
                                               , boost::asio::yield_context yield)
 {
@@ -43,6 +44,7 @@ unique_ptr<CacheInjector> CacheInjector::build( boost::asio::io_service& ios
         bep44_index = Bep44InjectorIndex::build(*bt_dht
                                                , bt_privkey
                                                , path_to_repo / "bep44-index"
+                                               , bep44_index_capacity
                                                , cancel
                                                , yield[ec]);
     }
