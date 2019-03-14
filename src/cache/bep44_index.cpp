@@ -111,10 +111,6 @@ static bt::MutableDataItem find( bt::MainlineDht& dht
 //--------------------------------------------------------------------
 class ouinet::Bep44EntryUpdater
 {
-public:
-    // Arbitrarily chosen
-    static const size_t CAPACITY = 1000;
-
 private:
     struct Entry {
         string url; // Mainly for debugging
