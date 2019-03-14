@@ -120,7 +120,7 @@ InjectorConfig::options_description()
         ("index-bep44-private-key", po::value<string>()
          , "Index private key for the BitTorrent BEP44 subsystem")
         ("index-bep44-capacity"
-         , po::value<unsigned int>()->default_value(1000)
+         , po::value<unsigned int>()->default_value(1000)  // arbitrarily chosen default
          , "Maximum number of entries to be kept (and persisted) in the BEP44 index")
         ;
 

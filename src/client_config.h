@@ -189,7 +189,7 @@ private:
     std::map<std::string, std::string> _injector_credentials;
 
     boost::optional<util::Ed25519PublicKey> _index_bep44_pubkey;
-    unsigned int _index_bep44_capacity = 1000;
+    unsigned int _index_bep44_capacity = 1000;  // arbitrarily chosen default
     bool _disable_cache = false;
     std::string _local_domain;
 };
