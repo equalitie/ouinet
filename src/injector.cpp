@@ -337,7 +337,7 @@ public:
         };
     }
 
-    Response fetch(const Request& rq, Yield yield)
+    bool fetch(GenericStream& con, const Request& rq, Yield yield)
     {
         Cancel cancel;
 
@@ -349,11 +349,11 @@ public:
         });
 
         sys::error_code ec;
-        Response response = cc.fetch(rq, cancel, yield[ec]);
+        bool keep_alive = cc.fetch(con, rq, cancel, yield[ec]);
 
         if (timed_out) ec = asio::error::timed_out;
 
-        return or_throw(yield, ec, move(response));
+        return or_throw(yield, ec, keep_alive);
     }
 
     Response fetch_fresh(const Request& rq_, Cancel& cancel, Yield yield) {
@@ -564,13 +564,29 @@ void serve( InjectorConfig& config
 
         Response res;
 
+        bool keep_alive = req.keep_alive();
+
         if (proxy) {
             // No Ouinet header, behave like a (non-caching) proxy.
             // TODO: Maybe reject requests for HTTPS URLS:
             // we are perfectly able to handle them (and do verification locally),
             // but the client should be using a CONNECT request instead!
             res = cc.fetch_fresh(req, cancel, yield[ec].tag("fetch_proxy"));
-        } else {
+
+            if (ec) {
+                handle_bad_request( con, req
+                                  , "Failed to retrieve content from origin: " + ec.message()
+                                  , yield[ec].tag("handle_bad_request"));
+                continue;
+            }
+
+            yield.log("=== Sending back proxy response ===");
+            yield.log(res.base());
+            http::async_write(con, res, yield[ec].tag("write_proxy_response"));
+
+            if (!res.keep_alive()) keep_alive = false;
+        }
+        else {
             // Ouinet header found, behave like a Ouinet injector.
             auto opt_err_res = version_error_response(req, version_hdr_i->value());
 
@@ -580,35 +596,13 @@ void serve( InjectorConfig& config
             else {
                 auto req2 = util::to_injector_request(req);  // sanitize
                 req2.keep_alive(req.keep_alive());
-                res = cc.fetch(req2, yield[ec].tag("cache_control.fetch"));
-                res.keep_alive(req.keep_alive());
+                keep_alive = cc.fetch( con
+                                     , req2
+                                     , yield[ec].tag("cache_control.fetch"));
             }
         }
 
-        if (ec) {
-            handle_bad_request( con, req
-                              , "Failed to retrieve content from origin: " + ec.message()
-                              , yield[ec].tag("handle_bad_request"));
-            continue;
-        }
-
-        yield.log("=== Sending back response ===");
-        yield.log(res.base());
-
-        // Note: Not 100% sure about this, but sometimes we got a HTTP 1.1
-        // response that did not contain the `Connection: close` header field
-        // nor any indicationi about the body size. Since in such cases we
-        // don't close connections to clients, clients keep waiting for the
-        // body indefinitely. The `prepare_payload` functions sets the body
-        // size so as to avoid such situations.
-        res.prepare_payload();
-
-        // Forward back the response
-        http::async_write(con, res, yield[ec].tag("write_response"));
-
-        if (ec) break;
-
-        if (!req.keep_alive()) {
+        if (ec || !keep_alive) {
             con.close();
             break;
         }
