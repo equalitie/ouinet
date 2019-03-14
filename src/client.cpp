@@ -1000,6 +1000,8 @@ void Client::State::serve_request( GenericStream&& con
              , {false, queue<fresh_channel>({fresh_channel::origin})} ),
         Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*cdn\\.mozilla\\.net/.*")
              , {false, queue<fresh_channel>({fresh_channel::origin})} ),
+        Match( reqexpr::from_regex(target_getter, "https?://detectportal\\.firefox\\.com/.*")
+             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
 
         // Disable cache and always go to proxy for this site.
         Match( reqexpr::from_regex(target_getter, "https?://ifconfig\\.co/.*")
