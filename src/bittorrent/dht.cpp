@@ -873,7 +873,7 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
      * sender for any routing purposes.
      */
     boost::optional<int64_t> read_only_flag = arguments["ro"].as_int();
-    if (!read_only_flag || *read_only_flag != 1) {
+    if (_routing_table && (!read_only_flag || *read_only_flag != 1)) {
         /*
         * Add the sender to the routing table.
         */

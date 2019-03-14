@@ -194,7 +194,7 @@ RoutingTable::TreeNode* RoutingTable::exhaustive_routing_subtable_fragment_root(
     return tree_node;
 }
 
-void RoutingTable::TreeNode::closest_routing_nodes( NodeID target
+void RoutingTable::TreeNode::closest_routing_nodes( const NodeID& target
                                                   , size_t max_output
                                                   , std::vector<NodeContact>& output)
 {

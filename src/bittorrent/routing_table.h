@@ -67,9 +67,9 @@ class RoutingTable {
         size_t depth() const { return range.mask; }
         size_t count_routing_nodes() const;
 
-        void closest_routing_nodes( NodeID target
-                              , size_t max_output
-                              , std::vector<NodeContact>& output);
+        void closest_routing_nodes( const NodeID& target
+                                  , size_t max_output
+                                  , std::vector<NodeContact>& output);
 
         std::unique_ptr<TreeNode> left_child;
         std::unique_ptr<TreeNode> right_child;
