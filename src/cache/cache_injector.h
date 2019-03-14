@@ -54,6 +54,7 @@ public:
          , fs::path path_to_repo
          , bool enable_btree
          , bool enable_bep44
+         , unsigned int bep44_index_capacity
          , Cancel&
          , boost::asio::yield_context);
 
