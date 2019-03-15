@@ -486,6 +486,32 @@ Response Client::State::fetch_fresh_through_simple_proxy
 }
 
 //------------------------------------------------------------------------------
+// Return true if res indicated an error from the injector
+bool handle_if_injector_error(GenericStream& con, const Response& res_, Yield yield) {
+    auto err_hdr_i = res_.find(http_::response_error_hdr);
+
+    if (err_hdr_i == res_.end()) return false; // No error
+
+    Response res{http::status::bad_request, 11};
+    res.set(http::field::server, OUINET_CLIENT_SERVER_STRING);
+    res.set(http_::response_error_hdr, err_hdr_i->value());
+    res.keep_alive(false);
+
+    string body = "Incompatible Ouinet request version";
+
+    Response::body_type::reader reader(res, res.body());
+    sys::error_code ec;
+    reader.put(asio::buffer(body), ec);
+    assert(!ec);
+
+    res.prepare_payload();
+
+    http::async_write(con, res, yield[ec]);
+
+    return true;
+}
+
+//------------------------------------------------------------------------------
 class Client::ClientCacheControl {
 public:
     ClientCacheControl( Client::State& client_state
@@ -648,7 +674,7 @@ public:
         return rs;
     }
 
-    Response fetch(const Request& rq, Yield yield)
+    bool fetch(GenericStream& con, const Request& rq, Yield yield)
     {
         namespace err = asio::error;
         using request_route::fresh_channel;
@@ -657,7 +683,7 @@ public:
 
         while (!request_config.fresh_channels.empty()) {
             if (client_state._shutdown_signal)
-                return or_throw<Response>(yield, err::operation_aborted);
+                return or_throw<bool>(yield, err::operation_aborted);
 
             auto r = request_config.fresh_channels.front();
             request_config.fresh_channels.pop();
@@ -674,7 +700,8 @@ public:
 
             switch (r) {
                 case fresh_channel::_front_end:
-                    return client_state.fetch_fresh_from_front_end(rq, yield);
+                    res = client_state.fetch_fresh_from_front_end(rq, yield);
+                    break;
 
                 case fresh_channel::origin:
                     res = client_state.fetch_fresh_from_origin(rq, yield[ec]);
@@ -709,12 +736,34 @@ public:
             }
 
             if (cancel) ec = err::timed_out;
-            if (!ec) return res;
+            if (!ec) {
+                send_back_response(con, res, yield);
+                return rq.keep_alive() && res.keep_alive();
+            }
             last_error = ec;
         }
 
         assert(last_error);
-        return or_throw<Response>(yield, last_error);
+
+        // TODO: Better error message.
+        handle_bad_request( con
+                          , rq
+                          , "Not cached"
+                          , yield.tag("handle_bad_request"));
+
+        return or_throw<bool>(yield, last_error, rq.keep_alive());
+    }
+
+private:
+    void send_back_response(GenericStream& con, Response& res, Yield yield)
+    {
+        sys::error_code ec;
+        if (handle_if_injector_error(con, res, yield[ec])) {
+            return;
+        }
+
+        // Forward the response back
+        http::async_write(con, res, asio::yield_context(yield)[ec]);
     }
 
 private:
@@ -722,16 +771,6 @@ private:
     request_route::Config& request_config;
     CacheControl cc;
 };
-
-//------------------------------------------------------------------------------
-//static
-//Response bad_gateway(const Request& req)
-//{
-//    Response res{http::status::bad_gateway, req.version()};
-//    res.set(http::field::server, "Ouinet");
-//    res.keep_alive(req.keep_alive());
-//    return res;
-//}
 
 //------------------------------------------------------------------------------
 static
@@ -793,32 +832,6 @@ GenericStream Client::State::ssl_mitm_handshake( GenericStream&& con
     };
 
     return GenericStream(move(ssl_sock), move(ssl_shutter));
-}
-
-//------------------------------------------------------------------------------
-// Return true if res indicated an error from the injector
-bool handle_if_injector_error(GenericStream& con, Response& res_, Yield yield) {
-    auto err_hdr_i = res_.find(http_::response_error_hdr);
-
-    if (err_hdr_i == res_.end()) return false; // No error
-
-    Response res{http::status::bad_request, 11};
-    res.set(http::field::server, OUINET_CLIENT_SERVER_STRING);
-    res.set(http_::response_error_hdr, err_hdr_i->value());
-    res.keep_alive(false);
-
-    string body = "Incompatible Ouinet request version";
-
-    Response::body_type::reader reader(res, res.body());
-    sys::error_code ec;
-    reader.put(asio::buffer(body), ec);
-    assert(!ec);
-
-    res.prepare_payload();
-
-    http::async_write(con, res, yield[ec]);
-
-    return true;
 }
 
 //------------------------------------------------------------------------------
@@ -1104,53 +1117,18 @@ void Client::State::serve_request( GenericStream&& con
 
         request_config = route_choose_config(req, matches, default_request_config);
 
-        auto res = cache_control.fetch(req, yield[ec].tag("cache_control.fetch"));
-
-        if (ec) {
-#ifndef NDEBUG
-            yield.log("----- WARNING: Error fetching --------");
-            yield.log("Error Code: ", ec.message());
-            yield.log(req.base(), res.base());
-            yield.log("--------------------------------------");
-#endif
-
-            // TODO: Better error message.
-            handle_bad_request( con
-                              , req
-                              , "Not cached"
-                              , yield.tag("handle_bad_request"));
-
-            if (req.keep_alive()) continue;
-            else return;
-        }
-
-        if (handle_if_injector_error(con, res, yield[ec])) {
-            if (res.keep_alive()) continue;
-            break;
-        }
-
-        yield.log("=== Sending back response ===");
-        yield.log(res.base());
-
-        // Forward the response back
-        http::async_write(con, res, yield[ec].tag("write_response"));
-
-        if (ec == http::error::end_of_stream) {
-          LOG_DEBUG("request served. Connection closed");
-          break;
-        }
+        bool keep_alive
+            = cache_control.fetch(con, req, yield[ec].tag("cache_control.fetch"));
 
         if (ec) {
             yield.log("error writing back response: ", ec.message());
             return;
         }
 
-        if (!res.keep_alive()) {
+        if (!keep_alive) {
             con.close();
             break;
         }
-
-        LOG_DEBUG("request served");
     }
 }
 
