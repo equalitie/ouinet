@@ -81,7 +81,6 @@ CacheInjector::CacheInjector
     , _bt_dht(move(bt_dht))  // used by either B-tree over BEP44, or BEP44
     , _bep44_index(move(bep44_index))
     , _scheduler(new Scheduler(ios, _concurrency))
-    , _was_destroyed(make_shared<bool>(false))
 {
     assert((enable_btree || _bep44_index) && "At least one index type must be enabled");
 
@@ -113,24 +112,25 @@ CacheInjector::insert_content( const string& id
                              , IndexType index_type
                              , asio::yield_context yield)
 {
-    auto index = get_index(index_type);
-    if (!index)
-        return or_throw<CacheInjector::InsertionResult>
-            (yield, asio::error::operation_not_supported);
+    Cancel cancel(_cancel);
 
-    auto wd = _was_destroyed;
+    auto index = get_index(index_type);
+
+    if (!index)
+        return or_throw<InsertionResult>( yield
+                                        , asio::error::operation_not_supported);
 
     // Wraps IPFS add operation to wait for a slot first
     auto ipfs_add = [&](auto data, auto yield) {
         sys::error_code ec;
         auto slot = _scheduler->wait_for_slot(yield[ec]);
 
-        if (!ec && *wd) ec = asio::error::operation_aborted;
+        if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw<string>(yield, ec);
 
         auto cid = _ipfs_node->add(data, yield[ec]);
 
-        if (!ec && *wd) ec = asio::error::operation_aborted;
+        if (cancel) ec = asio::error::operation_aborted;
         return or_throw(yield, ec, move(cid));
     };
 
@@ -145,19 +145,21 @@ CacheInjector::insert_content( const string& id
 
     rs = Response(); // Free the memory
 
-    if (!ec && *wd) ec = asio::error::operation_aborted;
-    if (ec) return or_throw<CacheInjector::InsertionResult>(yield, ec);
+    if (cancel) ec = asio::error::operation_aborted;
+    if (ec) return or_throw<InsertionResult>(yield, ec);
 
     // Store descriptor
     auto key = key_from_http_req(rq);
     auto cid_insdata = descriptor::put_into_index
         (key, desc, *index, ipfs_add, yield[ec]);
-    if (!ec && *wd) ec = asio::error::operation_aborted;
 
-    CacheInjector::InsertionResult ret
-        { move(key), move(desc)
-        , "/ipfs/" + cid_insdata.first, move(cid_insdata.second)};
-    return or_throw(yield, ec, move(ret));
+    if (cancel) ec = asio::error::operation_aborted;
+    if (ec) return or_throw<InsertionResult>(yield, ec);
+
+    return InsertionResult { move(key)
+                           , move(desc)
+                           , "/ipfs/" + cid_insdata.first
+                           , move(cid_insdata.second)};
 }
 
 string CacheInjector::get_descriptor( const string& key
@@ -202,5 +204,5 @@ CacheInjector::wait_for_ready(Cancel& cancel, asio::yield_context yield) const
 
 CacheInjector::~CacheInjector()
 {
-    *_was_destroyed = true;
+    _cancel();
 }

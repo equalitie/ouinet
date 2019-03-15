@@ -105,7 +105,7 @@ private:
     std::unique_ptr<Bep44InjectorIndex> _bep44_index;
     const unsigned int _concurrency = 8;
     std::unique_ptr<Scheduler> _scheduler;
-    std::shared_ptr<bool> _was_destroyed;
+    Cancel _cancel;
 };
 
 } // namespace
