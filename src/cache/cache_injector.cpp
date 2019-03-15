@@ -109,7 +109,7 @@ InjectorIndex* CacheInjector::get_index(IndexType index_type) const
 CacheInjector::InsertionResult
 CacheInjector::insert_content( const string& id
                              , const Request& rq
-                             , const Response& rs
+                             , Response rs
                              , IndexType index_type
                              , asio::yield_context yield)
 {
@@ -142,6 +142,9 @@ CacheInjector::insert_content( const string& id
                                        , rq, rs
                                        , ipfs_add
                                        , yield[ec]);
+
+    rs = Response(); // Free the memory
+
     if (!ec && *wd) ec = asio::error::operation_aborted;
     if (ec) return or_throw<CacheInjector::InsertionResult>(yield, ec);
 

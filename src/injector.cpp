@@ -455,7 +455,7 @@ private:
             rs = util::to_cache_response(move(rs));
 
             sys::error_code ec;
-            auto ret = injector->insert_content( id, rq, rs
+            auto ret = injector->insert_content( id, rq, move(rs)
                                                , index_type
                                                , yield[ec]);
 

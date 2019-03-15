@@ -70,7 +70,7 @@ public:
     // into the index given by `IndexType`, along with data in distributed storage.
     InsertionResult insert_content( const std::string& id
                                   , const Request&
-                                  , const Response&
+                                  , Response
                                   , IndexType
                                   , boost::asio::yield_context);
 
