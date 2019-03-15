@@ -444,9 +444,8 @@ private:
 
         // This injection code logs errors but does not propagate them
         // (the `desc_data` field is set to the empty string).
-        auto index_type = config.cache_index_type();
         auto inject = [
-            rq, rs, id, index_type,
+            rq, rs, id, index_type = config.cache_index_type(),
             injector = injector.get()
         ] (boost::asio::yield_context yield) mutable
           -> CacheInjector::InsertionResult {
@@ -477,23 +476,37 @@ private:
         }
 
         LOG_DEBUG("Sync inject: ", rq.target(), " ", id);
+
         auto ins = inject(yield);
+
         if (ins.desc_data.length() == 0)
             return rs;  // insertion failed
+
+        return add_insertion_header_fields(ins, move(rs));
+    }
+
+    Response&& add_insertion_header_fields( const CacheInjector::InsertionResult& ins
+                                          , Response&& rs)
+    {
+        auto index_type = config.cache_index_type();
 
         // Zlib-compress descriptor, Base64-encode and put in header.
         auto compressed_desc = util::zlib_compress(move(ins.desc_data));
         auto encoded_desc = util::base64_encode(move(compressed_desc));
+
         rs.set(http_::response_descriptor_hdr, move(encoded_desc));
+
         // Add descriptor storage link as is.
         rs.set(http_::response_descriptor_link_hdr, move(ins.desc_link));
+
         // Add Base64-encoded reinsertion data (if any).
         if (ins.index_ins_data.length() > 0) {
-            auto encoded_insd = util::base64_encode(move(ins.index_ins_data));
+            auto encoded_insd = util::base64_encode(ins.index_ins_data);
             rs.set( http_::response_insert_hdr_pfx + IndexName.at(index_type)
                   , move(encoded_insd));
         }
-        return rs;
+
+        return move(rs);
     }
 
 private:
