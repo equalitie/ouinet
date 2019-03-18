@@ -423,9 +423,10 @@ string Bep44ClientIndex::insert_mapping( const string& ins_data
     return util::bytes::to_hex(key);
 }
 
-string Bep44InjectorIndex::insert( string key
-                                 , string value
-                                 , asio::yield_context yield)
+bt::MutableDataItem
+Bep44InjectorIndex::get_mutable_data_item( string key
+                                         , string value
+                                         , sys::error_code& ec)
 {
     using Time = boost::posix_time::ptime;
 
@@ -439,16 +440,30 @@ string Bep44InjectorIndex::insert( string key
     Time ts = boost::posix_time::microsec_clock::universal_time();
 
     bt::MutableDataItem item;
+
     try {
         item = bt::MutableDataItem::sign( value
                                         , (ts - unix_epoch).total_milliseconds()
                                         , move(salt)
                                         , _bt_privkey);
     } catch(const length_error&) {
-        return or_throw<string>(yield, asio::error::message_size);
+        ec = asio::error::message_size;
+        return item;
     }
 
+    return item;
+}
+
+
+string Bep44InjectorIndex::insert( string key
+                                 , string value
+                                 , asio::yield_context yield)
+{
     sys::error_code ec;
+
+    auto item = get_mutable_data_item(key, value, ec);
+
+    if (ec) return or_throw<string>(yield, ec);
 
     Cancel cancel(_cancel);
     _bt_dht.mutable_put(item, cancel, yield[ec]);
@@ -461,6 +476,14 @@ string Bep44InjectorIndex::insert( string key
     LOG_DEBUG("BEP44 index: inserted key=", key);  // used by integration tests
 
     return item.bencode();
+}
+
+
+string Bep44InjectorIndex::get_insert_message( string key
+                                             , string value
+                                             , sys::error_code& ec)
+{
+    return get_mutable_data_item(move(key), move(value), ec).bencode();
 }
 
 

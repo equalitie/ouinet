@@ -8,7 +8,12 @@
 #include "../util/crypto.h"
 #include "index.h"
 
-namespace ouinet { namespace bittorrent { class MainlineDht; }}
+namespace ouinet {
+    namespace bittorrent {
+        class MainlineDht;
+        class MutableDataItem;
+    }
+}
 namespace ouinet { namespace util { class Ed25519PublicKey; }}
 
 namespace ouinet {
@@ -77,11 +82,17 @@ public:
     std::string insert( std::string key, std::string value
                       , asio::yield_context) override;
 
+    std::string get_insert_message( std::string key, std::string value
+                                  , sys::error_code&) override;
+
     boost::asio::io_service& get_io_service();
 
     ~Bep44InjectorIndex();
 
 private:
+    bittorrent::MutableDataItem
+    get_mutable_data_item(std::string key, std::string value, sys::error_code&);
+
     Bep44InjectorIndex( bittorrent::MainlineDht& bt_dht
                       , util::Ed25519PrivateKey bt_privkey
                       , std::unique_ptr<Bep44EntryUpdater>);

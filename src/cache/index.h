@@ -35,7 +35,18 @@ public:
     // The returned string depends on the implementation and
     // it should help an untrusted agent reinsert the key->value mapping into the index
     // (e.g. by including protocol-dependent signature data).
-    virtual std::string insert(std::string key, std::string value, asio::yield_context) = 0;
+    virtual std::string insert( std::string key
+                              , std::string value
+                              , asio::yield_context) = 0;
+
+    // Same as above, but don't do any IO, only return the same string
+    virtual std::string get_insert_message( std::string key
+                                          , std::string value
+                                          , sys::error_code& ec) {
+        // Only some indices support this operation
+        ec = asio::error::operation_not_supported;
+        return std::string();
+    }
 };
 
 } // namespace
