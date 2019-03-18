@@ -72,6 +72,7 @@ public:
                                   , const Request&
                                   , Response
                                   , IndexType
+                                  , bool perform_io
                                   , boost::asio::yield_context);
 
     // Find the content previously stored by the injector under `key`.

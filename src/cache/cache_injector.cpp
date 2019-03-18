@@ -110,6 +110,7 @@ CacheInjector::insert_content( const string& id
                              , const Request& rq
                              , Response rs
                              , IndexType index_type
+                             , bool perform_io
                              , asio::yield_context yield)
 {
     Cancel cancel(_cancel);
@@ -123,12 +124,24 @@ CacheInjector::insert_content( const string& id
     // Wraps IPFS add operation to wait for a slot first
     auto ipfs_add = [&](auto data, auto yield) {
         sys::error_code ec;
-        auto slot = _scheduler->wait_for_slot(yield[ec]);
+        Scheduler::Slot slot;
+
+        if (perform_io) {
+            slot = _scheduler->wait_for_slot(yield[ec]);
+        }
 
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw<string>(yield, ec);
 
-        auto cid = _ipfs_node->add(data, yield[ec]);
+        string cid;
+
+        if (perform_io) {
+            cid = _ipfs_node->add(data, yield[ec]);
+        } else {
+            function<void()> cancel_fn;
+            auto slot = cancel.connect([&] { if (cancel_fn) cancel_fn(); });
+            cid = _ipfs_node->calculate_cid(data, cancel_fn, yield[ec]);
+        }
 
         if (cancel) ec = asio::error::operation_aborted;
         return or_throw(yield, ec, move(cid));
@@ -151,7 +164,7 @@ CacheInjector::insert_content( const string& id
     // Store descriptor
     auto key = key_from_http_req(rq);
     auto cid_insdata = descriptor::put_into_index
-        (key, desc, *index, ipfs_add, yield[ec]);
+        (key, desc, *index, ipfs_add, perform_io, yield[ec]);
 
     if (cancel) ec = asio::error::operation_aborted;
     if (ec) return or_throw<InsertionResult>(yield, ec);

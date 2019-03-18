@@ -67,6 +67,7 @@ std::pair<std::string, std::string>
 put_into_index( const std::string& key, const std::string& desc_data
               , InjectorIndex& index
               , StoreFunc ipfs_store
+              , bool perform_io
               , asio::yield_context yield)
 {
     using dcid_insd = std::pair<std::string, std::string>;
@@ -78,16 +79,29 @@ put_into_index( const std::string& key, const std::string& desc_data
         return or_throw<dcid_insd>(yield, ec);
 
     std::string ins_data;
-    // Insert descriptor inline (if possible).
-    ins_data = index.insert( key, zlib_prefix + util::zlib_compress(desc_data)
-                           , yield[ec]);
+    std::string zvalue = zlib_prefix + util::zlib_compress(desc_data);
+
+    if (perform_io) {
+        // Insert descriptor inline (if possible).
+        ins_data = index.insert(key, std::move(zvalue), yield[ec]);
+    } else {
+        ins_data = index.get_insert_message(key, std::move(zvalue), ec);
+    }
+
     if (ec && ec != asio::error::message_size)
         return or_throw<dcid_insd>(yield, ec);
 
     // Insert IPFS link to descriptor.
     if (ec == asio::error::message_size) {
         ec = sys::error_code();
-        ins_data = index.insert(key, ipfs_prefix + desc_ipfs, yield[ec]);
+
+        auto value = ipfs_prefix + desc_ipfs;
+
+        if (perform_io) {
+            ins_data = index.insert(key, std::move(value), yield[ec]);
+        } else {
+            ins_data = index.get_insert_message(key, std::move(value), ec);
+        }
     }
 
     return or_throw(yield, ec, dcid_insd(move(desc_ipfs), move(ins_data)));

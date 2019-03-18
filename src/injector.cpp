@@ -456,6 +456,7 @@ private:
             sys::error_code ec;
             auto ret = injector->insert_content( id, rq, move(rs)
                                                , index_type
+                                               , true
                                                , yield[ec]);
 
             if (ec) {
