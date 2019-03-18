@@ -38,6 +38,7 @@
 #include "ssl/ca_certificate.h"
 #include "ssl/dummy_certificate.h"
 #include "ssl/util.h"
+#include "bittorrent/mutable_data.h"
 
 #ifndef __ANDROID__
 #  include "force_exit_on_signal.h"
@@ -579,6 +580,8 @@ public:
     {
         namespace err = asio::error;
 
+        auto& ios = client_state.get_io_service();
+
         // No need to filter request or response headers
         // since we are not storing them here
         // (they can be found at the descriptor).
@@ -591,7 +594,19 @@ public:
             return or_throw(yield, err::operation_not_supported, move(rs));
         }
 
-        asio::spawn(client_state.get_io_service(),
+        if (has_bep44_insert_hdr(rs)) {
+            asio::spawn(ios, [ rs
+                             , &cache
+                             , &cancel = client_state.get_shutdown_signal()
+                             ] (asio::yield_context yield) {
+                sys::error_code ec;
+                seed_response(rs, *cache, cancel, yield[ec]);
+            });
+
+            return rs;
+        }
+
+        asio::spawn(ios,
             [ &cache, rs
             , &ios = client_state.get_io_service()
             , &cancel = client_state.get_shutdown_signal()
@@ -672,6 +687,56 @@ public:
         // Note: we have to return a valid response even in case of error
         // because CacheControl will use it.
         return rs;
+    }
+
+    static
+    const string& response_insert_bep44_hdr()
+    {
+        static const string ret = http_::response_insert_hdr_pfx
+                                + IndexName.at(IndexType::bep44);
+        return ret;
+    }
+
+    static
+    bool has_bep44_insert_hdr(const Response& rs)
+    {
+        return !rs[response_insert_bep44_hdr()].empty();
+    }
+
+    static
+    void seed_response( const Response& rs
+                      , CacheClient& cache
+                      , Cancel& cancel
+                      , asio::yield_context yield)
+    {
+        boost::string_view encoded_insd = rs[response_insert_bep44_hdr()];
+
+        if (encoded_insd.empty()) return or_throw(yield, asio::error::no_data);
+
+        string bep44_push_msg = util::base64_decode(encoded_insd);
+
+        auto opt_item = bittorrent::MutableDataItem::bdecode(bep44_push_msg);
+
+        if (!opt_item) {
+            return or_throw(yield, asio::error::invalid_argument);
+        }
+
+        sys::error_code ec;
+        cache.insert_mapping(bep44_push_msg, IndexType::bep44, yield[ec]);
+
+        auto desc_path = opt_item->value.as_string();
+        assert(desc_path);
+
+        auto desc = cache.descriptor_from_path(*desc_path, cancel, yield[ec]);
+
+        return_or_throw_on_error(yield, cancel, ec);
+
+        auto body_link = cache.ipfs_add
+            (beast::buffers_to_string(rs.body().data()), yield[ec]);
+
+        // TODO: (currently `desc` is just a json string, so can't do this
+        // check directly)
+        //assert(body_link == desc["value"]);
     }
 
     bool fetch(GenericStream& con, const Request& rq, Yield yield)
