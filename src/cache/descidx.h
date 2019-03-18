@@ -18,37 +18,33 @@ namespace descriptor {
 static const std::string ipfs_prefix = "/ipfs/";
 static const std::string zlib_prefix = "/zlib/";
 
-// Get the serialized descriptor pointed to by an entry
-// in the given `index` under the given `key`.
-// The descriptor has been saved in the given stores (`ipfs_load`).
+// Get the serialized descriptor pointed to by an `desc_path`.  `desc_path` can
+// be either "/zlib/<data>" or "/ipfs/<QmCID>".  In the latter case there will
+// be one additional IO call to retrieve the descriptor from IPFS.
 template <class LoadFunc>
 inline
-std::string get_from_index( const std::string& key
-                          , ClientIndex& index
-                          , LoadFunc ipfs_load
-                          , Cancel& cancel
-                          , asio::yield_context yield)
+std::string from_path( const std::string& desc_path
+                     , LoadFunc ipfs_load
+                     , Cancel& cancel
+                     , asio::yield_context yield)
 {
     using namespace std;
 
     sys::error_code ec;
 
-    string desc_data = index.find(key, cancel, yield[ec]);
-
-    if (ec)
-        return or_throw<string>(yield, ec);
-
     string desc_str;
-    if (desc_data.find(zlib_prefix) == 0) {
+
+    // TODO: We don't need to search the whole string, just the first zlib_prefix.size()
+    // bytes.
+    if (desc_path.find(zlib_prefix) == 0) {
         // Retrieve descriptor from inline zlib-compressed data.
-        string desc_zlib(move(desc_data.substr(zlib_prefix.length())));
+        string desc_zlib(move(desc_path.substr(zlib_prefix.length())));
         desc_str = util::zlib_decompress(desc_zlib, ec);
-    } else if (desc_data.find(ipfs_prefix) == 0) {
+    } else if (desc_path.find(ipfs_prefix) == 0) {
         // Retrieve descriptor from IPFS link.
-        string desc_ipfs(move(desc_data.substr(ipfs_prefix.length())));
+        string desc_ipfs(move(desc_path.substr(ipfs_prefix.length())));
         desc_str = ipfs_load(desc_ipfs, cancel, yield[ec]);
     } else {
-        cerr << "WARNING: Invalid index entry for descriptor of key: " << key << endl;
         ec = asio::error::not_found;
     }
 

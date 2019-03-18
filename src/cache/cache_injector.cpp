@@ -181,11 +181,18 @@ string CacheInjector::get_descriptor( const string& key
                                     , asio::yield_context yield)
 {
     auto index = get_index(index_type);
+
     if (!index)
         return or_throw<string>(yield, asio::error::operation_not_supported);
 
-    return descriptor::get_from_index
-        ( key, *index, IPFS_LOAD_FUNC(*_ipfs_node), cancel, yield);
+    sys::error_code ec;
+
+    string desc_path = index->find(key, cancel, yield[ec]);
+
+    return_or_throw_on_error(yield, cancel, ec, string());
+
+    return descriptor::from_path
+        ( desc_path, IPFS_LOAD_FUNC(*_ipfs_node), cancel, yield);
 }
 
 pair<string, CacheEntry>
