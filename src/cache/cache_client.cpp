@@ -147,6 +147,13 @@ string CacheClient::get_descriptor( const string& key
 
     return_or_throw_on_error(yield, cancel, ec, string());
 
+    return descriptor_from_path(desc_path, cancel, yield);
+}
+
+string CacheClient::descriptor_from_path( const string& desc_path
+                                        , Cancel& cancel
+                                        , asio::yield_context yield)
+{
     return descriptor::from_path
         ( desc_path, IPFS_LOAD_FUNC(*_ipfs_node), cancel, yield);
 }

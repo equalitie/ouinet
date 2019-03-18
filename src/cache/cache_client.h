@@ -66,6 +66,10 @@ public:
                               , Cancel&
                               , asio::yield_context);
 
+    std::string descriptor_from_path( const std::string& desc_path
+                                    , Cancel&
+                                    , asio::yield_context);
+
     void set_ipns(std::string ipns);
 
     std::string ipfs_id() const;
