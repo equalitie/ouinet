@@ -409,44 +409,18 @@ string Bep44ClientIndex::insert_mapping( const string& ins_data
 {
     Cancel cancel(_cancel);
 
-    auto ins = bt::bencoding_decode(ins_data);
-    if (!ins || !ins->is_map()) {  // general format and type of data
-        return or_throw<string>(yield, asio::error::invalid_argument);
-    }
+    auto item = bt::MutableDataItem::bdecode(ins_data);
+
+    if (!item) return or_throw<string>(yield, asio::error::invalid_argument);
 
     sys::error_code ec;
-    string hex_key;
+    _updater->insert("no-debug-name", *item, cancel, yield[ec]);
 
-    bt::MutableDataItem item;
-    try {  // individual fields for mutable data item
-        auto ins_map = ins->as_map();
-        auto k = ins_map->at("k").as_string().value();
-        if (k.size() == 32) {  // or let verification fail
-            array<uint8_t, 32> ka;
-            copy(begin(k), end(k), begin(ka));
-            item.public_key = move(ka);
-        }
-        item.salt = ins_map->at("salt").as_string().value();
-        item.value = ins_map->at("v");
-        item.sequence_number = ins_map->at("seq").as_int().value();
-        auto sig = ins_map->at("sig").as_string().value();
-        if (sig.size() == item.signature.size())  // or let verification fail
-            copy(begin(sig), end(sig), begin(item.signature));
+    return_or_throw_on_error(yield, cancel, ec, string());
 
-        _updater->insert("?", item, cancel, yield[ec]);
+    auto key = util::sha1(item->public_key.serialize(), item->salt);
 
-        auto key = util::sha1(item.public_key.serialize(), item.salt);
-        hex_key = util::bytes::to_hex(key);
-    }
-    catch (const exception& e) {
-        ec = asio::error::invalid_argument;
-    }
-
-    if (!item.verify()) {  // mutable data item signature
-        ec = asio::error::invalid_argument;
-    }
-
-    return or_throw(yield, ec, move(hex_key));
+    return util::bytes::to_hex(key);
 }
 
 string Bep44InjectorIndex::insert( string key
@@ -486,18 +460,7 @@ string Bep44InjectorIndex::insert( string key
 
     LOG_DEBUG("BEP44 index: inserted key=", key);  // used by integration tests
 
-    // We follow the names used in the BEP44 document.
-    auto pk = item.public_key.serialize();
-    return bt::bencoding_encode(bt::BencodedMap{
-        // cas is not compulsory
-        // id depends on the publishing node
-        { "k"   , string(begin(pk), end(pk)) },
-        { "salt", item.salt },
-        { "seq" , item.sequence_number },
-        // token depends on the insertion
-        { "sig" , string(begin(item.signature), end(item.signature)) },
-        { "v"   , value }
-    });
+    return item.bencode();
 }
 
 
