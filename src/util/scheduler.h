@@ -56,6 +56,8 @@ public:
         using OnExit = std::function<void()>;
 
     public:
+        Slot() : scheduler(nullptr) {}
+
         Slot(const Slot&) = delete;
 
         Slot(Slot&& o) : scheduler(o.scheduler) {
@@ -74,7 +76,6 @@ public:
 
     private:
         friend class Scheduler;
-        Slot() {}
         Slot(Scheduler* s) : scheduler(s) {}
 
     private:
