@@ -308,7 +308,8 @@ public:
                         , unique_ptr<CacheInjector>& injector
                         , uuid_generator& genuuid
                         , Cancel& cancel)
-        : ios(ios)
+        : insert_id(to_string(genuuid()))
+        , ios(ios)
         , ssl_ctx(ssl_ctx)
         , injector(injector)
         , config(config)
@@ -337,7 +338,7 @@ public:
         };
     }
 
-    bool fetch(GenericStream& con, const Request& rq, Yield yield)
+    bool fetch(GenericStream& con, const Request& rq_, Yield yield)
     {
         Cancel cancel;
 
@@ -348,12 +349,43 @@ public:
             cancel();
         });
 
+        bool keep_alive;
         sys::error_code ec;
-        bool keep_alive = cc.fetch(con, rq, cancel, yield[ec]);
 
-        if (timed_out) ec = asio::error::timed_out;
+        if (config.seed_content()) {
+            keep_alive = cc.fetch(con, rq_, cancel, yield[ec]);
 
-        return or_throw(yield, ec, keep_alive);
+            if (timed_out) ec = asio::error::timed_out;
+            return or_throw(yield, ec, keep_alive);
+        }
+        else {
+            auto rs_ = fetch_fresh(rq_, cancel, yield[ec]);
+
+            if (timed_out) ec = asio::error::timed_out;
+            if (ec) return or_throw<bool>(yield, ec);
+
+            // Pop out Ouinet internal HTTP headers.
+            auto rq = util::to_cache_request(move(rq_));
+            auto rs = util::to_cache_response(move(rs_));
+
+            sys::error_code ec;
+            auto ins = injector->insert_content( insert_id, rq, rs
+                                               , config.cache_index_type()
+                                               , false
+                                               , yield[ec]);
+
+            if (timed_out) ec = asio::error::timed_out;
+            if (ec) return or_throw<bool>(yield, ec);
+
+            rs = add_re_insertion_header_field( move(rs)
+                                              , move(ins.index_ins_data));
+
+            keep_alive = rq_.keep_alive();
+
+            http::async_write(con, rs, yield[ec].tag("write_response"));
+
+            return or_throw(yield, ec, keep_alive);
+        }
     }
 
     Response fetch_fresh(const Request& rq_, Cancel& cancel, Yield yield) {
@@ -378,7 +410,7 @@ public:
 
         // Add an injection identifier header
         // to enable the client to track injection state.
-        ret.set(http_::response_injection_id_hdr, to_string(genuuid()));
+        ret.set(http_::response_injection_id_hdr, insert_id);
 
         if (ret.keep_alive() && rq_.keep_alive()) {
             origin_pools.insert_connection(rq_, move(connection));
@@ -438,14 +470,11 @@ private:
         bool sync = ( rq[http_::request_sync_injection_hdr]
                       == http_::request_sync_injection_true );
 
-        // Recover injection identifier.
-        auto id = rs[http_::response_injection_id_hdr].to_string();
-        assert(!id.empty());
-
         // This injection code logs errors but does not propagate them
         // (the `desc_data` field is set to the empty string).
         auto inject = [
-            rq, rs, id, index_type = config.cache_index_type(),
+            rq, rs, id = insert_id,
+            index_type = config.cache_index_type(),
             injector = injector.get()
         ] (boost::asio::yield_context yield) mutable
           -> CacheInjector::InsertionResult {
@@ -471,26 +500,24 @@ private:
         // Program or proceed to the real injection.
 
         if (!sync) {
-            LOG_DEBUG("Async inject: ", rq.target(), " ", id);
+            LOG_DEBUG("Async inject: ", rq.target(), " ", insert_id);
             asio::spawn(asio::yield_context(yield), inject);
             return rs;
         }
 
-        LOG_DEBUG("Sync inject: ", rq.target(), " ", id);
+        LOG_DEBUG("Sync inject: ", rq.target(), " ", insert_id);
 
         auto ins = inject(yield);
 
         if (ins.desc_data.length() == 0)
             return rs;  // insertion failed
 
-        return add_insertion_header_fields(ins, move(rs));
+        return add_insertion_header_fields(move(rs), move(ins));
     }
 
-    Response&& add_insertion_header_fields( const CacheInjector::InsertionResult& ins
-                                          , Response&& rs)
+    Response add_insertion_header_fields( Response&& rs
+                                        , CacheInjector::InsertionResult&& ins)
     {
-        auto index_type = config.cache_index_type();
-
         // Zlib-compress descriptor, Base64-encode and put in header.
         auto compressed_desc = util::zlib_compress(move(ins.desc_data));
         auto encoded_desc = util::base64_encode(move(compressed_desc));
@@ -500,17 +527,26 @@ private:
         // Add descriptor storage link as is.
         rs.set(http_::response_descriptor_link_hdr, move(ins.desc_link));
 
+        return add_re_insertion_header_field( move(rs)
+                                            , move(ins.index_ins_data));
+    }
+
+    // TODO: Better name for this function
+    Response add_re_insertion_header_field(Response&& rs, string&& index_ins_data)
+    {
+        auto index_type = config.cache_index_type();
+
         // Add Base64-encoded reinsertion data (if any).
-        if (ins.index_ins_data.length() > 0) {
-            auto encoded_insd = util::base64_encode(ins.index_ins_data);
+        if (index_ins_data.length() > 0) {
             rs.set( http_::response_insert_hdr_pfx + IndexName.at(index_type)
-                  , move(encoded_insd));
+                  , util::base64_encode(index_ins_data));
         }
 
         return move(rs);
     }
 
 private:
+    std::string insert_id;
     asio::io_service& ios;
     asio::ssl::context& ssl_ctx;
     unique_ptr<CacheInjector>& injector;
