@@ -159,7 +159,7 @@ public:
         , _lru(move(lru))
         , _has_entries(_ios)
     {
-        start();
+        asio::spawn(_ios, [&] (asio::yield_context yield) { loop(yield); });
     }
 
     void insert( const string& url
@@ -194,63 +194,62 @@ public:
     }
 
 private:
-    void start()
+
+    void loop(asio::yield_context yield)
     {
-        asio::spawn(_ios, [&] (asio::yield_context yield) {
-            Cancel cancel(_cancel);
+        Cancel cancel(_cancel);
 
-            while (true) {
-                auto i = pick_entry_to_update();
+        while (true) {
+            auto i = pick_entry_to_update();
 
-                if (i == _lru->end()) {
-                    _has_entries.wait(cancel, yield);
-                    if (cancel) return;
-                    continue;
-                }
-
-                auto old = i.value();
-
-                sys::error_code ec;
-
-                auto new_data = find(_dht
-                                    , old.data.public_key
-                                    , old.data.salt
-                                    , cancel
-                                    , yield[ec]);
-
+            if (i == _lru->end()) {
+                _has_entries.wait(cancel, yield);
                 if (cancel) return;
-
-                if (ec) {
-                    if (ec == asio::error::not_found) {
-                        _dht.mutable_put(old.data, cancel, yield[ec]);
-                    } else {
-                        // Some network error
-                        async_sleep(_ios, chrono::seconds(5), cancel, yield);
-                    }
-
-                    if (cancel) return;
-
-                    // Even if there was some network error we update the
-                    // `last_update` ts just to make sure we don't end up in an
-                    // infinite loop of updating the same item over and over.
-                    old.last_update = Clock::now();
-
-                    _lru->insert(i.key(), old, cancel, yield[ec]);
-                }
-                else {
-                    if (new_data.sequence_number > old.data.sequence_number)
-                    {
-                        // TODO: Store new data
-                        old.data = move(new_data);
-                        old.last_update = Clock::now() - chrono::minutes(15);
-
-                        _lru->insert(i.key(), move(old), cancel, yield[ec]);
-                    }
-                }
-
-                if (cancel) return;
+                continue;
             }
-        });
+
+            auto old = i.value();
+
+            sys::error_code ec;
+
+            auto new_data = find(_dht
+                                , old.data.public_key
+                                , old.data.salt
+                                , cancel
+                                , yield[ec]);
+
+            if (cancel) return;
+
+            if (ec) {
+                if (ec == asio::error::not_found) {
+                    _dht.mutable_put(old.data, cancel, yield[ec]);
+                } else {
+                    // Some network error
+                    async_sleep(_ios, chrono::seconds(5), cancel, yield);
+                }
+
+                if (cancel) return;
+
+                // Even if there was some network error we update the
+                // `last_update` ts just to make sure we don't end up in an
+                // infinite loop of updating the same item over and over.
+                old.last_update = Clock::now();
+
+                _lru->insert(i.key(), old, cancel, yield[ec]);
+            }
+            else {
+                if (new_data.sequence_number > old.data.sequence_number)
+                {
+                    // TODO: Store new data
+                    old.data = move(new_data);
+                    old.last_update = Clock::now() - chrono::minutes(15);
+
+                    _lru->insert(i.key(), move(old), cancel, yield[ec]);
+                }
+            }
+
+            if (cancel) return;
+        }
     }
 
     Lru::iterator pick_entry_to_update() {
