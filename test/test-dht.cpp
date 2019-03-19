@@ -1,6 +1,7 @@
 #include <bittorrent/dht.h>
 
 #include <iostream>
+#include <chrono>
 
 #include <sys/types.h>
 #include <ifaddrs.h>
@@ -185,6 +186,8 @@ int main(int argc, const char** argv)
     dht.set_interfaces(ifaddrs);
 
     asio::spawn(ios, [&] (asio::yield_context yield) {
+        using namespace std::chrono;
+
         sys::error_code ec;
         asio::steady_timer timer(ios);
 
@@ -202,6 +205,8 @@ int main(int argc, const char** argv)
         cerr << "Start" << endl;
 
         Cancel cancel;
+
+        steady_clock::time_point start = steady_clock::now();
 
         if (get_cmd) {
             auto salt = ouinet::util::sha1(get_cmd->dht_key);
@@ -248,7 +253,9 @@ int main(int argc, const char** argv)
             }
         }
 
-        cerr << "End" << endl;
+        auto secs = duration_cast<seconds>(steady_clock::now() - start).count();
+
+        cerr << "End. Took " << secs << " seconds" << endl;
     });
 
     ios.run();
