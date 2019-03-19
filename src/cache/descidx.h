@@ -4,6 +4,7 @@
 
 #include <iostream>
 #include <string>
+#include <boost/utility/string_view.hpp>
 
 #include "../namespaces.h"
 #include "../or_throw.h"
@@ -23,7 +24,7 @@ static const std::string zlib_prefix = "/zlib/";
 // be one additional IO call to retrieve the descriptor from IPFS.
 template <class LoadFunc>
 inline
-std::string from_path( const std::string& desc_path
+std::string from_path( boost::string_view desc_path
                      , LoadFunc ipfs_load
                      , Cancel& cancel
                      , asio::yield_context yield)
@@ -34,16 +35,15 @@ std::string from_path( const std::string& desc_path
 
     string desc_str;
 
-    // TODO: We don't need to search the whole string, just the first zlib_prefix.size()
-    // bytes.
-    if (desc_path.find(zlib_prefix) == 0) {
+    if (desc_path.substr(0, zlib_prefix.size()) == zlib_prefix) {
         // Retrieve descriptor from inline zlib-compressed data.
-        string desc_zlib(move(desc_path.substr(zlib_prefix.length())));
+        string desc_zlib(desc_path.substr(zlib_prefix.length()));
         desc_str = util::zlib_decompress(desc_zlib, ec);
-    } else if (desc_path.find(ipfs_prefix) == 0) {
+    } else if (desc_path.substr(0, ipfs_prefix.size()) == ipfs_prefix) {
         // Retrieve descriptor from IPFS link.
-        string desc_ipfs(move(desc_path.substr(ipfs_prefix.length())));
+        string desc_ipfs(desc_path.substr(ipfs_prefix.length()));
         desc_str = ipfs_load(desc_ipfs, cancel, yield[ec]);
+        assert(!cancel || ec == asio::error::operation_aborted);
     } else {
         ec = asio::error::not_found;
     }
