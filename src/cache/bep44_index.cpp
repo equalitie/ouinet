@@ -501,9 +501,11 @@ boost::asio::io_service& Bep44InjectorIndex::get_io_service()
 
 Bep44ClientIndex::~Bep44ClientIndex()
 {
+    _cancel();
 }
 
 
 Bep44InjectorIndex::~Bep44InjectorIndex()
 {
+    _cancel();
 }
