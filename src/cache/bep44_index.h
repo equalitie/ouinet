@@ -45,7 +45,12 @@ public:
                     , asio::yield_context) override;
 
     std::string insert_mapping( const std::string&
+                              , Cancel&
                               , asio::yield_context) override;
+
+    std::string insert_mapping( bittorrent::MutableDataItem
+                              , Cancel&
+                              , asio::yield_context);
 
     boost::asio::io_service& get_io_service();
 

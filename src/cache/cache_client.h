@@ -48,7 +48,9 @@ public:
     // The parsing of the given data depends on the index.
     // Return a printable representation of the key resulting from insertion.
     std::string insert_mapping( const std::string&
-                              , IndexType, boost::asio::yield_context);
+                              , IndexType
+                              , Cancel&
+                              , boost::asio::yield_context);
 
     // Find the content previously stored by the injector under `key`.
     // The descriptor identifier and cached content are returned.

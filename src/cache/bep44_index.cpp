@@ -419,23 +419,38 @@ string Bep44InjectorIndex::find( const string& key
 
 //--------------------------------------------------------------------
 string Bep44ClientIndex::insert_mapping( const string& ins_data
+                                       , Cancel& cancel
                                        , asio::yield_context yield)
 {
-    Cancel cancel(_cancel);
-
     auto item = bt::MutableDataItem::bdecode(ins_data);
 
     if (!item) return or_throw<string>(yield, asio::error::invalid_argument);
 
-    sys::error_code ec;
-    _updater->insert("no-debug-name", *item, cancel, yield[ec]);
+    return insert_mapping(move(*item), cancel, yield);
+}
 
+
+string Bep44ClientIndex::insert_mapping( bt::MutableDataItem item
+                                       , Cancel& cancel_
+                                       , asio::yield_context yield)
+{
+    Cancel cancel(_cancel);
+    auto slot = cancel_.connect([&] { cancel(); });
+
+    auto pk = item.public_key.serialize();
+    auto salt = item.salt;
+
+    sys::error_code ec;
+
+    _bt_dht.mutable_put(item, cancel, yield[ec]);
     return_or_throw_on_error(yield, cancel, ec, string());
 
-    auto key = util::sha1(item->public_key.serialize(), item->salt);
+    // Ignore the error here
+    _updater->insert("no-debug-name", move(item), cancel, yield[ec]);
 
-    return util::bytes::to_hex(key);
+    return util::bytes::to_hex(util::sha1(pk, salt));
 }
+
 
 bt::MutableDataItem
 Bep44InjectorIndex::get_mutable_data_item( string key

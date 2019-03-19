@@ -722,7 +722,9 @@ public:
         }
 
         sys::error_code ec;
-        cache.insert_mapping(bep44_push_msg, IndexType::bep44, yield[ec]);
+        cache.insert_mapping(bep44_push_msg, IndexType::bep44, cancel, yield[ec]);
+
+        return_or_throw_on_error(yield, cancel, ec);
 
         auto desc_path = opt_item->value.as_string();
         assert(desc_path);

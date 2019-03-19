@@ -23,7 +23,9 @@ public:
     // Insert a signed key->descriptor mapping.
     // The parsing of the given data depends on the index.
     // Return a printable representation of the key resulting from insertion.
-    virtual std::string insert_mapping(const std::string&, asio::yield_context yield) {
+    virtual std::string insert_mapping( const std::string&
+                                      , Cancel&
+                                      , asio::yield_context yield) {
         return or_throw<std::string>(yield, asio::error::operation_not_supported);
     };
 };

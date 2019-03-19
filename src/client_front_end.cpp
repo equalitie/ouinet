@@ -270,7 +270,13 @@ void ClientFrontEnd::handle_insert_bep44( const Request& req, Response& res, str
         err = "sorry, request expectations are not supported";
     } else {  // perform the insertion
         sys::error_code ec;
-        key = cache_client->insert_mapping(req.body(), IndexType::bep44, yield[ec]);
+
+        Cancel cancel;
+        key = cache_client->insert_mapping( req.body()
+                                          , IndexType::bep44
+                                          , cancel
+                                          , yield[ec]);
+
         if (ec == asio::error::operation_not_supported) {
             result = http::status::service_unavailable;
             err = "BEP44 index is not enabled";
