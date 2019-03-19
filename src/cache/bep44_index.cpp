@@ -6,6 +6,7 @@
 #include "../logger.h"
 #include "../util/lru_cache.h"
 #include "../util/persistent_lru_cache.h"
+#include "../util/condition_variable.h"
 #include "../bittorrent/bencoding.h"
 #include "../bittorrent/dht.h"
 #include "../or_throw.h"
@@ -156,23 +157,36 @@ public:
         : _ios(dht.get_io_service())
         , _dht(dht)
         , _lru(move(lru))
+        , _has_entries(_ios)
     {
         start();
     }
 
     void insert( const string& url
                , bt::MutableDataItem data
-               , Cancel& cancel
+               , Cancel& cancel_
                , asio::yield_context yield)
     {
-        auto slot = _cancel.connect([&] { cancel(); });
+        Cancel cancel;
+        auto slot1 = cancel_.connect([&] { cancel(); });
+        auto slot2 = _cancel.connect([&] { cancel(); });
 
         auto key = data.salt;
+
+        sys::error_code ec;
+
         _lru->insert( std::move(key)
                     , Entry{ url
                            , Clock::now() - chrono::minutes(15)
                            , std::move(data)}
-                    , cancel, yield);
+                    , cancel
+                    , yield[ec]);
+
+        if (!slot2) {
+            _has_entries.notify();
+        }
+
+        return or_throw(yield, ec);
     }
 
     ~Bep44EntryUpdater() {
@@ -189,7 +203,7 @@ private:
                 auto i = pick_entry_to_update();
 
                 if (i == _lru->end()) {
-                    async_sleep(_ios, chrono::minutes(1), cancel, yield);
+                    _has_entries.wait(cancel, yield);
                     if (cancel) return;
                     continue;
                 }
@@ -267,6 +281,7 @@ private:
     bt::MainlineDht& _dht;
     LruPtr _lru;
     Cancel _cancel;
+    ConditionVariable _has_entries;
 };
 
 
