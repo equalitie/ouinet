@@ -899,8 +899,12 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
 
         BencodedMap reply;
 
-        std::vector<dht::NodeContact> contacts
-            = _routing_table->find_closest_routing_nodes(target_id, RoutingBucket::BUCKET_SIZE);
+        std::vector<dht::NodeContact> contacts;
+
+        if (_routing_table) {
+            contacts = _routing_table->find_closest_routing_nodes(target_id, RoutingBucket::BUCKET_SIZE);
+        }
+
         std::string nodes;
         if (!contacts.empty() && contacts[0].id == target_id) {
             nodes += contacts[0].id.to_bytestring();
@@ -933,8 +937,12 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
 
         BencodedMap reply;
 
-        std::vector<dht::NodeContact> contacts
-            = _routing_table->find_closest_routing_nodes(infohash, RoutingBucket::BUCKET_SIZE);
+        std::vector<dht::NodeContact> contacts;
+
+        if (_routing_table) {
+            contacts = _routing_table->find_closest_routing_nodes(infohash, RoutingBucket::BUCKET_SIZE);
+        }
+
         std::string nodes;
         for (auto& contact : contacts) {
             nodes += contact.id.to_bytestring();
