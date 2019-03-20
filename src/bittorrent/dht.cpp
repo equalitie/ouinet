@@ -17,6 +17,12 @@
 #include <boost/asio/steady_timer.hpp>
 //#include <boost/optional/optional_io.hpp>
 
+#include <boost/accumulators/accumulators.hpp>
+#include <boost/accumulators/statistics/stats.hpp>
+#include <boost/accumulators/statistics/rolling_mean.hpp>
+#include <boost/accumulators/statistics/rolling_variance.hpp>
+#include <boost/accumulators/statistics/rolling_count.hpp>
+
 #include <chrono>
 #include <set>
 
@@ -28,8 +34,119 @@ namespace bittorrent {
 using std::cerr; using std::endl;
 using dht::NodeContact;
 using Candidates = std::vector<NodeContact>;
+namespace accum = boost::accumulators;
+using Clock = std::chrono::steady_clock;
 
 #define DEBUG_SHOW_MESSAGES 0
+
+float to_seconds(Clock::duration d) {
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(d).count() / 1000.f;
+};
+
+class Stat {
+private:
+    using AccumSet = accum::accumulator_set< float
+                                           , accum::stats< accum::tag::rolling_mean
+                                                         , accum::tag::rolling_variance
+                                                         , accum::tag::rolling_count>>;
+
+public:
+    using Duration = std::chrono::steady_clock::duration;
+
+public:
+    Stat()
+        : _accum_set(accum::tag::rolling_window::window_size = 10)
+    {}
+
+    void add_reply_time(Duration d)
+    {
+        using namespace std::chrono;
+        float seconds = duration_cast<milliseconds>(d).count() / 1000.f;
+        _accum_set(seconds);
+    }
+
+    Duration max_reply_wait_time() const {
+        //// 2 Should cover ~97.6% of all responses
+        //// 3 Should cover ~99.9% of all responses
+        auto ov = mean_plus_deviation(3);
+        if (!ov) return default_max_reply_wait_time();
+
+        return std::min(*ov, default_max_reply_wait_time());
+    }
+
+    void on_timed_out() {
+        auto ov = mean_plus_deviation(0.5);
+        if (!ov) return;
+        add_reply_time(*ov);
+    }
+
+    static
+    Duration default_max_reply_wait_time() {
+        return std::chrono::seconds(5);
+    }
+
+    static
+    Duration seconds_to_duration(float secs) {
+        using namespace std::chrono;
+        return milliseconds(int64_t(secs*1000.f));
+    }
+
+private:
+    boost::optional<Duration> mean_plus_deviation(float deviation_multiply) const {
+        auto count = accum::rolling_count(_accum_set);
+
+        if (count < 5) return boost::none;
+
+        auto mean     = accum::rolling_mean(_accum_set);
+        auto variance = accum::rolling_variance(_accum_set);
+
+        if (variance < 0) return boost::none;
+
+        auto deviation = sqrt(variance);
+
+        return seconds_to_duration(mean + deviation_multiply*deviation);
+    }
+
+private:
+    AccumSet _accum_set;
+};
+
+class dht::DhtNode::Stats {
+public:
+    using Duration = Stat::Duration;
+
+public:
+
+    void add_reply_time(boost::string_view msg_type, Duration d)
+    {
+        find_or_create(msg_type).add_reply_time(d);
+    }
+
+    void on_timed_out(const std::string& msg_type)
+    {
+        find_or_create(msg_type).on_timed_out();
+    }
+
+    Duration max_reply_wait_time(const std::string& msg_type)
+    {
+        return find_or_create(msg_type).max_reply_wait_time();
+    }
+
+private:
+    Stat& find_or_create(boost::string_view msg_type) {
+        auto i = _per_msg_stat.find(msg_type);
+        if (i == _per_msg_stat.end()) {
+            auto p = _per_msg_stat.insert(std::make_pair( msg_type.to_string()
+                                                        , Stat()));
+            return p.first->second;
+        }
+        return i->second;
+    }
+
+private:
+    std::map<std::string, Stat, std::less<>> _per_msg_stat;
+};
 
 std::string dht::NodeContact::to_string() const
 {
@@ -40,7 +157,8 @@ std::string dht::NodeContact::to_string() const
 dht::DhtNode::DhtNode(asio::io_service& ios, ip::address interface_address):
     _ios(ios),
     _interface_address(interface_address),
-    _ready(false)
+    _ready(false),
+    _stats(new Stats())
 {
 }
 
@@ -703,10 +821,13 @@ BencodedMap dht::DhtNode::send_query_await_reply(
     Contact dst,
     const std::string& query_type,
     const BencodedMap& query_arguments,
-    asio::steady_timer::duration timeout,
     asio::yield_context yield,
     Signal<void()>& cancel_signal
 ) {
+    auto timeout = _stats->max_reply_wait_time(query_type);
+
+    auto start = Clock::now();
+
     BencodedMap response; // Return value
 
     ConditionVariable reply_and_timeout_condition(_ios);
@@ -786,6 +907,13 @@ BencodedMap dht::DhtNode::send_query_await_reply(
 
     if (cancelled || *first_error_code == asio::error::operation_aborted) {
         return or_throw<BencodedMap>(yield, asio::error::operation_aborted);
+    }
+
+    if (!*first_error_code) {
+        _stats->add_reply_time(query_type, Clock::now() - start);
+    }
+    else if (*first_error_code == asio::error::timed_out) {
+        _stats->on_timed_out(query_type);
     }
 
     if (dst.id) {
@@ -1333,7 +1461,6 @@ dht::DhtNode::bootstrap_single( std::string bootstrap_domain
         { bootstrap_ep, boost::none },
         "ping",
         initial_ping_message,
-        std::chrono::seconds(15),
         yield[ec],
         _terminate_signal
     );
@@ -1547,7 +1674,6 @@ BencodedMap dht::DhtNode::send_ping(
 	contact,
 	"ping",
 	BencodedMap{{ "id", _node_id.to_bytestring() }},
-	std::chrono::seconds(15),
 	yield[ec],
 	cancel_signal
     );
@@ -1582,14 +1708,13 @@ void dht::DhtNode::send_write_query(
     /*
      * Retry the write message a couple of times.
      */
-    const int TRIES = 5;
+    const int TRIES = 3;
     sys::error_code ec;
     for (int i = 0; i < TRIES; i++) {
         BencodedMap write_reply = send_query_await_reply(
             { destination, destination_id },
             query_type,
             query_arguments,
-            std::chrono::seconds(15),
             yield[ec],
             cancel_signal
         );
@@ -1624,7 +1749,6 @@ bool dht::DhtNode::query_find_node(
             { "id", _node_id.to_bytestring() },
             { "target", target_id.to_bytestring() }
         },
-        std::chrono::seconds(15),
         yield[ec],
         cancel_signal
     );
@@ -1672,7 +1796,6 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_peers(
             { "id", _node_id.to_bytestring() },
             { "info_hash", infohash.to_bytestring() }
         },
-        std::chrono::seconds(15),
         yield[ec],
         cancel_signal
     );
@@ -1738,7 +1861,6 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data(
             { "id", _node_id.to_bytestring() },
             { "target", key.to_bytestring() }
         },
-        std::chrono::seconds(15),
         yield[ec],
         cancel_signal
     );

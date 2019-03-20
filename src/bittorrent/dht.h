@@ -241,7 +241,6 @@ class DhtNode {
         Contact,
         const std::string& query_type,
         const BencodedMap& query_arguments,
-        asio::steady_timer::duration timeout,
         asio::yield_context yield,
         Signal<void()>& cancel_signal
     );
@@ -335,6 +334,9 @@ class DhtNode {
     std::map<std::string, ActiveRequest> _active_requests;
 
     std::vector<udp::endpoint> _bootstrap_endpoints;
+
+    struct Stats;
+    std::unique_ptr<Stats> _stats;
 };
 
 struct DhtPublications
