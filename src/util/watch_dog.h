@@ -42,7 +42,7 @@ public:
     WatchDog(asio::io_service& ios, Duration d, OnTimeout on_timeout)
     {
         asio::spawn(ios, [self_ = this, &ios, d, on_timeout = std::move(on_timeout)]
-                         (asio::yield_context yield) {
+                         (asio::yield_context yield) mutable {
             Clock::time_point deadline = Clock::now() + d;
             WatchDog* self = self_;
 
