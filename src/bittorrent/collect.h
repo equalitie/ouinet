@@ -1,5 +1,10 @@
 #pragma once
 
+#include <iostream>
+#include "../util/scheduler.h"
+#include "../util/watch_dog.h"
+#include "../util/async_queue.h"
+
 namespace ouinet { namespace bittorrent {
 
 template<class CandidateSet, class Evaluate>
@@ -25,7 +30,7 @@ void collect(
         candidates.insert(candidates.end(), { c, unused });
     }
 
-    const int THREADS = 64;
+    const unsigned THREADS = 64;
     WaitCondition all_done(ios);
     ConditionVariable candidate_available(ios);
 
@@ -33,7 +38,7 @@ void collect(
         candidate_available.notify();
     });
 
-    for (int thread = 0; thread < THREADS; thread++) {
+    for (unsigned thread = 0; thread < THREADS; thread++) {
         asio::spawn(ios, [&, lock = all_done.lock()] (asio::yield_context yield) {
             while (true) {
                 if (cancelled) {
@@ -85,6 +90,167 @@ void collect(
     all_done.wait(yield);
 
     if (cancelled) {
+        or_throw(yield, asio::error::operation_aborted);
+    }
+}
+
+template<class CandidateSet, class Evaluate>
+void collect2(
+    asio::io_service& ios,
+    CandidateSet candidates_,
+    Evaluate&& evaluate,
+    asio::yield_context yield,
+    Signal<void()>& cancel_signal
+) {
+    using namespace std;
+
+    enum Progress { unused, used };
+
+    using Candidates = std::map< Contact
+                               , Progress
+                               , typename CandidateSet::key_compare>;
+
+    auto comp = candidates_.key_comp();
+    Candidates candidates(comp);
+
+    for (auto& c : candidates_) {
+        candidates.insert(candidates.end(), { c, unused });
+    }
+
+    WaitCondition all_done(ios);
+    util::AsyncQueue<dht::NodeContact> new_candidates(ios);
+
+    Scheduler scheduler(ios, 64);
+
+    auto pick_candidate = [&] {
+        // Pick the closest untried candidate...
+        for (auto it = candidates.begin(); it != candidates.end(); ++it) {
+            if (it->second != unused) continue;
+            it->second = used;
+            return it;
+        }
+        return candidates.end();
+    };
+
+    using Clock = chrono::steady_clock;
+
+    std::set<size_t> active_jobs;
+    size_t next_job_id = 0;
+
+    // Default timeout per each `evaluate` call.
+    auto default_timeout = std::chrono::seconds(30);
+
+    Cancel local_cancel(cancel_signal);
+
+    auto start = Clock::now();
+
+#if SPEED_DEBUG
+    auto secs = [start] (auto start) {
+        using namespace std::chrono;
+        return duration_cast<milliseconds>(steady_clock::now() - start).count() / 1000.f;
+    };
+#endif
+
+    while (true) {
+        sys::error_code ec;
+
+#if SPEED_DEBUG
+        cerr << secs(start) << " Start waiting for job (current count:" << scheduler.slot_count() << ")\n";
+#endif
+        auto slot = scheduler.wait_for_slot(cancel_signal, yield[ec]);
+#if SPEED_DEBUG
+        cerr << secs(start) << " Done waiting for job (job count:" << scheduler.slot_count() << ")\n";
+#endif
+
+        if (ec) break;
+
+        auto candidate_i = pick_candidate();
+
+        while (candidate_i == candidates.end()) {
+            sys::error_code ec2;
+
+            if (active_jobs.empty() && new_candidates.size() == 0) {
+                break;
+            }
+#if SPEED_DEBUG
+            cerr << secs(start) << " Start waiting for candidate (active jobs:" << active_jobs.size() << " new_candidates:" << new_candidates.size() << ")\n";
+#endif
+            auto new_candidate = new_candidates.async_pop(cancel_signal, yield[ec2]);
+
+#if SPEED_DEBUG
+            cerr << secs(start) << " End waiting for candidate " << ec2.message() << " " << new_candidate.id << "\n";
+#endif
+
+            if (ec2 == asio::error::eof) {
+                continue;
+            }
+
+            if (ec2 || cancel_signal) break;
+
+            if (!candidates.insert({ new_candidate, unused }).second) {
+                continue;
+            }
+
+
+            candidate_i = pick_candidate();
+        }
+
+        if (candidate_i == candidates.end()) break;
+
+        auto job_id = next_job_id++;
+        active_jobs.insert(job_id);
+
+        asio::spawn(ios, [ &
+                         , candidate = candidate_i->first
+                         , job_id
+                         , lock = all_done.lock()
+                         , slot = std::move(slot)
+                         ] (asio::yield_context yield) mutable {
+            sys::error_code ec;
+
+            bool on_finish_called = false;
+
+            auto on_finish = [&] () mutable {
+                if (on_finish_called) return;
+                on_finish_called = true;
+
+
+                active_jobs.erase(job_id);
+                slot = Scheduler::Slot();
+
+                // Make sure we don't get stuck waiting for candidates when
+                // there is no more work and this candidate has not returned
+                // any new ones.
+                new_candidates.async_push( dht::NodeContact()
+                                         , asio::error::eof
+                                         , local_cancel
+                                         , yield);
+            };
+
+            WatchDog wd(ios, default_timeout, [&] () mutable {
+#if SPEED_DEBUG
+                cerr << secs(start) << " dismiss " << candidate << "\n";
+#endif
+                on_finish();
+            });
+
+            evaluate( start, candidate
+                    , wd
+                    , new_candidates
+                    , yield[ec]
+                    , local_cancel);
+
+            on_finish();
+        });
+    }
+
+    local_cancel();
+#if SPEED_DEBUG
+    cerr << ">>>>>>>>>>>>>>>>>>> DONE <<<<<<<<<<<<<<<<<<<<\n";
+#endif
+    all_done.wait(yield);
+
+    if (cancel_signal) {
         or_throw(yield, asio::error::operation_aborted);
     }
 }

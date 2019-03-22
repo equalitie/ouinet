@@ -1,3 +1,7 @@
+
+// Temporary, shall be removed once I'm done with this branch
+#define SPEED_DEBUG 0
+
 #include "dht.h"
 #include "udp_multiplexer.h"
 #include "code.h"
@@ -11,11 +15,12 @@
 #include "../util/crypto.h"
 #include "../util/success_condition.h"
 #include "../util/wait_condition.h"
-#include "../util/watch_dog.h"
 
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/steady_timer.hpp>
-//#include <boost/optional/optional_io.hpp>
+#if SPEED_DEBUG
+#   include <boost/optional/optional_io.hpp>
+#endif
 
 #include <boost/accumulators/accumulators.hpp>
 #include <boost/accumulators/statistics/stats.hpp>
@@ -39,10 +44,17 @@ using Clock = std::chrono::steady_clock;
 
 #define DEBUG_SHOW_MESSAGES 0
 
+#if SPEED_DEBUG
 float to_seconds(Clock::duration d) {
     using namespace std::chrono;
     return duration_cast<milliseconds>(d).count() / 1000.f;
 };
+
+float secs(auto start) {
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(steady_clock::now() - start).count() / 1000.f;
+};
+#endif
 
 class Stat {
 private:
@@ -75,15 +87,9 @@ public:
         return std::min(*ov, default_max_reply_wait_time());
     }
 
-    void on_timed_out() {
-        auto ov = mean_plus_deviation(0.5);
-        if (!ov) return;
-        add_reply_time(*ov);
-    }
-
     static
     Duration default_max_reply_wait_time() {
-        return std::chrono::seconds(5);
+        return std::chrono::seconds(3);
     }
 
     static
@@ -121,11 +127,6 @@ public:
     void add_reply_time(boost::string_view msg_type, Duration d)
     {
         find_or_create(msg_type).add_reply_time(d);
-    }
-
-    void on_timed_out(const std::string& msg_type)
-    {
-        find_or_create(msg_type).on_timed_out();
     }
 
     Duration max_reply_wait_time(const std::string& msg_type)
@@ -551,6 +552,7 @@ NodeID dht::DhtNode::data_put_mutable(
     auto write_to_node = [&] ( const NodeID& id
                              , udp::endpoint ep
                              , const std::string& put_token
+                             , WatchDog& wd
                              , Cancel& cancel
                              , asio::yield_context yield) -> bool {
             BencodedMap put_message {
@@ -566,6 +568,8 @@ NodeID dht::DhtNode::data_put_mutable(
                 put_message["salt"] = data.salt;
             }
 
+            wd.expires_after(_stats->max_reply_wait_time("put"));
+
             sys::error_code ec;
             send_write_query(ep, id, "put", put_message, yield[ec], cancel);
 
@@ -574,58 +578,107 @@ NodeID dht::DhtNode::data_put_mutable(
             return !ec ? true : false;
     };
 
-    collect(target_id, [&](
+    using namespace std::chrono;
+
+#if SPEED_DEBUG
+    cerr << secs(Clock::now()) << " start " << target_id << "\n";
+    cerr << std::setprecision(3);
+    unsigned threads = 0;
+#endif
+
+    std::set<udp::endpoint> blacklist;
+
+    collect2(target_id, [&](
+        auto start,
         const Contact& candidate,
+        WatchDog& wd,
+        util::AsyncQueue<NodeContact>& closer_nodes,
         asio::yield_context yield,
         Signal<void()>& cancel
-    ) -> boost::optional<Candidates> {
+    ) {
         if (!candidate.id && responsible_nodes.full()) {
-            return boost::none;
+            return;
         }
 
         if (candidate.id && !responsible_nodes.would_insert(*candidate.id)) {
-            return boost::none;
+            return;
         }
 
-        std::vector<NodeContact> closer_nodes;
+        if (blacklist.count(candidate.endpoint)) {
+            return;
+        }
 
-        boost::optional<BencodedMap> response_ = query_get_data(
+#if SPEED_DEBUG
+        auto ss = secs(start);
+        threads++;
+        cerr << ss << " query_get_data 🍎 >>> " << candidate.id << " "
+             << candidate.endpoint << " threads:" << threads
+             << " timeout in: "
+             << to_seconds(_stats->max_reply_wait_time("get"))<< "s\n";
+#endif
+        boost::optional<BencodedMap> response_ = query_get_data2(
             target_id,
             candidate,
             closer_nodes,
+            wd,
             yield,
             cancel
         );
 
-        if (!response_) return closer_nodes;
+#if SPEED_DEBUG
+        auto sss = secs(start);
+        cerr << sss << " query_get_data send 🍏 <<< " << candidate.id
+             << " " << candidate.endpoint << " "
+             << (response_ ? "😊" : "😡") << " " << (sss - ss) << "s\n";
+
+        auto on_exit = defer([&] {
+                cerr << secs(start) << " query_get_data done >>> " << candidate.id << "\n";
+                threads--;
+            });
+#endif
+
+        if (!response_) {
+            blacklist.insert(candidate.endpoint);
+            return;
+        }
+
         BencodedMap& response = *response_;
 
         boost::optional<std::string> put_token = response["token"].as_string();
         if (!put_token) {
-            return closer_nodes;
+            return;
         }
 
         if (candidate.id) {
-            if (responsible_nodes.would_insert(*candidate.id)
-                    && write_to_node( *candidate.id
+            if (responsible_nodes.would_insert(*candidate.id)) {
+                if (write_to_node( *candidate.id
                                     , candidate.endpoint
                                     , *put_token
+                                    , wd
                                     , cancel
                                     , yield)) {
-                responsible_nodes.insert({*candidate.id, boost::none});
+                    responsible_nodes.insert({*candidate.id, boost::none});
+
+#if SPEED_DEBUG
+                    auto ssss = secs(start);
+                    cerr << ssss << " done 🐂 <<< " << candidate.id
+                         << " " << candidate.endpoint << " "
+                         << (ssss - sss) << "s " << (ssss - ss) << "s\n";
+#endif
+                }
             }
         }
 
         if (response["k"] != util::bytes::to_string(data.public_key.serialize())) {
-            return closer_nodes;
+            return;
         }
         boost::optional<int64_t> existing_sequence_number = response["seq"].as_int();
         if (!existing_sequence_number) {
-            return closer_nodes;
+            return;
         }
         boost::optional<std::string> existing_signature = response["sig"].as_string();
         if (!existing_signature || existing_signature->size() != 64) {
-            return closer_nodes;
+            return;
         }
 
         MutableDataItem item {
@@ -644,13 +697,21 @@ NodeID dht::DhtNode::data_put_mutable(
                 write_to_node( *candidate.id
                              , candidate.endpoint
                              , *put_token
+                             , wd
                              , cancel
                              , yield);
             }
         }
 
-        return closer_nodes;
+        return;
     }, yield[ec], local_cancel);
+
+#if SPEED_DEBUG
+    cerr << secs(Clock::now()) << " end " << responsible_nodes.size() << "\n";
+    for (auto r : responsible_nodes) {
+        cerr << "           " << r.first << "\n";
+    }
+#endif
 
     if (cancel_signal) {
         ec = asio::error::operation_aborted;
@@ -824,7 +885,8 @@ BencodedMap dht::DhtNode::send_query_await_reply(
     asio::yield_context yield,
     Signal<void()>& cancel_signal
 ) {
-    auto timeout = _stats->max_reply_wait_time(query_type);
+    //auto timeout = _stats->max_reply_wait_time(query_type);
+    auto timeout = std::chrono::seconds(15);
 
     auto start = Clock::now();
 
@@ -911,9 +973,6 @@ BencodedMap dht::DhtNode::send_query_await_reply(
 
     if (!*first_error_code) {
         _stats->add_reply_time(query_type, Clock::now() - start);
-    }
-    else if (*first_error_code == asio::error::timed_out) {
-        _stats->on_timed_out(query_type);
     }
 
     if (dst.id) {
@@ -1617,6 +1676,64 @@ void dht::DhtNode::collect(
     }
 }
 
+template<class Evaluate>
+void dht::DhtNode::collect2(
+    const NodeID& target_id,
+    Evaluate&& evaluate,
+    asio::yield_context yield,
+    Signal<void()>& cancel_signal
+) {
+    if (!_routing_table) {
+        // We're not yet bootstrapped.
+        return or_throw(yield, asio::error::try_again);
+    }
+
+    // (Note: can't use lambda because we need default constructibility now)
+    struct Compare {
+        NodeID target_id;
+
+        // Bootstrap nodes (those with id == boost::none) shall be ordered
+        // last.
+        bool operator()(const Contact& l, const Contact& r) const {
+            if (!l.id && !r.id) return l.endpoint < r.endpoint;
+            if ( l.id && !r.id) return true;
+            if (!l.id &&  r.id) return false;
+            return target_id.closer_to(*l.id, *r.id);
+        }
+    };
+
+    using CandidateSet = std::set<Contact, Compare>;
+
+    CandidateSet seed_candidates(Compare{target_id});
+
+    std::set<udp::endpoint> added_endpoints;
+
+    auto table_contacts =
+        _routing_table->find_closest_routing_nodes(target_id, RESPONSIBLE_TRACKERS_PER_SWARM);
+
+    for (auto& contact : table_contacts) {
+        seed_candidates.insert(contact);
+        added_endpoints.insert(contact.endpoint);
+    }
+
+    for (auto ep : _bootstrap_endpoints) {
+        if (added_endpoints.count(ep) != 0) continue;
+        seed_candidates.insert({ ep, boost::none });
+    }
+
+    auto terminated = _terminate_signal.connect([]{});
+    ::ouinet::bittorrent::collect2(
+        _ios,
+        std::move(seed_candidates),
+        std::forward<Evaluate>(evaluate),
+        yield,
+        cancel_signal
+    );
+    if (terminated) {
+        or_throw(yield, asio::error::operation_aborted);
+    }
+}
+
 std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
     NodeID target_id,
     asio::yield_context yield,
@@ -1779,6 +1896,54 @@ bool dht::DhtNode::query_find_node(
     return !closer_nodes.empty();
 }
 
+bool dht::DhtNode::query_find_node2(
+    NodeID target_id,
+    Contact node,
+    util::AsyncQueue<NodeContact>& closer_nodes,
+    asio::yield_context yield,
+    Signal<void()>& cancel_signal
+) {
+    sys::error_code ec;
+
+    BencodedMap find_node_reply = send_query_await_reply(
+        node,
+        "find_node",
+        BencodedMap {
+            { "id", _node_id.to_bytestring() },
+            { "target", target_id.to_bytestring() }
+        },
+        yield[ec],
+        cancel_signal
+    );
+
+    if (ec) {
+        return false;
+    }
+    if (find_node_reply["y"] != "r") {
+        return false;
+    }
+    boost::optional<BencodedMap> response = find_node_reply["r"].as_map();
+    if (!response) {
+        return false;
+    }
+
+    std::vector<NodeContact> closer_nodes_v;
+
+    if (is_v4()) {
+        boost::optional<std::string> nodes = (*response)["nodes"].as_string();
+        if (nodes) decode_contacts_v4(*nodes, closer_nodes_v);
+    } else {
+        boost::optional<std::string> nodes = (*response)["nodes6"].as_string();
+        if (nodes) decode_contacts_v6(*nodes, closer_nodes_v);
+    }
+
+    for (const auto& c : closer_nodes_v) {
+        closer_nodes.async_push(c, cancel_signal, yield[ec]);
+    }
+
+    return !closer_nodes_v.empty();
+}
+
 // http://bittorrent.org/beps/bep_0005.html#get-peers
 boost::optional<BencodedMap> dht::DhtNode::query_get_peers(
     NodeID infohash,
@@ -1922,6 +2087,76 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data(
         if (!decode_contacts_v6(*nodes6, closer_nodes)) {
             return boost::none;
         }
+    }
+
+    return response;
+}
+
+boost::optional<BencodedMap> dht::DhtNode::query_get_data2(
+    NodeID key,
+    Contact node,
+    util::AsyncQueue<NodeContact>& closer_nodes,
+    WatchDog& dead_man_switch,
+    asio::yield_context yield,
+    Signal<void()>& cancel_signal
+) {
+    sys::error_code ec;
+
+    dead_man_switch.expires_after( _stats->max_reply_wait_time("get")
+                                 + _stats->max_reply_wait_time("find_node"));
+
+    Cancel local_cancel(cancel_signal);
+    WaitCondition wc(_ios);
+
+    // Ideally, nodes that do not implement BEP 44 would reply to this query
+    // with a "not implemented" error. But in practice, most do not reply at
+    // all. If such nodes make up the entire routing table (as is often the
+    // case), the lookup might fail entirely. But doing an entire search
+    // through nodes without BEP 44 support slows things down quite a lot.
+    WatchDog wd(_ios, _stats->max_reply_wait_time("get"), [&] () mutable {
+        if (local_cancel) return;
+        asio::spawn(_ios, [&, lock = wc.lock()] ( asio::yield_context yield) {
+            query_find_node2(key, node, closer_nodes, yield, local_cancel);
+        });
+    });
+
+    BencodedMap get_reply = send_query_await_reply(
+        node,
+        "get",
+        BencodedMap {
+            { "id", _node_id.to_bytestring() },
+            { "target", key.to_bytestring() }
+        },
+        yield[ec],
+        cancel_signal
+    );
+
+    sys::error_code ec_;
+
+    if (ec || get_reply["y"] != "r") {
+        wc.wait(yield[ec_]);
+        return boost::none;
+    }
+
+    local_cancel();
+    wc.wait(yield[ec_]);
+
+    std::vector<NodeContact> closer_nodes_v;
+
+    boost::optional<BencodedMap> response = get_reply["r"].as_map();
+
+    if (!response) return boost::none;
+
+    if (is_v4()) {
+        boost::optional<std::string> nodes = (*response)["nodes"].as_string();
+        if (nodes) decode_contacts_v4(*nodes, closer_nodes_v);
+    } else {
+        boost::optional<std::string> nodes = (*response)["nodes6"].as_string();
+        if (nodes) decode_contacts_v6(*nodes, closer_nodes_v);
+    }
+
+    for (const auto& c : closer_nodes_v) {
+        closer_nodes.async_push(c, cancel_signal, yield[ec]);
     }
 
     return response;
