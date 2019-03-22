@@ -333,6 +333,7 @@ class DhtNode {
 
     template<class Evaluate>
     void collect2(
+        std::chrono::steady_clock::time_point start,
         const NodeID& target,
         Evaluate&&,
         asio::yield_context,

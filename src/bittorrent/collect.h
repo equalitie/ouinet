@@ -96,6 +96,7 @@ void collect(
 
 template<class CandidateSet, class Evaluate>
 void collect2(
+    std::chrono::steady_clock::time_point start,
     asio::io_service& ios,
     CandidateSet candidates_,
     Evaluate&& evaluate,
@@ -132,8 +133,6 @@ void collect2(
         return candidates.end();
     };
 
-    using Clock = chrono::steady_clock;
-
     std::set<size_t> active_jobs;
     size_t next_job_id = 0;
 
@@ -141,8 +140,6 @@ void collect2(
     auto default_timeout = std::chrono::seconds(30);
 
     Cancel local_cancel(cancel_signal);
-
-    auto start = Clock::now();
 
 #if SPEED_DEBUG
     auto secs = [start] (auto start) {
@@ -234,7 +231,7 @@ void collect2(
                 on_finish();
             });
 
-            evaluate( start, candidate
+            evaluate( candidate
                     , wd
                     , new_candidates
                     , yield[ec]

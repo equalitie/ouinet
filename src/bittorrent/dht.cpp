@@ -549,6 +549,16 @@ NodeID dht::DhtNode::data_put_mutable(
     sys::error_code ec;
     ProximityMap<boost::none_t> responsible_nodes(target_id, RESPONSIBLE_TRACKERS_PER_SWARM);
 
+    using namespace std::chrono;
+
+    auto start = steady_clock::now();
+
+#if SPEED_DEBUG
+    cerr << secs(start) << " start " << target_id << "\n";
+    cerr << std::setprecision(3);
+    unsigned threads = 0;
+#endif
+
     auto write_to_node = [&] ( const NodeID& id
                              , udp::endpoint ep
                              , const std::string& put_token
@@ -570,26 +580,26 @@ NodeID dht::DhtNode::data_put_mutable(
 
             wd.expires_after(_stats->max_reply_wait_time("put"));
 
+#if SPEED_DEBUG
+            auto s = secs(start);
+            auto exp = to_seconds(_stats->max_reply_wait_time("put"));
+            cerr << secs(start) << " write_to_node start " << id << " (expected duration:" << exp << "s)\n";
+#endif
             sys::error_code ec;
             send_write_query(ep, id, "put", put_message, yield[ec], cancel);
 
+#if SPEED_DEBUG
+            auto ss = secs(start);
+            cerr << secs(start) << " write_to_node end " << id << " (took:" << (ss-s) << "s  exp:" << exp << "s)\n";
+#endif
             if (cancel) ec = asio::error::operation_aborted;
 
             return !ec ? true : false;
     };
 
-    using namespace std::chrono;
-
-#if SPEED_DEBUG
-    cerr << secs(Clock::now()) << " start " << target_id << "\n";
-    cerr << std::setprecision(3);
-    unsigned threads = 0;
-#endif
-
     std::set<udp::endpoint> blacklist;
 
-    collect2(target_id, [&](
-        auto start,
+    collect2(start, target_id, [&](
         const Contact& candidate,
         WatchDog& wd,
         util::AsyncQueue<NodeContact>& closer_nodes,
@@ -625,6 +635,8 @@ NodeID dht::DhtNode::data_put_mutable(
             cancel
         );
 
+        if (cancel) return;
+
 #if SPEED_DEBUG
         auto sss = secs(start);
         cerr << sss << " query_get_data send 🍏 <<< " << candidate.id
@@ -651,12 +663,14 @@ NodeID dht::DhtNode::data_put_mutable(
 
         if (candidate.id) {
             if (responsible_nodes.would_insert(*candidate.id)) {
-                if (write_to_node( *candidate.id
-                                    , candidate.endpoint
-                                    , *put_token
-                                    , wd
-                                    , cancel
-                                    , yield)) {
+                auto write_success = write_to_node( *candidate.id
+                                                  , candidate.endpoint
+                                                  , *put_token
+                                                  , wd
+                                                  , cancel
+                                                  , yield);
+
+                if (write_success) {
                     responsible_nodes.insert({*candidate.id, boost::none});
 
 #if SPEED_DEBUG
@@ -665,31 +679,33 @@ NodeID dht::DhtNode::data_put_mutable(
                          << " " << candidate.endpoint << " "
                          << (ssss - sss) << "s " << (ssss - ss) << "s\n";
 #endif
+                    return;
                 }
             }
         }
 
+        if (cancel) return;
+
         if (response["k"] != util::bytes::to_string(data.public_key.serialize())) {
             return;
         }
-        boost::optional<int64_t> existing_sequence_number = response["seq"].as_int();
-        if (!existing_sequence_number) {
-            return;
-        }
-        boost::optional<std::string> existing_signature = response["sig"].as_string();
-        if (!existing_signature || existing_signature->size() != 64) {
-            return;
-        }
+
+        boost::optional<int64_t> response_seq = response["seq"].as_int();
+        if (!response_seq) return;
+
+        boost::optional<std::string> response_sig = response["sig"].as_string();
+        if (!response_sig || response_sig->size() != 64) return;
 
         MutableDataItem item {
             data.public_key,
             data.salt,
             response["v"],
-            *existing_sequence_number,
-            util::bytes::to_array<uint8_t, 64>(*existing_signature)
+            *response_seq,
+            util::bytes::to_array<uint8_t, 64>(*response_sig)
         };
+
         if (item.verify()) {
-            if (*existing_sequence_number < data.sequence_number) {
+            if (*response_seq < data.sequence_number) {
                 /*
                  * This node has an old version of this data entry.
                  * Update it even if it is no longer responsible.
@@ -702,12 +718,10 @@ NodeID dht::DhtNode::data_put_mutable(
                              , yield);
             }
         }
-
-        return;
     }, yield[ec], local_cancel);
 
 #if SPEED_DEBUG
-    cerr << secs(Clock::now()) << " end " << responsible_nodes.size() << "\n";
+    cerr << secs(start) << " end " << responsible_nodes.size() << "\n";
     for (auto r : responsible_nodes) {
         cerr << "           " << r.first << "\n";
     }
@@ -1678,6 +1692,7 @@ void dht::DhtNode::collect(
 
 template<class Evaluate>
 void dht::DhtNode::collect2(
+    std::chrono::steady_clock::time_point start,
     const NodeID& target_id,
     Evaluate&& evaluate,
     asio::yield_context yield,
@@ -1723,6 +1738,7 @@ void dht::DhtNode::collect2(
 
     auto terminated = _terminate_signal.connect([]{});
     ::ouinet::bittorrent::collect2(
+        start,
         _ios,
         std::move(seed_candidates),
         std::forward<Evaluate>(evaluate),
@@ -2132,6 +2148,8 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data2(
     );
 
     sys::error_code ec_;
+
+    if (cancel_signal) ec = asio::error::operation_aborted;
 
     if (ec || get_reply["y"] != "r") {
         wc.wait(yield[ec_]);
