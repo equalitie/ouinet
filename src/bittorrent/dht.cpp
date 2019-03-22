@@ -448,34 +448,38 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
 
     boost::optional<WatchDog> cancel_wd;
 
-    collect(target_id, [&](
+    auto start = std::chrono::steady_clock::now();
+
+    collect2(start, target_id, [&](
         const Contact& candidate,
+        WatchDog& wd,
+        util::AsyncQueue<NodeContact>& closer_nodes,
         asio::yield_context yield,
         Signal<void()>& cancel
-    ) -> boost::optional<Candidates> {
+    ) {
         if (!candidate.id && responsible_nodes.full()) {
-            return boost::none;
+            return;
         }
 
         if (candidate.id && !responsible_nodes.would_insert(*candidate.id)) {
-            return boost::none;
+            return;
         }
 
         /*
          * We want to find the latest version of the data, so don't stop early.
          */
 
-        std::vector<NodeContact> closer_nodes;
-        boost::optional<BencodedMap> response_ = query_get_data(
+        boost::optional<BencodedMap> response_ = query_get_data2(
             target_id,
             candidate,
             closer_nodes,
+            wd,
             yield,
             cancel
         );
-        if (!response_) {
-            return closer_nodes;
-        }
+
+        if (cancel || !response_) return;
+
         BencodedMap& response = *response_;
 
         if (candidate.id) {
@@ -483,16 +487,14 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
         }
 
         if (response["k"] != util::bytes::to_string(public_key.serialize())) {
-            return closer_nodes;
+            return;
         }
+
         boost::optional<int64_t> sequence_number = response["seq"].as_int();
-        if (!sequence_number) {
-            return closer_nodes;
-        }
+        if (!sequence_number) return;
+
         boost::optional<std::string> signature = response["sig"].as_string();
-        if (!signature || signature->size() != 64) {
-            return closer_nodes;
-        }
+        if (!signature || signature->size() != 64) return;
 
         MutableDataItem item {
             public_key,
@@ -525,8 +527,6 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
                 }
             }
         }
-
-        return closer_nodes;
     }, yield[ec], internal_cancel);
 
     if (ec == asio::error::operation_aborted && !cancel_signal && data) {
