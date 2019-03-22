@@ -20,6 +20,8 @@
 #include "../util/crypto.h"
 #include "../util/signal.h"
 #include "../util/wait_condition.h"
+#include "../util/async_queue.h"
+#include "../util/watch_dog.h"
 
 namespace ouinet {
 namespace bittorrent {
@@ -37,7 +39,6 @@ asio::ip::udp::endpoint resolve(
 namespace ip = asio::ip;
 using ip::tcp;
 using ip::udp;
-
 
 namespace dht {
 
@@ -198,6 +199,14 @@ class DhtNode {
         Signal<void()>& cancel_signal
     );
 
+    bool query_find_node2(
+        NodeID target_id,
+        Contact node,
+        util::AsyncQueue<NodeContact>& closer_nodes,
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
+    );
+
     // http://bittorrent.org/beps/bep_0005.html#get-peers
     boost::optional<BencodedMap> query_get_peers(
         NodeID infohash,
@@ -241,7 +250,6 @@ class DhtNode {
         Contact,
         const std::string& query_type,
         const BencodedMap& query_arguments,
-        asio::steady_timer::duration timeout,
         asio::yield_context yield,
         Signal<void()>& cancel_signal
     );
@@ -283,6 +291,15 @@ class DhtNode {
         Signal<void()>& cancel_signal
     );
 
+    boost::optional<BencodedMap> query_get_data2(
+        NodeID key,
+        Contact node,
+        util::AsyncQueue<NodeContact>& closer_nodes,
+        WatchDog& dead_man_switch,
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
+    );
+
 
     struct TrackerNode {
         asio::ip::udp::endpoint node_endpoint;
@@ -314,6 +331,15 @@ class DhtNode {
         Signal<void()>& cancel_signal
     );
 
+    template<class Evaluate>
+    void collect2(
+        std::chrono::steady_clock::time_point start,
+        const NodeID& target,
+        Evaluate&&,
+        asio::yield_context,
+        Signal<void()>& cancel_signal
+    );
+
     private:
     asio::io_service& _ios;
     ip::address _interface_address;
@@ -335,6 +361,9 @@ class DhtNode {
     std::map<std::string, ActiveRequest> _active_requests;
 
     std::vector<udp::endpoint> _bootstrap_endpoints;
+
+    struct Stats;
+    std::unique_ptr<Stats> _stats;
 };
 
 struct DhtPublications

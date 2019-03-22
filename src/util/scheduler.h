@@ -66,6 +66,8 @@ public:
         }
 
         Slot& operator=(Slot&& o) {
+            if (scheduler) scheduler->release_slot(*this);
+
             swap_nodes(o);
             scheduler = o.scheduler;
             o.scheduler = nullptr;
@@ -89,6 +91,9 @@ public:
     Slot wait_for_slot(Cancel&, asio::yield_context yield);
 
     size_t max_running_jobs() const { return _max_running_jobs; }
+
+    size_t slot_count() const { return _slots.size(); }
+    size_t waiter_count() const { return _waiters.size(); }
 
     ~Scheduler();
 
@@ -156,20 +161,7 @@ Scheduler::Slot Scheduler::wait_for_slot( Cancel& cancel
 
 inline
 Scheduler::Slot::~Slot() {
-    if (!scheduler) {
-        // Was either moved from or the scheduler has been destroyed.
-        return;
-    }
-
-    auto& slots = scheduler->_slots;
-    slots.erase(slots.iterator_to(*this));
-
-    auto& waiters = scheduler->_waiters;
-
-    if (waiters.empty()) return;
-    Waiter& next = waiters.front();
-
-    next.cv.notify();
+    if (scheduler) scheduler->release_slot(*this);
 }
 
 inline

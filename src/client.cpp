@@ -596,11 +596,39 @@ public:
 
         if (has_bep44_insert_hdr(rs)) {
             asio::spawn(ios, [ rs
+                             , target = rq.target().to_string()
+                             , &ios
                              , &cache
-                             , &cancel = client_state.get_shutdown_signal()
+                             , &cancel_ = client_state.get_shutdown_signal()
+                             , &scheduler = client_state._store_scheduler
                              ] (asio::yield_context yield) {
+                using namespace std::chrono;
+
+                Cancel cancel(cancel_);
+
+                steady_clock::duration scheduler_d = seconds(0)
+                                     , bep44_d     = seconds(0)
+                                     , ipfs_add_d  = seconds(0);
+
                 sys::error_code ec;
-                seed_response(rs, *cache, cancel, yield[ec]);
+                seed_response( rs, scheduler, *cache
+                             , scheduler_d
+                             , bep44_d
+                             , ipfs_add_d
+                             , cancel, yield[ec]);
+
+                static constexpr auto secs = [](steady_clock::duration d) {
+                    return duration_cast<milliseconds>(d).count() / 1000.f;
+                };
+
+                LOG_DEBUG("Insert finished for ", target
+                         , " ec:\"", ec.message(), "\" "
+                         , " took scheduler:", secs(scheduler_d), "s, "
+                               , "bep44m/put:", secs(bep44_d), "s, "
+                               , "ipfs/add:", secs(ipfs_add_d), "s, "
+                         , "remaining insertions: "
+                               , scheduler.slot_count(), " active, "
+                               , scheduler.waiter_count(), " pending");
             });
 
             return rs;
@@ -705,10 +733,19 @@ public:
 
     static
     void seed_response( const Response& rs
+                      , Scheduler& scheduler
                       , CacheClient& cache
+                      // These three are for debugging
+                      , chrono::steady_clock::duration& scheduler_duration
+                      , chrono::steady_clock::duration& bep44_duration
+                      , chrono::steady_clock::duration& ipfs_add_duration
                       , Cancel& cancel
                       , asio::yield_context yield)
     {
+        using Clock = chrono::steady_clock;
+
+        auto start = Clock::now();
+
         boost::string_view encoded_insd = rs[response_insert_bep44_hdr()];
 
         if (encoded_insd.empty()) return or_throw(yield, asio::error::no_data);
@@ -722,9 +759,19 @@ public:
         }
 
         sys::error_code ec;
-        cache.insert_mapping(bep44_push_msg, IndexType::bep44, cancel, yield[ec]);
+        auto slot = scheduler.wait_for_slot(cancel, yield[ec]);
+
+        scheduler_duration = Clock::now() - start;
+        start = Clock::now();
 
         return_or_throw_on_error(yield, cancel, ec);
+
+        cache.insert_mapping(bep44_push_msg, IndexType::bep44, cancel, yield[ec]);
+
+        bep44_duration = Clock::now() - start;
+        start = Clock::now();
+
+        if (ec) return or_throw(yield, ec);
 
         auto desc_path = opt_item->value.as_string();
         assert(desc_path);
@@ -736,6 +783,7 @@ public:
         auto body_link = cache.ipfs_add
             (beast::buffers_to_string(rs.body().data()), yield[ec]);
 
+        ipfs_add_duration = Clock::now() - start;
         // TODO: (currently `desc` is just a json string, so can't do this
         // check directly)
         //assert(body_link == desc["value"]);
