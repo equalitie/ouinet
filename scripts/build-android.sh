@@ -65,6 +65,9 @@ NDK_PLATFORM=${NDK_PLATFORM:-19}
 NDK_STL='libc++'
 NDK_TOOLCHAIN_DIR=${NDK_TOOLCHAIN_DIR:-${DIR}/${NDK}-toolchain-android$NDK_PLATFORM-$NDK_ARCH-$NDK_STL}
 
+# Android API level, see https://redmine.equalit.ie/issues/12143
+PLATFORM=${PLATFORM:-android-19}
+
 BOOST_V=${BOOST_V:-"1_67_0"}
 BOOST_V_DOT=${BOOST_V//_/.} # Replace '_' for '.'
 BOOST_SOURCE=${BOOST_SOURCE:-"${DIR}/Boost-for-Android"}
@@ -85,15 +88,15 @@ ANDROID_FLAGS="\
     -DCMAKE_ANDROID_ARCH_ABI=${ABI} \
     -DOPENSSL_ROOT_DIR=${SSL_DIR} \
     -DBOOST_INCLUDEDIR=${BOOST_INCLUDEDIR} \
-    -DBOOST_LIBRARYDIR=${BOOST_LIBRARYDIR}"
+    -DBOOST_LIBRARYDIR=${BOOST_LIBRARYDIR} \
+    -DAPP_PLATFORM=${PLATFORM}"
 
 EMULATOR_AVD=${EMULATOR_AVD:-ouinet-test}
 
 # The following options may be limited by availability of SDK packages,
 # to get list of all packages, use `sdkmanager --list`.
 
-# Android API level
-PLATFORM=${PLATFORM:-android-25}
+
 
 # The image to be used by the emulator AVD
 EMULATOR_IMAGE_TAG=google_apis  # uses to be available for all platforms and ABIs
@@ -106,7 +109,8 @@ EMULATOR_SKIN=1440x2560  # automatically scaled down on smaller screens
 echo "NDK_DIR: "$NDK_DIR
 echo "SDK_DIR: "$SDK_DIR
 echo "NDK_TOOLCHAIN_DIR: "$NDK_TOOLCHAIN_DIR
-echo "PLATFORM: "$PLATFORM
+echo "NDK_PLATFORM: "$NDK_PLATFORM
+echo "APP_PLATFORM: "$APP_PLATFORM
 echo "BOOST_SOURCE: "$BOOST_SOURCE
 echo "BOOST LIB: "$BOOST_LIBRARYDIR
 
@@ -372,7 +376,7 @@ function build_openssl {
     export CROSS_COMPILE="$NDK_TOOLCHAIN_TARGET-"
     export TOOLCHAIN="$NDK_TOOLCHAIN_DIR"
     export PATH="$NDK_TOOLCHAIN_DIR/bin:$PATH"
-    ./config -v no-shared -no-ssl2 -no-ssl3 -no-comp -no-hw -no-engine
+    ./config -v no-shared -no-ssl2 -no-ssl3 -no-comp -no-hw -no-engine -DAPP_PLATFORM=${PLATFORM} -D__ANDROID_API__=${NDK_PLATFORM}
     make depend
     make build_libs
 }
