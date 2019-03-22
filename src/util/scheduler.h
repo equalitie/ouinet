@@ -93,6 +93,7 @@ public:
     size_t max_running_jobs() const { return _max_running_jobs; }
 
     size_t slot_count() const { return _slots.size(); }
+    size_t waiter_count() const { return _waiters.size(); }
 
     ~Scheduler();
 
