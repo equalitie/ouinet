@@ -900,7 +900,7 @@ BencodedMap dht::DhtNode::send_query_await_reply(
     Signal<void()>& cancel_signal
 ) {
     //auto timeout = _stats->max_reply_wait_time(query_type);
-    auto timeout = std::chrono::seconds(15);
+    auto timeout = std::chrono::seconds(10);
 
     auto start = Clock::now();
 

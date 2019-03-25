@@ -98,10 +98,10 @@ template<class CandidateSet, class Evaluate>
 void collect2(
     std::chrono::steady_clock::time_point start,
     asio::io_service& ios,
-    CandidateSet candidates_,
+    CandidateSet first_candidates,
     Evaluate&& evaluate,
     asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Signal<void()>& cancel_signal, const char* debug = nullptr
 ) {
     using namespace std;
 
@@ -111,10 +111,10 @@ void collect2(
                                , Progress
                                , typename CandidateSet::key_compare>;
 
-    auto comp = candidates_.key_comp();
+    auto comp = first_candidates.key_comp();
     Candidates candidates(comp);
 
-    for (auto& c : candidates_) {
+    for (auto& c : first_candidates) {
         candidates.insert(candidates.end(), { c, unused });
     }
 
@@ -154,7 +154,7 @@ void collect2(
 #if SPEED_DEBUG
         cerr << secs(start) << " Start waiting for job (current count:" << scheduler.slot_count() << ")\n";
 #endif
-        auto slot = scheduler.wait_for_slot(cancel_signal, yield[ec]);
+        auto slot = scheduler.wait_for_slot(local_cancel, yield[ec]);
 #if SPEED_DEBUG
         cerr << secs(start) << " Done waiting for job (job count:" << scheduler.slot_count() << ")\n";
 #endif
@@ -170,19 +170,22 @@ void collect2(
                 break;
             }
 #if SPEED_DEBUG
-            cerr << secs(start) << " Start waiting for candidate (active jobs:" << active_jobs.size() << " new_candidates:" << new_candidates.size() << ")\n";
+            if (debug) cerr << debug << " " << secs(start) << " Start waiting for candidate (active jobs:" << active_jobs.size() << " new_candidates:" << new_candidates.size() << ")\n";
 #endif
-            auto new_candidate = new_candidates.async_pop(cancel_signal, yield[ec2]);
+            assert(!local_cancel);
+            auto new_candidate = new_candidates.async_pop(local_cancel, yield[ec2]);
 
 #if SPEED_DEBUG
-            cerr << secs(start) << " End waiting for candidate " << ec2.message() << " " << new_candidate.id << "\n";
+            if (debug) cerr << debug << " " << secs(start) << " End waiting for candidate " << ec2.message() << " " << new_candidate.id << "\n";
 #endif
+
+            assert(!local_cancel || ec2 == asio::error::operation_aborted);
 
             if (ec2 == asio::error::eof) {
                 continue;
             }
 
-            if (ec2 || cancel_signal) break;
+            if (ec2 || local_cancel) break;
 
             if (!candidates.insert({ new_candidate, unused }).second) {
                 continue;
@@ -193,6 +196,8 @@ void collect2(
         }
 
         if (candidate_i == candidates.end()) break;
+
+        assert(!local_cancel);
 
         auto job_id = next_job_id++;
         active_jobs.insert(job_id);
@@ -205,6 +210,7 @@ void collect2(
                          ] (asio::yield_context yield) mutable {
             sys::error_code ec;
 
+            assert(!local_cancel);
             bool on_finish_called = false;
 
             auto on_finish = [&] () mutable {
@@ -224,13 +230,22 @@ void collect2(
                                          , yield);
             };
 
-            WatchDog wd(ios, default_timeout, [&] () mutable {
-#if SPEED_DEBUG
-                cerr << secs(start) << " dismiss " << candidate << "\n";
-#endif
-                on_finish();
-            });
+            assert(!local_cancel);
+            WatchDog wd;
 
+            if (true || !first_candidates.count(candidate)) {
+                wd = WatchDog(ios, default_timeout, [&] () mutable {
+#if SPEED_DEBUG
+                    if (debug) cerr << debug << " " << secs(start) << " dismiss " << candidate << "\n";
+#endif
+                    on_finish();
+                });
+            }
+            else {
+                cerr << " no wd for " << candidate << "\n";
+            }
+
+            assert(!local_cancel);
             evaluate( candidate
                     , wd
                     , new_candidates
@@ -243,7 +258,7 @@ void collect2(
 
     local_cancel();
 #if SPEED_DEBUG
-    cerr << ">>>>>>>>>>>>>>>>>>> DONE <<<<<<<<<<<<<<<<<<<<\n";
+    if (debug) cerr << debug << " >>>>>>>>>>>>>>>>>>> DONE <<<<<<<<<<<<<<<<<<<<\n";
 #endif
     all_done.wait(yield);
 
