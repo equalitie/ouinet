@@ -35,8 +35,14 @@ unique_ptr<CacheInjector> CacheInjector::build( boost::asio::io_service& ios
 
     sys::error_code ec;
 
+    // TODO: Make this a parameter
+    const bool online = false;
+
     unique_ptr<bt::MainlineDht> bt_dht(new bt::MainlineDht(ios));
-    bt_dht->set_interfaces({asio::ip::address_v4::any()});
+
+    if (online) {
+        bt_dht->set_interfaces({asio::ip::address_v4::any()});
+    }
 
     unique_ptr<Bep44InjectorIndex> bep44_index;
 
@@ -60,7 +66,9 @@ unique_ptr<CacheInjector> CacheInjector::build( boost::asio::io_service& ios
                             , move(bt_dht)
                             , move(bep44_index)));
 
-    ci->wait_for_ready(cancel, yield[ec]);
+    if (online) {
+        ci->wait_for_ready(cancel, yield[ec]);
+    }
 
     assert(!cancel || ec == asio::error::operation_aborted);
     if (cancel) ec = asio::error::operation_aborted;
