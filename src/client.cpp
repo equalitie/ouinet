@@ -38,6 +38,7 @@
 #include "ssl/ca_certificate.h"
 #include "ssl/dummy_certificate.h"
 #include "ssl/util.h"
+#include "bittorrent/mutable_data.h"
 
 #ifndef __ANDROID__
 #  include "force_exit_on_signal.h"
@@ -486,6 +487,32 @@ Response Client::State::fetch_fresh_through_simple_proxy
 }
 
 //------------------------------------------------------------------------------
+// Return true if res indicated an error from the injector
+bool handle_if_injector_error(GenericStream& con, const Response& res_, Yield yield) {
+    auto err_hdr_i = res_.find(http_::response_error_hdr);
+
+    if (err_hdr_i == res_.end()) return false; // No error
+
+    Response res{http::status::bad_request, 11};
+    res.set(http::field::server, OUINET_CLIENT_SERVER_STRING);
+    res.set(http_::response_error_hdr, err_hdr_i->value());
+    res.keep_alive(false);
+
+    string body = "Incompatible Ouinet request version";
+
+    Response::body_type::reader reader(res, res.body());
+    sys::error_code ec;
+    reader.put(asio::buffer(body), ec);
+    assert(!ec);
+
+    res.prepare_payload();
+
+    http::async_write(con, res, yield[ec]);
+
+    return true;
+}
+
+//------------------------------------------------------------------------------
 class Client::ClientCacheControl {
 public:
     ClientCacheControl( Client::State& client_state
@@ -553,6 +580,8 @@ public:
     {
         namespace err = asio::error;
 
+        auto& ios = client_state.get_io_service();
+
         // No need to filter request or response headers
         // since we are not storing them here
         // (they can be found at the descriptor).
@@ -565,7 +594,47 @@ public:
             return or_throw(yield, err::operation_not_supported, move(rs));
         }
 
-        asio::spawn(client_state.get_io_service(),
+        if (has_bep44_insert_hdr(rs)) {
+            asio::spawn(ios, [ rs
+                             , target = rq.target().to_string()
+                             , &ios
+                             , &cache
+                             , &cancel_ = client_state.get_shutdown_signal()
+                             , &scheduler = client_state._store_scheduler
+                             ] (asio::yield_context yield) {
+                using namespace std::chrono;
+
+                Cancel cancel(cancel_);
+
+                steady_clock::duration scheduler_d = seconds(0)
+                                     , bep44_d     = seconds(0)
+                                     , ipfs_add_d  = seconds(0);
+
+                sys::error_code ec;
+                seed_response( rs, scheduler, *cache
+                             , scheduler_d
+                             , bep44_d
+                             , ipfs_add_d
+                             , cancel, yield[ec]);
+
+                static constexpr auto secs = [](steady_clock::duration d) {
+                    return duration_cast<milliseconds>(d).count() / 1000.f;
+                };
+
+                LOG_DEBUG("Insert finished for ", target
+                         , " ec:\"", ec.message(), "\" "
+                         , " took scheduler:", secs(scheduler_d), "s, "
+                               , "bep44m/put:", secs(bep44_d), "s, "
+                               , "ipfs/add:", secs(ipfs_add_d), "s, "
+                         , "remaining insertions: "
+                               , scheduler.slot_count(), " active, "
+                               , scheduler.waiter_count(), " pending");
+            });
+
+            return rs;
+        }
+
+        asio::spawn(ios,
             [ &cache, rs
             , &ios = client_state.get_io_service()
             , &cancel = client_state.get_shutdown_signal()
@@ -648,7 +717,79 @@ public:
         return rs;
     }
 
-    Response fetch(const Request& rq, Yield yield)
+    static
+    const string& response_insert_bep44_hdr()
+    {
+        static const string ret = http_::response_insert_hdr_pfx
+                                + IndexName.at(IndexType::bep44);
+        return ret;
+    }
+
+    static
+    bool has_bep44_insert_hdr(const Response& rs)
+    {
+        return !rs[response_insert_bep44_hdr()].empty();
+    }
+
+    static
+    void seed_response( const Response& rs
+                      , Scheduler& scheduler
+                      , CacheClient& cache
+                      // These three are for debugging
+                      , chrono::steady_clock::duration& scheduler_duration
+                      , chrono::steady_clock::duration& bep44_duration
+                      , chrono::steady_clock::duration& ipfs_add_duration
+                      , Cancel& cancel
+                      , asio::yield_context yield)
+    {
+        using Clock = chrono::steady_clock;
+
+        auto start = Clock::now();
+
+        boost::string_view encoded_insd = rs[response_insert_bep44_hdr()];
+
+        if (encoded_insd.empty()) return or_throw(yield, asio::error::no_data);
+
+        string bep44_push_msg = util::base64_decode(encoded_insd);
+
+        auto opt_item = bittorrent::MutableDataItem::bdecode(bep44_push_msg);
+
+        if (!opt_item) {
+            return or_throw(yield, asio::error::invalid_argument);
+        }
+
+        sys::error_code ec;
+        auto slot = scheduler.wait_for_slot(cancel, yield[ec]);
+
+        scheduler_duration = Clock::now() - start;
+        start = Clock::now();
+
+        return_or_throw_on_error(yield, cancel, ec);
+
+        cache.insert_mapping(bep44_push_msg, IndexType::bep44, cancel, yield[ec]);
+
+        bep44_duration = Clock::now() - start;
+        start = Clock::now();
+
+        if (ec) return or_throw(yield, ec);
+
+        auto desc_path = opt_item->value.as_string();
+        assert(desc_path);
+
+        auto desc = cache.descriptor_from_path(*desc_path, cancel, yield[ec]);
+
+        return_or_throw_on_error(yield, cancel, ec);
+
+        auto body_link = cache.ipfs_add
+            (beast::buffers_to_string(rs.body().data()), yield[ec]);
+
+        ipfs_add_duration = Clock::now() - start;
+        // TODO: (currently `desc` is just a json string, so can't do this
+        // check directly)
+        //assert(body_link == desc["value"]);
+    }
+
+    bool fetch(GenericStream& con, const Request& rq, Yield yield)
     {
         namespace err = asio::error;
         using request_route::fresh_channel;
@@ -657,7 +798,7 @@ public:
 
         while (!request_config.fresh_channels.empty()) {
             if (client_state._shutdown_signal)
-                return or_throw<Response>(yield, err::operation_aborted);
+                return or_throw<bool>(yield, err::operation_aborted);
 
             auto r = request_config.fresh_channels.front();
             request_config.fresh_channels.pop();
@@ -674,7 +815,8 @@ public:
 
             switch (r) {
                 case fresh_channel::_front_end:
-                    return client_state.fetch_fresh_from_front_end(rq, yield);
+                    res = client_state.fetch_fresh_from_front_end(rq, yield);
+                    break;
 
                 case fresh_channel::origin:
                     res = client_state.fetch_fresh_from_origin(rq, yield[ec]);
@@ -709,12 +851,34 @@ public:
             }
 
             if (cancel) ec = err::timed_out;
-            if (!ec) return res;
+            if (!ec) {
+                send_back_response(con, res, yield);
+                return rq.keep_alive() && res.keep_alive();
+            }
             last_error = ec;
         }
 
         assert(last_error);
-        return or_throw<Response>(yield, last_error);
+
+        // TODO: Better error message.
+        handle_bad_request( con
+                          , rq
+                          , "Not cached"
+                          , yield.tag("handle_bad_request"));
+
+        return or_throw<bool>(yield, last_error, rq.keep_alive());
+    }
+
+private:
+    void send_back_response(GenericStream& con, Response& res, Yield yield)
+    {
+        sys::error_code ec;
+        if (handle_if_injector_error(con, res, yield[ec])) {
+            return;
+        }
+
+        // Forward the response back
+        http::async_write(con, res, asio::yield_context(yield)[ec]);
     }
 
 private:
@@ -722,16 +886,6 @@ private:
     request_route::Config& request_config;
     CacheControl cc;
 };
-
-//------------------------------------------------------------------------------
-//static
-//Response bad_gateway(const Request& req)
-//{
-//    Response res{http::status::bad_gateway, req.version()};
-//    res.set(http::field::server, "Ouinet");
-//    res.keep_alive(req.keep_alive());
-//    return res;
-//}
 
 //------------------------------------------------------------------------------
 static
@@ -793,32 +947,6 @@ GenericStream Client::State::ssl_mitm_handshake( GenericStream&& con
     };
 
     return GenericStream(move(ssl_sock), move(ssl_shutter));
-}
-
-//------------------------------------------------------------------------------
-// Return true if res indicated an error from the injector
-bool handle_if_injector_error(GenericStream& con, Response& res_, Yield yield) {
-    auto err_hdr_i = res_.find(http_::response_error_hdr);
-
-    if (err_hdr_i == res_.end()) return false; // No error
-
-    Response res{http::status::bad_request, 11};
-    res.set(http::field::server, OUINET_CLIENT_SERVER_STRING);
-    res.set(http_::response_error_hdr, err_hdr_i->value());
-    res.keep_alive(false);
-
-    string body = "Incompatible Ouinet request version";
-
-    Response::body_type::reader reader(res, res.body());
-    sys::error_code ec;
-    reader.put(asio::buffer(body), ec);
-    assert(!ec);
-
-    res.prepare_payload();
-
-    http::async_write(con, res, yield[ec]);
-
-    return true;
 }
 
 //------------------------------------------------------------------------------
@@ -1003,6 +1131,22 @@ void Client::State::serve_request( GenericStream&& con
         Match( reqexpr::from_regex(target_getter, "https?://detectportal\\.firefox\\.com/.*")
              , {false, queue<fresh_channel>({fresh_channel::origin})} ),
 
+        // Ads
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*googlesyndication\\.com/.*")
+             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*googletagservices\\.com/.*")
+             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*moatads\\.com/.*")
+             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*amazon-adsystem\\.com/.*")
+             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*adsafeprotected\\.com/.*")
+             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*ads-twitter\\.com/.*")
+             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*doubleclick\\.net/.*")
+             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
+
         // Disable cache and always go to proxy for this site.
         Match( reqexpr::from_regex(target_getter, "https?://ifconfig\\.co/.*")
              , {false, queue<fresh_channel>({fresh_channel::proxy})} ),
@@ -1104,53 +1248,18 @@ void Client::State::serve_request( GenericStream&& con
 
         request_config = route_choose_config(req, matches, default_request_config);
 
-        auto res = cache_control.fetch(req, yield[ec].tag("cache_control.fetch"));
-
-        if (ec) {
-#ifndef NDEBUG
-            yield.log("----- WARNING: Error fetching --------");
-            yield.log("Error Code: ", ec.message());
-            yield.log(req.base(), res.base());
-            yield.log("--------------------------------------");
-#endif
-
-            // TODO: Better error message.
-            handle_bad_request( con
-                              , req
-                              , "Not cached"
-                              , yield.tag("handle_bad_request"));
-
-            if (req.keep_alive()) continue;
-            else return;
-        }
-
-        if (handle_if_injector_error(con, res, yield[ec])) {
-            if (res.keep_alive()) continue;
-            break;
-        }
-
-        yield.log("=== Sending back response ===");
-        yield.log(res.base());
-
-        // Forward the response back
-        http::async_write(con, res, yield[ec].tag("write_response"));
-
-        if (ec == http::error::end_of_stream) {
-          LOG_DEBUG("request served. Connection closed");
-          break;
-        }
+        bool keep_alive
+            = cache_control.fetch(con, req, yield[ec].tag("cache_control.fetch"));
 
         if (ec) {
             yield.log("error writing back response: ", ec.message());
             return;
         }
 
-        if (!res.keep_alive()) {
+        if (!keep_alive) {
             con.close();
             break;
         }
-
-        LOG_DEBUG("request served");
     }
 }
 

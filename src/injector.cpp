@@ -308,7 +308,8 @@ public:
                         , unique_ptr<CacheInjector>& injector
                         , uuid_generator& genuuid
                         , Cancel& cancel)
-        : ios(ios)
+        : insert_id(to_string(genuuid()))
+        , ios(ios)
         , ssl_ctx(ssl_ctx)
         , injector(injector)
         , config(config)
@@ -337,7 +338,7 @@ public:
         };
     }
 
-    Response fetch(const Request& rq, Yield yield)
+    bool fetch(GenericStream& con, const Request& rq_, Yield yield)
     {
         Cancel cancel;
 
@@ -348,12 +349,43 @@ public:
             cancel();
         });
 
+        bool keep_alive;
         sys::error_code ec;
-        Response response = cc.fetch(rq, cancel, yield[ec]);
 
-        if (timed_out) ec = asio::error::timed_out;
+        if (config.seed_content()) {
+            keep_alive = cc.fetch(con, rq_, cancel, yield[ec]);
 
-        return or_throw(yield, ec, move(response));
+            if (timed_out) ec = asio::error::timed_out;
+            return or_throw(yield, ec, keep_alive);
+        }
+        else {
+            auto rs_ = fetch_fresh(rq_, cancel, yield[ec]);
+
+            if (timed_out) ec = asio::error::timed_out;
+            if (ec) return or_throw<bool>(yield, ec);
+
+            // Pop out Ouinet internal HTTP headers.
+            auto rq = util::to_cache_request(move(rq_));
+            auto rs = util::to_cache_response(move(rs_));
+
+            sys::error_code ec;
+            auto ins = injector->insert_content( insert_id, rq, rs
+                                               , config.cache_index_type()
+                                               , false
+                                               , yield[ec]);
+
+            if (timed_out) ec = asio::error::timed_out;
+            if (ec) return or_throw<bool>(yield, ec);
+
+            rs = add_re_insertion_header_field( move(rs)
+                                              , move(ins.index_ins_data));
+
+            keep_alive = rq_.keep_alive();
+
+            http::async_write(con, rs, yield[ec].tag("write_response"));
+
+            return or_throw(yield, ec, keep_alive);
+        }
     }
 
     Response fetch_fresh(const Request& rq_, Cancel& cancel, Yield yield) {
@@ -378,7 +410,7 @@ public:
 
         // Add an injection identifier header
         // to enable the client to track injection state.
-        ret.set(http_::response_injection_id_hdr, to_string(genuuid()));
+        ret.set(http_::response_injection_id_hdr, insert_id);
 
         if (ret.keep_alive() && rq_.keep_alive()) {
             origin_pools.insert_connection(rq_, move(connection));
@@ -438,15 +470,11 @@ private:
         bool sync = ( rq[http_::request_sync_injection_hdr]
                       == http_::request_sync_injection_true );
 
-        // Recover injection identifier.
-        auto id = rs[http_::response_injection_id_hdr].to_string();
-        assert(!id.empty());
-
         // This injection code logs errors but does not propagate them
         // (the `desc_data` field is set to the empty string).
-        auto index_type = config.cache_index_type();
         auto inject = [
-            rq, rs, id, index_type,
+            rq, rs, id = insert_id,
+            index_type = config.cache_index_type(),
             injector = injector.get()
         ] (boost::asio::yield_context yield) mutable
           -> CacheInjector::InsertionResult {
@@ -457,6 +485,7 @@ private:
             sys::error_code ec;
             auto ret = injector->insert_content( id, rq, move(rs)
                                                , index_type
+                                               , true
                                                , yield[ec]);
 
             if (ec) {
@@ -471,32 +500,53 @@ private:
         // Program or proceed to the real injection.
 
         if (!sync) {
-            LOG_DEBUG("Async inject: ", rq.target(), " ", id);
+            LOG_DEBUG("Async inject: ", rq.target(), " ", insert_id);
             asio::spawn(asio::yield_context(yield), inject);
             return rs;
         }
 
-        LOG_DEBUG("Sync inject: ", rq.target(), " ", id);
+        LOG_DEBUG("Sync inject: ", rq.target(), " ", insert_id);
+
         auto ins = inject(yield);
+
         if (ins.desc_data.length() == 0)
             return rs;  // insertion failed
 
+        return add_insertion_header_fields(move(rs), move(ins));
+    }
+
+    Response add_insertion_header_fields( Response&& rs
+                                        , CacheInjector::InsertionResult&& ins)
+    {
         // Zlib-compress descriptor, Base64-encode and put in header.
         auto compressed_desc = util::zlib_compress(move(ins.desc_data));
         auto encoded_desc = util::base64_encode(move(compressed_desc));
+
         rs.set(http_::response_descriptor_hdr, move(encoded_desc));
+
         // Add descriptor storage link as is.
         rs.set(http_::response_descriptor_link_hdr, move(ins.desc_link));
+
+        return add_re_insertion_header_field( move(rs)
+                                            , move(ins.index_ins_data));
+    }
+
+    // TODO: Better name for this function
+    Response add_re_insertion_header_field(Response&& rs, string&& index_ins_data)
+    {
+        auto index_type = config.cache_index_type();
+
         // Add Base64-encoded reinsertion data (if any).
-        if (ins.index_ins_data.length() > 0) {
-            auto encoded_insd = util::base64_encode(move(ins.index_ins_data));
+        if (index_ins_data.length() > 0) {
             rs.set( http_::response_insert_hdr_pfx + IndexName.at(index_type)
-                  , move(encoded_insd));
+                  , util::base64_encode(index_ins_data));
         }
-        return rs;
+
+        return move(rs);
     }
 
 private:
+    std::string insert_id;
     asio::io_service& ios;
     asio::ssl::context& ssl_ctx;
     unique_ptr<CacheInjector>& injector;
@@ -564,13 +614,29 @@ void serve( InjectorConfig& config
 
         Response res;
 
+        bool keep_alive = req.keep_alive();
+
         if (proxy) {
             // No Ouinet header, behave like a (non-caching) proxy.
             // TODO: Maybe reject requests for HTTPS URLS:
             // we are perfectly able to handle them (and do verification locally),
             // but the client should be using a CONNECT request instead!
             res = cc.fetch_fresh(req, cancel, yield[ec].tag("fetch_proxy"));
-        } else {
+
+            if (ec) {
+                handle_bad_request( con, req
+                                  , "Failed to retrieve content from origin: " + ec.message()
+                                  , yield[ec].tag("handle_bad_request"));
+                continue;
+            }
+
+            yield.log("=== Sending back proxy response ===");
+            yield.log(res.base());
+            http::async_write(con, res, yield[ec].tag("write_proxy_response"));
+
+            if (!res.keep_alive()) keep_alive = false;
+        }
+        else {
             // Ouinet header found, behave like a Ouinet injector.
             auto opt_err_res = version_error_response(req, version_hdr_i->value());
 
@@ -580,35 +646,13 @@ void serve( InjectorConfig& config
             else {
                 auto req2 = util::to_injector_request(req);  // sanitize
                 req2.keep_alive(req.keep_alive());
-                res = cc.fetch(req2, yield[ec].tag("cache_control.fetch"));
-                res.keep_alive(req.keep_alive());
+                keep_alive = cc.fetch( con
+                                     , req2
+                                     , yield[ec].tag("cache_control.fetch"));
             }
         }
 
-        if (ec) {
-            handle_bad_request( con, req
-                              , "Failed to retrieve content from origin: " + ec.message()
-                              , yield[ec].tag("handle_bad_request"));
-            continue;
-        }
-
-        yield.log("=== Sending back response ===");
-        yield.log(res.base());
-
-        // Note: Not 100% sure about this, but sometimes we got a HTTP 1.1
-        // response that did not contain the `Connection: close` header field
-        // nor any indicationi about the body size. Since in such cases we
-        // don't close connections to clients, clients keep waiting for the
-        // body indefinitely. The `prepare_payload` functions sets the body
-        // size so as to avoid such situations.
-        res.prepare_payload();
-
-        // Forward back the response
-        http::async_write(con, res, yield[ec].tag("write_response"));
-
-        if (ec) break;
-
-        if (!req.keep_alive()) {
+        if (ec || !keep_alive) {
             con.close();
             break;
         }

@@ -13,7 +13,7 @@
 #include "../namespaces.h"
 #include "../or_throw.h"
 #include "../util.h"
-#include "../util/signal.h"
+#include "asio_ipfs.h"
 
 namespace ouinet {
 
@@ -131,6 +131,10 @@ http_parse( const std::string& desc_data
         std::cerr << "----------------" << std::endl;
         std::cerr << desc_data << std::endl;
         std::cerr << "----------------" << std::endl;
+        ec = asio::error::invalid_argument;
+    }
+
+    if (dsc->body_link.size() != asio_ipfs::node::CID_SIZE) {
         ec = asio::error::invalid_argument;
     }
 

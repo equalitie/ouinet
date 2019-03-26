@@ -8,6 +8,8 @@ struct Contact {
     asio::ip::udp::endpoint endpoint;
     boost::optional<NodeID> id;
 
+    Contact() {}
+
     Contact(asio::ip::udp::endpoint ep, boost::optional<NodeID> id)
         : endpoint(ep)
         , id(id)

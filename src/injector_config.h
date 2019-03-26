@@ -60,6 +60,8 @@ public:
 
     bool cache_enabled() const { return !_disable_cache; }
 
+    bool seed_content() const { return _seed_content; }
+
 private:
     void setup_index_bep44_private_key(const std::string& hex);
 
@@ -79,6 +81,7 @@ private:
     unsigned int _index_bep44_capacity;
     IndexType _cache_index_type = IndexType::btree;
     bool _disable_cache = false;
+    bool _seed_content = false;
 };
 
 inline
@@ -114,6 +117,9 @@ InjectorConfig::options_description()
 
         // Cache options
         ("disable-cache", "Disable all cache operations (even initialization)")
+        ("seed-content"
+         , po::value<bool>()->default_value(false)
+         , "Seed the content instead of only signing it")
         ("cache-index"
          , po::value<string>()->default_value("btree")
          , "Cache index to use, can be either \"btree\" or \"bep44\"")
@@ -224,6 +230,10 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
     if (vm.count("index-bep44-capacity")) {
         _index_bep44_capacity = vm["index-bep44-capacity"].as<unsigned int>();
+    }
+
+    if (vm.count("seed-content")) {
+        _seed_content = vm["seed-content"].as<bool>();
     }
 
     if (vm.count("cache-index")) {

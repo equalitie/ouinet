@@ -10,6 +10,8 @@
 
 namespace ouinet {
 
+class GenericStream;
+
 class CacheControl {
 private:
     struct FetchState;
@@ -30,6 +32,9 @@ public:
     {}
 
     Response fetch(const Request&, Cancel&, Yield);
+
+    // Return: whether to keep the connection alive
+    bool fetch(GenericStream&, const Request&, Cancel&, Yield);
 
     FetchStored  fetch_stored;
     FetchFresh   fetch_fresh;

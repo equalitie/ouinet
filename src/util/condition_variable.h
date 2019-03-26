@@ -4,6 +4,7 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/error.hpp>
 #include <boost/intrusive/list.hpp>
+#include "signal.h"
 
 namespace ouinet {
 
@@ -34,6 +35,7 @@ public:
     void notify(const boost::system::error_code& ec
                     = boost::system::error_code());
 
+    void wait(Cancel&, boost::asio::yield_context yield);
     void wait(boost::asio::yield_context yield);
 
 private:
@@ -64,25 +66,24 @@ void ConditionVariable::notify(const boost::system::error_code& ec)
 }
 
 inline
-void ConditionVariable::wait(boost::asio::yield_context yield)
+void ConditionVariable::wait(Cancel& cancel, boost::asio::yield_context yield)
 {
     WaitEntry entry;
 
-#if BOOST_VERSION >= 106700
     boost::asio::async_completion<boost::asio::yield_context, Sig> init(yield);
     entry.handler = std::move(init.completion_handler);
     _on_notify.push_back(entry);
+
+    auto slot = cancel.connect([&] { notify(asio::error::operation_aborted); });
+
     return init.result.get();
-#else
-    using Handler = boost::asio::handler_type<boost::asio::yield_context, void(boost::system::error_code)>::type;
+}
 
-    Handler handler(yield);
-    boost::asio::async_result<Handler> result(handler);
-    entry.handler = std::move(handler);
-    _on_notify.push_back(entry);
-
-    return result.get();
-#endif
+inline
+void ConditionVariable::wait(boost::asio::yield_context yield)
+{
+    Cancel dummy_cancel;
+    wait(dummy_cancel, yield);
 }
 
 } // ouinet namespace

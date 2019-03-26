@@ -8,64 +8,83 @@ class WatchDog {
 private:
     using Clock = std::chrono::steady_clock;
 
+    struct State {
+        WatchDog*          self;
+        Clock::time_point  deadline;
+        asio::steady_timer timer;
+
+        State(WatchDog* self, Clock::time_point d, asio::io_service& ios)
+            : self(self)
+            , deadline(d)
+            , timer(ios)
+        {}
+    };
+
 public:
+    WatchDog() : state(nullptr) {}
+
     WatchDog(const WatchDog&) = delete;
 
     WatchDog(WatchDog&& other)
-        : _deadline(other._deadline)
-        , _self_in_lambda(other._self_in_lambda)
-        , _timer(other._timer)
+        : state(other.state)
     {
-        other._deadline = nullptr;
-        other._self_in_lambda = nullptr;
-        other._timer = nullptr;
-
-        *_self_in_lambda = this;
+        other.state = nullptr;
+        if (state) state->self = this;
     }
 
     WatchDog& operator=(WatchDog&& other)
     {
-        _deadline = other._deadline;
-        _self_in_lambda = other._self_in_lambda;
-        _timer = other._timer;
+        stop();
 
-        *_self_in_lambda = this;
-
-        other._deadline = nullptr;
-        other._self_in_lambda = nullptr;
-        other._timer = nullptr;
-
+        state = other.state;
+        other.state = nullptr;
+        if (state) state->self = this;
         return *this;
     }
 
     template<class Duration, class OnTimeout>
     WatchDog(asio::io_service& ios, Duration d, OnTimeout on_timeout)
     {
+        start(ios, d, std::move(on_timeout));
+    }
+
+    template<class Duration>
+    void expires_after(Duration d)
+    {
+        if (!state) return;
+        auto old_deadline = state->deadline;
+        state->deadline = Clock::now() + d;
+
+        if (state->deadline < old_deadline) {
+            state->timer.cancel();
+        }
+    }
+
+    ~WatchDog() {
+        stop();
+    }
+
+    template<class Duration, class OnTimeout>
+    void start(asio::io_service& ios, Duration d, OnTimeout on_timeout) {
+        stop();
+
         asio::spawn(ios, [self_ = this, &ios, d, on_timeout = std::move(on_timeout)]
-                         (asio::yield_context yield) {
-            Clock::time_point deadline = Clock::now() + d;
-            WatchDog* self = self_;
-
-            asio::steady_timer timer(ios);
-
-            self->_self_in_lambda = &self;
-            self->_timer          = &timer;
-            self->_deadline       = &deadline;
+                         (asio::yield_context yield) mutable {
+            State state(self_, Clock::now() + d, ios);
+            self_->state = &state;
 
             {
                 auto on_exit = defer([&] {
-                        if (!self) return;
-                        self->_self_in_lambda = nullptr;
-                        self->_timer = nullptr;
-                        self->_deadline = nullptr;
+                        if (!state.self) return;
+                        state.self->state = nullptr;
                     });
 
                 auto now = Clock::now();
-                while (now < deadline) {
-                    timer.expires_after(deadline - now);
+                while (now < state.deadline) {
+                    state.timer.expires_after(state.deadline - now);
                     sys::error_code ec;
-                    timer.async_wait(yield[ec]);
-                    if (!self) return;
+                    state.timer.async_wait(yield[ec]);
+                    if (!state.self) return;
                     now = Clock::now();
                 }
             }
@@ -74,30 +93,31 @@ public:
         });
     }
 
-    template<class Duration>
-    void expires_after(Duration d)
+    Clock::duration stop()
     {
-        if (!_deadline) return;
-        auto old_deadline = *_deadline;
-        *_deadline = Clock::now() + d;
+        auto ret = time_to_finish();
 
-        if (*_deadline < old_deadline) {
-            assert(_timer);
-            _timer->cancel();
+        if (state) {
+            state->timer.cancel();
+            state->self = nullptr;
         }
+
+        return ret;
     }
 
-    ~WatchDog() {
-        if (_self_in_lambda) {
-            _timer->cancel();
-            *_self_in_lambda = nullptr;
-        }
+    Clock::duration time_to_finish() const
+    {
+        if (!state) return Clock::duration(0);
+
+        auto end = state->deadline;
+        auto now = Clock::now();
+
+        if (now < end) return end - now;
+        return Clock::duration(0);
     }
 
 private:
-    Clock::time_point* _deadline;
-    WatchDog** _self_in_lambda = nullptr;
-    asio::steady_timer* _timer;
+    State* state = nullptr;
 };
 
 

@@ -56,6 +56,8 @@ public:
         using OnExit = std::function<void()>;
 
     public:
+        Slot() : scheduler(nullptr) {}
+
         Slot(const Slot&) = delete;
 
         Slot(Slot&& o) : scheduler(o.scheduler) {
@@ -64,6 +66,8 @@ public:
         }
 
         Slot& operator=(Slot&& o) {
+            if (scheduler) scheduler->release_slot(*this);
+
             swap_nodes(o);
             scheduler = o.scheduler;
             o.scheduler = nullptr;
@@ -74,7 +78,6 @@ public:
 
     private:
         friend class Scheduler;
-        Slot() {}
         Slot(Scheduler* s) : scheduler(s) {}
 
     private:
@@ -86,8 +89,16 @@ public:
 
     Slot wait_for_slot(asio::yield_context yield);
     Slot wait_for_slot(Cancel&, asio::yield_context yield);
+    Slot get_slot() {
+        Slot slot(this);
+        _slots.push_back(slot);
+        return slot;
+    }
 
     size_t max_running_jobs() const { return _max_running_jobs; }
+
+    size_t slot_count() const { return _slots.size(); }
+    size_t waiter_count() const { return _waiters.size(); }
 
     ~Scheduler();
 
@@ -155,20 +166,7 @@ Scheduler::Slot Scheduler::wait_for_slot( Cancel& cancel
 
 inline
 Scheduler::Slot::~Slot() {
-    if (!scheduler) {
-        // Was either moved from or the scheduler has been destroyed.
-        return;
-    }
-
-    auto& slots = scheduler->_slots;
-    slots.erase(slots.iterator_to(*this));
-
-    auto& waiters = scheduler->_waiters;
-
-    if (waiters.empty()) return;
-    Waiter& next = waiters.front();
-
-    next.cv.notify();
+    if (scheduler) scheduler->release_slot(*this);
 }
 
 inline

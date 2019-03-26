@@ -6,6 +6,7 @@
 #include "../logger.h"
 #include "../util/lru_cache.h"
 #include "../util/persistent_lru_cache.h"
+#include "../util/condition_variable.h"
 #include "../bittorrent/bencoding.h"
 #include "../bittorrent/dht.h"
 #include "../or_throw.h"
@@ -156,23 +157,36 @@ public:
         : _ios(dht.get_io_service())
         , _dht(dht)
         , _lru(move(lru))
+        , _has_entries(_ios)
     {
-        start();
+        asio::spawn(_ios, [&] (asio::yield_context yield) { loop(yield); });
     }
 
     void insert( const string& url
                , bt::MutableDataItem data
-               , Cancel& cancel
+               , Cancel& cancel_
                , asio::yield_context yield)
     {
-        auto slot = _cancel.connect([&] { cancel(); });
+        Cancel cancel;
+        auto slot1 = cancel_.connect([&] { cancel(); });
+        auto slot2 = _cancel.connect([&] { cancel(); });
 
         auto key = data.salt;
+
+        sys::error_code ec;
+
         _lru->insert( std::move(key)
                     , Entry{ url
                            , Clock::now() - chrono::minutes(15)
                            , std::move(data)}
-                    , cancel, yield);
+                    , cancel
+                    , yield[ec]);
+
+        if (!slot2) {
+            _has_entries.notify();
+        }
+
+        return or_throw(yield, ec);
     }
 
     ~Bep44EntryUpdater() {
@@ -180,63 +194,62 @@ public:
     }
 
 private:
-    void start()
+
+    void loop(asio::yield_context yield)
     {
-        asio::spawn(_ios, [&] (asio::yield_context yield) {
-            Cancel cancel(_cancel);
+        Cancel cancel(_cancel);
 
-            while (true) {
-                auto i = pick_entry_to_update();
+        while (true) {
+            auto i = pick_entry_to_update();
 
-                if (i == _lru->end()) {
-                    async_sleep(_ios, chrono::minutes(1), cancel, yield);
-                    if (cancel) return;
-                    continue;
-                }
-
-                auto old = i.value();
-
-                sys::error_code ec;
-
-                auto new_data = find(_dht
-                                    , old.data.public_key
-                                    , old.data.salt
-                                    , cancel
-                                    , yield[ec]);
-
+            if (i == _lru->end()) {
+                _has_entries.wait(cancel, yield);
                 if (cancel) return;
-
-                if (ec) {
-                    if (ec == asio::error::not_found) {
-                        _dht.mutable_put(old.data, cancel, yield[ec]);
-                    } else {
-                        // Some network error
-                        async_sleep(_ios, chrono::seconds(5), cancel, yield);
-                    }
-
-                    if (cancel) return;
-
-                    // Even if there was some network error we update the
-                    // `last_update` ts just to make sure we don't end up in an
-                    // infinite loop of updating the same item over and over.
-                    old.last_update = Clock::now();
-
-                    _lru->insert(i.key(), old, cancel, yield[ec]);
-                }
-                else {
-                    if (new_data.sequence_number > old.data.sequence_number)
-                    {
-                        // TODO: Store new data
-                        old.data = move(new_data);
-                        old.last_update = Clock::now() - chrono::minutes(15);
-
-                        _lru->insert(i.key(), move(old), cancel, yield[ec]);
-                    }
-                }
-
-                if (cancel) return;
+                continue;
             }
-        });
+
+            auto old = i.value();
+
+            sys::error_code ec;
+
+            auto new_data = find(_dht
+                                , old.data.public_key
+                                , old.data.salt
+                                , cancel
+                                , yield[ec]);
+
+            if (cancel) return;
+
+            if (ec) {
+                if (ec == asio::error::not_found) {
+                    _dht.mutable_put(old.data, cancel, yield[ec]);
+                } else {
+                    // Some network error
+                    async_sleep(_ios, chrono::seconds(5), cancel, yield);
+                }
+
+                if (cancel) return;
+
+                // Even if there was some network error we update the
+                // `last_update` ts just to make sure we don't end up in an
+                // infinite loop of updating the same item over and over.
+                old.last_update = Clock::now();
+
+                _lru->insert(i.key(), old, cancel, yield[ec]);
+            }
+            else {
+                if (new_data.sequence_number > old.data.sequence_number)
+                {
+                    // TODO: Store new data
+                    old.data = move(new_data);
+                    old.last_update = Clock::now() - chrono::minutes(15);
+
+                    _lru->insert(i.key(), move(old), cancel, yield[ec]);
+                }
+            }
+
+            if (cancel) return;
+        }
     }
 
     Lru::iterator pick_entry_to_update() {
@@ -267,6 +280,7 @@ private:
     bt::MainlineDht& _dht;
     LruPtr _lru;
     Cancel _cancel;
+    ConditionVariable _has_entries;
 };
 
 
@@ -405,53 +419,43 @@ string Bep44InjectorIndex::find( const string& key
 
 //--------------------------------------------------------------------
 string Bep44ClientIndex::insert_mapping( const string& ins_data
+                                       , Cancel& cancel
+                                       , asio::yield_context yield)
+{
+    auto item = bt::MutableDataItem::bdecode(ins_data);
+
+    if (!item) return or_throw<string>(yield, asio::error::invalid_argument);
+
+    return insert_mapping(move(*item), cancel, yield);
+}
+
+
+string Bep44ClientIndex::insert_mapping( bt::MutableDataItem item
+                                       , Cancel& cancel_
                                        , asio::yield_context yield)
 {
     Cancel cancel(_cancel);
+    auto slot = cancel_.connect([&] { cancel(); });
 
-    auto ins = bt::bencoding_decode(ins_data);
-    if (!ins || !ins->is_map()) {  // general format and type of data
-        return or_throw<string>(yield, asio::error::invalid_argument);
-    }
+    auto pk = item.public_key.serialize();
+    auto salt = item.salt;
 
     sys::error_code ec;
-    string hex_key;
 
-    bt::MutableDataItem item;
-    try {  // individual fields for mutable data item
-        auto ins_map = ins->as_map();
-        auto k = ins_map->at("k").as_string().value();
-        if (k.size() == 32) {  // or let verification fail
-            array<uint8_t, 32> ka;
-            copy(begin(k), end(k), begin(ka));
-            item.public_key = move(ka);
-        }
-        item.salt = ins_map->at("salt").as_string().value();
-        item.value = ins_map->at("v");
-        item.sequence_number = ins_map->at("seq").as_int().value();
-        auto sig = ins_map->at("sig").as_string().value();
-        if (sig.size() == item.signature.size())  // or let verification fail
-            copy(begin(sig), end(sig), begin(item.signature));
+    _bt_dht.mutable_put(item, cancel, yield[ec]);
+    return_or_throw_on_error(yield, cancel, ec, string());
 
-        _updater->insert("?", item, cancel, yield[ec]);
+    // Ignore the error here
+    _updater->insert("no-debug-name", move(item), cancel, yield[ec]);
 
-        auto key = util::sha1(item.public_key.serialize(), item.salt);
-        hex_key = util::bytes::to_hex(key);
-    }
-    catch (const exception& e) {
-        ec = asio::error::invalid_argument;
-    }
-
-    if (!item.verify()) {  // mutable data item signature
-        ec = asio::error::invalid_argument;
-    }
-
-    return or_throw(yield, ec, move(hex_key));
+    return util::bytes::to_hex(util::sha1(pk, salt));
 }
 
-string Bep44InjectorIndex::insert( string key
-                                 , string value
-                                 , asio::yield_context yield)
+
+bt::MutableDataItem
+Bep44InjectorIndex::get_mutable_data_item( string key
+                                         , string value
+                                         , sys::error_code& ec)
 {
     using Time = boost::posix_time::ptime;
 
@@ -465,16 +469,30 @@ string Bep44InjectorIndex::insert( string key
     Time ts = boost::posix_time::microsec_clock::universal_time();
 
     bt::MutableDataItem item;
+
     try {
         item = bt::MutableDataItem::sign( value
                                         , (ts - unix_epoch).total_milliseconds()
                                         , move(salt)
                                         , _bt_privkey);
     } catch(const length_error&) {
-        return or_throw<string>(yield, asio::error::message_size);
+        ec = asio::error::message_size;
+        return item;
     }
 
+    return item;
+}
+
+
+string Bep44InjectorIndex::insert( string key
+                                 , string value
+                                 , asio::yield_context yield)
+{
     sys::error_code ec;
+
+    auto item = get_mutable_data_item(key, value, ec);
+
+    if (ec) return or_throw<string>(yield, ec);
 
     Cancel cancel(_cancel);
     _bt_dht.mutable_put(item, cancel, yield[ec]);
@@ -486,18 +504,15 @@ string Bep44InjectorIndex::insert( string key
 
     LOG_DEBUG("BEP44 index: inserted key=", key);  // used by integration tests
 
-    // We follow the names used in the BEP44 document.
-    auto pk = item.public_key.serialize();
-    return bt::bencoding_encode(bt::BencodedMap{
-        // cas is not compulsory
-        // id depends on the publishing node
-        { "k"   , string(begin(pk), end(pk)) },
-        { "salt", item.salt },
-        { "seq" , item.sequence_number },
-        // token depends on the insertion
-        { "sig" , string(begin(item.signature), end(item.signature)) },
-        { "v"   , value }
-    });
+    return item.bencode();
+}
+
+
+string Bep44InjectorIndex::get_insert_message( string key
+                                             , string value
+                                             , sys::error_code& ec)
+{
+    return get_mutable_data_item(move(key), move(value), ec).bencode();
 }
 
 
@@ -515,9 +530,11 @@ boost::asio::io_service& Bep44InjectorIndex::get_io_service()
 
 Bep44ClientIndex::~Bep44ClientIndex()
 {
+    _cancel();
 }
 
 
 Bep44InjectorIndex::~Bep44InjectorIndex()
 {
+    _cancel();
 }

@@ -111,6 +111,7 @@ string CacheClient::ipfs_add(const string& data, asio::yield_context yield)
 
 string CacheClient::insert_mapping( const std::string& ins_data
                                   , IndexType index_type
+                                  , Cancel& cancel
                                   , boost::asio::yield_context yield)
 {
     auto index = get_index(index_type);
@@ -118,7 +119,7 @@ string CacheClient::insert_mapping( const std::string& ins_data
     if (!index) return or_throw<string>( yield
                                        , asio::error::operation_not_supported);
 
-    return index->insert_mapping(ins_data, yield);
+    return index->insert_mapping(ins_data, cancel, yield);
 }
 
 ClientIndex* CacheClient::get_index(IndexType index_type)
@@ -141,8 +142,21 @@ string CacheClient::get_descriptor( const string& key
 
     if (!index) return or_throw<string>(yield, asio::error::not_found);
 
-    return descriptor::get_from_index
-        ( key, *index, IPFS_LOAD_FUNC(*_ipfs_node), cancel, yield);
+    sys::error_code ec;
+
+    string desc_path = index->find(key, cancel, yield[ec]);
+
+    return_or_throw_on_error(yield, cancel, ec, string());
+
+    return descriptor_from_path(desc_path, cancel, yield);
+}
+
+string CacheClient::descriptor_from_path( const string& desc_path
+                                        , Cancel& cancel
+                                        , asio::yield_context yield)
+{
+    return descriptor::from_path
+        ( desc_path, IPFS_LOAD_FUNC(*_ipfs_node), cancel, yield);
 }
 
 pair<string, CacheEntry>

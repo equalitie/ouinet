@@ -1,6 +1,7 @@
 #include <bittorrent/dht.h>
 
 #include <iostream>
+#include <chrono>
 
 #include <sys/types.h>
 #include <ifaddrs.h>
@@ -163,7 +164,7 @@ int main(int argc, const char** argv)
 {
     asio::io_service ios;
 
-    MainlineDht dht(ios);
+    unique_ptr<MainlineDht> dht(new MainlineDht(ios));
 
     vector<string> args;
 
@@ -182,13 +183,15 @@ int main(int argc, const char** argv)
         std::cout << "Spawning DHT node on " << addr << std::endl;
     }
 
-    dht.set_interfaces(ifaddrs);
+    dht->set_interfaces(ifaddrs);
 
     asio::spawn(ios, [&] (asio::yield_context yield) {
+        using namespace std::chrono;
+
         sys::error_code ec;
         asio::steady_timer timer(ios);
 
-        while (!dht.all_ready() && !ec) {
+        while (!dht->all_ready() && !ec) {
             cerr << "Not ready yet..." << endl;
             timer.expires_from_now(chrono::seconds(1));
             timer.async_wait(yield[ec]);
@@ -203,15 +206,17 @@ int main(int argc, const char** argv)
 
         Cancel cancel;
 
+        steady_clock::time_point start = steady_clock::now();
+
         if (get_cmd) {
             auto salt = ouinet::util::sha1(get_cmd->dht_key);
 
-            auto opt_data = dht.mutable_get( get_cmd->public_key
+            auto opt_data = dht->mutable_get( get_cmd->public_key
                                            , as_string_view(salt)
                                            , yield[ec], cancel);
 
             if (ec) {
-                cerr << "Error dht.mutable_get " << ec.message() << endl;
+                cerr << "Error dht->mutable_get " << ec.message() << endl;
             }
             else {
                 if (opt_data) {
@@ -241,14 +246,18 @@ int main(int argc, const char** argv)
                                              , as_string_view(salt)
                                              , put_cmd->private_key);
 
-            dht.mutable_put(item, cancel, yield[ec]);
+            dht->mutable_put(item, cancel, yield[ec]);
 
             if (ec) {
                 cerr << "Error dht.mutable_put " << ec.message() << endl;
             }
         }
 
-        cerr << "End" << endl;
+        auto secs = duration_cast<seconds>(steady_clock::now() - start).count();
+
+        cerr << "End. Took " << secs << " seconds" << endl;
+
+        dht.reset();
     });
 
     ios.run();

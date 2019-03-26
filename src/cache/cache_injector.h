@@ -72,6 +72,7 @@ public:
                                   , const Request&
                                   , Response
                                   , IndexType
+                                  , bool perform_io
                                   , boost::asio::yield_context);
 
     // Find the content previously stored by the injector under `key`.
@@ -90,12 +91,12 @@ public:
                               , Cancel&
                               , boost::asio::yield_context);
 
-    void wait_for_ready(Cancel&, boost::asio::yield_context) const;
-
     ~CacheInjector();
 
 private:
     InjectorIndex* get_index(IndexType) const;
+
+    void wait_for_ready(Cancel&, boost::asio::yield_context) const;
 
 private:
     std::unique_ptr<asio_ipfs::node> _ipfs_node;
@@ -105,7 +106,7 @@ private:
     std::unique_ptr<Bep44InjectorIndex> _bep44_index;
     const unsigned int _concurrency = 8;
     std::unique_ptr<Scheduler> _scheduler;
-    std::shared_ptr<bool> _was_destroyed;
+    Cancel _cancel;
 };
 
 } // namespace

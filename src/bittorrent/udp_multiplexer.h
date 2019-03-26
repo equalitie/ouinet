@@ -1,11 +1,13 @@
 #pragma once
 
 #include <list>
+#include <iostream>
 #include <boost/asio/buffer.hpp>
 #include <boost/utility/string_view.hpp>
 #include "../namespaces.h"
 #include "../or_throw.h"
 #include "../util/condition_variable.h"
+#include "../async_sleep.h"
 #include "rate_counter.h"
 
 namespace ouinet { namespace bittorrent {
@@ -72,6 +74,10 @@ private:
     IntrusiveList<RecvEntry> _receive_queue;
     Signal<void()> _terminate_signal;
     asio::steady_timer _rate_limiting_timer;
+    RateCounter _rc_rx;
+    RateCounter _rc_tx;
+    float sent = 0;
+    float recv = 0;
 };
 
 inline
@@ -82,12 +88,42 @@ UdpMultiplexer::UdpMultiplexer(udp::socket&& s):
 {
     assert(_socket.is_open());
 
+#if 0
     asio::spawn(get_io_service(), [this] (asio::yield_context yield) {
-        auto terminated = _terminate_signal.connect([&] {
+            using namespace std::chrono;
+            using std::cerr;
+
+            Cancel cancel(_terminate_signal);
+
+            auto print_rate = [](float r) {
+                if      (r >= 1000000) cerr << (r / 1000000) << "MiB/s";
+                else if (r >= 1000)    cerr << (r / 1000)    << "KiB/s";
+                else                   cerr << (r)           << "B/s";
+            };
+
+            while (true) {
+                sys::error_code ec;
+                async_sleep(get_io_service(), seconds(1), cancel, yield[ec]);
+                if (cancel) return;
+
+                cerr << "Current BT rate rx:";
+                print_rate(_rc_rx.rate());
+                cerr << " (" << recv << ") tx:";
+                print_rate(_rc_tx.rate());
+                cerr << " (" << sent << ") send_queue size:" << _send_queue.size();
+                cerr << "\n";
+                sent = 0;
+                recv = 0;
+            }
+    });
+#endif
+
+    asio::spawn(get_io_service(), [this] (asio::yield_context yield) {
+        Cancel cancel(_terminate_signal);
+
+        auto terminated = cancel.connect([&] {
             _send_queue_nonempty.notify();
         });
-
-        RateCounter rc;
 
         const float max_rate = (500 * 1000)/8; // 500K bits/sec
 
@@ -105,13 +141,17 @@ UdpMultiplexer::UdpMultiplexer(udp::socket&& s):
             SendEntry& entry = _send_queue.front();
 
             sys::error_code ec;
-            _socket.async_send_to(buffer(entry.message), entry.to, yield[ec]);
+
+            if (!ec) {
+                _socket.async_send_to(buffer(entry.message), entry.to, yield[ec]);
+            }
 
             if (terminated) break;
 
             if (!ec) {
-                rc.update(entry.message.size());
-                maintain_max_rate_bytes_per_sec(rc.rate(), max_rate, yield[ec]);
+                sent += entry.message.size();
+                _rc_tx.update(entry.message.size());
+                maintain_max_rate_bytes_per_sec(_rc_tx.rate(), max_rate, yield[ec]);
                 if (terminated) break;
             }
 
@@ -132,9 +172,10 @@ UdpMultiplexer::UdpMultiplexer(udp::socket&& s):
             buf.resize(65536);
 
             size_t size = _socket.async_receive_from(asio::buffer(buf), from, yield[ec]);
-            if (terminated) {
-                break;
-            }
+            if (terminated) return;
+
+            _rc_rx.update(size);
+            recv += size;
 
             buf.resize(size);
             for (auto& entry : std::move(_receive_queue)) {
