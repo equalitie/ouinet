@@ -1131,6 +1131,22 @@ void Client::State::serve_request( GenericStream&& con
         Match( reqexpr::from_regex(target_getter, "https?://detectportal\\.firefox\\.com/.*")
              , {false, queue<fresh_channel>({fresh_channel::origin})} ),
 
+        // Ads
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*googlesyndication\\.com/.*")
+             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*googletagservices\\.com/.*")
+             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*moatads\\.com/.*")
+             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*amazon-adsystem\\.com/.*")
+             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*adsafeprotected\\.com/.*")
+             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*ads-twitter\\.com/.*")
+             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*doubleclick\\.net/.*")
+             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
+
         // Disable cache and always go to proxy for this site.
         Match( reqexpr::from_regex(target_getter, "https?://ifconfig\\.co/.*")
              , {false, queue<fresh_channel>({fresh_channel::proxy})} ),
