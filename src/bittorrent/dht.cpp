@@ -2546,61 +2546,63 @@ void dht::DhtNode::routing_bucket_fail_node( RoutingBucket* bucket
 MainlineDht::MainlineDht(asio::io_service& ios)
     : _ios(ios)
 {
+    // Don't do this, let the user of this code manage republishing themselves.
+    // TODO: Remove all the supporting code as well
     /*
      * Refresh publications periodically.
      */
-    asio::spawn(_ios, [this] (asio::yield_context yield) {
-        while (true) {
-            if (!async_sleep(_ios, std::chrono::seconds(60), _terminate_signal, yield)) {
-                break;
-            }
+    //asio::spawn(_ios, [this] (asio::yield_context yield) {
+    //    while (true) {
+    //        if (!async_sleep(_ios, std::chrono::seconds(60), _terminate_signal, yield)) {
+    //            break;
+    //        }
 
-            std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+    //        std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
 
-            /*
-             * TODO: This needs proper cancellation support, as soon as DhtNode supports that.
-             */
+    //        /*
+    //         * TODO: This needs proper cancellation support, as soon as DhtNode supports that.
+    //         */
 
-            for (auto& i : _publications.tracker_publications) {
-                if (i.second.last_sent + std::chrono::seconds(_publications.ANNOUNCE_INTERVAL_SECONDS) < now) {
-                    i.second.last_sent = now;
-                    for (auto& j : _nodes) {
-                        asio::spawn(_ios, [&] (asio::yield_context yield) {
-                            sys::error_code ec;
-                            Signal<void()> cancel_dummy;
-                            j.second->tracker_announce(i.first, i.second.port, yield[ec], cancel_dummy);
-                        });
-                    }
-                }
-            }
+    //        for (auto& i : _publications.tracker_publications) {
+    //            if (i.second.last_sent + std::chrono::seconds(_publications.ANNOUNCE_INTERVAL_SECONDS) < now) {
+    //                i.second.last_sent = now;
+    //                for (auto& j : _nodes) {
+    //                    asio::spawn(_ios, [&] (asio::yield_context yield) {
+    //                        sys::error_code ec;
+    //                        Signal<void()> cancel_dummy;
+    //                        j.second->tracker_announce(i.first, i.second.port, yield[ec], cancel_dummy);
+    //                    });
+    //                }
+    //            }
+    //        }
 
-            for (auto& i : _publications.immutable_publications) {
-                if (i.second.last_sent + std::chrono::seconds(_publications.PUT_INTERVAL_SECONDS) < now) {
-                    i.second.last_sent = now;
-                    for (auto& j : _nodes) {
-                        asio::spawn(_ios, [&] (asio::yield_context yield) {
-                            sys::error_code ec;
-                            Signal<void()> cancel_dummy;
-                            j.second->data_put_immutable(i.second.data, yield[ec], cancel_dummy);
-                        });
-                    }
-                }
-            }
+    //        for (auto& i : _publications.immutable_publications) {
+    //            if (i.second.last_sent + std::chrono::seconds(_publications.PUT_INTERVAL_SECONDS) < now) {
+    //                i.second.last_sent = now;
+    //                for (auto& j : _nodes) {
+    //                    asio::spawn(_ios, [&] (asio::yield_context yield) {
+    //                        sys::error_code ec;
+    //                        Signal<void()> cancel_dummy;
+    //                        j.second->data_put_immutable(i.second.data, yield[ec], cancel_dummy);
+    //                    });
+    //                }
+    //            }
+    //        }
 
-            for (auto& i : _publications.mutable_publications) {
-                if (i.second.last_sent + std::chrono::seconds(_publications.PUT_INTERVAL_SECONDS) < now) {
-                    i.second.last_sent = now;
-                    for (auto& j : _nodes) {
-                        asio::spawn(_ios, [&] (asio::yield_context yield) {
-                            sys::error_code ec;
-                            Signal<void()> cancel_dummy;
-                            j.second->data_put_mutable(i.second.data, yield[ec], cancel_dummy);
-                        });
-                    }
-                }
-            }
-        }
-    });
+    //        for (auto& i : _publications.mutable_publications) {
+    //            if (i.second.last_sent + std::chrono::seconds(_publications.PUT_INTERVAL_SECONDS) < now) {
+    //                i.second.last_sent = now;
+    //                for (auto& j : _nodes) {
+    //                    asio::spawn(_ios, [&] (asio::yield_context yield) {
+    //                        sys::error_code ec;
+    //                        Signal<void()> cancel_dummy;
+    //                        j.second->data_put_mutable(i.second.data, yield[ec], cancel_dummy);
+    //                    });
+    //                }
+    //            }
+    //        }
+    //    }
+    //});
 
 }
 
