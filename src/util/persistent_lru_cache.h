@@ -285,7 +285,7 @@ PersistentLruCache<Value>::load( asio::io_service& ios
 
     while ((entry = readdir(directory)) != NULL) {
         if (entry->d_type == DT_REG) {
-            fs::path path(entry->d_name);
+            fs::path path(dir / entry->d_name);
             uint64_t ts;
             auto e = Element::open(ios, path, &ts, cancel, yield[ec]);
 
