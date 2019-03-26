@@ -96,12 +96,12 @@ void collect(
 
 template<class CandidateSet, class Evaluate>
 void collect2(
-    std::chrono::steady_clock::time_point start,
+    DebugCtx& dbg,
     asio::io_service& ios,
     CandidateSet first_candidates,
     Evaluate&& evaluate,
     asio::yield_context yield,
-    Signal<void()>& cancel_signal, const char* debug = nullptr
+    Signal<void()>& cancel_signal
 ) {
     using namespace std;
 
@@ -114,12 +114,15 @@ void collect2(
     auto comp = first_candidates.key_comp();
     Candidates candidates(comp);
 
+    if (dbg) cerr << dbg << "first candidates:" << "\n";
+
     for (auto& c : first_candidates) {
+        if (dbg) cerr << dbg << "     " << c << "\n";
         candidates.insert(candidates.end(), { c, unused });
     }
 
     WaitCondition all_done(ios);
-    util::AsyncQueue<dht::NodeContact> new_candidates(ios);
+    util::AsyncQueue<vector<dht::NodeContact>> new_candidates(ios);
 
     Scheduler scheduler(ios, 64);
 
@@ -141,24 +144,16 @@ void collect2(
 
     Cancel local_cancel(cancel_signal);
 
-#if SPEED_DEBUG
-    auto secs = [start] (auto start) {
-        using namespace std::chrono;
-        return duration_cast<milliseconds>(steady_clock::now() - start).count() / 1000.f;
-    };
-#endif
-
     while (true) {
         sys::error_code ec;
 
-#if SPEED_DEBUG
-        cerr << secs(start) << " Start waiting for job (current count:" << scheduler.slot_count() << ")\n";
-#endif
-        auto slot = scheduler.wait_for_slot(local_cancel, yield[ec]);
-#if SPEED_DEBUG
-        cerr << secs(start) << " Done waiting for job (job count:" << scheduler.slot_count() << ")\n";
-#endif
+        if (dbg) cerr << dbg << "Start waiting for job (current count:" << scheduler.slot_count() << ")\n";
 
+        auto slot = scheduler.wait_for_slot(local_cancel, yield[ec]);
+
+        if (dbg) cerr << dbg << " Done waiting for job (job count:" << scheduler.slot_count() << ")\n";
+
+        assert(!local_cancel || ec == asio::error::operation_aborted);
         if (ec) break;
 
         auto candidate_i = pick_candidate();
@@ -169,15 +164,15 @@ void collect2(
             if (active_jobs.empty() && new_candidates.size() == 0) {
                 break;
             }
-#if SPEED_DEBUG
-            if (debug) cerr << debug << " " << secs(start) << " Start waiting for candidate (active jobs:" << active_jobs.size() << " new_candidates:" << new_candidates.size() << ")\n";
-#endif
-            assert(!local_cancel);
-            auto new_candidate = new_candidates.async_pop(local_cancel, yield[ec2]);
 
-#if SPEED_DEBUG
-            if (debug) cerr << debug << " " << secs(start) << " End waiting for candidate " << ec2.message() << " " << new_candidate.id << "\n";
-#endif
+            if (dbg) cerr << dbg << " Start waiting for candidate (active jobs:"
+                          << active_jobs.size() << " new_candidates:" << new_candidates.size() << ")\n";
+
+            assert(!local_cancel);
+            auto cs = new_candidates.async_pop(local_cancel, yield[ec2]);
+
+            if (dbg) cerr << dbg << " End waiting for candidate "
+                          << ec2.message() << " " << cs.size() << "\n";
 
             assert(!local_cancel || ec2 == asio::error::operation_aborted);
 
@@ -187,10 +182,10 @@ void collect2(
 
             if (ec2 || local_cancel) break;
 
-            if (!candidates.insert({ new_candidate, unused }).second) {
-                continue;
+            for (auto &c : cs) {
+                bool added = candidates.insert({ c, unused }).second;
+                if (dbg && added) cerr << dbg << "     + " << c << "\n";
             }
-
 
             candidate_i = pick_candidate();
         }
@@ -210,7 +205,6 @@ void collect2(
                          ] (asio::yield_context yield) mutable {
             sys::error_code ec;
 
-            assert(!local_cancel);
             bool on_finish_called = false;
 
             auto on_finish = [&] () mutable {
@@ -224,28 +218,17 @@ void collect2(
                 // Make sure we don't get stuck waiting for candidates when
                 // there is no more work and this candidate has not returned
                 // any new ones.
-                new_candidates.async_push( dht::NodeContact()
+                new_candidates.async_push( vector<dht::NodeContact>()
                                          , asio::error::eof
                                          , local_cancel
                                          , yield);
             };
 
-            assert(!local_cancel);
-            WatchDog wd;
-
-            if (true || !first_candidates.count(candidate)) {
-                wd = WatchDog(ios, default_timeout, [&] () mutable {
-#if SPEED_DEBUG
-                    if (debug) cerr << debug << " " << secs(start) << " dismiss " << candidate << "\n";
-#endif
+            WatchDog wd(ios, default_timeout, [&] () mutable {
+                    if (dbg) cerr << dbg << "dismiss " << candidate << "\n";
                     on_finish();
                 });
-            }
-            else {
-                cerr << " no wd for " << candidate << "\n";
-            }
 
-            assert(!local_cancel);
             evaluate( candidate
                     , wd
                     , new_candidates
@@ -257,9 +240,9 @@ void collect2(
     }
 
     local_cancel();
-#if SPEED_DEBUG
-    if (debug) cerr << debug << " >>>>>>>>>>>>>>>>>>> DONE <<<<<<<<<<<<<<<<<<<<\n";
-#endif
+
+    if (dbg) cerr << dbg << " >>>>>>>>>>>>>>>>>>> DONE <<<<<<<<<<<<<<<<<<<<\n";
+
     all_done.wait(yield);
 
     if (cancel_signal) {
