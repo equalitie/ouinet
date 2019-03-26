@@ -15,6 +15,8 @@
 #include "node_id.h"
 #include "routing_table.h"
 #include "contact.h"
+#include "peer_limiter.h"
+#include "debug_ctx.h"
 
 #include "../namespaces.h"
 #include "../util/crypto.h"
@@ -202,7 +204,8 @@ class DhtNode {
     bool query_find_node2(
         NodeID target_id,
         Contact node,
-        util::AsyncQueue<NodeContact>& closer_nodes,
+        util::AsyncQueue<std::vector<NodeContact>>& closer_nodes,
+        WatchDog& dead_man_switch,
         asio::yield_context yield,
         Signal<void()>& cancel_signal
     );
@@ -250,6 +253,7 @@ class DhtNode {
         Contact,
         const std::string& query_type,
         const BencodedMap& query_arguments,
+        WatchDog* dms,
         asio::yield_context yield,
         Signal<void()>& cancel_signal
     );
@@ -294,8 +298,9 @@ class DhtNode {
     boost::optional<BencodedMap> query_get_data2(
         NodeID key,
         Contact node,
-        util::AsyncQueue<NodeContact>& closer_nodes,
+        util::AsyncQueue<std::vector<NodeContact>>& closer_nodes,
         WatchDog& dead_man_switch,
+        DebugCtx&,
         asio::yield_context yield,
         Signal<void()>& cancel_signal
     );
@@ -333,7 +338,7 @@ class DhtNode {
 
     template<class Evaluate>
     void collect2(
-        std::chrono::steady_clock::time_point start,
+        DebugCtx&,
         const NodeID& target,
         Evaluate&&,
         asio::yield_context,
@@ -342,6 +347,7 @@ class DhtNode {
 
     private:
     asio::io_service& _ios;
+    PeerLimiter _peer_limiter;
     ip::address _interface_address;
     std::unique_ptr<UdpMultiplexer> _multiplexer;
     NodeID _node_id;

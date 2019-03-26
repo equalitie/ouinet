@@ -91,12 +91,12 @@ public:
                               , Cancel&
                               , boost::asio::yield_context);
 
-    void wait_for_ready(Cancel&, boost::asio::yield_context) const;
-
     ~CacheInjector();
 
 private:
     InjectorIndex* get_index(IndexType) const;
+
+    void wait_for_ready(Cancel&, boost::asio::yield_context) const;
 
 private:
     std::unique_ptr<asio_ipfs::node> _ipfs_node;

@@ -89,6 +89,11 @@ public:
 
     Slot wait_for_slot(asio::yield_context yield);
     Slot wait_for_slot(Cancel&, asio::yield_context yield);
+    Slot get_slot() {
+        Slot slot(this);
+        _slots.push_back(slot);
+        return slot;
+    }
 
     size_t max_running_jobs() const { return _max_running_jobs; }
 
