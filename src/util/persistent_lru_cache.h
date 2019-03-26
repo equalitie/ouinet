@@ -6,6 +6,7 @@
 #include <boost/filesystem.hpp>
 #include <boost/asio/io_service.hpp>
 #include <boost/asio/spawn.hpp>
+#include <dirent.h>
 
 #include "../namespaces.h"
 #include "../defer.h"
@@ -277,18 +278,27 @@ PersistentLruCache<Value>::load( asio::io_service& ios
     std::map<Id, std::shared_ptr<Element>> elements;
 
     uint64_t i = 0;
-    for (auto file : fs::directory_iterator(dir)) {
-        uint64_t ts;
-        auto e = Element::open(ios, file, &ts, cancel, yield[ec]);
 
-        if (cancel) {
-            return or_throw<Ret>(yield, asio::error::operation_aborted);
+
+    DIR* directory = opendir(dir.c_str());
+    struct dirent* entry;
+
+    while ((entry = readdir(directory)) != NULL) {
+        if (entry->d_type == DT_REG) {
+            fs::path path(entry->d_name);
+            uint64_t ts;
+            auto e = Element::open(ios, path, &ts, cancel, yield[ec]);
+
+            if (cancel) {
+                return or_throw<Ret>(yield, asio::error::operation_aborted);
+            }
+
+            if (ec) continue;
+
+            elements.insert({Id{ts, i++}, e});
         }
-
-        if (ec) continue;
-
-        elements.insert({Id{ts, i++}, e});
     }
+    closedir(directory);
 
     while (elements.size() > max_size) {
         auto i = elements.begin();
