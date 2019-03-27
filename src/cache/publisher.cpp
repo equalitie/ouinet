@@ -124,7 +124,8 @@ Publisher::Publisher( asio_ipfs::node& ipfs_node
     _bt_loop->publish_func = [this](auto cid, auto yield) {
         auto ipns = _ipfs_node.id();
         auto item = bt_mutable_data(cid, ipns, _bep44_private_key);
-        _bt_dht.mutable_put_start(item, yield);
+        Cancel cancel;
+        _bt_dht.mutable_put(item, cancel, yield);
     };
 
     _ipfs_loop->start();
