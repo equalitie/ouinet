@@ -41,7 +41,7 @@ RUN wget -q "https://downloads.sourceforge.net/project/boost/boost/1.67.0/boost_
 # This version is a recommendation and this file has been tested to work for it,
 # but you may attempt to build other versions by overriding this argument.
 # Also see `OUINET_DOCKER_VERSION` below.
-ARG OUINET_VERSION=v0.0.31
+ARG OUINET_VERSION=v0.0.32
 RUN git clone --recursive -b "$OUINET_VERSION" https://github.com/equalitie/ouinet.git
 WORKDIR /opt/ouinet
 RUN cmake /usr/local/src/ouinet \
@@ -114,6 +114,7 @@ COPY --from=builder \
      /opt/ouinet/gcrypt/src/gcrypt/src/.libs/libgcrypt.so.20 \
      /opt/ouinet/gpg_error/out/lib/libgpg-error.so.0 \
      /opt/ouinet/modules/asio-ipfs/ipfs_bindings/libipfs_bindings.so \
+     /opt/ouinet/src/ouiservice/lampshade/lampshade_bindings/liblampshade_bindings.so \
      \
      /usr/local/lib/
 # Update the dynamic linker cache after all non-system libraries have been copied.
