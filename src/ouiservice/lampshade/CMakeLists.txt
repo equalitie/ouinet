@@ -106,7 +106,7 @@ add_custom_command(
          && export CC=${CMAKE_C_COMPILER}
          && mkdir -p ${GOPATH}/src/github.com/equalitie/lampshade/src
          && cd ${GOPATH}/src/github.com/equalitie/lampshade
-         && rsync -r ${CMAKE_CURRENT_SOURCE_DIR} src
+         && rsync -r ${CMAKE_CURRENT_SOURCE_DIR}/ src
          && go build -ldflags '-extldflags -Wl,-soname,liblampshade_bindings.so'
                      --buildmode=c-shared
                      -o ${BINDING_DIR}/lampshade_bindings.so
