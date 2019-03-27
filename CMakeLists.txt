@@ -63,6 +63,7 @@ option(ASIO_IPFS_WITH_EXAMPLE_BINARIES "" OFF)
 add_subdirectory(./modules/asio-ipfs)
 add_subdirectory(./modules/obfs4proxy)
 add_subdirectory(./src/ouiservice/i2p)
+add_subdirectory(./src/ouiservice/lampshade)
 
 ################################################################################
 project(ouinet)
@@ -172,6 +173,7 @@ file(GLOB client_sources
     "./src/ouiservice.cpp"
     "./src/ssl/ca_certificate.cpp"
     "./src/ssl/dummy_certificate.cpp"
+    "./src/ouiservice/lampshade.cpp"
     "./src/ouiservice/pt-obfs2.cpp"
     "./src/ouiservice/pt-obfs3.cpp"
     "./src/ouiservice/pt-obfs4.cpp"
@@ -205,6 +207,7 @@ target_link_libraries(client
     ouiservice-i2p
     ${Boost_LIBRARIES}
     ${ASIO_IPFS_LIBRARIES}
+    ${LIBLAMPSHADE_LIBRARIES}
     ${URI_LIBRARY}
     ${GCRYPT_LIBRARIES}
 )
@@ -226,6 +229,7 @@ if (WITH_INJECTOR)
         "./src/connect_to_host.cpp"
         "./src/cache_control.cpp"
         "./src/ouiservice.cpp"
+        "./src/ouiservice/lampshade.cpp"
         "./src/ouiservice/pt-obfs2.cpp"
         "./src/ouiservice/pt-obfs3.cpp"
         "./src/ouiservice/pt-obfs4.cpp"
@@ -252,6 +256,7 @@ if (WITH_INJECTOR)
         ouiservice-i2p
         ${Boost_LIBRARIES}
         ${ASIO_IPFS_LIBRARIES}
+        ${LIBLAMPSHADE_LIBRARIES}
         ${URI_LIBRARY}
         ${GCRYPT_LIBRARIES}
     )
