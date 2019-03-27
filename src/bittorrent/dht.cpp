@@ -748,23 +748,6 @@ NodeID dht::DhtNode::data_put_mutable(
     return or_throw<NodeID>(yield, ec, std::move(target_id));
 }
 
-NodeID dht::DhtNode::data_put_mutable(
-    const BencodedValue& data,
-    const util::Ed25519PrivateKey& private_key,
-    const std::string& salt,
-    int64_t sequence_number,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
-) {
-    return data_put_mutable(MutableDataItem::sign(
-        data,
-        sequence_number,
-        salt,
-        private_key
-    ), yield, cancel_signal);
-}
-
-
 
 void dht::DhtNode::receive_loop(asio::yield_context yield)
 {

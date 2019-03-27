@@ -163,27 +163,6 @@ class DhtNode {
         Signal<void()>& cancel_signal
     );
 
-    /**
-     * Store $data in the DHT as a BEP-44 mutable data item. The data item
-     * can be found when searching for the combination of (public key, salt).
-     *
-     * @param private_key The private key whose public key identifies the data item.
-     * @param salt The salt which identifies the data item. May be empty.
-     * @param sequence_number Version number of the data item. Must be larger
-     *            than any previous version number used for this data item.
-     * @return The ID as which this data is known in the DHT.
-     *
-     * TODO: Implement compare-and-swap if we ever need it.
-     */
-    NodeID data_put_mutable(
-        const BencodedValue& data,
-        const util::Ed25519PrivateKey& private_key,
-        const std::string& salt,
-        int64_t sequence_number,
-        asio::yield_context yield,
-        Signal<void()>& cancel_signal
-    );
-
     // http://bittorrent.org/beps/bep_0005.html#ping
     BencodedMap send_ping(
         NodeContact contact,
