@@ -102,16 +102,21 @@ int main(int argc, const char** argv)
 
         Cancel cancel;
 
+        auto ep = resolve( ios
+                         , "router.bittorrent.com"
+                         , "6881"
+                         , yield[ec]
+                         , cancel);
+
+        if (ec) {
+            cerr << "Error resolve " << ec.message() << endl;
+            return;
+        }
+
+        NodeID nid = NodeID::generate(ep.address());
+
         if (ping_cmd) {
-            auto ping_ep = resolve(
-                ios,
-                "router.bittorrent.com",
-                "6881",
-                yield[ec],
-                cancel
-                );
-            NodeID nid = NodeID::generate(ping_ep.address());
-            NodeContact nc {nid, ping_ep};
+            NodeContact nc {nid, ep};
 
             BencodedMap initial_ping_reply = dht_.send_ping(nc, yield[ec], cancel);
             std::cout << initial_ping_reply << endl;
@@ -123,14 +128,6 @@ int main(int argc, const char** argv)
         }
 
         if (find_node_cmd) {
-            auto ep = resolve(
-                ios,
-                "router.bittorrent.com",
-                "6881",
-                yield[ec],
-                cancel
-                );
-            NodeID nid = NodeID::generate(ep.address());
             Contact nc {ep, nid};
 
             std::vector<ouinet::bittorrent::dht::NodeContact> v = {};
@@ -144,14 +141,6 @@ int main(int argc, const char** argv)
         }
 
         if (get_peers_cmd) {
-            auto ep = resolve(
-                ios,
-                "router.bittorrent.com",
-                "6881",
-                yield[ec],
-                cancel
-                );
-            NodeID nid = NodeID::generate(ep.address());
             Contact nc {ep, nid};
 
             std::vector<ouinet::bittorrent::dht::NodeContact> v = {};
