@@ -20,6 +20,8 @@ boost::optional<Endpoint> parse_endpoint(beast::string_view endpoint)
     } else if (type == "gnunet") {
         output.type = Endpoint::GnunetEndpoint;
 #endif
+    } else if (type == "lampshade") {
+        output.type = Endpoint::LampshadeEndpoint;
     } else if (type == "obfs2") {
         output.type = Endpoint::Obfs2Endpoint;
     } else if (type == "obfs3") {
@@ -42,6 +44,8 @@ std::ostream& operator<<(std::ostream& os, const Endpoint& ep)
     } else if (ep.type == Endpoint::GnunetEndpoint) {
         os << "gnunet";
 #endif
+    } else if (ep.type == Endpoint::LampshadeEndpoint) {
+        os << "lampshade";
     } else if (ep.type == Endpoint::Obfs2Endpoint) {
         os << "obfs2";
     } else if (ep.type == Endpoint::Obfs3Endpoint) {

@@ -34,6 +34,7 @@
 
 #include "ouiservice.h"
 #include "ouiservice/i2p.h"
+#include "ouiservice/lampshade.h"
 #include "ouiservice/pt-obfs2.h"
 #include "ouiservice/pt-obfs3.h"
 #include "ouiservice/pt-obfs4.h"
@@ -786,6 +787,18 @@ int main(int argc, const char* argv[])
 
         auto base = make_unique<ouiservice::TcpOuiServiceServer>(ios, endpoint);
         proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(move(base), ssl_context));
+    }
+
+    if (config.lampshade_endpoint()) {
+        tcp::endpoint endpoint = *config.lampshade_endpoint();
+        util::create_state_file( config.repo_root()/"endpoint-lampshade"
+                               , util::str(endpoint));
+
+        unique_ptr<ouiservice::LampshadeOuiServiceServer> server =
+            make_unique<ouiservice::LampshadeOuiServiceServer>(ios, endpoint, config.repo_root()/"lampshade-server");
+        cout << "lampshade Address: " << util::str(endpoint) << ",key=" << server->public_key() << endl;
+
+        proxy_server.add(std::move(server));
     }
 
     if (config.obfs2_endpoint()) {

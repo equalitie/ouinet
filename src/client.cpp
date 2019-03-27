@@ -45,6 +45,7 @@
 
 #include "ouiservice.h"
 #include "ouiservice/i2p.h"
+#include "ouiservice/lampshade.h"
 #include "ouiservice/pt-obfs2.h"
 #include "ouiservice/pt-obfs3.h"
 #include "ouiservice/pt-obfs4.h"
@@ -1432,6 +1433,13 @@ void Client::State::setup_injector(asio::yield_context yield)
             return or_throw(yield, asio::error::invalid_argument);
         }
         client = std::move(tcp_client);
+    } else if (injector_ep->type == Endpoint::LampshadeEndpoint) {
+        auto lampshade_client = make_unique<ouiservice::LampshadeOuiServiceClient>(_ios, injector_ep->endpoint_string);
+
+        if (!lampshade_client->verify_endpoint()) {
+            return or_throw(yield, asio::error::invalid_argument);
+        }
+        client = std::move(lampshade_client);
     } else if (injector_ep->type == Endpoint::Obfs2Endpoint) {
         auto obfs2_client = make_unique<ouiservice::Obfs2OuiServiceClient>(_ios, injector_ep->endpoint_string, _config.repo_root()/"obfs2-client");
 

@@ -34,6 +34,9 @@ public:
     boost::optional<asio::ip::tcp::endpoint> tls_endpoint() const
     { return _tls_endpoint; }
 
+    boost::optional<asio::ip::tcp::endpoint> lampshade_endpoint() const
+    { return _lampshade_endpoint; }
+
     boost::optional<asio::ip::tcp::endpoint> obfs2_endpoint() const
     { return _obfs2_endpoint; }
 
@@ -70,6 +73,7 @@ private:
     bool _listen_on_i2p = false;
     boost::optional<asio::ip::tcp::endpoint> _tcp_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _tls_endpoint;
+    boost::optional<asio::ip::tcp::endpoint> _lampshade_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _obfs2_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _obfs3_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _obfs4_endpoint;
@@ -102,6 +106,7 @@ InjectorConfig::options_description()
         // Transport options
         ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen (cleartext)")
         ("listen-on-tls", po::value<string>(), "IP:PORT endpoint on which we'll listen (encrypted)")
+        ("listen-on-lampshade", po::value<string>(), "IP:PORT endpoint on which we'll listen using the lampshade pluggable transport")
         ("listen-on-obfs2", po::value<string>(), "IP:PORT endpoint on which we'll listen using the obfs2 pluggable transport")
         ("listen-on-obfs3", po::value<string>(), "IP:PORT endpoint on which we'll listen using the obfs3 pluggable transport")
         ("listen-on-obfs4", po::value<string>(), "IP:PORT endpoint on which we'll listen using the obfs4 pluggable transport")
@@ -204,6 +209,10 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
     if (vm.count("listen-on-tls")) {
         _tls_endpoint = util::parse_tcp_endpoint(vm["listen-on-tls"].as<string>());
+    }
+
+    if (vm.count("listen-on-lampshade")) {
+        _lampshade_endpoint = util::parse_tcp_endpoint(vm["listen-on-lampshade"].as<string>());
     }
 
     if (vm.count("listen-on-obfs2")) {
