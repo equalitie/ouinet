@@ -46,6 +46,34 @@ public:
         _rx_cv.notify();
     }
 
+    template<class Range>
+    void async_push_many( const Range& range
+                        , Cancel& cancel
+                        , asio::yield_context yield)
+    {
+        auto slot = _destroy_signal.connect([&] { cancel(); });
+
+        sys::error_code ec;
+
+        auto i = std::begin(range);
+        auto end = std::end(range);
+
+        while (i != end) {
+            while (_queue.size() >= _max_size) {
+                _tx_cv.wait(yield[ec]);
+                if (cancel) ec = asio::error::operation_aborted;
+                if (ec) return or_throw(yield, ec);
+            }
+
+            while (_queue.size() < _max_size && i != end) {
+                _queue.push({*i, sys::error_code()});
+                ++i;
+            }
+
+            _rx_cv.notify();
+        }
+    }
+
     T async_pop(Cancel& cancel, asio::yield_context yield)
     {
         auto slot = _destroy_signal.connect([&] { cancel(); });
@@ -66,6 +94,40 @@ public:
         _tx_cv.notify();
 
         return or_throw<T>(yield, ret.second, std::move(ret.first));
+    }
+
+    size_t async_flush( std::queue<T>& out
+                      , Cancel& cancel
+                      , asio::yield_context yield)
+    {
+        auto slot = _destroy_signal.connect([&] { cancel(); });
+
+        sys::error_code ec;
+
+        while (_queue.empty()) {
+            _rx_cv.wait(yield[ec]);
+            if (cancel) ec = asio::error::operation_aborted;
+            if (ec) return or_throw<size_t>(yield, ec, 0);
+        }
+
+        assert(!_queue.empty());
+
+        size_t ret = 0;
+
+        while (!_queue.empty()) {
+            auto p = std::move(_queue.front());
+            _queue.pop();
+            if (!p.second) {
+                ++ret;
+                out.push(std::move(p.first));
+            }
+        }
+
+        _tx_cv.notify();
+
+        if (cancel) ec = asio::error::operation_aborted;
+
+        return or_throw<size_t>(yield, ec, 0);
     }
 
     ~AsyncQueue()

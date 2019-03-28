@@ -145,6 +145,15 @@ bool NodeID::closer_to(const NodeID& left, const NodeID& right) const
     return false;
 }
 
+NodeID NodeID::operator^(const NodeID& other) const
+{
+    NodeID ret;
+    for (size_t i = 0; i < sizeof(buffer); i++) {
+        ret.buffer[i] = buffer[i] ^ other.buffer[i];
+    }
+    return ret;
+}
+
 NodeID NodeID::distance_to(const NodeID& other) const
 {
     NodeID ret = NodeID::zero();

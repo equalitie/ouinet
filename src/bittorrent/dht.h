@@ -163,27 +163,6 @@ class DhtNode {
         Signal<void()>& cancel_signal
     );
 
-    /**
-     * Store $data in the DHT as a BEP-44 mutable data item. The data item
-     * can be found when searching for the combination of (public key, salt).
-     *
-     * @param private_key The private key whose public key identifies the data item.
-     * @param salt The salt which identifies the data item. May be empty.
-     * @param sequence_number Version number of the data item. Must be larger
-     *            than any previous version number used for this data item.
-     * @return The ID as which this data is known in the DHT.
-     *
-     * TODO: Implement compare-and-swap if we ever need it.
-     */
-    NodeID data_put_mutable(
-        const BencodedValue& data,
-        const util::Ed25519PrivateKey& private_key,
-        const std::string& salt,
-        int64_t sequence_number,
-        asio::yield_context yield,
-        Signal<void()>& cancel_signal
-    );
-
     // http://bittorrent.org/beps/bep_0005.html#ping
     BencodedMap send_ping(
         NodeContact contact,
@@ -204,8 +183,9 @@ class DhtNode {
     bool query_find_node2(
         NodeID target_id,
         Contact node,
-        util::AsyncQueue<std::vector<NodeContact>>& closer_nodes,
+        util::AsyncQueue<NodeContact>& closer_nodes,
         WatchDog& dead_man_switch,
+        DebugCtx* dbg,
         asio::yield_context yield,
         Signal<void()>& cancel_signal
     );
@@ -225,6 +205,8 @@ class DhtNode {
     udp::endpoint wan_endpoint() const { return _wan_endpoint; }
 
     ~DhtNode();
+
+    asio::io_service& get_io_service() { return _ios; }
 
     private:
     void receive_loop(asio::yield_context yield);
@@ -254,6 +236,7 @@ class DhtNode {
         const std::string& query_type,
         const BencodedMap& query_arguments,
         WatchDog* dms,
+        DebugCtx* dbg,
         asio::yield_context yield,
         Signal<void()>& cancel_signal
     );
@@ -298,7 +281,7 @@ class DhtNode {
     boost::optional<BencodedMap> query_get_data2(
         NodeID key,
         Contact node,
-        util::AsyncQueue<std::vector<NodeContact>>& closer_nodes,
+        util::AsyncQueue<NodeContact>& closer_nodes,
         WatchDog& dead_man_switch,
         DebugCtx&,
         asio::yield_context yield,
@@ -372,39 +355,6 @@ class DhtNode {
     std::unique_ptr<Stats> _stats;
 };
 
-struct DhtPublications
-{
-    /*
-     * There does not seem to be any spec for this. 20 minute based on
-     * what other implementations seem to do.
-     */
-    const int ANNOUNCE_INTERVAL_SECONDS = 60 * 20;
-    /*
-     * http://www.bittorrent.org/beps/bep_0044.html#expiration recommends
-     * republish every hour, and expiring after two hours. We'll republish
-     * slightly faster, to avoid unfortunate rounding errors.
-     */
-    const int PUT_INTERVAL_SECONDS = 60 * 50;
-
-    struct TrackerPublication {
-        boost::optional<int> port;
-        std::chrono::steady_clock::time_point last_sent;
-    };
-    std::map<NodeID, TrackerPublication> tracker_publications;
-
-    struct ImmutablePublication {
-        BencodedValue data;
-        std::chrono::steady_clock::time_point last_sent;
-    };
-    std::map<NodeID, ImmutablePublication> immutable_publications;
-
-    struct MutablePublication {
-        MutableDataItem data;
-        std::chrono::steady_clock::time_point last_sent;
-    };
-    std::map<NodeID, MutablePublication> mutable_publications;
-};
-
 } // dht namespace
 
 class MainlineDht {
@@ -419,51 +369,16 @@ class MainlineDht {
     void set_interfaces(const std::vector<asio::ip::address>& addresses);
 
     /*
-     * When cancelled, the publication still goes through and will be refreshed
-     * until _stop()ped, but the _start() will not wait for successful completion.
-     */
-    /*
      * TODO: announce() and put() functions don't have any real error detection.
      */
-    std::set<tcp::endpoint> tracker_announce_start(
+    std::set<tcp::endpoint> tracker_announce(
         NodeID infohash,
         boost::optional<int> port,
         asio::yield_context yield,
         Signal<void()>& cancel_signal
     );
-    std::set<tcp::endpoint> tracker_announce_start(
-        NodeID infohash,
-        boost::optional<int> port,
-        asio::yield_context yield
-    )
-        { Signal<void()> cancel_signal; return tracker_announce_start(infohash, port, yield, cancel_signal); }
-    void tracker_announce_start(
-        NodeID infohash,
-        boost::optional<int> port
-    );
-    void tracker_announce_stop(NodeID infohash);
-
-    NodeID immutable_put_start(
-        const BencodedValue& data,
-        asio::yield_context yield,
-        Signal<void()>& cancel_signal
-    );
-    NodeID immutable_put_start(const BencodedValue& data, asio::yield_context yield)
-        { Signal<void()> cancel_signal; return immutable_put_start(data, yield, cancel_signal); }
-    NodeID immutable_put_start(const BencodedValue& data);
-    void immutable_put_stop(NodeID key);
 
     void mutable_put(const MutableDataItem&, Cancel&, asio::yield_context);
-
-    NodeID mutable_put_start(
-        const MutableDataItem& data,
-        asio::yield_context yield,
-        Signal<void()>& cancel_signal
-    );
-    NodeID mutable_put_start(const MutableDataItem& data, asio::yield_context yield)
-        { Signal<void()> cancel_signal; return mutable_put_start(data, yield, cancel_signal); }
-    NodeID mutable_put_start(const MutableDataItem& data);
-    void mutable_put_stop(NodeID key);
 
     std::set<tcp::endpoint> tracker_get_peers(NodeID infohash, asio::yield_context yield, Signal<void()>& cancel_signal);
     std::set<tcp::endpoint> tracker_get_peers(NodeID infohash, asio::yield_context yield)
@@ -490,7 +405,7 @@ class MainlineDht {
         boost::string_view salt,
         asio::yield_context yield
     )
-        { Signal<void()> cancel_signal; return mutable_get(public_key, salt, yield, cancel_signal); }
+    { Signal<void()> cancel_signal; return mutable_get(public_key, salt, yield, cancel_signal); }
 
     asio::io_service& get_io_service() { return _ios; }
 
@@ -508,7 +423,6 @@ class MainlineDht {
     private:
     asio::io_service& _ios;
     std::map<asio::ip::address, std::unique_ptr<dht::DhtNode>> _nodes;
-    dht::DhtPublications _publications;
     Signal<void()> _terminate_signal;
 };
 

@@ -43,6 +43,7 @@ CacheClient::build( asio::io_service& ios
         });
 
         ipfs_node = asio_ipfs::node::build( ios
+                                          , true
                                           , (path_to_repo/"ipfs").native()
                                           , yield[ec]);
     }

@@ -7,6 +7,7 @@
 #include <boost/optional.hpp>
 #include <boost/optional/optional_io.hpp>
 #include "../src/util/crypto.h"
+#include "../src/parse/number.h"
 
 using namespace ouinet;
 using namespace std;
@@ -31,6 +32,21 @@ static
 boost::string_view as_string_view(const std::array<uint8_t, N>& a)
 {
     return boost::string_view((char*) a.data(), a.size());
+}
+
+static
+asio::ip::udp::endpoint parse_endpoint(const std::string& s)
+{
+    auto pos = s.find(':');
+    assert(pos != s.npos);
+
+    auto ip_s = s.substr(0, pos);
+    auto port_s = s.substr(pos+1);
+    auto ip = asio::ip::make_address(ip_s);
+    boost::string_view port_sv(port_s);
+    auto port = ouinet::parse::number<uint16_t>(port_sv);
+    assert(port);
+    return asio::ip::udp::endpoint(ip, *port);
 }
 
 void parse_args( const vector<string>& args
@@ -102,16 +118,30 @@ int main(int argc, const char** argv)
 
         Cancel cancel;
 
+        auto ep = resolve( ios
+                         , "router.bittorrent.com"
+                         , "6881"
+                         , yield[ec]
+                         , cancel);
+
+        if (ec) {
+            cerr << "Error resolve " << ec.message() << endl;
+            return;
+        }
+
+        NodeID nid = NodeID::generate(ep.address());
+
         if (ping_cmd) {
-            auto ping_ep = resolve(
-                ios,
-                "router.bittorrent.com",
-                "6881",
-                yield[ec],
-                cancel
-                );
-            NodeID nid = NodeID::generate(ping_ep.address());
-            NodeContact nc {nid, ping_ep};
+            NodeContact nc;
+
+            if (args.size() == 5) {
+                udp::endpoint peer_ep = parse_endpoint(args[3]);
+                NodeID peer_id = NodeID::from_hex(args[4]);
+                nc = NodeContact{peer_id, peer_ep};
+            }
+            else {
+                nc = NodeContact{nid, ep};
+            }
 
             BencodedMap initial_ping_reply = dht_.send_ping(nc, yield[ec], cancel);
             std::cout << initial_ping_reply << endl;
@@ -123,14 +153,6 @@ int main(int argc, const char** argv)
         }
 
         if (find_node_cmd) {
-            auto ep = resolve(
-                ios,
-                "router.bittorrent.com",
-                "6881",
-                yield[ec],
-                cancel
-                );
-            NodeID nid = NodeID::generate(ep.address());
             Contact nc {ep, nid};
 
             std::vector<ouinet::bittorrent::dht::NodeContact> v = {};
@@ -144,14 +166,6 @@ int main(int argc, const char** argv)
         }
 
         if (get_peers_cmd) {
-            auto ep = resolve(
-                ios,
-                "router.bittorrent.com",
-                "6881",
-                yield[ec],
-                cancel
-                );
-            NodeID nid = NodeID::generate(ep.address());
             Contact nc {ep, nid};
 
             std::vector<ouinet::bittorrent::dht::NodeContact> v = {};

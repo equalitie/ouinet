@@ -85,7 +85,7 @@ CacheInjector::CacheInjector
         , bool enable_btree
         , unique_ptr<bt::MainlineDht> bt_dht
         , unique_ptr<Bep44InjectorIndex> bep44_index)
-    : _ipfs_node(new asio_ipfs::node(ios, (path_to_repo/"ipfs").native()))
+    : _ipfs_node(new asio_ipfs::node(ios, false, (path_to_repo/"ipfs").native()))
     , _bt_dht(move(bt_dht))  // used by either B-tree over BEP44, or BEP44
     , _bep44_index(move(bep44_index))
     , _scheduler(new Scheduler(ios, _concurrency))

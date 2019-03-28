@@ -47,6 +47,7 @@ struct NodeID {
 
     bool operator==(const NodeID& other) const { return buffer == other.buffer; }
     bool operator<(const NodeID& other) const { return buffer < other.buffer; }
+    NodeID operator^(const NodeID& other) const;
 
     // Return true if `left` is closer to `this` than `right` is in the XOR
     // metrics.
