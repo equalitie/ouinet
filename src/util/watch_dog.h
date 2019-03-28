@@ -60,9 +60,24 @@ public:
         }
     }
 
+    void expires_at(Clock::time_point t)
+    {
+        if (!state) return;
+        auto old_deadline = state->deadline;
+        state->deadline = t;
+
+        if (state->deadline < old_deadline) {
+            state->timer.cancel();
+        }
+    }
+
+    bool is_running() const {
+        return bool(state);
+    }
+
     Clock::duration pause() {
         auto ret = time_to_finish();
-        expires_after(Clock::duration::max());
+        expires_at(Clock::time_point::max());
         return ret;
     }
 
