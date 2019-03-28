@@ -60,6 +60,12 @@ public:
         }
     }
 
+    Clock::duration pause() {
+        auto ret = time_to_finish();
+        expires_after(Clock::duration::max());
+        return ret;
+    }
+
     ~WatchDog() {
         stop();
     }
