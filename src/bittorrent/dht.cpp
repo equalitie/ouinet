@@ -37,6 +37,8 @@
 namespace ouinet {
 namespace bittorrent {
 
+using std::vector;
+using boost::string_view;
 using std::cerr; using std::endl;
 using dht::NodeContact;
 using Candidates = std::vector<NodeContact>;
@@ -452,7 +454,7 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
     collect2(dbg, target_id, [&](
         const Contact& candidate,
         WatchDog& wd,
-        util::AsyncQueue<std::vector<NodeContact>>& closer_nodes,
+        util::AsyncQueue<NodeContact>& closer_nodes,
         asio::yield_context yield,
         Signal<void()>& cancel
     ) {
@@ -556,9 +558,9 @@ NodeID dht::DhtNode::data_put_mutable(
     DebugCtx dbg;
 
 #if SPEED_DEBUG
-    static unsigned kkk = 0;
+    static unsigned iii = 0;
     std::stringstream sstr;
-    sstr << "debug_" << kkk++;
+    sstr << "debug_" << iii++;
 
     unsigned threads = 0;
 
@@ -611,7 +613,7 @@ NodeID dht::DhtNode::data_put_mutable(
     collect2(dbg, target_id, [&](
         const Contact& candidate,
         WatchDog& wd,
-        util::AsyncQueue<std::vector<NodeContact>>& closer_nodes,
+        util::AsyncQueue<NodeContact>& closer_nodes,
         asio::yield_context yield,
         Signal<void()>& cancel
     ) {
@@ -733,7 +735,7 @@ NodeID dht::DhtNode::data_put_mutable(
     }, yield[ec], local_cancel);
 
 #if SPEED_DEBUG
-    cerr << dbg << "end " << responsible_nodes.size() << "\n";
+    cerr << dbg << "data_put_mutable end " << responsible_nodes.size() << "\n";
     for (auto r : responsible_nodes) {
         cerr << dbg << "           " << r.first << "\n";
     }
@@ -892,6 +894,7 @@ BencodedMap dht::DhtNode::send_query_await_reply(
     const std::string& query_type,
     const BencodedMap& query_arguments,
     WatchDog* dms,
+    DebugCtx* dbg,
     asio::yield_context yield,
     Signal<void()>& cancel_signal
 ) {
@@ -904,25 +907,33 @@ BencodedMap dht::DhtNode::send_query_await_reply(
     //auto timeout = _stats->max_reply_wait_time(query_type);
     auto timeout = std::chrono::seconds(10);
 
+#if 0
     auto opt_peer_slot = _peer_limiter.get_slot(dst.endpoint);
     PeerLimiter::Slot peer_slot;
 
+    if (dbg && *dbg && dms) cerr << *dbg << dst << " " << query_type << " opt_peer_slot " << bool(opt_peer_slot) << " " << dms->is_running() << "\n";
     if (!opt_peer_slot) {
         auto cancel(cancel_signal);
         steady_clock::duration d;
-        if (dms) {
-            d = dms->time_to_finish();
-            dms->expires_after(hours(1));
-        }
+
+        if (dms) d = dms->pause();
+
+        if (dbg && *dbg && dms) cerr << *dbg << dst << " " << query_type << " pause. remaining time: " << to_seconds(d) << "\n";
         peer_slot = _peer_limiter.wait_for_slot(dst.endpoint, cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec, BencodedMap());
 
-        if (dms) {
-            dms->expires_after(d);
-        }
+        if (dbg && *dbg && dms) cerr << *dbg << dst << " " << query_type << " unpause. remaining time: " << to_seconds(_stats->max_reply_wait_time(query_type)) << "s\n";
     }
     else {
         peer_slot = std::move(*opt_peer_slot);
+    }
+#endif
+
+    if (dms) {
+        auto d1 = dms->time_to_finish();
+        auto d2 = _stats->max_reply_wait_time(query_type);
+
+        dms->expires_after(std::max(d1,d2));
     }
 
     auto start = Clock::now();
@@ -1557,6 +1568,7 @@ dht::DhtNode::bootstrap_single( std::string bootstrap_domain
         "ping",
         initial_ping_message,
         nullptr,
+        nullptr,
         yield[ec],
         _terminate_signal
     );
@@ -1831,6 +1843,7 @@ BencodedMap dht::DhtNode::send_ping(
 	"ping",
 	BencodedMap{{ "id", _node_id.to_bytestring() }},
     nullptr,
+    nullptr,
 	yield[ec],
 	cancel_signal
     );
@@ -1873,6 +1886,7 @@ void dht::DhtNode::send_write_query(
             query_type,
             query_arguments,
             nullptr,
+            nullptr,
             yield[ec],
             cancel_signal
         );
@@ -1908,6 +1922,7 @@ bool dht::DhtNode::query_find_node(
             { "target", target_id.to_bytestring() }
         },
         nullptr,
+        nullptr,
         yield[ec],
         cancel_signal
     );
@@ -1941,11 +1956,16 @@ bool dht::DhtNode::query_find_node(
 bool dht::DhtNode::query_find_node2(
     NodeID target_id,
     Contact node,
-    util::AsyncQueue<std::vector<NodeContact>>& closer_nodes,
+    util::AsyncQueue<NodeContact>& closer_nodes,
     WatchDog& dms,
+    DebugCtx* dbg,
     asio::yield_context yield,
     Signal<void()>& cancel_signal
 ) {
+    assert(!cancel_signal);
+
+    Cancel cancel(cancel_signal);
+
     sys::error_code ec;
 
     BencodedMap find_node_reply = send_query_await_reply(
@@ -1956,16 +1976,17 @@ bool dht::DhtNode::query_find_node2(
             { "target", target_id.to_bytestring() }
         },
         &dms,
+        dbg,
         yield[ec],
-        cancel_signal
+        cancel
     );
 
-    if (ec) {
-        return false;
-    }
+    return_or_throw_on_error(yield, cancel, ec, false);
+
     if (find_node_reply["y"] != "r") {
         return false;
     }
+
     boost::optional<BencodedMap> response = find_node_reply["r"].as_map();
     if (!response) {
         return false;
@@ -1981,7 +2002,7 @@ bool dht::DhtNode::query_find_node2(
         if (nodes) decode_contacts_v6(*nodes, closer_nodes_v);
     }
 
-    closer_nodes.async_push(std::move(closer_nodes_v), cancel_signal, yield[ec]);
+    closer_nodes.async_push_many(closer_nodes_v, cancel, yield[ec]);
 
     return !closer_nodes_v.empty();
 }
@@ -2003,6 +2024,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_peers(
             { "id", _node_id.to_bytestring() },
             { "info_hash", infohash.to_bytestring() }
         },
+        nullptr,
         nullptr,
         yield[ec],
         cancel_signal
@@ -2069,6 +2091,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data(
             { "id", _node_id.to_bytestring() },
             { "target", key.to_bytestring() }
         },
+        nullptr,
         nullptr,
         yield[ec],
         cancel_signal
@@ -2139,7 +2162,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data(
 boost::optional<BencodedMap> dht::DhtNode::query_get_data2(
     NodeID key,
     Contact node,
-    util::AsyncQueue<std::vector<NodeContact>>& closer_nodes,
+    util::AsyncQueue<NodeContact>& closer_nodes,
     WatchDog& dms,
     DebugCtx& dbg,
     asio::yield_context yield,
@@ -2163,7 +2186,8 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data2(
         if (local_cancel) return;
         asio::spawn(_ios, [&, lock = wc.lock()] ( asio::yield_context yield) {
             if (dbg) cerr << dbg << "query_find_node2 start " << node << "\n";
-            query_find_node2(key, node, closer_nodes, dms, yield, local_cancel);
+            sys::error_code ec;
+            query_find_node2(key, node, closer_nodes, dms, &dbg, yield[ec], local_cancel);
             if (dbg) cerr << dbg << "query_find_node2 end " << node << "\n";
             local_cancel();
         });
@@ -2180,6 +2204,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data2(
             { "target", key.to_bytestring() }
         },
         &dms,
+        &dbg,
         yield[ec],
         local_cancel
     );
@@ -2211,7 +2236,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data2(
         if (nodes) decode_contacts_v6(*nodes, closer_nodes_v);
     }
 
-    closer_nodes.async_push(std::move(closer_nodes_v), cancel_signal, yield[ec]);
+    closer_nodes.async_push_many(closer_nodes_v, cancel_signal, yield[ec]);
 
     return response;
 }

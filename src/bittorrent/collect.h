@@ -96,7 +96,7 @@ void collect(
 
 template<class CandidateSet, class Evaluate>
 void collect2(
-    DebugCtx& dbg,
+    DebugCtx dbg,
     asio::io_service& ios,
     CandidateSet first_candidates,
     Evaluate&& evaluate,
@@ -104,6 +104,7 @@ void collect2(
     Signal<void()>& cancel_signal
 ) {
     using namespace std;
+    using dht::NodeContact;
 
     enum Progress { unused, used };
 
@@ -122,9 +123,9 @@ void collect2(
     }
 
     WaitCondition all_done(ios);
-    util::AsyncQueue<vector<dht::NodeContact>> new_candidates(ios);
+    util::AsyncQueue<dht::NodeContact> new_candidates(ios);
 
-    Scheduler scheduler(ios, 64);
+    Scheduler scheduler(ios, 16);
 
     auto pick_candidate = [&] {
         // Pick the closest untried candidate...
@@ -158,6 +159,8 @@ void collect2(
 
         auto candidate_i = pick_candidate();
 
+        std::queue<NodeContact> cs;
+
         while (candidate_i == candidates.end()) {
             sys::error_code ec2;
 
@@ -169,7 +172,7 @@ void collect2(
                           << active_jobs.size() << " new_candidates:" << new_candidates.size() << ")\n";
 
             assert(!local_cancel);
-            auto cs = new_candidates.async_pop(local_cancel, yield[ec2]);
+            new_candidates.async_flush(cs, local_cancel, yield[ec2]);
 
             if (dbg) cerr << dbg << " End waiting for candidate "
                           << ec2.message() << " " << cs.size() << "\n";
@@ -182,7 +185,9 @@ void collect2(
 
             if (ec2 || local_cancel) break;
 
-            for (auto &c : cs) {
+            while (!cs.empty()) {
+                auto c = std::move(cs.front());
+                cs.pop();
                 bool added = candidates.insert({ c, unused }).second;
                 if (dbg && added) cerr << dbg << "     + " << c << "\n";
             }
@@ -218,7 +223,7 @@ void collect2(
                 // Make sure we don't get stuck waiting for candidates when
                 // there is no more work and this candidate has not returned
                 // any new ones.
-                new_candidates.async_push( vector<dht::NodeContact>()
+                new_candidates.async_push( dht::NodeContact()
                                          , asio::error::eof
                                          , local_cancel
                                          , yield);

@@ -183,8 +183,9 @@ class DhtNode {
     bool query_find_node2(
         NodeID target_id,
         Contact node,
-        util::AsyncQueue<std::vector<NodeContact>>& closer_nodes,
+        util::AsyncQueue<NodeContact>& closer_nodes,
         WatchDog& dead_man_switch,
+        DebugCtx* dbg,
         asio::yield_context yield,
         Signal<void()>& cancel_signal
     );
@@ -204,6 +205,8 @@ class DhtNode {
     udp::endpoint wan_endpoint() const { return _wan_endpoint; }
 
     ~DhtNode();
+
+    asio::io_service& get_io_service() { return _ios; }
 
     private:
     void receive_loop(asio::yield_context yield);
@@ -233,6 +236,7 @@ class DhtNode {
         const std::string& query_type,
         const BencodedMap& query_arguments,
         WatchDog* dms,
+        DebugCtx* dbg,
         asio::yield_context yield,
         Signal<void()>& cancel_signal
     );
@@ -277,7 +281,7 @@ class DhtNode {
     boost::optional<BencodedMap> query_get_data2(
         NodeID key,
         Contact node,
-        util::AsyncQueue<std::vector<NodeContact>>& closer_nodes,
+        util::AsyncQueue<NodeContact>& closer_nodes,
         WatchDog& dead_man_switch,
         DebugCtx&,
         asio::yield_context yield,
