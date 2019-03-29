@@ -220,6 +220,7 @@ private:
 
             if (cancel) return;
 
+            Clock::time_point next_update;
             if (ec) {
                 if (ec == asio::error::not_found) {
                     _dht.mutable_put(old.data, cancel, yield[ec]);
@@ -230,23 +231,23 @@ private:
 
                 if (cancel) return;
 
-                // Even if there was some network error we update the
-                // `last_update` ts just to make sure we don't end up in an
-                // infinite loop of updating the same item over and over.
-                old.last_update = Clock::now();
-
-                _lru->insert(i.key(), old, cancel, yield[ec]);
+                next_update = Clock::now();
             }
             else {
                 if (new_data.sequence_number > old.data.sequence_number)
                 {
                     // TODO: Store new data
                     old.data = move(new_data);
-                    old.last_update = Clock::now() - chrono::minutes(15);
-
-                    _lru->insert(i.key(), move(old), cancel, yield[ec]);
                 }
+
+                next_update = Clock::now() - chrono::minutes(15);
             }
+
+            // Even if there was some network error or the entry was found in the DHT
+            // we update the `last_update` ts just to make sure
+            // we don't end up checking the same item over and over.
+            old.last_update = next_update;
+            _lru->insert(i.key(), move(old), cancel, yield[ec]);
 
             if (cancel) return;
         }
