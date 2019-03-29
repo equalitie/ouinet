@@ -24,7 +24,7 @@ stages:
         command: |
           sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
           sudo apt-get update
-          sudo apt-get install g++-5 dh-autoreconf autopoint libtool libunistring-dev libsqlite3-dev libgcrypt20-dev libidn11-dev zlib1g-dev texinfo libssl-dev
+          sudo apt-get install g++-6 dh-autoreconf autopoint libtool libunistring-dev libsqlite3-dev libgcrypt20-dev libidn11-dev zlib1g-dev texinfo libssl-dev
 
       - type: shell
         name: Install Boost
@@ -44,8 +44,8 @@ stages:
           git submodule update --recursive --init
           mkdir build
           cd build
-          export CXX=g++-5
-          export CC=gcc-5
+          export CXX=g++-6
+          export CC=gcc-6
           export PATH="$CMAKE_PATH:$PATH"
           cmake .. -DBOOST_ROOT=~/boost_${BOOST_MAJOR}_${BOOST_MINOR}_${BOOST_PATCH}
           make -j `nproc`
