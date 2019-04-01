@@ -1186,6 +1186,11 @@ void Client::State::serve_request( GenericStream&& con
         }
 
         Request req(reqhp.release());
+
+        if (!authenticate(req, con, _config.client_credentials(), yield[ec].tag("auth"))) {
+            continue;
+        }
+
         yield.log("=== New request ===");
         yield.log(req.base());
         auto on_exit = defer([&] { yield.log("Done"); });

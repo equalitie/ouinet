@@ -85,6 +85,8 @@ public:
         return _index_bep44_capacity;
     }
 
+    const std::string& client_credentials() const { return _client_credentials; }
+
     bool is_help() const { return _is_help; }
 
     boost::program_options::options_description description()
@@ -117,6 +119,8 @@ public:
               "and <EP> depends on the type of endpoint: "
               "<IP>:<PORT> for TCP (and TLS), <IP>:<PORT>[,<OPTION>=<VALUE>...] for OBFS and Lampshade, "
               "<B32_PUBKEY>.b32.i2p or <B64_PUBKEY> for I2P")
+           ("client-credentials", po::value<string>()
+            , "<username>:<password> authentication pair for the client")
            ("injector-credentials", po::value<string>()
             , "<username>:<password> authentication pair for the injector")
            ("injector-tls-cert-file", po::value<string>(&_tls_injector_cert_path)
@@ -186,6 +190,7 @@ private:
     boost::posix_time::time_duration _max_cached_age
         = boost::posix_time::hours(7*24);  // one week
 
+    std::string _client_credentials;
     std::map<std::string, std::string> _injector_credentials;
 
     boost::optional<util::Ed25519PublicKey> _index_bep44_pubkey;
@@ -315,6 +320,19 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         }
 
         set_credentials(util::str(*_injector_ep), cred);
+    }
+
+    if (vm.count("client-credentials")) {
+        auto cred = vm["client-credentials"].as<string>();
+
+        if (!cred.empty() && cred.find(':') == string::npos) {
+            throw std::runtime_error(util::str(
+                "The '--client-credentials' argument expects a string "
+                "in the format <username>:<password>. But the provided "
+                "string \"", cred, "\" is missing a colon."));
+        }
+
+        _client_credentials = move(cred);
     }
 
     if (vm.count("index-bep44-public-key")) {
