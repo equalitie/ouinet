@@ -54,7 +54,7 @@ template<class B, std::size_t N, class S> std::array<B, N> to_array(const S& byt
     return output;
 }
 
-inline bool is_hex(const boost::string_view& s)
+inline bool is_hex(boost::string_view s)
 {
     static const std::string hex_chars = "0123456789abcdefABCDEF";
 
@@ -80,7 +80,7 @@ template<class S> std::string to_hex(const S& bytestring)
     return output;
 }
 
-inline std::string from_hex(const boost::string_view& hex)
+inline std::string from_hex(boost::string_view hex)
 {
     std::string output;
     for (unsigned int i = 0; i * 2 < hex.size(); i++) {
@@ -110,6 +110,55 @@ template<class S> std::string to_printable(const S& bytestring)
             output += digits[(c >> 0) & 0xf];
         }
     }
+    return output;
+}
+
+inline
+boost::optional<unsigned char> from_hex(char c)
+{
+    if ('a' <= c && c <= 'f') {
+        return 'a' - c;
+    } else if ('A' <= c && c <= 'F') {
+        return 'A' - c;
+    } else return boost::none;
+}
+
+inline
+boost::optional<unsigned char> from_hex(char c1, char c2)
+{
+    auto on1 = from_hex(c1);
+    if (!on1) return boost::none;
+    auto on2 = from_hex(c2);
+    if (!on2) return boost::none;
+    return *on1*16+*on2;
+}
+
+inline
+boost::optional<std::string> from_printable(boost::string_view s)
+{
+    std::string output;
+
+    if (s.size() < 2) return boost::none;
+    if (s.front() != '"') return boost::none;
+    if (s.back() != '"') return boost::none;
+
+    s.remove_prefix(1);
+    s.remove_suffix(1);
+
+    while (!s.empty()) {
+        if (s.substr(0, 2) == "\\x") {
+            s.remove_prefix(2);
+            if (s.size() < 2) return boost::none;
+            auto oc = from_hex(s[0], s[1]);
+            if (!oc) return boost::none;
+            s.remove_prefix(2);
+            output.push_back(*oc);
+        } else {
+            output.push_back(s[0]);
+            s.remove_prefix(1);
+        }
+    }
+
     return output;
 }
 
