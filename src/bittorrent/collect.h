@@ -125,7 +125,7 @@ void collect2(
     WaitCondition all_done(ios);
     util::AsyncQueue<dht::NodeContact> new_candidates(ios);
 
-    Scheduler scheduler(ios, 16);
+    Scheduler scheduler(ios, 8);
 
     auto pick_candidate = [&] {
         // Pick the closest untried candidate...
@@ -139,9 +139,6 @@ void collect2(
 
     std::set<size_t> active_jobs;
     size_t next_job_id = 0;
-
-    // Default timeout per each `evaluate` call.
-    auto default_timeout = std::chrono::seconds(30);
 
     Cancel local_cancel(cancel_signal);
 
@@ -229,16 +226,33 @@ void collect2(
                                          , yield);
             };
 
-            WatchDog wd(ios, default_timeout, [&] () mutable {
-                    if (dbg) cerr << dbg << "dismiss " << candidate << "\n";
-                    on_finish();
-                });
+            bool is_first_round = first_candidates.count(candidate);
 
-            evaluate( candidate
-                    , wd
-                    , new_candidates
-                    , yield[ec]
-                    , local_cancel);
+            if (is_first_round) {
+                WatchDog wd(ios, std::chrono::seconds(5), [&] () mutable {
+                        if (dbg) cerr << dbg << "dismiss " << candidate << "\n";
+                        on_finish();
+                    });
+
+                WatchDog dummy_wd;
+
+                evaluate( candidate
+                        , dummy_wd
+                        , new_candidates
+                        , yield[ec]
+                        , local_cancel);
+            } else {
+                WatchDog wd(ios, std::chrono::milliseconds(200), [&] () mutable {
+                        if (dbg) cerr << dbg << "dismiss " << candidate << "\n";
+                        on_finish();
+                    });
+
+                evaluate( candidate
+                        , wd
+                        , new_candidates
+                        , yield[ec]
+                        , local_cancel);
+            }
 
             on_finish();
         });
