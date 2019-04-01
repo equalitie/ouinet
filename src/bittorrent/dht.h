@@ -180,6 +180,16 @@ class DhtNode {
         Signal<void()>& cancel_signal
     );
 
+    bool query_find_node3(
+        NodeID target_id,
+        Contact node,
+        util::AsyncQueue<NodeContact>& closer_nodes,
+        WatchDog& dms,
+        DebugCtx* dbg,
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
+    );
+
     bool query_find_node2(
         NodeID target_id,
         Contact node,
@@ -279,6 +289,16 @@ class DhtNode {
     );
 
     boost::optional<BencodedMap> query_get_data2(
+        NodeID key,
+        Contact node,
+        util::AsyncQueue<NodeContact>& closer_nodes,
+        WatchDog& dead_man_switch,
+        DebugCtx&,
+        asio::yield_context yield,
+        Signal<void()>& cancel_signal
+    );
+
+    boost::optional<BencodedMap> query_get_data3(
         NodeID key,
         Contact node,
         util::AsyncQueue<NodeContact>& closer_nodes,

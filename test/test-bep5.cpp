@@ -129,7 +129,7 @@ int main(int argc, const char** argv)
             return;
         }
 
-        NodeID nid = NodeID::generate(ep.address());
+        NodeID my_id = NodeID::generate(ep.address());
 
         if (ping_cmd) {
             NodeContact nc;
@@ -140,7 +140,7 @@ int main(int argc, const char** argv)
                 nc = NodeContact{peer_id, peer_ep};
             }
             else {
-                nc = NodeContact{nid, ep};
+                nc = NodeContact{my_id, ep};
             }
 
             BencodedMap initial_ping_reply = dht_.send_ping(nc, yield[ec], cancel);
@@ -148,28 +148,49 @@ int main(int argc, const char** argv)
             if (!initial_ping_reply.empty()) {
                 NodeID their_id = NodeID::from_bytestring(*((*initial_ping_reply["r"].as_map())["id"].as_string()));
                 std::cout << their_id.to_hex() << endl;
-                std::cout << "reply id == expected id: " << (nid == their_id) << endl;
+                std::cout << "reply id == expected id: " << (my_id == their_id) << endl;
             }
         }
 
         if (find_node_cmd) {
-            Contact nc {ep, nid};
+            Contact nc;
+            NodeID target = my_id;
+
+            if (args.size() >= 4) {
+                auto opt_target = NodeID::from_printable(args[4]);
+
+                if (!opt_target) {
+                    cerr << "Failed to parse args[4] as target id\n";
+                    return;
+                }
+
+                target = *opt_target;
+
+                if (args.size() >= 5) {
+                    nc.endpoint = parse_endpoint(args[4]);
+
+                    if (args.size() >= 6) {
+                        nc.id = NodeID::from_printable(args[5]);
+                    }
+                }
+                else nc = Contact {ep, my_id};
+            }
+            else nc = Contact {ep, my_id};
 
             std::vector<ouinet::bittorrent::dht::NodeContact> v = {};
-            bool is_found = dht_.query_find_node(nid, nc, v, yield[ec], cancel);
+            bool is_found = dht_.query_find_node(my_id, nc, v, yield[ec], cancel);
 
-            std::cout << is_found << endl;
+            std::cout << "Found: " << is_found << "\n";
             for (const auto& i: v) {
-                std::cout << i << ' ';
+                std::cout << "> " << i << "\n";
             }
-            std::cout << endl;
         }
 
         if (get_peers_cmd) {
-            Contact nc {ep, nid};
+            Contact nc {ep, my_id};
 
             std::vector<ouinet::bittorrent::dht::NodeContact> v = {};
-            boost::optional<BencodedMap> peers = dht_.query_get_peers(nid, nc, v, yield[ec], cancel);
+            boost::optional<BencodedMap> peers = dht_.query_get_peers(my_id, nc, v, yield[ec], cancel);
 
             if (peers) {
                 std::cout << "Nodes: " << (*peers)["nodes"] << endl;
