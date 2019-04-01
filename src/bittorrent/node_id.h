@@ -37,9 +37,25 @@ struct NodeID {
     void set_bit(int n, bool value);
 
     std::string to_hex() const { return util::bytes::to_hex(buffer); }
-    static NodeID from_hex(const std::string& hex) { return NodeID{ util::bytes::to_array<uint8_t, size>(util::bytes::from_hex(hex)) }; }
+
+    static NodeID from_hex(boost::string_view hex) {
+        return NodeID{ util::bytes::to_array<uint8_t, size>(util::bytes::from_hex(hex)) };
+    }
+
+    std::string to_printable() const { return util::bytes::to_printable(buffer); }
+
+    static boost::optional<NodeID> from_printable(boost::string_view s) {
+        auto a = util::bytes::from_printable(s);
+        if (!a) return boost::none;
+        return NodeID{util::bytes::to_array<uint8_t, size>(*a)};
+    }
+
     std::string to_bytestring() const { return util::bytes::to_string(buffer); }
-    static NodeID from_bytestring(const std::string& bytestring) { return NodeID{ util::bytes::to_array<uint8_t, size>(bytestring) }; }
+
+    static NodeID from_bytestring(const std::string& bytestring) {
+        return NodeID{ util::bytes::to_array<uint8_t, size>(bytestring) };
+    }
+
     static NodeID zero();
 
     // http://bittorrent.org/beps/bep_0042.html
