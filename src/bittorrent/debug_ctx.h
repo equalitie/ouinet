@@ -19,7 +19,7 @@ struct DebugCtx {
     {}
 
     static
-    float secs(auto start) {
+    float secs(Clock::time_point start) {
         using namespace std::chrono;
         return duration_cast<milliseconds>(steady_clock::now() - start).count()
              / 1000.f;

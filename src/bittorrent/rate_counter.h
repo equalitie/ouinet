@@ -49,7 +49,6 @@ private:
     Clock::time_point _start;
     Clock::time_point _rate_since;
     float _amount = 0;
-    bool _period_exceeded = false;
 };
 
 } // namespace
