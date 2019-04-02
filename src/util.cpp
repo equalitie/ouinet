@@ -43,15 +43,19 @@ string ouinet::util::zlib_decompress(const boost::string_view& in, sys::error_co
 // Based on <https://stackoverflow.com/a/28471421> by user "ltc".
 string ouinet::util::base64_encode(const boost::string_view in) {
     using namespace boost::archive::iterators;
-    using It = base64_from_binary<transform_width<string::const_iterator, 6, 8>>;
-    string out(It(in.begin()), It(in.end()));  // encode to base64
+    using It = base64_from_binary<transform_width<const char*, 6, 8>>;
+    It begin = in.data();
+    It end   = in.data() + in.size();
+    string out(begin, end);  // encode to base64
     return out.append((3 - in.size() % 3) % 3, '=');  // add padding
 }
 
 string ouinet::util::base64_decode(const boost::string_view in) {
     using namespace boost::archive::iterators;
-    using It = transform_width<binary_from_base64<string::const_iterator>, 8, 6>;
-    return boost::algorithm::trim_right_copy_if(string(It(begin(in)), It(end(in))), [](char c) {
+    using It = transform_width<binary_from_base64<const char*>, 8, 6>;
+    It begin = in.data();
+    It end   = in.data() + in.size();
+    return boost::algorithm::trim_right_copy_if(string(begin, end), [](char c) {
         return c == '\0';
     });
 }

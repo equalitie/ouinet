@@ -371,7 +371,7 @@ class DhtNode {
 
     std::vector<udp::endpoint> _bootstrap_endpoints;
 
-    struct Stats;
+    class Stats;
     std::unique_ptr<Stats> _stats;
 };
 
