@@ -8,6 +8,8 @@ include(ExternalProject)
 ################################################################################
 project(liblampshade)
 
+set(CMAKE_CXX_STANDARD 14)
+
 find_package(Threads)
 find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS
     coroutine
