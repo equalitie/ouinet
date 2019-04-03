@@ -287,15 +287,19 @@ class OuinetTests(TestCase):
         response_body = yield readBody(defered_response)
         self.assertEquals(response_body, content)
 
+    # Disabled because it no longer reflects how the injector works. I.e. while
+    # previously the injector was injecting resources into IPFS, it no longer does
+    # that (to preserve resources to be able to serve more clients).
     @inlineCallbacks
-    def test_ipfs_cache(self):
+    def _test_ipfs_cache(self):
         logging.debug("################################################")
         logging.debug("test_ipfs_cache");
         logging.debug("################################################")
         return self._test_cache(self.run_ipfs_injector, self.run_ipfs_client)
 
+    # Disabled for the same reason as the above test.
     @inlineCallbacks
-    def test_bep44_cache(self):
+    def _test_bep44_cache(self):
         logging.debug("################################################")
         logging.debug("test_bep44_cache");
         logging.debug("################################################")
