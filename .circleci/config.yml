@@ -64,11 +64,13 @@ stages:
           ./build/test/test-http-util            --log_level=test_suite
           ./build/test/test-persistent-lru-cache --log_level=test_suite
 
-          virtualenv .venv
-          . .venv/bin/activate
-          pip install twisted
-          export OUINET_BUILD_DIR=~/project/build
-          ./scripts/run_integration_tests.sh
+          # Disabled, the tests need to be revisited due to the recent
+          # changes in how injectors work.
+          #virtualenv .venv
+          #. .venv/bin/activate
+          #pip install twisted
+          #export OUINET_BUILD_DIR=~/project/build
+          #./scripts/run_integration_tests.sh
 
       - type: shell
         name: Build.Android
