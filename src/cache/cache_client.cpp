@@ -19,12 +19,11 @@ namespace asio = boost::asio;
 namespace sys  = boost::system;
 namespace bt   = ouinet::bittorrent;
 
-using boost::optional;
 
 unique_ptr<CacheClient>
 CacheClient::build( asio::io_service& ios
                   , string ipns
-                  , optional<util::Ed25519PublicKey> bt_pubkey
+                  , boost::optional<util::Ed25519PublicKey> bt_pubkey
                   , fs::path path_to_repo
                   , unsigned int bep44_index_capacity
                   , Cancel& cancel
@@ -80,7 +79,7 @@ CacheClient::build( asio::io_service& ios
 // private
 CacheClient::CacheClient( asio_ipfs::node ipfs_node
                         , string ipns
-                        , optional<util::Ed25519PublicKey> bt_pubkey
+                        , boost::optional<util::Ed25519PublicKey> bt_pubkey
                         , unique_ptr<bittorrent::MainlineDht> bt_dht
                         , unique_ptr<Bep44ClientIndex> bep44_index
                         , fs::path path_to_repo)

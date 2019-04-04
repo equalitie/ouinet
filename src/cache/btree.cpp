@@ -1,6 +1,6 @@
 #include "btree.h"
 #include "../or_throw.h"
-#include <json.hpp>
+#include <nlohmann/json.hpp>
 #include <iostream>
 
 using namespace ouinet;
@@ -636,7 +636,7 @@ void Node::restore( Hash hash
             auto child_i = v.find("child");
 
             if (child_i != v.end()) {
-                child_hash = move(child_i.value());
+                child_hash = move(child_i.value().get<std::string>());
             }
 
             boost::optional<std::string> key;
@@ -648,7 +648,7 @@ void Node::restore( Hash hash
             std::string value;
 
             if (v["value"].is_string()) {
-                value = move(v["value"]);
+                value = move(v["value"].get<std::string>());
             }
             Entries::insert(make_pair( key
                                      , Entry{ move(value)

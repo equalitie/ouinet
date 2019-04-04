@@ -7,7 +7,7 @@
 
 #include <boost/format.hpp>
 #include <boost/optional.hpp>
-#include <json.hpp>
+#include <nlohmann/json.hpp>
 
 #include "cache_entry.h"
 #include "../namespaces.h"
@@ -55,11 +55,11 @@ struct Descriptor {
 
             Descriptor dsc;
 
-            dsc.url        = json["url"];
-            dsc.request_id = json["id"];
+            dsc.url        = json["url"].get<std::string>();
+            dsc.request_id = json["id"].get<std::string>();
             dsc.timestamp  = boost::posix_time::from_iso_extended_string(json["ts"]);
-            dsc.head       = json["head"];
-            dsc.body_link  = json["body_link"];
+            dsc.head       = json["head"].get<std::string>();
+            dsc.body_link  = json["body_link"].get<std::string>();
 
             return dsc;
         } catch (const std::exception& e) {

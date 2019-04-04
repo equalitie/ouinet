@@ -15,7 +15,6 @@
 using namespace std;
 using namespace ouinet;
 namespace bt = ouinet::bittorrent;
-using boost::optional;
 
 static const unsigned int BTREE_NODE_SIZE=64;
 // This should be enough to insert small values
@@ -119,7 +118,7 @@ static void save_index_to_disk( const fs::path& path_to_repo
 BTreeClientIndex::BTreeClientIndex( asio_ipfs::node& ipfs_node
                                   , string ipns
                                   , bt::MainlineDht& bt_dht
-                                  , optional<util::Ed25519PublicKey> bt_publish_pubkey
+                                  , boost::optional<util::Ed25519PublicKey> bt_publish_pubkey
                                   , fs::path path_to_repo)
     : _path_to_repo(move(path_to_repo))
     , _ipns(move(ipns))

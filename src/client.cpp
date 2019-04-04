@@ -68,7 +68,6 @@ namespace posix_time = boost::posix_time;
 using tcp      = asio::ip::tcp;
 using Request  = http::request<http::string_body>;
 using Response = http::response<http::dynamic_body>;
-using boost::optional;
 
 static const fs::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
 static const fs::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
@@ -677,7 +676,7 @@ public:
                 // so that we help seed the URL->descriptor mapping too.
                 // Try a few times to get the descriptor
                 // (after some insertion delay, with exponential backoff).
-                optional<Descriptor> desc;
+                boost::optional<Descriptor> desc;
                 int attempt = 0;
                 for ( auto backoff = chrono::seconds(30);
                       attempt < max_attempts; backoff *= 2, ++attempt) {

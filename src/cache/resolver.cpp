@@ -8,7 +8,6 @@
 
 using namespace std;
 using namespace ouinet;
-using boost::optional;
 namespace bt = ouinet::bittorrent;
 
 struct Resolver::Loop : std::enable_shared_from_this<Loop> {
@@ -61,7 +60,7 @@ struct Resolver::Loop : std::enable_shared_from_this<Loop> {
 Resolver::Resolver( asio_ipfs::node& ipfs_node
                   , const string& ipns
                   , bt::MainlineDht& bt_dht
-                  , const optional<util::Ed25519PublicKey>& bt_pubkey
+                  , const boost::optional<util::Ed25519PublicKey>& bt_pubkey
                   , OnResolve on_resolve)
     : _ios(ipfs_node.get_io_service())
     , _ipfs_loop(make_shared<Loop>(_ios, on_resolve))

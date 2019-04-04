@@ -10,7 +10,7 @@
 #include <boost/format.hpp>
 #include <boost/regex.hpp>
 #include <network/uri.hpp>
-#include <json.hpp>
+#include <nlohmann/json.hpp>
 
 
 using namespace std;
