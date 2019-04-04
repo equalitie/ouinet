@@ -19,7 +19,8 @@ class TestFixtures:
         "test_i2p_transport": I2P_TRANSPORT_TIMEOUT,
         "test_tcp_transport": TCP_TRANSPORT_TIMEOUT,
         "test_ipfs_cache": IPFS_CACHE_TIMEOUT,
-        "test_bep44_cache": BEP44_CACHE_TIMEOUT}
+        "test_bep44_cache": BEP44_CACHE_TIMEOUT,
+        "test_bep44_seed": BEP44_CACHE_TIMEOUT}
 
     #BENCHMARK REGEX INDICES
     READY_REGEX_INDEX = 0

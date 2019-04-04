@@ -82,31 +82,40 @@ class OuinetTests(TestCase):
     def run_ipfs_injector(self, injector_args,
                           deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached):
         config = self._cache_injector_config(TestFixtures.IPFS_CACHE_TIMEOUT,
-                                             TestFixtures.IPNS_ID_ANNOUNCE_REGEX,
-                                             TestFixtures.IPFS_REQUEST_CACHED_REGEX,
+                                             [TestFixtures.IPNS_ID_ANNOUNCE_REGEX,
+                                              TestFixtures.IPFS_REQUEST_CACHED_REGEX],
                                              ["--cache-index", "btree"] + injector_args)
         return self._run_cache_injector(
             OuinetIPFSCacheInjector, config,
-            deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached)
+            [deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached])
 
     def run_bep44_injector(self, injector_args,
                            deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached):
         config = self._cache_injector_config(TestFixtures.BEP44_CACHE_TIMEOUT,
-                                             TestFixtures.BEP44_CACHE_READY_REGEX,
-                                             TestFixtures.BEP44_REQUEST_CACHED_REGEX,
+                                             [TestFixtures.BEP44_CACHE_READY_REGEX,
+                                              TestFixtures.BEP44_REQUEST_CACHED_REGEX],
                                              ["--cache-index", "bep44"] + injector_args)
         return self._run_cache_injector(
             OuinetBEP44CacheInjector, config,
-            deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached)
+            [deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached])
 
-    def _cache_injector_config(self, timeout, ready_regex, cached_regex, args):
+    def run_bep44_signer(self, injector_args,
+                         deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached):
+        config = self._cache_injector_config(TestFixtures.BEP44_CACHE_TIMEOUT,
+                                             [TestFixtures.BEP44_PUBK_ANNOUNCE_REGEX],  # bootstrap not needed
+                                             ["--cache-index", "bep44",
+                                              "--seed-content", "0"] + injector_args)
+        deferred_result_got_cached.callback(True)  # unused, clients should cache
+        return self._run_cache_injector(
+            OuinetBEP44CacheInjector, config,
+            [deferred_tcp_port_ready, deferred_index_ready])
+
+    def _cache_injector_config(self, timeout, evt_regexes, args):
         return OuinetConfig(TestFixtures.CACHE_INJECTOR_NAME, timeout, args,
-                            benchmark_regexes=[TestFixtures.TCP_PORT_READY_REGEX, ready_regex, cached_regex])
+                            benchmark_regexes=([TestFixtures.TCP_PORT_READY_REGEX] + evt_regexes))
 
-    def _run_cache_injector(self, proc_class, config,
-                            deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached):
-        injector = proc_class(config,
-                              [deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached])
+    def _run_cache_injector(self, proc_class, config, evt_deferreds):
+        injector = proc_class(config, evt_deferreds)
         injector.start()
         self.proc_list.append(injector)
 
@@ -304,6 +313,13 @@ class OuinetTests(TestCase):
         logging.debug("test_bep44_cache");
         logging.debug("################################################")
         return self._test_cache(self.run_bep44_injector, self.run_bep44_client)
+
+    @inlineCallbacks
+    def test_bep44_seed(self):
+        logging.debug("################################################")
+        logging.debug("test_bep44_seed");
+        logging.debug("################################################")
+        return self._test_cache(self.run_bep44_signer, self.run_bep44_client)
 
     def _test_cache(self, run_cache_injector, run_cache_client):
         """
