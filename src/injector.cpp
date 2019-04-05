@@ -365,6 +365,8 @@ public:
             if (timed_out) ec = asio::error::timed_out;
             if (ec) return or_throw<bool>(yield, ec);
 
+            keep_alive = rq_.keep_alive();
+
             // Pop out Ouinet internal HTTP headers.
             auto rq = util::to_cache_request(move(rq_));
             auto rs = util::to_cache_response(move(rs_));
@@ -380,8 +382,6 @@ public:
 
             rs = add_re_insertion_header_field( move(rs)
                                               , move(ins.index_ins_data));
-
-            keep_alive = rq_.keep_alive();
 
             http::async_write(con, rs, yield[ec].tag("write_response"));
 
