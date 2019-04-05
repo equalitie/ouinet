@@ -319,7 +319,7 @@ class OuinetTests(TestCase):
         logging.debug("################################################")
         logging.debug("test_bep44_seed");
         logging.debug("################################################")
-        return self._test_cache(self.run_bep44_signer, self.run_tcp_client, self.run_bep44_client)
+        return self._test_cache(self.run_bep44_signer, self.run_bep44_client, self.run_bep44_client)
 
     def _test_cache(self, run_injector, run_client, run_cache_client):
         """
@@ -350,10 +350,10 @@ class OuinetTests(TestCase):
         #injector client, use only Injector mechanism
         client_ready = defer.Deferred()
         run_client( TestFixtures.CACHE_CLIENT[0]["name"], index_key
-                    , [ "--disable-origin-access", "--disable-proxy-access", "--disable-cache"
+                    , [ "--disable-origin-access", "--disable-proxy-access"
                       , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[0]["port"])
                       , "--injector-ep", "tcp:127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)
-                      ]
+                      ] + ([] if run_client == run_cache_client else ["--disable-cache"])
                     , client_ready)
 
         #http_server
