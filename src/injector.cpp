@@ -372,16 +372,18 @@ public:
             auto rs = util::to_cache_response(move(rs_));
 
             sys::error_code ec;
-            auto ins = injector->insert_content( insert_id, rq, rs
-                                               , config.cache_index_type()
-                                               , false
-                                               , yield[ec]);
+            if (injector) {
+                auto ins = injector->insert_content( insert_id, rq, rs
+                                                   , config.cache_index_type()
+                                                   , false
+                                                   , yield[ec]);
 
-            if (timed_out) ec = asio::error::timed_out;
-            if (ec) return or_throw<bool>(yield, ec);
+                if (timed_out) ec = asio::error::timed_out;
+                if (ec) return or_throw<bool>(yield, ec);
 
-            rs = add_re_insertion_header_field( move(rs)
-                                              , move(ins.index_ins_data));
+                rs = add_re_insertion_header_field( move(rs)
+                                                  , move(ins.index_ins_data));
+            }
 
             http::async_write(con, rs, yield[ec].tag("write_response"));
 
