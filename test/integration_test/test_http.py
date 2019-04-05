@@ -377,10 +377,13 @@ class OuinetTests(TestCase):
         response_body = yield readBody(defered_response)
         self.assertEquals(response_body, TestFixtures.TEST_PAGE_BODY)
         
-        # now waiting or injector to annouce caching the request
         if injector_seed:
+            # now waiting or injector to annouce caching the request
             success = yield injector_cached_result
             self.assertTrue(success)
+        else:
+            # shut injector down to ensure it does not seed content to the cache client
+            cache_injector.stop()
 
         #start cache client which supposed to read the response from cache, use only Cache mechanism
         client_cache_ready = defer.Deferred()
