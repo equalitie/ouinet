@@ -121,14 +121,14 @@ class OuinetTests(TestCase):
 
         return injector
 
-    def run_tcp_client(self, name, args, deffered_tcp_port_ready):
+    def run_tcp_client(self, name, idx_key, args, deffered_tcp_port_ready):
         client = OuinetClient(OuinetConfig(name, TestFixtures.TCP_TRANSPORT_TIMEOUT, args, benchmark_regexes=[TestFixtures.TCP_PORT_READY_REGEX]), [deffered_tcp_port_ready])
         client.start()
         self.proc_list.append(client)
 
         return client
 
-    def run_i2p_client(self, name, args, deferred_i2p_ready):
+    def run_i2p_client(self, name, idx_key, args, deferred_i2p_ready):
         client = OuinetClient(OuinetConfig(name, TestFixtures.I2P_TRANSPORT_TIMEOUT, args, benchmark_regexes=[TestFixtures.I2P_TUNNEL_READY_REGEX]), [deferred_i2p_ready])
         client.start()
         self.proc_list.append(client)
@@ -349,7 +349,7 @@ class OuinetTests(TestCase):
 
         #tcp client, use only Injector mechanism
         client_tcp_port_ready = defer.Deferred()
-        self.run_tcp_client( TestFixtures.CACHE_CLIENT[0]["name"]
+        self.run_tcp_client( TestFixtures.CACHE_CLIENT[0]["name"], index_key
                            , [ "--disable-origin-access", "--disable-proxy-access", "--disable-cache"
                              , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[0]["port"])
                              , "--injector-ep", "tcp:127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)
