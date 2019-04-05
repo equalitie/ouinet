@@ -331,15 +331,15 @@ class OuinetTests(TestCase):
         """
         #injector
         injector_tcp_port_ready = defer.Deferred()
-        index_ready = defer.Deferred()
-        result_got_cached = defer.Deferred()
-        cache_injector = run_cache_injector(["--listen-on-i2p", "false", "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)], injector_tcp_port_ready, index_ready, result_got_cached)
+        injector_index_ready = defer.Deferred()
+        injector_cached_result = defer.Deferred()
+        cache_injector = run_cache_injector(["--listen-on-i2p", "false", "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)], injector_tcp_port_ready, injector_index_ready, injector_cached_result)
         
         #wait for the injector to open the port
         success = yield injector_tcp_port_ready
 
         #wait for the index to be ready
-        success = yield index_ready
+        success = yield injector_index_ready
         self.assertTrue(success)
 
         index_key = cache_injector.get_index_key()
@@ -372,7 +372,7 @@ class OuinetTests(TestCase):
         self.assertEquals(response_body, TestFixtures.TEST_PAGE_BODY)
         
         # now waiting or injector to annouce caching the request
-        success = yield result_got_cached
+        success = yield injector_cached_result
         self.assertTrue(success)
 
         #start cache client which supposed to read the response from cache, use only Cache mechanism
