@@ -622,9 +622,10 @@ public:
                     return duration_cast<milliseconds>(d).count() / 1000.f;
                 };
 
-                LOG_DEBUG("Insert finished for ", target
+                // used by integration tests
+                LOG_DEBUG("BEP44 index: insertion finished for ", target
                          , " ec:\"", ec.message(), "\" "
-                         , " took scheduler:", secs(scheduler_d), "s, "
+                         , "took scheduler:", secs(scheduler_d), "s, "
                                , "bep44m/put:", secs(bep44_d), "s, "
                                , "ipfs/add:", secs(ipfs_add_d), "s, "
                          , "remaining insertions: "

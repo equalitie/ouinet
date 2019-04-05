@@ -19,7 +19,8 @@ class TestFixtures:
         "test_i2p_transport": I2P_TRANSPORT_TIMEOUT,
         "test_tcp_transport": TCP_TRANSPORT_TIMEOUT,
         "test_ipfs_cache": IPFS_CACHE_TIMEOUT,
-        "test_bep44_cache": BEP44_CACHE_TIMEOUT}
+        "test_bep44_cache": BEP44_CACHE_TIMEOUT,
+        "test_bep44_seed": BEP44_CACHE_TIMEOUT}
 
     #BENCHMARK REGEX INDICES
     READY_REGEX_INDEX = 0
@@ -69,6 +70,7 @@ class TestFixtures:
     BEP44_CACHE_READY_REGEX = r'[\s\S]*BEP44 index: bootstrapped BitTorrent DHT[\s\S]*'
     IPFS_REQUEST_CACHED_REGEX = r'[\s\S]*Request was successfully published to cache[\s\S]*'
     BEP44_REQUEST_CACHED_REGEX = r'[\s\S]*BEP44 index: inserted key[\s\S]*'
+    BEP44_RESPONSE_CACHED_REGEX = r'[\s\S]*BEP44 index: insertion finished[\s\S]*'
     NO_OF_CACHED_MESSAGES_REQUIRED = 1
     RETRIEVED_FROM_CACHE_REGEX = r'[\s\S]*Response was retrieved from cache[\s\S]*'
     MAX_NO_OF_TRIAL_CACHE_REQUESTS = 3

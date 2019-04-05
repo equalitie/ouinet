@@ -82,44 +82,52 @@ class OuinetTests(TestCase):
     def run_ipfs_injector(self, injector_args,
                           deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached):
         config = self._cache_injector_config(TestFixtures.IPFS_CACHE_TIMEOUT,
-                                             TestFixtures.IPNS_ID_ANNOUNCE_REGEX,
-                                             TestFixtures.IPFS_REQUEST_CACHED_REGEX,
+                                             [TestFixtures.IPNS_ID_ANNOUNCE_REGEX,
+                                              TestFixtures.IPFS_REQUEST_CACHED_REGEX],
                                              ["--cache-index", "btree"] + injector_args)
         return self._run_cache_injector(
             OuinetIPFSCacheInjector, config,
-            deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached)
+            [deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached])
 
     def run_bep44_injector(self, injector_args,
                            deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached):
         config = self._cache_injector_config(TestFixtures.BEP44_CACHE_TIMEOUT,
-                                             TestFixtures.BEP44_CACHE_READY_REGEX,
-                                             TestFixtures.BEP44_REQUEST_CACHED_REGEX,
+                                             [TestFixtures.BEP44_CACHE_READY_REGEX,
+                                              TestFixtures.BEP44_REQUEST_CACHED_REGEX],
                                              ["--cache-index", "bep44"] + injector_args)
         return self._run_cache_injector(
             OuinetBEP44CacheInjector, config,
-            deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached)
+            [deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached])
 
-    def _cache_injector_config(self, timeout, ready_regex, cached_regex, args):
+    def run_bep44_signer(self, injector_args,
+                         deferred_tcp_port_ready, deferred_index_ready):
+        config = self._cache_injector_config(TestFixtures.BEP44_CACHE_TIMEOUT,
+                                             [TestFixtures.BEP44_PUBK_ANNOUNCE_REGEX],  # bootstrap not needed
+                                             ["--cache-index", "bep44",
+                                              "--seed-content", "0"] + injector_args)
+        return self._run_cache_injector(
+            OuinetBEP44CacheInjector, config,
+            [deferred_tcp_port_ready, deferred_index_ready])
+
+    def _cache_injector_config(self, timeout, evt_regexes, args):
         return OuinetConfig(TestFixtures.CACHE_INJECTOR_NAME, timeout, args,
-                            benchmark_regexes=[TestFixtures.TCP_PORT_READY_REGEX, ready_regex, cached_regex])
+                            benchmark_regexes=([TestFixtures.TCP_PORT_READY_REGEX] + evt_regexes))
 
-    def _run_cache_injector(self, proc_class, config,
-                            deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached):
-        injector = proc_class(config,
-                              [deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached])
+    def _run_cache_injector(self, proc_class, config, evt_deferreds):
+        injector = proc_class(config, evt_deferreds)
         injector.start()
         self.proc_list.append(injector)
 
         return injector
 
-    def run_tcp_client(self, name, args, deffered_tcp_port_ready):
+    def run_tcp_client(self, name, idx_key, args, deffered_tcp_port_ready):
         client = OuinetClient(OuinetConfig(name, TestFixtures.TCP_TRANSPORT_TIMEOUT, args, benchmark_regexes=[TestFixtures.TCP_PORT_READY_REGEX]), [deffered_tcp_port_ready])
         client.start()
         self.proc_list.append(client)
 
         return client
 
-    def run_i2p_client(self, name, args, deferred_i2p_ready):
+    def run_i2p_client(self, name, idx_key, args, deferred_i2p_ready):
         client = OuinetClient(OuinetConfig(name, TestFixtures.I2P_TRANSPORT_TIMEOUT, args, benchmark_regexes=[TestFixtures.I2P_TUNNEL_READY_REGEX]), [deferred_i2p_ready])
         client.start()
         self.proc_list.append(client)
@@ -130,16 +138,24 @@ class OuinetTests(TestCase):
         config = OuinetConfig(name, TestFixtures.IPFS_CACHE_TIMEOUT,
                               ["--cache-index", "btree", "--index-ipns-id", idx_key] + args,
                               benchmark_regexes=[TestFixtures.IPFS_CACHE_READY_REGEX])
-        return self._run_cache_client(OuinetIPFSClient, config, deferred_cache_ready)
+        return self._run_cache_client(OuinetIPFSClient, config, [deferred_cache_ready])
 
     def run_bep44_client(self, name, idx_key, args, deferred_cache_ready):
         config = OuinetConfig(name, TestFixtures.BEP44_CACHE_TIMEOUT,
                               ["--cache-index", "bep44", "--index-bep44-public-key", idx_key] + args,
                               benchmark_regexes=[TestFixtures.BEP44_CACHE_READY_REGEX])
-        return self._run_cache_client(OuinetBEP44Client, config, deferred_cache_ready)
+        return self._run_cache_client(OuinetBEP44Client, config, [deferred_cache_ready])
 
-    def _run_cache_client(self, proc_class, config, deferred_cache_ready):
-        client = proc_class(config, [deferred_cache_ready])
+    def run_bep44_seeder(self, name, idx_key, args, deferred_cache_ready, deferred_result_got_cached):
+        config = OuinetConfig(name, TestFixtures.BEP44_CACHE_TIMEOUT,
+                              ["--cache-index", "bep44", "--index-bep44-public-key", idx_key] + args,
+                              benchmark_regexes=[TestFixtures.BEP44_CACHE_READY_REGEX,
+                                                 TestFixtures.BEP44_RESPONSE_CACHED_REGEX])
+        return self._run_cache_client(OuinetBEP44Client, config,
+                                      [deferred_cache_ready, deferred_result_got_cached])
+
+    def _run_cache_client(self, proc_class, config, evt_deferreds):
+        client = proc_class(config, evt_deferreds)
         client.start()
         self.proc_list.append(client)
 
@@ -208,11 +224,11 @@ class OuinetTests(TestCase):
             i2pclient_tunnel_ready = defer.Deferred()
 
             #use only Proxy or Injector mechanisms
-            self.run_i2p_client( TestFixtures.I2P_CLIENT["name"]
+            self.run_i2p_client( TestFixtures.I2P_CLIENT["name"], None
                                , [ "--disable-origin-access", "--disable-cache"
                                  , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"])
                                  , "--injector-ep", "i2p:" + injector_i2p_public_id
-                                 , "http://localhost/"]
+                                 ]
                                , i2pclient_tunnel_ready)
         
             #wait for the client tunnel to connect to the injector
@@ -266,11 +282,11 @@ class OuinetTests(TestCase):
         client_tcp_port_ready = defer.Deferred()
 
         #use only Proxy or Injector mechanisms
-        self.run_tcp_client( TestFixtures.TCP_CLIENT["name"]
+        self.run_tcp_client( TestFixtures.TCP_CLIENT["name"], None
                            , [ "--disable-origin-access", "--disable-cache"
                              , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_CLIENT["port"])
                              , "--injector-ep", "tcp:127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)
-                             , "http://localhost/"]
+                             ]
                            , client_tcp_port_ready)
 
         #http_server
@@ -295,7 +311,7 @@ class OuinetTests(TestCase):
         logging.debug("################################################")
         logging.debug("test_ipfs_cache");
         logging.debug("################################################")
-        return self._test_cache(self.run_ipfs_injector, self.run_ipfs_client)
+        return self._test_cache(self.run_ipfs_injector, self.run_tcp_client, self.run_ipfs_client)
 
     # Disabled for the same reason as the above test.
     @inlineCallbacks
@@ -303,9 +319,17 @@ class OuinetTests(TestCase):
         logging.debug("################################################")
         logging.debug("test_bep44_cache");
         logging.debug("################################################")
-        return self._test_cache(self.run_bep44_injector, self.run_bep44_client)
+        return self._test_cache(self.run_bep44_injector, self.run_tcp_client, self.run_bep44_client)
 
-    def _test_cache(self, run_cache_injector, run_cache_client):
+    @inlineCallbacks
+    def test_bep44_seed(self):
+        logging.debug("################################################")
+        logging.debug("test_bep44_seed");
+        logging.debug("################################################")
+        return self._test_cache(self.run_bep44_signer, self.run_bep44_seeder, self.run_bep44_client,
+                                injector_seed=False)
+
+    def _test_cache(self, run_injector, run_client, run_cache_client, injector_seed=True):
         """
         Starts an echoing http server, a injector and a two clients and client1 send a unique http 
         request to the echoing http server through the g client --tcp--> injector -> http server
@@ -315,15 +339,21 @@ class OuinetTests(TestCase):
         """
         #injector
         injector_tcp_port_ready = defer.Deferred()
-        index_ready = defer.Deferred()
-        result_got_cached = defer.Deferred()
-        cache_injector = run_cache_injector(["--listen-on-i2p", "false", "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)], injector_tcp_port_ready, index_ready, result_got_cached)
+        injector_index_ready = defer.Deferred()
+        injector_cached_result = defer.Deferred()
+        cache_injector = run_injector(
+            [ "--listen-on-i2p", "false"
+            , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)
+            ]
+            , injector_tcp_port_ready, injector_index_ready
+            , *([injector_cached_result] if injector_seed else [])
+        )
         
         #wait for the injector to open the port
         success = yield injector_tcp_port_ready
 
         #wait for the index to be ready
-        success = yield index_ready
+        success = yield injector_index_ready
         self.assertTrue(success)
 
         index_key = cache_injector.get_index_key()
@@ -331,21 +361,23 @@ class OuinetTests(TestCase):
         
         print "Index key is: " + index_key
 
-        #tcp client, use only Injector mechanism
-        client_tcp_port_ready = defer.Deferred()
-        self.run_tcp_client( TestFixtures.CACHE_CLIENT[0]["name"]
-                           , [ "--disable-origin-access", "--disable-proxy-access", "--disable-cache"
-                             , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[0]["port"])
-                             , "--injector-ep", "tcp:127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)
-                             , "http://localhost/"]
-                           , client_tcp_port_ready)
+        #injector client, use only Injector mechanism
+        client_ready = defer.Deferred()
+        client_cached_result = defer.Deferred()
+        client = run_client( TestFixtures.CACHE_CLIENT[0]["name"], index_key
+                             , [ "--disable-origin-access", "--disable-proxy-access"
+                               , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[0]["port"])
+                               , "--injector-ep", "tcp:127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)
+                               ] + (["--disable-cache"] if injector_seed else [])
+                             , client_ready
+                             , *([] if injector_seed else [client_cached_result]))
 
         #http_server
         self.test_http_server = self.run_http_server(
             TestFixtures.TEST_HTTP_SERVER_PORT)
 
         #wait for the client to open the port
-        success = yield defer.gatherResults([client_tcp_port_ready])
+        success = yield defer.gatherResults([client_ready])
         self.assertTrue(success)
 
         page_url = self.safe_random_str(TestFixtures.RESPONSE_LENGTH)
@@ -355,9 +387,18 @@ class OuinetTests(TestCase):
         response_body = yield readBody(defered_response)
         self.assertEquals(response_body, TestFixtures.TEST_PAGE_BODY)
         
-        # now waiting or injector to annouce caching the request
-        success = yield result_got_cached
-        self.assertTrue(success)
+        if injector_seed:
+            # shut client down to ensure it does not seed content to the cache client
+            client.stop()
+            # now waiting or injector to annouce caching the request
+            success = yield injector_cached_result
+            self.assertTrue(success)
+        else:
+            # shut injector down to ensure it does not seed content to the cache client
+            cache_injector.stop()
+            # now waiting for client to annouce caching the response
+            success = yield client_cached_result
+            self.assertTrue(success)
 
         #start cache client which supposed to read the response from cache, use only Cache mechanism
         client_cache_ready = defer.Deferred()
@@ -365,7 +406,7 @@ class OuinetTests(TestCase):
             TestFixtures.CACHE_CLIENT[1]["name"], index_key,
             [ "--disable-origin-access", "--disable-proxy-access"
             , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["port"])
-            , "http://localhost/"],
+            ],
             client_cache_ready)
 
         import time
