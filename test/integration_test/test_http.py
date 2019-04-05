@@ -138,16 +138,16 @@ class OuinetTests(TestCase):
         config = OuinetConfig(name, TestFixtures.IPFS_CACHE_TIMEOUT,
                               ["--cache-index", "btree", "--index-ipns-id", idx_key] + args,
                               benchmark_regexes=[TestFixtures.IPFS_CACHE_READY_REGEX])
-        return self._run_cache_client(OuinetIPFSClient, config, deferred_cache_ready)
+        return self._run_cache_client(OuinetIPFSClient, config, [deferred_cache_ready])
 
     def run_bep44_client(self, name, idx_key, args, deferred_cache_ready):
         config = OuinetConfig(name, TestFixtures.BEP44_CACHE_TIMEOUT,
                               ["--cache-index", "bep44", "--index-bep44-public-key", idx_key] + args,
                               benchmark_regexes=[TestFixtures.BEP44_CACHE_READY_REGEX])
-        return self._run_cache_client(OuinetBEP44Client, config, deferred_cache_ready)
+        return self._run_cache_client(OuinetBEP44Client, config, [deferred_cache_ready])
 
-    def _run_cache_client(self, proc_class, config, deferred_cache_ready):
-        client = proc_class(config, [deferred_cache_ready])
+    def _run_cache_client(self, proc_class, config, evt_deferreds):
+        client = proc_class(config, evt_deferreds)
         client.start()
         self.proc_list.append(client)
 
