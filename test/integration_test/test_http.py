@@ -216,7 +216,7 @@ class OuinetTests(TestCase):
             i2pclient_tunnel_ready = defer.Deferred()
 
             #use only Proxy or Injector mechanisms
-            self.run_i2p_client( TestFixtures.I2P_CLIENT["name"]
+            self.run_i2p_client( TestFixtures.I2P_CLIENT["name"], None
                                , [ "--disable-origin-access", "--disable-cache"
                                  , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"])
                                  , "--injector-ep", "i2p:" + injector_i2p_public_id
@@ -274,7 +274,7 @@ class OuinetTests(TestCase):
         client_tcp_port_ready = defer.Deferred()
 
         #use only Proxy or Injector mechanisms
-        self.run_tcp_client( TestFixtures.TCP_CLIENT["name"]
+        self.run_tcp_client( TestFixtures.TCP_CLIENT["name"], None
                            , [ "--disable-origin-access", "--disable-cache"
                              , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_CLIENT["port"])
                              , "--injector-ep", "tcp:127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)
