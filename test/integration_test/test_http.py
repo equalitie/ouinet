@@ -355,12 +355,12 @@ class OuinetTests(TestCase):
 
         #injector client, use only Injector mechanism
         client_ready = defer.Deferred()
-        run_client( TestFixtures.CACHE_CLIENT[0]["name"], index_key
-                    , [ "--disable-origin-access", "--disable-proxy-access"
-                      , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[0]["port"])
-                      , "--injector-ep", "tcp:127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)
-                      ] + (["--disable-cache"] if injector_seed else [])
-                    , client_ready)
+        client = run_client( TestFixtures.CACHE_CLIENT[0]["name"], index_key
+                             , [ "--disable-origin-access", "--disable-proxy-access"
+                               , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[0]["port"])
+                               , "--injector-ep", "tcp:127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)
+                               ] + (["--disable-cache"] if injector_seed else [])
+                             , client_ready)
 
         #http_server
         self.test_http_server = self.run_http_server(
@@ -378,6 +378,8 @@ class OuinetTests(TestCase):
         self.assertEquals(response_body, TestFixtures.TEST_PAGE_BODY)
         
         if injector_seed:
+            # shut client down to ensure it does not seed content to the cache client
+            client.stop()
             # now waiting or injector to annouce caching the request
             success = yield injector_cached_result
             self.assertTrue(success)
