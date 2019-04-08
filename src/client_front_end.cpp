@@ -196,7 +196,8 @@ void ClientFrontEnd::handle_enumerate_index( const Request& req
     }
 }
 
-void ClientFrontEnd::handle_descriptor( const Request& req, Response& res, stringstream& ss
+void ClientFrontEnd::handle_descriptor( const ClientConfig& config
+                                      , const Request& req, Response& res, stringstream& ss
                                       , CacheClient* cache_client, asio::yield_context yield)
 {
     auto result = http::status::ok;
@@ -227,7 +228,7 @@ void ClientFrontEnd::handle_descriptor( const Request& req, Response& res, strin
 
         Cancel cancel; // TODO: This should come from above
         file_descriptor = cache_client->get_descriptor( key_from_http_url(uri)
-                                                      , IndexType::btree
+                                                      , config.cache_index_type()
                                                       , cancel
                                                       , yield[ec]);
 
@@ -458,7 +459,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
         handle_upload(req, res, ss, cache_client, yield[ec_]);
     } else if (path == "/api/descriptor") {
         sys::error_code ec_;  // shouldn't throw, but just in case
-        handle_descriptor(req, res, ss, cache_client, yield[ec_]);
+        handle_descriptor(config, req, res, ss, cache_client, yield[ec_]);
     } else if (path == "/api/insert/bep44") {
         sys::error_code ec_;  // shouldn't throw, but just in case
         handle_insert_bep44(req, res, ss, cache_client, yield[ec_]);
