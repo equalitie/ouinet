@@ -423,6 +423,7 @@ add_library $DIR/build-ouinet/libclient.so
 add_library $DIR/build-ouinet/modules/asio-ipfs/ipfs_bindings/libipfs_bindings.so
 add_library $DIR/build-ouinet/gcrypt/src/gcrypt/src/.libs/libgcrypt.so
 add_library $DIR/build-ouinet/gpg_error/out/lib/libgpg-error.so
+add_library $DIR/build-ouinet/src/ouiservice/lampshade/lampshade_bindings/liblampshade_bindings.so
 add_binary $DIR/build-ouinet/modules/obfs4proxy/obfs4proxy
 }
 
