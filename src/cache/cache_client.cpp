@@ -38,7 +38,7 @@ CacheClient::build( asio::io_service& ios
 
     {
         auto slot = cancel.connect([&] {
-            cerr << "TODO: Canceling Client::build doesn't immediately stop "
+            cerr << "TODO: Canceling CacheClient::build doesn't immediately stop "
                  << "IO tasks\n";
         });
 
