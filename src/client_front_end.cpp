@@ -151,26 +151,10 @@ static string html_desc_link(const string& uri) {
                     , uri, "</a><br/>\n");
 };
 
-void ClientFrontEnd::handle_enumerate_index( const Request& req
-                                           , Response& res
-                                           , stringstream& ss
-                                           , CacheClient* cache_client
-                                           , asio::yield_context yield)
+static void write_btree_desc_list( CacheClient* cache_client
+                                 , stringstream& ss
+                                 , asio::yield_context yield)
 {
-    res.set(http::field::content_type, "text/html");
-
-    ss << "<!DOCTYPE html>\n"
-           "<html>\n"
-           "</html>\n"
-           "<body style=\"font-family:monospace;white-space:nowrap;font-size:small\">\n";
-
-    auto on_exit = defer([&] { ss << "</body></html>\n"; });
-
-    if (!cache_client) {
-        ss << "Cache is not initialized";
-        return;
-    }
-
     auto btree = cache_client->get_btree();
 
     if (!btree) {
@@ -199,6 +183,30 @@ void ClientFrontEnd::handle_enumerate_index( const Request& req
             return;
         }
     }
+}
+
+void ClientFrontEnd::handle_enumerate_index( const Request& req
+                                           , Response& res
+                                           , stringstream& ss
+                                           , CacheClient* cache_client
+                                           , asio::yield_context yield)
+{
+    res.set(http::field::content_type, "text/html");
+
+    ss << "<!DOCTYPE html>\n"
+           "<html>\n"
+           "</html>\n"
+           "<body style=\"font-family:monospace;white-space:nowrap;font-size:small\">\n";
+
+    auto on_exit = defer([&] { ss << "</body></html>\n"; });
+
+    if (!cache_client) {
+        ss << "Cache is not initialized";
+        return;
+    }
+
+    // This shall not raise an error but report it on `ss` as HTML.
+    write_btree_desc_list(cache_client, ss, yield);
 }
 
 void ClientFrontEnd::handle_descriptor( const ClientConfig& config
