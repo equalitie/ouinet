@@ -184,6 +184,7 @@ void ClientFrontEnd::handle_enumerate_index( const Request& req
     }
 
     while (!iter.is_end()) {
+        // TODO: Escape URL for HTML link text.
         ss << "<a href=\"/api/descriptor?uri=" << percent_encode_all(iter.key()) << "\">"
            << iter.key() << "</a><br/>\n";
 
