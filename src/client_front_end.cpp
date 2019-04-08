@@ -167,7 +167,7 @@ void ClientFrontEnd::handle_enumerate_index( const Request& req
 
     auto btree = cache_client->get_btree();
 
-    if (!cache_client) {
+    if (!btree) {
         ss << "Cache does not sport BTree";
         return;
     }
