@@ -351,7 +351,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
           "<html>\n"
           "    <head>\n";
     if (_auto_refresh_enabled) {
-        ss << "      <meta http-equiv=\"refresh\" content=\"1\"/>\n";
+        ss << "      <meta http-equiv=\"refresh\" content=\"5\"/>\n";
     }
     ss << "      <style>\n"
           "        * {\n"
