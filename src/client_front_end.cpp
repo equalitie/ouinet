@@ -145,6 +145,12 @@ static string percent_encode_all(const string& in) {
     return outss.str();
 }
 
+static string html_desc_link(const string& uri) {
+    // TODO: Escape URL for HTML link text.
+    return util::str( "<a href=\"/api/descriptor?uri=", percent_encode_all(uri), "\">"
+                    , uri, "</a><br/>\n");
+};
+
 void ClientFrontEnd::handle_enumerate_index( const Request& req
                                            , Response& res
                                            , stringstream& ss
@@ -184,9 +190,7 @@ void ClientFrontEnd::handle_enumerate_index( const Request& req
     }
 
     while (!iter.is_end()) {
-        // TODO: Escape URL for HTML link text.
-        ss << "<a href=\"/api/descriptor?uri=" << percent_encode_all(iter.key()) << "\">"
-           << iter.key() << "</a><br/>\n";
+        ss << html_desc_link(iter.key());
 
         iter.advance(cancel, yield[ec]);
 
