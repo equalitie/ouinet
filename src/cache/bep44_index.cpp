@@ -1,4 +1,5 @@
 #include <iterator>
+#include <sstream>
 #include <json.hpp>
 
 #include "bep44_index.h"
@@ -197,6 +198,8 @@ private:
 
     void loop(asio::yield_context yield)
     {
+        using namespace std::chrono;  // for `duration_cast<milliseconds>`
+
         Cancel cancel(_cancel);
 
         while (true) {
@@ -220,12 +223,23 @@ private:
 
             if (cancel) return;
 
+            stringstream log_msg;
+            if (logger.get_threshold() <= DEBUG) {
+                log_msg << "BEP44 index: update"
+                        << " salt=" << util::bytes::to_hex(old.data.salt)
+                        << " ts1=" << duration_cast<milliseconds>(old.last_update.time_since_epoch()).count()
+                        << ": ";
+            }
+
             Clock::time_point next_update;
             if (ec) {
                 if (ec == asio::error::not_found) {
+                    log_msg << "not found in DHT, putting";
                     _dht.mutable_put(old.data, cancel, yield[ec]);
+                    if (ec) log_msg << "; put failed; ec=\"" << ec.message() << "\"";
                 } else {
                     // Some network error
+                    log_msg << "error looking up DHT; ec=\"" << ec.message() << "\"";
                     async_sleep(_ios, chrono::seconds(5), cancel, yield);
                 }
 
@@ -236,9 +250,12 @@ private:
             else {
                 if (new_data.sequence_number > old.data.sequence_number)
                 {
+                    log_msg << "newer entry found in DHT";
                     // TODO: Store new data
                     old.data = move(new_data);
-                }
+                } else log_msg << "older entry found in DHT";
+                log_msg << "; my_seq=" << old.data.sequence_number
+                        << " dht_seq=" << new_data.sequence_number;
 
                 next_update = Clock::now() - chrono::minutes(15);
             }
@@ -247,7 +264,10 @@ private:
             // we update the `last_update` ts just to make sure
             // we don't end up checking the same item over and over.
             old.last_update = next_update;
+            log_msg << "; ts2=" << duration_cast<milliseconds>(next_update.time_since_epoch()).count();
             _lru->insert(i.key(), move(old), cancel, yield[ec]);
+            if (ec) log_msg << "; ins failed; ec=\"" << ec.message() << "\"";
+            LOG_DEBUG(log_msg.str());
 
             if (cancel) return;
         }
