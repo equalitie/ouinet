@@ -252,14 +252,14 @@ private:
                 next_update = Clock::now();
             }
             else {
-                if (dht_data.sequence_number > loc.data.sequence_number)
+                auto dht_seq = dht_data.sequence_number, loc_seq = loc.data.sequence_number;
+                if (dht_seq > loc_seq)
                 {
                     log_msg << "newer entry found in DHT";
                     // TODO: Store new data
                     loc.data = move(dht_data);
                 } else log_msg << "older entry found in DHT";
-                log_msg << ": my_seq=" << loc.data.sequence_number
-                        << " dht_seq=" << dht_data.sequence_number;
+                log_msg << ": my_seq=" << loc_seq << " dht_seq=" << dht_seq;
 
                 next_update = Clock::now() - chrono::minutes(15);
             }
