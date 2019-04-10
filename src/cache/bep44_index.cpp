@@ -236,11 +236,15 @@ private:
                 if (ec == asio::error::not_found) {
                     log_msg << "not found in DHT, putting";
                     _dht.mutable_put(old.data, cancel, yield[ec]);
-                    if (ec) log_msg << "; put failed; ec=\"" << ec.message() << "\"";
-                } else {
-                    // Some network error
-                    log_msg << "error looking up DHT; ec=\"" << ec.message() << "\"";
+                    if (ec) log_msg << "; ";
+                }
+                if (ec && ec != asio::error::not_found && ec != asio::error::operation_aborted) {
+                    // Some network error which may affect other entries as well,
+                    // so do not move to the next one, just retry later.
+                    log_msg << "DHT error, retry; ec=\"" << ec.message() << "\"";
+                    LOG_DEBUG(log_msg.str());
                     async_sleep(_ios, chrono::seconds(5), cancel, yield);
+                    if (!cancel) continue;
                 }
 
                 if (cancel) return;
@@ -260,7 +264,7 @@ private:
                 next_update = Clock::now() - chrono::minutes(15);
             }
 
-            // Even if there was some network error or the entry was found in the DHT
+            // Regardless of whether we found the entry in the DHT or not,
             // we update the `last_update` ts just to make sure
             // we don't end up checking the same item over and over.
             old.last_update = next_update;
