@@ -211,13 +211,13 @@ private:
                 continue;
             }
 
-            auto old = i.value();
+            auto loc = i.value();
 
             sys::error_code ec;
 
-            auto new_data = find(_dht
-                                , old.data.public_key
-                                , old.data.salt
+            auto dht_data = find(_dht
+                                , loc.data.public_key
+                                , loc.data.salt
                                 , cancel
                                 , yield[ec]);
 
@@ -226,8 +226,8 @@ private:
             stringstream log_msg;
             if (logger.get_threshold() <= DEBUG) {
                 log_msg << "BEP44 index: update"
-                        << " salt=" << util::bytes::to_hex(old.data.salt)
-                        << " ts1=" << duration_cast<milliseconds>(old.last_update.time_since_epoch()).count()
+                        << " salt=" << util::bytes::to_hex(loc.data.salt)
+                        << " ts1=" << duration_cast<milliseconds>(loc.last_update.time_since_epoch()).count()
                         << ": ";
             }
 
@@ -235,7 +235,7 @@ private:
             if (ec) {
                 if (ec == asio::error::not_found) {
                     log_msg << "entry not found in DHT, putting";
-                    _dht.mutable_put(old.data, cancel, yield[ec]);
+                    _dht.mutable_put(loc.data, cancel, yield[ec]);
                     if (ec) log_msg << "; ";
                 }
                 if (ec && ec != asio::error::not_found && ec != asio::error::operation_aborted) {
@@ -252,14 +252,14 @@ private:
                 next_update = Clock::now();
             }
             else {
-                if (new_data.sequence_number > old.data.sequence_number)
+                if (dht_data.sequence_number > loc.data.sequence_number)
                 {
                     log_msg << "newer entry found in DHT";
                     // TODO: Store new data
-                    old.data = move(new_data);
+                    loc.data = move(dht_data);
                 } else log_msg << "older entry found in DHT";
-                log_msg << "; my_seq=" << old.data.sequence_number
-                        << " dht_seq=" << new_data.sequence_number;
+                log_msg << "; my_seq=" << loc.data.sequence_number
+                        << " dht_seq=" << dht_data.sequence_number;
 
                 next_update = Clock::now() - chrono::minutes(15);
             }
@@ -267,9 +267,9 @@ private:
             // Regardless of whether we found the entry in the DHT or not,
             // we update the `last_update` ts just to make sure
             // we don't end up checking the same item over and over.
-            old.last_update = next_update;
+            loc.last_update = next_update;
             log_msg << "; ts2=" << duration_cast<milliseconds>(next_update.time_since_epoch()).count();
-            _lru->insert(i.key(), move(old), cancel, yield[ec]);
+            _lru->insert(i.key(), move(loc), cancel, yield[ec]);
             if (ec) log_msg << "; ins failed; ec=\"" << ec.message() << "\"";
             LOG_DEBUG(log_msg.str());
 
