@@ -49,8 +49,8 @@ endif()
 
 set(GOROOT "${CMAKE_BINARY_DIR}/golang")
 externalproject_add(golang
-    URL https://dl.google.com/go/go1.11.2.linux-amd64.tar.gz
-    URL_MD5 5630231012b6d02b821af51f04c2776c
+    URL https://dl.google.com/go/go1.12.3.linux-amd64.tar.gz
+    URL_MD5 eac797050ce084d444a49e8d68ad13b7
     CONFIGURE_COMMAND ""
     BUILD_COMMAND ""
     INSTALL_COMMAND ""
