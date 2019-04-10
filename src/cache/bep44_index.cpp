@@ -241,7 +241,7 @@ private:
                 if (ec && ec != asio::error::not_found && ec != asio::error::operation_aborted) {
                     // Some network error which may affect other entries as well,
                     // so do not move to the next one, just retry later.
-                    log_msg << "DHT error, retry; ec=\"" << ec.message() << "\"";
+                    log_msg << "DHT error, retry: ec=\"" << ec.message() << "\"";
                     LOG_DEBUG(log_msg.str());
                     async_sleep(_ios, chrono::seconds(5), cancel, yield);
                     if (!cancel) continue;
@@ -258,7 +258,7 @@ private:
                     // TODO: Store new data
                     loc.data = move(dht_data);
                 } else log_msg << "older entry found in DHT";
-                log_msg << "; my_seq=" << loc.data.sequence_number
+                log_msg << ": my_seq=" << loc.data.sequence_number
                         << " dht_seq=" << dht_data.sequence_number;
 
                 next_update = Clock::now() - chrono::minutes(15);
@@ -270,7 +270,7 @@ private:
             loc.last_update = next_update;
             log_msg << "; ts2=" << duration_cast<milliseconds>(next_update.time_since_epoch()).count();
             _lru->insert(i.key(), move(loc), cancel, yield[ec]);
-            if (ec) log_msg << "; ins failed; ec=\"" << ec.message() << "\"";
+            if (ec) log_msg << "; ins failed: ec=\"" << ec.message() << "\"";
             LOG_DEBUG(log_msg.str());
 
             if (cancel) return;
