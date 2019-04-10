@@ -234,7 +234,7 @@ private:
             Clock::time_point next_update;
             if (ec) {
                 if (ec == asio::error::not_found) {
-                    log_msg << "not found in DHT, putting";
+                    log_msg << "entry not found in DHT, putting";
                     _dht.mutable_put(old.data, cancel, yield[ec]);
                     if (ec) log_msg << "; ";
                 }
