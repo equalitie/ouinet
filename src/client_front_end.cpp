@@ -31,6 +31,7 @@ static string now_as_string() {
 struct ToggleInput {
     beast::string_view text;
     beast::string_view name;
+    char shortcut;
     bool current_value;
 };
 
@@ -45,6 +46,7 @@ ostream& operator<<(ostream& os, const ToggleInput& i) {
           "    " << i.text << ": " << cur_value << "&nbsp;"
                     "<input type=\"submit\" "
                            "name=\""  << i.name << "\" "
+                           "accesskey=\""  << i.shortcut << "\" "
                            "value=\"" << next_value << "\"/>\n"
           "</form>\n";
 }
@@ -403,11 +405,11 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
           "      Verification of HTTPS content coming from the origin will be performed by your Ouinet client\n"
           "      using system-accepted Certification Authorities.</p>\n";
 
-    ss << ToggleInput{"Auto refresh",   "auto_refresh",   _auto_refresh_enabled};
-    ss << ToggleInput{"Origin access", "origin_access", config.is_origin_access_enabled()};
-    ss << ToggleInput{"Proxy access", "proxy_access", config.is_proxy_access_enabled()};
-    ss << ToggleInput{"Injector proxy", "injector_proxy", _injector_proxying_enabled};
-    ss << ToggleInput{"IPFS Cache",     "ipfs_cache",     _ipfs_cache_enabled};
+    ss << ToggleInput{"<u>A</u>uto refresh",   "auto_refresh",   'a', _auto_refresh_enabled};
+    ss << ToggleInput{"<u>O</u>rigin access",  "origin_access",  'o', config.is_origin_access_enabled()};
+    ss << ToggleInput{"<u>P</u>roxy access",   "proxy_access",   'p', config.is_proxy_access_enabled()};
+    ss << ToggleInput{"<u>I</u>njector proxy", "injector_proxy", 'i', _injector_proxying_enabled};
+    ss << ToggleInput{"IPFS <u>C</u>ache",     "ipfs_cache",     'c', _ipfs_cache_enabled};
 
     ss << "<br>\n";
     ss << "Now: " << now_as_string()  << "<br>\n";
