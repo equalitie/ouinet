@@ -170,6 +170,9 @@ public:
     bool is_proxy_access_enabled() const { return !_disable_proxy_access; }
     void is_proxy_access_enabled(bool v) { _disable_proxy_access = !v; }
 
+    bool is_injector_access_enabled() const { return !_disable_injector_access; }
+    void is_injector_access_enabled(bool v) { _disable_injector_access = !v; }
+
     std::string local_domain() const { return _local_domain; }
 
 private:
@@ -184,6 +187,7 @@ private:
     bool _enable_http_connect_requests = false;
     bool _disable_origin_access = false;
     bool _disable_proxy_access = false;
+    bool _disable_injector_access = false;
     asio::ip::tcp::endpoint _front_end_endpoint;
     IndexType _cache_index_type = IndexType::btree;
 

@@ -319,10 +319,10 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
             config.is_proxy_access_enabled(false);
         }
         else if (target.find("?injector_proxy=enable") != string::npos) {
-            _injector_proxying_enabled = true;
+            config.is_injector_access_enabled(true);
         }
         else if (target.find("?injector_proxy=disable") != string::npos) {
-            _injector_proxying_enabled = false;
+            config.is_injector_access_enabled(false);
         }
         else if (target.find("?auto_refresh=enable") != string::npos) {
             _auto_refresh_enabled = true;
@@ -373,7 +373,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     ss << ToggleInput{"Auto refresh",   "auto_refresh",   _auto_refresh_enabled};
     ss << ToggleInput{"Origin access", "origin_access", config.is_origin_access_enabled()};
     ss << ToggleInput{"Proxy access", "proxy_access", config.is_proxy_access_enabled()};
-    ss << ToggleInput{"Injector proxy", "injector_proxy", _injector_proxying_enabled};
+    ss << ToggleInput{"Injector proxy", "injector_proxy", config.is_injector_access_enabled()};
     ss << ToggleInput{"IPFS Cache",     "ipfs_cache",     _ipfs_cache_enabled};
 
     ss << "<br>\n";
@@ -416,7 +416,7 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         {"auto_refresh", _auto_refresh_enabled},
         {"origin_access", config.is_origin_access_enabled()},
         {"proxy_access", config.is_proxy_access_enabled()},
-        {"injector_proxy", _injector_proxying_enabled},
+        {"injector_proxy", config.is_injector_access_enabled()},
         {"ipfs_cache", _ipfs_cache_enabled},
      // https://github.com/nlohmann/json#arbitrary-types-conversions
      // {"misc", {

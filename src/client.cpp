@@ -165,10 +165,6 @@ private:
 
     GenericStream connect_to_origin(const Request&, Cancel&, Yield);
 
-    bool is_injector_proxying_enabled() const {
-        return _front_end.is_injector_proxying_enabled();
-    }
-
 private:
     asio::io_service& _ios;
     ClientConfig _config;
@@ -540,7 +536,7 @@ public:
     Response fetch_fresh(const Request& request, Cancel& cancel, Yield yield) {
         namespace err = asio::error;
 
-        if (!client_state.is_injector_proxying_enabled())
+        if (!client_state._config.is_injector_access_enabled())
             return or_throw<Response>(yield, err::operation_not_supported);
 
         sys::error_code ec;
@@ -598,7 +594,6 @@ public:
         if (has_bep44_insert_hdr(rs)) {
             asio::spawn(ios, [ rs
                              , target = rq.target().to_string()
-                             , &ios
                              , &cache
                              , &cancel_ = client_state.get_shutdown_signal()
                              , &scheduler = client_state._store_scheduler
