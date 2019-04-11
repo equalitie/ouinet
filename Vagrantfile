@@ -101,6 +101,10 @@ Vagrant.configure("2") do |config|
         # Stop all kinds of tools from warning on missing locales
         echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
         locale-gen
+
+        # Ensure using that fixed locale even for SSH sessions
+        update-locale LANG=en_US.UTF-8
+        sed -i -E 's/^(\s*AcceptEnv\b)/#\1/' /etc/ssh/sshd_config
     SHELL
   end
 

@@ -1,4 +1,5 @@
 #include <iterator>
+#include <sstream>
 #include <json.hpp>
 
 #include "bep44_index.h"
@@ -197,6 +198,8 @@ private:
 
     void loop(asio::yield_context yield)
     {
+        using namespace std::chrono;  // for `duration_cast<milliseconds>`
+
         Cancel cancel(_cancel);
 
         while (true) {
@@ -208,25 +211,40 @@ private:
                 continue;
             }
 
-            auto old = i.value();
+            auto loc = i.value();
 
             sys::error_code ec;
 
-            auto new_data = find(_dht
-                                , old.data.public_key
-                                , old.data.salt
+            auto dht_data = find(_dht
+                                , loc.data.public_key
+                                , loc.data.salt
                                 , cancel
                                 , yield[ec]);
 
             if (cancel) return;
 
+            stringstream log_msg;
+            if (logger.get_threshold() <= DEBUG) {
+                log_msg << "BEP44 index: update"
+                        << " salt=" << util::bytes::to_hex(loc.data.salt)
+                        << " ts1=" << duration_cast<milliseconds>(loc.last_update.time_since_epoch()).count()
+                        << ": ";
+            }
+
             Clock::time_point next_update;
             if (ec) {
                 if (ec == asio::error::not_found) {
-                    _dht.mutable_put(old.data, cancel, yield[ec]);
-                } else {
-                    // Some network error
+                    log_msg << "entry not found in DHT, putting";
+                    _dht.mutable_put(loc.data, cancel, yield[ec]);
+                    if (ec) log_msg << "; ";
+                }
+                if (ec && ec != asio::error::not_found && ec != asio::error::operation_aborted) {
+                    // Some network error which may affect other entries as well,
+                    // so do not move to the next one, just retry later.
+                    log_msg << "DHT error, retry: ec=\"" << ec.message() << "\"";
+                    LOG_DEBUG(log_msg.str());
                     async_sleep(_ios, chrono::seconds(5), cancel, yield);
+                    if (!cancel) continue;
                 }
 
                 if (cancel) return;
@@ -234,20 +252,26 @@ private:
                 next_update = Clock::now();
             }
             else {
-                if (new_data.sequence_number > old.data.sequence_number)
+                auto dht_seq = dht_data.sequence_number, loc_seq = loc.data.sequence_number;
+                if (dht_seq > loc_seq)
                 {
+                    log_msg << "newer entry found in DHT";
                     // TODO: Store new data
-                    old.data = move(new_data);
-                }
+                    loc.data = move(dht_data);
+                } else log_msg << "older entry found in DHT";
+                log_msg << ": my_seq=" << loc_seq << " dht_seq=" << dht_seq;
 
                 next_update = Clock::now() - chrono::minutes(15);
             }
 
-            // Even if there was some network error or the entry was found in the DHT
+            // Regardless of whether we found the entry in the DHT or not,
             // we update the `last_update` ts just to make sure
             // we don't end up checking the same item over and over.
-            old.last_update = next_update;
-            _lru->insert(i.key(), move(old), cancel, yield[ec]);
+            loc.last_update = next_update;
+            log_msg << "; ts2=" << duration_cast<milliseconds>(next_update.time_since_epoch()).count();
+            _lru->insert(i.key(), move(loc), cancel, yield[ec]);
+            if (ec) log_msg << "; ins failed: ec=\"" << ec.message() << "\"";
+            LOG_DEBUG(log_msg.str());
 
             if (cancel) return;
         }
