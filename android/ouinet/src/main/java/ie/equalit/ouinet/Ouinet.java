@@ -58,7 +58,7 @@ public class Ouinet {
         args.add("ouinet-client"); // App name
         args.add("--repo=" + dir());
         args.add("--listen-on-tcp=127.0.0.1:8080");
-        args.add("--front-end-ep=0.0.0.0:8081");
+        args.add("--front-end-ep=127.0.0.1:8081");
 
         maybeAdd(args, "--injector-ep",            conf.injector_endpoint);
         maybeAdd(args, "--injector-credentials",   conf.injector_credentials);
