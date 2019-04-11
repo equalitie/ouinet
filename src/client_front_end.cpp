@@ -186,7 +186,8 @@ static void write_btree_desc_list( CacheClient* cache_client
     }
 }
 
-void ClientFrontEnd::handle_enumerate_index( const Request& req
+void ClientFrontEnd::handle_enumerate_index( const ClientConfig& config
+                                           , const Request& req
                                            , Response& res
                                            , stringstream& ss
                                            , CacheClient* cache_client
@@ -475,7 +476,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
         handle_ca_pem(req, res, ss, ca);
     } else if (path == "/index.html") {
         sys::error_code ec_;  // shouldn't throw, but just in case
-        handle_enumerate_index(req, res, ss, cache_client, yield[ec_]);
+        handle_enumerate_index(config, req, res, ss, cache_client, yield[ec_]);
     } else if (path == "/api/upload") {
         sys::error_code ec_;  // shouldn't throw, but just in case
         handle_upload(req, res, ss, cache_client, yield[ec_]);
