@@ -235,6 +235,7 @@ private:
             if (ec) {
                 if (ec == asio::error::not_found) {
                     log_msg << "entry not found in DHT, putting";
+                    ec = sys::error_code();
                     _dht.mutable_put(loc.data, cancel, yield[ec]);
                     if (ec) log_msg << "; ";
                 }
@@ -269,6 +270,7 @@ private:
             // we don't end up checking the same item over and over.
             loc.last_update = next_update;
             log_msg << "; ts2=" << duration_cast<milliseconds>(next_update.time_since_epoch()).count();
+            ec = sys::error_code();
             _lru->insert(i.key(), move(loc), cancel, yield[ec]);
             if (ec) log_msg << "; ins failed: ec=\"" << ec.message() << "\"";
             LOG_DEBUG(log_msg.str());
