@@ -391,12 +391,6 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     ss << ToggleInput{"IPFS Cache",     "ipfs_cache",     _ipfs_cache_enabled};
 
     ss << "<br>\n";
-    ss << "<form action=\"/api/descriptor\" method=\"get\">\n"
-       << "    Query URI descriptor: <input name=\"uri\"/ placeholder=\"URI\" size=\"100\">\n"
-       << "    <input type=\"submit\" value=\"Submit\"/>\n"
-       << "</form>\n";
-
-    ss << "<br>\n";
     ss << "Now: " << now_as_string()  << "<br>\n";
     ss << "Injector endpoint: " << config.injector_endpoint() << "<br>\n";
 
@@ -413,6 +407,14 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         ss << "        Our IPFS ID (IPNS): " << cache_client->ipfs_id() << "<br>\n";
         ss << "        <h2>Index</h2>\n";
         ss << "        List of <a href=\"index.html\">URI descriptors</a> available to client.<br>\n";
+
+        ss << "        <br>\n";
+        ss << "        <form action=\"/api/descriptor\" method=\"get\">\n"
+           << "            Query URI descriptor: <input name=\"uri\"/ placeholder=\"URI\" size=\"100\">\n"
+           << "        <input type=\"submit\" value=\"Submit\"/>\n"
+           << "        </form>\n";
+
+        ss << "        <br>\n";
         ss << "        B-tree IPNS: " << cache_client->ipns() << "<br>\n";
         ss << "        B-tree IPFS: " << cache_client->ipfs() << "<br>\n";
     }
