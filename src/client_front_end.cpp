@@ -3,6 +3,7 @@
 #include "cache/cache_client.h"
 #include "cache/btree.h"
 #include "util.h"
+#include "util/bytes.h"
 #include "defer.h"
 #include "client_config.h"
 #include <boost/optional/optional_io.hpp>
@@ -414,7 +415,10 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
            << "        <input type=\"submit\" value=\"Submit\"/>\n"
            << "        </form>\n";
 
+        auto bep44_pk = config.index_bep44_pub_key();
+        auto bep44_pk_s = bep44_pk ? util::bytes::to_hex(bep44_pk->serialize()) : "";
         ss << "        <br>\n";
+        ss << "        BEP44 public key: " << bep44_pk_s << "<br>\n";
         ss << "        B-tree IPNS: " << cache_client->ipns() << "<br>\n";
         ss << "        B-tree IPFS: " << cache_client->ipfs() << "<br>\n";
     }
