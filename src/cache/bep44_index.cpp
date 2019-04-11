@@ -238,17 +238,18 @@ private:
                     ec = sys::error_code();
                     _dht.mutable_put(loc.data, cancel, yield[ec]);
                     if (ec) log_msg << "; ";
+                    if (cancel) return;
                 }
+                assert(!cancel || ec == asio::error::operation_aborted);
                 if (ec && ec != asio::error::not_found && ec != asio::error::operation_aborted) {
                     // Some network error which may affect other entries as well,
                     // so do not move to the next one, just retry later.
                     log_msg << "DHT error, retry: ec=\"" << ec.message() << "\"";
                     LOG_DEBUG(log_msg.str());
                     async_sleep(_ios, chrono::seconds(5), cancel, yield);
-                    if (!cancel) continue;
+                    if (cancel) return;
+                    continue;
                 }
-
-                if (cancel) return;
 
                 next_update = Clock::now();
             }
