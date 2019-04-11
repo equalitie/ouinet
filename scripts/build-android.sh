@@ -96,8 +96,6 @@ EMULATOR_AVD=${EMULATOR_AVD:-ouinet-test}
 # The following options may be limited by availability of SDK packages,
 # to get list of all packages, use `sdkmanager --list`.
 
-
-
 # The image to be used by the emulator AVD
 EMULATOR_IMAGE_TAG=google_apis  # uses to be available for all platforms and ABIs
 EMULATOR_IMAGE="system-images;$PLATFORM;$EMULATOR_IMAGE_TAG;$ABI"
@@ -405,6 +403,10 @@ fi
 
 ######################################################################
 function build_ouinet_libs {
+    BUILD_TYPE=Debug
+    if [ $RELEASE_BUILD -eq 1 ]; then
+        BUILD_TYPE=Release
+    fi
     mkdir -p build-ouinet
     cd build-ouinet
     cmake ${ANDROID_FLAGS} \
@@ -414,7 +416,7 @@ function build_ouinet_libs {
           -DOPENSSL_INCLUDE_DIR=${SSL_DIR}/include \
           -DCMAKE_CXX_FLAGS="-I ${DIR}/android-ifaddrs -I $SSL_DIR/include" \
           -DBOOST_ROOT="$BOOST_SOURCE" \
-          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
           ${ROOT}
     make VERBOSE=1
     cd -
@@ -504,6 +506,15 @@ EOF
 ######################################################################
 
 # Parse modes and leave emulator arguments.
+
+RELEASE_BUILD=0
+while getopts r option; do
+    case "$option" in
+    r) RELEASE_BUILD=1;;
+    esac
+done
+shift $((OPTIND -1))
+
 progname=$(basename "$0")
 if [ "$1" = --help ]; then
     echo "Usage: $progname [MODE...] [-- EMULATOR_ARG...]"

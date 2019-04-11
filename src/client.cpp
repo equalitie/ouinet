@@ -1191,10 +1191,15 @@ void Client::State::serve_request( GenericStream&& con
         if (!authenticate(req, con, _config.client_credentials(), yield[ec].tag("auth"))) {
             continue;
         }
-
+#ifndef NDEBUG
         yield.log("=== New request ===");
         yield.log(req.base());
-        auto on_exit = defer([&] { yield.log("Done"); });
+#endif
+        auto on_exit = defer([&] {
+#ifndef NDEBUG
+            yield.log("Done");
+#endif
+        });
         auto target = req.target();
 
         // Perform MitM for CONNECT requests (to be able to see encrypted requests)
