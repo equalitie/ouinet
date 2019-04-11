@@ -407,7 +407,9 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     if (cache_client) {
         ss << "        Our IPFS ID (IPNS): " << cache_client->ipfs_id() << "<br>\n";
         ss << "        <h2>Index</h2>\n";
-        ss << "        List of <a href=\"index.html\">URI descriptors</a> available to client.<br>\n";
+        ss << "        List of <a href=\"index.html\">URI descriptors</a> known to client.\n"
+              "        Others may be available over the network.\n"
+              "        Please use the box below to query the descriptor of an arbitrary URI without fetching the associated content.<br>\n";
 
         ss << "        <br>\n";
         ss << "        <form action=\"/api/descriptor\" method=\"get\">\n"
