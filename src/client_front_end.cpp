@@ -412,8 +412,9 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     if (cache_client) {
         ss << "        Our IPFS ID (IPNS): " << cache_client->ipfs_id() << "<br>\n";
         ss << "        <h2>Index</h2>\n";
-        ss << "        IPNS: " << cache_client->ipns() << "<br>\n";
-        ss << "        IPFS: <a href=\"index.html\">" << cache_client->ipfs() << "</a><br>\n";
+        ss << "        List of <a href=\"index.html\">URI descriptors</a> available to client.<br>\n";
+        ss << "        B-tree IPNS: " << cache_client->ipns() << "<br>\n";
+        ss << "        B-tree IPFS: " << cache_client->ipfs() << "<br>\n";
     }
 
     ss << "    </body>\n"
