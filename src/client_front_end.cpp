@@ -186,6 +186,14 @@ static void write_btree_desc_list( CacheClient* cache_client
     }
 }
 
+static void write_bep44_desc_list( CacheClient* cache_client
+                                 , stringstream& ss
+                                 , asio::yield_context yield)
+{
+    ss << "URI descriptors published by this client:<br/>\n";
+    ss << "TODO";
+}
+
 void ClientFrontEnd::handle_enumerate_index( const ClientConfig& config
                                            , const Request& req
                                            , Response& res
@@ -207,8 +215,17 @@ void ClientFrontEnd::handle_enumerate_index( const ClientConfig& config
         return;
     }
 
-    // This shall not raise an error but report it on `ss` as HTML.
-    write_btree_desc_list(cache_client, ss, yield);
+    switch (config.cache_index_type()) {
+        // These shall not raise an error but report it on `ss` as HTML.
+        case (IndexType::btree): 
+            write_btree_desc_list(cache_client, ss, yield);
+            break;
+        case (IndexType::bep44): 
+            write_bep44_desc_list(cache_client, ss, yield);
+            break;
+        default:
+          ss << "Unknown index type";
+    }
 }
 
 void ClientFrontEnd::handle_descriptor( const ClientConfig& config
