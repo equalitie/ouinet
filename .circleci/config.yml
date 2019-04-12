@@ -4,7 +4,7 @@ executorType: machine
 stages:
   build:
     environment:
-      - CMAKE_PATH: "/home/circleci/cmake-3.10.0-Linux-x86_64/bin"
+      - CMAKE_PATH: "/home/circleci/cmake-3.13.4-Linux-x86_64/bin"
       - BOOST_MAJOR: "1"
       - BOOST_MINOR: "67"
       - BOOST_PATCH: "0"
@@ -16,8 +16,8 @@ stages:
         name: Install cmake
         command: |
           cd ~
-          wget --quiet https://cmake.org/files/v3.10/cmake-3.10.0-Linux-x86_64.tar.gz
-          tar -xf cmake-3.10.0-Linux-x86_64.tar.gz
+          wget --quiet https://github.com/Kitware/CMake/releases/download/v3.13.4/cmake-3.13.4-Linux-x86_64.tar.gz
+          tar -xf cmake-3.13.4-Linux-x86_64.tar.gz
 
       - type: shell
         name: Install other dependencies
