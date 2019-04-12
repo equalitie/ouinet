@@ -79,7 +79,9 @@ void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, stringstr
 }
 
 void ClientFrontEnd::handle_upload( const Request& req, Response& res, stringstream& ss
-                                  , CacheClient* cache_client, asio::yield_context yield)
+                                  , CacheClient* cache_client
+                                  , const ClientConfig& config
+                                  , asio::yield_context yield)
 {
     static const string req_ctype = "application/octet-stream";
 
@@ -98,7 +100,7 @@ void ClientFrontEnd::handle_upload( const Request& req, Response& res, stringstr
         // e.g. to spot too big files before receiving the body.
         result = http::status::expectation_failed;
         err = "sorry, request expectations are not supported";
-    } else if (!cache_client || !_ipfs_cache_enabled) {
+    } else if (!cache_client || !config.is_cache_access_enabled()) {
         result = http::status::service_unavailable;
         err = "cache access is not available";
     } else {  // perform the upload
@@ -197,7 +199,9 @@ void ClientFrontEnd::handle_enumerate_index( const Request& req
 }
 
 void ClientFrontEnd::handle_descriptor( const Request& req, Response& res, stringstream& ss
-                                      , CacheClient* cache_client, asio::yield_context yield)
+                                      , CacheClient* cache_client
+                                      , const ClientConfig& config
+                                      , asio::yield_context yield)
 {
     auto result = http::status::ok;
     res.set(http::field::content_type, "application/json");
@@ -219,7 +223,7 @@ void ClientFrontEnd::handle_descriptor( const Request& req, Response& res, strin
     } else if (!percent_decode(urimatch[1], uri)) {
         result = http::status::bad_request;
         err = "illegal encoding of URI argument";
-    } else if (!cache_client || !_ipfs_cache_enabled) {
+    } else if (!cache_client || !config.is_cache_access_enabled()) {
         result = http::status::service_unavailable;
         err = "cache access is not available";
     } else {  // perform the query
@@ -331,10 +335,10 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
             _auto_refresh_enabled = false;
         }
         else if (target.find("?ipfs_cache=enable") != string::npos) {
-            _ipfs_cache_enabled = true;
+            config.is_cache_access_enabled(true);
         }
         else if (target.find("?ipfs_cache=disable") != string::npos) {
-            _ipfs_cache_enabled = false;
+            config.is_cache_access_enabled(false);
         }
 
         // Redirect back to the portal.
@@ -374,7 +378,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     ss << ToggleInput{"Origin access", "origin_access", config.is_origin_access_enabled()};
     ss << ToggleInput{"Proxy access", "proxy_access", config.is_proxy_access_enabled()};
     ss << ToggleInput{"Injector proxy", "injector_proxy", config.is_injector_access_enabled()};
-    ss << ToggleInput{"IPFS Cache",     "ipfs_cache",     _ipfs_cache_enabled};
+    ss << ToggleInput{"Distributed Cache",     "ipfs_cache",     config.is_cache_access_enabled()};
 
     ss << "<br>\n";
     ss << "<form action=\"/api/descriptor\" method=\"get\">\n"
@@ -417,7 +421,7 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         {"origin_access", config.is_origin_access_enabled()},
         {"proxy_access", config.is_proxy_access_enabled()},
         {"injector_proxy", config.is_injector_access_enabled()},
-        {"ipfs_cache", _ipfs_cache_enabled},
+        {"ipfs_cache", config.is_cache_access_enabled()},
      // https://github.com/nlohmann/json#arbitrary-types-conversions
      // {"misc", {
          // {"injector_endpoint", config.injector_endpoint()},
@@ -455,10 +459,10 @@ Response ClientFrontEnd::serve( ClientConfig& config
         handle_enumerate_index(req, res, ss, cache_client, yield[ec_]);
     } else if (path == "/api/upload") {
         sys::error_code ec_;  // shouldn't throw, but just in case
-        handle_upload(req, res, ss, cache_client, yield[ec_]);
+        handle_upload(req, res, ss, cache_client, config, yield[ec_]);
     } else if (path == "/api/descriptor") {
         sys::error_code ec_;  // shouldn't throw, but just in case
-        handle_descriptor(req, res, ss, cache_client, yield[ec_]);
+        handle_descriptor(req, res, ss, cache_client, config, yield[ec_]);
     } else if (path == "/api/insert/bep44") {
         sys::error_code ec_;  // shouldn't throw, but just in case
         handle_insert_bep44(req, res, ss, cache_client, yield[ec_]);

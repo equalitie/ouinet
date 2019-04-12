@@ -164,6 +164,9 @@ public:
 
     bool cache_enabled() const { return !_disable_cache; }
 
+    bool is_cache_access_enabled() const { return !_disable_cache_access; }
+    void is_cache_access_enabled(bool v) { _disable_cache_access = !v; }
+
     bool is_origin_access_enabled() const { return !_disable_origin_access; }
     void is_origin_access_enabled(bool v) { _disable_origin_access = !v; }
 
@@ -185,6 +188,7 @@ private:
     std::string _tls_ca_cert_store_path;
     std::string _index_ipns_id;
     bool _enable_http_connect_requests = false;
+    bool _disable_cache_access = false;
     bool _disable_origin_access = false;
     bool _disable_proxy_access = false;
     bool _disable_injector_access = false;

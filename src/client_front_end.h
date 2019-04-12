@@ -53,11 +53,6 @@ public:
                   , CacheClient*, const CACertificate&
                   , asio::yield_context yield);
 
-    bool is_ipfs_cache_enabled() const
-    {
-        return _ipfs_cache_enabled;
-    }
-
     Task notify_task(const std::string& task_name)
     {
         Task task(task_name);
@@ -66,10 +61,7 @@ public:
     }
 
 private:
-    // TODO: This structure shouldn't hold these variables.
-    // Instead we should use those defined in ClientConfig.
     bool _auto_refresh_enabled = true;
-    bool _ipfs_cache_enabled = true;
     bool _show_pending_tasks = false;
 
     boost::intrusive::list
@@ -81,10 +73,11 @@ private:
                       , const CACertificate& );
 
     void handle_upload(const Request&, Response&, std::stringstream&
-                      , CacheClient*, asio::yield_context);
+                      , CacheClient*, const ClientConfig&, asio::yield_context);
 
     void handle_descriptor(const Request&, Response&, std::stringstream&
-                          , CacheClient*, asio::yield_context);
+                          , CacheClient*, const ClientConfig&
+                          , asio::yield_context);
 
     void handle_insert_bep44(const Request&, Response&, std::stringstream&
                             , CacheClient*, asio::yield_context);

@@ -228,7 +228,7 @@ Client::State::fetch_stored( const Request& request
     const bool cache_is_disabled
         = !request_config.enable_stored
        || !_cache
-       || !_front_end.is_ipfs_cache_enabled();
+       || !_config.is_cache_access_enabled();
 
     if (cache_is_disabled) {
         return or_throw<CacheEntry>( yield
