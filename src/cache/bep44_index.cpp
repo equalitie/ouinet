@@ -163,7 +163,7 @@ public:
         asio::spawn(_ios, [&] (asio::yield_context yield) { loop(yield); });
     }
 
-    void insert( const string& url
+    void insert( const boost::string_view url
                , bt::MutableDataItem data
                , Cancel& cancel_
                , asio::yield_context yield)
@@ -177,7 +177,7 @@ public:
         sys::error_code ec;
 
         _lru->insert( std::move(key)
-                    , Entry{ url
+                    , Entry{ url.to_string()
                            , Clock::now() - chrono::minutes(15)
                            , std::move(data)}
                     , cancel
@@ -446,7 +446,8 @@ string Bep44InjectorIndex::find( const string& key
 
 
 //--------------------------------------------------------------------
-string Bep44ClientIndex::insert_mapping( const string& ins_data
+string Bep44ClientIndex::insert_mapping( const boost::string_view target
+                                       , const string& ins_data
                                        , Cancel& cancel
                                        , asio::yield_context yield)
 {
@@ -454,11 +455,12 @@ string Bep44ClientIndex::insert_mapping( const string& ins_data
 
     if (!item) return or_throw<string>(yield, asio::error::invalid_argument);
 
-    return insert_mapping(move(*item), cancel, yield);
+    return insert_mapping(target, move(*item), cancel, yield);
 }
 
 
-string Bep44ClientIndex::insert_mapping( bt::MutableDataItem item
+string Bep44ClientIndex::insert_mapping( const boost::string_view target
+                                       , bt::MutableDataItem item
                                        , Cancel& cancel_
                                        , asio::yield_context yield)
 {
@@ -474,7 +476,7 @@ string Bep44ClientIndex::insert_mapping( bt::MutableDataItem item
     return_or_throw_on_error(yield, cancel, ec, string());
 
     // Ignore the error here
-    _updater->insert("no-debug-name", move(item), cancel, yield[ec]);
+    _updater->insert(target, move(item), cancel, yield[ec]);
 
     return util::bytes::to_hex(util::sha1(pk, salt));
 }

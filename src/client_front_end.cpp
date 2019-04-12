@@ -276,7 +276,8 @@ void ClientFrontEnd::handle_insert_bep44( const Request& req, Response& res, str
         sys::error_code ec;
 
         Cancel cancel;
-        key = cache_client->insert_mapping( req.body()
+        key = cache_client->insert_mapping( req.target()
+                                          , req.body()
                                           , IndexType::bep44
                                           , cancel
                                           , yield[ec]);

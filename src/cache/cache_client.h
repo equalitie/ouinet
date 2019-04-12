@@ -47,7 +47,8 @@ public:
     // into the index of the given type.
     // The parsing of the given data depends on the index.
     // Return a printable representation of the key resulting from insertion.
-    std::string insert_mapping( const std::string&
+    std::string insert_mapping( const boost::string_view target
+                              , const std::string&
                               , IndexType
                               , Cancel&
                               , boost::asio::yield_context);

@@ -44,11 +44,13 @@ public:
                     , Cancel&
                     , asio::yield_context) override;
 
-    std::string insert_mapping( const std::string&
+    std::string insert_mapping( const boost::string_view target
+                              , const std::string&
                               , Cancel&
                               , asio::yield_context) override;
 
-    std::string insert_mapping( bittorrent::MutableDataItem
+    std::string insert_mapping( const boost::string_view target
+                              , bittorrent::MutableDataItem
                               , Cancel&
                               , asio::yield_context);
 

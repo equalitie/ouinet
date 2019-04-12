@@ -607,7 +607,8 @@ public:
                                      , ipfs_add_d  = seconds(0);
 
                 sys::error_code ec;
-                seed_response( rs, scheduler, *cache
+                seed_response( target
+                             , rs, scheduler, *cache
                              , scheduler_d
                              , bep44_d
                              , ipfs_add_d
@@ -729,7 +730,8 @@ public:
     }
 
     static
-    void seed_response( const Response& rs
+    void seed_response( const std::string& target
+                      , const Response& rs
                       , Scheduler& scheduler
                       , CacheClient& cache
                       // These three are for debugging
@@ -763,7 +765,7 @@ public:
 
         return_or_throw_on_error(yield, cancel, ec);
 
-        cache.insert_mapping(bep44_push_msg, IndexType::bep44, cancel, yield[ec]);
+        cache.insert_mapping(target, bep44_push_msg, IndexType::bep44, cancel, yield[ec]);
 
         bep44_duration = Clock::now() - start;
         start = Clock::now();

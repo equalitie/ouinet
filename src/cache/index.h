@@ -2,6 +2,7 @@
 
 #include <boost/asio/error.hpp>
 #include <boost/asio/spawn.hpp>
+#include <boost/utility/string_view.hpp>
 #include <map>
 #include <string>
 #include "../or_throw.h"
@@ -23,7 +24,8 @@ public:
     // Insert a signed key->descriptor mapping.
     // The parsing of the given data depends on the index.
     // Return a printable representation of the key resulting from insertion.
-    virtual std::string insert_mapping( const std::string&
+    virtual std::string insert_mapping( const boost::string_view target
+                                      , const std::string&
                                       , Cancel&
                                       , asio::yield_context yield) {
         return or_throw<std::string>(yield, asio::error::operation_not_supported);
