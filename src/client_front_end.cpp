@@ -5,6 +5,12 @@
 #include "util.h"
 #include "defer.h"
 #include "client_config.h"
+
+// For parsing BEP44 insertion data.
+#include "bittorrent/mutable_data.h"
+#include "cache/descidx.h"
+#include "cache/http_desc.h"
+
 #include <boost/optional/optional_io.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/format.hpp>
@@ -252,6 +258,37 @@ void ClientFrontEnd::handle_descriptor( const Request& req, Response& res, strin
         ss << "{\"error\": \"" << err << "\"}";
 }
 
+// Extract URL from BEP44 insertion data containing an inlined descriptor
+// (linked descriptors are not yet supported).
+static
+string url_from_bep44(const string& data, Cancel& cancel, asio::yield_context yield)
+{
+    string url;
+    sys::error_code ec;
+    try {
+        auto item = bittorrent::MutableDataItem::bdecode(data);  // opt<bep44/m>
+        if (!item) throw invalid_argument("");
+
+        auto desc_path = item->value.as_string();  // opt<path to serialized desc>
+        if (!desc_path) throw invalid_argument("");
+
+        static auto desc_load = [](auto, auto&, auto y) {  // TODO: support linked descriptors
+                                    return or_throw(y, asio::error::operation_not_supported, "");
+                                };
+        auto desc_data = descriptor::from_path( *desc_path, desc_load
+                                              , cancel, yield[ec]);  // serialized desc
+        if (ec) throw invalid_argument("");
+
+        auto desc = Descriptor::deserialize(desc_data);  // opt<desc>
+        if (!desc) throw invalid_argument("");
+
+        url = move(desc->url);
+    } catch (invalid_argument _) {
+        ec = asio::error::invalid_argument;
+    }
+    return or_throw(yield, ec, move(url));
+}
+
 void ClientFrontEnd::handle_insert_bep44( const Request& req, Response& res, stringstream& ss
                                         , CacheClient* cache_client, asio::yield_context yield)
 {
@@ -274,13 +311,19 @@ void ClientFrontEnd::handle_insert_bep44( const Request& req, Response& res, str
         err = "sorry, request expectations are not supported";
     } else {  // perform the insertion
         sys::error_code ec;
+        Cancel cancel; // TODO: This should come from above
 
-        Cancel cancel;
-        key = cache_client->insert_mapping( req.target()
-                                          , req.body()
-                                          , IndexType::bep44
-                                          , cancel
-                                          , yield[ec]);
+        // `ClientIndex` does not know about descriptor format,
+        // and `CacheClient` does not know about BEP44 format,
+        // so the proper place to extract the URL from insertion data is here.
+        auto body = req.body();
+        auto url = url_from_bep44(body, cancel, yield[ec]);
+        if (!ec)
+            key = cache_client->insert_mapping( url
+                                              , move(body)
+                                              , IndexType::bep44
+                                              , cancel
+                                              , yield[ec]);
 
         if (ec == asio::error::operation_not_supported) {
             result = http::status::service_unavailable;
