@@ -186,7 +186,7 @@ function setup_deps {
 # (see <https://stackoverflow.com/a/43574427>).
     local java_add_modules=' --add-modules java.se.ee'
     if [ $DEBIAN == true ] ; then
-        if [ $(dpkg-query -W default-jre | cut -f2 | sed -En 's/^[0-9]+:1\.([0-9]+).*/\1/p') -ge 9 \
+        if [ $(java -version 2>&1 | awk -F[\"\.] -v OFS=. 'NR==1{print $3}') -ge 9 \
              -a "${JAVA_OPTS%%$java_add_modules*}" = "$JAVA_OPTS" ] ; then
             export JAVA_OPTS="$JAVA_OPTS$java_add_modules"
         fi
