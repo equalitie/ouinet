@@ -1,5 +1,6 @@
 #include <iterator>
 #include <sstream>
+#include <tuple>
 #include <json.hpp>
 
 #include "bep44_index.h"
@@ -43,13 +44,14 @@ nlohmann::json entry_to_json( Clock::time_point t
     };
 }
 
-boost::optional<std::pair<Clock::time_point, bt::MutableDataItem>>
+boost::optional<std::tuple<Clock::time_point, string, bt::MutableDataItem>>
 entry_from_json(const nlohmann::json& json)
 {
     using util::bytes::from_hex;
     using chrono::milliseconds;
 
     Clock::time_point last_update;
+    string key;
     bt::MutableDataItem ret;
 
     try {
@@ -59,6 +61,8 @@ entry_from_json(const nlohmann::json& json)
 
         auto since_epoch = milliseconds(json["last_update"].get<uint64_t>());
         last_update = Clock::time_point() + since_epoch;
+
+        key = json["key"].get<string>();
 
         ret.public_key      = *pubkey;
         ret.salt            = from_hex(json["salt"].get<string>());
@@ -75,7 +79,7 @@ entry_from_json(const nlohmann::json& json)
         return boost::none;
     }
 
-    return make_pair(last_update, move(ret));
+    return make_tuple(last_update, move(key), move(ret));
 }
 
 //--------------------------------------------------------------------
@@ -141,8 +145,7 @@ private:
                 if (!opt) ec = asio::error::fault;
                 return_or_throw_on_error(yield, cancel, ec);
 
-                last_update = opt->first;
-                data = move(opt->second);
+                tie(last_update, url, data) = *opt;
             } catch (...) {
                 return_or_throw_on_error(yield, cancel, asio::error::fault);
             }
