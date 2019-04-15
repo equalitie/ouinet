@@ -26,6 +26,7 @@ CacheClient::build( asio::io_service& ios
                   , string ipns
                   , optional<util::Ed25519PublicKey> bt_pubkey
                   , fs::path path_to_repo
+                  , bool autoseed_updated
                   , unsigned int bep44_index_capacity
                   , Cancel& cancel
                   , asio::yield_context yield)
@@ -50,6 +51,10 @@ CacheClient::build( asio::io_service& ios
 
     if (cancel) ec = asio::error::operation_aborted;
     if (ec) return or_throw<ClientP>(yield, ec);
+
+    if (autoseed_updated) {
+        assert(0 && "TODO");
+    }
 
     auto bt_dht = make_unique<bt::MainlineDht>(ios);
 
