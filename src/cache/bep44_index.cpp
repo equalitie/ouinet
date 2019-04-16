@@ -22,7 +22,7 @@ namespace bt = bittorrent;
 namespace file_io = util::file_io;
 
 using Clock = std::chrono::steady_clock;
-using UpdatedHook = Bep44ClientIndex::UpdatedHook;
+using UpdatedHook = ClientIndex::UpdatedHook;
 
 //--------------------------------------------------------------------
 nlohmann::json entry_to_json( Clock::time_point t
