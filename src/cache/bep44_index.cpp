@@ -270,7 +270,6 @@ private:
                 if (dht_seq > loc_seq)
                 {
                     log_msg << "newer entry found in DHT";
-                    // TODO: Store new data
                     do_update = true;
                     new_data = *(dht_data.value.as_string());
                     old_data = *(loc.data.value.as_string());
