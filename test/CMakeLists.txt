@@ -64,7 +64,7 @@ target_link_libraries(test-bittorrent ${Boost_LIBRARIES} ${GCRYPT_LIBRARIES})
 add_dependencies(test-bittorrent gcrypt)
 
 ################################################################################
-add_executable(test-dht "test-dht.cpp" ${bt_cpp_files})
+add_executable(test-dht "test-dht.cpp" "../src/util.cpp" ${bt_cpp_files})
 
 target_include_directories(test-dht PUBLIC
     "${Boost_INCLUDE_DIR}"

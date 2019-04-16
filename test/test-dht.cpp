@@ -9,6 +9,7 @@
 #include <boost/asio/ip/address.hpp>
 #include <boost/optional.hpp>
 #include <boost/optional/optional_io.hpp>
+#include "../src/cache/descidx.h"
 #include "../src/util/crypto.h"
 #include "../src/util/wait_condition.h"
 #include "../src/util.h"
@@ -251,7 +252,18 @@ int main(int argc, const char** argv)
                 if (opt_data) {
                     cerr << "Got Data!" << endl;
                     cerr << "seq:   " << opt_data->sequence_number << endl;
-                    cerr << "value: " << opt_data->value << endl;
+                    // src/cache/descidx.h
+                    auto desc_str = [&]() {
+                        auto val = *opt_data->value.as_string();
+                        if (val.substr(0, ouinet::descriptor::zlib_prefix.size()) == ouinet::descriptor::zlib_prefix) {
+                            string desc_zlib(val.substr(ouinet::descriptor::zlib_prefix.length()));
+                            return "zlib: " + util::zlib_decompress(desc_zlib, ec);
+                        }
+                        else {
+                            return val;
+                        }
+                    }();
+                    cerr << "value: " << desc_str << endl;
                 }
                 else {
                     cerr << "No error, but also no data!" << endl;
