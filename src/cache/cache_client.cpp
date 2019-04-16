@@ -52,8 +52,27 @@ CacheClient::build( asio::io_service& ios
     if (cancel) ec = asio::error::operation_aborted;
     if (ec) return or_throw<ClientP>(yield, ec);
 
+    ClientIndex::UpdatedHook updated_hook = [](auto o, auto n, auto& c, auto y){};
     if (autoseed_updated) {
-        assert(0 && "TODO");
+        updated_hook = [&] (auto o, auto n, auto& c, auto y) {
+            auto ipfs_load = IPFS_LOAD_FUNC(*ipfs_node);
+            sys::error_code ec;
+            Cancel cancel(c);
+
+            // Fetch and decode new descriptor.
+            auto desc_data = descriptor::from_path(n, ipfs_load, cancel, y[ec]);
+            if (ec || cancel) return;
+            auto desc = Descriptor::deserialize(desc_data);
+            if (!desc) return;
+
+            // Fetch data pointed by new descriptor.
+            // TODO: check if it matches that of old descriptor
+            ec = sys::error_code();
+            auto data = ipfs_load(desc->body_link, cancel, y[ec]);
+            if (ec || cancel) return;
+
+            LOG_DEBUG("Fetched data from updated index entry: url=", desc->url)
+        };
     }
 
     auto bt_dht = make_unique<bt::MainlineDht>(ios);
@@ -66,7 +85,7 @@ CacheClient::build( asio::io_service& ios
         bep44_index = Bep44ClientIndex::build(*bt_dht, *bt_pubkey
                                              , path_to_repo / "bep44-index"
                                              , bep44_index_capacity
-                                             , [](auto o, auto n, auto& c, auto y){} // TODO
+                                             , move(updated_hook)
                                              , cancel
                                              , yield[ec]);
 
