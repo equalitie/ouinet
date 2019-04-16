@@ -70,7 +70,7 @@ target_include_directories(test-dht PUBLIC
     "${Boost_INCLUDE_DIR}"
     "${GCRYPT_INCLUDE_DIR}")
 
-target_link_libraries(test-dht ${Boost_LIBRARIES} ${GCRYPT_LIBRARIES})
+target_link_libraries(test-dht ${Boost_LIBRARIES} ${GCRYPT_LIBRARIES} z)
 add_dependencies(test-dht gcrypt)
 
 ################################################################################
