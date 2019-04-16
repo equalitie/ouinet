@@ -630,26 +630,6 @@ NodeID dht::DhtNode::data_put_mutable(
             return;
         }
 
-        //auto exp = to_seconds(_stats->max_reply_wait_time("find_node"));
-        //auto start = Clock::now();
-        ////wd.expires_after(std::chrono::seconds(10));
-        //cerr << dbg << "query_find_node2 begin >>> " << candidate.id << " exp:" <<  exp << "\n";
-        ////bool q = query_find_node2(target_id, candidate, closer_nodes, wd, &dbg, yield[ec], cancel);
-        //bool q = query_find_node3(target_id, candidate, closer_nodes, wd, &dbg, yield[ec], cancel);
-        //cerr << dbg << "query_find_node2 end >>> " << candidate.id << " " << ec.message() << " " << bool(q) << " took:" << to_seconds(Clock::now() - start) << "\n";
-
-        //if (!q || ec || cancel) {
-        //    return;
-        //}
-
-        //if (!candidate.id && responsible_nodes.full()) {
-        //    return;
-        //}
-
-        //if (candidate.id && !responsible_nodes.would_insert(*candidate.id)) {
-        //    return;
-        //}
-
 #if SPEED_DEBUG
         auto ss = dbg.uptime();
         threads++;
@@ -1983,60 +1963,6 @@ bool dht::DhtNode::query_find_node(
     }
 
     return !closer_nodes.empty();
-}
-
-bool dht::DhtNode::query_find_node3(
-    NodeID target_id,
-    Contact node,
-    util::AsyncQueue<NodeContact>& closer_nodes,
-    WatchDog& dms,
-    DebugCtx* dbg,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
-) {
-    assert(!cancel_signal);
-
-    Cancel cancel(cancel_signal);
-
-    sys::error_code ec;
-
-    BencodedMap find_node_reply = send_query_await_reply(
-        node,
-        "find_node",
-        BencodedMap {
-            { "id", _node_id.to_bytestring() },
-            { "target", target_id.to_bytestring() }
-        },
-        nullptr,
-        dbg,
-        yield[ec],
-        cancel
-    );
-
-    if (ec) {
-        return false;
-    }
-    if (find_node_reply["y"] != "r") {
-        return false;
-    }
-    boost::optional<BencodedMap> response = find_node_reply["r"].as_map();
-    if (!response) {
-        return false;
-    }
-
-    std::vector<NodeContact> closer_nodes_v;
-
-    if (is_v4()) {
-        boost::optional<std::string> nodes = (*response)["nodes"].as_string();
-        if (nodes) decode_contacts_v4(*nodes, closer_nodes_v);
-    } else {
-        boost::optional<std::string> nodes = (*response)["nodes6"].as_string();
-        if (nodes) decode_contacts_v6(*nodes, closer_nodes_v);
-    }
-
-    closer_nodes.async_push_many(closer_nodes_v, cancel, yield[ec]);
-
-    return !closer_nodes_v.empty();
 }
 
 bool dht::DhtNode::query_find_node2(
