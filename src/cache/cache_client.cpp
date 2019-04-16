@@ -69,7 +69,7 @@ CacheClient::build( asio::io_service& ios
         if (ec) return or_throw<ClientP>(yield, ec);
     }
 
-    return ClientP(new CacheClient( move(*ipfs_node)
+    return ClientP(new CacheClient( move(ipfs_node)
                                   , move(ipns)
                                   , std::move(bt_pubkey)
                                   , std::move(bt_dht)
@@ -78,14 +78,14 @@ CacheClient::build( asio::io_service& ios
 }
 
 // private
-CacheClient::CacheClient( asio_ipfs::node ipfs_node
+CacheClient::CacheClient( std::unique_ptr<asio_ipfs::node> ipfs_node
                         , string ipns
                         , optional<util::Ed25519PublicKey> bt_pubkey
                         , unique_ptr<bittorrent::MainlineDht> bt_dht
                         , unique_ptr<Bep44ClientIndex> bep44_index
                         , fs::path path_to_repo)
     : _path_to_repo(move(path_to_repo))
-    , _ipfs_node(new asio_ipfs::node(move(ipfs_node)))
+    , _ipfs_node(move(ipfs_node))
     , _bt_dht(move(bt_dht))
     , _bep44_index(move(bep44_index))
 {
@@ -107,6 +107,7 @@ const BTree* CacheClient::get_btree() const
 
 string CacheClient::ipfs_add(const string& data, asio::yield_context yield)
 {
+    if (!_ipfs_node) return or_throw<string>(yield, asio::error::operation_not_supported);
     return _ipfs_node->add(data, yield);
 }
 
@@ -157,6 +158,9 @@ string CacheClient::descriptor_from_path( const string& desc_path
                                         , Cancel& cancel
                                         , asio::yield_context yield)
 {
+    if (!_ipfs_node)
+        return or_throw<string>(yield, asio::error::operation_not_supported);
+
     return descriptor::from_path
         ( desc_path, IPFS_LOAD_FUNC(*_ipfs_node), cancel, yield);
 }
@@ -185,6 +189,7 @@ void CacheClient::set_ipns(std::string ipns)
 
 std::string CacheClient::ipfs_id() const
 {
+    assert(_ipfs_node);
     return _ipfs_node->id();
 }
 

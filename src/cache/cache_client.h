@@ -88,7 +88,7 @@ public:
 
 private:
     // Private, use the static `build` function instead
-    CacheClient( asio_ipfs::node
+    CacheClient( std::unique_ptr<asio_ipfs::node>
                , std::string ipns
                , boost::optional<util::Ed25519PublicKey> bt_pubkey
                , std::unique_ptr<bittorrent::MainlineDht>
