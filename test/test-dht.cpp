@@ -256,13 +256,16 @@ int main(int argc, const char** argv)
                     auto desc_str = [&]() {
                         auto val = *opt_data->value.as_string();
                         if (val.substr(0, ouinet::descriptor::zlib_prefix.size()) == ouinet::descriptor::zlib_prefix) {
-                            string desc_zlib(val.substr(ouinet::descriptor::zlib_prefix.length()));
+                            auto desc_zlib(val.substr(ouinet::descriptor::zlib_prefix.length()));
                             return "zlib: " + util::zlib_decompress(desc_zlib, ec);
                         }
                         else {
                             return val;
                         }
                     }();
+                    if (ec) {
+                        cerr << "Error: dht->mutable_get: decoding value: " << ec.message() << endl;
+                    }
                     cerr << "value: " << desc_str << endl;
                 }
                 else {
