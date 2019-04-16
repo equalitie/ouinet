@@ -44,6 +44,7 @@ using dht::NodeContact;
 using Candidates = std::vector<NodeContact>;
 namespace accum = boost::accumulators;
 using Clock = std::chrono::steady_clock;
+using std::make_shared;
 
 #define DEBUG_SHOW_MESSAGES 0
 
@@ -1676,13 +1677,24 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
 
 void dht::DhtNode::refresh_routing_table()
 {
+    // There is at least 32 buckets and for each bucket we invoke the
+    // `collect` function which then spawns up to 64 coroutines. Each
+    // coroutine allocates at least 65536 bytes for the stack. That is
+    // 32*64*65536B=134MB. This has been causing `bad_alloc` exceptions
+    // allo over the code on Android. Using the scheduler here trims
+    // the memory use down to ~16MB.
+    auto scheduler = make_shared<Scheduler>(get_io_service(), 4);
+
     _routing_table->for_each_bucket([&] (
         const NodeID::Range& range,
         RoutingBucket& bucket
     ) {
-        spawn(_ios, [this, range] (asio::yield_context yield) {
+        spawn(_ios, [this, range, scheduler] (asio::yield_context yield) {
+            Cancel cancel(_terminate_signal);
             sys::error_code ec;
-            find_closest_nodes(range.random_id(), yield[ec], _terminate_signal);
+            auto slot = scheduler->wait_for_slot(yield[ec]);
+            if (ec || cancel) return;
+            find_closest_nodes(range.random_id(), yield[ec], cancel);
         });
     });
 }
