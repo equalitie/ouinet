@@ -325,7 +325,6 @@ private:
     asio::io_service& _ios;
     bt::MainlineDht& _dht;
     LruPtr _lru;
-    UpdatedHook _updated_hook;
     Cancel _cancel;
     ConditionVariable _has_entries;
 };
