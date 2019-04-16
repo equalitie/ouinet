@@ -71,7 +71,8 @@ CacheClient::build( asio::io_service& ios
             auto data = ipfs_load(desc->body_link, cancel, y[ec]);
             if (ec || cancel) return;
 
-            LOG_DEBUG("Fetched data from updated index entry: url=", desc->url)
+            LOG_DEBUG( "Fetched data from updated index entry:"
+                     , " ipfs_cid=", desc->body_link," url=", desc->url)
         };
     }
 
