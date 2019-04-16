@@ -60,6 +60,11 @@ public class Ouinet {
         args.add("--listen-on-tcp=127.0.0.1:8080");
         args.add("--front-end-ep=127.0.0.1:8081");
 
+        // Useful for debugging
+        //args.add("--disable-origin-access");
+        //args.add("--disable-proxy-access");
+        //args.add("--disable-injector-access");
+
         maybeAdd(args, "--injector-ep",            conf.injector_endpoint);
         maybeAdd(args, "--injector-credentials",   conf.injector_credentials);
         maybeAdd(args, "--index-bep44-public-key", conf.index_bep44_pubkey);
