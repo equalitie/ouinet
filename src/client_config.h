@@ -148,6 +148,8 @@ public:
            // Request routing options
            ("disable-origin-access", po::bool_switch(&_disable_origin_access)->default_value(false)
             , "Disable direct access to the origin (forces use of injector and the cache)")
+           ("disable-injector-access", po::bool_switch(&_disable_injector_access)->default_value(false)
+            , "Disable access to the injector")
            ("disable-proxy-access", po::bool_switch(&_disable_proxy_access)->default_value(false)
             , "Disable proxied access to the origin (via the injector)")
            ("local-domain"
