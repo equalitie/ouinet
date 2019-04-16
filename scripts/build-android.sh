@@ -160,7 +160,7 @@ function check_mode {
 function setup_deps {
     if ! which unzip > /dev/null 2>&1; then
         if [ $DEBIAN == true ] ; then
-            sudo apt-get install unzip
+            sudo apt-get install -y unzip
         else
             echo "Error: missing unzip";
             return 1;
@@ -168,7 +168,7 @@ function setup_deps {
     fi
     if ! which java > /dev/null 2>&1; then
         if [ $DEBIAN == true ] ; then
-            sudo apt-get install default-jre
+            sudo apt-get install -y default-jre
         else
             echo "Error: missing java";
             return 1;
@@ -176,7 +176,7 @@ function setup_deps {
     fi
 
     if [ $DEBIAN == true ] ; then
-       dpkg-query -W default-jdk > /dev/null 2>&1 || sudo apt-get install default-jdk
+       dpkg-query -W default-jdk > /dev/null 2>&1 || sudo apt-get install -y default-jdk
     fi
 
 # J2EE is no longer part of standard Java modules in Java 9,
