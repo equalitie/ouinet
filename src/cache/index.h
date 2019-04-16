@@ -19,6 +19,11 @@ static const std::map<IndexType, std::string> IndexName = {
 
 class ClientIndex {
 public:
+    // If set, when the index detects a change in an entry that this client is publishing,
+    // this function is called with the old and new values in the index.
+    using UpdatedHook = std::function<void( std::string old, std::string new_
+                                          , Cancel&, asio::yield_context)>;
+
     virtual std::string find(const std::string& key, Cancel&, asio::yield_context) = 0;
 
     // Insert a signed key->descriptor mapping.

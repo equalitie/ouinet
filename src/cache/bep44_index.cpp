@@ -22,6 +22,7 @@ namespace bt = bittorrent;
 namespace file_io = util::file_io;
 
 using Clock = std::chrono::steady_clock;
+using UpdatedHook = Bep44ClientIndex::UpdatedHook;
 
 //--------------------------------------------------------------------
 nlohmann::json entry_to_json( Clock::time_point t
@@ -158,9 +159,15 @@ public:
 
 public:
     Bep44EntryUpdater(bt::MainlineDht& dht, LruPtr lru)
+        : Bep44EntryUpdater( dht, move(lru)
+                           , [](auto o, auto n, auto& c, auto y){})
+    {}
+
+    Bep44EntryUpdater(bt::MainlineDht& dht, LruPtr lru, UpdatedHook updated_hook)
         : _ios(dht.get_io_service())
         , _dht(dht)
         , _lru(move(lru))
+        , _updated_hook(move(updated_hook))
         , _has_entries(_ios)
     {
         asio::spawn(_ios, [&] (asio::yield_context yield) { loop(yield); });
@@ -310,6 +317,7 @@ private:
     asio::io_service& _ios;
     bt::MainlineDht& _dht;
     LruPtr _lru;
+    UpdatedHook _updated_hook;
     Cancel _cancel;
     ConditionVariable _has_entries;
 };
@@ -322,6 +330,7 @@ Bep44ClientIndex::build( bt::MainlineDht& bt_dht
                        , util::Ed25519PublicKey bt_pubkey
                        , const boost::filesystem::path& storage_path
                        , unsigned int capacity
+                       , UpdatedHook updated_hook
                        , Cancel& cancel
                        , asio::yield_context yield)
 {
@@ -337,7 +346,8 @@ Bep44ClientIndex::build( bt::MainlineDht& bt_dht
 
     return_or_throw_on_error(yield, cancel, ec, Ret());
 
-    auto updater = make_unique<Bep44EntryUpdater>(bt_dht, move(lru));
+    auto updater = make_unique<Bep44EntryUpdater>( bt_dht, move(lru)
+                                                 , move(updated_hook));
 
     return Ret(new Bep44ClientIndex(bt_dht, bt_pubkey, move(updater)));
 }

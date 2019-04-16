@@ -66,6 +66,7 @@ CacheClient::build( asio::io_service& ios
         bep44_index = Bep44ClientIndex::build(*bt_dht, *bt_pubkey
                                              , path_to_repo / "bep44-index"
                                              , bep44_index_capacity
+                                             , [](auto o, auto n, auto& c, auto y){} // TODO
                                              , cancel
                                              , yield[ec]);
 
