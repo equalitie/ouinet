@@ -52,10 +52,50 @@ CacheClient::build( asio::io_service& ios
     if (cancel) ec = asio::error::operation_aborted;
     if (ec) return or_throw<ClientP>(yield, ec);
 
+    auto bt_dht = make_unique<bt::MainlineDht>(ios);
+
+    bt_dht->set_interfaces({asio::ip::address_v4::any()});
+
+    unique_ptr<Bep44ClientIndex> bep44_index;
+
+    if (bt_pubkey) {
+        bep44_index = Bep44ClientIndex::build(*bt_dht, *bt_pubkey
+                                             , path_to_repo / "bep44-index"
+                                             , bep44_index_capacity
+                                             , cancel
+                                             , yield[ec]);
+
+        assert(!cancel || ec == asio::error::operation_aborted);
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec) return or_throw<ClientP>(yield, ec);
+    }
+
+    return ClientP(new CacheClient( move(*ipfs_node)
+                                  , move(ipns)
+                                  , std::move(bt_pubkey)
+                                  , std::move(bt_dht)
+                                  , std::move(bep44_index)
+                                  , move(path_to_repo)
+                                  , autoseed_updated));
+}
+
+// private
+CacheClient::CacheClient( asio_ipfs::node ipfs_node
+                        , string ipns
+                        , optional<util::Ed25519PublicKey> bt_pubkey
+                        , unique_ptr<bittorrent::MainlineDht> bt_dht
+                        , unique_ptr<Bep44ClientIndex> bep44_index
+                        , fs::path path_to_repo
+                        , bool autoseed_updated)
+    : _path_to_repo(move(path_to_repo))
+    , _ipfs_node(new asio_ipfs::node(move(ipfs_node)))
+    , _bt_dht(move(bt_dht))
+    , _bep44_index(move(bep44_index))
+{
     ClientIndex::UpdatedHook updated_hook = [](auto o, auto n, auto& c, auto y){};
     if (autoseed_updated) {
         updated_hook = [&] (auto o, auto n, auto& c, auto y) {
-            auto ipfs_load = IPFS_LOAD_FUNC(*ipfs_node);
+            auto ipfs_load = IPFS_LOAD_FUNC(*_ipfs_node);
             sys::error_code ec;
             Cancel cancel(c);
 
@@ -76,45 +116,6 @@ CacheClient::build( asio::io_service& ios
         };
     }
 
-    auto bt_dht = make_unique<bt::MainlineDht>(ios);
-
-    bt_dht->set_interfaces({asio::ip::address_v4::any()});
-
-    unique_ptr<Bep44ClientIndex> bep44_index;
-
-    if (bt_pubkey) {
-        bep44_index = Bep44ClientIndex::build(*bt_dht, *bt_pubkey
-                                             , path_to_repo / "bep44-index"
-                                             , bep44_index_capacity
-                                             , move(updated_hook)
-                                             , cancel
-                                             , yield[ec]);
-
-        assert(!cancel || ec == asio::error::operation_aborted);
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<ClientP>(yield, ec);
-    }
-
-    return ClientP(new CacheClient( move(*ipfs_node)
-                                  , move(ipns)
-                                  , std::move(bt_pubkey)
-                                  , std::move(bt_dht)
-                                  , std::move(bep44_index)
-                                  , move(path_to_repo)));
-}
-
-// private
-CacheClient::CacheClient( asio_ipfs::node ipfs_node
-                        , string ipns
-                        , optional<util::Ed25519PublicKey> bt_pubkey
-                        , unique_ptr<bittorrent::MainlineDht> bt_dht
-                        , unique_ptr<Bep44ClientIndex> bep44_index
-                        , fs::path path_to_repo)
-    : _path_to_repo(move(path_to_repo))
-    , _ipfs_node(new asio_ipfs::node(move(ipfs_node)))
-    , _bt_dht(move(bt_dht))
-    , _bep44_index(move(bep44_index))
-{
     if (!ipns.empty()) {
         _btree_index.reset(new BTreeClientIndex( *_ipfs_node
                                                , ipns
@@ -122,6 +123,14 @@ CacheClient::CacheClient( asio_ipfs::node ipfs_node
                                                , bt_pubkey
                                                , _path_to_repo));
     }
+
+    // Setup hooks.
+    // Since indexes may start working right after construction,
+    // setting hooks like this leaves a gap for
+    // some updates to be detected by an index before the hook is set.
+    // It is done like this to be able to create indexes in `build`
+    // while retaining ownership of the IPFS node object here.
+    _bep44_index->updated_hook(move(updated_hook));
 }
 
 const BTree* CacheClient::get_btree() const

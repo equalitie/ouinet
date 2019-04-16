@@ -23,6 +23,12 @@ public:
     // this function is called with the old and new values in the index.
     using UpdatedHook = std::function<void( std::string old, std::string new_
                                           , Cancel&, asio::yield_context)>;
+    virtual const UpdatedHook& updated_hook() const {
+        throw std::logic_error("not implemented");
+    };
+    virtual UpdatedHook updated_hook(UpdatedHook) {
+        throw std::logic_error("not implemented");
+    };
 
     virtual std::string find(const std::string& key, Cancel&, asio::yield_context) = 0;
 

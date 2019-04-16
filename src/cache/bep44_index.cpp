@@ -157,17 +157,13 @@ public:
     using Lru = util::PersistentLruCache<Entry>;
     using LruPtr = unique_ptr<Lru>;
 
+    UpdatedHook updated_hook;
+
 public:
     Bep44EntryUpdater(bt::MainlineDht& dht, LruPtr lru)
-        : Bep44EntryUpdater( dht, move(lru)
-                           , [](auto o, auto n, auto& c, auto y){})
-    {}
-
-    Bep44EntryUpdater(bt::MainlineDht& dht, LruPtr lru, UpdatedHook updated_hook)
         : _ios(dht.get_io_service())
         , _dht(dht)
         , _lru(move(lru))
-        , _updated_hook(move(updated_hook))
         , _has_entries(_ios)
     {
         asio::spawn(_ios, [&] (asio::yield_context yield) { loop(yield); });
@@ -292,10 +288,11 @@ private:
 
             if (cancel) return;
 
-            // Call the "updated" hook if there was a successfully completed update.
-            if (do_update) {
+            // Call the "updated" hook if there is one
+            // and there was a successfully completed update.
+            if (do_update && updated_hook) {
                 ec = sys::error_code();
-                _updated_hook(move(old_data), move(new_data), cancel, yield[ec]);
+                updated_hook(move(old_data), move(new_data), cancel, yield[ec]);
             }
             if (cancel) return;
         }
@@ -341,7 +338,6 @@ Bep44ClientIndex::build( bt::MainlineDht& bt_dht
                        , util::Ed25519PublicKey bt_pubkey
                        , const boost::filesystem::path& storage_path
                        , unsigned int capacity
-                       , UpdatedHook updated_hook
                        , Cancel& cancel
                        , asio::yield_context yield)
 {
@@ -357,8 +353,7 @@ Bep44ClientIndex::build( bt::MainlineDht& bt_dht
 
     return_or_throw_on_error(yield, cancel, ec, Ret());
 
-    auto updater = make_unique<Bep44EntryUpdater>( bt_dht, move(lru)
-                                                 , move(updated_hook));
+    auto updater = make_unique<Bep44EntryUpdater>(bt_dht, move(lru));
 
     return Ret(new Bep44ClientIndex(bt_dht, bt_pubkey, move(updater)));
 }
@@ -372,6 +367,19 @@ Bep44ClientIndex::Bep44ClientIndex( bt::MainlineDht& bt_dht
     , _bt_pubkey(bt_pubkey)
     , _updater(move(updater))
 {}
+
+// public
+const UpdatedHook& Bep44ClientIndex::updated_hook() const
+{
+    return _updater->updated_hook;
+}
+
+UpdatedHook Bep44ClientIndex::updated_hook(UpdatedHook f) {
+    // TODO?: make thread-safe
+    auto ret = move(_updater->updated_hook);
+    _updater->updated_hook = move(f);
+    return ret;
+}
 
 
 //--------------------------------------------------------------------

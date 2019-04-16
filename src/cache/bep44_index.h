@@ -37,9 +37,11 @@ public:
          , util::Ed25519PublicKey
          , const boost::filesystem::path& storage_path
          , unsigned int capacity
-         , UpdatedHook
          , Cancel&
          , asio::yield_context);
+
+    const UpdatedHook& updated_hook() const;
+    UpdatedHook updated_hook(UpdatedHook);
 
     std::string find( const std::string& key
                     , Cancel&
