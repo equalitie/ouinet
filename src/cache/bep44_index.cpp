@@ -242,6 +242,8 @@ private:
             }
 
             Clock::time_point next_update;
+            bool do_update = false;
+            string old_data, new_data;
             if (ec) {
                 if (ec == asio::error::not_found) {
                     log_msg << "entry not found in DHT, putting";
@@ -269,6 +271,9 @@ private:
                 {
                     log_msg << "newer entry found in DHT";
                     // TODO: Store new data
+                    do_update = true;
+                    new_data = *(dht_data.value.as_string());
+                    old_data = *(loc.data.value.as_string());
                     loc.data = move(dht_data);
                 } else log_msg << "older entry found in DHT";
                 log_msg << ": my_seq=" << loc_seq << " dht_seq=" << dht_seq;
@@ -286,6 +291,13 @@ private:
             if (ec) log_msg << "; ins failed: ec=\"" << ec.message() << "\"";
             LOG_DEBUG(log_msg.str());
 
+            if (cancel) return;
+
+            // Call the "updated" hook if there was a successfully completed update.
+            if (do_update) {
+                ec = sys::error_code();
+                _updated_hook(move(old_data), move(new_data), cancel, yield[ec]);
+            }
             if (cancel) return;
         }
     }
