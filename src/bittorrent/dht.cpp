@@ -1805,33 +1805,37 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
     sys::error_code ec;
     ProximityMap<udp::endpoint> out(target_id, RESPONSIBLE_TRACKERS_PER_SWARM);
 
-    collect(target_id, [&](
+    DebugCtx dbg;
+    dbg.enable_log = SPEED_DEBUG;
+
+    collect2(dbg, target_id, [&](
         const Contact& candidate,
+        WatchDog& dms,
+        util::AsyncQueue<NodeContact>& closer_nodes,
         asio::yield_context yield,
         Signal<void()>& cancel_signal
-    ) -> boost::optional<Candidates> {
+    ) {
         if (!candidate.id && out.full()) {
-            return boost::none;
+            return;
         }
 
         if (candidate.id && !out.would_insert(*candidate.id)) {
-            return boost::none;
+            return;
         }
 
-        std::vector<NodeContact> closer_nodes;
-        bool accepted = query_find_node(
-            target_id,
-            candidate,
-            closer_nodes,
-            yield,
-            cancel_signal
-        );
+        bool accepted = query_find_node2( target_id
+                                        , candidate
+                                        , closer_nodes
+                                        , dms
+                                        , &dbg
+                                        , yield[ec]
+                                        , cancel_signal);
 
         if (accepted && candidate.id) {
             out.insert({ *candidate.id, candidate.endpoint });
         }
 
-        return closer_nodes;
+        return;
     }
     , yield[ec], cancel_signal);
 
