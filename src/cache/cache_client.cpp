@@ -11,7 +11,7 @@
 #include "../bittorrent/dht.h"
 #include "../logger.h"
 #include "../util/crypto.h"
-#include "../util/timeout.h"
+#include "../util/watch_dog.h"
 
 using namespace std;
 using namespace ouinet;
@@ -96,17 +96,11 @@ CacheClient::CacheClient( asio_ipfs::node ipfs_node
     ClientIndex::UpdatedHook updated_hook = [](auto o, auto n, auto& c, auto y){};
     if (autoseed_updated) {
         updated_hook = [&] (auto o, auto n, auto& c, auto y) {
-            auto _ipfs_load = IPFS_LOAD_FUNC(*_ipfs_node);
-            auto ipfs_load = [&] (auto cid, auto& cc, auto yy) {
-                return util::with_timeout( _ipfs_node->get_io_service()
-                                         , cc, chrono::minutes(3)  // TODO: adjust
-                                         , [&] (auto& ccc, auto yyy) {
-                                               return _ipfs_load(cid, ccc, yyy);
-                                           }
-                                         , yy);
-            };
+            auto ipfs_load = IPFS_LOAD_FUNC(*_ipfs_node);
             sys::error_code ec;
             Cancel cancel(c);
+            WatchDog wd( _ipfs_node->get_io_service(), chrono::minutes(3)  // TODO: adjust
+                       , [&] { cancel(); });
 
             // Fetch and decode new descriptor.
             auto desc_data = descriptor::from_path(n, ipfs_load, cancel, y[ec]);
@@ -117,7 +111,7 @@ CacheClient::CacheClient( asio_ipfs::node ipfs_node
             // Fetch data pointed by new descriptor.
             // TODO: check if it matches that of old descriptor
             auto data = ipfs_load(desc->body_link, cancel, y[ec]);
-            if (cancel) ec = asio::error::operation_aborted;
+            if (cancel) ec = asio::error::timed_out;
 
             LOG_DEBUG( "Fetch data from updated index entry:"
                      , " ec=\"", ec.message(), "\""
