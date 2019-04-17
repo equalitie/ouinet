@@ -364,14 +364,13 @@ CacheControl::do_fetch(const Request& request, Cancel& cancel, Yield yield)
 
         auto res = do_fetch_fresh(fetch_state, request, yield[ec1]);
         if (!ec1) return res;
+        if (ec1 == err::operation_aborted) return or_throw(yield, ec1, move(res));
 
         auto cache_entry = do_fetch_stored(fetch_state, request, yield[ec2]);
         if (!ec2) return add_warning( move(cache_entry.response)
                                     , "111 Ouinet \"Revalidation Failed\"");
 
-        if (ec1 == err::operation_aborted || ec2 == err::operation_aborted) {
-            return or_throw(yield, err::operation_aborted, move(res));
-        }
+        if (ec2 == err::operation_aborted) return or_throw(yield, ec1, move(res));
 
         return bad_gateway( request
                           , util::str( "1: fresh: \"", ec1.message(), "\""
