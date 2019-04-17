@@ -116,7 +116,6 @@ CacheClient::CacheClient( asio_ipfs::node ipfs_node
 
             // Fetch data pointed by new descriptor.
             // TODO: check if it matches that of old descriptor
-            ec = sys::error_code();
             auto data = ipfs_load(desc->body_link, cancel, y[ec]);
             if (cancel) ec = asio::error::operation_aborted;
 
