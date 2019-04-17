@@ -238,8 +238,6 @@ private:
             }
 
             Clock::time_point next_update;
-            bool do_update = false;
-            string old_data, new_data;
             if (ec) {
                 if (ec == asio::error::not_found) {
                     log_msg << "entry not found in DHT, putting";
@@ -266,10 +264,18 @@ private:
                 if (dht_seq > loc_seq)
                 {
                     log_msg << "newer entry found in DHT";
-                    do_update = true;
-                    new_data = *(dht_data.value.as_string());
-                    old_data = *(loc.data.value.as_string());
-                    loc.data = move(dht_data);
+                    bool do_repub(true);
+                    if (updated_hook) {
+                        do_repub = updated_hook( *(loc.data.value.as_string())
+                                               , *(dht_data.value.as_string())
+                                               , cancel, yield);
+                        if (cancel) return;
+                    }
+                    // Only republish updated index entries that the hook accepted.
+                    if (do_repub) {
+                        loc.data = move(dht_data);
+                        log_msg << " (repub)";
+                    } else log_msg << " (norepub)";
                 } else log_msg << "older entry found in DHT";
                 log_msg << ": my_seq=" << loc_seq << " dht_seq=" << dht_seq;
 
@@ -286,14 +292,6 @@ private:
             if (ec) log_msg << "; ins failed: ec=\"" << ec.message() << "\"";
             LOG_DEBUG(log_msg.str());
 
-            if (cancel) return;
-
-            // Call the "updated" hook if there is one
-            // and there was a successfully completed update.
-            if (do_update && updated_hook) {
-                ec = sys::error_code();
-                updated_hook(move(old_data), move(new_data), cancel, yield[ec]);
-            }
             if (cancel) return;
         }
     }

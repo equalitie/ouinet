@@ -93,9 +93,13 @@ CacheClient::CacheClient( asio_ipfs::node ipfs_node
     , _bt_dht(move(bt_dht))
     , _bep44_index(move(bep44_index))
 {
-    ClientIndex::UpdatedHook updated_hook = [](auto o, auto n, auto& c, auto y){};
+    ClientIndex::UpdatedHook updated_hook = [](auto o, auto n, auto& c, auto y){ return true; };
     if (autoseed_updated) {
-        updated_hook = [&] (auto o, auto n, auto& c, auto y) {
+        updated_hook = [&] (auto o, auto n, auto& c, auto y) noexcept {
+            // Returning false in this function avoids the republication of index entries
+            // whose linked descriptors are missing or malformed,
+            // or whose associated data cannot be retrieved.
+
             auto ipfs_load = IPFS_LOAD_FUNC(*_ipfs_node);
             sys::error_code ec;
             Cancel cancel(c);
@@ -104,9 +108,9 @@ CacheClient::CacheClient( asio_ipfs::node ipfs_node
 
             // Fetch and decode new descriptor.
             auto desc_data = descriptor::from_path(n, ipfs_load, cancel, y[ec]);
-            if (ec || cancel) return;
+            if (ec || cancel) return false;
             auto desc = Descriptor::deserialize(desc_data);
-            if (!desc) return;
+            if (!desc) return false;
 
             // Fetch data pointed by new descriptor.
             // TODO: check if it matches that of old descriptor
@@ -116,6 +120,7 @@ CacheClient::CacheClient( asio_ipfs::node ipfs_node
             LOG_DEBUG( "Fetch data from updated index entry:"
                      , " ec=\"", ec.message(), "\""
                      , " ipfs_cid=", desc->body_link," url=", desc->url);
+            return !ec;
         };
     }
 

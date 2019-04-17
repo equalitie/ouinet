@@ -20,9 +20,12 @@ static const std::map<IndexType, std::string> IndexName = {
 class ClientIndex {
 public:
     // If set, when the index detects a change in an entry that this client is publishing,
-    // this function is called with the old and new values in the index.
-    using UpdatedHook = std::function<void( std::string old, std::string new_
-                                          , Cancel&, asio::yield_context)>;
+    // this function is called with the old and new values in the index,
+    // and it returns whether it considers the new value
+    // usable for further processing (e.g. storage or publishing).
+    // It should *not* propagate an error code.
+    using UpdatedHook = std::function<bool( std::string old, std::string new_
+                                          , Cancel&, asio::yield_context) noexcept>;
     virtual const UpdatedHook& updated_hook() const {
         throw std::logic_error("not implemented");
     };
