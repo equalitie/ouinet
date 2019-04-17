@@ -14,6 +14,7 @@
 #include <cstdlib>  // for atexit()
 
 #include "cache/cache_injector.h"
+#include "cache/http_desc.h"
 
 #include "namespaces.h"
 #include "util.h"
@@ -307,8 +308,7 @@ public:
                         , OriginPools& origin_pools
                         , const InjectorConfig& config
                         , unique_ptr<CacheInjector>& injector
-                        , uuid_generator& genuuid
-                        , Cancel& cancel)
+                        , uuid_generator& genuuid)
         : insert_id(to_string(genuuid()))
         , ios(ios)
         , ssl_ctx(ssl_ctx)
@@ -339,56 +339,108 @@ public:
         };
     }
 
-    bool fetch(GenericStream& con, const Request& rq_, Yield yield)
+    void inject_fresh( GenericStream& con
+                     , const Request& rq_
+                     , Cancel& cancel
+                     , Yield yield)
     {
-        Cancel cancel;
-
-        bool timed_out = false;
-
-        WatchDog wd(ios, chrono::minutes(3), [&] {
-            timed_out = true;
-            cancel();
-        });
-
-        bool keep_alive;
         sys::error_code ec;
 
-        if (config.seed_content()) {
-            keep_alive = cc.fetch(con, rq_, cancel, yield[ec]);
+        auto rs_ = fetch_fresh(rq_, cancel, yield[ec]);
 
-            if (timed_out) ec = asio::error::timed_out;
-            return or_throw(yield, ec, keep_alive);
-        }
-        else {
-            auto rs_ = fetch_fresh(rq_, cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec);
 
-            if (timed_out) ec = asio::error::timed_out;
-            if (ec) return or_throw<bool>(yield, ec);
+        // Pop out Ouinet internal HTTP headers.
+        auto rq = util::to_cache_request(move(rq_));
+        auto rs = util::to_cache_response(move(rs_));
 
-            keep_alive = rq_.keep_alive();
+        if (injector) {
+            auto ins = injector->insert_content( insert_id, rq, rs
+                                               , IndexType::bep44
+                                               , true
+                                               , yield[ec]);
 
-            // Pop out Ouinet internal HTTP headers.
-            auto rq = util::to_cache_request(move(rq_));
-            auto rs = util::to_cache_response(move(rs_));
-
-            sys::error_code ec;
-            if (injector) {
-                auto ins = injector->insert_content( insert_id, rq, rs
-                                                   , config.cache_index_type()
-                                                   , false
-                                                   , yield[ec]);
-
-                if (timed_out) ec = asio::error::timed_out;
-                if (ec) return or_throw<bool>(yield, ec);
-
+            if (!ec) {
                 rs = add_re_insertion_header_field( move(rs)
                                                   , move(ins.index_ins_data));
             }
+        }
 
-            http::async_write(con, rs, yield[ec].tag("write_response"));
+        http::async_write(con, rs, yield[ec].tag("write_response"));
 
+        if (cancel) ec = asio::error::operation_aborted;
+        return or_throw(yield, ec);
+    }
+
+    static bool is_old(boost::posix_time::ptime ts)
+    {
+        namespace pt = boost::posix_time;
+        return ts + pt::hours(1) < pt::second_clock::universal_time();
+    }
+
+    bool fetch( GenericStream& con
+              , const Request& rq_
+              , Cancel& cancel
+              , Yield yield)
+    {
+        WatchDog wd(ios, chrono::minutes(3), [&] { cancel(); });
+
+        bool keep_alive = rq_.keep_alive();
+        sys::error_code ec;
+
+        if (!injector) {
+            inject_fresh(con, rq_, cancel, yield[ec]);
             return or_throw(yield, ec, keep_alive);
         }
+
+        string bep44m = injector->get_bep44m(rq_.target(), cancel, yield[ec]);
+
+        if (cancel || ec == asio::error::operation_aborted) {
+            return or_throw(yield, asio::error::operation_aborted, keep_alive);
+        }
+
+        if (ec != asio::error::not_found) {
+            return_or_throw_on_error(yield, cancel, ec, keep_alive);
+        }
+
+        if (ec) { // not found
+            inject_fresh(con, rq_, cancel, yield[ec]);
+            return or_throw(yield, ec, keep_alive);
+        }
+
+        Descriptor dsc = injector->bep44m_to_descriptor( bep44m
+                                                       , cancel
+                                                       , yield[ec]);
+
+        bool get_fresh = ec
+                      || (is_old(dsc.timestamp)
+                          && CacheControl::is_expired(dsc.head, dsc.timestamp));
+
+        if (get_fresh) {
+            inject_fresh(con, rq_, cancel, yield[ec]);
+            return or_throw(yield, ec, keep_alive);
+        }
+
+        auto body = injector->ipfs_cat( dsc.body_link
+                                      , cancel
+                                      , yield[ec].tag("ipfs_cat body"));
+
+        if (cancel || ec == asio::error::operation_aborted) {
+            return or_throw(yield, asio::error::operation_aborted, keep_alive);
+        }
+
+        if (ec) {
+            inject_fresh(con, rq_, cancel, yield[ec]);
+            return or_throw(yield, ec, keep_alive);
+        }
+
+        http::response<http::string_body> rs(dsc.head);
+        rs.body() = move(body);
+        rs = add_re_insertion_header_field(move(rs), move(bep44m));
+        rs.prepare_payload();
+
+        http::async_write(con, rs, yield[ec]);
+        return or_throw(yield, ec, keep_alive);
     }
 
     Response fetch_fresh(const Request& rq_, Cancel& cancel, Yield yield) {
@@ -535,7 +587,8 @@ private:
     }
 
     // TODO: Better name for this function
-    Response add_re_insertion_header_field(Response&& rs, string&& index_ins_data)
+    template<class Rs>
+    Rs add_re_insertion_header_field(Rs&& rs, string&& index_ins_data)
     {
         auto index_type = config.cache_index_type();
 
@@ -580,8 +633,7 @@ void serve( InjectorConfig& config
                            , origin_pools
                            , config
                            , injector
-                           , genuuid
-                           , cancel);
+                           , genuuid);
 
     for (;;) {
         sys::error_code ec;
@@ -651,6 +703,7 @@ void serve( InjectorConfig& config
                 req2.keep_alive(req.keep_alive());
                 keep_alive = cc.fetch( con
                                      , req2
+                                     , cancel
                                      , yield[ec].tag("cache_control.fetch"));
             }
         }

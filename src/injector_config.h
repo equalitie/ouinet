@@ -63,8 +63,6 @@ public:
 
     bool cache_enabled() const { return !_disable_cache; }
 
-    bool seed_content() const { return _seed_content; }
-
 private:
     void setup_index_bep44_private_key(const std::string& hex);
 
@@ -85,7 +83,6 @@ private:
     unsigned int _index_bep44_capacity;
     IndexType _cache_index_type = IndexType::btree;
     bool _disable_cache = false;
-    bool _seed_content = false;
 };
 
 inline
@@ -239,10 +236,6 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
     if (vm.count("index-bep44-capacity")) {
         _index_bep44_capacity = vm["index-bep44-capacity"].as<unsigned int>();
-    }
-
-    if (vm.count("seed-content")) {
-        _seed_content = vm["seed-content"].as<bool>();
     }
 
     if (vm.count("cache-index")) {
