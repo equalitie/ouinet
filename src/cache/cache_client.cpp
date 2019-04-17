@@ -93,36 +93,39 @@ CacheClient::CacheClient( asio_ipfs::node ipfs_node
     , _bt_dht(move(bt_dht))
     , _bep44_index(move(bep44_index))
 {
-    ClientIndex::UpdatedHook updated_hook = [](auto o, auto n, auto& c, auto y){ return true; };
-    if (autoseed_updated) {
-        updated_hook = [&] (auto o, auto n, auto& c, auto y) noexcept {
-            // Returning false in this function avoids the republication of index entries
-            // whose linked descriptors are missing or malformed,
-            // or whose associated data cannot be retrieved.
+    ClientIndex::UpdatedHook updated_hook([&, autoseed_updated]
+                                          (auto o, auto n, auto& c, auto y) noexcept
+    {
+        // Returning false in this function avoids the republication of index entries
+        // whose linked descriptors are missing or malformed,
+        // or whose associated data cannot be retrieved.
 
-            auto ipfs_load = IPFS_LOAD_FUNC(*_ipfs_node);
-            sys::error_code ec;
-            Cancel cancel(c);
-            WatchDog wd( _ipfs_node->get_io_service(), chrono::minutes(3)  // TODO: adjust
-                       , [&] { cancel(); });
+        auto ipfs_load = IPFS_LOAD_FUNC(*_ipfs_node);
+        sys::error_code ec;
+        Cancel cancel(c);
+        WatchDog wd( _ipfs_node->get_io_service()
+                   // Even when not reseeding data, allow some time to reseed linked descriptor.
+                   , autoseed_updated ? chrono::minutes(3) : chrono::seconds(30)  // TODO: adjust
+                   , [&] { cancel(); });
 
-            // Fetch and decode new descriptor.
-            auto desc_data = descriptor::from_path(n, ipfs_load, cancel, y[ec]);
-            if (ec || cancel) return false;
-            auto desc = Descriptor::deserialize(desc_data);
-            if (!desc) return false;
+        // Fetch and decode new descriptor.
+        auto desc_data = descriptor::from_path(n, ipfs_load, cancel, y[ec]);
+        if (ec || cancel) return false;
+        auto desc = Descriptor::deserialize(desc_data);
+        if (!desc) return false;
 
-            // Fetch data pointed by new descriptor.
-            // TODO: check if it matches that of old descriptor
-            auto data = ipfs_load(desc->body_link, cancel, y[ec]);
-            if (cancel) ec = asio::error::timed_out;
+        if (!autoseed_updated) return true;  // do not care about data
 
-            LOG_DEBUG( "Fetch data from updated index entry:"
-                     , " ec=\"", ec.message(), "\""
-                     , " ipfs_cid=", desc->body_link," url=", desc->url);
-            return !ec;
-        };
-    }
+        // Fetch data pointed by new descriptor.
+        // TODO: check if it matches that of old descriptor
+        auto data = ipfs_load(desc->body_link, cancel, y[ec]);
+        if (cancel) ec = asio::error::timed_out;
+
+        LOG_DEBUG( "Fetch data from updated index entry:"
+                 , " ec=\"", ec.message(), "\""
+                 , " ipfs_cid=", desc->body_link," url=", desc->url);
+        return !ec;
+    });
 
     if (!ipns.empty()) {
         _btree_index.reset(new BTreeClientIndex( *_ipfs_node
