@@ -22,22 +22,25 @@ struct Descriptor {
 
     static unsigned version() { return 0; }
 
-    std::string url;
-    std::string request_id;
-    ptime       timestamp;
-    std::string head;
-    std::string body_link;
+    std::string             url;
+    std::string             request_id;
+    ptime                   timestamp;
+    http::response_header<> head;
+    std::string             body_link;
 
     std::string serialize() const {
         static const auto ts_to_str = [](ptime ts) {
             return boost::posix_time::to_iso_extended_string(ts) + 'Z';
         };
 
+        std::stringstream head_ss;
+        head_ss << head;
+
         return nlohmann::json { { "!ouinet_version", version() }
                               , { "url"            , url }
                               , { "id"             , request_id }
                               , { "ts"             , ts_to_str(timestamp) }
-                              , { "head"           , head }
+                              , { "head"           , head_ss.str() }
                               , { "body_link"      , body_link }
                               }
                               .dump();
@@ -53,18 +56,46 @@ struct Descriptor {
                 return boost::none;
             }
 
+            // TODO: Nlohmann's json library works with std::string_view
+            // but not with the one from boost and so we needlessly need
+            // to instantiate std::string.
+            auto opt_head = parse_header(json["head"].get<std::string>());
+
+            if (!opt_head) {
+                return boost::none;
+            }
+
             Descriptor dsc;
 
             dsc.url        = json["url"];
             dsc.request_id = json["id"];
             dsc.timestamp  = boost::posix_time::from_iso_extended_string(json["ts"]);
-            dsc.head       = json["head"];
+            dsc.head       = std::move(*opt_head);
             dsc.body_link  = json["body_link"];
 
             return dsc;
         } catch (const std::exception& e) {
             return boost::none;
         }
+    }
+
+    static
+    boost::optional<http::response_header<>> parse_header(boost::string_view s)
+    {
+        sys::error_code ec;
+
+        http::response_parser<http::empty_body> parser;
+
+        parser.eager(true);
+        parser.put(asio::buffer(s.data(), s.size()), ec);
+
+        if (!ec && !parser.is_header_done()) {
+            ec = asio::error::invalid_argument;
+        }
+
+        if (ec) return boost::none;
+
+        return parser.release();
     }
 };
 
@@ -93,13 +124,10 @@ http_create( const std::string& id
 
     if (ec) return or_throw<string>(yield, ec);
 
-    stringstream rsh_ss;
-    rsh_ss << rs.base();
-
     return Descriptor{ util::canonical_url(rq.target())
                      , id
                      , ts
-                     , rsh_ss.str()
+                     , rs.base()
                      , ipfs_id
                      }.serialize();
 }
@@ -143,26 +171,9 @@ http_parse( const std::string& desc_data
     // Get the HTTP response body (stored independently).
     std::string body = ipfs_load(dsc->body_link, cancel, yield[ec]);
 
-    // Build an HTTP response from the head in the descriptor and the retrieved body.
-    http::response_parser<Response::body_type> parser;
-    parser.eager(true);
+    if (ec) return or_throw<IdAndCE>(yield, ec);
 
-    // - Parse the response head.
-    parser.put(asio::buffer(dsc->head), ec);
-
-    if (!ec && !parser.is_header_done()) {
-        ec = asio::error::invalid_argument;
-    }
-
-    if (ec) {
-        std::cerr << "WARNING: Malformed or incomplete HTTP head in descriptor" << std::endl;
-        std::cerr << "----------------" << std::endl;
-        std::cerr << dsc->head << std::endl;
-        std::cerr << "----------------" << std::endl;
-        return or_throw<IdAndCE>(yield, ec);
-    }
-
-    Response res = parser.release();
+    Response res(dsc->head);
     Response::body_type::reader reader(res, res.body());
     reader.put(asio::buffer(body), ec);
 
