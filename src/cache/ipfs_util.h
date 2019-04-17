@@ -22,7 +22,7 @@ std::string ipfs_cat( asio_ipfs::node& node
 // and gets the given `hash` from it.
 #define IPFS_LOAD_FUNC(node) \
     [&](auto hash, auto& cancel, auto yield) { \
-        return ipfs_cat(node, hash, cancel, yield); \
+        return ::ouinet::ipfs_cat(node, hash, cancel, yield); \
     }
 
 } // namespace

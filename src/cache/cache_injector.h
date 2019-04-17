@@ -23,6 +23,7 @@ class Bep44InjectorIndex;
 class BTreeInjectorIndex;
 class Publisher;
 class Scheduler;
+class Descriptor;
 
 class CacheInjector {
 public:
@@ -85,6 +86,18 @@ public:
                                                   , IndexType
                                                   , Cancel&
                                                   , boost::asio::yield_context);
+
+    std::string ipfs_cat( boost::string_view cid
+                        , Cancel&
+                        , boost::asio::yield_context);
+
+    Descriptor bep44m_to_descriptor( boost::string_view bep44m_s
+                                   , Cancel&
+                                   , asio::yield_context);
+
+    std::string get_bep44m( boost::string_view key
+                          , Cancel&
+                          , boost::asio::yield_context);
 
     std::string get_descriptor( const std::string& key
                               , IndexType
