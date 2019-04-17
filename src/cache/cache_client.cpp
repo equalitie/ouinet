@@ -121,7 +121,7 @@ CacheClient::CacheClient( asio_ipfs::node ipfs_node
 
             LOG_DEBUG( "Fetch data from updated index entry:"
                      , " ec=\"", ec.message(), "\""
-                     , " ipfs_cid=", desc->body_link," url=", desc->url)
+                     , " ipfs_cid=", desc->body_link," url=", desc->url);
         };
     }
 
