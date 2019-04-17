@@ -48,10 +48,11 @@ struct MutableDataItem {
     }
 
     static
-    boost::optional<MutableDataItem> bdecode(const std::string& s) {
+    boost::optional<MutableDataItem> bdecode(boost::string_view s) {
         using namespace std;
 
-        auto ins = bencoding_decode(s);
+        // TODO: bencoding_decode should accept string_view
+        auto ins = bencoding_decode(s.to_string());
 
         if (!ins || !ins->is_map()) {  // general format and type of data
             return boost::none;
