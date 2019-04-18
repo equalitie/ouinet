@@ -16,6 +16,8 @@
 #include "cache/cache_injector.h"
 #include "cache/http_desc.h"
 
+#include "bittorrent/mutable_data.h"
+
 #include "namespaces.h"
 #include "util.h"
 #include "fetch_http_page.h"
@@ -393,7 +395,7 @@ public:
             return or_throw(yield, ec, keep_alive);
         }
 
-        string bep44m = injector->get_bep44m(rq_.target(), cancel, yield[ec]);
+        auto bep44m = injector->get_bep44m(rq_.target(), cancel, yield[ec]);
 
         if (cancel || ec == asio::error::operation_aborted) {
             return or_throw(yield, asio::error::operation_aborted, keep_alive);
@@ -436,7 +438,7 @@ public:
 
         http::response<http::string_body> rs(dsc.head);
         rs.body() = move(body);
-        rs = add_re_insertion_header_field(move(rs), move(bep44m));
+        rs = add_re_insertion_header_field(move(rs), bep44m.bencode());
         rs.prepare_payload();
 
         http::async_write(con, rs, yield[ec]);

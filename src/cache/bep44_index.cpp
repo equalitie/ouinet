@@ -93,11 +93,11 @@ boost::string_view as_string_view(const array<uint8_t, N>& a)
 
 
 //--------------------------------------------------------------------
-static bt::MutableDataItem find( bt::MainlineDht& dht
-                               , util::Ed25519PublicKey pubkey
-                               , const string& salt
-                               , Cancel& cancel
-                               , asio::yield_context yield)
+static bt::MutableDataItem find_bep44m( bt::MainlineDht& dht
+                                      , util::Ed25519PublicKey pubkey
+                                      , const string& salt
+                                      , Cancel& cancel
+                                      , asio::yield_context yield)
 {
     sys::error_code ec;
 
@@ -221,11 +221,11 @@ private:
 
             sys::error_code ec;
 
-            auto dht_data = find(_dht
-                                , loc.data.public_key
-                                , loc.data.salt
-                                , cancel
-                                , yield[ec]);
+            auto dht_data = find_bep44m(_dht
+                                       , loc.data.public_key
+                                       , loc.data.salt
+                                       , cancel
+                                       , yield[ec]);
 
             if (cancel) return;
 
@@ -426,9 +426,9 @@ string Bep44ClientIndex::find( const string& key
     auto slot2 = _cancel.connect([&] { cancel(); });
 
     sys::error_code ec;
-    auto data = ::find( _bt_dht
-                      , _bt_pubkey, bep44_salt_from_key(key)
-                      , cancel, yield[ec]);
+    auto data = ::find_bep44m( _bt_dht
+                             , _bt_pubkey, bep44_salt_from_key(key)
+                             , cancel, yield[ec]);
 
     return_or_throw_on_error(yield, cancel, ec, string());
 
@@ -455,9 +455,9 @@ string Bep44InjectorIndex::find( const string& key
     auto slot2 = _cancel.connect([&] { cancel(); });
 
     sys::error_code ec;
-    auto data = ::find( _bt_dht
-                      , _bt_privkey.public_key(), bep44_salt_from_key(key)
-                      , cancel, yield[ec]);
+    auto data = ::find_bep44m( _bt_dht
+                             , _bt_privkey.public_key(), bep44_salt_from_key(key)
+                             , cancel, yield[ec]);
 
     return_or_throw_on_error(yield, cancel, ec, string());
 
@@ -473,6 +473,21 @@ string Bep44InjectorIndex::find( const string& key
     return *data.value.as_string();
 }
 
+
+//--------------------------------------------------------------------
+bittorrent::MutableDataItem
+Bep44InjectorIndex::find_bep44m( boost::string_view key
+                               , Cancel& cancel_
+                               , asio::yield_context yield)
+{
+    Cancel cancel;
+    auto slot1 = cancel_.connect([&] { cancel(); });
+    auto slot2 = _cancel.connect([&] { cancel(); });
+
+    return ::find_bep44m( _bt_dht
+                        , _bt_privkey.public_key(), bep44_salt_from_key(key)
+                        , cancel, yield);
+}
 
 //--------------------------------------------------------------------
 string Bep44ClientIndex::insert_mapping( const boost::string_view target

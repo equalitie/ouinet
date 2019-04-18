@@ -193,17 +193,20 @@ std::string CacheInjector::ipfs_cat( boost::string_view cid
     return ::ouinet::ipfs_cat(*_ipfs_node, cid, cancel, yield);
 }
 
-string CacheInjector::get_bep44m( boost::string_view key
-                                , Cancel& cancel
-                                , boost::asio::yield_context yield)
+bittorrent::MutableDataItem
+CacheInjector::get_bep44m( boost::string_view key
+                         , Cancel& cancel
+                         , boost::asio::yield_context yield)
 {
     auto index = get_index(IndexType::bep44);
 
     if (!index)
-        return or_throw<string>(yield, asio::error::operation_not_supported);
+        return or_throw<bittorrent::MutableDataItem>
+            (yield, asio::error::operation_not_supported);
 
-    // TODO: Modify find to accept string_view
-    return index->find(key.to_string(), cancel, yield);
+    auto bep44_index = reinterpret_cast<Bep44InjectorIndex*>(index);
+
+    return bep44_index->find_bep44m(key, cancel, yield);
 }
 
 string CacheInjector::get_descriptor( const string& key
@@ -226,17 +229,12 @@ string CacheInjector::get_descriptor( const string& key
         ( desc_path, IPFS_LOAD_FUNC(*_ipfs_node), cancel, yield);
 }
 
-Descriptor CacheInjector::bep44m_to_descriptor( boost::string_view bep44m_s
-                                              , Cancel& cancel
-                                              , asio::yield_context yield)
+Descriptor CacheInjector::bep44m_to_descriptor
+    ( const bittorrent::MutableDataItem& bep44m
+    , Cancel& cancel
+    , asio::yield_context yield)
 {
-    auto opt_bep44m = bittorrent::MutableDataItem::bdecode(bep44m_s);
-
-    if (!opt_bep44m) {
-        return or_throw<Descriptor>(yield, asio::error::invalid_argument);
-    }
-
-    auto opt_path = opt_bep44m->value.as_string();
+    auto opt_path = bep44m.value.as_string();
 
     if (!opt_path) {
         return or_throw<Descriptor>(yield, asio::error::invalid_argument);

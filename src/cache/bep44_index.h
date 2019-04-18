@@ -19,7 +19,7 @@ namespace ouinet { namespace util { class Ed25519PublicKey; }}
 namespace ouinet {
 
 inline
-std::string bep44_salt_from_key(const std::string& key)
+std::string bep44_salt_from_key(boost::string_view key)
 {
     // This ensures short, fixed-size salts to be circulated
     // (as e.g. keys containing HTTP URIs may be quite long).
@@ -88,6 +88,11 @@ public:
     std::string find( const std::string& key
                     , Cancel&
                     , asio::yield_context) override;
+
+    bittorrent::MutableDataItem
+    find_bep44m( boost::string_view key
+               , Cancel& cancel_
+               , asio::yield_context yield);
 
     std::string insert( std::string key, std::string value
                       , asio::yield_context) override;

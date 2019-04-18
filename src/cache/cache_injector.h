@@ -15,7 +15,7 @@
 #include "index.h"
 
 namespace asio_ipfs { class node; }
-namespace ouinet { namespace bittorrent { class MainlineDht; }}
+namespace ouinet { namespace bittorrent { class MainlineDht; class MutableDataItem; }}
 
 namespace ouinet {
 
@@ -91,13 +91,14 @@ public:
                         , Cancel&
                         , boost::asio::yield_context);
 
-    Descriptor bep44m_to_descriptor( boost::string_view bep44m_s
+    Descriptor bep44m_to_descriptor( const bittorrent::MutableDataItem&
                                    , Cancel&
                                    , asio::yield_context);
 
-    std::string get_bep44m( boost::string_view key
-                          , Cancel&
-                          , boost::asio::yield_context);
+    bittorrent::MutableDataItem
+    get_bep44m( boost::string_view key
+              , Cancel&
+              , boost::asio::yield_context);
 
     std::string get_descriptor( const std::string& key
                               , IndexType
