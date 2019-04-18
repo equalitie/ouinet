@@ -261,7 +261,7 @@ int main(int argc, const char** argv)
                     }
                 }
             }
-            if (cmd_toks[0] == "put") {
+            else if (cmd_toks[0] == "put") {
                 if (args.size() != 4) {
                     cerr << "Bad command." << endl;
                     continue;
@@ -295,7 +295,7 @@ int main(int argc, const char** argv)
                     cerr << "FINISH: Success, took:" << secs(now() - start) << "s\n";
                 }
             }
-            if (cmd_toks[0] == "stress") {
+            else if (cmd_toks[0] == "stress") {
                 if (args.size() != 4) {
                     cerr << "Bad command." << endl;
                     continue;
