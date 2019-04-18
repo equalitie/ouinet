@@ -748,6 +748,8 @@ void listen( InjectorConfig& config
     ssl_ctx.set_default_verify_paths();
     ssl_ctx.set_verify_mode(asio::ssl::verify_peer);
 
+    ssl::util::load_tls_ca_certificates(ssl_ctx, config.tls_ca_cert_store_path());
+
     while (true) {
         GenericStream connection = proxy_server.accept(yield[ec]);
         if (ec == boost::asio::error::operation_aborted) {
@@ -837,12 +839,11 @@ int main(int argc, const char* argv[])
     }
     catch(const exception& e) {
         cerr << e.what() << endl;
-        cerr << InjectorConfig::options_description() << endl;
         return 1;
     }
 
     if (config.is_help()) {
-        cout << InjectorConfig::options_description() << endl;
+        cout << config.options_description() << endl;
         return EXIT_SUCCESS;
     }
 

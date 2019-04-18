@@ -6,6 +6,7 @@
 
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/ssl/stream.hpp>
+#include <boost/filesystem.hpp>
 
 #include "../generic_stream.h"
 #include "../or_throw.h"
@@ -119,6 +120,33 @@ get_server_context( const std::string& cert_chain
         });
 
     return ssl_context;
+}
+
+static inline
+void load_tls_ca_certificates( asio::ssl::context& ctx
+                             , const std::string& path_str)
+{
+    using namespace std;
+
+    if (path_str.empty()) return;
+
+    fs::path path = path_str;
+
+    if (!exists(path)) {
+        stringstream ss;
+        ss << "Can not read CA certificates from \"" << path << "\": "
+           << "No such file or directory";
+        throw runtime_error(ss.str());
+    }
+
+    if (fs::is_directory(path)) {
+        ctx.add_verify_path(path_str);
+        return;
+    }
+
+    stringstream ss;
+    ss << fs::ifstream(path).rdbuf();
+    ctx.add_certificate_authority(asio::buffer(ss.str()));
 }
 
 }}} // namespaces

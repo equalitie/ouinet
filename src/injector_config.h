@@ -46,11 +46,14 @@ public:
     boost::optional<asio::ip::tcp::endpoint> obfs4_endpoint() const
     { return _obfs4_endpoint; }
 
-    static boost::program_options::options_description
+    boost::program_options::options_description
     options_description();
 
     std::string credentials() const
     { return _credentials; }
+
+    const std::string& tls_ca_cert_store_path() const
+    { return _tls_ca_cert_store_path; }
 
     util::Ed25519PrivateKey index_bep44_private_key() const
     { return _index_bep44_private_key; }
@@ -71,6 +74,7 @@ private:
     boost::filesystem::path _repo_root;
     boost::optional<size_t> _open_file_limit;
     bool _listen_on_i2p = false;
+    std::string _tls_ca_cert_store_path;
     boost::optional<asio::ip::tcp::endpoint> _tcp_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _tls_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _lampshade_endpoint;
@@ -117,6 +121,8 @@ InjectorConfig::options_description()
          , "<username>:<password> authentication pair. "
            "If unused, this injector shall behave as an open proxy.")
 
+        ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
+         , "Path to the CA certificate store file")
         // Cache options
         ("disable-cache", "Disable all cache operations (even initialization)")
         ("seed-content"
