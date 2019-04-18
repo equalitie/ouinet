@@ -343,11 +343,10 @@ int main(int argc, const char** argv)
                 }
 
                 wc.wait(yield);
+                cerr << "End. Took " << secs(now() - start) << " seconds" << endl;
             }
             else { cerr << "Unknown command" << endl; }
         }
-
-        cerr << "End. Took " << secs(now() - start) << " seconds" << endl;
 
         dht.reset();
     });
