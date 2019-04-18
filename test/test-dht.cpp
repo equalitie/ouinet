@@ -6,9 +6,10 @@
 #include <sys/types.h>
 #include <ifaddrs.h>
 #include <arpa/inet.h>
-#include <boost/asio/ip/address.hpp>
+#include <boost/asio.hpp>
 #include <boost/optional.hpp>
 #include <boost/optional/optional_io.hpp>
+#include <boost/tokenizer.hpp>
 #include "../src/cache/descidx.h"
 #include "../src/util/crypto.h"
 #include "../src/util/wait_condition.h"
@@ -126,7 +127,6 @@ struct StressCmd {
 
 void parse_args( const vector<string>& args
                , vector<asio::ip::address>* ifaddrs
-               , optional<GetCmd>* get_cmd
                , optional<PutCmd>* put_cmd
                , optional<StressCmd>* stress_cmd)
 {
@@ -157,16 +157,6 @@ void parse_args( const vector<string>& args
         }
     }
 
-    if (args[2] == "get") {
-        if (args.size() != 5) {
-            usage(std::cerr, args[0]);
-            exit(1);
-        }
-        GetCmd c;
-        c.public_key = *util::Ed25519PublicKey::from_hex(args[3]);
-        c.dht_key = args[4];
-        *get_cmd = move(c);
-    }
     if (args[2] == "put") {
         if (args.size() != 6) {
             usage(std::cerr, args[0]);
@@ -203,11 +193,10 @@ int main(int argc, const char** argv)
 
     vector<asio::ip::address> ifaddrs;
 
-    optional<GetCmd>    get_cmd;
     optional<PutCmd>    put_cmd;
     optional<StressCmd> stress_cmd;
 
-    parse_args(args, &ifaddrs, &get_cmd, &put_cmd, &stress_cmd);
+    parse_args(args, &ifaddrs, &put_cmd, &stress_cmd);
 
     for (auto addr : ifaddrs) {
         std::cout << "Spawning DHT node on " << addr << std::endl;
@@ -238,40 +227,67 @@ int main(int argc, const char** argv)
 
         steady_clock::time_point start = steady_clock::now();
 
-        if (get_cmd) {
-            auto salt = ouinet::util::sha1(get_cmd->dht_key);
+        boost::asio::posix::stream_descriptor input (ios, ::dup(STDIN_FILENO));
+        boost::asio::posix::stream_descriptor output (ios, ::dup(STDOUT_FILENO));
 
-            auto opt_data = dht->mutable_get( get_cmd->public_key
-                                           , as_string_view(salt)
-                                           , yield[ec], cancel);
+        boost::asio::streambuf buffer;
+        while (true) {
+            boost::asio::async_write(output, asio::buffer("> "), yield[ec]);
+            size_t n = asio::async_read_until(input, buffer, '\n', yield[ec]);
 
-            if (ec) {
-                cerr << "Error dht->mutable_get " << ec.message() << endl;
+            vector<string> cmd_toks;
+            {
+                char cbuf[buffer.size()+1]; int rc = buffer.sgetn (cbuf, sizeof cbuf); cbuf[rc] = 0;
+                std::string str (cbuf, rc);
+                boost::char_separator<char> sep {" "};
+                boost::tokenizer<boost::char_separator<char>> tokens {str, sep};
+                for (const auto& t : tokens) { cmd_toks.push_back(t); }
             }
-            else {
-                if (opt_data) {
-                    cerr << "Got Data!" << endl;
-                    cerr << "seq:   " << opt_data->sequence_number << endl;
-                    // src/cache/descidx.h
-                    auto desc_str = [&]() {
-                        auto val = *opt_data->value.as_string();
-                        if (val.substr(0, ouinet::descriptor::zlib_prefix.size()) == ouinet::descriptor::zlib_prefix) {
-                            auto desc_zlib(val.substr(ouinet::descriptor::zlib_prefix.length()));
-                            return "zlib: " + util::zlib_decompress(desc_zlib, ec);
-                        }
-                        else {
-                            return val;
-                        }
-                    }();
-                    if (ec) {
-                        cerr << "Error: dht->mutable_get: decoding value: " << ec.message() << endl;
-                    }
-                    cerr << "value: " << desc_str << endl;
+
+            if (cmd_toks[0] == "get") {
+                if (cmd_toks.size() != 3) {
+                    cerr << "Bad command." << endl;
+                    continue;
+                }
+                GetCmd get_cmd;
+                get_cmd.public_key = *util::Ed25519PublicKey::from_hex(cmd_toks[1]);
+                get_cmd.dht_key = cmd_toks[2];
+
+                auto salt = ouinet::util::sha1(get_cmd.dht_key);
+
+                auto opt_data = dht->mutable_get( get_cmd.public_key
+                                               , as_string_view(salt)
+                                               , yield[ec], cancel);
+
+                if (ec) {
+                    cerr << "Error dht->mutable_get " << ec.message() << endl;
                 }
                 else {
-                    cerr << "No error, but also no data!" << endl;
+                    if (opt_data) {
+                        cerr << "Got Data!" << endl;
+                        cerr << "seq:   " << opt_data->sequence_number << endl;
+                        // src/cache/descidx.h
+                        auto desc_str = [&]() {
+                            auto val = *opt_data->value.as_string();
+                            if (val.substr(0, ouinet::descriptor::zlib_prefix.size()) == ouinet::descriptor::zlib_prefix) {
+                                auto desc_zlib(val.substr(ouinet::descriptor::zlib_prefix.length()));
+                                return "zlib: " + util::zlib_decompress(desc_zlib, ec);
+                            }
+                            else {
+                                return val;
+                            }
+                        }();
+                        if (ec) {
+                            cerr << "Error: dht->mutable_get: decoding value: " << ec.message() << endl;
+                        }
+                        cerr << "value: " << desc_str << endl;
+                    }
+                    else {
+                        cerr << "No error, but also no data!" << endl;
+                    }
                 }
             }
+            else { cerr << "Unknown command" << endl; }
         }
 
         if (put_cmd) {
