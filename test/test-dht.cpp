@@ -133,7 +133,7 @@ void parse_args( const vector<string>& args
         exit(0);
     }
 
-    if (args.size() < 3) {
+    if (args.size() < 2) {
         usage(std::cerr, args[0], "Too few arguments");
         exit(1);
     }
