@@ -127,7 +127,6 @@ struct StressCmd {
 
 void parse_args( const vector<string>& args
                , vector<asio::ip::address>* ifaddrs
-               , optional<PutCmd>* put_cmd
                , optional<StressCmd>* stress_cmd)
 {
     if (args.size() == 2 && args[1] == "-h") {
@@ -157,17 +156,6 @@ void parse_args( const vector<string>& args
         }
     }
 
-    if (args[2] == "put") {
-        if (args.size() != 6) {
-            usage(std::cerr, args[0]);
-            exit(1);
-        }
-        PutCmd c;
-        c.private_key = *util::Ed25519PrivateKey::from_hex(args[3]);
-        c.dht_key = args[4];
-        c.dht_value = args[5];
-        *put_cmd = move(c);
-    }
     if (args[2] == "stress") {
         if (args.size() != 4) {
             usage(std::cerr, args[0]);
@@ -193,10 +181,9 @@ int main(int argc, const char** argv)
 
     vector<asio::ip::address> ifaddrs;
 
-    optional<PutCmd>    put_cmd;
     optional<StressCmd> stress_cmd;
 
-    parse_args(args, &ifaddrs, &put_cmd, &stress_cmd);
+    parse_args(args, &ifaddrs, &stress_cmd);
 
     for (auto addr : ifaddrs) {
         std::cout << "Spawning DHT node on " << addr << std::endl;
@@ -287,33 +274,41 @@ int main(int argc, const char** argv)
                     }
                 }
             }
+            if (cmd_toks[0] == "put") {
+                if (args.size() != 4) {
+                    cerr << "Bad command." << endl;
+                    continue;
+                }
+                PutCmd put_cmd;
+                put_cmd.private_key = *util::Ed25519PrivateKey::from_hex(cmd_toks[1]);
+                put_cmd.dht_key = cmd_toks[2];
+                put_cmd.dht_value = cmd_toks[3];
+
+                auto salt = ouinet::util::sha1(put_cmd.dht_key);
+
+                using Time = boost::posix_time::ptime;
+                Time unix_epoch(boost::gregorian::date(1970, 1, 1));
+                Time ts = boost::posix_time::microsec_clock::universal_time();
+
+                auto seq = (ts - unix_epoch).total_milliseconds();
+
+                cerr << "seq: " << seq << endl;
+
+                auto item = MutableDataItem::sign( put_cmd.dht_value
+                                                 , seq
+                                                 , as_string_view(salt)
+                                                 , put_cmd.private_key);
+
+                dht->mutable_put(item, cancel, yield[ec]);
+
+                if (ec) {
+                    cerr << "FINISH: Error " << ec.message() << ", took:" << secs(now() - start) << "s\n";
+                }
+                else {
+                    cerr << "FINISH: Success, took:" << secs(now() - start) << "s\n";
+                }
+            }
             else { cerr << "Unknown command" << endl; }
-        }
-
-        if (put_cmd) {
-            auto salt = ouinet::util::sha1(put_cmd->dht_key);
-
-            using Time = boost::posix_time::ptime;
-            Time unix_epoch(boost::gregorian::date(1970, 1, 1));
-            Time ts = boost::posix_time::microsec_clock::universal_time();
-
-            auto seq = (ts - unix_epoch).total_milliseconds();
-
-            cerr << "seq: " << seq << endl;
-
-            auto item = MutableDataItem::sign( put_cmd->dht_value
-                                             , seq
-                                             , as_string_view(salt)
-                                             , put_cmd->private_key);
-
-            dht->mutable_put(item, cancel, yield[ec]);
-
-            if (ec) {
-                cerr << "FINISH: Error " << ec.message() << ", took:" << secs(now() - start) << "s\n";
-            }
-            else {
-                cerr << "FINISH: Success, took:" << secs(now() - start) << "s\n";
-            }
         }
 
         if (stress_cmd) {
