@@ -1146,6 +1146,9 @@ void Client::State::serve_request( GenericStream&& con
         Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*doubleclick\\.net/.*")
              , {false, queue<fresh_channel>({fresh_channel::origin})} ),
 
+        Match( reqexpr::from_regex(target_getter, "https?://ping.chartbeat.net/.*")
+             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
+
         // Disable cache and always go to proxy for this site.
         Match( reqexpr::from_regex(target_getter, "https?://ifconfig\\.co/.*")
              , {false, queue<fresh_channel>({fresh_channel::proxy})} ),
