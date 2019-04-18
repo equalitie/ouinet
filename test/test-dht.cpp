@@ -126,8 +126,7 @@ struct StressCmd {
 };
 
 void parse_args( const vector<string>& args
-               , vector<asio::ip::address>* ifaddrs
-               , optional<StressCmd>* stress_cmd)
+               , vector<asio::ip::address>* ifaddrs)
 {
     if (args.size() == 2 && args[1] == "-h") {
         usage(std::cout, args[0]);
@@ -155,16 +154,6 @@ void parse_args( const vector<string>& args
             exit(1);
         }
     }
-
-    if (args[2] == "stress") {
-        if (args.size() != 4) {
-            usage(std::cerr, args[0]);
-            exit(1);
-        }
-        StressCmd c;
-        c.private_key = *util::Ed25519PrivateKey::from_hex(args[3]);
-        *stress_cmd = move(c);
-    }
 }
 
 int main(int argc, const char** argv)
@@ -181,9 +170,7 @@ int main(int argc, const char** argv)
 
     vector<asio::ip::address> ifaddrs;
 
-    optional<StressCmd> stress_cmd;
-
-    parse_args(args, &ifaddrs, &stress_cmd);
+    parse_args(args, &ifaddrs);
 
     for (auto addr : ifaddrs) {
         std::cout << "Spawning DHT node on " << addr << std::endl;
@@ -308,50 +295,56 @@ int main(int argc, const char** argv)
                     cerr << "FINISH: Success, took:" << secs(now() - start) << "s\n";
                 }
             }
-            else { cerr << "Unknown command" << endl; }
-        }
+            if (cmd_toks[0] == "stress") {
+                if (args.size() != 4) {
+                    cerr << "Bad command." << endl;
+                    continue;
+                }
+                StressCmd stress_cmd;
+                stress_cmd.private_key = *util::Ed25519PrivateKey::from_hex(cmd_toks[1]);
 
-        if (stress_cmd) {
-            WaitCondition wc(ios);
+                WaitCondition wc(ios);
 
-            std::srand(std::time(nullptr));
+                std::srand(std::time(nullptr));
 
-            string key_base = util::str("ouinet-stress-test-", std::rand());
+                string key_base = util::str("ouinet-stress-test-", std::rand());
 
-            for (unsigned int i = 0; i < 32; ++i) {
-                asio::spawn(ios, [&, i, lock = wc.lock()](asio::yield_context yield) {
-                    steady_clock::time_point start = steady_clock::now();
+                for (unsigned int i = 0; i < 32; ++i) {
+                    asio::spawn(ios, [&, i, lock = wc.lock()](asio::yield_context yield) {
+                        steady_clock::time_point start = steady_clock::now();
 
-                    auto key = util::str(key_base, "-", i, "-key");
-                    auto val = util::str(key_base, "-", i, "-val");
+                        auto key = util::str(key_base, "-", i, "-key");
+                        auto val = util::str(key_base, "-", i, "-val");
 
-                    auto salt = ouinet::util::sha1(key);
+                        auto salt = ouinet::util::sha1(key);
 
-                    using Time = boost::posix_time::ptime;
-                    Time unix_epoch(boost::gregorian::date(1970, 1, 1));
-                    Time ts = boost::posix_time::microsec_clock::universal_time();
+                        using Time = boost::posix_time::ptime;
+                        Time unix_epoch(boost::gregorian::date(1970, 1, 1));
+                        Time ts = boost::posix_time::microsec_clock::universal_time();
 
-                    auto seq = (ts - unix_epoch).total_milliseconds();
+                        auto seq = (ts - unix_epoch).total_milliseconds();
 
-                    cerr << "seq: " << seq << endl;
+                        cerr << "seq: " << seq << endl;
 
-                    auto item = MutableDataItem::sign( val
-                                                     , seq
-                                                     , as_string_view(salt)
-                                                     , stress_cmd->private_key);
+                        auto item = MutableDataItem::sign( val
+                                                         , seq
+                                                         , as_string_view(salt)
+                                                         , stress_cmd.private_key);
 
-                    dht->mutable_put(item, cancel, yield[ec]);
+                        dht->mutable_put(item, cancel, yield[ec]);
 
-                    if (ec) {
-                        cerr << "FINISH" << i << ": Error " << ec.message() << ", took:" << secs(now() - start) << "s\n";
-                    }
-                    else {
-                        cerr << "FINISH" << i << ": Success, took:" << secs(now() - start) << "s\n";
-                    }
-                });
+                        if (ec) {
+                            cerr << "FINISH" << i << ": Error " << ec.message() << ", took:" << secs(now() - start) << "s\n";
+                        }
+                        else {
+                            cerr << "FINISH" << i << ": Success, took:" << secs(now() - start) << "s\n";
+                        }
+                    });
+                }
+
+                wc.wait(yield);
             }
-
-            wc.wait(yield);
+            else { cerr << "Unknown command" << endl; }
         }
 
         cerr << "End. Took " << secs(now() - start) << " seconds" << endl;
