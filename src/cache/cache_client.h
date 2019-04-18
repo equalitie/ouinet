@@ -31,6 +31,7 @@ public:
           , std::string ipns
           , boost::optional<util::Ed25519PublicKey> bt_pubkey
           , fs::path path_to_repo
+          , bool autoseed_updated
           , unsigned int bep44_index_capacity
           , Cancel& cancel
           , boost::asio::yield_context);
@@ -93,7 +94,8 @@ private:
                , boost::optional<util::Ed25519PublicKey> bt_pubkey
                , std::unique_ptr<bittorrent::MainlineDht>
                , std::unique_ptr<Bep44ClientIndex>
-               , fs::path path_to_repo);
+               , fs::path path_to_repo
+               , bool autoseed_updated);
 
     ClientIndex* get_index(IndexType);
 

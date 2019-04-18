@@ -57,6 +57,10 @@ public:
         return _max_cached_age;
     }
 
+    bool autoseed_updated() const {
+        return _autoseed_updated;
+    }
+
     boost::optional<std::string>
     credentials_for(const std::string& injector) const {
         auto i = _injector_credentials.find(injector);
@@ -144,6 +148,9 @@ public:
             , po::value<int>()->default_value(_max_cached_age.total_seconds())
             , "Discard cached content older than this many seconds "
               "(0: discard all; -1: discard none)")
+           ("autoseed-updated", po::bool_switch(&_autoseed_updated)->default_value(false)
+            , "Automatically fetch and seed the data of updated index entries "
+              "that this client is already publishing.")
 
            // Request routing options
            ("disable-origin-access", po::bool_switch(&_disable_origin_access)->default_value(false)
@@ -199,6 +206,7 @@ private:
 
     boost::posix_time::time_duration _max_cached_age
         = boost::posix_time::hours(7*24);  // one week
+    bool _autoseed_updated = false;
 
     std::string _client_credentials;
     std::map<std::string, std::string> _injector_credentials;

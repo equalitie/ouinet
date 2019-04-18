@@ -22,6 +22,7 @@ namespace bt = bittorrent;
 namespace file_io = util::file_io;
 
 using Clock = std::chrono::steady_clock;
+using UpdatedHook = ClientIndex::UpdatedHook;
 
 //--------------------------------------------------------------------
 nlohmann::json entry_to_json( Clock::time_point t
@@ -156,6 +157,8 @@ public:
     using Lru = util::PersistentLruCache<Entry>;
     using LruPtr = unique_ptr<Lru>;
 
+    UpdatedHook updated_hook;
+
 public:
     Bep44EntryUpdater(bt::MainlineDht& dht, LruPtr lru)
         : _ios(dht.get_io_service())
@@ -261,8 +264,18 @@ private:
                 if (dht_seq > loc_seq)
                 {
                     log_msg << "newer entry found in DHT";
-                    // TODO: Store new data
-                    loc.data = move(dht_data);
+                    bool do_repub(true);
+                    if (updated_hook) {
+                        do_repub = updated_hook( *(loc.data.value.as_string())
+                                               , *(dht_data.value.as_string())
+                                               , cancel, yield);
+                        if (cancel) return;
+                    }
+                    // Only republish updated index entries that the hook accepted.
+                    if (do_repub) {
+                        loc.data = move(dht_data);
+                        log_msg << " (repub)";
+                    } else log_msg << " (norepub)";
                 } else log_msg << "older entry found in DHT";
                 log_msg << ": my_seq=" << loc_seq << " dht_seq=" << dht_seq;
 
@@ -351,6 +364,19 @@ Bep44ClientIndex::Bep44ClientIndex( bt::MainlineDht& bt_dht
     , _bt_pubkey(bt_pubkey)
     , _updater(move(updater))
 {}
+
+// public
+const UpdatedHook& Bep44ClientIndex::updated_hook() const
+{
+    return _updater->updated_hook;
+}
+
+UpdatedHook Bep44ClientIndex::updated_hook(UpdatedHook f) {
+    // TODO?: make thread-safe
+    auto ret = move(_updater->updated_hook);
+    _updater->updated_hook = move(f);
+    return ret;
+}
 
 
 //--------------------------------------------------------------------

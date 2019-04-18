@@ -40,6 +40,9 @@ public:
          , Cancel&
          , asio::yield_context);
 
+    const UpdatedHook& updated_hook() const;
+    UpdatedHook updated_hook(UpdatedHook);
+
     std::string find( const std::string& key
                     , Cancel&
                     , asio::yield_context) override;

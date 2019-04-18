@@ -11,6 +11,7 @@
 #include "../bittorrent/dht.h"
 #include "../logger.h"
 #include "../util/crypto.h"
+#include "../util/watch_dog.h"
 
 using namespace std;
 using namespace ouinet;
@@ -26,6 +27,7 @@ CacheClient::build( asio::io_service& ios
                   , string ipns
                   , optional<util::Ed25519PublicKey> bt_pubkey
                   , fs::path path_to_repo
+                  , bool autoseed_updated
                   , unsigned int bep44_index_capacity
                   , Cancel& cancel
                   , asio::yield_context yield)
@@ -74,7 +76,8 @@ CacheClient::build( asio::io_service& ios
                                   , std::move(bt_pubkey)
                                   , std::move(bt_dht)
                                   , std::move(bep44_index)
-                                  , move(path_to_repo)));
+                                  , move(path_to_repo)
+                                  , autoseed_updated));
 }
 
 // private
@@ -83,12 +86,47 @@ CacheClient::CacheClient( std::unique_ptr<asio_ipfs::node> ipfs_node
                         , optional<util::Ed25519PublicKey> bt_pubkey
                         , unique_ptr<bittorrent::MainlineDht> bt_dht
                         , unique_ptr<Bep44ClientIndex> bep44_index
-                        , fs::path path_to_repo)
+                        , fs::path path_to_repo
+                        , bool autoseed_updated)
     : _path_to_repo(move(path_to_repo))
     , _ipfs_node(move(ipfs_node))
     , _bt_dht(move(bt_dht))
     , _bep44_index(move(bep44_index))
 {
+    ClientIndex::UpdatedHook updated_hook([&, autoseed_updated]
+                                          (auto o, auto n, auto& c, auto y) noexcept
+    {
+        // Returning false in this function avoids the republication of index entries
+        // whose linked descriptors are missing or malformed,
+        // or whose associated data cannot be retrieved.
+
+        auto ipfs_load = IPFS_LOAD_FUNC(*_ipfs_node);
+        sys::error_code ec;
+        Cancel cancel(c);
+        WatchDog wd( _ipfs_node->get_io_service()
+                   // Even when not reseeding data, allow some time to reseed linked descriptor.
+                   , autoseed_updated ? chrono::minutes(3) : chrono::seconds(30)  // TODO: adjust
+                   , [&] { cancel(); });
+
+        // Fetch and decode new descriptor.
+        auto desc_data = descriptor::from_path(n, ipfs_load, cancel, y[ec]);
+        if (ec || cancel) return false;
+        auto desc = Descriptor::deserialize(desc_data);
+        if (!desc) return false;
+
+        if (!autoseed_updated) return true;  // do not care about data
+
+        // Fetch data pointed by new descriptor.
+        // TODO: check if it matches that of old descriptor
+        auto data = ipfs_load(desc->body_link, cancel, y[ec]);
+        if (cancel) ec = asio::error::timed_out;
+
+        LOG_DEBUG( "Fetch data from updated index entry:"
+                 , " ec=\"", ec.message(), "\""
+                 , " ipfs_cid=", desc->body_link," url=", desc->url);
+        return !ec;
+    });
+
     if (!ipns.empty()) {
         _btree_index.reset(new BTreeClientIndex( *_ipfs_node
                                                , ipns
@@ -96,6 +134,14 @@ CacheClient::CacheClient( std::unique_ptr<asio_ipfs::node> ipfs_node
                                                , bt_pubkey
                                                , _path_to_repo));
     }
+
+    // Setup hooks.
+    // Since indexes may start working right after construction,
+    // setting hooks like this leaves a gap for
+    // some updates to be detected by an index before the hook is set.
+    // It is done like this to be able to create indexes in `build`
+    // while retaining ownership of the IPFS node object here.
+    _bep44_index->updated_hook(move(updated_hook));
 }
 
 const BTree* CacheClient::get_btree() const
