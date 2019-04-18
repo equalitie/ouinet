@@ -35,14 +35,9 @@ unique_ptr<CacheInjector> CacheInjector::build( boost::asio::io_service& ios
 
     sys::error_code ec;
 
-    // TODO: Make this a parameter
-    const bool online = false;
-
     unique_ptr<bt::MainlineDht> bt_dht(new bt::MainlineDht(ios));
 
-    if (online) {
-        bt_dht->set_interfaces({asio::ip::address_v4::any()});
-    }
+    bt_dht->set_interfaces({asio::ip::address_v4::any()});
 
     unique_ptr<Bep44InjectorIndex> bep44_index;
 
@@ -66,9 +61,7 @@ unique_ptr<CacheInjector> CacheInjector::build( boost::asio::io_service& ios
                             , move(bt_dht)
                             , move(bep44_index)));
 
-    if (online) {
-        ci->wait_for_ready(cancel, yield[ec]);
-    }
+    ci->wait_for_ready(cancel, yield[ec]);
 
     assert(!cancel || ec == asio::error::operation_aborted);
     if (cancel) ec = asio::error::operation_aborted;
@@ -183,6 +176,30 @@ CacheInjector::insert_content( const string& id
                            , move(cid_insdata.second)};
 }
 
+std::string CacheInjector::ipfs_cat( boost::string_view cid
+                                   , Cancel& cancel
+                                   , boost::asio::yield_context yield)
+{
+    if (!_ipfs_node) {
+        return or_throw<string>(yield, asio::error::operation_not_supported);
+    }
+
+    return ::ouinet::ipfs_cat(*_ipfs_node, cid, cancel, yield);
+}
+
+string CacheInjector::get_bep44m( boost::string_view key
+                                , Cancel& cancel
+                                , boost::asio::yield_context yield)
+{
+    auto index = get_index(IndexType::bep44);
+
+    if (!index)
+        return or_throw<string>(yield, asio::error::operation_not_supported);
+
+    // TODO: Modify find to accept string_view
+    return index->find(key.to_string(), cancel, yield);
+}
+
 string CacheInjector::get_descriptor( const string& key
                                     , IndexType index_type
                                     , Cancel& cancel
@@ -201,6 +218,40 @@ string CacheInjector::get_descriptor( const string& key
 
     return descriptor::from_path
         ( desc_path, IPFS_LOAD_FUNC(*_ipfs_node), cancel, yield);
+}
+
+Descriptor CacheInjector::bep44m_to_descriptor( boost::string_view bep44m_s
+                                              , Cancel& cancel
+                                              , asio::yield_context yield)
+{
+    auto opt_bep44m = bittorrent::MutableDataItem::bdecode(bep44m_s);
+
+    if (!opt_bep44m) {
+        return or_throw<Descriptor>(yield, asio::error::invalid_argument);
+    }
+
+    auto opt_path = opt_bep44m->value.as_string();
+
+    if (!opt_path) {
+        return or_throw<Descriptor>(yield, asio::error::invalid_argument);
+    }
+
+    sys::error_code ec;
+
+    string desc_str = descriptor::from_path( *opt_path
+                                           , IPFS_LOAD_FUNC(*_ipfs_node)
+                                           , cancel
+                                           , yield[ec]);
+
+    return_or_throw_on_error(yield, cancel, ec, Descriptor());
+
+    auto opt_desc = Descriptor::deserialize(desc_str);
+
+    if (!opt_desc) {
+        return or_throw<Descriptor>(yield, asio::error::bad_descriptor);
+    }
+
+    return move(*opt_desc);
 }
 
 pair<string, CacheEntry>

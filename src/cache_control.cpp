@@ -155,16 +155,23 @@ optional<unsigned> get_max_age(const beast::string_view& cache_control_value)
     return max_age;
 }
 
-static
-bool is_expired(const CacheEntry& entry)
+/* static */
+bool CacheControl::is_expired(const CacheEntry& entry)
+{
+    return is_expired(entry.response, entry.time_stamp);
+}
+
+/* static */
+bool CacheControl::is_expired( const http::response_header<>& response
+                             , boost::posix_time::ptime time_stamp)
 {
     // RFC2616: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.9.3
     static const auto now = [] {
         return posix_time::second_clock::universal_time();
     };
 
-    static const auto http10_is_expired = [](const auto& entry) {
-        auto expires = get(entry.response, http::field::expires);
+    static const auto http10_is_expired = [](const auto& response) {
+        auto expires = get(response, http::field::expires);
 
         if (expires) {
             auto exp_date = CacheControl::parse_date(*expires);
@@ -176,16 +183,16 @@ bool is_expired(const CacheEntry& entry)
         return true;
     };
 
-    auto cache_control_value = get(entry.response, http::field::cache_control);
+    auto cache_control_value = get(response, http::field::cache_control);
 
     if (!cache_control_value) {
-        return http10_is_expired(entry);
+        return http10_is_expired(response);
     }
 
     optional<unsigned> max_age = get_max_age(*cache_control_value);
-    if (!max_age) return http10_is_expired(entry);
+    if (!max_age) return http10_is_expired(response);
 
-    return now() > entry.time_stamp + posix_time::seconds(*max_age);
+    return now() > time_stamp + posix_time::seconds(*max_age);
 }
 
 bool
@@ -357,14 +364,13 @@ CacheControl::do_fetch(const Request& request, Cancel& cancel, Yield yield)
 
         auto res = do_fetch_fresh(fetch_state, request, yield[ec1]);
         if (!ec1) return res;
+        if (ec1 == err::operation_aborted) return or_throw(yield, ec1, move(res));
 
         auto cache_entry = do_fetch_stored(fetch_state, request, yield[ec2]);
         if (!ec2) return add_warning( move(cache_entry.response)
                                     , "111 Ouinet \"Revalidation Failed\"");
 
-        if (ec1 == err::operation_aborted || ec2 == err::operation_aborted) {
-            return or_throw(yield, err::operation_aborted, move(res));
-        }
+        if (ec2 == err::operation_aborted) return or_throw(yield, ec1, move(res));
 
         return bad_gateway( request
                           , util::str( "1: fresh: \"", ec1.message(), "\""

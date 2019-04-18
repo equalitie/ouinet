@@ -56,6 +56,13 @@ public:
         _parallel_fetch_enabled = value;
     }
 
+    static
+    bool is_expired( const http::response_header<>&
+                   , boost::posix_time::ptime time_stamp);
+
+    static
+    bool is_expired(const CacheEntry&);
+
 private:
     // TODO: Add cancellation support
     Response do_fetch(const Request&, Cancel&, Yield);
