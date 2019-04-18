@@ -347,8 +347,12 @@ int main(int argc, const char** argv)
             }
             else { cerr << "Unknown command" << endl; }
         }
+    });
 
+    boost::asio::signal_set signals(ios, SIGINT);
+    signals.async_wait([&](const boost::system::error_code& error , int signal_number) {
         dht.reset();
+        ios.stop();
     });
 
     ios.run();
