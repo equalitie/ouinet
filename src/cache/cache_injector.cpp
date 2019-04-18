@@ -70,7 +70,6 @@ unique_ptr<CacheInjector> CacheInjector::build( boost::asio::io_service& ios
     return or_throw(yield, ec, move(ci));
 }
 
-
 CacheInjector::CacheInjector
         ( asio::io_service& ios
         , util::Ed25519PrivateKey bt_privkey
@@ -78,7 +77,14 @@ CacheInjector::CacheInjector
         , bool enable_btree
         , unique_ptr<bt::MainlineDht> bt_dht
         , unique_ptr<Bep44InjectorIndex> bep44_index)
-    : _ipfs_node(new asio_ipfs::node(ios, true, (path_to_repo/"ipfs").native()))
+    : _ipfs_node(new asio_ipfs::node( ios
+                                    , (path_to_repo/"ipfs").native()
+                                    , asio_ipfs::node::config{
+                                          .online       = true,
+                                          .low_water    = 400,
+                                          .high_water   = 600,
+                                          .grace_period = 20
+                                      }))
     , _bt_dht(move(bt_dht))  // used by either B-tree over BEP44, or BEP44
     , _bep44_index(move(bep44_index))
     , _scheduler(new Scheduler(ios, _concurrency))

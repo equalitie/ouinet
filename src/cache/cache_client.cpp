@@ -44,9 +44,19 @@ CacheClient::build( asio::io_service& ios
                  << "IO tasks\n";
         });
 
+        asio_ipfs::node::config cfg {
+            .online       = true,
+            // The default values 600/900/20 kill routers
+            // See the Swarm section here for more info:
+            // https://medium.com/textileio/tutorial-setting-up-an-ipfs-peer-part-iii-f5f43506874c
+            .low_water    = 20,
+            .high_water   = 50,
+            .grace_period = 120
+        };
+
         ipfs_node = asio_ipfs::node::build( ios
-                                          , true
                                           , (path_to_repo/"ipfs").native()
+                                          , cfg
                                           , yield[ec]);
     }
 
