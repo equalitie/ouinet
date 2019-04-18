@@ -119,7 +119,7 @@ CacheClient::CacheClient( std::unique_ptr<asio_ipfs::node> ipfs_node
         // Fetch data pointed by new descriptor.
         // TODO: check if it matches that of old descriptor
         auto data = ipfs_load(desc->body_link, cancel, y[ec]);
-        if (cancel) ec = asio::error::timed_out;
+        if (cancel && !c) ec = asio::error::timed_out;
 
         LOG_DEBUG( "Fetch data from updated index entry:"
                  , " ec=\"", ec.message(), "\""
