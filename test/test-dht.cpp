@@ -211,7 +211,7 @@ int main(int argc, const char** argv)
 
             vector<string> cmd_toks;
             {
-                char cbuf[buffer.size()+1]; int rc = buffer.sgetn (cbuf, sizeof cbuf); cbuf[rc] = 0;
+                char cbuf[n+1]; int rc = buffer.sgetn (cbuf, sizeof cbuf); cbuf[rc] = 0;
                 std::string str (cbuf, rc);
                 boost::char_separator<char> sep {" "};
                 boost::tokenizer<boost::char_separator<char>> tokens {str, sep};
