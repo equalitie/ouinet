@@ -220,7 +220,7 @@ int main(int argc, const char** argv)
 
             if (cmd_toks[0] == "get") {
                 if (cmd_toks.size() != 3) {
-                    cerr << "Bad command." << endl;
+                    usage(std::cout, args[0]);
                     continue;
                 }
                 GetCmd get_cmd;
@@ -263,7 +263,7 @@ int main(int argc, const char** argv)
             }
             else if (cmd_toks[0] == "put") {
                 if (args.size() != 4) {
-                    cerr << "Bad command." << endl;
+                    usage(std::cout, args[0]);
                     continue;
                 }
                 PutCmd put_cmd;
@@ -297,7 +297,7 @@ int main(int argc, const char** argv)
             }
             else if (cmd_toks[0] == "stress") {
                 if (args.size() != 4) {
-                    cerr << "Bad command." << endl;
+                    usage(std::cout, args[0]);
                     continue;
                 }
                 StressCmd stress_cmd;
@@ -345,7 +345,7 @@ int main(int argc, const char** argv)
                 wc.wait(yield);
                 cerr << "End. Took " << secs(now() - start) << " seconds" << endl;
             }
-            else { cerr << "Unknown command" << endl; }
+            else { usage(std::cout, args[0]); }
         }
     });
 
