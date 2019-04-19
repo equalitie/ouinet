@@ -72,8 +72,9 @@ private:
     void handle_ca_pem( const Request&, Response&, std::stringstream&
                       , const CACertificate& );
 
-    void handle_upload(const Request&, Response&, std::stringstream&
-                      , CacheClient*, const ClientConfig&, asio::yield_context);
+    void handle_upload( const ClientConfig&
+                      , const Request&, Response&, std::stringstream&
+                      , CacheClient*, asio::yield_context);
 
     void handle_descriptor( const ClientConfig&
                           , const Request&, Response&, std::stringstream&

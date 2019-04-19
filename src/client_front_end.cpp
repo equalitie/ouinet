@@ -87,9 +87,9 @@ void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, stringstr
     ss << ca.pem_certificate();
 }
 
-void ClientFrontEnd::handle_upload( const Request& req, Response& res, stringstream& ss
+void ClientFrontEnd::handle_upload( const ClientConfig& config
+                                  , const Request& req, Response& res, stringstream& ss
                                   , CacheClient* cache_client
-                                  , const ClientConfig& config
                                   , asio::yield_context yield)
 {
     static const string req_ctype = "application/octet-stream";
@@ -544,7 +544,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
         handle_enumerate_index(config, req, res, ss, cache_client, yield[ec_]);
     } else if (path == "/api/upload") {
         sys::error_code ec_;  // shouldn't throw, but just in case
-        handle_upload(req, res, ss, cache_client, config, yield[ec_]);
+        handle_upload(config, req, res, ss, cache_client, yield[ec_]);
     } else if (path == "/api/descriptor") {
         sys::error_code ec_;  // shouldn't throw, but just in case
         handle_descriptor(config, req, res, ss, cache_client, yield[ec_]);
