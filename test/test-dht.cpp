@@ -6,9 +6,10 @@
 #include <sys/types.h>
 #include <ifaddrs.h>
 #include <arpa/inet.h>
-#include <boost/asio/ip/address.hpp>
+#include <boost/asio.hpp>
 #include <boost/optional.hpp>
 #include <boost/optional/optional_io.hpp>
+#include <boost/tokenizer.hpp>
 #include "../src/cache/descidx.h"
 #include "../src/util/crypto.h"
 #include "../src/util/wait_condition.h"
@@ -125,17 +126,14 @@ struct StressCmd {
 };
 
 void parse_args( const vector<string>& args
-               , vector<asio::ip::address>* ifaddrs
-               , optional<GetCmd>* get_cmd
-               , optional<PutCmd>* put_cmd
-               , optional<StressCmd>* stress_cmd)
+               , vector<asio::ip::address>* ifaddrs)
 {
     if (args.size() == 2 && args[1] == "-h") {
         usage(std::cout, args[0]);
         exit(0);
     }
 
-    if (args.size() < 3) {
+    if (args.size() < 2) {
         usage(std::cerr, args[0], "Too few arguments");
         exit(1);
     }
@@ -156,37 +154,6 @@ void parse_args( const vector<string>& args
             exit(1);
         }
     }
-
-    if (args[2] == "get") {
-        if (args.size() != 5) {
-            usage(std::cerr, args[0]);
-            exit(1);
-        }
-        GetCmd c;
-        c.public_key = *util::Ed25519PublicKey::from_hex(args[3]);
-        c.dht_key = args[4];
-        *get_cmd = move(c);
-    }
-    if (args[2] == "put") {
-        if (args.size() != 6) {
-            usage(std::cerr, args[0]);
-            exit(1);
-        }
-        PutCmd c;
-        c.private_key = *util::Ed25519PrivateKey::from_hex(args[3]);
-        c.dht_key = args[4];
-        c.dht_value = args[5];
-        *put_cmd = move(c);
-    }
-    if (args[2] == "stress") {
-        if (args.size() != 4) {
-            usage(std::cerr, args[0]);
-            exit(1);
-        }
-        StressCmd c;
-        c.private_key = *util::Ed25519PrivateKey::from_hex(args[3]);
-        *stress_cmd = move(c);
-    }
 }
 
 int main(int argc, const char** argv)
@@ -203,11 +170,7 @@ int main(int argc, const char** argv)
 
     vector<asio::ip::address> ifaddrs;
 
-    optional<GetCmd>    get_cmd;
-    optional<PutCmd>    put_cmd;
-    optional<StressCmd> stress_cmd;
-
-    parse_args(args, &ifaddrs, &get_cmd, &put_cmd, &stress_cmd);
+    parse_args(args, &ifaddrs);
 
     for (auto addr : ifaddrs) {
         std::cout << "Spawning DHT node on " << addr << std::endl;
@@ -238,114 +201,158 @@ int main(int argc, const char** argv)
 
         steady_clock::time_point start = steady_clock::now();
 
-        if (get_cmd) {
-            auto salt = ouinet::util::sha1(get_cmd->dht_key);
+        boost::asio::posix::stream_descriptor input (ios, ::dup(STDIN_FILENO));
+        boost::asio::posix::stream_descriptor output (ios, ::dup(STDOUT_FILENO));
 
-            auto opt_data = dht->mutable_get( get_cmd->public_key
-                                           , as_string_view(salt)
-                                           , yield[ec], cancel);
+        boost::asio::streambuf buffer;
+        while (true) {
+            boost::asio::async_write(output, asio::buffer("> "), yield[ec]);
+            size_t n = asio::async_read_until(input, buffer, '\n', yield[ec]);
 
-            if (ec) {
-                cerr << "Error dht->mutable_get " << ec.message() << endl;
+            vector<string> cmd_toks;
+            {
+                char cbuf[n+1]; int rc = buffer.sgetn (cbuf, sizeof cbuf); cbuf[rc] = 0;
+                std::string str (cbuf, rc);
+                boost::char_separator<char> sep {" "};
+                boost::tokenizer<boost::char_separator<char>> tokens {str, sep};
+                for (const auto& t : tokens) { cmd_toks.push_back(t); }
             }
-            else {
-                if (opt_data) {
-                    cerr << "Got Data!" << endl;
-                    cerr << "seq:   " << opt_data->sequence_number << endl;
-                    // src/cache/descidx.h
-                    auto desc_str = [&]() {
-                        auto val = *opt_data->value.as_string();
-                        if (val.substr(0, ouinet::descriptor::zlib_prefix.size()) == ouinet::descriptor::zlib_prefix) {
-                            auto desc_zlib(val.substr(ouinet::descriptor::zlib_prefix.length()));
-                            return "zlib: " + util::zlib_decompress(desc_zlib, ec);
-                        }
-                        else {
-                            return val;
-                        }
-                    }();
-                    if (ec) {
-                        cerr << "Error: dht->mutable_get: decoding value: " << ec.message() << endl;
-                    }
-                    cerr << "value: " << desc_str << endl;
+
+            if (cmd_toks[0] == "get") {
+                if (cmd_toks.size() != 3) {
+                    usage(std::cout, args[0]);
+                    continue;
+                }
+                GetCmd get_cmd;
+                get_cmd.public_key = *util::Ed25519PublicKey::from_hex(cmd_toks[1]);
+                get_cmd.dht_key = cmd_toks[2];
+
+                auto salt = ouinet::util::sha1(get_cmd.dht_key);
+
+                auto opt_data = dht->mutable_get( get_cmd.public_key
+                                               , as_string_view(salt)
+                                               , yield[ec], cancel);
+
+                if (ec) {
+                    cerr << "Error dht->mutable_get " << ec.message() << endl;
                 }
                 else {
-                    cerr << "No error, but also no data!" << endl;
-                }
-            }
-        }
-
-        if (put_cmd) {
-            auto salt = ouinet::util::sha1(put_cmd->dht_key);
-
-            using Time = boost::posix_time::ptime;
-            Time unix_epoch(boost::gregorian::date(1970, 1, 1));
-            Time ts = boost::posix_time::microsec_clock::universal_time();
-
-            auto seq = (ts - unix_epoch).total_milliseconds();
-
-            cerr << "seq: " << seq << endl;
-
-            auto item = MutableDataItem::sign( put_cmd->dht_value
-                                             , seq
-                                             , as_string_view(salt)
-                                             , put_cmd->private_key);
-
-            dht->mutable_put(item, cancel, yield[ec]);
-
-            if (ec) {
-                cerr << "FINISH: Error " << ec.message() << ", took:" << secs(now() - start) << "s\n";
-            }
-            else {
-                cerr << "FINISH: Success, took:" << secs(now() - start) << "s\n";
-            }
-        }
-
-        if (stress_cmd) {
-            WaitCondition wc(ios);
-
-            std::srand(std::time(nullptr));
-
-            string key_base = util::str("ouinet-stress-test-", std::rand());
-
-            for (unsigned int i = 0; i < 32; ++i) {
-                asio::spawn(ios, [&, i, lock = wc.lock()](asio::yield_context yield) {
-                    steady_clock::time_point start = steady_clock::now();
-
-                    auto key = util::str(key_base, "-", i, "-key");
-                    auto val = util::str(key_base, "-", i, "-val");
-
-                    auto salt = ouinet::util::sha1(key);
-
-                    using Time = boost::posix_time::ptime;
-                    Time unix_epoch(boost::gregorian::date(1970, 1, 1));
-                    Time ts = boost::posix_time::microsec_clock::universal_time();
-
-                    auto seq = (ts - unix_epoch).total_milliseconds();
-
-                    cerr << "seq: " << seq << endl;
-
-                    auto item = MutableDataItem::sign( val
-                                                     , seq
-                                                     , as_string_view(salt)
-                                                     , stress_cmd->private_key);
-
-                    dht->mutable_put(item, cancel, yield[ec]);
-
-                    if (ec) {
-                        cerr << "FINISH" << i << ": Error " << ec.message() << ", took:" << secs(now() - start) << "s\n";
+                    if (opt_data) {
+                        cerr << "Got Data!" << endl;
+                        cerr << "seq:   " << opt_data->sequence_number << endl;
+                        // src/cache/descidx.h
+                        auto desc_str = [&]() {
+                            auto val = *opt_data->value.as_string();
+                            if (val.substr(0, ouinet::descriptor::zlib_prefix.size()) == ouinet::descriptor::zlib_prefix) {
+                                auto desc_zlib(val.substr(ouinet::descriptor::zlib_prefix.length()));
+                                return "zlib: " + util::zlib_decompress(desc_zlib, ec);
+                            }
+                            else {
+                                return val;
+                            }
+                        }();
+                        if (ec) {
+                            cerr << "Error: dht->mutable_get: decoding value: " << ec.message() << endl;
+                        }
+                        cerr << "value: " << desc_str << endl;
                     }
                     else {
-                        cerr << "FINISH" << i << ": Success, took:" << secs(now() - start) << "s\n";
+                        cerr << "No error, but also no data!" << endl;
                     }
-                });
+                }
             }
+            else if (cmd_toks[0] == "put") {
+                if (args.size() != 4) {
+                    usage(std::cout, args[0]);
+                    continue;
+                }
+                PutCmd put_cmd;
+                put_cmd.private_key = *util::Ed25519PrivateKey::from_hex(cmd_toks[1]);
+                put_cmd.dht_key = cmd_toks[2];
+                put_cmd.dht_value = cmd_toks[3];
 
-            wc.wait(yield);
+                auto salt = ouinet::util::sha1(put_cmd.dht_key);
+
+                using Time = boost::posix_time::ptime;
+                Time unix_epoch(boost::gregorian::date(1970, 1, 1));
+                Time ts = boost::posix_time::microsec_clock::universal_time();
+
+                auto seq = (ts - unix_epoch).total_milliseconds();
+
+                cerr << "seq: " << seq << endl;
+
+                auto item = MutableDataItem::sign( put_cmd.dht_value
+                                                 , seq
+                                                 , as_string_view(salt)
+                                                 , put_cmd.private_key);
+
+                dht->mutable_put(item, cancel, yield[ec]);
+
+                if (ec) {
+                    cerr << "FINISH: Error " << ec.message() << ", took:" << secs(now() - start) << "s\n";
+                }
+                else {
+                    cerr << "FINISH: Success, took:" << secs(now() - start) << "s\n";
+                }
+            }
+            else if (cmd_toks[0] == "stress") {
+                if (args.size() != 4) {
+                    usage(std::cout, args[0]);
+                    continue;
+                }
+                StressCmd stress_cmd;
+                stress_cmd.private_key = *util::Ed25519PrivateKey::from_hex(cmd_toks[1]);
+
+                WaitCondition wc(ios);
+
+                std::srand(std::time(nullptr));
+
+                string key_base = util::str("ouinet-stress-test-", std::rand());
+
+                for (unsigned int i = 0; i < 32; ++i) {
+                    asio::spawn(ios, [&, i, lock = wc.lock()](asio::yield_context yield) {
+                        steady_clock::time_point start = steady_clock::now();
+
+                        auto key = util::str(key_base, "-", i, "-key");
+                        auto val = util::str(key_base, "-", i, "-val");
+
+                        auto salt = ouinet::util::sha1(key);
+
+                        using Time = boost::posix_time::ptime;
+                        Time unix_epoch(boost::gregorian::date(1970, 1, 1));
+                        Time ts = boost::posix_time::microsec_clock::universal_time();
+
+                        auto seq = (ts - unix_epoch).total_milliseconds();
+
+                        cerr << "seq: " << seq << endl;
+
+                        auto item = MutableDataItem::sign( val
+                                                         , seq
+                                                         , as_string_view(salt)
+                                                         , stress_cmd.private_key);
+
+                        dht->mutable_put(item, cancel, yield[ec]);
+
+                        if (ec) {
+                            cerr << "FINISH" << i << ": Error " << ec.message() << ", took:" << secs(now() - start) << "s\n";
+                        }
+                        else {
+                            cerr << "FINISH" << i << ": Success, took:" << secs(now() - start) << "s\n";
+                        }
+                    });
+                }
+
+                wc.wait(yield);
+                cerr << "End. Took " << secs(now() - start) << " seconds" << endl;
+            }
+            else { usage(std::cout, args[0]); }
         }
+    });
 
-        cerr << "End. Took " << secs(now() - start) << " seconds" << endl;
-
+    boost::asio::signal_set signals(ios, SIGINT);
+    signals.async_wait([&](const boost::system::error_code& error , int signal_number) {
         dht.reset();
+        ios.stop();
     });
 
     ios.run();
