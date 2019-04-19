@@ -133,8 +133,18 @@ InjectorConfig::options_description()
          , "Cache index to use, can be either \"btree\" or \"bep44\"")
         ("index-bep44-private-key", po::value<string>()
          , "Index private key for the BitTorrent BEP44 subsystem")
+        // By default, it is not desirable that the injector actively republishes BEP44 entries.
+        // If a client caused a new injection of a URL (whether there was an existing injection of it or not),
+        // and the client goes immediately offline (so that its IPFS data is no longer available),
+        // we prefer that the newly inserted BEP44 entries fade away as fast as possible,
+        // so that they either disappear or are eventually replaced by others being actively seeded by clients.
+        // Better have stale content or no trace of the content at all,
+        // than index entries that keep clients stuck for some minutes trying to fetch unavailable data.
+        // A positive (and big) value may make sense for an injector that
+        // kept content for a long time or indefinitely
+        // (e.g. if IPFS' urlstore may be used in the future).
         ("index-bep44-capacity"
-         , po::value<unsigned int>()->default_value(1000)  // arbitrarily chosen default
+         , po::value<unsigned int>()->default_value(0)
          , "Maximum number of entries to be kept (and persisted) in the BEP44 index")
         ;
 

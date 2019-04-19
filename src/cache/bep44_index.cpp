@@ -340,6 +340,9 @@ Bep44ClientIndex::build( bt::MainlineDht& bt_dht
 {
     using Ret = unique_ptr<Bep44ClientIndex>;
 
+    if (capacity == 0)
+        return Ret(new Bep44ClientIndex(bt_dht, bt_pubkey, nullptr));
+
     sys::error_code ec;
 
     auto lru = Bep44EntryUpdater::Lru::load( bt_dht.get_io_service()
@@ -367,6 +370,8 @@ Bep44ClientIndex::Bep44ClientIndex( bt::MainlineDht& bt_dht
 
 // public
 void Bep44ClientIndex::updated_hook(UpdatedHook f) {
+    if (!_updater) return;
+
     _updater->updated_hook = move(f);
 }
 
@@ -382,6 +387,9 @@ Bep44InjectorIndex::build( bt::MainlineDht& bt_dht
                          , asio::yield_context yield)
 {
     using Ret = unique_ptr<Bep44InjectorIndex>;
+
+    if (capacity == 0)
+        return Ret(new Bep44InjectorIndex(bt_dht, bt_privkey, nullptr));
 
     sys::error_code ec;
 
@@ -425,7 +433,8 @@ string Bep44ClientIndex::find( const string& key
     return_or_throw_on_error(yield, cancel, ec, string());
 
     sys::error_code ec2;
-    _updater->insert(key, data, cancel, yield[ec2]);
+    if (_updater)
+        _updater->insert(key, data, cancel, yield[ec2]);
 
     // Ignore all errors except operation_aborted
     if (ec2 == asio::error::operation_aborted) {
@@ -454,7 +463,8 @@ string Bep44InjectorIndex::find( const string& key
     return_or_throw_on_error(yield, cancel, ec, string());
 
     sys::error_code ec2;
-    _updater->insert(key, data, cancel, yield[ec2]);
+    if (_updater)
+        _updater->insert(key, data, cancel, yield[ec2]);
 
     // Ignore all errors except operation_aborted
     if (ec2 == asio::error::operation_aborted) {
@@ -512,7 +522,8 @@ string Bep44ClientIndex::insert_mapping( const boost::string_view target
     return_or_throw_on_error(yield, cancel, ec, string());
 
     // Ignore the error here
-    _updater->insert(target, move(item), cancel, yield[ec]);
+    if (_updater)
+        _updater->insert(target, move(item), cancel, yield[ec]);
 
     return util::bytes::to_hex(util::sha1(pk, salt));
 }
@@ -566,7 +577,8 @@ string Bep44InjectorIndex::insert( string key
     return_or_throw_on_error(yield, cancel, ec, string());
 
     sys::error_code ec_ignored;
-    _updater->insert(key, item, cancel, yield[ec_ignored]);
+    if (_updater)
+        _updater->insert(key, item, cancel, yield[ec_ignored]);
 
     LOG_DEBUG("BEP44 index: inserted key=", key);  // used by integration tests
 
