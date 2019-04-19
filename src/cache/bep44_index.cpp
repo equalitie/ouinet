@@ -366,16 +366,8 @@ Bep44ClientIndex::Bep44ClientIndex( bt::MainlineDht& bt_dht
 {}
 
 // public
-const UpdatedHook& Bep44ClientIndex::updated_hook() const
-{
-    return _updater->updated_hook;
-}
-
-UpdatedHook Bep44ClientIndex::updated_hook(UpdatedHook f) {
-    // TODO?: make thread-safe
-    auto ret = move(_updater->updated_hook);
+void Bep44ClientIndex::updated_hook(UpdatedHook f) {
     _updater->updated_hook = move(f);
-    return ret;
 }
 
 

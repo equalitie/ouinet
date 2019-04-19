@@ -26,10 +26,7 @@ public:
     // It should *not* propagate an error code.
     using UpdatedHook = std::function<bool( std::string old, std::string new_
                                           , Cancel&, asio::yield_context) noexcept>;
-    virtual const UpdatedHook& updated_hook() const {
-        throw std::logic_error("not implemented");
-    };
-    virtual UpdatedHook updated_hook(UpdatedHook) {
+    virtual void updated_hook(UpdatedHook) {
         throw std::logic_error("not implemented");
     };
 
