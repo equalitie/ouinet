@@ -3,6 +3,7 @@
 #include "cache/cache_client.h"
 #include "cache/btree.h"
 #include "util.h"
+#include "util/bytes.h"
 #include "defer.h"
 #include "client_config.h"
 
@@ -36,6 +37,7 @@ static string now_as_string() {
 struct ToggleInput {
     beast::string_view text;
     beast::string_view name;
+    char shortcut;
     bool current_value;
 };
 
@@ -50,6 +52,7 @@ ostream& operator<<(ostream& os, const ToggleInput& i) {
           "    " << i.text << ": " << cur_value << "&nbsp;"
                     "<input type=\"submit\" "
                            "name=\""  << i.name << "\" "
+                           "accesskey=\""  << i.shortcut << "\" "
                            "value=\"" << next_value << "\"/>\n"
           "</form>\n";
 }
@@ -153,7 +156,56 @@ static string percent_encode_all(const string& in) {
     return outss.str();
 }
 
-void ClientFrontEnd::handle_enumerate_index( const Request& req
+static string html_desc_link(const string& uri) {
+    // TODO: Escape URL for HTML link text.
+    return util::str( "<a href=\"/api/descriptor?uri=", percent_encode_all(uri), "\">"
+                    , uri, "</a><br/>\n");
+};
+
+static void write_btree_desc_list( CacheClient* cache_client
+                                 , stringstream& ss
+                                 , asio::yield_context yield)
+{
+    auto btree = cache_client->get_btree();
+
+    if (!btree) {
+        ss << "Cache does not sport BTree";
+        return;
+    }
+
+    ss << "Index CID: " << btree->root_hash() << "<br/>\n";
+
+    sys::error_code ec;
+    Cancel cancel; // TODO: This should come from above
+    auto iter = btree->begin(cancel, yield[ec]);
+
+    if (ec) {
+        ss << "Failed to retrieve BTree iterator: " << ec.message();
+        return;
+    }
+
+    while (!iter.is_end()) {
+        ss << html_desc_link(iter.key());
+
+        iter.advance(cancel, yield[ec]);
+
+        if (ec) {
+            ss << "Failed enumerate the entire BTree: " << ec.message();
+            return;
+        }
+    }
+}
+
+static void write_bep44_desc_list( CacheClient* cache_client
+                                 , stringstream& ss
+                                 , asio::yield_context yield)
+{
+    ss << "URI descriptors published by this client:<br/>\n";
+    ss << "TODO";
+}
+
+void ClientFrontEnd::handle_enumerate_index( const ClientConfig& config
+                                           , const Request& req
                                            , Response& res
                                            , stringstream& ss
                                            , CacheClient* cache_client
@@ -173,41 +225,22 @@ void ClientFrontEnd::handle_enumerate_index( const Request& req
         return;
     }
 
-    auto btree = cache_client->get_btree();
-
-    if (!cache_client) {
-        ss << "Cache does not sport BTree";
-        return;
-    }
-
-    ss << "Index CID: " << btree->root_hash() << "<br/>\n";
-
-    sys::error_code ec;
-    Cancel cancel; // TODO: This should come from above
-    auto iter = btree->begin(cancel, yield[ec]);
-
-    if (ec) {
-        ss << "Failed to retrieve BTree iterator: " << ec.message();
-        return;
-    }
-
-    while (!iter.is_end()) {
-        ss << "<a href=\"/api/descriptor?uri=" << percent_encode_all(iter.key()) << "\">"
-           << iter.key() << "</a><br/>\n";
-
-        iter.advance(cancel, yield[ec]);
-
-        if (ec) {
-            ss << "Failed enumerate the entire BTree: " << ec.message();
-            return;
-        }
+    switch (config.cache_index_type()) {
+        // These shall not raise an error but report it on `ss` as HTML.
+        case (IndexType::btree): 
+            write_btree_desc_list(cache_client, ss, yield);
+            break;
+        case (IndexType::bep44): 
+            write_bep44_desc_list(cache_client, ss, yield);
+            break;
+        default:
+          ss << "Unknown index type";
     }
 }
 
-void ClientFrontEnd::handle_descriptor( const Request& req, Response& res, stringstream& ss
-                                      , CacheClient* cache_client
-                                      , const ClientConfig& config
-                                      , asio::yield_context yield)
+void ClientFrontEnd::handle_descriptor( const ClientConfig& config
+                                      , const Request& req, Response& res, stringstream& ss
+                                      , CacheClient* cache_client, asio::yield_context yield)
 {
     auto result = http::status::ok;
     res.set(http::field::content_type, "application/json");
@@ -237,7 +270,7 @@ void ClientFrontEnd::handle_descriptor( const Request& req, Response& res, strin
 
         Cancel cancel; // TODO: This should come from above
         file_descriptor = cache_client->get_descriptor( key_from_http_url(uri)
-                                                      , IndexType::btree
+                                                      , config.cache_index_type()
                                                       , cancel
                                                       , yield[ec]);
 
@@ -399,7 +432,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
           "<html>\n"
           "    <head>\n";
     if (_auto_refresh_enabled) {
-        ss << "      <meta http-equiv=\"refresh\" content=\"1\"/>\n";
+        ss << "      <meta http-equiv=\"refresh\" content=\"5\"/>\n";
     }
     ss << "      <style>\n"
           "        * {\n"
@@ -418,17 +451,11 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
           "      Verification of HTTPS content coming from the origin will be performed by your Ouinet client\n"
           "      using system-accepted Certification Authorities.</p>\n";
 
-    ss << ToggleInput{"Auto refresh",   "auto_refresh",   _auto_refresh_enabled};
-    ss << ToggleInput{"Origin access", "origin_access", config.is_origin_access_enabled()};
-    ss << ToggleInput{"Proxy access", "proxy_access", config.is_proxy_access_enabled()};
-    ss << ToggleInput{"Injector proxy", "injector_proxy", config.is_injector_access_enabled()};
-    ss << ToggleInput{"Distributed Cache",     "ipfs_cache",     config.is_cache_access_enabled()};
-
-    ss << "<br>\n";
-    ss << "<form action=\"/api/descriptor\" method=\"get\">\n"
-       << "    Query URI descriptor: <input name=\"uri\"/ placeholder=\"URI\" size=\"100\">\n"
-       << "    <input type=\"submit\" value=\"Submit\"/>\n"
-       << "</form>\n";
+    ss << ToggleInput{"<u>A</u>uto refresh",   "auto_refresh",   'a', _auto_refresh_enabled};
+    ss << ToggleInput{"<u>O</u>rigin access",  "origin_access",  'o', config.is_origin_access_enabled()};
+    ss << ToggleInput{"<u>P</u>roxy access",   "proxy_access",   'p', config.is_proxy_access_enabled()};
+    ss << ToggleInput{"<u>I</u>njector proxy", "injector_proxy", 'i', config.is_injector_access_enabled()};
+    ss << ToggleInput{"Distributed <u>C</u>ache", "ipfs_cache",  'c', config.is_cache_access_enabled()};
 
     ss << "<br>\n";
     ss << "Now: " << now_as_string()  << "<br>\n";
@@ -446,8 +473,22 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     if (cache_client) {
         ss << "        Our IPFS ID (IPNS): " << cache_client->ipfs_id() << "<br>\n";
         ss << "        <h2>Index</h2>\n";
-        ss << "        IPNS: " << cache_client->ipns() << "<br>\n";
-        ss << "        IPFS: <a href=\"index.html\">" << cache_client->ipfs() << "</a><br>\n";
+        ss << "        <a href=\"index.html\">List URI descriptors</a> known to client.\n"
+              "        Others may be available over the network.\n"
+              "        Please use the box below to query the descriptor of an arbitrary URI without fetching the associated content.<br>\n";
+
+        ss << "        <br>\n";
+        ss << "        <form action=\"/api/descriptor\" method=\"get\">\n"
+           << "            Query URI descriptor: <input name=\"uri\"/ placeholder=\"URI\" size=\"100\">\n"
+           << "        <input type=\"submit\" value=\"Submit\"/>\n"
+           << "        </form>\n";
+
+        auto bep44_pk = config.index_bep44_pub_key();
+        auto bep44_pk_s = bep44_pk ? util::bytes::to_hex(bep44_pk->serialize()) : "";
+        ss << "        <br>\n";
+        ss << "        BEP44 public key: " << bep44_pk_s << "<br>\n";
+        ss << "        B-tree IPNS: " << cache_client->ipns() << "<br>\n";
+        ss << "        B-tree IPFS: " << cache_client->ipfs() << "<br>\n";
     }
 
     ss << "    </body>\n"
@@ -500,13 +541,13 @@ Response ClientFrontEnd::serve( ClientConfig& config
         handle_ca_pem(req, res, ss, ca);
     } else if (path == "/index.html") {
         sys::error_code ec_;  // shouldn't throw, but just in case
-        handle_enumerate_index(req, res, ss, cache_client, yield[ec_]);
+        handle_enumerate_index(config, req, res, ss, cache_client, yield[ec_]);
     } else if (path == "/api/upload") {
         sys::error_code ec_;  // shouldn't throw, but just in case
         handle_upload(req, res, ss, cache_client, config, yield[ec_]);
     } else if (path == "/api/descriptor") {
         sys::error_code ec_;  // shouldn't throw, but just in case
-        handle_descriptor(req, res, ss, cache_client, config, yield[ec_]);
+        handle_descriptor(config, req, res, ss, cache_client, yield[ec_]);
     } else if (path == "/api/insert/bep44") {
         sys::error_code ec_;  // shouldn't throw, but just in case
         handle_insert_bep44(req, res, ss, cache_client, yield[ec_]);
