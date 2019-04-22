@@ -213,6 +213,8 @@ int main(int argc, const char** argv)
             {
                 char cbuf[n+1]; int rc = buffer.sgetn (cbuf, sizeof cbuf); cbuf[rc] = 0;
                 std::string str (cbuf, rc);
+                // Remove '\n' from the end of line
+                while (!str.empty() && *str.rbegin() == '\n') str = str.substr(0, str.size()-1);
                 boost::char_separator<char> sep {" "};
                 boost::tokenizer<boost::char_separator<char>> tokens {str, sep};
                 for (const auto& t : tokens) { cmd_toks.push_back(t); }
@@ -223,6 +225,8 @@ int main(int argc, const char** argv)
                     usage(std::cout, args[0]);
                     continue;
                 }
+                cerr << "pubkey key: \"" << cmd_toks[1] << "\"\n";
+                cerr << "key:        \"" << cmd_toks[2] << "\"\n";
                 GetCmd get_cmd;
                 get_cmd.public_key = *util::Ed25519PublicKey::from_hex(cmd_toks[1]);
                 get_cmd.dht_key = cmd_toks[2];
