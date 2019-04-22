@@ -218,7 +218,8 @@ private:
                 // check persisted entries again
                 // in case any of them is now ready to update.
                 WatchDog wd(_ios, chrono::seconds(15), [&]{ tout(); });
-                _has_entries.wait(tout, yield);
+                sys::error_code ec_;
+                _has_entries.wait(tout, yield[ec_]);
                 if (cancel) return;
                 continue;
             }
