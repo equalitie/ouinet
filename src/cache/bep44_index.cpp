@@ -9,6 +9,7 @@
 #include "../util/lru_cache.h"
 #include "../util/persistent_lru_cache.h"
 #include "../util/condition_variable.h"
+#include "../util/watch_dog.h"
 #include "../bittorrent/bencoding.h"
 #include "../bittorrent/dht.h"
 #include "../or_throw.h"
@@ -212,7 +213,12 @@ private:
             auto i = pick_entry_to_update();
 
             if (i == _lru->end()) {
-                _has_entries.wait(cancel, yield);
+                Cancel tout(cancel);
+                // Wait for new entries, but if none comes in a while,
+                // check persisted entries again
+                // in case any of them is now ready to update.
+                WatchDog wd(_ios, chrono::seconds(15), [&]{ tout(); });
+                _has_entries.wait(tout, yield);
                 if (cancel) return;
                 continue;
             }
