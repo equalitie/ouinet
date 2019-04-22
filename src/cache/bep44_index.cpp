@@ -268,7 +268,8 @@ private:
                     if (updated_hook) {
                         do_repub = updated_hook( *(loc.data.value.as_string())
                                                , *(dht_data.value.as_string())
-                                               , cancel, yield);
+                                               , cancel, yield[ec]);
+                        assert(!ec);  // should not propagate errors up
                         if (cancel) return;
                     }
                     // Only republish updated index entries that the hook accepted.
