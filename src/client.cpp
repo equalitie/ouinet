@@ -1105,8 +1105,8 @@ void Client::State::serve_request( GenericStream&& con
              , nocache_request_config),
 
         // Disable cache and always go to origin for this site.
-        Match( reqexpr::from_regex(target_getter, "https?://ident\\.me/.*")
-             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
+        //Match( reqexpr::from_regex(target_getter, "https?://ident\\.me/.*")
+        //     , {false, queue<fresh_channel>({fresh_channel::origin})} ),
 
         // Disable cache and always go to origin for these google sites.
         Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?google\\.com/complete/.*")
@@ -1150,14 +1150,14 @@ void Client::State::serve_request( GenericStream&& con
              , {false, queue<fresh_channel>({fresh_channel::origin})} ),
 
         // Disable cache and always go to proxy for this site.
-        Match( reqexpr::from_regex(target_getter, "https?://ifconfig\\.co/.*")
-             , {false, queue<fresh_channel>({fresh_channel::proxy})} ),
+        //Match( reqexpr::from_regex(target_getter, "https?://ifconfig\\.co/.*")
+        //     , {false, queue<fresh_channel>({fresh_channel::proxy})} ),
         // Force cache and default channels for this site.
-        Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example\\.com/.*")
-             , {true, queue<fresh_channel>()} ),
+        //Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example\\.com/.*")
+        //     , {true, queue<fresh_channel>()} ),
         // Force cache and particular channels for this site.
-        Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example\\.net/.*")
-             , {true, queue<fresh_channel>({fresh_channel::injector})} ),
+        //Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example\\.net/.*")
+        //     , {true, queue<fresh_channel>({fresh_channel::injector})} ),
     });
 
     auto connection_id = _next_connection_id++;
