@@ -25,19 +25,22 @@ namespace file_io = util::file_io;
 using Clock = std::chrono::steady_clock;
 using UpdatedHook = ClientIndex::UpdatedHook;
 
+static uint64_t ms_since_epoch(Clock::time_point d)
+{
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(d.time_since_epoch()).count();
+}
+
 //--------------------------------------------------------------------
 nlohmann::json entry_to_json( Clock::time_point t
                             , const string& key
                             , const bt::MutableDataItem& item)
 {
     using util::bytes::to_hex;
-    using namespace std::chrono;
-
-    uint64_t ms = duration_cast<milliseconds>(t.time_since_epoch()).count();
 
     return nlohmann::json {
         { "key"             , key                                  },
-        { "last_update"     , ms                                   },
+        { "last_update"     , ms_since_epoch(t)                    },
         { "public_key"      , to_hex(item.public_key.serialize())  },
         { "salt"            , to_hex(item.salt)                    },
         { "value"           , to_hex(bencoding_encode(item.value)) },
@@ -209,10 +212,17 @@ private:
 
         Cancel cancel(_cancel);
 
+        auto on_exit = defer([&] {
+            LOG_DEBUG("Bep44EntryUpdater exited");
+        });
+
         while (true) {
+            LOG_DEBUG("Bep44EntryUpdater start new round");
+
             auto i = pick_entry_to_update();
 
             if (i == _lru->end()) {
+                LOG_DEBUG("Bep44EntryUpdater nothing to update, waiting");
                 Cancel tout(cancel);
                 // Wait for new entries, but if none comes in a while,
                 // check persisted entries again
@@ -228,6 +238,8 @@ private:
 
             sys::error_code ec;
 
+            LOG_DEBUG("Bep44EntryUpdater looking up bep44m");
+
             auto dht_data = find_bep44m(_dht
                                        , loc.data.public_key
                                        , loc.data.salt
@@ -236,29 +248,25 @@ private:
 
             if (cancel) return;
 
-            stringstream log_msg;
-            if (logger.get_threshold() <= DEBUG) {
-                log_msg << "BEP44 index: update"
-                        << " salt=" << util::bytes::to_hex(loc.data.salt)
-                        << " ts1=" << duration_cast<milliseconds>(loc.last_update.time_since_epoch()).count()
-                        << ": ";
-            }
 
             Clock::time_point next_update;
             if (ec) {
+                LOG_DEBUG("Bep44EntryUpdater lookup failure ", ec.message());
+
                 if (ec == asio::error::not_found) {
-                    log_msg << "entry not found in DHT, putting";
                     ec = sys::error_code();
                     _dht.mutable_put(loc.data, cancel, yield[ec]);
-                    if (ec) log_msg << "; ";
                     if (cancel) return;
                 }
+
+                LOG_DEBUG("Bep44EntryUpdater bep44m put "
+                         , "result: ", ec.message()
+                         , "cancel: ", bool(cancel));
+
                 assert(!cancel || ec == asio::error::operation_aborted);
                 if (ec && ec != asio::error::not_found && ec != asio::error::operation_aborted) {
                     // Some network error which may affect other entries as well,
                     // so do not move to the next one, just retry later.
-                    log_msg << "DHT error, retry: ec=\"" << ec.message() << "\"";
-                    LOG_DEBUG(log_msg.str());
                     async_sleep(_ios, chrono::seconds(5), cancel, yield);
                     if (cancel) return;
                     continue;
@@ -267,11 +275,20 @@ private:
                 next_update = Clock::now();
             }
             else {
-                auto dht_seq = dht_data.sequence_number, loc_seq = loc.data.sequence_number;
+                auto dht_seq = dht_data.sequence_number
+                   , loc_seq = loc.data.sequence_number;
+
+                LOG_DEBUG("Bep44EntryUpdater lookup success"
+                         , " loc_seq=", loc_seq
+                         , " dht_seq=", dht_seq
+                         , " salt=", util::bytes::to_hex(loc.data.salt)
+                         , " ts1=", ms_since_epoch(loc.last_update)
+                         , " updated_hook=", bool(updated_hook));
+
                 if (dht_seq > loc_seq)
                 {
-                    log_msg << "newer entry found in DHT";
-                    bool do_repub(true);
+                    bool do_repub = true;
+
                     if (updated_hook) {
                         do_repub = updated_hook( *(loc.data.value.as_string())
                                                , *(dht_data.value.as_string())
@@ -279,13 +296,14 @@ private:
                         assert(!ec);  // should not propagate errors up
                         if (cancel) return;
                     }
+
+                    LOG_DEBUG("Bep44EntryUpdater do_repub:", do_repub);
+
                     // Only republish updated index entries that the hook accepted.
                     if (do_repub) {
                         loc.data = move(dht_data);
-                        log_msg << " (repub)";
-                    } else log_msg << " (norepub)";
-                } else log_msg << "older entry found in DHT";
-                log_msg << ": my_seq=" << loc_seq << " dht_seq=" << dht_seq;
+                    };
+                }
 
                 next_update = Clock::now() - chrono::minutes(15);
             }
@@ -294,11 +312,15 @@ private:
             // we update the `last_update` ts just to make sure
             // we don't end up checking the same item over and over.
             loc.last_update = next_update;
-            log_msg << "; ts2=" << duration_cast<milliseconds>(next_update.time_since_epoch()).count();
             ec = sys::error_code();
+
+            LOG_DEBUG( "Bep44EntryUpdater _lru->insert start"
+                     , " ts2=", ms_since_epoch(next_update));
+
             _lru->insert(i.key(), move(loc), cancel, yield[ec]);
-            if (ec) log_msg << "; ins failed: ec=\"" << ec.message() << "\"";
-            LOG_DEBUG(log_msg.str());
+
+            LOG_DEBUG( "Bep44EntryUpdater _lru->insert end"
+                     , " ec=", ec.message());
 
             if (cancel) return;
         }
