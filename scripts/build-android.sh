@@ -210,7 +210,7 @@ if [ ! -f "$sdkmanager" ]; then
         # https://developer.android.com/studio/index.html#command-tools
         wget "https://dl.google.com/android/repository/$toolsfile"
     fi
-    unzip "$toolsfile" -d "$SDK_DIR"
+    unzip -q "$toolsfile" -d "$SDK_DIR"
 fi
 
 # SDK packages needed by the different modes.
@@ -272,7 +272,7 @@ function maybe_install_ndk {
         if [ ! -f ${NDK_ZIP} ]; then
             wget https://dl.google.com/android/repository/${NDK_ZIP}
         fi
-        unzip ${NDK_ZIP}
+        unzip -q ${NDK_ZIP}
     fi
 }
 
@@ -331,7 +331,7 @@ function maybe_install_gradle {
                 wget https://services.gradle.org/distributions/$GRADLE_ZIP
             fi
             #TODO: Check SHA256
-            unzip $GRADLE_ZIP
+            unzip -q $GRADLE_ZIP
         fi
         export PATH="`pwd`/$GRADLE/bin:$PATH"
     fi
