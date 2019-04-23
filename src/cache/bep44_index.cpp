@@ -238,7 +238,7 @@ private:
 
             sys::error_code ec;
 
-            LOG_DEBUG("Bep44EntryUpdater looking up bep44m");
+            LOG_DEBUG("Bep44EntryUpdater looking up bep44m ", loc.url);
 
             auto dht_data = find_bep44m(_dht
                                        , loc.data.public_key
