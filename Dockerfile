@@ -33,3 +33,4 @@ RUN wget -q "https://downloads.sourceforge.net/project/boost/boost/1.67.0/boost_
          --with-regex \
          --with-iostreams \
          --prefix=/usr/local install
+ENV LANG=C.UTF-8
