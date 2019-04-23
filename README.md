@@ -14,12 +14,14 @@ The typical Ouinet *client* node setup consists of a web browser or other
 application using a special HTTP proxy or API provided by a dedicated program
 or library on the local machine.  When the client gets a request for content,
 it attempts to retrieve the resource using several mechanisms.  It tries to
-fetch the page from a distributed cache (like [IPFS][]), and if not available,
-it contacts a trusted *injector* server over a peer-to-peer routing system
-(like [I2P][]) and asks it to fetch the page and store it in the *distributed
-cache*.
+fetch the page from a *distributed cache* (like [IPFS][]) by looking up the
+content in a *distributed cache index* (like the [BitTorrent][] DHT), and if
+not available, it contacts a trusted *injector* server over a peer-to-peer
+routing system (like [I2P][]) and asks it to fetch the page and store it in
+the distributed cache.
 
 [IPFS]: https://ipfs.io/ "InterPlanetary File System"
+[BitTorrent]: https://www.bittorrent.org/
 [I2P]: https://geti2p.net/ "Invisible Internet Project"
 
 ![Ouinet request/response flow](./doc/request-response-flow.svg)
@@ -38,13 +40,15 @@ benefit from these advantages.  Ouinet integration provides any content
 creator the opportunity to use cooperative networking and storage for the
 delivery of their content to users around the world.
 
-**Warning:** Ouinet is still highly experimental.  Some features (like
+**Warning:** Ouinet is still **highly experimental**.  Some features (like
 peer-to-peer routing) may or may not not work smoothly depending on the
-different back end technologies.  Information about your browsing might be
-leaked to other participants in the network.  Running some components (like
+different back-end technologies, and random unexpected crashes may occur.
+Also, Ouinet is **not an anonymity tool**: information about your browsing
+might be leaked to other participants in the network, as well as the fact that
+your application is seeding particular content.  Running some components (like
 injector code) may turn your computer into an open web proxy, and other
 security or privacy-affecting issues might exist.  Please keep this in mind
-when using this software.
+when using this software and only assume reasonable risks.
 
 **Note:** The steps described below have only been tested to work on GNU/Linux
 on AMD64 platforms.  Building and testing Ouinet on your computer requires
@@ -311,8 +315,8 @@ populate its default environment file:
     $ cd /path/to/ouinet-injector
     $ cp /path/to/docker-compose.yml .
     $ echo OUINET_ROLE=injector >> .env
-    $ echo OUINET_VERSION=v0.0.5-docker3 >> .env
-    $ echo OUINET_MEM_LIMIT=4g >> .env
+    $ echo OUINET_VERSION=v0.1.0 >> .env
+    $ echo OUINET_MEM_LIMIT=6g >> .env
     $ sudo docker-compose --compatibility up
 
 ### Injector container
