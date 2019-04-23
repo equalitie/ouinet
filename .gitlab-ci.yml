@@ -23,6 +23,11 @@ build:
       - build/injector
       - build/test/test-*
     expire_in: 6h
+  cache:
+    key: single
+    paths:
+      - build/modules/*/go-workspace
+      - build/src/ouiservice/lampshade/go-workspace
   script:
     - mkdir build
     - cd build
