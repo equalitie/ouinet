@@ -418,7 +418,7 @@ function build_ouinet_libs {
           -DBOOST_ROOT="$BOOST_SOURCE" \
           -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
           ${ROOT}
-    make -j `nproc` VERBOSE=1
+    make -j `nproc`
     cd -
 
 add_library $DIR/build-ouinet/libclient.so
