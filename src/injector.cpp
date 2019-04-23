@@ -346,6 +346,7 @@ public:
                      , Cancel& cancel
                      , Yield yield)
     {
+        LOG_DEBUG("Injector inject_fresh begin (has injector:", bool(injector), ")");
         sys::error_code ec;
 
         auto rs_ = fetch_fresh(rq_, cancel, yield[ec]);
@@ -357,14 +358,20 @@ public:
         auto rs = util::to_cache_response(move(rs_));
 
         if (injector) {
+
             auto ins = injector->insert_content( insert_id, rq, rs
                                                , IndexType::bep44
                                                , true
                                                , yield[ec]);
 
+
             if (!ec) {
+                LOG_DEBUG("Injector new insertion: ", ins.desc_data);
                 rs = add_re_insertion_header_field( move(rs)
                                                   , move(ins.index_ins_data));
+            }
+            else {
+                LOG_DEBUG("Injector new insertion failed: ", ec.message());
             }
         }
 
