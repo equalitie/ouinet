@@ -17,6 +17,12 @@ build:
   stage: build
   tags:
     - docker
+  artifacts:
+    paths:
+      - build/client
+      - build/injector
+      - build/test/test-*
+    expire_in: 6h
   script:
     - mkdir build
     - cd build
