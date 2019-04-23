@@ -77,6 +77,7 @@ set(GOPATH "${CMAKE_CURRENT_BINARY_DIR}/go-workspace")
 externalproject_add(lampshade
     GIT_REPOSITORY https://github.com/getlantern/lampshade.git
     GIT_TAG bca9c93b5723449e98c5077b75fc8b31387339c6
+    DEPENDS golang
     CONFIGURE_COMMAND ""
     BUILD_COMMAND mkdir -p ${GOPATH}/src/github.com/getlantern
                && rsync -r ${CMAKE_CURRENT_BINARY_DIR}/lampshade-prefix/src/lampshade ${GOPATH}/src/github.com/getlantern
