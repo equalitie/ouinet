@@ -208,7 +208,7 @@ if [ ! -f "$sdkmanager" ]; then
     [ -d "$SDK_DIR/tools" ] || rm -rf "$SDK_DIR/tools"
     if [ ! -f "$toolsfile" ]; then
         # https://developer.android.com/studio/index.html#command-tools
-        wget "https://dl.google.com/android/repository/$toolsfile"
+        wget -nv "https://dl.google.com/android/repository/$toolsfile"
     fi
     unzip -q "$toolsfile" -d "$SDK_DIR"
 fi
@@ -270,7 +270,7 @@ function maybe_install_ndk {
     if [ ! -d "$NDK_DIR" ]; then
         echo "installing ndk..."
         if [ ! -f ${NDK_ZIP} ]; then
-            wget https://dl.google.com/android/repository/${NDK_ZIP}
+            wget -nv https://dl.google.com/android/repository/${NDK_ZIP}
         fi
         unzip -q ${NDK_ZIP}
     fi
@@ -328,7 +328,7 @@ function maybe_install_gradle {
         if [ ! -d "$GRADLE" ]; then
             if [ ! -f $GRADLE_ZIP ]; then
                 echo "downloading gradle..."
-                wget https://services.gradle.org/distributions/$GRADLE_ZIP
+                wget -nv https://services.gradle.org/distributions/$GRADLE_ZIP
             fi
             #TODO: Check SHA256
             unzip -q $GRADLE_ZIP
@@ -382,7 +382,7 @@ function build_openssl {
 function maybe_install_openssl {
     if [ ! -d "$SSL_DIR" ]; then
         if [ ! -f openssl-${SSL_V}.tar.gz ]; then
-            wget https://www.openssl.org/source/openssl-${SSL_V}.tar.gz
+            wget -nv https://www.openssl.org/source/openssl-${SSL_V}.tar.gz
         fi
         tar xf openssl-${SSL_V}.tar.gz
         (cd $SSL_DIR && build_openssl)
