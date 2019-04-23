@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     rsync \
     texinfo \
+    virtualenv \
     wget \
     zlib1g-dev \
  && rm -rf /var/lib/apt/lists/*
