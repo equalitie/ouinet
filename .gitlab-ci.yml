@@ -22,3 +22,28 @@ build:
     - cd build
     - cmake ..
     - make -j `nproc`
+
+unit-test:
+  stage: test
+  tags:
+    - docker
+  script:
+    - export LD_LIBRARY_PATH=/usr/local/lib
+    - ./build/test/test-cache                --log_level=test_suite
+    - ./build/test/test-wait-condition       --log_level=test_suite
+    - ./build/test/test-bittorrent           --log_level=test_suite
+    - ./build/test/test-logger               --log_level=test_suite
+    - ./build/test/test-http-util            --log_level=test_suite
+    - ./build/test/test-persistent-lru-cache --log_level=test_suite
+
+integration-test:
+  stage: test
+  tags:
+    - docker
+  script:
+    - export LD_LIBRARY_PATH=/usr/local/lib
+    - virtualenv .venv
+    - . .venv/bin/activate
+    - pip install twisted
+    - export OUINET_BUILD_DIR=$PWD/build
+    - ./scripts/run_integration_tests.sh
