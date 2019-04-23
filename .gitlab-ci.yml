@@ -29,7 +29,7 @@ build:
       - build/modules/*/go-workspace
       - build/src/ouiservice/lampshade/go-workspace
   script:
-    - mkdir build
+    - mkdir -p build
     - cd build
     - cmake ..
     - make -j `nproc`
