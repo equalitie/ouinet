@@ -264,7 +264,8 @@ important parameters, so you may want to stop it (see above) and use the
   - If the injector endpoint uses TLS, set `injector-tls-cert-file` to
     `/var/opt/ouinet/client/ssl-inj-cert.pem` and copy the injector's TLS
     certificate to that file.
-  - Set the IPNS ID of the cache index in option `index-ipns-id`.
+  - Set the BEP44 public key of the cache index in option
+    `index-bep44-public-key`.
 
 After you have set up your client's configuration, you can **restart it**.
 The client's HTTP proxy endpoint should be available to the host at
@@ -355,7 +356,7 @@ If you ever need to reset and empty the injector's cache index for some reason
  4. In the container, run:
 
         # cd /mnt
-        # rm injector/ipfs/ipfs_cache_index.*
+        # rm -f injector/ipfs/ipfs_cache_index.*
         # alias ipfs='./ipfs -Lc injector/ipfs'
         # ipfs pin ls --type recursive | cut -d' ' -f1 | xargs ipfs pin rm
         # ipfs repo gc
@@ -418,7 +419,7 @@ To perform some tests using a Ouinet client and an existing injector, you
 first need to know the *injector endpoint* and *credentials* (if needed), and
 a *distributed cache index*.  These use to be respectively an IP address and
 port (for testing, otherwise an I2P peer identity), a `<USER>:<PASSWORD>`
-string, and an IPNS ID.
+string, and a BEP44 public key.
 
 You need to configure the Ouinet client to use the aforementioned parameters.
 If you have a local build, create a copy of the `repos/client` repository
@@ -436,7 +437,7 @@ replace the values with your own:
 
     injector-ep = tcp:127.0.0.1:7070
     injector-credentials = injector_user:injector_password
-    index-ipns-id = Qm0123456789abcdefghijklmnopqrstuvwxyzABCDEFGI
+    index-bep44-public-key = 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
 
 All the steps above only need to be done once.
 
@@ -513,19 +514,20 @@ configuration tools:
     client and (B) seed the content to the cache.  The client will also seed
     the content (along with parts of the cache index).
 
-  - The last seen version of the published *cache index* (an IPFS hash) is
-    also shown.  It is likely that at first it shall be empty, which indicates
-    that none has been downloaded yet.  The download may take from a couple of
-    seconds up to about three minutes (e.g. when starting the client).  The
-    page refreshes itself regularly so once the client downloads the index, it
-    should display automatically.
+  - If using the IPFS-based B-tree index (not the default), the last seen
+    version of the published *cache index* (an IPFS hash) is also shown.  It
+    is likely that at first it is empty, which indicates that none has been
+    downloaded yet.  The download may take from a couple of seconds up to
+    about three minutes (e.g. when starting the client).  The page refreshes
+    itself regularly so once the client downloads the index, it should display
+    automatically.
 
-After visiting a page with the Injector mechanism enabled and waiting for a
-new index to be published and downloaded by the client (the same one or a
-different one), you should be able to disable all request mechanisms except
-for the Cache, clear the browser's cached data, point the browser back to the
-same page and still get its contents from the distributed cache even when the
-origin server is completely unreachable.
+After visiting a page with the Origin mechanism disabled and Injector
+mechanism enabled, and waiting for a short while, you should be able to
+disable all request mechanisms except for the Cache, clear the browser's
+cached data, point the browser back to the same page and still get its
+contents from the distributed cache even when the origin server is completely
+unreachable.
 
 ## Android library and demo client
 
@@ -612,9 +614,10 @@ can tune the script to use them:
 ### Setting up the demo client
 
 The Android app has user menus for specifying the injector's endpoint,
-injector's credentials, and the cache index IPNS ID, but that is very tedious
-to do.  Because of that, the app also gives you an option to read QR codes.
-To generate one, create a text with these values:
+injector's credentials, and the B-tree cache index IPNS ID (BEP44 index not
+yet supported), but that is very tedious to do.  Because of that, the app also
+gives you an option to read QR codes.  To generate one, create a text with
+these values:
 
     injector=<INJECTOR ENDPOINT>
     ipns=<CACHE INDEX IPNS ID>
@@ -708,7 +711,8 @@ Then add a private member to your `MainActivity` class:
 
     private Ouinet _ouinet;
 
-And in its `OnCreate` method initiate the Ouinet object:
+And in its `OnCreate` method initiate the Ouinet object (using the B-tree
+cache index):
 
     _ouinet = new Ouinet(this);
 
