@@ -25,7 +25,7 @@ public:
     // usable for further processing (e.g. storage or publishing).
     // It should *not* propagate an error code.
     using UpdatedHook = std::function<bool( std::string old, std::string new_
-                                          , Cancel&, asio::yield_context) noexcept>;
+                                          , Cancel&, asio::yield_context)>;
     virtual void updated_hook(UpdatedHook) {
         throw std::logic_error("not implemented");
     };
