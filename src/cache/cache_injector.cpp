@@ -81,8 +81,8 @@ CacheInjector::CacheInjector
                                     , (path_to_repo/"ipfs").native()
                                     , asio_ipfs::node::config{
                                           .online       = true,
-                                          .low_water    = 400,
-                                          .high_water   = 600,
+                                          .low_water    = 600,
+                                          .high_water   = 900,
                                           .grace_period = 20
                                       }))
     , _bt_dht(move(bt_dht))  // used by either B-tree over BEP44, or BEP44
