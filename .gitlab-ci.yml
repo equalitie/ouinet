@@ -29,6 +29,10 @@ build:
       - build/client
       - build/injector
       - build/test/test-*
+      - build/gpg_error/out/lib/libgpg-error.so*
+      - build/gcrypt/src/gcrypt/src/.libs/libgcrypt.so*
+      - build/modules/asio-ipfs/ipfs_bindings/libipfs_bindings.so
+      - build/src/ouiservice/lampshade/lampshade_bindings/liblampshade_bindings.so
     expire_in: 6h
   cache:
     key: single
@@ -59,9 +63,9 @@ integration-test:
   tags:
     - docker
   script:
-    - export LD_LIBRARY_PATH=/usr/local/lib
     - virtualenv .venv
     - . .venv/bin/activate
     - pip install twisted
+    - export LD_LIBRARY_PATH=/usr/local/lib:$PWD/build/gcrypt/src/gcrypt/src/.libs:$PWD/build/gpg_error/out/lib:$PWD/build/modules/asio-ipfs/ipfs_bindings:$PWD/build/src/ouiservice/lampshade/lampshade_bindings
     - export OUINET_BUILD_DIR=$PWD/build
     - ./scripts/run_integration_tests.sh
