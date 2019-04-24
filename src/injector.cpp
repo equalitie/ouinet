@@ -389,9 +389,11 @@ public:
 
     bool fetch( GenericStream& con
               , const Request& rq_
-              , Cancel& cancel
+              , Cancel& cancel_
               , Yield yield)
     {
+        Cancel cancel(cancel_);
+
         WatchDog wd(ios, chrono::minutes(3), [&] { cancel(); });
 
         bool keep_alive = rq_.keep_alive();
