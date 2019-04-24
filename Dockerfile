@@ -41,7 +41,7 @@ RUN wget -q "https://downloads.sourceforge.net/project/boost/boost/1.67.0/boost_
 # This version is a recommendation and this file has been tested to work for it,
 # but you may attempt to build other versions by overriding this argument.
 # Also see `OUINET_DOCKER_VERSION` below.
-ARG OUINET_VERSION=v0.0.34
+ARG OUINET_VERSION=v0.0.35
 RUN git clone --recursive -b "$OUINET_VERSION" https://github.com/equalitie/ouinet.git
 WORKDIR /opt/ouinet
 # The C.UTF-8 locale (which is always available in Debian)
