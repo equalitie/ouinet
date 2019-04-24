@@ -20,7 +20,6 @@ namespace ouinet { namespace bittorrent { class MainlineDht; class MutableDataIt
 namespace ouinet {
 
 class Bep44InjectorIndex;
-class BTreeInjectorIndex;
 class Publisher;
 class Scheduler;
 class Descriptor;
@@ -44,7 +43,6 @@ private:
     CacheInjector( boost::asio::io_service&
                  , util::Ed25519PrivateKey bt_privkey
                  , fs::path path_to_repo
-                 , bool enable_btree
                  , std::unique_ptr<bittorrent::MainlineDht>
                  , std::unique_ptr<Bep44InjectorIndex>);
 
@@ -53,8 +51,6 @@ public:
     build( boost::asio::io_service&
          , util::Ed25519PrivateKey bt_privkey
          , fs::path path_to_repo
-         , bool enable_btree
-         , bool enable_bep44
          , unsigned int bep44_index_capacity
          , Cancel&
          , boost::asio::yield_context);
@@ -116,7 +112,6 @@ private:
     std::unique_ptr<asio_ipfs::node> _ipfs_node;
     std::unique_ptr<bittorrent::MainlineDht> _bt_dht;
     std::unique_ptr<Publisher> _publisher;
-    std::unique_ptr<BTreeInjectorIndex> _btree_index;
     std::unique_ptr<Bep44InjectorIndex> _bep44_index;
     const unsigned int _concurrency = 8;
     std::unique_ptr<Scheduler> _scheduler;

@@ -7,7 +7,6 @@
 #include "http_desc.h"
 
 #include <asio_ipfs.h>
-#include "btree_index.h"
 #include "bep44_index.h"
 #include "descidx.h"
 #include "publisher.h"
@@ -25,8 +24,6 @@ namespace bt = ouinet::bittorrent;
 unique_ptr<CacheInjector> CacheInjector::build( boost::asio::io_service& ios
                                               , util::Ed25519PrivateKey bt_privkey
                                               , fs::path path_to_repo
-                                              , bool enable_btree
-                                              , bool enable_bep44
                                               , unsigned int bep44_index_capacity
                                               , Cancel& cancel
                                               , boost::asio::yield_context yield)
@@ -41,14 +38,12 @@ unique_ptr<CacheInjector> CacheInjector::build( boost::asio::io_service& ios
 
     unique_ptr<Bep44InjectorIndex> bep44_index;
 
-    if (enable_bep44) {
-        bep44_index = Bep44InjectorIndex::build(*bt_dht
-                                               , bt_privkey
-                                               , path_to_repo / "bep44-index"
-                                               , bep44_index_capacity
-                                               , cancel
-                                               , yield[ec]);
-    }
+    bep44_index = Bep44InjectorIndex::build(*bt_dht
+                                           , bt_privkey
+                                           , path_to_repo / "bep44-index"
+                                           , bep44_index_capacity
+                                           , cancel
+                                           , yield[ec]);
 
     assert(!cancel || ec == asio::error::operation_aborted);
     if (cancel) ec = asio::error::operation_aborted;
@@ -57,7 +52,6 @@ unique_ptr<CacheInjector> CacheInjector::build( boost::asio::io_service& ios
     Ret ci(new CacheInjector( ios
                             , bt_privkey
                             , path_to_repo
-                            , enable_btree
                             , move(bt_dht)
                             , move(bep44_index)));
 
@@ -74,7 +68,6 @@ CacheInjector::CacheInjector
         ( asio::io_service& ios
         , util::Ed25519PrivateKey bt_privkey
         , fs::path path_to_repo
-        , bool enable_btree
         , unique_ptr<bt::MainlineDht> bt_dht
         , unique_ptr<Bep44InjectorIndex> bep44_index)
     : _ipfs_node(new asio_ipfs::node( ios
@@ -89,12 +82,6 @@ CacheInjector::CacheInjector
     , _bep44_index(move(bep44_index))
     , _scheduler(new Scheduler(ios, _concurrency))
 {
-    assert((enable_btree || _bep44_index) && "At least one index type must be enabled");
-
-    if (enable_btree) {
-        _publisher.reset(new Publisher(*_ipfs_node, *_bt_dht, bt_privkey));
-        _btree_index.reset(new BTreeInjectorIndex(*_ipfs_node, *_publisher, path_to_repo));
-    }
 }
 
 string CacheInjector::ipfs_id() const
@@ -105,7 +92,6 @@ string CacheInjector::ipfs_id() const
 InjectorIndex* CacheInjector::get_index(IndexType index_type) const
 {
     switch (index_type) {
-        case IndexType::btree: return _btree_index.get();
         case IndexType::bep44: return _bep44_index.get();
     }
 

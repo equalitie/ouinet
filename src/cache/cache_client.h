@@ -28,7 +28,6 @@ public:
     // constructing asio_ipfs::node takes some time.
     static std::unique_ptr<CacheClient>
     build ( boost::asio::io_service&
-          , std::string ipns
           , boost::optional<util::Ed25519PublicKey> bt_pubkey
           , fs::path path_to_repo
           , bool autoseed_updated
@@ -74,23 +73,17 @@ public:
                                     , Cancel&
                                     , asio::yield_context);
 
-    void set_ipns(std::string ipns);
-
     std::string ipfs_id() const;
 
-    std::string ipns() const;
     std::string ipfs() const;
 
     void wait_for_ready(Cancel&, boost::asio::yield_context) const;
 
     ~CacheClient();
 
-    const BTree* get_btree() const;
-
 private:
     // Private, use the static `build` function instead
     CacheClient( std::unique_ptr<asio_ipfs::node>
-               , std::string ipns
                , boost::optional<util::Ed25519PublicKey> bt_pubkey
                , std::unique_ptr<bittorrent::MainlineDht>
                , std::unique_ptr<Bep44ClientIndex>
@@ -103,7 +96,6 @@ private:
     fs::path _path_to_repo;
     std::unique_ptr<asio_ipfs::node> _ipfs_node;
     std::unique_ptr<bittorrent::MainlineDht> _bt_dht;
-    std::unique_ptr<BTreeClientIndex> _btree_index;
     std::unique_ptr<Bep44ClientIndex> _bep44_index;
 };
 

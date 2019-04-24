@@ -132,9 +132,6 @@ public:
 
            // Cache options
            ("disable-cache", "Disable all cache operations (even initialization)")
-           ("cache-index"
-            , po::value<string>()->default_value("bep44")
-            , "Cache index to use, can be either \"bep44\" or \"btree\"")
            ("index-ipns-id"
             , po::value<string>()->default_value("")
             , "Index ID for the IPFS IPNS subsystem")
@@ -169,8 +166,6 @@ public:
         return desc;
     }
 
-    IndexType cache_index_type() const { return _cache_index_type; }
-
     bool cache_enabled() const { return !_disable_cache; }
 
     bool is_cache_access_enabled() const { return !_disable_cache_access; }
@@ -202,7 +197,6 @@ private:
     bool _disable_proxy_access = false;
     bool _disable_injector_access = false;
     asio::ip::tcp::endpoint _front_end_endpoint;
-    IndexType _cache_index_type = IndexType::btree;
 
     boost::posix_time::time_duration _max_cached_age
         = boost::posix_time::hours(7*24);  // one week
@@ -368,25 +362,11 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         _index_bep44_capacity = vm["index-bep44-capacity"].as<unsigned int>();
     }
 
-    if (vm.count("cache-index")) {
-        auto type = vm["cache-index"].as<string>();
-
-        if (type == "btree") {
-            _cache_index_type = IndexType::btree;
-        }
-        else if (type == "bep44") {
-            _cache_index_type = IndexType::bep44;
-        }
-        else {
-            throw std::runtime_error("Invalid value for --cache-index");
-        }
-    }
-
     if (vm.count("disable-cache")) {
         _disable_cache = true;
     }
 
-    if (!_disable_cache && _cache_index_type == IndexType::bep44 && !_index_bep44_pubkey) {
+    if (!_disable_cache && !_index_bep44_pubkey) {
         throw std::runtime_error("BEP44 index selected but no injector BEP44 public key specified");
     }
 

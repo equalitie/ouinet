@@ -10,10 +10,9 @@
 
 namespace ouinet {
 
-enum class IndexType { btree, bep44 };
+enum class IndexType { bep44 };
 
 static const std::map<IndexType, std::string> IndexName = {
-    {IndexType::btree, "Btree"},
     {IndexType::bep44, "BEP44"}
 };
 

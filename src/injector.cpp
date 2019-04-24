@@ -540,7 +540,6 @@ private:
         // (the `desc_data` field is set to the empty string).
         auto inject = [
             rq, rs, id = insert_id,
-            index_type = config.cache_index_type(),
             injector = injector.get()
         ] (boost::asio::yield_context yield) mutable
           -> CacheInjector::InsertionResult {
@@ -550,7 +549,7 @@ private:
 
             sys::error_code ec;
             auto ret = injector->insert_content( id, rq, move(rs)
-                                               , index_type
+                                               , IndexType::bep44
                                                , true
                                                , yield[ec]);
 
@@ -601,11 +600,9 @@ private:
     template<class Rs>
     Rs add_re_insertion_header_field(Rs&& rs, string&& index_ins_data)
     {
-        auto index_type = config.cache_index_type();
-
         // Add Base64-encoded reinsertion data (if any).
         if (index_ins_data.length() > 0) {
-            rs.set( http_::response_insert_hdr_pfx + IndexName.at(index_type)
+            rs.set( http_::response_insert_hdr_pfx + IndexName.at(IndexType::bep44)
                   , util::base64_encode(index_ins_data));
         }
 
@@ -806,16 +803,11 @@ unique_ptr<CacheInjector> build_cache( asio::io_service& ios
 {
     auto bep44_privk = config.index_bep44_private_key();
 
-    auto enable_btree = config.cache_index_type() == IndexType::btree;
-    auto enable_bep44 = config.cache_index_type() == IndexType::bep44;
-
     sys::error_code ec;
 
     auto cache_injector = CacheInjector::build( ios
                                               , bep44_privk
                                               , config.repo_root()
-                                              , enable_btree
-                                              , enable_bep44
                                               , config.index_bep44_capacity()
                                               , cancel
                                               , yield[ec]);

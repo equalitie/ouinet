@@ -1,6 +1,5 @@
 #include <asio_ipfs.h>
 #include "cache_client.h"
-#include "btree_index.h"
 #include "bep44_index.h"
 #include "cache_entry.h"
 #include "descidx.h"
@@ -24,7 +23,6 @@ using boost::optional;
 
 unique_ptr<CacheClient>
 CacheClient::build( asio::io_service& ios
-                  , string ipns
                   , optional<util::Ed25519PublicKey> bt_pubkey
                   , fs::path path_to_repo
                   , bool autoseed_updated
@@ -82,7 +80,6 @@ CacheClient::build( asio::io_service& ios
     }
 
     return ClientP(new CacheClient( move(ipfs_node)
-                                  , move(ipns)
                                   , std::move(bt_pubkey)
                                   , std::move(bt_dht)
                                   , std::move(bep44_index)
@@ -92,7 +89,6 @@ CacheClient::build( asio::io_service& ios
 
 // private
 CacheClient::CacheClient( std::unique_ptr<asio_ipfs::node> ipfs_node
-                        , string ipns
                         , optional<util::Ed25519PublicKey> bt_pubkey
                         , unique_ptr<bittorrent::MainlineDht> bt_dht
                         , unique_ptr<Bep44ClientIndex> bep44_index
@@ -137,14 +133,6 @@ CacheClient::CacheClient( std::unique_ptr<asio_ipfs::node> ipfs_node
         return !ec;
     });
 
-    if (!ipns.empty()) {
-        _btree_index.reset(new BTreeClientIndex( *_ipfs_node
-                                               , ipns
-                                               , *_bt_dht
-                                               , bt_pubkey
-                                               , _path_to_repo));
-    }
-
     // Setup hooks.
     // Since indexes may start working right after construction,
     // setting hooks like this leaves a gap for
@@ -152,13 +140,6 @@ CacheClient::CacheClient( std::unique_ptr<asio_ipfs::node> ipfs_node
     // It is done like this to be able to create indexes in `build`
     // while retaining ownership of the IPFS node object here.
     _bep44_index->updated_hook(move(updated_hook));
-}
-
-const BTree* CacheClient::get_btree() const
-{
-    if (!_ipfs_node) return nullptr;
-    if (!_btree_index) return nullptr;
-    return _btree_index->get_btree();
 }
 
 string CacheClient::ipfs_add(const string& data, asio::yield_context yield)
@@ -184,7 +165,6 @@ string CacheClient::insert_mapping( const boost::string_view target
 ClientIndex* CacheClient::get_index(IndexType index_type)
 {
     switch (index_type) {
-        case IndexType::btree: return _btree_index.get();
         case IndexType::bep44: return _bep44_index.get();
     }
 
@@ -237,28 +217,10 @@ CacheClient::get_content( const string& key
         ( desc_data, IPFS_LOAD_FUNC(*_ipfs_node), cancel, yield);
 }
 
-void CacheClient::set_ipns(std::string ipns)
-{
-    assert(0 && "TODO");
-    //_btree_index.reset(new ClientIndex(*_ipfs_node, _path_to_repo, move(ipns)));
-}
-
 std::string CacheClient::ipfs_id() const
 {
     assert(_ipfs_node);
     return _ipfs_node->id();
-}
-
-string CacheClient::ipns() const
-{
-    if (!_btree_index) return {};
-    return _btree_index->ipns();
-}
-
-string CacheClient::ipfs() const
-{
-    if (!_btree_index) return {};
-    return _btree_index->ipfs();
 }
 
 void

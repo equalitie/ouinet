@@ -58,7 +58,6 @@ stages:
 
           ./build/test/test-cache                --log_level=test_suite
           ./build/test/test-wait-condition       --log_level=test_suite
-          ./build/test/test-btree                --log_level=test_suite
           ./build/test/test-bittorrent           --log_level=test_suite
           ./build/test/test-logger               --log_level=test_suite
           ./build/test/test-http-util            --log_level=test_suite

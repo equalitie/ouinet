@@ -61,9 +61,6 @@ public:
     unsigned int index_bep44_capacity() const
     { return _index_bep44_capacity; }
 
-    IndexType cache_index_type() const
-    { return _cache_index_type; }
-
     bool cache_enabled() const { return !_disable_cache; }
 
 private:
@@ -85,7 +82,6 @@ private:
     std::string _credentials;
     util::Ed25519PrivateKey _index_bep44_private_key;
     unsigned int _index_bep44_capacity;
-    IndexType _cache_index_type = IndexType::btree;
     bool _disable_cache = false;
 };
 
@@ -128,9 +124,6 @@ InjectorConfig::options_description()
         ("seed-content"
          , po::value<bool>()->default_value(false)
          , "Seed the content instead of only signing it")
-        ("cache-index"
-         , po::value<string>()->default_value("btree")
-         , "Cache index to use, can be either \"btree\" or \"bep44\"")
         ("index-bep44-private-key", po::value<string>()
          , "Index private key for the BitTorrent BEP44 subsystem")
         // By default, it is not desirable that the injector actively republishes BEP44 entries.
@@ -252,20 +245,6 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
     if (vm.count("index-bep44-capacity")) {
         _index_bep44_capacity = vm["index-bep44-capacity"].as<unsigned int>();
-    }
-
-    if (vm.count("cache-index")) {
-        auto type = vm["cache-index"].as<string>();
-
-        if (type == "btree") {
-            _cache_index_type = IndexType::btree;
-        }
-        else if (type == "bep44") {
-            _cache_index_type = IndexType::bep44;
-        }
-        else {
-            throw std::runtime_error("Invalid value for --cache-index");
-        }
     }
 
     if (vm.count("disable-cache")) {

@@ -79,16 +79,6 @@ class OuinetTests(TestCase):
 
         return injector
 
-    def run_ipfs_injector(self, injector_args,
-                          deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached):
-        config = self._cache_injector_config(TestFixtures.IPFS_CACHE_TIMEOUT,
-                                             [TestFixtures.IPNS_ID_ANNOUNCE_REGEX,
-                                              TestFixtures.IPFS_REQUEST_CACHED_REGEX],
-                                             ["--cache-index", "btree"] + injector_args)
-        return self._run_cache_injector(
-            OuinetIPFSCacheInjector, config,
-            [deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached])
-
     def run_bep44_injector(self, injector_args,
                            deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached):
         config = self._cache_injector_config(TestFixtures.BEP44_CACHE_TIMEOUT,
@@ -302,16 +292,6 @@ class OuinetTests(TestCase):
 
         response_body = yield readBody(defered_response)
         self.assertEquals(response_body, content)
-
-    # Disabled because it no longer reflects how the injector works. I.e. while
-    # previously the injector was injecting resources into IPFS, it no longer does
-    # that (to preserve resources to be able to serve more clients).
-    @inlineCallbacks
-    def _test_ipfs_cache(self):
-        logging.debug("################################################")
-        logging.debug("test_ipfs_cache");
-        logging.debug("################################################")
-        return self._test_cache(self.run_ipfs_injector, self.run_tcp_client, self.run_ipfs_client)
 
     # Disabled for the same reason as the above test.
     @inlineCallbacks
