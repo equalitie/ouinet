@@ -13,6 +13,8 @@ RUN apt-get update && apt-get install -y \
     libtool \
     libunistring-dev \
     pkg-config \
+    python \
+    python-dev \
     rsync \
     texinfo \
     virtualenv \
