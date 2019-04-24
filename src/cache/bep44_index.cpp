@@ -259,9 +259,9 @@ private:
                     if (cancel) return;
                 }
 
-                LOG_DEBUG("Bep44EntryUpdater bep44m put "
-                         , "result: ", ec.message()
-                         , "cancel: ", bool(cancel));
+                LOG_DEBUG("Bep44EntryUpdater bep44m put"
+                         , " result: ", ec.message()
+                         , " cancel: ", bool(cancel));
 
                 assert(!cancel || ec == asio::error::operation_aborted);
                 if (ec && ec != asio::error::not_found && ec != asio::error::operation_aborted) {
