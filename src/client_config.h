@@ -7,7 +7,6 @@
 #include "namespaces.h"
 #include "util.h"
 #include "util/crypto.h"
-#include "cache/index.h"
 #include "increase_open_file_limit.h"
 #include "endpoint.h"
 

@@ -168,7 +168,6 @@ void ClientFrontEnd::handle_descriptor( const ClientConfig& config
 
         Cancel cancel; // TODO: This should come from above
         file_descriptor = cache_client->get_descriptor( key_from_http_url(uri)
-                                                      , IndexType::bep44
                                                       , cancel
                                                       , yield[ec]);
 
@@ -252,7 +251,6 @@ void ClientFrontEnd::handle_insert_bep44( const Request& req, Response& res, str
         if (!ec)
             key = cache_client->insert_mapping( url
                                               , move(body)
-                                              , IndexType::bep44
                                               , cancel
                                               , yield[ec]);
 

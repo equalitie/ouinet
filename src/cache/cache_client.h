@@ -9,7 +9,6 @@
 #include <string>
 
 #include "cache_entry.h"
-#include "index.h"
 #include "../namespaces.h"
 
 namespace asio_ipfs { class node; }
@@ -19,7 +18,6 @@ namespace ouinet { class BTree; }
 
 namespace ouinet {
 
-class BTreeClientIndex;
 class Bep44ClientIndex;
 
 class CacheClient {
@@ -49,7 +47,6 @@ public:
     // Return a printable representation of the key resulting from insertion.
     std::string insert_mapping( const boost::string_view target
                               , const std::string&
-                              , IndexType
                               , Cancel&
                               , boost::asio::yield_context);
 
@@ -60,12 +57,10 @@ public:
     // correspoinding to the `key`, when found, fetch the content corresponding
     // to that IPFS_ID from IPFS.
     std::pair<std::string, CacheEntry> get_content( const std::string& key
-                                                  , IndexType
                                                   , Cancel&
                                                   , boost::asio::yield_context);
 
     std::string get_descriptor( const std::string& key
-                              , IndexType
                               , Cancel&
                               , asio::yield_context);
 
@@ -90,13 +85,11 @@ private:
                , fs::path path_to_repo
                , bool autoseed_updated);
 
-    ClientIndex* get_index(IndexType);
-
 private:
     fs::path _path_to_repo;
     std::unique_ptr<asio_ipfs::node> _ipfs_node;
     std::unique_ptr<bittorrent::MainlineDht> _bt_dht;
-    std::unique_ptr<Bep44ClientIndex> _bep44_index;
+    std::unique_ptr<Bep44ClientIndex> _index;
 };
 
 } // namespace

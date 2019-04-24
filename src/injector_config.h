@@ -1,7 +1,6 @@
 #pragma once
 
 #include "util/crypto.h"
-#include "cache/index.h"
 
 namespace ouinet {
 

@@ -360,7 +360,6 @@ public:
         if (injector) {
 
             auto ins = injector->insert_content( insert_id, rq, rs
-                                               , IndexType::bep44
                                                , true
                                                , yield[ec]);
 
@@ -549,7 +548,6 @@ private:
 
             sys::error_code ec;
             auto ret = injector->insert_content( id, rq, move(rs)
-                                               , IndexType::bep44
                                                , true
                                                , yield[ec]);
 
@@ -602,7 +600,7 @@ private:
     {
         // Add Base64-encoded reinsertion data (if any).
         if (index_ins_data.length() > 0) {
-            rs.set( http_::response_insert_hdr_pfx + IndexName.at(IndexType::bep44)
+            rs.set( http_::response_insert_hdr
                   , util::base64_encode(index_ins_data));
         }
 

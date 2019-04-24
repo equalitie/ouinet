@@ -40,7 +40,7 @@ static const std::string response_descriptor_link_hdr = header_prefix + "Descrip
 
 // Also, this is added with Base64-encoded, index-specific data to help reinsert.
 // The name of the index is added at the end of the header name.
-static const std::string response_insert_hdr_pfx = header_prefix + "Insert-";
+static const std::string response_insert_hdr = header_prefix + "Insert-BEP44";
 
 static const std::string response_error_hdr = header_prefix + "Error";
 

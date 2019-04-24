@@ -79,7 +79,7 @@ CacheInjector::CacheInjector
                                           .grace_period = 20
                                       }))
     , _bt_dht(move(bt_dht))  // used by either B-tree over BEP44, or BEP44
-    , _bep44_index(move(bep44_index))
+    , _index(move(bep44_index))
     , _scheduler(new Scheduler(ios, _concurrency))
 {
 }
@@ -89,28 +89,16 @@ string CacheInjector::ipfs_id() const
     return _ipfs_node->id();
 }
 
-InjectorIndex* CacheInjector::get_index(IndexType index_type) const
-{
-    switch (index_type) {
-        case IndexType::bep44: return _bep44_index.get();
-    }
-
-    return nullptr;
-}
-
 CacheInjector::InsertionResult
 CacheInjector::insert_content( const string& id
                              , const Request& rq
                              , Response rs
-                             , IndexType index_type
                              , bool perform_io
                              , asio::yield_context yield)
 {
     Cancel cancel(_cancel);
 
-    auto index = get_index(index_type);
-
-    if (!index)
+    if (!_index)
         return or_throw<InsertionResult>( yield
                                         , asio::error::operation_not_supported);
 
@@ -157,7 +145,7 @@ CacheInjector::insert_content( const string& id
     // Store descriptor
     auto key = key_from_http_req(rq);
     auto cid_insdata = descriptor::put_into_index
-        (key, desc, *index, ipfs_add, perform_io, yield[ec]);
+        (key, desc, *_index, ipfs_add, perform_io, yield[ec]);
 
     if (cancel) ec = asio::error::operation_aborted;
     if (ec) return or_throw<InsertionResult>(yield, ec);
@@ -184,30 +172,23 @@ CacheInjector::get_bep44m( boost::string_view key
                          , Cancel& cancel
                          , boost::asio::yield_context yield)
 {
-    auto index = get_index(IndexType::bep44);
-
-    if (!index)
+    if (!_index)
         return or_throw<bittorrent::MutableDataItem>
             (yield, asio::error::operation_not_supported);
 
-    auto bep44_index = reinterpret_cast<Bep44InjectorIndex*>(index);
-
-    return bep44_index->find_bep44m(key, cancel, yield);
+    return _index->find_bep44m(key, cancel, yield);
 }
 
 string CacheInjector::get_descriptor( const string& key
-                                    , IndexType index_type
                                     , Cancel& cancel
                                     , asio::yield_context yield)
 {
-    auto index = get_index(index_type);
-
-    if (!index)
+    if (!_index)
         return or_throw<string>(yield, asio::error::operation_not_supported);
 
     sys::error_code ec;
 
-    string desc_path = index->find(key, cancel, yield[ec]);
+    string desc_path = _index->find(key, cancel, yield[ec]);
 
     return_or_throw_on_error(yield, cancel, ec, string());
 
@@ -246,13 +227,12 @@ Descriptor CacheInjector::bep44m_to_descriptor
 
 pair<string, CacheEntry>
 CacheInjector::get_content( const string& key
-                          , IndexType index_type
                           , Cancel& cancel
                           , asio::yield_context yield)
 {
     sys::error_code ec;
 
-    string desc_data = get_descriptor(key, index_type, cancel, yield[ec]);
+    string desc_data = get_descriptor(key, cancel, yield[ec]);
 
     if (ec) return or_throw<pair<string, CacheEntry>>(yield, ec);
 
@@ -264,7 +244,7 @@ void
 CacheInjector::wait_for_ready(Cancel& cancel, asio::yield_context yield) const
 {
     // TODO: Wait for IPFS cache to be ready, if needed.
-    if (_bep44_index) {
+    if (_index) {
         LOG_DEBUG("BEP44 index: waiting for BitTorrent DHT bootstrap...");
         _bt_dht->wait_all_ready(yield, cancel);
         LOG_DEBUG("BEP44 index: bootstrapped BitTorrent DHT");  // used by integration tests

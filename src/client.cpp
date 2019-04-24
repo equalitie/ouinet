@@ -236,7 +236,6 @@ Client::State::fetch_stored( const Request& request
     }
 
     auto ret = _cache->get_content( key_from_http_req(request)
-                                  , IndexType::bep44
                                   , cancel
                                   , yield[ec]);
     if (!ec) {
@@ -682,7 +681,6 @@ public:
 
                     sys::error_code ec;
                     auto desc_data = cache->get_descriptor( key
-                                                          , IndexType::bep44
                                                           , cancel
                                                           , yield[ec]);
                     if (ec == err::not_found) {  // not (yet) inserted
@@ -718,17 +716,9 @@ public:
     }
 
     static
-    const string& response_insert_bep44_hdr()
-    {
-        static const string ret = http_::response_insert_hdr_pfx
-                                + IndexName.at(IndexType::bep44);
-        return ret;
-    }
-
-    static
     bool has_bep44_insert_hdr(const Response& rs)
     {
-        return !rs[response_insert_bep44_hdr()].empty();
+        return !rs[http_::response_insert_hdr].empty();
     }
 
     static
@@ -747,7 +737,7 @@ public:
 
         auto start = Clock::now();
 
-        boost::string_view encoded_insd = rs[response_insert_bep44_hdr()];
+        boost::string_view encoded_insd = rs[http_::response_insert_hdr];
 
         if (encoded_insd.empty()) return or_throw(yield, asio::error::no_data);
 
@@ -767,7 +757,7 @@ public:
 
         return_or_throw_on_error(yield, cancel, ec);
 
-        cache.insert_mapping(target, bep44_push_msg, IndexType::bep44, cancel, yield[ec]);
+        cache.insert_mapping(target, bep44_push_msg, cancel, yield[ec]);
 
         bep44_duration = Clock::now() - start;
         start = Clock::now();
