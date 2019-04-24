@@ -86,7 +86,7 @@ class OuinetProcess:
         if not process_potocol:
             self._proc_protocol = OuinetProcessProtocol()
             
-        self._proc = reactor.spawnProcess(self._proc_protocol, argv[0], argv)
+        self._proc = reactor.spawnProcess(self._proc_protocol, argv[0], argv, env=ouinet_env)
 
         self._has_started = True
 
