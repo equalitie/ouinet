@@ -73,7 +73,7 @@ CacheInjector::CacheInjector
     : _ipfs_node(new asio_ipfs::node( ios
                                     , (path_to_repo/"ipfs").native()
                                     , asio_ipfs::node::config{
-                                          .online       = true,
+                                          .online       = false,
                                           .low_water    = 600,
                                           .high_water   = 900,
                                           .grace_period = 20
