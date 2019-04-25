@@ -56,6 +56,41 @@ inline void trim_quotes(beast::string_view& v) {
     while (v.ends_with  ('"')) v.remove_suffix(1);
 };
 
+static
+boost::optional<posix_time::ptime> parse_date_rfc1123(beast::string_view s)
+{
+    static const char * months[12] = {
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    };
+
+    struct tm g = {0};
+    char M[4];
+    time_t t;
+    int i;
+
+    char buf[128];
+
+    if (s.size() >= sizeof(buf)) return boost::none;
+
+    memcpy(buf, s.data(), s.size());
+    buf[s.size()] = 0;
+
+    sscanf(buf, "%*[a-zA-Z,] %d %3s %d %d:%d:%d",
+	   & g.tm_mday, M, & g.tm_year,
+	   & g.tm_hour, & g.tm_min, & g.tm_sec);
+    for (i = 0; i < 12; i++) {
+	    if (strncmp (M, months[i], 3) == 0) {
+	        g.tm_mon = i;
+	        break;
+	    }
+    }
+    g.tm_year -= 1900;
+    t = timegm (& g);
+
+    return posix_time::from_time_t(t);
+}
+
 posix_time::ptime CacheControl::parse_date(beast::string_view s)
 {
     namespace bt = boost::posix_time;
@@ -64,7 +99,11 @@ posix_time::ptime CacheControl::parse_date(beast::string_view s)
     // This confuses the address sanitizer when combined with Boost.Coroutine
     // and causes the app exit with false positive log from Asan.
 #   ifdef __SANITIZE_ADDRESS__
-    return bt::ptime();
+    {
+        auto t = parse_date_rfc1123(s);
+        if (!t) return bt::ptime();
+        return *t;
+    }
 #   endif
 
     // Trim quotes from the beginning
