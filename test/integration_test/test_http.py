@@ -84,7 +84,7 @@ class OuinetTests(TestCase):
         config = self._cache_injector_config(TestFixtures.BEP44_CACHE_TIMEOUT,
                                              [TestFixtures.BEP44_CACHE_READY_REGEX,
                                               TestFixtures.BEP44_REQUEST_CACHED_REGEX],
-                                             ["--cache-index", "bep44"] + injector_args)
+                                             injector_args)
         return self._run_cache_injector(
             OuinetBEP44CacheInjector, config,
             [deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached])
@@ -93,8 +93,7 @@ class OuinetTests(TestCase):
                          deferred_tcp_port_ready, deferred_index_ready):
         config = self._cache_injector_config(TestFixtures.BEP44_CACHE_TIMEOUT,
                                              [TestFixtures.BEP44_PUBK_ANNOUNCE_REGEX],  # bootstrap not needed
-                                             ["--cache-index", "bep44",
-                                              "--seed-content", "0"] + injector_args)
+                                             ["--seed-content", "0"] + injector_args)
         return self._run_cache_injector(
             OuinetBEP44CacheInjector, config,
             [deferred_tcp_port_ready, deferred_index_ready])
@@ -124,21 +123,15 @@ class OuinetTests(TestCase):
 
         return client
 
-    def run_ipfs_client(self, name, idx_key, args, deferred_cache_ready):
-        config = OuinetConfig(name, TestFixtures.IPFS_CACHE_TIMEOUT,
-                              ["--cache-index", "btree", "--index-ipns-id", idx_key] + args,
-                              benchmark_regexes=[TestFixtures.IPFS_CACHE_READY_REGEX])
-        return self._run_cache_client(OuinetIPFSClient, config, [deferred_cache_ready])
-
     def run_bep44_client(self, name, idx_key, args, deferred_cache_ready):
         config = OuinetConfig(name, TestFixtures.BEP44_CACHE_TIMEOUT,
-                              ["--cache-index", "bep44", "--index-bep44-public-key", idx_key] + args,
+                              ["--index-bep44-public-key", idx_key] + args,
                               benchmark_regexes=[TestFixtures.BEP44_CACHE_READY_REGEX])
         return self._run_cache_client(OuinetBEP44Client, config, [deferred_cache_ready])
 
     def run_bep44_seeder(self, name, idx_key, args, deferred_cache_ready, deferred_result_got_cached):
         config = OuinetConfig(name, TestFixtures.BEP44_CACHE_TIMEOUT,
-                              ["--cache-index", "bep44", "--index-bep44-public-key", idx_key] + args,
+                              ["--index-bep44-public-key", idx_key] + args,
                               benchmark_regexes=[TestFixtures.BEP44_CACHE_READY_REGEX,
                                                  TestFixtures.BEP44_RESPONSE_CACHED_REGEX])
         return self._run_cache_client(OuinetBEP44Client, config,
@@ -178,7 +171,7 @@ class OuinetTests(TestCase):
         return agent.request("GET", url)
 
     @inlineCallbacks
-    def test_i2p_transport(self):
+    def _test_i2p_transport(self):
         """
         Starts an echoing http server, a injector and a client and send a unique http 
         request to the echoing http server through the client --i2p--> injector -> http server
