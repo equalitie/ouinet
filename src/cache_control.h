@@ -47,6 +47,7 @@ public:
 
     // Returns ptime() if parsing fails.
     static boost::posix_time::ptime parse_date(beast::string_view);
+    static std::string format_date(boost::posix_time::ptime);
 
     static bool ok_to_cache( const http::request_header<>&  request
                            , const http::response_header<>& response

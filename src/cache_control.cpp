@@ -115,6 +115,19 @@ posix_time::ptime CacheControl::parse_date(beast::string_view s)
     return pt;
 }
 
+string CacheControl::format_date(posix_time::ptime date)
+{
+    posix_time::time_facet* facet = new posix_time::time_facet();
+
+    facet->format("%a, %d %b %Y %H:%M:%S");
+
+    stringstream ss;
+
+    ss.imbue(std::locale(std::locale::classic(), facet));
+    ss << date;
+    return ss.str();
+}
+
 static
 optional<unsigned> get_max_age(const beast::string_view& cache_control_value)
 {
