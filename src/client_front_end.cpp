@@ -138,7 +138,7 @@ static bool percent_decode(const string& in, string& out) {
 
 void ClientFrontEnd::handle_descriptor( const ClientConfig& config
                                       , const Request& req, Response& res, stringstream& ss
-                                      , CacheClient* cache_client, asio::yield_context yield)
+                                      , CacheClient* cache_client, Yield yield)
 {
     auto result = http::status::ok;
     res.set(http::field::content_type, "application/json");
@@ -416,7 +416,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
                               , const Request& req
                               , CacheClient* cache_client
                               , const CACertificate& ca
-                              , asio::yield_context yield)
+                              , Yield yield)
 {
     Response res{http::status::ok, req.version()};
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);

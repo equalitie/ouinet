@@ -637,7 +637,10 @@ public:
             , &cancel = client_state.get_shutdown_signal()
             , &scheduler = client_state._store_scheduler
             , key = key_from_http_req(rq)
-            ] (asio::yield_context yield) mutable {
+            ] (asio::yield_context yield_) mutable {
+
+                Yield yield(ios, yield_, "Frontend");
+
                 sys::error_code ec;
 
                 // TODO: Be smarter about what we're storing here. I.e. don't
@@ -830,6 +833,13 @@ public:
 
                 case fresh_channel::injector:
                     res = cc.fetch(rq, cancel, yield[ec]);
+
+#ifndef NDEBUG
+                    yield.log("----------------------------");
+                    yield.log("CacheControl result ", ec.message());
+                    yield.log(res.base());
+                    yield.log("----------------------------");
+#endif
 
                     if (res.result() == http::status::bad_gateway
                             && !request_config.fresh_channels.empty()) {
@@ -1186,12 +1196,10 @@ void Client::State::serve_request( GenericStream&& con
 #ifndef NDEBUG
         yield.log("=== New request ===");
         yield.log(req.base());
-#endif
         auto on_exit = defer([&] {
-#ifndef NDEBUG
             yield.log("Done");
-#endif
         });
+#endif
         auto target = req.target();
 
         // Perform MitM for CONNECT requests (to be able to see encrypted requests)
@@ -1445,6 +1453,7 @@ void Client::State::start()
             ( _ios
             , [this, self = shared_from_this()]
               (asio::yield_context yield) {
+
                   if (was_stopped()) return;
 
                   sys::error_code ec;
@@ -1455,7 +1464,8 @@ void Client::State::start()
                   listen_tcp( yield[ec]
                             , ep
                             , [this, self]
-                              (GenericStream c, asio::yield_context yield) {
+                              (GenericStream c, asio::yield_context yield_) {
+                        Yield yield(_ios, yield_, "Frontend");
                         sys::error_code ec;
                         Request rq;
                         beast::flat_buffer buffer;

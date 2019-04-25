@@ -7,6 +7,7 @@
 #include <chrono>
 #include "namespaces.h"
 #include "ssl/ca_certificate.h"
+#include "util/yield.h"
 
 namespace ouinet { class CacheClient; }
 
@@ -51,7 +52,7 @@ public:
     Response serve( ClientConfig&
                   , const http::request<http::string_body>&
                   , CacheClient*, const CACertificate&
-                  , asio::yield_context yield);
+                  , Yield yield);
 
     Task notify_task(const std::string& task_name)
     {
@@ -78,7 +79,7 @@ private:
 
     void handle_descriptor( const ClientConfig&
                           , const Request&, Response&, std::stringstream&
-                          , CacheClient*, asio::yield_context);
+                          , CacheClient*, Yield);
 
     void handle_insert_bep44(const Request&, Response&, std::stringstream&
                             , CacheClient*, asio::yield_context);

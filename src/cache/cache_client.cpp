@@ -159,19 +159,32 @@ string CacheClient::insert_mapping( const boost::string_view target
     return _index->insert_mapping(target, ins_data, cancel, yield);
 }
 
-string CacheClient::get_descriptor( const string& key
-                                  , Cancel& cancel
-                                  , asio::yield_context yield)
+string CacheClient::get_descriptor( const string& key, Cancel& cancel, Yield yield_)
 {
+    Yield yield = yield_.tag("CacheClient::get_descriptor");
+
     if (!_index) return or_throw<string>(yield, asio::error::not_found);
 
     sys::error_code ec;
 
     string desc_path = _index->find(key, cancel, yield[ec]);
 
+    if (cancel || ec) {
+        assert(ec != asio::error::operation_aborted || cancel);
+        yield.log( "BEP44 lookup failed \"", ec.message(), "\""
+                 , " key: \"", key, "\"");
+    }
+
     return_or_throw_on_error(yield, cancel, ec, string());
 
-    return descriptor_from_path(desc_path, cancel, yield);
+    auto ret = descriptor_from_path(desc_path, cancel, yield[ec]);
+
+    if (cancel || ec) {
+        assert(ec != asio::error::operation_aborted || cancel);
+        yield.log("Failed to resolve path \"", ec.message(), "\"");
+    }
+
+    return or_throw(yield, ec, move(ret));
 }
 
 string CacheClient::descriptor_from_path( const string& desc_path
@@ -186,18 +199,26 @@ string CacheClient::descriptor_from_path( const string& desc_path
 }
 
 pair<string, CacheEntry>
-CacheClient::get_content( const string& key
-                        , Cancel& cancel
-                        , asio::yield_context yield)
+CacheClient::get_content(const string& key, Cancel& cancel, Yield yield_)
 {
+    Yield yield = yield_.tag("CacheClient::get_content");
+
     sys::error_code ec;
 
     string desc_data = get_descriptor(key, cancel, yield[ec]);
 
     if (ec) return or_throw<pair<string, CacheEntry>>(yield, ec);
 
-    return descriptor::http_parse
-        ( desc_data, IPFS_LOAD_FUNC(*_ipfs_node), cancel, yield);
+    auto ret = descriptor::http_parse
+        ( desc_data, IPFS_LOAD_FUNC(*_ipfs_node), cancel, yield[ec]);
+
+    if (cancel) ec = asio::error::operation_aborted;
+
+    if (ec) {
+        yield.log("Failed at http_parse \"", ec.message(), "\"");
+    }
+
+    return or_throw(yield, ec, move(ret));
 }
 
 std::string CacheClient::ipfs_id() const

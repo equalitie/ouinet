@@ -10,6 +10,7 @@
 
 #include "cache_entry.h"
 #include "../namespaces.h"
+#include "../util/yield.h"
 
 namespace asio_ipfs { class node; }
 namespace ouinet { namespace bittorrent { class MainlineDht; }}
@@ -58,11 +59,9 @@ public:
     // to that IPFS_ID from IPFS.
     std::pair<std::string, CacheEntry> get_content( const std::string& key
                                                   , Cancel&
-                                                  , boost::asio::yield_context);
+                                                  , Yield);
 
-    std::string get_descriptor( const std::string& key
-                              , Cancel&
-                              , asio::yield_context);
+    std::string get_descriptor(const std::string& key, Cancel&, Yield);
 
     std::string descriptor_from_path( const std::string& desc_path
                                     , Cancel&
