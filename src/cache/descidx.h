@@ -9,7 +9,7 @@
 #include "../namespaces.h"
 #include "../or_throw.h"
 #include "../util.h"
-#include "index.h"
+#include "bep44_index.h"
 
 
 namespace ouinet {
@@ -61,7 +61,7 @@ template <class StoreFunc>
 inline
 std::pair<std::string, std::string>
 put_into_index( const std::string& key, const std::string& desc_data
-              , InjectorIndex& index
+              , Bep44InjectorIndex& index
               , StoreFunc ipfs_store
               , bool perform_io
               , asio::yield_context yield)

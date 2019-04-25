@@ -79,22 +79,12 @@ class OuinetTests(TestCase):
 
         return injector
 
-    def run_ipfs_injector(self, injector_args,
-                          deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached):
-        config = self._cache_injector_config(TestFixtures.IPFS_CACHE_TIMEOUT,
-                                             [TestFixtures.IPNS_ID_ANNOUNCE_REGEX,
-                                              TestFixtures.IPFS_REQUEST_CACHED_REGEX],
-                                             ["--cache-index", "btree"] + injector_args)
-        return self._run_cache_injector(
-            OuinetIPFSCacheInjector, config,
-            [deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached])
-
     def run_bep44_injector(self, injector_args,
                            deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached):
         config = self._cache_injector_config(TestFixtures.BEP44_CACHE_TIMEOUT,
                                              [TestFixtures.BEP44_CACHE_READY_REGEX,
                                               TestFixtures.BEP44_REQUEST_CACHED_REGEX],
-                                             ["--cache-index", "bep44"] + injector_args)
+                                             injector_args)
         return self._run_cache_injector(
             OuinetBEP44CacheInjector, config,
             [deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached])
@@ -103,8 +93,7 @@ class OuinetTests(TestCase):
                          deferred_tcp_port_ready, deferred_index_ready):
         config = self._cache_injector_config(TestFixtures.BEP44_CACHE_TIMEOUT,
                                              [TestFixtures.BEP44_PUBK_ANNOUNCE_REGEX],  # bootstrap not needed
-                                             ["--cache-index", "bep44",
-                                              "--seed-content", "0"] + injector_args)
+                                             ["--seed-content", "0"] + injector_args)
         return self._run_cache_injector(
             OuinetBEP44CacheInjector, config,
             [deferred_tcp_port_ready, deferred_index_ready])
@@ -134,21 +123,15 @@ class OuinetTests(TestCase):
 
         return client
 
-    def run_ipfs_client(self, name, idx_key, args, deferred_cache_ready):
-        config = OuinetConfig(name, TestFixtures.IPFS_CACHE_TIMEOUT,
-                              ["--cache-index", "btree", "--index-ipns-id", idx_key] + args,
-                              benchmark_regexes=[TestFixtures.IPFS_CACHE_READY_REGEX])
-        return self._run_cache_client(OuinetIPFSClient, config, [deferred_cache_ready])
-
     def run_bep44_client(self, name, idx_key, args, deferred_cache_ready):
         config = OuinetConfig(name, TestFixtures.BEP44_CACHE_TIMEOUT,
-                              ["--cache-index", "bep44", "--index-bep44-public-key", idx_key] + args,
+                              ["--index-bep44-public-key", idx_key] + args,
                               benchmark_regexes=[TestFixtures.BEP44_CACHE_READY_REGEX])
         return self._run_cache_client(OuinetBEP44Client, config, [deferred_cache_ready])
 
     def run_bep44_seeder(self, name, idx_key, args, deferred_cache_ready, deferred_result_got_cached):
         config = OuinetConfig(name, TestFixtures.BEP44_CACHE_TIMEOUT,
-                              ["--cache-index", "bep44", "--index-bep44-public-key", idx_key] + args,
+                              ["--index-bep44-public-key", idx_key] + args,
                               benchmark_regexes=[TestFixtures.BEP44_CACHE_READY_REGEX,
                                                  TestFixtures.BEP44_RESPONSE_CACHED_REGEX])
         return self._run_cache_client(OuinetBEP44Client, config,
@@ -188,7 +171,7 @@ class OuinetTests(TestCase):
         return agent.request("GET", url)
 
     @inlineCallbacks
-    def test_i2p_transport(self):
+    def _test_i2p_transport(self):
         """
         Starts an echoing http server, a injector and a client and send a unique http 
         request to the echoing http server through the client --i2p--> injector -> http server
@@ -302,16 +285,6 @@ class OuinetTests(TestCase):
 
         response_body = yield readBody(defered_response)
         self.assertEquals(response_body, content)
-
-    # Disabled because it no longer reflects how the injector works. I.e. while
-    # previously the injector was injecting resources into IPFS, it no longer does
-    # that (to preserve resources to be able to serve more clients).
-    @inlineCallbacks
-    def _test_ipfs_cache(self):
-        logging.debug("################################################")
-        logging.debug("test_ipfs_cache");
-        logging.debug("################################################")
-        return self._test_cache(self.run_ipfs_injector, self.run_tcp_client, self.run_ipfs_client)
 
     # Disabled for the same reason as the above test.
     @inlineCallbacks

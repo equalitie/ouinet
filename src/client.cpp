@@ -236,7 +236,6 @@ Client::State::fetch_stored( const Request& request
     }
 
     auto ret = _cache->get_content( key_from_http_req(request)
-                                  , _config.cache_index_type()
                                   , cancel
                                   , yield[ec]);
     if (!ec) {
@@ -638,7 +637,6 @@ public:
             , &cancel = client_state.get_shutdown_signal()
             , &scheduler = client_state._store_scheduler
             , key = key_from_http_req(rq)
-            , indextype = client_state._config.cache_index_type()
             ] (asio::yield_context yield) mutable {
                 sys::error_code ec;
 
@@ -682,7 +680,9 @@ public:
                         return;
 
                     sys::error_code ec;
-                    auto desc_data = cache->get_descriptor(key, indextype, cancel, yield[ec]);
+                    auto desc_data = cache->get_descriptor( key
+                                                          , cancel
+                                                          , yield[ec]);
                     if (ec == err::not_found) {  // not (yet) inserted
                         log_post_inject(attempt, "not found, try again");
                         continue;
@@ -716,17 +716,9 @@ public:
     }
 
     static
-    const string& response_insert_bep44_hdr()
-    {
-        static const string ret = http_::response_insert_hdr_pfx
-                                + IndexName.at(IndexType::bep44);
-        return ret;
-    }
-
-    static
     bool has_bep44_insert_hdr(const Response& rs)
     {
-        return !rs[response_insert_bep44_hdr()].empty();
+        return !rs[http_::response_insert_hdr].empty();
     }
 
     static
@@ -745,7 +737,7 @@ public:
 
         auto start = Clock::now();
 
-        boost::string_view encoded_insd = rs[response_insert_bep44_hdr()];
+        boost::string_view encoded_insd = rs[http_::response_insert_hdr];
 
         if (encoded_insd.empty()) return or_throw(yield, asio::error::no_data);
 
@@ -765,7 +757,7 @@ public:
 
         return_or_throw_on_error(yield, cancel, ec);
 
-        cache.insert_mapping(target, bep44_push_msg, IndexType::bep44, cancel, yield[ec]);
+        cache.insert_mapping(target, bep44_push_msg, cancel, yield[ec]);
 
         bep44_duration = Clock::now() - start;
         start = Clock::now();
@@ -1289,26 +1281,14 @@ void Client::State::setup_ipfs_cache()
                       ] (asio::yield_context yield) {
         if (was_stopped()) return;
 
-        const string ipns = _config.index_ipns_id();
-
         if (_config.cache_enabled())
         {
-            LOG_DEBUG("Starting IPFS Cache with IPNS ID: ", ipns);
             LOG_DEBUG("And BitTorrent pubkey: ", _config.index_bep44_pub_key());
 
             auto on_exit = defer([&] { _is_ipns_being_setup = false; });
 
-            if (ipns.empty()) {
-                LOG_WARN("IPNS index shall be disabled because we have not been provided with an IPNS id");
-            }
-
-            if (_cache) {
-                return _cache->set_ipns(move(ipns));
-            }
-
             sys::error_code ec;
             _cache = CacheClient::build(_ios
-                                       , ipns
                                        , _config.index_bep44_pub_key()
                                        , _config.repo_root()
                                        , _config.autoseed_updated()
@@ -1327,11 +1307,6 @@ void Client::State::setup_ipfs_cache()
                 _cache->wait_for_ready(_shutdown_signal, yield[ec]);
 #endif
             }
-        }
-
-        if (ipns != _config.index_ipns_id()) {
-            // Use requested yet another IPNS
-            setup_ipfs_cache();
         }
     });
 }

@@ -1,7 +1,6 @@
 #include "client_front_end.h"
 #include "generic_stream.h"
 #include "cache/cache_client.h"
-#include "cache/btree.h"
 #include "util.h"
 #include "util/bytes.h"
 #include "defer.h"
@@ -137,107 +136,6 @@ static bool percent_decode(const string& in, string& out) {
     return true;
 }
 
-static string percent_encode_all(const string& in) {
-    // The URI library interface for doing this is really cumbersome
-    // and we do not need a minimal or canonical encoding,
-    // just something to allow passing the URI as a query argument
-    // and avoid HTML inlining issues.
-    // So we just encode everything but unreserved characters.
-    stringstream outss;
-    for (auto c : in)
-        // Taken from <https://en.wikipedia.org/wiki/Percent-encoding#Types_of_URI_characters>.
-        if ( (('0' <= c) && (c <= '9'))
-             || (('A' <= c) && (c <= 'Z'))
-             || (('a' <= c) && (c <= 'z'))
-             || (c == '-') || (c == '_') || (c == '.') || (c == '~') )
-            outss << c;
-        else
-            outss << boost::format("%%%02X") % static_cast<int>(c);
-    return outss.str();
-}
-
-static string html_desc_link(const string& uri) {
-    // TODO: Escape URL for HTML link text.
-    return util::str( "<a href=\"/api/descriptor?uri=", percent_encode_all(uri), "\">"
-                    , uri, "</a><br/>\n");
-};
-
-static void write_btree_desc_list( CacheClient* cache_client
-                                 , stringstream& ss
-                                 , asio::yield_context yield)
-{
-    auto btree = cache_client->get_btree();
-
-    if (!btree) {
-        ss << "Cache does not sport BTree";
-        return;
-    }
-
-    ss << "Index CID: " << btree->root_hash() << "<br/>\n";
-
-    sys::error_code ec;
-    Cancel cancel; // TODO: This should come from above
-    auto iter = btree->begin(cancel, yield[ec]);
-
-    if (ec) {
-        ss << "Failed to retrieve BTree iterator: " << ec.message();
-        return;
-    }
-
-    while (!iter.is_end()) {
-        ss << html_desc_link(iter.key());
-
-        iter.advance(cancel, yield[ec]);
-
-        if (ec) {
-            ss << "Failed enumerate the entire BTree: " << ec.message();
-            return;
-        }
-    }
-}
-
-static void write_bep44_desc_list( CacheClient* cache_client
-                                 , stringstream& ss
-                                 , asio::yield_context yield)
-{
-    ss << "URI descriptors published by this client:<br/>\n";
-    ss << "TODO";
-}
-
-void ClientFrontEnd::handle_enumerate_index( const ClientConfig& config
-                                           , const Request& req
-                                           , Response& res
-                                           , stringstream& ss
-                                           , CacheClient* cache_client
-                                           , asio::yield_context yield)
-{
-    res.set(http::field::content_type, "text/html");
-
-    ss << "<!DOCTYPE html>\n"
-           "<html>\n"
-           "</html>\n"
-           "<body style=\"font-family:monospace;white-space:nowrap;font-size:small\">\n";
-
-    auto on_exit = defer([&] { ss << "</body></html>\n"; });
-
-    if (!cache_client) {
-        ss << "Cache is not initialized";
-        return;
-    }
-
-    switch (config.cache_index_type()) {
-        // These shall not raise an error but report it on `ss` as HTML.
-        case (IndexType::btree): 
-            write_btree_desc_list(cache_client, ss, yield);
-            break;
-        case (IndexType::bep44): 
-            write_bep44_desc_list(cache_client, ss, yield);
-            break;
-        default:
-          ss << "Unknown index type";
-    }
-}
-
 void ClientFrontEnd::handle_descriptor( const ClientConfig& config
                                       , const Request& req, Response& res, stringstream& ss
                                       , CacheClient* cache_client, asio::yield_context yield)
@@ -270,7 +168,6 @@ void ClientFrontEnd::handle_descriptor( const ClientConfig& config
 
         Cancel cancel; // TODO: This should come from above
         file_descriptor = cache_client->get_descriptor( key_from_http_url(uri)
-                                                      , config.cache_index_type()
                                                       , cancel
                                                       , yield[ec]);
 
@@ -354,7 +251,6 @@ void ClientFrontEnd::handle_insert_bep44( const Request& req, Response& res, str
         if (!ec)
             key = cache_client->insert_mapping( url
                                               , move(body)
-                                              , IndexType::bep44
                                               , cancel
                                               , yield[ec]);
 
@@ -473,9 +369,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     if (cache_client) {
         ss << "        Our IPFS ID (IPNS): " << cache_client->ipfs_id() << "<br>\n";
         ss << "        <h2>Index</h2>\n";
-        ss << "        <a href=\"index.html\">List URI descriptors</a> known to client.\n"
-              "        Others may be available over the network.\n"
-              "        Please use the box below to query the descriptor of an arbitrary URI without fetching the associated content.<br>\n";
+        ss << "        Please use the box below to query the descriptor of an arbitrary URI without fetching the associated content.<br>\n";
 
         ss << "        <br>\n";
         ss << "        <form action=\"/api/descriptor\" method=\"get\">\n"
@@ -487,8 +381,6 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         auto bep44_pk_s = bep44_pk ? util::bytes::to_hex(bep44_pk->serialize()) : "";
         ss << "        <br>\n";
         ss << "        BEP44 public key: " << bep44_pk_s << "<br>\n";
-        ss << "        B-tree IPNS: " << cache_client->ipns() << "<br>\n";
-        ss << "        B-tree IPFS: " << cache_client->ipfs() << "<br>\n";
     }
 
     ss << "    </body>\n"
@@ -539,9 +431,6 @@ Response ClientFrontEnd::serve( ClientConfig& config
 
     if (path == "/ca.pem") {
         handle_ca_pem(req, res, ss, ca);
-    } else if (path == "/index.html") {
-        sys::error_code ec_;  // shouldn't throw, but just in case
-        handle_enumerate_index(config, req, res, ss, cache_client, yield[ec_]);
     } else if (path == "/api/upload") {
         sys::error_code ec_;  // shouldn't throw, but just in case
         handle_upload(config, req, res, ss, cache_client, yield[ec_]);

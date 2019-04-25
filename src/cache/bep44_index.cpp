@@ -23,7 +23,7 @@ namespace bt = bittorrent;
 namespace file_io = util::file_io;
 
 using Clock = std::chrono::steady_clock;
-using UpdatedHook = ClientIndex::UpdatedHook;
+using UpdatedHook = Bep44ClientIndex::UpdatedHook;
 
 static uint64_t ms_since_epoch(Clock::time_point d)
 {

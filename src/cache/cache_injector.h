@@ -12,7 +12,6 @@
 #include "../namespaces.h"
 #include "../util/crypto.h"
 #include "cache_entry.h"
-#include "index.h"
 
 namespace asio_ipfs { class node; }
 namespace ouinet { namespace bittorrent { class MainlineDht; class MutableDataItem; }}
@@ -20,7 +19,6 @@ namespace ouinet { namespace bittorrent { class MainlineDht; class MutableDataIt
 namespace ouinet {
 
 class Bep44InjectorIndex;
-class BTreeInjectorIndex;
 class Publisher;
 class Scheduler;
 class Descriptor;
@@ -44,7 +42,6 @@ private:
     CacheInjector( boost::asio::io_service&
                  , util::Ed25519PrivateKey bt_privkey
                  , fs::path path_to_repo
-                 , bool enable_btree
                  , std::unique_ptr<bittorrent::MainlineDht>
                  , std::unique_ptr<Bep44InjectorIndex>);
 
@@ -53,8 +50,6 @@ public:
     build( boost::asio::io_service&
          , util::Ed25519PrivateKey bt_privkey
          , fs::path path_to_repo
-         , bool enable_btree
-         , bool enable_bep44
          , unsigned int bep44_index_capacity
          , Cancel&
          , boost::asio::yield_context);
@@ -68,11 +63,10 @@ public:
     std::string ipfs_id() const;
 
     // Insert a descriptor with the given `id` for the given request and response
-    // into the index given by `IndexType`, along with data in distributed storage.
+    // into the index, along with data in distributed storage.
     InsertionResult insert_content( const std::string& id
                                   , const Request&
                                   , Response
-                                  , IndexType
                                   , bool perform_io
                                   , boost::asio::yield_context);
 
@@ -83,7 +77,6 @@ public:
     // correspoinding to the `key`, when found, fetch the content corresponding
     // to that IPFS_ID from IPFS.
     std::pair<std::string, CacheEntry> get_content( const std::string& key
-                                                  , IndexType
                                                   , Cancel&
                                                   , boost::asio::yield_context);
 
@@ -101,23 +94,19 @@ public:
               , boost::asio::yield_context);
 
     std::string get_descriptor( const std::string& key
-                              , IndexType
                               , Cancel&
                               , boost::asio::yield_context);
 
     ~CacheInjector();
 
 private:
-    InjectorIndex* get_index(IndexType) const;
-
     void wait_for_ready(Cancel&, boost::asio::yield_context) const;
 
 private:
     std::unique_ptr<asio_ipfs::node> _ipfs_node;
     std::unique_ptr<bittorrent::MainlineDht> _bt_dht;
     std::unique_ptr<Publisher> _publisher;
-    std::unique_ptr<BTreeInjectorIndex> _btree_index;
-    std::unique_ptr<Bep44InjectorIndex> _bep44_index;
+    std::unique_ptr<Bep44InjectorIndex> _index;
     const unsigned int _concurrency = 8;
     std::unique_ptr<Scheduler> _scheduler;
     Cancel _cancel;

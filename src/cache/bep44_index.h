@@ -2,11 +2,12 @@
 
 #include <boost/system/error_code.hpp>
 #include <boost/asio/io_service.hpp>
+#include <boost/asio/spawn.hpp>
 #include <boost/filesystem.hpp>
 
 #include "../namespaces.h"
 #include "../util/crypto.h"
-#include "index.h"
+#include "../util/signal.h"
 
 namespace ouinet {
     namespace bittorrent {
@@ -29,8 +30,11 @@ std::string bep44_salt_from_key(boost::string_view key)
 
 class Bep44EntryUpdater;
 
-class Bep44ClientIndex : public ClientIndex {
+class Bep44ClientIndex {
 public:
+    using UpdatedHook = std::function<bool( std::string old, std::string new_
+                                      , Cancel&, asio::yield_context)>;
+
     static
     std::unique_ptr<Bep44ClientIndex>
     build( bittorrent::MainlineDht&
@@ -44,12 +48,12 @@ public:
 
     std::string find( const std::string& key
                     , Cancel&
-                    , asio::yield_context) override;
+                    , asio::yield_context);
 
     std::string insert_mapping( const boost::string_view target
                               , const std::string&
                               , Cancel&
-                              , asio::yield_context) override;
+                              , asio::yield_context);
 
     std::string insert_mapping( const boost::string_view target
                               , bittorrent::MutableDataItem
@@ -73,7 +77,7 @@ private:
     Cancel _cancel;
 };
 
-class Bep44InjectorIndex : public InjectorIndex {
+class Bep44InjectorIndex {
 public:
     static
     std::unique_ptr<Bep44InjectorIndex>
@@ -86,7 +90,7 @@ public:
 
     std::string find( const std::string& key
                     , Cancel&
-                    , asio::yield_context) override;
+                    , asio::yield_context);
 
     bittorrent::MutableDataItem
     find_bep44m( boost::string_view key
@@ -94,10 +98,10 @@ public:
                , asio::yield_context yield);
 
     std::string insert( std::string key, std::string value
-                      , asio::yield_context) override;
+                      , asio::yield_context);
 
     std::string get_insert_message( std::string key, std::string value
-                                  , sys::error_code&) override;
+                                  , sys::error_code&);
 
     boost::asio::io_service& get_io_service();
 

@@ -24,13 +24,6 @@ target_include_directories(test-scheduler PUBLIC "${Boost_INCLUDE_DIR}")
 target_link_libraries(test-scheduler ${Boost_LIBRARIES})
 
 ######################################################################
-add_executable(test-btree "test_btree.cpp"
-                          "../src/cache/btree.cpp"
-                          "../src/asio.cpp")
-target_link_libraries(test-btree ${Boost_LIBRARIES})
-add_dependencies(test-btree json)
-
-######################################################################
 add_executable(test-timeout-stream "test_timeout_stream.cpp"
                                    "../src/asio.cpp")
 
