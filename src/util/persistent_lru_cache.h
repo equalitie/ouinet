@@ -18,7 +18,6 @@
 namespace ouinet { namespace util {
 
 namespace persisten_lru_cache_detail {
-    void create_or_check_directory(const fs::path&, sys::error_code&);
     uint64_t ms_since_epoch();
     fs::path path_from_key(const fs::path&, const std::string&);
 } // detail namespace
@@ -267,7 +266,7 @@ PersistentLruCache<Value>::load( asio::io_service& ios
         dir = fs::absolute(dir);
     }
 
-    if (!ec) create_or_check_directory(dir, ec);
+    if (!ec) file_io::check_or_create_directory(dir, ec);
     if (ec) return or_throw<Ret>(yield, ec);
 
     Ret lru(new PersistentLruCache<Value>(ios, dir, max_size));

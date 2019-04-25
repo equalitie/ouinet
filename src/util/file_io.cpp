@@ -93,6 +93,30 @@ void truncate( posix::stream_descriptor& f
     }
 }
 
+bool check_or_create_directory(const fs::path& dir, sys::error_code& ec)
+{
+    // https://www.boost.org/doc/libs/1_69_0/libs/system/doc/html/system.html#ref_boostsystemerror_code_hpp
+
+    namespace errc = boost::system::errc;
+
+    if (fs::exists(dir)) {
+        if (!is_directory(dir)) {
+            ec = make_error_code(errc::not_a_directory);
+            return false;
+        }
+
+        return false;
+    }
+    else {
+        if (!create_directories(dir, ec)) {
+            if (!ec) ec = make_error_code(errc::operation_not_permitted);
+            return false;
+        }
+        assert(is_directory(dir));
+        return true;
+    }
+}
+
 void read( posix::stream_descriptor& f
          , asio::mutable_buffer b
          , Cancel& cancel

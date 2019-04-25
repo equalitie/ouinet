@@ -11,6 +11,9 @@
 
 namespace ouinet { namespace util { namespace file_io {
 
+asio::posix::stream_descriptor
+open(asio::io_service& ios, const fs::path&, sys::error_code&);
+
 void fseek(asio::posix::stream_descriptor&, size_t pos, sys::error_code&);
 
 size_t current_position(asio::posix::stream_descriptor&, sys::error_code&);
@@ -18,9 +21,6 @@ size_t current_position(asio::posix::stream_descriptor&, sys::error_code&);
 size_t file_size(asio::posix::stream_descriptor&, sys::error_code&);
 
 size_t file_remaining_size(asio::posix::stream_descriptor&, sys::error_code&);
-
-asio::posix::stream_descriptor
-open(asio::io_service& ios, const fs::path&, sys::error_code&);
 
 void truncate( asio::posix::stream_descriptor&
              , size_t new_length
@@ -35,6 +35,11 @@ void write( asio::posix::stream_descriptor&
           , asio::const_buffer
           , Cancel&
           , asio::yield_context);
+
+// Check whether the directory exists, if not, try to create it.
+// If the directory doesn't exist nor it can be created, the error
+// code is set. Returns true if the directory has been created.
+bool check_or_create_directory(const fs::path&, sys::error_code&);
 
 template<typename T>
 T read_number( asio::posix::stream_descriptor& f
