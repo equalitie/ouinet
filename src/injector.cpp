@@ -49,6 +49,7 @@
 #include "util/timeout.h"
 #include "util/crypto.h"
 #include "util/bytes.h"
+#include "util/file_io.h"
 
 #include "logger.h"
 #include "defer.h"
@@ -358,16 +359,23 @@ public:
         auto rs = util::to_cache_response(move(rs_));
 
         if (injector) {
-
             auto ins = injector->insert_content( insert_id, rq, rs
-                                               , true
+                                               , false
                                                , yield[ec]);
 
 
             if (!ec) {
+                namespace pt = boost::posix_time;
+                auto now = CacheControl::format_date(pt::second_clock::universal_time());
+                rs.set(http::field::date, now);
+
                 LOG_DEBUG("Injector new insertion: ", ins.desc_data);
                 rs = add_re_insertion_header_field( move(rs)
                                                   , move(ins.index_ins_data));
+
+                sys::error_code ec_ignored;
+                save_to_disk(rq.target(), rs, yield[ec_ignored]);
+                assert(!ec);
             }
             else {
                 LOG_DEBUG("Injector new insertion failed: ", ec.message());
@@ -386,71 +394,92 @@ public:
         return ts + pt::hours(1) < pt::second_clock::universal_time();
     }
 
+    fs::path cache_dir() {
+        return config.repo_root() / "cache";
+    }
+
+    fs::path cache_file(string_view key)
+    {
+        return cache_dir() /  util::bytes::to_hex(util::sha1(key));
+    }
+
+    http::response<http::dynamic_body> load_from_disk(string_view key, Yield yield)
+    {
+        using Response = http::response<http::dynamic_body>;
+
+        sys::error_code ec;
+
+        util::file_io::check_or_create_directory(cache_dir(), ec);
+
+        if (ec) return or_throw<Response>(yield, ec);
+
+        auto file = util::file_io::open(ios, cache_file(key), ec);
+
+        if (ec) return or_throw<Response>(yield, ec);
+
+        beast::flat_buffer buffer;
+        http::response_parser<http::dynamic_body> parser;
+        http::async_read(file, buffer, parser, yield[ec]);
+
+        if (ec) return or_throw<Response>(yield, ec);
+
+        return parser.release();
+    }
+
+    template<class Rs>
+    void save_to_disk(string_view key, Rs& rs, Yield yield)
+    {
+        sys::error_code ec;
+        fs::path dir = cache_dir();
+
+        auto file = util::file_io::open(ios, cache_file(key), ec);
+
+        if (ec) return or_throw(yield, ec);
+
+        http::async_write(file, rs, yield[ec]);
+
+        return or_throw(yield, ec);
+    }
+
+    bool is_semi_fresh(http::response_header<>& hdr)
+    {
+        auto date = CacheControl::parse_date(hdr[http::field::date]);
+        assert(date != boost::posix_time::ptime());
+
+        bool expired = CacheControl::is_expired(hdr, date);
+
+        if (!expired) return true;
+        return !is_old(date);
+    }
+
     bool fetch( GenericStream& con
-              , const Request& rq_
+              , const Request& rq
               , Cancel& cancel_
               , Yield yield)
     {
-        Cancel cancel(cancel_);
-
-        WatchDog wd(ios, chrono::minutes(3), [&] { cancel(); });
-
-        bool keep_alive = rq_.keep_alive();
         sys::error_code ec;
 
-        if (!injector) {
-            inject_fresh(con, rq_, cancel, yield[ec]);
+        Cancel cancel(cancel_);
+
+        bool keep_alive = rq.keep_alive();
+
+        auto rs = load_from_disk(rq.target(), yield[ec]);
+
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec == asio::error::operation_aborted) {
             return or_throw(yield, ec, keep_alive);
         }
 
-        auto bep44m = injector->get_bep44m(rq_.target(), cancel, yield[ec]);
-
-        if (cancel || ec == asio::error::operation_aborted) {
-            return or_throw(yield, asio::error::operation_aborted, keep_alive);
-        }
-
-        if (ec != asio::error::not_found) {
-            return_or_throw_on_error(yield, cancel, ec, keep_alive);
-        }
-
-        if (ec) { // not found
-            inject_fresh(con, rq_, cancel, yield[ec]);
-            return or_throw(yield, ec, keep_alive);
-        }
-
-        Descriptor dsc = injector->bep44m_to_descriptor( bep44m
-                                                       , cancel
-                                                       , yield[ec]);
-
-        bool get_fresh = ec
-                      || (is_old(dsc.timestamp)
-                          && CacheControl::is_expired(dsc.head, dsc.timestamp));
+        bool get_fresh = ec || !is_semi_fresh(rs);
 
         if (get_fresh) {
-            inject_fresh(con, rq_, cancel, yield[ec]);
+            inject_fresh(con, rq, cancel, yield[ec]);
             return or_throw(yield, ec, keep_alive);
         }
-
-        auto body = injector->ipfs_cat( dsc.body_link
-                                      , cancel
-                                      , yield[ec].tag("ipfs_cat body"));
-
-        if (cancel || ec == asio::error::operation_aborted) {
-            return or_throw(yield, asio::error::operation_aborted, keep_alive);
-        }
-
-        if (ec) {
-            inject_fresh(con, rq_, cancel, yield[ec]);
-            return or_throw(yield, ec, keep_alive);
-        }
-
-        http::response<http::string_body> rs(dsc.head);
-        rs.body() = move(body);
-        rs = add_re_insertion_header_field(move(rs), bep44m.bencode());
-        rs.prepare_payload();
 
         http::async_write(con, rs, yield[ec]);
-        return or_throw(yield, ec, keep_alive);
+
+        return keep_alive;
     }
 
     Response fetch_fresh(const Request& rq_, Cancel& cancel, Yield yield) {
