@@ -103,6 +103,11 @@ if grep -qP '^\s*injector-ep\s*=(?!\s*[A-Za-z][-\+\.0-9A-Za-z]*:)' "$CONF" && ! 
         "$CONF"
 fi
 
+# Comment out some obsolete configuration parameters.
+if grep -qE '^\s*(cache-index|index-ipns-id)\s*=' "$CONF" && ! has_help_arg "$@"; then
+    sed -i -E 's/^(\s*)(cache-index|index-ipns-id)(\s*=.*)/##\1\2\3  # obsolete/' "$CONF"
+fi
+
 # Update BEP44 key file names.
 if ! has_help_arg "$@"; then
     if [ -e "$REPO/bt-private-key" ]; then
