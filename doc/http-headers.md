@@ -90,5 +90,4 @@ The identifier is eventually added to the resulting descriptor (when the
 injection takes place) and the client can use it to track the state of an
 injection asynchronously, for instance to retrieve the descriptor
 corresponding to a URI that it requested and help decide whether to seed it or
-not (in certain data bases like IPNS/IPFS, the lookup itself may help with
-future lookups by retrieving intermediate structures like B-tree nodes).
+not.

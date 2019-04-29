@@ -402,13 +402,12 @@ point it to the repository created above:
     Swarm listening on /ip4/127.0.0.1/tcp/4001
     Swarm listening on /ip4/192.168.0.136/tcp/4001
     Swarm listening on /ip6/::1/tcp/4001
-    IPNS Index: <IPNS IDX>
     BEP44 Index: <BEP44 IDX>
     ...
 
-Note down the `<IPNS IDX>` and `<BEP44 IDX>` strings in the above output since
-clients will need those as the *distributed cache index*.  You may also find
-these values in the `cache-*` files in the injector repository.
+Note down the `<BEP44 IDX>` string in the above output since clients will need
+it as the *distributed cache index*.  You may also find that value in the
+`cache-*` files in the injector repository.
 
 When you are done testing the Ouinet injector, you may shut it down by hitting
 Ctrl+C.
@@ -514,13 +513,7 @@ configuration tools:
     client and (B) seed the content to the cache.  The client will also seed
     the content (along with parts of the cache index).
 
-  - If using the IPFS-based B-tree index (not the default), the last seen
-    version of the published *cache index* (an IPFS hash) is also shown.  It
-    is likely that at first it is empty, which indicates that none has been
-    downloaded yet.  The download may take from a couple of seconds up to
-    about three minutes (e.g. when starting the client).  The page refreshes
-    itself regularly so once the client downloads the index, it should display
-    automatically.
+  - Other information about the cache index is shown next.
 
 After visiting a page with the Origin mechanism disabled and Injector
 mechanism enabled, and waiting for a short while, you should be able to
