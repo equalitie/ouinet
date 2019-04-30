@@ -194,7 +194,9 @@ class DhtNode {
     boost::optional<BencodedMap> query_get_peers(
         NodeID infohash,
         Contact node,
-        std::vector<NodeContact>& closer_nodes,
+        util::AsyncQueue<NodeContact>& closer_nodes,
+        WatchDog& dms,
+        DebugCtx* dbg,
         asio::yield_context yield,
         Signal<void()>& cancel_signal
     );
