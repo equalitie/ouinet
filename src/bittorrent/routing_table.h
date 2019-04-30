@@ -5,24 +5,9 @@
 #include <chrono>
 #include <deque>
 
-#include "node_id.h"
+#include "node_contact.h"
 
 namespace ouinet { namespace bittorrent { namespace dht {
-
-struct NodeContact {
-    NodeID id;
-    asio::ip::udp::endpoint endpoint;
-
-    std::string to_string() const;
-
-    bool operator==(const NodeContact& other) const {
-        return id == other.id && endpoint == other.endpoint;
-    }
-
-    bool operator<(const NodeContact& other) const {
-        return std::tie(id, endpoint) < std::tie(other.id, other.endpoint);
-    }
-};
 
 struct RoutingNode {
     static inline constexpr std::chrono::minutes QUESTIONABLE_TIMEOUT() { return std::chrono::minutes(15); }
