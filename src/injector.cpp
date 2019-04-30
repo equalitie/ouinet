@@ -42,6 +42,7 @@
 #include "ouiservice/pt-obfs3.h"
 #include "ouiservice/pt-obfs4.h"
 #include "ouiservice/tcp.h"
+#include "ouiservice/utp.h"
 #include "ouiservice/tls.h"
 #include "ssl/ca_certificate.h"
 #include "ssl/util.h"
@@ -59,6 +60,7 @@ using namespace std;
 using namespace ouinet;
 
 using tcp         = asio::ip::tcp;
+using udp         = asio::ip::udp;
 using string_view = beast::string_view;
 // We are more interested in an ID generator that can be
 // used concurrently and does not block by random pool exhaustion
@@ -917,6 +919,16 @@ int main(int argc, const char* argv[])
 
         auto base = make_unique<ouiservice::TcpOuiServiceServer>(ios, endpoint);
         proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(move(base), ssl_context));
+    }
+
+    if (config.utp_endpoint()) {
+        udp::endpoint endpoint = *config.utp_endpoint();
+        cout << "uTP Address: " << endpoint << endl;
+
+        util::create_state_file( config.repo_root()/"endpoint-utp"
+                               , util::str(endpoint));
+
+        proxy_server.add(make_unique<ouiservice::UtpOuiServiceServer>(ios, endpoint));
     }
 
     if (config.lampshade_endpoint()) {

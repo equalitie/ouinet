@@ -59,8 +59,11 @@ externalproject_add(golang
 
 ################################################################################
 option(ASIO_IPFS_WITH_EXAMPLE_BINARIES "" OFF)
+option(ASIO_UTP_WITH_TESTS             "" OFF)
+option(ASIO_UTP_WITH_EXAMPLES          "" OFF)
 
 add_subdirectory(./modules/asio-ipfs)
+add_subdirectory(./modules/asio-utp)
 add_subdirectory(./modules/obfs4proxy)
 add_subdirectory(./src/ouiservice/i2p)
 add_subdirectory(./src/ouiservice/lampshade)
@@ -178,6 +181,7 @@ file(GLOB client_sources
     "./src/ouiservice/pt-obfs3.cpp"
     "./src/ouiservice/pt-obfs4.cpp"
     "./src/ouiservice/tcp.cpp"
+    "./src/ouiservice/utp.cpp"
     "./src/ouiservice/tls.cpp"
     "./src/ouiservice/pluggable-transports/*.cpp"
     "./src/logger.cpp"
@@ -205,6 +209,7 @@ endif()
 target_link_libraries(client
     ${log-lib}
     ouiservice-i2p
+    asio_utp
     ${Boost_LIBRARIES}
     ${ASIO_IPFS_LIBRARIES}
     ${LIBLAMPSHADE_LIBRARIES}
@@ -234,6 +239,7 @@ if (WITH_INJECTOR)
         "./src/ouiservice/pt-obfs3.cpp"
         "./src/ouiservice/pt-obfs4.cpp"
         "./src/ouiservice/tcp.cpp"
+        "./src/ouiservice/utp.cpp"
         "./src/ouiservice/tls.cpp"
         "./src/ouiservice/pluggable-transports/*.cpp"
         "./src/ssl/ca_certificate.cpp"
@@ -254,6 +260,7 @@ if (WITH_INJECTOR)
 
     target_link_libraries(injector
         ouiservice-i2p
+        asio_utp
         ${Boost_LIBRARIES}
         ${ASIO_IPFS_LIBRARIES}
         ${LIBLAMPSHADE_LIBRARIES}
