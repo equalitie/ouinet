@@ -33,7 +33,7 @@ class Bep44EntryUpdater;
 class Bep44ClientIndex {
 public:
     using UpdatedHook = std::function<bool( std::string old, std::string new_
-                                      , Cancel&, asio::yield_context)>;
+                                          , Cancel&, asio::yield_context)>;
 
     static
     std::unique_ptr<Bep44ClientIndex>
@@ -44,6 +44,11 @@ public:
          , Cancel&
          , asio::yield_context);
 
+    // If set, when the index detects a change in an entry that this client is
+    // publishing, this function is called with the old and new values in the
+    // index, and it returns whether it considers the new value usable for
+    // further processing (e.g. storage or publishing).  It should *not*
+    // propagate an error code.
     void updated_hook(UpdatedHook);
 
     std::string find( const std::string& key
