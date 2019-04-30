@@ -1956,12 +1956,12 @@ bool dht::DhtNode::query_find_node(
 
     if (is_v4()) {
         boost::optional<std::string> nodes = (*response)["nodes"].as_string();
-        if (!decode_contacts_v4(*nodes, closer_nodes)) {
+        if (!NodeContact::decode_compact_v4(*nodes, closer_nodes)) {
             return false;
         }
     } else {
         boost::optional<std::string> nodes6 = (*response)["nodes6"].as_string();
-        if (!decode_contacts_v6(*nodes6, closer_nodes)) {
+        if (!NodeContact::decode_compact_v6(*nodes6, closer_nodes)) {
             return false;
         }
     }
@@ -2012,10 +2012,10 @@ bool dht::DhtNode::query_find_node2(
 
     if (is_v4()) {
         boost::optional<std::string> nodes = (*response)["nodes"].as_string();
-        if (nodes) decode_contacts_v4(*nodes, closer_nodes_v);
+        if (nodes) NodeContact::decode_compact_v4(*nodes, closer_nodes_v);
     } else {
         boost::optional<std::string> nodes = (*response)["nodes6"].as_string();
-        if (nodes) decode_contacts_v6(*nodes, closer_nodes_v);
+        if (nodes) NodeContact::decode_compact_v6(*nodes, closer_nodes_v);
     }
 
     closer_nodes.async_push_many(closer_nodes_v, cancel, yield[ec]);
@@ -2059,12 +2059,12 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_peers(
 
     if (is_v4()) {
         boost::optional<std::string> nodes = (*response)["nodes"].as_string();
-        if (!decode_contacts_v4(*nodes, closer_nodes)) {
+        if (!NodeContact::decode_compact_v4(*nodes, closer_nodes)) {
             return boost::none;
         }
     } else {
         boost::optional<std::string> nodes6 = (*response)["nodes6"].as_string();
-        if (!decode_contacts_v6(*nodes6, closer_nodes)) {
+        if (!NodeContact::decode_compact_v6(*nodes6, closer_nodes)) {
             return boost::none;
         }
     }
@@ -2162,12 +2162,12 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data(
 
     if (is_v4()) {
         boost::optional<std::string> nodes = (*response)["nodes"].as_string();
-        if (!decode_contacts_v4(*nodes, closer_nodes)) {
+        if (!NodeContact::decode_compact_v4(*nodes, closer_nodes)) {
             return boost::none;
         }
     } else {
         boost::optional<std::string> nodes6 = (*response)["nodes6"].as_string();
-        if (!decode_contacts_v6(*nodes6, closer_nodes)) {
+        if (!NodeContact::decode_compact_v6(*nodes6, closer_nodes)) {
             return boost::none;
         }
     }
@@ -2246,10 +2246,10 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data2(
 
     if (is_v4()) {
         boost::optional<std::string> nodes = (*response)["nodes"].as_string();
-        if (nodes) decode_contacts_v4(*nodes, closer_nodes_v);
+        if (nodes) NodeContact::decode_compact_v4(*nodes, closer_nodes_v);
     } else {
         boost::optional<std::string> nodes = (*response)["nodes6"].as_string();
-        if (nodes) decode_contacts_v6(*nodes, closer_nodes_v);
+        if (nodes) NodeContact::decode_compact_v6(*nodes, closer_nodes_v);
     }
 
     closer_nodes.async_push_many(closer_nodes_v, cancel_signal, yield[ec]);
@@ -2312,10 +2312,10 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data3(
 
     if (is_v4()) {
         boost::optional<std::string> nodes = (*response)["nodes"].as_string();
-        if (nodes) decode_contacts_v4(*nodes, closer_nodes_v);
+        if (nodes) NodeContact::decode_compact_v4(*nodes, closer_nodes_v);
     } else {
         boost::optional<std::string> nodes = (*response)["nodes6"].as_string();
-        if (nodes) decode_contacts_v6(*nodes, closer_nodes_v);
+        if (nodes) NodeContact::decode_compact_v6(*nodes, closer_nodes_v);
     }
 
     closer_nodes.async_push_many(closer_nodes_v, cancel_signal, yield[ec]);
