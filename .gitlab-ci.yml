@@ -1,4 +1,4 @@
-image: registry.gitlab.com/wldhx/ouinet:latest
+image: registry.gitlab.com/equalitie/ouinet:latest
 
 stages:
   - build-image
