@@ -52,7 +52,7 @@ struct NodeID {
 
     std::string to_bytestring() const { return util::bytes::to_string(buffer); }
 
-    static NodeID from_bytestring(const std::string& bytestring) {
+    static NodeID from_bytestring(boost::string_view bytestring) {
         return NodeID{ util::bytes::to_array<uint8_t, size>(bytestring) };
     }
 

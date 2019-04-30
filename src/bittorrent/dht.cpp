@@ -1956,12 +1956,12 @@ bool dht::DhtNode::query_find_node(
 
     if (is_v4()) {
         boost::optional<std::string> nodes = (*response)["nodes"].as_string();
-        if (!decode_contacts_v4(*nodes, closer_nodes)) {
+        if (!NodeContact::decode_compact_v4(*nodes, closer_nodes)) {
             return false;
         }
     } else {
         boost::optional<std::string> nodes6 = (*response)["nodes6"].as_string();
-        if (!decode_contacts_v6(*nodes6, closer_nodes)) {
+        if (!NodeContact::decode_compact_v6(*nodes6, closer_nodes)) {
             return false;
         }
     }
@@ -2012,10 +2012,10 @@ bool dht::DhtNode::query_find_node2(
 
     if (is_v4()) {
         boost::optional<std::string> nodes = (*response)["nodes"].as_string();
-        if (nodes) decode_contacts_v4(*nodes, closer_nodes_v);
+        if (nodes) NodeContact::decode_compact_v4(*nodes, closer_nodes_v);
     } else {
         boost::optional<std::string> nodes = (*response)["nodes6"].as_string();
-        if (nodes) decode_contacts_v6(*nodes, closer_nodes_v);
+        if (nodes) NodeContact::decode_compact_v6(*nodes, closer_nodes_v);
     }
 
     closer_nodes.async_push_many(closer_nodes_v, cancel, yield[ec]);
@@ -2027,7 +2027,9 @@ bool dht::DhtNode::query_find_node2(
 boost::optional<BencodedMap> dht::DhtNode::query_get_peers(
     NodeID infohash,
     Contact node,
-    std::vector<NodeContact>& closer_nodes,
+    util::AsyncQueue<NodeContact>& closer_nodes,
+    WatchDog& dms,
+    DebugCtx* dbg,
     asio::yield_context yield,
     Signal<void()>& cancel_signal
 ) {
@@ -2040,8 +2042,8 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_peers(
             { "id", _node_id.to_bytestring() },
             { "info_hash", infohash.to_bytestring() }
         },
-        nullptr,
-        nullptr,
+        &dms,
+        dbg,
         yield[ec],
         cancel_signal
     );
@@ -2057,19 +2059,21 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_peers(
         return boost::none;
     }
 
+    std::vector<NodeContact> closer_nodes_v;
+
     if (is_v4()) {
         boost::optional<std::string> nodes = (*response)["nodes"].as_string();
-        if (!decode_contacts_v4(*nodes, closer_nodes)) {
+        if (!NodeContact::decode_compact_v4(*nodes, closer_nodes_v)) {
             return boost::none;
         }
     } else {
         boost::optional<std::string> nodes6 = (*response)["nodes6"].as_string();
-        if (!decode_contacts_v6(*nodes6, closer_nodes)) {
+        if (!NodeContact::decode_compact_v6(*nodes6, closer_nodes_v)) {
             return boost::none;
         }
     }
 
-    if (closer_nodes.empty()) {
+    if (closer_nodes_v.empty()) {
         /*
          * We got a reply to get_peers, but it does not contain nodes.
          * Follow up with a find_node to fill the gap.
@@ -2078,7 +2082,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_peers(
         query_find_node(
             infohash,
             node,
-            closer_nodes,
+            closer_nodes_v,
             yield,
             cancel_signal
         );
@@ -2086,6 +2090,8 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_peers(
             return boost::none;
         }
     }
+
+    closer_nodes.async_push_many(closer_nodes_v, cancel_signal, yield[ec]);
 
     return response;
 }
@@ -2162,12 +2168,12 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data(
 
     if (is_v4()) {
         boost::optional<std::string> nodes = (*response)["nodes"].as_string();
-        if (!decode_contacts_v4(*nodes, closer_nodes)) {
+        if (!NodeContact::decode_compact_v4(*nodes, closer_nodes)) {
             return boost::none;
         }
     } else {
         boost::optional<std::string> nodes6 = (*response)["nodes6"].as_string();
-        if (!decode_contacts_v6(*nodes6, closer_nodes)) {
+        if (!NodeContact::decode_compact_v6(*nodes6, closer_nodes)) {
             return boost::none;
         }
     }
@@ -2246,10 +2252,10 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data2(
 
     if (is_v4()) {
         boost::optional<std::string> nodes = (*response)["nodes"].as_string();
-        if (nodes) decode_contacts_v4(*nodes, closer_nodes_v);
+        if (nodes) NodeContact::decode_compact_v4(*nodes, closer_nodes_v);
     } else {
         boost::optional<std::string> nodes = (*response)["nodes6"].as_string();
-        if (nodes) decode_contacts_v6(*nodes, closer_nodes_v);
+        if (nodes) NodeContact::decode_compact_v6(*nodes, closer_nodes_v);
     }
 
     closer_nodes.async_push_many(closer_nodes_v, cancel_signal, yield[ec]);
@@ -2312,10 +2318,10 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data3(
 
     if (is_v4()) {
         boost::optional<std::string> nodes = (*response)["nodes"].as_string();
-        if (nodes) decode_contacts_v4(*nodes, closer_nodes_v);
+        if (nodes) NodeContact::decode_compact_v4(*nodes, closer_nodes_v);
     } else {
         boost::optional<std::string> nodes = (*response)["nodes6"].as_string();
-        if (nodes) decode_contacts_v6(*nodes, closer_nodes_v);
+        if (nodes) NodeContact::decode_compact_v6(*nodes, closer_nodes_v);
     }
 
     closer_nodes.async_push_many(closer_nodes_v, cancel_signal, yield[ec]);
@@ -2342,35 +2348,37 @@ void dht::DhtNode::tracker_do_search_peers(
     };
     ProximityMap<ResponsibleNode> responsible_nodes_full(infohash, RESPONSIBLE_TRACKERS_PER_SWARM);
 
-    collect(infohash, [&](
+    DebugCtx dbg;
+    collect2(dbg, infohash, [&](
         const Contact& candidate,
+        WatchDog& wd,
+        util::AsyncQueue<NodeContact>& closer_nodes,
         asio::yield_context yield,
         Signal<void()>& cancel_signal
-    ) -> boost::optional<Candidates> {
+    ) {
         if (!candidate.id && responsible_nodes_full.full()) {
-            return boost::none;
+            return;
         }
         if (candidate.id && !responsible_nodes_full.would_insert(*candidate.id)) {
-            return boost::none;
+            return;
         }
 
-        std::vector<NodeContact> closer_nodes;
         boost::optional<BencodedMap> response_ = query_get_peers(
             infohash,
             candidate,
             closer_nodes,
+            wd,
+            &dbg,
             yield,
             cancel_signal
         );
-        if (!response_) {
-            return closer_nodes;
-        }
+        if (!response_) return;
+
         BencodedMap& response = *response_;
 
         boost::optional<std::string> announce_token = response["token"].as_string();
-        if (!announce_token) {
-            return closer_nodes;
-        }
+
+        if (!announce_token) return;
 
         if (candidate.id) {
             ResponsibleNode node{ candidate.endpoint, {}, *announce_token };
@@ -2378,20 +2386,16 @@ void dht::DhtNode::tracker_do_search_peers(
             if (encoded_peers) {
                 for (auto& peer : *encoded_peers) {
                     boost::optional<std::string> peer_string = peer.as_string();
-                    if (!peer_string) {
-                        continue;
-                    }
+                    if (!peer_string) continue;
+
                     boost::optional<udp::endpoint> endpoint = decode_endpoint(*peer_string);
-                    if (!endpoint) {
-                        continue;
-                    }
+                    if (!endpoint) continue;
+
                     node.peers.push_back({endpoint->address(), endpoint->port()});
                 }
             }
             responsible_nodes_full.insert({ *candidate.id, std::move(node) });
         }
-
-        return closer_nodes;
     }, yield[ec], cancel_signal);
 
     peers.clear();
