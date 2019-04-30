@@ -56,9 +56,10 @@ bool match_http_url(const boost::string_view url, url_match& match) {
     return true;
 }
 
+template<class Proto /* one of asio::ip::{tcp,udp} */>
 inline
-asio::ip::tcp::endpoint
-parse_tcp_endpoint(const std::string& s, sys::error_code& ec)
+typename Proto::endpoint
+parse_endpoint(const std::string& s, sys::error_code& ec)
 {
     using namespace std;
     auto pos = s.rfind(':');
@@ -67,7 +68,7 @@ parse_tcp_endpoint(const std::string& s, sys::error_code& ec)
 
     if (pos == string::npos) {
         ec = asio::error::invalid_argument;
-        return asio::ip::tcp::endpoint();
+        return {};
     }
 
     auto addr = asio::ip::address::from_string(s.substr(0, pos));
@@ -77,10 +78,18 @@ parse_tcp_endpoint(const std::string& s, sys::error_code& ec)
 
     if (port == 0 && !(*pb == '0' && *(pb+1) == 0)) {
         ec = asio::error::invalid_argument;
-        return asio::ip::tcp::endpoint();
+        return {};
     }
 
-    return asio::ip::tcp::endpoint(move(addr), port);
+    return {move(addr), port};
+}
+
+// Deprecated in favor of the above `parse_endpoint`
+inline
+asio::ip::tcp::endpoint
+parse_tcp_endpoint(const std::string& s, sys::error_code& ec)
+{
+    return parse_endpoint<asio::ip::tcp>(s, ec);
 }
 
 inline
