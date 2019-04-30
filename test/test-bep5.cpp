@@ -8,6 +8,8 @@
 #include <boost/optional/optional_io.hpp>
 #include "../src/util/crypto.h"
 #include "../src/parse/number.h"
+#include "../src/async_sleep.h"
+#include "progress.h"
 
 using namespace ouinet;
 using namespace std;
@@ -76,11 +78,28 @@ void parse_args( const vector<string>& args
     }
 }
 
+void wait_for_ready(DhtNode& dht, asio::yield_context yield)
+{
+    auto& ios = dht.get_io_service();
+
+    sys::error_code ec;
+    Progress progress(ios, "Bootstrapping");
+
+    dht.start(yield[ec]);
+
+    asio::steady_timer timer(ios);
+
+    while (!ec && !dht.ready()) {
+        timer.expires_from_now(chrono::milliseconds(200));
+        timer.async_wait(yield[ec]);
+    }
+}
+
 int main(int argc, const char** argv)
 {
     asio::io_service ios;
 
-    DhtNode dht_ {ios, asio::ip::make_address("0.0.0.0")};
+    DhtNode dht {ios, asio::ip::make_address("0.0.0.0")};
 
     vector<string> args;
 
@@ -99,22 +118,7 @@ int main(int argc, const char** argv)
     asio::spawn(ios, [&] (asio::yield_context yield) {
         sys::error_code ec;
 
-        dht_.start(yield[ec]);
-
-        asio::steady_timer timer(ios);
-
-        while (!dht_.ready() && !ec) {
-            cerr << "Not ready yet..." << endl;
-            timer.expires_from_now(chrono::seconds(1));
-            timer.async_wait(yield[ec]);
-        }
-
-        if (ec) {
-            cerr << "Error timer.async_wait " << ec.message() << endl;
-            return;
-        }
-
-        cerr << "Start" << endl;
+        wait_for_ready(dht, yield);
 
         Cancel cancel;
 
@@ -143,7 +147,7 @@ int main(int argc, const char** argv)
                 nc = NodeContact{my_id, ep};
             }
 
-            BencodedMap initial_ping_reply = dht_.send_ping(nc, yield[ec], cancel);
+            BencodedMap initial_ping_reply = dht.send_ping(nc, yield[ec], cancel);
             std::cout << initial_ping_reply << endl;
             if (!initial_ping_reply.empty()) {
                 NodeID their_id = NodeID::from_bytestring(*((*initial_ping_reply["r"].as_map())["id"].as_string()));
@@ -178,7 +182,7 @@ int main(int argc, const char** argv)
             else nc = Contact {ep, my_id};
 
             std::vector<ouinet::bittorrent::dht::NodeContact> v = {};
-            bool is_found = dht_.query_find_node(my_id, nc, v, yield[ec], cancel);
+            bool is_found = dht.query_find_node(my_id, nc, v, yield[ec], cancel);
 
             std::cout << "Found: " << is_found << "\n";
             for (const auto& i: v) {
@@ -187,14 +191,28 @@ int main(int argc, const char** argv)
         }
 
         if (get_peers_cmd) {
-            Contact nc {ep, my_id};
+            if (args.size() < 4) {
+                cerr << "Missing infohash argument\n";
+                return;
+            }
 
-            std::vector<ouinet::bittorrent::dht::NodeContact> v = {};
-            boost::optional<BencodedMap> peers = dht_.query_get_peers(my_id, nc, v, yield[ec], cancel);
+            auto infohash = NodeID::from_hex(args[3]);
 
-            if (peers) {
-                std::cout << "Nodes: " << (*peers)["nodes"] << endl;
-                std::cout << "Token: " << (*peers)["token"] << endl;
+            auto peers = [&] {
+                Progress p(ios, "Getting peers");
+                return dht.tracker_get_peers(infohash, yield[ec], cancel);
+            }();
+
+            if (!ec) {
+                cerr << "Found " << peers.size() << " peers:\n";
+                for (auto i = peers.begin(); i != peers.end(); ++i) {
+                    cerr << *i;
+                    if (next(i) != peers.end()) cerr << ", ";
+                }
+                cerr << "\n";
+            }
+            else {
+                cerr << "No peers found: " << ec.message() << "\n";
             }
         }
 
