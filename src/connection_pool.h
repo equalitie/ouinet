@@ -48,7 +48,8 @@ class ConnectionPool {
                                       << res;
                             assert(0);
                         }
-                        if (!_is_requesting && !ec) break;
+
+                        if (!_is_requesting) break;
 
                         _res = std::move(res);
                         _cv.notify(ec);
