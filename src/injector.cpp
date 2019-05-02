@@ -374,7 +374,7 @@ public:
                                                   , move(ins.index_ins_data));
 
                 sys::error_code ec_ignored;
-                save_to_disk(rq.target(), rs, yield[ec_ignored]);
+                save_to_disk(key_from_http_req(rq), rs, yield[ec_ignored]);
                 assert(!ec);
             }
             else {
@@ -463,7 +463,7 @@ public:
 
         bool keep_alive = rq.keep_alive();
 
-        auto rs = load_from_disk(rq.target(), yield[ec]);
+        auto rs = load_from_disk(key_from_http_req(rq), yield[ec]);
 
         if (cancel) ec = asio::error::operation_aborted;
         if (ec == asio::error::operation_aborted) {
