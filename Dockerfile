@@ -25,6 +25,9 @@ RUN apt-get update && apt-get install -y \
     virtualenv \
     wget \
     zlib1g-dev
+# quieten wget and unzip
+RUN echo 'quiet = on' >> /etc/wgetrc
+ENV UNZIP=-q
 WORKDIR /usr/local/src
 RUN wget -q "https://downloads.sourceforge.net/project/boost/boost/1.67.0/boost_1_67_0.tar.bz2" \
  && tar -xf boost_1_67_0.tar.bz2 \
