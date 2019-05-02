@@ -24,8 +24,7 @@ RUN apt-get update && apt-get install -y \
     texinfo \
     virtualenv \
     wget \
-    zlib1g-dev \
- && rm -rf /var/lib/apt/lists/*
+    zlib1g-dev
 WORKDIR /usr/local/src
 RUN wget -q "https://downloads.sourceforge.net/project/boost/boost/1.67.0/boost_1_67_0.tar.bz2" \
  && tar -xf boost_1_67_0.tar.bz2 \
