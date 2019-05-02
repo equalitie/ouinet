@@ -53,7 +53,7 @@ RUN cp -r /usr/local/src/ouinet/repos/ repo-templates/
 ARG OUINET_DEBUG=no
 RUN \
 if [ $OUINET_DEBUG != yes ]; then \
-    strip injector client modules/obfs4proxy/obfs4proxy test/test-* \
+    strip injector client modules/obfs4proxy/obfs4proxy \
         && find . -name '*.so' -exec strip '{}' + \
         && find . -wholename '*/libexec/*' -executable -type f -exec strip '{}' + ; \
 fi
@@ -73,7 +73,7 @@ FROM debian:stretch
 # To get the list of system library packages to install,
 # enter the build directory and execute:
 #
-#     ldd injector client test/test-* $(find . -name '*.so' | grep -v '\.libs') \
+#     ldd injector client $(find . -name '*.so' | grep -v '\.libs') \
 #         | sed -En 's#^.* => (/lib/.*|/usr/lib/.*) \(.*#\1#p' | sort -u \
 #         | (while read l; do dpkg -S $l; done) | cut -f1 -d: | sort -u
 #
@@ -109,7 +109,7 @@ WORKDIR /opt/ouinet
 # To get the list of locally built libraries to copy,
 # enter the build directory and execute:
 #
-#     ldd injector client test/test-* $(find . -name '*.so' | grep -v '\.libs') \
+#     ldd injector client $(find . -name '*.so' | grep -v '\.libs') \
 #         | sed -En "s#^.* => ($PWD/.*) \(.*#\1#p" | sort -u \
 #         | sed "s#$PWD#/opt/ouinet#"
 #
@@ -127,7 +127,6 @@ RUN ldconfig
 #COPY --from=builder /opt/ouinet/modules/gnunet-channels/gnunet-bin/lib/ modules/gnunet-channels/gnunet-bin/lib/
 COPY --from=builder /opt/ouinet/injector /opt/ouinet/client ./
 COPY --from=builder /opt/ouinet/modules/obfs4proxy/obfs4proxy ./
-COPY --from=builder /opt/ouinet/test/test-* test/
 COPY --from=builder /opt/ouinet/repo-templates/ repo-templates/
 # This ensures that we use the desired Docker-specific files.
 RUN echo "$OUINET_DOCKER_VERSION"
