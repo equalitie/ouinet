@@ -1,0 +1,67 @@
+image: registry.gitlab.com/equalitie/ouinet:latest
+
+stages:
+  - build-image
+  - build
+  - test
+
+variables:
+  GIT_SUBMODULE_STRATEGY: recursive
+
+build-image:
+  stage: build-image
+  tags:
+    - shell
+  script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker build --pull --target base -t $CI_REGISTRY_IMAGE:latest - < Dockerfile
+    - docker push $CI_REGISTRY_IMAGE:latest
+    - docker build -t $CI_REGISTRY_IMAGE:android - < Dockerfile.android
+    - docker push $CI_REGISTRY_IMAGE:android
+
+build:
+  stage: build
+  tags:
+    - docker
+  artifacts:
+    paths:
+      - build/client
+      - build/injector
+      - build/test/test-*
+      - build/gpg_error/out/lib/libgpg-error.so*
+      - build/gcrypt/src/gcrypt/src/.libs/libgcrypt.so*
+      - build/modules/asio-ipfs/ipfs_bindings/libipfs_bindings.so
+      - build/src/ouiservice/lampshade/lampshade_bindings/liblampshade_bindings.so
+    expire_in: 6h
+  cache:
+    key: single
+    paths:
+      - build/modules/*/go-workspace
+      - build/src/ouiservice/lampshade/go-workspace
+  script:
+    - mkdir -p build
+    - cd build
+    - cmake ..
+    - make -j `nproc`
+
+unit-test:
+  stage: test
+  tags:
+    - docker
+  script:
+    - export LD_LIBRARY_PATH=/usr/local/lib
+    - ./build/test/test-cache                --log_level=test_suite
+    - ./build/test/test-wait-condition       --log_level=test_suite
+    - ./build/test/test-bittorrent           --log_level=test_suite
+    - ./build/test/test-logger               --log_level=test_suite
+    - ./build/test/test-http-util            --log_level=test_suite
+    - ./build/test/test-persistent-lru-cache --log_level=test_suite
+
+integration-test:
+  stage: test
+  tags:
+    - docker
+  script:
+    - export LD_LIBRARY_PATH=/usr/local/lib:$PWD/build/gcrypt/src/gcrypt/src/.libs:$PWD/build/gpg_error/out/lib:$PWD/build/modules/asio-ipfs/ipfs_bindings:$PWD/build/src/ouiservice/lampshade/lampshade_bindings
+    - export OUINET_BUILD_DIR=$PWD/build
+    - ./scripts/run_integration_tests.sh

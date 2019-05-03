@@ -134,6 +134,9 @@ Vagrant.configure("2") do |config|
         libidn11-dev \
         libssl-dev \
         libunistring-dev \
+        python \
+        python-dev \
+        python-twisted \
         zlib1g-dev
       cd /usr/local/src
       wget -q "https://downloads.sourceforge.net/project/boost/boost/1.67.0/boost_1_67_0.tar.bz2"

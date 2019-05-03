@@ -126,7 +126,8 @@ class OuinetProcess(object):
 
         self._proc = reactor.spawnProcess(self._proc_protocol,
                                           self.config.argv[0],
-                                          self.config.argv)
+                                          self.config.argv,
+                                          env=ouinet_env)
         self._has_started = True
 
         # we add a twisted timer to kill the process after timeout
