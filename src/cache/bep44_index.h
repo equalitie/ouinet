@@ -55,12 +55,12 @@ public:
                     , Cancel&
                     , asio::yield_context);
 
-    std::string insert_mapping( const boost::string_view target
+    std::string insert_mapping( const boost::string_view key
                               , const std::string&
                               , Cancel&
                               , asio::yield_context);
 
-    std::string insert_mapping( const boost::string_view target
+    std::string insert_mapping( const boost::string_view key
                               , bittorrent::MutableDataItem
                               , Cancel&
                               , asio::yield_context);

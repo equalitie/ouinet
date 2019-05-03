@@ -148,7 +148,7 @@ string CacheClient::ipfs_add(const string& data, asio::yield_context yield)
     return _ipfs_node->add(data, yield);
 }
 
-string CacheClient::insert_mapping( const boost::string_view target
+string CacheClient::insert_mapping( const boost::string_view key
                                   , const std::string& ins_data
                                   , Cancel& cancel
                                   , boost::asio::yield_context yield)
@@ -156,7 +156,7 @@ string CacheClient::insert_mapping( const boost::string_view target
     if (!_index) return or_throw<string>( yield
                                         , asio::error::operation_not_supported);
 
-    return _index->insert_mapping(target, ins_data, cancel, yield);
+    return _index->insert_mapping(key, ins_data, cancel, yield);
 }
 
 string CacheClient::get_descriptor( const string& key, Cancel& cancel, Yield yield_)

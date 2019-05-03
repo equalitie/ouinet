@@ -124,13 +124,13 @@ class ouinet::Bep44EntryUpdater
 {
 private:
     struct Entry {
-        string url; // Mainly for debugging
+        string key; // Mainly for debugging
         Clock::time_point last_update;
         bt::MutableDataItem data;
 
         template<class File>
         void write(File& f, Cancel& cancel, asio::yield_context yield) {
-            auto s = entry_to_json(last_update, url, data).dump();
+            auto s = entry_to_json(last_update, key, data).dump();
             file_io::write(f, asio::buffer(s), cancel, yield);
         }
 
@@ -150,7 +150,7 @@ private:
                 if (!opt) ec = asio::error::fault;
                 return_or_throw_on_error(yield, cancel, ec);
 
-                tie(last_update, url, data) = *opt;
+                tie(last_update, key, data) = *opt;
             } catch (...) {
                 return_or_throw_on_error(yield, cancel, asio::error::fault);
             }
@@ -173,7 +173,7 @@ public:
         asio::spawn(_ios, [&] (asio::yield_context yield) { loop(yield); });
     }
 
-    void insert( const boost::string_view url
+    void insert( const boost::string_view key
                , bt::MutableDataItem data
                , Cancel& cancel_
                , asio::yield_context yield)
@@ -182,12 +182,12 @@ public:
         auto slot1 = cancel_.connect([&] { cancel(); });
         auto slot2 = _cancel.connect([&] { cancel(); });
 
-        auto key = data.salt;
+        auto lru_key = data.salt;
 
         sys::error_code ec;
 
-        _lru->insert( std::move(key)
-                    , Entry{ url.to_string()
+        _lru->insert( std::move(lru_key)
+                    , Entry{ key.to_string()
                            , Clock::now() - chrono::minutes(15)
                            , std::move(data)}
                     , cancel
@@ -238,7 +238,7 @@ private:
 
             sys::error_code ec;
 
-            LOG_DEBUG("Bep44EntryUpdater looking up bep44m ", loc.url);
+            LOG_DEBUG("Bep44EntryUpdater looking up bep44m ", loc.key);
 
             auto dht_data = find_bep44m(_dht
                                        , loc.data.public_key
@@ -522,7 +522,7 @@ Bep44InjectorIndex::find_bep44m( boost::string_view key
 }
 
 //--------------------------------------------------------------------
-string Bep44ClientIndex::insert_mapping( const boost::string_view target
+string Bep44ClientIndex::insert_mapping( const boost::string_view key
                                        , const string& ins_data
                                        , Cancel& cancel
                                        , asio::yield_context yield)
@@ -531,11 +531,11 @@ string Bep44ClientIndex::insert_mapping( const boost::string_view target
 
     if (!item) return or_throw<string>(yield, asio::error::invalid_argument);
 
-    return insert_mapping(target, move(*item), cancel, yield);
+    return insert_mapping(key, move(*item), cancel, yield);
 }
 
 
-string Bep44ClientIndex::insert_mapping( const boost::string_view target
+string Bep44ClientIndex::insert_mapping( const boost::string_view key
                                        , bt::MutableDataItem item
                                        , Cancel& cancel_
                                        , asio::yield_context yield)
@@ -553,7 +553,7 @@ string Bep44ClientIndex::insert_mapping( const boost::string_view target
 
     // Ignore the error here
     if (_updater)
-        _updater->insert(target, move(item), cancel, yield[ec]);
+        _updater->insert(key, move(item), cancel, yield[ec]);
 
     return util::bytes::to_hex(util::sha1(pk, salt));
 }
