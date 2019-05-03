@@ -21,9 +21,9 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     python \
     python-dev \
+    python-twisted \
     rsync \
     texinfo \
-    virtualenv \
     wget \
     zlib1g-dev
 # quieten wget and unzip
