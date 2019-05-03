@@ -1,4 +1,5 @@
-[![CircleCI](https://circleci.com/gh/equalitie/ouinet/tree/master.svg?style=shield)](https://circleci.com/gh/equalitie/ouinet/tree/master)
+[![CircleCI](https://circleci.com/gh/equalitie/ouinet/tree/master.svg?style=shield)](https://circleci.com/gh/equalitie/ouinet/tree/master) [![pipeline status](https://gitlab.com/equalitie/ouinet/badges/master/pipeline.svg)](https://gitlab.com/equalitie/ouinet/commits/master)
+
 
 # Ouinet
 
