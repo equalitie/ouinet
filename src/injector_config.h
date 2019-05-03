@@ -31,11 +31,11 @@ public:
     boost::optional<asio::ip::tcp::endpoint> tcp_endpoint() const
     { return _tcp_endpoint; }
 
+    boost::optional<asio::ip::tcp::endpoint> tcp_tls_endpoint() const
+    { return _tcp_tls_endpoint; }
+
     boost::optional<asio::ip::udp::endpoint> utp_endpoint() const
     { return _utp_endpoint; }
-
-    boost::optional<asio::ip::tcp::endpoint> tls_endpoint() const
-    { return _tls_endpoint; }
 
     boost::optional<asio::ip::tcp::endpoint> lampshade_endpoint() const
     { return _lampshade_endpoint; }
@@ -76,8 +76,8 @@ private:
     bool _listen_on_i2p = false;
     std::string _tls_ca_cert_store_path;
     boost::optional<asio::ip::tcp::endpoint> _tcp_endpoint;
+    boost::optional<asio::ip::tcp::endpoint> _tcp_tls_endpoint;
     boost::optional<asio::ip::udp::endpoint> _utp_endpoint;
-    boost::optional<asio::ip::tcp::endpoint> _tls_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _lampshade_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _obfs2_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _obfs3_endpoint;
@@ -109,8 +109,8 @@ InjectorConfig::options_description()
 
         // Transport options
         ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen (cleartext)")
+        ("listen-on-tcp-tls", po::value<string>(), "IP:PORT endpoint on which we'll listen (encrypted)")
         ("listen-on-utp", po::value<string>(), "IP:PORT endpoint on which we'll listen (cleartext)")
-        ("listen-on-tls", po::value<string>(), "IP:PORT endpoint on which we'll listen (encrypted)")
         ("listen-on-lampshade", po::value<string>(), "IP:PORT endpoint on which we'll listen using the lampshade pluggable transport")
         ("listen-on-obfs2", po::value<string>(), "IP:PORT endpoint on which we'll listen using the obfs2 pluggable transport")
         ("listen-on-obfs3", po::value<string>(), "IP:PORT endpoint on which we'll listen using the obfs3 pluggable transport")
@@ -231,8 +231,8 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         _utp_endpoint = ep;
     }
 
-    if (vm.count("listen-on-tls")) {
-        _tls_endpoint = util::parse_tcp_endpoint(vm["listen-on-tls"].as<string>());
+    if (vm.count("listen-on-tcp-tls")) {
+        _tcp_tls_endpoint = util::parse_tcp_endpoint(vm["listen-on-tcp-tls"].as<string>());
     }
 
     if (vm.count("listen-on-lampshade")) {

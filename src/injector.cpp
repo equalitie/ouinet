@@ -906,15 +906,15 @@ int main(int argc, const char* argv[])
     }
 
     asio::ssl::context ssl_context{asio::ssl::context::tls_server};
-    if (config.tls_endpoint()) {
+    if (config.tcp_tls_endpoint()) {
         ssl_context = ssl::util::get_server_context
             ( tls_certificate->pem_certificate()
             , tls_certificate->pem_private_key()
             , tls_certificate->pem_dh_param());
 
-        tcp::endpoint endpoint = *config.tls_endpoint();
-        cout << "TLS Address: " << endpoint << endl;
-        util::create_state_file( config.repo_root()/"endpoint-tls"
+        tcp::endpoint endpoint = *config.tcp_tls_endpoint();
+        cout << "TCP/TLS Address: " << endpoint << endl;
+        util::create_state_file( config.repo_root()/"endpoint-tcp-tls"
                                , util::str(endpoint));
 
         auto base = make_unique<ouiservice::TcpOuiServiceServer>(ios, endpoint);
