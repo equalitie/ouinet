@@ -1,4 +1,5 @@
 FROM debian:stretch AS base
+ENV LANG=C.UTF-8
 # To get the list of build dependency packages from the Vagrantfile, run:
 #
 #     sed '/# Install toolchain/,/^$/!d' Vagrantfile \
@@ -43,7 +44,6 @@ RUN wget -q "https://downloads.sourceforge.net/project/boost/boost/1.67.0/boost_
          --with-regex \
          --with-iostreams \
          --prefix=/usr/local install
-ENV LANG=C.UTF-8
 
 FROM base as builder
 # This version is a recommendation and this file has been tested to work for it,
