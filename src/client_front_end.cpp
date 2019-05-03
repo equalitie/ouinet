@@ -188,12 +188,12 @@ void ClientFrontEnd::handle_descriptor( const ClientConfig& config
         ss << "{\"error\": \"" << err << "\"}";
 }
 
-// Extract URL from BEP44 insertion data containing an inlined descriptor
+// Extract key from BEP44 insertion data containing an inlined descriptor
 // (linked descriptors are not yet supported).
 static
-string url_from_bep44(const string& data, Cancel& cancel, asio::yield_context yield)
+string key_from_bep44(const string& data, Cancel& cancel, asio::yield_context yield)
 {
-    string url;
+    string key;
     sys::error_code ec;
     try {
         auto item = bittorrent::MutableDataItem::bdecode(data);  // opt<bep44/m>
@@ -212,11 +212,11 @@ string url_from_bep44(const string& data, Cancel& cancel, asio::yield_context yi
         auto desc = Descriptor::deserialize(desc_data);  // opt<desc>
         if (!desc) throw invalid_argument("");
 
-        url = move(desc->url);
+        key = key_from_http_url(desc->url);
     } catch (invalid_argument _) {
         ec = asio::error::invalid_argument;
     }
-    return or_throw(yield, ec, move(url));
+    return or_throw(yield, ec, move(key));
 }
 
 void ClientFrontEnd::handle_insert_bep44( const Request& req, Response& res, stringstream& ss
@@ -245,11 +245,11 @@ void ClientFrontEnd::handle_insert_bep44( const Request& req, Response& res, str
 
         // `ClientIndex` does not know about descriptor format,
         // and `CacheClient` does not know about BEP44 format,
-        // so the proper place to extract the URL from insertion data is here.
+        // so the proper place to extract the key from insertion data is here.
         auto body = req.body();
-        auto url = url_from_bep44(body, cancel, yield[ec]);
+        auto key = key_from_bep44(body, cancel, yield[ec]);
         if (!ec)
-            key = cache_client->insert_mapping( url
+            key = cache_client->insert_mapping( key
                                               , move(body)
                                               , cancel
                                               , yield[ec]);
