@@ -134,8 +134,6 @@ Vagrant.configure("2") do |config|
         libidn11-dev \
         libssl-dev \
         libunistring-dev \
-        python \
-        python-dev \
         python-twisted \
         zlib1g-dev
       cd /usr/local/src
