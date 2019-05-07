@@ -395,7 +395,7 @@ public:
     }
 
     fs::path cache_dir() {
-        return config.repo_root() / "cache";
+        return config.repo_root() / "cache-v0";
     }
 
     fs::path cache_file(string_view key)
