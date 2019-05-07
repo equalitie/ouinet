@@ -257,16 +257,25 @@ void handle_connect_request( GenericStream client_c
 struct InjectorCacheControl {
 private:
     struct Entry {
-        string key;
+        Response rs;  // TODO: mindless initial approach, everything slurped into memory
 
         template<class File>
         void write(File& f, Cancel& cancel, asio::yield_context yield) {
-            // TODO
+            util::file_io::write(f, rs, cancel, yield);
         }
 
         template<class File>
         void read(File& f, Cancel& cancel, asio::yield_context yield) {
-            // TODO
+            beast::flat_buffer buffer;
+            http::response_parser<http::dynamic_body> parser;
+            sys::error_code ec;
+
+            auto cancel_slot = cancel.connect([&] { f.close(); });
+            http::async_read(f, buffer, parser, yield[ec]);
+            if (cancel) ec = asio::error::operation_aborted;
+            if (ec) return or_throw(yield, ec);
+
+            rs = move(parser.release());
         }
     };
 
