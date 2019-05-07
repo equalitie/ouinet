@@ -50,6 +50,7 @@
 #include "util/crypto.h"
 #include "util/bytes.h"
 #include "util/file_io.h"
+#include "util/persistent_lru_cache.h"
 
 #include "logger.h"
 #include "defer.h"
@@ -254,9 +255,27 @@ void handle_connect_request( GenericStream client_c
 
 //------------------------------------------------------------------------------
 struct InjectorCacheControl {
-    using Connection = OriginPools::Connection;
+private:
+    struct Entry {
+        string key;
+
+        template<class File>
+        void write(File& f, Cancel& cancel, asio::yield_context yield) {
+            // TODO
+        }
+
+        template<class File>
+        void read(File& f, Cancel& cancel, asio::yield_context yield) {
+            // TODO
+        }
+    };
 
 public:
+    using Lru = util::PersistentLruCache<Entry>;
+    using LruPtr = unique_ptr<Lru>;
+
+    using Connection = OriginPools::Connection;
+
     unique_ptr<Connection> connect( asio::io_service& ios
                                   , const Request& rq
                                   , Cancel& cancel
@@ -311,13 +330,15 @@ public:
                         , OriginPools& origin_pools
                         , const InjectorConfig& config
                         , unique_ptr<CacheInjector>& injector
-                        , uuid_generator& genuuid)
+                        , uuid_generator& genuuid
+                        , LruPtr& local_cache)
         : insert_id(to_string(genuuid()))
         , ios(ios)
         , ssl_ctx(ssl_ctx)
         , injector(injector)
         , config(config)
         , genuuid(genuuid)
+        , local_cache(local_cache)
         , cc(ios, OUINET_INJECTOR_SERVER_STRING)
         , origin_pools(origin_pools)
     {
@@ -395,7 +416,7 @@ public:
     }
 
     fs::path cache_dir() {
-        return config.repo_root() / "cache-v0";
+        return local_cache->dir();
     }
 
     fs::path cache_file(string_view key)
@@ -643,6 +664,7 @@ private:
     unique_ptr<CacheInjector>& injector;
     const InjectorConfig& config;
     uuid_generator& genuuid;
+    LruPtr& local_cache;
     CacheControl cc;
     OriginPools& origin_pools;
 };
@@ -656,6 +678,7 @@ void serve( InjectorConfig& config
           , unique_ptr<CacheInjector>& injector
           , OriginPools& origin_pools
           , uuid_generator& genuuid
+          , InjectorCacheControl::LruPtr& local_cache
           , Cancel& cancel
           , asio::yield_context yield_)
 {
@@ -668,7 +691,8 @@ void serve( InjectorConfig& config
                            , origin_pools
                            , config
                            , injector
-                           , genuuid);
+                           , genuuid
+                           , local_cache);
 
     for (;;) {
         sys::error_code ec;
@@ -760,13 +784,24 @@ void listen( InjectorConfig& config
 {
     uuid_generator genuuid;
 
+    asio::io_service& ios = proxy_server.get_io_service();
+
+    sys::error_code ec;
+
+    auto local_cache = InjectorCacheControl::Lru::load( ios
+                                                      , config.repo_root() / "cache-v0"
+                                                      , config.cache_local_capacity()
+                                                      , cancel
+                                                      , yield[ec]);
+    if (ec) {
+        std::cerr << "Failed to initialize local cache: " << ec.message() << endl;
+        return;
+    }
+
     auto stop_proxy_slot = cancel.connect([&proxy_server] {
         proxy_server.stop_listen();
     });
 
-    asio::io_service& ios = proxy_server.get_io_service();
-
-    sys::error_code ec;
     proxy_server.start_listen(yield[ec]);
     if (ec) {
         std::cerr << "Failed to setup ouiservice proxy server: " << ec.message() << endl;
@@ -805,6 +840,7 @@ void listen( InjectorConfig& config
             &cancel,
             &config,
             &genuuid,
+            &local_cache,
             &origin_pools,
             connection_id,
             lock = shutdown_connections.lock()
@@ -816,6 +852,7 @@ void listen( InjectorConfig& config
                  , cache_injector
                  , origin_pools
                  , genuuid
+                 , local_cache
                  , cancel
                  , yield);
         });
