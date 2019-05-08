@@ -433,27 +433,13 @@ public:
         return cache_dir() /  util::bytes::to_hex(util::sha1(key));
     }
 
-    http::response<http::dynamic_body> load_from_disk(string_view key, Yield yield)
+    Response load_from_disk(string_view key, Yield yield)
     {
-        using Response = http::response<http::dynamic_body>;
+        auto it = local_cache->find(key.to_string());
+        if (it == local_cache->end())
+            return or_throw<Response>(yield, asio::error::not_found);
 
-        sys::error_code ec;
-
-        util::file_io::check_or_create_directory(cache_dir(), ec);
-
-        if (ec) return or_throw<Response>(yield, ec);
-
-        auto file = util::file_io::open(ios, cache_file(key), ec);
-
-        if (ec) return or_throw<Response>(yield, ec);
-
-        beast::flat_buffer buffer;
-        http::response_parser<http::dynamic_body> parser;
-        http::async_read(file, buffer, parser, yield[ec]);
-
-        if (ec) return or_throw<Response>(yield, ec);
-
-        return parser.release();
+        return it.value().rs;
     }
 
     template<class Rs>
