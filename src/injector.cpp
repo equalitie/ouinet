@@ -428,15 +428,6 @@ public:
         return ts + pt::hours(1) < pt::second_clock::universal_time();
     }
 
-    fs::path cache_dir() {
-        return local_cache->dir();
-    }
-
-    fs::path cache_file(string_view key)
-    {
-        return cache_dir() /  util::bytes::to_hex(util::sha1(key));
-    }
-
     Response load_from_disk(string_view key, Yield yield)
     {
         auto it = local_cache->find(key.to_string());
