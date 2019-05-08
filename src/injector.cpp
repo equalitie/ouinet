@@ -50,6 +50,7 @@
 #include "util/crypto.h"
 #include "util/bytes.h"
 #include "util/persistent_lru_cache.h"
+#include "util/file_io.h"
 
 #include "logger.h"
 #include "defer.h"
@@ -256,30 +257,59 @@ void handle_connect_request( GenericStream client_c
 struct InjectorCacheControl {
 private:
     struct Entry {
-        Response rs;  // TODO: mindless initial approach, everything slurped into memory
+        Response* rs = nullptr;  // only set and used until writing
+        fs::path path;  // TODO: set it on read or write
+        ssize_t offset = -1;
 
         template<class File>
         void write(File& f, Cancel& cancel, asio::yield_context yield) {
+            // Get the file position, dump the response and forget it.
+            assert(rs != nullptr);
+
             auto cancel_slot = cancel.connect([&] { f.close(); });
             sys::error_code ec;
-            http::async_write(f, rs, yield[ec]);
-            if (cancel) ec = asio::error::operation_aborted;
 
-            return or_throw(yield, ec);
+            auto pos = util::file_io::current_position(f, ec);
+            return_or_throw_on_error(yield, cancel, ec);
+
+            http::async_write(f, *rs, yield[ec]);
+            return_or_throw_on_error(yield, cancel, ec);
+
+            rs = nullptr;
+            offset = pos;
         }
 
         template<class File>
         void read(File& f, Cancel& cancel, asio::yield_context yield) {
+            // Just get the file position.
+            sys::error_code ec;
+            auto pos = util::file_io::current_position(f, ec);
+            return_or_throw_on_error(yield, cancel, ec);
+
+            offset = pos;
+        }
+
+        Response load(asio::io_service& ios, Cancel& cancel, Yield yield) const {
+            // Open the path, seek and read a response.
+            assert(offset != -1 && !path.empty());
+
+            Response rs;
+
             beast::flat_buffer buffer;
             http::response_parser<http::dynamic_body> parser;
             sys::error_code ec;
 
+            auto f = util::file_io::open(ios, path, ec);
+            return_or_throw_on_error(yield, cancel, ec, rs);
+
+            util::file_io::fseek(f, offset, ec);
+            return_or_throw_on_error(yield, cancel, ec, rs);
+
             auto cancel_slot = cancel.connect([&] { f.close(); });
             http::async_read(f, buffer, parser, yield[ec]);
-            if (cancel) ec = asio::error::operation_aborted;
-            if (ec) return or_throw(yield, ec);
+            return_or_throw_on_error(yield, cancel, ec, rs);
 
-            rs = move(parser.release());
+            return parser.release();
         }
     };
 
@@ -428,13 +458,13 @@ public:
         return ts + pt::hours(1) < pt::second_clock::universal_time();
     }
 
-    Response load_from_disk(string_view key, Yield yield)
+    Response load_from_disk(string_view key, Cancel& cancel, Yield yield)
     {
         auto it = local_cache->find(key.to_string());
         if (it == local_cache->end())
             return or_throw<Response>(yield, asio::error::not_found);
 
-        return it.value().rs;
+        return it.value().load(ios, cancel, yield);
     }
 
     template<class Rs>
@@ -442,7 +472,7 @@ public:
     {
         sys::error_code ec;
         local_cache->insert( key.to_string()
-                           , InjectorCacheControl::Entry{rs}
+                           , InjectorCacheControl::Entry{&rs}
                            , cancel, yield[ec]);
         return or_throw(yield, ec);
     }
@@ -469,7 +499,7 @@ public:
 
         bool keep_alive = rq.keep_alive();
 
-        auto rs = load_from_disk(key_from_http_req(rq), yield[ec]);
+        auto rs = load_from_disk(key_from_http_req(rq), cancel, yield[ec]);
 
         if (cancel) ec = asio::error::operation_aborted;
         if (ec == asio::error::operation_aborted) {
