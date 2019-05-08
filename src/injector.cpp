@@ -49,7 +49,6 @@
 #include "util/timeout.h"
 #include "util/crypto.h"
 #include "util/bytes.h"
-#include "util/file_io.h"
 #include "util/persistent_lru_cache.h"
 
 #include "logger.h"
@@ -261,7 +260,12 @@ private:
 
         template<class File>
         void write(File& f, Cancel& cancel, asio::yield_context yield) {
-            util::file_io::write(f, rs, cancel, yield);
+            auto cancel_slot = cancel.connect([&] { f.close(); });
+            sys::error_code ec;
+            http::async_write(f, rs, yield[ec]);
+            if (cancel) ec = asio::error::operation_aborted;
+
+            return or_throw(yield, ec);
         }
 
         template<class File>
@@ -404,7 +408,7 @@ public:
                                                   , move(ins.index_ins_data));
 
                 sys::error_code ec_ignored;
-                save_to_disk(key_from_http_req(rq), rs, yield[ec_ignored]);
+                save_to_disk(key_from_http_req(rq), rs, cancel, yield[ec_ignored]);
                 assert(!ec);
             }
             else {
@@ -443,17 +447,12 @@ public:
     }
 
     template<class Rs>
-    void save_to_disk(string_view key, Rs& rs, Yield yield)
+    void save_to_disk(string_view key, Rs& rs, Cancel& cancel, Yield yield)
     {
         sys::error_code ec;
-        fs::path dir = cache_dir();
-
-        auto file = util::file_io::open(ios, cache_file(key), ec);
-
-        if (ec) return or_throw(yield, ec);
-
-        http::async_write(file, rs, yield[ec]);
-
+        local_cache->insert( key.to_string()
+                           , InjectorCacheControl::Entry{rs}
+                           , cancel, yield[ec]);
         return or_throw(yield, ec);
     }
 
