@@ -29,7 +29,7 @@ struct StringEntry : public std::string {
 
     using std::string::string;
 
-    void write(File& f, Cancel& cancel, asio::yield_context yield) const
+    void write(const fs::path&, File& f, Cancel& cancel, asio::yield_context yield) const
     {
         sys::error_code ec;
 
@@ -39,7 +39,7 @@ struct StringEntry : public std::string {
         file_io::write(f, asio::buffer(*this), cancel, yield[ec]);
     }
 
-    void read(File& f, Cancel& cancel, asio::yield_context yield)
+    void read(const fs::path&, File& f, Cancel& cancel, asio::yield_context yield)
     {
         sys::error_code ec;
 

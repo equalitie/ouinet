@@ -262,7 +262,7 @@ private:
         ssize_t offset = -1;
 
         template<class File>
-        void write(File& f, Cancel& cancel, asio::yield_context yield) {
+        void write(const fs::path& p, File& f, Cancel& cancel, asio::yield_context yield) {
             // Get the file position, dump the response and forget it.
             assert(rs != nullptr);
 
@@ -276,16 +276,18 @@ private:
             return_or_throw_on_error(yield, cancel, ec);
 
             rs = nullptr;
+            path = p;
             offset = pos;
         }
 
         template<class File>
-        void read(File& f, Cancel& cancel, asio::yield_context yield) {
+        void read(const fs::path& p, File& f, Cancel& cancel, asio::yield_context yield) {
             // Just get the file position.
             sys::error_code ec;
             auto pos = util::file_io::current_position(f, ec);
             return_or_throw_on_error(yield, cancel, ec);
 
+            path = p;
             offset = pos;
         }
 

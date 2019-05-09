@@ -166,7 +166,7 @@ public:
 
         Value value;
 
-        value.read(file, cancel, yield[ec]);
+        value.read(path, file, cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec, Ret());
 
         return std::make_shared<Element>( ios
@@ -193,7 +193,7 @@ public:
         if (!ec) file_io::write_number<uint32_t>(f, _key.size(), cancel, yield[ec]);
         if (!ec) file_io::write(f, asio::buffer(_key), cancel, yield[ec]);
         //if (!ec) file_io::write(f, asio::buffer(value), cancel, yield[ec]);
-        if (!ec) _value.write(f, cancel, yield[ec]);
+        if (!ec) _value.write(_path, f, cancel, yield[ec]);
 
         return or_throw(yield, ec);
     }

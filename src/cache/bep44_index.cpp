@@ -129,13 +129,13 @@ private:
         bt::MutableDataItem data;
 
         template<class File>
-        void write(File& f, Cancel& cancel, asio::yield_context yield) {
+        void write(const fs::path&, File& f, Cancel& cancel, asio::yield_context yield) {
             auto s = entry_to_json(last_update, key, data).dump();
             file_io::write(f, asio::buffer(s), cancel, yield);
         }
 
         template<class File>
-        void read(File& f, Cancel& cancel, asio::yield_context yield) {
+        void read(const fs::path&, File& f, Cancel& cancel, asio::yield_context yield) {
             sys::error_code ec;
             auto size = file_io::file_remaining_size(f, ec);
             return_or_throw_on_error(yield, cancel, ec);
