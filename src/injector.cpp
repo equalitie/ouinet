@@ -258,54 +258,35 @@ struct InjectorCacheControl {
 private:
     struct Entry {
         Response* rs = nullptr;  // only set and used until writing
-        fs::path path;  // TODO: set it on read or write
-        ssize_t offset = -1;
 
         template<class File>
-        void write(const fs::path& p, File& f, Cancel& cancel, asio::yield_context yield) {
-            // Get the file position, dump the response and forget it.
+        void write(File& f, Cancel& cancel, asio::yield_context yield) {
+            // Dump the response and forget it.
             assert(rs != nullptr);
-
-            auto cancel_slot = cancel.connect([&] { f.close(); });
             sys::error_code ec;
 
-            auto pos = util::file_io::current_position(f, ec);
-            return_or_throw_on_error(yield, cancel, ec);
-
+            auto cancel_slot = cancel.connect([&] { f.close(); });
             http::async_write(f, *rs, yield[ec]);
             return_or_throw_on_error(yield, cancel, ec);
 
             rs = nullptr;
-            path = p;
-            offset = pos;
         }
 
         template<class File>
-        void read(const fs::path& p, File& f, Cancel& cancel, asio::yield_context yield) {
-            // Just get the file position.
-            sys::error_code ec;
-            auto pos = util::file_io::current_position(f, ec);
-            return_or_throw_on_error(yield, cancel, ec);
-
-            path = p;
-            offset = pos;
+        void read(File&, Cancel&, asio::yield_context) {
+            // We only use direct access to on-disk data via explicit load below.
         }
 
-        Response load(asio::io_service& ios, Cancel& cancel, Yield yield) const {
-            // Open the path, seek and read a response.
-            assert(offset != -1 && !path.empty());
-
+        // A complete response is returned, but we could instead
+        // return a head (i.e. a message with an empty body) and
+        // advance the file to the beginning of the body.
+        template<class File>
+        Response load(File& f, Cancel& cancel, Yield yield) const {
             Response rs;
 
             beast::flat_buffer buffer;
             http::response_parser<http::dynamic_body> parser;
             sys::error_code ec;
-
-            auto f = util::file_io::open_readonly(ios, path, ec);
-            return_or_throw_on_error(yield, cancel, ec, rs);
-
-            util::file_io::fseek(f, offset, ec);
-            return_or_throw_on_error(yield, cancel, ec, rs);
 
             auto cancel_slot = cancel.connect([&] { f.close(); });
             http::async_read(f, buffer, parser, yield[ec]);
@@ -466,7 +447,11 @@ public:
         if (it == local_cache->end())
             return or_throw<Response>(yield, asio::error::not_found);
 
-        return it.value().load(ios, cancel, yield);
+        sys::error_code ec;
+        auto f = it.reader(ec);
+        if (ec) return or_throw<Response>(yield, ec);
+
+        return it.value().load(f, cancel, yield);
     }
 
     template<class Rs>
