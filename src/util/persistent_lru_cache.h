@@ -149,7 +149,7 @@ public:
 
         auto on_exit = defer([&] { if (ec) file_io::remove_file(path); });
 
-        auto file = file_io::open(ios, path, ec);
+        auto file = file_io::open_readonly(ios, path, ec);
         if (ec) return or_throw<Ret>(yield, ec);
 
         auto ts = file_io::read_number<uint64_t>(file, cancel, yield[ec]);
@@ -185,7 +185,7 @@ public:
 
         sys::error_code ec;
 
-        auto f = file_io::open(_ios, _path, ec);
+        auto f = file_io::open_or_create(_ios, _path, ec);
         //if (!ec) file_io::truncate(f, content_start() + value.size(), ec);
         if (!ec) file_io::truncate(f, content_start(), ec);
         if (!ec) file_io::fseek(f, 0, ec);

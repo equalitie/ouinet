@@ -65,12 +65,11 @@ size_t file_remaining_size(posix::stream_descriptor& f, sys::error_code& ec)
     return size - pos;
 }
 
-posix::stream_descriptor open( asio::io_service& ios
-                             , const fs::path& p
+static
+posix::stream_descriptor open( int file
+                             , asio::io_service& ios
                              , sys::error_code& ec)
 {
-    int file = ::open(p.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
-
     if (file == -1) {
         ec = last_error();
         if (!ec) ec = make_error_code(errc::no_message);
@@ -81,6 +80,22 @@ posix::stream_descriptor open( asio::io_service& ios
     fseek(f, 0, ec);
 
     return f;
+}
+
+posix::stream_descriptor open_or_create( asio::io_service& ios
+                                       , const fs::path& p
+                                       , sys::error_code& ec)
+{
+    int file = ::open(p.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+    return open(file, ios, ec);
+}
+
+posix::stream_descriptor open_readonly( asio::io_service& ios
+                                      , const fs::path& p
+                                      , sys::error_code& ec)
+{
+    int file = ::open(p.c_str(), O_RDONLY);
+    return open(file, ios, ec);
 }
 
 void truncate( posix::stream_descriptor& f

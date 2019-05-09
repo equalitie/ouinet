@@ -299,7 +299,7 @@ private:
             http::response_parser<http::dynamic_body> parser;
             sys::error_code ec;
 
-            auto f = util::file_io::open(ios, path, ec);
+            auto f = util::file_io::open_readonly(ios, path, ec);
             return_or_throw_on_error(yield, cancel, ec, rs);
 
             util::file_io::fseek(f, offset, ec);

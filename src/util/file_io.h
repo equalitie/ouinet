@@ -12,7 +12,10 @@
 namespace ouinet { namespace util { namespace file_io {
 
 asio::posix::stream_descriptor
-open(asio::io_service& ios, const fs::path&, sys::error_code&);
+open_or_create(asio::io_service& ios, const fs::path&, sys::error_code&);
+
+asio::posix::stream_descriptor
+open_readonly(asio::io_service& ios, const fs::path&, sys::error_code&);
 
 void fseek(asio::posix::stream_descriptor&, size_t pos, sys::error_code&);
 
