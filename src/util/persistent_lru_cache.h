@@ -64,6 +64,8 @@ public:
 
         const Value& value() const;
         const Key& key() const;
+
+        asio::posix::stream_descriptor reader(sys::error_code&) const;
     };
 
 private:
@@ -200,6 +202,13 @@ public:
 
     const Value& value() const {
         return _value;
+    }
+
+    // Read-only byte-oriented access to on-disk data.
+    asio::posix::stream_descriptor reader(sys::error_code& ec) const {
+        auto f = file_io::open_readonly(_ios, _path, ec);
+        if (!ec) file_io::fseek(f, content_start(), ec);
+        return f;
     }
 
     ~Element()
@@ -408,6 +417,14 @@ const typename PersistentLruCache<Value>::Key&
 PersistentLruCache<Value>::iterator::key() const
 {
     return i->first;
+}
+
+template<class Value>
+inline
+asio::posix::stream_descriptor
+PersistentLruCache<Value>::iterator::reader(sys::error_code& ec) const
+{
+    return i->second->second->reader(ec);
 }
 
 template<class Value>
