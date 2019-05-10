@@ -448,7 +448,7 @@ public:
             return or_throw<Response>(yield, asio::error::not_found);
 
         sys::error_code ec;
-        auto f = it.reader(ec);
+        auto f = it.open(ec);
         if (ec) return or_throw<Response>(yield, ec);
 
         return it.value().load(f, cancel, yield);

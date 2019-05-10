@@ -65,7 +65,7 @@ public:
         const Value& value() const;
         const Key& key() const;
 
-        asio::posix::stream_descriptor reader(sys::error_code&) const;
+        asio::posix::stream_descriptor open(sys::error_code&) const;
     };
 
 private:
@@ -138,8 +138,10 @@ private:
 template<class Value>
 class PersistentLruCache<Value>::Element {
 public:
+    //static const auto temp_file_prefix = "tmp.";
+
     static
-    std::shared_ptr<Element> open( asio::io_service& ios
+    std::shared_ptr<Element> read( asio::io_service& ios
                                  , fs::path path
                                  , uint64_t* ts_out
                                  , Cancel& cancel
@@ -205,7 +207,7 @@ public:
     }
 
     // Read-only byte-oriented access to on-disk data.
-    asio::posix::stream_descriptor reader(sys::error_code& ec) const {
+    asio::posix::stream_descriptor open_value(sys::error_code& ec) const {
         auto f = file_io::open_readonly(_ios, _path, ec);
         if (!ec) file_io::fseek(f, content_start(), ec);
         return f;
@@ -295,7 +297,7 @@ PersistentLruCache<Value>::load( asio::io_service& ios
         if (entry->d_type == DT_REG) {
             fs::path path(dir / entry->d_name);
             uint64_t ts;
-            auto e = Element::open(ios, path, &ts, cancel, yield[ec]);
+            auto e = Element::read(ios, path, &ts, cancel, yield[ec]);
 
             if (cancel) {
                 return or_throw<Ret>(yield, asio::error::operation_aborted);
@@ -422,9 +424,9 @@ PersistentLruCache<Value>::iterator::key() const
 template<class Value>
 inline
 asio::posix::stream_descriptor
-PersistentLruCache<Value>::iterator::reader(sys::error_code& ec) const
+PersistentLruCache<Value>::iterator::open(sys::error_code& ec) const
 {
-    return i->second->second->reader(ec);
+    return i->second->second->open_value(ec);
 }
 
 template<class Value>
