@@ -21,6 +21,7 @@ namespace persisten_lru_cache_detail {
     uint64_t ms_since_epoch();
     fs::path path_from_key(const fs::path&, const std::string&);
     bool is_cache_entry(const struct dirent*);
+    fs::path temp_file_along(const fs::path&, sys::error_code&);
 } // detail namespace
 
 template<class Value>
@@ -139,8 +140,6 @@ private:
 template<class Value>
 class PersistentLruCache<Value>::Element {
 public:
-    //static const auto temp_file_prefix = "tmp.";
-
     static
     std::shared_ptr<Element> read( asio::io_service& ios
                                  , fs::path path
@@ -190,15 +189,20 @@ public:
 
         sys::error_code ec;
 
-        auto f = file_io::open_or_create(_ios, _path, ec);
-        //if (!ec) file_io::truncate(f, content_start() + value.size(), ec);
-        if (!ec) file_io::truncate(f, content_start(), ec);
-        if (!ec) file_io::fseek(f, 0, ec);
+        // Create a new entry file "atomically" (at least inside the program)
+        // by writing data to a temporary file and replacing the existing file.
+        // Otherwise we might be overwriting old data that others are reading.
+        auto temp_path = temp_file_along(_path, ec);
+        if (ec) return or_throw(yield, ec);
+        auto f = file_io::open_or_create(_ios, temp_path, ec);
+        auto remove_temp = defer([&] { file_io::remove_file(temp_path); });
+
         if (!ec) file_io::write_number<uint64_t>(f, ts, cancel, yield[ec]);
         if (!ec) file_io::write_number<uint32_t>(f, _key.size(), cancel, yield[ec]);
         if (!ec) file_io::write(f, asio::buffer(_key), cancel, yield[ec]);
         //if (!ec) file_io::write(f, asio::buffer(value), cancel, yield[ec]);
         if (!ec) _value.write(f, cancel, yield[ec]);
+        if (!ec) { f.close(); fs::rename(temp_path, _path, ec); };
 
         return or_throw(yield, ec);
     }

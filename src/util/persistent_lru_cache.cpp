@@ -15,6 +15,9 @@ namespace ouinet {
 namespace util {
 namespace persisten_lru_cache_detail {
 
+static const auto temp_file_prefix = "tmp.";
+static const auto temp_file_model = std::string(temp_file_prefix) + "%%%%-%%%%-%%%%-%%%%";
+
 uint64_t ms_since_epoch()
 {
     using namespace std::chrono;
@@ -27,7 +30,12 @@ fs::path path_from_key(const fs::path& dir, const std::string& key) {
 }
 
 bool is_cache_entry(const struct dirent* entry) {
-    return entry->d_type == DT_REG;
+    return (entry->d_type == DT_REG
+            && strstr(entry->d_name, temp_file_prefix) != entry->d_name);
+}
+
+fs::path temp_file_along(const fs::path& p, sys::error_code& ec) {
+    return p.parent_path() / fs::unique_path(temp_file_model, ec);
 }
 
 }}} // namespaces
