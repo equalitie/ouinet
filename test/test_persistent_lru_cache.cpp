@@ -181,7 +181,7 @@ BOOST_AUTO_TEST_CASE(test_open_value)
 
     const unsigned max_cache_size = 1;
     const std::string key("test");
-    const std::string data("foobar");
+    const std::string data(4200, 'x');  // bigger than usual cache block
 
     asio::spawn(ios, [&] (auto yield) {
         sys::error_code ec;
@@ -208,6 +208,39 @@ BOOST_AUTO_TEST_CASE(test_open_value)
 
             std::string data_in(data.size(), '\0');
             file_io::read(f, asio::buffer(data_in), cancel, yield[ec]);
+            BOOST_REQUIRE(!ec);
+            BOOST_REQUIRE_EQUAL(data_in, data);
+        }
+
+        // Update entry while another reader is accessing it
+        {
+            std::string data_in;
+
+            auto lru = DataLru::load(ios, dir, max_cache_size, cancel, yield[ec]);
+            BOOST_REQUIRE(!ec);
+
+            auto i = lru->find(key);
+            BOOST_REQUIRE(i != lru->end());
+
+            auto f_old = i.open(ec);
+            BOOST_REQUIRE(!ec);
+
+            const std::string data_new(data.size(), 'y');
+            lru->insert(key, DataEntry({&data_new}), cancel, yield[ec]);
+            BOOST_REQUIRE(!ec);
+
+            auto f_new = i.open(ec);
+            BOOST_REQUIRE(!ec);
+
+            // This should yield the new data
+            data_in.resize(data_new.size(), '\0');
+            file_io::read(f_new, asio::buffer(data_in), cancel, yield[ec]);
+            BOOST_REQUIRE(!ec);
+            BOOST_REQUIRE_EQUAL(data_in, data_new);
+
+            // This should yield the old data, not the new one
+            data_in.resize(data.size(), '\0');
+            file_io::read(f_old, asio::buffer(data_in), cancel, yield[ec]);
             BOOST_REQUIRE(!ec);
             BOOST_REQUIRE_EQUAL(data_in, data);
         }
