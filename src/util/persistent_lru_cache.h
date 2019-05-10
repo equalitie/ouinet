@@ -20,6 +20,7 @@ namespace ouinet { namespace util {
 namespace persisten_lru_cache_detail {
     uint64_t ms_since_epoch();
     fs::path path_from_key(const fs::path&, const std::string&);
+    bool is_cache_entry(const struct dirent*);
 } // detail namespace
 
 template<class Value>
@@ -294,7 +295,7 @@ PersistentLruCache<Value>::load( asio::io_service& ios
         uint64_t i = 0;
         struct dirent* entry;
         while ((entry = readdir(directory)) != NULL) {
-            if (entry->d_type == DT_REG) {
+            if (is_cache_entry(entry)) {
                 fs::path path(dir / entry->d_name);
                 uint64_t ts;
                 auto e = Element::read(ios, path, &ts, cancel, yield[ec]);

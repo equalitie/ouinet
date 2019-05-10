@@ -26,4 +26,8 @@ fs::path path_from_key(const fs::path& dir, const std::string& key) {
     return dir / util::bytes::to_hex(util::sha1(key));
 }
 
+bool is_cache_entry(const struct dirent* entry) {
+    return entry->d_type == DT_REG;
+}
+
 }}} // namespaces
