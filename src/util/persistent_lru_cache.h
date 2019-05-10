@@ -287,28 +287,28 @@ PersistentLruCache<Value>::load( asio::io_service& ios
 
     std::map<Id, std::shared_ptr<Element>> elements;
 
-    uint64_t i = 0;
+    {
+        DIR* directory = opendir(dir.c_str());
+        auto close_dir = defer([&] { if (directory != nullptr) closedir(directory); });
 
+        uint64_t i = 0;
+        struct dirent* entry;
+        while ((entry = readdir(directory)) != NULL) {
+            if (entry->d_type == DT_REG) {
+                fs::path path(dir / entry->d_name);
+                uint64_t ts;
+                auto e = Element::read(ios, path, &ts, cancel, yield[ec]);
 
-    DIR* directory = opendir(dir.c_str());
-    struct dirent* entry;
+                if (cancel) {
+                    return or_throw<Ret>(yield, asio::error::operation_aborted);
+                }
 
-    while ((entry = readdir(directory)) != NULL) {
-        if (entry->d_type == DT_REG) {
-            fs::path path(dir / entry->d_name);
-            uint64_t ts;
-            auto e = Element::read(ios, path, &ts, cancel, yield[ec]);
+                if (ec) continue;
 
-            if (cancel) {
-                return or_throw<Ret>(yield, asio::error::operation_aborted);
+                elements.insert({Id{ts, i++}, e});
             }
-
-            if (ec) continue;
-
-            elements.insert({Id{ts, i++}, e});
         }
     }
-    closedir(directory);
 
     while (elements.size() > max_size) {
         auto i = elements.begin();
