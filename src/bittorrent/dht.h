@@ -169,6 +169,7 @@ class DhtNode {
         asio::yield_context yield,
         Signal<void()>& cancel_signal
     );
+
     void send_ping(NodeContact contact);
 
     // http://bittorrent.org/beps/bep_0005.html#find-node
@@ -275,9 +276,11 @@ class DhtNode {
     boost::optional<BencodedMap> query_get_data(
         NodeID key,
         Contact node,
-        std::vector<NodeContact>& closer_nodes,
+        util::AsyncQueue<NodeContact>& closer_nodes,
+        WatchDog& dms,
+        DebugCtx* dbg,
         asio::yield_context yield,
-        Signal<void()>& cancel_signal
+        Signal<void()>& cancel
     );
 
     boost::optional<BencodedMap> query_get_data2(
@@ -338,7 +341,6 @@ class DhtNode {
     ip::address _interface_address;
     std::unique_ptr<UdpMultiplexer> _multiplexer;
     NodeID _node_id;
-    bool _initialized;
     udp::endpoint _wan_endpoint;
     std::unique_ptr<RoutingTable> _routing_table;
     std::unique_ptr<Tracker> _tracker;

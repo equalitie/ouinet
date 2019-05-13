@@ -292,36 +292,42 @@ boost::optional<BencodedValue> dht::DhtNode::data_get_immutable(
     ProximityMap<boost::none_t> responsible_nodes(key, RESPONSIBLE_TRACKERS_PER_SWARM);
     boost::optional<BencodedValue> data;
 
-    collect(key, [&](
+    DebugCtx dbg;
+    dbg.enable_log = SPEED_DEBUG;
+
+    collect2(dbg, key, [&](
         const Contact& candidate,
+        WatchDog& wd,
+        util::AsyncQueue<NodeContact>& closer_nodes,
         asio::yield_context yield,
         Signal<void()>& cancel_signal
-    ) -> boost::optional<Candidates> {
+    ) {
         if (!candidate.id && responsible_nodes.full()) {
-            return boost::none;
+            return;
         }
+
         if (candidate.id && !responsible_nodes.would_insert(*candidate.id)) {
-            return boost::none;
+            return;
         }
 
         /*
          * As soon as we have found a valid data value, we can stop the search.
          */
         if (data) {
-            return boost::none;
+            return;
         }
 
-        std::vector<NodeContact> closer_nodes;
         boost::optional<BencodedMap> response_ = query_get_data(
             key,
             candidate,
             closer_nodes,
+            wd, &dbg,
             yield,
             cancel_signal
         );
-        if (!response_) {
-            return closer_nodes;
-        }
+
+        if (!response_) return;
+
         BencodedMap& response = *response_;
 
         if (candidate.id) {
@@ -332,11 +338,9 @@ boost::optional<BencodedValue> dht::DhtNode::data_get_immutable(
             BencodedValue value = response["v"];
             if (DataStore::immutable_get_id(value) == key) {
                 data = value;
-                return boost::none;
+                return;
             }
         }
-
-        return closer_nodes;
     }, yield[ec], cancel_signal);
 
     return or_throw<boost::optional<BencodedValue>>(yield, ec, std::move(data));
@@ -356,35 +360,40 @@ NodeID dht::DhtNode::data_put_immutable(
     };
     ProximityMap<ResponsibleNode> responsible_nodes(key, RESPONSIBLE_TRACKERS_PER_SWARM);
 
-    collect(key, [&](
+    DebugCtx dbg;
+    dbg.enable_log = SPEED_DEBUG;
+
+    collect2(dbg, key, [&](
         const Contact& candidate,
+        WatchDog& wd,
+        util::AsyncQueue<NodeContact>& closer_nodes,
         asio::yield_context yield,
-        Signal<void()>& cancel_signal
-    ) -> boost::optional<Candidates> {
+        Signal<void()>& cancel
+    ) {
         if (!candidate.id && responsible_nodes.full()) {
-            return boost::none;
-        }
-        if (candidate.id && !responsible_nodes.would_insert(*candidate.id)) {
-            return boost::none;
+            return;
         }
 
-        std::vector<NodeContact> closer_nodes;
+        if (candidate.id && !responsible_nodes.would_insert(*candidate.id)) {
+            return;
+        }
+
         boost::optional<BencodedMap> response_ = query_get_data(
             key,
             candidate,
             closer_nodes,
+            wd, &dbg,
             yield,
-            cancel_signal
+            cancel
         );
-        if (!response_) {
-            return closer_nodes;
-        }
+
+        if (!response_) return;
+
         BencodedMap& response = *response_;
 
         boost::optional<std::string> put_token = response["token"].as_string();
-        if (!put_token) {
-            return closer_nodes;
-        }
+
+        if (!put_token) return;
 
         if (candidate.id) {
             responsible_nodes.insert({
@@ -392,8 +401,6 @@ NodeID dht::DhtNode::data_put_immutable(
                 { candidate.endpoint, *put_token }
             });
         }
-
-        return closer_nodes;
     }, yield[ec], cancel_signal);
 
     if (ec) {
@@ -2099,9 +2106,11 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_peers(
 boost::optional<BencodedMap> dht::DhtNode::query_get_data(
     NodeID key,
     Contact node,
-    std::vector<NodeContact>& closer_nodes,
+    util::AsyncQueue<NodeContact>& closer_nodes,
+    WatchDog& dms,
+    DebugCtx* dbg,
     asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Signal<void()>& cancel
 ) {
     sys::error_code ec;
 
@@ -2115,7 +2124,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data(
         nullptr,
         nullptr,
         yield[ec],
-        cancel_signal
+        cancel
     );
 
     if (ec == asio::error::operation_aborted) {
@@ -2134,12 +2143,13 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data(
          * TODO: Perhaps using a separate routing table for BEP 44 nodes would
          * improve things here?
          */
-        query_find_node(
+        query_find_node2(
             key,
             node,
             closer_nodes,
+            dms, dbg,
             yield,
-            cancel_signal
+            cancel
         );
         return boost::none;
     }
@@ -2150,32 +2160,32 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data(
          * Query it using find_node instead. Ignore errors and hope for
          * the best; we are just trying to find some closer nodes here.
          */
-        query_find_node(
+        query_find_node2(
             key,
             node,
             closer_nodes,
+            dms, dbg,
             yield,
-            cancel_signal
+            cancel
         );
         return boost::none;
     }
 
     boost::optional<BencodedMap> response = get_reply["r"].as_map();
-    if (!response) {
-        return boost::none;
-    }
+
+    if (!response) return boost::none;
+
+    std::vector<NodeContact> closer_nodes_v;
 
     if (is_v4()) {
-        boost::optional<std::string> nodes = (*response)["nodes"].as_string();
-        if (!NodeContact::decode_compact_v4(*nodes, closer_nodes)) {
-            return boost::none;
-        }
+        auto nodes = (*response)["nodes"].as_string();
+        if (nodes) NodeContact::decode_compact_v4(*nodes, closer_nodes_v);
     } else {
-        boost::optional<std::string> nodes6 = (*response)["nodes6"].as_string();
-        if (!NodeContact::decode_compact_v6(*nodes6, closer_nodes)) {
-            return boost::none;
-        }
+        auto nodes = (*response)["nodes6"].as_string();
+        if (nodes) NodeContact::decode_compact_v6(*nodes, closer_nodes_v);
     }
+
+    closer_nodes.async_push_many(closer_nodes_v, cancel, yield[ec]);
 
     return response;
 }
