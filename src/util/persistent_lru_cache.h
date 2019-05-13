@@ -189,6 +189,7 @@ public:
 
         sys::error_code ec;
 
+        // TODO: Factor out along with `InjectorCacheControl::save_to_disk`.
         // Create a new entry file "atomically" (at least inside the program)
         // by writing data to a temporary file and replacing the existing file.
         // Otherwise we might be overwriting old data that others are reading.

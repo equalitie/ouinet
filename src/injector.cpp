@@ -49,7 +49,6 @@
 #include "util/timeout.h"
 #include "util/crypto.h"
 #include "util/bytes.h"
-#include "util/persistent_lru_cache.h"
 #include "util/file_io.h"
 
 #include "logger.h"
@@ -255,53 +254,9 @@ void handle_connect_request( GenericStream client_c
 
 //------------------------------------------------------------------------------
 struct InjectorCacheControl {
-private:
-    struct Entry {
-        Response* rs = nullptr;  // only set and used until writing
-
-        template<class File>
-        void write(File& f, Cancel& cancel, asio::yield_context yield) {
-            // Dump the response and forget it.
-            assert(rs != nullptr);
-            sys::error_code ec;
-
-            auto cancel_slot = cancel.connect([&] { f.close(); });
-            http::async_write(f, *rs, yield[ec]);
-            return_or_throw_on_error(yield, cancel, ec);
-
-            rs = nullptr;
-        }
-
-        template<class File>
-        void read(File&, Cancel&, asio::yield_context) {
-            // We only use direct access to on-disk data via explicit load below.
-        }
-
-        // A complete response is returned, but we could instead
-        // return a head (i.e. a message with an empty body) and
-        // advance the file to the beginning of the body.
-        template<class File>
-        Response load(File& f, Cancel& cancel, Yield yield) const {
-            Response rs;
-
-            beast::flat_buffer buffer;
-            http::response_parser<http::dynamic_body> parser;
-            sys::error_code ec;
-
-            auto cancel_slot = cancel.connect([&] { f.close(); });
-            http::async_read(f, buffer, parser, yield[ec]);
-            return_or_throw_on_error(yield, cancel, ec, rs);
-
-            return parser.release();
-        }
-    };
-
-public:
-    using Lru = util::PersistentLruCache<Entry>;
-    using LruPtr = unique_ptr<Lru>;
-
     using Connection = OriginPools::Connection;
 
+public:
     unique_ptr<Connection> connect( asio::io_service& ios
                                   , const Request& rq
                                   , Cancel& cancel
@@ -356,15 +311,13 @@ public:
                         , OriginPools& origin_pools
                         , const InjectorConfig& config
                         , unique_ptr<CacheInjector>& injector
-                        , uuid_generator& genuuid
-                        , LruPtr& local_cache)
+                        , uuid_generator& genuuid)
         : insert_id(to_string(genuuid()))
         , ios(ios)
         , ssl_ctx(ssl_ctx)
         , injector(injector)
         , config(config)
         , genuuid(genuuid)
-        , local_cache(local_cache)
         , cc(ios, OUINET_INJECTOR_SERVER_STRING)
         , origin_pools(origin_pools)
     {
@@ -441,27 +394,59 @@ public:
         return ts + pt::hours(1) < pt::second_clock::universal_time();
     }
 
+    fs::path cache_dir() {
+        return config.repo_root() / "cache";
+    }
+
+    fs::path cache_file(string_view key)
+    {
+        return cache_dir() /  util::bytes::to_hex(util::sha1(key));
+    }
+
     Response load_from_disk(string_view key, Cancel& cancel, Yield yield)
     {
-        auto it = local_cache->find(key.to_string());
-        if (it == local_cache->end())
-            return or_throw<Response>(yield, asio::error::not_found);
-
         sys::error_code ec;
-        auto f = it.open(ec);
+
+        auto file = util::file_io::open_readonly(ios, cache_file(key), ec);
         if (ec) return or_throw<Response>(yield, ec);
 
-        return it.value().load(f, cancel, yield);
+        beast::flat_buffer buffer;
+        http::response_parser<http::dynamic_body> parser;
+
+        auto cancel_slot = cancel.connect([&] { file.close(); });
+        http::async_read(file, buffer, parser, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, Response());
+
+        return parser.release();
     }
 
     template<class Rs>
     void save_to_disk(string_view key, Rs& rs, Cancel& cancel, Yield yield)
     {
         sys::error_code ec;
-        local_cache->insert( key.to_string()
-                           , InjectorCacheControl::Entry{&rs}
-                           , cancel, yield[ec]);
-        return or_throw(yield, ec);
+
+        util::file_io::check_or_create_directory(cache_dir(), ec);
+        if (ec) return or_throw(yield, ec);
+
+        // TODO: Factor out along with `PersistentLruCache::update`.
+        // Create a new file "atomically" (at least inside the program)
+        // by writing data to a temporary file and replacing the existing file.
+        // Otherwise we might be overwriting old data that others are reading.
+        static const string temp_file_model("tmp.%%%%-%%%%-%%%%-%%%%");
+        auto temp_path = cache_dir() / fs::unique_path(temp_file_model, ec);
+        if (ec) return or_throw(yield, ec);
+
+        auto file = util::file_io::open_or_create(ios, temp_path, ec);
+        if (ec) return or_throw(yield, ec);
+        auto remove_temp = defer([&] { util::file_io::remove_file(temp_path); });
+
+        auto cancel_slot = cancel.connect([&] { file.close(); });
+        http::async_write(file, rs, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec);
+
+        file.close();
+        fs::rename(temp_path, cache_file(key), ec);
+        if (ec) return or_throw(yield, ec);
     }
 
     bool is_semi_fresh(http::response_header<>& hdr)
@@ -666,7 +651,6 @@ private:
     unique_ptr<CacheInjector>& injector;
     const InjectorConfig& config;
     uuid_generator& genuuid;
-    LruPtr& local_cache;
     CacheControl cc;
     OriginPools& origin_pools;
 };
@@ -680,7 +664,6 @@ void serve( InjectorConfig& config
           , unique_ptr<CacheInjector>& injector
           , OriginPools& origin_pools
           , uuid_generator& genuuid
-          , InjectorCacheControl::LruPtr& local_cache
           , Cancel& cancel
           , asio::yield_context yield_)
 {
@@ -693,8 +676,7 @@ void serve( InjectorConfig& config
                            , origin_pools
                            , config
                            , injector
-                           , genuuid
-                           , local_cache);
+                           , genuuid);
 
     for (;;) {
         sys::error_code ec;
@@ -786,24 +768,13 @@ void listen( InjectorConfig& config
 {
     uuid_generator genuuid;
 
-    asio::io_service& ios = proxy_server.get_io_service();
-
-    sys::error_code ec;
-
-    auto local_cache = InjectorCacheControl::Lru::load( ios
-                                                      , config.repo_root() / "cache-v0"
-                                                      , config.cache_local_capacity()
-                                                      , cancel
-                                                      , yield[ec]);
-    if (ec) {
-        std::cerr << "Failed to initialize local cache: " << ec.message() << endl;
-        return;
-    }
-
     auto stop_proxy_slot = cancel.connect([&proxy_server] {
         proxy_server.stop_listen();
     });
 
+    asio::io_service& ios = proxy_server.get_io_service();
+
+    sys::error_code ec;
     proxy_server.start_listen(yield[ec]);
     if (ec) {
         std::cerr << "Failed to setup ouiservice proxy server: " << ec.message() << endl;
@@ -842,7 +813,6 @@ void listen( InjectorConfig& config
             &cancel,
             &config,
             &genuuid,
-            &local_cache,
             &origin_pools,
             connection_id,
             lock = shutdown_connections.lock()
@@ -854,7 +824,6 @@ void listen( InjectorConfig& config
                  , cache_injector
                  , origin_pools
                  , genuuid
-                 , local_cache
                  , cancel
                  , yield);
         });
