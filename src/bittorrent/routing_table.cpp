@@ -261,10 +261,10 @@ RoutingTable::find_closest_routing_nodes(NodeID target, size_t count)
  * Record a failure of a routing table node to respond to a query. If this
  * makes the node bad, try to replace it with a queued candidate.
  */
-void RoutingTable::routing_bucket_fail_node( RoutingBucket* bucket
-                                           , NodeContact contact
-                                           , DhtNode& dht_node)
+void RoutingTable::fail_node(NodeContact contact, DhtNode& dht_node)
 {
+    dht::RoutingBucket* bucket = find_bucket(contact.id, false);
+
     sys::error_code ec;
     /*
      * Find the contact in the routing table.
@@ -356,11 +356,12 @@ void RoutingTable::routing_bucket_fail_node( RoutingBucket* bucket
  * check for node replacement opportunities. If is_verified is not set, ping
  * the target contact before adding it.
  */
-void RoutingTable::routing_bucket_try_add_node( RoutingBucket* bucket
-                                              , NodeContact contact
-                                              , bool is_verified
-                                              , DhtNode& dht_node)
+void RoutingTable::try_add_node( NodeContact contact
+                               , bool is_verified
+                               , DhtNode& dht_node)
 {
+    dht::RoutingBucket* bucket = find_bucket(contact.id, true);
+
     /*
      * Check whether the contact is already in the routing table. If so, bump it.
      */

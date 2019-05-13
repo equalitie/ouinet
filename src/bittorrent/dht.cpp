@@ -1036,14 +1036,12 @@ BencodedMap dht::DhtNode::send_query_await_reply(
             /*
              * Record the failure in the routing table.
              */
-            dht::RoutingBucket* routing_bucket = _routing_table->find_bucket(*dst.id, false);
-            _routing_table->routing_bucket_fail_node(routing_bucket, contact, *this);
+            _routing_table->fail_node(contact, *this);
         } else {
             /*
              * Add the node to the routing table, subject to space limitations.
              */
-            dht::RoutingBucket* routing_bucket = _routing_table->find_bucket(*dst.id, true);
-            _routing_table->routing_bucket_try_add_node(routing_bucket, contact, true, *this);
+            _routing_table->try_add_node(contact, true, *this);
         }
     }
 
@@ -1118,8 +1116,7 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
         /*
         * Add the sender to the routing table.
         */
-        dht::RoutingBucket* routing_bucket = _routing_table->find_bucket(contact.id, true);
-        _routing_table->routing_bucket_try_add_node(routing_bucket, contact, false, *this);
+        _routing_table->try_add_node(contact, false, *this);
     }
 
     if (query_type == "ping") {

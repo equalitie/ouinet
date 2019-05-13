@@ -67,23 +67,17 @@ class RoutingTable {
     RoutingTable(NodeID);
     RoutingTable(const RoutingTable&) = delete;
 
-    RoutingBucket* find_bucket(NodeID id, bool split_buckets);
     std::vector<NodeContact> find_closest_routing_nodes(NodeID target, size_t count);
 
     template<class F> void for_each_bucket(F&&);
 
-    void routing_bucket_fail_node(RoutingBucket*, NodeContact, DhtNode&);
+    void fail_node(NodeContact, DhtNode&);
 
-    void routing_bucket_try_add_node(
-        RoutingBucket*,
-        NodeContact,
-        bool is_verified,
-        DhtNode&
-    );
+    void try_add_node(NodeContact, bool is_verified, DhtNode&);
 
     private:
+    RoutingBucket* find_bucket(NodeID id, bool split_buckets);
     TreeNode* exhaustive_routing_subtable_fragment_root() const;
-
     template<class F> void for_each_bucket(F&&, TreeNode*);
 
     private:
