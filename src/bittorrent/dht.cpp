@@ -295,7 +295,7 @@ boost::optional<BencodedValue> dht::DhtNode::data_get_immutable(
     DebugCtx dbg;
     dbg.enable_log = SPEED_DEBUG;
 
-    collect2(dbg, key, [&](
+    collect(dbg, key, [&](
         const Contact& candidate,
         WatchDog& wd,
         util::AsyncQueue<NodeContact>& closer_nodes,
@@ -363,7 +363,7 @@ NodeID dht::DhtNode::data_put_immutable(
     DebugCtx dbg;
     dbg.enable_log = SPEED_DEBUG;
 
-    collect2(dbg, key, [&](
+    collect(dbg, key, [&](
         const Contact& candidate,
         WatchDog& wd,
         util::AsyncQueue<NodeContact>& closer_nodes,
@@ -459,7 +459,7 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
     DebugCtx dbg;
     dbg.enable_log = SPEED_DEBUG;
 
-    collect2(dbg, target_id, [&](
+    collect(dbg, target_id, [&](
         const Contact& candidate,
         WatchDog& wd,
         util::AsyncQueue<NodeContact>& closer_nodes,
@@ -618,7 +618,7 @@ NodeID dht::DhtNode::data_put_mutable(
 
     std::set<udp::endpoint> blacklist;
 
-    collect2(dbg, target_id, [&](
+    collect(dbg, target_id, [&](
         const Contact& candidate,
         WatchDog& wd,
         util::AsyncQueue<NodeContact>& closer_nodes,
@@ -1686,7 +1686,7 @@ void dht::DhtNode::refresh_routing_table()
 }
 
 template<class Evaluate>
-void dht::DhtNode::collect2(
+void dht::DhtNode::collect(
     DebugCtx& dbg,
     const NodeID& target_id,
     Evaluate&& evaluate,
@@ -1732,7 +1732,7 @@ void dht::DhtNode::collect2(
     }
 
     auto terminated = _terminate_signal.connect([]{});
-    ::ouinet::bittorrent::collect2(
+    ::ouinet::bittorrent::collect(
         dbg,
         _ios,
         std::move(seed_candidates),
@@ -1756,7 +1756,7 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
     DebugCtx dbg;
     dbg.enable_log = SPEED_DEBUG;
 
-    collect2(dbg, target_id, [&](
+    collect(dbg, target_id, [&](
         const Contact& candidate,
         WatchDog& dms,
         util::AsyncQueue<NodeContact>& closer_nodes,
@@ -2300,7 +2300,7 @@ void dht::DhtNode::tracker_do_search_peers(
     ProximityMap<ResponsibleNode> responsible_nodes_full(infohash, RESPONSIBLE_TRACKERS_PER_SWARM);
 
     DebugCtx dbg;
-    collect2(dbg, infohash, [&](
+    collect(dbg, infohash, [&](
         const Contact& candidate,
         WatchDog& wd,
         util::AsyncQueue<NodeContact>& closer_nodes,

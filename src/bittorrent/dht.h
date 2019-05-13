@@ -319,7 +319,7 @@ class DhtNode {
     static bool closer_to(const NodeID& reference, const NodeID& left, const NodeID& right);
 
     template<class Evaluate>
-    void collect2(
+    void collect(
         DebugCtx&,
         const NodeID& target,
         Evaluate&&,

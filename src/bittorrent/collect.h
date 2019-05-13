@@ -8,7 +8,7 @@
 namespace ouinet { namespace bittorrent {
 
 template<class CandidateSet, class Evaluate>
-void collect2(
+void collect(
     DebugCtx dbg,
     asio::io_service& ios,
     CandidateSet first_candidates,
