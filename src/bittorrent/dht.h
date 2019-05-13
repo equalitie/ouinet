@@ -319,14 +319,6 @@ class DhtNode {
     static bool closer_to(const NodeID& reference, const NodeID& left, const NodeID& right);
 
     template<class Evaluate>
-    void collect(
-        const NodeID& target,
-        Evaluate&&,
-        asio::yield_context,
-        Signal<void()>& cancel_signal
-    );
-
-    template<class Evaluate>
     void collect2(
         DebugCtx&,
         const NodeID& target,

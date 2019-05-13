@@ -1686,64 +1686,6 @@ void dht::DhtNode::refresh_routing_table()
 }
 
 template<class Evaluate>
-void dht::DhtNode::collect(
-    const NodeID& target_id,
-    Evaluate&& evaluate,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
-) {
-    if (!_routing_table) {
-        // We're not yet bootstrapped.
-        return or_throw(yield, asio::error::try_again);
-    }
-
-    // (Note: can't use lambda because we need default constructibility now)
-    struct Compare {
-        NodeID target_id;
-
-        // Bootstrap nodes (those with id == boost::none) shall be ordered
-        // last.
-        bool operator()(const Contact& l, const Contact& r) const {
-            if (!l.id && !r.id) return l.endpoint < r.endpoint;
-            if ( l.id && !r.id) return true;
-            if (!l.id &&  r.id) return false;
-            return target_id.closer_to(*l.id, *r.id);
-        }
-    };
-
-    using CandidateSet = std::set<Contact, Compare>;
-
-    CandidateSet seed_candidates(Compare{target_id});
-
-    std::set<udp::endpoint> added_endpoints;
-
-    auto table_contacts =
-        _routing_table->find_closest_routing_nodes(target_id, RESPONSIBLE_TRACKERS_PER_SWARM);
-
-    for (auto& contact : table_contacts) {
-        seed_candidates.insert(contact);
-        added_endpoints.insert(contact.endpoint);
-    }
-
-    for (auto ep : _bootstrap_endpoints) {
-        if (added_endpoints.count(ep) != 0) continue;
-        seed_candidates.insert({ ep, boost::none });
-    }
-
-    auto terminated = _terminate_signal.connect([]{});
-    ::ouinet::bittorrent::collect(
-        _ios,
-        std::move(seed_candidates),
-        std::forward<Evaluate>(evaluate),
-        yield,
-        cancel_signal
-    );
-    if (terminated) {
-        or_throw(yield, asio::error::operation_aborted);
-    }
-}
-
-template<class Evaluate>
 void dht::DhtNode::collect2(
     DebugCtx& dbg,
     const NodeID& target_id,
