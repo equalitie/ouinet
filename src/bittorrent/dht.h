@@ -329,7 +329,6 @@ class DhtNode {
 
     private:
     asio::io_service& _ios;
-    PeerLimiter _peer_limiter;
     ip::address _interface_address;
     std::unique_ptr<UdpMultiplexer> _multiplexer;
     NodeID _node_id;

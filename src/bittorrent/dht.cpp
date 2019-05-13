@@ -48,13 +48,6 @@ using std::make_shared;
 
 #define DEBUG_SHOW_MESSAGES 0
 
-#if SPEED_DEBUG
-float to_seconds(Clock::duration d) {
-    using namespace std::chrono;
-    return duration_cast<milliseconds>(d).count() / 1000.f;
-};
-#endif
-
 class Stat {
 private:
     using AccumSet = accum::accumulator_set< float
@@ -565,19 +558,6 @@ NodeID dht::DhtNode::data_put_mutable(
 
     DebugCtx dbg;
 
-#if SPEED_DEBUG
-    static unsigned iii = 0;
-    std::stringstream sstr;
-    sstr << "debug_" << iii++;
-
-    unsigned threads = 0;
-
-    dbg.enable_log = SPEED_DEBUG;
-    dbg.tag = sstr.str();
-
-    cerr << dbg << "start " << target_id << "\n";
-#endif
-
     auto write_to_node = [&] ( const NodeID& id
                              , udp::endpoint ep
                              , const std::string& put_token
@@ -599,18 +579,9 @@ NodeID dht::DhtNode::data_put_mutable(
 
             wd.expires_after(_stats->max_reply_wait_time("put"));
 
-#if SPEED_DEBUG
-            auto s = dbg.uptime();
-            auto exp = to_seconds(_stats->max_reply_wait_time("put"));
-            cerr << dbg << "write_to_node start " << id << " (expected duration:" << exp << "s)\n";
-#endif
             sys::error_code ec;
             send_write_query(ep, id, "put", put_message, cancel, yield[ec]);
 
-#if SPEED_DEBUG
-            auto ss = dbg.uptime();
-            cerr << dbg << "write_to_node end " << id << " (took:" << (ss-s) << "s  exp:" << exp << "s)\n";
-#endif
             if (cancel) ec = asio::error::operation_aborted;
 
             return !ec ? true : false;
@@ -637,16 +608,6 @@ NodeID dht::DhtNode::data_put_mutable(
             return;
         }
 
-#if SPEED_DEBUG
-        auto ss = dbg.uptime();
-        threads++;
-        cerr << dbg << ss << " query_get_data 🍎 >>> " << candidate.id << " "
-             << candidate.endpoint << " threads:" << threads
-             << " timeout in: "
-             << to_seconds(_stats->max_reply_wait_time("get") + _stats->max_reply_wait_time("find_node"))<< "s"
-             << " (= get:" << to_seconds(_stats->max_reply_wait_time("get")) << "s + find_node:"
-             << to_seconds(_stats->max_reply_wait_time("find_node")) << "s)\n";
-#endif
         boost::optional<BencodedMap> response_ = query_get_data3(
             target_id,
             candidate,
@@ -658,18 +619,6 @@ NodeID dht::DhtNode::data_put_mutable(
         );
 
         if (cancel) return;
-
-#if SPEED_DEBUG
-        auto sss = dbg.uptime();
-        cerr << dbg << sss << " query_get_data send 🍏 <<< " << candidate.id
-             << " " << candidate.endpoint << " "
-             << (response_ ? "😊" : "😡") << " " << (sss - ss) << "s\n";
-
-        auto on_exit = defer([&] {
-                cerr << dbg << " query_get_data done >>> " << candidate.id << "\n";
-                threads--;
-            });
-#endif
 
         if (!response_) {
             blacklist.insert(candidate.endpoint);
@@ -694,13 +643,6 @@ NodeID dht::DhtNode::data_put_mutable(
 
                 if (write_success) {
                     responsible_nodes.insert({*candidate.id, boost::none});
-
-#if SPEED_DEBUG
-                    auto ssss = dbg.uptime();
-                    cerr << dbg << ssss << " done 🐂 <<< " << candidate.id
-                         << " " << candidate.endpoint << " "
-                         << (ssss - sss) << "s " << (ssss - ss) << "s\n";
-#endif
                     return;
                 }
             }
@@ -741,13 +683,6 @@ NodeID dht::DhtNode::data_put_mutable(
             }
         }
     }, local_cancel, yield[ec]);
-
-#if SPEED_DEBUG
-    cerr << dbg << "data_put_mutable end " << responsible_nodes.size() << "\n";
-    for (auto r : responsible_nodes) {
-        cerr << dbg << "           " << r.first << "\n";
-    }
-#endif
 
     if (cancel_signal) {
         ec = asio::error::operation_aborted;
@@ -913,28 +848,6 @@ BencodedMap dht::DhtNode::send_query_await_reply(
 
     //auto timeout = _stats->max_reply_wait_time(query_type);
     auto timeout = std::chrono::seconds(10);
-
-#if 0
-    auto opt_peer_slot = _peer_limiter.get_slot(dst.endpoint);
-    PeerLimiter::Slot peer_slot;
-
-    if (dbg && *dbg && dms) cerr << *dbg << dst << " " << query_type << " opt_peer_slot " << bool(opt_peer_slot) << " " << dms->is_running() << "\n";
-    if (!opt_peer_slot) {
-        auto cancel(cancel_signal);
-        steady_clock::duration d;
-
-        if (dms) d = dms->pause();
-
-        if (dbg && *dbg && dms) cerr << *dbg << dst << " " << query_type << " pause. remaining time: " << to_seconds(d) << "\n";
-        peer_slot = _peer_limiter.wait_for_slot(dst.endpoint, cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, BencodedMap());
-
-        if (dbg && *dbg && dms) cerr << *dbg << dst << " " << query_type << " unpause. remaining time: " << to_seconds(_stats->max_reply_wait_time(query_type)) << "s\n";
-    }
-    else {
-        peer_slot = std::move(*opt_peer_slot);
-    }
-#endif
 
     if (dms) {
         auto d1 = dms->time_to_finish();
