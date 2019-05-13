@@ -313,12 +313,6 @@ class DhtNode {
         Signal<void()>& cancel_signal
     );
 
-    void routing_bucket_try_add_node(
-        RoutingBucket*,
-        NodeContact,
-        bool is_verified
-    );
-
     static bool closer_to(const NodeID& reference, const NodeID& left, const NodeID& right);
 
     template<class Evaluate>

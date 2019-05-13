@@ -74,6 +74,13 @@ class RoutingTable {
 
     void routing_bucket_fail_node(RoutingBucket*, NodeContact, DhtNode&);
 
+    void routing_bucket_try_add_node(
+        RoutingBucket*,
+        NodeContact,
+        bool is_verified,
+        DhtNode&
+    );
+
     private:
     TreeNode* exhaustive_routing_subtable_fragment_root() const;
 
