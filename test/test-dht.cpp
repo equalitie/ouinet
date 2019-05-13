@@ -235,7 +235,7 @@ int main(int argc, const char** argv)
 
                 auto opt_data = dht->mutable_get( get_cmd.public_key
                                                , as_string_view(salt)
-                                               , yield[ec], cancel);
+                                               , cancel, yield[ec]);
 
                 if (ec) {
                     cerr << "Error dht->mutable_get " << ec.message() << endl;

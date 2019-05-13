@@ -13,8 +13,8 @@ void collect(
     asio::io_service& ios,
     CandidateSet first_candidates,
     Evaluate&& evaluate,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Cancel& cancel_signal,
+    asio::yield_context yield
 ) {
     using namespace std;
     using dht::NodeContact;
@@ -152,8 +152,8 @@ void collect(
                 evaluate( candidate
                         , dummy_wd
                         , new_candidates
-                        , yield[ec]
-                        , local_cancel);
+                        , local_cancel
+                        , yield[ec]);
             } else {
                 WatchDog wd(ios, std::chrono::milliseconds(200), [&] () mutable {
                         if (dbg) cerr << dbg << "dismiss " << candidate << "\n";
@@ -163,8 +163,8 @@ void collect(
                 evaluate( candidate
                         , wd
                         , new_candidates
-                        , yield[ec]
-                        , local_cancel);
+                        , local_cancel
+                        , yield[ec]);
             }
 
             on_finish();

@@ -126,8 +126,8 @@ int main(int argc, const char** argv)
         auto ep = resolve( ios
                          , "router.bittorrent.com"
                          , "6881"
-                         , yield[ec]
-                         , cancel);
+                         , cancel
+                         , yield[ec]);
 
         if (ec) {
             cerr << "Error resolve " << ec.message() << endl;
@@ -148,7 +148,7 @@ int main(int argc, const char** argv)
                 nc = NodeContact{my_id, ep};
             }
 
-            BencodedMap initial_ping_reply = dht.send_ping(nc, yield[ec], cancel);
+            BencodedMap initial_ping_reply = dht.send_ping(nc, cancel, yield[ec]);
             std::cout << initial_ping_reply << endl;
             if (!initial_ping_reply.empty()) {
                 NodeID their_id = NodeID::from_bytestring(*((*initial_ping_reply["r"].as_map())["id"].as_string()));
@@ -169,8 +169,8 @@ int main(int argc, const char** argv)
                 Progress p(ios, "Announcing");
                 return dht.tracker_announce( infohash
                                            , boost::none
-                                           , yield[ec]
-                                           , cancel);
+                                           , cancel
+                                           , yield[ec]);
             }();
 
             std::cout << "Found " << peers.size() << " peers\n";
@@ -186,7 +186,7 @@ int main(int argc, const char** argv)
 
             auto peers = [&] {
                 Progress p(ios, "Getting peers");
-                return dht.tracker_get_peers(infohash, yield[ec], cancel);
+                return dht.tracker_get_peers(infohash, cancel, yield[ec]);
             }();
 
             if (!ec) {

@@ -224,32 +224,32 @@ dht::DhtNode::~DhtNode()
 
 std::set<tcp::endpoint> dht::DhtNode::tracker_get_peers(
     NodeID infohash,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Cancel& cancel,
+    asio::yield_context yield
 ) {
     sys::error_code ec;
     std::set<tcp::endpoint> peers;
     std::map<NodeID, TrackerNode> responsible_nodes;
-    tracker_do_search_peers(infohash, peers, responsible_nodes, yield[ec], cancel_signal);
+    tracker_do_search_peers(infohash, peers, responsible_nodes, cancel, yield[ec]);
     return or_throw(yield, ec, std::move(peers));
 }
 
 std::set<tcp::endpoint> dht::DhtNode::tracker_announce(
     NodeID infohash,
     boost::optional<int> port,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Cancel& cancel,
+    asio::yield_context yield
 ) {
     sys::error_code ec;
     std::set<tcp::endpoint> peers;
     std::map<NodeID, TrackerNode> responsible_nodes;
-    tracker_do_search_peers(infohash, peers, responsible_nodes, yield[ec], cancel_signal);
+    tracker_do_search_peers(infohash, peers, responsible_nodes, cancel, yield[ec]);
     if (ec) {
         return or_throw<std::set<tcp::endpoint>>(yield, ec, std::move(peers));
     }
 
     bool success = false;
-    auto cancelled = cancel_signal.connect([]{});
+    auto cancelled = cancel.connect([]{});
     WaitCondition wc(_ios);
     for (auto& i : responsible_nodes) {
         asio::spawn(_ios, [&, lock = wc.lock()] (asio::yield_context yield) {
@@ -265,8 +265,8 @@ std::set<tcp::endpoint> dht::DhtNode::tracker_announce(
                     { "implied_port", port ? int64_t(0) : int64_t(1) },
                     { "port", port ? int64_t(*port) : int64_t(0) }
                 },
-                yield[ec],
-                cancel_signal
+                cancel,
+                yield[ec]
             );
             if (!ec) {
                 success = true;
@@ -282,8 +282,8 @@ std::set<tcp::endpoint> dht::DhtNode::tracker_announce(
 
 boost::optional<BencodedValue> dht::DhtNode::data_get_immutable(
     const NodeID& key,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Cancel& cancel,
+    asio::yield_context yield
 ) {
     sys::error_code ec;
     /*
@@ -299,8 +299,8 @@ boost::optional<BencodedValue> dht::DhtNode::data_get_immutable(
         const Contact& candidate,
         WatchDog& wd,
         util::AsyncQueue<NodeContact>& closer_nodes,
-        asio::yield_context yield,
-        Signal<void()>& cancel_signal
+        Cancel& cancel,
+        asio::yield_context yield
     ) {
         if (!candidate.id && responsible_nodes.full()) {
             return;
@@ -322,8 +322,8 @@ boost::optional<BencodedValue> dht::DhtNode::data_get_immutable(
             candidate,
             closer_nodes,
             wd, &dbg,
-            yield,
-            cancel_signal
+            cancel,
+            yield
         );
 
         if (!response_) return;
@@ -341,15 +341,15 @@ boost::optional<BencodedValue> dht::DhtNode::data_get_immutable(
                 return;
             }
         }
-    }, yield[ec], cancel_signal);
+    }, cancel, yield[ec]);
 
     return or_throw<boost::optional<BencodedValue>>(yield, ec, std::move(data));
 }
 
 NodeID dht::DhtNode::data_put_immutable(
     const BencodedValue& data,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Cancel& cancel,
+    asio::yield_context yield
 ) {
     NodeID key = DataStore::immutable_get_id(data);
 
@@ -367,8 +367,8 @@ NodeID dht::DhtNode::data_put_immutable(
         const Contact& candidate,
         WatchDog& wd,
         util::AsyncQueue<NodeContact>& closer_nodes,
-        asio::yield_context yield,
-        Signal<void()>& cancel
+        Signal<void()>& cancel,
+        asio::yield_context yield
     ) {
         if (!candidate.id && responsible_nodes.full()) {
             return;
@@ -383,8 +383,8 @@ NodeID dht::DhtNode::data_put_immutable(
             candidate,
             closer_nodes,
             wd, &dbg,
-            yield,
-            cancel
+            cancel,
+            yield
         );
 
         if (!response_) return;
@@ -401,14 +401,14 @@ NodeID dht::DhtNode::data_put_immutable(
                 { candidate.endpoint, *put_token }
             });
         }
-    }, yield[ec], cancel_signal);
+    }, cancel, yield[ec]);
 
     if (ec) {
         return or_throw<NodeID>(yield, ec, std::move(key));
     }
 
     bool success = false;
-    auto cancelled = cancel_signal.connect([]{});
+    auto cancelled = cancel.connect([]{});
     WaitCondition wc(_ios);
     for (auto& i : responsible_nodes) {
         asio::spawn(_ios, [&, lock = wc.lock()] (asio::yield_context yield) {
@@ -422,8 +422,8 @@ NodeID dht::DhtNode::data_put_immutable(
                     { "v", data },
                     { "token", i.second.put_token }
                 },
-                yield[ec],
-                cancel_signal
+                cancel,
+                yield[ec]
             );
             if (!ec) {
                 success = true;
@@ -440,8 +440,8 @@ NodeID dht::DhtNode::data_put_immutable(
 boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
     const util::Ed25519PublicKey& public_key,
     boost::string_view salt,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Cancel& cancel,
+    asio::yield_context yield
 ) {
     NodeID target_id = DataStore::mutable_get_id(public_key, salt);
 
@@ -452,7 +452,7 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
     ProximityMap<boost::none_t> responsible_nodes(target_id, RESPONSIBLE_TRACKERS_PER_SWARM);
     boost::optional<MutableDataItem> data;
 
-    Cancel internal_cancel(cancel_signal);
+    Cancel internal_cancel(cancel);
 
     boost::optional<WatchDog> cancel_wd;
 
@@ -463,8 +463,8 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
         const Contact& candidate,
         WatchDog& wd,
         util::AsyncQueue<NodeContact>& closer_nodes,
-        asio::yield_context yield,
-        Signal<void()>& cancel
+        Cancel& cancel,
+        asio::yield_context yield
     ) {
         if (!candidate.id && responsible_nodes.full()) {
             return;
@@ -486,8 +486,8 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
             closer_nodes,
             wd,
             dbg,
-            yield,
-            cancel
+            cancel,
+            yield
         );
 
         if (cancel || !response_) return;
@@ -539,9 +539,9 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
                 }
             }
         }
-    }, yield[ec], internal_cancel);
+    }, internal_cancel, yield[ec]);
 
-    if (ec == asio::error::operation_aborted && !cancel_signal && data) {
+    if (ec == asio::error::operation_aborted && !cancel && data) {
         // Only internal cancel was called to indicate we're done
         ec = sys::error_code();
     }
@@ -551,8 +551,8 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
 
 NodeID dht::DhtNode::data_put_mutable(
     MutableDataItem data,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Cancel& cancel_signal,
+    asio::yield_context yield
 ) {
     Cancel local_cancel(cancel_signal);
 
@@ -605,7 +605,7 @@ NodeID dht::DhtNode::data_put_mutable(
             cerr << dbg << "write_to_node start " << id << " (expected duration:" << exp << "s)\n";
 #endif
             sys::error_code ec;
-            send_write_query(ep, id, "put", put_message, yield[ec], cancel);
+            send_write_query(ep, id, "put", put_message, cancel, yield[ec]);
 
 #if SPEED_DEBUG
             auto ss = dbg.uptime();
@@ -622,8 +622,8 @@ NodeID dht::DhtNode::data_put_mutable(
         const Contact& candidate,
         WatchDog& wd,
         util::AsyncQueue<NodeContact>& closer_nodes,
-        asio::yield_context yield,
-        Signal<void()>& cancel
+        Cancel& cancel,
+        asio::yield_context yield
     ) {
         if (!candidate.id && responsible_nodes.full()) {
             return;
@@ -653,8 +653,8 @@ NodeID dht::DhtNode::data_put_mutable(
             closer_nodes,
             wd,
             dbg,
-            yield,
-            cancel
+            cancel,
+            yield
         );
 
         if (cancel) return;
@@ -740,7 +740,7 @@ NodeID dht::DhtNode::data_put_mutable(
                              , yield);
             }
         }
-    }, yield[ec], local_cancel);
+    }, local_cancel, yield[ec]);
 
 #if SPEED_DEBUG
     cerr << dbg << "data_put_mutable end " << responsible_nodes.size() << "\n";
@@ -772,7 +772,7 @@ void dht::DhtNode::receive_loop(asio::yield_context yield)
         udp::endpoint sender;
 
         const boost::string_view packet
-            = _multiplexer->receive(sender, yield[ec], _terminate_signal);
+            = _multiplexer->receive(sender, _terminate_signal, yield[ec]);
 
         if (ec) {
             break;
@@ -858,13 +858,13 @@ void dht::DhtNode::send_datagram(
 void dht::DhtNode::send_datagram(
     udp::endpoint destination,
     const BencodedMap& message,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Cancel& cancel,
+    asio::yield_context yield
 ) {
 #   if DEBUG_SHOW_MESSAGES
     std::cerr << "send: " << destination << " " << message << " :: " << i->second << std::endl;
 #   endif
-    _multiplexer->send(bencoding_encode(message), destination, yield, cancel_signal);
+    _multiplexer->send(bencoding_encode(message), destination, cancel, yield);
 }
 
 void dht::DhtNode::send_query(
@@ -872,8 +872,8 @@ void dht::DhtNode::send_query(
     std::string transaction,
     std::string query_type,
     BencodedMap query_arguments,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Cancel& cancel,
+    asio::yield_context yield
 ) {
     send_datagram(
         destination,
@@ -884,8 +884,8 @@ void dht::DhtNode::send_query(
             // TODO: version string
             { "t", std::move(transaction) }
         },
-        yield,
-        cancel_signal
+        cancel,
+        yield
     );
 }
 
@@ -902,8 +902,8 @@ BencodedMap dht::DhtNode::send_query_await_reply(
     const BencodedMap& query_arguments,
     WatchDog* dms,
     DebugCtx* dbg,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Cancel& cancel_signal,
+    asio::yield_context yield
 ) {
     using namespace std::chrono;
 
@@ -996,8 +996,8 @@ BencodedMap dht::DhtNode::send_query_await_reply(
         transaction,
         std::move(query_type),
         std::move(query_arguments),
-        yield[ec],
-        cancel_signal
+        cancel_signal,
+        yield[ec]
     );
 
     if (ec) {
@@ -1511,8 +1511,8 @@ asio::ip::udp::endpoint resolve(
     asio::io_context& ioc,
     const std::string& addr,
     const std::string& port,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Cancel& cancel_signal,
+    asio::yield_context yield
 ) {
     using asio::ip::udp;
 
@@ -1555,8 +1555,8 @@ dht::DhtNode::bootstrap_single( std::string bootstrap_domain
         _ios,
         bootstrap_domain,
         "6881",
-        yield[ec],
-        _terminate_signal
+        _terminate_signal,
+        yield[ec]
     );
 
     if (ec == asio::error::operation_aborted) {
@@ -1576,8 +1576,8 @@ dht::DhtNode::bootstrap_single( std::string bootstrap_domain
         initial_ping_message,
         nullptr,
         nullptr,
-        yield[ec],
-        _terminate_signal
+        _terminate_signal,
+        yield[ec]
     );
     if (ec == asio::error::operation_aborted) {
         return or_throw<T>(yield, asio::error::operation_aborted);
@@ -1647,7 +1647,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
     /*
      * Lookup our own ID, constructing a basic path to ourselves.
      */
-    find_closest_nodes(_node_id, yield[ec], _terminate_signal);
+    find_closest_nodes(_node_id, _terminate_signal, yield[ec]);
     if (ec) {
         return or_throw(yield, ec);
     }
@@ -1680,7 +1680,7 @@ void dht::DhtNode::refresh_routing_table()
             sys::error_code ec;
             auto slot = scheduler->wait_for_slot(yield[ec]);
             if (ec || cancel) return;
-            find_closest_nodes(range.random_id(), yield[ec], cancel);
+            find_closest_nodes(range.random_id(), cancel, yield[ec]);
         });
     });
 }
@@ -1690,8 +1690,8 @@ void dht::DhtNode::collect(
     DebugCtx& dbg,
     const NodeID& target_id,
     Evaluate&& evaluate,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Cancel& cancel_signal,
+    asio::yield_context yield
 ) {
     if (!_routing_table) {
         // We're not yet bootstrapped.
@@ -1737,8 +1737,8 @@ void dht::DhtNode::collect(
         _ios,
         std::move(seed_candidates),
         std::forward<Evaluate>(evaluate),
-        yield,
-        cancel_signal
+        cancel_signal,
+        yield
     );
     if (terminated) {
         or_throw(yield, asio::error::operation_aborted);
@@ -1747,8 +1747,8 @@ void dht::DhtNode::collect(
 
 std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
     NodeID target_id,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Cancel& cancel_signal,
+    asio::yield_context yield
 ) {
     sys::error_code ec;
     ProximityMap<udp::endpoint> out(target_id, RESPONSIBLE_TRACKERS_PER_SWARM);
@@ -1760,8 +1760,8 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
         const Contact& candidate,
         WatchDog& dms,
         util::AsyncQueue<NodeContact>& closer_nodes,
-        asio::yield_context yield,
-        Signal<void()>& cancel_signal
+        Cancel& cancel_signal,
+        asio::yield_context yield
     ) {
         if (!candidate.id && out.full()) {
             return;
@@ -1776,8 +1776,8 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
                                         , closer_nodes
                                         , dms
                                         , &dbg
-                                        , yield[ec]
-                                        , cancel_signal);
+                                        , cancel_signal
+                                        , yield[ec]);
 
         if (accepted && candidate.id) {
             out.insert({ *candidate.id, candidate.endpoint });
@@ -1785,7 +1785,7 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
 
         return;
     }
-    , yield[ec], cancel_signal);
+    , cancel_signal, yield[ec]);
 
     std::vector<NodeContact> output_set;
     for (auto& c : out) {
@@ -1797,8 +1797,8 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
 
 BencodedMap dht::DhtNode::send_ping(
     NodeContact contact,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Cancel& cancel_signal,
+    asio::yield_context yield
 ) {
     sys::error_code ec;
 
@@ -1808,8 +1808,8 @@ BencodedMap dht::DhtNode::send_ping(
 	BencodedMap{{ "id", _node_id.to_bytestring() }},
     nullptr,
     nullptr,
-	yield[ec],
-	cancel_signal
+	cancel_signal,
+	yield[ec]
     );
 }
 
@@ -1823,7 +1823,7 @@ void dht::DhtNode::send_ping(NodeContact contact)
         sys::error_code ec;
         Signal<void()> cancel_signal;
 
-        send_ping(contact, yield[ec], cancel_signal);
+        send_ping(contact, cancel_signal, yield[ec]);
     });
 }
 
@@ -1836,8 +1836,8 @@ void dht::DhtNode::send_write_query(
     NodeID destination_id,
     const std::string& query_type,
     const BencodedMap& query_arguments,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Cancel& cancel_signal,
+    asio::yield_context yield
 ) {
     /*
      * Retry the write message a couple of times.
@@ -1851,8 +1851,8 @@ void dht::DhtNode::send_write_query(
             query_arguments,
             nullptr,
             nullptr,
-            yield[ec],
-            cancel_signal
+            cancel_signal,
+            yield[ec]
         );
 
         if (ec == asio::error::operation_aborted) {
@@ -1873,8 +1873,8 @@ bool dht::DhtNode::query_find_node(
     NodeID target_id,
     Contact node,
     std::vector<NodeContact>& closer_nodes,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Cancel& cancel_signal,
+    asio::yield_context yield
 ) {
     sys::error_code ec;
 
@@ -1887,8 +1887,8 @@ bool dht::DhtNode::query_find_node(
         },
         nullptr,
         nullptr,
-        yield[ec],
-        cancel_signal
+        cancel_signal,
+        yield[ec]
     );
 
     if (ec) {
@@ -1923,8 +1923,8 @@ bool dht::DhtNode::query_find_node2(
     util::AsyncQueue<NodeContact>& closer_nodes,
     WatchDog& dms,
     DebugCtx* dbg,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Cancel& cancel_signal,
+    asio::yield_context yield
 ) {
     assert(!cancel_signal);
 
@@ -1941,8 +1941,8 @@ bool dht::DhtNode::query_find_node2(
         },
         &dms,
         dbg,
-        yield[ec],
-        cancel
+        cancel,
+        yield[ec]
     );
 
     return_or_throw_on_error(yield, cancel, ec, false);
@@ -1978,8 +1978,8 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_peers(
     util::AsyncQueue<NodeContact>& closer_nodes,
     WatchDog& dms,
     DebugCtx* dbg,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Cancel& cancel_signal,
+    asio::yield_context yield
 ) {
     sys::error_code ec;
 
@@ -1992,8 +1992,8 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_peers(
         },
         &dms,
         dbg,
-        yield[ec],
-        cancel_signal
+        cancel_signal,
+        yield[ec]
     );
 
     if (ec) {
@@ -2031,8 +2031,8 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_peers(
             infohash,
             node,
             closer_nodes_v,
-            yield,
-            cancel_signal
+            cancel_signal,
+            yield
         );
         if (cancelled) {
             return boost::none;
@@ -2051,8 +2051,8 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data(
     util::AsyncQueue<NodeContact>& closer_nodes,
     WatchDog& dms,
     DebugCtx* dbg,
-    asio::yield_context yield,
-    Signal<void()>& cancel
+    Cancel& cancel,
+    asio::yield_context yield
 ) {
     sys::error_code ec;
 
@@ -2065,8 +2065,8 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data(
         },
         nullptr,
         nullptr,
-        yield[ec],
-        cancel
+        cancel,
+        yield[ec]
     );
 
     if (ec == asio::error::operation_aborted) {
@@ -2090,8 +2090,8 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data(
             node,
             closer_nodes,
             dms, dbg,
-            yield,
-            cancel
+            cancel,
+            yield
         );
         return boost::none;
     }
@@ -2107,8 +2107,8 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data(
             node,
             closer_nodes,
             dms, dbg,
-            yield,
-            cancel
+            cancel,
+            yield
         );
         return boost::none;
     }
@@ -2138,8 +2138,8 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data2(
     util::AsyncQueue<NodeContact>& closer_nodes,
     WatchDog& dms,
     DebugCtx& dbg,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Cancel& cancel_signal,
+    asio::yield_context yield
 ) {
     sys::error_code ec;
 
@@ -2160,7 +2160,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data2(
         asio::spawn(_ios, [&, lock = wc.lock()] ( asio::yield_context yield) {
             if (dbg) cerr << dbg << "query_find_node2 start " << node << "\n";
             sys::error_code ec;
-            query_find_node2(key, node, closer_nodes, dms, &dbg, yield[ec], local_cancel);
+            query_find_node2(key, node, closer_nodes, dms, &dbg, local_cancel, yield[ec]);
             if (dbg) cerr << dbg << "query_find_node2 end " << node << "\n";
             local_cancel();
         });
@@ -2178,8 +2178,8 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data2(
         },
         &dms,
         &dbg,
-        yield[ec],
-        local_cancel
+        local_cancel,
+        yield[ec]
     );
 
     if (dbg) cerr << dbg << "send_query_await_reply get end " << node << " " << ec.message() << "\n";
@@ -2220,8 +2220,8 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data3(
     util::AsyncQueue<NodeContact>& closer_nodes,
     WatchDog& dms,
     DebugCtx& dbg,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Cancel& cancel_signal,
+    asio::yield_context yield
 ) {
     sys::error_code ec;
 
@@ -2244,8 +2244,8 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data3(
         },
         &dms,
         &dbg,
-        yield[ec],
-        local_cancel
+        local_cancel,
+        yield[ec]
     );
 
     if (dbg) cerr << dbg << "send_query_await_reply get end " << node << " " << ec.message() << "\n";
@@ -2288,8 +2288,8 @@ void dht::DhtNode::tracker_do_search_peers(
     NodeID infohash,
     std::set<tcp::endpoint>& peers,
     std::map<NodeID, TrackerNode>& responsible_nodes,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Cancel& cancel_signal,
+    asio::yield_context yield
 ) {
     sys::error_code ec;
     struct ResponsibleNode {
@@ -2304,8 +2304,8 @@ void dht::DhtNode::tracker_do_search_peers(
         const Contact& candidate,
         WatchDog& wd,
         util::AsyncQueue<NodeContact>& closer_nodes,
-        asio::yield_context yield,
-        Signal<void()>& cancel_signal
+        Cancel& cancel_signal,
+        asio::yield_context yield
     ) {
         if (!candidate.id && responsible_nodes_full.full()) {
             return;
@@ -2320,9 +2320,10 @@ void dht::DhtNode::tracker_do_search_peers(
             closer_nodes,
             wd,
             &dbg,
-            yield,
-            cancel_signal
+            cancel_signal,
+            yield
         );
+
         if (!response_) return;
 
         BencodedMap& response = *response_;
@@ -2347,7 +2348,7 @@ void dht::DhtNode::tracker_do_search_peers(
             }
             responsible_nodes_full.insert({ *candidate.id, std::move(node) });
         }
-    }, yield[ec], cancel_signal);
+    }, cancel_signal, yield[ec]);
 
     peers.clear();
     responsible_nodes.clear();
@@ -2397,8 +2398,8 @@ void MainlineDht::set_interfaces(const std::vector<asio::ip::address>& addresses
 std::set<tcp::endpoint> MainlineDht::tracker_announce(
     NodeID infohash,
     boost::optional<int> port,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Cancel& cancel_signal,
+    asio::yield_context yield
 ) {
     std::set<tcp::endpoint> output;
 
@@ -2407,7 +2408,7 @@ std::set<tcp::endpoint> MainlineDht::tracker_announce(
         asio::spawn(_ios, [&, lock = condition.lock()] (asio::yield_context yield) {
             sys::error_code ec;
             Signal<void()> cancel_dummy;
-            std::set<tcp::endpoint> peers = i.second->tracker_announce(infohash, port, yield[ec], cancel_dummy);
+            std::set<tcp::endpoint> peers = i.second->tracker_announce(infohash, port, cancel_dummy, yield[ec]);
 
             if (ec) {
                 return;
@@ -2465,7 +2466,7 @@ void MainlineDht::mutable_put(
             }
 
             sys::error_code ec;
-            i.second->data_put_mutable(data, yield[ec], cancel);
+            i.second->data_put_mutable(data, cancel, yield[ec]);
 
             if (ec) return;
 
@@ -2495,12 +2496,12 @@ void MainlineDht::mutable_put(
     return or_throw(yield, ec);
 }
 
-std::set<tcp::endpoint> MainlineDht::tracker_get_peers(NodeID infohash, asio::yield_context yield, Signal<void()>& cancel_signal)
+std::set<tcp::endpoint> MainlineDht::tracker_get_peers(NodeID infohash, Cancel& cancel_signal, asio::yield_context yield)
 {
     std::set<tcp::endpoint> output;
     sys::error_code ec;
 
-    Signal<void()> cancel_attempts;
+    Cancel cancel_attempts;
 
     SuccessCondition success_condition(_ios);
     WaitCondition completed_condition(_ios);
@@ -2515,7 +2516,7 @@ std::set<tcp::endpoint> MainlineDht::tracker_get_peers(NodeID infohash, asio::yi
             }
 
             sys::error_code ec;
-            std::set<tcp::endpoint> peers = i.second->tracker_get_peers(infohash, yield[ec], cancel_attempts);
+            std::set<tcp::endpoint> peers = i.second->tracker_get_peers(infohash, cancel_attempts, yield[ec]);
 
             output.insert(peers.begin(), peers.end());
 
@@ -2548,8 +2549,8 @@ std::set<tcp::endpoint> MainlineDht::tracker_get_peers(NodeID infohash, asio::yi
 
 boost::optional<BencodedValue> MainlineDht::immutable_get(
         NodeID key,
-        asio::yield_context yield,
-        Signal<void()>& cancel_signal
+        Cancel& cancel_signal,
+        asio::yield_context yield
 ) {
     boost::optional<BencodedValue> output;
     sys::error_code ec;
@@ -2569,7 +2570,7 @@ boost::optional<BencodedValue> MainlineDht::immutable_get(
             }
 
             sys::error_code ec;
-            boost::optional<BencodedValue> data = i.second->data_get_immutable(key, yield[ec], cancel_attempts);
+            boost::optional<BencodedValue> data = i.second->data_get_immutable(key, cancel_attempts, yield[ec]);
 
             if (!ec && data) {
                 output = data;
@@ -2603,8 +2604,8 @@ boost::optional<BencodedValue> MainlineDht::immutable_get(
 boost::optional<MutableDataItem> MainlineDht::mutable_get(
     const util::Ed25519PublicKey& public_key,
     boost::string_view salt,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Cancel& cancel_signal,
+    asio::yield_context yield
 ) {
     boost::optional<MutableDataItem> output;
     sys::error_code ec;
@@ -2628,8 +2629,8 @@ boost::optional<MutableDataItem> MainlineDht::mutable_get(
             boost::optional<MutableDataItem> data = i.second->data_get_mutable(
                 public_key,
                 salt,
-                yield[ec],
-                cancel_attempts
+                cancel_attempts,
+                yield[ec]
             );
 
             if (!ec && data) {
@@ -2662,8 +2663,8 @@ boost::optional<MutableDataItem> MainlineDht::mutable_get(
 
 
 void MainlineDht::wait_all_ready(
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Cancel& cancel_signal,
+    asio::yield_context yield
 ) {
     auto cancelled = _terminate_signal.connect([&] {
         cancel_signal();

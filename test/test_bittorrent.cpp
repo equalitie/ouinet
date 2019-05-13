@@ -67,10 +67,10 @@ BOOST_AUTO_TEST_CASE(test_bep_5)
         dht.start(yield[ec]);
         BOOST_REQUIRE(!ec);
 
-        dht.tracker_announce(infohash, dht.wan_endpoint().port(), yield[ec], cancel_signal);
+        dht.tracker_announce(infohash, dht.wan_endpoint().port(), cancel_signal, yield[ec]);
         BOOST_REQUIRE(!ec);
 
-        auto peers = dht.tracker_get_peers(infohash , yield[ec], cancel_signal);
+        auto peers = dht.tracker_get_peers(infohash , cancel_signal, yield[ec]);
         BOOST_REQUIRE(!ec);
 
         BOOST_REQUIRE(peers.count(as_tcp(dht.wan_endpoint())));
@@ -135,7 +135,7 @@ BOOST_AUTO_TEST_CASE(test_bep_44)
                 auto item = mutable_data(value.str(), salt.str(), skey);
 
                 //auto start = Clock::now();
-                dht.data_put_mutable(item, yield[ec], cancel);
+                dht.data_put_mutable(item, cancel, yield[ec]);
                 //cerr << "Putting data " << value.str()
                 //     << " took " << seconds(Clock::now() - start) << "s"
                 //     << endl;
@@ -146,8 +146,8 @@ BOOST_AUTO_TEST_CASE(test_bep_44)
                 //start = Clock::now();
                 auto opt_data = dht.data_get_mutable( pkey
                                                     , salt.str()
-                                                    , yield[ec]
-                                                    , cancel);
+                                                    , cancel
+                                                    , yield[ec]);
                 //cerr << "Getting data " << value.str()
                 //     << " took " << seconds(Clock::now() - start) << "s"
                 //     << endl;

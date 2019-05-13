@@ -34,8 +34,8 @@ asio::ip::udp::endpoint resolve(
     asio::io_context& ioc,
     const std::string& addr,
     const std::string& port,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Signal<void()>& cancel_signal,
+    asio::yield_context yield
 );
 
 namespace ip = asio::ip;
@@ -90,8 +90,8 @@ class DhtNode {
      */
     std::set<tcp::endpoint> tracker_get_peers(
         NodeID infohash,
-        asio::yield_context yield,
-        Signal<void()>& cancel_signal
+        Cancel&,
+        asio::yield_context
     );
 
     /**
@@ -108,8 +108,8 @@ class DhtNode {
     std::set<tcp::endpoint> tracker_announce(
         NodeID infohash,
         boost::optional<int> port,
-        asio::yield_context yield,
-        Signal<void()>& cancel_signal
+        Cancel&,
+        asio::yield_context
     );
 
     /**
@@ -119,8 +119,8 @@ class DhtNode {
      */
     boost::optional<BencodedValue> data_get_immutable(
         const NodeID& key,
-        asio::yield_context yield,
-        Signal<void()>& cancel_signal
+        Cancel&,
+        asio::yield_context
     );
 
     /**
@@ -130,8 +130,8 @@ class DhtNode {
      */
     NodeID data_put_immutable(
         const BencodedValue& data,
-        asio::yield_context yield,
-        Signal<void()>& cancel_signal
+        Cancel&,
+        asio::yield_context
     );
 
     /**
@@ -145,8 +145,8 @@ class DhtNode {
     boost::optional<MutableDataItem> data_get_mutable(
         const util::Ed25519PublicKey& public_key,
         boost::string_view salt,
-        asio::yield_context yield,
-        Signal<void()>& cancel_signal
+        Cancel&,
+        asio::yield_context
     );
 
     /**
@@ -159,15 +159,15 @@ class DhtNode {
      */
     NodeID data_put_mutable(
         MutableDataItem data,
-        asio::yield_context yield,
-        Signal<void()>& cancel_signal
+        Cancel&,
+        asio::yield_context
     );
 
     // http://bittorrent.org/beps/bep_0005.html#ping
     BencodedMap send_ping(
         NodeContact contact,
-        asio::yield_context yield,
-        Signal<void()>& cancel_signal
+        Cancel&,
+        asio::yield_context
     );
 
     void send_ping(NodeContact contact);
@@ -177,8 +177,8 @@ class DhtNode {
         NodeID target_id,
         Contact node,
         std::vector<NodeContact>& closer_nodes,
-        asio::yield_context yield,
-        Signal<void()>& cancel_signal
+        Cancel&,
+        asio::yield_context
     );
 
     bool query_find_node2(
@@ -187,8 +187,8 @@ class DhtNode {
         util::AsyncQueue<NodeContact>& closer_nodes,
         WatchDog& dead_man_switch,
         DebugCtx* dbg,
-        asio::yield_context yield,
-        Signal<void()>& cancel_signal
+        Cancel&,
+        asio::yield_context
     );
 
     // http://bittorrent.org/beps/bep_0005.html#get-peers
@@ -198,8 +198,8 @@ class DhtNode {
         util::AsyncQueue<NodeContact>& closer_nodes,
         WatchDog& dms,
         DebugCtx* dbg,
-        asio::yield_context yield,
-        Signal<void()>& cancel_signal
+        Cancel&,
+        asio::yield_context
     );
 
     bool is_v4() const { return _interface_address.is_v4(); }
@@ -212,7 +212,7 @@ class DhtNode {
     asio::io_service& get_io_service() { return _ios; }
 
     private:
-    void receive_loop(asio::yield_context yield);
+    void receive_loop(asio::yield_context);
 
     void send_datagram(
         udp::endpoint destination,
@@ -221,8 +221,8 @@ class DhtNode {
     void send_datagram(
         udp::endpoint destination,
         const BencodedMap& query_arguments,
-        asio::yield_context yield,
-        Signal<void()>& cancel_signal
+        Cancel&,
+        asio::yield_context
     );
 
     void send_query(
@@ -230,8 +230,8 @@ class DhtNode {
         std::string transaction,
         std::string query_type,
         BencodedMap query_arguments,
-        asio::yield_context yield,
-        Signal<void()>& cancel_signal
+        Cancel&,
+        asio::yield_context
     );
 
     BencodedMap send_query_await_reply(
@@ -240,13 +240,13 @@ class DhtNode {
         const BencodedMap& query_arguments,
         WatchDog* dms,
         DebugCtx* dbg,
-        asio::yield_context yield,
-        Signal<void()>& cancel_signal
+        Cancel&,
+        asio::yield_context
     );
 
     void handle_query(udp::endpoint sender, BencodedMap query);
 
-    void bootstrap(asio::yield_context yield);
+    void bootstrap(asio::yield_context);
 
     std::pair< asio::ip::udp::endpoint
              , asio::ip::udp::endpoint
@@ -257,8 +257,8 @@ class DhtNode {
 
     std::vector<NodeContact> find_closest_nodes(
         NodeID target_id,
-        asio::yield_context yield,
-        Signal<void()>& cancel_signal
+        Cancel&,
+        asio::yield_context
     );
 
     std::string new_transaction_string();
@@ -268,8 +268,8 @@ class DhtNode {
         NodeID destination_id,
         const std::string& query_type,
         const BencodedMap& query_arguments,
-        asio::yield_context,
-        Signal<void()>& cancel_signal
+        Cancel&,
+        asio::yield_context
     );
 
     // http://bittorrent.org/beps/bep_0044.html#get-message
@@ -279,8 +279,8 @@ class DhtNode {
         util::AsyncQueue<NodeContact>& closer_nodes,
         WatchDog& dms,
         DebugCtx* dbg,
-        asio::yield_context yield,
-        Signal<void()>& cancel
+        Cancel&,
+        asio::yield_context
     );
 
     boost::optional<BencodedMap> query_get_data2(
@@ -289,8 +289,8 @@ class DhtNode {
         util::AsyncQueue<NodeContact>& closer_nodes,
         WatchDog& dead_man_switch,
         DebugCtx&,
-        asio::yield_context yield,
-        Signal<void()>& cancel_signal
+        Cancel&,
+        asio::yield_context
     );
 
     boost::optional<BencodedMap> query_get_data3(
@@ -299,8 +299,8 @@ class DhtNode {
         util::AsyncQueue<NodeContact>& closer_nodes,
         WatchDog& dead_man_switch,
         DebugCtx&,
-        asio::yield_context yield,
-        Signal<void()>& cancel_signal
+        Cancel&,
+        asio::yield_context
     );
 
 
@@ -312,8 +312,8 @@ class DhtNode {
         NodeID infohash,
         std::set<tcp::endpoint>& peers,
         std::map<NodeID, TrackerNode>& responsible_nodes,
-        asio::yield_context,
-        Signal<void()>& cancel_signal
+        Cancel&,
+        asio::yield_context
     );
 
     static bool closer_to(const NodeID& reference, const NodeID& left, const NodeID& right);
@@ -323,8 +323,8 @@ class DhtNode {
         DebugCtx&,
         const NodeID& target,
         Evaluate&&,
-        asio::yield_context,
-        Signal<void()>& cancel_signal
+        Cancel&,
+        asio::yield_context
     );
 
     private:
@@ -372,18 +372,18 @@ class MainlineDht {
     std::set<tcp::endpoint> tracker_announce(
         NodeID infohash,
         boost::optional<int> port,
-        asio::yield_context yield,
-        Signal<void()>& cancel_signal
+        Cancel&,
+        asio::yield_context
     );
 
     void mutable_put(const MutableDataItem&, Cancel&, asio::yield_context);
 
-    std::set<tcp::endpoint> tracker_get_peers(NodeID infohash, asio::yield_context yield, Signal<void()>& cancel_signal);
+    std::set<tcp::endpoint> tracker_get_peers(NodeID infohash, Cancel&, asio::yield_context);
     std::set<tcp::endpoint> tracker_get_peers(NodeID infohash, asio::yield_context yield)
-        { Signal<void()> cancel_signal; return tracker_get_peers(infohash, yield, cancel_signal); }
-    boost::optional<BencodedValue> immutable_get(NodeID key, asio::yield_context yield, Signal<void()>& cancel_signal);
+        { Cancel cancel; return tracker_get_peers(infohash, cancel, yield); }
+    boost::optional<BencodedValue> immutable_get(NodeID key, Cancel&, asio::yield_context);
     boost::optional<BencodedValue> immutable_get(NodeID key, asio::yield_context yield)
-        { Signal<void()> cancel_signal; return immutable_get(key, yield, cancel_signal); }
+        { Cancel cancel; return immutable_get(key, cancel, yield); }
     /*
      * TODO:
      *
@@ -395,15 +395,15 @@ class MainlineDht {
     boost::optional<MutableDataItem> mutable_get(
         const util::Ed25519PublicKey& public_key,
         boost::string_view salt,
-        asio::yield_context yield,
-        Signal<void()>& cancel_signal
+        Cancel&,
+        asio::yield_context
     );
     boost::optional<MutableDataItem> mutable_get(
         const util::Ed25519PublicKey& public_key,
         boost::string_view salt,
         asio::yield_context yield
     )
-    { Signal<void()> cancel_signal; return mutable_get(public_key, salt, yield, cancel_signal); }
+    { Cancel cancel; return mutable_get(public_key, salt, cancel, yield); }
 
     asio::io_service& get_io_service() { return _ios; }
 
@@ -413,10 +413,7 @@ class MainlineDht {
         }
         return true;
     }
-    void wait_all_ready(
-        asio::yield_context yield,
-        Signal<void()>& cancel_signal
-    );
+    void wait_all_ready(Cancel&, asio::yield_context);
 
     private:
     asio::io_service& _ios;
