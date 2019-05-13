@@ -52,7 +52,7 @@ struct MutableDataItem {
         using namespace std;
 
         // TODO: bencoding_decode should accept string_view
-        auto ins = bencoding_decode(s.to_string());
+        auto ins = bencoding_decode(s);
 
         if (!ins || !ins->is_map()) {  // general format and type of data
             return boost::none;

@@ -772,8 +772,7 @@ void dht::DhtNode::receive_loop(asio::yield_context yield)
         }
 
         // TODO: The bencode parser should only need a string_view.
-        boost::optional<BencodedValue> decoded_message
-            = bencoding_decode(packet.to_string());
+        boost::optional<BencodedValue> decoded_message = bencoding_decode(packet);
 
         if (!decoded_message) {
 #           if DEBUG_SHOW_MESSAGES

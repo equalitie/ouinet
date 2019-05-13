@@ -144,9 +144,11 @@ boost::optional<BencodedValue> destructive_parse_value(std::string& encoded)
     }
 }
 
-boost::optional<BencodedValue> bencoding_decode(std::string encoded)
+boost::optional<BencodedValue> bencoding_decode(boost::string_view encoded)
 {
-    return destructive_parse_value(encoded);
+    // TODO: We shouldn't need to create the string here
+    auto encoded_s = encoded.to_string();
+    return destructive_parse_value(encoded_s);
 }
 
 std::ostream& operator<<(std::ostream& os, const BencodedValue& value)
