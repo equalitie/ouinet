@@ -10,7 +10,7 @@ RoutingTable::RoutingTable(NodeID node_id) :
     _node_id(node_id)
 {
     _root_node = std::make_unique<TreeNode>(NodeID::Range::max());
-    _root_node->bucket = std::make_unique<RoutingBucket>();
+    _root_node->bucket = std::make_unique<Bucket>();
 }
 
 void RoutingTable::TreeNode::split() {
@@ -30,10 +30,10 @@ void RoutingTable::TreeNode::split() {
      * Split the bucket.
      */
     left_child = std::make_unique<TreeNode>(range.reduce(0));
-    left_child->bucket = std::make_unique<RoutingBucket>();
+    left_child->bucket = std::make_unique<Bucket>();
 
     right_child = std::make_unique<TreeNode>(range.reduce(1));
-    right_child->bucket = std::make_unique<RoutingBucket>();
+    right_child->bucket = std::make_unique<Bucket>();
 
     for (const auto& node : bucket->nodes) {
         if (node.contact.id.bit(depth())) {
@@ -87,7 +87,7 @@ size_t RoutingTable::TreeNode::count_routing_nodes() const
  * contain a routing node for the target ID, and may or may not have room to
  * add such a node.
  */
-RoutingBucket* RoutingTable::find_bucket(NodeID id, bool split_buckets)
+RoutingTable::Bucket* RoutingTable::find_bucket(NodeID id, bool split_buckets)
 {
     TreeNode* tree_node = _root_node.get();
     std::set<TreeNode*> ancestors;
@@ -129,7 +129,7 @@ RoutingBucket* RoutingTable::find_bucket(NodeID id, bool split_buckets)
         const int TREE_BASE = 5;
         TreeNode* exhaustive_root = exhaustive_routing_subtable_fragment_root();
 
-        while (tree_node->bucket->nodes.size() == RoutingBucket::BUCKET_SIZE
+        while (tree_node->bucket->nodes.size() == RoutingTable::BUCKET_SIZE
                 && tree_node->depth() < NodeID::bit_size) {
             if (
                 !node_contains_self
@@ -182,7 +182,7 @@ RoutingTable::TreeNode* RoutingTable::exhaustive_routing_subtable_fragment_root(
 
     size_t size = tree_node->bucket->nodes.size();
 
-    while (size < RoutingBucket::BUCKET_SIZE && !path.empty()) {
+    while (size < RoutingTable::BUCKET_SIZE && !path.empty()) {
         tree_node = path.back();
         path.pop_back();
         if (_node_id.bit(path.size())) {
@@ -263,7 +263,7 @@ RoutingTable::find_closest_routing_nodes(NodeID target, size_t count)
  */
 void RoutingTable::fail_node(NodeContact contact, DhtNode& dht_node)
 {
-    dht::RoutingBucket* bucket = find_bucket(contact.id, false);
+    Bucket* bucket = find_bucket(contact.id, false);
 
     sys::error_code ec;
     /*
@@ -360,7 +360,7 @@ void RoutingTable::try_add_node( NodeContact contact
                                , bool is_verified
                                , DhtNode& dht_node)
 {
-    dht::RoutingBucket* bucket = find_bucket(contact.id, true);
+    Bucket* bucket = find_bucket(contact.id, true);
 
     /*
      * Check whether the contact is already in the routing table. If so, bump it.
@@ -403,7 +403,7 @@ void RoutingTable::try_add_node( NodeContact contact
      * If there is space in the bucket, add the node. If it is unverified,
      * ping it instead; on success, the node will be added.
      */
-    if (bucket->nodes.size() < RoutingBucket::BUCKET_SIZE) {
+    if (bucket->nodes.size() < RoutingTable::BUCKET_SIZE) {
         if (is_verified) {
             RoutingNode node;
             node.contact = contact;

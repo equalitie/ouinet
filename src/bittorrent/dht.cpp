@@ -150,7 +150,6 @@ std::string dht::NodeContact::to_string() const
 
 dht::DhtNode::DhtNode(asio::io_service& ios, ip::address interface_address):
     _ios(ios),
-    _peer_limiter(ios, 500),
     _interface_address(interface_address),
     _ready(false),
     _stats(new Stats())
@@ -1053,7 +1052,7 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
         std::vector<dht::NodeContact> contacts;
 
         if (_routing_table) {
-            contacts = _routing_table->find_closest_routing_nodes(target_id, RoutingBucket::BUCKET_SIZE);
+            contacts = _routing_table->find_closest_routing_nodes(target_id, RoutingTable::BUCKET_SIZE);
         }
 
         std::string nodes;
@@ -1091,7 +1090,7 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
         std::vector<dht::NodeContact> contacts;
 
         if (_routing_table) {
-            contacts = _routing_table->find_closest_routing_nodes(infohash, RoutingBucket::BUCKET_SIZE);
+            contacts = _routing_table->find_closest_routing_nodes(infohash, RoutingTable::BUCKET_SIZE);
         }
 
         std::string nodes;
@@ -1202,7 +1201,7 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
         BencodedMap reply;
 
         std::vector<dht::NodeContact> contacts
-            = _routing_table->find_closest_routing_nodes(target, RoutingBucket::BUCKET_SIZE);
+            = _routing_table->find_closest_routing_nodes(target, RoutingTable::BUCKET_SIZE);
         std::string nodes;
         for (auto& contact : contacts) {
             nodes += contact.id.to_bytestring();
@@ -1581,10 +1580,7 @@ void dht::DhtNode::refresh_routing_table()
     // the memory use down to ~16MB.
     auto scheduler = make_shared<Scheduler>(get_io_service(), 4);
 
-    _routing_table->for_each_bucket([&] (
-        const NodeID::Range& range,
-        RoutingBucket& bucket
-    ) {
+    _routing_table->for_each_bucket([&] (const NodeID::Range& range) {
         spawn(_ios, [this, range, scheduler] (asio::yield_context yield) {
             Cancel cancel(_terminate_signal);
             sys::error_code ec;
