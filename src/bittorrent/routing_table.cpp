@@ -1,4 +1,5 @@
 #include "routing_table.h"
+#include "dht.h"
 
 #include <set>
 
@@ -254,4 +255,97 @@ RoutingTable::find_closest_routing_nodes(NodeID target, size_t count)
     }
 
     return output;
+}
+
+/*
+ * Record a failure of a routing table node to respond to a query. If this
+ * makes the node bad, try to replace it with a queued candidate.
+ */
+void RoutingTable::routing_bucket_fail_node( RoutingBucket* bucket
+                                           , NodeContact contact
+                                           , DhtNode& dht_node)
+{
+    sys::error_code ec;
+    /*
+     * Find the contact in the routing table.
+     */
+    size_t node_index;
+    bool found = false;
+    for (size_t i = 0; i < bucket->nodes.size(); i++) {
+        if (bucket->nodes[i].contact == contact) {
+            node_index = i;
+            found = true;
+        }
+    }
+    if (!found) {
+        return;
+    }
+
+    bucket->nodes[node_index].queries_failed++;
+    if (!bucket->nodes[node_index].is_bad()) {
+        if (bucket->nodes[node_index].is_questionable()) {
+            bucket->nodes[node_index].questionable_ping_ongoing = true;
+            dht_node.send_ping(contact);
+        }
+        return;
+    }
+
+    /*
+     * The node is bad. Try to replace it with one of the queued replacements.
+     */
+    /*
+     * Get rid of outdated candidates.
+     */
+    while (!bucket->verified_candidates.empty() && bucket->verified_candidates[0].is_questionable()) {
+        bucket->verified_candidates.pop_front();
+    }
+    while (!bucket->unverified_candidates.empty() && bucket->unverified_candidates[0].is_questionable()) {
+        bucket->unverified_candidates.pop_front();
+    }
+
+    if (!bucket->verified_candidates.empty()) {
+        /*
+         * If there is a verified candidate available, use it.
+         */
+        bucket->nodes.erase(bucket->nodes.begin() + node_index);
+
+        RoutingNode node;
+        node.contact = bucket->verified_candidates[0].contact;
+        node.last_activity = bucket->verified_candidates[0].last_activity;
+        node.queries_failed = 0;
+        node.questionable_ping_ongoing = false;
+        bucket->verified_candidates.pop_front();
+
+        for (size_t i = 0; i < bucket->nodes.size(); i++) {
+            if (bucket->nodes[i].last_activity > node.last_activity) {
+                bucket->nodes.insert(bucket->nodes.begin() + i, node);
+                break;
+            }
+        }
+    } else if (!bucket->unverified_candidates.empty()) {
+        /*
+         * If there is an unverified candidate available, ping it. The reply
+         * handler will replace the bad node.
+         */
+        NodeContact contact = bucket->unverified_candidates[0].contact;
+        bucket->unverified_candidates.pop_front();
+        dht_node.send_ping(contact);
+        if (ec) return;
+    }
+
+    /*
+     * Cleanup superfluous candidates.
+     */
+    size_t questionable_nodes = 0;
+    for (size_t i = 0; i < bucket->nodes.size(); i++) {
+        if (bucket->nodes[i].is_questionable()) {
+            questionable_nodes++;
+        }
+    }
+    while (bucket->verified_candidates.size() > questionable_nodes) {
+        bucket->verified_candidates.pop_front();
+    }
+    while (bucket->verified_candidates.size() + bucket->unverified_candidates.size() > questionable_nodes) {
+        bucket->unverified_candidates.pop_front();
+    }
 }

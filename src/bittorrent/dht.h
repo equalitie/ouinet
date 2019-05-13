@@ -319,8 +319,6 @@ class DhtNode {
         bool is_verified
     );
 
-    void routing_bucket_fail_node(RoutingBucket*, NodeContact);
-
     static bool closer_to(const NodeID& reference, const NodeID& left, const NodeID& right);
 
     template<class Evaluate>

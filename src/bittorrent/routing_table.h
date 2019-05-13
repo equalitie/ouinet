@@ -36,6 +36,8 @@ struct RoutingBucket {
      */
 };
 
+class DhtNode;
+
 class RoutingTable {
     private:
     struct TreeNode {
@@ -69,6 +71,8 @@ class RoutingTable {
     std::vector<NodeContact> find_closest_routing_nodes(NodeID target, size_t count);
 
     template<class F> void for_each_bucket(F&&);
+
+    void routing_bucket_fail_node(RoutingBucket*, NodeContact, DhtNode&);
 
     private:
     TreeNode* exhaustive_routing_subtable_fragment_root() const;
