@@ -129,7 +129,7 @@ RoutingTable::Bucket* RoutingTable::find_bucket(NodeID id, bool split_buckets)
         const int TREE_BASE = 5;
         TreeNode* exhaustive_root = exhaustive_routing_subtable_fragment_root();
 
-        while (tree_node->bucket->nodes.size() == RoutingTable::BUCKET_SIZE
+        while (tree_node->bucket->nodes.size() == BUCKET_SIZE
                 && tree_node->depth() < NodeID::bit_size) {
             if (
                 !node_contains_self
@@ -182,7 +182,7 @@ RoutingTable::TreeNode* RoutingTable::exhaustive_routing_subtable_fragment_root(
 
     size_t size = tree_node->bucket->nodes.size();
 
-    while (size < RoutingTable::BUCKET_SIZE && !path.empty()) {
+    while (size < BUCKET_SIZE && !path.empty()) {
         tree_node = path.back();
         path.pop_back();
         if (_node_id.bit(path.size())) {
@@ -403,7 +403,7 @@ void RoutingTable::try_add_node( NodeContact contact
      * If there is space in the bucket, add the node. If it is unverified,
      * ping it instead; on success, the node will be added.
      */
-    if (bucket->nodes.size() < RoutingTable::BUCKET_SIZE) {
+    if (bucket->nodes.size() < BUCKET_SIZE) {
         if (is_verified) {
             RoutingNode node;
             node.contact = contact;
