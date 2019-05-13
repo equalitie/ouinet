@@ -12,11 +12,6 @@
 
 namespace ouinet { namespace bittorrent {
 
-static
-boost::asio::const_buffers_1 buffer(const std::string& s) {
-    return boost::asio::buffer(const_cast<const char*>(s.data()), s.size());
-}
-
 class UdpMultiplexer {
 private:
     using udp = asio::ip::udp;
@@ -48,17 +43,13 @@ public:
 
     asio::io_service& get_io_service();
 
-    void send(std::string&& message, const udp::endpoint& to, asio::yield_context yield, Signal<void()>& cancel_signal);
-    void send(std::string&& message, const udp::endpoint& to, asio::yield_context yield)
-        { Signal<void()> cancel_signal; send(std::move(message), to, yield, cancel_signal); }
+    void send(std::string&& message, const udp::endpoint& to, Cancel&, asio::yield_context);
     void send(std::string&& message, const udp::endpoint& to);
 
     // NOTE: The pointer inside the returned string_view is guaranteed to
     // be valid only until the next coroutine based async IO call or until
     // the coroutine that runs this function exits (whichever comes first).
-    const boost::string_view receive(udp::endpoint& from, asio::yield_context yield, Signal<void()>& cancel_signal);
-    const boost::string_view receive(udp::endpoint& from, asio::yield_context yield)
-        { Signal<void()> cancel_signal; return receive(from, yield, cancel_signal); }
+    const boost::string_view receive(udp::endpoint& from, Cancel&, asio::yield_context);
 
     ~UdpMultiplexer();
 
@@ -66,6 +57,11 @@ private:
     void maintain_max_rate_bytes_per_sec( float current_rate
                                         , float max_rate
                                         , asio::yield_context);
+
+    static
+    boost::asio::const_buffers_1 buffer(const std::string& s) {
+        return boost::asio::buffer(const_cast<const char*>(s.data()), s.size());
+    }
 
 private:
     udp::socket _socket;
@@ -212,8 +208,8 @@ inline
 void UdpMultiplexer::send(
     std::string&& message,
     const udp::endpoint& to,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Cancel& cancel_signal,
+    asio::yield_context yield
 ) {
     ConditionVariable condition(get_io_service());
 
@@ -261,7 +257,7 @@ void UdpMultiplexer::send(
 
 inline
 const boost::string_view
-UdpMultiplexer::receive(udp::endpoint& from, asio::yield_context yield, Signal<void()>& cancel_signal)
+UdpMultiplexer::receive(udp::endpoint& from, Cancel& cancel, asio::yield_context yield)
 {
     ConditionVariable condition(get_io_service());
 
@@ -277,7 +273,7 @@ UdpMultiplexer::receive(udp::endpoint& from, asio::yield_context yield, Signal<v
     };
     _receive_queue.push_back(recv_entry);
 
-    auto cancelled = cancel_signal.connect([&] {
+    auto cancelled = cancel.connect([&] {
         condition.notify();
     });
 

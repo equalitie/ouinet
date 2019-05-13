@@ -105,7 +105,7 @@ static bt::MutableDataItem find_bep44m( bt::MainlineDht& dht
 {
     sys::error_code ec;
 
-    auto opt_data = dht.mutable_get(pubkey, salt, yield[ec], cancel);
+    auto opt_data = dht.mutable_get(pubkey, salt, cancel, yield[ec]);
 
     if (!ec && !opt_data) {
         // TODO: This shouldn't happen (it does), the above

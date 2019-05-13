@@ -9,99 +9,12 @@ namespace ouinet { namespace bittorrent {
 
 template<class CandidateSet, class Evaluate>
 void collect(
-    asio::io_service& ios,
-    CandidateSet candidates_,
-    Evaluate&& evaluate,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
-) {
-    enum Progress { unused, used };
-
-    using Candidates = std::map< Contact
-                               , Progress
-                               , typename CandidateSet::key_compare>;
-
-    auto comp = candidates_.key_comp();
-    Candidates candidates(comp);
-
-    int in_progress_endpoints = 0;
-
-    for (auto& c : candidates_) {
-        candidates.insert(candidates.end(), { c, unused });
-    }
-
-    const unsigned THREADS = 64;
-    WaitCondition all_done(ios);
-    ConditionVariable candidate_available(ios);
-
-    auto cancelled = cancel_signal.connect([&] {
-        candidate_available.notify();
-    });
-
-    for (unsigned thread = 0; thread < THREADS; thread++) {
-        asio::spawn(ios, [&, lock = all_done.lock()] (asio::yield_context yield) {
-            while (true) {
-                if (cancelled) {
-                    break;
-                }
-
-                typename Candidates::iterator candidate_i = candidates.end();
-
-                /*
-                 * Try the closest untried candidate...
-                 */
-                for (auto it = candidates.begin(); it != candidates.end(); ++it) {
-                    if (it->second != unused) continue;
-                    it->second = used;
-                    candidate_i = it;
-                    break;
-                }
-
-                if (candidate_i == candidates.end()) {
-                    if (in_progress_endpoints == 0) {
-                        return;
-                    }
-                    candidate_available.wait(yield);
-                    continue;
-                }
-
-                in_progress_endpoints++;
-                sys::error_code ec;
-                auto opt_new_candidates = evaluate(candidate_i->first, yield[ec], cancel_signal);
-                in_progress_endpoints--;
-
-                if (cancelled) {
-                    break;
-                }
-
-                if (!opt_new_candidates) {
-                    continue;
-                }
-
-                for (auto c : *opt_new_candidates) {
-                    candidates.insert({ c, unused });
-                }
-
-                candidate_available.notify();
-            }
-        });
-    }
-
-    all_done.wait(yield);
-
-    if (cancelled) {
-        or_throw(yield, asio::error::operation_aborted);
-    }
-}
-
-template<class CandidateSet, class Evaluate>
-void collect2(
     DebugCtx dbg,
     asio::io_service& ios,
     CandidateSet first_candidates,
     Evaluate&& evaluate,
-    asio::yield_context yield,
-    Signal<void()>& cancel_signal
+    Cancel& cancel_signal,
+    asio::yield_context yield
 ) {
     using namespace std;
     using dht::NodeContact;
@@ -239,8 +152,8 @@ void collect2(
                 evaluate( candidate
                         , dummy_wd
                         , new_candidates
-                        , yield[ec]
-                        , local_cancel);
+                        , local_cancel
+                        , yield[ec]);
             } else {
                 WatchDog wd(ios, std::chrono::milliseconds(200), [&] () mutable {
                         if (dbg) cerr << dbg << "dismiss " << candidate << "\n";
@@ -250,8 +163,8 @@ void collect2(
                 evaluate( candidate
                         , wd
                         , new_candidates
-                        , yield[ec]
-                        , local_cancel);
+                        , local_cancel
+                        , yield[ec]);
             }
 
             on_finish();

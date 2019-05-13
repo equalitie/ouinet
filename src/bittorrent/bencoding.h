@@ -6,6 +6,7 @@
 
 #include <boost/optional.hpp>
 #include <boost/variant.hpp>
+#include <boost/utility/string_view.hpp>
 
 namespace ouinet {
 namespace bittorrent {
@@ -86,7 +87,7 @@ class BencodedValue : public detail::value {
 };
 
 std::string bencoding_encode(const BencodedValue& value);
-boost::optional<BencodedValue> bencoding_decode(std::string encoded);
+boost::optional<BencodedValue> bencoding_decode(boost::string_view encoded);
 
 std::ostream& operator<<(std::ostream&, const BencodedValue&);
 
