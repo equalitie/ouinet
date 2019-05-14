@@ -30,6 +30,7 @@
 #include <boost/accumulators/statistics/rolling_count.hpp>
 
 #include <chrono>
+#include <random>
 #include <set>
 
 #include <iostream>
@@ -38,6 +39,7 @@ namespace ouinet {
 namespace bittorrent {
 
 using std::vector;
+using std::string;
 using boost::string_view;
 using std::cerr; using std::endl;
 using dht::NodeContact;
@@ -1534,11 +1536,17 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
     asio::ip::udp::endpoint my_endpoint;
     asio::ip::udp::endpoint bootstrap_ep;
 
-    const std::array<std::string,3> bootstraps { "router.bittorrent.com"
-                                               , "router.utorrent.com"
-                                               , "router.transmissionbt.com" };
+    vector<string> bootstraps { "router.bittorrent.com"
+                              , "router.utorrent.com"
+                              , "router.transmissionbt.com" };
+
     {
         bool done = false;
+
+        std::random_device r;
+        auto rng = std::default_random_engine(r());
+        std::shuffle(bootstraps.begin(), bootstraps.end(), rng);
+
         do {
             for (const auto bs : bootstraps) {
                 std::tie(my_endpoint, bootstrap_ep) = bootstrap_single(bs, yield[ec]);
