@@ -428,24 +428,18 @@ public:
         util::file_io::check_or_create_directory(cache_dir(), ec);
         if (ec) return or_throw(yield, ec);
 
-        // TODO: Factor out along with `PersistentLruCache::update`.
         // Create a new file "atomically" (at least inside the program)
         // by writing data to a temporary file and replacing the existing file.
         // Otherwise we might be overwriting old data that others are reading.
-        static const string temp_file_model("tmp.%%%%-%%%%-%%%%-%%%%");
-        auto temp_path = cache_dir() / fs::unique_path(temp_file_model, ec);
+        auto af = util::file_io::mkatomic( ios, ec, cache_file(key)
+                                         , "tmp.%%%%-%%%%-%%%%-%%%%");
         if (ec) return or_throw(yield, ec);
 
-        auto file = util::file_io::open_or_create(ios, temp_path, ec);
-        if (ec) return or_throw(yield, ec);
-        auto remove_temp = defer([&] { util::file_io::remove_file(temp_path); });
-
-        auto cancel_slot = cancel.connect([&] { file.close(); });
-        http::async_write(file, rs, yield[ec]);
+        auto cancel_slot = cancel.connect([&] { af->close(); });
+        http::async_write(af->lowest_layer(), rs, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec);
 
-        file.close();
-        fs::rename(temp_path, cache_file(key), ec);
+        af->commit(ec);
         if (ec) return or_throw(yield, ec);
     }
 
