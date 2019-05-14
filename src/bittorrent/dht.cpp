@@ -1487,38 +1487,40 @@ dht::DhtNode::bootstrap_single( std::string bootstrap_domain
         return or_throw<T>(yield, asio::error::operation_aborted);
     }
     if (ec) {
-        std::cout << "Unable to resolve bootstrap server, giving up\n";
+        std::cerr << "Unable to resolve bootstrap server, giving up\n";
         return or_throw<T>(yield, ec);
     }
-
-    BencodedMap initial_ping_message;
-    initial_ping_message["id"] = _node_id.to_bytestring();
 
     BencodedMap initial_ping_reply = send_query_await_reply(
         { bootstrap_ep, boost::none },
         "ping",
-        initial_ping_message,
+        BencodedMap{{ "id" , _node_id.to_bytestring() }},
         nullptr,
         nullptr,
         _cancel,
         yield[ec]
     );
+
     if (ec == asio::error::operation_aborted) {
         return or_throw<T>(yield, asio::error::operation_aborted);
     }
+
     if (ec) {
-        std::cout << "Bootstrap server does not reply, giving up\n";
+        std::cerr << "Bootstrap server does not reply, giving up\n";
         return or_throw<T>(yield, ec);
     }
 
     boost::optional<std::string> my_ip = initial_ping_reply["ip"].as_string();
+
     if (!my_ip) {
-        std::cout << "Unexpected bootstrap server reply, giving up\n";
+        std::cerr << "Unexpected bootstrap server reply, giving up\n";
         return or_throw<T>(yield, asio::error::fault);
     }
+
     boost::optional<asio::ip::udp::endpoint> my_endpoint = decode_endpoint(*my_ip);
+
     if (!my_endpoint) {
-        std::cout << "Unexpected bootstrap server reply, giving up\n";
+        std::cerr << "Unexpected bootstrap server reply, giving up\n";
         return or_throw<T>(yield, asio::error::fault);
     }
 
