@@ -415,6 +415,7 @@ public:
 
         auto cancel_slot = cancel.connect([&] { file.close(); });
         http::async_read(file, buffer, parser, yield[ec]);
+        if (cancel) ec = asio::error::operation_aborted;
         return_or_throw_on_error(yield, cancel, ec, Response());
 
         return parser.release();
@@ -437,6 +438,7 @@ public:
 
         auto cancel_slot = cancel.connect([&] { af->close(); });
         http::async_write(*af, rs, yield[ec]);
+        if (cancel) ec = asio::error::operation_aborted;
         return_or_throw_on_error(yield, cancel, ec);
 
         af->commit(ec);
