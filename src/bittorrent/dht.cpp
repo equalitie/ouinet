@@ -269,7 +269,7 @@ void dht::DhtNode::stop()
     _multiplexer = nullptr;
     _tracker = nullptr;
     _data_store = nullptr;
-    _terminate_signal();
+    _cancel();
 }
 
 dht::DhtNode::~DhtNode()
@@ -769,7 +769,7 @@ void dht::DhtNode::receive_loop(asio::yield_context yield)
         udp::endpoint sender;
 
         const boost::string_view packet
-            = _multiplexer->receive(sender, _terminate_signal, yield[ec]);
+            = _multiplexer->receive(sender, _cancel, yield[ec]);
 
         if (ec) {
             break;
@@ -943,7 +943,7 @@ BencodedMap dht::DhtNode::send_query_await_reply(
         timeout_timer.cancel();
     });
 
-    auto terminated = _terminate_signal.connect([&] {
+    auto terminated = _cancel.connect([&] {
         first_error_code = asio::error::operation_aborted;
         timeout_timer.cancel();
     });
@@ -1527,7 +1527,7 @@ dht::DhtNode::bootstrap_single( std::string bootstrap_domain
         _ios,
         bootstrap_domain,
         "6881",
-        _terminate_signal,
+        _cancel,
         yield[ec]
     );
 
@@ -1548,7 +1548,7 @@ dht::DhtNode::bootstrap_single( std::string bootstrap_domain
         initial_ping_message,
         nullptr,
         nullptr,
-        _terminate_signal,
+        _cancel,
         yield[ec]
     );
     if (ec == asio::error::operation_aborted) {
@@ -1594,7 +1594,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
                     ec = sys::error_code(); // reset
                 }
             }
-            async_sleep(_ios, std::chrono::seconds(10), _terminate_signal, yield[ec]);
+            async_sleep(_ios, std::chrono::seconds(10), _cancel, yield[ec]);
         }
         while (!done);
     }
@@ -1619,7 +1619,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
     /*
      * Lookup our own ID, constructing a basic path to ourselves.
      */
-    find_closest_nodes(_node_id, _terminate_signal, yield[ec]);
+    find_closest_nodes(_node_id, _cancel, yield[ec]);
     if (ec) {
         return or_throw(yield, ec);
     }
@@ -1649,7 +1649,7 @@ void dht::DhtNode::refresh_routing_table()
 
     for (;range.mask < NodeID::bit_size; range.mask += CHAR_BIT) {
         spawn(_ios, [this, range, scheduler] (asio::yield_context yield) {
-            Cancel cancel(_terminate_signal);
+            Cancel cancel(_cancel);
             sys::error_code ec;
             auto slot = scheduler->wait_for_slot(yield[ec]);
             if (ec || cancel) return;
@@ -1705,7 +1705,7 @@ void dht::DhtNode::collect(
         seed_candidates.insert({ ep, boost::none });
     }
 
-    auto terminated = _terminate_signal.connect([]{});
+    auto terminated = _cancel.connect([]{});
     ::ouinet::bittorrent::collect(
         dbg,
         _ios,
@@ -2304,7 +2304,7 @@ MainlineDht::MainlineDht(asio::io_service& ios)
 
 MainlineDht::~MainlineDht()
 {
-    _terminate_signal();
+    _cancel();
 }
 
 void MainlineDht::set_interfaces(const std::vector<asio::ip::address>& addresses)
@@ -2367,7 +2367,7 @@ std::set<tcp::endpoint> MainlineDht::tracker_announce(
         condition.cancel();
     });
 
-    auto terminated = _terminate_signal.connect([&] {
+    auto terminated = _cancel.connect([&] {
         condition.cancel();
     });
 
@@ -2414,7 +2414,7 @@ void MainlineDht::mutable_put(
         condition.cancel();
     });
 
-    auto terminated = _terminate_signal.connect([&] {
+    auto terminated = _cancel.connect([&] {
         condition.cancel();
     });
 
@@ -2465,7 +2465,7 @@ std::set<tcp::endpoint> MainlineDht::tracker_get_peers(NodeID infohash, Cancel& 
     auto cancelled = cancel_signal.connect([&] {
         success_condition.cancel();
     });
-    auto terminated = _terminate_signal.connect([&] {
+    auto terminated = _cancel.connect([&] {
         success_condition.cancel();
     });
     if (!success_condition.wait_for_success(yield)) {
@@ -2518,7 +2518,7 @@ boost::optional<BencodedValue> MainlineDht::immutable_get(
         success_condition.cancel();
     });
 
-    auto terminated = _terminate_signal.connect([&] {
+    auto terminated = _cancel.connect([&] {
         success_condition.cancel();
     });
 
@@ -2578,7 +2578,7 @@ boost::optional<MutableDataItem> MainlineDht::mutable_get(
     auto cancelled = cancel_signal.connect([&] {
         success_condition.cancel();
     });
-    auto terminated = _terminate_signal.connect([&] {
+    auto terminated = _cancel.connect([&] {
         success_condition.cancel();
     });
 
@@ -2602,7 +2602,7 @@ void MainlineDht::wait_all_ready(
     Cancel& cancel_signal,
     asio::yield_context yield
 ) {
-    auto cancelled = _terminate_signal.connect([&] {
+    auto cancelled = _cancel.connect([&] {
         cancel_signal();
     });
     sys::error_code ec;

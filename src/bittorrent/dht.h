@@ -337,7 +337,7 @@ class DhtNode {
     std::unique_ptr<Tracker> _tracker;
     std::unique_ptr<DataStore> _data_store;
     bool _ready;
-    Signal<void()> _terminate_signal;
+    Cancel _cancel;
 
     struct ActiveRequest {
         udp::endpoint destination;
@@ -417,7 +417,7 @@ class MainlineDht {
     private:
     asio::io_service& _ios;
     std::map<asio::ip::address, std::unique_ptr<dht::DhtNode>> _nodes;
-    Signal<void()> _terminate_signal;
+    Cancel _cancel;
 };
 
 } // bittorrent namespace
