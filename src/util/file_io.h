@@ -76,6 +76,7 @@ class temp_file {
     friend boost::optional<temp_file>
     mktemp( asio::io_service&, sys::error_code&
           , const fs::path&, const fs::path&);
+
 public:
     using lowest_layer_type = asio::posix::stream_descriptor;
 
@@ -95,6 +96,7 @@ public:
 
     lowest_layer_type& lowest_layer() { return _file; }
     const lowest_layer_type& lowest_layer() const { return _file; }
+    auto native_handle() { return _file.native_handle(); }
 
     // <AsyncReadStream+AsyncWriteStream>
     auto get_executor() { return _file.get_executor(); }
@@ -154,6 +156,7 @@ public:
 
     lowest_layer_type& lowest_layer() { return _temp_file.lowest_layer(); }
     const lowest_layer_type& lowest_layer() const { return _temp_file.lowest_layer(); }
+    auto native_handle() { return _temp_file.native_handle(); }
 
     // <AsyncReadStream+AsyncWriteStream>
     auto get_executor() { return _temp_file.get_executor(); }
