@@ -142,6 +142,31 @@ private:
     std::map<std::string, Stat, std::less<>> _per_msg_stat;
 };
 
+static bool is_martian(const udp::endpoint& ep) {
+    if (ep.port() == 0) return true;
+    auto addr = ep.address();
+
+    if (addr.is_v4()) {
+        auto v4 = addr.to_v4();
+
+        if (v4.is_multicast()) return true;
+        if (v4.is_loopback())  return true;
+
+        if (v4.to_bytes()[0] == 0) return true;
+    }
+    else {
+        auto v6 = addr.to_v6();
+
+        if (v6.is_multicast())   return true;
+        if (v6.is_link_local())  return true;
+        if (v6.is_v4_mapped())   return true;
+        if (v6.is_loopback())    return true;
+        if (v6.is_unspecified()) return true;
+    }
+
+    return false;
+}
+
 static bool read_nodes( bool is_v4
                       , const BencodedMap& response
                       , util::AsyncQueue<NodeContact>& sink
@@ -163,6 +188,13 @@ static bool read_nodes( bool is_v4
             if (os) NodeContact::decode_compact_v6(*os, nodes);
         }
     }
+
+    // Remove invalid endpoints
+    nodes.erase( std::remove_if
+                  ( nodes.begin()
+                  , nodes.end()
+                  , [] (auto& n) { return is_martian(n.endpoint); })
+               , nodes.end());
 
     if (nodes.empty()) return false;
 
