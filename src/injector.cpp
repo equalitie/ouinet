@@ -436,7 +436,7 @@ public:
         if (ec) return or_throw(yield, ec);
 
         auto cancel_slot = cancel.connect([&] { af->close(); });
-        http::async_write(af->lowest_layer(), rs, yield[ec]);
+        http::async_write(*af, rs, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec);
 
         af->commit(ec);

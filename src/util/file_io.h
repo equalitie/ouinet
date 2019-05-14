@@ -96,6 +96,16 @@ public:
     lowest_layer_type& lowest_layer() { return _file; }
     const lowest_layer_type& lowest_layer() const { return _file; }
 
+    // <AsyncReadStream+AsyncWriteStream>
+    auto get_executor() { return _file.get_executor(); }
+    auto async_read_some(const auto& mb, auto&& t) {
+        return _file.async_read_some(mb, std::move(t));
+    }
+    auto async_write_some(const auto& cb, auto&& t) {
+        return _file.async_write_some(cb, std::move(t));
+    }
+    // </AsyncReadStream+AsyncWriteStream>
+
     void close();
 
 private:
@@ -144,6 +154,16 @@ public:
 
     lowest_layer_type& lowest_layer() { return _temp_file.lowest_layer(); }
     const lowest_layer_type& lowest_layer() const { return _temp_file.lowest_layer(); }
+
+    // <AsyncReadStream+AsyncWriteStream>
+    auto get_executor() { return _temp_file.get_executor(); }
+    auto async_read_some(const auto& mb, auto&& t) {
+        return _temp_file.async_read_some(mb, std::move(t));
+    }
+    auto async_write_some(const auto& cb, auto&& t) {
+        return _temp_file.async_write_some(cb, std::move(t));
+    }
+    // </AsyncReadStream+AsyncWriteStream>
 
     void commit(sys::error_code&);
 
