@@ -142,6 +142,37 @@ private:
     std::map<std::string, Stat, std::less<>> _per_msg_stat;
 };
 
+static bool read_nodes( bool is_v4
+                      , const BencodedMap& response
+                      , util::AsyncQueue<NodeContact>& sink
+                      , Cancel& cancel
+                      , asio::yield_context yield)
+{
+    std::vector<NodeContact> nodes;
+
+    if (is_v4) {
+        auto i = response.find("nodes");
+        if (i != response.end()) {
+            boost::optional<std::string> os = i->second.as_string();
+            if (os) NodeContact::decode_compact_v4(*os, nodes);
+        }
+    } else {
+        auto i = response.find("nodes6");
+        if (i != response.end()) {
+            boost::optional<std::string> os = i->second.as_string();
+            if (os) NodeContact::decode_compact_v6(*os, nodes);
+        }
+    }
+
+    if (nodes.empty()) return false;
+
+    sys::error_code ec;
+    sink.async_push_many(nodes, cancel, yield[ec]);
+    return_or_throw_on_error(yield, cancel, ec, false);
+
+    return true;
+}
+
 std::string dht::NodeContact::to_string() const
 {
     return id.to_hex() + " at " + endpoint.address().to_string() + ":" + std::to_string(endpoint.port());
@@ -1867,19 +1898,7 @@ bool dht::DhtNode::query_find_node2(
         return false;
     }
 
-    std::vector<NodeContact> closer_nodes_v;
-
-    if (is_v4()) {
-        boost::optional<std::string> nodes = (*response)["nodes"].as_string();
-        if (nodes) NodeContact::decode_compact_v4(*nodes, closer_nodes_v);
-    } else {
-        boost::optional<std::string> nodes = (*response)["nodes6"].as_string();
-        if (nodes) NodeContact::decode_compact_v6(*nodes, closer_nodes_v);
-    }
-
-    closer_nodes.async_push_many(closer_nodes_v, cancel, yield[ec]);
-
-    return !closer_nodes_v.empty();
+    return read_nodes(is_v4(), *response, closer_nodes, cancel, yield[ec]);
 }
 
 // http://bittorrent.org/beps/bep_0005.html#get-peers
@@ -2028,17 +2047,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data(
 
     if (!response) return boost::none;
 
-    std::vector<NodeContact> closer_nodes_v;
-
-    if (is_v4()) {
-        auto nodes = (*response)["nodes"].as_string();
-        if (nodes) NodeContact::decode_compact_v4(*nodes, closer_nodes_v);
-    } else {
-        auto nodes = (*response)["nodes6"].as_string();
-        if (nodes) NodeContact::decode_compact_v6(*nodes, closer_nodes_v);
-    }
-
-    closer_nodes.async_push_many(closer_nodes_v, cancel, yield[ec]);
+    read_nodes(is_v4(), *response, closer_nodes, cancel, yield[ec]);
 
     return response;
 }
@@ -2112,15 +2121,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data2(
 
     if (!response) return boost::none;
 
-    if (is_v4()) {
-        boost::optional<std::string> nodes = (*response)["nodes"].as_string();
-        if (nodes) NodeContact::decode_compact_v4(*nodes, closer_nodes_v);
-    } else {
-        boost::optional<std::string> nodes = (*response)["nodes6"].as_string();
-        if (nodes) NodeContact::decode_compact_v6(*nodes, closer_nodes_v);
-    }
-
-    closer_nodes.async_push_many(closer_nodes_v, cancel_signal, yield[ec]);
+    read_nodes(is_v4(), *response, closer_nodes, cancel_signal, yield[ec]);
 
     return response;
 }
@@ -2178,15 +2179,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data3(
 
     if (!response) return boost::none;
 
-    if (is_v4()) {
-        boost::optional<std::string> nodes = (*response)["nodes"].as_string();
-        if (nodes) NodeContact::decode_compact_v4(*nodes, closer_nodes_v);
-    } else {
-        boost::optional<std::string> nodes = (*response)["nodes6"].as_string();
-        if (nodes) NodeContact::decode_compact_v6(*nodes, closer_nodes_v);
-    }
-
-    closer_nodes.async_push_many(closer_nodes_v, cancel_signal, yield[ec]);
+    read_nodes(is_v4(), *response, closer_nodes, cancel_signal, yield[ec]);
 
     return response;
 }
