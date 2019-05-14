@@ -365,10 +365,6 @@ public:
 
 
             if (!ec) {
-                namespace pt = boost::posix_time;
-                auto now = CacheControl::format_date(pt::second_clock::universal_time());
-                rs.set(http::field::date, now);
-
                 LOG_DEBUG("Injector new insertion: ", ins.desc_data);
                 rs = add_re_insertion_header_field( move(rs)
                                                   , move(ins.index_ins_data));
@@ -502,6 +498,14 @@ public:
         Response ret = connection->request(rq, cancel, yield[ec].tag("request"));
 
         if (ec) return or_throw<Response>(yield, ec);
+
+        // Add a date if missing (or broken) in the response (RFC 7231#7.1.1.2).
+        // It is also assumed by `is_semi_fresh`.
+        namespace pt = boost::posix_time;
+        if (CacheControl::parse_date(ret[http::field::date]) == pt::ptime()) {
+            auto now = CacheControl::format_date(pt::second_clock::universal_time());
+            ret.set(http::field::date, now);
+        }
 
         // Prevent others from inserting ouinet specific header fields.
         ret = util::remove_ouinet_fields(move(ret));
