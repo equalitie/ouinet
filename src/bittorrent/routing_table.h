@@ -47,66 +47,24 @@ private:
         std::deque<RoutingNode> unverified_candidates;
     };
 
-    struct TreeNode {
-        /*
-         * A tree node is either a leaf with a bucket pointer,
-         * or a non-leaf with children.
-         */
-
-        NodeID::Range range;
-
-        TreeNode(NodeID::Range r) : range(std::move(r)) {}
-
-        void split();
-        size_t depth() const { return range.mask; }
-        size_t count_routing_nodes() const;
-
-        void closest_routing_nodes( const NodeID& target
-                                  , size_t max_output
-                                  , std::vector<NodeContact>& output);
-
-        std::unique_ptr<TreeNode> left_child;
-        std::unique_ptr<TreeNode> right_child;
-        std::unique_ptr<Bucket> bucket;
-    };
-
 public:
     RoutingTable(NodeID);
     RoutingTable(const RoutingTable&) = delete;
 
     std::vector<NodeContact> find_closest_routing_nodes(NodeID target, size_t count);
 
-    template<class F> void for_each_bucket(F&&);
-
     void fail_node(NodeContact, DhtNode&);
 
     void try_add_node(NodeContact, bool is_verified, DhtNode&);
 
 private:
-    Bucket* find_bucket(NodeID id, bool split_buckets);
-    TreeNode* exhaustive_routing_subtable_fragment_root() const;
-    template<class F> void for_each_bucket(F&&, TreeNode*);
+    RoutingTable::Bucket* find_bucket(NodeID id);
+    size_t bucket_id(const NodeID&) const;
 
 private:
     NodeID _node_id;
-    std::unique_ptr<TreeNode> _root_node;
+    std::vector<Bucket> _buckets;
 };
-
-template<class F>
-void RoutingTable::for_each_bucket(F&& f) {
-    for_each_bucket(std::forward<F>(f), _root_node.get());
-}
-
-template<class F>
-void RoutingTable::for_each_bucket(F&& f, TreeNode* node) {
-    if (node->bucket) {
-        f(node->range);
-        return;
-    }
-
-    for_each_bucket(std::forward<F>(f), node->left_child.get());
-    for_each_bucket(std::forward<F>(f), node->right_child.get());
-}
 
 }}} // namespaces
 

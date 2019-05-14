@@ -25,6 +25,7 @@ struct NodeID {
         static const Range& max();
     };
 
+    // buffer[0] is the most signifficant byte
     Buffer buffer;
 
     NodeID() = default;
@@ -76,5 +77,6 @@ struct NodeID {
 };
 
 std::ostream& operator<<(std::ostream&, const NodeID&);
+std::ostream& operator<<(std::ostream&, const NodeID::Range&);
 
 }} // namespaces

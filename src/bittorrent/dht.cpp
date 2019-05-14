@@ -1572,23 +1572,28 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
 
 void dht::DhtNode::refresh_routing_table()
 {
-    // There is at least 32 buckets and for each bucket we invoke the
-    // `collect` function which then spawns up to 64 coroutines. Each
-    // coroutine allocates at least 65536 bytes for the stack. That is
-    // 32*64*65536B=134MB. This has been causing `bad_alloc` exceptions
-    // allo over the code on Android. Using the scheduler here trims
-    // the memory use down to ~16MB.
+    // TODO: It should be the responsibility of the RoutingTable to do this.
+    // (and do it periodically).
+
+    // There is 160 buckets and for each bucket we invoke the `collect`
+    // function which then spawns up to 64 coroutines. Each coroutine allocates
+    // at least 65536 bytes for the stack. That is 160*64*65536B=670MB. This
+    // has been causing `bad_alloc` exceptions allo over the code on Android.
+    // Using the scheduler here trims the memory consumption down.
     auto scheduler = make_shared<Scheduler>(get_io_service(), 4);
 
-    _routing_table->for_each_bucket([&] (const NodeID::Range& range) {
+    NodeID::Range range{_node_id.buffer, 0};
+
+    for (;range.mask < NodeID::bit_size; range.mask += CHAR_BIT) {
         spawn(_ios, [this, range, scheduler] (asio::yield_context yield) {
             Cancel cancel(_terminate_signal);
             sys::error_code ec;
             auto slot = scheduler->wait_for_slot(yield[ec]);
             if (ec || cancel) return;
-            find_closest_nodes(range.random_id(), cancel, yield[ec]);
+            auto rid = range.random_id();
+            find_closest_nodes(rid, cancel, yield[ec]);
         });
-    });
+    }
 }
 
 template<class Evaluate>

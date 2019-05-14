@@ -2,6 +2,7 @@
 #include "node_id.h"
 
 using namespace ouinet::bittorrent;
+using namespace std;
 
 static bool get_rbit(const NodeID::Buffer& buffer, size_t n) {
     return (buffer[n / CHAR_BIT] & (1 << (CHAR_BIT - 1 - (n % CHAR_BIT)))) != 0;
@@ -163,7 +164,12 @@ NodeID NodeID::distance_to(const NodeID& other) const
     return ret;
 }
 
-std::ostream& ouinet::bittorrent::operator<<(std::ostream& os, const NodeID& id)
+ostream& ouinet::bittorrent::operator<<(ostream& os, const NodeID& id)
 {
     return os << id.to_hex();
+}
+
+ostream& ouinet::bittorrent::operator<<(ostream& os, const NodeID::Range& r)
+{
+    return os << r.mask << ":" << util::bytes::to_hex(r.stencil);
 }
