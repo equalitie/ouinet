@@ -61,9 +61,18 @@ RoutingTable::find_closest_routing_nodes(NodeID target, size_t count)
 }
 
 template<class R, class P>
-static void erase_if(R& r, P&& p) {
+static void erase_if(R& r, P&& p)
+{
     r.erase( std::remove_if(std::begin(r), std::end(r), std::forward<P>(p))
            , std::end(r));
+}
+
+template<class Q>
+static void erase_front_questionables(Q& q)
+{
+    while (!q.empty() && q[0].is_questionable()) {
+        q.pop_front();
+    }
 }
 
 /*
@@ -74,7 +83,6 @@ void RoutingTable::fail_node(NodeContact contact, DhtNode& dht_node)
 {
     Bucket* bucket = find_bucket(contact.id);
 
-    sys::error_code ec;
     /*
      * Find the contact in the routing table.
      */
@@ -91,7 +99,7 @@ void RoutingTable::fail_node(NodeContact contact, DhtNode& dht_node)
 
     bucket->nodes[node_i].queries_failed++;
 
-    if (!bucket->nodes[node_i].is_bad()) {
+    if (bucket->nodes[node_i].is_good()) {
         if (bucket->nodes[node_i].is_questionable()) {
             bucket->nodes[node_i].ping_ongoing = true;
             dht_node.send_ping(contact);
@@ -102,12 +110,8 @@ void RoutingTable::fail_node(NodeContact contact, DhtNode& dht_node)
     /*
      * The node is bad. Try to replace it with one of the queued replacements.
      */
-    while (!bucket->verified_candidates.empty() && bucket->verified_candidates[0].is_questionable()) {
-        bucket->verified_candidates.pop_front();
-    }
-    while (!bucket->unverified_candidates.empty() && bucket->unverified_candidates[0].is_questionable()) {
-        bucket->unverified_candidates.pop_front();
-    }
+    erase_front_questionables(bucket->verified_candidates);
+    erase_front_questionables(bucket->unverified_candidates);
 
     if (!bucket->verified_candidates.empty()) {
         /*
@@ -115,17 +119,19 @@ void RoutingTable::fail_node(NodeContact contact, DhtNode& dht_node)
          */
         bucket->nodes.erase(bucket->nodes.begin() + node_i);
 
+        auto c = bucket->verified_candidates[0];
+        bucket->verified_candidates.pop_front();
+
         RoutingNode node {
-            .contact        = bucket->verified_candidates[0].contact,
-            .last_activity  = bucket->verified_candidates[0].last_activity,
+            .contact        = c.contact,
+            .recv_time      = c.recv_time,
+            .reply_time     = c.reply_time,
             .queries_failed = 0,
             .ping_ongoing   = false
         };
 
-        bucket->verified_candidates.pop_front();
-
         for (size_t i = 0; i < bucket->nodes.size(); i++) {
-            if (bucket->nodes[i].last_activity > node.last_activity) {
+            if (bucket->nodes[i].recv_time > node.recv_time) {
                 bucket->nodes.insert(bucket->nodes.begin() + i, node);
                 break;
             }
@@ -138,7 +144,6 @@ void RoutingTable::fail_node(NodeContact contact, DhtNode& dht_node)
         NodeContact contact = bucket->unverified_candidates[0].contact;
         bucket->unverified_candidates.pop_front();
         dht_node.send_ping(contact);
-        if (ec) return;
     }
 
     /*
@@ -170,17 +175,23 @@ void RoutingTable::try_add_node( NodeContact contact
 {
     Bucket* bucket = find_bucket(contact.id);
 
+    auto now = Clock::now();
+
     /*
      * Check whether the contact is already in the routing table. If so, bump it.
      */
     for (size_t i = 0; i < bucket->nodes.size(); i++) {
         if (bucket->nodes[i].contact == contact) {
             RoutingNode node = bucket->nodes[i];
-            node.last_activity = Clock::now();
+
+            node.recv_time = now;
+
             if (is_verified) {
+                node.reply_time     = now;
                 node.queries_failed = 0;
-                node.ping_ongoing = false;
+                node.ping_ongoing   = false;
             }
+
             bucket->nodes.erase(bucket->nodes.begin() + i);
             bucket->nodes.push_back(node);
             return;
@@ -191,27 +202,19 @@ void RoutingTable::try_add_node( NodeContact contact
     erase_if(bucket->unverified_candidates, [&] (auto& c) { return c.contact == contact; });
 
     /*
-     * If we get here, the contact is neither in the routing table nor in the
-     * candidate table.
-     */
-
-    /*
      * If there is space in the bucket, add the node. If it is unverified,
      * ping it instead; on success, the node will be added.
      */
     if (bucket->nodes.size() < BUCKET_SIZE) {
         if (is_verified) {
-            RoutingNode node {
+            bucket->nodes.push_back(RoutingNode {
                 .contact        = contact,
-                .last_activity  = Clock::now(),
+                .recv_time      = now,
+                .reply_time     = now,
                 .queries_failed = 0,
                 .ping_ongoing   = false,
-            };
-
-            bucket->nodes.push_back(node);
+            });
         } else {
-            // TODO: add it to the table (mark as unverified?) so that we don't
-            // keep pinging the same node.
             dht_node.send_ping(contact);
         }
         return;
@@ -222,21 +225,18 @@ void RoutingTable::try_add_node( NodeContact contact
      * per above.
      */
     for (size_t i = 0; i < bucket->nodes.size(); i++) {
-        if (bucket->nodes[i].is_bad()) {
+        if (!bucket->nodes[i].is_good()) {
             if (is_verified) {
                 bucket->nodes.erase(bucket->nodes.begin() + i);
 
-                RoutingNode node {
+                bucket->nodes.push_back(RoutingNode {
                     .contact        = contact,
-                    .last_activity  = Clock::now(),
+                    .recv_time      = now,
+                    .reply_time     = now,
                     .queries_failed = 0,
                     .ping_ongoing   = false,
-                };
-
-                bucket->nodes.push_back(node);
+                });
             } else {
-                // TODO: add it to the table (mark as unverified?) so that we don't
-                // keep pinging the same node.
                 dht_node.send_ping(contact);
             }
             return;
@@ -264,7 +264,8 @@ void RoutingTable::try_add_node( NodeContact contact
      */
     RoutingNode candidate {
         .contact        = contact,
-        .last_activity  = Clock::now(),
+        .recv_time      = now,
+        .reply_time     = is_verified ? now : Clock::time_point(),
         .queries_failed = 0,
         .ping_ongoing   = false
     };
@@ -278,16 +279,17 @@ void RoutingTable::try_add_node( NodeContact contact
          * An unverified contact can either replace other unverified contacts,
          * or verified contacts that have become questionable (read: old).
          */
-        while (!bucket->verified_candidates.empty() && bucket->verified_candidates[0].is_questionable()) {
-            bucket->verified_candidates.pop_front();
-        }
+        erase_front_questionables(bucket->verified_candidates);
+
         if (bucket->verified_candidates.size() < questionable_nodes) {
             bucket->unverified_candidates.push_back(candidate);
         }
     }
+
     while (bucket->verified_candidates.size() > questionable_nodes) {
         bucket->verified_candidates.pop_front();
     }
+
     while (bucket->verified_candidates.size() + bucket->unverified_candidates.size() > questionable_nodes) {
         bucket->unverified_candidates.pop_front();
     }

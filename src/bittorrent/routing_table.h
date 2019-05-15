@@ -14,23 +14,34 @@ class DhtNode;
 class RoutingTable {
 public:
     static const size_t BUCKET_SIZE = 8;
-    using Clock = std::chrono::steady_clock;
 
 private:
+    using Clock = std::chrono::steady_clock;
+
     struct RoutingNode {
-        static inline constexpr std::chrono::minutes QUESTIONABLE_TIMEOUT() {
-            return std::chrono::minutes(15);
-        }
-    
         NodeContact contact;
-        Clock::time_point last_activity;
+
+        Clock::time_point recv_time;  // time of last message received
+        Clock::time_point reply_time; // time of last reply received
+
         int queries_failed;
         bool ping_ongoing;
     
-        inline bool is_bad() const { return queries_failed > 3; }
+        inline bool is_good() const {
+            using namespace std::chrono_literals;
 
+            auto now = Clock::now();
+
+            return queries_failed <= 2
+                && recv_time  >= now - (15 * 60s)
+                && reply_time >= now - 2h;
+        }
+
+        // "questionable" is defined in BEP0005
+        // http://www.bittorrent.org/beps/bep_0005.html#routing-table
         inline bool is_questionable() const {
-            return last_activity + QUESTIONABLE_TIMEOUT() < Clock::now();
+            using namespace std::chrono_literals;
+            return recv_time < Clock::now() - (15 * 60s);
         }
     };
 
@@ -40,11 +51,13 @@ private:
          * Unverified candidates need to be pinged first.
          *
          * The number of nodes plus the number of candidates always stays below
-         * BUCKET_SIZE.
+         * BUCKET_SIZE + questionable_count_in(nodes).
          */
         std::vector<RoutingNode> nodes;
         std::deque<RoutingNode> verified_candidates;
         std::deque<RoutingNode> unverified_candidates;
+
+        void erase_candidate(const NodeContact&);
     };
 
 public:
