@@ -1733,19 +1733,19 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
 
 BencodedMap dht::DhtNode::send_ping(
     NodeContact contact,
-    Cancel& cancel_signal,
+    Cancel& cancel,
     asio::yield_context yield
 ) {
     sys::error_code ec;
 
     return send_query_await_reply(
-	contact,
-	"ping",
-	BencodedMap{{ "id", _node_id.to_bytestring() }},
-    nullptr,
-    nullptr,
-	cancel_signal,
-	yield[ec]
+        contact,
+        "ping",
+        BencodedMap{{ "id", _node_id.to_bytestring() }},
+        nullptr,
+        nullptr,
+        cancel,
+        yield[ec]
     );
 }
 

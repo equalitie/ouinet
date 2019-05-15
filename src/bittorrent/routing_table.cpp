@@ -60,6 +60,12 @@ RoutingTable::find_closest_routing_nodes(NodeID target, size_t count)
     return output;
 }
 
+template<class R, class P>
+static void erase_if(R& r, P&& p) {
+    r.erase( std::remove_if(std::begin(r), std::end(r), std::forward<P>(p))
+           , std::end(r));
+}
+
 /*
  * Record a failure of a routing table node to respond to a query. If this
  * makes the node bad, try to replace it with a queued candidate.
@@ -72,22 +78,22 @@ void RoutingTable::fail_node(NodeContact contact, DhtNode& dht_node)
     /*
      * Find the contact in the routing table.
      */
-    size_t node_index;
-    bool found = false;
+    size_t node_i = bucket->nodes.size();
+
     for (size_t i = 0; i < bucket->nodes.size(); i++) {
         if (bucket->nodes[i].contact == contact) {
-            node_index = i;
-            found = true;
+            node_i = i;
+            break;
         }
     }
-    if (!found) {
-        return;
-    }
 
-    bucket->nodes[node_index].queries_failed++;
-    if (!bucket->nodes[node_index].is_bad()) {
-        if (bucket->nodes[node_index].is_questionable()) {
-            bucket->nodes[node_index].questionable_ping_ongoing = true;
+    if (node_i == bucket->nodes.size()) return;
+
+    bucket->nodes[node_i].queries_failed++;
+
+    if (!bucket->nodes[node_i].is_bad()) {
+        if (bucket->nodes[node_i].is_questionable()) {
+            bucket->nodes[node_i].ping_ongoing = true;
             dht_node.send_ping(contact);
         }
         return;
@@ -95,9 +101,6 @@ void RoutingTable::fail_node(NodeContact contact, DhtNode& dht_node)
 
     /*
      * The node is bad. Try to replace it with one of the queued replacements.
-     */
-    /*
-     * Get rid of outdated candidates.
      */
     while (!bucket->verified_candidates.empty() && bucket->verified_candidates[0].is_questionable()) {
         bucket->verified_candidates.pop_front();
@@ -110,13 +113,15 @@ void RoutingTable::fail_node(NodeContact contact, DhtNode& dht_node)
         /*
          * If there is a verified candidate available, use it.
          */
-        bucket->nodes.erase(bucket->nodes.begin() + node_index);
+        bucket->nodes.erase(bucket->nodes.begin() + node_i);
 
-        RoutingNode node;
-        node.contact = bucket->verified_candidates[0].contact;
-        node.last_activity = bucket->verified_candidates[0].last_activity;
-        node.queries_failed = 0;
-        node.questionable_ping_ongoing = false;
+        RoutingNode node {
+            .contact        = bucket->verified_candidates[0].contact,
+            .last_activity  = bucket->verified_candidates[0].last_activity,
+            .queries_failed = 0,
+            .ping_ongoing   = false
+        };
+
         bucket->verified_candidates.pop_front();
 
         for (size_t i = 0; i < bucket->nodes.size(); i++) {
@@ -140,19 +145,19 @@ void RoutingTable::fail_node(NodeContact contact, DhtNode& dht_node)
      * Cleanup superfluous candidates.
      */
     size_t questionable_nodes = 0;
-    for (size_t i = 0; i < bucket->nodes.size(); i++) {
-        if (bucket->nodes[i].is_questionable()) {
-            questionable_nodes++;
-        }
+
+    for (auto& n : bucket->nodes) {
+        if (n.is_questionable()) questionable_nodes++;
     }
+
     while (bucket->verified_candidates.size() > questionable_nodes) {
         bucket->verified_candidates.pop_front();
     }
+
     while (bucket->verified_candidates.size() + bucket->unverified_candidates.size() > questionable_nodes) {
         bucket->unverified_candidates.pop_front();
     }
 }
-
 
 /*
  * Record a node in the routing table, space permitting. If there is no space,
@@ -171,10 +176,10 @@ void RoutingTable::try_add_node( NodeContact contact
     for (size_t i = 0; i < bucket->nodes.size(); i++) {
         if (bucket->nodes[i].contact == contact) {
             RoutingNode node = bucket->nodes[i];
-            node.last_activity = std::chrono::steady_clock::now();
+            node.last_activity = Clock::now();
             if (is_verified) {
                 node.queries_failed = 0;
-                node.questionable_ping_ongoing = false;
+                node.ping_ongoing = false;
             }
             bucket->nodes.erase(bucket->nodes.begin() + i);
             bucket->nodes.push_back(node);
@@ -182,21 +187,9 @@ void RoutingTable::try_add_node( NodeContact contact
         }
     }
 
-    /*
-     * Remove the contact from the candidate table, if necessary.
-     */
-    for (size_t i = 0; i < bucket->verified_candidates.size(); i++) {
-        if (bucket->verified_candidates[i].contact == contact) {
-            bucket->verified_candidates.erase(bucket->verified_candidates.begin() + i);
-            break;
-        }
-    }
-    for (size_t i = 0; i < bucket->unverified_candidates.size(); i++) {
-        if (bucket->unverified_candidates[i].contact == contact) {
-            bucket->unverified_candidates.erase(bucket->unverified_candidates.begin() + i);
-            break;
-        }
-    }
+    erase_if(bucket->verified_candidates,   [&] (auto& c) { return c.contact == contact; });
+    erase_if(bucket->unverified_candidates, [&] (auto& c) { return c.contact == contact; });
+
     /*
      * If we get here, the contact is neither in the routing table nor in the
      * candidate table.
@@ -208,13 +201,17 @@ void RoutingTable::try_add_node( NodeContact contact
      */
     if (bucket->nodes.size() < BUCKET_SIZE) {
         if (is_verified) {
-            RoutingNode node;
-            node.contact = contact;
-            node.last_activity = std::chrono::steady_clock::now();
-            node.queries_failed = 0;
-            node.questionable_ping_ongoing = false;
+            RoutingNode node {
+                .contact        = contact,
+                .last_activity  = Clock::now(),
+                .queries_failed = 0,
+                .ping_ongoing   = false,
+            };
+
             bucket->nodes.push_back(node);
         } else {
+            // TODO: add it to the table (mark as unverified?) so that we don't
+            // keep pinging the same node.
             dht_node.send_ping(contact);
         }
         return;
@@ -229,13 +226,17 @@ void RoutingTable::try_add_node( NodeContact contact
             if (is_verified) {
                 bucket->nodes.erase(bucket->nodes.begin() + i);
 
-                RoutingNode node;
-                node.contact = contact;
-                node.last_activity = std::chrono::steady_clock::now();
-                node.queries_failed = 0;
-                node.questionable_ping_ongoing = false;
+                RoutingNode node {
+                    .contact        = contact,
+                    .last_activity  = Clock::now(),
+                    .queries_failed = 0,
+                    .ping_ongoing   = false,
+                };
+
                 bucket->nodes.push_back(node);
             } else {
+                // TODO: add it to the table (mark as unverified?) so that we don't
+                // keep pinging the same node.
                 dht_node.send_ping(contact);
             }
             return;
@@ -247,12 +248,13 @@ void RoutingTable::try_add_node( NodeContact contact
      * pinged to check whether they are still good.
      */
     size_t questionable_nodes = 0;
-    for (size_t i = 0; i < bucket->nodes.size(); i++) {
-        if (bucket->nodes[i].is_questionable()) {
+
+    for (auto& n : bucket->nodes) {
+        if (n.is_questionable()) {
             questionable_nodes++;
-            if (!bucket->nodes[i].questionable_ping_ongoing) {
-                dht_node.send_ping(bucket->nodes[i].contact);
-                bucket->nodes[i].questionable_ping_ongoing = true;
+            if (!n.ping_ongoing) {
+                dht_node.send_ping(n.contact);
+                n.ping_ongoing = true;
             }
         }
     }
@@ -260,12 +262,12 @@ void RoutingTable::try_add_node( NodeContact contact
     /*
      * Add the contact as a candidate.
      */
-    RoutingNode candidate;
-    candidate.contact = contact;
-    candidate.last_activity = std::chrono::steady_clock::now();
-    /*
-     * Other fields are meaningless for candidates.
-     */
+    RoutingNode candidate {
+        .contact        = contact,
+        .last_activity  = Clock::now(),
+        .queries_failed = 0,
+        .ping_ongoing   = false
+    };
 
     if (is_verified) {
         if (questionable_nodes > 0) {

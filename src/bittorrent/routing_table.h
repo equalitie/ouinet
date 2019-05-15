@@ -14,6 +14,7 @@ class DhtNode;
 class RoutingTable {
 public:
     static const size_t BUCKET_SIZE = 8;
+    using Clock = std::chrono::steady_clock;
 
 private:
     struct RoutingNode {
@@ -22,15 +23,14 @@ private:
         }
     
         NodeContact contact;
-        std::chrono::steady_clock::time_point last_activity;
+        Clock::time_point last_activity;
         int queries_failed;
-        bool questionable_ping_ongoing;
+        bool ping_ongoing;
     
         inline bool is_bad() const { return queries_failed > 3; }
 
         inline bool is_questionable() const {
-            return last_activity + QUESTIONABLE_TIMEOUT()
-                < std::chrono::steady_clock::now();
+            return last_activity + QUESTIONABLE_TIMEOUT() < Clock::now();
         }
     };
 
