@@ -81,7 +81,7 @@ static void erase_front_questionables(Q& q)
  * Record a failure of a routing table node to respond to a query. If this
  * makes the node bad, try to replace it with a queued candidate.
  */
-void RoutingTable::fail_node(NodeContact contact, DhtNode& dht_node)
+void RoutingTable::fail_node(NodeContact contact)
 {
     Bucket* bucket = find_bucket(contact.id);
 
@@ -104,7 +104,7 @@ void RoutingTable::fail_node(NodeContact contact, DhtNode& dht_node)
     if (bucket->nodes[node_i].is_good()) {
         if (bucket->nodes[node_i].is_questionable()) {
             bucket->nodes[node_i].ping_ongoing = true;
-            dht_node.send_ping(contact);
+            _dht_node.send_ping(contact);
         }
         return;
     }
@@ -145,7 +145,7 @@ void RoutingTable::fail_node(NodeContact contact, DhtNode& dht_node)
          */
         NodeContact contact = bucket->unverified_candidates[0].contact;
         bucket->unverified_candidates.pop_front();
-        dht_node.send_ping(contact);
+        _dht_node.send_ping(contact);
     }
 
     /*
@@ -171,9 +171,7 @@ void RoutingTable::fail_node(NodeContact contact, DhtNode& dht_node)
  * check for node replacement opportunities. If is_verified is not set, ping
  * the target contact before adding it.
  */
-void RoutingTable::try_add_node( NodeContact contact
-                               , bool is_verified
-                               , DhtNode& dht_node)
+void RoutingTable::try_add_node(NodeContact contact, bool is_verified)
 {
     Bucket* bucket = find_bucket(contact.id);
 
@@ -217,7 +215,7 @@ void RoutingTable::try_add_node( NodeContact contact
                 .ping_ongoing   = false,
             });
         } else {
-            dht_node.send_ping(contact);
+            _dht_node.send_ping(contact);
         }
         return;
     }
@@ -239,7 +237,7 @@ void RoutingTable::try_add_node( NodeContact contact
                     .ping_ongoing   = false,
                 });
             } else {
-                dht_node.send_ping(contact);
+                _dht_node.send_ping(contact);
             }
             return;
         }
@@ -255,7 +253,7 @@ void RoutingTable::try_add_node( NodeContact contact
         if (n.is_questionable()) {
             questionable_nodes++;
             if (!n.ping_ongoing) {
-                dht_node.send_ping(n.contact);
+                _dht_node.send_ping(n.contact);
                 n.ping_ongoing = true;
             }
         }

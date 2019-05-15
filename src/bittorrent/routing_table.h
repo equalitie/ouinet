@@ -33,7 +33,7 @@ private:
             auto now = Clock::now();
 
             return queries_failed <= 2
-                && recv_time  >= now - (15 * 60s)
+                && recv_time  >= now - 15min
                 && reply_time >= now - 2h;
         }
 
@@ -41,7 +41,7 @@ private:
         // http://www.bittorrent.org/beps/bep_0005.html#routing-table
         inline bool is_questionable() const {
             using namespace std::chrono_literals;
-            return recv_time < Clock::now() - (15 * 60s);
+            return recv_time < Clock::now() - 15min;
         }
     };
 
@@ -66,9 +66,9 @@ public:
 
     std::vector<NodeContact> find_closest_routing_nodes(NodeID target, size_t count);
 
-    void fail_node(NodeContact, DhtNode&);
+    void fail_node(NodeContact);
 
-    void try_add_node(NodeContact, bool is_verified, DhtNode&);
+    void try_add_node(NodeContact, bool is_verified);
 
 private:
     RoutingTable::Bucket* find_bucket(NodeID id);
