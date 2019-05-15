@@ -7,8 +7,9 @@
 using namespace std;
 using namespace ouinet::bittorrent::dht;
 
-RoutingTable::RoutingTable(NodeID node_id)
-    : _node_id(node_id)
+RoutingTable::RoutingTable(DhtNode& dht_node)
+    : _dht_node(dht_node)
+    , _node_id(dht_node.node_id())
     , _buckets(NodeID::bit_size)
 {
 }

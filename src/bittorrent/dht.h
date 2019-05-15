@@ -211,6 +211,8 @@ class DhtNode {
 
     asio::io_service& get_io_service() { return _ios; }
 
+    NodeID node_id() const { return _node_id; }
+
     private:
     void receive_loop(asio::yield_context);
 

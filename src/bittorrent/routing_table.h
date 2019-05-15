@@ -61,7 +61,7 @@ private:
     };
 
 public:
-    RoutingTable(NodeID);
+    RoutingTable(DhtNode&);
     RoutingTable(const RoutingTable&) = delete;
 
     std::vector<NodeContact> find_closest_routing_nodes(NodeID target, size_t count);
@@ -75,6 +75,7 @@ private:
     size_t bucket_id(const NodeID&) const;
 
 private:
+    DhtNode& _dht_node;
     NodeID _node_id;
     std::vector<Bucket> _buckets;
 };
