@@ -15,7 +15,6 @@
 #include "node_id.h"
 #include "routing_table.h"
 #include "contact.h"
-#include "peer_limiter.h"
 #include "debug_ctx.h"
 
 #include "../namespaces.h"
@@ -254,8 +253,6 @@ class DhtNode {
              , asio::ip::udp::endpoint
              >
     bootstrap_single(std::string bootstrap_domain, asio::yield_context);
-
-    void refresh_routing_table();
 
     std::vector<NodeContact> find_closest_nodes(
         NodeID target_id,

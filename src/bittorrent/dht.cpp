@@ -254,16 +254,8 @@ void dht::DhtNode::start(asio::yield_context yield)
     });
 
     bootstrap(yield[ec]);
-    if (ec) {
-        return or_throw(yield, ec);
-    }
 
-    /*
-     * For each bucket in the routing table, lookup a random ID in that range.
-     * This ensures that every node that should route to us, knows about us.
-     * This can be done after bootstrap proper, in the background.
-     */
-    refresh_routing_table();
+    return or_throw(yield, ec);
 }
 
 void dht::DhtNode::stop()
@@ -1582,9 +1574,8 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
      * Lookup our own ID, constructing a basic path to ourselves.
      */
     find_closest_nodes(_node_id, _cancel, yield[ec]);
-    if (ec) {
-        return or_throw(yield, ec);
-    }
+
+    if (ec) return or_throw(yield, ec);
 
     /*
      * We now know enough nodes that general DHT queries should succeed. The
@@ -1594,32 +1585,6 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
     _ready = true;
 }
 
-
-void dht::DhtNode::refresh_routing_table()
-{
-    // TODO: It should be the responsibility of the RoutingTable to do this.
-    // (and do it periodically).
-
-    // There is 160 buckets and for each bucket we invoke the `collect`
-    // function which then spawns up to 64 coroutines. Each coroutine allocates
-    // at least 65536 bytes for the stack. That is 160*64*65536B=670MB. This
-    // has been causing `bad_alloc` exceptions allo over the code on Android.
-    // Using the scheduler here trims the memory consumption down.
-    auto scheduler = make_shared<Scheduler>(get_io_service(), 4);
-
-    NodeID::Range range{_node_id.buffer, 0};
-
-    for (;range.mask < NodeID::bit_size; range.mask += CHAR_BIT) {
-        spawn(_ios, [this, range, scheduler] (asio::yield_context yield) {
-            Cancel cancel(_cancel);
-            sys::error_code ec;
-            auto slot = scheduler->wait_for_slot(yield[ec]);
-            if (ec || cancel) return;
-            auto rid = range.random_id();
-            find_closest_nodes(rid, cancel, yield[ec]);
-        });
-    }
-}
 
 template<class Evaluate>
 void dht::DhtNode::collect(

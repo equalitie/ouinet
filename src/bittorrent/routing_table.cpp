@@ -5,6 +5,7 @@
 #include <set>
 
 using namespace std;
+using namespace ouinet;
 using namespace ouinet::bittorrent::dht;
 
 RoutingTable::RoutingTable(DhtNode& dht_node)
@@ -295,6 +296,3 @@ void RoutingTable::try_add_node( NodeContact contact
         bucket->unverified_candidates.pop_front();
     }
 }
-
-
-
