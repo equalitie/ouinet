@@ -15,7 +15,6 @@
 #include "node_id.h"
 #include "routing_table.h"
 #include "contact.h"
-#include "peer_limiter.h"
 #include "debug_ctx.h"
 
 #include "../namespaces.h"
@@ -211,6 +210,8 @@ class DhtNode {
 
     asio::io_service& get_io_service() { return _ios; }
 
+    NodeID node_id() const { return _node_id; }
+
     private:
     void receive_loop(asio::yield_context);
 
@@ -252,8 +253,6 @@ class DhtNode {
              , asio::ip::udp::endpoint
              >
     bootstrap_single(std::string bootstrap_domain, asio::yield_context);
-
-    void refresh_routing_table();
 
     std::vector<NodeContact> find_closest_nodes(
         NodeID target_id,
@@ -337,7 +336,7 @@ class DhtNode {
     std::unique_ptr<Tracker> _tracker;
     std::unique_ptr<DataStore> _data_store;
     bool _ready;
-    Signal<void()> _terminate_signal;
+    Cancel _cancel;
 
     struct ActiveRequest {
         udp::endpoint destination;
@@ -417,7 +416,7 @@ class MainlineDht {
     private:
     asio::io_service& _ios;
     std::map<asio::ip::address, std::unique_ptr<dht::DhtNode>> _nodes;
-    Signal<void()> _terminate_signal;
+    Cancel _cancel;
 };
 
 } // bittorrent namespace

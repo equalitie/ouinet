@@ -16,21 +16,32 @@ public:
     static const size_t BUCKET_SIZE = 8;
 
 private:
-    struct RoutingNode {
-        static inline constexpr std::chrono::minutes QUESTIONABLE_TIMEOUT() {
-            return std::chrono::minutes(15);
-        }
-    
-        NodeContact contact;
-        std::chrono::steady_clock::time_point last_activity;
-        int queries_failed;
-        bool questionable_ping_ongoing;
-    
-        inline bool is_bad() const { return queries_failed > 3; }
+    using Clock = std::chrono::steady_clock;
 
+    struct RoutingNode {
+        NodeContact contact;
+
+        Clock::time_point recv_time;  // time of last message received
+        Clock::time_point reply_time; // time of last reply received
+
+        int queries_failed;
+        bool ping_ongoing;
+    
+        inline bool is_good() const {
+            using namespace std::chrono_literals;
+
+            auto now = Clock::now();
+
+            return queries_failed <= 2
+                && recv_time  >= now - 15min
+                && reply_time >= now - 2h;
+        }
+
+        // "questionable" is defined in BEP0005
+        // http://www.bittorrent.org/beps/bep_0005.html#routing-table
         inline bool is_questionable() const {
-            return last_activity + QUESTIONABLE_TIMEOUT()
-                < std::chrono::steady_clock::now();
+            using namespace std::chrono_literals;
+            return recv_time < Clock::now() - 15min;
         }
     };
 
@@ -40,73 +51,34 @@ private:
          * Unverified candidates need to be pinged first.
          *
          * The number of nodes plus the number of candidates always stays below
-         * BUCKET_SIZE.
+         * BUCKET_SIZE + questionable_count_in(nodes).
          */
         std::vector<RoutingNode> nodes;
         std::deque<RoutingNode> verified_candidates;
         std::deque<RoutingNode> unverified_candidates;
-    };
 
-    struct TreeNode {
-        /*
-         * A tree node is either a leaf with a bucket pointer,
-         * or a non-leaf with children.
-         */
-
-        NodeID::Range range;
-
-        TreeNode(NodeID::Range r) : range(std::move(r)) {}
-
-        void split();
-        size_t depth() const { return range.mask; }
-        size_t count_routing_nodes() const;
-
-        void closest_routing_nodes( const NodeID& target
-                                  , size_t max_output
-                                  , std::vector<NodeContact>& output);
-
-        std::unique_ptr<TreeNode> left_child;
-        std::unique_ptr<TreeNode> right_child;
-        std::unique_ptr<Bucket> bucket;
+        void erase_candidate(const NodeContact&);
     };
 
 public:
-    RoutingTable(NodeID);
+    RoutingTable(DhtNode&);
     RoutingTable(const RoutingTable&) = delete;
 
     std::vector<NodeContact> find_closest_routing_nodes(NodeID target, size_t count);
 
-    template<class F> void for_each_bucket(F&&);
+    void fail_node(NodeContact);
 
-    void fail_node(NodeContact, DhtNode&);
-
-    void try_add_node(NodeContact, bool is_verified, DhtNode&);
+    void try_add_node(NodeContact, bool is_verified);
 
 private:
-    Bucket* find_bucket(NodeID id, bool split_buckets);
-    TreeNode* exhaustive_routing_subtable_fragment_root() const;
-    template<class F> void for_each_bucket(F&&, TreeNode*);
+    RoutingTable::Bucket* find_bucket(NodeID id);
+    size_t bucket_id(const NodeID&) const;
 
 private:
+    DhtNode& _dht_node;
     NodeID _node_id;
-    std::unique_ptr<TreeNode> _root_node;
+    std::vector<Bucket> _buckets;
 };
-
-template<class F>
-void RoutingTable::for_each_bucket(F&& f) {
-    for_each_bucket(std::forward<F>(f), _root_node.get());
-}
-
-template<class F>
-void RoutingTable::for_each_bucket(F&& f, TreeNode* node) {
-    if (node->bucket) {
-        f(node->range);
-        return;
-    }
-
-    for_each_bucket(std::forward<F>(f), node->left_child.get());
-    for_each_bucket(std::forward<F>(f), node->right_child.get());
-}
 
 }}} // namespaces
 
