@@ -78,6 +78,9 @@ void write_number( asio::posix::stream_descriptor& f
 void remove_file(const fs::path& p);
 
 
+//----------------------------------------------------------------------------
+// Temporary and atomic files.
+
 class temp_file {
     friend boost::optional<temp_file>
     mktemp( asio::io_service&, sys::error_code&
