@@ -98,6 +98,16 @@ posix::stream_descriptor open_readonly( asio::io_service& ios
     return open(file, ios, ec);
 }
 
+int dup_fd(asio::posix::stream_descriptor& f, sys::error_code& ec)
+{
+    int file = ::dup(f.native_handle());
+    if (file == -1) {
+        ec = last_error();
+        if (!ec) ec = make_error_code(errc::no_message);
+    }
+    return file;
+}
+
 void truncate( posix::stream_descriptor& f
              , size_t new_length
              , sys::error_code& ec)
