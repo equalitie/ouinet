@@ -68,6 +68,8 @@ using uuid_generator = boost::uuids::random_generator_mt19937;
 using Request     = http::request<http::string_body>;
 using Response    = http::response<http::dynamic_body>;
 using TcpLookup   = asio::ip::tcp::resolver::results_type;
+using ResponseWithFileBody = http::response<http::basic_file_body<
+    util::file_io::file_posix_with_offset>>;
 
 static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
 static const fs::path OUINET_TLS_KEY_FILE = "tls-key.pem";
@@ -399,22 +401,39 @@ public:
         return cache_dir() /  util::bytes::to_hex(util::sha1(key));
     }
 
-    Response load_from_disk(string_view key, Cancel& cancel, Yield yield)
+    ResponseWithFileBody load_from_disk(string_view key, Cancel& cancel, Yield yield)
     {
         sys::error_code ec;
 
-        auto file = util::file_io::open_readonly(ios, cache_file(key), ec);
-        if (ec) return or_throw<Response>(yield, ec);
+        http::response<http::empty_body> head;
+        int fd;
+        size_t body_offset;
+        {
+            auto file = util::file_io::open_readonly(ios, cache_file(key), ec);
+            if (ec) return or_throw<ResponseWithFileBody>(yield, ec);
 
-        beast::flat_buffer buffer;
-        http::response_parser<http::dynamic_body> parser;
+            // Read the head from the file.
+            beast::flat_buffer buffer;
+            http::response_parser<http::empty_body> parser;
+            auto cancel_slot = cancel.connect([&] { file.close(); });
+            http::async_read_header(file, buffer, parser, yield[ec]);
+            if (cancel) ec = asio::error::operation_aborted;
+            if (!ec) head = parser.release();
 
-        auto cancel_slot = cancel.connect([&] { file.close(); });
-        http::async_read(file, buffer, parser, yield[ec]);
-        if (cancel) ec = asio::error::operation_aborted;
-        return_or_throw_on_error(yield, cancel, ec, Response());
+            // Rewind file to beginning of body, get its offset and duplicate its descriptor.
+            if (!ec) body_offset = util::file_io::current_position(file, ec) - buffer.size();
+            if (!ec) util::file_io::fseek(file, body_offset, ec);
+            if (!ec) fd = util::file_io::dup_fd(file, ec);  // do last...
+            return_or_throw_on_error(yield, cancel, ec, ResponseWithFileBody());
+        }
 
-        return parser.release();
+        ResponseWithFileBody::body_type::file_type body_file;
+        body_file.native_handle(fd);  // ...and assign ASAP (for auto close)
+        body_file.base_offset(body_offset);
+
+        auto ret = ResponseWithFileBody(head);
+        ret.body().reset(move(body_file), ec);
+        return or_throw(yield, ec, move(ret));
     }
 
     template<class Rs>
