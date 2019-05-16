@@ -78,95 +78,6 @@ static void erase_front_questionables(Q& q)
 }
 
 /*
- * Record a failure of a routing table node to respond to a query. If this
- * makes the node bad, try to replace it with a queued candidate.
- */
-void RoutingTable::fail_node(NodeContact contact)
-{
-    Bucket* bucket = find_bucket(contact.id);
-
-    /*
-     * Find the contact in the routing table.
-     */
-    size_t node_i = bucket->nodes.size();
-
-    for (size_t i = 0; i < bucket->nodes.size(); i++) {
-        if (bucket->nodes[i].contact == contact) {
-            node_i = i;
-            break;
-        }
-    }
-
-    if (node_i == bucket->nodes.size()) return;
-
-    bucket->nodes[node_i].queries_failed++;
-
-    if (bucket->nodes[node_i].is_good()) {
-        if (bucket->nodes[node_i].is_questionable()) {
-            bucket->nodes[node_i].ping_ongoing = true;
-            _dht_node.send_ping(contact);
-        }
-        return;
-    }
-
-    /*
-     * The node is bad. Try to replace it with one of the queued replacements.
-     */
-    erase_front_questionables(bucket->verified_candidates);
-    erase_front_questionables(bucket->unverified_candidates);
-
-    if (!bucket->verified_candidates.empty()) {
-        /*
-         * If there is a verified candidate available, use it.
-         */
-        bucket->nodes.erase(bucket->nodes.begin() + node_i);
-
-        auto c = bucket->verified_candidates[0];
-        bucket->verified_candidates.pop_front();
-
-        RoutingNode node {
-            .contact        = c.contact,
-            .recv_time      = c.recv_time,
-            .reply_time     = c.reply_time,
-            .queries_failed = 0,
-            .ping_ongoing   = false
-        };
-
-        for (size_t i = 0; i < bucket->nodes.size(); i++) {
-            if (bucket->nodes[i].recv_time > node.recv_time) {
-                bucket->nodes.insert(bucket->nodes.begin() + i, node);
-                break;
-            }
-        }
-    } else if (!bucket->unverified_candidates.empty()) {
-        /*
-         * If there is an unverified candidate available, ping it. The reply
-         * handler will replace the bad node.
-         */
-        NodeContact contact = bucket->unverified_candidates[0].contact;
-        bucket->unverified_candidates.pop_front();
-        _dht_node.send_ping(contact);
-    }
-
-    /*
-     * Cleanup superfluous candidates.
-     */
-    size_t questionable_nodes = 0;
-
-    for (auto& n : bucket->nodes) {
-        if (n.is_questionable()) questionable_nodes++;
-    }
-
-    while (bucket->verified_candidates.size() > questionable_nodes) {
-        bucket->verified_candidates.pop_front();
-    }
-
-    while (bucket->verified_candidates.size() + bucket->unverified_candidates.size() > questionable_nodes) {
-        bucket->unverified_candidates.pop_front();
-    }
-}
-
-/*
  * Record a node in the routing table, space permitting. If there is no space,
  * check for node replacement opportunities. If is_verified is not set, ping
  * the target contact before adding it.
@@ -294,3 +205,93 @@ void RoutingTable::try_add_node(NodeContact contact, bool is_verified)
         bucket->unverified_candidates.pop_front();
     }
 }
+
+/*
+ * Record a failure of a routing table node to respond to a query. If this
+ * makes the node bad, try to replace it with a queued candidate.
+ */
+void RoutingTable::fail_node(NodeContact contact)
+{
+    Bucket* bucket = find_bucket(contact.id);
+
+    /*
+     * Find the contact in the routing table.
+     */
+    size_t node_i = bucket->nodes.size();
+
+    for (size_t i = 0; i < bucket->nodes.size(); i++) {
+        if (bucket->nodes[i].contact == contact) {
+            node_i = i;
+            break;
+        }
+    }
+
+    if (node_i == bucket->nodes.size()) return;
+
+    bucket->nodes[node_i].queries_failed++;
+
+    if (bucket->nodes[node_i].is_good()) {
+        if (bucket->nodes[node_i].is_questionable()) {
+            bucket->nodes[node_i].ping_ongoing = true;
+            _dht_node.send_ping(contact);
+        }
+        return;
+    }
+
+    /*
+     * The node is bad. Try to replace it with one of the queued replacements.
+     */
+    erase_front_questionables(bucket->verified_candidates);
+    erase_front_questionables(bucket->unverified_candidates);
+
+    if (!bucket->verified_candidates.empty()) {
+        /*
+         * If there is a verified candidate available, use it.
+         */
+        bucket->nodes.erase(bucket->nodes.begin() + node_i);
+
+        auto c = bucket->verified_candidates[0];
+        bucket->verified_candidates.pop_front();
+
+        RoutingNode node {
+            .contact        = c.contact,
+            .recv_time      = c.recv_time,
+            .reply_time     = c.reply_time,
+            .queries_failed = 0,
+            .ping_ongoing   = false
+        };
+
+        for (size_t i = 0; i < bucket->nodes.size(); i++) {
+            if (bucket->nodes[i].recv_time > node.recv_time) {
+                bucket->nodes.insert(bucket->nodes.begin() + i, node);
+                break;
+            }
+        }
+    } else if (!bucket->unverified_candidates.empty()) {
+        /*
+         * If there is an unverified candidate available, ping it. The reply
+         * handler will replace the bad node.
+         */
+        NodeContact contact = bucket->unverified_candidates[0].contact;
+        bucket->unverified_candidates.pop_front();
+        _dht_node.send_ping(contact);
+    }
+
+    /*
+     * Cleanup superfluous candidates.
+     */
+    size_t questionable_nodes = 0;
+
+    for (auto& n : bucket->nodes) {
+        if (n.is_questionable()) questionable_nodes++;
+    }
+
+    while (bucket->verified_candidates.size() > questionable_nodes) {
+        bucket->verified_candidates.pop_front();
+    }
+
+    while (bucket->verified_candidates.size() + bucket->unverified_candidates.size() > questionable_nodes) {
+        bucket->unverified_candidates.pop_front();
+    }
+}
+
