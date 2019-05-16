@@ -3,6 +3,7 @@
 #include <boost/asio/posix/stream_descriptor.hpp>
 #include <boost/asio/io_service.hpp>
 #include <boost/asio/spawn.hpp>
+#include <boost/beast/core/file_posix.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/optional.hpp>
 
@@ -206,5 +207,40 @@ boost::optional<atomic_file>
 mkatomic( asio::io_service&, sys::error_code&
         , fs::path path
         , const fs::path& temp_model="tmp.%%%%-%%%%-%%%%-%%%%");
+
+
+//----------------------------------------------------------------------------
+// `File` implementations.
+
+// A variant of the POSIX file which allows setting a *base offset*,
+// so that bytes before that offset are hidden away and not available for
+// reading, writing, seeking or computing the file size.
+//
+// Note: There is currently no validation of the correctness of the base offset;
+// also, setting the offset multiple times will
+// move the fake beginning of the file further towards the end of the file.
+class file_posix_with_offset : public beast::file_posix {
+    uint64_t base_offset_ = 0;
+
+public:
+    uint64_t base_offset() const { return base_offset_; }
+    void base_offset(uint64_t offset) { base_offset_ = offset; }  // TODO: check
+
+    uint64_t size(sys::error_code& ec) const {
+        uint64_t ret = beast::file_posix::size(ec);
+        if (ec) return ret;
+        return ret - base_offset_;
+    }
+
+    uint64_t pos(sys::error_code& ec) const {
+        uint64_t ret = beast::file_posix::pos(ec);
+        if (ec) return ret;
+        return ret - base_offset_;
+    }
+
+    void seek(std::uint64_t offset, sys::error_code& ec) {
+        beast::file_posix::seek(base_offset_ + offset, ec);
+    }
+};
 
 }}} // namespaces
