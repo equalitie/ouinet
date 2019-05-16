@@ -6,25 +6,45 @@
 namespace ouinet {
 namespace ouiservice {
 
+using namespace std;
+
 UtpOuiServiceServer::UtpOuiServiceServer(asio::io_service& ios, asio::ip::udp::endpoint endpoint):
     _ios(ios),
-    _endpoint(endpoint)
+    _endpoint(endpoint),
+    _accept_queue(_ios)
 {}
 
 void UtpOuiServiceServer::start_listen(asio::yield_context yield)
 {
+    asio::spawn(_ios, [&] (asio::yield_context yield) {
+        Cancel cancel(_cancel);
+
+        while (!cancel) {
+            sys::error_code ec;
+            asio_utp::socket s(_ios, _endpoint);
+            s.async_accept(yield[ec]);
+            if (cancel) return;
+            assert(!ec);
+            _accept_queue.async_push(move(s), ec, cancel, yield[ec]);
+        }
+    });
 }
 
 void UtpOuiServiceServer::stop_listen()
 {
+    _cancel();
+}
+
+UtpOuiServiceServer::~UtpOuiServiceServer()
+{
+    stop_listen();
 }
 
 GenericStream UtpOuiServiceServer::accept(asio::yield_context yield)
 {
     sys::error_code ec;
-    asio_utp::socket s(_ios, _endpoint);
-    s.async_accept(yield[ec]);
-    return GenericStream(std::move(s));
+    auto s = _accept_queue.async_pop(_cancel, yield[ec]);
+    return or_throw(yield, ec, move(s));
 }
 
 static boost::optional<asio::ip::udp::endpoint> parse_endpoint(std::string endpoint)

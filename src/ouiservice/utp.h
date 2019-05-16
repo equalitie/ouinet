@@ -6,6 +6,7 @@
 #include <asio_utp.hpp>
 
 #include "../ouiservice.h"
+#include "../util/async_queue.h"
 
 namespace ouinet {
 namespace ouiservice {
@@ -20,9 +21,13 @@ class UtpOuiServiceServer : public OuiServiceImplementationServer
 
     GenericStream accept(asio::yield_context) override;
 
+    ~UtpOuiServiceServer();
+
     private:
     asio::io_service& _ios;
     asio::ip::udp::endpoint _endpoint;
+    Cancel _cancel;
+    util::AsyncQueue<asio_utp::socket> _accept_queue;
 };
 
 class UtpOuiServiceClient : public OuiServiceImplementationClient
