@@ -149,4 +149,104 @@ BOOST_AUTO_TEST_CASE(test_initialize)
     ios.run();
 }
 
+struct DataEntry {
+    const std::string* data = nullptr;  // only set and used until writing
+
+    void write(File& f, Cancel& cancel, asio::yield_context yield)
+    {
+        sys::error_code ec;
+        file_io::write(f, asio::buffer(*data), cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec);
+        data = nullptr;
+    }
+
+    void read(File&, Cancel&, asio::yield_context) {}
+};
+
+using DataLru = PersistentLruCache<DataEntry>;
+
+BOOST_AUTO_TEST_CASE(test_open_value)
+{
+    asio::io_service ios;
+    Cancel cancel;
+
+    auto dir = fs::temp_directory_path()
+             / fs::unique_path("ouinet-persistent-lru-cache-test-%%%%-%%%%");
+
+    auto on_exit = defer([&] { fs::remove_all(dir); });
+
+    BOOST_REQUIRE(!exists(dir));
+
+    cerr << "LRU cache test dir: " << dir << endl;
+
+    const unsigned max_cache_size = 1;
+    const std::string key("test");
+    const std::string data(4200, 'x');  // bigger than usual cache block
+
+    asio::spawn(ios, [&] (auto yield) {
+        sys::error_code ec;
+
+        // Create cache and insert element
+        {
+            auto lru = DataLru::load(ios, dir, max_cache_size, cancel, yield[ec]);
+            BOOST_REQUIRE(!ec);
+
+            lru->insert(key, DataEntry{&data}, cancel, yield[ec]);
+            BOOST_REQUIRE(!ec);
+        }
+
+        // Reload cache and open element data
+        {
+            auto lru = DataLru::load(ios, dir, max_cache_size, cancel, yield[ec]);
+            BOOST_REQUIRE(!ec);
+
+            auto i = lru->find(key);
+            BOOST_REQUIRE(i != lru->end());
+
+            auto f = i.open(ec);
+            BOOST_REQUIRE(!ec);
+
+            std::string data_in(data.size(), '\0');
+            file_io::read(f, asio::buffer(data_in), cancel, yield[ec]);
+            BOOST_REQUIRE(!ec);
+            BOOST_REQUIRE_EQUAL(data_in, data);
+        }
+
+        // Update entry while another reader is accessing it
+        {
+            std::string data_in;
+
+            auto lru = DataLru::load(ios, dir, max_cache_size, cancel, yield[ec]);
+            BOOST_REQUIRE(!ec);
+
+            auto i = lru->find(key);
+            BOOST_REQUIRE(i != lru->end());
+
+            auto f_old = i.open(ec);
+            BOOST_REQUIRE(!ec);
+
+            const std::string data_new(data.size(), 'y');
+            lru->insert(key, DataEntry({&data_new}), cancel, yield[ec]);
+            BOOST_REQUIRE(!ec);
+
+            auto f_new = i.open(ec);
+            BOOST_REQUIRE(!ec);
+
+            // This should yield the new data
+            data_in.resize(data_new.size(), '\0');
+            file_io::read(f_new, asio::buffer(data_in), cancel, yield[ec]);
+            BOOST_REQUIRE(!ec);
+            BOOST_REQUIRE_EQUAL(data_in, data_new);
+
+            // This should yield the old data, not the new one
+            data_in.resize(data.size(), '\0');
+            file_io::read(f_old, asio::buffer(data_in), cancel, yield[ec]);
+            BOOST_REQUIRE(!ec);
+            BOOST_REQUIRE_EQUAL(data_in, data);
+        }
+    });
+
+    ios.run();
+}
+
 BOOST_AUTO_TEST_SUITE_END()

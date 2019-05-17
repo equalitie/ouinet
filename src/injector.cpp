@@ -48,9 +48,11 @@
 #include "ssl/util.h"
 
 #include "util/timeout.h"
+#include "util/atomic_file.h"
 #include "util/crypto.h"
 #include "util/bytes.h"
 #include "util/file_io.h"
+#include "util/file_posix_with_offset.h"
 
 #include "logger.h"
 #include "defer.h"
@@ -70,6 +72,8 @@ using uuid_generator = boost::uuids::random_generator_mt19937;
 using Request     = http::request<http::string_body>;
 using Response    = http::response<http::dynamic_body>;
 using TcpLookup   = asio::ip::tcp::resolver::results_type;
+using ResponseWithFileBody = http::response<http::basic_file_body<
+    util::file_posix_with_offset>>;
 
 static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
 static const fs::path OUINET_TLS_KEY_FILE = "tls-key.pem";
@@ -367,16 +371,12 @@ public:
 
 
             if (!ec) {
-                namespace pt = boost::posix_time;
-                auto now = CacheControl::format_date(pt::second_clock::universal_time());
-                rs.set(http::field::date, now);
-
                 LOG_DEBUG("Injector new insertion: ", ins.desc_data);
                 rs = add_re_insertion_header_field( move(rs)
                                                   , move(ins.index_ins_data));
 
                 sys::error_code ec_ignored;
-                save_to_disk(key_from_http_req(rq), rs, yield[ec_ignored]);
+                save_to_disk(key_from_http_req(rq), rs, cancel, yield[ec_ignored]);
                 assert(!ec);
             }
             else {
@@ -405,42 +405,67 @@ public:
         return cache_dir() /  util::bytes::to_hex(util::sha1(key));
     }
 
-    http::response<http::dynamic_body> load_from_disk(string_view key, Yield yield)
+    ResponseWithFileBody load_from_disk(string_view key, Cancel& cancel, Yield yield)
     {
-        using Response = http::response<http::dynamic_body>;
-
         sys::error_code ec;
 
-        util::file_io::check_or_create_directory(cache_dir(), ec);
+        http::response<http::empty_body> head;
+        int fd;
+        size_t body_offset;
+        {
+            auto file = util::file_io::open_readonly(ios, cache_file(key), ec);
+            if (ec) return or_throw<ResponseWithFileBody>(yield, ec);
 
-        if (ec) return or_throw<Response>(yield, ec);
+            // Read the head from the file.
+            beast::flat_buffer buffer;
+            http::response_parser<http::empty_body> parser;
+            auto cancel_slot = cancel.connect([&] { file.close(); });
+            http::async_read_header(file, buffer, parser, yield[ec]);
+            if (cancel) ec = asio::error::operation_aborted;
+            if (!ec) head = parser.release();
 
-        auto file = util::file_io::open(ios, cache_file(key), ec);
+            // Rewind file to beginning of body, get its offset and duplicate its descriptor.
+            if (!ec) body_offset = util::file_io::current_position(file, ec) - buffer.size();
+            if (!ec) util::file_io::fseek(file, body_offset, ec);
+            if (!ec) fd = util::file_io::dup_fd(file, ec);  // do last...
+            return_or_throw_on_error(yield, cancel, ec, ResponseWithFileBody());
+        }
 
-        if (ec) return or_throw<Response>(yield, ec);
+        // Create a response body from the duplicate descriptor + offset.
+        ResponseWithFileBody::body_type::file_type body_file;
+        body_file.native_handle(fd);  // ...and assign ASAP (for auto close)
+        body_file.base_offset(body_offset, ec);
+        assert(ec != asio::error::invalid_argument);  // may indicate overwritten data
+        if (ec) return or_throw<ResponseWithFileBody>(yield, ec);
 
-        beast::flat_buffer buffer;
-        http::response_parser<http::dynamic_body> parser;
-        http::async_read(file, buffer, parser, yield[ec]);
-
-        if (ec) return or_throw<Response>(yield, ec);
-
-        return parser.release();
+        // Create a response with the parsed head and the body reader.
+        auto ret = ResponseWithFileBody(head);
+        ret.body().reset(move(body_file), ec);
+        return or_throw(yield, ec, move(ret));
     }
 
     template<class Rs>
-    void save_to_disk(string_view key, Rs& rs, Yield yield)
+    void save_to_disk(string_view key, Rs& rs, Cancel& cancel, Yield yield)
     {
         sys::error_code ec;
-        fs::path dir = cache_dir();
 
-        auto file = util::file_io::open(ios, cache_file(key), ec);
-
+        util::file_io::check_or_create_directory(cache_dir(), ec);
         if (ec) return or_throw(yield, ec);
 
-        http::async_write(file, rs, yield[ec]);
+        // Create a new file "atomically" (at least inside the program)
+        // by writing data to a temporary file and replacing the existing file.
+        // Otherwise we might be overwriting old data that others are reading.
+        auto af = util::mkatomic( ios, ec, cache_file(key)
+                                , "tmp.%%%%-%%%%-%%%%-%%%%");
+        if (ec) return or_throw(yield, ec);
 
-        return or_throw(yield, ec);
+        auto cancel_slot = cancel.connect([&] { af->close(); });
+        http::async_write(*af, rs, yield[ec]);
+        if (cancel) ec = asio::error::operation_aborted;
+        return_or_throw_on_error(yield, cancel, ec);
+
+        af->commit(ec);
+        if (ec) return or_throw(yield, ec);
     }
 
     bool is_semi_fresh(http::response_header<>& hdr)
@@ -465,7 +490,7 @@ public:
 
         bool keep_alive = rq.keep_alive();
 
-        auto rs = load_from_disk(key_from_http_req(rq), yield[ec]);
+        auto rs = load_from_disk(key_from_http_req(rq), cancel, yield[ec]);
 
         if (cancel) ec = asio::error::operation_aborted;
         if (ec == asio::error::operation_aborted) {
@@ -500,6 +525,14 @@ public:
         Response ret = connection->request(rq, cancel, yield[ec].tag("request"));
 
         if (ec) return or_throw<Response>(yield, ec);
+
+        // Add a date if missing (or broken) in the response (RFC 7231#7.1.1.2).
+        // It is also assumed by `is_semi_fresh`.
+        namespace pt = boost::posix_time;
+        if (CacheControl::parse_date(ret[http::field::date]) == pt::ptime()) {
+            auto now = CacheControl::format_date(pt::second_clock::universal_time());
+            ret.set(http::field::date, now);
+        }
 
         // Prevent others from inserting ouinet specific header fields.
         ret = util::remove_ouinet_fields(move(ret));

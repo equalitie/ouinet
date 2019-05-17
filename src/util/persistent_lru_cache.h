@@ -10,6 +10,7 @@
 
 #include "../namespaces.h"
 #include "../defer.h"
+#include "atomic_file.h"
 #include "signal.h"
 #include "file_io.h"
 #include "scheduler.h"
@@ -18,8 +19,12 @@
 namespace ouinet { namespace util {
 
 namespace persisten_lru_cache_detail {
+    static const auto temp_file_prefix = "tmp.";
+    static const auto temp_file_model = std::string(temp_file_prefix) + "%%%%-%%%%-%%%%-%%%%";
+
     uint64_t ms_since_epoch();
     fs::path path_from_key(const fs::path&, const std::string&);
+    bool is_cache_entry(const struct dirent*);
 } // detail namespace
 
 template<class Value>
@@ -64,6 +69,8 @@ public:
 
         const Value& value() const;
         const Key& key() const;
+
+        asio::posix::stream_descriptor open(sys::error_code&) const;
     };
 
 private:
@@ -137,7 +144,7 @@ template<class Value>
 class PersistentLruCache<Value>::Element {
 public:
     static
-    std::shared_ptr<Element> open( asio::io_service& ios
+    std::shared_ptr<Element> read( asio::io_service& ios
                                  , fs::path path
                                  , uint64_t* ts_out
                                  , Cancel& cancel
@@ -149,7 +156,7 @@ public:
 
         auto on_exit = defer([&] { if (ec) file_io::remove_file(path); });
 
-        auto file = file_io::open(ios, path, ec);
+        auto file = file_io::open_readonly(ios, path, ec);
         if (ec) return or_throw<Ret>(yield, ec);
 
         auto ts = file_io::read_number<uint64_t>(file, cancel, yield[ec]);
@@ -185,21 +192,32 @@ public:
 
         sys::error_code ec;
 
-        auto f = file_io::open(_ios, _path, ec);
-        //if (!ec) file_io::truncate(f, content_start() + value.size(), ec);
-        if (!ec) file_io::truncate(f, content_start(), ec);
-        if (!ec) file_io::fseek(f, 0, ec);
+        // Create a new entry file "atomically" (at least inside the program)
+        // by writing data to a temporary file and replacing the existing file.
+        // Otherwise we might be overwriting old data that others are reading.
+        auto af = mkatomic( _ios, ec, _path
+                          , persisten_lru_cache_detail::temp_file_model);
+        if (ec) return or_throw(yield, ec);
+        auto& f = af->lowest_layer();
         if (!ec) file_io::write_number<uint64_t>(f, ts, cancel, yield[ec]);
         if (!ec) file_io::write_number<uint32_t>(f, _key.size(), cancel, yield[ec]);
         if (!ec) file_io::write(f, asio::buffer(_key), cancel, yield[ec]);
         //if (!ec) file_io::write(f, asio::buffer(value), cancel, yield[ec]);
         if (!ec) _value.write(f, cancel, yield[ec]);
+        if (!ec) af->commit(ec);
 
         return or_throw(yield, ec);
     }
 
     const Value& value() const {
         return _value;
+    }
+
+    // Read-only byte-oriented access to on-disk data.
+    asio::posix::stream_descriptor open_value(sys::error_code& ec) const {
+        auto f = file_io::open_readonly(_ios, _path, ec);
+        if (!ec) file_io::fseek(f, content_start(), ec);
+        return f;
     }
 
     ~Element()
@@ -276,28 +294,28 @@ PersistentLruCache<Value>::load( asio::io_service& ios
 
     std::map<Id, std::shared_ptr<Element>> elements;
 
-    uint64_t i = 0;
+    {
+        DIR* directory = opendir(dir.c_str());
+        auto close_dir = defer([&] { if (directory != nullptr) closedir(directory); });
 
+        uint64_t i = 0;
+        struct dirent* entry;
+        while ((entry = readdir(directory)) != NULL) {
+            if (is_cache_entry(entry)) {
+                fs::path path(dir / entry->d_name);
+                uint64_t ts;
+                auto e = Element::read(ios, path, &ts, cancel, yield[ec]);
 
-    DIR* directory = opendir(dir.c_str());
-    struct dirent* entry;
+                if (cancel) {
+                    return or_throw<Ret>(yield, asio::error::operation_aborted);
+                }
 
-    while ((entry = readdir(directory)) != NULL) {
-        if (entry->d_type == DT_REG) {
-            fs::path path(dir / entry->d_name);
-            uint64_t ts;
-            auto e = Element::open(ios, path, &ts, cancel, yield[ec]);
+                if (ec) continue;
 
-            if (cancel) {
-                return or_throw<Ret>(yield, asio::error::operation_aborted);
+                elements.insert({Id{ts, i++}, e});
             }
-
-            if (ec) continue;
-
-            elements.insert({Id{ts, i++}, e});
         }
     }
-    closedir(directory);
 
     while (elements.size() > max_size) {
         auto i = elements.begin();
@@ -408,6 +426,14 @@ const typename PersistentLruCache<Value>::Key&
 PersistentLruCache<Value>::iterator::key() const
 {
     return i->first;
+}
+
+template<class Value>
+inline
+asio::posix::stream_descriptor
+PersistentLruCache<Value>::iterator::open(sys::error_code& ec) const
+{
+    return i->second->second->open_value(ec);
 }
 
 template<class Value>

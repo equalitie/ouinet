@@ -12,7 +12,16 @@
 namespace ouinet { namespace util { namespace file_io {
 
 asio::posix::stream_descriptor
-open(asio::io_service& ios, const fs::path&, sys::error_code&);
+open_or_create(asio::io_service& ios, const fs::path&, sys::error_code&);
+
+asio::posix::stream_descriptor
+open_readonly(asio::io_service& ios, const fs::path&, sys::error_code&);
+
+// Duplicate the descriptor, see dup(2).
+// The descriptor shares offset and flags with that of the original file,
+// but it stays open regardless of the original one getting closed,
+// so it must be closed separately.
+int dup_fd(asio::posix::stream_descriptor&, sys::error_code&);
 
 void fseek(asio::posix::stream_descriptor&, size_t pos, sys::error_code&);
 

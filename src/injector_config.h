@@ -67,6 +67,9 @@ public:
     unsigned int index_bep44_capacity() const
     { return _index_bep44_capacity; }
 
+    unsigned int cache_local_capacity() const
+    { return _cache_local_capacity; }
+
     bool cache_enabled() const { return !_disable_cache; }
 
 private:
@@ -90,6 +93,7 @@ private:
     std::string _credentials;
     util::Ed25519PrivateKey _index_bep44_private_key;
     unsigned int _index_bep44_capacity;
+    unsigned int _cache_local_capacity;
     bool _disable_cache = false;
 };
 
@@ -134,6 +138,9 @@ InjectorConfig::options_description()
         ("seed-content"
          , po::value<bool>()->default_value(false)
          , "Seed the content instead of only signing it")
+        ("cache-local-capacity"
+         , po::value<unsigned int>()->default_value(10000)  // arbitrarily chosen
+         , "Maximum number of resources to be cached locally")
         ("index-bep44-private-key", po::value<string>()
          , "Index private key for the BitTorrent BEP44 subsystem")
         // By default, it is not desirable that the injector actively republishes BEP44 entries.
@@ -269,6 +276,9 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
     if (vm.count("index-bep44-capacity")) {
         _index_bep44_capacity = vm["index-bep44-capacity"].as<unsigned int>();
+    }
+    if (vm.count("cache-local-capacity")) {
+        _cache_local_capacity = vm["cache-local-capacity"].as<unsigned int>();
     }
 
     if (vm.count("disable-cache")) {
