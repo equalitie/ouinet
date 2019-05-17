@@ -2,6 +2,7 @@
 #include "../or_throw.h"
 #include "../util.h"
 #include "../logger.h"
+#include "../util/watch_dog.h"
 
 namespace ouinet {
 namespace ouiservice {
@@ -63,19 +64,41 @@ UtpOuiServiceClient::UtpOuiServiceClient(asio::io_service& ios, std::string endp
 GenericStream
 UtpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
 {
+    using namespace chrono_literals;
+
     if (!_endpoint) {
         return or_throw<GenericStream>(yield, asio::error::invalid_argument);
     }
 
     sys::error_code ec;
+    asio_utp::socket socket;
 
-    asio_utp::socket socket(_ios, {asio::ip::address_v4::any(), 0});
+    const size_t max_retries = 3;
 
-    auto cancel_slot = cancel.connect([&] {
-        socket.close();
-    });
+    static const chrono::milliseconds retry_timeout[max_retries] = { 1000ms
+                                                                   , 2000ms
+                                                                   , 5000ms };
 
-    socket.async_connect(*_endpoint, yield[ec]);
+    for (int i = 0; i != max_retries; ++i) {
+        ec = sys::error_code();
+
+        socket = asio_utp::socket(_ios, {asio::ip::address_v4::any(), 0});
+
+        auto cancel_slot = cancel.connect([&] {
+            socket.close();
+        });
+
+        bool timed_out = false;
+
+        WatchDog wd(_ios, retry_timeout[i], [&] {
+                timed_out = true;
+                socket.close();
+        });
+
+        socket.async_connect(*_endpoint, yield[ec]);
+
+        if (!timed_out) break;
+    }
 
     if (cancel) ec = asio::error::operation_aborted;
 
