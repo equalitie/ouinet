@@ -47,6 +47,7 @@
 #include "ssl/util.h"
 
 #include "util/timeout.h"
+#include "util/atomic_file.h"
 #include "util/crypto.h"
 #include "util/bytes.h"
 #include "util/file_io.h"
@@ -450,8 +451,8 @@ public:
         // Create a new file "atomically" (at least inside the program)
         // by writing data to a temporary file and replacing the existing file.
         // Otherwise we might be overwriting old data that others are reading.
-        auto af = util::file_io::mkatomic( ios, ec, cache_file(key)
-                                         , "tmp.%%%%-%%%%-%%%%-%%%%");
+        auto af = util::mkatomic( ios, ec, cache_file(key)
+                                , "tmp.%%%%-%%%%-%%%%-%%%%");
         if (ec) return or_throw(yield, ec);
 
         auto cancel_slot = cancel.connect([&] { af->close(); });
