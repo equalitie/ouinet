@@ -429,12 +429,14 @@ public:
             return_or_throw_on_error(yield, cancel, ec, ResponseWithFileBody());
         }
 
+        // Create a response body from the duplicate descriptor + offset.
         ResponseWithFileBody::body_type::file_type body_file;
         body_file.native_handle(fd);  // ...and assign ASAP (for auto close)
         body_file.base_offset(body_offset, ec);
         assert(ec != asio::error::invalid_argument);  // may indicate overwritten data
         if (ec) return or_throw<ResponseWithFileBody>(yield, ec);
 
+        // Create a response with the parsed head and the body reader.
         auto ret = ResponseWithFileBody(head);
         ret.body().reset(move(body_file), ec);
         return or_throw(yield, ec, move(ret));
