@@ -5,3 +5,6 @@
 [submodule "modules/asio-ipfs"]
 	path = modules/asio-ipfs
 	url = https://github.com/equalitie/asio-ipfs.git
+[submodule "modules/asio-utp"]
+	path = modules/asio-utp
+	url = https://github.com/inetic/asio-utp

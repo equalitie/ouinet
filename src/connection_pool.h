@@ -48,7 +48,16 @@ class ConnectionPool {
                                       << res;
                             assert(0);
                         }
-                        if (!_is_requesting && !ec) break;
+
+                        // This likely means that the sender did not calculate
+                        // the content size properly or there is some problem
+                        // with the transport.
+                        // TODO: It does happen occasionally, even when the
+                        // transport is simple TCP. Try to uncomment it and
+                        // find out what the culprit is.
+                        //assert(ec != http::error::bad_version);
+
+                        if (!_is_requesting) break;
 
                         _res = std::move(res);
                         _cv.notify(ec);
@@ -131,6 +140,9 @@ class ConnectionPool {
     void push_back(std::unique_ptr<Connection> c)
     {
         assert(c);
+        //TODO: This shouldn't happen, but does
+        //assert(c->_stream.has_implementation());
+        if (!c->_stream.has_implementation()) return;
         _connections.push_back(*c);
         c->_self = std::move(c);
     }

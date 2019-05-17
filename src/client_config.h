@@ -167,8 +167,8 @@ public:
 
     bool cache_enabled() const { return !_disable_cache; }
 
-    bool is_cache_access_enabled() const { return !_disable_cache_access; }
-    void is_cache_access_enabled(bool v) { _disable_cache_access = !v; }
+    bool is_cache_access_enabled() const { return !_disable_cache_access && !_disable_cache; }
+    void is_cache_access_enabled(bool v) { if (!_disable_cache) _disable_cache_access = !v; }
 
     bool is_origin_access_enabled() const { return !_disable_origin_access; }
     void is_origin_access_enabled(bool v) { _disable_origin_access = !v; }

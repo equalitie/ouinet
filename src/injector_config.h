@@ -1,5 +1,6 @@
 #pragma once
 
+#include <boost/asio/ip/udp.hpp>
 #include "util/crypto.h"
 
 namespace ouinet {
@@ -30,8 +31,14 @@ public:
     boost::optional<asio::ip::tcp::endpoint> tcp_endpoint() const
     { return _tcp_endpoint; }
 
-    boost::optional<asio::ip::tcp::endpoint> tls_endpoint() const
-    { return _tls_endpoint; }
+    boost::optional<asio::ip::tcp::endpoint> tcp_tls_endpoint() const
+    { return _tcp_tls_endpoint; }
+
+    boost::optional<asio::ip::udp::endpoint> utp_endpoint() const
+    { return _utp_endpoint; }
+
+    boost::optional<asio::ip::udp::endpoint> utp_tls_endpoint() const
+    { return _utp_tls_endpoint; }
 
     boost::optional<asio::ip::tcp::endpoint> lampshade_endpoint() const
     { return _lampshade_endpoint; }
@@ -72,7 +79,9 @@ private:
     bool _listen_on_i2p = false;
     std::string _tls_ca_cert_store_path;
     boost::optional<asio::ip::tcp::endpoint> _tcp_endpoint;
-    boost::optional<asio::ip::tcp::endpoint> _tls_endpoint;
+    boost::optional<asio::ip::tcp::endpoint> _tcp_tls_endpoint;
+    boost::optional<asio::ip::udp::endpoint> _utp_endpoint;
+    boost::optional<asio::ip::udp::endpoint> _utp_tls_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _lampshade_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _obfs2_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _obfs3_endpoint;
@@ -104,7 +113,9 @@ InjectorConfig::options_description()
 
         // Transport options
         ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen (cleartext)")
-        ("listen-on-tls", po::value<string>(), "IP:PORT endpoint on which we'll listen (encrypted)")
+        ("listen-on-tcp-tls", po::value<string>(), "IP:PORT endpoint on which we'll listen (encrypted)")
+        ("listen-on-utp", po::value<string>(), "IP:PORT UDP endpoint on which we'll listen (cleartext)")
+        ("listen-on-utp-tls", po::value<string>(), "IP:PORT UDP endpoint on which we'll listen (encrypted)")
         ("listen-on-lampshade", po::value<string>(), "IP:PORT endpoint on which we'll listen using the lampshade pluggable transport")
         ("listen-on-obfs2", po::value<string>(), "IP:PORT endpoint on which we'll listen using the obfs2 pluggable transport")
         ("listen-on-obfs3", po::value<string>(), "IP:PORT endpoint on which we'll listen using the obfs3 pluggable transport")
@@ -218,8 +229,22 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         _tcp_endpoint = util::parse_tcp_endpoint(vm["listen-on-tcp"].as<string>());
     }
 
-    if (vm.count("listen-on-tls")) {
-        _tls_endpoint = util::parse_tcp_endpoint(vm["listen-on-tls"].as<string>());
+    if (vm.count("listen-on-tcp-tls")) {
+        _tcp_tls_endpoint = util::parse_tcp_endpoint(vm["listen-on-tcp-tls"].as<string>());
+    }
+
+    if (vm.count("listen-on-utp")) {
+        sys::error_code ec;
+        auto ep = util::parse_endpoint<asio::ip::udp>(vm["listen-on-utp"].as<string>(), ec);
+        if (ec) throw std::runtime_error("Failed to parse utp endpoint");
+        _utp_endpoint = ep;
+    }
+
+    if (vm.count("listen-on-utp-tls")) {
+        sys::error_code ec;
+        auto ep = util::parse_endpoint<asio::ip::udp>(vm["listen-on-utp-tls"].as<string>(), ec);
+        if (ec) throw std::runtime_error("Failed to parse utp endpoint");
+        _utp_tls_endpoint = ep;
     }
 
     if (vm.count("listen-on-lampshade")) {

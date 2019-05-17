@@ -77,6 +77,7 @@ private:
         virtual void write_impl(OnWrite&&) = 0;
 
         virtual void close() = 0;
+        virtual bool closed() const = 0;
 
         virtual ~Base() {}
 
@@ -123,12 +124,18 @@ private:
 
         void close() override
         {
+            _closed = true;
             _shutter(*_impl);
+        }
+
+        bool closed() const override {
+            return _closed;
         }
 
     private:
         generic_stream_detail::Deref<Impl> _impl;
         Shutter _shutter;
+        bool _closed = false;
     };
 
 public:
@@ -211,7 +218,9 @@ public:
                       << " GenericStream::~GenericStream()" << std::endl;
         }
         try {
-            if (_impl) _impl->close();
+            if (_impl) {
+                _impl->close();
+            }
         }
         catch (...) {
             assert(0 && "Uncaught exception when closing GenericStream");
@@ -276,9 +285,20 @@ public:
                 , asio::buffer_sequence_end(bs)
                 , _impl->read_buffers.begin());
 
+            // TODO: It should not be necessary to check whether the underlying
+            // implementation has been closed (Asio itself doesn't guarantee
+            // returning an error in such cases). But it seems there may be a
+            // bug in Boost.Beast (Boost v1.67) because even if it destroys the
+            // socket it continues reading from it.
+            // Test vector: uTP x TLS x bbc.com
+            // (Same with the async_write_some operation)
             _impl->read_impl([h = move(handler), impl = _impl]
                              (const system::error_code& ec, size_t size) {
-                                 (*h)(ec, size);
+                                 if (impl->closed()) {
+                                    (*h)(asio::error::operation_aborted, 0);
+                                 } else {
+                                    (*h)(ec, size);
+                                 }
                              });
         }
         else {
@@ -321,9 +341,14 @@ public:
                 , asio::buffer_sequence_end(bs)
                 , _impl->write_buffers.begin());
 
+            // TODO: Same as the comment in async_read_some operation
             _impl->write_impl([h = move(handler), impl = _impl]
                               (const system::error_code& ec, size_t size) {
-                                  (*h)(ec, size);
+                                 if (impl->closed()) {
+                                    (*h)(asio::error::operation_aborted, 0);
+                                 } else {
+                                    (*h)(ec, size);
+                                 }
                               });
         }
         else {

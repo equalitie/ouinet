@@ -51,6 +51,7 @@
 #include "ouiservice/pt-obfs3.h"
 #include "ouiservice/pt-obfs4.h"
 #include "ouiservice/tcp.h"
+#include "ouiservice/utp.h"
 #include "ouiservice/tls.h"
 
 #include "util/signal.h"
@@ -1511,6 +1512,13 @@ void Client::State::setup_injector(asio::yield_context yield)
         client = std::move(i2p_client);
     } else if (injector_ep->type == Endpoint::TcpEndpoint) {
         auto tcp_client = make_unique<ouiservice::TcpOuiServiceClient>(_ios, injector_ep->endpoint_string);
+
+        if (!tcp_client->verify_endpoint()) {
+            return or_throw(yield, asio::error::invalid_argument);
+        }
+        client = std::move(tcp_client);
+    } else if (injector_ep->type == Endpoint::UtpEndpoint) {
+        auto tcp_client = make_unique<ouiservice::UtpOuiServiceClient>(_ios, injector_ep->endpoint_string);
 
         if (!tcp_client->verify_endpoint()) {
             return or_throw(yield, asio::error::invalid_argument);

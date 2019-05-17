@@ -42,6 +42,7 @@
 #include "ouiservice/pt-obfs3.h"
 #include "ouiservice/pt-obfs4.h"
 #include "ouiservice/tcp.h"
+#include "ouiservice/utp.h"
 #include "ouiservice/tls.h"
 #include "ssl/ca_certificate.h"
 #include "ssl/util.h"
@@ -59,6 +60,7 @@ using namespace std;
 using namespace ouinet;
 
 using tcp         = asio::ip::tcp;
+using udp         = asio::ip::udp;
 using string_view = beast::string_view;
 // We are more interested in an ID generator that can be
 // used concurrently and does not block by random pool exhaustion
@@ -903,19 +905,46 @@ int main(int argc, const char* argv[])
         proxy_server.add(make_unique<ouiservice::TcpOuiServiceServer>(ios, endpoint));
     }
 
-    asio::ssl::context ssl_context{asio::ssl::context::tls_server};
-    if (config.tls_endpoint()) {
-        ssl_context = ssl::util::get_server_context
+    auto read_ssl_certs = [&] {
+        return ssl::util::get_server_context
             ( tls_certificate->pem_certificate()
             , tls_certificate->pem_private_key()
             , tls_certificate->pem_dh_param());
+    };
 
-        tcp::endpoint endpoint = *config.tls_endpoint();
-        cout << "TLS Address: " << endpoint << endl;
-        util::create_state_file( config.repo_root()/"endpoint-tls"
+    asio::ssl::context ssl_context{asio::ssl::context::tls_server};
+    if (config.tcp_tls_endpoint()) {
+        ssl_context = read_ssl_certs();
+
+        tcp::endpoint endpoint = *config.tcp_tls_endpoint();
+        cout << "TCP/TLS Address: " << endpoint << endl;
+        util::create_state_file( config.repo_root()/"endpoint-tcp-tls"
                                , util::str(endpoint));
 
         auto base = make_unique<ouiservice::TcpOuiServiceServer>(ios, endpoint);
+        proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(move(base), ssl_context));
+    }
+
+    if (config.utp_endpoint()) {
+        udp::endpoint endpoint = *config.utp_endpoint();
+        cout << "uTP Address: " << endpoint << endl;
+
+        util::create_state_file( config.repo_root()/"endpoint-utp"
+                               , util::str(endpoint));
+
+        proxy_server.add(make_unique<ouiservice::UtpOuiServiceServer>(ios, endpoint));
+    }
+
+    if (config.utp_tls_endpoint()) {
+        ssl_context = read_ssl_certs();
+
+        udp::endpoint endpoint = *config.utp_tls_endpoint();
+        cout << "uTP/TLS Address: " << endpoint << endl;
+
+        util::create_state_file( config.repo_root()/"endpoint-utp-tls"
+                               , util::str(endpoint));
+
+        auto base = make_unique<ouiservice::UtpOuiServiceServer>(ios, endpoint);
         proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(move(base), ssl_context));
     }
 

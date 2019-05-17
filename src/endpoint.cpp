@@ -14,6 +14,8 @@ boost::optional<Endpoint> parse_endpoint(beast::string_view endpoint)
 
     if (type == "tcp") {
         output.type = Endpoint::TcpEndpoint;
+    } else if (type == "utp") {
+        output.type = Endpoint::UtpEndpoint;
     } else if (type == "i2p") {
         output.type = Endpoint::I2pEndpoint;
 #ifdef USE_GNUNET
@@ -38,6 +40,8 @@ std::ostream& operator<<(std::ostream& os, const Endpoint& ep)
 {
     if (ep.type == Endpoint::TcpEndpoint) {
         os << "tcp";
+    } else if (ep.type == Endpoint::UtpEndpoint) {
+        os << "utp";
     } else if (ep.type == Endpoint::I2pEndpoint) {
         os << "i2p";
 #ifdef USE_GNUNET

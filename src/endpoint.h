@@ -10,6 +10,7 @@ namespace ouinet {
 struct Endpoint {
     enum Type {
         TcpEndpoint,
+        UtpEndpoint,
         I2pEndpoint,
 #ifdef USE_GNUNET
         GnunetEndpoint,
