@@ -12,7 +12,7 @@
 namespace ouinet {
     namespace bittorrent {
         class MainlineDht;
-        class MutableDataItem;
+        struct MutableDataItem;
     }
 }
 namespace ouinet { namespace util { class Ed25519PublicKey; }}
