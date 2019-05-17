@@ -216,15 +216,21 @@ mkatomic( asio::io_service&, sys::error_code&
 // so that bytes before that offset are hidden away and not available for
 // reading, writing, seeking or computing the file size.
 //
-// Note: There is currently no validation of the correctness of the base offset;
-// also, setting the offset multiple times will
-// move the fake beginning of the file further towards the end of the file.
+// The base offset must always lie within the current boundaries of the file.
+//
+// Setting the offset multiple times will move the fake beginning of the file
+// further towards the end of the file.
 class file_posix_with_offset : public beast::file_posix {
     uint64_t base_offset_ = 0;
 
 public:
     uint64_t base_offset() const { return base_offset_; }
-    void base_offset(uint64_t offset) { base_offset_ = offset; }  // TODO: check
+    void base_offset(uint64_t offset, sys::error_code& ec) {
+        bool too_far = offset > size(ec);
+        if (ec) return;
+        if (too_far) { ec = asio::error::invalid_argument; return; }
+        base_offset_ = offset;
+    }
 
     uint64_t size(sys::error_code& ec) const {
         uint64_t ret = beast::file_posix::size(ec);
