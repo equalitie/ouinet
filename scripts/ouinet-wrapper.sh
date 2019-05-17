@@ -55,7 +55,7 @@ REPO="${repo_arg:-$REPO}"
 CLIENT_PROXY_PORT=8077
 INJECTOR_LOOP_ADDR=127.7.2.1
 INJECTOR_TCP_PORT=7070
-INJECTOR_TLS_PORT=7077
+INJECTOR_TCP_TLS_PORT=7077
 
 # Fix some configuration parameters on repo creation.
 if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
@@ -72,9 +72,9 @@ if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
         sed -i -E "s/^#?(listen-on-tcp\s*=\s*)127.0.0.1:[0-9]+(.*)/\1${INJECTOR_LOOP_ADDR}:${INJECTOR_TCP_PORT}\2/" "$CONF"
     fi
 
-    # Set a well-known injector TLS port (and enable it).
+    # Set a well-known injector TCP/TLS port (and enable it).
     if [ "$PROG" = injector ]; then
-        sed -i -E "s/^#?(listen-on-tls\s*=\s*:::)[0-9]+(.*)/\1${INJECTOR_TLS_PORT}\2/" "$CONF"
+        sed -i -E "s/^#?(listen-on-tcp-tls\s*=\s*:::)[0-9]+(.*)/\1${INJECTOR_TCP_TLS_PORT}\2/" "$CONF"
     fi
 
     # Generate a random password for injector credentials.
@@ -85,12 +85,13 @@ if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
 fi
 
 # Update some renamed configuration parameters.
-if grep -qE '^#*\s*(default-index|bittorrent-private-key|bittorrent-public-key|injector-ipns)\s*=' "$CONF" && ! has_help_arg "$@"; then
+if grep -qE '^#*\s*(default-index|bittorrent-private-key|bittorrent-public-key|injector-ipns|listen-on-tls)\s*=' "$CONF" && ! has_help_arg "$@"; then
     sed -i -E \
         -e 's/^(#*\s*)default-index(\s*=.*)/\1cache-index\2/g' \
         -e 's/^(#*\s*)bittorrent-private-key(\s*=.*)/\1index-bep44-private-key\2/g' \
         -e 's/^(#*\s*)bittorrent-public-key(\s*=.*)/\1index-bep44-public-key\2/g' \
         -e 's/^(#*\s*)injector-ipns(\s*=.*)/\1index-ipns-id\2/g' \
+        -e 's/^(#*\s*)listen-on-tls(\s*=.*)/\1listen-on-tcp-tls\2/g' \
         "$CONF"
 fi
 
