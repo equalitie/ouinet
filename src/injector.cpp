@@ -50,6 +50,7 @@
 #include "util/crypto.h"
 #include "util/bytes.h"
 #include "util/file_io.h"
+#include "util/file_posix_with_offset.h"
 
 #include "logger.h"
 #include "defer.h"
@@ -69,7 +70,7 @@ using Request     = http::request<http::string_body>;
 using Response    = http::response<http::dynamic_body>;
 using TcpLookup   = asio::ip::tcp::resolver::results_type;
 using ResponseWithFileBody = http::response<http::basic_file_body<
-    util::file_io::file_posix_with_offset>>;
+    util::file_posix_with_offset>>;
 
 static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
 static const fs::path OUINET_TLS_KEY_FILE = "tls-key.pem";
