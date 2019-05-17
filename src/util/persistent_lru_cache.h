@@ -30,7 +30,7 @@ namespace persisten_lru_cache_detail {
 template<class Value>
 class PersistentLruCache {
 private:
-    struct Element;
+    class Element;
 
     using Key = std::string;
     using KeyVal = std::pair<Key, std::shared_ptr<Element>>;
