@@ -29,7 +29,9 @@ Logger logger(DEBUG);
 
 const std::string log_level_announce[] =       {"SILLY"        , "DEBUG"     , "VERBOSE"   , "INFO"      , "WARN"        , "ERROR"      , "ABORT"};
 const std::string log_level_color_prefix[] =   {"\033[1;35;47m", "\033[1;32m", "\033[1;37m", "\033[1;34m", "\033[90;103m", "\033[31;40m", "\033[1;31;40m"};
+#ifndef __ANDROID__
 const bool log_level_colored_msg[] =           {true           , false       , false       , false       , true        , true          , true};
+#endif // ifndef __ANDROID__
 
 void Logger::initiate_textual_conversions()
 {
