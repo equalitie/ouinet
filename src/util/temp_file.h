@@ -38,10 +38,14 @@ public:
 
     // <AsyncReadStream+AsyncWriteStream>
     auto get_executor() { return _file.get_executor(); }
-    auto async_read_some(const auto& mb, auto&& t) {
+
+    template<class MutableBufferSequence, class Token>
+    auto async_read_some(const MutableBufferSequence& mb, Token&& t) {
         return _file.async_read_some(mb, std::move(t));
     }
-    auto async_write_some(const auto& cb, auto&& t) {
+
+    template<class ConstBufferSequence, class Token>
+    auto async_write_some(const ConstBufferSequence& cb, Token&& t) {
         return _file.async_write_some(cb, std::move(t));
     }
     // </AsyncReadStream+AsyncWriteStream>
