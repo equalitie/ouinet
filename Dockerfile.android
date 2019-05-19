@@ -3,4 +3,4 @@ RUN apt-get install -qqy --no-install-recommends \
       default-jre \
       default-jdk \
       unzip
-ENV UNZIP=-q
+ENV UNZIPOPT=-q
