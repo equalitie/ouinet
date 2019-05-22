@@ -534,11 +534,10 @@ public:
             ret.set(http::field::date, now);
         }
 
-        // Disable chunked transfer encoding, use a well-known content length below.
+        // Disable chunked transfer encoding and use actual body size as content length.
         // This allows sharing the plain body representation with other platforms.
+        // It also compensates for the lack of body data size field in v0 descriptors.
         ret.chunked(false);
-
-        // Use the actual content length according to body size.
         ret.set(http::field::content_length, ret.body().size());
 
         // Prevent others from inserting ouinet specific header fields.
