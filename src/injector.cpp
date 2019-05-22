@@ -539,6 +539,7 @@ public:
         // It also compensates for the lack of body data size field in v0 descriptors.
         ret.chunked(false);
         ret.set(http::field::content_length, ret.body().size());
+        ret.erase(http::field::trailer);  // pointless without chunking
 
         // Prevent others from inserting ouinet specific header fields.
         ret = util::remove_ouinet_fields(move(ret));
