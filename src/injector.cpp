@@ -534,6 +534,9 @@ public:
             ret.set(http::field::date, now);
         }
 
+        // Use the actual content length according to body size.
+        ret.set(http::field::content_length, ret.body().size());
+
         // Prevent others from inserting ouinet specific header fields.
         ret = util::remove_ouinet_fields(move(ret));
 
