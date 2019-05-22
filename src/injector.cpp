@@ -534,6 +534,10 @@ public:
             ret.set(http::field::date, now);
         }
 
+        // Disable chunked transfer encoding, use a well-known content length below.
+        // This allows sharing the plain body representation with other platforms.
+        ret.chunked(false);
+
         // Use the actual content length according to body size.
         ret.set(http::field::content_length, ret.body().size());
 
