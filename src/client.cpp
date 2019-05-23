@@ -591,6 +591,12 @@ public:
             return or_throw(yield, err::operation_not_supported, move(rs));
         }
 
+        if (has_descriptor_hdr(rs)) {
+            // Present if insertion data does not contain the inlined descriptor
+            // but a link to it: seed descriptor itself to distributed cache.
+            // TODO: retrieve descriptor from header and add via IPFS
+        }
+
         if (has_bep44_insert_hdr(rs)) {
             asio::spawn(ios, [ rs
                              , target = rq.target().to_string()
@@ -629,7 +635,7 @@ public:
                                , scheduler.waiter_count(), " pending");
             });
 
-            return rs;
+            return rs;  // no further actions for descriptor retrieval needed
         }
 
         asio::spawn(ios,
@@ -717,6 +723,12 @@ public:
         // Note: we have to return a valid response even in case of error
         // because CacheControl will use it.
         return rs;
+    }
+
+    static
+    bool has_descriptor_hdr(const Response& rs)
+    {
+        return !rs[http_::response_descriptor_hdr].empty();
     }
 
     static
