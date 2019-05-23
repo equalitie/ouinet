@@ -374,6 +374,9 @@ public:
                 LOG_DEBUG("Injector new insertion: ", ins.desc_data);
                 rs = add_re_insertion_header_field( move(rs)
                                                   , move(ins.index_ins_data));
+                if (ins.index_linked_desc)  // linked descriptor, send as well
+                    rs = add_descriptor_header_field( move(rs)
+                                                    , move(ins.desc_data));
 
                 sys::error_code ec_ignored;
                 save_to_disk(key_from_http_req(rq), rs, cancel, yield[ec_ignored]);

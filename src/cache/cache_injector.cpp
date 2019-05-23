@@ -144,7 +144,7 @@ CacheInjector::insert_content( const string& id
 
     // Store descriptor
     auto key = key_from_http_req(rq);
-    auto cid_insdata = descriptor::put_into_index
+    auto cid_insdata_lnk = descriptor::put_into_index
         (key, desc, *_index, ipfs_add, perform_io, yield[ec]);
 
     if (cancel) ec = asio::error::operation_aborted;
@@ -152,8 +152,9 @@ CacheInjector::insert_content( const string& id
 
     return InsertionResult { move(key)
                            , move(desc)
-                           , "/ipfs/" + cid_insdata.first
-                           , move(cid_insdata.second)};
+                           , "/ipfs/" + get<0>(cid_insdata_lnk)
+                           , move(get<1>(cid_insdata_lnk))
+                           , get<2>(cid_insdata_lnk)};
 }
 
 std::string CacheInjector::ipfs_cat( boost::string_view cid
