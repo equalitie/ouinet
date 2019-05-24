@@ -17,6 +17,7 @@ public:
 
 private:
     using Clock = std::chrono::steady_clock;
+    using SendPing = std::function<void(const NodeContact&)>;
 
     struct RoutingNode {
         NodeContact contact;
@@ -61,7 +62,7 @@ private:
     };
 
 public:
-    RoutingTable(DhtNode&);
+    RoutingTable(const NodeID& node_id, SendPing);
     RoutingTable(const RoutingTable&) = delete;
 
     std::vector<NodeContact> find_closest_routing_nodes(NodeID target, size_t count);
@@ -75,8 +76,8 @@ private:
     size_t bucket_id(const NodeID&) const;
 
 private:
-    DhtNode& _dht_node;
     NodeID _node_id;
+    SendPing _send_ping;
     std::vector<Bucket> _buckets;
 };
 

@@ -1555,7 +1555,12 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
 
     _node_id = NodeID::generate(my_endpoint.address());
     _wan_endpoint = my_endpoint;
-    _routing_table = std::make_unique<RoutingTable>(*this);
+
+    _routing_table =
+        std::make_unique<RoutingTable>( _node_id
+                                      , [&](const NodeContact& c) {
+                                            send_ping(c);
+                                        });
 
     /*
      * TODO: Make bootstrap node handling and ID determination more reliable.

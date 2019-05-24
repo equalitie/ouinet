@@ -8,9 +8,9 @@ using namespace std;
 using namespace ouinet;
 using namespace ouinet::bittorrent::dht;
 
-RoutingTable::RoutingTable(DhtNode& dht_node)
-    : _dht_node(dht_node)
-    , _node_id(dht_node.node_id())
+RoutingTable::RoutingTable(const NodeID& node_id, SendPing send_ping)
+    : _node_id(node_id)
+    , _send_ping(move(send_ping))
     , _buckets(NodeID::bit_size)
 {
 }
@@ -126,7 +126,7 @@ void RoutingTable::try_add_node(NodeContact contact, bool is_verified)
                 .ping_ongoing   = false,
             });
         } else {
-            _dht_node.send_ping(contact);
+            _send_ping(contact);
         }
         return;
     }
@@ -148,7 +148,7 @@ void RoutingTable::try_add_node(NodeContact contact, bool is_verified)
                     .ping_ongoing   = false,
                 });
             } else {
-                _dht_node.send_ping(contact);
+                _send_ping(contact);
             }
             return;
         }
@@ -164,7 +164,7 @@ void RoutingTable::try_add_node(NodeContact contact, bool is_verified)
         if (n.is_questionable()) {
             questionable_nodes++;
             if (!n.ping_ongoing) {
-                _dht_node.send_ping(n.contact);
+                _send_ping(n.contact);
                 n.ping_ongoing = true;
             }
         }
@@ -233,7 +233,7 @@ void RoutingTable::fail_node(NodeContact contact)
     if (bucket->nodes[node_i].is_good()) {
         if (bucket->nodes[node_i].is_questionable()) {
             bucket->nodes[node_i].ping_ongoing = true;
-            _dht_node.send_ping(contact);
+            _send_ping(contact);
         }
         return;
     }
@@ -274,7 +274,7 @@ void RoutingTable::fail_node(NodeContact contact)
          */
         NodeContact contact = bucket->unverified_candidates[0].contact;
         bucket->unverified_candidates.pop_front();
-        _dht_node.send_ping(contact);
+        _send_ping(contact);
     }
 
     /*
