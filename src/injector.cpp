@@ -374,6 +374,9 @@ public:
                 LOG_DEBUG("Injector new insertion: ", ins.desc_data);
                 rs = add_re_insertion_header_field( move(rs)
                                                   , move(ins.index_ins_data));
+                if (ins.index_linked_desc)  // linked descriptor, send as well
+                    rs = add_descriptor_header_field( move(rs)
+                                                    , move(ins.desc_data));
 
                 sys::error_code ec_ignored;
                 save_to_disk(key_from_http_req(rq), rs, cancel, yield[ec_ignored]);
@@ -645,17 +648,24 @@ private:
     Response add_insertion_header_fields( Response&& rs
                                         , CacheInjector::InsertionResult&& ins)
     {
+        // Add descriptor storage link as is.
+        rs.set(http_::response_descriptor_link_hdr, move(ins.desc_link));
+
+        rs = add_descriptor_header_field(move(rs), move(ins.desc_data));
+        return add_re_insertion_header_field( move(rs)
+                                            , move(ins.index_ins_data));
+    }
+
+    template<class Rs>
+    Rs add_descriptor_header_field(Rs&& rs, string&& desc_data)
+    {
         // Zlib-compress descriptor, Base64-encode and put in header.
-        auto compressed_desc = util::zlib_compress(move(ins.desc_data));
+        auto compressed_desc = util::zlib_compress(move(desc_data));
         auto encoded_desc = util::base64_encode(move(compressed_desc));
 
         rs.set(http_::response_descriptor_hdr, move(encoded_desc));
 
-        // Add descriptor storage link as is.
-        rs.set(http_::response_descriptor_link_hdr, move(ins.desc_link));
-
-        return add_re_insertion_header_field( move(rs)
-                                            , move(ins.index_ins_data));
+        return move(rs);
     }
 
     // TODO: Better name for this function

@@ -55,24 +55,25 @@ std::string from_path( boost::string_view desc_path
 // in the given `index` under the given `key`.
 // The descriptor is to be saved in the given stores (`ipfs_store`).
 //
-// Returns the result of `ipfs_store` and
-// index-specific data to help reinsert the key->descriptor mapping.
+// Returns the result of `ipfs_store`,
+// index-specific data to help reinsert the key->descriptor mapping,
+// and whether insertion data links to the descriptor instead of embedding it.
 template <class StoreFunc>
 inline
-std::pair<std::string, std::string>
+std::tuple<std::string, std::string, bool>
 put_into_index( const std::string& key, const std::string& desc_data
               , Bep44InjectorIndex& index
               , StoreFunc ipfs_store
               , bool perform_io
               , asio::yield_context yield)
 {
-    using dcid_insd = std::pair<std::string, std::string>;
+    using dcid_insd_link = std::tuple<std::string, std::string, bool>;
     sys::error_code ec;
 
     // Always store the descriptor itself in IPFS.
     std::string desc_ipfs = ipfs_store(desc_data, yield[ec]);
     if (ec)
-        return or_throw<dcid_insd>(yield, ec);
+        return or_throw<dcid_insd_link>(yield, ec);
 
     std::string ins_data;
     std::string zvalue = zlib_prefix + util::zlib_compress(desc_data);
@@ -84,11 +85,12 @@ put_into_index( const std::string& key, const std::string& desc_data
         ins_data = index.get_insert_message(key, std::move(zvalue), ec);
     }
 
-    if (ec && ec != asio::error::message_size)
-        return or_throw<dcid_insd>(yield, ec);
+    bool link_desc = ec == asio::error::message_size;
+    if (ec && !link_desc)
+        return or_throw<dcid_insd_link>(yield, ec);
 
     // Insert IPFS link to descriptor.
-    if (ec == asio::error::message_size) {
+    if (link_desc) {
         ec = sys::error_code();
 
         auto value = ipfs_prefix + desc_ipfs;
@@ -100,7 +102,7 @@ put_into_index( const std::string& key, const std::string& desc_data
         }
     }
 
-    return or_throw(yield, ec, dcid_insd(move(desc_ipfs), move(ins_data)));
+    return or_throw(yield, ec, dcid_insd_link(move(desc_ipfs), move(ins_data), link_desc));
 }
 
 } // namespace descriptor

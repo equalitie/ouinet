@@ -35,6 +35,7 @@ public:
         std::string desc_data;  // serialized descriptor
         std::string desc_link;  // descriptor storage link
         std::string index_ins_data;  // index-specific data to help reinsert
+        bool index_linked_desc;  // whether the descriptor is linked to by ins data
     };
 
 private:
