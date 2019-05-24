@@ -592,9 +592,22 @@ public:
         }
 
         if (has_descriptor_hdr(rs)) {
-            // Present if insertion data does not contain the inlined descriptor
+            // Present if any insertion data does not contain the inlined descriptor
             // but a link to it: seed descriptor itself to distributed cache.
-            // TODO: retrieve descriptor from header and add via IPFS
+            asio::spawn(ios, [ desc_hdr = rs[http_::response_descriptor_hdr].to_string()
+                             , target = rq.target().to_string()
+                             , &cache
+                             , &cancel_ = client_state.get_shutdown_signal()
+                             , &scheduler = client_state._store_scheduler
+                             ] (asio::yield_context yield) {
+                Cancel cancel(cancel_);
+                sys::error_code ec;
+                seed_descriptor( target, desc_hdr
+                               , scheduler, *cache
+                               , cancel, yield[ec]);
+                LOG_DEBUG( "Index: seed descriptor for ", target
+                         , " ec:\"", ec.message(), "\"");
+            });
         }
 
         if (has_bep44_insert_hdr(rs)) {
@@ -735,6 +748,30 @@ public:
     bool has_bep44_insert_hdr(const Response& rs)
     {
         return !rs[http_::response_insert_hdr].empty();
+    }
+
+    static
+    void seed_descriptor( const std::string& target
+                        , const std::string& encoded_desc
+                        , Scheduler& scheduler
+                        , CacheClient& cache
+                        , Cancel& cancel
+                        , asio::yield_context yield)
+    {
+        sys::error_code ec;
+
+        auto compressed_desc = util::base64_decode(encoded_desc);
+        auto desc_data = util::zlib_decompress(compressed_desc, ec);
+        if (ec) {
+            LOG_WARN("Invalid descriptor data from injector; url=", target);
+            return or_throw(yield, ec);
+        }
+
+        auto slot = scheduler.wait_for_slot(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec);
+
+        cache.ipfs_add(desc_data, yield[ec]);
+        return or_throw(yield, ec);
     }
 
     static
