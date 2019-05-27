@@ -69,6 +69,19 @@ target_link_libraries(test-dht ${Boost_LIBRARIES} ${GCRYPT_LIBRARIES} z)
 add_dependencies(test-dht gcrypt)
 
 ################################################################################
+add_executable(
+    test-routing-table
+    "test-routing-table.cpp"
+    "../src/util.cpp" ${bt_cpp_files})
+
+target_include_directories(test-routing-table PUBLIC
+    "${Boost_INCLUDE_DIR}"
+    "${GCRYPT_INCLUDE_DIR}")
+
+target_link_libraries(test-routing-table ${Boost_LIBRARIES} ${GCRYPT_LIBRARIES} z)
+add_dependencies(test-routing-table gcrypt)
+
+################################################################################
 add_executable(test-bep5 "test-bep5.cpp" ${bt_cpp_files})
 
 target_include_directories(test-bep5 PUBLIC
