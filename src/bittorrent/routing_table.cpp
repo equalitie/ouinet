@@ -3,63 +3,25 @@
 #include "proximity_map.h"
 
 #include <set>
+#include <iostream>
 
 using namespace std;
 using namespace ouinet;
+using namespace ouinet::bittorrent;
 using namespace ouinet::bittorrent::dht;
 
-RoutingTable::RoutingTable(const NodeID& node_id, SendPing send_ping)
-    : _node_id(node_id)
-    , _send_ping(move(send_ping))
-    , _buckets(NodeID::bit_size)
+//--------------------------------------------------------------------
+template<class From, class To, class Pred>
+static void move_elements(From& from, To&& to, const Pred& predicate)
 {
-}
-
-size_t RoutingTable::bucket_id(const NodeID& id) const
-{
-    NodeID diff = _node_id ^ id;
-
-    // Bucket 0 is one with all contacts with IDs same as ours (which means
-    // this particular one will be empty, but that's the price to pay for not
-    // needing to do branching on `if 0`).
-    size_t bucket_i = 0;
-
-    for (size_t i = 0; i < NodeID::bit_size; ++i) {
-        if (diff.bit(i)) {
-            bucket_i = NodeID::bit_size - i - 1;
-            break;
+    for (size_t i = 0; i < from.size();) {
+        if (predicate(from[i])) {
+            to.push_back(move(from[i]));
+            from.erase(from.begin() + i);
+        } else {
+            ++i;
         }
     }
-
-    return bucket_i;
-}
-
-RoutingTable::Bucket* RoutingTable::find_bucket(NodeID id)
-{
-    return &_buckets[bucket_id(id)];
-}
-
-std::vector<NodeContact>
-RoutingTable::find_closest_routing_nodes(NodeID target, size_t count)
-{
-    std::vector<NodeContact> output;
-
-    ProximityMap<NodeContact> m(target, count);
-
-    // TODO: This isn't efficient. Instead of going through every single bucket
-    // and try to add it to `m`, we should start in the bucket that corresponds
-    // to `target` and then move to both sides until no new contacts fit into `m`.
-    for (auto& bucket : _buckets) {
-        for (auto & n : bucket.nodes) {
-            m.insert({n.contact.id, n.contact});
-        }
-    }
-
-    for (auto& p : m) {
-        output.push_back(p.second);
-    }
-
-    return output;
 }
 
 template<class R, class P>
@@ -77,6 +39,140 @@ static void erase_front_questionables(Q& q)
     }
 }
 
+//--------------------------------------------------------------------
+
+RoutingTable::RoutingTable(const NodeID& node_id, SendPing send_ping)
+    : _node_id(node_id)
+    , _send_ping(move(send_ping))
+    , _buckets(1)
+{
+}
+
+//  max_distance(0)   -> 111..111
+//  max_distance(1)   -> 011..111
+//  max_distance(2)   -> 001..111
+//  ...
+//  max_distance(159) -> 000..000
+NodeID RoutingTable::max_distance(size_t bucket_id) const
+{
+    NodeID ret = NodeID::max();
+
+    for (size_t i = 0; i < bucket_id; ++i) {
+        ret.set_bit(i, false);
+    }
+
+    return ret;
+}
+
+bool RoutingTable::would_split_bucket( size_t bucket_id
+                                     , const NodeID& new_id) const
+{
+    auto dst = new_id ^ _node_id;
+
+    if (dst > max_distance(bucket_id)) {
+        return false;
+    }
+
+    auto& b = _buckets[bucket_id];
+
+    if (b.nodes.size() < BUCKET_SIZE) return false;
+
+    auto half_dst = max_distance(bucket_id + 1);
+
+    size_t cnt = 0;
+    if (dst <= half_dst) { cnt++; }
+
+    for (auto& n : b.nodes) {
+        if ((n.contact.id ^ _node_id) <= half_dst) {
+            cnt++;
+        }
+    }
+
+    // We can only split if after splitting we wont end up with all the old
+    // nodes together wit the new_id being in only one of the new buckets.
+    return 0 < cnt && cnt <= BUCKET_SIZE;
+}
+
+size_t RoutingTable::find_bucket_id(const NodeID& id) const
+{
+    NodeID distance = _node_id ^ id;
+    NodeID max = NodeID::max();
+
+    size_t ret = 0;
+
+    for (size_t i = 0; i < _buckets.size(); ++i) {
+        if (distance > max) {
+            return ret;
+        }
+        max.set_bit(i, false);
+        ret = i;
+    }
+
+    return ret;
+}
+
+RoutingTable::Bucket* RoutingTable::find_bucket(NodeID id)
+{
+    return &_buckets[find_bucket_id(id)];
+}
+
+void RoutingTable::split_bucket(size_t i)
+{
+    assert(i == _buckets.size() - 1);
+
+    Bucket new_bucket;
+
+    auto new_bucket_max_size = max_distance(i+1);
+
+    auto belongs_to_new_bucket = [&] (const RoutingNode& n) {
+        return (n.contact.id ^ _node_id) <= new_bucket_max_size;
+    };
+
+    move_elements(_buckets[i].nodes
+                 , new_bucket.nodes
+                 , belongs_to_new_bucket);
+
+    move_elements(_buckets[i].verified_candidates
+                 , new_bucket.verified_candidates
+                 , belongs_to_new_bucket);
+
+    move_elements(_buckets[i].unverified_candidates
+                 , new_bucket.unverified_candidates
+                 , belongs_to_new_bucket);
+
+    _buckets.push_back(move(new_bucket));
+}
+
+std::vector<NodeContact>
+RoutingTable::find_closest_routing_nodes(NodeID target, size_t count)
+{
+    std::vector<NodeContact> output;
+
+    if (count == 0) return output;
+
+    size_t bucket_i = find_bucket_id(target);
+    bool done = false;
+
+    for (size_t i = bucket_i; i < _buckets.size() && !done; ++i) {
+        for (auto& n : _buckets[i].nodes) {
+            output.push_back(n.contact);
+            if (output.size() >= count) done = true;
+            if (done) break;
+        }
+    }
+
+    while (bucket_i && !done) {
+        --bucket_i;
+        for (auto& n : _buckets[bucket_i].nodes) {
+            output.push_back(n.contact);
+            if (output.size() >= count) done = true;
+            if (done) break;
+        }
+    }
+
+    return output;
+}
+
 /*
  * Record a node in the routing table, space permitting. If there is no space,
  * check for node replacement opportunities. If is_verified is not set, ping
@@ -84,7 +180,8 @@ static void erase_front_questionables(Q& q)
  */
 void RoutingTable::try_add_node(NodeContact contact, bool is_verified)
 {
-    Bucket* bucket = find_bucket(contact.id);
+    size_t bucket_id = find_bucket_id(contact.id);
+    Bucket* bucket = &_buckets[bucket_id];
 
     auto now = Clock::now();
 
@@ -131,6 +228,28 @@ void RoutingTable::try_add_node(NodeContact contact, bool is_verified)
         return;
     }
 
+    if (would_split_bucket(bucket_id, contact.id)) {
+        if (is_verified) {
+
+            bucket->nodes.push_back(RoutingNode {
+                .contact        = contact,
+                .recv_time      = now,
+                .reply_time     = now,
+                .queries_failed = 0,
+                .ping_ongoing   = false,
+            });
+
+            split_bucket(bucket_id);
+
+            assert(_buckets.size() == bucket_id + 2);
+            assert(_buckets[bucket_id].nodes.size() <= BUCKET_SIZE);
+            assert(_buckets[bucket_id+1].nodes.size() <= BUCKET_SIZE);
+        } else {
+            _send_ping(contact);
+        }
+        return;
+    }
+
     /*
      * Check whether there are any bad nodes in the table. If so, replace it,
      * per above.
@@ -163,6 +282,7 @@ void RoutingTable::try_add_node(NodeContact contact, bool is_verified)
     for (auto& n : bucket->nodes) {
         if (n.is_questionable()) {
             questionable_nodes++;
+
             if (!n.ping_ongoing) {
                 _send_ping(n.contact);
                 n.ping_ongoing = true;

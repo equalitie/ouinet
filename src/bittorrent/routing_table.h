@@ -13,7 +13,7 @@ class DhtNode;
 
 class RoutingTable {
 public:
-    static const size_t BUCKET_SIZE = 8;
+    static constexpr size_t BUCKET_SIZE = 8;
 
 private:
     using Clock = std::chrono::steady_clock;
@@ -57,8 +57,6 @@ private:
         std::vector<RoutingNode> nodes;
         std::deque<RoutingNode> verified_candidates;
         std::deque<RoutingNode> unverified_candidates;
-
-        void erase_candidate(const NodeContact&);
     };
 
 public:
@@ -71,9 +69,13 @@ public:
 
     void try_add_node(NodeContact, bool is_verified);
 
+    NodeID max_distance(size_t bucket_id) const;
+
 private:
     RoutingTable::Bucket* find_bucket(NodeID id);
-    size_t bucket_id(const NodeID&) const;
+    size_t find_bucket_id(const NodeID&) const;
+    bool would_split_bucket(size_t bucket_id, const NodeID& new_id) const;
+    void split_bucket(size_t bucket_id);
 
 private:
     NodeID _node_id;
