@@ -69,9 +69,20 @@ NodeID::Range NodeID::Range::reduce(bool bit) const {
     return ret;
 }
 
+/* static */
 NodeID NodeID::zero()
 {
     return NodeID{ zero_buffer() };
+}
+
+/* static */
+NodeID NodeID::max()
+{
+    return NodeID{ Buffer{ 0xff, 0xff, 0xff, 0xff
+                         , 0xff, 0xff, 0xff, 0xff
+                         , 0xff, 0xff, 0xff, 0xff
+                         , 0xff, 0xff, 0xff, 0xff
+                         , 0xff, 0xff, 0xff, 0xff } };
 }
 
 NodeID NodeID::generate(asio::ip::address address)
@@ -160,6 +171,15 @@ NodeID NodeID::distance_to(const NodeID& other) const
     NodeID ret = NodeID::zero();
     for (size_t i = 0; i < sizeof(buffer); i++) {
         ret.buffer[i] = buffer[i] ^ other.buffer[i];
+    }
+    return ret;
+}
+
+string NodeID::to_bitstr() const
+{
+    string ret;
+    for (size_t i = 0; i < bit_size; ++i) {
+        ret.push_back(bit(i) ? '1' : '0');
     }
     return ret;
 }
