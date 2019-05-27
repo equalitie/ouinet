@@ -57,117 +57,6 @@ inline void trim_quotes(beast::string_view& v) {
 };
 
 static
-boost::optional<posix_time::ptime> parse_date_rfc1123(beast::string_view s)
-{
-    static const char * months[12] = {
-        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-    };
-
-    struct tm g = {0};
-    char M[4];
-    time_t t;
-    int i;
-
-    char buf[128];
-
-    if (s.size() >= sizeof(buf)) return boost::none;
-
-    memcpy(buf, s.data(), s.size());
-    buf[s.size()] = 0;
-
-    sscanf(buf, "%*[a-zA-Z,] %d %3s %d %d:%d:%d",
-	   & g.tm_mday, M, & g.tm_year,
-	   & g.tm_hour, & g.tm_min, & g.tm_sec);
-    for (i = 0; i < 12; i++) {
-	    if (strncmp (M, months[i], 3) == 0) {
-	        g.tm_mon = i;
-	        break;
-	    }
-    }
-    g.tm_year -= 1900;
-    t = timegm (& g);
-
-    return posix_time::from_time_t(t);
-}
-
-posix_time::ptime CacheControl::parse_date(beast::string_view s)
-{
-    namespace bt = boost::posix_time;
-
-    // The date parsing code below internally throws and catches exceptions.
-    // This confuses the address sanitizer when combined with Boost.Coroutine
-    // and causes the app exit with false positive log from Asan.
-#   ifdef __SANITIZE_ADDRESS__
-    {
-        auto t = parse_date_rfc1123(s);
-        if (!t) return bt::ptime();
-        return *t;
-    }
-#   endif
-
-    // Trim quotes from the beginning
-    while (s.starts_with('"')) s.remove_prefix(1);
-
-    static const auto format = [](const char* fmt) {
-        using std::locale;
-        return locale(locale::classic(), new bt::time_input_facet(fmt));
-    };
-
-    // https://www.w3.org/Protocols/rfc2616/rfc2616-sec3.html#sec3.3
-
-    // Format spec:
-    // http://www.boost.org/doc/libs/1_60_0/doc/html/date_time/date_time_io.html
-    static const std::locale formats[] = {
-        format("%a, %d %b %Y %H:%M:%S"),
-        format("%A, %d-%b-%y %H:%M:%S"),
-        // TODO: ANSI C's format not done yet because Boost doesn't seem
-        // to support parsing days of month in 1-digit format.
-    };
-
-    const size_t formats_n = sizeof(formats)/sizeof(formats[0]);
-
-    bt::ptime pt;
-
-    // https://stackoverflow.com/a/13059195/273348
-    struct membuf: std::streambuf {
-        membuf(char const* base, size_t size) {
-            char* p(const_cast<char*>(base));
-            this->setg(p, p, p + size);
-        }
-    };
-
-    struct imemstream: virtual membuf, std::istream {
-        imemstream(beast::string_view s)
-            : membuf(s.data(), s.size())
-            , std::istream(static_cast<std::streambuf*>(this)) {
-        }
-    };
-
-    for(size_t i=0; i<formats_n; ++i) {
-        imemstream is(s);
-        is.istream::imbue(formats[i]);
-        is >> pt;
-        if(pt != bt::ptime()) return pt;
-    }
-
-    return pt;
-}
-
-string CacheControl::format_date(posix_time::ptime date)
-{
-    posix_time::time_facet* facet = new posix_time::time_facet();
-
-    facet->format("%a, %d %b %Y %H:%M:%S");
-
-    stringstream ss;
-
-    ss.imbue(std::locale(std::locale::classic(), facet));
-    ss << date;
-    return ss.str();
-}
-
-static
 optional<unsigned> get_max_age(const beast::string_view& cache_control_value)
 {
     using boost::optional;
@@ -226,7 +115,7 @@ bool CacheControl::is_expired( const http::response_header<>& response
         auto expires = get(response, http::field::expires);
 
         if (expires) {
-            auto exp_date = CacheControl::parse_date(*expires);
+            auto exp_date = util::parse_date(*expires);
             if (exp_date != posix_time::ptime()) {
                 return exp_date < now();
             }

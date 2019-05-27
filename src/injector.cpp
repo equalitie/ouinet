@@ -372,6 +372,10 @@ public:
 
             if (!ec) {
                 LOG_DEBUG("Injector new insertion: ", ins.desc_data);
+                // Add an injection identifier header
+                // to enable the client to track injection state.
+                rs.set(http_::response_injection_id_hdr, insert_id);
+                // Add index insertion headers.
                 rs = add_re_insertion_header_field( move(rs)
                                                   , move(ins.index_ins_data));
                 if (ins.index_linked_desc)  // linked descriptor, send as well
@@ -473,7 +477,7 @@ public:
 
     bool is_semi_fresh(http::response_header<>& hdr)
     {
-        auto date = CacheControl::parse_date(hdr[http::field::date]);
+        auto date = util::parse_date(hdr[http::field::date]);
         assert(date != boost::posix_time::ptime());
 
         bool expired = CacheControl::is_expired(hdr, date);
@@ -529,27 +533,8 @@ public:
 
         if (ec) return or_throw<Response>(yield, ec);
 
-        // Add a date if missing (or broken) in the response (RFC 7231#7.1.1.2).
-        // It is also assumed by `is_semi_fresh`.
-        namespace pt = boost::posix_time;
-        if (CacheControl::parse_date(ret[http::field::date]) == pt::ptime()) {
-            auto now = CacheControl::format_date(pt::second_clock::universal_time());
-            ret.set(http::field::date, now);
-        }
-
-        // Disable chunked transfer encoding and use actual body size as content length.
-        // This allows sharing the plain body representation with other platforms.
-        // It also compensates for the lack of body data size field in v0 descriptors.
-        ret.chunked(false);
-        ret.set(http::field::content_length, ret.body().size());
-        ret.erase(http::field::trailer);  // pointless without chunking
-
         // Prevent others from inserting ouinet specific header fields.
         ret = util::remove_ouinet_fields(move(ret));
-
-        // Add an injection identifier header
-        // to enable the client to track injection state.
-        ret.set(http_::response_injection_id_hdr, insert_id);
 
         if (ret.keep_alive() && rq_.keep_alive()) {
             origin_pools.insert_connection(rq_, move(connection));
