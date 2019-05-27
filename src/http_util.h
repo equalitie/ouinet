@@ -242,6 +242,20 @@ static Request to_cache_request(Request rq) {
 // This only leaves a minimum set of non-privacy sensitive headers.
 template<class Response>
 static Response to_cache_response(Response rs) {
+    // Add a date if missing (or broken) in the response (RFC 7231#7.1.1.2).
+    namespace pt = boost::posix_time;
+    if (parse_date(rs[http::field::date]) == pt::ptime()) {
+        auto now = format_date(pt::second_clock::universal_time());
+        rs.set(http::field::date, now);
+    }
+
+    // Disable chunked transfer encoding and use actual body size as content length.
+    // This allows sharing the plain body representation with other platforms.
+    // It also compensates for the lack of body data size field in v0 descriptors.
+    rs.chunked(false);
+    rs.set(http::field::content_length, rs.body().size());
+    rs.erase(http::field::trailer);  // pointless without chunking
+
     rs = remove_ouinet_fields(move(rs));
     // TODO: This list was created by going through some 100 responses from
     // bbc.com. Careful selection from all possible (standard) fields is

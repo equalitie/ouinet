@@ -529,21 +529,6 @@ public:
 
         if (ec) return or_throw<Response>(yield, ec);
 
-        // Add a date if missing (or broken) in the response (RFC 7231#7.1.1.2).
-        // It is also assumed by `is_semi_fresh`.
-        namespace pt = boost::posix_time;
-        if (util::parse_date(ret[http::field::date]) == pt::ptime()) {
-            auto now = util::format_date(pt::second_clock::universal_time());
-            ret.set(http::field::date, now);
-        }
-
-        // Disable chunked transfer encoding and use actual body size as content length.
-        // This allows sharing the plain body representation with other platforms.
-        // It also compensates for the lack of body data size field in v0 descriptors.
-        ret.chunked(false);
-        ret.set(http::field::content_length, ret.body().size());
-        ret.erase(http::field::trailer);  // pointless without chunking
-
         // Prevent others from inserting ouinet specific header fields.
         ret = util::remove_ouinet_fields(move(ret));
 
