@@ -372,6 +372,10 @@ public:
 
             if (!ec) {
                 LOG_DEBUG("Injector new insertion: ", ins.desc_data);
+                // Add an injection identifier header
+                // to enable the client to track injection state.
+                rs.set(http_::response_injection_id_hdr, insert_id);
+                // Add index insertion headers.
                 rs = add_re_insertion_header_field( move(rs)
                                                   , move(ins.index_ins_data));
                 if (ins.index_linked_desc)  // linked descriptor, send as well
@@ -531,10 +535,6 @@ public:
 
         // Prevent others from inserting ouinet specific header fields.
         ret = util::remove_ouinet_fields(move(ret));
-
-        // Add an injection identifier header
-        // to enable the client to track injection state.
-        ret.set(http_::response_injection_id_hdr, insert_id);
 
         if (ret.keep_alive() && rq_.keep_alive()) {
             origin_pools.insert_connection(rq_, move(connection));
