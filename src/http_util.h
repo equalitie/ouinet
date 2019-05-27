@@ -8,6 +8,7 @@
 #include <boost/beast/http/fields.hpp>
 #include <boost/beast/http/message.hpp>
 #include <boost/beast/http/string_body.hpp>
+#include <boost/date_time/posix_time/posix_time.hpp>
 
 #include "constants.h"
 #include "util.h"
@@ -32,6 +33,10 @@ Num parse_num(beast::string_view s, Num default_value) {
         return default_value;
     }
 }
+
+// Returns ptime() if parsing fails.
+boost::posix_time::ptime parse_date(beast::string_view);
+std::string format_date(boost::posix_time::ptime);
 
  ///////////////////////////////////////////////////////////////////////////////
 // Utility function to check whether an HTTP field belongs to a set. Where

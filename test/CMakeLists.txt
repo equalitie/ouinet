@@ -10,9 +10,10 @@ add_executable(test-parser "test_parser.cpp")
 add_executable(test-cache "test_cache_control.cpp"
                           "../src/cache_control.cpp"
                           "../src/asio.cpp"
+                          "../src/http_util.cpp"
                           "../src/logger.cpp")
 
-target_link_libraries(test-cache ${Boost_LIBRARIES})
+target_link_libraries(test-cache ${Boost_LIBRARIES} ${URI_LIBRARY})
 
 ######################################################################
 add_executable(test-wait-condition "test_wait_condition.cpp" "../src/asio.cpp")

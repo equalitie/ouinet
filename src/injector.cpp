@@ -473,7 +473,7 @@ public:
 
     bool is_semi_fresh(http::response_header<>& hdr)
     {
-        auto date = CacheControl::parse_date(hdr[http::field::date]);
+        auto date = util::parse_date(hdr[http::field::date]);
         assert(date != boost::posix_time::ptime());
 
         bool expired = CacheControl::is_expired(hdr, date);
@@ -532,8 +532,8 @@ public:
         // Add a date if missing (or broken) in the response (RFC 7231#7.1.1.2).
         // It is also assumed by `is_semi_fresh`.
         namespace pt = boost::posix_time;
-        if (CacheControl::parse_date(ret[http::field::date]) == pt::ptime()) {
-            auto now = CacheControl::format_date(pt::second_clock::universal_time());
+        if (util::parse_date(ret[http::field::date]) == pt::ptime()) {
+            auto now = util::format_date(pt::second_clock::universal_time());
             ret.set(http::field::date, now);
         }
 

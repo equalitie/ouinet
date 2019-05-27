@@ -5,6 +5,7 @@
 #include <boost/optional.hpp>
 
 #include <cache_control.h>
+#include <http_util.h>
 #include <util.h>
 #include <or_throw.h>
 #include <iostream>
@@ -49,7 +50,7 @@ template<class F> static void run_spawned(asio::io_service& ios, F&& f) {
 BOOST_AUTO_TEST_CASE(test_parse_date)
 {
     const auto p = [](const char* s) {
-        auto date = CacheControl::parse_date(s);
+        auto date = util::parse_date(s);
         stringstream ss;
         ss << date;
         return ss.str();
