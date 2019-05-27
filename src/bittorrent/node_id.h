@@ -45,6 +45,8 @@ struct NodeID {
 
     std::string to_printable() const { return util::bytes::to_printable(buffer); }
 
+    std::string to_bitstr() const;
+
     static boost::optional<NodeID> from_printable(boost::string_view s) {
         auto a = util::bytes::from_printable(s);
         if (!a) return boost::none;
@@ -58,12 +60,15 @@ struct NodeID {
     }
 
     static NodeID zero();
+    static NodeID max();
 
     // http://bittorrent.org/beps/bep_0042.html
     static NodeID generate(asio::ip::address address);
 
     bool operator==(const NodeID& other) const { return buffer == other.buffer; }
     bool operator<(const NodeID& other) const { return buffer < other.buffer; }
+    bool operator<=(const NodeID& other) const { return !(other.buffer < buffer); }
+    bool operator>(const NodeID& other) const { return other.buffer < buffer; }
     NodeID operator^(const NodeID& other) const;
 
     // Return true if `left` is closer to `this` than `right` is in the XOR

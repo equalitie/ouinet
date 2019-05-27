@@ -13,10 +13,11 @@ class DhtNode;
 
 class RoutingTable {
 public:
-    static const size_t BUCKET_SIZE = 8;
+    static constexpr size_t BUCKET_SIZE = 8;
 
 private:
     using Clock = std::chrono::steady_clock;
+    using SendPing = std::function<void(const NodeContact&)>;
 
     struct RoutingNode {
         NodeContact contact;
@@ -56,12 +57,10 @@ private:
         std::vector<RoutingNode> nodes;
         std::deque<RoutingNode> verified_candidates;
         std::deque<RoutingNode> unverified_candidates;
-
-        void erase_candidate(const NodeContact&);
     };
 
 public:
-    RoutingTable(DhtNode&);
+    RoutingTable(const NodeID& node_id, SendPing);
     RoutingTable(const RoutingTable&) = delete;
 
     std::vector<NodeContact> find_closest_routing_nodes(NodeID target, size_t count);
@@ -70,13 +69,17 @@ public:
 
     void try_add_node(NodeContact, bool is_verified);
 
-private:
-    RoutingTable::Bucket* find_bucket(NodeID id);
-    size_t bucket_id(const NodeID&) const;
+    NodeID max_distance(size_t bucket_id) const;
 
 private:
-    DhtNode& _dht_node;
+    RoutingTable::Bucket* find_bucket(NodeID id);
+    size_t find_bucket_id(const NodeID&) const;
+    bool would_split_bucket(size_t bucket_id, const NodeID& new_id) const;
+    void split_bucket(size_t bucket_id);
+
+private:
     NodeID _node_id;
+    SendPing _send_ping;
     std::vector<Bucket> _buckets;
 };
 
