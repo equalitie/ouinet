@@ -225,24 +225,10 @@ void dht::DhtNode::start(asio::yield_context yield)
 {
     sys::error_code ec;
 
-    udp::socket socket(_ios);
+    _multiplexer = std::make_unique<UdpMultiplexer>(
+            asio_utp::udp_multiplexer(_ios
+                                     , udp::endpoint(_interface_address, 0)));
 
-    if (_interface_address.is_v4()) {
-        socket.open(udp::v4(), ec);
-    } else {
-        socket.open(udp::v6(), ec);
-    }
-    if (ec) {
-        return or_throw(yield, ec);
-    }
-
-    udp::endpoint endpoint(_interface_address, 0);
-    socket.bind(endpoint, ec);
-    if (ec) {
-        return or_throw(yield, ec);
-    }
-
-    _multiplexer = std::make_unique<UdpMultiplexer>(std::move(socket));
     _tracker = std::make_unique<Tracker>(_ios);
     _data_store = std::make_unique<DataStore>(_ios);
 

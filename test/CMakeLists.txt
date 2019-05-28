@@ -1,4 +1,6 @@
 
+set(ASIO_UTP_INCLUDE_DIR "../modules/asio-utp/include")
+
 include_directories(
     "${Boost_INCLUDE_DIR}"
     "../src")
@@ -53,20 +55,26 @@ file(GLOB bt_cpp_files "../src/bittorrent/*.cpp"
 add_executable(test-bittorrent "test_bittorrent.cpp" ${bt_cpp_files})
 
 target_include_directories(test-bittorrent PUBLIC
+    "${ASIO_UTP_INCLUDE_DIR}"
     "${Boost_INCLUDE_DIR}"
     "${GCRYPT_INCLUDE_DIR}")
 
-target_link_libraries(test-bittorrent ${Boost_LIBRARIES} ${GCRYPT_LIBRARIES})
+target_link_libraries(test-bittorrent
+    asio_utp ${Boost_LIBRARIES} ${GCRYPT_LIBRARIES})
+
 add_dependencies(test-bittorrent gcrypt)
 
 ################################################################################
 add_executable(test-dht "test-dht.cpp" "../src/util.cpp" ${bt_cpp_files})
 
 target_include_directories(test-dht PUBLIC
+    "${ASIO_UTP_INCLUDE_DIR}"
     "${Boost_INCLUDE_DIR}"
     "${GCRYPT_INCLUDE_DIR}")
 
-target_link_libraries(test-dht ${Boost_LIBRARIES} ${GCRYPT_LIBRARIES} z)
+target_link_libraries(test-dht
+    asio_utp ${Boost_LIBRARIES} ${GCRYPT_LIBRARIES} z)
+
 add_dependencies(test-dht gcrypt)
 
 ################################################################################
@@ -76,20 +84,24 @@ add_executable(
     "../src/util.cpp" ${bt_cpp_files})
 
 target_include_directories(test-routing-table PUBLIC
+    "${ASIO_UTP_INCLUDE_DIR}"
     "${Boost_INCLUDE_DIR}"
     "${GCRYPT_INCLUDE_DIR}")
 
-target_link_libraries(test-routing-table ${Boost_LIBRARIES} ${GCRYPT_LIBRARIES} z)
+target_link_libraries(test-routing-table
+    asio_utp ${Boost_LIBRARIES} ${GCRYPT_LIBRARIES} z)
+
 add_dependencies(test-routing-table gcrypt)
 
 ################################################################################
 add_executable(test-bep5 "test-bep5.cpp" ${bt_cpp_files})
 
 target_include_directories(test-bep5 PUBLIC
+    "${ASIO_UTP_INCLUDE_DIR}"
     "${Boost_INCLUDE_DIR}"
     "${GCRYPT_INCLUDE_DIR}")
 
-target_link_libraries(test-bep5 ${Boost_LIBRARIES} ${GCRYPT_LIBRARIES})
+target_link_libraries(test-bep5 asio_utp ${Boost_LIBRARIES} ${GCRYPT_LIBRARIES})
 add_dependencies(test-bep5 gcrypt)
 
 ######################################################################
