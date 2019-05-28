@@ -203,6 +203,7 @@ int main(int argc, const char** argv)
         }
 
         cerr << "End" << endl;
+        dht.stop();
     });
 
     ios.run();
