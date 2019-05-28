@@ -146,8 +146,8 @@ function add_binary {
 
 ######################################################################
 MODES=
-ALLOWED_MODES="build emu abiclean"
-DEFAULT_MODES="build"
+ALLOWED_MODES="bootstrap build emu abiclean"
+DEFAULT_MODES="bootstrap build"
 
 function check_mode {
     if echo "$MODES" | grep -q "\b$1\b"; then
@@ -519,9 +519,8 @@ if [ ! "$MODES" ]; then
     MODES="$DEFAULT_MODES"
 fi
 
-setup_deps
-
-if check_mode build; then
+if check_mode bootstrap; then
+    setup_deps
     maybe_install_ndk
     maybe_install_ndk_toolchain
     maybe_install_gradle
@@ -529,6 +528,9 @@ if check_mode build; then
     maybe_install_openssl
     maybe_clone_ifaddrs
     # TODO: miniupnp
+fi
+
+if check_mode build; then
     build_ouinet_libs
     copy_jni_libs
     copy_binaries
