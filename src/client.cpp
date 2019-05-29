@@ -111,7 +111,7 @@ public:
         if (_injector) _injector->stop();
     }
 
-    void setup_ipfs_cache();
+    void setup_cache();
     void set_injector(string);
 
 private:
@@ -1352,7 +1352,7 @@ void Client::State::serve_request( GenericStream&& con
 }
 
 //------------------------------------------------------------------------------
-void Client::State::setup_ipfs_cache()
+void Client::State::setup_cache()
 {
     if (_is_ipns_being_setup) {
         return;
@@ -1514,7 +1514,7 @@ void Client::State::start()
                        << endl;
               }
 
-              setup_ipfs_cache();
+              setup_cache();
 
               listen_tcp( yield[ec]
                         , _config.local_endpoint()
@@ -1701,7 +1701,7 @@ void Client::set_injector_endpoint(const char* injector_ep)
 void Client::set_ipns(const char* ipns)
 {
     _state->_config.set_index_ipns_id(move(ipns));
-    _state->setup_ipfs_cache();
+    _state->setup_cache();
 }
 
 void Client::set_credentials(const char* injector, const char* cred)
