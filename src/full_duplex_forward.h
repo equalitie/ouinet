@@ -30,6 +30,27 @@ void half_duplex( StreamIn& in, StreamOut& out
     }
 }
 
+template<class StreamIn, class StreamOut>
+inline
+void half_duplex(StreamIn in, StreamOut out, asio::yield_context yield)
+{
+    assert(&in.get_io_service() == &out.get_io_service());
+
+    WatchDog wdog( in.get_io_service()
+                 , half_duplex_timeout
+                 , [&] { in.close(); out.close(); });
+
+    WaitCondition wait_condition(in.get_io_service());
+
+    asio::spawn
+        ( yield
+        , [&, lock = wait_condition.lock()](asio::yield_context yield) {
+              half_duplex(in, out, wdog, yield);
+          });
+
+    wait_condition.wait(yield);
+}
+
 template<class Stream1, class Stream2>
 inline
 void full_duplex(Stream1 c1, Stream2 c2, asio::yield_context yield)
