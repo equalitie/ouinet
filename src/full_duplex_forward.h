@@ -10,9 +10,9 @@ namespace ouinet {
 static const auto half_duplex_timeout = std::chrono::seconds(60);
 
 // Low-level, one-direction operation.
-template<class Stream1, class Stream2>
+template<class StreamIn, class StreamOut>
 inline
-void half_duplex( Stream1& in, Stream2& out
+void half_duplex( StreamIn& in, StreamOut& out
                 , WatchDog& wdog
                 , asio::yield_context& yield)
 {
