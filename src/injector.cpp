@@ -507,6 +507,45 @@ public:
         return keep_alive;
     }
 
+    // This gets whatever is considered a valid response from `origin_c`
+    // and leaves any read but unused input in `buffer`.
+    template<class Rs, class DynamicBuffer>
+    Rs fetch_fresh( const Request& rq_
+                  , Connection& origin_c, DynamicBuffer& buffer
+                  , Cancel& cancel, Yield yield) {
+        sys::error_code ec;
+
+        auto cancel_slot = cancel.connect([&] {
+            origin_c.close();
+        });
+
+        Request rq = util::to_origin_request(rq_);
+        rq.keep_alive(true);
+
+        // Send request
+        http::async_write(origin_c, rq, yield[ec].tag("request"));
+
+        if (!ec && cancel_slot) {
+            ec = asio::error::operation_aborted;
+        }
+        if (ec) return or_throw<Rs>(yield, ec);
+
+        // Receive response
+        Rs ret;
+        http::async_read(origin_c, buffer, ret, yield[ec].tag("response"));
+
+        if (!ec && cancel_slot) {
+            ec = asio::error::operation_aborted;
+        }
+        if (ec) return or_throw<Rs>(yield, ec, std::move(ret));
+
+        // Prevent others from inserting ouinet specific header fields.
+        ret = util::remove_ouinet_fields(move(ret));
+
+        return ret;
+    }
+
+    // This gets a full response and handles origin connection and buffering.
     Response fetch_fresh(const Request& rq_, Cancel& cancel, Yield yield) {
         sys::error_code ec;
 
@@ -522,39 +561,14 @@ public:
             connection = origin_pools.wrap(std::move(stream));
         }
 
-        auto cancel_slot = cancel.connect([&] {
-            connection.close();
-        });
-
-        Request rq = util::to_origin_request(rq_);
-        rq.keep_alive(true);
-
-        // Send request
-        http::async_write(connection, rq, yield[ec].tag("request"));
-
-        if (!ec && cancel_slot) {
-            ec = asio::error::operation_aborted;
-        }
-        if (ec) return or_throw<Response>(yield, ec);
-
-        // Receive response
-        Response ret;
         beast::flat_buffer buffer;
-        http::async_read(connection, buffer, ret, yield[ec].tag("response"));
-
-        if (!ec && cancel_slot) {
-            ec = asio::error::operation_aborted;
-        }
+        auto ret = fetch_fresh<Response>(rq_, connection, buffer, cancel, yield[ec]);
         if (ec) return or_throw<Response>(yield, ec, std::move(ret));
-
-        // Prevent others from inserting ouinet specific header fields.
-        ret = util::remove_ouinet_fields(move(ret));
 
         if (ret.keep_alive() && rq_.keep_alive()) {
             origin_pools.insert_connection(rq_, move(connection));
         }
 
-        // Prevent origin from inserting ouinet specific header fields.
         return ret;
     }
 
