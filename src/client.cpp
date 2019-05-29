@@ -135,7 +135,7 @@ private:
 
     Response fetch_fresh_through_connect_proxy(const Request&, Cancel&, Yield);
 
-    Response fetch_fresh_through_simple_proxy( const Request&
+    Response fetch_fresh_through_simple_proxy( Request
                                              , bool can_inject
                                              , Cancel& cancel
                                              , Yield);
@@ -313,25 +313,38 @@ Response Client::State::fetch_fresh_from_origin(const Request& rq, Yield yield)
                       , default_timeout::fetch_http()
                       , [&] { cancel(); });
 
-    auto con = _origin_pools.get_connection(rq);
-
     sys::error_code ec;
 
-    if (!con) {
+    auto maybe_con = _origin_pools.get_connection(rq);
+    OriginPools::Connection con;
+    if (maybe_con) {
+        con = std::move(*maybe_con);
+    } else {
         auto stream = connect_to_origin(rq, cancel, yield[ec]);
 
         if (!ec && cancel) ec = asio::error::timed_out;
         if (ec) return or_throw<Response>(yield, ec);
 
-        con.reset(new ConnectionPool<>::Connection(move(stream), boost::none));
+        con = _origin_pools.wrap(std::move(stream));
     }
 
     // Transform request from absolute-form to origin-form
     // https://tools.ietf.org/html/rfc7230#section-5.3
     auto rq_ = util::req_form_from_absolute_to_origin(rq);
 
-    auto res = con->request(rq_, cancel, yield[ec]);
+    // Send request
+    http::async_write(con, rq_, yield[ec].tag("origin-request"));
 
+    if (ec) return or_throw<Response>(yield, ec);
+
+    // Receive response
+    Response res;
+    beast::flat_buffer buffer;
+    http::async_read(con, buffer, res, yield[ec].tag("origin-response"));
+
+    if (ec) return or_throw<Response>(yield, ec, std::move(res));
+
+    // Store keep-alive connections in connection pool
     if (!ec && res.keep_alive()) {
         _origin_pools.insert_connection(rq, move(con));
     }
@@ -431,46 +444,59 @@ Response Client::State::fetch_fresh_through_connect_proxy( const Request& rq
 }
 //------------------------------------------------------------------------------
 Response Client::State::fetch_fresh_through_simple_proxy
-        ( const Request& request
+        ( Request request
         , bool can_inject
         , Cancel& cancel
         , Yield yield)
 {
-    // Connect to the injector.
     sys::error_code ec;
 
-    using Con = ConnectionPool<std::string>::Connection;
-
-    unique_ptr<Con> con = _injector_connections.pop_front();
-
-    if (!con) {
-        auto c = _injector->connect
-            (yield[ec].tag("connect_to_injector2"), cancel);
+    // Connect to the injector.
+    ConnectionPool<std::string>::Connection con;
+    if (_injector_connections.empty()) {
+        auto c = _injector->connect(yield[ec].tag("connect_to_injector2"), cancel);
 
         if (ec) return or_throw<Response>(yield, ec);
 
-        con = make_unique<Con>( move(c.connection)
-                              , move(c.remote_endpoint) );
+        con = _injector_connections.wrap(std::move(c.connection));
+        *con = c.remote_endpoint;
+    } else {
+        con = _injector_connections.pop_front();
     }
 
+    auto cancel_slot = cancel.connect([&] {
+        con.close();
+    });
+
     // Build the actual request to send to the injector.
-    Request injreq = request;
+    if (auto credentials = _config.credentials_for(*con))
+        request = authorize(request, *credentials);
 
-    if (auto credentials = _config.credentials_for(con->aux))
-        injreq = authorize(injreq, *credentials);
+    if (can_inject) {
+        bool keepalive = request.keep_alive();
+        request = util::to_injector_request(move(request));
+        request.keep_alive(keepalive);
+    }
 
-    if (can_inject)
-        injreq = util::to_injector_request(move(injreq));
+    // Send request
+    http::async_write(con, request, yield[ec].tag("inj-request"));
 
-    injreq.keep_alive(request.keep_alive());
+    if (!ec && cancel_slot) {
+        ec = asio::error::operation_aborted;
+    }
+    if (ec) return or_throw<Response>(yield, ec);
 
-    // Send the request to the injector/proxy.
-    auto res = con->request( injreq
-                           , cancel
-                           , yield[ec].tag("inj-request"));
+    // Receive response
+    Response res;
+    beast::flat_buffer buffer;
+    http::async_read(con, buffer, res, yield[ec].tag("inj-response"));
 
-    if (ec) return or_throw(yield, ec, move(res));
+    if (!ec && cancel_slot) {
+        ec = asio::error::operation_aborted;
+    }
+    if (ec) return or_throw<Response>(yield, ec, std::move(res));
 
+    // Store keep-alive connections in connection pool
     if (res.keep_alive()) {
         _injector_connections.push_back(std::move(con));
     }

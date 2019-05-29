@@ -100,6 +100,12 @@ add_executable(test-logger "test_logger.cpp"
 target_link_libraries(test-logger ${Boost_LIBRARIES})
 
 ######################################################################
+add_executable(test-connection-pool "test-connection-pool.cpp"
+                                    "../src/asio.cpp")
+
+target_link_libraries(test-connection-pool ${Boost_LIBRARIES})
+
+######################################################################
 add_executable(test-oui-server "ouiservice-server.cpp"
                                "../src/asio.cpp"
                                "../src/logger.cpp"

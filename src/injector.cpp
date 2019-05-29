@@ -263,19 +263,17 @@ struct InjectorCacheControl {
     using Connection = OriginPools::Connection;
 
 public:
-    unique_ptr<Connection> connect( asio::io_service& ios
-                                  , const Request& rq
-                                  , Cancel& cancel
-                                  , Yield yield)
+    GenericStream connect( asio::io_service& ios
+                         , const Request& rq
+                         , Cancel& cancel
+                         , Yield yield)
     {
-        using ConP = unique_ptr<Connection>;
-
         // Parse the URL to tell HTTP/HTTPS, host, port.
         util::url_match url;
 
         if (!util::match_http_url(rq.target(), url)) {
-            return or_throw<ConP>( yield
-                                 , asio::error::operation_not_supported);
+            return or_throw<GenericStream>( yield
+                                          , asio::error::operation_not_supported);
         }
 
         sys::error_code ec;
@@ -283,31 +281,24 @@ public:
         // Resolve target endpoint and check its validity.
         TcpLookup lookup = resolve_target(rq, ios, cancel, yield[ec]);
 
-        if (ec) return or_throw<ConP>(yield, ec);
+        if (ec) return or_throw<GenericStream>(yield, ec);
 
         auto socket = connect_to_host( lookup
                                      , ios
                                      , cancel
                                      , yield[ec]);
 
-        if (ec) return or_throw<ConP>(yield, ec);
-
-        GenericStream stream;
+        if (ec) return or_throw<GenericStream>(yield, ec);
 
         if (url.scheme == "https") {
-            stream = ssl::util::client_handshake( move(socket)
-                                                , ssl_ctx
-                                                , url.host
-                                                , cancel
-                                                , yield[ec]);
-
-            if (ec) return or_throw<ConP>(yield, ec);
+            return ssl::util::client_handshake( move(socket)
+                                              , ssl_ctx
+                                              , url.host
+                                              , cancel
+                                              , yield[ec]);
+        } else {
+            return GenericStream(move(socket));
         }
-        else {
-            stream = move(socket);
-        }
-
-        return std::make_unique<Connection>(move(stream), boost::none);
     }
 
     // TODO: Replace this with cancellation support in which fetch_ operations
@@ -519,19 +510,42 @@ public:
     Response fetch_fresh(const Request& rq_, Cancel& cancel, Yield yield) {
         sys::error_code ec;
 
-        auto connection = origin_pools.get_connection(rq_);
+        auto maybe_connection = origin_pools.get_connection(rq_);
+        OriginPools::Connection connection;
+        if (maybe_connection) {
+            connection = std::move(*maybe_connection);
+        } else {
+            auto stream = connect(ios, rq_, cancel, yield[ec].tag("connect"));
 
-        if (!connection) {
-            connection = connect(ios, rq_, cancel, yield[ec].tag("connect"));
+            if (ec) return or_throw<Response>(yield, ec);
+
+            connection = origin_pools.wrap(std::move(stream));
         }
 
-        if (ec) return or_throw<Response>(yield, ec);
+        auto cancel_slot = cancel.connect([&] {
+            connection.close();
+        });
 
         Request rq = util::to_origin_request(rq_);
         rq.keep_alive(true);
-        Response ret = connection->request(rq, cancel, yield[ec].tag("request"));
 
+        // Send request
+        http::async_write(connection, rq, yield[ec].tag("request"));
+
+        if (!ec && cancel_slot) {
+            ec = asio::error::operation_aborted;
+        }
         if (ec) return or_throw<Response>(yield, ec);
+
+        // Receive response
+        Response ret;
+        beast::flat_buffer buffer;
+        http::async_read(connection, buffer, ret, yield[ec].tag("response"));
+
+        if (!ec && cancel_slot) {
+            ec = asio::error::operation_aborted;
+        }
+        if (ec) return or_throw<Response>(yield, ec, std::move(ret));
 
         // Prevent others from inserting ouinet specific header fields.
         ret = util::remove_ouinet_fields(move(ret));

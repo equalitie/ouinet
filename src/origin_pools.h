@@ -1,6 +1,7 @@
 #pragma once
 
 #include "connection_pool.h"
+#include <boost/optional.hpp>
 
 namespace ouinet {
 
@@ -12,39 +13,44 @@ public:
     struct PoolId {
         bool is_ssl;
         std::string host;
-    
+
         bool operator<(const PoolId& other) const {
             return tie(is_ssl, host) < tie(other.is_ssl, other.host);
         }
     };
 
-    using Connection = ConnectionPool<>::Connection;
+    using Connection = ConnectionPool<bool>::Connection;
 
 public:
-    std::unique_ptr<Connection> get_connection(const RequestHdr& rq);
+    static Connection wrap(GenericStream connection)
+    {
+        return ConnectionPool<bool>::wrap(std::move(connection));
+    }
 
-    void insert_connection(const RequestHdr& rq, std::unique_ptr<Connection>);
+    boost::optional<Connection> get_connection(const RequestHdr& rq);
+
+    void insert_connection(const RequestHdr& rq, Connection);
 
 private:
     boost::optional<PoolId> make_pool_id(const RequestHdr& hdr);
 
 private:
-    std::map<PoolId, ConnectionPool<>> _pools;
+    std::map<PoolId, ConnectionPool<bool>> _pools;
 };
 
 inline
-std::unique_ptr<OriginPools::Connection>
+boost::optional<OriginPools::Connection>
 OriginPools::get_connection(const RequestHdr& rq)
 {
     auto opt_pool_id = make_pool_id(rq);
 
     assert(opt_pool_id);
 
-    if (!opt_pool_id) return nullptr;
-    
+    if (!opt_pool_id) return boost::none;
+
     auto pool_i = _pools.find(*opt_pool_id);
 
-    if (pool_i == _pools.end()) return nullptr;
+    if (pool_i == _pools.end()) return boost::none;
 
     auto ret = pool_i->second.pop_front();
 
@@ -57,11 +63,8 @@ OriginPools::get_connection(const RequestHdr& rq)
 
 inline
 void
-OriginPools::insert_connection( const RequestHdr& rq
-                              , std::unique_ptr<Connection> con)
+OriginPools::insert_connection(const RequestHdr& rq, Connection con)
 {
-    if (!con) return;
-
     auto opt_pool_id = make_pool_id(rq);
 
     assert(opt_pool_id);
@@ -80,9 +83,9 @@ OriginPools::make_pool_id(const RequestHdr& hdr)
     assert(!host.empty());
 
     if (host.empty()) return boost::none;
-    
+
     bool is_ssl = hdr.target().starts_with("https:");
-    
+
     // TODO: Can we avoid converting to string?
     return PoolId{is_ssl, host.to_string()};
 }

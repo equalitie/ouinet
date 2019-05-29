@@ -1,164 +1,332 @@
 #pragma once
 
-#include <boost/intrusive/list.hpp>
-#include <boost/optional.hpp>
+#include <boost/asio/post.hpp>
 #include "generic_stream.h"
-#include "util/condition_variable.h"
-#include "util/signal.h"
-#include "or_throw.h"
-#include "defer.h"
+#include "util/unique_function.h"
 
 namespace ouinet {
 
-template<class Aux = boost::none_t>
-class ConnectionPool {
-    using Request  = http::request<http::string_body>;
-    using Response = http::response<http::dynamic_body>;
-
-    using ListHook = boost::intrusive::list_base_hook
-        <boost::intrusive::link_mode<boost::intrusive::auto_unlink>>;
-
-    template<class T>
-    using List = boost::intrusive::list
-        <T, boost::intrusive::constant_time_size<false>>;
-
+/*
+ * An IdleConnection wraps a GenericStream, and can be put in  "idle mode".
+ * While in idle mode, the underlying stream is not allowed to become readable;
+ * if it does, an error callback function is triggered.
+ */
+template<class StoredValue>
+class IdleConnection {
     public:
-    struct Connection : public ListHook {
-        public:
-        Connection(GenericStream stream, Aux aux)
-            : aux(std::move(aux))
-            , _stream(std::move(stream))
-            , _cv(_stream.get_io_service())
-            , _was_destroyed(std::make_shared<bool>(false))
-        {
-            asio::spawn(_stream.get_io_service(),
-                [&, wd = _was_destroyed] (asio::yield_context yield) {
-                    beast::flat_buffer buffer;
-                    sys::error_code ec;
+    IdleConnection() {}
 
-                    while (!ec) {
-                        Response res;
-                        http::async_read(_stream, buffer, res, yield[ec]);
+    IdleConnection(GenericStream&& connection):
+        _data(std::make_unique<Data>())
+    {
+        _data->connection = std::move(connection);
+        _data->was_destroyed = std::make_shared<bool>(false);
+        _data->pending_idle_read = false;
+        _data->read_queued = false;
+    }
 
-                        if (*wd) return;
+    ~IdleConnection()
+    {
+        if (_data) {
+            *_data->was_destroyed = true;
 
-                        if (!_is_requesting && !ec) {
-                            std::cerr << "Remote sent a response without "
-                                      << " us requesting anything: " << std::endl
-                                      << res;
-                            assert(0);
-                        }
-
-                        // This likely means that the sender did not calculate
-                        // the content size properly or there is some problem
-                        // with the transport.
-                        // TODO: It does happen occasionally, even when the
-                        // transport is simple TCP. Try to uncomment it and
-                        // find out what the culprit is.
-                        //assert(ec != http::error::bad_version);
-
-                        if (!_is_requesting) break;
-
-                        _res = std::move(res);
-                        _cv.notify(ec);
-                    }
-
-                    _stream.close();
-                    _self.reset();
+            if (_data->read_callback) {
+                asio::post(_data->connection.get_io_service(), [
+                    handler = std::move(_data->read_callback)
+                ] () mutable {
+                    handler(asio::error::operation_aborted, 0);
                 });
+            }
+        }
+    }
+
+    IdleConnection(const IdleConnection&) = delete;
+    IdleConnection& operator=(const IdleConnection&) = delete;
+
+    IdleConnection(IdleConnection&&) = default;
+    IdleConnection& operator=(IdleConnection&&) = default;
+
+    StoredValue& operator*()
+    {
+        return _data->value;
+    }
+
+    boost::asio::io_context::executor_type get_executor()
+    {
+        return _data->connection.get_executor();
+    }
+
+    boost::asio::io_context& get_io_service()
+    {
+        return _data->connection.get_io_service();
+    }
+
+    void close()
+    {
+        _data->connection.close();
+    }
+
+    template<typename ConstBufferSequence, typename CompletionToken>
+    BOOST_ASIO_INITFN_RESULT_TYPE(CompletionToken, void(sys::error_code, std::size_t))
+    async_write_some(const ConstBufferSequence& buffers, CompletionToken&& token)
+    {
+        return _data->connection.async_write_some(buffers, std::move(token));
+    }
+
+    template<typename MutableBufferSequence, typename CompletionToken>
+    BOOST_ASIO_INITFN_RESULT_TYPE(CompletionToken, void(sys::error_code, std::size_t))
+    async_read_some(const MutableBufferSequence& buffers, CompletionToken&& token)
+    {
+        assert(!_data->on_idle_read);
+
+        bool empty = true;
+        unsigned char* byte_buffer = nullptr;
+        for (auto it = asio::buffer_sequence_begin(buffers); it != asio::buffer_sequence_end(buffers); ++it) {
+            if (it->size() > 0) {
+                empty = false;
+                byte_buffer = (unsigned char*)it->data();
+                break;
+            }
         }
 
-        Connection(const Connection&) = delete;
-        Connection(Connection&&) = delete;
+        if (empty) {
+            // An operation with a zero-length buffer gets completed immediately.
 
-        Response request(Request rq, Cancel& cancel, asio::yield_context yield)
-        {
-            assert(!_is_requesting);
-            assert(!_res);
+            boost::asio::async_completion<
+                CompletionToken,
+                void(sys::error_code, std::size_t)
+            > completion(token);
 
-            if (cancel.call_count())
-                return or_throw<Response>(yield, asio::error::operation_aborted);
+            asio::post(_data->connection.get_io_service(), [
+                handler = std::move(completion.completion_handler)
+            ] () mutable {
+                handler(sys::error_code(), 0);
+            });
 
-            _is_requesting = true;
-            auto on_exit = defer([&] { _is_requesting = false; });
+            return completion.result.get();
+        }
 
-            if (!_stream.has_implementation()) {
-                return or_throw<Response>(yield, asio::error::bad_descriptor);
+        if (_data->read_callback) {
+            // Cannot support multiple simultaneous requests.
+
+            boost::asio::async_completion<
+                CompletionToken,
+                void(sys::error_code, std::size_t)
+            > completion(token);
+
+            asio::post(_data->connection.get_io_service(), [
+                handler = std::move(completion.completion_handler)
+            ] () mutable {
+                handler(asio::error::already_started, 0);
+            });
+
+            return completion.result.get();
+        }
+
+        /*
+         * Three cases are possible:
+         * - An idle read has completed before this read request got started, and we can
+         *   fulfil this request immediately;
+         * - An idle read is still pending, in which case we queue up this read request;
+         * - No idle read is involved and we can pass along this read request directly.
+         */
+
+        if (_data->read_queued) {
+            assert(!_data->pending_idle_read);
+            _data->read_queued = false;
+
+            size_t read = 0;
+            if (!_data->queued_read_error) {
+                *byte_buffer = _data->queued_read_buffer;
+                read = 1;
             }
 
-            auto wd = _was_destroyed;
+            boost::asio::async_completion<
+                CompletionToken,
+                void(sys::error_code, std::size_t)
+            > completion(token);
 
-            auto cancel_slot = cancel.connect([&] { _stream.close(); });
+            asio::post(_data->connection.get_io_service(), [
+                handler = std::move(completion.completion_handler),
+                read,
+                ec = _data->queued_read_error
+            ] () mutable {
+                handler(ec, read);
+            });
 
-            sys::error_code ec;
-            http::async_write(_stream, rq, yield[ec]);
-
-            if (!ec && (*wd || cancel.call_count()))
-                    ec = asio::error::operation_aborted;
-
-            if (ec) return or_throw<Response>(yield, ec);
-
-            if (!_res) _cv.wait(yield[ec]);
-
-            if (!ec && (*wd || cancel.call_count()))
-                ec = asio::error::operation_aborted;
-
-            if (ec) return or_throw<Response>(yield, ec);
-
-            auto ret = std::move(*_res);
-            _res = boost::none;
-            return ret;
+            return completion.result.get();
         }
 
-        ~Connection()
-        {
-            *_was_destroyed = true;
+        if (_data->pending_idle_read) {
+            _data->read_buffer = byte_buffer;
+
+            boost::asio::async_completion<
+                CompletionToken,
+                void(sys::error_code, std::size_t)
+            > completion(token);
+
+            _data->read_callback = [
+                handler = std::move(completion.completion_handler)
+            ] (sys::error_code ec, std::size_t read) mutable {
+                handler(ec, read);
+            };
+
+            return completion.result.get();
         }
 
-        void close() {
-            _stream.close();
-        }
-
-        void* id() const { return _stream.id(); }
-
-        // Auxilliary data per stream.
-        Aux aux;
-
-        private:
-        friend class ConnectionPool;
-        bool _is_requesting = false;
-        GenericStream _stream;
-        ConditionVariable _cv;
-        boost::optional<Response> _res;
-        std::shared_ptr<bool> _was_destroyed;
-
-        // Keep `this` from destruction while in the pool.
-        std::unique_ptr<Connection> _self;
-    };
-
-    public:
-    void push_back(std::unique_ptr<Connection> c)
-    {
-        assert(c);
-        //TODO: This shouldn't happen, but does
-        //assert(c->_stream.has_implementation());
-        if (!c->_stream.has_implementation()) return;
-        _connections.push_back(*c);
-        c->_self = std::move(c);
+        return _data->connection.async_read_some(buffers, std::move(token));
     }
 
-    std::unique_ptr<Connection> pop_front()
+    void make_idle(std::function<void()> on_idle_read)
     {
-        if (_connections.empty()) return nullptr;
-        auto& front = _connections.front();
-        _connections.pop_front();
-        return std::move(front._self);
+        assert(!_data->read_callback);
+
+        assert(!_data->on_idle_read);
+        _data->on_idle_read = std::move(on_idle_read);
+
+        if (_data->read_queued) {
+            auto handler = std::move(_data->on_idle_read);
+            handler();
+            return;
+        }
+
+        if (_data->pending_idle_read) {
+            return;
+        }
+
+        _data->pending_idle_read = true;
+        _data->connection.async_read_some(
+            boost::asio::mutable_buffer(&_data->queued_read_buffer, 1), [
+                data = _data.get(),
+                was_destroyed = _data->was_destroyed
+            ] (sys::error_code ec, size_t read) {
+                if (*was_destroyed) {
+                    return;
+                }
+
+                /*
+                 * Three cases are possible:
+                 * - Connection is in idle mode, which makes this read unexpected;
+                 * - Connection is not in idle mode, and there is a read request queued
+                 *   to which we can forward the data;
+                 * - Connection is not in idle mode and there is no read request queued.
+                 *   Store the data for later and use it to complete the next request.
+                 */
+
+                assert(data->pending_idle_read);
+                data->pending_idle_read = false;
+
+                assert(!data->read_queued);
+
+                if (data->on_idle_read) {
+                    auto handler = std::move(data->on_idle_read);
+                    handler();
+                    return;
+                }
+
+                if (data->read_callback) {
+                    if (read > 0) {
+                        *data->read_buffer = data->queued_read_buffer;
+                    }
+
+                    asio::post(data->connection.get_io_service(), [
+                        handler = std::move(data->read_callback),
+                        ec,
+                        read
+                    ] () mutable {
+                        handler(ec, read);
+                    });
+
+                    return;
+                }
+
+                data->queued_read_error = ec;
+                data->read_queued = true;
+            }
+        );
     }
 
-    bool empty() const { return _connections.empty(); }
+    void make_not_idle()
+    {
+        assert(_data->on_idle_read);
+        _data->on_idle_read = nullptr;
+    }
 
     private:
-    List<Connection> _connections;
+    struct Data {
+        GenericStream connection;
+        StoredValue value;
+        std::shared_ptr<bool> was_destroyed;
+
+        /*
+        * If set, the connection is idle, and read() returning is an error.
+        */
+        std::function<void()> on_idle_read;
+        /*
+        * True iff we are waiting on a read started while the connection was idle.
+        */
+        bool pending_idle_read;
+
+        /*
+        * Set when async_read_some() is invoked while the idle read call is still pending.
+        */
+        util::unique_function<void(sys::error_code, std::size_t)> read_callback;
+        unsigned char* read_buffer;
+
+        /*
+        * Set when the idle read returns in anticipation of a future async_read_some() call.
+        */
+        bool read_queued;
+        unsigned char queued_read_buffer;
+        sys::error_code queued_read_error;
+    };
+    std::unique_ptr<Data> _data;
+};
+
+template<class StoredValue>
+class ConnectionPool {
+    public:
+    typedef IdleConnection<StoredValue> Connection;
+
+    static Connection wrap(GenericStream connection)
+    {
+        return Connection(std::move(connection));
+    }
+
+    void push_back(Connection connection)
+    {
+        _connections.push_back(std::move(connection));
+
+        typename std::list<Connection>::iterator it = _connections.end();
+        --it;
+        /*
+         * Callback may be called during make_idle().
+         * This is important, for the connection might be disqualified immediately.
+         */
+        it->make_idle([this, it] {
+            it->close();
+            _connections.erase(it);
+        });
+    }
+
+    Connection pop_front()
+    {
+        assert(!_connections.empty());
+
+        Connection connection = std::move(_connections.front());
+        _connections.pop_front();
+        connection.make_not_idle();
+
+        return connection;
+    }
+
+    bool empty() const
+    {
+        return _connections.empty();
+    }
+
+    private:
+    std::list<Connection> _connections;
 };
 
 } // namespace
