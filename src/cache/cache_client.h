@@ -27,6 +27,7 @@ public:
     // constructing asio_ipfs::node takes some time.
     static std::unique_ptr<CacheClient>
     build ( boost::asio::io_service&
+          , std::unique_ptr<bittorrent::MainlineDht> bt_dht
           , boost::optional<util::Ed25519PublicKey> bt_pubkey
           , fs::path path_to_repo
           , bool autoseed_updated
