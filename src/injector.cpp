@@ -263,8 +263,7 @@ struct InjectorCacheControl {
     using Connection = OriginPools::Connection;
 
 public:
-    GenericStream connect( asio::io_service& ios
-                         , const Request& rq
+    GenericStream connect( const Request& rq
                          , Cancel& cancel
                          , Yield yield)
     {
@@ -554,7 +553,7 @@ public:
         if (maybe_connection) {
             connection = std::move(*maybe_connection);
         } else {
-            auto stream = connect(ios, rq_, cancel, yield[ec].tag("connect"));
+            auto stream = connect(rq_, cancel, yield[ec].tag("connect"));
 
             if (ec) return or_throw<Response>(yield, ec);
 
