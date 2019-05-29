@@ -213,9 +213,9 @@ std::string dht::NodeContact::to_string() const
 }
 
 
-dht::DhtNode::DhtNode(asio::io_service& ios, ip::address interface_address):
+dht::DhtNode::DhtNode(asio::io_service& ios, udp::endpoint local_endpoint):
     _ios(ios),
-    _interface_address(interface_address),
+    _local_endpoint(local_endpoint),
     _ready(false),
     _stats(new Stats())
 {
@@ -226,8 +226,9 @@ void dht::DhtNode::start(asio::yield_context yield)
     sys::error_code ec;
 
     _multiplexer = std::make_unique<UdpMultiplexer>(
-            asio_utp::udp_multiplexer(_ios
-                                     , udp::endpoint(_interface_address, 0)));
+            asio_utp::udp_multiplexer(_ios, _local_endpoint));
+
+    _local_endpoint = _multiplexer->local_endpoint();
 
     _tracker = std::make_unique<Tracker>(_ios);
     _data_store = std::make_unique<DataStore>(_ios);
@@ -2225,25 +2226,31 @@ MainlineDht::~MainlineDht()
     _cancel();
 }
 
-void MainlineDht::set_interfaces(const std::vector<asio::ip::address>& addresses)
+void MainlineDht::set_endpoints(const std::set<udp::endpoint>& eps)
 {
-    std::set<asio::ip::address> addresses_used;
-    addresses_used.insert(addresses.begin(), addresses.end());
-
+    // Remove nodes whose address is not listed in `eps`
     for (auto it = _nodes.begin(); it != _nodes.end(); ) {
-        if (addresses_used.count(it->first)) {
+        if (eps.count(it->first)) {
             ++it;
         } else {
             it = _nodes.erase(it);
         }
     }
 
-    for (asio::ip::address address : addresses_used) {
-        if (!_nodes.count(address)) {
-            asio::spawn(_ios, [&, address] (asio::yield_context yield) mutable {
-                _nodes[address] = std::make_unique<dht::DhtNode>(_ios, address);
+    for (auto ep : eps) {
+        if (!_nodes.count(ep)) {
+            asio::spawn(_ios, [&, ep] (asio::yield_context yield) mutable {
+                auto n = std::make_unique<dht::DhtNode>(_ios, ep);
+
+                // `local_ep` may be different to `ep` because `ep` could have
+                // had 0 for the port.
+                auto local_ep = n->local_endpoint();
                 sys::error_code ec;
-                _nodes[address]->start(yield[ec]);
+                n->start(yield[ec]);
+
+                if (!ec) {
+                    _nodes[local_ep] = move(n);
+                }
             });
         }
     }

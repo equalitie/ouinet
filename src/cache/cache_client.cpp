@@ -63,7 +63,7 @@ CacheClient::build( asio::io_service& ios
 
     auto bt_dht = make_unique<bt::MainlineDht>(ios);
 
-    bt_dht->set_interfaces({asio::ip::address_v4::any()});
+    bt_dht->set_endpoints({{asio::ip::address_v4::any(), 0}});
 
     unique_ptr<Bep44ClientIndex> bep44_index;
 

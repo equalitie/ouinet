@@ -52,6 +52,8 @@ public:
     // the coroutine that runs this function exits (whichever comes first).
     const boost::string_view receive(udp::endpoint& from, Cancel&, asio::yield_context);
 
+    udp::endpoint local_endpoint() const { return _socket.local_endpoint(); }
+
     ~UdpMultiplexer();
 
 private:

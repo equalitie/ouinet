@@ -169,14 +169,16 @@ int main(int argc, const char** argv)
     }
 
     vector<asio::ip::address> ifaddrs;
+    set<asio::ip::udp::endpoint> endpoints;
 
     parse_args(args, &ifaddrs);
 
     for (auto addr : ifaddrs) {
         std::cout << "Spawning DHT node on " << addr << std::endl;
+        endpoints.insert({addr, 0});
     }
 
-    dht->set_interfaces(ifaddrs);
+    dht->set_endpoints(endpoints);
 
     asio::spawn(ios, [&] (asio::yield_context yield) {
         using namespace std::chrono;
