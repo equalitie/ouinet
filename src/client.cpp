@@ -433,7 +433,7 @@ Response Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     // TODO: move
     auto rq_ = util::req_form_from_absolute_to_origin(rq);
 
-    auto res = fetch_http<http::dynamic_body>(_ios, con, rq_, cancel, yield[ec]);
+    auto res = fetch_http<http::dynamic_body>(con, rq_, cancel, yield[ec]);
 
     if (!ec) {
         // Prevent others from inserting ouinet headers.

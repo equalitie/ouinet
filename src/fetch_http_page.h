@@ -24,8 +24,7 @@ namespace ouinet {
 template<class ResponseBodyType, class RequestType>
 inline
 http::response<ResponseBodyType>
-fetch_http( asio::io_service& ios
-          , GenericStream& con
+fetch_http( GenericStream& con
           , RequestType req
           , Signal<void()>& abort_signal
           , Yield yield_)
@@ -81,7 +80,7 @@ fetch_http( asio::io_service& ios
         , timeout
         , [&] (auto& abort_signal, auto yield) {
               return fetch_http<ResponseBodyType>
-                (ios, con, req, abort_signal, yield);
+                (con, req, abort_signal, yield);
           }
         , yield);
 }
