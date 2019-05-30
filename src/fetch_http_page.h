@@ -5,7 +5,6 @@
 #include <boost/asio/spawn.hpp>
 
 #include "or_throw.h"
-#include "generic_stream.h"
 #include "util/signal.h"
 #include "util/timeout.h"
 #include "util/yield.h"
@@ -22,10 +21,10 @@ namespace ouinet {
 // *as is* and return the HTTP response or just its head
 // depending on the expected `ResponseType`.
 // Read but unused data may be left at the `buffer`.
-template<class ResponseBodyType, class RequestType, class DynamicBuffer>
+template<class ResponseBodyType, class Stream, class RequestType, class DynamicBuffer>
 inline
 http::response<ResponseBodyType>
-fetch_http( GenericStream& con
+fetch_http( Stream& con
           , DynamicBuffer& buffer
           , RequestType req
           , Signal<void()>& abort_signal
@@ -68,10 +67,10 @@ fetch_http( GenericStream& con
     return or_throw(yield, ec, move(res));
 }
 
-template<class ResponseBodyType, class RequestType>
+template<class ResponseBodyType, class Stream, class RequestType>
 inline
 http::response<ResponseBodyType>
-fetch_http( GenericStream& con
+fetch_http( Stream& con
           , RequestType req
           , Signal<void()>& abort_signal
           , Yield yield_)
@@ -80,11 +79,11 @@ fetch_http( GenericStream& con
     return fetch_http<ResponseBodyType>(con, buffer, req, abort_signal, yield_);
 }
 
-template<class ResponseBodyType, class Duration, class RequestType>
+template<class ResponseBodyType, class Stream, class Duration, class RequestType>
 inline
 http::response<ResponseBodyType>
 fetch_http( asio::io_service& ios
-          , GenericStream& con
+          , Stream& con
           , RequestType req
           , Duration timeout
           , Signal<void()>& abort_signal
@@ -101,9 +100,10 @@ fetch_http( asio::io_service& ios
         , yield);
 }
 
+template<class Stream>
 inline
 void
-_recv_http_response( GenericStream& con
+_recv_http_response( Stream& con
                    , beast::flat_buffer& buffer
                    , http::response<http::dynamic_body>& res
                    , asio::yield_context yield)
@@ -111,9 +111,10 @@ _recv_http_response( GenericStream& con
     http::async_read(con, buffer, res, yield);
 }
 
+template<class Stream>
 inline
 void
-_recv_http_response( GenericStream& con
+_recv_http_response( Stream& con
                    , beast::flat_buffer& buffer
                    , http::response<http::empty_body>& res
                    , asio::yield_context yield)
