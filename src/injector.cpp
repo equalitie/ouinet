@@ -512,31 +512,13 @@ public:
     Rs fetch_fresh( const Request& rq_
                   , Connection& origin_c, DynamicBuffer& buffer
                   , Cancel& cancel, Yield yield) {
-        sys::error_code ec;
-
-        auto cancel_slot = cancel.connect([&] {
-            origin_c.close();
-        });
-
         Request rq = util::to_origin_request(rq_);
         rq.keep_alive(true);
 
-        // Send request
-        http::async_write(origin_c, rq, yield[ec].tag("request"));
-
-        if (!ec && cancel_slot) {
-            ec = asio::error::operation_aborted;
-        }
-        if (ec) return or_throw<Rs>(yield, ec);
-
-        // Receive response
-        Rs ret;
-        http::async_read(origin_c, buffer, ret, yield[ec].tag("response"));
-
-        if (!ec && cancel_slot) {
-            ec = asio::error::operation_aborted;
-        }
-        if (ec) return or_throw<Rs>(yield, ec, std::move(ret));
+        sys::error_code ec;
+        auto ret = fetch_http<typename Rs::body_type>( origin_c, buffer, rq
+                                                     , cancel, yield[ec].tag("fetch"));
+        return_or_throw_on_error(yield, cancel, ec, Rs());
 
         // Prevent others from inserting ouinet specific header fields.
         ret = util::remove_ouinet_fields(move(ret));
