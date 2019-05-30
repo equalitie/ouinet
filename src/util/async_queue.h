@@ -130,12 +130,24 @@ public:
         return or_throw<size_t>(yield, ec, 0);
     }
 
+    T& back() {
+        assert(!_queue.empty());
+        return _queue.back().first;
+    }
+
+    void pop() {
+        assert(!_queue.empty());
+        _queue.pop();
+        _tx_cv.notify();
+    }
+
     ~AsyncQueue()
     {
         _destroy_signal();
     }
 
     size_t size() const { return _queue.size(); }
+    bool empty() const { return _queue.empty(); }
 
 private:
     asio::io_service& _ios;
