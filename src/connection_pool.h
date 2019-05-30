@@ -70,6 +70,8 @@ class IdleConnection {
     BOOST_ASIO_INITFN_RESULT_TYPE(CompletionToken, void(sys::error_code, std::size_t))
     async_write_some(const ConstBufferSequence& buffers, CompletionToken&& token)
     {
+        assert(_data);
+        assert(_data->connection.has_implementation());
         return _data->connection.async_write_some(buffers, std::move(token));
     }
 

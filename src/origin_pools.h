@@ -52,6 +52,11 @@ OriginPools::get_connection(const RequestHdr& rq)
 
     if (pool_i == _pools.end()) return boost::none;
 
+    if (pool_i->second.empty()) {
+        _pools.erase(pool_i);
+        return boost::none;
+    }
+
     auto ret = pool_i->second.pop_front();
 
     if (pool_i->second.empty()) {

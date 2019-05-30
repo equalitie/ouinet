@@ -291,11 +291,13 @@ public:
         if (ec) return or_throw<GenericStream>(yield, ec);
 
         if (url.scheme == "https") {
-            return ssl::util::client_handshake( move(socket)
-                                              , ssl_ctx
-                                              , url.host
-                                              , cancel
-                                              , yield[ec]);
+            auto c = ssl::util::client_handshake( move(socket)
+                                                , ssl_ctx
+                                                , url.host
+                                                , cancel
+                                                , yield[ec]);
+
+            return or_throw(yield, ec, move(c));
         } else {
             return GenericStream(move(socket));
         }
