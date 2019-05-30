@@ -548,25 +548,14 @@ public:
     Response fetch_fresh(const Request& rq_, Cancel& cancel, Yield yield) {
         sys::error_code ec;
 
-        auto maybe_connection = origin_pools.get_connection(rq_);
-        OriginPools::Connection connection;
-        if (maybe_connection) {
-            connection = std::move(*maybe_connection);
-        } else {
-            auto stream = connect(rq_, cancel, yield[ec].tag("connect"));
-
-            if (ec) return or_throw<Response>(yield, ec);
-
-            connection = origin_pools.wrap(std::move(stream));
-        }
+        auto connection = get_connection(rq_, cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, Response());
 
         beast::flat_buffer buffer;
         auto ret = fetch_fresh<Response>(rq_, connection, buffer, cancel, yield[ec]);
         if (ec) return or_throw<Response>(yield, ec, std::move(ret));
 
-        if (ret.keep_alive() && rq_.keep_alive()) {
-            origin_pools.insert_connection(rq_, move(connection));
-        }
+        keep_connection(rq_, ret, move(connection));
 
         return ret;
     }
@@ -698,6 +687,31 @@ private:
         }
 
         return move(rs);
+    }
+
+    Connection get_connection(const Request& rq_, Cancel& cancel, Yield yield) {
+        Connection connection;
+        sys::error_code ec;
+
+        auto maybe_connection = origin_pools.get_connection(rq_);
+        if (maybe_connection) {
+            connection = std::move(*maybe_connection);
+        } else {
+            auto stream = connect(rq_, cancel, yield[ec].tag("connect"));
+
+            if (ec) return or_throw<Connection>(yield, ec);
+
+            connection = origin_pools.wrap(std::move(stream));
+        }
+        return connection;
+    }
+
+    bool keep_connection(const Request& rq, const Response& rs, Connection con) {
+        if (!rs.keep_alive() || !rq.keep_alive())
+            return false;
+
+        origin_pools.insert_connection(rq, move(con));
+        return true;
     }
 
 private:
