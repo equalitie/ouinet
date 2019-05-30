@@ -973,7 +973,7 @@ int main(int argc, const char* argv[])
                                , util::str(endpoint));
 
         auto base = make_unique<ouiservice::TcpOuiServiceServer>(ios, endpoint);
-        proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(move(base), ssl_context));
+        proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(ios, move(base), ssl_context));
     }
 
     if (config.utp_endpoint()) {
@@ -996,7 +996,7 @@ int main(int argc, const char* argv[])
                                , util::str(endpoint));
 
         auto base = make_unique<ouiservice::UtpOuiServiceServer>(ios, endpoint);
-        proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(move(base), ssl_context));
+        proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(ios, move(base), ssl_context));
     }
 
     if (config.lampshade_endpoint()) {

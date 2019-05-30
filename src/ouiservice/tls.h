@@ -4,6 +4,7 @@
 
 #include "../ouiservice.h"
 #include "../util/signal.h"
+#include "../util/async_queue.h"
 
 namespace ouinet {
 namespace ouiservice {
@@ -14,22 +15,28 @@ class TlsOuiServiceServer : public OuiServiceImplementationServer
     public:
     using BaseServicePtr = std::unique_ptr<OuiServiceImplementationServer>;
 
-    TlsOuiServiceServer(BaseServicePtr base_, asio::ssl::context& context):
-        base(std::move(base_)), ssl_context(context)
+    TlsOuiServiceServer( asio::io_service& ios
+                       , BaseServicePtr base
+                       , asio::ssl::context& context)
+        : _ios(ios)
+        , _base(std::move(base))
+        , _ssl_context(context)
+        , _accept_queue(_ios /*, TODO: max size? */)
     {};
 
-    void start_listen(asio::yield_context yield) override {
-        base->start_listen(yield);
-    };
-    void stop_listen() override {
-        base->stop_listen();
-    };
+    void start_listen(asio::yield_context) override;
+    void stop_listen() override;
 
     GenericStream accept(asio::yield_context yield) override;
 
+    ~TlsOuiServiceServer();
+
     private:
-    BaseServicePtr base;
-    asio::ssl::context& ssl_context;
+    asio::io_service& _ios;
+    BaseServicePtr _base;
+    asio::ssl::context& _ssl_context;
+    Cancel _cancel;
+    util::AsyncQueue<GenericStream> _accept_queue;
 };
 
 class TlsOuiServiceClient : public OuiServiceImplementationClient
@@ -39,22 +46,22 @@ class TlsOuiServiceClient : public OuiServiceImplementationClient
 
     public:
     TlsOuiServiceClient(BaseServicePtr base_, asio::ssl::context& context):
-        base(std::move(base_)), ssl_context(context)
+        _base(std::move(base_)), _ssl_context(context)
     {};
 
     void start(asio::yield_context yield) override {
-        base->start(yield);
-    }
-    void stop() override {
-        base->stop();
+        _base->start(yield);
     }
 
-    GenericStream connect( asio::yield_context yield
-                         , Signal<void()>& cancel) override;
+    void stop() override {
+        _base->stop();
+    }
+
+    GenericStream connect(asio::yield_context, Cancel&) override;
 
     private:
-    BaseServicePtr base;
-    asio::ssl::context& ssl_context;
+    BaseServicePtr _base;
+    asio::ssl::context& _ssl_context;
 };
 
 } // ouiservice namespace
