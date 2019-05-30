@@ -56,7 +56,7 @@ BOOST_AUTO_TEST_CASE(test_bep_5)
 
     asio::io_service ios;
 
-    DhtNode dht(ios, asio::ip::make_address("0.0.0.0")); // TODO: IPv6
+    DhtNode dht(ios, {asio::ip::make_address("0.0.0.0"), 0}); // TODO: IPv6
 
     asio::spawn(ios, [&] (auto yield) {
         sys::error_code ec;
@@ -87,7 +87,7 @@ BOOST_AUTO_TEST_CASE(test_bep_44)
 
     asio::io_service ios;
 
-    DhtNode dht(ios, asio::ip::make_address("0.0.0.0")); // TODO: IPv6
+    DhtNode dht(ios, {asio::ip::make_address("0.0.0.0"), 0}); // TODO: IPv6
 
     auto mutable_data = []( const string& value
                           , const string& salt

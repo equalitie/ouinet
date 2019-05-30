@@ -34,7 +34,7 @@ unique_ptr<CacheInjector> CacheInjector::build( boost::asio::io_service& ios
 
     unique_ptr<bt::MainlineDht> bt_dht(new bt::MainlineDht(ios));
 
-    bt_dht->set_interfaces({asio::ip::address_v4::any()});
+    bt_dht->set_endpoints({{asio::ip::address_v4::any(), 0}});
 
     unique_ptr<Bep44InjectorIndex> bep44_index;
 

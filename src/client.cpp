@@ -38,6 +38,7 @@
 #include "ssl/ca_certificate.h"
 #include "ssl/dummy_certificate.h"
 #include "ssl/util.h"
+#include "bittorrent/dht.h"
 #include "bittorrent/mutable_data.h"
 
 #ifndef __ANDROID__
@@ -111,7 +112,7 @@ public:
         if (_injector) _injector->stop();
     }
 
-    void setup_ipfs_cache();
+    void setup_cache();
     void set_injector(string);
 
 private:
@@ -189,6 +190,7 @@ private:
 
     Scheduler _fetch_stored_scheduler;
     Scheduler _store_scheduler;
+    boost::optional<asio::ip::udp::endpoint> _local_utp_endpoint;
 };
 
 //------------------------------------------------------------------------------
@@ -1352,7 +1354,7 @@ void Client::State::serve_request( GenericStream&& con
 }
 
 //------------------------------------------------------------------------------
-void Client::State::setup_ipfs_cache()
+void Client::State::setup_cache()
 {
     if (_is_ipns_being_setup) {
         return;
@@ -1371,8 +1373,17 @@ void Client::State::setup_ipfs_cache()
 
             auto on_exit = defer([&] { _is_ipns_being_setup = false; });
 
+            auto bt_dht = make_unique<bittorrent::MainlineDht>(_ios);
+
+            if (_local_utp_endpoint) {
+                bt_dht->set_endpoints({*_local_utp_endpoint});
+            } else {
+                bt_dht->set_endpoints({{asio::ip::address_v4::any(), 0}});
+            }
+
             sys::error_code ec;
             _cache = CacheClient::build(_ios
+                                       , move(bt_dht)
                                        , _config.index_bep44_pub_key()
                                        , _config.repo_root()
                                        , _config.autoseed_updated()
@@ -1514,7 +1525,7 @@ void Client::State::start()
                        << endl;
               }
 
-              setup_ipfs_cache();
+              setup_cache();
 
               listen_tcp( yield[ec]
                         , _config.local_endpoint()
@@ -1593,12 +1604,15 @@ void Client::State::setup_injector(asio::yield_context yield)
         }
         client = std::move(tcp_client);
     } else if (injector_ep->type == Endpoint::UtpEndpoint) {
-        auto tcp_client = make_unique<ouiservice::UtpOuiServiceClient>(_ios, injector_ep->endpoint_string);
+        auto utp_client = make_unique<ouiservice::UtpOuiServiceClient>(_ios, injector_ep->endpoint_string);
 
-        if (!tcp_client->verify_endpoint()) {
+        if (!utp_client->verify_remote_endpoint()) {
             return or_throw(yield, asio::error::invalid_argument);
         }
-        client = std::move(tcp_client);
+
+        _local_utp_endpoint = utp_client->local_endpoint();
+
+        client = std::move(utp_client);
     } else if (injector_ep->type == Endpoint::LampshadeEndpoint) {
         auto lampshade_client = make_unique<ouiservice::LampshadeOuiServiceClient>(_ios, injector_ep->endpoint_string);
 
@@ -1701,7 +1715,7 @@ void Client::set_injector_endpoint(const char* injector_ep)
 void Client::set_ipns(const char* ipns)
 {
     _state->_config.set_index_ipns_id(move(ipns));
-    _state->setup_ipfs_cache();
+    _state->setup_cache();
 }
 
 void Client::set_credentials(const char* injector, const char* cred)

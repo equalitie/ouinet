@@ -58,15 +58,22 @@ static boost::optional<asio::ip::udp::endpoint> parse_endpoint(std::string endpo
 
 UtpOuiServiceClient::UtpOuiServiceClient(asio::io_service& ios, std::string endpoint):
     _ios(ios),
-    _endpoint(parse_endpoint(endpoint))
-{}
+    _remote_endpoint(parse_endpoint(endpoint)),
+    _udp_multiplexer(
+            new asio_utp::udp_multiplexer(_ios
+                                         , asio::ip::udp::endpoint
+                                            ( asio::ip::address_v4::any()
+                                            , 0 )))
+{
+    cerr << "uTP local endpoint is: UDP:" << _udp_multiplexer->local_endpoint() << "\n";
+}
 
 GenericStream
 UtpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
 {
     using namespace chrono_literals;
 
-    if (!_endpoint) {
+    if (!_remote_endpoint) {
         return or_throw<GenericStream>(yield, asio::error::invalid_argument);
     }
 
@@ -82,7 +89,7 @@ UtpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
     for (int i = 0; i != max_retries; ++i) {
         ec = sys::error_code();
 
-        socket = asio_utp::socket(_ios, {asio::ip::address_v4::any(), 0});
+        socket = asio_utp::socket(_ios, _udp_multiplexer->local_endpoint());
 
         auto cancel_slot = cancel.connect([&] {
             socket.close();
@@ -95,7 +102,7 @@ UtpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
                 socket.close();
         });
 
-        socket.async_connect(*_endpoint, yield[ec]);
+        socket.async_connect(*_remote_endpoint, yield[ec]);
 
         if (!timed_out) break;
     }

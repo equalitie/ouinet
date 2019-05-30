@@ -4,6 +4,7 @@
 #include <iostream>
 #include <boost/asio/buffer.hpp>
 #include <boost/utility/string_view.hpp>
+#include <asio_utp/udp_multiplexer.hpp>
 #include "../namespaces.h"
 #include "../or_throw.h"
 #include "../util/condition_variable.h"
@@ -39,7 +40,7 @@ private:
     };
 
 public:
-    UdpMultiplexer(udp::socket&&);
+    UdpMultiplexer(asio_utp::udp_multiplexer&&);
 
     asio::io_service& get_io_service();
 
@@ -50,6 +51,8 @@ public:
     // be valid only until the next coroutine based async IO call or until
     // the coroutine that runs this function exits (whichever comes first).
     const boost::string_view receive(udp::endpoint& from, Cancel&, asio::yield_context);
+
+    udp::endpoint local_endpoint() const { return _socket.local_endpoint(); }
 
     ~UdpMultiplexer();
 
@@ -64,7 +67,7 @@ private:
     }
 
 private:
-    udp::socket _socket;
+    asio_utp::udp_multiplexer _socket;
     std::list<SendEntry> _send_queue;
     ConditionVariable _send_queue_nonempty;
     IntrusiveList<RecvEntry> _receive_queue;
@@ -77,7 +80,7 @@ private:
 };
 
 inline
-UdpMultiplexer::UdpMultiplexer(udp::socket&& s):
+UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s):
     _socket(std::move(s)),
     _send_queue_nonempty(_socket.get_io_service()),
     _rate_limiting_timer(_socket.get_io_service())
@@ -201,7 +204,9 @@ inline
 UdpMultiplexer::~UdpMultiplexer()
 {
     _terminate_signal();
-    _socket.close();
+
+    sys::error_code ec;
+    _socket.close(ec);
 }
 
 inline

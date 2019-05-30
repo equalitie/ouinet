@@ -23,6 +23,7 @@ using boost::optional;
 
 unique_ptr<CacheClient>
 CacheClient::build( asio::io_service& ios
+                  , unique_ptr<bittorrent::MainlineDht> bt_dht
                   , optional<util::Ed25519PublicKey> bt_pubkey
                   , fs::path path_to_repo
                   , bool autoseed_updated
@@ -60,10 +61,6 @@ CacheClient::build( asio::io_service& ios
 
     if (cancel) ec = asio::error::operation_aborted;
     if (ec) return or_throw<ClientP>(yield, ec);
-
-    auto bt_dht = make_unique<bt::MainlineDht>(ios);
-
-    bt_dht->set_interfaces({asio::ip::address_v4::any()});
 
     unique_ptr<Bep44ClientIndex> bep44_index;
 

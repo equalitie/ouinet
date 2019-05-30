@@ -40,11 +40,17 @@ class UtpOuiServiceClient : public OuiServiceImplementationClient
 
     GenericStream connect(asio::yield_context, Cancel&) override;
 
-    bool verify_endpoint() const { return (bool)_endpoint; }
+    boost::optional<asio::ip::udp::endpoint> local_endpoint() const {
+        if (!_udp_multiplexer) return boost::none;
+        return _udp_multiplexer->local_endpoint();
+    }
+
+    bool verify_remote_endpoint() const { return bool(_remote_endpoint); }
 
     private:
     asio::io_service& _ios;
-    boost::optional<asio::ip::udp::endpoint> _endpoint;
+    boost::optional<asio::ip::udp::endpoint> _remote_endpoint;
+    std::unique_ptr<asio_utp::udp_multiplexer> _udp_multiplexer;
 };
 
 } // ouiservice namespace

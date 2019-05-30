@@ -71,7 +71,7 @@ class DhtNode {
     const size_t RESPONSIBLE_TRACKERS_PER_SWARM = 8;
 
     public:
-    DhtNode(asio::io_service& ios, ip::address interface_address);
+    DhtNode(asio::io_service& ios, udp::endpoint);
     void start(asio::yield_context yield);
     void stop();
 
@@ -201,9 +201,10 @@ class DhtNode {
         asio::yield_context
     );
 
-    bool is_v4() const { return _interface_address.is_v4(); }
-    bool is_v6() const { return _interface_address.is_v6(); }
+    bool is_v4() const { return _local_endpoint.address().is_v4(); }
+    bool is_v6() const { return _local_endpoint.address().is_v6(); }
 
+    udp::endpoint local_endpoint() const { return _local_endpoint; }
     udp::endpoint wan_endpoint() const { return _wan_endpoint; }
 
     ~DhtNode();
@@ -328,7 +329,7 @@ class DhtNode {
 
     private:
     asio::io_service& _ios;
-    ip::address _interface_address;
+    ip::udp::endpoint _local_endpoint;
     std::unique_ptr<UdpMultiplexer> _multiplexer;
     NodeID _node_id;
     udp::endpoint _wan_endpoint;
@@ -362,7 +363,7 @@ class MainlineDht {
 
     ~MainlineDht();
 
-    void set_interfaces(const std::vector<asio::ip::address>& addresses);
+    void set_endpoints(const std::set<udp::endpoint>&);
 
     /*
      * TODO: announce() and put() functions don't have any real error detection.
@@ -415,7 +416,7 @@ class MainlineDht {
 
     private:
     asio::io_service& _ios;
-    std::map<asio::ip::address, std::unique_ptr<dht::DhtNode>> _nodes;
+    std::map<udp::endpoint, std::unique_ptr<dht::DhtNode>> _nodes;
     Cancel _cancel;
 };
 

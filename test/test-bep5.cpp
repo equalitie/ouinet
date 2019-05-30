@@ -98,7 +98,7 @@ int main(int argc, const char** argv)
 {
     asio::io_service ios;
 
-    DhtNode dht {ios, asio::ip::make_address("0.0.0.0")};
+    DhtNode dht {ios, { asio::ip::make_address("0.0.0.0"), 0 }};
 
     vector<string> args;
 
@@ -203,6 +203,7 @@ int main(int argc, const char** argv)
         }
 
         cerr << "End" << endl;
+        dht.stop();
     });
 
     ios.run();
