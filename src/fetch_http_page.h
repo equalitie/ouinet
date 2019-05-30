@@ -21,10 +21,12 @@ namespace ouinet {
 // (which may be already an SSL tunnel)
 // *as is* and return the HTTP response or just its head
 // depending on the expected `ResponseType`.
-template<class ResponseBodyType, class RequestType>
+// Read but unused data may be left at the `buffer`.
+template<class ResponseBodyType, class RequestType, class DynamicBuffer>
 inline
 http::response<ResponseBodyType>
 fetch_http( GenericStream& con
+          , DynamicBuffer& buffer
           , RequestType req
           , Signal<void()>& abort_signal
           , Yield yield_)
@@ -54,8 +56,6 @@ fetch_http( GenericStream& con
 
     if (ec) return or_throw(yield, ec, move(res));
 
-    beast::flat_buffer buffer;
-
     // Receive the HTTP response
     _recv_http_response(con, buffer, res, yield[ec]);
     if (!ec && cancel_slot) {
@@ -66,6 +66,18 @@ fetch_http( GenericStream& con
     }
 
     return or_throw(yield, ec, move(res));
+}
+
+template<class ResponseBodyType, class RequestType>
+inline
+http::response<ResponseBodyType>
+fetch_http( GenericStream& con
+          , RequestType req
+          , Signal<void()>& abort_signal
+          , Yield yield_)
+{
+    beast::flat_buffer buffer;
+    return fetch_http<ResponseBodyType>(con, buffer, req, abort_signal, yield_);
 }
 
 template<class ResponseBodyType, class Duration, class RequestType>
