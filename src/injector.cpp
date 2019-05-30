@@ -811,7 +811,7 @@ void serve( InjectorConfig& config
             yield.log(res.base());
             http::async_write(con, res, yield[ec].tag("write_proxy_response_head"));
             if (!ec) asio::async_write(con, buffer, yield[ec].tag("write_proxy_response_buff"));
-            if (!ec) half_duplex(orig_con, con, yield[ec]);
+            if (!ec) half_duplex(orig_con, con, yield[ec].tag("write_proxy_response_fwd"));
             if (!ec && res.keep_alive())
                 cc.keep_connection(req, res, move(orig_con));
             else
