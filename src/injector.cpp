@@ -689,6 +689,7 @@ private:
         return move(rs);
     }
 
+public:
     Connection get_connection(const Request& rq_, Cancel& cancel, Yield yield) {
         Connection connection;
         sys::error_code ec;
@@ -706,6 +707,7 @@ private:
         return connection;
     }
 
+    template<class Response>
     bool keep_connection(const Request& rq, const Response& rs, Connection con) {
         if (!rs.keep_alive() || !rq.keep_alive())
             return false;
@@ -780,8 +782,6 @@ void serve( InjectorConfig& config
         // whether to behave like an injector or a proxy.
         bool proxy = (version_hdr_i == req.end());
 
-        Response res;
-
         bool keep_alive = req.keep_alive();
 
         if (proxy) {
@@ -789,8 +789,15 @@ void serve( InjectorConfig& config
             // TODO: Maybe reject requests for HTTPS URLS:
             // we are perfectly able to handle them (and do verification locally),
             // but the client should be using a CONNECT request instead!
-            res = cc.fetch_fresh(req, cancel, yield[ec].tag("fetch_proxy"));
+            using ResponseH = http::response<http::empty_body>;
+            ResponseH res;
+            beast::flat_buffer buffer;
 
+            // FIXME: This does *not* work: an `empty_body` receiving
+            // a response with non-empty content will cause `http::error::unexpected_body`.
+            auto orig_con = cc.get_connection(req, cancel, yield[ec]);
+            if (!ec) res = cc.fetch_fresh<ResponseH>( req, orig_con, buffer
+                                                    , cancel, yield[ec].tag("fetch_proxy"));
             if (ec) {
                 handle_bad_request( con, req
                                   , "Failed to retrieve content from origin: " + ec.message()
@@ -798,18 +805,24 @@ void serve( InjectorConfig& config
                 continue;
             }
 
+            // Send the head, then unused read input, then forward the rest,
+            // and keep the connection if nothing failed.
             yield.log("=== Sending back proxy response ===");
             yield.log(res.base());
-            http::async_write(con, res, yield[ec].tag("write_proxy_response"));
-
-            if (!res.keep_alive()) keep_alive = false;
+            http::async_write(con, res, yield[ec].tag("write_proxy_response_head"));
+            if (!ec) asio::async_write(con, buffer, yield[ec].tag("write_proxy_response_buff"));
+            if (!ec) half_duplex(orig_con, con, yield[ec]);
+            if (!ec && res.keep_alive())
+                cc.keep_connection(req, res, move(orig_con));
+            else
+                keep_alive = false;
         }
         else {
             // Ouinet header found, behave like a Ouinet injector.
             auto opt_err_res = version_error_response(req, version_hdr_i->value());
 
             if (opt_err_res) {
-                res = *opt_err_res;
+                Response res = *opt_err_res;  // TODO: send it to client
             }
             else {
                 auto req2 = util::to_injector_request(req);  // sanitize

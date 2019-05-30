@@ -32,7 +32,7 @@ void half_duplex( StreamIn& in, StreamOut& out
 
 template<class StreamIn, class StreamOut>
 inline
-void half_duplex(StreamIn in, StreamOut out, asio::yield_context yield)
+void half_duplex(StreamIn& in, StreamOut& out, asio::yield_context yield)
 {
     assert(&in.get_io_service() == &out.get_io_service());
 
