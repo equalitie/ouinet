@@ -775,8 +775,6 @@ void serve( InjectorConfig& config
             ResponseH res;
             beast::flat_buffer buffer;
 
-            // FIXME: This does *not* work: an `empty_body` receiving
-            // a response with non-empty content will cause `http::error::unexpected_body`.
             auto orig_con = cc.get_connection(req, cancel, yield[ec]);
             if (!ec) res = cc.fetch_fresh<ResponseH>( req, orig_con, buffer
                                                     , cancel, yield[ec].tag("fetch_proxy"));
