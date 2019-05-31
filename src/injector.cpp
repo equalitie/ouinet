@@ -804,7 +804,7 @@ void serve( InjectorConfig& config
             auto opt_err_res = version_error_response(req, version_hdr_i->value());
 
             if (opt_err_res) {
-                Response res = *opt_err_res;  // TODO: send it to client
+                http::async_write(con, *opt_err_res, yield[ec]);
             }
             else {
                 auto req2 = util::to_injector_request(req);  // sanitize
