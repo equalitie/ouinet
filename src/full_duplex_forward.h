@@ -12,19 +12,21 @@ static const auto half_duplex_timeout = std::chrono::seconds(60);
 // Low-level, one-direction operation.
 template<class StreamIn, class StreamOut>
 inline
-void half_duplex( StreamIn& in, StreamOut& out
+void half_duplex( StreamIn& in, StreamOut& out, size_t max_transfer
                 , WatchDog& wdog
                 , asio::yield_context& yield)
 {
     sys::error_code ec;
     std::array<uint8_t, 2048> data;
 
-    for (;;) {
+    for (size_t cur_transfer = 0; cur_transfer < max_transfer;) {
         size_t length = in.async_read_some(asio::buffer(data), yield[ec]);
         if (ec) break;
 
         asio::async_write(out, asio::buffer(data, length), yield[ec]);
         if (ec) break;
+
+        cur_transfer += length;
 
         wdog.expires_after(half_duplex_timeout);
     }
@@ -32,7 +34,18 @@ void half_duplex( StreamIn& in, StreamOut& out
 
 template<class StreamIn, class StreamOut>
 inline
-void half_duplex(StreamIn& in, StreamOut& out, asio::yield_context yield)
+void half_duplex( StreamIn& in, StreamOut& out
+                , WatchDog& wdog
+                , asio::yield_context& yield)
+{
+    return half_duplex( in, out, std::numeric_limits<std::size_t>::max()
+                      , wdog, yield);
+}
+
+template<class StreamIn, class StreamOut>
+inline
+void half_duplex( StreamIn& in, StreamOut& out, size_t max_transfer
+                , asio::yield_context yield)
 {
     assert(&in.get_io_service() == &out.get_io_service());
 
@@ -45,10 +58,18 @@ void half_duplex(StreamIn& in, StreamOut& out, asio::yield_context yield)
     asio::spawn
         ( yield
         , [&, lock = wait_condition.lock()](asio::yield_context yield) {
-              half_duplex(in, out, wdog, yield);
+              half_duplex(in, out, max_transfer, wdog, yield);
           });
 
     wait_condition.wait(yield);
+}
+
+template<class StreamIn, class StreamOut>
+inline
+void half_duplex(StreamIn& in, StreamOut& out, asio::yield_context yield)
+{
+    return half_duplex( in, out, std::numeric_limits<std::size_t>::max()
+                      , yield);
 }
 
 template<class Stream1, class Stream2>
