@@ -1,6 +1,7 @@
 #pragma once
 
 #include <boost/asio/read.hpp>
+#include "default_timeout.h"
 #include "generic_stream.h"
 #include "util/wait_condition.h"
 #include "util/watch_dog.h"
@@ -8,7 +9,6 @@
 namespace ouinet {
 
 static const size_t half_duplex_default_block = 2048;
-static const auto half_duplex_timeout = std::chrono::seconds(60);
 
 // Low-level, one-direction operation.
 // Data already present in `buffer` will be sent in the first batch.
@@ -30,7 +30,7 @@ void half_duplex( StreamIn& in, StreamOut& out
 
         cur_transfer += length;
 
-        wdog.expires_after(half_duplex_timeout);
+        wdog.expires_after(default_timeout::half_duplex());
     }
 }
 
@@ -55,7 +55,7 @@ void half_duplex( StreamIn& in, StreamOut& out, size_t max_transfer
     assert(&in.get_io_service() == &out.get_io_service());
 
     WatchDog wdog( in.get_io_service()
-                 , half_duplex_timeout
+                 , default_timeout::half_duplex()
                  , [&] { in.close(); out.close(); });
 
     WaitCondition wait_condition(in.get_io_service());
@@ -87,7 +87,7 @@ void full_duplex(Stream1 c1, Stream2 c2, asio::yield_context yield)
     assert(&c1.get_io_service() == &c2.get_io_service());
 
     WatchDog wdog( c1.get_io_service()
-                 , half_duplex_timeout
+                 , default_timeout::half_duplex()
                  , [&] { c1.close(); c2.close(); });
 
     WaitCondition wait_condition(c1.get_io_service());
