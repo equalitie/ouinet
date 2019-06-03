@@ -47,9 +47,10 @@ void half_duplex( StreamIn& in, StreamOut& out
                       , wdog, yield);
 }
 
-template<class StreamIn, class StreamOut>
+template<class StreamIn, class StreamOut, class Buffer>
 inline
-void half_duplex( StreamIn& in, StreamOut& out, size_t max_transfer
+void half_duplex( StreamIn& in, StreamOut& out
+                , Buffer& buffer, size_t max_transfer
                 , asio::yield_context yield)
 {
     assert(&in.get_io_service() == &out.get_io_service());
@@ -59,9 +60,6 @@ void half_duplex( StreamIn& in, StreamOut& out, size_t max_transfer
                  , [&] { in.close(); out.close(); });
 
     WaitCondition wait_condition(in.get_io_service());
-
-    std::array<uint8_t, half_duplex_default_block> data;
-    auto buffer = asio::buffer(data);
 
     asio::spawn
         ( yield
@@ -76,7 +74,10 @@ template<class StreamIn, class StreamOut>
 inline
 void half_duplex(StreamIn& in, StreamOut& out, asio::yield_context yield)
 {
-    return half_duplex( in, out, std::numeric_limits<std::size_t>::max()
+    std::array<uint8_t, half_duplex_default_block> data;
+    auto buffer = asio::buffer(data);
+    return half_duplex( in, out, buffer
+                      , std::numeric_limits<std::size_t>::max()
                       , yield);
 }
 
