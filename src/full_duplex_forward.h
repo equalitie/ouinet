@@ -7,23 +7,25 @@
 
 namespace ouinet {
 
+static const size_t half_duplex_default_block = 2048;
 static const auto half_duplex_timeout = std::chrono::seconds(60);
 
 // Low-level, one-direction operation.
-template<class StreamIn, class StreamOut>
+// Data already present in `buffer` will be sent in the first batch.
+template<class StreamIn, class StreamOut, class Buffer>
 inline
-void half_duplex( StreamIn& in, StreamOut& out, size_t max_transfer
+void half_duplex( StreamIn& in, StreamOut& out
+                , Buffer& buffer, size_t max_transfer
                 , WatchDog& wdog
                 , asio::yield_context& yield)
 {
     sys::error_code ec;
-    std::array<uint8_t, 2048> data;
 
     for (size_t cur_transfer = 0; cur_transfer < max_transfer;) {
-        size_t length = in.async_read_some(asio::buffer(data), yield[ec]);
+        size_t length = in.async_read_some(buffer, yield[ec]);
         if (ec) break;
 
-        asio::async_write(out, asio::buffer(data, length), yield[ec]);
+        asio::async_write(out, asio::buffer(buffer, length), yield[ec]);
         if (ec) break;
 
         cur_transfer += length;
@@ -38,7 +40,10 @@ void half_duplex( StreamIn& in, StreamOut& out
                 , WatchDog& wdog
                 , asio::yield_context& yield)
 {
-    return half_duplex( in, out, std::numeric_limits<std::size_t>::max()
+    std::array<uint8_t, half_duplex_default_block> data;
+    auto buffer = asio::buffer(data);
+    return half_duplex( in, out, buffer
+                      , std::numeric_limits<std::size_t>::max()
                       , wdog, yield);
 }
 
@@ -55,10 +60,13 @@ void half_duplex( StreamIn& in, StreamOut& out, size_t max_transfer
 
     WaitCondition wait_condition(in.get_io_service());
 
+    std::array<uint8_t, half_duplex_default_block> data;
+    auto buffer = asio::buffer(data);
+
     asio::spawn
         ( yield
         , [&, lock = wait_condition.lock()](asio::yield_context yield) {
-              half_duplex(in, out, max_transfer, wdog, yield);
+              half_duplex(in, out, buffer, max_transfer, wdog, yield);
           });
 
     wait_condition.wait(yield);
