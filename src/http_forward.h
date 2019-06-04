@@ -19,7 +19,7 @@ namespace ouinet {
 
 template<class StreamIn, class StreamOut, class Request>
 inline
-bool  // `out` keep alive
+http::response_header<>
 http_forward( StreamIn& in
             , StreamOut& out
             , Request rq
@@ -27,6 +27,7 @@ http_forward( StreamIn& in
             , Yield yield_)
 {
     // TODO: Split and refactor with `fetch_http` if still useful.
+    using ResponseH = http::response_header<>;
 
     Yield yield = yield_.tag("http_forward");
 
@@ -44,7 +45,7 @@ http_forward( StreamIn& in
     if (!ec && cancelled)
         ec = asio::error::operation_aborted;
     if (ec) yield.log("Failed to send request: ", ec.message());
-    if (ec) return or_throw(yield, ec, false);
+    if (ec) return or_throw<ResponseH>(yield, ec);
 
     beast::flat_buffer buffer;
 
@@ -57,7 +58,7 @@ http_forward( StreamIn& in
     if (!ec && cancelled)
         ec = asio::error::operation_aborted;
     if (ec) yield.log("Failed to receive response head: ", ec.message());
-    if (ec) return or_throw(yield, ec, false);
+    if (ec) return or_throw<ResponseH>(yield, ec);
 
     // Cut buffer size down to the one that will be used in forwarding.
 #if BOOST_VERSION >= 107000
@@ -83,7 +84,7 @@ http_forward( StreamIn& in
         max_transfer = util::parse_num<size_t>(content_length, max_size_t);
     if (!ec && max_transfer == max_size_t)
         ec = asio::error::invalid_argument;
-    if (ec) return or_throw(yield, ec, false);
+    if (ec) return or_throw<ResponseH>(yield, ec);
 
     // TODO: Allow processing the parsed head before writing.
 
@@ -95,7 +96,7 @@ http_forward( StreamIn& in
     if (!ec && cancelled)
         ec = asio::error::operation_aborted;
     if (ec) yield.log("Failed to send response head: ", ec.message());
-    if (ec) return or_throw(yield, ec, false);
+    if (ec) return or_throw<ResponseH>(yield, ec);
 
     // Forward the body.
     half_duplex(in, out, buffer_, max_transfer, yield[ec]);
@@ -103,9 +104,9 @@ http_forward( StreamIn& in
     if (!ec && cancelled)
         ec = asio::error::operation_aborted;
     if (ec) yield.log("Failed to forward response body: ", ec.message());
-    if (ec) return or_throw(yield, ec, false);
+    if (ec) return or_throw<ResponseH>(yield, ec);
 
-    return rph.keep_alive();
+    return rpp.release().base();
 }
 
 } // namespace ouinet
