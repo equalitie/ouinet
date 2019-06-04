@@ -27,7 +27,7 @@ http::response_header<>
 http_forward( StreamIn& in
             , StreamOut& out
             , Request rq
-            , ProcHeadFunc hproc
+            , ProcHeadFunc rshproc
             , Cancel& cancel
             , Yield yield_)
 {
@@ -76,12 +76,12 @@ http_forward( StreamIn& in
 #endif
 
     assert(rpp.is_header_done());
-    auto rph = rpp.get();
-    assert(!rph.chunked());  // TODO: implement
+    auto rp = rpp.get();
+    assert(!rp.chunked());  // TODO: implement
 
     // Get content length.
     static const auto max_size_t = std::numeric_limits<std::size_t>::max();
-    auto content_length = rph[http::field::content_length];
+    auto content_length = rp[http::field::content_length];
     size_t max_transfer;
     if (content_length.empty())
         ec = asio::error::operation_not_supported;
@@ -94,7 +94,7 @@ http_forward( StreamIn& in
     // Send the HTTP response head (after processing).
     {
         auto rph_out(rpp.get().base());
-        rph_out = hproc(std::move(rph_out), ec);
+        rph_out = rshproc(std::move(rph_out), ec);
         if (ec) yield.log("Failed to process response head: ", ec.message());
         if (ec) return or_throw<ResponseH>(yield, ec);
 
