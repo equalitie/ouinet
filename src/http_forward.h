@@ -89,7 +89,7 @@ http_forward( StreamIn& in
 
     // Send the HTTP response head.
     yield.log("=== Sending back response ===");  // TODO: log while processing
-    yield.log(rph);
+    yield.log(rph.base());
     http::async_write(out, rph, yield[ec]);
 
     if (!ec && cancelled)
