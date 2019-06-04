@@ -17,12 +17,17 @@
 
 namespace ouinet {
 
+// Get copy of response head from input, return response head for output.
+using ProcHeadFunc = std::function<
+    http::response_header<>(http::response_header<>, sys::error_code&)>;
+
 template<class StreamIn, class StreamOut, class Request>
 inline
 http::response_header<>
 http_forward( StreamIn& in
             , StreamOut& out
             , Request rq
+            , ProcHeadFunc hproc
             , Cancel& cancel
             , Yield yield_)
 {
@@ -86,12 +91,16 @@ http_forward( StreamIn& in
         ec = asio::error::invalid_argument;
     if (ec) return or_throw<ResponseH>(yield, ec);
 
-    // TODO: Allow processing the parsed head before writing.
+    // Send the HTTP response head (after processing).
+    {
+        auto rph_out(rpp.get().base());
+        rph_out = hproc(std::move(rph_out), ec);
+        if (ec) yield.log("Failed to process response head: ", ec.message());
+        if (ec) return or_throw<ResponseH>(yield, ec);
 
-    // Send the HTTP response head.
-    yield.log("=== Sending back response ===");  // TODO: log while processing
-    yield.log(rph.base());
-    http::async_write(out, rph, yield[ec]);
+        http::response<http::empty_body> rp_out(std::move(rph_out));
+        http::async_write(out, rp_out, yield[ec]);
+    }
 
     if (!ec && cancelled)
         ec = asio::error::operation_aborted;
