@@ -1529,13 +1529,16 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
         do {
             for (const auto bs : bootstraps) {
                 std::tie(my_endpoint, bootstrap_ep) = bootstrap_single(bs, yield[ec]);
+                if (ec == asio::error::operation_aborted)
+                    return or_throw(yield ,ec);
                 if (!ec) { done = true; break; }
                 else {
                     cerr << "Skipping bootstrap node " << bs << ": " << ec << endl;
                     ec = sys::error_code(); // reset
                 }
             }
-            async_sleep(_ios, std::chrono::seconds(10), _cancel, yield[ec]);
+            if (!async_sleep(_ios, std::chrono::seconds(10), _cancel, yield))
+                return or_throw(yield, asio::error::operation_aborted);
         }
         while (!done);
     }
@@ -2242,11 +2245,15 @@ void MainlineDht::set_endpoints(const std::set<udp::endpoint>& eps)
             asio::spawn(_ios, [&, ep] (asio::yield_context yield) mutable {
                 auto n = std::make_unique<dht::DhtNode>(_ios, ep);
 
+                auto con = _cancel.connect([&] { n.reset(); });
+
                 // `local_ep` may be different to `ep` because `ep` could have
                 // had 0 for the port.
                 auto local_ep = n->local_endpoint();
                 sys::error_code ec;
                 n->start(yield[ec]);
+
+                assert(!con || ec == asio::error::operation_aborted);
 
                 if (!ec) {
                     _nodes[local_ep] = move(n);
