@@ -80,13 +80,9 @@ UtpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
     sys::error_code ec;
     asio_utp::socket socket;
 
-    const size_t max_retries = 3;
+    static const chrono::seconds retry_timeout[] = { 4s , 8s , 16s };
 
-    static const chrono::milliseconds retry_timeout[max_retries] = { 1000ms
-                                                                   , 2000ms
-                                                                   , 5000ms };
-
-    for (int i = 0; i != max_retries; ++i) {
+    for (int i = 0; i != sizeof(retry_timeout)/sizeof(*retry_timeout); ++i) {
         ec = sys::error_code();
 
         socket = asio_utp::socket(_ios, _udp_multiplexer->local_endpoint());
