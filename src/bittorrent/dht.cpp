@@ -2241,25 +2241,25 @@ void MainlineDht::set_endpoints(const std::set<udp::endpoint>& eps)
     }
 
     for (auto ep : eps) {
-        if (!_nodes.count(ep)) {
-            asio::spawn(_ios, [&, ep] (asio::yield_context yield) mutable {
-                auto n = std::make_unique<dht::DhtNode>(_ios, ep);
+        if (_nodes.count(ep)) continue;
 
-                auto con = _cancel.connect([&] { n.reset(); });
+        asio::spawn(_ios, [&, ep] (asio::yield_context yield) mutable {
+            auto n = std::make_unique<dht::DhtNode>(_ios, ep);
 
-                // `local_ep` may be different to `ep` because `ep` could have
-                // had 0 for the port.
-                auto local_ep = n->local_endpoint();
-                sys::error_code ec;
-                n->start(yield[ec]);
+            auto con = _cancel.connect([&] { n.reset(); });
 
-                assert(!con || ec == asio::error::operation_aborted);
+            // `local_ep` may be different to `ep` because `ep` could have
+            // had 0 for the port.
+            auto local_ep = n->local_endpoint();
 
-                if (!ec) {
-                    _nodes[local_ep] = move(n);
-                }
-            });
-        }
+            auto p = n.get();
+            _nodes[local_ep] = move(n);
+
+            sys::error_code ec;
+            p->start(yield[ec]);
+
+            assert(!con || ec == asio::error::operation_aborted);
+        });
     }
 }
 
