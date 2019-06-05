@@ -1,6 +1,7 @@
 #include "tls.h"
 #include "../or_throw.h"
 #include "../ssl/util.h"
+#include "../util/watch_dog.h"
 #include "../async_sleep.h"
 #include <iostream>
 
@@ -33,22 +34,39 @@ void TlsOuiServiceServer::start_listen(asio::yield_context yield) /* override */
                     continue;
                 }
 
-                auto tls_sock = make_unique<SslStream>(std::move(base_con), _ssl_context);
-                tls_sock->async_handshake(asio::ssl::stream_base::server, yield[ec]);
+                auto tls_con = make_unique<SslStream>( move(base_con)
+                                                     , _ssl_context);
 
-                if (cancel || ec == asio::error::operation_aborted) break;
-                if (ec) continue;
+                // Spawn a new coroutine to avoid blocking accept of the next
+                // socket.
+                asio::spawn(_ios, [ tls_con = move(tls_con)
+                                  , cancel = move(cancel)
+                                  , &q = _accept_queue
+                                  , &ios = _ios
+                                  ] (auto yield) mutable {
+                    sys::error_code ec;
+                    bool timed_out = false;
 
-                static const auto shutter = [](SslStream& s) {
-                    // Just close the underlying connection
-                    // (TLS has no message exchange for shutdown).
-                    s.next_layer().close();
-                };
+                    WatchDog wd(ios, 10s, [&] {
+                                              tls_con->next_layer().close();
+                                              timed_out = true;
+                                          });
 
-                _accept_queue.async_push( GenericStream( move(tls_sock)
-                                                       , move(shutter))
-                                        , cancel
-                                        , yield[ec]);
+                    tls_con->async_handshake( asio::ssl::stream_base::server
+                                            , yield[ec]);
+
+                    if (ec || timed_out || cancel) return;
+
+                    static const auto shutter = [](SslStream& s) {
+                        // Just close the underlying connection
+                        // (TLS has no message exchange for shutdown).
+                        s.next_layer().close();
+                    };
+
+                    q.async_push( GenericStream(move(tls_con), move(shutter))
+                                , cancel
+                                , yield[ec]);
+                });
             }
         });
 };
