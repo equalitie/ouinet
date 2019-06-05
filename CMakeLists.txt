@@ -63,6 +63,10 @@ option(ASIO_IPFS_WITH_EXAMPLE_BINARIES "" OFF)
 option(ASIO_UTP_WITH_TESTS             "" OFF)
 option(ASIO_UTP_WITH_EXAMPLES          "" OFF)
 
+# Enable/disable logging from asio-utp and/or libutp
+set(ASIO_UTP_DEBUG_LOGGING OFF CACHE BOOL "" FORCE)
+set(UTP_DEBUG_LOGGING      OFF CACHE BOOL "" FORCE)
+
 add_subdirectory(./modules/asio-ipfs)
 add_subdirectory(./modules/asio-utp)
 add_subdirectory(./modules/obfs4proxy)
