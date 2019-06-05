@@ -105,6 +105,10 @@ target_link_libraries(test-bep5 asio_utp ${Boost_LIBRARIES} ${GCRYPT_LIBRARIES})
 add_dependencies(test-bep5 gcrypt)
 
 ######################################################################
+add_executable(test-watch-dog "test_watch_dog.cpp" "../src/asio.cpp")
+target_link_libraries(test-watch-dog ${Boost_LIBRARIES})
+
+######################################################################
 add_executable(test-logger "test_logger.cpp"
                            "../src/logger.cpp"
                            "../src/asio.cpp")
