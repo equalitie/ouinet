@@ -45,6 +45,8 @@ public:
     Signal() = default;
     Signal(const Signal&) = delete;
     Signal& operator=(const Signal&) = delete;
+    Signal(Signal&&) = default;
+    Signal& operator=(Signal&&) = default;
 
     Signal(Signal& parent)
         : _parent_connection(parent.connect([&] (auto&&... args) {
