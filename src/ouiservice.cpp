@@ -157,7 +157,7 @@ void OuiServiceClient::start(asio::yield_context yield)
 
 void OuiServiceClient::stop()
 {
-    assert(_implementation);
+    if (!_implementation) return;
 
     _started = false;
     _implementation->stop();
