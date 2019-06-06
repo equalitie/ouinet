@@ -21,6 +21,7 @@
 #include "namespaces.h"
 #include "util.h"
 #include "fetch_http_page.h"
+#include "http_forward.h"
 #include "connect_to_host.h"
 #include "default_timeout.h"
 #include "cache_control.h"
@@ -773,29 +774,26 @@ void serve( InjectorConfig& config
             // but the client should be using a CONNECT request instead!
             using ResponseH = http::response<http::empty_body>;
             ResponseH res;
-            beast::flat_buffer buffer;
-
             auto orig_con = cc.get_connection(req, cancel, yield[ec]);
-            if (!ec) res = cc.fetch_fresh<ResponseH>( req, orig_con, buffer
-                                                    , cancel, yield[ec].tag("fetch_proxy"));
+            if (!ec) {
+                auto reshproc = [&] (auto inh, auto& ec) {
+                    // Prevent others from inserting ouinet specific header fields.
+                    auto outh = util::remove_ouinet_fields(move(inh));
+                    yield.log("=== Sending back proxy response ===");
+                    yield.log(outh);
+                    return outh;
+                };
+                res = ResponseH(http_forward( orig_con, con
+                                            , util::to_origin_request(req), reshproc
+                                            , cancel, yield[ec].tag("fetch_proxy")));
+            }
             if (ec) {
                 handle_bad_request( con, req
                                   , "Failed to retrieve content from origin: " + ec.message()
                                   , yield[ec].tag("handle_bad_request"));
                 continue;
             }
-
-            // Send the head, then unused read input, then forward the rest,
-            // and keep the connection if nothing failed.
-            yield.log("=== Sending back proxy response ===");
-            yield.log(res.base());
-            http::async_write(con, res, yield[ec].tag("write_proxy_response_head"));
-            if (!ec) asio::async_write(con, buffer, yield[ec].tag("write_proxy_response_buff"));
-            if (!ec) half_duplex(orig_con, con, yield[ec].tag("write_proxy_response_fwd"));
-            if (!ec && res.keep_alive())
-                cc.keep_connection(req, res, move(orig_con));
-            else
-                keep_alive = false;
+            keep_alive = cc.keep_connection(req, res, move(orig_con));
         }
         else {
             // Ouinet header found, behave like a Ouinet injector.
