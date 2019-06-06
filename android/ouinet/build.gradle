@@ -25,8 +25,8 @@ android {
             jniLibs.srcDirs = ["$libdir"]
             assets.srcDirs = ["$assetsdir"]
         }
-
     }
+
     buildTypes {
         release {
             minifyEnabled false
@@ -38,6 +38,9 @@ android {
             path "CMakeLists.txt"
             buildStagingDirectory (new File(project.buildDir, "../build-cmake"))
         }
+    }
+    lintOptions {
+        disable 'UnsafeNativeCodeLocation' // Disable warning about obfsproxy executable in assets
     }
 }
 
