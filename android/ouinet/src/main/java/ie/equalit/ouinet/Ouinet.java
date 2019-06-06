@@ -126,7 +126,8 @@ public class Ouinet {
     // but that's not essential for WAN).
     public boolean acquireMulticastLock()
     {
-        WifiManager wifi = (WifiManager) ctx.getSystemService(Context.WIFI_SERVICE);
+        WifiManager wifi = (WifiManager) ctx.getApplicationContext()
+                .getSystemService(Context.WIFI_SERVICE);
 
         if (wifi == null){
             return false;
