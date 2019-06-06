@@ -209,24 +209,11 @@ Java_ie_equalit_ouinet_Ouinet_nSetCredentialsFor(
 
 extern "C"
 JNIEXPORT jstring JNICALL
-Java_ie_equalit_ouinet_Ouinet_nPathToCARootCert(
+Java_ie_equalit_ouinet_Ouinet_nGetCARootCert(
         JNIEnv* env,
-        jobject /* this */)
+        jclass /* class */,
+        jstring j_repo_root)
 {
-    mutex m;
-    unique_lock<mutex> lk(m);
-    condition_variable cv;
-    bool done = false;
-
-    string cert_path;
-
-    g_ios.post([env, &cert_path, &cv, &done] {
-            Defer on_exit([&] { done = true; cv.notify_one(); });
-            if (!g_client) return;
-            cert_path = g_client->ca_cert_path().string();
-        });
-
-    cv.wait(lk, [&]{ return done; });
-
-    return env->NewStringUTF(cert_path.c_str());
+    string repo_root = env->GetStringUTFChars(j_repo_root, NULL);
+    return env->NewStringUTF(ouinet::Client::get_or_gen_ca_root_cert(repo_root).c_str());
 }

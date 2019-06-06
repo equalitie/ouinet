@@ -1728,6 +1728,18 @@ fs::path Client::ca_cert_path() const
     return _state->ca_cert_path();
 }
 
+fs::path Client::get_or_gen_ca_root_cert(const string repo_root)
+{
+    fs::path repo_path = fs::path(repo_root);
+    fs::path ca_cert_path = repo_root / OUINET_CA_CERT_FILE;
+    fs::path ca_key_path = repo_root / OUINET_CA_KEY_FILE;
+    fs::path ca_dh_path = repo_root / OUINET_CA_DH_FILE;
+    get_or_gen_tls_cert<CACertificate>
+        ( "Your own local Ouinet client"
+        , ca_cert_path, ca_key_path, ca_dh_path);
+    return ca_cert_path;
+}
+
 //------------------------------------------------------------------------------
 #ifndef __ANDROID__
 int main(int argc, char* argv[])

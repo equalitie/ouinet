@@ -22,6 +22,7 @@ import com.google.zxing.integration.android.IntentIntegrator;
 import android.content.Intent;
 import android.widget.Toast;
 
+import ie.equalit.ouinet.Config;
 import ie.equalit.ouinet.browser.OuiWebViewClient;
 import ie.equalit.ouinet.browser.Util;
 import ie.equalit.ouinet.Ouinet;
@@ -131,11 +132,11 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        Ouinet.Config conf = new Ouinet.Config();
+        Config conf = new Config.ConfigBuilder(this).build();
 
-        conf.injector_endpoint    = readInjectorEP();
-        conf.injector_credentials = readCredentialsFor(conf.injector_endpoint);
-        conf.index_ipns_id        = readIPNS();
+//        conf.injector_endpoint    = readInjectorEP();
+//        conf.injector_credentials = readCredentialsFor(conf.injector_endpoint);
+//        conf.index_ipns_id        = readIPNS();
 
         _ouinet = new Ouinet(this, conf);
 

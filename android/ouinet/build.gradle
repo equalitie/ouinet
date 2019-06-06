@@ -26,7 +26,6 @@ android {
             assets.srcDirs = ["$assetsdir"]
         }
     }
-
     buildTypes {
         release {
             minifyEnabled false
@@ -39,6 +38,9 @@ android {
             buildStagingDirectory (new File(project.buildDir, "../build-cmake"))
         }
     }
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
     lintOptions {
         disable 'UnsafeNativeCodeLocation' // Disable warning about obfsproxy executable in assets
     }
@@ -47,4 +49,12 @@ android {
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
     implementation 'com.android.support:appcompat-v7:26.1.0'
+    testImplementation "junit:junit:4.12"
+    testImplementation 'org.mockito:mockito-core:2.23.0'
+    testImplementation 'org.powermock:powermock-core:2.0.2'
+    testImplementation 'org.powermock:powermock-module-junit4:2.0.2'
+    testImplementation 'org.powermock:powermock-api-mockito2:2.0.2'
+    testImplementation 'com.android.support.test:rules:1.0.2'
+    testImplementation 'com.android.support:support-annotations:28.0.0'
+    testImplementation 'com.android.support.test:runner:1.0.2'
 }
