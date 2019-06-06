@@ -108,7 +108,7 @@ http_forward( StreamIn& in
     if (ec) return or_throw<ResponseH>(yield, ec);
 
     // Forward the body.
-    half_duplex(in, out, buffer_, max_transfer, yield[ec]);
+    half_duplex(in, out, buffer_, buffer.size(), max_transfer, yield[ec]);
 
     if (!ec && cancelled)
         ec = asio::error::operation_aborted;

@@ -1,6 +1,8 @@
 #pragma once
 
+#include <boost/asio/buffer.hpp>
 #include <boost/asio/read.hpp>
+
 #include "default_timeout.h"
 #include "generic_stream.h"
 #include "util/wait_condition.h"
@@ -11,24 +13,28 @@ namespace ouinet {
 static const size_t half_duplex_default_block = 2048;
 
 // Low-level, one-direction operation.
-// Data already present in `buffer` will be sent in the first batch.
-template<class StreamIn, class StreamOut, class Buffer>
+// `already_read` bytes already present in `buffer` will be sent in the first batch.
+template<class StreamIn, class StreamOut>
 inline
 void half_duplex( StreamIn& in, StreamOut& out
-                , Buffer& buffer, size_t max_transfer
+                , asio::mutable_buffer& buffer
+                , size_t already_read, size_t max_transfer
                 , WatchDog& wdog
                 , asio::yield_context& yield)
 {
+    assert(max_transfer >= already_read);
     sys::error_code ec;
 
-    for (size_t cur_transfer = 0; cur_transfer < max_transfer;) {
-        size_t length = in.async_read_some(buffer, yield[ec]);
+    while (max_transfer > 0) {
+        auto buf = asio::buffer(buffer, max_transfer);
+        size_t length = already_read + in.async_read_some(buf + already_read, yield[ec]);
+        already_read = 0;  // only usable on first read
         if (ec) break;
 
-        asio::async_write(out, asio::buffer(buffer, length), yield[ec]);
+        asio::async_write(out, asio::buffer(buf, length), yield[ec]);
         if (ec) break;
 
-        cur_transfer += length;
+        max_transfer -= length;
 
         wdog.expires_after(default_timeout::half_duplex());
     }
@@ -42,15 +48,16 @@ void half_duplex( StreamIn& in, StreamOut& out
 {
     std::array<uint8_t, half_duplex_default_block> data;
     auto buffer = asio::buffer(data);
-    return half_duplex( in, out, buffer
+    return half_duplex( in, out, buffer, 0
                       , std::numeric_limits<std::size_t>::max()
                       , wdog, yield);
 }
 
-template<class StreamIn, class StreamOut, class Buffer>
+template<class StreamIn, class StreamOut>
 inline
 void half_duplex( StreamIn& in, StreamOut& out
-                , Buffer& buffer, size_t max_transfer
+                , asio::mutable_buffer& buffer
+                , size_t already_read, size_t max_transfer
                 , asio::yield_context yield)
 {
     assert(&in.get_io_service() == &out.get_io_service());
@@ -64,7 +71,7 @@ void half_duplex( StreamIn& in, StreamOut& out
     asio::spawn
         ( yield
         , [&, lock = wait_condition.lock()](asio::yield_context yield) {
-              half_duplex(in, out, buffer, max_transfer, wdog, yield);
+              half_duplex(in, out, buffer, already_read, max_transfer, wdog, yield);
           });
 
     wait_condition.wait(yield);
@@ -76,7 +83,7 @@ void half_duplex(StreamIn& in, StreamOut& out, asio::yield_context yield)
 {
     std::array<uint8_t, half_duplex_default_block> data;
     auto buffer = asio::buffer(data);
-    return half_duplex( in, out, buffer
+    return half_duplex( in, out, buffer, 0
                       , std::numeric_limits<std::size_t>::max()
                       , yield);
 }
