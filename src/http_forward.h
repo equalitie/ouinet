@@ -52,28 +52,20 @@ http_forward( StreamIn& in
     if (ec) yield.log("Failed to send request: ", ec.message());
     if (ec) return or_throw<ResponseH>(yield, ec);
 
-    beast::flat_buffer buffer;
-
     // Receive the head of the HTTP response into a parser.
+    beast::static_buffer<half_duplex_default_block> buffer;
     http::response_parser<http::empty_body> rpp;
     http::async_read_header(in, buffer, rpp, yield[ec]);
-    if (buffer.size() > half_duplex_default_block)
-        ec = asio::error::message_size;  // TODO: better handling
 
     if (!ec && cancelled)
         ec = asio::error::operation_aborted;
     if (ec) yield.log("Failed to receive response head: ", ec.message());
     if (ec) return or_throw<ResponseH>(yield, ec);
 
-    // Cut buffer size down to the one that will be used in forwarding.
-#if BOOST_VERSION >= 107000
-    buffer.max_size(half_duplex_default_block);
-    auto& buffer_ = buffer;
-#else
-    std::array<uint8_t, half_duplex_default_block> data;
-    auto buffer_ = asio::buffer(data);
-    asio::buffer_copy(buffer_, buffer.data());
-#endif
+    // Prepare forwarding buffer with body data already read.
+    std::array<uint8_t, half_duplex_default_block> fwd_data;
+    auto fwd_buffer = asio::buffer(fwd_data);
+    auto fwd_buffer_dl = asio::buffer_copy(fwd_buffer, buffer.data());
 
     assert(rpp.is_header_done());
     auto rp = rpp.get();
@@ -108,7 +100,7 @@ http_forward( StreamIn& in
     if (ec) return or_throw<ResponseH>(yield, ec);
 
     // Forward the body.
-    half_duplex(in, out, buffer_, buffer.size(), max_transfer, yield[ec]);
+    half_duplex(in, out, fwd_buffer, fwd_buffer_dl, max_transfer, yield[ec]);
 
     if (!ec && cancelled)
         ec = asio::error::operation_aborted;
