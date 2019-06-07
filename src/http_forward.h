@@ -70,14 +70,10 @@ http_forward( StreamIn& in
     size_t max_transfer;
     if (!rp.chunked()) {
         static const auto max_size_t = std::numeric_limits<std::size_t>::max();
-        auto content_length = rp[http::field::content_length];
-        if (content_length.empty())
-            ec = asio::error::invalid_argument;
-        if (!ec)
-            max_transfer = util::parse_num<size_t>(content_length, max_size_t);
-        if (!ec && max_transfer == max_size_t)
-            ec = asio::error::invalid_argument;
-        if (ec) return or_throw<ResponseH>(yield, ec);
+        max_transfer = util::parse_num<size_t>( rp[http::field::content_length]
+                                              , max_size_t);
+        if (max_transfer == max_size_t)
+            return or_throw<ResponseH>(yield, asio::error::invalid_argument);
     }
 
     // Send the HTTP response head (after processing).
