@@ -62,26 +62,23 @@ http_forward( StreamIn& in
     if (ec) yield.log("Failed to receive response head: ", ec.message());
     if (ec) return or_throw<ResponseH>(yield, ec);
 
-    // Prepare forwarding buffer with body data already read.
-    std::array<uint8_t, half_duplex_default_block> fwd_data;
-    auto fwd_buffer = asio::buffer(fwd_data);
-    auto fwd_buffer_dl = asio::buffer_copy(fwd_buffer, buffer.data());
-
     assert(rpp.is_header_done());
     auto rp = rpp.get();
     assert(!rp.chunked());  // TODO: implement
 
-    // Get content length.
-    static const auto max_size_t = std::numeric_limits<std::size_t>::max();
-    auto content_length = rp[http::field::content_length];
+    // Get content length if non-chunked.
     size_t max_transfer;
-    if (content_length.empty())
-        ec = asio::error::operation_not_supported;
-    if (!ec)
-        max_transfer = util::parse_num<size_t>(content_length, max_size_t);
-    if (!ec && max_transfer == max_size_t)
-        ec = asio::error::invalid_argument;
-    if (ec) return or_throw<ResponseH>(yield, ec);
+    if (!rp.chunked()) {
+        static const auto max_size_t = std::numeric_limits<std::size_t>::max();
+        auto content_length = rp[http::field::content_length];
+        if (content_length.empty())
+            ec = asio::error::invalid_argument;
+        if (!ec)
+            max_transfer = util::parse_num<size_t>(content_length, max_size_t);
+        if (!ec && max_transfer == max_size_t)
+            ec = asio::error::invalid_argument;
+        if (ec) return or_throw<ResponseH>(yield, ec);
+    }
 
     // Send the HTTP response head (after processing).
     {
@@ -100,7 +97,16 @@ http_forward( StreamIn& in
     if (ec) return or_throw<ResponseH>(yield, ec);
 
     // Forward the body.
-    half_duplex(in, out, fwd_buffer, fwd_buffer_dl, max_transfer, yield[ec]);
+    // TODO: Implement chunkedness conversion according to `rph_out` above
+    // (ensuring that chunked to non-chunked is not allowed).
+    if (!rp.chunked()) {
+        // Prepare forwarding buffer with body data already read.
+        std::array<uint8_t, half_duplex_default_block> fwd_data;
+        auto fwd_buffer = asio::buffer(fwd_data);
+        auto fwd_buffer_dl = asio::buffer_copy(fwd_buffer, buffer.data());
+        half_duplex(in, out, fwd_buffer, fwd_buffer_dl, max_transfer, yield[ec]);
+    } else
+        /* TODO: implement */;
 
     if (!ec && cancelled)
         ec = asio::error::operation_aborted;
