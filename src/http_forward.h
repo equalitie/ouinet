@@ -5,6 +5,7 @@
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/write.hpp>
 #include <boost/beast/core/flat_buffer.hpp>
+#include <boost/beast/http/chunk_encode.hpp>
 #include <boost/beast/http/parser.hpp>
 
 #include "full_duplex_forward.h"
@@ -20,14 +21,23 @@ namespace ouinet {
 // Get copy of response head from input, return response head for output.
 using ProcHeadFunc = std::function<
     http::response_header<>(http::response_header<>, sys::error_code&)>;
+// Get a buffer of data to be sent after processing a buffer of received data.
+// The returned data will be wrapped in a single chunk
+// if the output response is chunked.
+// If the received data is empty, no more data is to be received.
+// If the returned buffer is empty, nothing is sent.
+template<class OutBuffer>
+using ProcInFunc = std::function<
+    OutBuffer&(const asio::const_buffer& inbuf, Cancel&, Yield)>;
 
-template<class StreamIn, class StreamOut, class Request>
+template<class StreamIn, class StreamOut, class Request, class ProcInFunc>
 inline
 http::response_header<>
 http_forward( StreamIn& in
             , StreamOut& out
             , Request rq
             , ProcHeadFunc rshproc
+            , ProcInFunc inproc
             , Cancel& cancel
             , Yield yield_)
 {
@@ -64,7 +74,6 @@ http_forward( StreamIn& in
 
     assert(rpp.is_header_done());
     auto rp = rpp.get();
-    assert(!rp.chunked());  // TODO: implement
 
     // Get content length if non-chunked.
     size_t max_transfer;
@@ -101,8 +110,33 @@ http_forward( StreamIn& in
         auto fwd_buffer = asio::buffer(fwd_data);
         auto fwd_buffer_dl = asio::buffer_copy(fwd_buffer, buffer.data());
         half_duplex(in, out, fwd_buffer, fwd_buffer_dl, max_transfer, yield[ec]);
-    } else
-        /* TODO: implement */;
+    } else {
+        assert(0 && "TODO: Not yet supported");
+        // Based on "Boost.Beast / HTTP / Chunked Encoding / Parsing Chunks" example.
+        bool chunked_out = true;  // TODO: get from `rph_out` instead
+
+        // TODO: watchdog
+        auto body_cb = [&] (auto, auto body, auto& ec) {
+            auto outbuf = inproc( asio::const_buffer(body.data(), body.size())
+                                , cancel, yield[ec]);
+            if (!ec && cancelled)
+                ec = asio::error::operation_aborted;
+            if (ec) return 0ul;
+            if (outbuf.size() == 0) return body.size();  // just wait for more data
+
+            if (chunked_out)
+                asio::async_write(out, http::make_chunk(outbuf), yield[ec]);
+            else
+                asio::async_write(out, outbuf, yield[ec]);
+            if (!ec && cancelled)
+                ec = asio::error::operation_aborted;
+            if (ec) return 0ul;
+            return body.size();  // done, wait for more data
+        };
+        rpp.on_chunk_body(body_cb);
+
+        // TODO: complete
+    }
 
     if (!ec && cancelled)
         ec = asio::error::operation_aborted;

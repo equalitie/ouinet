@@ -775,6 +775,7 @@ void serve( InjectorConfig& config
             using ResponseH = http::response<http::empty_body>;
             ResponseH res;
             auto orig_con = cc.get_connection(req, cancel, yield[ec]);
+            size_t saw_forwarded = 0;
             if (!ec) {
                 auto reshproc = [&] (auto inh, auto& ec) {
                     // Prevent others from inserting ouinet specific header fields.
@@ -783,8 +784,12 @@ void serve( InjectorConfig& config
                     yield.log(outh);
                     return outh;
                 };
+                auto inproc = [&] (auto const& inbuf, auto& c, auto y) {
+                    saw_forwarded += inbuf.size();
+                    return inbuf;  // just pass data on
+                };
                 res = ResponseH(http_forward( orig_con, con
-                                            , util::to_origin_request(req), reshproc
+                                            , util::to_origin_request(req), reshproc, inproc
                                             , cancel, yield[ec].tag("fetch_proxy")));
             }
             if (ec) {
@@ -793,6 +798,8 @@ void serve( InjectorConfig& config
                                   , yield[ec].tag("handle_bad_request"));
                 continue;
             }
+            // TODO: Not all forward operations let us see the data.
+            yield.log("Forwarded data bytes seen: ", saw_forwarded);
             keep_alive = cc.keep_connection(req, res, move(orig_con));
         }
         else {
