@@ -27,27 +27,32 @@ if [ "$ABI" = "armeabi-v7a" ]; then
     NDK_ARCH="arm"
     NDK_TOOLCHAIN_TARGET="arm-linux-androideabi"
     NDK_TOOLCHAIN_LIB_SUBDIR="lib/armv7-a"
+    NDK_PLATFORM=19
     CMAKE_SYSTEM_PROCESSOR="armv7-a"
     OPENSSL_MACHINE="armv7"
 elif [ "$ABI" = "arm64-v8a" ]; then
     NDK_ARCH="arm64"
     NDK_TOOLCHAIN_TARGET="aarch64-linux-android"
+    NDK_PLATFORM=21
     CMAKE_SYSTEM_PROCESSOR="aarch64"
     OPENSSL_MACHINE="arm64"
 elif [ "$ABI" = "armeabi" ]; then
     NDK_ARCH="arm"
     NDK_TOOLCHAIN_TARGET="arm-linux-androideabi"
+    NDK_PLATFORM=19
     CMAKE_SYSTEM_PROCESSOR="armv5te"
     OPENSSL_MACHINE="armv4"
 elif [ "$ABI" = "x86" ]; then
     NDK_ARCH="x86"
     NDK_TOOLCHAIN_TARGET="i686-linux-android"
+    NDK_PLATFORM=19
     CMAKE_SYSTEM_PROCESSOR="i686"
     OPENSSL_MACHINE="i686"
 elif [ "$ABI" = "x86_64" ]; then
     NDK_ARCH="x86_64"
     NDK_TOOLCHAIN_TARGET="x86_64-linux-android"
     NDK_TOOLCHAIN_LIB_SUBDIR="lib64"
+    NDK_PLATFORM=19
     CMAKE_SYSTEM_PROCESSOR="x86_64"
     OPENSSL_MACHINE="x86_64"
 else
@@ -61,7 +66,6 @@ NDK=android-ndk-r16b
 NDK_DIR=${NDK_DIR:-"$DIR/$NDK"}
 NDK_ZIP=${NDK}-linux-x86_64.zip
 
-NDK_PLATFORM=${NDK_PLATFORM:-19}
 NDK_STL='libc++'
 NDK_TOOLCHAIN_DIR=${NDK_TOOLCHAIN_DIR:-${DIR}/${NDK}-toolchain-android$NDK_PLATFORM-$NDK_ARCH-$NDK_STL}
 
@@ -247,7 +251,7 @@ fi
 ######################################################################
 function maybe_install_ndk {
     if [ ! -d "$NDK_DIR" ]; then
-        echo "installing ndk..."
+        echo "Installing NDK..."
         if [ ! -f ${NDK_ZIP} ]; then
             wget -nv https://dl.google.com/android/repository/${NDK_ZIP}
         fi
@@ -258,7 +262,7 @@ function maybe_install_ndk {
 ######################################################################
 function maybe_install_ndk_toolchain {
     if [ ! -d "${NDK_TOOLCHAIN_DIR}" ]; then
-        echo "installing ndk toolchain..."
+        echo "Installing NDK toolchain..."
         $NDK_DIR/build/tools/make-standalone-toolchain.sh \
             --platform=android-$NDK_PLATFORM \
             --arch=$NDK_ARCH \
