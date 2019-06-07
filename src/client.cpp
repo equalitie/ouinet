@@ -611,6 +611,11 @@ public:
         // Otherwise we should pass them through
         // `util::to_cache_request` and `util::to_cache_response` (respectively).
 
+        // Nonetheless, chunked transfer encoding may still have been used,
+        // and we need to undo it since the data referenced by the descriptor
+        // is the plain one.
+        rs = util::to_non_chunked_response(move(rs));
+
         auto& cache = client_state._cache;
 
         if (!cache) {
