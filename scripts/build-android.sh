@@ -57,6 +57,9 @@ else
     exit 1
 fi
 
+# Destination directory for Ouinet build outputs
+OUTPUT_DIR=build-android-${ABI}
+
 SDK_DIR=${SDK_DIR:-"$DIR/sdk"}
 
 NDK=android-ndk-r16b
@@ -412,7 +415,7 @@ function build_ouinet_libs {
 
 ######################################################################
 function copy_jni_libs {
-    local jni_dst_dir="${DIR}"/build-android/builddir/deps/${ABI}
+    local jni_dst_dir="${DIR}"/${OUTPUT_DIR}/builddir/deps/${ABI}
     rm -rf "${jni_dst_dir}"
     mkdir -p "${jni_dst_dir}"
     local lib
@@ -424,7 +427,7 @@ function copy_jni_libs {
 
 ######################################################################
 function copy_binaries {
-    local binary_dst_dir="${DIR}"/build-android/builddir/assets/
+    local binary_dst_dir="${DIR}"/${OUTPUT_DIR}/builddir/assets/
     rm -rf "${binary_dst_dir}"
     mkdir -p "${binary_dst_dir}"
     local binary
@@ -437,22 +440,16 @@ function copy_binaries {
 ######################################################################
 # Unpolished code to build the debug APK
 function build_ouinet_apk {
-    mkdir -p "${DIR}"/build-android
-    cd "${DIR}"/build-android
+    mkdir -p "${DIR}"/${OUTPUT_DIR}
+    cd "${DIR}"/${OUTPUT_DIR}
     ln -sf $(dirname ${APP_ROOT})/* .
     export GRADLE_USER_HOME=$(pwd)/.gradle-home
     gradle --no-daemon build \
         -Pboost_includedir=${BOOST_INCLUDEDIR} \
         -Pandroid_abi=${ABI} \
-        -Pouinet_clientlib_path="${DIR}"/build-android/builddir/deps/${ABI}/libclient.so \
-        -Plibdir="${DIR}"/build-android/builddir/deps \
-        -Passetsdir="${DIR}"/build-android/builddir/assets
-
-    echo "---------------------------------"
-    echo "Your Android package is ready at:"
-    ls -l "$APK"
-    echo "---------------------------------"
-    cd - >/dev/null
+        -Pouinet_clientlib_path="${DIR}"/${OUTPUT_DIR}/builddir/deps/${ABI}/libclient.so \
+        -Plibdir="${DIR}"/${OUTPUT_DIR}/builddir/deps \
+        -Passetsdir="${DIR}"/${OUTPUT_DIR}/builddir/assets
 }
 
 ######################################################################
@@ -547,7 +544,5 @@ fi
 # This only cleans files which may interfere when building for a different ABI,
 # while keeping (some) downloaded and ABI-neutral stuff.
 if check_mode abiclean; then
-    rm -rf \
-       Boost-for-Android/build \
-       build-android/builddir
+    rm -rf Boost-for-Android/build
 fi
