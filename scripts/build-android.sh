@@ -27,24 +27,32 @@ if [ "$ABI" = "armeabi-v7a" ]; then
     NDK_PLATFORM=19
     CMAKE_SYSTEM_PROCESSOR="armv7-a"
     SSL_TARGET=android-armeabi
+    GCRYPT_TARGET=arm-unknown-linux-androideabi
+
 elif [ "$ABI" = "arm64-v8a" ]; then
     NDK_ARCH="arm64"
     NDK_TOOLCHAIN_TARGET="aarch64-linux-android"
     NDK_PLATFORM=21
     CMAKE_SYSTEM_PROCESSOR="aarch64"
     SSL_TARGET=android64-aarch64
+    GCRYPT_TARGET=aarch64-linux-android
+
 elif [ "$ABI" = "armeabi" ]; then
     NDK_ARCH="arm"
     NDK_TOOLCHAIN_TARGET="arm-linux-androideabi"
     NDK_PLATFORM=19
     CMAKE_SYSTEM_PROCESSOR="armv5te"
     SSL_TARGET=android #untested
+    GCRYPT_TARGET=arm-unknown-linux-androideabi #untested
+
 elif [ "$ABI" = "x86" ]; then
     NDK_ARCH="x86"
     NDK_TOOLCHAIN_TARGET="i686-linux-android"
     NDK_PLATFORM=19
     CMAKE_SYSTEM_PROCESSOR="i686"
     SSL_TARGET=android-x86 # untested
+    GCRYPT_TARGET=arm-unknown-linux-androideabi #untested
+
 elif [ "$ABI" = "x86_64" ]; then
     NDK_ARCH="x86_64"
     NDK_TOOLCHAIN_TARGET="x86_64-linux-android"
@@ -52,6 +60,7 @@ elif [ "$ABI" = "x86_64" ]; then
     NDK_PLATFORM=19
     CMAKE_SYSTEM_PROCESSOR="x86_64"
     SSL_TARGET=android64 #untested
+    GCRYPT_TARGET=arm-unknown-linux-androideabi #untested
 else
     >&2 echo "TODO: Need a mapping from \"$ABI\" to other target selection variables"
     exit 1
@@ -401,6 +410,7 @@ function build_ouinet_libs {
           -DCMAKE_CXX_FLAGS="-I ${DIR}/android-ifaddrs -I $SSL_DIR/include" \
           -DBOOST_ROOT="$BOOST_SOURCE" \
           -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
+          -DGCRYPT_TARGET=${GCRYPT_TARGET} \
           ${ROOT}
     make -j `nproc` VERBOSE=1
     cd - >/dev/null

@@ -97,7 +97,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -Wall -O0 -ggdb ${SANITIZE}")
 ################################################################################
 if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
-    set(GCRYPT_HOST "--host=arm-unknown-linux-androideabi")
+    set(GCRYPT_HOST "--host=${GCRYPT_TARGET}")
 endif()
 
 set(GPG_ERROR_PREFIX ${CMAKE_CURRENT_BINARY_DIR}/gpg_error/out)
