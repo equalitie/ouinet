@@ -162,44 +162,44 @@ function check_mode {
 
 ######################################################################
 function setup_deps {
-# J2EE is no longer part of standard Java modules in Java 9,
-# although the Android SDK uses some of its classes.
-# This causes exception "java.lang.NoClassDefFoundError: javax/xml/bind/...",
-# so we need to reenable J2EE modules explicitly when using JRE 9
-# (see <https://stackoverflow.com/a/43574427>).
-    local java_add_modules=' --add-modules java.se.ee'
-    if [ $DEBIAN == true ] ; then
-        if [ $(java -version 2>&1 | awk -F[\"\.] -v OFS=. 'NR==1{print $3}') -ge 9 \
-             -a "${JAVA_OPTS%%$java_add_modules*}" = "$JAVA_OPTS" ] ; then
-            export JAVA_OPTS="$JAVA_OPTS$java_add_modules"
+    # J2EE is no longer part of standard Java modules in Java 9,
+    # although the Android SDK uses some of its classes.
+    # This causes exception "java.lang.NoClassDefFoundError: javax/xml/bind/...",
+    # so we need to reenable J2EE modules explicitly when using JRE 9
+    # (see <https://stackoverflow.com/a/43574427>).
+        local java_add_modules=' --add-modules java.se.ee'
+        if [ $DEBIAN == true ] ; then
+            if [ $(java -version 2>&1 | awk -F[\"\.] -v OFS=. 'NR==1{print $3}') -ge 9 \
+                 -a "${JAVA_OPTS%%$java_add_modules*}" = "$JAVA_OPTS" ] ; then
+                export JAVA_OPTS="$JAVA_OPTS$java_add_modules"
+            fi
         fi
+
+    ######################################################################
+    # Install SDK dependencies.
+    local toolsfile=sdk-tools-linux-3859397.zip
+    local sdkmanager="$SDK_DIR/tools/bin/sdkmanager"
+
+    # Reuse downloaded SDK stuff from old versions of this script.
+    if [ -d "$DIR/sdk_root" -a ! -d "$SDK_DIR" ]; then
+        mv "$DIR/sdk_root" "$SDK_DIR"
     fi
 
-######################################################################
-# Install SDK dependencies.
-local toolsfile=sdk-tools-linux-3859397.zip
-local sdkmanager="$SDK_DIR/tools/bin/sdkmanager"
-
-# Reuse downloaded SDK stuff from old versions of this script.
-if [ -d "$DIR/sdk_root" -a ! -d "$SDK_DIR" ]; then
-    mv "$DIR/sdk_root" "$SDK_DIR"
-fi
-
-if [ ! -f "$sdkmanager" ]; then
-    echo "cannot find sdk manager: $sdkmangaer"
-    echo "downlodaing sdk.."
-    [ -d "$SDK_DIR/tools" ] || rm -rf "$SDK_DIR/tools"
-    if [ ! -f "$toolsfile" ]; then
-        # https://developer.android.com/studio/index.html#command-tools
-        wget -nv "https://dl.google.com/android/repository/$toolsfile"
+    if [ ! -f "$sdkmanager" ]; then
+        echo "cannot find sdk manager: $sdkmangaer"
+        echo "downlodaing sdk.."
+        [ -d "$SDK_DIR/tools" ] || rm -rf "$SDK_DIR/tools"
+        if [ ! -f "$toolsfile" ]; then
+            # https://developer.android.com/studio/index.html#command-tools
+            wget -nv "https://dl.google.com/android/repository/$toolsfile"
+        fi
+        unzip -q "$toolsfile" -d "$SDK_DIR"
     fi
-    unzip -q "$toolsfile" -d "$SDK_DIR"
-fi
 
-# SDK packages needed by the different modes.
-# To get list of all packages, use `sdkmanager --list`.
-local sdk_pkgs
-declare -A sdk_pkgs
+    # SDK packages needed by the different modes.
+    # To get list of all packages, use `sdkmanager --list`.
+    local sdk_pkgs
+    declare -A sdk_pkgs
 sdk_pkgs[build]="
 platforms;$PLATFORM
 build-tools;25.0.3
@@ -213,39 +213,39 @@ platform-tools
 emulator
 "
 
-# Collect SDK packages that need to be installed for the requested modes.
-local sdk_pkgs_install mode pkg
-for mode in $ALLOWED_MODES; do
-    if check_mode $mode; then
-        for pkg in ${sdk_pkgs[$mode]}; do
-            if [ ! -d "$SDK_DIR/$(echo $pkg | tr ';' /)" ]; then
-                sdk_pkgs_install="$sdk_pkgs_install $pkg"
-            fi
-        done
+    # Collect SDK packages that need to be installed for the requested modes.
+    local sdk_pkgs_install mode pkg
+    for mode in $ALLOWED_MODES; do
+        if check_mode $mode; then
+            for pkg in ${sdk_pkgs[$mode]}; do
+                if [ ! -d "$SDK_DIR/$(echo $pkg | tr ';' /)" ]; then
+                    sdk_pkgs_install="$sdk_pkgs_install $pkg"
+                fi
+            done
+        fi
+    done
+
+    # Filter out repeated packages.
+    sdk_pkgs_install=$(echo "$sdk_pkgs_install" | tr [:space:] '\n' | sort -u)
+    # Install missing packages.
+    if [ "$sdk_pkgs_install" ]; then
+        echo y | "$sdkmanager" $sdk_pkgs_install
     fi
-done
 
-# Filter out repeated packages.
-sdk_pkgs_install=$(echo "$sdk_pkgs_install" | tr [:space:] '\n' | sort -u)
-# Install missing packages.
-if [ "$sdk_pkgs_install" ]; then
-    echo y | "$sdkmanager" $sdk_pkgs_install
-fi
+    # Prefer locally installed platform tools to those in the system.
+    export PATH="$SDK_DIR/platform-tools:$PATH"
 
-# Prefer locally installed platform tools to those in the system.
-export PATH="$SDK_DIR/platform-tools:$PATH"
-
-export ANDROID_HOME=$(dirname $(dirname $(which adb)))
+    export ANDROID_HOME=$(dirname $(dirname $(which adb)))
 }
 
 ######################################################################
 # Create Android virtual device for the emulator.
 function maybe_create_avd {
-if ! "$SDK_DIR/tools/emulator" -list-avds | grep -q "^$EMULATOR_AVD$"; then
-    echo no | "$SDK_DIR/tools/bin/avdmanager" create avd -n "$EMULATOR_AVD" \
-                                              -k "$EMULATOR_IMAGE" -g "$EMULATOR_IMAGE_TAG" \
-                                              -b "$ABI" -d "$EMULATOR_DEV"
-fi
+    if ! "$SDK_DIR/tools/emulator" -list-avds | grep -q "^$EMULATOR_AVD$"; then
+        echo no | "$SDK_DIR/tools/bin/avdmanager" create avd -n "$EMULATOR_AVD" \
+                                                  -k "$EMULATOR_IMAGE" -g "$EMULATOR_IMAGE_TAG" \
+                                                  -b "$ABI" -d "$EMULATOR_DEV"
+    fi
 }
 
 ######################################################################
@@ -323,28 +323,28 @@ function maybe_install_gradle {
 ######################################################################
 function maybe_install_boost {
 
-BOOST_GIT=https://github.com/equalitie/Boost-for-Android
+    BOOST_GIT=https://github.com/equalitie/Boost-for-Android
 
-if [ ! -d "$BOOST_SOURCE" ]; then
-    cd "$(dirname "$BOOST_SOURCE")"
-    git clone $BOOST_GIT "$(basename "$BOOST_SOURCE")"
-    cd $BOOST_SOURCE
-    git reset --hard 67ed5c6e8669073fd5cb939e5914662057514d00
-    cd $DIR
-fi
+    if [ ! -d "$BOOST_SOURCE" ]; then
+        cd "$(dirname "$BOOST_SOURCE")"
+        git clone $BOOST_GIT "$(basename "$BOOST_SOURCE")"
+        cd $BOOST_SOURCE
+        git reset --hard 67ed5c6e8669073fd5cb939e5914662057514d00
+        cd $DIR
+    fi
 
-if [ ! -d "$BOOST_LIBRARYDIR" ]; then
-    echo "building boost"
-    cd "$BOOST_SOURCE"
-    # TODO: Android doesn't need program_options and test.
-    ./build-android.sh \
-        --boost=${BOOST_V_DOT} \
-        --arch=${ABI} \
-        --with-libraries=regex,context,coroutine,program_options,system,test,thread,filesystem,date_time,iostreams \
-        --layout=system \
-        $NDK_DIR
-    cd -
-fi
+    if [ ! -d "$BOOST_LIBRARYDIR" ]; then
+        echo "building boost"
+        cd "$BOOST_SOURCE"
+        # TODO: Android doesn't need program_options and test.
+        ./build-android.sh \
+            --boost=${BOOST_V_DOT} \
+            --arch=${ABI} \
+            --with-libraries=regex,context,coroutine,program_options,system,test,thread,filesystem,date_time,iostreams \
+            --layout=system \
+            $NDK_DIR
+        cd - >/dev/null
+    fi
 }
 
 ######################################################################
@@ -374,10 +374,10 @@ function maybe_install_openssl {
 
 ######################################################################
 function maybe_clone_ifaddrs {
-if [ ! -d "android-ifaddrs" ]; then
-    # TODO: Still need to compile the .c file and make use of it.
-    git clone https://github.com/PurpleI2P/android-ifaddrs.git
-fi
+    if [ ! -d "android-ifaddrs" ]; then
+        # TODO: Still need to compile the .c file and make use of it.
+        git clone https://github.com/PurpleI2P/android-ifaddrs.git
+    fi
 }
 
 ######################################################################
@@ -402,59 +402,59 @@ function build_ouinet_libs {
           -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
           ${ROOT}
     make -j `nproc`
-    cd -
+    cd - >/dev/null
 
-add_library $DIR/build-ouinet/libclient.so
-add_library $DIR/build-ouinet/modules/asio-ipfs/ipfs_bindings/libipfs_bindings.so
-add_library $DIR/build-ouinet/gcrypt/src/gcrypt/src/.libs/libgcrypt.so
-add_library $DIR/build-ouinet/gpg_error/out/lib/libgpg-error.so
-add_library $DIR/build-ouinet/src/ouiservice/lampshade/lampshade_bindings/liblampshade_bindings.so
-add_binary $DIR/build-ouinet/modules/obfs4proxy/obfs4proxy
-}
+    add_library $DIR/build-ouinet/libclient.so
+    add_library $DIR/build-ouinet/modules/asio-ipfs/ipfs_bindings/libipfs_bindings.so
+    add_library $DIR/build-ouinet/gcrypt/src/gcrypt/src/.libs/libgcrypt.so
+    add_library $DIR/build-ouinet/gpg_error/out/lib/libgpg-error.so
+    add_library $DIR/build-ouinet/src/ouiservice/lampshade/lampshade_bindings/liblampshade_bindings.so
+    add_binary $DIR/build-ouinet/modules/obfs4proxy/obfs4proxy
+    }
 
 ######################################################################
 function copy_jni_libs {
-local jni_dst_dir="${DIR}"/build-android/builddir/deps/${ABI}
-rm -rf "${jni_dst_dir}"
-mkdir -p "${jni_dst_dir}"
-local lib
-for lib in "${OUT_LIBS[@]}"; do
-    echo "Copying $lib to $jni_dst_dir"
-    cp $lib $jni_dst_dir/
-done
+    local jni_dst_dir="${DIR}"/build-android/builddir/deps/${ABI}
+    rm -rf "${jni_dst_dir}"
+    mkdir -p "${jni_dst_dir}"
+    local lib
+    for lib in "${OUT_LIBS[@]}"; do
+        echo "Copying $lib to $jni_dst_dir"
+        cp $lib $jni_dst_dir/
+    done
 }
 
 ######################################################################
 function copy_binaries {
-local binary_dst_dir="${DIR}"/build-android/builddir/assets/
-rm -rf "${binary_dst_dir}"
-mkdir -p "${binary_dst_dir}"
-local binary
-for binary in "${OUT_BINARIES[@]}"; do
-    echo "Copying $binary to $binary_dst_dir"
-    cp $binary $binary_dst_dir/
-done
+    local binary_dst_dir="${DIR}"/build-android/builddir/assets/
+    rm -rf "${binary_dst_dir}"
+    mkdir -p "${binary_dst_dir}"
+    local binary
+    for binary in "${OUT_BINARIES[@]}"; do
+        echo "Copying $binary to $binary_dst_dir"
+        cp $binary $binary_dst_dir/
+    done
 }
 
 ######################################################################
 # Unpolished code to build the debug APK
 function build_ouinet_apk {
-mkdir -p "${DIR}"/build-android
-cd "${DIR}"/build-android
-ln -sf $(dirname ${APP_ROOT})/* .
-export GRADLE_USER_HOME=$(pwd)/.gradle-home
-gradle --no-daemon build \
-    -Pboost_includedir=${BOOST_INCLUDEDIR} \
-    -Pandroid_abi=${ABI} \
-    -Pouinet_clientlib_path="${DIR}"/build-android/builddir/deps/${ABI}/libclient.so \
-    -Plibdir="${DIR}"/build-android/builddir/deps \
-    -Passetsdir="${DIR}"/build-android/builddir/assets
+    mkdir -p "${DIR}"/build-android
+    cd "${DIR}"/build-android
+    ln -sf $(dirname ${APP_ROOT})/* .
+    export GRADLE_USER_HOME=$(pwd)/.gradle-home
+    gradle --no-daemon build \
+        -Pboost_includedir=${BOOST_INCLUDEDIR} \
+        -Pandroid_abi=${ABI} \
+        -Pouinet_clientlib_path="${DIR}"/build-android/builddir/deps/${ABI}/libclient.so \
+        -Plibdir="${DIR}"/build-android/builddir/deps \
+        -Passetsdir="${DIR}"/build-android/builddir/assets
 
-echo "---------------------------------"
-echo "Your Android package is ready at:"
-ls -l "$APK"
-echo "---------------------------------"
-cd -
+    echo "---------------------------------"
+    echo "Your Android package is ready at:"
+    ls -l "$APK"
+    echo "---------------------------------"
+    cd - >/dev/null
 }
 
 ######################################################################
