@@ -348,7 +348,7 @@ function maybe_install_boost {
         # TODO: Android doesn't need program_options and test.
         ./build-android.sh \
             --boost=${BOOST_V_DOT} \
-            --arch=${ABI} \
+            --arch=arm64-v8a,armeabi-v7a \
             --with-libraries=regex,context,coroutine,program_options,system,test,thread,filesystem,date_time,iostreams \
             --layout=system \
             $NDK_DIR
@@ -412,7 +412,7 @@ function build_ouinet_libs {
           -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
           -DGCRYPT_TARGET=${GCRYPT_TARGET} \
           ${ROOT}
-    make -j `nproc` VERBOSE=1
+    make -j `nproc`
     cd - >/dev/null
 
     add_library $DIR/$BUILD_DIR/libclient.so
@@ -554,5 +554,5 @@ fi
 # This only cleans files which may interfere when building for a different ABI,
 # while keeping (some) downloaded and ABI-neutral stuff.
 if check_mode abiclean; then
-    rm -rf Boost-for-Android/build
+    :
 fi
