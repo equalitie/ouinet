@@ -70,7 +70,7 @@ NDK_STL='libc++'
 NDK_TOOLCHAIN_DIR=${NDK_TOOLCHAIN_DIR:-${DIR}/${NDK}-toolchain-android$NDK_PLATFORM-$NDK_ARCH-$NDK_STL}
 
 # Android API level, see https://redmine.equalit.ie/issues/12143
-PLATFORM=${PLATFORM:-android-19}
+PLATFORM=android-${NDK_PLATFORM}
 
 BOOST_V=${BOOST_V:-"1_67_0"}
 BOOST_V_DOT=${BOOST_V//_/.} # Replace '_' for '.'
@@ -112,7 +112,6 @@ echo "NDK_DIR: "$NDK_DIR
 echo "SDK_DIR: "$SDK_DIR
 echo "NDK_TOOLCHAIN_DIR: "$NDK_TOOLCHAIN_DIR
 echo "NDK_PLATFORM: "$NDK_PLATFORM
-echo "APP_PLATFORM: "$APP_PLATFORM
 echo "BOOST_SOURCE: "$BOOST_SOURCE
 echo "BOOST LIB: "$BOOST_LIBRARYDIR
 
@@ -167,13 +166,13 @@ function setup_deps {
     # This causes exception "java.lang.NoClassDefFoundError: javax/xml/bind/...",
     # so we need to reenable J2EE modules explicitly when using JRE 9
     # (see <https://stackoverflow.com/a/43574427>).
-        local java_add_modules=' --add-modules java.se.ee'
-        if [ $DEBIAN == true ] ; then
-            if [ $(java -version 2>&1 | awk -F[\"\.] -v OFS=. 'NR==1{print $3}') -ge 9 \
-                 -a "${JAVA_OPTS%%$java_add_modules*}" = "$JAVA_OPTS" ] ; then
-                export JAVA_OPTS="$JAVA_OPTS$java_add_modules"
-            fi
+    local java_add_modules=' --add-modules java.se.ee'
+    if [ $DEBIAN == true ] ; then
+        if [ $(java -version 2>&1 | awk -F[\"\.] -v OFS=. 'NR==1{print $3}') -ge 9 \
+             -a "${JAVA_OPTS%%$java_add_modules*}" = "$JAVA_OPTS" ] ; then
+            export JAVA_OPTS="$JAVA_OPTS$java_add_modules"
         fi
+    fi
 
     ######################################################################
     # Install SDK dependencies.
@@ -410,7 +409,7 @@ function build_ouinet_libs {
     add_library $DIR/build-ouinet/gpg_error/out/lib/libgpg-error.so
     add_library $DIR/build-ouinet/src/ouiservice/lampshade/lampshade_bindings/liblampshade_bindings.so
     add_binary $DIR/build-ouinet/modules/obfs4proxy/obfs4proxy
-    }
+}
 
 ######################################################################
 function copy_jni_libs {
