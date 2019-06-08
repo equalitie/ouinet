@@ -334,7 +334,7 @@ function maybe_install_boost {
     fi
 
     if [ ! -d "$BOOST_LIBRARYDIR" ]; then
-        echo "building boost"
+        echo "Building boost"
         cd "$BOOST_SOURCE"
         # TODO: Android doesn't need program_options and test.
         ./build-android.sh \
@@ -353,10 +353,9 @@ function build_openssl {
     export ANDROID_DEV="${CROSS_SYSROOT}/usr"
     export CROSS_COMPILE="$NDK_TOOLCHAIN_TARGET-"
     export PATH="$NDK_TOOLCHAIN_DIR/bin:$PATH"
-    ./Configure ${SSL_TARGET} no-shared -no-ssl2 -no-ssl3 -no-comp -no-hw -no-engine -DAPP_PLATFORM=${PLATFORM} -D__ANDROID_API__=${NDK_PLATFORM} --prefix=${SSL_DIR}
+    ./Configure ${SSL_TARGET} no-shared -no-ssl2 -no-ssl3 -no-comp -no-hw -no-engine -DAPP_PLATFORM=${PLATFORM} -D__ANDROID_API__=${NDK_PLATFORM}
     make depend
     make build_libs
-    make install_sw
 }
 
 function maybe_install_openssl {
@@ -368,8 +367,9 @@ function maybe_install_openssl {
             wget -nv https://www.openssl.org/source/openssl-${SSL_V}.tar.gz
         fi
         tar xf openssl-${SSL_V}.tar.gz
+        mv $SSL_SOURCE $SSL_DIR
     fi
-    (cd $SSL_SOURCE && build_openssl)
+    (cd $SSL_DIR && build_openssl)
 }
 
 ######################################################################
