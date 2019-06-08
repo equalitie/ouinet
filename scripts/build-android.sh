@@ -29,32 +29,32 @@ if [ "$ABI" = "armeabi-v7a" ]; then
     NDK_TOOLCHAIN_LIB_SUBDIR="lib/armv7-a"
     NDK_PLATFORM=19
     CMAKE_SYSTEM_PROCESSOR="armv7-a"
-    OPENSSL_MACHINE="armv7"
+    SSL_TARGET=android-armeabi
 elif [ "$ABI" = "arm64-v8a" ]; then
     NDK_ARCH="arm64"
     NDK_TOOLCHAIN_TARGET="aarch64-linux-android"
     NDK_PLATFORM=21
     CMAKE_SYSTEM_PROCESSOR="aarch64"
-    OPENSSL_MACHINE="arm64"
+    SSL_TARGET=android64-aarch64
 elif [ "$ABI" = "armeabi" ]; then
     NDK_ARCH="arm"
     NDK_TOOLCHAIN_TARGET="arm-linux-androideabi"
     NDK_PLATFORM=19
     CMAKE_SYSTEM_PROCESSOR="armv5te"
-    OPENSSL_MACHINE="armv4"
+    SSL_TARGET=android #untested
 elif [ "$ABI" = "x86" ]; then
     NDK_ARCH="x86"
     NDK_TOOLCHAIN_TARGET="i686-linux-android"
     NDK_PLATFORM=19
     CMAKE_SYSTEM_PROCESSOR="i686"
-    OPENSSL_MACHINE="i686"
+    SSL_TARGET=android-x86 # untested
 elif [ "$ABI" = "x86_64" ]; then
     NDK_ARCH="x86_64"
     NDK_TOOLCHAIN_TARGET="x86_64-linux-android"
     NDK_TOOLCHAIN_LIB_SUBDIR="lib64"
     NDK_PLATFORM=19
     CMAKE_SYSTEM_PROCESSOR="x86_64"
-    OPENSSL_MACHINE="x86_64"
+    SSL_TARGET=android64 #untested
 else
     >&2 echo "TODO: Need a mapping from \"$ABI\" to other target selection variables"
     exit 1
@@ -79,7 +79,8 @@ BOOST_INCLUDEDIR=$BOOST_SOURCE/build/out/${ABI}/include
 BOOST_LIBRARYDIR=$BOOST_SOURCE/build/out/${ABI}/lib
 
 SSL_V="1.1.0g"
-SSL_DIR=${DIR}/openssl-${SSL_V}
+SSL_SOURCE=${DIR}/openssl-${SSL_V}
+SSL_DIR=${DIR}/openssl-${SSL_V}-${SSL_TARGET}
 
 ANDROID_FLAGS="\
     -DBoost_COMPILER='-clang' \
@@ -90,10 +91,8 @@ ANDROID_FLAGS="\
     -DCMAKE_SYSROOT=$NDK_TOOLCHAIN_DIR/sysroot \
     -DCMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR} \
     -DCMAKE_ANDROID_ARCH_ABI=${ABI} \
-    -DOPENSSL_ROOT_DIR=${SSL_DIR} \
     -DBOOST_INCLUDEDIR=${BOOST_INCLUDEDIR} \
-    -DBOOST_LIBRARYDIR=${BOOST_LIBRARYDIR} \
-    -DAPP_PLATFORM=${PLATFORM}"
+    -DBOOST_LIBRARYDIR=${BOOST_LIBRARYDIR}"
 
 EMULATOR_AVD=${EMULATOR_AVD:-ouinet-test}
 
@@ -112,6 +111,7 @@ echo "NDK_DIR: "$NDK_DIR
 echo "SDK_DIR: "$SDK_DIR
 echo "NDK_TOOLCHAIN_DIR: "$NDK_TOOLCHAIN_DIR
 echo "NDK_PLATFORM: "$NDK_PLATFORM
+echo "PLATFORM: "$PLATFORM
 echo "BOOST_SOURCE: "$BOOST_SOURCE
 echo "BOOST LIB: "$BOOST_LIBRARYDIR
 
@@ -199,13 +199,13 @@ function setup_deps {
     # To get list of all packages, use `sdkmanager --list`.
     local sdk_pkgs
     declare -A sdk_pkgs
-sdk_pkgs[build]="
+    sdk_pkgs[build]="
 platforms;$PLATFORM
 build-tools;25.0.3
 platform-tools
 cmake;3.6.4111459
 "
-sdk_pkgs[emu]="
+    sdk_pkgs[emu]="
 $EMULATOR_IMAGE
 platforms;$PLATFORM
 platform-tools
@@ -348,27 +348,27 @@ function maybe_install_boost {
 
 ######################################################################
 function build_openssl {
-    export SYSTEM=android
-    export CROSS_SYSROOT="$NDK_TOOLCHAIN_DIR/sysroot"
-    export ANDROID_DEV="$SYSROOT/usr"
-    export MACHINE="$OPENSSL_MACHINE"
-    export CC=gcc
+    export CROSS_SYSROOT="${NDK_TOOLCHAIN_DIR}/sysroot"
+    export ANDROID_DEV="${CROSS_SYSROOT}/usr"
     export CROSS_COMPILE="$NDK_TOOLCHAIN_TARGET-"
-    export TOOLCHAIN="$NDK_TOOLCHAIN_DIR"
     export PATH="$NDK_TOOLCHAIN_DIR/bin:$PATH"
-    ./config -v no-shared -no-ssl2 -no-ssl3 -no-comp -no-hw -no-engine -DAPP_PLATFORM=${PLATFORM} -D__ANDROID_API__=${NDK_PLATFORM}
+    ./Configure ${SSL_TARGET} no-shared -no-ssl2 -no-ssl3 -no-comp -no-hw -no-engine -DAPP_PLATFORM=${PLATFORM} -D__ANDROID_API__=${NDK_PLATFORM} --prefix=${SSL_DIR}
     make depend
     make build_libs
+    make install_sw
 }
 
 function maybe_install_openssl {
-    if [ ! -d "$SSL_DIR" ]; then
+    if [ -d "$SSL_DIR" ]; then
+        return
+    fi
+    if [ ! -d "$SSL_SOURCE" ]; then
         if [ ! -f openssl-${SSL_V}.tar.gz ]; then
             wget -nv https://www.openssl.org/source/openssl-${SSL_V}.tar.gz
         fi
         tar xf openssl-${SSL_V}.tar.gz
-        (cd $SSL_DIR && build_openssl)
     fi
+    (cd $SSL_SOURCE && build_openssl)
 }
 
 ######################################################################
