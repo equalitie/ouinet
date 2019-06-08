@@ -16,9 +16,6 @@ else
     DEBIAN=false
 fi
 
-# https://developer.android.com/ndk/guides/abis.html
-ABI=${ABI:-armeabi-v7a}
-
 # Derive other variables from the selected ABI.
 # See `$NDK/build/tools/make_standalone_toolchain.py:get_{triple,abis}()`.
 # See <https://github.com/opencv/opencv/blob/5b868ccd829975da5372bf330994553e176aee09/platforms/android/android.toolchain.cmake#L658>.
@@ -91,6 +88,7 @@ ANDROID_FLAGS="\
     -DCMAKE_SYSROOT=$NDK_TOOLCHAIN_DIR/sysroot \
     -DCMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR} \
     -DCMAKE_ANDROID_ARCH_ABI=${ABI} \
+    -DOPENSSL_ROOT_DIR=${SSL_DIR} \
     -DBOOST_INCLUDEDIR=${BOOST_INCLUDEDIR} \
     -DBOOST_LIBRARYDIR=${BOOST_LIBRARYDIR}"
 
@@ -389,8 +387,9 @@ function build_ouinet_libs {
     if [ $RELEASE_BUILD -eq 1 ]; then
         BUILD_TYPE=Release
     fi
-    mkdir -p build-ouinet
-    cd build-ouinet
+    BUILD_DIR=build-ouinet-${ABI}
+    mkdir -p $BUILD_DIR
+    cd $BUILD_DIR
     cmake ${ANDROID_FLAGS} \
           -DANDROID=1 \
           -DWITH_INJECTOR=OFF \
@@ -400,15 +399,15 @@ function build_ouinet_libs {
           -DBOOST_ROOT="$BOOST_SOURCE" \
           -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
           ${ROOT}
-    make -j `nproc`
+    make -j `nproc` VERBOSE=1
     cd - >/dev/null
 
-    add_library $DIR/build-ouinet/libclient.so
-    add_library $DIR/build-ouinet/modules/asio-ipfs/ipfs_bindings/libipfs_bindings.so
-    add_library $DIR/build-ouinet/gcrypt/src/gcrypt/src/.libs/libgcrypt.so
-    add_library $DIR/build-ouinet/gpg_error/out/lib/libgpg-error.so
-    add_library $DIR/build-ouinet/src/ouiservice/lampshade/lampshade_bindings/liblampshade_bindings.so
-    add_binary $DIR/build-ouinet/modules/obfs4proxy/obfs4proxy
+    add_library $DIR/$BUILD_DIR/libclient.so
+    add_library $DIR/$BUILD_DIR/modules/asio-ipfs/ipfs_bindings/libipfs_bindings.so
+    add_library $DIR/$BUILD_DIR/gcrypt/src/gcrypt/src/.libs/libgcrypt.so
+    add_library $DIR/$BUILD_DIR/gpg_error/out/lib/libgpg-error.so
+    add_library $DIR/$BUILD_DIR/src/ouiservice/lampshade/lampshade_bindings/liblampshade_bindings.so
+    add_binary  $DIR/$BUILD_DIR/modules/obfs4proxy/obfs4proxy
 }
 
 ######################################################################
@@ -550,7 +549,5 @@ fi
 if check_mode abiclean; then
     rm -rf \
        Boost-for-Android/build \
-       openssl-1.1.0g \
-       build-ouinet \
        build-android/builddir
 fi
