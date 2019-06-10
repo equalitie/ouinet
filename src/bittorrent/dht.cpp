@@ -16,6 +16,7 @@
 #include "../util/crypto.h"
 #include "../util/success_condition.h"
 #include "../util/wait_condition.h"
+#include "../logger.h"
 
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/steady_timer.hpp>
@@ -38,6 +39,7 @@
 namespace ouinet {
 namespace bittorrent {
 
+using std::move;
 using std::vector;
 using std::string;
 using boost::string_view;
@@ -213,22 +215,30 @@ std::string dht::NodeContact::to_string() const
 }
 
 
-dht::DhtNode::DhtNode(asio::io_service& ios, udp::endpoint local_endpoint):
+dht::DhtNode::DhtNode(asio::io_service& ios):
     _ios(ios),
-    _local_endpoint(local_endpoint),
     _ready(false),
     _stats(new Stats())
 {
 }
 
-void dht::DhtNode::start(asio::yield_context yield)
+void dht::DhtNode::start(udp::endpoint local_ep, asio::yield_context yield)
 {
+    if (local_ep.address().is_loopback()) {
+        LOG_WARN( "BT DhtNode shall be bound to the loopback address and "
+                , "thus won't be able to communicate with the world");
+    }
+
     sys::error_code ec;
+    auto m = asio_utp::udp_multiplexer(_ios);
+    m.bind(local_ep, ec);
+    if (ec) return or_throw(yield, ec);
+    return start(move(m), yield);
+}
 
-    _multiplexer = std::make_unique<UdpMultiplexer>(
-            asio_utp::udp_multiplexer(_ios, _local_endpoint));
-
-    _local_endpoint = _multiplexer->local_endpoint();
+void dht::DhtNode::start(asio_utp::udp_multiplexer m, asio::yield_context yield)
+{
+    _multiplexer = std::make_unique<UdpMultiplexer>(move(m));
 
     _tracker = std::make_unique<Tracker>(_ios);
     _data_store = std::make_unique<DataStore>(_ios);
@@ -240,6 +250,7 @@ void dht::DhtNode::start(asio::yield_context yield)
         receive_loop(yield);
     });
 
+    sys::error_code ec;
     bootstrap(yield[ec]);
 
     return or_throw(yield, ec);
@@ -1188,7 +1199,7 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
          * TODO: This can be done in a more efficient way once the routing
          * table code stabilizes.
          */
-        {
+        if (_routing_table) {
             bool contains_self = false;
             std::vector<NodeContact> closer_nodes = _routing_table->find_closest_routing_nodes(infohash, RESPONSIBLE_TRACKERS_PER_SWARM * 4);
             for (auto& i : closer_nodes) {
@@ -1468,7 +1479,8 @@ dht::DhtNode::bootstrap_single( std::string bootstrap_domain
         return or_throw<T>(yield, asio::error::operation_aborted);
     }
     if (ec) {
-        std::cerr << "Unable to resolve bootstrap server, giving up\n";
+        cerr << "Unable to resolve bootstrap server "
+             << bootstrap_domain << " (" << ec.message() << ") giving up\n";
         return or_throw<T>(yield, ec);
     }
 
@@ -1487,7 +1499,8 @@ dht::DhtNode::bootstrap_single( std::string bootstrap_domain
     }
 
     if (ec) {
-        std::cerr << "Bootstrap server does not reply, giving up\n";
+        std::cerr << "Bootstrap server " << bootstrap_domain
+                  << " does not reply (" << ec.message() << ") giving up\n";
         return or_throw<T>(yield, ec);
     }
 
@@ -1528,14 +1541,14 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
 
         do {
             for (const auto bs : bootstraps) {
+                ec = sys::error_code();
+
                 std::tie(my_endpoint, bootstrap_ep) = bootstrap_single(bs, yield[ec]);
+
                 if (ec == asio::error::operation_aborted)
                     return or_throw(yield ,ec);
+
                 if (!ec) { done = true; break; }
-                else {
-                    cerr << "Skipping bootstrap node " << bs << ": " << ec << endl;
-                    ec = sys::error_code(); // reset
-                }
             }
             if (!async_sleep(_ios, std::chrono::seconds(10), _cancel, yield))
                 return or_throw(yield, asio::error::operation_aborted);
@@ -1545,6 +1558,8 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
 
     _node_id = NodeID::generate(my_endpoint.address());
     _wan_endpoint = my_endpoint;
+
+    LOG_DEBUG("BT WAN Endpoint: ", _wan_endpoint);
 
     _routing_table =
         std::make_unique<RoutingTable>( _node_id
@@ -2243,24 +2258,35 @@ void MainlineDht::set_endpoints(const std::set<udp::endpoint>& eps)
     for (auto ep : eps) {
         if (_nodes.count(ep)) continue;
 
-        asio::spawn(_ios, [&, ep] (asio::yield_context yield) mutable {
-            auto n = std::make_unique<dht::DhtNode>(_ios, ep);
-
-            auto con = _cancel.connect([&] { n.reset(); });
-
-            // `local_ep` may be different to `ep` because `ep` could have
-            // had 0 for the port.
-            auto local_ep = n->local_endpoint();
-
-            auto p = n.get();
-            _nodes[local_ep] = move(n);
-
-            sys::error_code ec;
-            p->start(yield[ec]);
-
-            assert(!con || ec == asio::error::operation_aborted);
-        });
+        asio_utp::udp_multiplexer m(_ios);
+        sys::error_code ec;
+        m.bind(ep, ec);
+        assert(!ec);
+        set_endpoint(move(m));
     }
+}
+
+void MainlineDht::set_endpoint(asio_utp::udp_multiplexer m)
+{
+    auto it = _nodes.find(m.local_endpoint());
+
+    if (it != _nodes.end()) {
+        it = _nodes.erase(it);
+    }
+
+    asio::spawn(_ios, [&, m = move(m)] (asio::yield_context yield) mutable {
+        auto n = std::make_unique<dht::DhtNode>(_ios);
+
+        auto con = _cancel.connect([&] { n.reset(); });
+
+        auto p = n.get();
+        _nodes[m.local_endpoint()] = move(n);
+
+        sys::error_code ec;
+        p->start(move(m), yield[ec]);
+
+        assert(!con || ec == asio::error::operation_aborted);
+    });
 }
 
 std::set<tcp::endpoint> MainlineDht::tracker_announce(

@@ -56,7 +56,7 @@ BOOST_AUTO_TEST_CASE(test_bep_5)
 
     asio::io_service ios;
 
-    DhtNode dht(ios, {asio::ip::make_address("0.0.0.0"), 0}); // TODO: IPv6
+    DhtNode dht(ios);
 
     asio::spawn(ios, [&] (auto yield) {
         sys::error_code ec;
@@ -64,7 +64,7 @@ BOOST_AUTO_TEST_CASE(test_bep_5)
 
         NodeID infohash = util::sha1("ouinet-test-" + to_string(time(0)));
 
-        dht.start(yield[ec]);
+        dht.start({asio::ip::make_address("0.0.0.0"), 0}, yield[ec]); // TODO: IPv6
         BOOST_REQUIRE(!ec);
 
         dht.tracker_announce(infohash, dht.wan_endpoint().port(), cancel_signal, yield[ec]);
@@ -87,7 +87,7 @@ BOOST_AUTO_TEST_CASE(test_bep_44)
 
     asio::io_service ios;
 
-    DhtNode dht(ios, {asio::ip::make_address("0.0.0.0"), 0}); // TODO: IPv6
+    DhtNode dht(ios);
 
     auto mutable_data = []( const string& value
                           , const string& salt
@@ -115,7 +115,7 @@ BOOST_AUTO_TEST_CASE(test_bep_44)
     size_t success_count = 0;
 
     asio::spawn(ios, [&] (auto yield) {
-        dht.start(yield[ec]);
+        dht.start({asio::ip::make_address("0.0.0.0"), 0}, yield[ec]); // TODO: IPv6
 
         BOOST_REQUIRE(!ec);
         BOOST_REQUIRE(dht.ready());

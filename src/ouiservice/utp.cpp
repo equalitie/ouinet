@@ -7,13 +7,26 @@
 namespace ouinet {
 namespace ouiservice {
 
+using udp = asio::ip::udp;
 using namespace std;
 
-UtpOuiServiceServer::UtpOuiServiceServer(asio::io_service& ios, asio::ip::udp::endpoint endpoint):
+UtpOuiServiceServer::UtpOuiServiceServer( asio::io_service& ios
+                                        , udp::endpoint local_endpoint):
     _ios(ios),
-    _endpoint(endpoint),
+    _udp_multiplexer(new asio_utp::udp_multiplexer(_ios)),
     _accept_queue(_ios)
-{}
+{
+    sys::error_code ec;
+
+    _udp_multiplexer->bind(local_endpoint, ec);
+
+    if (ec) {
+        LOG_ERROR("uTP: Failed to bind UtpOuiServiceServer to "
+                 , local_endpoint, " ec:", ec.message());
+    } else {
+        LOG_DEBUG("uTP UDP endpoint:", _udp_multiplexer->local_endpoint());
+    }
+}
 
 void UtpOuiServiceServer::start_listen(asio::yield_context yield)
 {
@@ -22,7 +35,9 @@ void UtpOuiServiceServer::start_listen(asio::yield_context yield)
 
         while (!cancel) {
             sys::error_code ec;
-            asio_utp::socket s(_ios, _endpoint);
+            asio_utp::socket s(_ios);
+            s.bind(_udp_multiplexer->local_endpoint(), ec);
+            assert(!ec);
             s.async_accept(yield[ec]);
             if (cancel) return;
             assert(!ec);
@@ -56,16 +71,13 @@ static boost::optional<asio::ip::udp::endpoint> parse_endpoint(std::string endpo
     return ep;
 }
 
-UtpOuiServiceClient::UtpOuiServiceClient(asio::io_service& ios, std::string endpoint):
+UtpOuiServiceClient::UtpOuiServiceClient( asio::io_service& ios
+                                        , asio_utp::udp_multiplexer m
+                                        , std::string endpoint):
     _ios(ios),
     _remote_endpoint(parse_endpoint(endpoint)),
-    _udp_multiplexer(
-            new asio_utp::udp_multiplexer(_ios
-                                         , asio::ip::udp::endpoint
-                                            ( asio::ip::address_v4::any()
-                                            , 0 )))
+    _udp_multiplexer(move(m))
 {
-    cerr << "uTP local endpoint is: UDP:" << _udp_multiplexer->local_endpoint() << "\n";
 }
 
 GenericStream
@@ -85,7 +97,9 @@ UtpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
     for (int i = 0; i != sizeof(retry_timeout)/sizeof(*retry_timeout); ++i) {
         ec = sys::error_code();
 
-        socket = asio_utp::socket(_ios, _udp_multiplexer->local_endpoint());
+        socket = asio_utp::socket(_ios);
+        socket.bind(_udp_multiplexer, ec);
+        assert(!ec);
 
         auto cancel_slot = cancel.connect([&] {
             socket.close();

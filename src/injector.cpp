@@ -64,6 +64,7 @@ using namespace ouinet;
 using tcp         = asio::ip::tcp;
 using udp         = asio::ip::udp;
 using string_view = beast::string_view;
+namespace bt = bittorrent;
 // We are more interested in an ID generator that can be
 // used concurrently and does not block by random pool exhaustion
 // than we are in getting unpredictable IDs;
@@ -877,6 +878,7 @@ void listen( InjectorConfig& config
 
 //------------------------------------------------------------------------------
 unique_ptr<CacheInjector> build_cache( asio::io_service& ios
+                                     , shared_ptr<bittorrent::MainlineDht> bt_dht
                                      , const InjectorConfig& config
                                      , Cancel& cancel
                                      , asio::yield_context yield)
@@ -886,6 +888,7 @@ unique_ptr<CacheInjector> build_cache( asio::io_service& ios
     sys::error_code ec;
 
     auto cache_injector = CacheInjector::build( ios
+                                              , bt_dht
                                               , bep44_privk
                                               , config.repo_root()
                                               , config.index_bep44_capacity()
@@ -933,6 +936,8 @@ int main(int argc, const char* argv[])
     if (config.open_file_limit()) {
         increase_open_file_limit(*config.open_file_limit());
     }
+
+    boost::optional<udp::endpoint> local_utp_endpoint;
 
     // Create or load the TLS certificate.
     auto tls_certificate = get_or_gen_tls_cert<EndCertificate>
@@ -983,7 +988,10 @@ int main(int argc, const char* argv[])
         util::create_state_file( config.repo_root()/"endpoint-utp"
                                , util::str(endpoint));
 
-        proxy_server.add(make_unique<ouiservice::UtpOuiServiceServer>(ios, endpoint));
+        auto srv = make_unique<ouiservice::UtpOuiServiceServer>(ios, endpoint);
+        local_utp_endpoint = srv->local_endpoint();
+        assert(local_utp_endpoint);
+        proxy_server.add(move(srv));
     }
 
     if (config.utp_tls_endpoint()) {
@@ -996,6 +1004,8 @@ int main(int argc, const char* argv[])
                                , util::str(endpoint));
 
         auto base = make_unique<ouiservice::UtpOuiServiceServer>(ios, endpoint);
+        local_utp_endpoint = base->local_endpoint();
+        assert(local_utp_endpoint);
         proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(ios, move(base), ssl_context));
     }
 

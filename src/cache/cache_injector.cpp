@@ -22,6 +22,7 @@ namespace bt = ouinet::bittorrent;
 
 // static
 unique_ptr<CacheInjector> CacheInjector::build( boost::asio::io_service& ios
+                                              , std::shared_ptr<bt::MainlineDht> bt_dht
                                               , util::Ed25519PrivateKey bt_privkey
                                               , fs::path path_to_repo
                                               , unsigned int bep44_index_capacity
@@ -31,10 +32,6 @@ unique_ptr<CacheInjector> CacheInjector::build( boost::asio::io_service& ios
     using Ret = unique_ptr<CacheInjector>;
 
     sys::error_code ec;
-
-    unique_ptr<bt::MainlineDht> bt_dht(new bt::MainlineDht(ios));
-
-    bt_dht->set_endpoints({{asio::ip::address_v4::any(), 0}});
 
     unique_ptr<Bep44InjectorIndex> bep44_index;
 
@@ -52,7 +49,7 @@ unique_ptr<CacheInjector> CacheInjector::build( boost::asio::io_service& ios
     Ret ci(new CacheInjector( ios
                             , bt_privkey
                             , path_to_repo
-                            , move(bt_dht)
+                            , bt_dht
                             , move(bep44_index)));
 
     ci->wait_for_ready(cancel, yield[ec]);
@@ -68,7 +65,7 @@ CacheInjector::CacheInjector
         ( asio::io_service& ios
         , util::Ed25519PrivateKey bt_privkey
         , fs::path path_to_repo
-        , unique_ptr<bt::MainlineDht> bt_dht
+        , shared_ptr<bt::MainlineDht> bt_dht
         , unique_ptr<Bep44InjectorIndex> bep44_index)
     : _ipfs_node(new asio_ipfs::node( ios
                                     , (path_to_repo/"ipfs").native()
