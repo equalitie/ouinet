@@ -111,7 +111,6 @@ http_forward( StreamIn& in
         auto fwd_buffer_dl = asio::buffer_copy(fwd_buffer, buffer.data());
         half_duplex(in, out, fwd_buffer, fwd_buffer_dl, max_transfer, yield[ec]);
     } else {
-        assert(0 && "TODO: Not yet supported");
         // Based on "Boost.Beast / HTTP / Chunked Encoding / Parsing Chunks" example.
         bool chunked_out = true;  // TODO: get from `rph_out` instead
 
@@ -124,6 +123,7 @@ http_forward( StreamIn& in
             if (ec) return 0ul;
             if (outbuf.size() == 0) return body.size();  // just wait for more data
 
+            // TODO: Fix failing `! is_running()` assertion.
             if (chunked_out)
                 asio::async_write(out, http::make_chunk(outbuf), yield[ec]);
             else
@@ -135,7 +135,14 @@ http_forward( StreamIn& in
         };
         rpp.on_chunk_body(body_cb);
 
-        // TODO: complete
+        while (!rpp.is_done()) {  // `buffer` includes initial data on first read
+            http::async_read(in, buffer, rpp, yield[ec]);
+            if (!ec && cancelled)
+                ec = asio::error::operation_aborted;
+            if (ec) yield.log("Failed to read response body: ", ec.message());
+            if (ec) return or_throw<ResponseH>(yield, ec);
+            // Sending is done by the chunk body callback.
+        }
     }
 
     if (!ec && cancelled)
