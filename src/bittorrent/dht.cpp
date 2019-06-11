@@ -2412,7 +2412,7 @@ std::set<tcp::endpoint> MainlineDht::tracker_get_peers(NodeID infohash, Cancel& 
 
     completed_condition.wait(yield);
 
-    return or_throw<std::set<tcp::endpoint>>(yield, ec);
+    return or_throw(yield, ec, move(output));
 }
 
 boost::optional<BencodedValue> MainlineDht::immutable_get(
