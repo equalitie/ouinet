@@ -23,7 +23,7 @@ using boost::optional;
 
 unique_ptr<CacheClient>
 CacheClient::build( asio::io_service& ios
-                  , unique_ptr<bittorrent::MainlineDht> bt_dht
+                  , shared_ptr<bittorrent::MainlineDht> bt_dht
                   , optional<util::Ed25519PublicKey> bt_pubkey
                   , fs::path path_to_repo
                   , bool autoseed_updated
@@ -87,7 +87,7 @@ CacheClient::build( asio::io_service& ios
 // private
 CacheClient::CacheClient( std::unique_ptr<asio_ipfs::node> ipfs_node
                         , optional<util::Ed25519PublicKey> bt_pubkey
-                        , unique_ptr<bittorrent::MainlineDht> bt_dht
+                        , shared_ptr<bittorrent::MainlineDht> bt_dht
                         , unique_ptr<Bep44ClientIndex> bep44_index
                         , fs::path path_to_repo
                         , bool autoseed_updated)

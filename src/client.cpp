@@ -67,6 +67,7 @@ using namespace std;
 using namespace ouinet;
 
 namespace posix_time = boost::posix_time;
+namespace bt = ouinet::bittorrent;
 
 using tcp      = asio::ip::tcp;
 using Request  = http::request<http::string_body>;
@@ -125,6 +126,22 @@ public:
                                     , _config.repo_root() / "last_used_udp_port");
 
         return *_udp_multiplexer;
+    }
+
+    std::shared_ptr<bt::MainlineDht> bittorrent_dht()
+    {
+        if (_bt_dht) return _bt_dht;
+
+        _bt_dht = make_shared<bittorrent::MainlineDht>(_ios);
+
+        sys::error_code ec;
+        asio_utp::udp_multiplexer m(_ios);
+        m.bind(common_udp_multiplexer(), ec);
+        assert(!ec);
+
+        _bt_dht->set_endpoint(move(m));
+
+        return _bt_dht;
     }
 
 private:
@@ -204,6 +221,7 @@ private:
     Scheduler _store_scheduler;
     boost::optional<asio::ip::udp::endpoint> _local_utp_endpoint;
     boost::optional<asio_utp::udp_multiplexer> _udp_multiplexer;
+    shared_ptr<bt::MainlineDht> _bt_dht;
 };
 
 //------------------------------------------------------------------------------
@@ -1386,17 +1404,10 @@ void Client::State::setup_cache()
 
             auto on_exit = defer([&] { _is_ipns_being_setup = false; });
 
-            auto bt_dht = make_unique<bittorrent::MainlineDht>(_ios);
-
             sys::error_code ec;
-            asio_utp::udp_multiplexer m(_ios);
-            m.bind(common_udp_multiplexer(), ec);
-            assert(!ec);
-
-            bt_dht->set_endpoint(move(m));
 
             _cache = CacheClient::build(_ios
-                                       , move(bt_dht)
+                                       , bittorrent_dht()
                                        , _config.index_bep44_pub_key()
                                        , _config.repo_root()
                                        , _config.autoseed_updated()
