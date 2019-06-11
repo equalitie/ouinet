@@ -92,8 +92,10 @@ http_forward( StreamIn& in
         if (ec) yield.log("Failed to process response head: ", ec.message());
         if (ec) return or_throw<ResponseH>(yield, ec);
 
-        http::response<http::empty_body> rp_out(std::move(rph_out));
-        http::async_write(out, rp_out, yield[ec]);
+        // Write the head as a string to avoid the serializer adding an empty body
+        // (which results in a terminating chunk if chunked).
+        auto rph_outs = util::str(rph_out);
+        asio::async_write(out, asio::buffer(rph_outs.data(), rph_outs.size()), yield[ec]);
     }
 
     if (!ec && cancelled)
