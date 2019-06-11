@@ -22,22 +22,23 @@ namespace ouinet {
 using ProcHeadFunc = std::function<
     http::response_header<>(http::response_header<>, sys::error_code&)>;
 // Get a buffer of data to be sent after processing a buffer of received data.
+// The returned data must be alive while `http_forward` runs,
 // The returned data will be wrapped in a single chunk
 // if the output response is chunked.
 // If the received data is empty, no more data is to be received.
 // If the returned buffer is empty, nothing is sent.
-template<class OutBuffer>
+template<class ConstBufferSequence>
 using ProcInFunc = std::function<
-    OutBuffer&(const asio::const_buffer& inbuf, Cancel&, Yield)>;
+    ConstBufferSequence(const asio::const_buffer& inbuf, sys::error_code&)>;
 
-template<class StreamIn, class StreamOut, class Request, class ProcInFunc>
+template<class StreamIn, class StreamOut, class Request, class ConstBufferSequence>
 inline
 http::response_header<>
 http_forward( StreamIn& in
             , StreamOut& out
             , Request rq
             , ProcHeadFunc rshproc
-            , ProcInFunc inproc
+            , ProcInFunc<ConstBufferSequence> inproc
             , Cancel& cancel
             , Yield yield_)
 {
@@ -112,44 +113,48 @@ http_forward( StreamIn& in
         auto fwd_buffer = asio::buffer(fwd_data);
         auto fwd_buffer_dl = asio::buffer_copy(fwd_buffer, buffer.data());
         half_duplex(in, out, fwd_buffer, fwd_buffer_dl, max_transfer, yield[ec]);
+        if (ec || cancelled)
+            yield.log("Failed to forward response body: ", ec.message());
     } else {
         // Based on "Boost.Beast / HTTP / Chunked Encoding / Parsing Chunks" example.
         bool chunked_out = true;  // TODO: get from `rph_out` instead
+        ConstBufferSequence outbuf;
 
         // TODO: watchdog
         auto body_cb = [&] (auto, auto body, auto& ec) {
-            auto outbuf = inproc( asio::const_buffer(body.data(), body.size())
-                                , cancel, yield[ec]);
-            if (!ec && cancelled)
-                ec = asio::error::operation_aborted;
+            outbuf = inproc(asio::const_buffer(body.data(), body.size()), ec);
             if (ec) return 0ul;
-            if (outbuf.size() == 0) return body.size();  // just wait for more data
-
-            // TODO: Fix failing `! is_running()` assertion.
-            if (chunked_out)
-                asio::async_write(out, http::make_chunk(outbuf), yield[ec]);
-            else
-                asio::async_write(out, outbuf, yield[ec]);
-            if (!ec && cancelled)
-                ec = asio::error::operation_aborted;
-            if (ec) return 0ul;
-            return body.size();  // done, wait for more data
+            if (asio::buffer_size(outbuf) > 0)
+                ec = http::error::end_of_chunk;  // not really, but similar semantics
+            return body.size();  // wait for more data
         };
         rpp.on_chunk_body(body_cb);
 
         while (!rpp.is_done()) {  // `buffer` includes initial data on first read
             http::async_read(in, buffer, rpp, yield[ec]);
-            if (!ec && cancelled)
-                ec = asio::error::operation_aborted;
-            if (ec) yield.log("Failed to read response body: ", ec.message());
-            if (ec) return or_throw<ResponseH>(yield, ec);
-            // Sending is done by the chunk body callback.
+            if (ec == http::error::end_of_chunk)
+                ec = {};  // just a signal that we have output to send
+            if (ec || cancelled) {
+               yield.log("Failed to read response body: ", ec.message());
+               break;
+            }
+
+            if (asio::buffer_size(outbuf) == 0)
+               continue;  // e.g. `buffer` filled but no output yet
+
+            if (chunked_out)
+                asio::async_write(out, http::make_chunk(outbuf), yield[ec]);
+            else
+                asio::async_write(out, outbuf, yield[ec]);
+            if (ec || cancelled) {
+                yield.log("Failed to send response body: ", ec.message());
+                break;
+            }
         }
     }
 
     if (!ec && cancelled)
         ec = asio::error::operation_aborted;
-    if (ec) yield.log("Failed to forward response body: ", ec.message());
     if (ec) return or_throw<ResponseH>(yield, ec);
 
     return rpp.release().base();
