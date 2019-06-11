@@ -9,6 +9,7 @@ ROOT=$(cd ${SCRIPT_DIR}/.. && pwd)
 APP_ROOT="${ROOT}/android/browser"
 APK="${DIR}"/build-android/builddir/browser/build-android/outputs/apk/debug/browser-debug.apk
 APK_ID=$(sed -En 's/^\s*\bapplicationId\s+"([^"]+)".*/\1/p' "${APP_ROOT}/build.gradle")
+ABI=${ABI:-armeabi-v7a}
 
 if which apt-get 1> /dev/null 2>&1; then
     DEBIAN=true
@@ -62,7 +63,7 @@ elif [ "$ABI" = "x86_64" ]; then
     SSL_TARGET=android64 #untested
     GCRYPT_TARGET=arm-unknown-linux-androideabi #untested
 else
-    >&2 echo "TODO: Need a mapping from \"$ABI\" to other target selection variables"
+    >&2 echo "Unsupported ABI: '$ABI'"
     exit 1
 fi
 
