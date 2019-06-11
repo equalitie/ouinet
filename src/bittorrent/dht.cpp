@@ -41,6 +41,7 @@ namespace ouinet {
 namespace bittorrent {
 
 using std::move;
+using std::make_unique;
 using std::vector;
 using std::string;
 using boost::string_view;
@@ -2250,17 +2251,14 @@ void MainlineDht::set_endpoint(asio_utp::udp_multiplexer m)
         it = _nodes.erase(it);
     }
 
+    _nodes[m.local_endpoint()] = make_unique<dht::DhtNode>(_ios);
+
     asio::spawn(_ios, [&, m = move(m)] (asio::yield_context yield) mutable {
-        auto n = std::make_unique<dht::DhtNode>(_ios);
-
-        auto con = _cancel.connect([&] { n.reset(); });
-
-        auto p = n.get();
-        _nodes[m.local_endpoint()] = move(n);
+        auto ep = m.local_endpoint();
+        auto con = _cancel.connect([&] { _nodes.erase(ep); });
 
         sys::error_code ec;
-        p->start(move(m), yield[ec]);
-
+        _nodes[ep]->start(move(m), yield[ec]);
         assert(!con || ec == asio::error::operation_aborted);
     });
 }

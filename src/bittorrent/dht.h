@@ -369,6 +369,12 @@ class MainlineDht {
     void set_endpoints(const std::set<udp::endpoint>&);
     void set_endpoint(asio_utp::udp_multiplexer);
 
+    std::set<udp::endpoint> local_endpoints() const {
+        std::set<udp::endpoint> ret;
+        for (auto& p : _nodes) { ret.insert(p.first); }
+        return ret;
+    }
+
     /*
      * TODO: announce() and put() functions don't have any real error detection.
      */
