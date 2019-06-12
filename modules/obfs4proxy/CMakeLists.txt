@@ -58,6 +58,6 @@ externalproject_add(obfs4proxy
                && export GOARM=${GOARM}
                && export CC=${CMAKE_C_COMPILER}
                && export CGO_ENABLED=1
-               && go build -o ${CMAKE_CURRENT_BINARY_DIR}/obfs4proxy ./obfs4proxy
+               && go build -x -v -o ${CMAKE_CURRENT_BINARY_DIR}/obfs4proxy ./obfs4proxy
     INSTALL_COMMAND ""
 )
