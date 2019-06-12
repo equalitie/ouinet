@@ -46,11 +46,11 @@ class Bep5Client : public OuiServiceImplementationClient
 {
 private:
     struct Bep5Loop;
-    struct Injector;
+    struct Client;
 
-    using Injectors = std::map< asio::ip::udp::endpoint
-                              , std::unique_ptr<Injector>
-                              >;
+    using Clients = std::map< asio::ip::udp::endpoint
+                            , std::unique_ptr<Client>
+                            >;
 
 public:
     Bep5Client( std::shared_ptr<bittorrent::MainlineDht>
@@ -69,12 +69,12 @@ public:
 private:
     void add_injector_endpoints(const std::set<asio::ip::udp::endpoint>&);
 
-    Injectors::iterator chose_injector();
+    Clients::iterator choose_client();
     unsigned lowest_fail_count() const;
-    std::unique_ptr<Injector> build_injector(const asio::ip::udp::endpoint&);
+    std::unique_ptr<Client> build_client(const asio::ip::udp::endpoint&);
 
     boost::optional<asio_utp::udp_multiplexer>
-    chose_multiplexer_for(const asio::ip::udp::endpoint&);
+    choose_multiplexer_for(const asio::ip::udp::endpoint&);
 
 private:
     std::shared_ptr<bittorrent::MainlineDht> _dht;
@@ -85,7 +85,7 @@ private:
 
     std::mt19937 _random_gen;
 
-    Injectors _injectors;
+    Clients _clients;
 
     bool _log_debug = false;
 };

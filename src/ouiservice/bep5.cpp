@@ -203,11 +203,11 @@ struct Bep5Client::Bep5Loop
     }
 };
 
-struct Bep5Client::Injector {
+struct Bep5Client::Client {
     unsigned fail_count = 0;
     std::unique_ptr<AbstractClient> client;
 
-    Injector(unique_ptr<AbstractClient> c) : client(move(c)) {}
+    Client(unique_ptr<AbstractClient> c) : client(move(c)) {}
 };
 
 Bep5Client::Bep5Client( shared_ptr<bt::MainlineDht> dht
@@ -236,7 +236,7 @@ void Bep5Client::start(asio::yield_context)
 void Bep5Client::stop()
 {
     _bep5_loop = nullptr;
-    _injectors.clear();
+    _clients.clear();
 }
 
 static bool same_ipv(const udp::endpoint& ep1, const udp::endpoint& ep2)
@@ -245,7 +245,7 @@ static bool same_ipv(const udp::endpoint& ep1, const udp::endpoint& ep2)
 }
 
 boost::optional<asio_utp::udp_multiplexer>
-Bep5Client::chose_multiplexer_for(const udp::endpoint& ep)
+Bep5Client::choose_multiplexer_for(const udp::endpoint& ep)
 {
     auto eps = _dht->local_endpoints();
 
@@ -262,12 +262,12 @@ Bep5Client::chose_multiplexer_for(const udp::endpoint& ep)
     return boost::none;
 }
 
-unique_ptr<Bep5Client::Injector> Bep5Client::build_injector(const udp::endpoint& ep)
+unique_ptr<Bep5Client::Client> Bep5Client::build_client(const udp::endpoint& ep)
 {
-    auto opt_m = chose_multiplexer_for(ep);
+    auto opt_m = choose_multiplexer_for(ep);
 
     if (!opt_m) {
-        LOG_ERROR("Bep5Client: Failed to chose multiplexer");
+        LOG_ERROR("Bep5Client: Failed to choose multiplexer");
         return nullptr;
     }
 
@@ -281,35 +281,34 @@ unique_ptr<Bep5Client::Injector> Bep5Client::build_injector(const udp::endpoint&
 
     auto tls_client = make_unique<TlsOuiServiceClient>(move(utp_client), _tls_ctx);
 
-    return make_unique<Injector>(move(tls_client));
+    return make_unique<Client>(move(tls_client));
 }
 
 void Bep5Client::add_injector_endpoints(const set<udp::endpoint>& eps)
 {
     for (auto ep : eps) {
         if (bittorrent::is_martian(ep)) continue;
-        //auto r = _injectors.insert(pair<udp::endpoint, unique_ptr<Injector>>{ep, nullptr});
-        auto r = _injectors.emplace(ep, nullptr);
+        auto r = _clients.emplace(ep, nullptr);
         if (r.second) {
-            auto inj = build_injector(ep);
-            if (!inj) continue;
-            r.first->second = move(inj);
+            auto c = build_client(ep);
+            if (!c) continue;
+            r.first->second = move(c);
         }
     }
 }
 
-Bep5Client::Injectors::iterator Bep5Client::chose_injector()
+Bep5Client::Clients::iterator Bep5Client::choose_client()
 {
-    if (_injectors.empty()) return _injectors.end();
+    if (_clients.empty()) return _clients.end();
 
     unsigned sum = 0;
     unsigned max = 0;
 
-    for (auto& inj : _injectors) {
+    for (auto& inj : _clients) {
         max = std::max(max, inj.second->fail_count);
     }
 
-    for (auto& inj : _injectors) {
+    for (auto& inj : _clients) {
         unsigned n = (max - inj.second->fail_count) + 1;
         sum += n;
     }
@@ -318,20 +317,20 @@ Bep5Client::Injectors::iterator Bep5Client::chose_injector()
 
     unsigned r = dist(_random_gen);
 
-    for (auto i = _injectors.begin(); i != _injectors.end(); ++i) {
+    for (auto i = _clients.begin(); i != _clients.end(); ++i) {
         unsigned n = (max - i->second->fail_count) + 1;
         if (n > r) return i;
         r -= n;
     }
 
     assert(0);
-    return _injectors.end();
+    return _clients.end();
 }
 
 unsigned Bep5Client::lowest_fail_count() const
 {
     unsigned ret = std::numeric_limits<unsigned>::max();
-    for (auto& ep : _injectors) ret = std::min(ret, ep.second->fail_count);
+    for (auto& ep : _clients) ret = std::min(ret, ep.second->fail_count);
     return ret;
 }
 
@@ -341,12 +340,12 @@ GenericStream Bep5Client::connect(asio::yield_context yield, Cancel& cancel_)
     auto cancel_con = _cancel.connect([&] { cancel(); });
 
     while (lowest_fail_count() < 5) {
-        auto i = chose_injector();
+        auto i = choose_client();
 
         if (_log_debug) LOG_DEBUG("Connecting...");
 
-        if (i == _injectors.end()) {
-            if (_log_debug) LOG_DEBUG("Connect failed: no known injectors");
+        if (i == _clients.end()) {
+            if (_log_debug) LOG_DEBUG("Connect failed: no remote endpoints");
             return or_throw<GenericStream>(yield, asio::error::host_unreachable);
         }
 
