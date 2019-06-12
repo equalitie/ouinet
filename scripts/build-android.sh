@@ -6,9 +6,6 @@ set -x
 DIR=`pwd`
 SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
 ROOT=$(cd ${SCRIPT_DIR}/.. && pwd)
-APP_ROOT="${ROOT}/android/browser"
-APK="${DIR}"/build-android/builddir/browser/build-android/outputs/apk/debug/browser-debug.apk
-APK_ID=$(sed -En 's/^\s*\bapplicationId\s+"([^"]+)".*/\1/p' "${APP_ROOT}/build.gradle")
 ABI=${ABI:-armeabi-v7a}
 
 if which apt-get 1> /dev/null 2>&1; then
@@ -453,7 +450,6 @@ function copy_binaries {
 function build_ouinet_apk {
     mkdir -p "${DIR}"/${OUTPUT_DIR}
     cd "${DIR}"/${OUTPUT_DIR}
-    ln -sf $(dirname ${APP_ROOT})/* .
     export GRADLE_USER_HOME=$(pwd)/.gradle-home
     gradle --no-daemon build \
         -Pboost_includedir=${BOOST_INCLUDEDIR} \
