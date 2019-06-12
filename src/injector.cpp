@@ -473,7 +473,11 @@ public:
     bool is_semi_fresh(http::response_header<>& hdr)
     {
         auto date = util::parse_date(hdr[http::field::date]);
-        assert(date != boost::posix_time::ptime());
+
+        if (date == boost::posix_time::ptime()) {
+            LOG_ERROR("Failed to parse header date: \"", hdr[http::field::date],"\"");
+            return false;
+        }
 
         bool expired = CacheControl::is_expired(hdr, date);
 
