@@ -73,12 +73,18 @@ http_forward( StreamIn& in
     if (ec) yield.log("Failed to receive response head: ", ec.message());
     if (ec) return or_throw<ResponseH>(yield, ec);
 
+    // Prepare forwarding buffer with body data already read.
+    std::array<uint8_t, half_duplex_default_block> fwd_data;
+    auto fwd_buffer = asio::buffer(fwd_data);
+    auto fwd_buffer_dl = asio::buffer_copy(fwd_buffer, buffer.data());
+
     assert(rpp.is_header_done());
     auto rp = rpp.get();
+    bool chunked_in = rp.chunked();
 
     // Get content length if non-chunked.
-    size_t max_transfer;
-    if (!rp.chunked()) {
+    size_t max_transfer = 0;
+    if (!chunked_in) {
         static const auto max_size_t = std::numeric_limits<std::size_t>::max();
         max_transfer = util::parse_num<size_t>( rp[http::field::content_length]
                                               , max_size_t);
@@ -87,11 +93,15 @@ http_forward( StreamIn& in
     }
 
     // Send the HTTP response head (after processing).
+    bool chunked_out;
     {
         auto rph_out(rpp.get().base());
         rph_out = rshproc(std::move(rph_out), ec);
         if (ec) yield.log("Failed to process response head: ", ec.message());
         if (ec) return or_throw<ResponseH>(yield, ec);
+
+        chunked_out = http::response<http::empty_body>(rph_out).chunked();
+        assert(!(chunked_in && !chunked_out));  // implies slurping response into memory
 
         // Write the head as a string to avoid the serializer adding an empty body
         // (which results in a terminating chunk if chunked).
@@ -105,19 +115,12 @@ http_forward( StreamIn& in
     if (ec) return or_throw<ResponseH>(yield, ec);
 
     // Forward the body.
-    // TODO: Implement chunkedness conversion according to `rph_out` above
-    // (ensuring that chunked to non-chunked is not allowed).
-    if (!rp.chunked()) {
-        // Prepare forwarding buffer with body data already read.
-        std::array<uint8_t, half_duplex_default_block> fwd_data;
-        auto fwd_buffer = asio::buffer(fwd_data);
-        auto fwd_buffer_dl = asio::buffer_copy(fwd_buffer, buffer.data());
+    if (!chunked_in && !chunked_out) {
         half_duplex(in, out, fwd_buffer, fwd_buffer_dl, max_transfer, yield[ec]);
         if (ec || cancelled)
             yield.log("Failed to forward response body: ", ec.message());
     } else {
         // Based on "Boost.Beast / HTTP / Chunked Encoding / Parsing Chunks" example.
-        bool chunked_out = true;  // TODO: get from `rph_out` instead
         ConstBufferSequence outbuf;
 
         // TODO: watchdog
@@ -130,10 +133,20 @@ http_forward( StreamIn& in
         };
         rpp.on_chunk_body(body_cb);
 
-        while (!rpp.is_done()) {  // `buffer` includes initial data on first read
-            http::async_read(in, buffer, rpp, yield[ec]);
-            if (ec == http::error::end_of_chunk)
-                ec = {};  // just a signal that we have output to send
+        while (chunked_in ? !rpp.is_done() : max_transfer > 0) {
+            // `buffer` includes initial data on first read.
+            if (chunked_in) {
+                http::async_read(in, buffer, rpp, yield[ec]);
+                if (ec == http::error::end_of_chunk)
+                    ec = {};  // just a signal that we have output to send
+            } else {
+                auto buf = asio::buffer(fwd_buffer, max_transfer);
+                size_t length = fwd_buffer_dl + in.async_read_some(buf + fwd_buffer_dl, yield[ec]);
+                fwd_buffer_dl = 0;  // only usable on first read
+                max_transfer -= length;
+                if (!(ec || cancelled))
+                    outbuf = inproc(asio::buffer(buf, length), ec);
+            }
             if (ec || cancelled) {
                yield.log("Failed to read response body: ", ec.message());
                break;
