@@ -785,11 +785,11 @@ void serve( InjectorConfig& config
                     yield.log(outh);
                     return outh;
                 };
-                array<uint8_t, half_duplex_default_block> outdata;  // should not get more data
+                array<uint8_t, http_forward_block> outdata;  // should not get more data
                 auto outbuf = asio::buffer(outdata);  // must be alive while `http_forward` runs
                 ProcInFunc<asio::mutable_buffer> inproc = [&] (auto const& inbuf, auto& ec) {
                     auto length = inbuf.size();
-                    assert(length <= half_duplex_default_block);
+                    assert(length <= http_forward_block);
                     auto retbuf = asio::buffer(outbuf, length);
                     asio::buffer_copy(retbuf, inbuf);
                     saw_forwarded += length;

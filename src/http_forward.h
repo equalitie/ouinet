@@ -8,7 +8,6 @@
 #include <boost/beast/http/chunk_encode.hpp>
 #include <boost/beast/http/parser.hpp>
 
-#include "full_duplex_forward.h"
 #include "or_throw.h"
 #include "util.h"
 #include "util/signal.h"
@@ -17,6 +16,8 @@
 #include "namespaces.h"
 
 namespace ouinet {
+
+static const size_t http_forward_block = 2048;
 
 // Get copy of response head from input, return response head for output.
 using ProcHeadFunc = std::function<
@@ -64,7 +65,7 @@ http_forward( StreamIn& in
     if (ec) return or_throw<ResponseH>(yield, ec);
 
     // Receive the head of the HTTP response into a parser.
-    beast::static_buffer<half_duplex_default_block> buffer;
+    beast::static_buffer<http_forward_block> buffer;
     http::response_parser<http::empty_body> rpp;
     http::async_read_header(in, buffer, rpp, yield[ec]);
 
@@ -74,7 +75,7 @@ http_forward( StreamIn& in
     if (ec) return or_throw<ResponseH>(yield, ec);
 
     // Prepare forwarding buffer with body data already read.
-    std::array<uint8_t, half_duplex_default_block> fwd_data;
+    std::array<uint8_t, http_forward_block> fwd_data;
     auto fwd_buffer = asio::buffer(fwd_data);
     auto fwd_buffer_dl = asio::buffer_copy(fwd_buffer, buffer.data());
 
@@ -115,60 +116,54 @@ http_forward( StreamIn& in
     if (ec) return or_throw<ResponseH>(yield, ec);
 
     // Forward the body.
-    if (!chunked_in && !chunked_out) {
-        half_duplex(in, out, fwd_buffer, fwd_buffer_dl, max_transfer, yield[ec]);
-        if (ec || cancelled)
-            yield.log("Failed to forward response body: ", ec.message());
-    } else {
-        // Based on "Boost.Beast / HTTP / Chunked Encoding / Parsing Chunks" example.
-        ConstBufferSequence outbuf;
+    // Based on "Boost.Beast / HTTP / Chunked Encoding / Parsing Chunks" example.
+    ConstBufferSequence outbuf;
 
-        // TODO: watchdog
-        auto body_cb = [&] (auto, auto body, auto& ec) {
-            outbuf = inproc(asio::const_buffer(body.data(), body.size()), ec);
-            if (ec) return 0ul;
-            if (asio::buffer_size(outbuf) > 0)
-                ec = http::error::end_of_chunk;  // not really, but similar semantics
-            return body.size();  // wait for more data
-        };
-        rpp.on_chunk_body(body_cb);
+    // TODO: watchdog
+    auto body_cb = [&] (auto, auto body, auto& ec) {
+        outbuf = inproc(asio::const_buffer(body.data(), body.size()), ec);
+        if (ec) return 0ul;
+        if (asio::buffer_size(outbuf) > 0)
+            ec = http::error::end_of_chunk;  // not really, but similar semantics
+        return body.size();  // wait for more data
+    };
+    rpp.on_chunk_body(body_cb);
 
-        while (chunked_in ? !rpp.is_done() : max_transfer > 0) {
-            // `buffer` includes initial data on first read.
-            if (chunked_in) {
-                http::async_read(in, buffer, rpp, yield[ec]);
-                if (ec == http::error::end_of_chunk)
-                    ec = {};  // just a signal that we have output to send
-            } else {
-                auto buf = asio::buffer(fwd_buffer, max_transfer);
-                size_t length = fwd_buffer_dl + in.async_read_some(buf + fwd_buffer_dl, yield[ec]);
-                fwd_buffer_dl = 0;  // only usable on first read
-                max_transfer -= length;
-                if (!(ec || cancelled))
-                    outbuf = inproc(asio::buffer(buf, length), ec);
-            }
-            if (ec || cancelled) {
-               yield.log("Failed to read response body: ", ec.message());
-               break;
-            }
-
-            if (asio::buffer_size(outbuf) == 0)
-               continue;  // e.g. `buffer` filled but no output yet
-
-            if (chunked_out)
-                asio::async_write(out, http::make_chunk(outbuf), yield[ec]);
-            else
-                asio::async_write(out, outbuf, yield[ec]);
-            if (ec || cancelled) {
-                yield.log("Failed to send response body: ", ec.message());
-                break;
-            }
+    while (chunked_in ? !rpp.is_done() : max_transfer > 0) {
+        // `buffer` includes initial data on first read.
+        if (chunked_in) {
+            http::async_read(in, buffer, rpp, yield[ec]);
+            if (ec == http::error::end_of_chunk)
+                ec = {};  // just a signal that we have output to send
+        } else {
+            auto buf = asio::buffer(fwd_buffer, max_transfer);
+            size_t length = fwd_buffer_dl + in.async_read_some(buf + fwd_buffer_dl, yield[ec]);
+            fwd_buffer_dl = 0;  // only usable on first read
+            max_transfer -= length;
+            if (!(ec || cancelled))
+                outbuf = inproc(asio::buffer(buf, length), ec);
+        }
+        if (ec || cancelled) {
+           yield.log("Failed to read response body: ", ec.message());
+           break;
         }
 
-        if (!(ec || cancelled) && chunked_out)
-            // Trailers are handled outside.
-            asio::async_write(out, http::make_chunk_last(), yield[ec]);
+        if (asio::buffer_size(outbuf) == 0)
+           continue;  // e.g. `buffer` filled but no output yet
+
+        if (chunked_out)
+            asio::async_write(out, http::make_chunk(outbuf), yield[ec]);
+        else
+            asio::async_write(out, outbuf, yield[ec]);
+        if (ec || cancelled) {
+            yield.log("Failed to send response body: ", ec.message());
+            break;
+        }
     }
+
+    if (!(ec || cancelled) && chunked_out)
+        // Trailers are handled outside.
+        asio::async_write(out, http::make_chunk_last(), yield[ec]);
 
     if (!ec && cancelled)
         ec = asio::error::operation_aborted;
