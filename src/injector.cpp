@@ -1141,8 +1141,12 @@ int main(int argc, const char* argv[])
 
     unique_ptr<ForceExitOnSignal> force_exit;
 
-    signals.async_wait([&cancel, &signals, &ios, &force_exit]
+    signals.async_wait([&cancel, &signals, &ios, &force_exit, &bt_dht_ptr]
                        (const sys::error_code& ec, int signal_number) {
+            if (bt_dht_ptr) {
+                bt_dht_ptr->stop();
+                bt_dht_ptr = nullptr;
+            }
             cancel();
             signals.clear();
             force_exit = make_unique<ForceExitOnSignal>();

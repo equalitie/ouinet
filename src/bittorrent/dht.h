@@ -424,6 +424,10 @@ class MainlineDht {
     }
     void wait_all_ready(Cancel&, asio::yield_context);
 
+    void stop() {
+        _nodes.clear();
+    }
+
     private:
     asio::io_service& _ios;
     std::map<udp::endpoint, std::unique_ptr<dht::DhtNode>> _nodes;

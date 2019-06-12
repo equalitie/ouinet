@@ -113,6 +113,10 @@ public:
         _cache = nullptr;
         _shutdown_signal();
         if (_injector) _injector->stop();
+        if (_bt_dht) {
+            _bt_dht->stop();
+            _bt_dht = nullptr;
+        }
     }
 
     void setup_cache();
