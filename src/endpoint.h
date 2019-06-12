@@ -18,7 +18,8 @@ struct Endpoint {
         LampshadeEndpoint,
         Obfs2Endpoint,
         Obfs3Endpoint,
-        Obfs4Endpoint
+        Obfs4Endpoint,
+        Bep5Endpoint
     };
 
     Type type;
