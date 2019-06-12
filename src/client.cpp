@@ -196,6 +196,9 @@ private:
 
     GenericStream connect_to_origin(const Request&, Cancel&, Yield);
 
+    unique_ptr<OuiServiceImplementationClient>
+    maybe_wrap_tls(unique_ptr<OuiServiceImplementationClient>);
+
 private:
     asio::io_service& _ios;
     ClientConfig _config;
@@ -1598,6 +1601,19 @@ void Client::State::start()
 }
 
 //------------------------------------------------------------------------------
+unique_ptr<OuiServiceImplementationClient>
+Client::State::maybe_wrap_tls(unique_ptr<OuiServiceImplementationClient> client)
+{
+    bool enable_injector_tls = !_config.tls_injector_cert_path().empty();
+
+    if (!enable_injector_tls) {
+        LOG_WARN("Connection to the injector shall not be encrypted");
+        return client;
+    }
+
+    return make_unique<ouiservice::TlsOuiServiceClient>(move(client), inj_ctx);
+}
+
 void Client::State::setup_injector(asio::yield_context yield)
 {
     _injector = std::make_unique<OuiServiceClient>(_ios);
@@ -1626,7 +1642,7 @@ void Client::State::setup_injector(asio::yield_context yield)
         if (!tcp_client->verify_endpoint()) {
             return or_throw(yield, asio::error::invalid_argument);
         }
-        client = std::move(tcp_client);
+        client = maybe_wrap_tls(move(tcp_client));
     } else if (injector_ep->type == Endpoint::UtpEndpoint) {
         sys::error_code ec;
         asio_utp::udp_multiplexer m(_ios);
@@ -1640,7 +1656,7 @@ void Client::State::setup_injector(asio::yield_context yield)
             return or_throw(yield, asio::error::invalid_argument);
         }
 
-        client = std::move(utp_client);
+        client = maybe_wrap_tls(move(utp_client));
     } else if (injector_ep->type == Endpoint::LampshadeEndpoint) {
         auto lampshade_client = make_unique<ouiservice::LampshadeOuiServiceClient>(_ios, injector_ep->endpoint_string);
 
@@ -1671,14 +1687,7 @@ void Client::State::setup_injector(asio::yield_context yield)
         client = std::move(obfs4_client);
     }
 
-    bool enable_injector_tls = !_config.tls_injector_cert_path().empty();
-    if (!enable_injector_tls) {
-        _injector->add(*injector_ep, std::move(client));
-    } else {
-        auto tls_client
-            = make_unique<ouiservice::TlsOuiServiceClient>(move(client), inj_ctx);
-        _injector->add(*injector_ep, std::move(tls_client));
-    }
+    _injector->add(*injector_ep, std::move(client));
 
     _injector->start(yield);
 }
