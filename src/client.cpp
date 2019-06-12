@@ -55,6 +55,7 @@
 #include "ouiservice/tcp.h"
 #include "ouiservice/utp.h"
 #include "ouiservice/tls.h"
+#include "ouiservice/bep5.h"
 
 #include "util/signal.h"
 #include "util/crypto.h"
@@ -1657,6 +1658,13 @@ void Client::State::setup_injector(asio::yield_context yield)
         }
 
         client = maybe_wrap_tls(move(utp_client));
+    } else if (injector_ep->type == Endpoint::Bep5Endpoint) {
+
+        client = make_unique<ouiservice::Bep5Client>
+            ( bittorrent_dht()
+            , injector_ep->endpoint_string
+            , inj_ctx);
+
     } else if (injector_ep->type == Endpoint::LampshadeEndpoint) {
         auto lampshade_client = make_unique<ouiservice::LampshadeOuiServiceClient>(_ios, injector_ep->endpoint_string);
 

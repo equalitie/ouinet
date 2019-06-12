@@ -45,6 +45,7 @@
 #include "ouiservice/tcp.h"
 #include "ouiservice/utp.h"
 #include "ouiservice/tls.h"
+#include "ouiservice/bep5.h"
 #include "ssl/ca_certificate.h"
 #include "ssl/util.h"
 
@@ -1023,6 +1024,15 @@ int main(int argc, const char* argv[])
         } else {
             LOG_ERROR("Failed to start uTP/TLS service on ", *config.utp_tls_endpoint());
         }
+    }
+
+    if (config.bep5_injector_swarm_name()) {
+        ssl_context = read_ssl_certs();
+        auto dht = bittorrent_dht();
+        assert(dht);
+        assert(!dht->local_endpoints().empty());
+        proxy_server.add(make_unique<ouiservice::Bep5Server>
+                (move(dht), ssl_context, *config.bep5_injector_swarm_name()));
     }
 
     if (config.lampshade_endpoint()) {

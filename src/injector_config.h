@@ -28,6 +28,11 @@ public:
     bool listen_on_i2p() const
     { return _listen_on_i2p; }
 
+    boost::optional<std::string> bep5_injector_swarm_name() const
+    {
+        return _bep5_injector_swarm_name;
+    }
+
     boost::optional<asio::ip::udp::endpoint> bittorrent_endpoint() const
     {
         if (_bt_endpoint) return _bt_endpoint;
@@ -98,6 +103,7 @@ private:
     boost::optional<asio::ip::tcp::endpoint> _obfs3_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _obfs4_endpoint;
     boost::optional<asio::ip::udp::endpoint> _bt_endpoint;
+    boost::optional<std::string> _bep5_injector_swarm_name;
     boost::filesystem::path OUINET_CONF_FILE = "ouinet-injector.conf";
     std::string _credentials;
     util::Ed25519PrivateKey _index_bep44_private_key;
@@ -136,6 +142,7 @@ InjectorConfig::options_description()
         ("listen-on-i2p",
          po::value<string>(),
          "Whether we should be listening on I2P (true/false)")
+        ("listen-in-bep5-swarm", po::value<string>(), "Bep5 swarm name to announce our WAN IP")
         ("credentials", po::value<string>()
          , "<username>:<password> authentication pair. "
            "If unused, this injector shall behave as an open proxy.")
@@ -277,6 +284,10 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
     if (vm.count("listen-on-obfs4")) {
         _obfs4_endpoint = util::parse_tcp_endpoint(vm["listen-on-obfs4"].as<string>());
+    }
+
+    if (vm.count("listen-in-bep5-swarm")) {
+        _bep5_injector_swarm_name = vm["listen-in-bep5-swarm"].as<string>();
     }
 
     setup_index_bep44_private_key( vm.count("index-bep44-private-key")
