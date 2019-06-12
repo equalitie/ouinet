@@ -807,6 +807,7 @@ void serve( InjectorConfig& config
             }
             // TODO: Not all forward operations let us see the data.
             yield.log("Forwarded data bytes seen: ", saw_forwarded);
+            // TODO: Handle trailers.
             keep_alive = cc.keep_connection(req, res, move(orig_con));
         }
         else {

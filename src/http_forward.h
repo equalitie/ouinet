@@ -151,6 +151,10 @@ http_forward( StreamIn& in
                 break;
             }
         }
+
+        if (!(ec || cancelled) && chunked_out)
+            // Trailers are handled outside.
+            asio::async_write(out, http::make_chunk_last(), yield[ec]);
     }
 
     if (!ec && cancelled)
