@@ -65,31 +65,32 @@ http_forward( StreamIn& in
     if (ec) return or_throw<ResponseH>(yield, ec);
 
     // Receive the head of the HTTP response into a parser.
-    beast::static_buffer<http_forward_block> buffer;
+    beast::static_buffer<http_forward_block> inbuf;
     http::response_parser<http::empty_body> rpp;
-    http::async_read_header(in, buffer, rpp, yield[ec]);
+    http::async_read_header(in, inbuf, rpp, yield[ec]);
 
     if (!ec && cancelled)
         ec = asio::error::operation_aborted;
     if (ec) yield.log("Failed to receive response head: ", ec.message());
     if (ec) return or_throw<ResponseH>(yield, ec);
 
-    // Prepare forwarding buffer with body data already read.
-    std::array<uint8_t, http_forward_block> fwd_data;
-    auto fwd_buffer = asio::buffer(fwd_data);
-    auto fwd_buffer_dl = asio::buffer_copy(fwd_buffer, buffer.data());
+    // Prepare forwarding buffer with body data already read
+    // (for non-chunked input).
+    std::array<uint8_t, http_forward_block> nc_data;
+    auto nc_inbuf = asio::buffer(nc_data);
+    auto nc_initial = asio::buffer_copy(nc_inbuf, inbuf.data());
 
     assert(rpp.is_header_done());
     auto rp = rpp.get();
     bool chunked_in = rp.chunked();
 
     // Get content length if non-chunked.
-    size_t max_transfer = 0;
+    size_t nc_pending = 0;
     if (!chunked_in) {
         static const auto max_size_t = std::numeric_limits<std::size_t>::max();
-        max_transfer = util::parse_num<size_t>( rp[http::field::content_length]
-                                              , max_size_t);
-        if (max_transfer == max_size_t)
+        nc_pending = util::parse_num<size_t>( rp[http::field::content_length]
+                                            , max_size_t);
+        if (nc_pending == max_size_t)
             return or_throw<ResponseH>(yield, asio::error::invalid_argument);
     }
 
@@ -129,17 +130,17 @@ http_forward( StreamIn& in
     };
     rpp.on_chunk_body(body_cb);
 
-    while (chunked_in ? !rpp.is_done() : max_transfer > 0) {
-        // `buffer` includes initial data on first read.
+    while (chunked_in ? !rpp.is_done() : nc_pending > 0) {
+        // Input buffer includes initial data on first read.
         if (chunked_in) {
-            http::async_read(in, buffer, rpp, yield[ec]);
+            http::async_read(in, inbuf, rpp, yield[ec]);
             if (ec == http::error::end_of_chunk)
                 ec = {};  // just a signal that we have output to send
         } else {
-            auto buf = asio::buffer(fwd_buffer, max_transfer);
-            size_t length = fwd_buffer_dl + in.async_read_some(buf + fwd_buffer_dl, yield[ec]);
-            fwd_buffer_dl = 0;  // only usable on first read
-            max_transfer -= length;
+            auto buf = asio::buffer(nc_inbuf, nc_pending);
+            size_t length = nc_initial + in.async_read_some(buf + nc_initial, yield[ec]);
+            nc_initial = 0;  // only usable on first read
+            nc_pending -= length;
             if (!(ec || cancelled))
                 outbuf = inproc(asio::buffer(buf, length), ec);
         }
@@ -149,7 +150,7 @@ http_forward( StreamIn& in
         }
 
         if (asio::buffer_size(outbuf) == 0)
-           continue;  // e.g. `buffer` filled but no output yet
+           continue;  // e.g. input buffer filled but no output yet
 
         if (chunked_out)
             asio::async_write(out, http::make_chunk(outbuf), yield[ec]);
