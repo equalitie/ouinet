@@ -43,12 +43,13 @@ private:
     CacheInjector( boost::asio::io_service&
                  , util::Ed25519PrivateKey bt_privkey
                  , fs::path path_to_repo
-                 , std::unique_ptr<bittorrent::MainlineDht>
+                 , std::shared_ptr<bittorrent::MainlineDht>
                  , std::unique_ptr<Bep44InjectorIndex>);
 
 public:
     static std::unique_ptr<CacheInjector>
     build( boost::asio::io_service&
+         , std::shared_ptr<bittorrent::MainlineDht>
          , util::Ed25519PrivateKey bt_privkey
          , fs::path path_to_repo
          , unsigned int bep44_index_capacity
@@ -105,7 +106,7 @@ private:
 
 private:
     std::unique_ptr<asio_ipfs::node> _ipfs_node;
-    std::unique_ptr<bittorrent::MainlineDht> _bt_dht;
+    std::shared_ptr<bittorrent::MainlineDht> _bt_dht;
     std::unique_ptr<Publisher> _publisher;
     std::unique_ptr<Bep44InjectorIndex> _index;
     const unsigned int _concurrency = 8;

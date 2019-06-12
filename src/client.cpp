@@ -35,6 +35,7 @@
 #include "defer.h"
 #include "default_timeout.h"
 #include "constants.h"
+#include "create_udp_multiplexer.h"
 #include "ssl/ca_certificate.h"
 #include "ssl/dummy_certificate.h"
 #include "ssl/util.h"
@@ -54,6 +55,7 @@
 #include "ouiservice/tcp.h"
 #include "ouiservice/utp.h"
 #include "ouiservice/tls.h"
+#include "ouiservice/bep5.h"
 
 #include "util/signal.h"
 #include "util/crypto.h"
@@ -66,6 +68,7 @@ using namespace std;
 using namespace ouinet;
 
 namespace posix_time = boost::posix_time;
+namespace bt = ouinet::bittorrent;
 
 using tcp      = asio::ip::tcp;
 using Request  = http::request<http::string_body>;
@@ -110,10 +113,41 @@ public:
         _cache = nullptr;
         _shutdown_signal();
         if (_injector) _injector->stop();
+        if (_bt_dht) {
+            _bt_dht->stop();
+            _bt_dht = nullptr;
+        }
     }
 
     void setup_cache();
     void set_injector(string);
+
+    const asio_utp::udp_multiplexer& common_udp_multiplexer()
+    {
+        if (_udp_multiplexer) return *_udp_multiplexer;
+
+        _udp_multiplexer
+            = create_udp_multiplexer( _ios
+                                    , _config.repo_root() / "last_used_udp_port");
+
+        return *_udp_multiplexer;
+    }
+
+    std::shared_ptr<bt::MainlineDht> bittorrent_dht()
+    {
+        if (_bt_dht) return _bt_dht;
+
+        _bt_dht = make_shared<bittorrent::MainlineDht>(_ios);
+
+        sys::error_code ec;
+        asio_utp::udp_multiplexer m(_ios);
+        m.bind(common_udp_multiplexer(), ec);
+        assert(!ec);
+
+        _bt_dht->set_endpoint(move(m));
+
+        return _bt_dht;
+    }
 
 private:
     GenericStream ssl_mitm_handshake( GenericStream&&
@@ -167,6 +201,9 @@ private:
 
     GenericStream connect_to_origin(const Request&, Cancel&, Yield);
 
+    unique_ptr<OuiServiceImplementationClient>
+    maybe_wrap_tls(unique_ptr<OuiServiceImplementationClient>);
+
 private:
     asio::io_service& _ios;
     ClientConfig _config;
@@ -191,6 +228,8 @@ private:
     Scheduler _fetch_stored_scheduler;
     Scheduler _store_scheduler;
     boost::optional<asio::ip::udp::endpoint> _local_utp_endpoint;
+    boost::optional<asio_utp::udp_multiplexer> _udp_multiplexer;
+    shared_ptr<bt::MainlineDht> _bt_dht;
 };
 
 //------------------------------------------------------------------------------
@@ -1373,17 +1412,10 @@ void Client::State::setup_cache()
 
             auto on_exit = defer([&] { _is_ipns_being_setup = false; });
 
-            auto bt_dht = make_unique<bittorrent::MainlineDht>(_ios);
-
-            if (_local_utp_endpoint) {
-                bt_dht->set_endpoints({*_local_utp_endpoint});
-            } else {
-                bt_dht->set_endpoints({{asio::ip::address_v4::any(), 0}});
-            }
-
             sys::error_code ec;
+
             _cache = CacheClient::build(_ios
-                                       , move(bt_dht)
+                                       , bittorrent_dht()
                                        , _config.index_bep44_pub_key()
                                        , _config.repo_root()
                                        , _config.autoseed_updated()
@@ -1574,6 +1606,19 @@ void Client::State::start()
 }
 
 //------------------------------------------------------------------------------
+unique_ptr<OuiServiceImplementationClient>
+Client::State::maybe_wrap_tls(unique_ptr<OuiServiceImplementationClient> client)
+{
+    bool enable_injector_tls = !_config.tls_injector_cert_path().empty();
+
+    if (!enable_injector_tls) {
+        LOG_WARN("Connection to the injector shall not be encrypted");
+        return client;
+    }
+
+    return make_unique<ouiservice::TlsOuiServiceClient>(move(client), inj_ctx);
+}
+
 void Client::State::setup_injector(asio::yield_context yield)
 {
     _injector = std::make_unique<OuiServiceClient>(_ios);
@@ -1602,17 +1647,28 @@ void Client::State::setup_injector(asio::yield_context yield)
         if (!tcp_client->verify_endpoint()) {
             return or_throw(yield, asio::error::invalid_argument);
         }
-        client = std::move(tcp_client);
+        client = maybe_wrap_tls(move(tcp_client));
     } else if (injector_ep->type == Endpoint::UtpEndpoint) {
-        auto utp_client = make_unique<ouiservice::UtpOuiServiceClient>(_ios, injector_ep->endpoint_string);
+        sys::error_code ec;
+        asio_utp::udp_multiplexer m(_ios);
+        m.bind(common_udp_multiplexer(), ec);
+        assert(!ec);
+
+        auto utp_client = make_unique<ouiservice::UtpOuiServiceClient>
+            (_ios, move(m), injector_ep->endpoint_string);
 
         if (!utp_client->verify_remote_endpoint()) {
             return or_throw(yield, asio::error::invalid_argument);
         }
 
-        _local_utp_endpoint = utp_client->local_endpoint();
+        client = maybe_wrap_tls(move(utp_client));
+    } else if (injector_ep->type == Endpoint::Bep5Endpoint) {
 
-        client = std::move(utp_client);
+        client = make_unique<ouiservice::Bep5Client>
+            ( bittorrent_dht()
+            , injector_ep->endpoint_string
+            , inj_ctx);
+
     } else if (injector_ep->type == Endpoint::LampshadeEndpoint) {
         auto lampshade_client = make_unique<ouiservice::LampshadeOuiServiceClient>(_ios, injector_ep->endpoint_string);
 
@@ -1643,14 +1699,7 @@ void Client::State::setup_injector(asio::yield_context yield)
         client = std::move(obfs4_client);
     }
 
-    bool enable_injector_tls = !_config.tls_injector_cert_path().empty();
-    if (!enable_injector_tls) {
-        _injector->add(*injector_ep, std::move(client));
-    } else {
-        auto tls_client
-            = make_unique<ouiservice::TlsOuiServiceClient>(move(client), inj_ctx);
-        _injector->add(*injector_ep, std::move(tls_client));
-    }
+    _injector->add(*injector_ep, std::move(client));
 
     _injector->start(yield);
 }

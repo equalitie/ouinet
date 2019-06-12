@@ -77,14 +77,14 @@ void parse_args( const vector<string>& args
     }
 }
 
-void wait_for_ready(DhtNode& dht, asio::yield_context yield)
+void wait_for_ready(DhtNode& dht, udp::endpoint ep, asio::yield_context yield)
 {
     auto& ios = dht.get_io_service();
 
     sys::error_code ec;
     Progress progress(ios, "Bootstrapping");
 
-    dht.start(yield[ec]);
+    dht.start(ep, yield[ec]);
 
     asio::steady_timer timer(ios);
 
@@ -98,7 +98,7 @@ int main(int argc, const char** argv)
 {
     asio::io_service ios;
 
-    DhtNode dht {ios, { asio::ip::make_address("0.0.0.0"), 0 }};
+    DhtNode dht {ios};
 
     vector<string> args;
 
@@ -117,7 +117,7 @@ int main(int argc, const char** argv)
     asio::spawn(ios, [&] (asio::yield_context yield) {
         sys::error_code ec;
 
-        wait_for_ready(dht, yield);
+        wait_for_ready(dht, { asio::ip::address_v4::any(), 0 }, yield);
 
         cerr << "Our WAN endpoint: " << dht.wan_endpoint() << "\n";
 

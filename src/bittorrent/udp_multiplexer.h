@@ -4,7 +4,6 @@
 #include <iostream>
 #include <boost/asio/buffer.hpp>
 #include <boost/utility/string_view.hpp>
-#include <asio_utp/udp_multiplexer.hpp>
 #include "../namespaces.h"
 #include "../or_throw.h"
 #include "../util/condition_variable.h"

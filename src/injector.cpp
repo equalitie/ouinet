@@ -16,6 +16,7 @@
 #include "cache/cache_injector.h"
 #include "cache/http_desc.h"
 
+#include "bittorrent/dht.h"
 #include "bittorrent/mutable_data.h"
 
 #include "namespaces.h"
@@ -44,6 +45,7 @@
 #include "ouiservice/tcp.h"
 #include "ouiservice/utp.h"
 #include "ouiservice/tls.h"
+#include "ouiservice/bep5.h"
 #include "ssl/ca_certificate.h"
 #include "ssl/util.h"
 
@@ -64,6 +66,7 @@ using namespace ouinet;
 using tcp         = asio::ip::tcp;
 using udp         = asio::ip::udp;
 using string_view = beast::string_view;
+namespace bt = bittorrent;
 // We are more interested in an ID generator that can be
 // used concurrently and does not block by random pool exhaustion
 // than we are in getting unpredictable IDs;
@@ -471,7 +474,11 @@ public:
     bool is_semi_fresh(http::response_header<>& hdr)
     {
         auto date = util::parse_date(hdr[http::field::date]);
-        assert(date != boost::posix_time::ptime());
+
+        if (date == boost::posix_time::ptime()) {
+            LOG_ERROR("Failed to parse header date: \"", hdr[http::field::date],"\"");
+            return false;
+        }
 
         bool expired = CacheControl::is_expired(hdr, date);
 
@@ -877,6 +884,7 @@ void listen( InjectorConfig& config
 
 //------------------------------------------------------------------------------
 unique_ptr<CacheInjector> build_cache( asio::io_service& ios
+                                     , shared_ptr<bittorrent::MainlineDht> bt_dht
                                      , const InjectorConfig& config
                                      , Cancel& cancel
                                      , asio::yield_context yield)
@@ -886,6 +894,7 @@ unique_ptr<CacheInjector> build_cache( asio::io_service& ios
     sys::error_code ec;
 
     auto cache_injector = CacheInjector::build( ios
+                                              , bt_dht
                                               , bep44_privk
                                               , config.repo_root()
                                               , config.index_bep44_capacity()
@@ -944,6 +953,16 @@ int main(int argc, const char* argv[])
     // The io_service is required for all I/O
     asio::io_service ios;
 
+    shared_ptr<bt::MainlineDht> bt_dht_ptr;
+
+    auto bittorrent_dht = [&bt_dht_ptr, &config, &ios] {
+        if (!config.bittorrent_endpoint() || bt_dht_ptr) return bt_dht_ptr;
+        bt_dht_ptr = make_shared<bt::MainlineDht>(ios);
+        bt_dht_ptr->set_endpoints({*config.bittorrent_endpoint()});
+        assert(!bt_dht_ptr->local_endpoints().empty());
+        return bt_dht_ptr;
+    };
+
     OuiServiceServer proxy_server(ios);
 
     if (config.tcp_endpoint()) {
@@ -983,20 +1002,37 @@ int main(int argc, const char* argv[])
         util::create_state_file( config.repo_root()/"endpoint-utp"
                                , util::str(endpoint));
 
-        proxy_server.add(make_unique<ouiservice::UtpOuiServiceServer>(ios, endpoint));
+        auto srv = make_unique<ouiservice::UtpOuiServiceServer>(ios, endpoint);
+        proxy_server.add(move(srv));
     }
 
     if (config.utp_tls_endpoint()) {
         ssl_context = read_ssl_certs();
 
         udp::endpoint endpoint = *config.utp_tls_endpoint();
-        cout << "uTP/TLS Address: " << endpoint << endl;
-
-        util::create_state_file( config.repo_root()/"endpoint-utp-tls"
-                               , util::str(endpoint));
 
         auto base = make_unique<ouiservice::UtpOuiServiceServer>(ios, endpoint);
-        proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(ios, move(base), ssl_context));
+
+        auto local_ep = base->local_endpoint();
+
+        if (local_ep) {
+            LOG_DEBUG("uTP/TLS Address: ", *local_ep);
+            util::create_state_file( config.repo_root()/"endpoint-utp-tls"
+                                   , util::str(*local_ep));
+            proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(ios, move(base), ssl_context));
+
+        } else {
+            LOG_ERROR("Failed to start uTP/TLS service on ", *config.utp_tls_endpoint());
+        }
+    }
+
+    if (config.bep5_injector_swarm_name()) {
+        ssl_context = read_ssl_certs();
+        auto dht = bittorrent_dht();
+        assert(dht);
+        assert(!dht->local_endpoints().empty());
+        proxy_server.add(make_unique<ouiservice::Bep5Server>
+                (move(dht), ssl_context, *config.bep5_injector_swarm_name()));
     }
 
     if (config.lampshade_endpoint()) {
@@ -1070,7 +1106,8 @@ int main(int argc, const char* argv[])
         &shutdown_ipfs_slot,
         &proxy_server,
         &config,
-        &cancel
+        &cancel,
+        &bittorrent_dht
     ] (asio::yield_context yield) {
         sys::error_code ec;
 
@@ -1078,6 +1115,7 @@ int main(int argc, const char* argv[])
 
         if (config.cache_enabled()) {
             cache_injector = build_cache( ios
+                                        , bittorrent_dht()
                                         , config
                                         , cancel
                                         , yield[ec]);
@@ -1103,8 +1141,12 @@ int main(int argc, const char* argv[])
 
     unique_ptr<ForceExitOnSignal> force_exit;
 
-    signals.async_wait([&cancel, &signals, &ios, &force_exit]
+    signals.async_wait([&cancel, &signals, &ios, &force_exit, &bt_dht_ptr]
                        (const sys::error_code& ec, int signal_number) {
+            if (bt_dht_ptr) {
+                bt_dht_ptr->stop();
+                bt_dht_ptr = nullptr;
+            }
             cancel();
             signals.clear();
             force_exit = make_unique<ForceExitOnSignal>();

@@ -9,6 +9,8 @@
 #include <vector>
 #include <set>
 
+#include <asio_utp/udp_multiplexer.hpp>
+
 #include "bencoding.h"
 #include "dht_storage.h"
 #include "mutable_data.h"
@@ -71,8 +73,9 @@ class DhtNode {
     const size_t RESPONSIBLE_TRACKERS_PER_SWARM = 8;
 
     public:
-    DhtNode(asio::io_service& ios, udp::endpoint);
-    void start(asio::yield_context yield);
+    DhtNode(asio::io_service& ios);
+    void start(udp::endpoint, asio::yield_context yield);
+    void start(asio_utp::udp_multiplexer, asio::yield_context yield);
     void stop();
 
     /**
@@ -364,6 +367,13 @@ class MainlineDht {
     ~MainlineDht();
 
     void set_endpoints(const std::set<udp::endpoint>&);
+    void set_endpoint(asio_utp::udp_multiplexer);
+
+    std::set<udp::endpoint> local_endpoints() const {
+        std::set<udp::endpoint> ret;
+        for (auto& p : _nodes) { ret.insert(p.first); }
+        return ret;
+    }
 
     /*
      * TODO: announce() and put() functions don't have any real error detection.
@@ -413,6 +423,10 @@ class MainlineDht {
         return true;
     }
     void wait_all_ready(Cancel&, asio::yield_context);
+
+    void stop() {
+        _nodes.clear();
+    }
 
     private:
     asio::io_service& _ios;

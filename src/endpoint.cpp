@@ -30,6 +30,8 @@ boost::optional<Endpoint> parse_endpoint(beast::string_view endpoint)
         output.type = Endpoint::Obfs3Endpoint;
     } else if (type == "obfs4") {
         output.type = Endpoint::Obfs4Endpoint;
+    } else if (type == "bep5") {
+        output.type = Endpoint::Bep5Endpoint;
     } else {
         return boost::none;
     }
@@ -56,6 +58,8 @@ std::ostream& operator<<(std::ostream& os, const Endpoint& ep)
         os << "obfs3";
     } else if (ep.type == Endpoint::Obfs4Endpoint) {
         os << "obfs4";
+    } else if (ep.type == Endpoint::Bep5Endpoint) {
+        os << "bep5";
     } else {
         assert(false);
     }
