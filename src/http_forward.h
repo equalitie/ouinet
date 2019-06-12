@@ -74,24 +74,26 @@ http_forward( StreamIn& in
     if (ec) yield.log("Failed to receive response head: ", ec.message());
     if (ec) return or_throw<ResponseH>(yield, ec);
 
-    // Prepare forwarding buffer with body data already read
-    // (for non-chunked input).
-    std::array<uint8_t, http_forward_block> nc_data;
-    auto nc_inbuf = asio::buffer(nc_data);
-    auto nc_initial = asio::buffer_copy(nc_inbuf, inbuf.data());
-
     assert(rpp.is_header_done());
     auto rp = rpp.get();
     bool chunked_in = rp.chunked();
 
-    // Get content length if non-chunked.
-    size_t nc_pending = 0;
+    // Get content length and prepare forwarding buffer with body data already read
+    // (for non-chunked input).
+    using nc_buf_data = std::array<uint8_t, http_forward_block>;
+    std::unique_ptr<nc_buf_data> nc_data;
+    asio::mutable_buffer nc_inbuf;
+    size_t nc_initial, nc_pending;
     if (!chunked_in) {
         static const auto max_size_t = std::numeric_limits<std::size_t>::max();
         nc_pending = util::parse_num<size_t>( rp[http::field::content_length]
                                             , max_size_t);
         if (nc_pending == max_size_t)
             return or_throw<ResponseH>(yield, asio::error::invalid_argument);
+
+        nc_data = std::make_unique<nc_buf_data>();
+        nc_inbuf = asio::buffer(*nc_data);
+        nc_initial = asio::buffer_copy(nc_inbuf, inbuf.data());
     }
 
     // Send the HTTP response head (after processing).
