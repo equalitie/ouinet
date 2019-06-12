@@ -16,6 +16,7 @@
 #include "cache/cache_injector.h"
 #include "cache/http_desc.h"
 
+#include "bittorrent/dht.h"
 #include "bittorrent/mutable_data.h"
 
 #include "namespaces.h"
@@ -937,8 +938,6 @@ int main(int argc, const char* argv[])
         increase_open_file_limit(*config.open_file_limit());
     }
 
-    boost::optional<udp::endpoint> local_utp_endpoint;
-
     // Create or load the TLS certificate.
     auto tls_certificate = get_or_gen_tls_cert<EndCertificate>
         ( "localhost"
@@ -948,6 +947,16 @@ int main(int argc, const char* argv[])
 
     // The io_service is required for all I/O
     asio::io_service ios;
+
+    shared_ptr<bt::MainlineDht> bt_dht_ptr;
+
+    auto bittorrent_dht = [&bt_dht_ptr, &config, &ios] {
+        if (!config.bittorrent_endpoint() || bt_dht_ptr) return bt_dht_ptr;
+        bt_dht_ptr = make_shared<bt::MainlineDht>(ios);
+        bt_dht_ptr->set_endpoints({*config.bittorrent_endpoint()});
+        assert(!bt_dht_ptr->local_endpoints().empty());
+        return bt_dht_ptr;
+    };
 
     OuiServiceServer proxy_server(ios);
 
@@ -989,8 +998,6 @@ int main(int argc, const char* argv[])
                                , util::str(endpoint));
 
         auto srv = make_unique<ouiservice::UtpOuiServiceServer>(ios, endpoint);
-        local_utp_endpoint = srv->local_endpoint();
-        assert(local_utp_endpoint);
         proxy_server.add(move(srv));
     }
 
@@ -998,15 +1005,20 @@ int main(int argc, const char* argv[])
         ssl_context = read_ssl_certs();
 
         udp::endpoint endpoint = *config.utp_tls_endpoint();
-        cout << "uTP/TLS Address: " << endpoint << endl;
-
-        util::create_state_file( config.repo_root()/"endpoint-utp-tls"
-                               , util::str(endpoint));
 
         auto base = make_unique<ouiservice::UtpOuiServiceServer>(ios, endpoint);
-        local_utp_endpoint = base->local_endpoint();
-        assert(local_utp_endpoint);
-        proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(ios, move(base), ssl_context));
+
+        auto local_ep = base->local_endpoint();
+
+        if (local_ep) {
+            LOG_DEBUG("uTP/TLS Address: ", *local_ep);
+            util::create_state_file( config.repo_root()/"endpoint-utp-tls"
+                                   , util::str(*local_ep));
+            proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(ios, move(base), ssl_context));
+
+        } else {
+            LOG_ERROR("Failed to start uTP/TLS service on ", *config.utp_tls_endpoint());
+        }
     }
 
     if (config.lampshade_endpoint()) {
@@ -1080,7 +1092,8 @@ int main(int argc, const char* argv[])
         &shutdown_ipfs_slot,
         &proxy_server,
         &config,
-        &cancel
+        &cancel,
+        &bittorrent_dht
     ] (asio::yield_context yield) {
         sys::error_code ec;
 
@@ -1088,6 +1101,7 @@ int main(int argc, const char* argv[])
 
         if (config.cache_enabled()) {
             cache_injector = build_cache( ios
+                                        , bittorrent_dht()
                                         , config
                                         , cancel
                                         , yield[ec]);

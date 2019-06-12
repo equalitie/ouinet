@@ -28,6 +28,14 @@ public:
     bool listen_on_i2p() const
     { return _listen_on_i2p; }
 
+    boost::optional<asio::ip::udp::endpoint> bittorrent_endpoint() const
+    {
+        if (_bt_endpoint) return _bt_endpoint;
+        if (_utp_tls_endpoint) return _utp_tls_endpoint;
+        if (_utp_endpoint) return _utp_endpoint;
+        return asio::ip::udp::endpoint(asio::ip::address_v4::any(), 4567);
+    }
+
     boost::optional<asio::ip::tcp::endpoint> tcp_endpoint() const
     { return _tcp_endpoint; }
 
@@ -89,6 +97,7 @@ private:
     boost::optional<asio::ip::tcp::endpoint> _obfs2_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _obfs3_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _obfs4_endpoint;
+    boost::optional<asio::ip::udp::endpoint> _bt_endpoint;
     boost::filesystem::path OUINET_CONF_FILE = "ouinet-injector.conf";
     std::string _credentials;
     util::Ed25519PrivateKey _index_bep44_private_key;
