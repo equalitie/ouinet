@@ -30,7 +30,7 @@ using ProcHeadFunc = std::function<
 // If the returned buffer is empty, nothing is sent.
 template<class ConstBufferSequence>
 using ProcInFunc = std::function<
-    ConstBufferSequence(const asio::const_buffer& inbuf, sys::error_code&)>;
+    ConstBufferSequence(asio::const_buffer inbuf, sys::error_code&)>;
 
 template<class StreamIn, class StreamOut, class Request, class ConstBufferSequence>
 inline

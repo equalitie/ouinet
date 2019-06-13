@@ -8,7 +8,6 @@
 #include <boost/filesystem.hpp>
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
-#include <array>
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -785,15 +784,9 @@ void serve( InjectorConfig& config
                     yield.log(outh);
                     return outh;
                 };
-                array<uint8_t, http_forward_block> outdata;  // should not get more data
-                auto outbuf = asio::buffer(outdata);  // must be alive while `http_forward` runs
-                ProcInFunc<asio::mutable_buffer> inproc = [&] (auto const& inbuf, auto& ec) {
-                    auto length = inbuf.size();
-                    assert(length <= http_forward_block);
-                    auto retbuf = asio::buffer(outbuf, length);
-                    asio::buffer_copy(retbuf, inbuf);
-                    saw_forwarded += length;
-                    return retbuf;
+                ProcInFunc<asio::const_buffer> inproc = [&] (auto inbuf, auto& ec) {
+                    saw_forwarded += inbuf.size();
+                    return inbuf;  // just pass data on
                 };
                 res = ResponseH(http_forward( orig_con, con
                                             , util::to_origin_request(req), reshproc, inproc
