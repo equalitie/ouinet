@@ -8,9 +8,12 @@
 #include <boost/beast/http/chunk_encode.hpp>
 #include <boost/beast/http/parser.hpp>
 
+#include "default_timeout.h"
+#include "defer.h"
 #include "or_throw.h"
 #include "util.h"
 #include "util/signal.h"
+#include "util/watch_dog.h"
 #include "util/yield.h"
 
 #include "namespaces.h"
@@ -49,6 +52,10 @@ http_forward( StreamIn& in
     Yield yield = yield_.tag("http_forward");
 
     auto cancelled = cancel.connect([&] { in.close(); out.close(); });
+    bool timed_out = false;
+    auto wdog_timeout = default_timeout::http_forward();
+    WatchDog wdog( in.get_io_service(), wdog_timeout
+                 , [&] { timed_out = true; in.close(); out.close(); });
 
     sys::error_code ec;
 
@@ -58,6 +65,7 @@ http_forward( StreamIn& in
     // the receive buffer we can read.
     if (ec == http::error::end_of_stream)
         ec = sys::error_code();
+    if (timed_out) ec = asio::error::timed_out;
     if (cancelled) ec = asio::error::operation_aborted;
     if (ec) {
         yield.log("Failed to send request: ", ec.message());
@@ -68,11 +76,14 @@ http_forward( StreamIn& in
     beast::static_buffer<http_forward_block> inbuf;
     http::response_parser<http::empty_body> rpp;
     http::async_read_header(in, inbuf, rpp, yield[ec]);
+    if (timed_out) ec = asio::error::timed_out;
     if (cancelled) ec = asio::error::operation_aborted;
     if (ec) {
         yield.log("Failed to receive response head: ", ec.message());
         return or_throw<ResponseH>(yield, ec);
     }
+
+    wdog.expires_after(wdog_timeout);
 
     assert(rpp.is_header_done());
     auto rp = rpp.get();
@@ -93,6 +104,7 @@ http_forward( StreamIn& in
     {
         auto rph_out(rpp.get().base());
         rph_out = rshproc(std::move(rph_out), cancel, yield[ec]);
+        if (timed_out) ec = asio::error::timed_out;
         if (cancelled) ec = asio::error::operation_aborted;
         if (ec) {
             yield.log("Failed to process response head: ", ec.message());
@@ -107,11 +119,14 @@ http_forward( StreamIn& in
         auto rph_outs = util::str(rph_out);
         asio::async_write(out, asio::buffer(rph_outs.data(), rph_outs.size()), yield[ec]);
     }
+    if (timed_out) ec = asio::error::timed_out;
     if (cancelled) ec = asio::error::operation_aborted;
     if (ec) {
         yield.log("Failed to send response head: ", ec.message());
         return or_throw<ResponseH>(yield, ec);
     }
+
+    wdog.expires_after(wdog_timeout);
 
     // Forward the body.
     // Based on "Boost.Beast / HTTP / Chunked Encoding / Parsing Chunks" example.
@@ -124,7 +139,6 @@ http_forward( StreamIn& in
         fwd_initial = asio::buffer_copy(asio::buffer(fwd_data), inbuf.data());
     asio::mutable_buffer fwdbuf;
 
-    // TODO: watchdog
     auto body_cb = [&] (auto, auto body, auto& ec) {
         // Just exfiltrate a copy data for the input processing callback
         // to handle asynchronously
@@ -139,6 +153,8 @@ http_forward( StreamIn& in
     rpp.on_chunk_body(body_cb);
 
     while (chunked_in ? !rpp.is_done() : nc_pending > 0) {
+        auto reset_wdog = defer([&] { wdog.expires_after(wdog_timeout); });
+
         // Input buffer includes initial data on first read.
         if (chunked_in) {
             http::async_read(in, inbuf, rpp, yield[ec]);
@@ -151,6 +167,7 @@ http_forward( StreamIn& in
             nc_pending -= length;
             fwdbuf = asio::buffer(buf, length);
         }
+        if (timed_out) ec = asio::error::timed_out;
         if (cancelled) ec = asio::error::operation_aborted;
         if (ec) {
            yield.log("Failed to read response body: ", ec.message());
@@ -158,6 +175,7 @@ http_forward( StreamIn& in
         }
 
         ConstBufferSequence outbuf = inproc(fwdbuf, cancel, yield[ec]);
+        if (timed_out) ec = asio::error::timed_out;
         if (cancelled) ec = asio::error::operation_aborted;
         if (ec) {
            yield.log("Failed to process response body: ", ec.message());
@@ -170,6 +188,7 @@ http_forward( StreamIn& in
             asio::async_write(out, http::make_chunk(outbuf), yield[ec]);
         else
             asio::async_write(out, outbuf, yield[ec]);
+        if (timed_out) ec = asio::error::timed_out;
         if (cancelled) ec = asio::error::operation_aborted;
         if (ec) {
             yield.log("Failed to send response body: ", ec.message());
@@ -181,6 +200,7 @@ http_forward( StreamIn& in
         // Trailers are handled outside.
         asio::async_write(out, http::make_chunk_last(), yield[ec]);
 
+    if (timed_out) ec = asio::error::timed_out;
     if (cancelled) ec = asio::error::operation_aborted;
     if (ec) return or_throw<ResponseH>(yield, ec);
 
