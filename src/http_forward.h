@@ -78,22 +78,14 @@ http_forward( StreamIn& in
     auto rp = rpp.get();
     bool chunked_in = rp.chunked();
 
-    // Get content length and prepare forwarding buffer with body data already read
-    // (for non-chunked input).
-    using nc_buf_data = std::array<uint8_t, http_forward_block>;
-    std::unique_ptr<nc_buf_data> nc_data;
-    asio::mutable_buffer nc_inbuf;
-    size_t nc_initial, nc_pending;
+    // Get content length if non-chunked.
+    size_t nc_pending;
     if (!chunked_in) {
         static const auto max_size_t = std::numeric_limits<std::size_t>::max();
         nc_pending = util::parse_num<size_t>( rp[http::field::content_length]
                                             , max_size_t);
         if (nc_pending == max_size_t)
             return or_throw<ResponseH>(yield, asio::error::invalid_argument);
-
-        nc_data = std::make_unique<nc_buf_data>();
-        nc_inbuf = asio::buffer(*nc_data);
-        nc_initial = asio::buffer_copy(nc_inbuf, inbuf.data());
     }
 
     // Send the HTTP response head (after processing).
@@ -120,15 +112,25 @@ http_forward( StreamIn& in
 
     // Forward the body.
     // Based on "Boost.Beast / HTTP / Chunked Encoding / Parsing Chunks" example.
-    ConstBufferSequence outbuf;
+
+    // Prepare fixed-size forwarding buffer
+    // (with body data already read for non-chunked input).
+    std::array<uint8_t, http_forward_block> fwd_data;
+    size_t fwd_initial;
+    if (!chunked_in)
+        fwd_initial = asio::buffer_copy(asio::buffer(fwd_data), inbuf.data());
+    asio::mutable_buffer fwdbuf;
 
     // TODO: watchdog
     auto body_cb = [&] (auto, auto body, auto& ec) {
-        outbuf = inproc(asio::const_buffer(body.data(), body.size()), ec);
-        if (ec) return 0ul;
-        if (asio::buffer_size(outbuf) > 0)
-            ec = http::error::end_of_chunk;  // not really, but similar semantics
-        return body.size();  // wait for more data
+        // Just exfiltrate a copy data for the input processing callback
+        // (we cannot be sure that the data in `body` will still be available
+        // after the read operation returns).
+        size_t length = body.size();
+        fwdbuf = asio::buffer(fwd_data, length);
+        asio::buffer_copy(fwdbuf, asio::const_buffer(body.data(), length));
+        ec = http::error::end_of_chunk;  // not really, but similar semantics
+        return length;
     };
     rpp.on_chunk_body(body_cb);
 
@@ -137,20 +139,24 @@ http_forward( StreamIn& in
         if (chunked_in) {
             http::async_read(in, inbuf, rpp, yield[ec]);
             if (ec == http::error::end_of_chunk)
-                ec = {};  // just a signal that we have output to send
+                ec = {};  // just a signal that we have input to process
         } else {
-            auto buf = asio::buffer(nc_inbuf, nc_pending);
-            size_t length = nc_initial + in.async_read_some(buf + nc_initial, yield[ec]);
-            nc_initial = 0;  // only usable on first read
+            auto buf = asio::buffer(fwd_data, nc_pending);
+            size_t length = fwd_initial + in.async_read_some(buf + fwd_initial, yield[ec]);
+            fwd_initial = 0;  // only usable on first read
             nc_pending -= length;
-            if (!(ec || cancelled))
-                outbuf = inproc(asio::buffer(buf, length), ec);
+            fwdbuf = asio::buffer(buf, length);
         }
         if (ec || cancelled) {
            yield.log("Failed to read response body: ", ec.message());
            break;
         }
 
+        ConstBufferSequence outbuf = inproc(fwdbuf, ec);
+        if (ec || cancelled) {
+           yield.log("Failed to process response body: ", ec.message());
+           break;
+        }
         if (asio::buffer_size(outbuf) == 0)
            continue;  // e.g. input buffer filled but no output yet
 
