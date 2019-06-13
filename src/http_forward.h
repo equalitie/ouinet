@@ -21,7 +21,7 @@ static const size_t http_forward_block = 2048;
 
 // Get copy of response head from input, return response head for output.
 using ProcHeadFunc = std::function<
-    http::response_header<>(http::response_header<>, sys::error_code&)>;
+    http::response_header<>(http::response_header<>, Cancel&, Yield)>;
 // Get a buffer of data to be sent after processing a buffer of received data.
 // The returned data must be alive while `http_forward` runs,
 // The returned data will be wrapped in a single chunk
@@ -30,7 +30,7 @@ using ProcHeadFunc = std::function<
 // If the returned buffer is empty, nothing is sent.
 template<class ConstBufferSequence>
 using ProcInFunc = std::function<
-    ConstBufferSequence(asio::const_buffer inbuf, sys::error_code&)>;
+    ConstBufferSequence(asio::const_buffer inbuf, Cancel&, Yield)>;
 
 template<class StreamIn, class StreamOut, class Request, class ConstBufferSequence>
 inline
@@ -92,7 +92,7 @@ http_forward( StreamIn& in
     bool chunked_out;
     {
         auto rph_out(rpp.get().base());
-        rph_out = rshproc(std::move(rph_out), ec);
+        rph_out = rshproc(std::move(rph_out), cancel, yield[ec]);
         if (ec) yield.log("Failed to process response head: ", ec.message());
         if (ec) return or_throw<ResponseH>(yield, ec);
 
@@ -124,6 +124,7 @@ http_forward( StreamIn& in
     // TODO: watchdog
     auto body_cb = [&] (auto, auto body, auto& ec) {
         // Just exfiltrate a copy data for the input processing callback
+        // to handle asynchronously
         // (we cannot be sure that the data in `body` will still be available
         // after the read operation returns).
         size_t length = body.size();
@@ -152,7 +153,7 @@ http_forward( StreamIn& in
            break;
         }
 
-        ConstBufferSequence outbuf = inproc(fwdbuf, ec);
+        ConstBufferSequence outbuf = inproc(fwdbuf, cancel, yield[ec]);
         if (ec || cancelled) {
            yield.log("Failed to process response body: ", ec.message());
            break;

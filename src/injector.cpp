@@ -777,14 +777,14 @@ void serve( InjectorConfig& config
             auto orig_con = cc.get_connection(req, cancel, yield[ec]);
             size_t forwarded = 0;
             if (!ec) {
-                auto reshproc = [&] (auto inh, auto& ec) {
+                auto reshproc = [&] (auto inh, auto&, auto) {
                     // Prevent others from inserting ouinet specific header fields.
                     auto outh = util::remove_ouinet_fields(move(inh));
                     yield.log("=== Sending back proxy response ===");
                     yield.log(outh);
                     return outh;
                 };
-                ProcInFunc<asio::const_buffer> inproc = [&] (auto inbuf, auto& ec) {
+                ProcInFunc<asio::const_buffer> inproc = [&] (auto inbuf, auto&, auto) {
                     forwarded += inbuf.size();
                     return inbuf;  // just pass data on
                 };
