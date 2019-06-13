@@ -58,21 +58,21 @@ http_forward( StreamIn& in
     // the receive buffer we can read.
     if (ec == http::error::end_of_stream)
         ec = sys::error_code();
-
-    if (!ec && cancelled)
-        ec = asio::error::operation_aborted;
-    if (ec) yield.log("Failed to send request: ", ec.message());
-    if (ec) return or_throw<ResponseH>(yield, ec);
+    if (cancelled) ec = asio::error::operation_aborted;
+    if (ec) {
+        yield.log("Failed to send request: ", ec.message());
+        return or_throw<ResponseH>(yield, ec);
+    }
 
     // Receive the head of the HTTP response into a parser.
     beast::static_buffer<http_forward_block> inbuf;
     http::response_parser<http::empty_body> rpp;
     http::async_read_header(in, inbuf, rpp, yield[ec]);
-
-    if (!ec && cancelled)
-        ec = asio::error::operation_aborted;
-    if (ec) yield.log("Failed to receive response head: ", ec.message());
-    if (ec) return or_throw<ResponseH>(yield, ec);
+    if (cancelled) ec = asio::error::operation_aborted;
+    if (ec) {
+        yield.log("Failed to receive response head: ", ec.message());
+        return or_throw<ResponseH>(yield, ec);
+    }
 
     assert(rpp.is_header_done());
     auto rp = rpp.get();
@@ -93,8 +93,11 @@ http_forward( StreamIn& in
     {
         auto rph_out(rpp.get().base());
         rph_out = rshproc(std::move(rph_out), cancel, yield[ec]);
-        if (ec) yield.log("Failed to process response head: ", ec.message());
-        if (ec) return or_throw<ResponseH>(yield, ec);
+        if (cancelled) ec = asio::error::operation_aborted;
+        if (ec) {
+            yield.log("Failed to process response head: ", ec.message());
+            return or_throw<ResponseH>(yield, ec);
+        }
 
         chunked_out = http::response<http::empty_body>(rph_out).chunked();
         assert(!(chunked_in && !chunked_out));  // implies slurping response into memory
@@ -104,11 +107,11 @@ http_forward( StreamIn& in
         auto rph_outs = util::str(rph_out);
         asio::async_write(out, asio::buffer(rph_outs.data(), rph_outs.size()), yield[ec]);
     }
-
-    if (!ec && cancelled)
-        ec = asio::error::operation_aborted;
-    if (ec) yield.log("Failed to send response head: ", ec.message());
-    if (ec) return or_throw<ResponseH>(yield, ec);
+    if (cancelled) ec = asio::error::operation_aborted;
+    if (ec) {
+        yield.log("Failed to send response head: ", ec.message());
+        return or_throw<ResponseH>(yield, ec);
+    }
 
     // Forward the body.
     // Based on "Boost.Beast / HTTP / Chunked Encoding / Parsing Chunks" example.
@@ -148,13 +151,15 @@ http_forward( StreamIn& in
             nc_pending -= length;
             fwdbuf = asio::buffer(buf, length);
         }
-        if (ec || cancelled) {
+        if (cancelled) ec = asio::error::operation_aborted;
+        if (ec) {
            yield.log("Failed to read response body: ", ec.message());
            break;
         }
 
         ConstBufferSequence outbuf = inproc(fwdbuf, cancel, yield[ec]);
-        if (ec || cancelled) {
+        if (cancelled) ec = asio::error::operation_aborted;
+        if (ec) {
            yield.log("Failed to process response body: ", ec.message());
            break;
         }
@@ -165,18 +170,18 @@ http_forward( StreamIn& in
             asio::async_write(out, http::make_chunk(outbuf), yield[ec]);
         else
             asio::async_write(out, outbuf, yield[ec]);
-        if (ec || cancelled) {
+        if (cancelled) ec = asio::error::operation_aborted;
+        if (ec) {
             yield.log("Failed to send response body: ", ec.message());
             break;
         }
     }
 
-    if (!(ec || cancelled) && chunked_out)
+    if (!ec && chunked_out)
         // Trailers are handled outside.
         asio::async_write(out, http::make_chunk_last(), yield[ec]);
 
-    if (!ec && cancelled)
-        ec = asio::error::operation_aborted;
+    if (cancelled) ec = asio::error::operation_aborted;
     if (ec) return or_throw<ResponseH>(yield, ec);
 
     return rpp.release().base();
