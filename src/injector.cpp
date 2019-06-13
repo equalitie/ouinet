@@ -805,8 +805,7 @@ void serve( InjectorConfig& config
                                   , yield[ec].tag("handle_bad_request"));
                 continue;
             }
-            // TODO: Not all forward operations let us see the data.
-            yield.log("Forwarded data bytes seen: ", saw_forwarded);
+            yield.log("Forwarded data bytes: ", saw_forwarded);
             // TODO: Handle trailers.
             keep_alive = cc.keep_connection(req, res, move(orig_con));
         }
