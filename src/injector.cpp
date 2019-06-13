@@ -775,7 +775,7 @@ void serve( InjectorConfig& config
             using ResponseH = http::response<http::empty_body>;
             ResponseH res;
             auto orig_con = cc.get_connection(req, cancel, yield[ec]);
-            size_t saw_forwarded = 0;
+            size_t forwarded = 0;
             if (!ec) {
                 auto reshproc = [&] (auto inh, auto& ec) {
                     // Prevent others from inserting ouinet specific header fields.
@@ -785,7 +785,7 @@ void serve( InjectorConfig& config
                     return outh;
                 };
                 ProcInFunc<asio::const_buffer> inproc = [&] (auto inbuf, auto& ec) {
-                    saw_forwarded += inbuf.size();
+                    forwarded += inbuf.size();
                     return inbuf;  // just pass data on
                 };
                 res = ResponseH(http_forward( orig_con, con
@@ -798,7 +798,7 @@ void serve( InjectorConfig& config
                                   , yield[ec].tag("handle_bad_request"));
                 continue;
             }
-            yield.log("Forwarded data bytes: ", saw_forwarded);
+            yield.log("Forwarded data bytes: ", forwarded);
             // TODO: Handle trailers.
             keep_alive = cc.keep_connection(req, res, move(orig_con));
         }
