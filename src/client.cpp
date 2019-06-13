@@ -93,8 +93,6 @@ public:
         , _ssl_certificate_cache(1000)
         , ssl_ctx{asio::ssl::context::tls_client}
         , inj_ctx{asio::ssl::context::tls_client}
-        , _fetch_stored_scheduler(_ios, 16)
-        , _store_scheduler(_ios, 4)
     {
         ssl_ctx.set_default_verify_paths();
         ssl_ctx.set_verify_mode(asio::ssl::verify_peer);
@@ -110,7 +108,7 @@ public:
     void start();
 
     void stop() {
-        _cache = nullptr;
+        _ipfs_bep44_cache = nullptr;
         _shutdown_signal();
         if (_injector) _injector->stop();
         if (_bt_dht) {
@@ -204,13 +202,15 @@ private:
     unique_ptr<OuiServiceImplementationClient>
     maybe_wrap_tls(unique_ptr<OuiServiceImplementationClient>);
 
+    AbstractCache* cache() { return _ipfs_bep44_cache.get(); }
+
 private:
     asio::io_service& _ios;
     ClientConfig _config;
     std::unique_ptr<CACertificate> _ca_certificate;
     util::LruCache<string, string> _ssl_certificate_cache;
     std::unique_ptr<OuiServiceClient> _injector;
-    std::unique_ptr<CacheClient> _cache;
+    std::unique_ptr<CacheClient> _ipfs_bep44_cache;
 
     ClientFrontEnd _front_end;
     Signal<void()> _shutdown_signal;
@@ -225,8 +225,6 @@ private:
     asio::ssl::context ssl_ctx;
     asio::ssl::context inj_ctx;
 
-    Scheduler _fetch_stored_scheduler;
-    Scheduler _store_scheduler;
     boost::optional<asio::ip::udp::endpoint> _local_utp_endpoint;
     boost::optional<asio_utp::udp_multiplexer> _udp_multiplexer;
     shared_ptr<bt::MainlineDht> _bt_dht;
@@ -261,15 +259,11 @@ Client::State::fetch_stored( const Request& request
                            , Cancel& cancel
                            , Yield yield)
 {
-    sys::error_code ec;
-    auto slot = _fetch_stored_scheduler.wait_for_slot(cancel, yield);
-
-    if (cancel) ec = asio::error::operation_aborted;
-    if (ec) return or_throw<CacheEntry>(yield, ec);
+    auto c = cache();
 
     const bool cache_is_disabled
         = !request_config.enable_stored
-       || !_cache
+       || !c
        || !_config.is_cache_access_enabled();
 
     if (cache_is_disabled) {
@@ -277,19 +271,7 @@ Client::State::fetch_stored( const Request& request
                                    , asio::error::operation_not_supported);
     }
 
-    auto ret = _cache->get_content( key_from_http_req(request)
-                                  , cancel
-                                  , yield[ec]);
-    if (!ec) {
-        // Prevent others from inserting ouinet headers.
-        ret.second.response = util::remove_ouinet_fields(move(ret.second.response));
-
-        // Add an injection identifier header
-        // to enable the user to track injection state.
-        ret.second.response.set(http_::response_injection_id_hdr, ret.first);
-    }
-
-    return or_throw(yield, ec, move(ret.second));
+    return c->load(key_from_http_req(request), cancel, yield);
 }
 
 //------------------------------------------------------------------------------
@@ -336,7 +318,7 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
 {
     return _front_end.serve( _config
                            , rq
-                           , _cache.get()
+                           , _ipfs_bep44_cache.get()
                            , *_ca_certificate
                            , yield.tag("serve_frontend"));
 }
@@ -644,260 +626,23 @@ public:
     {
         namespace err = asio::error;
 
-        auto& ios = client_state.get_io_service();
-
         // No need to filter request or response headers
         // since we are not storing them here
         // (they can be found at the descriptor).
         // Otherwise we should pass them through
         // `util::to_cache_request` and `util::to_cache_response` (respectively).
 
-        auto& cache = client_state._cache;
+        auto cache = client_state.cache();
 
         if (!cache) {
             return or_throw(yield, err::operation_not_supported, move(rs));
         }
 
-        if (has_descriptor_hdr(rs)) {
-            // Present if any insertion data does not contain the inlined descriptor
-            // but a link to it: seed descriptor itself to distributed cache.
-            asio::spawn(ios, [ desc_hdr = rs[http_::response_descriptor_hdr].to_string()
-                             , target = rq.target().to_string()
-                             , &cache
-                             , &cancel_ = client_state.get_shutdown_signal()
-                             , &scheduler = client_state._store_scheduler
-                             ] (asio::yield_context yield) {
-                Cancel cancel(cancel_);
-                sys::error_code ec;
-                seed_descriptor( target, desc_hdr
-                               , scheduler, *cache
-                               , cancel, yield[ec]);
-                LOG_DEBUG( "Index: seed descriptor for ", target
-                         , " ec:\"", ec.message(), "\"");
-            });
-        }
-
-        if (has_bep44_insert_hdr(rs)) {
-            asio::spawn(ios, [ rs
-                             , target = rq.target().to_string()
-                             , &cache
-                             , &cancel_ = client_state.get_shutdown_signal()
-                             , &scheduler = client_state._store_scheduler
-                             ] (asio::yield_context yield) {
-                using namespace std::chrono;
-
-                Cancel cancel(cancel_);
-
-                steady_clock::duration scheduler_d = seconds(0)
-                                     , bep44_d     = seconds(0)
-                                     , ipfs_add_d  = seconds(0);
-
-                sys::error_code ec;
-                seed_response( target
-                             , rs, scheduler, *cache
-                             , scheduler_d
-                             , bep44_d
-                             , ipfs_add_d
-                             , cancel, yield[ec]);
-
-                static constexpr auto secs = [](steady_clock::duration d) {
-                    return duration_cast<milliseconds>(d).count() / 1000.f;
-                };
-
-                // used by integration tests
-                LOG_DEBUG("BEP44 index: insertion finished for ", target
-                         , " ec:\"", ec.message(), "\" "
-                         , "took scheduler:", secs(scheduler_d), "s, "
-                               , "bep44m/put:", secs(bep44_d), "s, "
-                               , "ipfs/add:", secs(ipfs_add_d), "s, "
-                         , "remaining insertions: "
-                               , scheduler.slot_count(), " active, "
-                               , scheduler.waiter_count(), " pending");
-            });
-
-            return rs;  // no further actions for descriptor retrieval needed
-        }
-
-        asio::spawn(ios,
-            [ &cache, rs
-            , &ios = client_state.get_io_service()
-            , &cancel = client_state.get_shutdown_signal()
-            , &scheduler = client_state._store_scheduler
-            , key = key_from_http_req(rq)
-            ] (asio::yield_context yield_) mutable {
-
-                Yield yield(ios, yield_, "Frontend");
-
-                sys::error_code ec;
-
-                // TODO: Be smarter about what we're storing here. I.e. don't
-                // attempt to store what is currently being stored in another
-                // coroutine or has been stored just recently.
-                auto slot = scheduler.wait_for_slot(cancel, yield[ec]);
-
-                if (cancel) ec = err::operation_aborted;
-                if (ec) return;
-
-                // Seed content data itself.
-                // TODO: Use the scheduler here to only do some max number
-                // of `ipfs_add`s at a time. Also then trim that queue so
-                // that it doesn't grow indefinitely.
-                auto body_link = cache->ipfs_add
-                    (beast::buffers_to_string(rs.body().data()), yield[ec]);
-
-                auto inj_id = rs[http_::response_injection_id_hdr].to_string();
-                rs = Response();  // drop heavy response body
-
-                static const int max_attempts = 3;
-                auto log_post_inject =
-                    [&] (int attempt, const string& msg){
-                        // Adjust attempt number for meaningful 1-based logging.
-                        attempt = (attempt < max_attempts) ? attempt + 1 : max_attempts;
-                        LOG_DEBUG( "Post-inject lookup id=", inj_id
-                                 , " (", attempt, "/", max_attempts, "): "
-                                 , msg, "; key=", key);
-                    };
-
-                // Retrieve the descriptor for the injection that we triggered
-                // so that we help seed the URL->descriptor mapping too.
-                // Try a few times to get the descriptor
-                // (after some insertion delay, with exponential backoff).
-                optional<Descriptor> desc;
-                int attempt = 0;
-                for ( auto backoff = chrono::seconds(30);
-                      attempt < max_attempts; backoff *= 2, ++attempt) {
-                    if (!async_sleep(ios, backoff, cancel, yield))
-                        return;
-
-                    sys::error_code ec;
-                    auto desc_data = cache->get_descriptor( key
-                                                          , cancel
-                                                          , yield[ec]);
-                    if (ec == err::not_found) {  // not (yet) inserted
-                        log_post_inject(attempt, "not found, try again");
-                        continue;
-                    } else if (ec) {  // some other error
-                        log_post_inject(attempt, (boost::format("error=%s, giving up") % ec).str());
-                        return;
-                    }
-
-                    desc = Descriptor::deserialize(desc_data);
-                    if (!desc) {  // maybe incompatible cache index
-                        log_post_inject(attempt, "invalid descriptor, giving up");
-                        return;
-                    }
-
-                    if (inj_id == desc->request_id)
-                        break;  // found desired descriptor
-
-                    // different injection, try again
-                }
-
-                log_post_inject
-                    (attempt, desc ? ( boost::format("same_desc=%b same_data=%b")
-                                     % (inj_id == desc->request_id)
-                                     % (body_link == desc->body_link)).str()
-                                   : "did not find descriptor, giving up");
-            });
+        cache->store(key_from_http_req(rq), rs, cancel, yield);
 
         // Note: we have to return a valid response even in case of error
         // because CacheControl will use it.
         return rs;
-    }
-
-    static
-    bool has_descriptor_hdr(const Response& rs)
-    {
-        return !rs[http_::response_descriptor_hdr].empty();
-    }
-
-    static
-    bool has_bep44_insert_hdr(const Response& rs)
-    {
-        return !rs[http_::response_insert_hdr].empty();
-    }
-
-    static
-    void seed_descriptor( const std::string& target
-                        , const std::string& encoded_desc
-                        , Scheduler& scheduler
-                        , CacheClient& cache
-                        , Cancel& cancel
-                        , asio::yield_context yield)
-    {
-        sys::error_code ec;
-
-        auto compressed_desc = util::base64_decode(encoded_desc);
-        auto desc_data = util::zlib_decompress(compressed_desc, ec);
-        if (ec) {
-            LOG_WARN("Invalid descriptor data from injector; url=", target);
-            return or_throw(yield, ec);
-        }
-
-        auto slot = scheduler.wait_for_slot(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec);
-
-        cache.ipfs_add(desc_data, yield[ec]);
-        return or_throw(yield, ec);
-    }
-
-    static
-    void seed_response( const std::string& target
-                      , const Response& rs
-                      , Scheduler& scheduler
-                      , CacheClient& cache
-                      // These three are for debugging
-                      , chrono::steady_clock::duration& scheduler_duration
-                      , chrono::steady_clock::duration& bep44_duration
-                      , chrono::steady_clock::duration& ipfs_add_duration
-                      , Cancel& cancel
-                      , asio::yield_context yield)
-    {
-        using Clock = chrono::steady_clock;
-
-        auto start = Clock::now();
-
-        boost::string_view encoded_insd = rs[http_::response_insert_hdr];
-
-        if (encoded_insd.empty()) return or_throw(yield, asio::error::no_data);
-
-        string bep44_push_msg = util::base64_decode(encoded_insd);
-
-        auto opt_item = bittorrent::MutableDataItem::bdecode(bep44_push_msg);
-
-        if (!opt_item) {
-            return or_throw(yield, asio::error::invalid_argument);
-        }
-
-        sys::error_code ec;
-        auto slot = scheduler.wait_for_slot(cancel, yield[ec]);
-
-        scheduler_duration = Clock::now() - start;
-        start = Clock::now();
-
-        return_or_throw_on_error(yield, cancel, ec);
-
-        cache.insert_mapping(target, bep44_push_msg, cancel, yield[ec]);
-
-        bep44_duration = Clock::now() - start;
-        start = Clock::now();
-
-        if (ec) return or_throw(yield, ec);
-
-        auto desc_path = opt_item->value.as_string();
-        assert(desc_path);
-
-        auto desc = cache.descriptor_from_path(*desc_path, cancel, yield[ec]);
-
-        return_or_throw_on_error(yield, cancel, ec);
-
-        auto body_link = cache.ipfs_add
-            (beast::buffers_to_string(rs.body().data()), yield[ec]);
-
-        ipfs_add_duration = Clock::now() - start;
-        // TODO: (currently `desc` is just a json string, so can't do this
-        // check directly)
-        //assert(body_link == desc["value"]);
     }
 
     bool fetch(GenericStream& con, const Request& rq, Yield yield)
@@ -1414,25 +1159,25 @@ void Client::State::setup_cache()
 
             sys::error_code ec;
 
-            _cache = CacheClient::build(_ios
-                                       , bittorrent_dht()
-                                       , _config.index_bep44_pub_key()
-                                       , _config.repo_root()
-                                       , _config.autoseed_updated()
-                                       , _config.index_bep44_capacity()
-                                       , _shutdown_signal
-                                       , yield[ec]);
+            bool wait_for_ready = false;
+
+#ifndef NDEBUG
+            wait_for_ready = true;
+#endif
+
+            _ipfs_bep44_cache
+                = CacheClient::build(_ios
+                                    , bittorrent_dht()
+                                    , _config.index_bep44_pub_key()
+                                    , _config.repo_root()
+                                    , _config.autoseed_updated()
+                                    , _config.index_bep44_capacity()
+                                    , wait_for_ready
+                                    , _shutdown_signal
+                                    , yield[ec]);
 
             if (ec) {
-                cerr << "Failed to build CacheClient: "
-                     << ec.message()
-                     << endl;
-            } else {
-#ifndef NDEBUG
-                // Since this code is spawned,
-                // we only wait in order to trigger debugging messages.
-                _cache->wait_for_ready(_shutdown_signal, yield[ec]);
-#endif
+                LOG_ERROR("Failed to build CacheClient: ", ec.message());
             }
         }
     });
@@ -1594,7 +1339,7 @@ void Client::State::start()
 
                         auto rs = _front_end.serve( _config
                                                   , rq
-                                                  , _cache.get()
+                                                  , _ipfs_bep44_cache.get()
                                                   , *_ca_certificate
                                                   , yield[ec]);
                         if (ec) return;
