@@ -18,6 +18,7 @@
 
 using namespace std;
 using namespace ouinet;
+using namespace bep44_ipfs;
 
 namespace bt = bittorrent;
 namespace file_io = util::file_io;
@@ -120,7 +121,7 @@ static bt::MutableDataItem find_bep44m( bt::MainlineDht& dht
 
 
 //--------------------------------------------------------------------
-class ouinet::Bep44EntryUpdater
+class ouinet::bep44_ipfs::Bep44EntryUpdater
 {
 private:
     struct Entry {

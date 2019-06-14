@@ -17,7 +17,7 @@ namespace ouinet {
 }
 namespace ouinet { namespace util { class Ed25519PublicKey; }}
 
-namespace ouinet {
+namespace ouinet { namespace bep44_ipfs {
 
 inline
 std::string bep44_salt_from_key(boost::string_view key)
@@ -127,5 +127,5 @@ private:
     Cancel _cancel;
 };
 
-} // namespace
+}} // namespace
 

@@ -2,7 +2,7 @@
 
 #include "../../util/signal.h"
 
-namespace ouinet {
+namespace ouinet { namespace bep44_ipfs {
 
 inline
 std::string ipfs_cat( asio_ipfs::node& node
@@ -22,7 +22,7 @@ std::string ipfs_cat( asio_ipfs::node& node
 // and gets the given `hash` from it.
 #define IPFS_LOAD_FUNC(node) \
     [&](auto hash, auto& cancel, auto yield) { \
-        return ::ouinet::ipfs_cat(node, hash, cancel, yield); \
+        return ::ouinet::bep44_ipfs::ipfs_cat(node, hash, cancel, yield); \
     }
 
-} // namespace
+}} // namespace

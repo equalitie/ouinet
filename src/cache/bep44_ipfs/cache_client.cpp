@@ -15,6 +15,7 @@
 
 using namespace std;
 using namespace ouinet;
+using namespace bep44_ipfs;
 
 namespace asio = boost::asio;
 namespace sys  = boost::system;

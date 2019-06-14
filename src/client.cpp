@@ -107,7 +107,7 @@ public:
     void start();
 
     void stop() {
-        _ipfs_bep44_cache = nullptr;
+        _bep44_ipfs_cache = nullptr;
         _shutdown_signal();
         if (_injector) _injector->stop();
         if (_bt_dht) {
@@ -201,7 +201,7 @@ private:
     unique_ptr<OuiServiceImplementationClient>
     maybe_wrap_tls(unique_ptr<OuiServiceImplementationClient>);
 
-    AbstractCache* cache() { return _ipfs_bep44_cache.get(); }
+    AbstractCache* cache() { return _bep44_ipfs_cache.get(); }
 
 private:
     asio::io_service& _ios;
@@ -209,7 +209,7 @@ private:
     std::unique_ptr<CACertificate> _ca_certificate;
     util::LruCache<string, string> _ssl_certificate_cache;
     std::unique_ptr<OuiServiceClient> _injector;
-    std::unique_ptr<CacheClient> _ipfs_bep44_cache;
+    std::unique_ptr<bep44_ipfs::CacheClient> _bep44_ipfs_cache;
 
     ClientFrontEnd _front_end;
     Signal<void()> _shutdown_signal;
@@ -317,7 +317,7 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
 {
     return _front_end.serve( _config
                            , rq
-                           , _ipfs_bep44_cache.get()
+                           , _bep44_ipfs_cache.get()
                            , *_ca_certificate
                            , yield.tag("serve_frontend"));
 }
@@ -1164,16 +1164,16 @@ void Client::State::setup_cache()
             wait_for_ready = true;
 #endif
 
-            _ipfs_bep44_cache
-                = CacheClient::build(_ios
-                                    , bittorrent_dht()
-                                    , _config.index_bep44_pub_key()
-                                    , _config.repo_root()
-                                    , _config.autoseed_updated()
-                                    , _config.index_bep44_capacity()
-                                    , wait_for_ready
-                                    , _shutdown_signal
-                                    , yield[ec]);
+            _bep44_ipfs_cache
+                = bep44_ipfs::CacheClient::build(_ios
+                                                , bittorrent_dht()
+                                                , _config.index_bep44_pub_key()
+                                                , _config.repo_root()
+                                                , _config.autoseed_updated()
+                                                , _config.index_bep44_capacity()
+                                                , wait_for_ready
+                                                , _shutdown_signal
+                                                , yield[ec]);
 
             if (ec) {
                 LOG_ERROR("Failed to build CacheClient: ", ec.message());
@@ -1338,7 +1338,7 @@ void Client::State::start()
 
                         auto rs = _front_end.serve( _config
                                                   , rq
-                                                  , _ipfs_bep44_cache.get()
+                                                  , _bep44_ipfs_cache.get()
                                                   , *_ca_certificate
                                                   , yield[ec]);
                         if (ec) return;

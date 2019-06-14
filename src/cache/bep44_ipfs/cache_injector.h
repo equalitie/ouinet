@@ -17,10 +17,13 @@ namespace asio_ipfs { class node; }
 namespace ouinet { namespace bittorrent { class MainlineDht; class MutableDataItem; }}
 
 namespace ouinet {
+    
+class Scheduler;
+
+namespace bep44_ipfs {
 
 class Bep44InjectorIndex;
 class Publisher;
-class Scheduler;
 class Descriptor;
 
 class CacheInjector {
@@ -114,5 +117,5 @@ private:
     Cancel _cancel;
 };
 
-} // namespace
+}} // namespace
 

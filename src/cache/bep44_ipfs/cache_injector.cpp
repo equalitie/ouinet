@@ -18,6 +18,7 @@
 
 using namespace std;
 using namespace ouinet;
+using namespace bep44_ipfs;
 namespace bt = ouinet::bittorrent;
 
 // static
@@ -162,7 +163,7 @@ std::string CacheInjector::ipfs_cat( boost::string_view cid
         return or_throw<string>(yield, asio::error::operation_not_supported);
     }
 
-    return ::ouinet::ipfs_cat(*_ipfs_node, cid, cancel, yield);
+    return ::ouinet::bep44_ipfs::ipfs_cat(*_ipfs_node, cid, cancel, yield);
 }
 
 bittorrent::MutableDataItem

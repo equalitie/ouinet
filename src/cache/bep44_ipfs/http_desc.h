@@ -15,7 +15,7 @@
 #include "../../util.h"
 #include "asio_ipfs.h"
 
-namespace ouinet {
+namespace ouinet { namespace bep44_ipfs {
 
 struct Descriptor {
     using ptime = boost::posix_time::ptime;
@@ -192,4 +192,4 @@ http_parse( const std::string& desc_data
 
 } // ouinet::descriptor namespace
 
-} // ouinet namespace
+}} // namespaces

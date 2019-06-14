@@ -77,6 +77,8 @@ using TcpLookup   = asio::ip::tcp::resolver::results_type;
 using ResponseWithFileBody = http::response<http::basic_file_body<
     util::file_posix_with_offset>>;
 
+using bep44_ipfs::CacheInjector;
+
 static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
 static const fs::path OUINET_TLS_KEY_FILE = "tls-key.pem";
 static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";

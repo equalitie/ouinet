@@ -8,6 +8,7 @@
 
 using namespace std;
 using namespace ouinet;
+using namespace bep44_ipfs;
 
 namespace bt = ouinet::bittorrent;
 
