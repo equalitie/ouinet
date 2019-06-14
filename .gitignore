@@ -4,9 +4,6 @@ Vagrantfile.kvm
 android/.gradle/
 android/.idea/
 android/android.iml
-android/browser/.externalNativeBuild/
-android/browser/browser.iml
-android/browser/src/main/jniLibs/
 android/local.properties
 
 #python byte codes
