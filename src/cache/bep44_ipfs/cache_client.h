@@ -8,10 +8,10 @@
 #include <memory>
 #include <string>
 
-#include "abstract_cache.h"
-#include "../namespaces.h"
-#include "../util/yield.h"
-#include "../util/scheduler.h"
+#include "../abstract_cache.h"
+#include "../../namespaces.h"
+#include "../../util/yield.h"
+#include "../../util/scheduler.h"
 
 namespace asio_ipfs { class node; }
 namespace ouinet { namespace bittorrent { class MainlineDht; }}

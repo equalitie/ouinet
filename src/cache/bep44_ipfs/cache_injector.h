@@ -9,9 +9,9 @@
 #include <memory>
 #include <queue>
 
-#include "../namespaces.h"
-#include "../util/crypto.h"
-#include "cache_entry.h"
+#include "../../namespaces.h"
+#include "../../util/crypto.h"
+#include "../cache_entry.h"
 
 namespace asio_ipfs { class node; }
 namespace ouinet { namespace bittorrent { class MainlineDht; class MutableDataItem; }}

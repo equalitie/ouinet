@@ -13,8 +13,7 @@
 #include <string>
 #include <cstdlib>  // for atexit()
 
-#include "cache/cache_injector.h"
-#include "cache/http_desc.h"
+#include "cache/bep44_ipfs/cache_injector.h"
 
 #include "bittorrent/dht.h"
 #include "bittorrent/mutable_data.h"

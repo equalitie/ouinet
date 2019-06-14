@@ -1,17 +1,17 @@
 #include <asio_ipfs.h>
 #include "cache_client.h"
 #include "bep44_index.h"
-#include "cache_entry.h"
+#include "../cache_entry.h"
 #include "descidx.h"
 #include "http_desc.h"
 #include "ipfs_util.h"
-#include "../or_throw.h"
-#include "../async_sleep.h"
-#include "../bittorrent/dht.h"
-#include "../logger.h"
-#include "../util/crypto.h"
-#include "../util/watch_dog.h"
-#include "../http_util.h"
+#include "../../or_throw.h"
+#include "../../async_sleep.h"
+#include "../../bittorrent/dht.h"
+#include "../../logger.h"
+#include "../../util/crypto.h"
+#include "../../util/watch_dog.h"
+#include "../../http_util.h"
 
 using namespace std;
 using namespace ouinet;

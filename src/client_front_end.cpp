@@ -1,6 +1,6 @@
 #include "client_front_end.h"
 #include "generic_stream.h"
-#include "cache/cache_client.h"
+#include "cache/bep44_ipfs/cache_client.h"
 #include "util.h"
 #include "util/bytes.h"
 #include "defer.h"
@@ -8,8 +8,8 @@
 
 // For parsing BEP44 insertion data.
 #include "bittorrent/mutable_data.h"
-#include "cache/descidx.h"
-#include "cache/http_desc.h"
+#include "cache/bep44_ipfs/descidx.h"
+#include "cache/bep44_ipfs/http_desc.h"
 
 #include <boost/optional/optional_io.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>

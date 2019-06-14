@@ -6,9 +6,9 @@
 #include <string>
 #include <boost/utility/string_view.hpp>
 
-#include "../namespaces.h"
-#include "../or_throw.h"
-#include "../util.h"
+#include "../../namespaces.h"
+#include "../../or_throw.h"
+#include "../../util.h"
 #include "bep44_index.h"
 
 

@@ -5,9 +5,9 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/filesystem.hpp>
 
-#include "../namespaces.h"
-#include "../util/crypto.h"
-#include "../util/signal.h"
+#include "../../namespaces.h"
+#include "../../util/crypto.h"
+#include "../../util/signal.h"
 
 namespace ouinet {
     namespace bittorrent {

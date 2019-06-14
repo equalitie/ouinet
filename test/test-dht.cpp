@@ -10,7 +10,7 @@
 #include <boost/optional.hpp>
 #include <boost/optional/optional_io.hpp>
 #include <boost/tokenizer.hpp>
-#include "../src/cache/descidx.h"
+#include "../src/cache/bep44_ipfs/descidx.h"
 #include "../src/util/crypto.h"
 #include "../src/util/wait_condition.h"
 #include "../src/util.h"

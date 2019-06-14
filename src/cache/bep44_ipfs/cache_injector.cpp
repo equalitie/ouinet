@@ -11,10 +11,10 @@
 #include "descidx.h"
 #include "publisher.h"
 #include "ipfs_util.h"
-#include "../async_sleep.h"
-#include "../bittorrent/dht.h"
-#include "../logger.h"
-#include "../util/scheduler.h"
+#include "../../async_sleep.h"
+#include "../../bittorrent/dht.h"
+#include "../../logger.h"
+#include "../../util/scheduler.h"
 
 using namespace std;
 using namespace ouinet;

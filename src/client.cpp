@@ -13,8 +13,7 @@
 #include <iostream>
 #include <cstdlib>  // for atexit()
 
-#include "cache/cache_client.h"
-#include "cache/http_desc.h"
+#include "cache/bep44_ipfs/cache_client.h"
 
 #include "namespaces.h"
 #include "origin_pools.h"
