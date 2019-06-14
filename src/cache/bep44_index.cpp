@@ -217,12 +217,15 @@ private:
         });
 
         while (true) {
+#ifndef NDEBUG
             LOG_DEBUG("Bep44EntryUpdater start new round");
-
+#endif
             auto i = pick_entry_to_update();
 
             if (i == _lru->end()) {
+#ifndef NDEBUG
                 LOG_DEBUG("Bep44EntryUpdater nothing to update, waiting");
+#endif
                 Cancel tout(cancel);
                 // Wait for new entries, but if none comes in a while,
                 // check persisted entries again
