@@ -6,6 +6,7 @@
 #include <boost/asio/write.hpp>
 #include <boost/beast/core/flat_buffer.hpp>
 #include <boost/beast/http/chunk_encode.hpp>
+#include <boost/beast/http/fields.hpp>
 #include <boost/beast/http/parser.hpp>
 
 #include "default_timeout.h"
@@ -34,6 +35,9 @@ using ProcHeadFunc = std::function<
 template<class ConstBufferSequence>
 using ProcInFunc = std::function<
     ConstBufferSequence(asio::const_buffer inbuf, Cancel&, Yield)>;
+// Get copy of response trailers from input, return response trailers for output.
+// Only trailers declared in the input response's `Trailers:` header are considered.
+using ProcTrailFunc = std::function<http::fields(http::fields, Cancel&, Yield)>;
 
 template<class StreamIn, class StreamOut, class Request, class ConstBufferSequence>
 inline
@@ -43,6 +47,7 @@ http_forward( StreamIn& in
             , Request rq
             , ProcHeadFunc rshproc
             , ProcInFunc<ConstBufferSequence> inproc
+            , ProcTrailFunc trproc
             , Cancel& cancel
             , Yield yield_)
 {
@@ -195,16 +200,41 @@ http_forward( StreamIn& in
             break;
         }
     }
-
-    if (!ec && chunked_out)
-        // Trailers are handled outside.
-        asio::async_write(out, http::make_chunk_last(), yield[ec]);
-
-    if (timed_out) ec = asio::error::timed_out;
-    if (cancelled) ec = asio::error::operation_aborted;
     if (ec) return or_throw<ResponseH>(yield, ec);
 
-    return rpp.release().base();
+    auto rph = rpp.release().base();
+
+    // Send last chunk and trailers (if needed).
+    if (chunked_out) {
+        http::fields intrail;
+        for (const auto& hdr : http::token_list(rph[http::field::trailer])) {
+            auto hit = rph.find(hdr);
+            if (hit == rph.end())
+                continue;  // missing trailer
+            intrail.insert(hit->name(), hit->value());
+        }
+
+        auto outtrail = trproc(std::move(intrail), cancel, yield[ec]);
+        if (timed_out) ec = asio::error::timed_out;
+        if (cancelled) ec = asio::error::operation_aborted;
+        if (ec) {
+            yield.log("Failed to process response trailers: ", ec.message());
+            return or_throw<ResponseH>(yield, ec);
+        }
+
+        if (outtrail.begin() != outtrail.end())
+            asio::async_write(out, http::make_chunk_last(outtrail), yield[ec]);
+        else
+            asio::async_write(out, http::make_chunk_last(), yield[ec]);
+        if (timed_out) ec = asio::error::timed_out;
+        if (cancelled) ec = asio::error::operation_aborted;
+        if (ec) {
+            yield.log("Failed to send last chunk and trailers: ", ec.message());
+            return or_throw<ResponseH>(yield, ec);
+        }
+    }
+
+    return rph;
 }
 
 } // namespace ouinet

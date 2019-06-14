@@ -788,8 +788,12 @@ void serve( InjectorConfig& config
                     forwarded += inbuf.size();
                     return inbuf;  // just pass data on
                 };
+                auto trproc = [&] (auto intr, auto&, auto) {
+                    return intr;  // leave trailers untouched
+                };
                 res = ResponseH(http_forward( orig_con, con
-                                            , util::to_origin_request(req), reshproc, inproc
+                                            , util::to_origin_request(req)
+                                            , reshproc, inproc, trproc
                                             , cancel, yield[ec].tag("fetch_proxy")));
             }
             if (ec) {
@@ -799,7 +803,6 @@ void serve( InjectorConfig& config
                 continue;
             }
             yield.log("Forwarded data bytes: ", forwarded);
-            // TODO: Handle trailers.
             keep_alive = cc.keep_connection(req, res, move(orig_con));
         }
         else {
