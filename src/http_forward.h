@@ -94,12 +94,17 @@ http_forward( StreamIn& in
 
     // Get content length if non-chunked.
     size_t nc_pending;
+    bool http_10_eob = false;  // HTTP/1.0 end of body on connection close, no `Content-Length`
     if (!chunked_in) {
         static const auto max_size_t = std::numeric_limits<std::size_t>::max();
         nc_pending = util::parse_num<size_t>( rp[http::field::content_length]
                                             , max_size_t);
-        if (nc_pending == max_size_t)
-            return or_throw<ResponseH>(yield, asio::error::invalid_argument);
+        if (nc_pending == max_size_t) {
+            if (rp.version() == 10)
+                http_10_eob = true;
+            else
+                return or_throw<ResponseH>(yield, asio::error::invalid_argument);
+        }
     }
 
     // Send the HTTP response head (after processing).
@@ -161,6 +166,11 @@ http_forward( StreamIn& in
             fwd_initial = 0;  // only usable on first read
             nc_pending -= length;
             fwdbuf = asio::buffer(buf, length);
+
+            if (ec == asio::error::eof && http_10_eob) {
+                ec = {};  // HTTP/1.0 end of body as of RFC1945#7.2.2
+                nc_pending = 0;
+            }
         }
         if (set_error(ec, "Failed to read response body"))
             break;
