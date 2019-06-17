@@ -163,13 +163,13 @@ http_forward( StreamIn& in
             fwdbuf = asio::buffer(buf, length);
         }
         if (set_error(ec, "Failed to read response body"))
-           break;
+            break;
 
         ConstBufferSequence outbuf = inproc(fwdbuf, cancel, yield[ec]);
         if (set_error(ec, "Failed to process response body"))
-           break;
+            break;
         if (asio::buffer_size(outbuf) == 0)
-           continue;  // e.g. input buffer filled but no output yet
+            continue;  // e.g. input buffer filled but no output yet
 
         if (chunked_out)
             asio::async_write(out, http::make_chunk(outbuf), yield[ec]);
