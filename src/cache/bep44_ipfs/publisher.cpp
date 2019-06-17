@@ -2,12 +2,13 @@
 #include <asio_ipfs.h>
 #include <iostream>
 
-#include "../util/crypto.h"
-#include "../logger.h"
-#include "../bittorrent/dht.h"
+#include "../../util/crypto.h"
+#include "../../logger.h"
+#include "../../bittorrent/dht.h"
 
 using namespace std;
 using namespace ouinet;
+using namespace bep44_ipfs;
 
 namespace bt = ouinet::bittorrent;
 

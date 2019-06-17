@@ -13,8 +13,7 @@
 #include <string>
 #include <cstdlib>  // for atexit()
 
-#include "cache/cache_injector.h"
-#include "cache/http_desc.h"
+#include "cache/bep44_ipfs/cache_injector.h"
 
 #include "bittorrent/dht.h"
 #include "bittorrent/mutable_data.h"
@@ -77,6 +76,8 @@ using Response    = http::response<http::dynamic_body>;
 using TcpLookup   = asio::ip::tcp::resolver::results_type;
 using ResponseWithFileBody = http::response<http::basic_file_body<
     util::file_posix_with_offset>>;
+
+using bep44_ipfs::CacheInjector;
 
 static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
 static const fs::path OUINET_TLS_KEY_FILE = "tls-key.pem";

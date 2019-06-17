@@ -4,20 +4,21 @@
 #include <json.hpp>
 
 #include "bep44_index.h"
-#include "../util/file_io.h"
-#include "../logger.h"
-#include "../util/lru_cache.h"
-#include "../util/persistent_lru_cache.h"
-#include "../util/condition_variable.h"
-#include "../util/watch_dog.h"
-#include "../bittorrent/bencoding.h"
-#include "../bittorrent/dht.h"
-#include "../or_throw.h"
-#include "../defer.h"
-#include "../async_sleep.h"
+#include "../../util/file_io.h"
+#include "../../logger.h"
+#include "../../util/lru_cache.h"
+#include "../../util/persistent_lru_cache.h"
+#include "../../util/condition_variable.h"
+#include "../../util/watch_dog.h"
+#include "../../bittorrent/bencoding.h"
+#include "../../bittorrent/dht.h"
+#include "../../or_throw.h"
+#include "../../defer.h"
+#include "../../async_sleep.h"
 
 using namespace std;
 using namespace ouinet;
+using namespace bep44_ipfs;
 
 namespace bt = bittorrent;
 namespace file_io = util::file_io;
@@ -120,7 +121,7 @@ static bt::MutableDataItem find_bep44m( bt::MainlineDht& dht
 
 
 //--------------------------------------------------------------------
-class ouinet::Bep44EntryUpdater
+class ouinet::bep44_ipfs::Bep44EntryUpdater
 {
 private:
     struct Entry {

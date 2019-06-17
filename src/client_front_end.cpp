@@ -1,6 +1,6 @@
 #include "client_front_end.h"
 #include "generic_stream.h"
-#include "cache/cache_client.h"
+#include "cache/bep44_ipfs/cache_client.h"
 #include "util.h"
 #include "util/bytes.h"
 #include "defer.h"
@@ -8,8 +8,8 @@
 
 // For parsing BEP44 insertion data.
 #include "bittorrent/mutable_data.h"
-#include "cache/descidx.h"
-#include "cache/http_desc.h"
+#include "cache/bep44_ipfs/descidx.h"
+#include "cache/bep44_ipfs/http_desc.h"
 
 #include <boost/optional/optional_io.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
@@ -88,7 +88,7 @@ void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, stringstr
 
 void ClientFrontEnd::handle_upload( const ClientConfig& config
                                   , const Request& req, Response& res, stringstream& ss
-                                  , CacheClient* cache_client
+                                  , bep44_ipfs::CacheClient* cache_client
                                   , asio::yield_context yield)
 {
     static const string req_ctype = "application/octet-stream";
@@ -138,7 +138,7 @@ static bool percent_decode(const string& in, string& out) {
 
 void ClientFrontEnd::handle_descriptor( const ClientConfig& config
                                       , const Request& req, Response& res, stringstream& ss
-                                      , CacheClient* cache_client, Yield yield)
+                                      , bep44_ipfs::CacheClient* cache_client, Yield yield)
 {
     auto result = http::status::ok;
     res.set(http::field::content_type, "application/json");
@@ -205,11 +205,11 @@ string key_from_bep44(const string& data, Cancel& cancel, asio::yield_context yi
         static auto desc_load = [](auto, auto&, auto y) {  // TODO: support linked descriptors
                                     return or_throw(y, asio::error::operation_not_supported, "");
                                 };
-        auto desc_data = descriptor::from_path( *desc_path, desc_load
-                                              , cancel, yield[ec]);  // serialized desc
+        auto desc_data = bep44_ipfs::descriptor::from_path( *desc_path, desc_load
+                                                          , cancel, yield[ec]);  // serialized desc
         if (ec) throw invalid_argument("");
 
-        auto desc = Descriptor::deserialize(desc_data);  // opt<desc>
+        auto desc = bep44_ipfs::Descriptor::deserialize(desc_data);  // opt<desc>
         if (!desc) throw invalid_argument("");
 
         key = key_from_http_url(desc->url);
@@ -220,7 +220,8 @@ string key_from_bep44(const string& data, Cancel& cancel, asio::yield_context yi
 }
 
 void ClientFrontEnd::handle_insert_bep44( const Request& req, Response& res, stringstream& ss
-                                        , CacheClient* cache_client, asio::yield_context yield)
+                                        , bep44_ipfs::CacheClient* cache_client
+                                        , asio::yield_context yield)
 {
     static const string req_ctype = "application/x-bittorrent";
 
@@ -275,7 +276,7 @@ void ClientFrontEnd::handle_insert_bep44( const Request& req, Response& res, str
 
 void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , const Request& req, Response& res, stringstream& ss
-                                  , CacheClient* cache_client)
+                                  , bep44_ipfs::CacheClient* cache_client)
 {
     res.set(http::field::content_type, "text/html");
 
@@ -389,7 +390,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
 void ClientFrontEnd::handle_status( ClientConfig& config
                                   , const Request& req, Response& res, stringstream& ss
-                                  , CacheClient* cache_client)
+                                  , bep44_ipfs::CacheClient* cache_client)
 {
     res.set(http::field::content_type, "application/json");
 
@@ -414,7 +415,7 @@ void ClientFrontEnd::handle_status( ClientConfig& config
 
 Response ClientFrontEnd::serve( ClientConfig& config
                               , const Request& req
-                              , CacheClient* cache_client
+                              , bep44_ipfs::CacheClient* cache_client
                               , const CACertificate& ca
                               , Yield yield)
 {

@@ -6,15 +6,13 @@
 #include <string>
 #include <boost/utility/string_view.hpp>
 
-#include "../namespaces.h"
-#include "../or_throw.h"
-#include "../util.h"
+#include "../../namespaces.h"
+#include "../../or_throw.h"
+#include "../../util.h"
 #include "bep44_index.h"
 
 
-namespace ouinet {
-
-namespace descriptor {
+namespace ouinet { namespace bep44_ipfs { namespace descriptor {
 
 static const std::string ipfs_prefix = "/ipfs/";
 static const std::string zlib_prefix = "/zlib/";
@@ -106,4 +104,5 @@ put_into_index( const std::string& key, const std::string& desc_data
 }
 
 } // namespace descriptor
+} // namespace bep44_ipfs
 } // namespace ouinet

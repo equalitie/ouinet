@@ -10,13 +10,14 @@
 #include <boost/optional.hpp>
 #include <boost/optional/optional_io.hpp>
 #include <boost/tokenizer.hpp>
-#include "../src/cache/descidx.h"
+#include "../src/cache/bep44_ipfs/descidx.h"
 #include "../src/util/crypto.h"
 #include "../src/util/wait_condition.h"
 #include "../src/util.h"
 
 
 using namespace ouinet;
+using namespace ouinet::bep44_ipfs;
 using namespace std;
 using namespace ouinet::bittorrent;
 using boost::string_view;
@@ -249,8 +250,8 @@ int main(int argc, const char** argv)
                         // src/cache/descidx.h
                         auto desc_str = [&]() {
                             auto val = *opt_data->value.as_string();
-                            if (val.substr(0, ouinet::descriptor::zlib_prefix.size()) == ouinet::descriptor::zlib_prefix) {
-                                auto desc_zlib(val.substr(ouinet::descriptor::zlib_prefix.length()));
+                            if (val.substr(0, descriptor::zlib_prefix.size()) == descriptor::zlib_prefix) {
+                                auto desc_zlib(val.substr(descriptor::zlib_prefix.length()));
                                 return "zlib: " + util::zlib_decompress(desc_zlib, ec);
                             }
                             else {

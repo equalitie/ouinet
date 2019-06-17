@@ -8,16 +8,16 @@
 #include <memory>
 #include <string>
 
-#include "abstract_cache.h"
-#include "../namespaces.h"
-#include "../util/yield.h"
-#include "../util/scheduler.h"
+#include "../abstract_cache.h"
+#include "../../namespaces.h"
+#include "../../util/yield.h"
+#include "../../util/scheduler.h"
 
 namespace asio_ipfs { class node; }
 namespace ouinet { namespace bittorrent { class MainlineDht; }}
 namespace ouinet { namespace util { class Ed25519PublicKey; }}
 
-namespace ouinet {
+namespace ouinet { namespace bep44_ipfs {
 
 class Bep44ClientIndex;
 
@@ -123,5 +123,5 @@ private:
     Scheduler _fetch_stored_scheduler;
 };
 
-} // namespace
+}} // namespace
 
