@@ -11,6 +11,7 @@
 
 #include "default_timeout.h"
 #include "defer.h"
+#include "http_util.h"
 #include "or_throw.h"
 #include "util.h"
 #include "util/signal.h"
