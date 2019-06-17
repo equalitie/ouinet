@@ -75,6 +75,8 @@ http_forward( StreamIn& in
 
     Yield yield = yield_.tag("http_forward");
 
+    // Cancellation, time out and error handling
+    // -----------------------------------------
     auto cancelled = cancel.connect([&] { in.close(); out.close(); });
     bool timed_out = false;
     auto wdog_timeout = default_timeout::http_forward();
@@ -89,7 +91,8 @@ http_forward( StreamIn& in
         return ec;
     };
 
-    // Send the HTTP request to the input side.
+    // Send HTTP request to input side
+    // -------------------------------
     http::async_write(in, rq, yield[ec]);
     // Ignore `end_of_stream` error, there may still be data in
     // the receive buffer we can read.
@@ -98,7 +101,8 @@ http_forward( StreamIn& in
     if (set_error(ec, "Failed to send request"))
         return or_throw<ResponseH>(yield, ec);
 
-    // Receive the head of the HTTP response into a parser.
+    // Receive HTTP response head from input side and parse it
+    // -------------------------------------------------------
     beast::static_buffer<http_forward_block> inbuf;
     http::response_parser<http::empty_body> rpp;
     rpp.body_limit(max_size_t);  // i.e. unlimited; callbacks can restrict this
@@ -126,7 +130,8 @@ http_forward( StreamIn& in
         }
     }
 
-    // Send the HTTP response head (after processing).
+    // Process and send HTTP response head to output side
+    // --------------------------------------------------
     bool chunked_out;
     {
         auto rph_out(rpp.get().base());
@@ -147,7 +152,8 @@ http_forward( StreamIn& in
 
     wdog.expires_after(wdog_timeout);
 
-    // Forward the body.
+    // Process and forward body blocks
+    // -------------------------------
     // Based on "Boost.Beast / HTTP / Chunked Encoding / Parsing Chunks" example.
 
     // Prepare fixed-size forwarding buffer
@@ -211,7 +217,8 @@ http_forward( StreamIn& in
 
     auto rph = rpp.release().base();
 
-    // Send last chunk and trailers (if needed).
+    // Process and send last chunk and trailers to output side
+    // -------------------------------------------------------
     if (chunked_out) {
         http::fields intrail;
         for (const auto& hdr : http::token_list(rph[http::field::trailer])) {
