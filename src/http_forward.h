@@ -27,6 +27,7 @@ static const size_t http_forward_block = 2048;
 // Get copy of response head from input, return response head for output.
 using ProcHeadFunc = std::function<
     http::response_header<>(http::response_header<>, Cancel&, Yield)>;
+
 // Get a buffer of data to be sent after processing a buffer of received data.
 // The returned data must be alive while `http_forward` runs,
 // The returned data will be wrapped in a single chunk
@@ -36,10 +37,26 @@ using ProcHeadFunc = std::function<
 template<class ConstBufferSequence>
 using ProcInFunc = std::function<
     ConstBufferSequence(asio::const_buffer inbuf, Cancel&, Yield)>;
+
 // Get copy of response trailers from input, return response trailers for output.
 // Only trailers declared in the input response's `Trailers:` header are considered.
 using ProcTrailFunc = std::function<http::fields(http::fields, Cancel&, Yield)>;
 
+// Send the HTTP request `rq` over `in`, send the response head over `out`,
+// then forward the response body from `in` to `out`.
+//
+// The `rshproc` callback can be used to manipulate the response head
+// before sending it to `out`.
+// It can be used to set output transfer encoding to chunked.
+//
+// The `inproc` callback can be used to manipulate blocks of input
+// (of at most `http_forward_block` size)
+// before sending the resulting data to `out`.
+// Every non-empty result is sent in a single write operation
+// (wrapped in a single chunk if the output is chunked).
+//
+// The `trproc` callback can be used to manipulate trailers
+// before sending them to `out`.
 template<class StreamIn, class StreamOut, class Request, class ConstBufferSequence>
 inline
 http::response_header<>
