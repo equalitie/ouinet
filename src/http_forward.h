@@ -54,6 +54,7 @@ http_forward( StreamIn& in
 {
     // TODO: Split and refactor with `fetch_http` if still useful.
     using ResponseH = http::response_header<>;
+    static const auto max_size_t = (std::numeric_limits<std::size_t>::max)();
 
     Yield yield = yield_.tag("http_forward");
 
@@ -83,6 +84,7 @@ http_forward( StreamIn& in
     // Receive the head of the HTTP response into a parser.
     beast::static_buffer<http_forward_block> inbuf;
     http::response_parser<http::empty_body> rpp;
+    rpp.body_limit(max_size_t);  // i.e. unlimited; callbacks can restrict this
     http::async_read_header(in, inbuf, rpp, yield[ec]);
     if (set_error(ec, "Failed to receive response head"))
         return or_throw<ResponseH>(yield, ec);
@@ -97,7 +99,6 @@ http_forward( StreamIn& in
     size_t nc_pending;
     bool http_10_eob = false;  // HTTP/1.0 end of body on connection close, no `Content-Length`
     if (!chunked_in) {
-        static const auto max_size_t = (std::numeric_limits<std::size_t>::max)();
         nc_pending = util::parse_num<size_t>( rp[http::field::content_length]
                                             , max_size_t);
         if (nc_pending == max_size_t) {
