@@ -97,7 +97,7 @@ http_forward( StreamIn& in
     size_t nc_pending;
     bool http_10_eob = false;  // HTTP/1.0 end of body on connection close, no `Content-Length`
     if (!chunked_in) {
-        static const auto max_size_t = std::numeric_limits<std::size_t>::max();
+        static const auto max_size_t = (std::numeric_limits<std::size_t>::max)();
         nc_pending = util::parse_num<size_t>( rp[http::field::content_length]
                                             , max_size_t);
         if (nc_pending == max_size_t) {
