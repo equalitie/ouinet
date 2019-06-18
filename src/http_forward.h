@@ -5,9 +5,13 @@
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/write.hpp>
 #include <boost/beast/core/flat_buffer.hpp>
+#include <boost/beast/core/static_buffer.hpp>
 #include <boost/beast/http/chunk_encode.hpp>
+#include <boost/beast/http/empty_body.hpp>
 #include <boost/beast/http/fields.hpp>
 #include <boost/beast/http/parser.hpp>
+#include <boost/beast/http/read.hpp>
+#include <boost/beast/http/write.hpp>
 
 #include "default_timeout.h"
 #include "defer.h"
