@@ -46,6 +46,13 @@ using ProcInFunc = std::function<
 // Only trailers declared in the input response's `Trailers:` header are considered.
 using ProcTrailFunc = std::function<http::fields(http::fields, Cancel&, Yield)>;
 
+namespace detail {
+static const auto max_size_t = (std::numeric_limits<std::size_t>::max)();
+size_t get_content_length(const http::response_header<>&, sys::error_code&);
+http::fields process_trailers( const http::response_header<>&, const ProcTrailFunc&
+                             , Cancel&, Yield);
+}
+
 // Send the HTTP request `rq` over `in`, send the response head over `out`,
 // then forward the response body from `in` to `out`.
 //
@@ -75,7 +82,6 @@ http_forward( StreamIn& in
 {
     // TODO: Split and refactor with `fetch_http` if still useful.
     using ResponseH = http::response_header<>;
-    static const auto max_size_t = (std::numeric_limits<std::size_t>::max)();
 
     Yield yield = yield_.tag("http_forward");
 
@@ -109,7 +115,7 @@ http_forward( StreamIn& in
     // -------------------------------------------------------
     beast::static_buffer<http_forward_block> inbuf;
     http::response_parser<http::empty_body> rpp;
-    rpp.body_limit(max_size_t);  // i.e. unlimited; callbacks can restrict this
+    rpp.body_limit(detail::max_size_t);  // i.e. unlimited; callbacks can restrict this
     http::async_read_header(in, inbuf, rpp, yield[ec]);
     if (set_error(ec, "Failed to receive response head"))
         return or_throw<ResponseH>(yield, ec);
@@ -122,16 +128,11 @@ http_forward( StreamIn& in
 
     // Get content length if non-chunked.
     size_t nc_pending;
-    bool http_10_eob = false;  // HTTP/1.0 end of body on connection close, no `Content-Length`
+    bool http_10_eob;  // HTTP/1.0 end of body on connection close, no `Content-Length`
     if (!chunked_in) {
-        nc_pending = util::parse_num<size_t>( rp[http::field::content_length]
-                                            , max_size_t);
-        if (nc_pending == max_size_t) {
-            if (rp.version() == 10)
-                http_10_eob = true;
-            else
-                return or_throw<ResponseH>(yield, asio::error::invalid_argument);
-        }
+        nc_pending = detail::get_content_length(rp, ec);
+        if (ec) return or_throw<ResponseH>(yield, ec);
+        http_10_eob = (nc_pending == detail::max_size_t);
     }
 
     // Process and send HTTP response head to output side
@@ -224,15 +225,7 @@ http_forward( StreamIn& in
     // Process and send last chunk and trailers to output side
     // -------------------------------------------------------
     if (chunked_out) {
-        http::fields intrail;
-        for (const auto& hdr : http::token_list(rph[http::field::trailer])) {
-            auto hit = rph.find(hdr);
-            if (hit == rph.end())
-                continue;  // missing trailer
-            intrail.insert(hit->name(), hit->value());
-        }
-
-        auto outtrail = trproc(std::move(intrail), cancel, yield[ec]);
+        auto outtrail = detail::process_trailers(rph, trproc, cancel, yield[ec]);
         if (set_error(ec, "Failed to process response trailers"))
             return or_throw<ResponseH>(yield, ec);
 

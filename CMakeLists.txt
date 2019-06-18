@@ -257,6 +257,7 @@ if (WITH_INJECTOR)
         "./src/util/sha1.cpp"
         "./src/util.cpp"
         "./src/http_util.cpp"
+        "./src/http_forward.cpp"
     )
 
     add_executable(injector ${injector_sources})
