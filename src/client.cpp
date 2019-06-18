@@ -14,6 +14,7 @@
 #include <cstdlib>  // for atexit()
 
 #include "cache/bep44_ipfs/cache_client.h"
+#include "cache/bep5_http/client.h"
 
 #include "namespaces.h"
 #include "origin_pools.h"
@@ -201,7 +202,7 @@ private:
     unique_ptr<OuiServiceImplementationClient>
     maybe_wrap_tls(unique_ptr<OuiServiceImplementationClient>);
 
-    AbstractCache* cache() { return _bep44_ipfs_cache.get(); }
+    AbstractCacheOld* cache() { return _bep44_ipfs_cache.get(); }
 
 private:
     asio::io_service& _ios;

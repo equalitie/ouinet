@@ -21,7 +21,7 @@ namespace ouinet { namespace bep44_ipfs {
 
 class Bep44ClientIndex;
 
-class CacheClient : public AbstractCache {
+class CacheClient : public AbstractCacheOld {
 public:
     // Construct the CacheClient without blocking the main thread as
     // constructing asio_ipfs::node takes some time.
