@@ -1,5 +1,7 @@
 #pragma once
 
+#include <chrono>
+
 namespace ouinet { namespace default_timeout {
 
 static inline auto tcp_connect() { return std::chrono::minutes(4); }
