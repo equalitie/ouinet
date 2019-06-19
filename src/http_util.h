@@ -24,6 +24,7 @@ std::pair<std::string, std::string>
 get_host_port(const http::request<http::string_body>&);
 
 ///////////////////////////////////////////////////////////////////////////////
+// DEPRECATED: please use ouinet::parse::number instead
 template<class Num>
 Num parse_num(beast::string_view s, Num default_value) {
     try {
