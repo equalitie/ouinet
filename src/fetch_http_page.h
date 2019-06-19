@@ -5,7 +5,6 @@
 #include <boost/asio/spawn.hpp>
 
 #include "or_throw.h"
-#include "generic_stream.h"
 #include "util/signal.h"
 #include "util/timeout.h"
 #include "util/yield.h"
@@ -21,11 +20,12 @@ namespace ouinet {
 // (which may be already an SSL tunnel)
 // *as is* and return the HTTP response or just its head
 // depending on the expected `ResponseType`.
-template<class ResponseBodyType, class RequestType>
+// Read but unused data may be left at the `buffer`.
+template<class ResponseBodyType, class Stream, class RequestType, class DynamicBuffer>
 inline
 http::response<ResponseBodyType>
-fetch_http( asio::io_service& ios
-          , GenericStream& con
+fetch_http( Stream& con
+          , DynamicBuffer& buffer
           , RequestType req
           , Signal<void()>& abort_signal
           , Yield yield_)
@@ -34,13 +34,15 @@ fetch_http( asio::io_service& ios
 
     http::response<ResponseBodyType> res;
 
-    auto slot = abort_signal.connect([&con] { con.close(); });
+    auto cancel_slot = abort_signal.connect([&con] { con.close(); });
 
     sys::error_code ec;
 
     // Send the HTTP request to the remote host
     http::async_write(con, req, yield[ec]);
-
+    if (!ec && cancel_slot) {
+        ec = asio::error::operation_aborted;
+    }
     if (ec) {
         yield.log("Failed to http::async_write ", ec.message());
     }
@@ -53,11 +55,11 @@ fetch_http( asio::io_service& ios
 
     if (ec) return or_throw(yield, ec, move(res));
 
-    beast::flat_buffer buffer;
-
     // Receive the HTTP response
     _recv_http_response(con, buffer, res, yield[ec]);
-
+    if (!ec && cancel_slot) {
+        ec = asio::error::operation_aborted;
+    }
     if (ec) {
         yield.log("Failed to http::async_read ", ec.message());
     }
@@ -65,11 +67,23 @@ fetch_http( asio::io_service& ios
     return or_throw(yield, ec, move(res));
 }
 
-template<class ResponseBodyType, class Duration, class RequestType>
+template<class ResponseBodyType, class Stream, class RequestType>
+inline
+http::response<ResponseBodyType>
+fetch_http( Stream& con
+          , RequestType req
+          , Signal<void()>& abort_signal
+          , Yield yield_)
+{
+    beast::flat_buffer buffer;
+    return fetch_http<ResponseBodyType>(con, buffer, req, abort_signal, yield_);
+}
+
+template<class ResponseBodyType, class Stream, class Duration, class RequestType>
 inline
 http::response<ResponseBodyType>
 fetch_http( asio::io_service& ios
-          , GenericStream& con
+          , Stream& con
           , RequestType req
           , Duration timeout
           , Signal<void()>& abort_signal
@@ -81,14 +95,15 @@ fetch_http( asio::io_service& ios
         , timeout
         , [&] (auto& abort_signal, auto yield) {
               return fetch_http<ResponseBodyType>
-                (ios, con, req, abort_signal, yield);
+                (con, req, abort_signal, yield);
           }
         , yield);
 }
 
+template<class Stream>
 inline
 void
-_recv_http_response( GenericStream& con
+_recv_http_response( Stream& con
                    , beast::flat_buffer& buffer
                    , http::response<http::dynamic_body>& res
                    , asio::yield_context yield)
@@ -96,9 +111,10 @@ _recv_http_response( GenericStream& con
     http::async_read(con, buffer, res, yield);
 }
 
+template<class Stream>
 inline
 void
-_recv_http_response( GenericStream& con
+_recv_http_response( Stream& con
                    , beast::flat_buffer& buffer
                    , http::response<http::empty_body>& res
                    , asio::yield_context yield)

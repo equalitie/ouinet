@@ -21,6 +21,7 @@
 #include "namespaces.h"
 #include "util.h"
 #include "fetch_http_page.h"
+#include "http_forward.h"
 #include "connect_to_host.h"
 #include "default_timeout.h"
 #include "cache_control.h"
@@ -267,8 +268,7 @@ struct InjectorCacheControl {
     using Connection = OriginPools::Connection;
 
 public:
-    GenericStream connect( asio::io_service& ios
-                         , const Request& rq
+    GenericStream connect( const Request& rq
                          , Cancel& cancel
                          , Yield yield)
     {
@@ -517,54 +517,39 @@ public:
         return keep_alive;
     }
 
-    Response fetch_fresh(const Request& rq_, Cancel& cancel, Yield yield) {
-        sys::error_code ec;
-
-        auto maybe_connection = origin_pools.get_connection(rq_);
-        OriginPools::Connection connection;
-        if (maybe_connection) {
-            connection = std::move(*maybe_connection);
-        } else {
-            auto stream = connect(ios, rq_, cancel, yield[ec].tag("connect"));
-
-            if (ec) return or_throw<Response>(yield, ec);
-
-            connection = origin_pools.wrap(std::move(stream));
-        }
-
-        auto cancel_slot = cancel.connect([&] {
-            connection.close();
-        });
-
+    // This gets whatever is considered a valid response from `origin_c`
+    // and leaves any read but unused input in `buffer`.
+    template<class Rs, class DynamicBuffer>
+    Rs fetch_fresh( const Request& rq_
+                  , Connection& origin_c, DynamicBuffer& buffer
+                  , Cancel& cancel, Yield yield) {
         Request rq = util::to_origin_request(rq_);
         rq.keep_alive(true);
 
-        // Send request
-        http::async_write(connection, rq, yield[ec].tag("request"));
-
-        if (!ec && cancel_slot) {
-            ec = asio::error::operation_aborted;
-        }
-        if (ec) return or_throw<Response>(yield, ec);
-
-        // Receive response
-        Response ret;
-        beast::flat_buffer buffer;
-        http::async_read(connection, buffer, ret, yield[ec].tag("response"));
-
-        if (!ec && cancel_slot) {
-            ec = asio::error::operation_aborted;
-        }
-        if (ec) return or_throw<Response>(yield, ec, std::move(ret));
+        sys::error_code ec;
+        auto ret = fetch_http<typename Rs::body_type>( origin_c, buffer, rq
+                                                     , cancel, yield[ec].tag("fetch"));
+        return_or_throw_on_error(yield, cancel, ec, Rs());
 
         // Prevent others from inserting ouinet specific header fields.
         ret = util::remove_ouinet_fields(move(ret));
 
-        if (ret.keep_alive() && rq_.keep_alive()) {
-            origin_pools.insert_connection(rq_, move(connection));
-        }
+        return ret;
+    }
 
-        // Prevent origin from inserting ouinet specific header fields.
+    // This gets a full response and handles origin connection and buffering.
+    Response fetch_fresh(const Request& rq_, Cancel& cancel, Yield yield) {
+        sys::error_code ec;
+
+        auto connection = get_connection(rq_, cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, Response());
+
+        beast::flat_buffer buffer;
+        auto ret = fetch_fresh<Response>(rq_, connection, buffer, cancel, yield[ec]);
+        if (ec) return or_throw<Response>(yield, ec, std::move(ret));
+
+        keep_connection(rq_, ret, move(connection));
+
         return ret;
     }
 
@@ -697,6 +682,33 @@ private:
         return move(rs);
     }
 
+public:
+    Connection get_connection(const Request& rq_, Cancel& cancel, Yield yield) {
+        Connection connection;
+        sys::error_code ec;
+
+        auto maybe_connection = origin_pools.get_connection(rq_);
+        if (maybe_connection) {
+            connection = std::move(*maybe_connection);
+        } else {
+            auto stream = connect(rq_, cancel, yield[ec].tag("connect"));
+
+            if (ec) return or_throw<Connection>(yield, ec);
+
+            connection = origin_pools.wrap(std::move(stream));
+        }
+        return connection;
+    }
+
+    template<class Response>
+    bool keep_connection(const Request& rq, const Response& rs, Connection con) {
+        if (!rs.keep_alive() || !rq.keep_alive())
+            return false;
+
+        origin_pools.insert_connection(rq, move(con));
+        return true;
+    }
+
 private:
     std::string insert_id;
     asio::io_service& ios;
@@ -763,8 +775,6 @@ void serve( InjectorConfig& config
         // whether to behave like an injector or a proxy.
         bool proxy = (version_hdr_i == req.end());
 
-        Response res;
-
         bool keep_alive = req.keep_alive();
 
         if (proxy) {
@@ -772,27 +782,45 @@ void serve( InjectorConfig& config
             // TODO: Maybe reject requests for HTTPS URLS:
             // we are perfectly able to handle them (and do verification locally),
             // but the client should be using a CONNECT request instead!
-            res = cc.fetch_fresh(req, cancel, yield[ec].tag("fetch_proxy"));
-
+            using ResponseH = http::response<http::empty_body>;
+            ResponseH res;
+            auto orig_con = cc.get_connection(req, cancel, yield[ec]);
+            size_t forwarded = 0;
+            if (!ec) {
+                auto reshproc = [&] (auto inh, auto&, auto) {
+                    // Prevent others from inserting ouinet specific header fields.
+                    auto outh = util::remove_ouinet_fields(move(inh));
+                    yield.log("=== Sending back proxy response ===");
+                    yield.log(outh);
+                    return outh;
+                };
+                ProcInFunc<asio::const_buffer> inproc = [&] (auto inbuf, auto&, auto) {
+                    forwarded += inbuf.size();
+                    return inbuf;  // just pass data on
+                };
+                auto trproc = [&] (auto intr, auto&, auto) {
+                    return intr;  // leave trailers untouched
+                };
+                res = ResponseH(http_forward( orig_con, con
+                                            , util::to_origin_request(req)
+                                            , reshproc, inproc, trproc
+                                            , cancel, yield[ec].tag("fetch_proxy")));
+            }
             if (ec) {
                 handle_bad_request( con, req
                                   , "Failed to retrieve content from origin: " + ec.message()
                                   , yield[ec].tag("handle_bad_request"));
                 continue;
             }
-
-            yield.log("=== Sending back proxy response ===");
-            yield.log(res.base());
-            http::async_write(con, res, yield[ec].tag("write_proxy_response"));
-
-            if (!res.keep_alive()) keep_alive = false;
+            yield.log("Forwarded data bytes: ", forwarded);
+            keep_alive = cc.keep_connection(req, res, move(orig_con));
         }
         else {
             // Ouinet header found, behave like a Ouinet injector.
             auto opt_err_res = version_error_response(req, version_hdr_i->value());
 
             if (opt_err_res) {
-                res = *opt_err_res;
+                http::async_write(con, *opt_err_res, yield[ec]);
             }
             else {
                 auto req2 = util::to_injector_request(req);  // sanitize

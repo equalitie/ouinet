@@ -455,7 +455,7 @@ Response Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     // TODO: move
     auto rq_ = util::req_form_from_absolute_to_origin(rq);
 
-    auto res = fetch_http<http::dynamic_body>(_ios, con, rq_, cancel, yield[ec]);
+    auto res = fetch_http<http::dynamic_body>(con, rq_, cancel, yield[ec]);
 
     if (!ec) {
         // Prevent others from inserting ouinet headers.
@@ -630,6 +630,11 @@ public:
         // (they can be found at the descriptor).
         // Otherwise we should pass them through
         // `util::to_cache_request` and `util::to_cache_response` (respectively).
+
+        // Nonetheless, chunked transfer encoding may still have been used,
+        // and we need to undo it since the data referenced by the descriptor
+        // is the plain one.
+        rs = util::to_non_chunked_response(move(rs));
 
         auto cache = client_state.cache();
 

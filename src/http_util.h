@@ -24,6 +24,7 @@ std::pair<std::string, std::string>
 get_host_port(const http::request<http::string_body>&);
 
 ///////////////////////////////////////////////////////////////////////////////
+// DEPRECATED: please use ouinet::parse::number instead
 template<class Num>
 Num parse_num(beast::string_view s, Num default_value) {
     try {
@@ -119,6 +120,14 @@ static Message remove_ouinet_fields(Message message)
     }
 
     return message;
+}
+
+template<class Response>
+static Response to_non_chunked_response(Response rs) {
+    rs.chunked(false);
+    rs.set(http::field::content_length, rs.body().size());
+    rs.erase(http::field::trailer);  // pointless without chunking
+    return rs;
 }
 
 // Transform request from absolute-form to origin-form
@@ -252,9 +261,7 @@ static Response to_cache_response(Response rs) {
     // Disable chunked transfer encoding and use actual body size as content length.
     // This allows sharing the plain body representation with other platforms.
     // It also compensates for the lack of body data size field in v0 descriptors.
-    rs.chunked(false);
-    rs.set(http::field::content_length, rs.body().size());
-    rs.erase(http::field::trailer);  // pointless without chunking
+    rs = to_non_chunked_response(move(rs));
 
     rs = remove_ouinet_fields(move(rs));
     // TODO: This list was created by going through some 100 responses from
