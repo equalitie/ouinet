@@ -127,8 +127,6 @@ http_forward( StreamIn& in
     if (set_error(ec, "Failed to receive response head"))
         return or_throw<ResponseH>(yield, ec);
 
-    wdog.expires_after(wdog_timeout);
-
     assert(rpp.is_header_done());
     auto rp = rpp.get();
     bool chunked_in = rp.chunked();
@@ -142,11 +140,13 @@ http_forward( StreamIn& in
         http_10_eob = (nc_pending == detail::max_size_t);
     }
 
+    wdog.expires_after(wdog_timeout);
+
     // Process and send HTTP response head to output side
     // --------------------------------------------------
     bool chunked_out;
     {
-        auto outh = detail::process_head( rpp.get().base(), rshproc, chunked_out
+        auto outh = detail::process_head( rp.base(), rshproc, chunked_out
                                         , cancel, yield[ec]);
         if (set_error(ec, "Failed to process response head"))
             return or_throw<ResponseH>(yield, ec);
@@ -222,10 +222,10 @@ http_forward( StreamIn& in
     }
     if (ec) return or_throw<ResponseH>(yield, ec);
 
-    auto rph = rpp.release().base();
-
     // Process and send last chunk and trailers to output side
     // -------------------------------------------------------
+    auto rph = rpp.release().base();
+
     if (chunked_out) {
         auto outtrail = detail::process_trailers(rph, trproc, cancel, yield[ec]);
         if (set_error(ec, "Failed to process response trailers"))
