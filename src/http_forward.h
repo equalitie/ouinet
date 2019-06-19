@@ -17,7 +17,6 @@
 #include "defer.h"
 #include "http_util.h"
 #include "or_throw.h"
-#include "util.h"
 #include "util/signal.h"
 #include "util/watch_dog.h"
 #include "util/yield.h"
@@ -48,9 +47,17 @@ using ProcTrailFunc = std::function<http::fields(http::fields, Cancel&, Yield)>;
 
 namespace detail {
 static const auto max_size_t = (std::numeric_limits<std::size_t>::max)();
-size_t get_content_length(const http::response_header<>&, sys::error_code&);
-http::fields process_trailers( const http::response_header<>&, const ProcTrailFunc&
-                             , Cancel&, Yield);
+
+size_t
+get_content_length(const http::response_header<>&, sys::error_code&);
+
+std::string
+process_head( const http::response_header<>&, const ProcHeadFunc&, bool& chunked_out
+            , Cancel&, Yield);
+
+http::fields
+process_trailers( const http::response_header<>&, const ProcTrailFunc&
+                , Cancel&, Yield);
 }
 
 // Send the HTTP request `rq` over `in`, send the response head over `out`,
@@ -139,21 +146,16 @@ http_forward( StreamIn& in
     // --------------------------------------------------
     bool chunked_out;
     {
-        auto rph_out(rpp.get().base());
-        rph_out = rshproc(std::move(rph_out), cancel, yield[ec]);
+        auto outh = detail::process_head( rpp.get().base(), rshproc, chunked_out
+                                        , cancel, yield[ec]);
         if (set_error(ec, "Failed to process response head"))
             return or_throw<ResponseH>(yield, ec);
 
-        chunked_out = http::response<http::empty_body>(rph_out).chunked();
         assert(!(chunked_in && !chunked_out));  // implies slurping response into memory
-
-        // Write the head as a string to avoid the serializer adding an empty body
-        // (which results in a terminating chunk if chunked).
-        auto rph_outs = util::str(rph_out);
-        asio::async_write(out, asio::buffer(rph_outs.data(), rph_outs.size()), yield[ec]);
+        asio::async_write(out, asio::buffer(outh), yield[ec]);
+        if (set_error(ec, "Failed to send response head"))
+            return or_throw<ResponseH>(yield, ec);
     }
-    if (set_error(ec, "Failed to send response head"))
-        return or_throw<ResponseH>(yield, ec);
 
     wdog.expires_after(wdog_timeout);
 
