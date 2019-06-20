@@ -34,6 +34,7 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
         """
         listen for the debugger output reacto to fatal errors and other clues
         """
+        data = data.decode()
         logging.debug(self.app_name + ": " + data)
         self._logger.handlers[0].flush()
 
@@ -51,6 +52,7 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
         return False
 
     def outReceived(self, data):
+        data = data.decode()
         logging.debug(self.app_name + ": " + data)
         self._logger.handlers[0].flush()
 
@@ -88,11 +90,12 @@ class OuinetCacheProcessProtocol(OuinetProcessProtocol, object):
         """
         listen for the debugger output calls the parent function and then react to cached request cached
         """
+        data, rdata = data.decode(), data
         #checking for specifc strings before calling back any deferred object
         #because the reaction to the deferred might depend on these data
         self.check_response_served_from_cached(data)
 
-        super(OuinetCacheProcessProtocol, self).errReceived(data)
+        super(OuinetCacheProcessProtocol, self).errReceived(rdata)
 
         if self._index_ready_deferred and self.check_index_ready(data):
             self._index_ready_deferred.callback(self)
@@ -127,9 +130,10 @@ class OuinetIPFSCacheProcessProtocol(OuinetCacheProcessProtocol, object):
         self.IPNS_resolution_start_time = 0
 
     def errReceived(self, data):
+        data, rdata = data.decode(), data
         self.Mark_start_of_first_IPNS_resolution(data)
         self.look_for_IPNS_ID(data)
-        super(OuinetIPFSCacheProcessProtocol, self).errReceived(data)
+        super(OuinetIPFSCacheProcessProtocol, self).errReceived(rdata)
 
     def look_for_IPNS_ID(self, data):
         IPNS_ID_search_result = re.match(TestFixtures.IPNS_ID_ANNOUNCE_REGEX, data)
@@ -148,8 +152,9 @@ class OuinetBEP44CacheProcessProtocol(OuinetCacheProcessProtocol, object):
         self.BEP44_pubk = ""
 
     def errReceived(self, data):
+        data, rdata = data.decode(), data
         self.look_for_BEP44_pubk(data)
-        super(OuinetBEP44CacheProcessProtocol, self).errReceived(data)
+        super(OuinetBEP44CacheProcessProtocol, self).errReceived(rdata)
 
     def look_for_BEP44_pubk(self, data):
         BEP44_pubk_search_result = re.match(TestFixtures.BEP44_PUBK_ANNOUNCE_REGEX, data)

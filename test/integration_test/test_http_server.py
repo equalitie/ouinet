@@ -9,8 +9,8 @@ from test_fixtures import TestFixtures
 class TestPage(Resource):
     isLeaf = True
     def render_GET(self, request):
-        if "content" in request.args:
-            return request.args["content"][0]
+        if b"content" in request.args:
+            return request.args[b"content"][0]
         else:
             return TestFixtures.TEST_PAGE_BODY
 

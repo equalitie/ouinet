@@ -47,7 +47,7 @@ class TestFixtures:
 
     CACHE_INJECTOR_NAME = "cache_injector"
     
-    TEST_PAGE_BODY="<html><body>TESTPAGE</body></html>\n"
+    TEST_PAGE_BODY=b"<html><body>TESTPAGE</body></html>\n"
     TEST_HTTP_SERVER_PORT = 7080
     RESPONSE_LENGTH = 20
 

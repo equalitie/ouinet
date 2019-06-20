@@ -168,7 +168,7 @@ class OuinetTests(TestCase):
     def request_url(self, port, url):
         ouinet_client_endpoint = TCP4ClientEndpoint(reactor, "127.0.0.1", port)
         agent = ProxyAgent(ouinet_client_endpoint)
-        return agent.request("GET", url)
+        return agent.request(b"GET", url.encode())
 
     @inlineCallbacks
     def _test_i2p_transport(self):
@@ -225,7 +225,7 @@ class OuinetTests(TestCase):
                     self.assertEquals(defered_response.code, 200)
 
                     response_body = yield readBody(defered_response)
-                    self.assertEquals(response_body, content)
+                    self.assertEquals(response_body.decode(), content)
                     test_passed = True
                     break
                 else:
@@ -284,7 +284,7 @@ class OuinetTests(TestCase):
         self.assertEquals(defered_response.code, 200)
 
         response_body = yield readBody(defered_response)
-        self.assertEquals(response_body, content)
+        self.assertEquals(response_body.decode(), content)
 
     # Disabled for the same reason as the above test.
     @inlineCallbacks
@@ -332,7 +332,7 @@ class OuinetTests(TestCase):
         index_key = cache_injector.get_index_key()
         assert(len(index_key) > 0);
         
-        print "Index key is: " + index_key
+        print("Index key is: " + index_key)
 
         #injector client, use only Injector mechanism
         client_ready = defer.Deferred()
