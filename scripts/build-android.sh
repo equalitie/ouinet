@@ -450,6 +450,7 @@ function copy_binaries {
 function build_ouinet_apk {
     mkdir -p "${DIR}"/${OUTPUT_DIR}
     cd "${DIR}"/${OUTPUT_DIR}
+    ln -sf "${ROOT}/android"/* .
     export GRADLE_USER_HOME=$(pwd)/.gradle-home
     gradle --no-daemon build \
         -Pboost_includedir=${BOOST_INCLUDEDIR} \
