@@ -4,6 +4,13 @@ Vagrantfile.kvm
 android/.gradle/
 android/.idea/
 android/android.iml
+android/builddir/
+
+android/gradle/
+android/gradlew
+android/gradlew.bat
+android/ouinet/ouinet.iml
+
 android/local.properties
 
 #python byte codes
