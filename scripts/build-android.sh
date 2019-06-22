@@ -448,10 +448,10 @@ function copy_binaries {
 ######################################################################
 # Unpolished code to build the debug APK
 function build_ouinet_apk {
-    mkdir -p "${DIR}"/${OUTPUT_DIR}
-    cd "${DIR}"/${OUTPUT_DIR}
+    mkdir -p "${DIR}/${OUTPUT_DIR}"
+    cd "${DIR}/${OUTPUT_DIR}"
     ln -sf "${ROOT}/android"/* .
-    export GRADLE_USER_HOME=$(pwd)/.gradle-home
+    export GRADLE_USER_HOME="${DIR}/.gradle-home"
     gradle --no-daemon build \
         -Pboost_includedir=${BOOST_INCLUDEDIR} \
         -Pandroid_abi=${ABI} \
