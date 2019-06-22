@@ -5,6 +5,7 @@
 #include "util/bytes.h"
 #include "defer.h"
 #include "client_config.h"
+#include "version.h"
 
 // For parsing BEP44 insertion data.
 #include "bittorrent/mutable_data.h"
@@ -400,6 +401,8 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         {"proxy_access", config.is_proxy_access_enabled()},
         {"injector_proxy", config.is_injector_access_enabled()},
         {"ipfs_cache", config.is_cache_access_enabled()},
+        {"ouinet_version", Version::VERSION_NAME},
+        {"ouinet_build_id", Version::BUILD_ID}
      // https://github.com/nlohmann/json#arbitrary-types-conversions
      // {"misc", {
          // {"injector_endpoint", config.injector_endpoint()},

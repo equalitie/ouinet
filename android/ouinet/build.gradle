@@ -1,14 +1,9 @@
-import java.text.SimpleDateFormat
-
 apply plugin: 'com.android.library'
 
-def gitHash = 'git rev-parse HEAD'.execute([], project.rootDir).text.trim()
-def gitBranch = 'git rev-parse --abbrev-ref HEAD'.execute([], project.rootDir).text.trim()
-def buildTime() {
-    def df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm'Z'")
-    df.setTimeZone(TimeZone.getTimeZone("UTC"))
-    return df.format(new Date())
-}
+def properties = new Properties()
+file("$ouinet_properties").withInputStream { properties.load(it) }
+def ouinetVersionName = properties.getProperty("versionName")
+def buildId = properties.getProperty("buildId")
 
 android {
     compileSdkVersion 26
@@ -16,9 +11,8 @@ android {
         minSdkVersion 15
         targetSdkVersion 26
         versionCode 1
-        versionName "1.0"
-        buildConfigField("String", "GIT_HASH", "\"${gitHash}\"")
-        buildConfigField("String", "GIT_BRANCH", "\"${gitBranch}\"")
+        versionName ouinetVersionName
+        buildConfigField("String", "BUILD_ID", "\"${buildId}\"")
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
         externalNativeBuild {
             cmake {
@@ -40,14 +34,8 @@ android {
     }
     buildTypes {
         release {
-            buildConfigField("String", "BUILD_TIME", "\"${buildTime()}\"")
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-        }
-        debug {
-            // Use static values for incremental builds to ensure that
-            // resource files and BuildConfig aren't rebuilt with each run.
-            buildConfigField("String", "BUILD_TIME", "\"0\"")
         }
     }
     externalNativeBuild {

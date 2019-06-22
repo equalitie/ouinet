@@ -455,9 +455,10 @@ function build_ouinet_apk {
     gradle --no-daemon build \
         -Pboost_includedir=${BOOST_INCLUDEDIR} \
         -Pandroid_abi=${ABI} \
-        -Pouinet_clientlib_path="${DIR}"/${OUTPUT_DIR}/builddir/deps/${ABI}/libclient.so \
-        -Plibdir="${DIR}"/${OUTPUT_DIR}/builddir/deps \
-        -Passetsdir="${DIR}"/${OUTPUT_DIR}/builddir/assets
+        -Pouinet_clientlib_path="${DIR}/${OUTPUT_DIR}/builddir/deps/${ABI}/libclient.so" \
+        -Plibdir="${DIR}/${OUTPUT_DIR}/builddir/deps" \
+        -Passetsdir="${DIR}/${OUTPUT_DIR}/builddir/assets" \
+        -Pouinet_properties="${DIR}/${BUILD_DIR}/ouinet.properties"
 }
 
 ######################################################################

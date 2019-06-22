@@ -1,0 +1,5 @@
+#include "version.h"
+
+using namespace ouinet;
+const std::string Version::VERSION_NAME = "@VERSION_NAME@";
+const std::string Version::BUILD_ID = "@BUILD_ID@";

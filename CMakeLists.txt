@@ -161,12 +161,29 @@ set(URI_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri/include")
 set(URI_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri-build/src/libnetwork-uri.a")
 
 ################################################################################
+file(STRINGS "version.txt" VERSION_NAME)
+execute_process(COMMAND git rev-parse HEAD
+    RESULT_VARIABLE GIT_HASH_RESULT
+    OUTPUT_VARIABLE GIT_HASH
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+execute_process(COMMAND git rev-parse --abbrev-ref HEAD
+    RESULT_VARIABLE GIT_BRANCH_RESULT
+    OUTPUT_VARIABLE GIT_BRANCH
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+set(BUILD_ID "${CMAKE_BUILD_TYPE} ${GIT_BRANCH} ${GIT_HASH}")
+
+configure_file(src/version.cpp.in src/version.cpp)
+configure_file(src/version.h.in src/version.h)
+configure_file(ouinet.properties.in ouinet.properties)
+
+################################################################################
 include_directories(
     "${Boost_INCLUDE_DIR}"
     "${ASIO_IPFS_INCLUDE_DIR}"
     "${GCRYPT_INCLUDE_DIR}"
     "${JSON_INCLUDE_DIR}"
     "${URI_INCLUDE_DIR}"
+    "${CMAKE_CURRENT_BINARY_DIR}/src"
 )
 
 file(GLOB client_sources
@@ -202,6 +219,7 @@ file(GLOB client_sources
     "./src/util/sha1.cpp"
     "./src/util.cpp"
     "./src/http_util.cpp"
+    "${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp"
 )
 
 if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
