@@ -15,6 +15,7 @@ include_directories("../../src"
 
 # https://www.boost.org/doc/libs/1_67_0/doc/html/boost_asio/using.html#boost_asio.using.optional_separate_compilation
 add_definitions(-DBOOST_ASIO_SEPARATE_COMPILATION)
+add_definitions(-DBOOST_COROUTINES_NO_DEPRECATION_WARNING)
 
 add_library( # Sets the name of the library.
              native-lib
