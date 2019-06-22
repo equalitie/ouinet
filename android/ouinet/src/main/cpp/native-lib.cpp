@@ -217,3 +217,17 @@ Java_ie_equalit_ouinet_Ouinet_nGetCARootCert(
     string repo_root = env->GetStringUTFChars(j_repo_root, NULL);
     return env->NewStringUTF(ouinet::Client::get_or_gen_ca_root_cert(repo_root).c_str());
 }
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_ie_equalit_ouinet_Ouinet_nChargingStateChange(
+        JNIEnv* env,
+        jobject /* this */,
+        jboolean j_is_charging) { }
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_ie_equalit_ouinet_Ouinet_nWifiStateChange(
+        JNIEnv* env,
+        jobject /* this */,
+        jboolean j_is_wifi_connected) { }
