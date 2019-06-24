@@ -9,11 +9,14 @@
 #include "util/crypto.h"
 #include "increase_open_file_limit.h"
 #include "endpoint.h"
+#include "logger.h"
 
 namespace ouinet {
 
 class ClientConfig {
 public:
+    enum class CacheType { None, Bep44Ipfs, Bep5Http };
+
     ClientConfig();
 
     // Throws on error
@@ -130,7 +133,8 @@ public:
             , "Path to the Injector's TLS certificate")
 
            // Cache options
-           ("disable-cache", "Disable all cache operations (even initialization)")
+           ("cache-type", po::value<string>()->default_value("none")
+            , "Type of d-cache {none, bep5-http, bep44-ipfs}")
            ("index-ipns-id"
             , po::value<string>()->default_value("")
             , "Index ID for the IPFS IPNS subsystem")
@@ -165,10 +169,11 @@ public:
         return desc;
     }
 
-    bool cache_enabled() const { return !_disable_cache; }
+    bool cache_enabled() const { return _cache_type != CacheType::None; }
+    CacheType cache_type() const { return _cache_type; }
 
-    bool is_cache_access_enabled() const { return !_disable_cache_access && !_disable_cache; }
-    void is_cache_access_enabled(bool v) { if (!_disable_cache) _disable_cache_access = !v; }
+    bool is_cache_access_enabled() const { return cache_enabled() && !_disable_cache_access; }
+    void is_cache_access_enabled(bool v) { _disable_cache_access = !v; }
 
     bool is_origin_access_enabled() const { return !_disable_origin_access; }
     void is_origin_access_enabled(bool v) { _disable_origin_access = !v; }
@@ -206,7 +211,7 @@ private:
 
     boost::optional<util::Ed25519PublicKey> _index_bep44_pubkey;
     unsigned int _index_bep44_capacity = 1000;  // arbitrarily chosen default
-    bool _disable_cache = false;
+    CacheType _cache_type = CacheType::None;
     std::string _local_domain;
 };
 
@@ -361,11 +366,31 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         _index_bep44_capacity = vm["index-bep44-capacity"].as<unsigned int>();
     }
 
-    if (vm.count("disable-cache")) {
-        _disable_cache = true;
+    if (vm.count("cache-type")) {
+        auto type_str = vm["cache-type"].as<string>();
+
+        if (type_str == "bep5-http") {
+            _cache_type = CacheType::Bep5Http;
+            LOG_DEBUG("Using bep5-http cache");
+        }
+        else if (type_str == "bep44-ipfs") {
+            _cache_type = CacheType::Bep44Ipfs;
+            LOG_WARN("bep44-ipfs cache type has been disabled in the code");
+        }
+        else if (type_str == "none" || type_str == "") {
+            _cache_type = CacheType::None;
+        }
+        else {
+            throw std::runtime_error(
+                    util::str("Unknown cache-type \"", type_str, "\""));
+        }
+
+        if (_cache_type == CacheType::None) {
+            LOG_WARN("Not using d-cache");
+        }
     }
 
-    if (!_disable_cache && !_index_bep44_pubkey) {
+    if (cache_enabled() && _cache_type == CacheType::Bep44Ipfs && !_index_bep44_pubkey) {
         throw std::runtime_error("BEP44 index selected but no injector BEP44 public key specified");
     }
 
