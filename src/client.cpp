@@ -202,7 +202,7 @@ private:
     unique_ptr<OuiServiceImplementationClient>
     maybe_wrap_tls(unique_ptr<OuiServiceImplementationClient>);
 
-    AbstractCacheOld* cache() { return _bep44_ipfs_cache.get(); }
+    AbstractCache* get_cache() { return _bep5_http_cache.get(); }
 
 private:
     asio::io_service& _ios;
@@ -254,13 +254,42 @@ void handle_bad_request( GenericStream& con
 }
 
 //------------------------------------------------------------------------------
+// Temporary code until we no longer need to store responses in memory.
+static
+pair<tcp::socket, tcp::socket>
+make_connection(asio::io_service& ios, asio::yield_context yield)
+{
+    using Ret = pair<tcp::socket, tcp::socket>;
+
+    tcp::acceptor a(ios, tcp::endpoint(tcp::v4(), 0));
+    tcp::socket s1(ios), s2(ios);
+
+    sys::error_code accept_ec;
+    sys::error_code connect_ec;
+
+    WaitCondition wc(ios);
+
+    asio::spawn(ios, [&, lock = wc.lock()] (asio::yield_context yield) mutable {
+            a.async_accept(s2, yield[accept_ec]);
+        });
+
+    s1.async_connect(a.local_endpoint(), yield[connect_ec]);
+    wc.wait(yield);
+
+    if (accept_ec)  return or_throw(yield, accept_ec, Ret(move(s1),move(s2)));
+    if (connect_ec) return or_throw(yield, connect_ec, Ret(move(s1),move(s2)));
+
+    return make_pair(move(s1), move(s2));
+}
+
+//------------------------------------------------------------------------------
 CacheEntry
 Client::State::fetch_stored( const Request& request
                            , request_route::Config& request_config
                            , Cancel& cancel
                            , Yield yield)
 {
-    auto c = cache();
+    auto c = get_cache();
 
     const bool cache_is_disabled
         = !request_config.enable_stored
@@ -272,7 +301,38 @@ Client::State::fetch_stored( const Request& request
                                    , asio::error::operation_not_supported);
     }
 
-    return c->load(key_from_http_req(request), cancel, yield);
+    // XXX: Using two connected sockets to fetch data from dcache is
+    // a temporary solution until this function no longer needs to store
+    // the entire response in the memory before it's forwarded.
+    sys::error_code ec1, ec2;
+
+    tcp::socket s1(_ios), s2(_ios);
+    tie(s1,s2) = make_connection(_ios, yield[ec1]);
+    assert(!ec1);
+    GenericStream c1(move(s1));
+
+    WaitCondition wc(_ios);
+
+    asio::spawn(_ios, [&, lock = wc.lock()] (asio::yield_context yield2) {
+        auto y = yield.detach(yield2);
+        c->load(key_from_http_req(request), c1, cancel, y[ec1]);
+        c1.close();
+    });
+
+    Response res;
+    beast::flat_buffer buffer;
+    http::async_read(s2, buffer, res, yield[ec2]);
+
+    c1.close();
+    if (s2.is_open()) s2.close();
+
+    wc.wait(yield);
+
+    if (ec1) return or_throw<CacheEntry>(yield, ec1);
+    if (ec2 && ec2 != http::error::end_of_stream) return or_throw<CacheEntry>(yield, ec2);
+
+    return CacheEntry{ util::parse_date(res[http_::response_injection_time])
+                     , move(res)};
 }
 
 //------------------------------------------------------------------------------
@@ -638,17 +698,48 @@ public:
         // is the plain one.
         rs = util::to_non_chunked_response(move(rs));
 
-        auto cache = client_state.cache();
+        auto cache = client_state.get_cache();
 
         if (!cache) {
             return or_throw(yield, err::operation_not_supported, move(rs));
         }
 
-        cache->store(key_from_http_req(rq), rs, cancel, yield);
+        sys::error_code ec1, ec2;
+
+        auto& ios = client_state.get_io_service();
+        tcp::socket s1(ios), s2(ios);
+        tie(s1,s2) = make_connection(ios, yield[ec1]);
+        assert(!ec1);
+        GenericStream c1(move(s1));
+
+        WaitCondition wc(ios);
+
+        asio::spawn(ios, [&, lock = wc.lock()] (asio::yield_context y) {
+            cache->store(key_from_http_req(rq), rs.base(), c1, cancel, y[ec1]);
+            c1.close();
+        });
+
+        auto rs2 = rs;
+        auto body_writer = http::dynamic_body::writer(rs2.base(), rs2.body());
+
+        body_writer.init(ec2);
+        assert(!ec2);
+
+        while (auto p = body_writer.get(ec2)) {
+            if (ec2) return or_throw<Response>(yield, ec2);
+            asio::async_write(s2, p->first, yield[ec2]);
+            if (ec2) return or_throw<Response>(yield, ec2);
+            if (!p->second) break;
+        }
+
+        if (s2.is_open()) s2.close();
+
+        wc.wait(yield);
+        c1.close();
 
         // Note: we have to return a valid response even in case of error
         // because CacheControl will use it.
-        return rs;
+        return or_throw(yield, ec2, move(rs));
     }
 
     bool fetch(GenericStream& con, const Request& rq, Yield yield)
