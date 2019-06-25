@@ -75,7 +75,7 @@ struct Bep5Server::State
 };
 
 Bep5Server::Bep5Server( shared_ptr<bt::MainlineDht> dht
-                      , boost::asio::ssl::context& ssl_context
+                      , boost::asio::ssl::context* ssl_context
                       , string swarm_name)
     : _dht(dht)
     , _accept_queue(_dht->get_io_service())
@@ -95,9 +95,14 @@ Bep5Server::Bep5Server( shared_ptr<bt::MainlineDht> dht
 
     for (auto ep : endpoints) {
         auto base = make_unique<ouiservice::UtpOuiServiceServer>(ios, ep);
-        LOG_INFO("Bep5: uTP/TLS Address: ", ep);
-        auto tls = make_unique<ouiservice::TlsOuiServiceServer>(ios, move(base), ssl_context);
-        _states.emplace_back(new State(dht, infohash, move(tls)));
+        if (ssl_context) {
+            LOG_INFO("Bep5: uTP/TLS Address: ", ep);
+            auto tls = make_unique<ouiservice::TlsOuiServiceServer>(ios, move(base), *ssl_context);
+            _states.emplace_back(new State(dht, infohash, move(tls)));
+        } else {
+            LOG_INFO("Bep5: uTP Address: ", ep);
+            _states.emplace_back(new State(dht, infohash, move(base)));
+        }
     }
 }
 
@@ -212,7 +217,7 @@ struct Bep5Client::Client {
 
 Bep5Client::Bep5Client( shared_ptr<bt::MainlineDht> dht
                       , string swarm_name
-                      , asio::ssl::context& tls_ctx)
+                      , asio::ssl::context* tls_ctx)
     : _dht(dht)
     , _swarm_name(move(swarm_name))
     , _tls_ctx(tls_ctx)
@@ -279,7 +284,11 @@ unique_ptr<Bep5Client::Client> Bep5Client::build_client(const udp::endpoint& ep)
         return nullptr;
     }
 
-    auto tls_client = make_unique<TlsOuiServiceClient>(move(utp_client), _tls_ctx);
+    if (!_tls_ctx) {
+        return make_unique<Client>(move(utp_client));
+    }
+
+    auto tls_client = make_unique<TlsOuiServiceClient>(move(utp_client), *_tls_ctx);
 
     return make_unique<Client>(move(tls_client));
 }

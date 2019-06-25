@@ -1066,7 +1066,7 @@ int main(int argc, const char* argv[])
         assert(dht);
         assert(!dht->local_endpoints().empty());
         proxy_server.add(make_unique<ouiservice::Bep5Server>
-                (move(dht), ssl_context, *config.bep5_injector_swarm_name()));
+                (move(dht), &ssl_context, *config.bep5_injector_swarm_name()));
     }
 
     if (config.lampshade_endpoint()) {

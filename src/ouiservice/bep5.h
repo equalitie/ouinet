@@ -24,7 +24,7 @@ private:
 
 public:
     Bep5Server( std::shared_ptr<bittorrent::MainlineDht>
-              , boost::asio::ssl::context& ssl_context
+              , boost::asio::ssl::context* ssl_context
               , std::string swarm_name);
 
     void start_listen(asio::yield_context) override;
@@ -55,7 +55,7 @@ private:
 public:
     Bep5Client( std::shared_ptr<bittorrent::MainlineDht>
               , std::string swarm_name
-              , asio::ssl::context&);
+              , asio::ssl::context*);
 
     void start(asio::yield_context) override;
     void stop() override;
@@ -80,7 +80,7 @@ private:
     std::shared_ptr<bittorrent::MainlineDht> _dht;
     std::unique_ptr<Bep5Loop> _bep5_loop;
     std::string _swarm_name;
-    asio::ssl::context& _tls_ctx;
+    asio::ssl::context* _tls_ctx;
     Cancel _cancel;
 
     std::mt19937 _random_gen;
