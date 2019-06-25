@@ -1506,8 +1506,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
     asio::ip::udp::endpoint bootstrap_ep;
 
     vector<string> bootstraps { "router.bittorrent.com"
-                              , "router.utorrent.com"
-                              , "router.transmissionbt.com" };
+                              , "router.utorrent.com" };
 
     {
         bool done = false;
