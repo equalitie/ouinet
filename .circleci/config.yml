@@ -65,6 +65,7 @@ stages:
           ./build/test/test-http-util            --log_level=test_suite
           ./build/test/test-persistent-lru-cache --log_level=test_suite
 
+          export PYENV_VERSION=3.5.2
           python3 -m venv .venv
           . .venv/bin/activate
           pip install twisted
