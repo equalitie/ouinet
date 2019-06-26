@@ -150,6 +150,8 @@ struct Bep5Client::Bep5Loop
     shared_ptr<bt::MainlineDht> dht;
     bt::NodeID infohash;
     Cancel cancel_;
+    size_t get_peers_call_count = 0;
+    std::vector<WaitCondition::Lock> wait_condition_locks;
 
     Bep5Loop( Bep5Client* owner
             , bt::NodeID infohash
@@ -159,11 +161,15 @@ struct Bep5Client::Bep5Loop
         , infohash(infohash)
     {}
 
+    ~Bep5Loop() {
+        wait_condition_locks.clear();
+        cancel_();
+    }
+
     void start() {
-        Cancel cancel(cancel_);
         asio::spawn(owner->get_io_service()
-                   , [&, cancel = move(cancel)]
-                     (asio::yield_context yield) mutable {
+                   , [&] (asio::yield_context yield) {
+                         Cancel cancel(cancel_);
                          sys::error_code ec;
                          loop(cancel, yield[ec]);
                      });
@@ -184,6 +190,8 @@ struct Bep5Client::Bep5Loop
             assert(!cancel || ec == asio::error::operation_aborted);
             if (cancel) break;
 
+            get_peers_call_count++;
+            wait_condition_locks.clear();
             if (ec) {
                 async_sleep(ios, 1s, cancel, yield);
                 continue;
@@ -240,7 +248,10 @@ void Bep5Client::start(asio::yield_context)
 
 void Bep5Client::stop()
 {
-    _bep5_loop = nullptr;
+    if (_bep5_loop) {
+        _bep5_loop->wait_condition_locks.clear();
+        _bep5_loop = nullptr;
+    }
     _clients.clear();
 }
 
@@ -347,6 +358,18 @@ GenericStream Bep5Client::connect(asio::yield_context yield, Cancel& cancel_)
 {
     Cancel cancel(cancel_);
     auto cancel_con = _cancel.connect([&] { cancel(); });
+
+    if (_wait_for_bep5_resolve && _bep5_loop->get_peers_call_count == 0) {
+        WaitCondition wc(_dht->get_io_service());
+
+        _bep5_loop->wait_condition_locks.push_back(wc.lock());
+
+        sys::error_code ec;
+        wc.wait(cancel, yield[ec]);
+
+        if (cancel)
+            return or_throw<GenericStream>(yield, asio::error::operation_aborted);
+    }
 
     while (lowest_fail_count() < 5) {
         auto i = choose_client();

@@ -66,6 +66,10 @@ public:
 
     asio::io_service& get_io_service();
 
+    // Set to true to have the connect function wait until at least one
+    // BEP5 DHT resolution has taken place.
+    void wait_for_bep5_resolve(bool value);
+
 private:
     void add_injector_endpoints(const std::set<asio::ip::udp::endpoint>&);
 
@@ -88,6 +92,7 @@ private:
     Clients _clients;
 
     bool _log_debug = false;
+    bool _wait_for_bep5_resolve = false;
 };
 
 }} // namespaces

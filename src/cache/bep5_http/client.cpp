@@ -137,6 +137,7 @@ struct Client::Impl {
         sys::error_code ec;
         ouiservice::Bep5Client client(dht, key, nullptr);
         client.start(yield[ec]);
+        client.wait_for_bep5_resolve(true);
         assert(!ec);
 
         auto con = client.connect(yield[ec], cancel);
