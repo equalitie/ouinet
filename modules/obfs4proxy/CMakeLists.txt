@@ -58,6 +58,7 @@ externalproject_add(obfs4proxy
                && export GOARM=${GOARM}
                && export CC=${CMAKE_C_COMPILER}
                && export CGO_ENABLED=1
+	       && export GIT_SSL_NO_VERIFY=1 # XXX: go get gitlab.com/yawning/utls.git@v0.0.9-2 fails on GL CI otherwise
                && go build -o ${CMAKE_CURRENT_BINARY_DIR}/obfs4proxy ./obfs4proxy
     INSTALL_COMMAND ""
 )
