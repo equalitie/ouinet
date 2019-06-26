@@ -27,6 +27,9 @@ public:
     void set_ipns(const char*);
     void set_credentials(const char* injector, const char* cred);
 
+    void charging_state_change(bool is_charging);
+    void wifi_state_change(bool is_wifi_connected);
+
     // Calling this only has meaning after client start.
     boost::filesystem::path get_pid_path() const;
     boost::filesystem::path ca_cert_path() const;

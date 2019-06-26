@@ -146,7 +146,6 @@ public class Ouinet {
                         return;
                     }
                     if (info.isConnected()) {
-                        Log.d(TAG, "Wifi connected");
                         nWifiStateChange(true);
                     }
                 } else if (ConnectivityManager.CONNECTIVITY_ACTION.equals(action)) {
@@ -156,7 +155,6 @@ public class Ouinet {
                         return;
                     }
                     if (info.getType() == ConnectivityManager.TYPE_WIFI && !info.isConnected()) {
-                        Log.d(TAG, "Wifi disconnected");
                         nWifiStateChange(false);
                     }
                 }
@@ -171,7 +169,6 @@ public class Ouinet {
             @Override
             public void onReceive(Context context, Intent intent) {
                 boolean isCharging = Intent.ACTION_POWER_CONNECTED.equals(intent.getAction());
-                Log.d(TAG, "Charging state changed, charging: " + isCharging);
                 nChargingStateChange(isCharging);
             }
         };

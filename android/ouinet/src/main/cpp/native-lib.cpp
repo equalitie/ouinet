@@ -223,11 +223,21 @@ JNIEXPORT void JNICALL
 Java_ie_equalit_ouinet_Ouinet_nChargingStateChange(
         JNIEnv* env,
         jobject /* this */,
-        jboolean j_is_charging) { }
+        jboolean j_is_charging) {
+    g_ios.post([j_is_charging] {
+        if (!g_client) return;
+        g_client->charging_state_change(j_is_charging);
+    });
+}
 
 extern "C"
 JNIEXPORT void JNICALL
 Java_ie_equalit_ouinet_Ouinet_nWifiStateChange(
         JNIEnv* env,
         jobject /* this */,
-        jboolean j_is_wifi_connected) { }
+        jboolean j_is_wifi_connected) {
+    g_ios.post([j_is_wifi_connected] {
+        if (!g_client) return;
+        g_client->wifi_state_change(j_is_wifi_connected);
+    });
+}

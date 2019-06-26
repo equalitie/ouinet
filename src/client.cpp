@@ -1521,6 +1521,16 @@ void Client::set_credentials(const char* injector, const char* cred)
     _state->_config.set_credentials(injector, cred);
 }
 
+void Client::charging_state_change(bool is_charging) {
+    LOG_DEBUG("Charging state changed, is charging: ", is_charging);
+    //TODO(peter) do something
+}
+
+void Client::wifi_state_change(bool is_wifi_connected) {
+    LOG_DEBUG("Wifi state changed, is connected: ", is_wifi_connected);
+    //TODO(peter) do something
+}
+
 fs::path Client::ca_cert_path() const
 {
     return _state->ca_cert_path();
