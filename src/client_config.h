@@ -385,9 +385,10 @@ ClientConfig::ClientConfig(int argc, char* argv[])
                     util::str("Unknown cache-type \"", type_str, "\""));
         }
 
-        if (_cache_type == CacheType::None) {
-            LOG_WARN("Not using d-cache");
-        }
+    }
+
+    if (_cache_type == CacheType::None) {
+        LOG_WARN("Not using d-cache");
     }
 
     if (cache_enabled() && _cache_type == CacheType::Bep44Ipfs && !_index_bep44_pubkey) {
