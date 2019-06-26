@@ -328,7 +328,6 @@ Client::State::fetch_stored( const Request& request
 
     wc.wait(yield);
 
-    if (ec1) return or_throw<CacheEntry>(yield, ec1);
     if (ec2 && ec2 != http::error::end_of_stream) return or_throw<CacheEntry>(yield, ec2);
 
     return CacheEntry{ util::parse_date(res[http_::response_injection_time])
@@ -1248,7 +1247,7 @@ void Client::State::setup_cache()
             sys::error_code ec;
 
             _bep5_http_cache
-                = cache::bep5_http::Client::build( _ios
+                = cache::bep5_http::Client::build( bittorrent_dht()
                                                  , _config.repo_root()/"bep5_http"
                                                  , yield[ec]);
 

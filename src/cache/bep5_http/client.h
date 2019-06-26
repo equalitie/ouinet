@@ -4,6 +4,11 @@
 #include <boost/filesystem.hpp>
 
 namespace ouinet {
+
+namespace bittorrent {
+    class MainlineDht;
+}
+
 namespace cache {
 namespace bep5_http {
 
@@ -13,7 +18,9 @@ private:
 
 public:
     static std::unique_ptr<Client>
-    build(asio::io_service&, fs::path cache_dir, asio::yield_context);
+    build( std::shared_ptr<bittorrent::MainlineDht>
+         , fs::path cache_dir
+         , asio::yield_context);
 
     void load( const std::string& key
              , GenericStream& sink
