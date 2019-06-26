@@ -368,6 +368,8 @@ public:
 
 
             if (!ec) {
+                auto key = key_from_http_req(rq);
+
                 LOG_DEBUG("Injector new insertion: ", ins.desc_data);
                 // Add an injection identifier header
                 // to enable the client to track injection state.
@@ -376,6 +378,8 @@ public:
                 rs.set( http_::response_injection_time
                       , util::format_date(
                           boost::posix_time::second_clock::universal_time()));
+
+                rs.set(http_::response_injection_key, key);
 
                 // Add index insertion headers.
                 rs = add_re_insertion_header_field( move(rs)

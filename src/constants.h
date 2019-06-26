@@ -23,7 +23,8 @@ static const std::string request_version_hdr_current = request_version_hdr_v1;
 // Such a request should get the following HTTP response header
 // with an opaque identifier for this insertion.
 static const std::string response_injection_id_hdr = header_prefix + "Injection-ID";
-static const std::string response_injection_time = header_prefix + "Injection-Time";
+static const std::string response_injection_time   = header_prefix + "Injection-Time";
+static const std::string response_injection_key    = header_prefix + "Injection-Key";
 
 // The presence of this HTTP request header with the true value below
 // instructs the injector to behave synchronously
