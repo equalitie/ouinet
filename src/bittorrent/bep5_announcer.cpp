@@ -1,5 +1,6 @@
 #include "bep5_announcer.h"
 #include "../async_sleep.h"
+#include "../logger.h"
 #include <random>
 #include <iostream>
 
@@ -64,9 +65,16 @@ struct Bep5Announcer::Impl
             if (!dht) return;
 
             sys::error_code ec;
-            cerr << "ANNOUNCING...\n";
+
+            if (debug) {
+                LOG_DEBUG("ANNOUNCING ", infohash, " ...");
+            }
+
             dht->tracker_announce(infohash, boost::none, cancel, yield[ec]);
-            cerr << "ANNOUNCING done: " << ec.message() << " cancel:" << bool(cancel) << "\n";
+
+            if (debug) {
+                LOG_DEBUG("ANNOUNCING ", infohash, " done: ", ec.message(), " cancel:", bool(cancel));
+            }
 
             if (cancel) return;
 
@@ -80,7 +88,11 @@ struct Bep5Announcer::Impl
             }
 
             auto sleep = random_timeout();
-            cerr << "ANNOUNCING next in: " << (sleep.count()/1000.f) << "s\n";
+
+            if (debug) {
+                LOG_DEBUG("ANNOUNCING ", infohash, " next in: ", (sleep.count()/1000.f), "s");
+            }
+
             async_sleep(*ios, sleep, cancel, yield);
         }
     }
@@ -89,6 +101,7 @@ struct Bep5Announcer::Impl
     weak_ptr<MainlineDht> dht_w;
     asio::io_service* ios = nullptr;
     Cancel cancel;
+    bool debug = false;
 };
 
 Bep5Announcer::Bep5Announcer(NodeID infohash, std::weak_ptr<MainlineDht> dht)
