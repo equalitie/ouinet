@@ -12,24 +12,20 @@ class UniformRandomDuration {
 public:
     using Duration = std::chrono::milliseconds;
 
-    UniformRandomDuration(Duration min, Duration max)
-        : min(min)
-        , gen(rd())
-        , dis(0, (max - min).count())
+    UniformRandomDuration()
+        : gen(rd())
+    { }
+
+    Duration operator()(Duration min, Duration max)
     {
         assert(max >= min);
-    }
-
-    Duration operator()()
-    {
+        uniform_int_distribution<Duration::rep> dis(0, (max-min).count());
         return min + Duration(dis(gen));
     }
 
 private:
-    Duration min;
     std::random_device rd;
     mt19937 gen;
-    uniform_int_distribution<Duration::rep> dis;
 };
 
 struct Bep5Announcer::Impl
@@ -58,7 +54,7 @@ struct Bep5Announcer::Impl
     {
         using namespace std::chrono_literals;
 
-        UniformRandomDuration random_timeout(5min, 30min);
+        UniformRandomDuration random_timeout;
 
         while (!cancel) {
             auto dht = dht_w.lock();
@@ -82,12 +78,12 @@ struct Bep5Announcer::Impl
 
             if (ec) {
                 // TODO: Arbitrary timeout
-                async_sleep(*ios, 10s, cancel, yield);
+                async_sleep(*ios, random_timeout(1s, 1min), cancel, yield);
                 if (cancel) return;
                 continue;
             }
 
-            auto sleep = random_timeout();
+            auto sleep = random_timeout(5min, 30min);
 
             if (debug) {
                 LOG_DEBUG("ANNOUNCING ", infohash, " next in: ", (sleep.count()/1000.f), "s");
