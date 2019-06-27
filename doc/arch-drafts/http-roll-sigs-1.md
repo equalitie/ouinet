@@ -78,13 +78,13 @@ X-Oui-Sig: keyId="????",algorithm="????",
   signature="BASE64(...)"
 ```
 
-If the client sends an HTTP range request, the injector aligns it to block boundaries (this is acceptable according to [RFC7233#4.1][] — "a client cannot rely on receiving the same ranges that it requested").  The partial response head includes a signed ``Range:`` header, and hashes in the final response head correspond to the range, not the full data.
+The signature for a given block comes in a chunk extension in the chunk right after the block's end (for the last block, in the final chunk), and it covers the injection identifier and block offset besides its content.  This avoids replay and reordering attacks, but it also binds the stream representation to this injection.  Storage that keeps signatures inline with block data should take this into account.
+
+If the client sends an HTTP range request, the injector aligns it to block boundaries (this is acceptable according to [RFC7233#4.1][] — "a client cannot rely on receiving the same ranges that it requested").  The partial response head includes a ``Range:`` header, but it is not part of the partial nor final signatures (to allow later sharing of subranges, whose blocks can be validated independently anyway).  ``Digest:`` and ``X-Oui-Content-Length:`` may be missing in the final response head, if the injector did not have access to the whole body data.
 
 [RFC7233#4.1]: https://tools.ietf.org/html/rfc7233#section-4.1
 
 Client-to-client transmission works in a similar way, with the difference that when the first client got to get and save the full response from the injector, it may send to the second client the final response head straight away (i.e. without ``X-Oui-Part-Sig:`` nor a trailer).
-
-The signature for a given block comes in a chunk extension in the chunk right after the block's end (for the last block, in the final chunk), and it covers the injection identifier and block offset besides its content.  This avoids replay and reordering attacks, but it also binds the stream representation to this injection.  Storage that keeps signatures inline with block data should take this into account.
 
 ## Issues
 
