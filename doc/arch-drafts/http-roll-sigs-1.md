@@ -62,7 +62,7 @@ X-Oui-Part-Sig: keyId="????",algorithm="????",
   headers="x-oui-version x-oui-uri x-oui-injection x-oui-http-status date server content-type content-disposition x-oui-hashing",
   signature="BASE64(...)"
 Transfer-Encoding: chunked
-Trailer: Digest, X-Oui-Content-Length, X-Oui-Hashes, X-Oui-Hashes-Sig, X-Oui-Sig
+Trailer: Digest, X-Oui-Content-Length, X-Oui-Sig
 
 80000
 0123456789...
