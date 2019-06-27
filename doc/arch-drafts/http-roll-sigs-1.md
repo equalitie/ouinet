@@ -88,7 +88,7 @@ The signature for a given block comes in a chunk extension in the chunk right af
 
 ## Issues
 
-  - Choose an adequate data block length (can use different ones according to ``Content-Length:``).
+  - Choose an adequate data block length (can use different ones according to ``Content-Length:`` from the origin).
   - Choose block signature algorithm.
   - It may only be usable for single ranges (i.e. no ``multipart/byteranges`` body).
   - Block hashes are outside of the signed HTTP head.  Inlining them in the final head may require long Base64-encoded headers for long files.
