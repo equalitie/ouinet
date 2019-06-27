@@ -1,7 +1,7 @@
 #pragma once
 
 #include <boost/optional.hpp>
-#include "sha1.h"
+#include <boost/utility/string_view.hpp>
 
 /*
  * Forward declarations for opaque libgcrypt data structures.
