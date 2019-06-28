@@ -365,7 +365,7 @@ function build_openssl {
     export PATH="$NDK_TOOLCHAIN_DIR/bin:$PATH"
     ./Configure ${SSL_TARGET} no-shared -no-ssl2 -no-ssl3 -no-comp -no-hw -no-engine -DAPP_PLATFORM=${PLATFORM} -D__ANDROID_API__=${NDK_PLATFORM}
     make depend
-    make build_libs
+    make build_libs > "$DIR/$BUILD_DIR/openssl.log"
 }
 
 function maybe_install_openssl {
