@@ -11,6 +11,7 @@
 #include <bittorrent/node_id.h>
 #include <bittorrent/dht.h>
 #include <bittorrent/code.h>
+#include <util/hash.h>
 
 BOOST_AUTO_TEST_SUITE(bittorrent)
 
@@ -62,7 +63,7 @@ BOOST_AUTO_TEST_CASE(test_bep_5)
         sys::error_code ec;
         Signal<void()> cancel_signal;
 
-        NodeID infohash = util::sha1("ouinet-test-" + to_string(time(0)));
+        NodeID infohash = util::sha1_digest("ouinet-test-" + to_string(time(0)));
 
         dht.start({asio::ip::make_address("0.0.0.0"), 0}, yield[ec]); // TODO: IPv6
         BOOST_REQUIRE(!ec);

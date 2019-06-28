@@ -14,6 +14,7 @@
 #include "../src/util/crypto.h"
 #include "../src/util/wait_condition.h"
 #include "../src/util.h"
+#include "../src/util/hash.h"
 
 
 using namespace ouinet;
@@ -234,7 +235,7 @@ int main(int argc, const char** argv)
                 get_cmd.public_key = *util::Ed25519PublicKey::from_hex(cmd_toks[1]);
                 get_cmd.dht_key = cmd_toks[2];
 
-                auto salt = ouinet::util::sha1(get_cmd.dht_key);
+                auto salt = ouinet::util::sha1_digest(get_cmd.dht_key);
 
                 auto opt_data = dht->mutable_get( get_cmd.public_key
                                                , as_string_view(salt)
@@ -278,7 +279,7 @@ int main(int argc, const char** argv)
                 put_cmd.dht_key = cmd_toks[2];
                 put_cmd.dht_value = cmd_toks[3];
 
-                auto salt = ouinet::util::sha1(put_cmd.dht_key);
+                auto salt = ouinet::util::sha1_digest(put_cmd.dht_key);
 
                 using Time = boost::posix_time::ptime;
                 Time unix_epoch(boost::gregorian::date(1970, 1, 1));
@@ -323,7 +324,7 @@ int main(int argc, const char** argv)
                         auto key = util::str(key_base, "-", i, "-key");
                         auto val = util::str(key_base, "-", i, "-val");
 
-                        auto salt = ouinet::util::sha1(key);
+                        auto salt = ouinet::util::sha1_digest(key);
 
                         using Time = boost::posix_time::ptime;
                         Time unix_epoch(boost::gregorian::date(1970, 1, 1));

@@ -3,6 +3,7 @@
 #include "../async_sleep.h"
 #include "../util/bytes.h"
 #include "../util/crypto.h"
+#include "../util/hash.h"
 
 #include <cstdlib>
 
@@ -27,7 +28,7 @@ std::string detail::DhtWriteTokenStorage::generate_token(asio::ip::address addre
     }
 
     std::string secret = _secrets.back().secret;
-    auto hash = util::sha1(secret + address.to_string() + id.to_bytestring());
+    auto hash = util::sha1_digest(secret + address.to_string() + id.to_bytestring());
     return std::string((char *)hash.data(), hash.size());
 }
 
@@ -36,7 +37,7 @@ bool detail::DhtWriteTokenStorage::verify_token(asio::ip::address address, NodeI
     expire();
 
     for (auto& i : _secrets) {
-        auto hash = util::sha1(i.secret + address.to_string() + id.to_bytestring());
+        auto hash = util::sha1_digest(i.secret + address.to_string() + id.to_bytestring());
 
         if (boost::string_view((char *)hash.data(), hash.size()) == token) {
             return true;
@@ -216,7 +217,7 @@ DataStore::~DataStore()
 
 NodeID DataStore::immutable_get_id(BencodedValue value)
 {
-    return util::sha1(bencoding_encode(value));
+    return util::sha1_digest(bencoding_encode(value));
 }
 
 void DataStore::put_immutable(BencodedValue value)
@@ -239,7 +240,7 @@ boost::optional<BencodedValue> DataStore::get_immutable(NodeID id)
 NodeID DataStore::mutable_get_id( util::Ed25519PublicKey public_key
                                 , boost::string_view salt)
 {
-    return util::sha1(public_key.serialize(), salt);
+    return util::sha1_digest(public_key.serialize(), salt);
 }
 
 void DataStore::put_mutable(MutableDataItem item)

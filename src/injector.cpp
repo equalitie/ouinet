@@ -52,6 +52,7 @@
 #include "util/timeout.h"
 #include "util/atomic_file.h"
 #include "util/crypto.h"
+#include "util/hash.h"
 #include "util/bytes.h"
 #include "util/file_io.h"
 #include "util/file_posix_with_offset.h"
@@ -406,7 +407,7 @@ public:
 
     fs::path cache_file(string_view key)
     {
-        return cache_dir() /  util::bytes::to_hex(util::sha1(key));
+        return cache_dir() /  util::bytes::to_hex(util::sha1_digest(key));
     }
 
     ResponseWithFileBody load_from_disk(string_view key, Cancel& cancel, Yield yield)

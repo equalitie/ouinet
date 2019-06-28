@@ -2,7 +2,8 @@
 
 #include <chrono>
 #include <iostream>
-#include "sha1.h"
+
+#include "hash.h"
 
 using namespace std;
 using boost::string_view;
@@ -23,7 +24,7 @@ uint64_t ms_since_epoch()
 }
 
 fs::path path_from_key(const fs::path& dir, const std::string& key) {
-    return dir / util::bytes::to_hex(util::sha1(key));
+    return dir / util::bytes::to_hex(util::sha1_digest(key));
 }
 
 bool is_cache_entry(const struct dirent* entry) {
