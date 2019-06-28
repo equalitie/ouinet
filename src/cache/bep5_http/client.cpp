@@ -4,17 +4,21 @@
 #include "../../util/file_io.h"
 #include "../../bittorrent/dht.h"
 #include "../../bittorrent/bep5_announcer.h"
+#include "../../bittorrent/is_martian.h"
 #include "../../ouiservice/utp.h"
 #include "../../ouiservice/bep5.h"
 #include "../../logger.h"
 #include "../../async_sleep.h"
 #include "../../constants.h"
 #include <map>
+#include <set>
+#include <network/uri.hpp>
 
 using namespace std;
 using namespace ouinet;
 using namespace cache::bep5_http;
 using udp = asio::ip::udp;
+using tcp = asio::ip::tcp;
 
 namespace fs = boost::filesystem;
 namespace bt = bittorrent;
@@ -25,6 +29,8 @@ struct Client::Impl {
     fs::path cache_dir;
     Cancel cancel;
     map<string, unique_ptr<bt::Bep5Announcer>> swarm_announcers;
+    // TODO: Should be Lru
+    map<string, udp::endpoint> peer_cache;
 
     Impl(shared_ptr<bt::MainlineDht> dht_, fs::path cache_dir)
         : ios(dht_->get_io_service())
@@ -78,9 +84,8 @@ struct Client::Impl {
 
             if (cancel || ec == asio::error::operation_aborted) return;
             if (ec) {
-                LOG_WARN("Bep5Http: Failure to serve:", ec.message());
                 con.close();
-                continue;
+                break;
             }
 
             // TODO: handle keep alive
@@ -127,36 +132,164 @@ struct Client::Impl {
         http::async_write(con, res, yield);
     }
 
+    string get_host(const string& uri_s)
+    {
+        network::uri uri(uri_s);
+        return uri.host().to_string();
+    }
+
     void load( const std::string& key
              , GenericStream& sink
              , Cancel cancel
              , Yield yield)
     {
+        auto host = get_host(key);
         auto canceled = this->cancel.connect([&] { cancel(); });
 
-        sys::error_code ec;
-        ouiservice::Bep5Client client(dht, key, nullptr);
-        client.start(yield[ec]);
-        client.wait_for_bep5_resolve(true);
-        assert(!ec);
+        auto peer_i = peer_cache.find(host);
 
-        auto con = client.connect(yield[ec], cancel);
+        if (peer_i != peer_cache.end()) {
+            sys::error_code ec;
+            auto con = connect(peer_i->second, cancel, yield[ec]);
+
+            if (cancel) return or_throw(yield, asio::error::operation_aborted);
+            if (!ec) {
+                load(key, con, sink, cancel, yield[ec]);
+
+                if (!ec) {
+                    return;
+                }
+
+                peer_cache.erase(host);
+            }
+            else {
+                peer_cache.erase(host);
+            }
+        }
+
+        sys::error_code ec;
+
+        auto endpoints = dht->tracker_get_peers(util::sha1(key), cancel, yield[ec]);
 
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw(yield, ec);
 
+        udp::endpoint con_ep;
+        auto con = connect(tcp_to_udp(endpoints), con_ep, cancel, yield[ec]);
+
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec) return or_throw(yield, ec);
+
+        peer_cache[host] = con_ep;
+
+        load(key, con, sink, cancel, yield[ec]);
+
+        return or_throw(yield, ec);
+    }
+
+    template<class Con>
+    void load( const std::string& key
+               , Con& con
+               , GenericStream& sink
+               , Cancel cancel
+               , Yield yield)
+    {
         http::request<http::string_body> rq{http::verb::get, key, 11 /* version */};
         rq.set(http::field::host, "dummy_host");
         rq.set(http::field::user_agent, "Ouinet.Bep5.Client");
 
         auto cancelled2 = cancel.connect([&] { con.close(); });
 
+        sys::error_code ec;
         http::async_write(con, rq, yield[ec]);
 
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw(yield, ec);
 
         flush_from_to(con, sink, cancel, yield);
+    }
+
+    static set<udp::endpoint> tcp_to_udp(const set<tcp::endpoint>& eps)
+    {
+        set<udp::endpoint> ret;
+        for (auto& ep : eps) { ret.insert({ep.address(), ep.port()}); }
+        return ret;
+    }
+
+    GenericStream connect( udp::endpoint ep
+                         , Cancel& cancel
+                         , asio::yield_context yield)
+    {
+        sys::error_code ec;
+        auto opt_m = choose_multiplexer_for(ep);
+        assert(opt_m);
+        asio_utp::socket s(ios);
+        s.bind(*opt_m, ec);
+        if (ec) return or_throw<GenericStream>(yield, ec);
+        auto c = cancel.connect([&] { s.close(); });
+        s.async_connect(ep, yield[ec]);
+        if (ec || cancel) return or_throw<GenericStream>(yield, ec);
+        return GenericStream(move(s));
+    }
+
+    GenericStream connect( set<udp::endpoint> eps
+                         , udp::endpoint& ret_ep
+                         , Cancel& cancel
+                         , asio::yield_context yield)
+    {
+        boost::optional<GenericStream> retval;
+
+        WaitCondition wc(ios);
+
+        Cancel local_cancel(cancel);
+
+        set<udp::endpoint> our_endpoints = dht->wan_endpoints();
+
+        for (auto& ep : eps) {
+            if (bt::is_martian(ep)) continue;
+            if (our_endpoints.count(ep)) continue;
+
+            asio::spawn(ios, [&, ep, lock = wc.lock()] (asio::yield_context yield) {
+                sys::error_code ec;
+                auto s = connect(ep, local_cancel, yield[ec]);
+                if (ec || local_cancel) return;
+                ret_ep = ep;
+                retval = move(s);
+                local_cancel();
+            });
+        }
+
+        sys::error_code ec;
+        wc.wait(cancel, yield[ec]);
+
+        if (!retval) ec = asio::error::host_unreachable;
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec) return or_throw<GenericStream>(yield, ec);
+
+        return move(*retval);
+    }
+
+    static bool same_ipv(const udp::endpoint& ep1, const udp::endpoint& ep2)
+    {
+        return ep1.address().is_v4() == ep2.address().is_v4();
+    }
+
+    boost::optional<asio_utp::udp_multiplexer>
+    choose_multiplexer_for(const udp::endpoint& ep)
+    {
+        auto eps = dht->local_endpoints();
+
+        for (auto& e : eps) {
+            if (same_ipv(ep, e)) {
+                asio_utp::udp_multiplexer m(ios);
+                sys::error_code ec;
+                m.bind(e, ec);
+                assert(!ec);
+                return m;
+            }
+        }
+
+        return boost::none;
     }
 
     void store( const std::string& key
