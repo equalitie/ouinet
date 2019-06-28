@@ -1,16 +1,34 @@
 #pragma once
 
 #include <array>
-#include <vector>
+#include <cstring>
+#include <memory>
 #include <string>
+#include <vector>
 
 #include <boost/utility/string_view.hpp>
 
-extern "C" {
-#include "gcrypt.h"
-}
-
 namespace ouinet { namespace util {
+
+enum class hash_algorithm {
+    sha1,
+    sha256,
+};
+
+
+namespace hash_detail {
+
+class HashImpl;
+struct HashImplDeleter {
+    void operator()(HashImpl*);
+};
+
+HashImpl* new_hash_impl(hash_algorithm);
+void hash_impl_update(HashImpl&, const void*, size_t);
+uint8_t* hash_impl_close(HashImpl&);
+
+} // namespace hash_detail
+
 
 /* Templated class to support running hashes.
  *
@@ -18,22 +36,12 @@ namespace ouinet { namespace util {
  * data.  When you are done, you may call the `close` function, which returns
  * the resulting digest as an array of bytes.
  */
-template<int ALGORITHM, size_t DIGEST_LENGTH>
+template<hash_algorithm ALGORITHM, size_t DIGEST_LENGTH>
 class Hash {
 public:
     using digest_type = std::array<uint8_t, DIGEST_LENGTH>;
 
-    Hash()
-    {
-        digest = new (mem) md_handle();
-        if (::gcry_md_open(&digest->impl, ALGORITHM, 0))
-            throw std::runtime_error("Failed to initialize hash");
-    }
-
-    ~Hash()
-    {
-        ::gcry_md_close(digest->impl);
-    }
+    Hash() : impl(hash_detail::new_hash_impl(ALGORITHM)) {};
 
     inline void update(boost::string_view sv)
     {
@@ -63,28 +71,24 @@ public:
 
     inline digest_type close()
     {
-        uint8_t* digest_buffer = ::gcry_md_read(digest->impl, ALGORITHM);
+        auto digest_buffer = hash_detail::hash_impl_close(*impl);
 
         digest_type result;
-        memcpy(result.data(), digest_buffer, result.size());
+        std::memcpy(result.data(), digest_buffer, result.size());
         return result;
     }
 
 private:
-    struct md_handle {
-        ::gcry_md_hd_t impl;
-    };
+    std::unique_ptr<hash_detail::HashImpl, hash_detail::HashImplDeleter> impl;
 
-    uint8_t mem[DIGEST_LENGTH];
-    md_handle* digest;
-
-    inline void update(const void* buffer, size_t size) {
-        ::gcry_md_write(digest->impl, buffer, size);
+    inline void update(const void* buffer, size_t size)
+    {
+        hash_detail::hash_impl_update(*impl, buffer, size);
     }
 };
 
-using SHA1 = Hash<::gcry_md_algos::GCRY_MD_SHA1, 20>;
-using SHA256 = Hash<::gcry_md_algos::GCRY_MD_SHA256, 32>;
+using SHA1 = Hash<hash_algorithm::sha1, 20>;
+using SHA256 = Hash<hash_algorithm::sha256, 32>;
 
 
 namespace hash_detail {
