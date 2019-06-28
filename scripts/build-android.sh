@@ -352,7 +352,7 @@ function maybe_install_boost {
             --arch=arm64-v8a,armeabi-v7a \
             --with-libraries=regex,context,coroutine,program_options,system,test,thread,filesystem,date_time,iostreams \
             --layout=system \
-            $NDK_DIR
+            $NDK_DIR > "$DIR/$BUILD_DIR/boost.log"
         cd - >/dev/null
     fi
 }
