@@ -80,15 +80,12 @@ struct Client::Impl {
                 continue;
             }
 
-            serve(con, cancel, yield[ec]);
-
-            if (cancel || ec == asio::error::operation_aborted) return;
-            if (ec) {
-                con.close();
-                break;
-            }
-
-            // TODO: handle keep alive
+            asio::spawn(ios, [&, con = move(con)]
+                             (asio::yield_context yield) mutable {
+                Cancel c(cancel);
+                sys::error_code ec;
+                serve(con, c, yield[ec]);
+            });
         }
     }
 
