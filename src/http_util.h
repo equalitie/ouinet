@@ -274,6 +274,7 @@ static Response to_cache_response(Response rs) {
                         , http::field::content_type
                         , http::field::content_encoding
                         , http::field::content_language
+                        , http::field::digest
                         , http::field::transfer_encoding
                         , http::field::accept_ranges
                         , http::field::etag

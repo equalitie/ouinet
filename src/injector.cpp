@@ -265,6 +265,15 @@ void handle_connect_request( GenericStream client_c
 }
 
 //------------------------------------------------------------------------------
+static
+util::SHA256::digest_type
+body_sha256_digest(const Response& rs)
+{
+    // TODO: Update hash with body buffers to avoid copying.
+    return util::sha256_digest(beast::buffers_to_string(rs.body().data()));
+}
+
+//------------------------------------------------------------------------------
 struct InjectorCacheControl {
     using Connection = OriginPools::Connection;
 
@@ -357,6 +366,11 @@ public:
         auto rs_ = fetch_fresh(rq_, cancel, yield[ec]);
 
         return_or_throw_on_error(yield, cancel, ec);
+
+        // Add a content digest (as per RFC 3230 and RFC 5843).
+        auto digest = body_sha256_digest(rs_);;
+        auto encoded_digest = util::base64_encode(digest);
+        rs_.set(http::field::digest, "SHA-256=" + encoded_digest);
 
         // Pop out Ouinet internal HTTP headers.
         auto rq = util::to_cache_request(move(rq_));
