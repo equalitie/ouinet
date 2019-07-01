@@ -371,6 +371,13 @@ public:
 
         return_or_throw_on_error(yield, cancel, ec);
 
+        // Add a date if missing (or broken) in the response (RFC 7231#7.1.1.2).
+        namespace pt = boost::posix_time;
+        if (util::parse_date(rs_[http::field::date]) == pt::ptime()) {
+            auto now = util::format_date(pt::second_clock::universal_time());
+            rs_.set(http::field::date, now);
+        }
+
         // Add a content digest (as per RFC 3230 and RFC 5843).
         auto digest = body_sha256_digest(rs_);;
         auto encoded_digest = util::base64_encode(digest);
