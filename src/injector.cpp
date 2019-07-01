@@ -269,8 +269,12 @@ static
 util::SHA256::digest_type
 body_sha256_digest(const Response& rs)
 {
-    // TODO: Update hash with body buffers to avoid copying.
-    return util::sha256_digest(beast::buffers_to_string(rs.body().data()));
+    util::SHA256 hash;
+
+    // Feed each buffer of body data into the hash.
+    for (auto it : rs.body().data())
+        hash.update(it);
+    return hash.close();
 }
 
 //------------------------------------------------------------------------------

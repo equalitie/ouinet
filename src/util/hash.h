@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include <boost/asio/buffer.hpp>
 #include <boost/utility/string_view.hpp>
 
 namespace ouinet { namespace util {
@@ -54,6 +55,11 @@ public:
     }
 
     inline void update(std::string& data)
+    {
+        update(data.data(), data.size());
+    }
+
+    inline void update(boost::asio::const_buffer data)
     {
         update(data.data(), data.size());
     }
