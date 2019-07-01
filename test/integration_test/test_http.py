@@ -295,7 +295,7 @@ class OuinetTests(TestCase):
         return self._test_cache(self.run_bep44_injector, self.run_tcp_client, self.run_bep44_client)
 
     @inlineCallbacks
-    def test_bep44_seed(self):
+    def _test_bep44_seed(self):
         logging.debug("################################################")
         logging.debug("test_bep44_seed");
         logging.debug("################################################")
