@@ -8,9 +8,11 @@
 #include <boost/filesystem.hpp>
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
+#include <chrono>
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <ctime>
 #include <cstdlib>  // for atexit()
 
 #include "cache/bep44_ipfs/cache_injector.h"
@@ -359,6 +361,21 @@ public:
         };
     }
 
+    Response add_injection_meta(const Request& canon_rq, Response rs) {
+        assert(http_::response_version_hdr_current == http_::response_version_hdr_v0);
+
+        rs.set(http_::response_version_hdr, http_::response_version_hdr_v0);
+        rs.set(http_::header_prefix + "URI", canon_rq.target());
+        {
+            auto ts = std::chrono::seconds(std::time(nullptr));
+            rs.set( http_::header_prefix + "Injection"
+                  , "id=" + insert_id + ",ts=" + std::to_string(ts.count()));
+        }
+        rs.set(http_::header_prefix + "HTTP-Status", rs.result_int());
+
+        return rs;
+    }
+
     void inject_fresh( GenericStream& con
                      , const Request& rq_
                      , Cancel& cancel
@@ -409,12 +426,16 @@ public:
             }
         }
 
-        // Add a content digest (as per RFC 3230 and RFC 5843).
+        // Add headers in preparation for head signing:
+        //   - metadata on request, response and injection
+        rs = add_injection_meta(rq, move(rs));
+        //   - a content digest (as per RFC 3230 and RFC 5843)
         {
             auto digest = body_sha256_digest(rs);;
             auto encoded_digest = util::base64_encode(digest);
             rs.set(http::field::digest, "SHA-256=" + encoded_digest);
         }
+        // TODO: Sign the resulting head.
 
         http::async_write(con, rs, yield[ec].tag("write_response"));
 
