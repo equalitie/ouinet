@@ -400,7 +400,8 @@ public:
         // Add headers in preparation for signing: injection metadata, body digest.
         rs = cache::http_add_injection_meta(rq, move(rs), insert_id);
         rs = cache::http_add_digest(move(rs));
-        // TODO: Sign the resulting head.
+        // TODO: Use a key to actually sign the resulting head.
+        rs = cache::http_add_signature(move(rs));
 
         http::async_write(con, rs, yield[ec].tag("write_response"));
 

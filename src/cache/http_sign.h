@@ -53,4 +53,21 @@ http_add_injection_meta( const Request& canon_rq, Response rs
     return rs;
 }
 
+namespace http_sign_detail {
+std::string get_signature(const http::response_header<>&);
+}
+
+// TODO: Use a key and its signature algorithm to
+// actually create a signature
+// according to draft-cavage-http-signatures-11.
+template<class Response>
+inline
+Response
+http_add_signature(Response rs)
+{
+    auto sig = http_sign_detail::get_signature(rs);
+    rs.set("Signature", sig);
+    return rs;
+}
+
 }} // namespaces

@@ -22,5 +22,11 @@ http_add_digest(http::response<http::dynamic_body> rs)
     return rs;
 }
 
+std::string
+http_sign_detail::get_signature(const http::response_header<>& rsh)
+{
+    // TODO
+    return "";
+}
 
 }} // namespaces
