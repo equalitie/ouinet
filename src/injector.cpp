@@ -8,14 +8,13 @@
 #include <boost/filesystem.hpp>
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
-#include <chrono>
 #include <iostream>
 #include <fstream>
 #include <string>
-#include <ctime>
 #include <cstdlib>  // for atexit()
 
 #include "cache/bep44_ipfs/cache_injector.h"
+#include "cache/http_sign.h"
 
 #include "bittorrent/dht.h"
 #include "bittorrent/mutable_data.h"
@@ -267,19 +266,6 @@ void handle_connect_request( GenericStream client_c
 }
 
 //------------------------------------------------------------------------------
-static
-util::SHA256::digest_type
-body_sha256_digest(const Response& rs)
-{
-    util::SHA256 hash;
-
-    // Feed each buffer of body data into the hash.
-    for (auto it : rs.body().data())
-        hash.update(it);
-    return hash.close();
-}
-
-//------------------------------------------------------------------------------
 struct InjectorCacheControl {
     using Connection = OriginPools::Connection;
 
@@ -361,21 +347,6 @@ public:
         };
     }
 
-    Response add_injection_meta(const Request& canon_rq, Response rs) {
-        assert(http_::response_version_hdr_current == http_::response_version_hdr_v0);
-
-        rs.set(http_::response_version_hdr, http_::response_version_hdr_v0);
-        rs.set(http_::header_prefix + "URI", canon_rq.target());
-        {
-            auto ts = std::chrono::seconds(std::time(nullptr));
-            rs.set( http_::header_prefix + "Injection"
-                  , "id=" + insert_id + ",ts=" + std::to_string(ts.count()));
-        }
-        rs.set(http_::header_prefix + "HTTP-Status", rs.result_int());
-
-        return rs;
-    }
-
     void inject_fresh( GenericStream& con
                      , const Request& rq_
                      , Cancel& cancel
@@ -426,15 +397,9 @@ public:
             }
         }
 
-        // Add headers in preparation for head signing:
-        //   - metadata on request, response and injection
-        rs = add_injection_meta(rq, move(rs));
-        //   - a content digest (as per RFC 3230 and RFC 5843)
-        {
-            auto digest = body_sha256_digest(rs);;
-            auto encoded_digest = util::base64_encode(digest);
-            rs.set(http::field::digest, "SHA-256=" + encoded_digest);
-        }
+        // Add headers in preparation for signing: injection metadata, body digest.
+        rs = cache::http_add_injection_meta(rq, move(rs), insert_id);
+        rs = cache::http_add_digest(move(rs));
         // TODO: Sign the resulting head.
 
         http::async_write(con, rs, yield[ec].tag("write_response"));
