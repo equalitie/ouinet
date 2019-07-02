@@ -378,13 +378,6 @@ public:
             rs_.set(http::field::date, now);
         }
 
-        // Add a content digest (as per RFC 3230 and RFC 5843).
-        {
-            auto digest = body_sha256_digest(rs_);;
-            auto encoded_digest = util::base64_encode(digest);
-            rs_.set(http::field::digest, "SHA-256=" + encoded_digest);
-        }
-
         // Pop out Ouinet internal HTTP headers.
         auto rq = util::to_cache_request(move(rq_));
         auto rs = util::to_cache_response(move(rs_));
@@ -414,6 +407,13 @@ public:
             else {
                 LOG_DEBUG("Injector new insertion failed: ", ec.message());
             }
+        }
+
+        // Add a content digest (as per RFC 3230 and RFC 5843).
+        {
+            auto digest = body_sha256_digest(rs);;
+            auto encoded_digest = util::base64_encode(digest);
+            rs.set(http::field::digest, "SHA-256=" + encoded_digest);
         }
 
         http::async_write(con, rs, yield[ec].tag("write_response"));
