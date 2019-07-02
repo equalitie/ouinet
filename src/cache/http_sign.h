@@ -6,6 +6,7 @@
 
 #include <boost/beast/http/dynamic_body.hpp>
 #include <boost/beast/http/message.hpp>
+#include <boost/format.hpp>
 
 #include "../constants.h"
 
@@ -43,9 +44,9 @@ http_add_injection_meta( const Request& canon_rq, Response rs
     rs.set(response_version_hdr, response_version_hdr_v0);
     rs.set(header_prefix + "URI", canon_rq.target());
     {
-        auto ts = std::chrono::seconds(std::time(nullptr));
+        auto ts = std::chrono::seconds(std::time(nullptr)).count();
         rs.set( header_prefix + "Injection"
-              , "id=" + injection_id + ",ts=" + std::to_string(ts.count()));
+              , boost::format("id=%s,ts=%d") % injection_id % ts);
     }
     rs.set(header_prefix + "HTTP-Status", rs.result_int());
 
