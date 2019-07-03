@@ -6,17 +6,6 @@
 
 namespace ouinet {
 
-class AbstractCacheOld {
-public:
-    using Response = CacheEntry::Response;
-
-    virtual
-    CacheEntry load(const std::string& key, Cancel, Yield) = 0;
-
-    virtual
-    void store(const std::string& key, Response&, Cancel, asio::yield_context) = 0;
-};
-
 class AbstractCache {
 public:
     virtual
