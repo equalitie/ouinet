@@ -40,6 +40,16 @@ public:
 
         void close();
 
+        asio::io_service& get_io_service() {
+            assert(fork);
+            return fork->get_io_service();
+        }
+
+        asio::io_context::executor_type get_executor() {
+            assert(fork);
+            return fork->get_executor();
+        }
+
         private:
         void flush_rx_handler(sys::error_code, size_t);
 
@@ -62,6 +72,7 @@ public:
     void close();
 
     asio::io_service& get_io_service();
+    asio::io_context::executor_type get_executor();
 
 private:
     using Tines = boost::intrusive::list
@@ -109,9 +120,6 @@ private:
 
         void on_tine_closed(size_t);
     };
-
-private:
-    boost::asio::io_context::executor_type get_executor() { return _state->get_executor(); }
 
 private:
     std::shared_ptr<ForkState> _state;
@@ -438,6 +446,14 @@ asio::io_service& Fork<SourceStream>::get_io_service()
 {
     assert(_state);
     return _state->get_io_service();
+}
+
+template<class SourceStream>
+inline
+asio::io_context::executor_type Fork<SourceStream>::get_executor()
+{
+    assert(_state);
+    return _state->get_executor();
 }
 
 }} // namespaces
