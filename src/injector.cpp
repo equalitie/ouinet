@@ -321,28 +321,8 @@ public:
         , injector(injector)
         , config(config)
         , genuuid(genuuid)
-        , cc(ios, OUINET_INJECTOR_SERVER_STRING)
         , origin_pools(origin_pools)
     {
-        // The following operations take care of adding or removing
-        // a custom Ouinet HTTP response header with the injection identifier
-        // to enable the tracking of this particular injection.
-        // The header is added when fetching fresh content or retrieving from the cache,
-        // (so it is sent to the client in both cases)
-        // and it is removed just before saving to the cache
-        // (though it is still used to create the descriptor).
-
-        cc.fetch_fresh = [&] (const Request& rq, Cancel& c, Yield y) {
-            return fetch_fresh(rq, c, y);
-        };
-
-        cc.fetch_stored = [&](const Request& rq, Cancel& c, Yield y) {
-            return fetch_stored(rq, c, y);
-        };
-
-        cc.store = [&](const Request& rq, Response rs, Cancel& /* TODO */, Yield y) {
-            return store(rq, rs, y);
-        };
     }
 
     void inject_fresh( GenericStream& con
@@ -725,7 +705,6 @@ private:
     unique_ptr<CacheInjector>& injector;
     const InjectorConfig& config;
     uuid_generator& genuuid;
-    CacheControl cc;
     OriginPools& origin_pools;
 };
 
