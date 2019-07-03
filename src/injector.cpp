@@ -368,10 +368,19 @@ public:
 
 
             if (!ec) {
+                auto key = key_from_http_req(rq);
+
                 LOG_DEBUG("Injector new insertion: ", ins.desc_data);
                 // Add an injection identifier header
                 // to enable the client to track injection state.
                 rs.set(http_::response_injection_id_hdr, insert_id);
+
+                rs.set( http_::response_injection_time
+                      , util::format_date(
+                          boost::posix_time::second_clock::universal_time()));
+
+                rs.set(http_::response_injection_key, key);
+
                 // Add index insertion headers.
                 rs = add_re_insertion_header_field( move(rs)
                                                   , move(ins.index_ins_data));
@@ -1061,7 +1070,7 @@ int main(int argc, const char* argv[])
         assert(dht);
         assert(!dht->local_endpoints().empty());
         proxy_server.add(make_unique<ouiservice::Bep5Server>
-                (move(dht), ssl_context, *config.bep5_injector_swarm_name()));
+                (move(dht), &ssl_context, *config.bep5_injector_swarm_name()));
     }
 
     if (config.lampshade_endpoint()) {

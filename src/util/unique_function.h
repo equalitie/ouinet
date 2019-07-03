@@ -16,6 +16,7 @@ namespace ouinet { namespace util {
 
 template<class T> class unique_function;
 
+// TODO: Small object allocator optimization
 template<class Result, class... Args>
 class unique_function<Result(Args...)> {
     public:

@@ -375,6 +375,12 @@ class MainlineDht {
         return ret;
     }
 
+    std::set<udp::endpoint> wan_endpoints() const {
+        std::set<udp::endpoint> ret;
+        for (auto& p : _nodes) { ret.insert(p.second->wan_endpoint()); }
+        return ret;
+    }
+
     /*
      * TODO: announce() and put() functions don't have any real error detection.
      */
