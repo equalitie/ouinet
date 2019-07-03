@@ -10,6 +10,8 @@
 #include "../../logger.h"
 #include "../../async_sleep.h"
 #include "../../constants.h"
+#include "../../stream/fork.h"
+#include "../../session.h"
 #include <map>
 #include <set>
 #include <network/uri.hpp>
@@ -151,7 +153,7 @@ struct Client::Impl {
 
             if (cancel) return or_throw(yield, asio::error::operation_aborted);
             if (!ec) {
-                load(key, con, sink, cancel, yield[ec]);
+                load_from_connection(key, con, sink, cancel, yield[ec]);
 
                 if (!ec) {
                     return;
@@ -179,17 +181,17 @@ struct Client::Impl {
 
         peer_cache[host] = con_ep;
 
-        load(key, con, sink, cancel, yield[ec]);
+        load_from_connection(key, con, sink, cancel, yield[ec]);
 
         return or_throw(yield, ec);
     }
 
     template<class Con>
-    void load( const std::string& key
-               , Con& con
-               , GenericStream& sink
-               , Cancel cancel
-               , Yield yield)
+    void load_from_connection( const std::string& key
+                             , Con& con
+                             , GenericStream& sink
+                             , Cancel cancel
+                             , Yield yield)
     {
         http::request<http::string_body> rq{http::verb::get, key, 11 /* version */};
         rq.set(http::field::host, "dummy_host");
@@ -203,7 +205,41 @@ struct Client::Impl {
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw(yield, ec);
 
-        flush_from_to(con, sink, cancel, yield);
+        stream::Fork<Con> fork(move(con));
+        typename stream::Fork<Con>::Tine src1(fork);
+        typename stream::Fork<Con>::Tine src2(fork);
+
+        WaitCondition wc(ios);
+
+        sys::error_code file_ec;
+        auto path = path_from_key(key);
+        auto file = open_or_create(path, file_ec);
+
+        if (!file_ec) {
+            asio::spawn(ios, [&, lock = wc.lock()] (asio::yield_context yield) {
+                sys::error_code ec;
+                Session session(std::move(src2));
+                session.flush_response(file, cancel, yield[ec]);
+                if (ec) {
+                    LOG_WARN("Bep5Http cache: Failed to flush to file: ",
+                            ec.message());
+                    try_remove(path);
+                }
+            });
+        } else {
+            LOG_WARN("Bep5Http cache: Failed to open file: ", ec.message());
+        }
+
+        Session session(std::move(src1));
+        session.flush_response(sink, cancel, yield[ec]);
+
+        if (ec) {
+            if (file.is_open()) file.close();
+        }
+
+        wc.wait(yield);
+
+        return or_throw(yield, ec);
     }
 
     static set<udp::endpoint> tcp_to_udp(const set<tcp::endpoint>& eps)
@@ -297,15 +333,11 @@ struct Client::Impl {
     {
         sys::error_code ec;
 
-        auto infohash = util::sha1(key);
-        auto path = path_from_infohash(infohash);
+        auto path = path_from_key(key);
         auto file = open_or_create(path, ec);
         if (ec) return or_throw(yield, ec);
 
-        http::response<http::empty_body> rs_hdr_msg{rs_hdr};
-        http::response_serializer<http::empty_body> rs_hdr_s(rs_hdr_msg);
-
-        http::async_write_header(file, rs_hdr_s, yield[ec]);
+        write_header(rs_hdr, file, yield[ec]);
 
         if (ec) {
             try_remove(path);
@@ -321,6 +353,18 @@ struct Client::Impl {
 
         announce(key);
     }
+
+    template<class Stream>
+    void write_header(
+            const http::response_header<>& hdr,
+            Stream& sink,
+            asio::yield_context yield)
+    {
+        http::response<http::empty_body> msg{hdr};
+        http::response_serializer<http::empty_body> s(msg);
+        http::async_write_header(sink, s, yield);
+    }
+
 
     void announce(string key)
     {
