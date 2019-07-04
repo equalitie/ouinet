@@ -9,6 +9,7 @@
 #include <boost/format.hpp>
 
 #include "../constants.h"
+#include "../util/crypto.h"
 
 #include "../namespaces.h"
 
@@ -57,6 +58,7 @@ http_digest(const http::response<http::dynamic_body>&);
 // actually create a signature
 // according to draft-cavage-http-signatures-11.
 std::string
-http_signature(const http::response_header<>&);
+http_signature( const http::response_header<>&
+              , const ouinet::util::Ed25519PrivateKey&);
 
 }} // namespaces
