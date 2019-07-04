@@ -402,7 +402,7 @@ public:
         // Add injection metadata headers in preparation for signing.
         to_sign = cache::http_add_injection_meta(rq, move(to_sign), insert_id);
         for (auto fit = to_sign.begin(); fit != to_sign.end(); fit++)
-            if (boost::istarts_with(fit->name_string(), http_::header_prefix))
+            if (fit->name_string().starts_with(http_::header_prefix))
                 rs.set(fit->name_string(), fit->value());
 
         // TODO: Send digest and signature as trailers.
