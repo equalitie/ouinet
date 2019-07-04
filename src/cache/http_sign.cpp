@@ -25,10 +25,15 @@ http_signature( const http::response_header<>& rsh
               , const ouinet::util::Ed25519PrivateKey& sk)
 {
     // TODO: Compute proper signature string and sign it.
-    auto fmt = boost::format("keyId=\"ed25519:%s\",algorithm=\"hs2019\"");
+    auto fmt = boost::format("keyId=\"ed25519:%s\""
+                             ",algorithm=\"hs2019\""
+                             ",created=%d");
+
     // TODO: Cache somewhere, doing this every time is quite inefficient.
     auto encoded_pk = ouinet::util::base64_encode(sk.public_key().serialize());
-    return (fmt % encoded_pk).str();
+    auto ts = std::chrono::seconds(std::time(nullptr)).count();
+
+    return (fmt % encoded_pk % ts).str();
 }
 
 }} // namespaces
