@@ -25,7 +25,7 @@ http_signature( const http::response_header<>& rsh
               , const ouinet::util::Ed25519PrivateKey& sk)
 {
     // TODO: Compute proper signature string and sign it.
-    auto fmt = boost::format("keyId=\"ed25519:%s\""
+    auto fmt = boost::format("keyId=\"%s\""
                              ",algorithm=\"hs2019\""
                              ",created=%d");
 
