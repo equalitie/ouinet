@@ -370,6 +370,8 @@ public:
         auto rq = util::to_cache_request(move(rq_));
         auto rs = util::to_cache_response(move(rs_));
 
+        auto to_sign = rs.base();  // lacks old headers added just below
+
         if (injector) {
             auto ins = injector->insert_content( insert_id, rq, rs
                                                , false
@@ -397,11 +399,22 @@ public:
             }
         }
 
-        // Add headers in preparation for signing: injection metadata, body digest.
-        rs = cache::http_add_injection_meta(rq, move(rs), insert_id);
-        rs = cache::http_add_digest(move(rs));
-        // TODO: Use a key to actually sign the resulting head.
-        rs = cache::http_add_signature(move(rs));
+        // Add injection metadata headers in preparation for signing.
+        to_sign = cache::http_add_injection_meta(rq, move(to_sign), insert_id);
+        for (auto fit = to_sign.begin(); fit != to_sign.end(); fit++)
+            if (boost::istarts_with(fit->name_string(), http_::header_prefix))
+                rs.set(fit->name(), fit->value());
+
+        // TODO: Send digest and signature as trailers.
+        rs.chunked(true);
+
+        auto digest = cache::http_digest(rs);
+        to_sign.set(http::field::digest, digest);
+        rs.set(http::field::digest, digest);
+
+        // TODO: Actually sign the resulting head.
+        auto signature = cache::http_signature(to_sign);
+        rs.set("Signature", signature);
 
         http::async_write(con, rs, yield[ec].tag("write_response"));
 

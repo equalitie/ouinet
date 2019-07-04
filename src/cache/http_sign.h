@@ -14,15 +14,6 @@
 
 namespace ouinet { namespace cache {
 
-// Add a body digest as per RFC 3230 and RFC 5843.
-//
-// Example:
-//
-//     Digest: SHA-256=NYfLd2zg5OgjfyFYALff+6DyWGXLhFUOh+qLusg4xCM=
-//
-http::response<http::dynamic_body>
-http_add_digest(http::response<http::dynamic_body>);
-
 // Add internal headers to support signing the message head.
 //
 // Example:
@@ -53,21 +44,19 @@ http_add_injection_meta( const Request& canon_rq, Response rs
     return rs;
 }
 
-namespace http_sign_detail {
-std::string get_signature(const http::response_header<>&);
-}
+// Get the body digest as per RFC 3230 and RFC 5843.
+//
+// Example:
+//
+//     SHA-256=NYfLd2zg5OgjfyFYALff+6DyWGXLhFUOh+qLusg4xCM=
+//
+std::string
+http_digest(const http::response<http::dynamic_body>&);
 
 // TODO: Use a key and its signature algorithm to
 // actually create a signature
 // according to draft-cavage-http-signatures-11.
-template<class Response>
-inline
-Response
-http_add_signature(Response rs)
-{
-    auto sig = http_sign_detail::get_signature(rs);
-    rs.set("Signature", sig);
-    return rs;
-}
+std::string
+http_signature(const http::response_header<>&);
 
 }} // namespaces

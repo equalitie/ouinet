@@ -7,8 +7,8 @@
 
 namespace ouinet { namespace cache {
 
-http::response<http::dynamic_body>
-http_add_digest(http::response<http::dynamic_body> rs)
+std::string
+http_digest(const http::response<http::dynamic_body>& rs)
 {
     ouinet::util::SHA256 hash;
 
@@ -17,13 +17,11 @@ http_add_digest(http::response<http::dynamic_body> rs)
         hash.update(it);
     auto digest = hash.close();
     auto encoded_digest = ouinet::util::base64_encode(digest);
-    rs.set(http::field::digest, "SHA-256=" + encoded_digest);
-
-    return rs;
+    return "SHA-256=" + encoded_digest;
 }
 
 std::string
-http_sign_detail::get_signature(const http::response_header<>& rsh)
+http_signature(const http::response_header<>& rsh)
 {
     // TODO
     return "";
