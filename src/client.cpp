@@ -35,6 +35,7 @@
 #include "defer.h"
 #include "default_timeout.h"
 #include "constants.h"
+#include "session.h"
 #include "create_udp_multiplexer.h"
 #include "ssl/ca_certificate.h"
 #include "ssl/dummy_certificate.h"
@@ -164,7 +165,7 @@ private:
                 , Yield yield);
 
     Response fetch_fresh_from_front_end(const Request&, Yield);
-    Response fetch_fresh_from_origin(const Request&, Yield);
+    Session fetch_fresh_from_origin(const Request&, Yield);
 
     Response fetch_fresh_through_connect_proxy(const Request&, Cancel&, Yield);
 
@@ -384,10 +385,10 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
 }
 
 //------------------------------------------------------------------------------
-Response Client::State::fetch_fresh_from_origin(const Request& rq, Yield yield)
+Session Client::State::fetch_fresh_from_origin(const Request& rq, Yield yield)
 {
     if (!_config.is_origin_access_enabled()) {
-        return or_throw<Response>(yield, asio::error::operation_not_supported);
+        return or_throw<Session>(yield, asio::error::operation_not_supported);
     }
 
     Cancel cancel;
@@ -406,7 +407,7 @@ Response Client::State::fetch_fresh_from_origin(const Request& rq, Yield yield)
         auto stream = connect_to_origin(rq, cancel, yield[ec]);
 
         if (!ec && cancel) ec = asio::error::timed_out;
-        if (ec) return or_throw<Response>(yield, ec);
+        if (ec) return or_throw<Session>(yield, ec);
 
         con = _origin_pools.wrap(rq, std::move(stream));
     }
@@ -418,26 +419,16 @@ Response Client::State::fetch_fresh_from_origin(const Request& rq, Yield yield)
     // Send request
     http::async_write(con, rq_, yield[ec].tag("origin-request"));
 
-    if (ec) return or_throw<Response>(yield, ec);
+    if (ec) return or_throw<Session>(yield, ec);
 
-    // Receive response
-    Response res;
-    beast::flat_buffer buffer;
-    http::async_read(con, buffer, res, yield[ec].tag("origin-response"));
+    Session ret(std::move(con));
+    auto hdr_p = ret.read_response_header(cancel, yield[ec]);
+    if (ec) return or_throw(yield, ec, std::move(ret));
 
-    if (ec) return or_throw<Response>(yield, ec, std::move(res));
+    // Prevent others from inserting ouinet headers.
+    util::remove_ouinet_fields_ref(*hdr_p);
 
-    // Store keep-alive connections in connection pool
-    if (!res.keep_alive()) {
-        con.close();
-    }
-
-    if (!ec) {
-        // Prevent others from inserting ouinet headers.
-        res = util::remove_ouinet_fields(move(res));
-    }
-
-    return or_throw(yield, ec, move(res));
+    return or_throw(yield, ec, move(ret));
 }
 
 //------------------------------------------------------------------------------
@@ -771,7 +762,13 @@ public:
                     break;
 
                 case fresh_channel::origin:
-                    res = client_state.fetch_fresh_from_origin(rq, yield[ec]);
+                    {
+                        auto session = client_state.fetch_fresh_from_origin(rq, yield[ec]);
+                        res = session.slurp<http::dynamic_body>(cancel, yield[ec]);
+                        if (!rq.keep_alive() || !res.keep_alive()) {
+                            session.close();
+                        }
+                    }
                     break;
 
                 case fresh_channel::proxy:
