@@ -48,6 +48,8 @@ public:
 
     void close();
 
+    bool is_open() const { return _socket.is_open(); }
+
 private:
     friend class Client;
     friend class Server;

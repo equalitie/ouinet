@@ -40,6 +40,8 @@ public:
 
         void close();
 
+        bool is_open() const;
+
         asio::io_service& get_io_service() {
             assert(fork);
             return fork->get_io_service();
@@ -276,6 +278,14 @@ void Fork<SourceStream>::Tine::close()
     auto s = fork->_state;
     fork = nullptr;
     s->on_tine_closed(unread_data_buffer.size());
+}
+
+template<class SourceStream>
+inline
+bool Fork<SourceStream>::Tine::is_open() const
+{
+    if (!fork) return false;
+    return fork->_state->source.is_open();
 }
 
 template<class SourceStream>

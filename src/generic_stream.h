@@ -8,6 +8,7 @@
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/error.hpp>
+#include <boost/asio/ssl/stream.hpp>
 #include <functional>
 #include <vector>
 #include <iostream>
@@ -43,6 +44,9 @@ namespace generic_stream_detail {
 
     template<class T> T& deref(T& v) { return v; }
     template<class T> T& deref(std::unique_ptr<T>& v) { return *v; }
+
+    template<class T> bool is_open(const T& v) { return v.is_open(); }
+    template<class T> bool is_open(const asio::ssl::stream<T>& v) { return v.next_layer().is_open(); }
 } // namespace
 
 
@@ -78,6 +82,7 @@ private:
 
         virtual void close() = 0;
         virtual bool closed() const = 0;
+        virtual bool is_open() const = 0;
 
         virtual ~Base() {}
 
@@ -130,6 +135,11 @@ private:
 
         bool closed() const override {
             return _closed;
+        }
+
+        bool is_open() const override {
+            if (_closed) return false;
+            return generic_stream_detail::is_open(*_impl);
         }
 
     private:
@@ -250,6 +260,12 @@ public:
         if (!_impl) return;
         _impl->close();
         _impl = nullptr;
+    }
+
+    bool is_open() const
+    {
+        if (!_impl) return false;
+        return _impl->is_open();
     }
 
     template< class MutableBufferSequence
