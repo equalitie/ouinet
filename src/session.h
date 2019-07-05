@@ -2,7 +2,7 @@
 
 #include "generic_stream.h"
 
-namespace ouinet { namespace cache {
+namespace ouinet {
 
 class Session {
 private:
@@ -167,4 +167,4 @@ http::response<BodyType> Session::slurp(Cancel& cancel, asio::yield_context yiel
     return rs;
 }
 
-}} // namespaces
+} // namespaces
