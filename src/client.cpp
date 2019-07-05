@@ -408,7 +408,7 @@ Response Client::State::fetch_fresh_from_origin(const Request& rq, Yield yield)
         if (!ec && cancel) ec = asio::error::timed_out;
         if (ec) return or_throw<Response>(yield, ec);
 
-        con = _origin_pools.wrap(std::move(stream));
+        con = _origin_pools.wrap(rq, std::move(stream));
     }
 
     // Transform request from absolute-form to origin-form
@@ -428,8 +428,8 @@ Response Client::State::fetch_fresh_from_origin(const Request& rq, Yield yield)
     if (ec) return or_throw<Response>(yield, ec, std::move(res));
 
     // Store keep-alive connections in connection pool
-    if (!ec && res.keep_alive()) {
-        _origin_pools.insert_connection(rq, move(con));
+    if (!res.keep_alive()) {
+        con.close();
     }
 
     if (!ec) {
@@ -580,8 +580,8 @@ Response Client::State::fetch_fresh_through_simple_proxy
     if (ec) return or_throw<Response>(yield, ec, std::move(res));
 
     // Store keep-alive connections in connection pool
-    if (res.keep_alive()) {
-        _injector_connections.push_back(std::move(con));
+    if (!res.keep_alive()) {
+        con.close();
     }
 
     if (!can_inject) {

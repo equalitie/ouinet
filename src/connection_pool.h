@@ -61,6 +61,11 @@ class IdleConnection {
         _data->connection.close();
     }
 
+    bool is_open() const {
+        if (!_data) return false;
+        return _data->connection.is_open();
+    }
+
     template<typename ConstBufferSequence, typename CompletionToken>
     BOOST_ASIO_INITFN_RESULT_TYPE(CompletionToken, void(sys::error_code, std::size_t))
     async_write_some(const ConstBufferSequence& buffers, CompletionToken&& token)
@@ -282,60 +287,99 @@ class IdleConnection {
 template<class StoredValue>
 class ConnectionPool {
     public:
+    class Connection;
+
+    using Connections = std::list<Connection>;
 
     class Connection : public IdleConnection<GenericStream> {
         public:
 
         using IdleConnection<GenericStream>::IdleConnection;
 
+        Connection(Connection&&) = default;
+        Connection& operator=(Connection&&) = default;
+
         StoredValue& operator*()
         {
             return _value;
         }
 
+        ~Connection()
+        {
+            if (!IdleConnection::is_open()) return;
+
+            if (auto cs = _connections.lock()) {
+                Connection c((IdleConnection<GenericStream>&&) *this);
+                c._value = std::move(_value);
+                push_back(*cs, std::move(c));
+            }
+        }
+
         private:
+
+        Connection(IdleConnection<GenericStream> c)
+            : IdleConnection<GenericStream>(std::move(c))
+        {}
+
+        private:
+        friend class ConnectionPool;
         StoredValue _value;
+        std::weak_ptr<Connections> _connections;
     };
 
-    static Connection wrap(GenericStream connection)
+    ConnectionPool()
+        : _connections(std::make_shared<Connections>())
+    {}
+
+    Connection wrap(GenericStream connection)
     {
-        return Connection(std::move(connection));
+        auto c = Connection(std::move(connection));
+        c._connections = _connections;
+        return c;
     }
 
     void push_back(Connection connection)
     {
-        _connections.push_back(std::move(connection));
-
-        typename std::list<Connection>::iterator it = _connections.end();
-        --it;
-        /*
-         * Callback may be called during make_idle().
-         * This is important, for the connection might be disqualified immediately.
-         */
-        it->make_idle([this, it] {
-            it->close();
-            _connections.erase(it);
-        });
+        connection._connections.reset();
+        push_back(*_connections, std::move(connection));
     }
 
     Connection pop_front()
     {
-        assert(!_connections.empty());
+        assert(!_connections->empty());
 
-        Connection connection = std::move(_connections.front());
-        _connections.pop_front();
+        Connection connection = std::move(_connections->front());
+        _connections->pop_front();
         connection.make_not_idle();
+        connection._connections = _connections;
 
         return connection;
     }
 
     bool empty() const
     {
-        return _connections.empty();
+        return _connections->empty();
     }
 
     private:
-    std::list<Connection> _connections;
+    static void push_back(Connections& connections, Connection connection)
+    {
+        connections.push_back(std::move(connection));
+
+        typename Connections::iterator it = connections.end();
+        --it;
+        /*
+         * Callback may be called during make_idle().
+         * This is important, for the connection might be disqualified immediately.
+         */
+        it->make_idle([&connections, it] {
+            it->close();
+            connections.erase(it);
+        });
+    }
+
+    private:
+    std::shared_ptr<Connections> _connections;
 };
 
 } // namespace

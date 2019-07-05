@@ -684,17 +684,20 @@ public:
 
             if (ec) return or_throw<Connection>(yield, ec);
 
-            connection = origin_pools.wrap(std::move(stream));
+            connection = origin_pools.wrap(rq_, std::move(stream));
         }
         return connection;
     }
 
     template<class Response>
     bool keep_connection(const Request& rq, const Response& rs, Connection con) {
-        if (!rs.keep_alive() || !rq.keep_alive())
-            return false;
+        if (!con.is_open()) return false;
 
-        origin_pools.insert_connection(rq, move(con));
+        if (!rs.keep_alive() || !rq.keep_alive()) {
+            con.close();
+            return false;
+        }
+
         return true;
     }
 
