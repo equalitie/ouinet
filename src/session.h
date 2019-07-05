@@ -42,6 +42,11 @@ public:
     template<class BodyType>
     http::response<BodyType> slurp(Cancel&, asio::yield_context);
 
+    void close() {
+        if (!_state) return;
+        if (_state->con.is_open()) _state->con.close();
+    }
+
 private:
     std::unique_ptr<State> _state;
 };
