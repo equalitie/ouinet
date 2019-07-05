@@ -38,6 +38,10 @@ public:
     template<class SinkStream>
     void flush_response(SinkStream&, Cancel&, asio::yield_context);
 
+    // Loads the entire response to memory, use only for debugging
+    template<class BodyType>
+    http::response<BodyType> slurp(Cancel&, asio::yield_context);
+
 private:
     std::unique_ptr<State> _state;
 };
@@ -88,7 +92,7 @@ Session::flush_response(SinkStream& sink,
     sys::error_code ec;
 
     http::response_serializer<http::buffer_body> sr{_state->parser.get()};
-    
+
     read_response_header(cancel , yield[ec]); // Won't read if already read.
     return_or_throw_on_error(yield, cancel, ec);
 
@@ -119,6 +123,48 @@ Session::flush_response(SinkStream& sink,
         return_or_throw_on_error(yield, cancel, ec);
     }
     while (!_state->parser.is_done() && !sr.is_done());
+}
+
+template<class BodyType>
+http::response<BodyType> Session::slurp(Cancel& cancel, asio::yield_context yield)
+{
+    if (!_state) {
+        return or_throw<http::response<BodyType>>(
+                yield, asio::error::bad_descriptor);
+    }
+
+    auto c = cancel.connect([&] { _state->con.close(); });
+
+    sys::error_code ec;
+
+    http::response_serializer<http::buffer_body> sr{_state->parser.get()};
+
+    read_response_header(cancel , yield[ec]); // Won't read if already read.
+    return_or_throw_on_error(yield, cancel, ec, http::response<BodyType>{});
+
+    http::response<BodyType> rs{*response_header()};
+
+    char buf[2048];
+
+    std::string s;
+    while (!_state->parser.is_done() && !sr.is_done()) {
+        _state->parser.get().body().data = buf;
+        _state->parser.get().body().size = sizeof(buf);
+
+        http::async_read(_state->con, _state->buffer, _state->parser, yield[ec]);
+
+        if (ec == http::error::need_buffer) ec = {};
+        return_or_throw_on_error(yield, cancel, ec, http::response<BodyType>{});
+
+        size_t size = sizeof(buf) - _state->parser.get().body().size;
+        s += std::string(buf, size);
+    }
+
+    typename BodyType::reader reader(rs, rs.body());
+    reader.put(asio::buffer(s), ec);
+    assert(!ec);
+
+    return rs;
 }
 
 }} // namespaces
