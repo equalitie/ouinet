@@ -401,8 +401,7 @@ public:
         to_sign.set(http::field::digest, digest);
         rs.set(http::field::digest, digest);
 
-        // TODO: Do not get key from BEP44 configuration.
-        auto signature = cache::http_signature(to_sign, config.index_bep44_private_key());
+        auto signature = cache::http_signature(to_sign, config.cache_private_key());
         rs.set("Signature", signature);
 
         http::async_write(con, rs, yield[ec].tag("write_response"));
