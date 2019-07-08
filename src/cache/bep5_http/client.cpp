@@ -137,11 +137,10 @@ struct Client::Impl {
         return uri.host().to_string();
     }
 
-    void load( const std::string& key
-             , GenericStream& sink
-             , Cancel cancel
-             , Yield yield)
+    Session load(const std::string& key, Cancel cancel, Yield yield)
     {
+        namespace err = asio::error;
+
         auto host = get_host(key);
         auto canceled = this->cancel.connect([&] { cancel(); });
 
@@ -151,12 +150,13 @@ struct Client::Impl {
             sys::error_code ec;
             auto con = connect(peer_i->second, cancel, yield[ec]);
 
-            if (cancel) return or_throw(yield, asio::error::operation_aborted);
+            if (cancel) return or_throw<Session>(yield, err::operation_aborted);
+
             if (!ec) {
-                load_from_connection(key, con, sink, cancel, yield[ec]);
+                auto ret = load_from_connection(key, con, cancel, yield[ec]);
 
                 if (!ec) {
-                    return;
+                    return ret;
                 }
 
                 peer_cache.erase(host);
@@ -171,27 +171,26 @@ struct Client::Impl {
         auto endpoints = dht->tracker_get_peers(util::sha1(key), cancel, yield[ec]);
 
         if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw(yield, ec);
+        if (ec) return or_throw<Session>(yield, ec);
 
         udp::endpoint con_ep;
         auto con = connect(tcp_to_udp(endpoints), con_ep, cancel, yield[ec]);
 
         if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw(yield, ec);
+        if (ec) return or_throw<Session>(yield, ec);
 
         peer_cache[host] = con_ep;
 
-        load_from_connection(key, con, sink, cancel, yield[ec]);
+        auto ret = load_from_connection(key, con, cancel, yield[ec]);
 
-        return or_throw(yield, ec);
+        return or_throw<Session>(yield, ec, move(ret));
     }
 
     template<class Con>
-    void load_from_connection( const std::string& key
-                             , Con& con
-                             , GenericStream& sink
-                             , Cancel cancel
-                             , Yield yield)
+    Session load_from_connection( const std::string& key
+                                , Con& con
+                                , Cancel cancel
+                                , Yield yield)
     {
         http::request<http::string_body> rq{http::verb::get, key, 11 /* version */};
         rq.set(http::field::host, "dummy_host");
@@ -203,23 +202,27 @@ struct Client::Impl {
         http::async_write(con, rq, yield[ec]);
 
         if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw(yield, ec);
+        if (ec) return or_throw<Session>(yield, ec);
 
         stream::Fork<Con> fork(move(con));
         typename stream::Fork<Con>::Tine src1(fork);
         typename stream::Fork<Con>::Tine src2(fork);
-
-        WaitCondition wc(ios);
 
         sys::error_code file_ec;
         auto path = path_from_key(key);
         auto file = open_or_create(path, file_ec);
 
         if (!file_ec) {
-            asio::spawn(ios, [&, lock = wc.lock()] (asio::yield_context yield) {
+            asio::spawn(ios, [
+                    &cancel,
+                    path = move(path),
+                    src2 = move(src2),
+                    file = move(file)
+            ] (asio::yield_context yield) mutable {
+                Cancel c = cancel;
                 sys::error_code ec;
                 Session session(std::move(src2));
-                session.flush_response(file, cancel, yield[ec]);
+                session.flush_response(file, c, yield[ec]);
                 if (ec) {
                     LOG_WARN("Bep5Http cache: Failed to flush to file: ",
                             ec.message());
@@ -231,15 +234,12 @@ struct Client::Impl {
         }
 
         Session session(std::move(src1));
-        session.flush_response(sink, cancel, yield[ec]);
 
         if (ec) {
             if (file.is_open()) file.close();
         }
 
-        wc.wait(yield);
-
-        return or_throw(yield, ec);
+        return or_throw(yield, ec, move(session));
     }
 
     static set<udp::endpoint> tcp_to_udp(const set<tcp::endpoint>& eps)
@@ -414,7 +414,7 @@ struct Client::Impl {
         }
     }
 
-    void try_remove(const fs::path& path)
+    static void try_remove(const fs::path& path)
     {
         sys::error_code ec_ignored;
         fs::remove(path, ec_ignored);
@@ -507,12 +507,9 @@ Client::Client(unique_ptr<Impl> impl)
     : _impl(move(impl))
 {}
 
-void Client::load( const std::string& key
-                 , GenericStream& sink
-                 , Cancel cancel
-                 , Yield yield)
+Session Client::load(const std::string& key, Cancel cancel, Yield yield)
 {
-    _impl->load(key, sink, cancel, yield);
+    return _impl->load(key, cancel, yield);
 }
 
 void Client::store( const std::string& key

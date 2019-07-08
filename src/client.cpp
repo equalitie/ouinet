@@ -302,37 +302,17 @@ Client::State::fetch_stored( const Request& request
                                    , asio::error::operation_not_supported);
     }
 
-    // XXX: Using two connected sockets to fetch data from dcache is
-    // a temporary solution until this function no longer needs to store
-    // the entire response in the memory before it's forwarded.
-    sys::error_code ec1, ec2;
+    sys::error_code ec;
 
-    tcp::socket s1(_ios), s2(_ios);
-    tie(s1,s2) = make_connection(_ios, yield[ec1]);
-    assert(!ec1);
-    GenericStream c1(move(s1));
+    auto s = c->load(key_from_http_req(request), cancel, yield[ec]);
+    return_or_throw_on_error(yield, cancel, ec, CacheEntry{});
 
-    WaitCondition wc(_ios);
+    Response res = s.slurp<http::dynamic_body>(cancel, yield[ec]);
+    return_or_throw_on_error(yield, cancel, ec, CacheEntry{});
 
-    asio::spawn(_ios, [&, lock = wc.lock()] (asio::yield_context yield2) {
-        auto y = yield.detach(yield2);
-        c->load(key_from_http_req(request), c1, cancel, y[ec1]);
-        c1.close();
-    });
+    auto date = util::parse_date(res[http_::response_injection_time]);
 
-    Response res;
-    beast::flat_buffer buffer;
-    http::async_read(s2, buffer, res, yield[ec2]);
-
-    c1.close();
-    if (s2.is_open()) s2.close();
-
-    wc.wait(yield);
-
-    if (ec2 && ec2 != http::error::end_of_stream) return or_throw<CacheEntry>(yield, ec2);
-
-    return CacheEntry{ util::parse_date(res[http_::response_injection_time])
-                     , move(res)};
+    return CacheEntry{date, move(res)};
 }
 
 //------------------------------------------------------------------------------

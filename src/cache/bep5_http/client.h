@@ -22,10 +22,7 @@ public:
          , fs::path cache_dir
          , asio::yield_context);
 
-    void load( const std::string& key
-             , GenericStream& sink
-             , Cancel
-             , Yield) override;
+    Session load(const std::string& key, Cancel, Yield) override;
 
     void store( const std::string& key
               , const http::response_header<>&
