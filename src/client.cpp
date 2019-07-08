@@ -167,12 +167,12 @@ private:
     Response fetch_fresh_from_front_end(const Request&, Yield);
     Session fetch_fresh_from_origin(const Request&, Yield);
 
-    Response fetch_fresh_through_connect_proxy(const Request&, Cancel&, Yield);
+    Session fetch_fresh_through_connect_proxy(const Request&, Cancel&, Yield);
 
-    Response fetch_fresh_through_simple_proxy( Request
-                                             , bool can_inject
-                                             , Cancel& cancel
-                                             , Yield);
+    Session fetch_fresh_through_simple_proxy( Request
+                                            , bool can_inject
+                                            , Cancel& cancel
+                                            , Yield);
 
     CacheControl build_cache_control(request_route::Config& request_config);
 
@@ -432,9 +432,9 @@ Session Client::State::fetch_fresh_from_origin(const Request& rq, Yield yield)
 }
 
 //------------------------------------------------------------------------------
-Response Client::State::fetch_fresh_through_connect_proxy( const Request& rq
-                                                         , Cancel& cancel_
-                                                         , Yield yield)
+Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
+                                                        , Cancel& cancel_
+                                                        , Yield yield)
 {
     // TODO: We're not re-using connections here. It's because the
     // ConnectionPool as it is right now can only work with http requests
@@ -448,14 +448,14 @@ Response Client::State::fetch_fresh_through_connect_proxy( const Request& rq
 
     if (!match_http_url(rq.target(), url)) {
         // unsupported URL
-        return or_throw<Response>(yield, asio::error::operation_not_supported);
+        return or_throw<Session>(yield, asio::error::operation_not_supported);
     }
 
     // Connect to the injector/proxy.
     sys::error_code ec;
     auto inj = _injector->connect(yield[ec].tag("connect_to_injector"), cancel);
 
-    if (ec) return or_throw<Response>(yield, ec);
+    if (ec) return or_throw<Session>(yield, ec);
 
     // Build the actual request to send to the proxy.
     Request connreq = { http::verb::connect
@@ -487,7 +487,7 @@ Response Client::State::fetch_fresh_through_connect_proxy( const Request& rq
         // This error code is quite fake, so log the error too.
         // Unfortunately there is no body to show.
         yield.tag("proxy_connect").log(connres);
-        return or_throw<Response>(yield, asio::error::connection_refused);
+        return or_throw<Session>(yield, asio::error::connection_refused);
     }
 
     GenericStream con;
@@ -502,22 +502,28 @@ Response Client::State::fetch_fresh_through_connect_proxy( const Request& rq
         con = move(inj.connection);
     }
 
-    if (ec) return or_throw<Response>(yield, ec);
+    if (ec) return or_throw<Session>(yield, ec);
 
     // TODO: move
     auto rq_ = util::req_form_from_absolute_to_origin(rq);
 
-    auto res = fetch_http<http::dynamic_body>(con, rq_, cancel, yield[ec]);
-
-    if (!ec) {
-        // Prevent others from inserting ouinet headers.
-        res = util::remove_ouinet_fields(move(res));
+    {
+        auto slot = cancel.connect([&con] { con.close(); });
+        http::async_write(con, rq_, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, Session());
     }
 
-    return or_throw(yield, ec, move(res));
+    Session session(move(con));
+    auto hdr_p = session.read_response_header(cancel, yield[ec]);
+    return_or_throw_on_error(yield, cancel, ec, Session());
+
+    // Prevent others from inserting ouinet headers.
+    util::remove_ouinet_fields_ref(*hdr_p);
+
+    return session;
 }
 //------------------------------------------------------------------------------
-Response Client::State::fetch_fresh_through_simple_proxy
+Session Client::State::fetch_fresh_through_simple_proxy
         ( Request request
         , bool can_inject
         , Cancel& cancel
@@ -530,7 +536,7 @@ Response Client::State::fetch_fresh_through_simple_proxy
     if (_injector_connections.empty()) {
         auto c = _injector->connect(yield[ec].tag("connect_to_injector2"), cancel);
 
-        if (ec) return or_throw<Response>(yield, ec);
+        if (ec) return or_throw<Session>(yield, ec);
 
         con = _injector_connections.wrap(std::move(c.connection));
         *con = c.remote_endpoint;
@@ -558,29 +564,23 @@ Response Client::State::fetch_fresh_through_simple_proxy
     if (!ec && cancel_slot) {
         ec = asio::error::operation_aborted;
     }
-    if (ec) return or_throw<Response>(yield, ec);
+    if (ec) return or_throw<Session>(yield, ec);
 
     // Receive response
-    Response res;
-    beast::flat_buffer buffer;
-    http::async_read(con, buffer, res, yield[ec].tag("inj-response"));
+    Session session(move(con));
+    auto hdr_p = session.read_response_header(cancel, yield[ec]);
 
-    if (!ec && cancel_slot) {
-        ec = asio::error::operation_aborted;
-    }
-    if (ec) return or_throw<Response>(yield, ec, std::move(res));
+    if (cancel_slot) ec = asio::error::operation_aborted;
+    if (ec) return or_throw(yield, ec, std::move(session));
 
     // Store keep-alive connections in connection pool
-    if (!res.keep_alive()) {
-        con.close();
-    }
 
     if (!can_inject) {
         // Prevent others from inserting ouinet headers.
-        res = util::remove_ouinet_fields(move(res));
+        util::remove_ouinet_fields_ref(*hdr_p);
     }
 
-    return res;
+    return session;
 }
 
 //------------------------------------------------------------------------------
@@ -640,15 +640,21 @@ public:
             return or_throw<Response>(yield, err::operation_not_supported);
 
         sys::error_code ec;
-        auto r = client_state.fetch_fresh_through_simple_proxy( request
+        auto s = client_state.fetch_fresh_through_simple_proxy( request
                                                               , true
                                                               , cancel
                                                               , yield[ec]);
 
         if (!ec) {
-            yield.log("Fetched fresh success, status: ", r.result());
+            yield.log("Fetched fresh success, status: ", s.response_header()->result());
         } else {
             yield.log("Fetched fresh error: ", ec.message());
+        }
+
+        auto r = s.slurp<http::dynamic_body>(cancel, yield[ec]);
+
+        if (ec) {
+            yield.log("Fetched fresh slurp error: ", ec.message());
         }
 
         return or_throw(yield, ec, move(r));
@@ -765,7 +771,7 @@ public:
                     {
                         auto session = client_state.fetch_fresh_from_origin(rq, yield[ec]);
                         res = session.slurp<http::dynamic_body>(cancel, yield[ec]);
-                        if (!rq.keep_alive() || !res.keep_alive()) {
+                        if (ec || !rq.keep_alive() || !res.keep_alive()) {
                             session.close();
                         }
                     }
@@ -777,12 +783,20 @@ public:
                     }
 
                     if (rq.target().starts_with("https://")) {
-                        res = client_state.fetch_fresh_through_connect_proxy
+                        auto session = client_state.fetch_fresh_through_connect_proxy
                                 (rq, cancel, yield[ec]);
+                        res = session.slurp<http::dynamic_body>(cancel, yield[ec]);
+                        if (ec || !rq.keep_alive() || !res.keep_alive()) {
+                            session.close();
+                        }
                     }
                     else {
-                        res = client_state.fetch_fresh_through_simple_proxy
+                        auto session = client_state.fetch_fresh_through_simple_proxy
                                 (rq, false, cancel, yield[ec]);
+                        res = session.slurp<http::dynamic_body>(cancel, yield[ec]);
+                        if (ec || !rq.keep_alive() || !res.keep_alive()) {
+                            session.close();
+                        }
                     }
                     break;
 
