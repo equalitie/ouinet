@@ -1,5 +1,5 @@
 #include "client.h"
-#include "../../util/sha1.h"
+#include "../../util/hash.h"
 #include "../../util/bytes.h"
 #include "../../util/file_io.h"
 #include "../../bittorrent/dht.h"
@@ -168,7 +168,7 @@ struct Client::Impl {
 
         sys::error_code ec;
 
-        auto endpoints = dht->tracker_get_peers(util::sha1(key), cancel, yield[ec]);
+        auto endpoints = dht->tracker_get_peers(util::sha1_digest(key), cancel, yield[ec]);
 
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw(yield, ec);
@@ -368,7 +368,7 @@ struct Client::Impl {
 
     void announce(string key)
     {
-        auto infohash = util::sha1(key);
+        auto infohash = util::sha1_digest(key);
         auto res = swarm_announcers.emplace(move(key), nullptr);
 
         if (res.second /* inserted? */) {
@@ -427,7 +427,7 @@ struct Client::Impl {
 
     fs::path path_from_key(const std::string& key)
     {
-        return path_from_infohash(util::sha1(key));
+        return path_from_infohash(util::sha1_digest(key));
     }
 
     fs::path path_from_infohash(const bt::NodeID& infohash)
