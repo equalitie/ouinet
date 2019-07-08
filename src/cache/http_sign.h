@@ -54,9 +54,7 @@ http_add_injection_meta( const Request& canon_rq, Response rs
 std::string
 http_digest(const http::response<http::dynamic_body>&);
 
-// TODO: Use a key and its signature algorithm to
-// actually create a signature
-// according to draft-cavage-http-signatures-11.
+// Compute a signature as per draft-cavage-http-signatures-11.
 std::string
 http_signature( const http::response_header<>&
               , const ouinet::util::Ed25519PrivateKey&);

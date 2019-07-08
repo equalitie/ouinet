@@ -89,7 +89,8 @@ http_signature( const http::response_header<>& rsh
     auto fmt = boost::format("keyId=\"ed25519=%s\""
                              ",algorithm=\"hs2019\""
                              ",created=%d"
-                             ",headers=\"%s\"");
+                             ",headers=\"%s\""
+                             ",signature=\"%s\"");
 
     // TODO: Cache somewhere, doing this every time is quite inefficient.
     auto encoded_pk = ouinet::util::base64_encode(sk.public_key().serialize());
@@ -102,7 +103,9 @@ http_signature( const http::response_header<>& rsh
     std::string sig_string, headers;
     std::tie(sig_string, headers) = get_sig_str_hdrs(sig_head);
 
-    return (fmt % encoded_pk % ts % headers).str();
+    auto encoded_sig = ouinet::util::base64_encode(sk.sign(sig_string));
+
+    return (fmt % encoded_pk % ts % headers % encoded_sig).str();
 }
 
 }} // namespaces
