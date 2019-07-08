@@ -70,7 +70,7 @@ Session::read_response_header(Cancel& cancel, asio::yield_context yield)
                             _state->parser,
                             yield[ec]);
 
-    if (c) ec = asio::error::operation_aborted;
+    if (cancel) ec = asio::error::operation_aborted;
     if (ec) return or_throw<http::response_header<>*>(yield, ec, nullptr);
 
     assert(_state->parser.is_header_done());
