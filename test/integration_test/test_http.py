@@ -266,7 +266,7 @@ class OuinetTests(TestCase):
 
         #use only Proxy or Injector mechanisms
         self.run_tcp_client( TestFixtures.TCP_CLIENT["name"], None
-                           , [ "--disable-origin-access", "--disable-cache"
+                           , [ "--disable-origin-access", "--cache-type=none"
                              , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_CLIENT["port"])
                              , "--injector-ep", "tcp:127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)
                              ]
@@ -295,7 +295,7 @@ class OuinetTests(TestCase):
         return self._test_cache(self.run_bep44_injector, self.run_tcp_client, self.run_bep44_client)
 
     @inlineCallbacks
-    def test_bep44_seed(self):
+    def _test_bep44_seed(self):
         logging.debug("################################################")
         logging.debug("test_bep44_seed");
         logging.debug("################################################")

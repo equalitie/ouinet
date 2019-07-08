@@ -8,8 +8,8 @@
 #include <memory>
 #include <string>
 
-#include "../abstract_cache.h"
 #include "../../namespaces.h"
+#include "../cache_entry.h"
 #include "../../util/yield.h"
 #include "../../util/scheduler.h"
 
@@ -21,8 +21,10 @@ namespace ouinet { namespace bep44_ipfs {
 
 class Bep44ClientIndex;
 
-class CacheClient : public AbstractCache {
+class CacheClient {
 public:
+    using Response = CacheEntry::Response;
+
     // Construct the CacheClient without blocking the main thread as
     // constructing asio_ipfs::node takes some time.
     static std::unique_ptr<CacheClient>
@@ -42,9 +44,9 @@ public:
     CacheClient(CacheClient&&) = delete;
     CacheClient& operator=(CacheClient&&) = delete;
 
-    CacheEntry load(const std::string& key, Cancel, Yield) override;
+    CacheEntry load(const std::string& key, Cancel, Yield);
 
-    void store(const std::string& key, Response&, Cancel, asio::yield_context) override;
+    void store(const std::string& key, Response&, Cancel, asio::yield_context);
 
     ~CacheClient();
 

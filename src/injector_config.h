@@ -290,10 +290,6 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         _bep5_injector_swarm_name = vm["listen-in-bep5-swarm"].as<string>();
     }
 
-    setup_index_bep44_private_key( vm.count("index-bep44-private-key")
-                                 ? vm["index-bep44-private-key"].as<string>()
-                                 : string());
-
     if (vm.count("index-bep44-capacity")) {
         _index_bep44_capacity = vm["index-bep44-capacity"].as<unsigned int>();
     }
@@ -304,6 +300,16 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
     if (vm.count("disable-cache")) {
         _disable_cache = true;
     }
+
+    if (vm.count("index-bep44-private-key") || !_disable_cache) {
+        // Only set this up when we actually need it. The problem being
+        // that generating keys takes a long time on CI machines and it
+        // causes time outs.
+        setup_index_bep44_private_key( vm.count("index-bep44-private-key")
+                                     ? vm["index-bep44-private-key"].as<string>()
+                                     : string());
+    }
+
 }
 
 inline void InjectorConfig::setup_index_bep44_private_key(const std::string& hex)

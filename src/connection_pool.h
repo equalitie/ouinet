@@ -11,12 +11,12 @@ namespace ouinet {
  * While in idle mode, the underlying stream is not allowed to become readable;
  * if it does, an error callback function is triggered.
  */
-template<class StoredValue>
+template<class Connection>
 class IdleConnection {
     public:
     IdleConnection() {}
 
-    IdleConnection(GenericStream&& connection):
+    IdleConnection(Connection&& connection):
         _data(std::make_unique<Data>())
     {
         _data->connection = std::move(connection);
@@ -45,11 +45,6 @@ class IdleConnection {
 
     IdleConnection(IdleConnection&&) = default;
     IdleConnection& operator=(IdleConnection&&) = default;
-
-    StoredValue& operator*()
-    {
-        return _data->value;
-    }
 
     boost::asio::io_context::executor_type get_executor()
     {
@@ -256,8 +251,7 @@ class IdleConnection {
 
     private:
     struct Data {
-        GenericStream connection;
-        StoredValue value;
+        Connection connection;
         std::shared_ptr<bool> was_destroyed;
 
         /*
@@ -288,7 +282,20 @@ class IdleConnection {
 template<class StoredValue>
 class ConnectionPool {
     public:
-    typedef IdleConnection<StoredValue> Connection;
+
+    class Connection : public IdleConnection<GenericStream> {
+        public:
+
+        using IdleConnection<GenericStream>::IdleConnection;
+
+        StoredValue& operator*()
+        {
+            return _value;
+        }
+
+        private:
+        StoredValue _value;
+    };
 
     static Connection wrap(GenericStream connection)
     {

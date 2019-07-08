@@ -119,6 +119,8 @@ private:
             write_deadline   = std::make_shared<Deadline>(ctx);
             connect_deadline = std::make_shared<Deadline>(ctx);
         }
+
+        bool is_open() const { return inner.is_open(); }
     };
 
 public:
@@ -196,6 +198,11 @@ public:
     template<typename ShutdownType>
     void shutdown(ShutdownType type, sys::error_code& ec) {
         _state->inner.shutdown(type, ec);
+    }
+
+    bool is_open() const {
+        if (_state) return false;
+        return _state->is_open();
     }
 
     ~TimeoutStream();

@@ -210,6 +210,7 @@ file(GLOB client_sources
     "./src/logger.cpp"
     "./src/cache/*.cpp"
     "./src/cache/bep44_ipfs/*.cpp"
+    "./src/cache/bep5_http/*.cpp"
     "./src/bittorrent/*.cpp"
     "./src/util/atomic_file.cpp"
     "./src/util/persistent_lru_cache.cpp"

@@ -32,6 +32,12 @@ add_executable(test-timeout-stream "test_timeout_stream.cpp"
 
 target_link_libraries(test-timeout-stream ${Boost_LIBRARIES})
 
+######################################################################
+add_executable(test-stream-fork "test-stream-fork.cpp"
+                                   "../src/asio.cpp")
+
+target_link_libraries(test-stream-fork ${Boost_LIBRARIES})
+
 ################################################################################
 add_executable(test-persistent-lru-cache "test_persistent_lru_cache.cpp"
                                          "../src/util/persistent_lru_cache.cpp"

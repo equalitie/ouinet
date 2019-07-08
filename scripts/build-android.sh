@@ -66,6 +66,9 @@ fi
 
 # Destination directory for Ouinet build outputs
 OUTPUT_DIR=build-android-${ABI}
+mkdir -p "${DIR}/${OUTPUT_DIR}"
+BUILD_DIR=build-ouinet-${ABI}
+mkdir -p $BUILD_DIR
 
 SDK_DIR=${SDK_DIR:-"$DIR/sdk"}
 
@@ -349,7 +352,7 @@ function maybe_install_boost {
             --arch=arm64-v8a,armeabi-v7a \
             --with-libraries=regex,context,coroutine,program_options,system,test,thread,filesystem,date_time,iostreams \
             --layout=system \
-            $NDK_DIR
+            $NDK_DIR > "$DIR/$BUILD_DIR/boost.log"
         cd - >/dev/null
     fi
 }
@@ -362,7 +365,7 @@ function build_openssl {
     export PATH="$NDK_TOOLCHAIN_DIR/bin:$PATH"
     ./Configure ${SSL_TARGET} no-shared -no-ssl2 -no-ssl3 -no-comp -no-hw -no-engine -DAPP_PLATFORM=${PLATFORM} -D__ANDROID_API__=${NDK_PLATFORM}
     make depend
-    make build_libs
+    make build_libs > "$DIR/$BUILD_DIR/openssl.log"
 }
 
 function maybe_install_openssl {
@@ -397,8 +400,6 @@ function build_ouinet_libs {
     if [ $RELEASE_BUILD -eq 1 ]; then
         BUILD_TYPE=Release
     fi
-    BUILD_DIR=build-ouinet-${ABI}
-    mkdir -p $BUILD_DIR
     cd $BUILD_DIR
     cmake ${ANDROID_FLAGS} \
           -DANDROID=1 \
@@ -448,7 +449,6 @@ function copy_binaries {
 ######################################################################
 # Unpolished code to build the debug APK
 function build_ouinet_apk {
-    mkdir -p "${DIR}/${OUTPUT_DIR}"
     cd "${DIR}/${OUTPUT_DIR}"
     ln -sf "${ROOT}/android"/* .
     export GRADLE_USER_HOME="${DIR}/.gradle-home"

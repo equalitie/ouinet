@@ -332,6 +332,11 @@ class LampshadeStream
         go_lampshade_connection_close(*_connection_id, (void*) empty_lampshade_callback_void, nullptr);
     }
 
+    bool is_open() const {
+        if (_closed) return false;
+        return bool(_connection_id);
+    }
+
     protected:
     asio::io_service& _ios;
     boost::intrusive::list<detail::Cancellable, boost::intrusive::constant_time_size<false>> _pending_operations;

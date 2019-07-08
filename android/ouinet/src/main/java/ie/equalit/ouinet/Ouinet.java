@@ -181,7 +181,6 @@ public class Ouinet {
     /**
      * Wrapper for the native method as native methods cannot be mocked in tests.
      */
-    @VisibleForTesting
     static String getCARootCert(String ouinetDirectory) {
         return nGetCARootCert(ouinetDirectory);
     }

@@ -115,6 +115,7 @@ UtpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
         socket.async_connect(*_remote_endpoint, yield[ec]);
 
         if (!timed_out) break;
+        ec = asio::error::timed_out;
     }
 
     if (cancel) ec = asio::error::operation_aborted;

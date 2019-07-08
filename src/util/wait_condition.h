@@ -2,7 +2,9 @@
 
 #include <memory>
 
+#include "signal.h"
 #include "condition_variable.h"
+#include "../or_throw.h"
 
 namespace ouinet {
 
@@ -63,6 +65,7 @@ public:
     WaitCondition& operator=(const WaitCondition&) = delete;
 
     void wait(boost::asio::yield_context yield);
+    void wait(Cancel&, boost::asio::yield_context yield);
 
     Lock lock();
 
@@ -70,6 +73,9 @@ public:
         if (!_wait_state) return 0;
         return _wait_state->remaining_locks;
     }
+
+private:
+    void do_wait(Cancel*, boost::asio::yield_context yield);
 
 private:
     boost::asio::io_service& _ios;
@@ -119,10 +125,17 @@ void WaitCondition::Lock::release() const
         return;
     }
 
+    if (!_wait_state->blocked()) {
+        _wait_state.reset();
+        return;
+    }
+
     _wait_state->remaining_locks--;
+
     if (!_wait_state->blocked()) {
         _wait_state->condition.notify();
     }
+
     _wait_state.reset();
 }
 
@@ -134,13 +147,40 @@ WaitCondition::WaitCondition(boost::asio::io_service& ios):
 inline
 void WaitCondition::wait(boost::asio::yield_context yield)
 {
+    do_wait(nullptr, yield);
+}
+
+inline
+void WaitCondition::wait(Cancel& cancel, boost::asio::yield_context yield)
+{
+    do_wait(&cancel, yield);
+}
+
+inline
+void WaitCondition::do_wait(Cancel* cancel, boost::asio::yield_context yield)
+{
     if (!_wait_state) {
         _wait_state = std::make_shared<WaitState>(_ios);
     }
 
     std::shared_ptr<WaitState> wait_state = std::move(_wait_state);
+
     if (wait_state->blocked()) {
+        Cancel::Connection con;
+
+        if (cancel) {
+            con = cancel->connect([&] {
+                if (!wait_state->blocked()) return;
+                wait_state->remaining_locks = 0;
+                wait_state->condition.notify();
+            });
+        }
+
         wait_state->condition.wait(yield);
+
+        if (con) {
+            return or_throw(yield, asio::error::operation_aborted);
+        }
     }
 }
 
