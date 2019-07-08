@@ -241,7 +241,7 @@ BOOST_AUTO_TEST_CASE(test_two_small_buffers) {
     BOOST_REQUIRE(done);
 }
 
-BOOST_AUTO_TEST_CASE(test_destroy_fork) {
+BOOST_AUTO_TEST_CASE(test_close_fork) {
     asio::io_service ios;
 
     bool done = false;
@@ -267,6 +267,8 @@ BOOST_AUTO_TEST_CASE(test_destroy_fork) {
                     asio::async_read(tine, asio::buffer(rx_buf), yield[ec]);
                     BOOST_REQUIRE_EQUAL(ec, asio::error::operation_aborted);
                 });
+
+            fork.close();
         }
 
         wc.wait(yield);
