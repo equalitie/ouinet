@@ -16,7 +16,7 @@ jobs:
             mkdir build
             cd build
             cmake ..
-            make -j `nproc`
+            make -j 4
 
       - run:
           name: Test
