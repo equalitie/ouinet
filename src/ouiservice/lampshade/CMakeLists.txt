@@ -1,8 +1,7 @@
 cmake_minimum_required (VERSION 3.5)
 ################################################################################
 
-# NOTE: from_iso_extended_string has been introduced in Boost 1.62
-set(BOOST_VERSION 1.62)
+set(BOOST_VERSION 1.67)
 include(ExternalProject)
 
 ################################################################################
