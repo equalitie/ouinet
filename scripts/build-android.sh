@@ -169,7 +169,7 @@ function setup_deps {
 
     ######################################################################
     # Install SDK dependencies.
-    local toolsfile=sdk-tools-linux-3859397.zip
+    local toolsfile=sdk-tools-linux-4333796.zip
     local sdkmanager="$SDK_DIR/tools/bin/sdkmanager"
 
     # Reuse downloaded SDK stuff from old versions of this script.
