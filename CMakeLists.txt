@@ -90,7 +90,7 @@ find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS filesystem
 find_package(Threads)
 
 ################################################################################
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 ################################################################################
