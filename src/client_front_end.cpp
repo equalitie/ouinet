@@ -26,7 +26,6 @@ using json = nlohmann::json;
 
 using Request = ClientFrontEnd::Request;
 using Response = ClientFrontEnd::Response;
-using boost::optional;
 
 static string now_as_string() {
     namespace pt = boost::posix_time;
