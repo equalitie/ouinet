@@ -8,12 +8,6 @@ SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
 ROOT=$(cd ${SCRIPT_DIR}/.. && pwd)
 ABI=${ABI:-armeabi-v7a}
 
-if which apt-get 1> /dev/null 2>&1; then
-    DEBIAN=true
-else
-    DEBIAN=false
-fi
-
 RELEASE_BUILD=0
 while getopts r option; do
     case "$option" in
@@ -154,18 +148,15 @@ function check_mode {
 
 ######################################################################
 function setup_deps {
-    # J2EE is no longer part of standard Java modules in Java 9,
-    # although the Android SDK uses some of its classes.
-    # This causes exception "java.lang.NoClassDefFoundError: javax/xml/bind/...",
-    # so we need to reenable J2EE modules explicitly when using JRE 9
-    # (see <https://stackoverflow.com/a/43574427>).
-    local java_add_modules=' --add-modules java.se.ee'
-    if [ $DEBIAN == true ] ; then
-        if [ $(java -version 2>&1 | awk -F[\"\.] -v OFS=. 'NR==1{print $3}') -ge 9 \
-             -a "${JAVA_OPTS%%$java_add_modules*}" = "$JAVA_OPTS" ] ; then
-            export JAVA_OPTS="$JAVA_OPTS$java_add_modules"
-        fi
+    ######################################################################
+    # Get JDK 8 bundled with Android Studio
+    if [ ! -d "$PWD/android-studio/jre" ]; then
+        local idefile='android-studio-ide-183.5692245-linux.tar.gz'
+        wget "https://dl.google.com/dl/android/studio/ide-zips/3.4.2.0/$idefile"
+        tar axf "$idefile" android-studio/jre
+        rm "$idefile"
     fi
+    export PATH="$PWD/android-studio/jre/bin":$PATH
 
     ######################################################################
     # Install SDK dependencies.
