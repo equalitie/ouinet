@@ -64,7 +64,7 @@
 
 Vagrant.configure("2") do |config|
   def basic_setup(vm)
-    vm.vm.box = "debian/stretch64"
+    vm.vm.box = "debian/buster64"
 
     vm.vm.provider "libvirt" do |v|
       v.memory = 4096
