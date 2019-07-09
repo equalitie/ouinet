@@ -7,7 +7,7 @@
 
 #include <boost/format.hpp>
 #include <boost/optional.hpp>
-#include <json.hpp>
+#include <nlohmann/json.hpp>
 
 #include "../cache_entry.h"
 #include "../../namespaces.h"
