@@ -5,39 +5,8 @@ jobs:
     docker:
       - image: registry.gitlab.com/equalitie/ouinet:android
 
-    environment:
-      - CMAKE_PATH: "/home/circleci/cmake-3.13.4-Linux-x86_64/bin"
-      - BOOST_MAJOR: "1"
-      - BOOST_MINOR: "67"
-      - BOOST_PATCH: "0"
-      
     steps:
       - checkout
-
-      - run:
-          name: Install cmake
-          command: |
-            cd ~
-            wget --quiet https://github.com/Kitware/CMake/releases/download/v3.13.4/cmake-3.13.4-Linux-x86_64.tar.gz
-            tar -xf cmake-3.13.4-Linux-x86_64.tar.gz
-
-      - run:
-          name: Install other dependencies
-          command: |
-            sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
-            sudo apt-get update
-            sudo apt-get install g++-6 dh-autoreconf autopoint libtool libunistring-dev libsqlite3-dev libgcrypt20-dev libidn11-dev zlib1g-dev texinfo libssl-dev python3-dev realpath
-
-      - run:
-          name: Install Boost
-          command: |
-            cd ~
-            boost=boost_${BOOST_MAJOR}_${BOOST_MINOR}_${BOOST_PATCH}
-            wget https://downloads.sourceforge.net/project/boost/boost/${BOOST_MAJOR}.${BOOST_MINOR}.${BOOST_PATCH}/${boost}.tar.bz2
-            tar xf ${boost}.tar.bz2
-            cd ${boost}
-            ./bootstrap.sh
-            ./b2 -j `nproc` -d+0 --link=shared --with-system --with-program_options --with-test --with-coroutine --with-filesystem --with-date_time --with-regex --with-iostreams --with-thread --with-atomic
 
       - run:
           name: Build
@@ -46,35 +15,25 @@ jobs:
             git submodule update --recursive --init
             mkdir build
             cd build
-            export CXX=g++-6
-            export CC=gcc-6
-            export PATH="$CMAKE_PATH:$PATH"
-            cmake .. -DBOOST_ROOT=~/boost_${BOOST_MAJOR}_${BOOST_MINOR}_${BOOST_PATCH}
+            cmake ..
             make -j `nproc`
 
       - run:
           name: Test
           command: |
-            boost_root=${HOME}/boost_${BOOST_MAJOR}_${BOOST_MINOR}_${BOOST_PATCH}
-            export LD_LIBRARY_PATH=${boost_root}/stage/lib:$LD_LIBRARY_PATH
+            export LD_LIBRARY_PATH=/usr/local/lib
 
             for test in ./build/test/test-*; do
                 "$test" --log_level=test_suite
             done
 
-            export PYENV_VERSION=3.5.2
-            python3 -m venv .venv
-            . .venv/bin/activate
-            pip install twisted
-            export OUINET_BUILD_DIR=~/project/build
+            export LD_LIBRARY_PATH=/usr/local/lib:$PWD/build/gcrypt/src/gcrypt/src/.libs:$PWD/build/gpg_error/out/lib:$PWD/build/modules/asio-ipfs/ipfs_bindings:$PWD/build/src/ouiservice/lampshade/lampshade_bindings
+            export OUINET_BUILD_DIR=$PWD/build
             ./scripts/run_integration_tests.sh
 
       - run:
           name: Build.Android
           command: |
-            export TERM=xterm
-            mkdir build.android
+            mkdir -p build.android
             cd build.android
-            export PATH="$CMAKE_PATH:$PATH"
             ../scripts/build-android.sh
-
