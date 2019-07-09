@@ -5,6 +5,9 @@ jobs:
     docker:
       - image: registry.gitlab.com/equalitie/ouinet:android
 
+    environment:
+      CMAKE_BUILD_PARALLEL_LEVEL: 3
+
     steps:
       - checkout
 
@@ -16,7 +19,7 @@ jobs:
             mkdir build
             cd build
             cmake ..
-            make -j `nproc`
+            cmake --build .
 
       - run:
           name: Test
