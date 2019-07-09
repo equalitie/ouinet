@@ -64,7 +64,6 @@ using namespace ouinet;
 
 using tcp         = asio::ip::tcp;
 using udp         = asio::ip::udp;
-using string_view = beast::string_view;
 namespace bt = bittorrent;
 // We are more interested in an ID generator that can be
 // used concurrently and does not block by random pool exhaustion
@@ -84,7 +83,7 @@ static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
 
 //------------------------------------------------------------------------------
 boost::optional<Response> version_error_response( const Request& rq
-                                                , string_view oui_version)
+                                                , beast::string_view oui_version)
 {
     unsigned version = 0;
 
