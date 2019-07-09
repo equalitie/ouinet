@@ -130,13 +130,14 @@ set(GCRYPT_LIBRARIES "${CMAKE_CURRENT_BINARY_DIR}/gcrypt/src/gcrypt/src/.libs/li
 ################################################################################
 externalproject_add(json
     # TODO: We only really need to download one header file.
-    URL https://github.com/nlohmann/json/archive/v2.1.1.tar.gz
+    # (https://github.com/nlohmann/json/releases/download/v3.6.1/json.hpp)
+    URL https://github.com/nlohmann/json/archive/v3.6.1.tar.gz
     BUILD_COMMAND ""
     UPDATE_COMMAND ""
     INSTALL_COMMAND ""
     PREFIX json)
 
-set(JSON_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/json/src/json/src")
+set(JSON_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/json/src/json/single_include")
 
 # gcc 8 spits out warnings from Boost.Mpl about unnecessary parentheses
 # https://github.com/CauldronDevelopmentLLC/cbang/issues/26
