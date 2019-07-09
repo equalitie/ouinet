@@ -328,86 +328,83 @@ public:
     }
 
     void inject_fresh( GenericStream& con
-                     , const Request& rq_
+                     , Request rq
                      , Cancel& cancel
                      , Yield yield)
     {
-        LOG_DEBUG("Injector inject_fresh begin (has injector:", bool(injector), ")");
+        yield.log("Injection begin");
+
         sys::error_code ec;
 
-        auto rs_ = fetch_fresh(rq_, cancel, yield[ec]);
+        // Pop out Ouinet internal HTTP headers.
+        rq = util::to_cache_request(move(rq));
 
+        auto orig_con = get_connection(rq, cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec);
 
-        // Add a date if missing (or broken) in the response (RFC 7231#7.1.1.2).
-        namespace pt = boost::posix_time;
-        if (util::parse_date(rs_[http::field::date]) == pt::ptime()) {
-            auto now = util::format_date(pt::second_clock::universal_time());
-            rs_.set(http::field::date, now);
-        }
+        http::response_header<> to_sign;
+        auto head_proc = [&] (auto inh, auto&, auto yield_) {
+            // Only identity and chunked transfer encodings are supported.
+            // (Also we did not send a `TE:` request header.)
+            auto in_te = inh[http::field::transfer_encoding];
+            if (!in_te.empty() && !boost::iequals(in_te, "chunked"))
+                return or_throw(yield_, asio::error::invalid_argument, inh);
 
-        // Pop out Ouinet internal HTTP headers.
-        auto rq = util::to_cache_request(move(rq_));
-        auto rs = util::to_cache_response(move(rs_));
-
-        auto to_sign = rs.base();  // lacks old headers added just below
-
-        if (injector) {
-            auto ins = injector->insert_content( insert_id, rq, rs
-                                               , false
-                                               , yield[ec]);
-
-
-            if (!ec) {
-                auto key = key_from_http_req(rq);
-
-                LOG_DEBUG("Injector new insertion: ", ins.desc_data);
-                // Add an injection identifier header
-                // to enable the client to track injection state.
-                rs.set(http_::response_injection_id_hdr, insert_id);
-
-                rs.set( http_::response_injection_time
-                      , util::format_date(
-                          boost::posix_time::second_clock::universal_time()));
-
-                rs.set(http_::response_injection_key, key);
-
-                // Add index insertion headers.
-                rs = add_re_insertion_header_field( move(rs)
-                                                  , move(ins.index_ins_data));
-                if (ins.index_linked_desc)  // linked descriptor, send as well
-                    rs = add_descriptor_header_field( move(rs)
-                                                    , move(ins.desc_data));
-
-                sys::error_code ec_ignored;
-                save_to_disk(key_from_http_req(rq), rs, cancel, yield[ec_ignored]);
-                assert(!ec);
+            // Add a date if missing (or broken) in the response (RFC 7231#7.1.1.2).
+            namespace pt = boost::posix_time;
+            if (util::parse_date(inh[http::field::date]) == pt::ptime()) {
+                auto now = util::format_date(pt::second_clock::universal_time());
+                inh.set(http::field::date, now);
             }
-            else {
-                LOG_DEBUG("Injector new insertion failed: ", ec.message());
-            }
-        }
 
-        // Add injection metadata headers in preparation for signing.
-        to_sign = cache::http_add_injection_meta(rq, move(to_sign), insert_id);
-        for (auto& hdr : to_sign)
-            if (hdr.name_string().starts_with(http_::header_prefix))
-                rs.set(hdr.name_string(), hdr.value());
+            auto outh = util::to_cache_response(move(inh));
+            // FIXME: Disable chunking and trailer in this head.
+            // Add injection metadata headers in preparation for signing.
+            outh = cache::http_add_injection_meta(rq, move(outh), insert_id);
+            to_sign = outh;
 
-        // TODO: Send digest and signature as trailers.
-        rs.chunked(true);
+            // The rest will be sent in the trailer.
+            // TODO: We may want to keep some of the headers that
+            // the origin will send in the trailer.
+            outh.set(http::field::transfer_encoding, "chunked");
+            outh.set(http::field::trailer, "Digest, Signature");
 
-        auto digest = cache::http_digest(rs);
-        to_sign.set(http::field::digest, digest);
-        rs.set(http::field::digest, digest);
+            return outh;
+        };
 
-        auto signature = cache::http_signature(to_sign, config.cache_private_key());
-        rs.set("Signature", signature);
+        size_t forwarded = 0;
+        util::SHA256 data_hash;
+        ProcInFunc<asio::const_buffer> data_proc = [&] (auto inbuf, auto&, auto) {
+            // Just count transferred data (for debugging) and feed the hash.
+            forwarded += inbuf.size();
+            data_hash.update(inbuf);
+            return inbuf;  // pass data on
+        };
 
-        http::async_write(con, rs, yield[ec].tag("write_response"));
+        auto trailer_proc = [&] (auto intr, auto&, auto) {
+            intr.clear();  // TODO: keep some from origin, see above
 
-        if (cancel) ec = asio::error::operation_aborted;
-        return or_throw(yield, ec);
+            auto digest = util::base64_encode(data_hash.close());
+            to_sign.set(http::field::digest, digest);
+            intr.set(http::field::digest, digest);
+
+            auto signature = cache::http_signature(to_sign, config.cache_private_key());
+            intr.set("Signature", signature);
+
+            return intr;
+        };
+
+        using ResponseH = http::response<http::empty_body>;
+        ResponseH res;
+        res = ResponseH(http_forward( orig_con, con, util::to_origin_request(rq)
+                                    , head_proc, data_proc, trailer_proc
+                                    , cancel, yield[ec].tag("fetch_injector")));
+
+        if (ec) yield.log("Injection failed: ", ec.message());
+        return_or_throw_on_error(yield, cancel, ec);
+        yield.log("Injected data bytes: ", forwarded);
+
+        keep_connection(rq, res, move(orig_con));
     }
 
     static bool is_old(boost::posix_time::ptime ts)
