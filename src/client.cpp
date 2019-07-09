@@ -75,7 +75,6 @@ namespace bt = ouinet::bittorrent;
 using tcp      = asio::ip::tcp;
 using Request  = http::request<http::string_body>;
 using Response = http::response<http::dynamic_body>;
-using boost::optional;
 
 static const fs::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
 static const fs::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";

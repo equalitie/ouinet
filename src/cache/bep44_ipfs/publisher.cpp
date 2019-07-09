@@ -12,7 +12,6 @@ using namespace bep44_ipfs;
 
 namespace bt = ouinet::bittorrent;
 
-using boost::optional;
 using Timer = asio::steady_timer;
 using Clock = chrono::steady_clock;
 static const Timer::duration publish_duration = chrono::minutes(10);

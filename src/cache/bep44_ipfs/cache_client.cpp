@@ -21,12 +21,10 @@ namespace asio = boost::asio;
 namespace sys  = boost::system;
 namespace bt   = ouinet::bittorrent;
 
-using boost::optional;
-
 unique_ptr<CacheClient>
 CacheClient::build( asio::io_service& ios
                   , shared_ptr<bittorrent::MainlineDht> bt_dht
-                  , optional<util::Ed25519PublicKey> bt_pubkey
+                  , boost::optional<util::Ed25519PublicKey> bt_pubkey
                   , fs::path path_to_repo
                   , bool autoseed_updated
                   , unsigned int bep44_index_capacity
@@ -95,7 +93,7 @@ CacheClient::build( asio::io_service& ios
 
 // private
 CacheClient::CacheClient( std::unique_ptr<asio_ipfs::node> ipfs_node
-                        , optional<util::Ed25519PublicKey> bt_pubkey
+                        , boost::optional<util::Ed25519PublicKey> bt_pubkey
                         , shared_ptr<bittorrent::MainlineDht> bt_dht
                         , unique_ptr<Bep44ClientIndex> bep44_index
                         , fs::path path_to_repo
@@ -292,7 +290,7 @@ void CacheClient::store( const string& key
             // so that we help seed the URL->descriptor mapping too.
             // Try a few times to get the descriptor
             // (after some insertion delay, with exponential backoff).
-            optional<Descriptor> desc;
+            boost::optional<Descriptor> desc;
             int attempt = 0;
             for ( auto backoff = chrono::seconds(30);
                   attempt < max_attempts; backoff *= 2, ++attempt) {
