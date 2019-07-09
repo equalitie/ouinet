@@ -132,6 +132,7 @@ Vagrant.configure("2") do |config|
         gettext \
         libgcrypt-dev \
         libidn11-dev \
+        libncurses5 \
         libssl-dev \
         libunistring-dev \
         python-twisted \
