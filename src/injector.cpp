@@ -67,7 +67,6 @@ using namespace ouinet;
 
 using tcp         = asio::ip::tcp;
 using udp         = asio::ip::udp;
-using string_view = beast::string_view;
 namespace bt = bittorrent;
 // We are more interested in an ID generator that can be
 // used concurrently and does not block by random pool exhaustion
@@ -89,7 +88,7 @@ static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
 
 //------------------------------------------------------------------------------
 boost::optional<Response> version_error_response( const Request& rq
-                                                , string_view oui_version)
+                                                , beast::string_view oui_version)
 {
     unsigned version = util::parse_num<unsigned>(oui_version, 0);
 
@@ -403,12 +402,12 @@ public:
         return config.repo_root() / "cache";
     }
 
-    fs::path cache_file(string_view key)
+    fs::path cache_file(beast::string_view key)
     {
         return cache_dir() /  util::bytes::to_hex(util::sha1_digest(key));
     }
 
-    ResponseWithFileBody load_from_disk(string_view key, Cancel& cancel, Yield yield)
+    ResponseWithFileBody load_from_disk(beast::string_view key, Cancel& cancel, Yield yield)
     {
         sys::error_code ec;
 
@@ -448,7 +447,7 @@ public:
     }
 
     template<class Rs>
-    void save_to_disk(string_view key, Rs& rs, Cancel& cancel, Yield yield)
+    void save_to_disk(beast::string_view key, Rs& rs, Cancel& cancel, Yield yield)
     {
         sys::error_code ec;
 
@@ -574,7 +573,7 @@ private:
 
         sys::error_code ec;
 
-        // TODO: use string_view
+        // TODO: use beast::string_view
         auto ret = injector->get_content( key_from_http_req(rq)
                                         , config.cache_index_type()
                                         , cancel
