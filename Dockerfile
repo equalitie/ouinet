@@ -1,4 +1,4 @@
-FROM debian:stretch AS base
+FROM debian:buster AS base
 ENV LANG=C.UTF-8
 # To get the list of build dependency packages from the Vagrantfile, run:
 #
