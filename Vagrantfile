@@ -137,9 +137,9 @@ Vagrant.configure("2") do |config|
         python-twisted \
         zlib1g-dev
       cd /usr/local/src
-      wget -q "https://downloads.sourceforge.net/project/boost/boost/1.67.0/boost_1_67_0.tar.bz2"
-      tar -xf boost_1_67_0.tar.bz2
-      cd boost_1_67_0
+      wget -q "https://downloads.sourceforge.net/project/boost/boost/1.69.0/boost_1_69_0.tar.bz2"
+      tar -xf boost_1_69_0.tar.bz2
+      cd boost_1_69_0
       ./bootstrap.sh
       ./b2 -j `nproc` -d+0 --link=shared --with-system --with-program_options --with-test --with-coroutine --with-filesystem --with-date_time --with-regex --with-iostreams --with-thread --with-atomic --prefix=/usr/local install
 
