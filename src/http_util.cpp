@@ -164,6 +164,7 @@ ouinet::util::format_date(posix_time::ptime date)
 http::response_header<>
 ouinet::util::to_cache_response(http::response_header<> rs) {
     rs = remove_ouinet_fields(move(rs));
+    // TODO: Handle `Trailer:` properly.
     // TODO: This list was created by going through some 100 responses from
     // bbc.com. Careful selection from all possible (standard) fields is
     // needed.
@@ -204,4 +205,12 @@ ouinet::util::to_cache_response(http::response_header<> rs) {
                         , http::field::access_control_max_age  // expiration of pre-flight response info
                         , http::field::access_control_expose_headers  // headers of response to be exposed
                         );
+}
+
+http::fields
+ouinet::util::to_cache_trailer(http::fields rst)
+{
+    // TODO: Handle properly.
+    rst.clear();
+    return rst;
 }

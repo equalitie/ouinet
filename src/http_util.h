@@ -262,4 +262,6 @@ static http::response<Body> to_cache_response(http::response<Body> rs) {
     return http::response<Body>(move(rsh), move(rs.body()));
 }
 
+http::fields to_cache_trailer(http::fields rst);
+
 }} // ouinet::util namespace
