@@ -44,6 +44,20 @@ build:
     - cmake ..
     - make -j `nproc`
 
+build-guix:
+  stage: build
+  tags:
+    - guix
+  script:
+    - echo '
+      mkdir -p build && \
+      cd build && \
+      cmake .. && \
+      make -j `nproc`
+      ' > build.sh
+    - chmod +x build.sh
+    - GUIX_PACKAGE_PATH=$PWD guix environment -C -N ouinet -- ./build.sh
+
 unit-test:
   stage: test
   tags:
