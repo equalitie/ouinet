@@ -342,7 +342,7 @@ public:
         auto orig_con = get_connection(rq, cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec);
 
-        http::response_header<> to_sign;
+        http::response_header<> outh;
         auto head_proc = [&] (auto inh, auto&, auto yield_) {
             // Only identity and chunked transfer encodings are supported.
             // (Also we did not send a `TE:` request header.)
@@ -357,41 +357,26 @@ public:
                 inh.set(http::field::date, now);
             }
 
-            auto outh = util::to_cache_response(move(inh));
-            // FIXME: Disable chunking and trailer in this head.
-            // Add injection metadata headers in preparation for signing.
-            outh = cache::http_add_injection_meta(rq, move(outh), insert_id);
-            to_sign = outh;
-
-            // The rest will be sent in the trailer.
-            // TODO: We may want to keep some of the headers that
-            // the origin will send in the trailer.
-            outh.set(http::field::transfer_encoding, "chunked");
-            outh.set(http::field::trailer, "Digest, Signature");
-
-            return outh;
+            inh = util::to_cache_response(move(inh));
+            inh = cache::http_injection_head(rq, move(inh), insert_id);
+            outh = inh;
+            return inh;
         };
 
         size_t forwarded = 0;
         util::SHA256 data_hash;
         ProcInFunc<asio::const_buffer> data_proc = [&] (auto inbuf, auto&, auto) {
-            // Just count transferred data (for debugging) and feed the hash.
+            // Just count transferred data and feed the hash.
             forwarded += inbuf.size();
             data_hash.update(inbuf);
             return inbuf;  // pass data on
         };
 
         auto trailer_proc = [&] (auto intr, auto&, auto) {
-            intr.clear();  // TODO: keep some from origin, see above
-
-            auto digest = util::base64_encode(data_hash.close());
-            to_sign.set(http::field::digest, digest);
-            intr.set(http::field::digest, digest);
-
-            auto signature = cache::http_signature(to_sign, config.cache_private_key());
-            intr.set("Signature", signature);
-
-            return intr;
+            intr = util::to_cache_trailer(move(intr));
+            return cache::http_injection_trailer( outh, move(intr)
+                                                , forwarded, data_hash.close()
+                                                , config.cache_private_key());
         };
 
         using ResponseH = http::response<http::empty_body>;

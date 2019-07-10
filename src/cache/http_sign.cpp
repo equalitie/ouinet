@@ -1,17 +1,77 @@
 #include "http_sign.h"
 
+#include <chrono>
+#include <ctime>
 #include <map>
 #include <tuple>
 #include <utility>
 #include <vector>
 
 #include <boost/algorithm/string/case_conv.hpp>
+#include <boost/beast/http/empty_body.hpp>
 #include <boost/beast/http/field.hpp>
+#include <boost/format.hpp>
 
+#include "../constants.h"
 #include "../util.h"
 #include "../util/hash.h"
 
 namespace ouinet { namespace cache {
+
+http::response_header<>
+http_injection_head( const http::request_header<>& rqh
+                   , http::response_header<> rsh
+                   , const std::string& injection_id)
+{
+    using namespace ouinet::http_;
+    assert(response_version_hdr_current == response_version_hdr_v0);
+
+    rsh.set(response_version_hdr, response_version_hdr_v0);
+    rsh.set(header_prefix + "URI", rqh.target());
+    {
+        auto ts = std::chrono::seconds(std::time(nullptr)).count();
+        rsh.set( header_prefix + "Injection"
+               , boost::format("id=%s,ts=%d") % injection_id % ts);
+    }
+    rsh.set(header_prefix + "HTTP-Status", rsh.result_int());
+
+    // Enabling chunking is easier with a whole respone,
+    // and we do not care about content length anyway.
+    http::response<http::empty_body> rs(std::move(rsh));
+    rs.chunked(true);
+    auto trfmt = boost::format("%s%s" + header_prefix + "Data-Size, Digest, Signature");
+    auto trhdr = rs[http::field::trailer];
+    rs.set( http::field::trailer
+          , (trfmt % trhdr % (trhdr.empty() ? "" : ", ")).str() );
+
+    return rs.base();
+}
+
+http::fields
+http_injection_trailer( const http::response_header<>& rsh
+                      , http::fields rst
+                      , size_t content_length
+                      , const ouinet::util::SHA256::digest_type& content_digest
+                      , const ouinet::util::Ed25519PrivateKey& sk)
+{
+    // Pending trailer headers to support the signature.
+    rst.set(ouinet::http_::header_prefix + "Data-Size", content_length);
+    rst.set(http::field::digest, util::base64_encode(content_digest));
+
+    // Put together the head to be signed:
+    // initial head, minus chunking (and related headers), plus trailer headers.
+    // Use `...-Data-Size` internal header instead on `Content-Length`.
+    http::response<http::empty_body> rs(rsh);
+    rs.chunked(false);  // easier with a whole response
+    rs.erase(http::field::content_length);  // 0 anyway because of empty body
+    rs.erase(http::field::trailer);
+    auto to_sign = std::move(rs.base());
+    for (auto& hdr : rst)
+        to_sign.set(hdr.name_string(), hdr.value());
+
+    rst.set("Signature", http_signature(to_sign, sk));
+    return rst;
+}
 
 std::string
 http_digest(const http::response<http::dynamic_body>& rs)

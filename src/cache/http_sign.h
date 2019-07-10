@@ -1,49 +1,51 @@
 #pragma once
 
-#include <chrono>
-#include <ctime>
 #include <string>
 
 #include <boost/beast/http/dynamic_body.hpp>
 #include <boost/beast/http/message.hpp>
-#include <boost/format.hpp>
 
-#include "../constants.h"
 #include "../util/crypto.h"
+#include "../util/hash.h"
 
 #include "../namespaces.h"
 
 namespace ouinet { namespace cache {
 
-// Add internal headers to support signing the message head.
+// Get an extended version of the given response head
+// with added headers to support later signing the full message head.
 //
 // Example:
 //
+//     ...
 //     X-Ouinet-Version: 0
 //     X-Ouinet-URI: https://example.com/foo
 //     X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
 //     X-Ouinet-HTTP-Status: 200
+//     Transfer-Encoding: chunked
+//     Trailer: X-Ouinet-Data-Size, Digest, Signature
 //
-template<class Request, class Response>
-inline
-Response
-http_add_injection_meta( const Request& canon_rq, Response rs
-                       , const std::string& injection_id)
-{
-    using namespace ouinet::http_;
-    assert(response_version_hdr_current == response_version_hdr_v0);
+http::response_header<>
+http_injection_head( const http::request_header<>& rqh
+                   , http::response_header<> rsh
+                   , const std::string& injection_id);
 
-    rs.set(response_version_hdr, response_version_hdr_v0);
-    rs.set(header_prefix + "URI", canon_rq.target());
-    {
-        auto ts = std::chrono::seconds(std::time(nullptr)).count();
-        rs.set( header_prefix + "Injection"
-              , boost::format("id=%s,ts=%d") % injection_id % ts);
-    }
-    rs.set(header_prefix + "HTTP-Status", rs.result_int());
-
-    return rs;
-}
+// Get an extended version of the given response trailer
+// with added headers completing the signature of the message.
+//
+// Example:
+//
+//     ...
+//     X-Ouinet-Data-Size: 38
+//     Digest: SHA-256=j7uwtB/QQz0FJONbkyEmaqlJwGehJLqWoCO1ceuM30w=
+//     Signature: keyId="...",algorithm="hs2019",created=1516048311,
+//       headers="(created) ... digest",signature="..."
+http::fields
+http_injection_trailer( const http::response_header<>& rsh
+                      , http::fields rst
+                      , size_t content_length
+                      , const ouinet::util::SHA256::digest_type& content_digest
+                      , const ouinet::util::Ed25519PrivateKey&);
 
 // Get the body digest as per RFC 3230 and RFC 5843.
 //
