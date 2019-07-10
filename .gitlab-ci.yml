@@ -52,7 +52,7 @@ build-guix:
     - echo '
       mkdir -p build && \
       cd build && \
-      cmake .. && \
+      cmake -DUSE_SYSTEM_GO=ON .. && \
       make -j `nproc`
       ' > build.sh
     - chmod +x build.sh
