@@ -1,4 +1,4 @@
-FROM debian:stretch AS base
+FROM debian:buster AS base
 ENV LANG=C.UTF-8
 # To get the list of build dependency packages from the Vagrantfile, run:
 #
@@ -27,9 +27,9 @@ RUN apt-get update && apt-get install -y \
 # quieten wget and unzip
 RUN echo 'quiet = on' >> /etc/wgetrc
 WORKDIR /usr/local/src
-RUN wget -q "https://downloads.sourceforge.net/project/boost/boost/1.67.0/boost_1_67_0.tar.bz2" \
- && tar -xf boost_1_67_0.tar.bz2 \
- && cd boost_1_67_0 \
+RUN wget -q "https://downloads.sourceforge.net/project/boost/boost/1.69.0/boost_1_69_0.tar.bz2" \
+ && tar -xf boost_1_69_0.tar.bz2 \
+ && cd boost_1_69_0 \
  && ./bootstrap.sh \
  && ./b2 -j `nproc` -d+0 --link=shared \
          --with-system \
@@ -71,7 +71,7 @@ RUN cd /usr/local/src/ouinet \
  && git fetch -t \
  && git checkout "$OUINET_DOCKER_VERSION"
 # Populate the licenses directory (avoid version numbers in source paths).
-RUN ln -s /usr/local/src/boost_1_67_0 /usr/local/src/boost \
+RUN ln -s /usr/local/src/boost_1_69_0 /usr/local/src/boost \
  && /usr/local/src/ouinet/scripts/add-licenses-dir.sh /usr/local/src/ouinet .
 
 FROM debian:stretch

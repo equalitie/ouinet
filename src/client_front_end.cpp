@@ -17,7 +17,7 @@
 #include <boost/format.hpp>
 #include <boost/regex.hpp>
 #include <network/uri.hpp>
-#include <json.hpp>
+#include <nlohmann/json.hpp>
 
 
 using namespace std;
@@ -26,7 +26,6 @@ using json = nlohmann::json;
 
 using Request = ClientFrontEnd::Request;
 using Response = ClientFrontEnd::Response;
-using boost::optional;
 
 static string now_as_string() {
     namespace pt = boost::posix_time;

@@ -1,6 +1,5 @@
 #define BOOST_TEST_MODULE logger_tester
 #include <boost/test/included/unit_test.hpp>
-#include <boost/optional.hpp>
 
 #include <iostream>
 #include <string>
@@ -12,8 +11,6 @@ BOOST_AUTO_TEST_SUITE(logger_tester)
 
 using namespace std;
 using namespace ouinet;
-
-using boost::optional;
 
 
 BOOST_AUTO_TEST_CASE(test_generate_node_id)

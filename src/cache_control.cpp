@@ -19,7 +19,6 @@ using namespace ouinet;
 using Request = CacheControl::Request;
 using Response = CacheControl::Response;
 using Request = CacheControl::Request;
-using boost::optional;
 
 namespace posix_time = boost::posix_time;
 
@@ -42,7 +41,7 @@ bool has_cache_control_directive( const http::message<isRequest, Body>& request
 }
 
 template<class R>
-static optional<beast::string_view> get(const R& r, http::field f)
+static boost::optional<beast::string_view> get(const R& r, http::field f)
 {
     auto i = r.find(f);
     if (i == r.end())
@@ -57,14 +56,12 @@ inline void trim_quotes(beast::string_view& v) {
 };
 
 static
-optional<unsigned> get_max_age(const beast::string_view& cache_control_value)
+boost::optional<unsigned> get_max_age(const beast::string_view& cache_control_value)
 {
-    using boost::optional;
+    boost::optional<unsigned> max_age;
+    boost::optional<unsigned> s_maxage;
 
-    optional<unsigned> max_age;
-    optional<unsigned> s_maxage;
-
-    auto update_max_age = [] ( optional<unsigned>& max_age
+    auto update_max_age = [] ( boost::optional<unsigned>& max_age
                              , beast::string_view value) {
         trim_quotes(value);
 
@@ -130,7 +127,7 @@ bool CacheControl::is_expired( const http::response_header<>& response
         return http10_is_expired(response);
     }
 
-    optional<unsigned> max_age = get_max_age(*cache_control_value);
+    boost::optional<unsigned> max_age = get_max_age(*cache_control_value);
     if (!max_age) return http10_is_expired(response);
 
     return now() > time_stamp + posix_time::seconds(*max_age);
@@ -259,8 +256,8 @@ bool CacheControl::has_temporary_result(const Response& rs) const
 
 //------------------------------------------------------------------------------
 struct CacheControl::FetchState {
-    optional<AsyncJob<Response>> fetch_fresh;
-    optional<AsyncJob<CacheEntry>> fetch_stored;
+    boost::optional<AsyncJob<Response>> fetch_fresh;
+    boost::optional<AsyncJob<CacheEntry>> fetch_stored;
 };
 
 //------------------------------------------------------------------------------

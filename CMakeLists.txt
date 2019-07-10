@@ -6,7 +6,7 @@ else()
     cmake_minimum_required (VERSION 3.5)
 endif()
 
-set(BOOST_VERSION 1.67)
+set(BOOST_VERSION 1.69)
 
 include(ExternalProject)
 ################################################################################
@@ -79,7 +79,6 @@ project(ouinet)
 find_package(OpenSSL REQUIRED)
 find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS filesystem
                                                         regex
-                                                        unit_test_framework
                                                         program_options
                                                         coroutine
                                                         context
@@ -90,7 +89,7 @@ find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS filesystem
 find_package(Threads)
 
 ################################################################################
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 ################################################################################
@@ -130,13 +129,14 @@ set(GCRYPT_LIBRARIES "${CMAKE_CURRENT_BINARY_DIR}/gcrypt/src/gcrypt/src/.libs/li
 ################################################################################
 externalproject_add(json
     # TODO: We only really need to download one header file.
-    URL https://github.com/nlohmann/json/archive/v2.1.1.tar.gz
+    # (https://github.com/nlohmann/json/releases/download/v3.6.1/json.hpp)
+    URL https://github.com/nlohmann/json/archive/v3.6.1.tar.gz
     BUILD_COMMAND ""
     UPDATE_COMMAND ""
     INSTALL_COMMAND ""
     PREFIX json)
 
-set(JSON_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/json/src/json/src")
+set(JSON_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/json/src/json/single_include")
 
 # gcc 8 spits out warnings from Boost.Mpl about unnecessary parentheses
 # https://github.com/CauldronDevelopmentLLC/cbang/issues/26

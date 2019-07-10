@@ -82,7 +82,7 @@ NDK_TOOLCHAIN_DIR=${NDK_TOOLCHAIN_DIR:-${DIR}/${NDK}-toolchain-android$NDK_PLATF
 # Android API level, see https://redmine.equalit.ie/issues/12143
 PLATFORM=android-${NDK_PLATFORM}
 
-BOOST_V=${BOOST_V:-"1_67_0"}
+BOOST_V=${BOOST_V:-"1_69_0"}
 BOOST_V_DOT=${BOOST_V//_/.} # Replace '_' for '.'
 BOOST_SOURCE=${BOOST_SOURCE:-"${DIR}/Boost-for-Android"}
 BOOST_INCLUDEDIR=$BOOST_SOURCE/build/out/${ABI}/include
