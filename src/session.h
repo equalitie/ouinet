@@ -10,6 +10,7 @@ private:
         GenericStream con;
         beast::static_buffer<16384> buffer;
         http::response_parser<http::buffer_body> parser;
+        boost::optional<bool> response_keep_alive;
 
         State(GenericStream&& con) : con(std::move(con)) {}
     };
@@ -27,7 +28,7 @@ public:
         : _state(new State(std::move(con)))
     {}
 
-    http::response_header<>* response_header() {
+    http::response_header<>* response_header() const {
         if (!_state) return nullptr;
         if (!_state->parser.is_header_done()) return nullptr;
         return &_state->parser.get().base();
@@ -47,6 +48,12 @@ public:
         if (_state->con.is_open()) _state->con.close();
     }
 
+    void keep_alive(bool v) {
+        assert(_state);
+        if (!_state) return;
+        _state->response_keep_alive = v;
+    }
+
 private:
     std::unique_ptr<State> _state;
 };
@@ -55,6 +62,8 @@ inline
 http::response_header<>*
 Session::read_response_header(Cancel& cancel, asio::yield_context yield)
 {
+    assert(!cancel);
+
     if (!_state) {
         return or_throw<http::response_header<>*>(
                 yield, asio::error::bad_descriptor);
@@ -106,21 +115,27 @@ Session::flush_response(SinkStream& sink,
 
     char buf[2048];
 
+    auto& rs = _state->parser.get();
+
+    if (_state->response_keep_alive) {
+        rs.keep_alive(*_state->response_keep_alive);
+    }
+
     do {
         if (!_state->parser.is_done()) {
-            _state->parser.get().body().data = buf;
-            _state->parser.get().body().size = sizeof(buf);
+            rs.body().data = buf;
+            rs.body().size = sizeof(buf);
             http::async_read(_state->con, _state->buffer, _state->parser, yield[ec]);
 
             if (ec == http::error::need_buffer) ec = {};
             return_or_throw_on_error(yield, cancel, ec);
 
-            _state->parser.get().body().size = sizeof(buf) - _state->parser.get().body().size;
-            _state->parser.get().body().data = buf;
-            _state->parser.get().body().more = !_state->parser.is_done();
+            rs.body().size = sizeof(buf) - rs.body().size;
+            rs.body().data = buf;
+            rs.body().more = !_state->parser.is_done();
         } else {
-            _state->parser.get().body().data = nullptr;
-            _state->parser.get().body().size = 0;
+            rs.body().data = nullptr;
+            rs.body().size = 0;
         }
 
         http::async_write(sink, sr, yield[ec]);
