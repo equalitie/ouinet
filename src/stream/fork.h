@@ -26,8 +26,10 @@ public:
         template<class T> friend class ouinet::stream::Fork;
 
         public:
+        Tine() = default;
         Tine(Fork&);
-        Tine(const Tine&) = delete;
+        Tine(const Tine&);
+        Tine& operator=(const Tine&);
         Tine(Tine&&);
         Tine& operator=(Tine&&);
 
@@ -52,11 +54,19 @@ public:
         void flush_rx_handler(sys::error_code, size_t);
 
         private:
+        // ForkState knows about all the Tines through this hook
         IntrusiveHook hook;
+        // ForkState runs the receive loop
         std::shared_ptr<ForkState> fork_state;
+        // User provided rx_handler (or completion token)
         util::unique_function<void(sys::error_code, size_t)> rx_handler;
+        // Points to some part of fork_state->rx_buffer that the user of this
+        // Tine has not yet been notified about through the rx_handler and
+        // rx_buffers.
         asio::const_buffer unread_data_buffer;
+        // User provided buffers
         std::vector<asio::mutable_buffer> rx_buffers;
+        // Whether to print debug output
         bool debug = false;
     };
 
@@ -85,9 +95,11 @@ private:
         SourceStream source;
         std::vector<uint8_t> rx_buffer;
         bool is_reading = false;
-
         bool read_again = false;
-
+        // Must be always equal to sum of each tine->unread_data_buffer.size()
+        // We can only start new async_read operation when this is zero. I.e.
+        // when all tines have read everything from rx_buffer that was received
+        // during the previous completion of async_read call.
         size_t total_unread_data_size = 0;
 
         Cancel cancel;
@@ -190,6 +202,20 @@ Fork<SourceStream>::Tine::Tine(Fork& fork)
     }
 
     fork_state->tines.push_back(*this);
+}
+
+template<class SourceStream>
+inline
+Fork<SourceStream>::Tine::Tine(const Tine& other)
+    : fork_state(other.fork_state)
+    , unread_data_buffer(other.unread_data_buffer)
+{
+    if (debug) {
+        std::cerr << this << " Tine::Tine(Tine& " << &other << ")\n";
+    }
+
+    fork_state->tines.push_back(*this);
+    fork_state->total_unread_data_size += unread_data_buffer.size();
 }
 
 template<class SourceStream>
@@ -381,6 +407,7 @@ void Fork<SourceStream>::ForkState::on_read(sys::error_code ec, size_t size)
             size_t s = asio::buffer_copy(i->rx_buffers, buf);
             total_unread_data_size += size - s;
             i->unread_data_buffer = buf + s;
+            // XXX: Shouldn't we post this to the io_service?
             h(ec, s);
         } else {
             total_unread_data_size += size;
