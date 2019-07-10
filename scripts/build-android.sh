@@ -330,7 +330,7 @@ function maybe_install_boost {
         cd "$(dirname "$BOOST_SOURCE")"
         git clone $BOOST_GIT "$(basename "$BOOST_SOURCE")"
         cd $BOOST_SOURCE
-        git reset --hard 67ed5c6e8669073fd5cb939e5914662057514d00
+        git reset --hard f1d6d40a1f8730b38e3b30fb46d4c9c01f664d98
         cd $DIR
     fi
 
