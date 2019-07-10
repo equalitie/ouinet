@@ -67,7 +67,6 @@
        ("libtool" , libtool)
        ("libunistring" , libunistring)
        ("libgpg-error" , libgpg-error)
-       ("nlohmann-json-cpp" , nlohmann-json-cpp)
        ("nss-certs" , nss-certs)
        ("patch" , patch)
        ("pkg-config" , pkg-config)
