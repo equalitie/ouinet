@@ -13,6 +13,7 @@ include(ExternalProject)
 # Configurable options
 option(WITH_INJECTOR "Compile injector" ON)
 option(WITH_ASAN "Build with Address sanitizer" OFF)
+option(USE_SYSTEM_GO "Disable vendoring Golang binaries" OFF)
 
 ################################################################################
 # NOTE: https://stackoverflow.com/questions/37603238/fsanitize-not-using-gold-linker-in-gcc-6-1
@@ -48,6 +49,9 @@ if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
 endif()
 ################################################################################
 
+if(USE_SYSTEM_GO)
+add_custom_target(golang)
+else()
 set(GOROOT "${CMAKE_BINARY_DIR}/golang")
 externalproject_add(golang
     URL https://dl.google.com/go/go1.12.3.linux-amd64.tar.gz
@@ -57,6 +61,7 @@ externalproject_add(golang
     INSTALL_COMMAND ""
     SOURCE_DIR ${GOROOT}
 )
+endif()
 
 ################################################################################
 option(ASIO_IPFS_WITH_EXAMPLE_BINARIES "" OFF)
