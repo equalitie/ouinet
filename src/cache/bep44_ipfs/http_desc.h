@@ -148,6 +148,9 @@ http_parse( const std::string& desc_data
           , asio::yield_context yield)
 {
     using IdAndCE = std::pair<std::string, CacheEntry>;
+
+    // XXX This code needs to be fixed to support the new streaming API
+#if 0
     using Response = http::response<http::dynamic_body>;
 
     sys::error_code ec;
@@ -188,6 +191,9 @@ http_parse( const std::string& desc_data
 
     return IdAndCE( dsc->request_id
                   , CacheEntry{dsc->timestamp, std::move(res)});
+#else
+    return or_throw<IdAndCE>(yield, asio::error::operation_not_supported);
+#endif
 }
 
 } // ouinet::descriptor namespace
