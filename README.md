@@ -185,7 +185,19 @@ the Vagrant environment to Amazon Web Services (AWS):
     $ vagrant sshfs --mount linux
     $ vagrant ssh
 
-## Using Docker containers
+## Docker development environment
+
+Here's one way to run a local development environment capable of building for
+both host system and Android:
+
+```sh
+mkdir -p ../ouinet.build/ ../ouinet.build.android/ ../ouinet.home/
+sudo docker run --rm -it --mount type=bind,source="$(pwd)",target=/usr/local/src/ouinet --mount type=bind,source="$(pwd)/../ouinet.build",target=/usr/local/src/ouinet.build --mount type=bind,source="$(pwd)/../ouinet.build.android",target=/usr/local/src/ouinet.build.android --mount type=bind,source="$(pwd)/../ouinet.home",target=/mnt/home/ -e HOME=/mnt/home registry.gitlab.com/equalitie/ouinet:android
+```
+
+Consult the CI scripts to see how to build the image locally.
+
+## Docker deployment
 
 Ouinet injectors and clients can be run as Docker containers.  An application
 configuration file for Docker Compose is included for easily deploying all
