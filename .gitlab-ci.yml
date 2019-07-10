@@ -50,9 +50,9 @@ build-guix:
     - guix
   script:
     - echo '
-      mkdir -p build && \
-      cd build && \
-      cmake -DUSE_SYSTEM_GO=ON .. && \
+      mkdir -p build &&
+      cd build &&
+      cmake -DUSE_SYSTEM_GO=ON .. &&
       make -j `nproc`
       ' > build.sh
     - chmod +x build.sh
