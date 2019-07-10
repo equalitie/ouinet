@@ -7,6 +7,7 @@ DIR=`pwd`
 SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
 ROOT=$(cd ${SCRIPT_DIR}/.. && pwd)
 ABI=${ABI:-armeabi-v7a}
+CMAKE_BUILD_PARALLEL_LEVEL=${CMAKE_BUILD_PARALLEL_LEVEL:-`nproc`}
 
 RELEASE_BUILD=0
 while getopts r option; do
@@ -318,7 +319,7 @@ function build_ouinet_libs {
           -DWITH_INJECTOR=OFF \
           -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
           ${ROOT}
-    make -j `nproc`
+    cmake --build .
     cd - >/dev/null
 
     add_library $DIR/$BUILD_DIR/libclient.so
