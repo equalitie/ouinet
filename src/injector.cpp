@@ -350,13 +350,6 @@ public:
             if (!in_te.empty() && !boost::iequals(in_te, "chunked"))
                 return or_throw(yield_, asio::error::invalid_argument, inh);
 
-            // Add a date if missing (or broken) in the response (RFC 7231#7.1.1.2).
-            namespace pt = boost::posix_time;
-            if (util::parse_date(inh[http::field::date]) == pt::ptime()) {
-                auto now = util::format_date(pt::second_clock::universal_time());
-                inh.set(http::field::date, now);
-            }
-
             inh = util::to_cache_response(move(inh));
             inh = cache::http_injection_head(rq, move(inh), insert_id);
             outh = inh;
