@@ -307,12 +307,17 @@ Client::State::fetch_stored( const Request& request
     auto s = c->load(key_from_http_req(request), cancel, yield[ec]);
     return_or_throw_on_error(yield, cancel, ec, CacheEntry{});
 
-    Response res = s.slurp<http::dynamic_body>(cancel, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec, CacheEntry{});
+    auto hdr = s.response_header();
 
-    auto date = util::parse_date(res[http_::response_injection_time]);
+    assert(hdr);
+    if (!hdr) {
+        return or_throw<CacheEntry>( yield
+                                   , asio::error::operation_not_supported);
+    }
 
-    return CacheEntry{date, move(res)};
+    auto date = util::parse_date((*hdr)[http_::response_injection_time]);
+
+    return CacheEntry{date, move(s)};
 }
 
 //------------------------------------------------------------------------------
@@ -606,18 +611,18 @@ public:
             return fetch_stored(rq, cancel, yield);
         };
 
-        cc.store = [&](const Request& rq, Response rs, Cancel& cancel, Yield yield) {
-            return store(rq, move(rs), cancel, yield);
+        cc.store = [&](const Request& rq, Session s, Cancel& cancel, Yield yield) {
+            return store(rq, move(s), cancel, yield);
         };
 
         cc.max_cached_age(client_state._config.max_cached_age());
     }
 
-    Response fetch_fresh(const Request& request, Cancel& cancel, Yield yield) {
+    Session fetch_fresh(const Request& request, Cancel& cancel, Yield yield) {
         namespace err = asio::error;
 
         if (!client_state._config.is_injector_access_enabled())
-            return or_throw<Response>(yield, err::operation_not_supported);
+            return or_throw<Session>(yield, err::operation_not_supported);
 
         sys::error_code ec;
         auto s = client_state.fetch_fresh_through_simple_proxy( request
@@ -631,13 +636,7 @@ public:
             yield.log("Fetched fresh error: ", ec.message());
         }
 
-        auto r = s.slurp<http::dynamic_body>(cancel, yield[ec]);
-
-        if (ec) {
-            yield.log("Fetched fresh slurp error: ", ec.message());
-        }
-
-        return or_throw(yield, ec, move(r));
+        return or_throw(yield, ec, move(s));
     }
 
     CacheEntry
@@ -650,16 +649,14 @@ public:
                                           , cancel
                                           , yield[ec]);
 
-        if (!ec) {
-            yield.log("Fetched from cache success, status: ", r.response.result());
-        } else {
+        if (ec) {
             yield.log("Fetched from cache error: ", ec.message());
         }
 
         return or_throw(yield, ec, move(r));
     }
 
-    Response store(const Request& rq, Response rs, Cancel& cancel, Yield yield)
+    void store(const Request& rq, Session s, Cancel& cancel, Yield yield)
     {
         namespace err = asio::error;
 
@@ -672,50 +669,53 @@ public:
         // Nonetheless, chunked transfer encoding may still have been used,
         // and we need to undo it since the data referenced by the descriptor
         // is the plain one.
-        rs = util::to_non_chunked_response(move(rs));
+
+        // TODO: The above ^
 
         auto cache = client_state.get_cache();
 
         if (!cache) {
-            return or_throw(yield, err::operation_not_supported, move(rs));
+            return or_throw(yield, err::operation_not_supported);
         }
 
-        sys::error_code ec1, ec2;
+        //cache->store(key_from_http_req(rq), move(s), cancel, yield);
 
-        auto& ios = client_state.get_io_service();
-        tcp::socket s1(ios), s2(ios);
-        tie(s1,s2) = make_connection(ios, yield[ec1]);
-        assert(!ec1);
-        GenericStream c1(move(s1));
+        //sys::error_code ec1, ec2;
 
-        WaitCondition wc(ios);
+        //auto& ios = client_state.get_io_service();
+        //tcp::socket s1(ios), s2(ios);
+        //tie(s1,s2) = make_connection(ios, yield[ec1]);
+        //assert(!ec1);
+        //GenericStream c1(move(s1));
 
-        asio::spawn(ios, [&, lock = wc.lock()] (asio::yield_context y) {
-            cache->store(key_from_http_req(rq), rs.base(), c1, cancel, y[ec1]);
-            c1.close();
-        });
+        //WaitCondition wc(ios);
 
-        auto rs2 = rs;
-        auto body_writer = http::dynamic_body::writer(rs2.base(), rs2.body());
+        //asio::spawn(ios, [&, lock = wc.lock()] (asio::yield_context y) {
+        //    cache->store(key_from_http_req(rq), rs.base(), c1, cancel, y[ec1]);
+        //    c1.close();
+        //});
 
-        body_writer.init(ec2);
-        assert(!ec2);
+        //auto rs2 = rs;
+        //auto body_writer = http::dynamic_body::writer(rs2.base(), rs2.body());
 
-        while (auto p = body_writer.get(ec2)) {
-            if (ec2) return or_throw<Response>(yield, ec2);
-            asio::async_write(s2, p->first, yield[ec2]);
-            if (ec2) return or_throw<Response>(yield, ec2);
-            if (!p->second) break;
-        }
+        //body_writer.init(ec2);
+        //assert(!ec2);
 
-        if (s2.is_open()) s2.close();
+        //while (auto p = body_writer.get(ec2)) {
+        //    if (ec2) return or_throw<Response>(yield, ec2);
+        //    asio::async_write(s2, p->first, yield[ec2]);
+        //    if (ec2) return or_throw<Response>(yield, ec2);
+        //    if (!p->second) break;
+        //}
 
-        wc.wait(yield);
-        c1.close();
+        //if (s2.is_open()) s2.close();
 
-        // Note: we have to return a valid response even in case of error
-        // because CacheControl will use it.
-        return or_throw(yield, ec2, move(rs));
+        //wc.wait(yield);
+        //c1.close();
+
+        //// Note: we have to return a valid response even in case of error
+        //// because CacheControl will use it.
+        //return or_throw(yield, ec2, move(rs));
     }
 
     bool fetch(GenericStream& con, const Request& rq, Yield yield)
@@ -781,7 +781,25 @@ public:
                     break;
 
                 case fresh_channel::injector:
-                    res = cc.fetch(rq, cancel, yield[ec]);
+                    sys::error_code fresh_ec;
+                    sys::error_code cache_ec;
+
+                    auto s = cc.fetch(rq, fresh_ec, cache_ec, cancel, yield[ec]);
+
+                    if (fresh_ec && cache_ec) {
+                        assert(ec);
+
+                        res = Response{http::status::bad_gateway, rq.version()};
+                        res.set(http::field::server, "Ouinet client");
+                        res.set(http_::header_prefix + "Debug",
+                                util::str("Fresh:", fresh_ec.message(),
+                                          " Cache:", cache_ec.message()));
+                        res.keep_alive(rq.keep_alive());
+                        res.prepare_payload();
+                    }
+                    else {
+                        assert(!ec);
+                    }
 
 #ifndef NDEBUG
                     yield.log("----------------------------");

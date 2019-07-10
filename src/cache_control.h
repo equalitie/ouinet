@@ -21,9 +21,9 @@ public:
     using Response = http::response<http::dynamic_body>;
 
     using FetchStored = std::function<CacheEntry(const Request&, Cancel&, Yield)>;
-    using FetchFresh  = std::function<Response(const Request&, Cancel&, Yield)>;
+    using FetchFresh  = std::function<Session(const Request&, Cancel&, Yield)>;
     // This function may alter a (moved) response and return it.
-    using Store = std::function<Response(const Request&, Response, Cancel&, Yield)>;
+    using Store = std::function<void(const Request&, Session, Cancel&, Yield)>;
 
 public:
     CacheControl(asio::io_service& ios, std::string server_name)
@@ -31,16 +31,21 @@ public:
         , _server_name(std::move(server_name))
     {}
 
-    Response fetch(const Request&, Cancel&, Yield);
+    Session fetch(const Request&,
+                  sys::error_code& fresh_ec,
+                  sys::error_code& cache_ec,
+                  Cancel&,
+                  Yield);
 
     // Return: whether to keep the connection alive
-    bool fetch(GenericStream&, const Request&, Cancel&, Yield);
+    //bool fetch(GenericStream&, const Request&, Cancel&, Yield);
 
     FetchStored  fetch_stored;
     FetchFresh   fetch_fresh;
     Store        store;
 
-    Response try_to_cache(const Request&, Response, Yield) const;
+    // XXX: Does this need to be public?
+    //void try_to_cache(const Request&, const Response&, Yield) const;
 
     void max_cached_age(const boost::posix_time::time_duration&);
     boost::posix_time::time_duration max_cached_age() const;
@@ -62,20 +67,24 @@ public:
 
 private:
     // TODO: Add cancellation support
-    Response do_fetch(const Request&, Cancel&, Yield);
-    Response do_fetch_fresh(FetchState&, const Request&, Yield);
+    Session do_fetch(
+            const Request&,
+            sys::error_code& fresh_ec,
+            sys::error_code& cache_ec,
+            Cancel&,
+            Yield);
+
+    Session do_fetch_fresh(FetchState&, const Request&, Yield);
     CacheEntry do_fetch_stored(FetchState&, const Request&, Yield);
 
-    bool is_stale( const boost::posix_time::ptime& time_stamp
-                 , const Response&) const;
+    //bool is_stale( const boost::posix_time::ptime& time_stamp
+    //             , const Response&) const;
 
     bool is_older_than_max_cache_age(const boost::posix_time::ptime&) const;
 
-    Response bad_gateway(const Request&, beast::string_view reason);
-
     auto make_fetch_fresh_job(const Request&, Yield&);
 
-    bool has_temporary_result(const Response&) const;
+    bool has_temporary_result(const Session&) const;
 
 private:
     asio::io_service& _ios;

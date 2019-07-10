@@ -5,6 +5,7 @@
 #include <boost/beast.hpp>
 #include "../namespaces.h"
 #include "../util.h"
+#include "../session.h"
 
 namespace ouinet {
 
@@ -24,7 +25,7 @@ std::string key_from_http_url(const std::string& url) {
 }
 
 struct CacheEntry {
-    using Response = http::response<http::dynamic_body>;
+    using Response = Session;
 
     // Data time stamp, not a date/time on errors.
     boost::posix_time::ptime time_stamp;
