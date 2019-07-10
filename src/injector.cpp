@@ -465,6 +465,8 @@ public:
 
     bool is_semi_fresh(http::response_header<>& hdr)
     {
+        // TODO: If something like this must be used,
+        // please check injection metadata headers instead.
         auto date = util::parse_date(hdr[http::field::date]);
 
         if (date == boost::posix_time::ptime()) {
