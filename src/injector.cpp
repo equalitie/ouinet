@@ -332,7 +332,7 @@ public:
                      , Cancel& cancel
                      , Yield yield)
     {
-        using ResponseH = http::response<http::empty_body>;
+        using RespFromH = http::response<http::empty_body>;
 
         yield.log("Injection begin");
 
@@ -355,7 +355,7 @@ public:
             do_inject = true;
             inh = cache::http_injection_head(rq, move(inh), insert_id);
             // We will use the trailer to send the body digest and head signature.
-            assert(ResponseH(inh).chunked());
+            assert(RespFromH(inh).chunked());
 
             outh = inh;
             return inh;
@@ -379,10 +379,9 @@ public:
                                                 , config.cache_private_key());
         };
 
-        ResponseH res;
-        res = ResponseH(http_forward( orig_con, con, util::to_origin_request(rq)
-                                    , head_proc, data_proc, trailer_proc
-                                    , cancel, yield[ec].tag("fetch_injector")));
+        RespFromH res(http_forward( orig_con, con, util::to_origin_request(rq)
+                                  , head_proc, data_proc, trailer_proc
+                                  , cancel, yield[ec].tag("fetch_injector")));
 
         if (ec) yield.log("Injection failed: ", ec.message());
         return_or_throw_on_error(yield, cancel, ec);
@@ -783,8 +782,8 @@ void serve( InjectorConfig& config
             // TODO: Maybe reject requests for HTTPS URLS:
             // we are perfectly able to handle them (and do verification locally),
             // but the client should be using a CONNECT request instead!
-            using ResponseH = http::response<http::empty_body>;
-            ResponseH res;
+            using RespFromH = http::response<http::empty_body>;
+            RespFromH res;
             auto orig_con = cc.get_connection(req, cancel, yield[ec]);
             size_t forwarded = 0;
             if (!ec) {
@@ -802,7 +801,7 @@ void serve( InjectorConfig& config
                 auto trproc = [&] (auto intr, auto&, auto) {
                     return intr;  // leave trailers untouched
                 };
-                res = ResponseH(http_forward( orig_con, con
+                res = RespFromH(http_forward( orig_con, con
                                             , util::to_origin_request(req)
                                             , reshproc, inproc, trproc
                                             , cancel, yield[ec].tag("fetch_proxy")));
