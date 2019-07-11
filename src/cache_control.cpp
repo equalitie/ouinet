@@ -59,7 +59,7 @@ static optional<beast::string_view> get(const Session& s, http::field f)
     auto hdr = s.response_header();
     assert(hdr);
     if (!hdr) return boost::none;
-    get(*hdr, f);
+    return get(*hdr, f);
 }
 
 inline void trim_quotes(beast::string_view& v) {
@@ -425,17 +425,7 @@ auto CacheControl::make_fetch_fresh_job(const Request& rq, Yield& yield)
 
     job.start([&] (Cancel& cancel, asio::yield_context yield_) mutable {
             auto y = yield.detach(yield_);
-
-            sys::error_code ec;
-            auto rs = fetch_fresh(rq, cancel, y[ec]);
-
-            if (!ec) {
-                assert(0 && "TODO");
-                //sys::error_code ec_;
-                //try_to_cache(rq, rs, y[ec_].tag("try_to_cache"));
-            }
-
-            return or_throw(yield_, ec, move(rs));
+            return fetch_fresh(rq, cancel, y);
         });
 
     return job;
