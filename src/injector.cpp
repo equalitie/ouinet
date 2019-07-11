@@ -344,12 +344,15 @@ public:
         auto orig_con = get_connection(rq, cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec);
 
+        bool do_inject = false;
         http::response_header<> outh;
         auto head_proc = [&] (auto inh, auto&, auto yield_) {
+            auto inh_orig = inh;
             sys::error_code ec_;
             inh = util::to_cache_response(move(inh), ec_);
-            if (ec) return or_throw(yield_, ec_, inh);
+            if (ec) return inh_orig;  // will not inject, just proxy
 
+            do_inject = true;
             inh = cache::http_injection_head(rq, move(inh), insert_id);
             // We will use the trailer to send the body digest and head signature.
             assert(ResponseH(inh).chunked());
@@ -363,11 +366,13 @@ public:
         ProcInFunc<asio::const_buffer> data_proc = [&] (auto inbuf, auto&, auto) {
             // Just count transferred data and feed the hash.
             forwarded += inbuf.size();
-            data_hash.update(inbuf);
+            if (do_inject) data_hash.update(inbuf);
             return inbuf;  // pass data on
         };
 
         auto trailer_proc = [&] (auto intr, auto&, auto) {
+            if (!do_inject) return intr;
+
             intr = util::to_cache_trailer(move(intr));
             return cache::http_injection_trailer( outh, move(intr)
                                                 , forwarded, data_hash.close()
@@ -381,7 +386,7 @@ public:
 
         if (ec) yield.log("Injection failed: ", ec.message());
         return_or_throw_on_error(yield, cancel, ec);
-        yield.log("Injected data bytes: ", forwarded);
+        yield.log(do_inject ? "Injected data bytes: " : "Forwarded data bytes: ", forwarded);
 
         keep_connection(rq, res, move(orig_con));
     }
