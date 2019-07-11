@@ -160,7 +160,7 @@ function add_binary {
 
 ######################################################################
 MODES=
-ALLOWED_MODES="bootstrap build emu abiclean"
+ALLOWED_MODES="bootstrap build emu"
 DEFAULT_MODES="bootstrap build"
 
 function check_mode {
@@ -550,8 +550,3 @@ if check_mode emu; then
     run_emulator "$@"
 fi
 
-# This only cleans files which may interfere when building for a different ABI,
-# while keeping (some) downloaded and ABI-neutral stuff.
-if check_mode abiclean; then
-    :
-fi
