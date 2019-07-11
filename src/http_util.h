@@ -249,16 +249,18 @@ static Request to_cache_request(Request rq) {
 
 // Make the given response ready to be sent to the cache.
 // This only leaves a minimum set of non-privacy sensitive headers.
-http::response_header<> to_cache_response(http::response_header<>);
+// An error code may be set if the response can not be safely converted to
+// a cache response.
+http::response_header<> to_cache_response(http::response_header<>, sys::error_code&);
 
 template<class Body>
-static http::response<Body> to_cache_response(http::response<Body> rs) {
+static http::response<Body> to_cache_response(http::response<Body> rs, sys::error_code& ec) {
     // Disable chunked transfer encoding and use actual body size as content length.
     // This allows sharing the plain body representation with other platforms.
     // It also compensates for the lack of body data size field in v0 descriptors.
     rs = to_non_chunked_response(move(rs));
 
-    auto rsh = to_cache_response(move(rs.base()));
+    auto rsh = to_cache_response(move(rs.base()), ec);
     return http::response<Body>(move(rsh), move(rs.body()));
 }
 

@@ -346,13 +346,10 @@ public:
 
         http::response_header<> outh;
         auto head_proc = [&] (auto inh, auto&, auto yield_) {
-            // Only identity and chunked transfer encodings are supported.
-            // (Also we did not send a `TE:` request header.)
-            auto in_te = inh[http::field::transfer_encoding];
-            if (!in_te.empty() && !boost::iequals(in_te, "chunked"))
-                return or_throw(yield_, asio::error::invalid_argument, inh);
+            sys::error_code ec_;
+            inh = util::to_cache_response(move(inh), ec_);
+            if (ec) return or_throw(yield_, ec_, inh);
 
-            inh = util::to_cache_response(move(inh));
             inh = cache::http_injection_head(rq, move(inh), insert_id);
             // We will use the trailer to send the body digest and head signature.
             assert(ResponseH(inh).chunked());

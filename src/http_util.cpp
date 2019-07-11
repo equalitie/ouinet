@@ -162,7 +162,15 @@ ouinet::util::format_date(posix_time::ptime date)
 }
 
 http::response_header<>
-ouinet::util::to_cache_response(http::response_header<> rs) {
+ouinet::util::to_cache_response(http::response_header<> rs, sys::error_code& ec) {
+    // Only identity and chunked transfer encodings are supported.
+    // (Also canonical requests do not have a `TE:` header.)
+    auto rs_te = rs[http::field::transfer_encoding];
+    if (!rs_te.empty() && !boost::iequals(rs_te, "chunked")) {
+        ec = asio::error::invalid_argument;
+        return rs;
+    }
+
     rs = remove_ouinet_fields(move(rs));
     // TODO: Handle `Trailer:` properly.
     // TODO: This list was created by going through some 100 responses from
