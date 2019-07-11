@@ -349,28 +349,28 @@ auto Fork<SourceStream>::Tine::async_read_some( const MutableBufferSequence& bs
         unread_data_buffer += size;
         fs->total_unread_data_size -= size;
 
-        fs->get_io_service().post(
-                [ fs
-                , size
-                , h = std::move(init.completion_handler)
-                ] () mutable {
-                    if (fs->cancel)
-                        h(asio::error::operation_aborted, 0);
+        asio::post(fs->get_io_service(),
+            [ fs
+            , size
+            , h = std::move(init.completion_handler)
+            ] () mutable {
+                if (fs->cancel)
+                    h(asio::error::operation_aborted, 0);
 
-                    h(sys::error_code(), size);
+                h(sys::error_code(), size);
 
-                    if (fs->cancel) return;
+                if (fs->cancel) return;
 
-                    if (!fs->is_reading
-                            && fs->read_again
-                            && fs->total_unread_data_size == 0)
-                    {
-                        fs->read_again = false;
-                        fs->get_executor().on_work_finished();
+                if (!fs->is_reading
+                        && fs->read_again
+                        && fs->total_unread_data_size == 0)
+                {
+                    fs->read_again = false;
+                    fs->get_executor().on_work_finished();
 
-                        fs->start_reading();
-                    }
-                });
+                    fs->start_reading();
+                }
+            });
     }
     else {
         rx_handler = std::move(init.completion_handler);
