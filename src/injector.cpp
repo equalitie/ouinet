@@ -604,14 +604,17 @@ private:
             injector = injector.get()
         ] (boost::asio::yield_context yield) mutable
           -> CacheInjector::InsertionResult {
+            sys::error_code ec;
+
             // Pop out Ouinet internal HTTP headers.
             rq = util::to_cache_request(move(rq));
-            rs = util::to_cache_response(move(rs));
+            rs = util::to_cache_response(move(rs), ec);
 
-            sys::error_code ec;
-            auto ret = injector->insert_content( id, rq, move(rs)
-                                               , true
-                                               , yield[ec]);
+            CacheInjector::InsertionResult ret;
+            if (!ec)
+                ret = injector->insert_content( id, rq, move(rs)
+                                              , true
+                                              , yield[ec]);
 
             if (ec) {
                 cout << "!Insert failed: " << rq.target()
