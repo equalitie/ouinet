@@ -332,6 +332,8 @@ public:
                      , Cancel& cancel
                      , Yield yield)
     {
+        using ResponseH = http::response<http::empty_body>;
+
         yield.log("Injection begin");
 
         sys::error_code ec;
@@ -352,6 +354,9 @@ public:
 
             inh = util::to_cache_response(move(inh));
             inh = cache::http_injection_head(rq, move(inh), insert_id);
+            // We will use the trailer to send the body digest and head signature.
+            assert(ResponseH(inh).chunked());
+
             outh = inh;
             return inh;
         };
@@ -372,7 +377,6 @@ public:
                                                 , config.cache_private_key());
         };
 
-        using ResponseH = http::response<http::empty_body>;
         ResponseH res;
         res = ResponseH(http_forward( orig_con, con, util::to_origin_request(rq)
                                     , head_proc, data_proc, trailer_proc
