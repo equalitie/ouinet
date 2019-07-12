@@ -306,6 +306,7 @@ class ConnectionPool {
 
         ~Connection()
         {
+            if (!_auto_add_back_to_pool) return;
             if (!IdleConnection::is_open()) return;
 
             if (auto cs = _connections.lock()) {
@@ -313,6 +314,14 @@ class ConnectionPool {
                 c._value = std::move(_value);
                 push_back(*cs, std::move(c));
             }
+        }
+
+        void auto_add_back_to_pool(bool v) {
+            _auto_add_back_to_pool = v;
+        }
+
+        bool auto_add_back_to_pool() const {
+            return _auto_add_back_to_pool;
         }
 
         private:
@@ -325,6 +334,7 @@ class ConnectionPool {
         friend class ConnectionPool;
         StoredValue _value;
         std::weak_ptr<Connections> _connections;
+        bool _auto_add_back_to_pool = true;
     };
 
     ConnectionPool()
