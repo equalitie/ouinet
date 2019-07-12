@@ -54,6 +54,12 @@ public:
         _state->response_keep_alive = v;
     }
 
+    bool keep_alive() const {
+        assert(_state);
+        if (!_state) return false;
+        return _state->parser.get().keep_alive();
+    }
+
 private:
     std::unique_ptr<State> _state;
 };
@@ -130,6 +136,9 @@ Session::flush_response(SinkStream& sink,
             if (ec == http::error::need_buffer) ec = {};
             return_or_throw_on_error(yield, cancel, ec);
 
+            // At this point 'data' and 'size' represent the "buffer still
+            // available for reading".  We change it to represent the data we
+            // just read so the serializer can write them.
             rs.body().size = sizeof(buf) - rs.body().size;
             rs.body().data = buf;
             rs.body().more = !_state->parser.is_done();
@@ -157,8 +166,6 @@ http::response<BodyType> Session::slurp(Cancel& cancel, asio::yield_context yiel
 
     sys::error_code ec;
 
-    http::response_serializer<http::buffer_body> sr{_state->parser.get()};
-
     read_response_header(cancel , yield[ec]); // Won't read if already read.
     return_or_throw_on_error(yield, cancel, ec, http::response<BodyType>{});
 
@@ -167,7 +174,7 @@ http::response<BodyType> Session::slurp(Cancel& cancel, asio::yield_context yiel
     char buf[2048];
 
     std::string s;
-    while (!_state->parser.is_done() && !sr.is_done()) {
+    while (!_state->parser.is_done()) {
         _state->parser.get().body().data = buf;
         _state->parser.get().body().size = sizeof(buf);
 
