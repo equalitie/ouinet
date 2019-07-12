@@ -22,8 +22,6 @@ public:
 
     using FetchStored = std::function<CacheEntry(const Request&, Cancel&, Yield)>;
     using FetchFresh  = std::function<Session(const Request&, Cancel&, Yield)>;
-    // This function may alter a (moved) response and return it.
-    using Store = std::function<void(const Request&, Session, Cancel&, Yield)>;
 
 public:
     CacheControl(asio::io_service& ios, std::string server_name)
@@ -37,15 +35,8 @@ public:
                   Cancel&,
                   Yield);
 
-    // Return: whether to keep the connection alive
-    //bool fetch(GenericStream&, const Request&, Cancel&, Yield);
-
     FetchStored  fetch_stored;
     FetchFresh   fetch_fresh;
-    Store        store;
-
-    // XXX: Does this need to be public?
-    //void try_to_cache(const Request&, const Response&, Yield) const;
 
     void max_cached_age(const boost::posix_time::time_duration&);
     boost::posix_time::time_duration max_cached_age() const;

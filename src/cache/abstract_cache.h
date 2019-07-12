@@ -14,8 +14,7 @@ public:
 
     virtual
     void store( const std::string& key
-              , const http::response_header<>&
-              , GenericStream& response_body
+              , Session&
               , Cancel
               , asio::yield_context) = 0;
 };

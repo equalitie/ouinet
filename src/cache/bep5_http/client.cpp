@@ -154,6 +154,7 @@ struct Client::Impl {
 
             if (!ec) {
                 auto ret = load_from_connection(key, con, cancel, yield[ec]);
+                assert(ec || ret.response_header());
 
                 if (!ec) {
                     return ret;
@@ -182,6 +183,7 @@ struct Client::Impl {
         peer_cache[host] = con_ep;
 
         auto ret = load_from_connection(key, con, cancel, yield[ec]);
+        assert(ec || ret.response_header());
 
         return or_throw<Session>(yield, ec, move(ret));
     }
@@ -326,8 +328,7 @@ struct Client::Impl {
     }
 
     void store( const std::string& key
-              , const http::response_header<>& rs_hdr
-              , GenericStream& rs_body
+              , Session& s
               , Cancel cancel
               , asio::yield_context yield)
     {
@@ -337,14 +338,7 @@ struct Client::Impl {
         auto file = open_or_create(path, ec);
         if (ec) return or_throw(yield, ec);
 
-        write_header(rs_hdr, file, yield[ec]);
-
-        if (ec) {
-            try_remove(path);
-            return or_throw(yield, ec);
-        }
-
-        flush_from_to(rs_body, file, cancel, yield[ec]);
+        s.flush_response(file, cancel, yield[ec]);
 
         if (ec) {
             try_remove(path);
@@ -513,12 +507,11 @@ Session Client::load(const std::string& key, Cancel cancel, Yield yield)
 }
 
 void Client::store( const std::string& key
-                  , const http::response_header<>& rs_hdr
-                  , GenericStream& rs_body
+                  , Session& s
                   , Cancel cancel
                   , asio::yield_context yield)
 {
-    _impl->store(key, rs_hdr, rs_body, cancel, yield);
+    _impl->store(key, s, cancel, yield);
 }
 
 Client::~Client()

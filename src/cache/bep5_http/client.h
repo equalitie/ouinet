@@ -9,6 +9,8 @@ namespace bittorrent {
     class MainlineDht;
 }
 
+class Session;
+
 namespace cache {
 namespace bep5_http {
 
@@ -25,8 +27,7 @@ public:
     Session load(const std::string& key, Cancel, Yield) override;
 
     void store( const std::string& key
-              , const http::response_header<>&
-              , GenericStream& response_body
+              , Session&
               , Cancel
               , asio::yield_context) override;
 

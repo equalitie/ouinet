@@ -202,23 +202,6 @@ CacheControl::fetch(const Request& request,
     return or_throw(yield, ec, move(response));
 }
 
-//bool
-//CacheControl::fetch( GenericStream& con
-//                   , const Request& request
-//                   , Cancel& cancel
-//                   , Yield yield)
-//{
-//    sys::error_code ec;
-//    auto response = do_fetch(request, cancel, yield[ec]);
-//
-//    return_or_throw_on_error(yield, cancel, ec, false);
-//
-//    response.keep_alive(request.keep_alive());
-//    response.flush_response(con, cancel, yield[ec]);
-//
-//    return or_throw(yield, ec, request.keep_alive());
-//}
-
 static bool must_revalidate(const Request& request)
 {
     if (get(request, http::field::if_none_match))
@@ -302,20 +285,25 @@ CacheControl::do_fetch(
     namespace err = asio::error;
 
     if (must_revalidate(request)) {
-        sys::error_code ec1, ec2;
+        auto res = do_fetch_fresh(fetch_state, request, yield[fresh_ec]);
 
-        auto res = do_fetch_fresh(fetch_state, request, yield[ec1]);
-        if (!ec1) return res;
-        if (ec1 == err::operation_aborted) return or_throw(yield, ec1, move(res));
+        if (!fresh_ec) {
+            cache_ec = err::operation_aborted;
+            return res;
+        }
 
-        auto cache_entry = do_fetch_stored(fetch_state, request, yield[ec2]);
-        if (!ec2) return add_warning( move(cache_entry.response)
-                                    , "111 Ouinet \"Revalidation Failed\"");
+        if (fresh_ec == err::operation_aborted) {
+            cache_ec = err::operation_aborted;
+            return or_throw(yield, fresh_ec, move(res));
+        }
 
-        if (ec2 == err::operation_aborted) return or_throw(yield, ec1, move(res));
+        auto cache_entry = do_fetch_stored(fetch_state, request, yield[cache_ec]);
+        if (!cache_ec) return add_warning( move(cache_entry.response)
+                                         , "111 Ouinet \"Revalidation Failed\"");
 
-        fresh_ec = ec1;
-        cache_ec = ec2;
+        if (cache_ec == err::operation_aborted)
+            return or_throw(yield, fresh_ec, move(res));
+
         return or_throw<Session>(yield, err::service_not_found);
     }
 
@@ -349,6 +337,7 @@ CacheControl::do_fetch(
         auto response = do_fetch_fresh(fetch_state, request, yield[fresh_ec]);
 
         if (!fresh_ec) {
+            cache_ec = err::operation_aborted;
             LOG_DEBUG(yield.tag(), ": Response was served from injector: cached response is private or too old");
             return response;
         }
@@ -364,6 +353,7 @@ CacheControl::do_fetch(
 
     if (!is_expired(cache_entry)) {
         LOG_DEBUG(yield.tag(), ": Response was served from cache: not expired");
+        fresh_ec = err::operation_aborted;
         return move(cache_entry.response);
     }
 
@@ -401,6 +391,7 @@ CacheControl::do_fetch(
         LOG_DEBUG(yield.tag(), ": Response was served from cache: requesting fresh response failed");
         return add_stale_warning(move(cache_entry.response));
     } else {
+        cache_ec = err::operation_aborted;
         LOG_DEBUG(yield.tag(), ": Response was served from injector: cached expired without etag");
         return response;
     }
@@ -425,7 +416,11 @@ auto CacheControl::make_fetch_fresh_job(const Request& rq, Yield& yield)
 
     job.start([&] (Cancel& cancel, asio::yield_context yield_) mutable {
             auto y = yield.detach(yield_);
-            return fetch_fresh(rq, cancel, y);
+            sys::error_code ec;
+            auto r = fetch_fresh(rq, cancel, y[ec]);
+            if (ec) return or_throw(y, ec, move(r));
+            assert(r.response_header());
+            return r;
         });
 
     return job;
