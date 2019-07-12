@@ -571,10 +571,14 @@ Session Client::State::fetch_fresh_through_simple_proxy
 
 //------------------------------------------------------------------------------
 // Return true if res indicated an error from the injector
-bool handle_if_injector_error(GenericStream& con, const Response& res_, Yield yield) {
-    auto err_hdr_i = res_.find(http_::response_error_hdr);
+bool handle_if_injector_error(
+        GenericStream& con,
+        const http::response_header<>& rs_hdr,
+        Yield yield)
+{
+    auto err_hdr_i = rs_hdr.find(http_::response_error_hdr);
 
-    if (err_hdr_i == res_.end()) return false; // No error
+    if (err_hdr_i == rs_hdr.end()) return false; // No error
 
     Response res{http::status::bad_request, 11};
     res.set(http::field::server, OUINET_CLIENT_SERVER_STRING);
@@ -714,8 +718,9 @@ public:
             switch (r) {
                 case fresh_channel::_front_end: {
                     Response res = client_state.fetch_fresh_from_front_end(rq, yield);
-                    send_back_response(con, res, yield[ec]);
-                    return !ec && rq.keep_alive() && res.keep_alive();
+                    res.keep_alive(false);
+                    http::async_write(con, res, asio::yield_context(yield)[ec]);
+                    return false;
                 }
                 case fresh_channel::origin: {
                     auto session = client_state.fetch_fresh_from_origin(rq, yield[ec]);
@@ -765,6 +770,10 @@ public:
 
                     assert(!fresh_ec || !cache_ec); // At least one success
                     assert( fresh_ec ||  cache_ec); // One needs to fail
+
+                    if (handle_if_injector_error(con, *s.response_header(), yield[ec])) {
+                        return false;
+                    }
 
                     if (!fresh_ec) {
                         using Fork = stream::Fork<GenericStream>;
@@ -820,18 +829,6 @@ public:
                           , yield.tag("handle_bad_request"));
 
         return or_throw<bool>(yield, last_error, rq.keep_alive());
-    }
-
-private:
-    void send_back_response(GenericStream& con, Response& res, Yield yield)
-    {
-        sys::error_code ec;
-        if (handle_if_injector_error(con, res, yield[ec])) {
-            return;
-        }
-
-        // Forward the response back
-        http::async_write(con, res, asio::yield_context(yield)[ec]);
     }
 
 private:

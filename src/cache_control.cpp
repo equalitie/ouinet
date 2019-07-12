@@ -663,28 +663,3 @@ bool CacheControl::ok_to_cache( const http::request_header<>&  request
 
     return true;
 }
-
-//------------------------------------------------------------------------------
-//Response
-//CacheControl::try_to_cache( const Request& request
-//                          , Response response
-//                          , Yield yield) const
-//{
-//    if (!store) return response;
-//
-//    const char* reason = "";
-//
-//    if (!ok_to_cache(request, response, &reason)) {
-//#ifndef NDEBUG
-//        yield.log("::::: CacheControl: NOT CACHING :::::");
-//        yield.log(":: ", reason);
-//        yield.log(request.base(), response.base());
-//        yield.log(":::::::::::::::::::::::::::::::::::::");
-//#endif
-//        return response;
-//    }
-//
-//    Cancel cancel;
-//    return store(request, move(response), cancel, yield);
-//}
-
