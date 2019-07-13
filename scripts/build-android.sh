@@ -332,7 +332,6 @@ function maybe_install_gradle {
 
 ######################################################################
 function maybe_install_boost {
-
     BOOST_GIT=https://github.com/equalitie/Boost-for-Android
 
     if [ ! -d "$BOOST_SOURCE" ]; then
@@ -447,18 +446,18 @@ function copy_binaries {
 }
 
 ######################################################################
-# Unpolished code to build the debug APK
+# Build the Ouinet AAR
 function build_ouinet_apk {
-    cd "${DIR}/${OUTPUT_DIR}"
-    ln -sf "${ROOT}/android"/* .
     export GRADLE_USER_HOME="${DIR}/.gradle-home"
-    gradle --no-daemon build \
+    ( cd "${ROOT}/android";
+      gradle build \
         -Pboost_includedir=${BOOST_INCLUDEDIR} \
         -Pandroid_abi=${ABI} \
         -Pouinet_clientlib_path="${DIR}/${OUTPUT_DIR}/builddir/deps/${ABI}/libclient.so" \
         -Plibdir="${DIR}/${OUTPUT_DIR}/builddir/deps" \
         -Passetsdir="${DIR}/${OUTPUT_DIR}/builddir/assets" \
-        -Pouinet_properties="${DIR}/${BUILD_DIR}/ouinet.properties"
+        -Pouinet_properties="${DIR}/${BUILD_DIR}/ouinet.properties";
+      ln -sf $(realpath builddir/ouinet/) "$DIR/$OUTPUT_DIR/builddir/ouinet" )
 }
 
 ######################################################################
