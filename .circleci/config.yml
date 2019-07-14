@@ -24,7 +24,7 @@ stages:
         command: |
           sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
           sudo apt-get update
-          sudo apt-get install g++-6 dh-autoreconf autopoint libtool libunistring-dev libsqlite3-dev libgcrypt20-dev libidn11-dev zlib1g-dev texinfo libssl-dev python3-dev
+          sudo apt-get install g++-6 dh-autoreconf autopoint libtool libunistring-dev libsqlite3-dev libgcrypt20-dev libidn11-dev zlib1g-dev texinfo libssl-dev python3-dev realpath
 
       - type: shell
         name: Install Boost
