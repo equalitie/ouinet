@@ -28,6 +28,7 @@ if [ "$ABI" = "armeabi-v7a" ]; then
     GCRYPT_TARGET=arm-unknown-linux-androideabi
 
 elif [ "$ABI" = "arm64-v8a" ]; then
+    # Not currently working, libgpg-error doesn't support armv8
     NDK_ARCH="arm64"
     NDK_TOOLCHAIN_TARGET="aarch64-linux-android"
     NDK_PLATFORM=21
@@ -36,29 +37,32 @@ elif [ "$ABI" = "arm64-v8a" ]; then
     GCRYPT_TARGET=aarch64-linux-android
 
 elif [ "$ABI" = "armeabi" ]; then
+    # Untested
     NDK_ARCH="arm"
     NDK_TOOLCHAIN_TARGET="arm-linux-androideabi"
     NDK_PLATFORM=19
     CMAKE_SYSTEM_PROCESSOR="armv5te"
-    SSL_TARGET=android #untested
-    GCRYPT_TARGET=arm-unknown-linux-androideabi #untested
+    SSL_TARGET=android
+    GCRYPT_TARGET=arm-unknown-linux-androideabi
 
 elif [ "$ABI" = "x86" ]; then
+    # Not currently working, asio-ipfs & libgpg-error don't support x86
     NDK_ARCH="x86"
     NDK_TOOLCHAIN_TARGET="i686-linux-android"
     NDK_PLATFORM=19
     CMAKE_SYSTEM_PROCESSOR="i686"
-    SSL_TARGET=android-x86 # untested
-    GCRYPT_TARGET=arm-unknown-linux-androideabi #untested
+    SSL_TARGET=android-x86
+    GCRYPT_TARGET=arm-unknown-linux-androideabi
 
 elif [ "$ABI" = "x86_64" ]; then
+    # Not currently working, libgpg-error doesn't support x86_64
     NDK_ARCH="x86_64"
     NDK_TOOLCHAIN_TARGET="x86_64-linux-android"
     NDK_TOOLCHAIN_LIB_SUBDIR="lib64"
-    NDK_PLATFORM=19
+    NDK_PLATFORM=21
     CMAKE_SYSTEM_PROCESSOR="x86_64"
-    SSL_TARGET=android64 #untested
-    GCRYPT_TARGET=arm-unknown-linux-androideabi #untested
+    SSL_TARGET=android64
+    GCRYPT_TARGET=x86_64-linux-androideabi
 else
     >&2 echo "Unsupported ABI: '$ABI'"
     exit 1
@@ -84,7 +88,7 @@ PLATFORM=android-${NDK_PLATFORM}
 
 BOOST_V=${BOOST_V:-"1_67_0"}
 BOOST_V_DOT=${BOOST_V//_/.} # Replace '_' for '.'
-BOOST_SOURCE=${BOOST_SOURCE:-"${DIR}/Boost-for-Android"}
+BOOST_SOURCE=${BOOST_SOURCE:-${DIR}/Boost-for-Android}
 BOOST_INCLUDEDIR=$BOOST_SOURCE/build/out/${ABI}/include
 BOOST_LIBRARYDIR=$BOOST_SOURCE/build/out/${ABI}/lib
 
@@ -344,15 +348,17 @@ function maybe_install_boost {
 
     if [ ! -d "$BOOST_LIBRARYDIR" ]; then
         echo "Building boost"
-        cd "$BOOST_SOURCE"
-        # TODO: Android doesn't need program_options and test.
-        ./build-android.sh \
+        ( cd "$BOOST_SOURCE";
+          # TODO: Android doesn't need program_options and test.
+          # Build Boost for all architectures otherwise it will
+          # do a rebuild whenever the ABI changes.
+          ./build-android.sh \
             --boost=${BOOST_V_DOT} \
-            --arch=arm64-v8a,armeabi-v7a \
+            --arch=arm64-v8a,armeabi-v7a,x86,x86_64 \
             --with-libraries=regex,context,coroutine,program_options,system,test,thread,filesystem,date_time,iostreams \
             --layout=system \
             $NDK_DIR > "$DIR/$BUILD_DIR/boost.log"
-        cd - >/dev/null
+        )
     fi
 }
 
