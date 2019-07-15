@@ -40,6 +40,7 @@ http_injection_head( const http::request_header<>& rqh
 //     Digest: SHA-256=j7uwtB/QQz0FJONbkyEmaqlJwGehJLqWoCO1ceuM30w=
 //     Signature: keyId="...",algorithm="hs2019",created=1516048311,
 //       headers="(created) ... digest",signature="..."
+//
 http::fields
 http_injection_trailer( const http::response_header<>& rsh
                       , http::fields rst
