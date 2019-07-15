@@ -801,6 +801,7 @@ public:
                             lock = wc.lock()
                         ] (asio::yield_context yield) {
                             Session s2(move(src2));
+                            sys::error_code ec;
                             s2.flush_response(con, cancel, yield[ec]);
                         });
 
