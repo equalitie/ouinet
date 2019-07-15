@@ -7,6 +7,7 @@
 
 #include "../../namespaces.h"
 #include "../../util/crypto.h"
+#include "../../util/hash.h"
 #include "../../util/signal.h"
 
 namespace ouinet {
@@ -24,7 +25,7 @@ std::string bep44_salt_from_key(boost::string_view key)
 {
     // This ensures short, fixed-size salts to be circulated
     // (as e.g. keys containing HTTP URIs may be quite long).
-    auto ret = util::sha1(key);
+    auto ret = util::sha1_digest(key);
     return std::string(ret.begin(), ret.end());
 }
 

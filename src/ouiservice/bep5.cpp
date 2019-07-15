@@ -6,6 +6,7 @@
 #include "../bittorrent/bep5_announcer.h"
 #include "../bittorrent/is_martian.h"
 #include "../logger.h"
+#include "../util/hash.h"
 
 using namespace std;
 using namespace ouinet;
@@ -90,7 +91,7 @@ Bep5Server::Bep5Server( shared_ptr<bt::MainlineDht> dht
         LOG_ERROR("Bep5Server: DHT has no endpoints!");
     }
 
-    bt::NodeID infohash = util::sha1(swarm_name);
+    bt::NodeID infohash = util::sha1_digest(swarm_name);
     LOG_INFO("Injector swarm: sha1('", swarm_name, "'): ", infohash.to_hex());
 
     for (auto ep : endpoints) {
@@ -238,7 +239,7 @@ Bep5Client::Bep5Client( shared_ptr<bt::MainlineDht> dht
 
 void Bep5Client::start(asio::yield_context)
 {
-    bt::NodeID infohash = util::sha1(_swarm_name);
+    bt::NodeID infohash = util::sha1_digest(_swarm_name);
 
     LOG_INFO("Injector swarm: sha1('", _swarm_name, "'): ", infohash.to_hex());
 

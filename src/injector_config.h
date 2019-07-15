@@ -74,8 +74,11 @@ public:
     const std::string& tls_ca_cert_store_path() const
     { return _tls_ca_cert_store_path; }
 
+    util::Ed25519PrivateKey cache_private_key() const
+    { return _ed25519_private_key; }
+
     util::Ed25519PrivateKey index_bep44_private_key() const
-    { return _index_bep44_private_key; }
+    { return _ed25519_private_key; }
 
     unsigned int index_bep44_capacity() const
     { return _index_bep44_capacity; }
@@ -86,7 +89,7 @@ public:
     bool cache_enabled() const { return !_disable_cache; }
 
 private:
-    void setup_index_bep44_private_key(const std::string& hex);
+    void setup_ed25519_private_key(const std::string& hex);
 
 private:
     bool _is_help = false;
@@ -106,7 +109,7 @@ private:
     boost::optional<std::string> _bep5_injector_swarm_name;
     boost::filesystem::path OUINET_CONF_FILE = "ouinet-injector.conf";
     std::string _credentials;
-    util::Ed25519PrivateKey _index_bep44_private_key;
+    util::Ed25519PrivateKey _ed25519_private_key;
     unsigned int _index_bep44_capacity;
     unsigned int _cache_local_capacity;
     bool _disable_cache = false;
@@ -151,14 +154,14 @@ InjectorConfig::options_description()
          , "Path to the CA certificate store file")
         // Cache options
         ("disable-cache", "Disable all cache operations (even initialization)")
+        ("ed25519-private-key", po::value<string>()
+         , "Ed25519 private key for cache-related signatures (hex-encoded)")
         ("seed-content"
          , po::value<bool>()->default_value(false)
          , "Seed the content instead of only signing it")
         ("cache-local-capacity"
          , po::value<unsigned int>()->default_value(10000)  // arbitrarily chosen
          , "Maximum number of resources to be cached locally")
-        ("index-bep44-private-key", po::value<string>()
-         , "Index private key for the BitTorrent BEP44 subsystem")
         // By default, it is not desirable that the injector actively republishes BEP44 entries.
         // If a client caused a new injection of a URL (whether there was an existing injection of it or not),
         // and the client goes immediately offline (so that its IPFS data is no longer available),
@@ -301,39 +304,39 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         _disable_cache = true;
     }
 
-    if (vm.count("index-bep44-private-key") || !_disable_cache) {
+    if (vm.count("ed25519-private-key") || !_disable_cache) {
         // Only set this up when we actually need it. The problem being
         // that generating keys takes a long time on CI machines and it
         // causes time outs.
-        setup_index_bep44_private_key( vm.count("index-bep44-private-key")
-                                     ? vm["index-bep44-private-key"].as<string>()
-                                     : string());
+        setup_ed25519_private_key( vm.count("ed25519-private-key")
+                                 ? vm["ed25519-private-key"].as<string>()
+                                 : string());
     }
 
 }
 
-inline void InjectorConfig::setup_index_bep44_private_key(const std::string& hex)
+inline void InjectorConfig::setup_ed25519_private_key(const std::string& hex)
 {
-    fs::path priv_config = _repo_root/"bep44-private-key";
-    fs::path pub_config  = _repo_root/"bep44-public-key";
+    fs::path priv_config = _repo_root/"ed25519-private-key";
+    fs::path pub_config  = _repo_root/"ed25519-public-key";
 
     if (hex.empty()) {
         if (fs::exists(priv_config)) {
-            fs::ifstream(priv_config) >> _index_bep44_private_key;
-            fs::ofstream(pub_config)  << _index_bep44_private_key.public_key();
+            fs::ifstream(priv_config) >> _ed25519_private_key;
+            fs::ofstream(pub_config)  << _ed25519_private_key.public_key();
             return;
         }
 
-        _index_bep44_private_key = util::Ed25519PrivateKey::generate();
+        _ed25519_private_key = util::Ed25519PrivateKey::generate();
 
-        fs::ofstream(priv_config) << _index_bep44_private_key;
-        fs::ofstream(pub_config)  << _index_bep44_private_key.public_key();
+        fs::ofstream(priv_config) << _ed25519_private_key;
+        fs::ofstream(pub_config)  << _ed25519_private_key.public_key();
         return;
     }
 
-    _index_bep44_private_key = *util::Ed25519PrivateKey::from_hex(hex);
-    fs::ofstream(priv_config) << _index_bep44_private_key;
-    fs::ofstream(pub_config)  << _index_bep44_private_key.public_key();
+    _ed25519_private_key = *util::Ed25519PrivateKey::from_hex(hex);
+    fs::ofstream(priv_config) << _ed25519_private_key;
+    fs::ofstream(pub_config)  << _ed25519_private_key.public_key();
 }
 
 } // ouinet namespace

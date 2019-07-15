@@ -559,7 +559,7 @@ string Bep44ClientIndex::insert_mapping( const boost::string_view key
     if (_updater)
         _updater->insert(key, move(item), cancel, yield[ec]);
 
-    return util::bytes::to_hex(util::sha1(pk, salt));
+    return util::bytes::to_hex(util::sha1_digest(pk, salt));
 }
 
 

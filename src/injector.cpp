@@ -14,6 +14,7 @@
 #include <cstdlib>  // for atexit()
 
 #include "cache/bep44_ipfs/cache_injector.h"
+#include "cache/http_sign.h"
 
 #include "bittorrent/dht.h"
 #include "bittorrent/mutable_data.h"
@@ -52,6 +53,7 @@
 #include "util/timeout.h"
 #include "util/atomic_file.h"
 #include "util/crypto.h"
+#include "util/hash.h"
 #include "util/bytes.h"
 #include "util/file_io.h"
 #include "util/file_posix_with_offset.h"
@@ -320,67 +322,74 @@ public:
         , ssl_ctx(ssl_ctx)
         , injector(injector)
         , config(config)
+        , httpsig_key_id(cache::http_key_id_for_injection(config.cache_private_key()))
         , genuuid(genuuid)
         , origin_pools(origin_pools)
     {
     }
 
     void inject_fresh( GenericStream& con
-                     , const Request& rq_
+                     , Request rq
                      , Cancel& cancel
                      , Yield yield)
     {
-        LOG_DEBUG("Injector inject_fresh begin (has injector:", bool(injector), ")");
+        using RespFromH = http::response<http::empty_body>;
+
+        yield.log("Injection begin");
+
         sys::error_code ec;
 
-        auto rs_ = fetch_fresh(rq_, cancel, yield[ec]);
+        // Pop out Ouinet internal HTTP headers.
+        rq = util::to_cache_request(move(rq));
 
+        auto orig_con = get_connection(rq, cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec);
 
-        // Pop out Ouinet internal HTTP headers.
-        auto rq = util::to_cache_request(move(rq_));
-        auto rs = util::to_cache_response(move(rs_));
+        bool do_inject = false;
+        http::response_header<> outh;
+        auto head_proc = [&] (auto inh, auto&, auto yield_) {
+            auto inh_orig = inh;
+            sys::error_code ec_;
+            inh = util::to_cache_response(move(inh), ec_);
+            if (ec) return inh_orig;  // will not inject, just proxy
 
-        if (injector) {
-            auto ins = injector->insert_content( insert_id, rq, rs
-                                               , false
-                                               , yield[ec]);
+            do_inject = true;
+            inh = cache::http_injection_head(rq, move(inh), insert_id);
+            // We will use the trailer to send the body digest and head signature.
+            assert(RespFromH(inh).chunked());
 
+            outh = inh;
+            return inh;
+        };
 
-            if (!ec) {
-                auto key = key_from_http_req(rq);
+        size_t forwarded = 0;
+        util::SHA256 data_hash;
+        ProcInFunc<asio::const_buffer> data_proc = [&] (auto inbuf, auto&, auto) {
+            // Just count transferred data and feed the hash.
+            forwarded += inbuf.size();
+            if (do_inject) data_hash.update(inbuf);
+            return inbuf;  // pass data on
+        };
 
-                LOG_DEBUG("Injector new insertion: ", ins.desc_data);
-                // Add an injection identifier header
-                // to enable the client to track injection state.
-                rs.set(http_::response_injection_id_hdr, insert_id);
+        auto trailer_proc = [&] (auto intr, auto&, auto) {
+            if (!do_inject) return intr;
 
-                rs.set( http_::response_injection_time
-                      , util::format_date(
-                          boost::posix_time::second_clock::universal_time()));
+            intr = util::to_cache_trailer(move(intr));
+            return cache::http_injection_trailer( outh, move(intr)
+                                                , forwarded, data_hash.close()
+                                                , config.cache_private_key()
+                                                , httpsig_key_id);
+        };
 
-                rs.set(http_::response_injection_key, key);
+        RespFromH res(http_forward( orig_con, con, util::to_origin_request(rq)
+                                  , head_proc, data_proc, trailer_proc
+                                  , cancel, yield[ec].tag("fetch_injector")));
 
-                // Add index insertion headers.
-                rs = add_re_insertion_header_field( move(rs)
-                                                  , move(ins.index_ins_data));
-                if (ins.index_linked_desc)  // linked descriptor, send as well
-                    rs = add_descriptor_header_field( move(rs)
-                                                    , move(ins.desc_data));
+        if (ec) yield.log("Injection failed: ", ec.message());
+        return_or_throw_on_error(yield, cancel, ec);
+        yield.log(do_inject ? "Injected data bytes: " : "Forwarded data bytes: ", forwarded);
 
-                sys::error_code ec_ignored;
-                save_to_disk(key_from_http_req(rq), rs, cancel, yield[ec_ignored]);
-                assert(!ec);
-            }
-            else {
-                LOG_DEBUG("Injector new insertion failed: ", ec.message());
-            }
-        }
-
-        http::async_write(con, rs, yield[ec].tag("write_response"));
-
-        if (cancel) ec = asio::error::operation_aborted;
-        return or_throw(yield, ec);
+        keep_connection(rq, res, move(orig_con));
     }
 
     static bool is_old(boost::posix_time::ptime ts)
@@ -395,7 +404,7 @@ public:
 
     fs::path cache_file(string_view key)
     {
-        return cache_dir() /  util::bytes::to_hex(util::sha1(key));
+        return cache_dir() /  util::bytes::to_hex(util::sha1_digest(key));
     }
 
     ResponseWithFileBody load_from_disk(string_view key, Cancel& cancel, Yield yield)
@@ -463,6 +472,8 @@ public:
 
     bool is_semi_fresh(http::response_header<>& hdr)
     {
+        // TODO: If something like this must be used,
+        // please check injection metadata headers instead.
         auto date = util::parse_date(hdr[http::field::date]);
 
         if (date == boost::posix_time::ptime()) {
@@ -599,14 +610,17 @@ private:
             injector = injector.get()
         ] (boost::asio::yield_context yield) mutable
           -> CacheInjector::InsertionResult {
+            sys::error_code ec;
+
             // Pop out Ouinet internal HTTP headers.
             rq = util::to_cache_request(move(rq));
-            rs = util::to_cache_response(move(rs));
+            rs = util::to_cache_response(move(rs), ec);
 
-            sys::error_code ec;
-            auto ret = injector->insert_content( id, rq, move(rs)
-                                               , true
-                                               , yield[ec]);
+            CacheInjector::InsertionResult ret;
+            if (!ec)
+                ret = injector->insert_content( id, rq, move(rs)
+                                              , true
+                                              , yield[ec]);
 
             if (ec) {
                 cout << "!Insert failed: " << rq.target()
@@ -704,6 +718,7 @@ private:
     asio::ssl::context& ssl_ctx;
     unique_ptr<CacheInjector>& injector;
     const InjectorConfig& config;
+    string httpsig_key_id;
     uuid_generator& genuuid;
     OriginPools& origin_pools;
 };
@@ -770,8 +785,8 @@ void serve( InjectorConfig& config
             // TODO: Maybe reject requests for HTTPS URLS:
             // we are perfectly able to handle them (and do verification locally),
             // but the client should be using a CONNECT request instead!
-            using ResponseH = http::response<http::empty_body>;
-            ResponseH res;
+            using RespFromH = http::response<http::empty_body>;
+            RespFromH res;
             auto orig_con = cc.get_connection(req, cancel, yield[ec]);
             size_t forwarded = 0;
             if (!ec) {
@@ -789,7 +804,7 @@ void serve( InjectorConfig& config
                 auto trproc = [&] (auto intr, auto&, auto) {
                     return intr;  // leave trailers untouched
                 };
-                res = ResponseH(http_forward( orig_con, con
+                res = RespFromH(http_forward( orig_con, con
                                             , util::to_origin_request(req)
                                             , reshproc, inproc, trproc
                                             , cancel, yield[ec].tag("fetch_proxy")));

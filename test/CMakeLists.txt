@@ -42,7 +42,7 @@ target_link_libraries(test-stream-fork ${Boost_LIBRARIES})
 add_executable(test-persistent-lru-cache "test_persistent_lru_cache.cpp"
                                          "../src/util/persistent_lru_cache.cpp"
                                          "../src/asio.cpp"
-                                         "../src/util/sha1.cpp"
+                                         "../src/util/hash.cpp"
                                          "../src/util/atomic_file.cpp"
                                          "../src/util/crypto.cpp"
                                          "../src/util/file_io.cpp"
@@ -55,7 +55,7 @@ target_link_libraries(test-persistent-lru-cache ${Boost_LIBRARIES} ${GCRYPT_LIBR
 ################################################################################
 file(GLOB bt_cpp_files "../src/bittorrent/*.cpp"
                        "../src/util/crypto.cpp"
-                       "../src/util/sha1.cpp"
+                       "../src/util/hash.cpp"
                        "../src/logger.cpp"
                        "../src/asio.cpp")
 
