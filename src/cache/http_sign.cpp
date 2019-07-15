@@ -57,7 +57,7 @@ http_injection_trailer( const http::response_header<>& rsh
 {
     // Pending trailer headers to support the signature.
     rst.set(ouinet::http_::header_prefix + "Data-Size", content_length);
-    rst.set(http::field::digest, util::base64_encode(content_digest));
+    rst.set(http::field::digest, "SHA-256=" + util::base64_encode(content_digest));
 
     // Put together the head to be signed:
     // initial head, minus chunking (and related headers), plus trailer headers.
