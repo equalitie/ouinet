@@ -296,6 +296,7 @@ class ConnectionPool {
 
         using IdleConnection<GenericStream>::IdleConnection;
 
+        Connection() = default;
         Connection(Connection&&) = default;
         Connection& operator=(Connection&&) = default;
 
