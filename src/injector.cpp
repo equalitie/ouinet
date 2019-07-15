@@ -322,6 +322,7 @@ public:
         , ssl_ctx(ssl_ctx)
         , injector(injector)
         , config(config)
+        , httpsig_key_id(cache::http_key_id_for_injection(config.cache_private_key()))
         , genuuid(genuuid)
         , origin_pools(origin_pools)
     {
@@ -376,7 +377,8 @@ public:
             intr = util::to_cache_trailer(move(intr));
             return cache::http_injection_trailer( outh, move(intr)
                                                 , forwarded, data_hash.close()
-                                                , config.cache_private_key());
+                                                , config.cache_private_key()
+                                                , httpsig_key_id);
         };
 
         RespFromH res(http_forward( orig_con, con, util::to_origin_request(rq)
@@ -716,6 +718,7 @@ private:
     asio::ssl::context& ssl_ctx;
     unique_ptr<CacheInjector>& injector;
     const InjectorConfig& config;
+    string httpsig_key_id;
     uuid_generator& genuuid;
     OriginPools& origin_pools;
 };

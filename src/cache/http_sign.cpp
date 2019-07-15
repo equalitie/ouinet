@@ -52,7 +52,8 @@ http_injection_trailer( const http::response_header<>& rsh
                       , http::fields rst
                       , size_t content_length
                       , const ouinet::util::SHA256::digest_type& content_digest
-                      , const ouinet::util::Ed25519PrivateKey& sk)
+                      , const ouinet::util::Ed25519PrivateKey& sk
+                      , const std::string key_id)
 {
     // Pending trailer headers to support the signature.
     rst.set(ouinet::http_::header_prefix + "Data-Size", content_length);
@@ -69,8 +70,14 @@ http_injection_trailer( const http::response_header<>& rsh
     for (auto& hdr : rst)
         to_sign.set(hdr.name_string(), hdr.value());
 
-    rst.set("Signature", http_signature(to_sign, sk));
+    rst.set("Signature", http_signature(to_sign, sk, key_id));
     return rst;
+}
+
+std::string
+http_key_id_for_injection(const ouinet::util::Ed25519PrivateKey& sk)
+{
+    return "ed25519=" + ouinet::util::base64_encode(sk.public_key().serialize());
 }
 
 std::string
@@ -143,16 +150,15 @@ get_sig_str_hdrs(const Head& sig_head)
 
 std::string
 http_signature( const http::response_header<>& rsh
-              , const ouinet::util::Ed25519PrivateKey& sk)
+              , const ouinet::util::Ed25519PrivateKey& sk
+              , const std::string key_id)
 {
-    auto fmt = boost::format("keyId=\"ed25519=%s\""
+    auto fmt = boost::format("keyId=\"%s\""
                              ",algorithm=\"hs2019\""
                              ",created=%d"
                              ",headers=\"%s\""
                              ",signature=\"%s\"");
 
-    // TODO: Cache somewhere, doing this every time is quite inefficient.
-    auto encoded_pk = ouinet::util::base64_encode(sk.public_key().serialize());
     auto ts = std::chrono::seconds(std::time(nullptr)).count();
 
     http::response_header<> sig_head;
@@ -164,7 +170,7 @@ http_signature( const http::response_header<>& rsh
 
     auto encoded_sig = ouinet::util::base64_encode(sk.sign(sig_string));
 
-    return (fmt % encoded_pk % ts % headers % encoded_sig).str();
+    return (fmt % key_id % ts % headers % encoded_sig).str();
 }
 
 }} // namespaces

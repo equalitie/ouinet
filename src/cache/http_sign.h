@@ -45,7 +45,12 @@ http_injection_trailer( const http::response_header<>& rsh
                       , http::fields rst
                       , size_t content_length
                       , const ouinet::util::SHA256::digest_type& content_digest
-                      , const ouinet::util::Ed25519PrivateKey&);
+                      , const ouinet::util::Ed25519PrivateKey&
+                      , const std::string key_id);
+
+// Get a `keyId` encoding the public key of the given private key itself.
+std::string
+http_key_id_for_injection(const ouinet::util::Ed25519PrivateKey&);
 
 // Get the body digest as per RFC 3230 and RFC 5843.
 //
@@ -59,6 +64,7 @@ http_digest(const http::response<http::dynamic_body>&);
 // Compute a signature as per draft-cavage-http-signatures-11.
 std::string
 http_signature( const http::response_header<>&
-              , const ouinet::util::Ed25519PrivateKey&);
+              , const ouinet::util::Ed25519PrivateKey&
+              , const std::string key_id);
 
 }} // namespaces
