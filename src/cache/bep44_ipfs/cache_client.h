@@ -23,7 +23,7 @@ class Bep44ClientIndex;
 
 class CacheClient {
 public:
-    using Response = CacheEntry::Response;
+    using Response = http::response<http::dynamic_body>;//CacheEntry::Response;
 
     // Construct the CacheClient without blocking the main thread as
     // constructing asio_ipfs::node takes some time.

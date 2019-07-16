@@ -26,13 +26,16 @@ namespace posix_time = boost::posix_time;
 // Look for a literal directive (like "no-cache" but not "max-age=N")
 // in the "Cache-Control" header field
 // of a request or response.
-template <bool isRequest, class Body>
 static
-bool has_cache_control_directive( const http::message<isRequest, Body>& request
+bool has_cache_control_directive( const Session& session
                                 , const beast::string_view& directive)
 {
-    auto cache_control_i = request.find(http::field::cache_control);
-    if (cache_control_i == request.end()) return false;
+    auto hdr_p = session.response_header();
+    assert(hdr_p);
+    if (!hdr_p) return false;
+
+    auto cache_control_i = hdr_p->find(http::field::cache_control);
+    if (cache_control_i == hdr_p->end()) return false;
 
     for (auto kv : SplitString(cache_control_i->value(), ',')) {
         if (boost::iequals(kv, directive)) return true;
@@ -49,6 +52,14 @@ static optional<beast::string_view> get(const R& r, http::field f)
       return boost::none;
         
     return i->value();
+}
+
+static optional<beast::string_view> get(const Session& s, http::field f)
+{
+    auto hdr = s.response_header();
+    assert(hdr);
+    if (!hdr) return boost::none;
+    return get(*hdr, f);
 }
 
 inline void trim_quotes(beast::string_view& v) {
@@ -99,7 +110,10 @@ optional<unsigned> get_max_age(const beast::string_view& cache_control_value)
 /* static */
 bool CacheControl::is_expired(const CacheEntry& entry)
 {
-    return is_expired(entry.response, entry.time_stamp);
+    auto hdr_p = entry.response.response_header();
+    assert(hdr_p);
+    if (!hdr_p) return true;
+    return is_expired(*hdr_p, entry.time_stamp);
 }
 
 /* static */
@@ -150,80 +164,42 @@ CacheControl::is_older_than_max_cache_age(const posix_time::ptime& time_stamp) c
 }
 
 static
-Response add_warning(Response response, const char* value)
+Session add_warning(Session s, const char* value)
 {
-    response.set(http::field::warning, value);
-    return response;
+    auto hdr_p = s.response_header();
+
+    assert(hdr_p);
+    if (!hdr_p) return s;
+
+    hdr_p->set(http::field::warning, value);
+
+    return s;
 }
 
 static
-Response add_stale_warning(Response response)
+Session add_stale_warning(Session response)
 {
     return add_warning( move(response)
                       , "110 Ouinet 'Response is stale'");
 }
 
-static bool has_correct_content_length(const Response& rs)
-{
-    // Relevant RFC https://tools.ietf.org/html/rfc7230#section-3.3.2
-    auto opt_length = get(rs, http::field::content_length);
-    if (!opt_length) return true;
-    auto length = util::parse_num<size_t>(*opt_length, size_t(-1));
-    if (length == size_t(-1)) return false;
-    return rs.body().size() == length;
-}
-
-Response CacheControl::bad_gateway(const Request& req, beast::string_view reason)
-{
-    Response res{http::status::bad_gateway, req.version()};
-    res.set(http::field::server, _server_name);
-    res.set(http_::header_prefix + "Debug", reason);
-    res.keep_alive(req.keep_alive());
-    res.prepare_payload();
-    return res;
-}
-
-Response
-CacheControl::fetch(const Request& request, Cancel& cancel, Yield yield)
+Session
+CacheControl::fetch(const Request& request,
+                    sys::error_code& fresh_ec,
+                    sys::error_code& cache_ec,
+                    Cancel& cancel,
+                    Yield yield)
 {
     sys::error_code ec;
-    auto response = do_fetch(request, cancel, yield[ec]);
 
-    if(!ec && !has_correct_content_length(response)) {
-#ifndef NDEBUG
-        yield.log("::::: CacheControl WARNING Incorrect content length :::::");
-        yield.log(request, response);
-        yield.log(":::::::::::::::::::::::::::::::::::::::::::::::::::::::::");
-#endif
-    }
+    auto response = do_fetch(
+            request,
+            fresh_ec,
+            cache_ec,
+            cancel,
+            yield[ec]);
 
     return or_throw(yield, ec, move(response));
-}
-
-bool
-CacheControl::fetch( GenericStream& con
-                   , const Request& request
-                   , Cancel& cancel
-                   , Yield yield)
-{
-    sys::error_code ec;
-    auto response = do_fetch(request, cancel, yield[ec]);
-
-    if(!ec && !has_correct_content_length(response)) {
-#ifndef NDEBUG
-        yield.log("::::: CacheControl WARNING Incorrect content length :::::");
-        yield.log(request, response);
-        yield.log(":::::::::::::::::::::::::::::::::::::::::::::::::::::::::");
-#endif
-    }
-
-    return_or_throw_on_error(yield, cancel, ec, false);
-
-    response.keep_alive(request.keep_alive());
-
-    http::async_write(con, response, yield[ec].tag("write_response"));
-
-    return request.keep_alive();
 }
 
 static bool must_revalidate(const Request& request)
@@ -250,22 +226,32 @@ static bool must_revalidate(const Request& request)
 }
 
 //------------------------------------------------------------------------------
-bool CacheControl::has_temporary_result(const Response& rs) const
+bool CacheControl::has_temporary_result(const Session& rs) const
 {
+    auto hdr = rs.response_header();
+
+    assert(hdr);
+    if (!hdr) return false;
+
     // TODO: More statuses
-    return rs.result() == http::status::found
-        || rs.result() == http::status::temporary_redirect;
+    return hdr->result() == http::status::found
+        || hdr->result() == http::status::temporary_redirect;
 }
 
 //------------------------------------------------------------------------------
 struct CacheControl::FetchState {
-    optional<AsyncJob<Response>> fetch_fresh;
+    optional<AsyncJob<Session>> fetch_fresh;
     optional<AsyncJob<CacheEntry>> fetch_stored;
 };
 
 //------------------------------------------------------------------------------
-Response
-CacheControl::do_fetch(const Request& request, Cancel& cancel, Yield yield)
+Session
+CacheControl::do_fetch(
+        const Request& request,
+        sys::error_code& fresh_ec,
+        sys::error_code& cache_ec,
+        Cancel& cancel,
+        Yield yield)
 {
     FetchState fetch_state;
 
@@ -298,47 +284,47 @@ CacheControl::do_fetch(const Request& request, Cancel& cancel, Yield yield)
 
     namespace err = asio::error;
 
-    sys::error_code ec;
-
     if (must_revalidate(request)) {
-        sys::error_code ec1, ec2;
+        auto res = do_fetch_fresh(fetch_state, request, yield[fresh_ec]);
 
-        auto res = do_fetch_fresh(fetch_state, request, yield[ec1]);
-        if (!ec1) return res;
-        if (ec1 == err::operation_aborted) return or_throw(yield, ec1, move(res));
+        if (!fresh_ec) {
+            cache_ec = err::operation_aborted;
+            return res;
+        }
 
-        auto cache_entry = do_fetch_stored(fetch_state, request, yield[ec2]);
-        if (!ec2) return add_warning( move(cache_entry.response)
-                                    , "111 Ouinet \"Revalidation Failed\"");
+        if (fresh_ec == err::operation_aborted) {
+            cache_ec = err::operation_aborted;
+            return or_throw(yield, fresh_ec, move(res));
+        }
 
-        if (ec2 == err::operation_aborted) return or_throw(yield, ec1, move(res));
+        auto cache_entry = do_fetch_stored(fetch_state, request, yield[cache_ec]);
+        if (!cache_ec) return add_warning( move(cache_entry.response)
+                                         , "111 Ouinet \"Revalidation Failed\"");
 
-        return bad_gateway( request
-                          , util::str( "1: fresh: \"", ec1.message(), "\""
-                                     , " cache: \"",   ec2.message(), "\""));
+        if (cache_ec == err::operation_aborted)
+            return or_throw(yield, fresh_ec, move(res));
+
+        return or_throw<Session>(yield, err::service_not_found);
     }
 
-    auto cache_entry = do_fetch_stored(fetch_state, request, yield[ec]);
+    auto cache_entry = do_fetch_stored(fetch_state, request, yield[cache_ec]);
 
-    if (ec == err::operation_aborted) {
-        return or_throw<Response>(yield, ec);
+    if (cache_ec == err::operation_aborted) {
+        fresh_ec = err::operation_aborted;
+        return or_throw<Session>(yield, err::operation_aborted);
     }
 
-    if (ec) {
+    if (cache_ec) {
         // Retrieving from cache failed.
-        sys::error_code fresh_ec;
-
         auto res = do_fetch_fresh(fetch_state, request, yield[fresh_ec]);
 
         if (!fresh_ec) return res;
 
         if (fresh_ec == err::operation_aborted) {
-            return or_throw<Response>(yield, ec);
+            return or_throw<Session>(yield, err::operation_aborted);
         }
 
-        return bad_gateway( request
-                          , util::str( "2: fresh: \"", fresh_ec.message(), "\""
-                                     , " cached: \"", ec.message(), "\""));
+        return or_throw<Session>(yield, err::no_data);
     }
 
     // If we're here that means that we were able to retrieve something
@@ -348,23 +334,27 @@ CacheControl::do_fetch(const Request& request, Cancel& cancel, Yield yield)
     if (has_cache_control_directive(cache_entry.response, "private")
         || is_older_than_max_cache_age(cache_entry.time_stamp)
         || has_temporary_result(cache_entry.response)) {
-        auto response = do_fetch_fresh(fetch_state, request, yield[ec]);
+        auto response = do_fetch_fresh(fetch_state, request, yield[fresh_ec]);
 
-        if (!ec) {
+        if (!fresh_ec) {
+            cache_ec = err::operation_aborted;
             LOG_DEBUG(yield.tag(), ": Response was served from injector: cached response is private or too old");
             return response;
         }
 
         LOG_DEBUG(yield.tag(), ": Response was served from cached: cannot reach the injector");
 
-        return is_expired(cache_entry)
-             ? add_stale_warning(move(cache_entry.response))
-             : cache_entry.response;
+        if (is_expired(cache_entry)) {
+            cache_entry.response = add_stale_warning(move(cache_entry.response));
+        }
+
+        return move(cache_entry.response);
     }
 
     if (!is_expired(cache_entry)) {
         LOG_DEBUG(yield.tag(), ": Response was served from cache: not expired");
-        return cache_entry.response;
+        fresh_ec = err::operation_aborted;
+        return move(cache_entry.response);
     }
 
     auto cache_etag  = get(cache_entry.response, http::field::etag);
@@ -376,14 +366,17 @@ CacheControl::do_fetch(const Request& request, Cancel& cancel, Yield yield)
 
         rq.set(http::field::if_none_match, *cache_etag);
 
-        auto response = do_fetch_fresh(fetch_state, rq, yield[ec]);
+        auto response = do_fetch_fresh(fetch_state, rq, yield[fresh_ec]);
 
-        if (ec) {
+        if (fresh_ec) {
             LOG_DEBUG(yield.tag(), ": Response was served from cache: revalidation failed");
             return add_stale_warning(move(cache_entry.response));
         }
 
-        if (response.result() == http::status::not_modified) {
+        auto hdr = response.response_header();
+        assert(hdr);
+
+        if (hdr->result() == http::status::not_modified) {
             LOG_DEBUG(yield.tag(), ": Response was served from cache: not modified");
             return move(cache_entry.response);
         }
@@ -392,12 +385,13 @@ CacheControl::do_fetch(const Request& request, Cancel& cancel, Yield yield)
         return response;
     }
 
-    auto response = do_fetch_fresh(fetch_state, request, yield[ec]);
+    auto response = do_fetch_fresh(fetch_state, request, yield[fresh_ec]);
 
-    if (ec) {
+    if (fresh_ec) {
         LOG_DEBUG(yield.tag(), ": Response was served from cache: requesting fresh response failed");
         return add_stale_warning(move(cache_entry.response));
     } else {
+        cache_ec = err::operation_aborted;
         LOG_DEBUG(yield.tag(), ": Response was served from injector: cached expired without etag");
         return response;
     }
@@ -418,31 +412,26 @@ posix_time::time_duration CacheControl::max_cached_age() const
 //------------------------------------------------------------------------------
 auto CacheControl::make_fetch_fresh_job(const Request& rq, Yield& yield)
 {
-    AsyncJob<Response> job(_ios);
+    AsyncJob<Session> job(_ios);
 
     job.start([&] (Cancel& cancel, asio::yield_context yield_) mutable {
             auto y = yield.detach(yield_);
-
             sys::error_code ec;
-            auto rs = fetch_fresh(rq, cancel, y[ec]);
-
-            if (!ec) {
-                sys::error_code ec_;
-                rs = try_to_cache(rq, move(rs), y[ec_].tag("try_to_cache"));
-            }
-
-            return or_throw(yield_, ec, move(rs));
+            auto r = fetch_fresh(rq, cancel, y[ec]);
+            if (ec) return or_throw(y, ec, move(r));
+            assert(r.response_header());
+            return r;
         });
 
     return job;
 }
 
 //------------------------------------------------------------------------------
-Response
+Session
 CacheControl::do_fetch_fresh(FetchState& fs, const Request& rq, Yield yield)
 {
     if (!fetch_fresh) {
-        return or_throw<Response>(yield, asio::error::operation_not_supported);
+        return or_throw<Session>(yield, asio::error::operation_not_supported);
     }
 
     if (!fs.fetch_fresh) {
@@ -505,7 +494,7 @@ CacheControl::do_fetch_stored(FetchState& fs, const Request& rq, Yield yield)
         if (!r.ec) {
             return {
                 posix_time::second_clock::universal_time(),
-                r.retval
+                move(r.retval)
             };
         }
 
@@ -515,11 +504,11 @@ CacheControl::do_fetch_stored(FetchState& fs, const Request& rq, Yield yield)
         cv.wait(yield);
 
         auto& r2 = fs.fetch_stored->result();
-        return or_throw(yield, r2.ec, r2.retval);
+        return or_throw(yield, r2.ec, move(r2.retval));
     }
     else if (which == stored) {
         auto& r = fs.fetch_stored->result();
-        return or_throw(yield, r.ec, r.retval);
+        return or_throw(yield, r.ec, move(r.retval));
     }
 
     assert(0);
@@ -674,28 +663,3 @@ bool CacheControl::ok_to_cache( const http::request_header<>&  request
 
     return true;
 }
-
-//------------------------------------------------------------------------------
-Response
-CacheControl::try_to_cache( const Request& request
-                          , Response response
-                          , Yield yield) const
-{
-    if (!store) return response;
-
-    const char* reason = "";
-
-    if (!ok_to_cache(request, response, &reason)) {
-#ifndef NDEBUG
-        yield.log("::::: CacheControl: NOT CACHING :::::");
-        yield.log(":: ", reason);
-        yield.log(request.base(), response.base());
-        yield.log(":::::::::::::::::::::::::::::::::::::");
-#endif
-        return response;
-    }
-
-    Cancel cancel;
-    return store(request, move(response), cancel, yield);
-}
-

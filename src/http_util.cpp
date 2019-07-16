@@ -47,6 +47,7 @@ ouinet::util::get_host_port(const http::request<http::string_body>& req)
     return make_pair(host, port);
 }
 
+#ifdef __SANITIZE_ADDRESS__
 static
 boost::optional<posix_time::ptime>
 parse_date_rfc1123(beast::string_view s)
@@ -77,11 +78,15 @@ parse_date_rfc1123(beast::string_view s)
 	        break;
 	    }
     }
+
+    if (g.tm_year == 0) return boost::none;
+
     g.tm_year -= 1900;
     t = timegm (& g);
 
     return posix_time::from_time_t(t);
 }
+#endif
 
 posix_time::ptime
 ouinet::util::parse_date(beast::string_view s)

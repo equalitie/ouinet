@@ -109,7 +109,7 @@ static Message filter_fields(Message message, const Fields&... keep_fields)
 }
 
 template<class Message>
-static Message remove_ouinet_fields(Message message)
+static void remove_ouinet_fields_ref(Message& message)
 {
     for (auto fit = message.begin(); fit != message.end();) {
         if (boost::istarts_with(fit->name_string(), http_::header_prefix)) {
@@ -118,7 +118,12 @@ static Message remove_ouinet_fields(Message message)
             fit++;
         }
     }
+}
 
+template<class Message>
+static Message remove_ouinet_fields(Message message)
+{
+    remove_ouinet_fields_ref(message);
     return message;
 }
 

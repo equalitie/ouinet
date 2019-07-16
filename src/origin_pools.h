@@ -22,10 +22,7 @@ public:
     using Connection = ConnectionPool<bool>::Connection;
 
 public:
-    static Connection wrap(GenericStream connection)
-    {
-        return ConnectionPool<bool>::wrap(std::move(connection));
-    }
+    Connection wrap(const RequestHdr&, GenericStream);
 
     boost::optional<Connection> get_connection(const RequestHdr& rq);
 
@@ -64,6 +61,18 @@ OriginPools::get_connection(const RequestHdr& rq)
     }
 
     return ret;
+}
+
+inline
+OriginPools::Connection
+OriginPools::wrap(const RequestHdr& rq, GenericStream connection)
+{
+    auto opt_pool_id = make_pool_id(rq);
+
+    assert(opt_pool_id);
+    if (!opt_pool_id) return Connection();
+
+    return _pools[*opt_pool_id].wrap(std::move(connection));
 }
 
 inline

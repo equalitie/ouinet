@@ -152,6 +152,8 @@ CacheClient::CacheClient( std::unique_ptr<asio_ipfs::node> ipfs_node
 
 CacheEntry CacheClient::load(const string& key, Cancel cancel, Yield yield)
 {
+    // This code needs to be fixed to support the new streaming API
+#if 0
     sys::error_code ec;
     auto slot = _fetch_stored_scheduler.wait_for_slot(cancel, yield);
 
@@ -173,6 +175,9 @@ CacheEntry CacheClient::load(const string& key, Cancel cancel, Yield yield)
     }
 
     return or_throw(yield, ec, move(ret.second));
+#else
+    return or_throw<CacheEntry>(yield, asio::error::operation_not_supported);
+#endif
 }
 
 void CacheClient::store( const string& key
@@ -180,6 +185,8 @@ void CacheClient::store( const string& key
                        , Cancel cancel_
                        , asio::yield_context yield)
 {
+    // This code needs to be fixed to support the new streaming API
+#if 0
     auto& ios = _ipfs_node->get_io_service();
 
     auto cancel_con = _cancel.connect([&] { cancel_(); });
@@ -322,6 +329,9 @@ void CacheClient::store( const string& key
                                  % (body_link == desc->body_link)).str()
                                : "did not find descriptor, giving up");
         });
+#else
+    return or_throw(yield, asio::error::operation_not_supported);
+#endif
 }
 
 string CacheClient::ipfs_add(const string& data, asio::yield_context yield)

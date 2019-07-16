@@ -15,6 +15,7 @@ add_executable(test-cache "test_cache_control.cpp"
                           "../src/http_util.cpp"
                           "../src/logger.cpp")
 
+add_dependencies(test-cache uri)
 target_link_libraries(test-cache ${Boost_LIBRARIES} ${URI_LIBRARY})
 
 ######################################################################

@@ -18,14 +18,18 @@ class Fork {
     using IntrusiveHook = boost::intrusive::list_member_hook
         <boost::intrusive::link_mode<boost::intrusive::auto_unlink>>;
 
+    class ForkState;
+
 public:
     class Tine {
         friend class Fork;
         template<class T> friend class ouinet::stream::Fork;
 
         public:
+        Tine() = default;
         Tine(Fork&);
-        Tine(const Tine&) = delete;
+        Tine(const Tine&);
+        Tine& operator=(const Tine&);
         Tine(Tine&&);
         Tine& operator=(Tine&&);
 
@@ -42,25 +46,27 @@ public:
 
         bool is_open() const;
 
-        asio::io_service& get_io_service() {
-            assert(fork);
-            return fork->get_io_service();
-        }
+        asio::io_service& get_io_service();
 
-        asio::io_context::executor_type get_executor() {
-            assert(fork);
-            return fork->get_executor();
-        }
+        asio::io_context::executor_type get_executor();
 
         private:
         void flush_rx_handler(sys::error_code, size_t);
 
         private:
+        // ForkState knows about all the Tines through this hook
         IntrusiveHook hook;
-        Fork* fork;
+        // ForkState runs the receive loop
+        std::shared_ptr<ForkState> fork_state;
+        // User provided rx_handler (or completion token)
         util::unique_function<void(sys::error_code, size_t)> rx_handler;
+        // Points to some part of fork_state->rx_buffer that the user of this
+        // Tine has not yet been notified about through the rx_handler and
+        // rx_buffers.
         asio::const_buffer unread_data_buffer;
+        // User provided buffers
         std::vector<asio::mutable_buffer> rx_buffers;
+        // Whether to print debug output
         bool debug = false;
     };
 
@@ -89,9 +95,11 @@ private:
         SourceStream source;
         std::vector<uint8_t> rx_buffer;
         bool is_reading = false;
-
         bool read_again = false;
-
+        // Must be always equal to sum of each tine->unread_data_buffer.size()
+        // We can only start new async_read operation when this is zero. I.e.
+        // when all tines have read everything from rx_buffer that was received
+        // during the previous completion of async_read call.
         size_t total_unread_data_size = 0;
 
         Cancel cancel;
@@ -139,11 +147,6 @@ inline
 Fork<SourceStream>::Fork(Fork&& other)
     : _state(std::move(other._state))
 {
-    if (!_state) return;
-
-    for (auto& tine : _state->tines) {
-        tine.fork = this;
-    }
 }
 
 template<class SourceStream>
@@ -151,13 +154,6 @@ inline
 Fork<SourceStream>& Fork<SourceStream>::operator=(Fork&& other)
 {
     _state = std::move(other._state);
-
-    if (!_state) return *this;
-
-    for (auto& tine : _state->tines) {
-        tine.fork = this;
-    }
-
     return *this;
 }
 
@@ -199,26 +195,39 @@ void Fork<SourceStream>::ForkState::start_reading()
 template<class SourceStream>
 inline
 Fork<SourceStream>::Tine::Tine(Fork& fork)
-    : fork(&fork)
+    : fork_state(fork._state)
 {
     if (debug) {
-        std::cerr << this << " Tine::Tine(Fork* " << this->fork << ")\n";
+        std::cerr << this << " Tine::Tine(ForkState* " << this->fork_state << ")\n";
     }
 
-    this->fork->_state->tines.push_back(*this);
+    fork_state->tines.push_back(*this);
+}
+
+template<class SourceStream>
+inline
+Fork<SourceStream>::Tine::Tine(const Tine& other)
+    : fork_state(other.fork_state)
+    , unread_data_buffer(other.unread_data_buffer)
+{
+    if (debug) {
+        std::cerr << this << " Tine::Tine(Tine& " << &other << ")\n";
+    }
+
+    fork_state->tines.push_back(*this);
+    fork_state->total_unread_data_size += unread_data_buffer.size();
 }
 
 template<class SourceStream>
 inline
 Fork<SourceStream>::Tine::Tine(Tine&& other)
-    : fork(other.fork)
+    : fork_state(move(other.fork_state))
     , rx_handler(std::move(other.rx_handler))
     , unread_data_buffer(other.unread_data_buffer)
     , rx_buffers(std::move(other.rx_buffers))
     , debug(other.debug)
 {
     hook.swap_nodes(other.hook);
-    other.fork = nullptr;
     other.unread_data_buffer = asio::const_buffer();
 }
 
@@ -229,9 +238,7 @@ Fork<SourceStream>::Tine::operator=(Tine&& other)
 {
     hook.swap_nodes(other.hook);
 
-    fork(other.fork);
-    other.fork = nullptr;
-
+    fork_state = std::move(other.fork_state);
     rx_handler = std::move(other.rx_handler);
 
     unread_data_buffer = other.unread_data_buffer;
@@ -250,9 +257,9 @@ void Fork<SourceStream>::Tine::flush_rx_handler(sys::error_code ec, size_t size)
 {
     if (!rx_handler) return;
 
-    assert(fork);
+    assert(fork_state);
 
-    fork->get_io_service().post(
+    fork_state->get_io_service().post(
         [ p = std::make_shared<decltype(rx_handler)>(std::move(rx_handler))
         , ec
         , size]
@@ -265,7 +272,7 @@ template<class SourceStream>
 inline
 void Fork<SourceStream>::Tine::close()
 {
-    if (!fork) return;
+    if (!fork_state) return;
 
     if (debug) {
         std::cerr << this << " Tine::close()\n";
@@ -275,8 +282,7 @@ void Fork<SourceStream>::Tine::close()
 
     if (hook.is_linked()) hook.unlink();
 
-    auto s = fork->_state;
-    fork = nullptr;
+    auto s = std::move(fork_state);
     s->on_tine_closed(unread_data_buffer.size());
 }
 
@@ -284,8 +290,8 @@ template<class SourceStream>
 inline
 bool Fork<SourceStream>::Tine::is_open() const
 {
-    if (!fork) return false;
-    return fork->_state->source.is_open();
+    if (!fork_state) return false;
+    return fork_state->source.is_open();
 }
 
 template<class SourceStream>
@@ -324,8 +330,7 @@ auto Fork<SourceStream>::Tine::async_read_some( const MutableBufferSequence& bs
         std::cerr << this << " Tine::async_read_some\n";
     }
 
-    assert(fork);
-    assert(fork->_state);
+    assert(fork_state);
 
     rx_buffers.clear();
 
@@ -337,43 +342,43 @@ auto Fork<SourceStream>::Tine::async_read_some( const MutableBufferSequence& bs
 
     assert(!rx_handler);
 
-    auto fork_state = fork->_state;
+    auto fs = fork_state;
 
     if (unread_data_buffer.size()) {
         size_t size = asio::buffer_copy(rx_buffers, unread_data_buffer);
         unread_data_buffer += size;
-        fork_state->total_unread_data_size -= size;
+        fs->total_unread_data_size -= size;
 
-        fork->get_io_service().post(
-                [ fork_state
-                , size
-                , h = std::move(init.completion_handler)
-                ] () mutable {
-                    if (fork_state->cancel)
-                        h(asio::error::operation_aborted, 0);
+        asio::post(fs->get_io_service(),
+            [ fs
+            , size
+            , h = std::move(init.completion_handler)
+            ] () mutable {
+                if (fs->cancel)
+                    h(asio::error::operation_aborted, 0);
 
-                    h(sys::error_code(), size);
+                h(sys::error_code(), size);
 
-                    if (fork_state->cancel) return;
+                if (fs->cancel) return;
 
-                    if (!fork_state->is_reading
-                            && fork_state->read_again
-                            && fork_state->total_unread_data_size == 0)
-                    {
-                        fork_state->read_again = false;
-                        fork_state->get_executor().on_work_finished();
+                if (!fs->is_reading
+                        && fs->read_again
+                        && fs->total_unread_data_size == 0)
+                {
+                    fs->read_again = false;
+                    fs->get_executor().on_work_finished();
 
-                        fork_state->start_reading();
-                    }
-                });
+                    fs->start_reading();
+                }
+            });
     }
     else {
         rx_handler = std::move(init.completion_handler);
-        if (!fork_state->is_reading && !fork_state->read_again) {
-            fork_state->start_reading();
-        } else if (!fork_state->read_again) {
-            fork_state->read_again = true;
-            fork_state->get_executor().on_work_started();
+        if (!fs->is_reading && !fs->read_again) {
+            fs->start_reading();
+        } else if (!fs->read_again) {
+            fs->read_again = true;
+            fs->get_executor().on_work_started();
         }
     }
 
@@ -402,6 +407,7 @@ void Fork<SourceStream>::ForkState::on_read(sys::error_code ec, size_t size)
             size_t s = asio::buffer_copy(i->rx_buffers, buf);
             total_unread_data_size += size - s;
             i->unread_data_buffer = buf + s;
+            // XXX: Shouldn't we post this to the io_service?
             h(ec, s);
         } else {
             total_unread_data_size += size;
@@ -443,11 +449,6 @@ template<class SourceStream>
 inline
 Fork<SourceStream>::~Fork()
 {
-    if (_debug) {
-        std::cerr << this << " ~Fork state:" << _state << "\n";
-    }
-
-    close();
 }
 
 template<class SourceStream>
@@ -465,5 +466,20 @@ asio::io_context::executor_type Fork<SourceStream>::get_executor()
     assert(_state);
     return _state->get_executor();
 }
+
+template<class SourceStream>
+inline
+asio::io_service& Fork<SourceStream>::Tine::get_io_service() {
+    assert(fork_state);
+    return fork_state->get_io_service();
+}
+
+template<class SourceStream>
+inline
+asio::io_context::executor_type Fork<SourceStream>::Tine::get_executor() {
+    assert(fork_state);
+    return fork_state->get_executor();
+}
+
 
 }} // namespaces

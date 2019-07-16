@@ -35,6 +35,7 @@
 #include "defer.h"
 #include "default_timeout.h"
 #include "constants.h"
+#include "session.h"
 #include "create_udp_multiplexer.h"
 #include "ssl/ca_certificate.h"
 #include "ssl/dummy_certificate.h"
@@ -61,6 +62,7 @@
 #include "util/crypto.h"
 #include "util/lru_cache.h"
 #include "util/scheduler.h"
+#include "stream/fork.h"
 
 #include "logger.h"
 
@@ -164,14 +166,14 @@ private:
                 , Yield yield);
 
     Response fetch_fresh_from_front_end(const Request&, Yield);
-    Response fetch_fresh_from_origin(const Request&, Yield);
+    Session fetch_fresh_from_origin(const Request&, Yield);
 
-    Response fetch_fresh_through_connect_proxy(const Request&, Cancel&, Yield);
+    Session fetch_fresh_through_connect_proxy(const Request&, Cancel&, Yield);
 
-    Response fetch_fresh_through_simple_proxy( Request
-                                             , bool can_inject
-                                             , Cancel& cancel
-                                             , Yield);
+    Session fetch_fresh_through_simple_proxy( Request
+                                            , bool can_inject
+                                            , Cancel& cancel
+                                            , Yield);
 
     CacheControl build_cache_control(request_route::Config& request_config);
 
@@ -301,37 +303,22 @@ Client::State::fetch_stored( const Request& request
                                    , asio::error::operation_not_supported);
     }
 
-    // XXX: Using two connected sockets to fetch data from dcache is
-    // a temporary solution until this function no longer needs to store
-    // the entire response in the memory before it's forwarded.
-    sys::error_code ec1, ec2;
+    sys::error_code ec;
 
-    tcp::socket s1(_ios), s2(_ios);
-    tie(s1,s2) = make_connection(_ios, yield[ec1]);
-    assert(!ec1);
-    GenericStream c1(move(s1));
+    auto s = c->load(key_from_http_req(request), cancel, yield[ec]);
+    return_or_throw_on_error(yield, cancel, ec, CacheEntry{});
 
-    WaitCondition wc(_ios);
+    auto hdr = s.response_header();
+    assert(hdr);
 
-    asio::spawn(_ios, [&, lock = wc.lock()] (asio::yield_context yield2) {
-        auto y = yield.detach(yield2);
-        c->load(key_from_http_req(request), c1, cancel, y[ec1]);
-        c1.close();
-    });
+    if (!hdr) {
+        return or_throw<CacheEntry>( yield
+                                   , asio::error::operation_not_supported);
+    }
 
-    Response res;
-    beast::flat_buffer buffer;
-    http::async_read(s2, buffer, res, yield[ec2]);
+    auto date = util::parse_date((*hdr)[http_::response_injection_time]);
 
-    c1.close();
-    if (s2.is_open()) s2.close();
-
-    wc.wait(yield);
-
-    if (ec2 && ec2 != http::error::end_of_stream) return or_throw<CacheEntry>(yield, ec2);
-
-    return CacheEntry{ util::parse_date(res[http_::response_injection_time])
-                     , move(res)};
+    return CacheEntry{date, move(s)};
 }
 
 //------------------------------------------------------------------------------
@@ -384,10 +371,10 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
 }
 
 //------------------------------------------------------------------------------
-Response Client::State::fetch_fresh_from_origin(const Request& rq, Yield yield)
+Session Client::State::fetch_fresh_from_origin(const Request& rq, Yield yield)
 {
     if (!_config.is_origin_access_enabled()) {
-        return or_throw<Response>(yield, asio::error::operation_not_supported);
+        return or_throw<Session>(yield, asio::error::operation_not_supported);
     }
 
     Cancel cancel;
@@ -406,9 +393,9 @@ Response Client::State::fetch_fresh_from_origin(const Request& rq, Yield yield)
         auto stream = connect_to_origin(rq, cancel, yield[ec]);
 
         if (!ec && cancel) ec = asio::error::timed_out;
-        if (ec) return or_throw<Response>(yield, ec);
+        if (ec) return or_throw<Session>(yield, ec);
 
-        con = _origin_pools.wrap(std::move(stream));
+        con = _origin_pools.wrap(rq, std::move(stream));
     }
 
     // Transform request from absolute-form to origin-form
@@ -418,32 +405,22 @@ Response Client::State::fetch_fresh_from_origin(const Request& rq, Yield yield)
     // Send request
     http::async_write(con, rq_, yield[ec].tag("origin-request"));
 
-    if (ec) return or_throw<Response>(yield, ec);
+    if (ec) return or_throw<Session>(yield, ec);
 
-    // Receive response
-    Response res;
-    beast::flat_buffer buffer;
-    http::async_read(con, buffer, res, yield[ec].tag("origin-response"));
+    Session ret(std::move(con));
+    auto hdr_p = ret.read_response_header(cancel, yield[ec]);
+    if (ec) return or_throw(yield, ec, std::move(ret));
 
-    if (ec) return or_throw<Response>(yield, ec, std::move(res));
+    // Prevent others from inserting ouinet headers.
+    util::remove_ouinet_fields_ref(*hdr_p);
 
-    // Store keep-alive connections in connection pool
-    if (!ec && res.keep_alive()) {
-        _origin_pools.insert_connection(rq, move(con));
-    }
-
-    if (!ec) {
-        // Prevent others from inserting ouinet headers.
-        res = util::remove_ouinet_fields(move(res));
-    }
-
-    return or_throw(yield, ec, move(res));
+    return or_throw(yield, ec, move(ret));
 }
 
 //------------------------------------------------------------------------------
-Response Client::State::fetch_fresh_through_connect_proxy( const Request& rq
-                                                         , Cancel& cancel_
-                                                         , Yield yield)
+Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
+                                                        , Cancel& cancel_
+                                                        , Yield yield)
 {
     // TODO: We're not re-using connections here. It's because the
     // ConnectionPool as it is right now can only work with http requests
@@ -457,14 +434,14 @@ Response Client::State::fetch_fresh_through_connect_proxy( const Request& rq
 
     if (!match_http_url(rq.target(), url)) {
         // unsupported URL
-        return or_throw<Response>(yield, asio::error::operation_not_supported);
+        return or_throw<Session>(yield, asio::error::operation_not_supported);
     }
 
     // Connect to the injector/proxy.
     sys::error_code ec;
     auto inj = _injector->connect(yield[ec].tag("connect_to_injector"), cancel);
 
-    if (ec) return or_throw<Response>(yield, ec);
+    if (ec) return or_throw<Session>(yield, ec);
 
     // Build the actual request to send to the proxy.
     Request connreq = { http::verb::connect
@@ -496,7 +473,7 @@ Response Client::State::fetch_fresh_through_connect_proxy( const Request& rq
         // This error code is quite fake, so log the error too.
         // Unfortunately there is no body to show.
         yield.tag("proxy_connect").log(connres);
-        return or_throw<Response>(yield, asio::error::connection_refused);
+        return or_throw<Session>(yield, asio::error::connection_refused);
     }
 
     GenericStream con;
@@ -511,22 +488,28 @@ Response Client::State::fetch_fresh_through_connect_proxy( const Request& rq
         con = move(inj.connection);
     }
 
-    if (ec) return or_throw<Response>(yield, ec);
+    if (ec) return or_throw<Session>(yield, ec);
 
     // TODO: move
     auto rq_ = util::req_form_from_absolute_to_origin(rq);
 
-    auto res = fetch_http<http::dynamic_body>(con, rq_, cancel, yield[ec]);
-
-    if (!ec) {
-        // Prevent others from inserting ouinet headers.
-        res = util::remove_ouinet_fields(move(res));
+    {
+        auto slot = cancel.connect([&con] { con.close(); });
+        http::async_write(con, rq_, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, Session());
     }
 
-    return or_throw(yield, ec, move(res));
+    Session session(move(con));
+    auto hdr_p = session.read_response_header(cancel, yield[ec]);
+    return_or_throw_on_error(yield, cancel, ec, Session());
+
+    // Prevent others from inserting ouinet headers.
+    util::remove_ouinet_fields_ref(*hdr_p);
+
+    return session;
 }
 //------------------------------------------------------------------------------
-Response Client::State::fetch_fresh_through_simple_proxy
+Session Client::State::fetch_fresh_through_simple_proxy
         ( Request request
         , bool can_inject
         , Cancel& cancel
@@ -539,7 +522,7 @@ Response Client::State::fetch_fresh_through_simple_proxy
     if (_injector_connections.empty()) {
         auto c = _injector->connect(yield[ec].tag("connect_to_injector2"), cancel);
 
-        if (ec) return or_throw<Response>(yield, ec);
+        if (ec) return or_throw<Session>(yield, ec);
 
         con = _injector_connections.wrap(std::move(c.connection));
         *con = c.remote_endpoint;
@@ -567,37 +550,37 @@ Response Client::State::fetch_fresh_through_simple_proxy
     if (!ec && cancel_slot) {
         ec = asio::error::operation_aborted;
     }
-    if (ec) return or_throw<Response>(yield, ec);
+    if (ec) return or_throw<Session>(yield, ec);
 
     // Receive response
-    Response res;
-    beast::flat_buffer buffer;
-    http::async_read(con, buffer, res, yield[ec].tag("inj-response"));
+    Session session(move(con));
+    auto hdr_p = session.read_response_header(cancel, yield[ec]);
 
-    if (!ec && cancel_slot) {
-        ec = asio::error::operation_aborted;
-    }
-    if (ec) return or_throw<Response>(yield, ec, std::move(res));
+    assert(!cancel || cancel_slot);
+    assert(!cancel_slot || cancel);
+    if (cancel_slot) ec = asio::error::operation_aborted;
+    if (ec) return or_throw(yield, ec, std::move(session));
 
     // Store keep-alive connections in connection pool
-    if (res.keep_alive()) {
-        _injector_connections.push_back(std::move(con));
-    }
 
     if (!can_inject) {
         // Prevent others from inserting ouinet headers.
-        res = util::remove_ouinet_fields(move(res));
+        util::remove_ouinet_fields_ref(*hdr_p);
     }
 
-    return res;
+    return session;
 }
 
 //------------------------------------------------------------------------------
 // Return true if res indicated an error from the injector
-bool handle_if_injector_error(GenericStream& con, const Response& res_, Yield yield) {
-    auto err_hdr_i = res_.find(http_::response_error_hdr);
+bool handle_if_injector_error(
+        GenericStream& con,
+        const http::response_header<>& rs_hdr,
+        Yield yield)
+{
+    auto err_hdr_i = rs_hdr.find(http_::response_error_hdr);
 
-    if (err_hdr_i == res_.end()) return false; // No error
+    if (err_hdr_i == rs_hdr.end()) return false; // No error
 
     Response res{http::status::bad_request, 11};
     res.set(http::field::server, OUINET_CLIENT_SERVER_STRING);
@@ -635,32 +618,28 @@ public:
             return fetch_stored(rq, cancel, yield);
         };
 
-        cc.store = [&](const Request& rq, Response rs, Cancel& cancel, Yield yield) {
-            return store(rq, move(rs), cancel, yield);
-        };
-
         cc.max_cached_age(client_state._config.max_cached_age());
     }
 
-    Response fetch_fresh(const Request& request, Cancel& cancel, Yield yield) {
+    Session fetch_fresh(const Request& request, Cancel& cancel, Yield yield) {
         namespace err = asio::error;
 
         if (!client_state._config.is_injector_access_enabled())
-            return or_throw<Response>(yield, err::operation_not_supported);
+            return or_throw<Session>(yield, err::operation_not_supported);
 
         sys::error_code ec;
-        auto r = client_state.fetch_fresh_through_simple_proxy( request
+        auto s = client_state.fetch_fresh_through_simple_proxy( request
                                                               , true
                                                               , cancel
                                                               , yield[ec]);
 
         if (!ec) {
-            yield.log("Fetched fresh success, status: ", r.result());
+            yield.log("Fetched fresh success, status: ", s.response_header()->result());
         } else {
             yield.log("Fetched fresh error: ", ec.message());
         }
 
-        return or_throw(yield, ec, move(r));
+        return or_throw(yield, ec, move(s));
     }
 
     CacheEntry
@@ -673,16 +652,16 @@ public:
                                           , cancel
                                           , yield[ec]);
 
-        if (!ec) {
-            yield.log("Fetched from cache success, status: ", r.response.result());
-        } else {
+        if (ec) {
             yield.log("Fetched from cache error: ", ec.message());
         }
 
         return or_throw(yield, ec, move(r));
     }
 
-    Response store(const Request& rq, Response rs, Cancel& cancel, Yield yield)
+    void store( const Request& rq
+              , Session& s
+              , Cancel& cancel, Yield yield)
     {
         namespace err = asio::error;
 
@@ -695,50 +674,25 @@ public:
         // Nonetheless, chunked transfer encoding may still have been used,
         // and we need to undo it since the data referenced by the descriptor
         // is the plain one.
-        rs = util::to_non_chunked_response(move(rs));
+
+        // TODO: The above ^
 
         auto cache = client_state.get_cache();
 
         if (!cache) {
-            return or_throw(yield, err::operation_not_supported, move(rs));
+            return or_throw(yield, err::operation_not_supported);
         }
 
-        sys::error_code ec1, ec2;
+        sys::error_code ec;
 
-        auto& ios = client_state.get_io_service();
-        tcp::socket s1(ios), s2(ios);
-        tie(s1,s2) = make_connection(ios, yield[ec1]);
-        assert(!ec1);
-        GenericStream c1(move(s1));
+        auto rs_hdr = s.read_response_header(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec);
+        assert(rs_hdr);
+        if (!rs_hdr) return;
 
-        WaitCondition wc(ios);
+        if (!CacheControl::ok_to_cache(rq, *rs_hdr)) return;
 
-        asio::spawn(ios, [&, lock = wc.lock()] (asio::yield_context y) {
-            cache->store(key_from_http_req(rq), rs.base(), c1, cancel, y[ec1]);
-            c1.close();
-        });
-
-        auto rs2 = rs;
-        auto body_writer = http::dynamic_body::writer(rs2.base(), rs2.body());
-
-        body_writer.init(ec2);
-        assert(!ec2);
-
-        while (auto p = body_writer.get(ec2)) {
-            if (ec2) return or_throw<Response>(yield, ec2);
-            asio::async_write(s2, p->first, yield[ec2]);
-            if (ec2) return or_throw<Response>(yield, ec2);
-            if (!p->second) break;
-        }
-
-        if (s2.is_open()) s2.close();
-
-        wc.wait(yield);
-        c1.close();
-
-        // Note: we have to return a valid response even in case of error
-        // because CacheControl will use it.
-        return or_throw(yield, ec2, move(rs));
+        cache->store(key_from_http_req(rq), s, cancel, yield);
     }
 
     bool fetch(GenericStream& con, const Request& rq, Yield yield)
@@ -757,63 +711,115 @@ public:
 
             Cancel cancel(client_state._shutdown_signal);
 
-            WatchDog wd( client_state.get_io_service()
-                       , chrono::minutes(3)
-                       , [&] { cancel(); });
+            auto& ios = client_state.get_io_service();
+
+            WatchDog wd(ios, chrono::minutes(3), [&] { cancel(); });
 
             sys::error_code ec;
 
-            Response res;
-
             switch (r) {
-                case fresh_channel::_front_end:
-                    res = client_state.fetch_fresh_from_front_end(rq, yield);
-                    break;
+                case fresh_channel::_front_end: {
+                    Response res = client_state.fetch_fresh_from_front_end(rq, yield);
+                    res.keep_alive(false);
+                    http::async_write(con, res, asio::yield_context(yield)[ec]);
+                    return false;
+                }
+                case fresh_channel::origin: {
+                    auto session = client_state.fetch_fresh_from_origin(rq, yield[ec]);
 
-                case fresh_channel::origin:
-                    res = client_state.fetch_fresh_from_origin(rq, yield[ec]);
-                    break;
+                    if (ec) break;
 
-                case fresh_channel::proxy:
+                    session.flush_response(con, cancel, yield[ec]);
+
+                    if (ec || !rq.keep_alive() || !session.keep_alive()) {
+                        session.close();
+                        return false;
+                    }
+                    return true;
+                }
+                case fresh_channel::proxy: {
                     if (!client_state._config.is_proxy_access_enabled()) {
                         continue;
                     }
 
+                    Session session;
+
                     if (rq.target().starts_with("https://")) {
-                        res = client_state.fetch_fresh_through_connect_proxy
+                        session = client_state.fetch_fresh_through_connect_proxy
                                 (rq, cancel, yield[ec]);
                     }
                     else {
-                        res = client_state.fetch_fresh_through_simple_proxy
+                        session = client_state.fetch_fresh_through_simple_proxy
                                 (rq, false, cancel, yield[ec]);
                     }
-                    break;
 
-                case fresh_channel::injector:
-                    res = cc.fetch(rq, cancel, yield[ec]);
+                    session.flush_response(con, cancel, yield[ec]);
 
-#ifndef NDEBUG
-                    yield.log("----------------------------");
-                    yield.log("CacheControl result ", ec.message());
-                    yield.log(res.base());
-                    yield.log("----------------------------");
-#endif
-
-                    if (res.result() == http::status::bad_gateway
-                            && !request_config.fresh_channels.empty()) {
-                        // XXX: Arbitrary error, but we want to continue
-                        // trying other request_route channels.
-                        ec = err::service_not_found;
+                    if (ec || !rq.keep_alive() || !session.keep_alive()) {
+                        session.close();
+                        return false;
                     }
 
-                    break;
+                    return true;
+                }
+                case fresh_channel::injector: {
+                    sys::error_code fresh_ec;
+                    sys::error_code cache_ec;
+
+                    auto s = cc.fetch(rq, fresh_ec, cache_ec, cancel, yield[ec]);
+
+                    if (ec) break;
+
+                    assert(!fresh_ec || !cache_ec); // At least one success
+                    assert( fresh_ec ||  cache_ec); // One needs to fail
+
+                    if (handle_if_injector_error(con, *s.response_header(), yield[ec])) {
+                        return false;
+                    }
+
+                    if (!fresh_ec) {
+                        using Fork = stream::Fork<GenericStream>;
+
+                        tcp::socket source(ios), sink(ios);
+                        tie(source, sink) = make_connection(ios, yield);
+
+                        Fork fork(move(source));
+                        Fork::Tine src1(fork), src2(fork);
+
+                        WaitCondition wc(ios);
+
+                        asio::spawn(ios, [
+                            &,
+                            lock = wc.lock()
+                        ] (asio::yield_context yield_) {
+                          auto y = yield.detach(yield_);
+                          Session s1(move(src1));
+                          sys::error_code ec;
+                          store(rq, s1, cancel, y[ec]);
+                        });
+
+                        asio::spawn(ios, [
+                            &,
+                            lock = wc.lock()
+                        ] (asio::yield_context yield) {
+                            Session s2(move(src2));
+                            sys::error_code ec;
+                            s2.flush_response(con, cancel, yield[ec]);
+                        });
+
+                        s.flush_response(sink, cancel, yield[ec]);
+
+                        wc.wait(yield);
+                    }
+                    else {
+                      s.flush_response(con, cancel, yield[ec]);
+                    }
+
+                    return !ec && rq.keep_alive() && s.keep_alive();
+                }
             }
 
             if (cancel) ec = err::timed_out;
-            if (!ec) {
-                send_back_response(con, res, yield);
-                return rq.keep_alive() && res.keep_alive();
-            }
             last_error = ec;
         }
 
@@ -826,18 +832,6 @@ public:
                           , yield.tag("handle_bad_request"));
 
         return or_throw<bool>(yield, last_error, rq.keep_alive());
-    }
-
-private:
-    void send_back_response(GenericStream& con, Response& res, Yield yield)
-    {
-        sys::error_code ec;
-        if (handle_if_injector_error(con, res, yield[ec])) {
-            return;
-        }
-
-        // Forward the response back
-        http::async_write(con, res, asio::yield_context(yield)[ec]);
     }
 
 private:
