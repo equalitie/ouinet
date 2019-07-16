@@ -556,6 +556,8 @@ Session Client::State::fetch_fresh_through_simple_proxy
     Session session(move(con));
     auto hdr_p = session.read_response_header(cancel, yield[ec]);
 
+    assert(!cancel || cancel_slot);
+    assert(!cancel_slot || cancel);
     if (cancel_slot) ec = asio::error::operation_aborted;
     if (ec) return or_throw(yield, ec, std::move(session));
 

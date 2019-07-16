@@ -183,6 +183,7 @@ struct Client::Impl {
         peer_cache[host] = con_ep;
 
         auto ret = load_from_connection(key, con, cancel, yield[ec]);
+        assert(!cancel || ec == asio::error::operation_aborted);
         assert(ec || ret.response_header());
 
         return or_throw<Session>(yield, ec, move(ret));
@@ -232,10 +233,15 @@ struct Client::Impl {
                 }
             });
         } else {
-            LOG_WARN("Bep5Http cache: Failed to open file: ", ec.message());
+            LOG_WARN("Bep5Http cache: Failed to open file: ", file_ec.message());
         }
 
         Session session(std::move(src1));
+
+        session.read_response_header(cancel, yield[ec]);
+
+        assert(!cancel || ec == asio::error::operation_aborted);
+        if (cancel) ec = asio::error::operation_aborted;
 
         if (ec) {
             if (file.is_open()) file.close();
