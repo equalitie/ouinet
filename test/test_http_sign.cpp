@@ -24,7 +24,7 @@ BOOST_AUTO_TEST_CASE(test_http_sign) {
     const string b64_digest = util::base64_encode(util::sha256_digest(body));
     BOOST_REQUIRE(b64_digest == "j7uwtB/QQz0FJONbkyEmaqlJwGehJLqWoCO1ceuM30w=");
 
-    const string head_s =
+    const string head_s = (
         "HTTP/1.1 200 OK\r\n"
         "Date: Mon, 15 Jan 2018 20:31:50 GMT\r\n"
         "Server: Apache1\r\n"
@@ -32,7 +32,8 @@ BOOST_AUTO_TEST_CASE(test_http_sign) {
         "Content-Disposition: inline; filename=\"foo.html\"\r\n"
         "Content-Length: 38\r\n"
         "Server: Apache2\r\n"
-        "\r\n";
+        "\r\n"
+    );
     http::response_parser<http::string_body> parser;
     parser.put(asio::buffer(head_s), ec);
     BOOST_REQUIRE(!ec);
