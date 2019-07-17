@@ -34,9 +34,9 @@ BOOST_AUTO_TEST_CASE(test_http_sign) {
         "Server: Apache2\r\n"
         "\r\n";
     http::response_parser<http::string_body> parser;
-    parser.put(asio::buffer(head_s.data(), head_s.size()), ec);
+    parser.put(asio::buffer(head_s), ec);
     BOOST_REQUIRE(!ec);
-    parser.put(asio::buffer(body.data(), body.size()), ec);
+    parser.put(asio::buffer(body), ec);
     BOOST_REQUIRE(!ec);
     BOOST_REQUIRE(parser.is_done());
     auto head = parser.get().base();
