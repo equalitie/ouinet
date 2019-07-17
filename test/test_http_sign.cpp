@@ -3,6 +3,7 @@
 
 #include <string>
 
+#include <boost/beast/http/message.hpp>
 #include <boost/beast/http/parser.hpp>
 #include <boost/beast/http/string_body.hpp>
 
@@ -41,6 +42,17 @@ BOOST_AUTO_TEST_CASE(test_http_sign) {
     BOOST_REQUIRE(!ec);
     BOOST_REQUIRE(parser.is_done());
     auto head = parser.get().base();
+
+    http::request_header<> req_h;
+    req_h.method(http::verb::get);
+    req_h.target("https://example.com/foo");  // proxy-like
+    req_h.version(11);
+    req_h.set(http::field::host, "example.com");
+
+    const string id = "d6076384-2295-462b-a047-fe2c9274e58d";
+    const std::chrono::seconds::rep ts = 1516048310;
+
+    head = cache::http_injection_head(req_h, std::move(head), id, ts);
 
     // TODO: complete
 
