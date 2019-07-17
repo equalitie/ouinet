@@ -49,7 +49,8 @@ http_injection_trailer( const http::response_header<>& rsh
                       , size_t content_length
                       , const ouinet::util::SHA256::digest_type& content_digest
                       , const ouinet::util::Ed25519PrivateKey& sk
-                      , const std::string key_id)
+                      , const std::string key_id
+                      , std::chrono::seconds::rep ts)
 {
     // Pending trailer headers to support the signature.
     rst.set(ouinet::http_::header_prefix + "Data-Size", content_length);
@@ -66,7 +67,7 @@ http_injection_trailer( const http::response_header<>& rsh
     for (auto& hdr : rst)
         to_sign.set(hdr.name_string(), hdr.value());
 
-    rst.set("Signature", http_signature(to_sign, sk, key_id));
+    rst.set("Signature", http_signature(to_sign, sk, key_id, ts));
     return rst;
 }
 

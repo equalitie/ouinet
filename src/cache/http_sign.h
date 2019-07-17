@@ -60,7 +60,23 @@ http_injection_trailer( const http::response_header<>& rsh
                       , size_t content_length
                       , const ouinet::util::SHA256::digest_type& content_digest
                       , const ouinet::util::Ed25519PrivateKey&
-                      , const std::string key_id);
+                      , const std::string key_id
+                      , std::chrono::seconds::rep ts);
+
+inline
+http::fields
+http_injection_trailer( const http::response_header<>& rsh
+                      , http::fields rst
+                      , size_t content_length
+                      , const ouinet::util::SHA256::digest_type& content_digest
+                      , const ouinet::util::Ed25519PrivateKey& sk
+                      , const std::string key_id)
+{
+    auto ts = std::chrono::seconds(std::time(nullptr)).count();
+    return http_injection_trailer( rsh, std::move(rst)
+                                 , content_length, content_digest
+                                 , sk, key_id, ts);
+}
 
 // Get a `keyId` encoding the public key of the given private key itself.
 std::string
