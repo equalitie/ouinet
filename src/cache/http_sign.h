@@ -1,5 +1,7 @@
 #pragma once
 
+#include <chrono>
+#include <ctime>
 #include <string>
 
 #include <boost/beast/http/dynamic_body.hpp>
@@ -63,9 +65,20 @@ std::string
 http_digest(const http::response<http::dynamic_body>&);
 
 // Compute a signature as per draft-cavage-http-signatures-11.
-std::string
+std::string  // use this to enable setting the time stamp (e.g. for tests)
 http_signature( const http::response_header<>&
               , const ouinet::util::Ed25519PrivateKey&
-              , const std::string key_id);
+              , const std::string key_id
+              , std::chrono::seconds::rep ts);
+
+inline  // use this for the rest of cases
+std::string
+http_signature( const http::response_header<>& rsh
+              , const ouinet::util::Ed25519PrivateKey& sk
+              , const std::string key_id)
+{
+    auto ts = std::chrono::seconds(std::time(nullptr)).count();
+    return http_signature(rsh, sk, key_id, ts);
+}
 
 }} // namespaces

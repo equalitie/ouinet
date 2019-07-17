@@ -1,7 +1,5 @@
 #include "http_sign.h"
 
-#include <chrono>
-#include <ctime>
 #include <map>
 #include <tuple>
 #include <utility>
@@ -151,15 +149,14 @@ get_sig_str_hdrs(const Head& sig_head)
 std::string
 http_signature( const http::response_header<>& rsh
               , const ouinet::util::Ed25519PrivateKey& sk
-              , const std::string key_id)
+              , const std::string key_id
+              , std::chrono::seconds::rep ts)
 {
     auto fmt = boost::format("keyId=\"%s\""
                              ",algorithm=\"hs2019\""
                              ",created=%d"
                              ",headers=\"%s\""
                              ",signature=\"%s\"");
-
-    auto ts = std::chrono::seconds(std::time(nullptr)).count();
 
     http::response_header<> sig_head;
     sig_head.set("(created)", ts);
