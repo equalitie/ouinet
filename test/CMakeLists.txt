@@ -155,3 +155,15 @@ target_link_libraries(test-oui-client ${Boost_LIBRARIES})
 add_executable(test-http-util "test_http_util.cpp" "../src/asio.cpp")
 target_include_directories(test-http-util PUBLIC "${Boost_INCLUDE_DIR}")
 target_link_libraries(test-http-util ${Boost_LIBRARIES})
+
+######################################################################
+add_executable(test-http-sign "test_http_sign.cpp"
+                              "../src/asio.cpp"
+                              "../src/cache/http_sign.cpp"
+                              "../src/util.cpp"
+                              "../src/util/crypto.cpp"
+                              "../src/util/hash.cpp"
+)
+target_include_directories(test-http-sign PUBLIC "${Boost_INCLUDE_DIR}")
+target_link_libraries(test-http-sign ${Boost_LIBRARIES} ${GCRYPT_LIBRARIES})
+add_dependencies(test-http-sign gcrypt)
