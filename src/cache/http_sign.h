@@ -27,10 +27,21 @@ namespace ouinet { namespace cache {
 //     Transfer-Encoding: chunked
 //     Trailer: X-Ouinet-Data-Size, Digest, Signature
 //
-http::response_header<>
+http::response_header<>  // use this to enable setting the time stamp (e.g. for tests)
 http_injection_head( const http::request_header<>& rqh
                    , http::response_header<> rsh
-                   , const std::string& injection_id);
+                   , const std::string& injection_id
+                   , std::chrono::seconds::rep injection_ts);
+
+inline
+http::response_header<>  // use this for the rest of cases
+http_injection_head( const http::request_header<>& rqh
+                   , http::response_header<> rsh
+                   , const std::string& injection_id)
+{
+    auto ts = std::chrono::seconds(std::time(nullptr)).count();
+    return http_injection_head(rqh, std::move(rsh), injection_id, ts);
+}
 
 // Get an extended version of the given response trailer
 // with added headers completing the signature of the message.

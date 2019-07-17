@@ -19,18 +19,16 @@ namespace ouinet { namespace cache {
 http::response_header<>
 http_injection_head( const http::request_header<>& rqh
                    , http::response_header<> rsh
-                   , const std::string& injection_id)
+                   , const std::string& injection_id
+                   , std::chrono::seconds::rep injection_ts)
 {
     using namespace ouinet::http_;
     assert(response_version_hdr_current == response_version_hdr_v0);
 
     rsh.set(response_version_hdr, response_version_hdr_v0);
     rsh.set(header_prefix + "URI", rqh.target());
-    {
-        auto ts = std::chrono::seconds(std::time(nullptr)).count();
-        rsh.set( header_prefix + "Injection"
-               , boost::format("id=%s,ts=%d") % injection_id % ts);
-    }
+    rsh.set( header_prefix + "Injection"
+           , boost::format("id=%s,ts=%d") % injection_id % injection_ts);
     rsh.set(header_prefix + "HTTP-Status", rsh.result_int());
 
     // Enabling chunking is easier with a whole respone,
