@@ -46,6 +46,13 @@ http_injection_head( const http::request_header<>& rqh
 // Get an extended version of the given response trailer
 // with added headers completing the signature of the message.
 //
+// Please note that framing headers (`Content-Length`, `Transfer-Encoding`, `Trailer`)
+// are not included in the signature, though an `X-Ouinet-Data-Size` header is added to
+// convey the actual content length after the whole content has been seen.
+// If a non-chunked response head needs to be constructed from the signed head,
+// a `Content-Length` header should be added with the value of `X-Ouinet-Data-Size`
+// (and the later be kept as well to avoid a signature verification failure).
+//
 // Example:
 //
 //     ...
