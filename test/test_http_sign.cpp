@@ -1,11 +1,13 @@
 #define BOOST_TEST_MODULE http_sign
 #include <boost/test/included/unit_test.hpp>
 
+#include <sstream>
 #include <string>
 
 #include <boost/beast/http/message.hpp>
 #include <boost/beast/http/parser.hpp>
 #include <boost/beast/http/string_body.hpp>
+#include <boost/beast/http/write.hpp>
 
 #include <util.h>
 #include <util/bytes.h>
@@ -66,8 +68,46 @@ BOOST_AUTO_TEST_CASE(test_http_sign) {
     trailer = cache::http_injection_trailer( head, std::move(trailer)
                                            , body.size(), digest
                                            , sk, key_id, ts + 1);
+    // Add headers from the trailer to the injection head.
+    for (auto& hdr : trailer)
+        head.set(hdr.name_string(), hdr.value());
+    // Remove framing headers from the injection head
+    // (they are never part of a signature).
+    head.erase(http::field::content_length);
+    head.erase(http::field::transfer_encoding);
+    head.erase(http::field::trailer);
 
-    // TODO: complete
+    // If Beast changes message representation or shuffles headers,
+    // the example will need to be updated,
+    // but the signature should stay the same.
+    // If comparing the whole head becomes too tricky, just check `Signature`.
+    const string signed_head = (
+        "HTTP/1.1 200 OK\r\n"
+        "Date: Mon, 15 Jan 2018 20:31:50 GMT\r\n"
+        "Server: Apache1\r\n"
+        "Server: Apache2\r\n"
+        "Content-Type: text/html\r\n"
+        "Content-Disposition: inline; filename=\"foo.html\"\r\n"
+        "X-Ouinet-Version: 0\r\n"
+        "X-Ouinet-URI: https://example.com/foo\r\n"
+        "X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310\r\n"
+        "X-Ouinet-HTTP-Status: 200\r\n"
+        "X-Ouinet-Data-Size: 38\r\n"
+        "Digest: SHA-256=j7uwtB/QQz0FJONbkyEmaqlJwGehJLqWoCO1ceuM30w=\r\n"
+        "Signature: keyId=\"ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=\","
+        "algorithm=\"hs2019\",created=1516048311,"
+        "headers=\"(created) "
+        "date server content-type content-disposition "
+        "x-ouinet-version x-ouinet-uri x-ouinet-injection "
+        "x-ouinet-http-status x-ouinet-data-size "
+        "digest\","
+        "signature=\"ZHjVsSXaXBi9WyYfXWi9Hi0dh/pW5oMqYoS3U2Gm9+Bf8vFj8REL4dwwTYYPyt3OfHD3JVEN8Icf05nG3qEHDg==\"\r\n"
+        "\r\n"
+    );
+
+    std::stringstream head_ss;
+    head_ss << head;
+    BOOST_REQUIRE(head_ss.str() == signed_head);
 
 }
 
