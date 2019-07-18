@@ -29,7 +29,6 @@ http_injection_head( const http::request_header<>& rqh
     rsh.set(header_prefix + "URI", rqh.target());
     rsh.set( header_prefix + "Injection"
            , boost::format("id=%s,ts=%d") % injection_id % injection_ts);
-    rsh.set(header_prefix + "HTTP-Status", rsh.result_int());
 
     // Enabling chunking is easier with a whole respone,
     // and we do not care about content length anyway.
@@ -158,6 +157,7 @@ http_signature( const http::response_header<>& rsh
                              ",signature=\"%s\"");
 
     http::response_header<> sig_head;
+    sig_head.set("(response-status)", rsh.result_int());
     sig_head.set("(created)", ts);
     prep_sig_head(rsh, sig_head);  // unique fields, lowercase names, trimmed values
 

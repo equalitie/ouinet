@@ -23,7 +23,6 @@ namespace ouinet { namespace cache {
 //     X-Ouinet-Version: 0
 //     X-Ouinet-URI: https://example.com/foo
 //     X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
-//     X-Ouinet-HTTP-Status: 200
 //     Transfer-Encoding: chunked
 //     Trailer: X-Ouinet-Data-Size, Digest, Signature
 //
@@ -59,7 +58,7 @@ http_injection_head( const http::request_header<>& rqh
 //     X-Ouinet-Data-Size: 38
 //     Digest: SHA-256=j7uwtB/QQz0FJONbkyEmaqlJwGehJLqWoCO1ceuM30w=
 //     Signature: keyId="...",algorithm="hs2019",created=1516048311,
-//       headers="(created) ... digest",signature="..."
+//       headers="(response-status) (created) ... digest",signature="..."
 //
 http::fields
 http_injection_trailer( const http::response_header<>& rsh
