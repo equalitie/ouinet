@@ -72,9 +72,9 @@ http_injection_trailer( const http::response_header<>& rsh
 }
 
 std::string
-http_key_id_for_injection(const ouinet::util::Ed25519PrivateKey& sk)
+http_key_id_for_injection(const ouinet::util::Ed25519PublicKey& pk)
 {
-    return "ed25519=" + ouinet::util::base64_encode(sk.public_key().serialize());
+    return "ed25519=" + ouinet::util::base64_encode(pk.serialize());
 }
 
 std::string

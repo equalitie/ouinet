@@ -78,9 +78,9 @@ http_injection_trailer( const http::response_header<>& rsh
                                  , sk, key_id, ts);
 }
 
-// Get a `keyId` encoding the public key of the given private key itself.
+// Get a `keyId` encoding the given public key itself.
 std::string
-http_key_id_for_injection(const ouinet::util::Ed25519PrivateKey&);
+http_key_id_for_injection(const ouinet::util::Ed25519PublicKey&);
 
 // Get the body digest as per RFC 3230 and RFC 5843.
 //

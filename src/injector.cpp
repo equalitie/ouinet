@@ -322,7 +322,8 @@ public:
         , ssl_ctx(ssl_ctx)
         , injector(injector)
         , config(config)
-        , httpsig_key_id(cache::http_key_id_for_injection(config.cache_private_key()))
+        , httpsig_key_id(cache::http_key_id_for_injection(
+              config.cache_private_key().public_key()))
         , genuuid(genuuid)
         , origin_pools(origin_pools)
     {

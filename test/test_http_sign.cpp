@@ -59,7 +59,7 @@ BOOST_AUTO_TEST_CASE(test_http_sign) {
     const auto b64sk = "MfWAV5YllPAPeMuLXwN2mUkV9YaSSJVUcj/2YOaFmwQ=";
     const auto ska = util::bytes::to_array<uint8_t, 32>(util::base64_decode(b64sk));
     const util::Ed25519PrivateKey sk(std::move(ska));
-    const auto key_id = cache::http_key_id_for_injection(sk);
+    const auto key_id = cache::http_key_id_for_injection(sk.public_key());
     BOOST_REQUIRE(key_id == "ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=");
 
     http::fields trailer;
