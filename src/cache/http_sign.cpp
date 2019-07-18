@@ -1,7 +1,5 @@
 #include "http_sign.h"
 
-#include <chrono>
-#include <ctime>
 #include <map>
 #include <tuple>
 #include <utility>
@@ -21,18 +19,16 @@ namespace ouinet { namespace cache {
 http::response_header<>
 http_injection_head( const http::request_header<>& rqh
                    , http::response_header<> rsh
-                   , const std::string& injection_id)
+                   , const std::string& injection_id
+                   , std::chrono::seconds::rep injection_ts)
 {
     using namespace ouinet::http_;
     assert(response_version_hdr_current == response_version_hdr_v0);
 
     rsh.set(response_version_hdr, response_version_hdr_v0);
     rsh.set(header_prefix + "URI", rqh.target());
-    {
-        auto ts = std::chrono::seconds(std::time(nullptr)).count();
-        rsh.set( header_prefix + "Injection"
-               , boost::format("id=%s,ts=%d") % injection_id % ts);
-    }
+    rsh.set( header_prefix + "Injection"
+           , boost::format("id=%s,ts=%d") % injection_id % injection_ts);
     rsh.set(header_prefix + "HTTP-Status", rsh.result_int());
 
     // Enabling chunking is easier with a whole respone,
@@ -53,7 +49,8 @@ http_injection_trailer( const http::response_header<>& rsh
                       , size_t content_length
                       , const ouinet::util::SHA256::digest_type& content_digest
                       , const ouinet::util::Ed25519PrivateKey& sk
-                      , const std::string key_id)
+                      , const std::string key_id
+                      , std::chrono::seconds::rep ts)
 {
     // Pending trailer headers to support the signature.
     rst.set(ouinet::http_::header_prefix + "Data-Size", content_length);
@@ -70,14 +67,14 @@ http_injection_trailer( const http::response_header<>& rsh
     for (auto& hdr : rst)
         to_sign.set(hdr.name_string(), hdr.value());
 
-    rst.set("Signature", http_signature(to_sign, sk, key_id));
+    rst.set("Signature", http_signature(to_sign, sk, key_id, ts));
     return rst;
 }
 
 std::string
-http_key_id_for_injection(const ouinet::util::Ed25519PrivateKey& sk)
+http_key_id_for_injection(const ouinet::util::Ed25519PublicKey& pk)
 {
-    return "ed25519=" + ouinet::util::base64_encode(sk.public_key().serialize());
+    return "ed25519=" + ouinet::util::base64_encode(pk.serialize());
 }
 
 std::string
@@ -151,15 +148,14 @@ get_sig_str_hdrs(const Head& sig_head)
 std::string
 http_signature( const http::response_header<>& rsh
               , const ouinet::util::Ed25519PrivateKey& sk
-              , const std::string key_id)
+              , const std::string key_id
+              , std::chrono::seconds::rep ts)
 {
     auto fmt = boost::format("keyId=\"%s\""
                              ",algorithm=\"hs2019\""
                              ",created=%d"
                              ",headers=\"%s\""
                              ",signature=\"%s\"");
-
-    auto ts = std::chrono::seconds(std::time(nullptr)).count();
 
     http::response_header<> sig_head;
     sig_head.set("(created)", ts);
