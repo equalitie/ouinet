@@ -8,6 +8,7 @@
 #include <boost/beast/http/string_body.hpp>
 
 #include <util.h>
+#include <util/bytes.h>
 #include <cache/http_sign.h>
 
 #include <namespaces.h>
@@ -22,7 +23,8 @@ BOOST_AUTO_TEST_CASE(test_http_sign) {
     sys::error_code ec;
 
     const string body = "<!DOCTYPE html>\n<p>Tiny body here!</p>";
-    const string b64_digest = util::base64_encode(util::sha256_digest(body));
+    const auto digest = util::sha256_digest(body);
+    const auto b64_digest = util::base64_encode(digest);
     BOOST_REQUIRE(b64_digest == "j7uwtB/QQz0FJONbkyEmaqlJwGehJLqWoCO1ceuM30w=");
 
     const string head_s = (
@@ -53,6 +55,17 @@ BOOST_AUTO_TEST_CASE(test_http_sign) {
     const std::chrono::seconds::rep ts = 1516048310;
 
     head = cache::http_injection_head(req_h, std::move(head), id, ts);
+
+    const auto b64sk = "MfWAV5YllPAPeMuLXwN2mUkV9YaSSJVUcj/2YOaFmwQ=";
+    const auto ska = util::bytes::to_array<uint8_t, 32>(util::base64_decode(b64sk));
+    const util::Ed25519PrivateKey sk(std::move(ska));
+    const auto key_id = cache::http_key_id_for_injection(sk);
+    BOOST_REQUIRE(key_id == "ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=");
+
+    http::fields trailer;
+    trailer = cache::http_injection_trailer( head, std::move(trailer)
+                                           , body.size(), digest
+                                           , sk, key_id, ts + 1);
 
     // TODO: complete
 
