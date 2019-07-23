@@ -397,7 +397,6 @@ struct Client::Impl {
 
             if (key.empty()) { try_remove(p); continue; }
 
-            LOG_DEBUG("Announcing stored: ", key);
             announcer.add(key.to_string());
         }
     }
