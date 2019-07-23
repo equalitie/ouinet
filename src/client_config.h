@@ -121,16 +121,16 @@ public:
            ("injector-ep"
             , po::value<string>()
             , "Injector's endpoint as <TYPE>:<EP>, "
-              "where <TYPE> can be \"tcp\", \"obfs2\", \"obfs3\", \"obfs4\", \"lampshade\" or \"i2p\", "
+              "where <TYPE> can be \"tcp\", \"utp\", \"obfs2\", \"obfs3\", \"obfs4\", \"lampshade\" or \"i2p\", "
               "and <EP> depends on the type of endpoint: "
-              "<IP>:<PORT> for TCP (and TLS), <IP>:<PORT>[,<OPTION>=<VALUE>...] for OBFS and Lampshade, "
+              "<IP>:<PORT> for TCP and uTP, <IP>:<PORT>[,<OPTION>=<VALUE>...] for OBFS and Lampshade, "
               "<B32_PUBKEY>.b32.i2p or <B64_PUBKEY> for I2P")
            ("client-credentials", po::value<string>()
             , "<username>:<password> authentication pair for the client")
            ("injector-credentials", po::value<string>()
             , "<username>:<password> authentication pair for the injector")
            ("injector-tls-cert-file", po::value<string>(&_tls_injector_cert_path)
-            , "Path to the Injector's TLS certificate")
+            , "Path to the injector's TLS certificate; enable TLS for TCP and uTP")
 
            // Cache options
            ("cache-type", po::value<string>()->default_value("none")
