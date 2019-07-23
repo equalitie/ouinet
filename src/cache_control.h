@@ -66,7 +66,7 @@ private:
             Yield);
 
     Session do_fetch_fresh(FetchState&, const Request&, Yield);
-    CacheEntry do_fetch_stored(FetchState&, const Request&, Yield);
+    CacheEntry do_fetch_stored(FetchState&, const Request&, bool& is_fresh, Yield);
 
     //bool is_stale( const boost::posix_time::ptime& time_stamp
     //             , const Response&) const;
