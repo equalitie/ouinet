@@ -11,6 +11,7 @@ android/gradlew
 android/gradlew.bat
 android/ouinet/ouinet.iml
 android/ouinet/data
+android/gradle.properties
 
 android/local.properties
 
