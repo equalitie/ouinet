@@ -526,7 +526,7 @@ unreachable.
 ## Android library and demo client
 
 Ouinet can also be built as an Android Archive library (AAR) to use in your
-Android adds.  
+Android apps.  
 
 ### Build requirements
 
