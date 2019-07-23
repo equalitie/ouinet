@@ -297,9 +297,15 @@ CacheControl::do_fetch(
             return or_throw(yield, fresh_ec, move(res));
         }
 
-        auto cache_entry = do_fetch_stored(fetch_state, request, yield[cache_ec]);
-        if (!cache_ec) return add_warning( move(cache_entry.response)
-                                         , "111 Ouinet \"Revalidation Failed\"");
+        bool is_fresh = false;
+        auto cache_entry = do_fetch_stored(fetch_state, request, is_fresh, yield[cache_ec]);
+        if (!cache_ec) {
+            if (is_fresh) {
+                return move(cache_entry.response);
+            }
+            return add_warning( move(cache_entry.response)
+                                    , "111 Ouinet \"Revalidation Failed\"");
+        }
 
         if (cache_ec == err::operation_aborted)
             return or_throw(yield, fresh_ec, move(res));
@@ -307,7 +313,8 @@ CacheControl::do_fetch(
         return or_throw<Session>(yield, err::service_not_found);
     }
 
-    auto cache_entry = do_fetch_stored(fetch_state, request, yield[cache_ec]);
+    bool is_fresh = false;
+    auto cache_entry = do_fetch_stored(fetch_state, request, is_fresh, yield[cache_ec]);
 
     if (cache_ec == err::operation_aborted) {
         fresh_ec = err::operation_aborted;
@@ -325,6 +332,12 @@ CacheControl::do_fetch(
         }
 
         return or_throw<Session>(yield, err::no_data);
+    }
+
+    if (is_fresh) {
+        cache_ec = err::operation_aborted;
+        fresh_ec = {};
+        return move(cache_entry.response);
     }
 
     // If we're here that means that we were able to retrieve something
@@ -418,6 +431,7 @@ auto CacheControl::make_fetch_fresh_job(const Request& rq, Yield& yield)
             auto y = yield.detach(yield_);
             sys::error_code ec;
             auto r = fetch_fresh(rq, cancel, y[ec]);
+            assert(!cancel || ec == asio::error::operation_aborted);
             if (ec) return or_throw(y, ec, move(r));
             assert(r.response_header());
             return r;
@@ -449,8 +463,12 @@ CacheControl::do_fetch_fresh(FetchState& fs, const Request& rq, Yield yield)
 }
 
 CacheEntry
-CacheControl::do_fetch_stored(FetchState& fs, const Request& rq, Yield yield)
+CacheControl::do_fetch_stored(FetchState& fs,
+                              const Request& rq,
+                              bool& is_fresh,
+                              Yield yield)
 {
+    is_fresh = false;
     if (!fetch_stored) {
         return or_throw<CacheEntry>(yield, asio::error::operation_not_supported);
     }
@@ -492,6 +510,7 @@ CacheControl::do_fetch_stored(FetchState& fs, const Request& rq, Yield yield)
     if (which == fresh) {
         auto& r = fs.fetch_fresh->result();
         if (!r.ec) {
+            is_fresh = true;
             return {
                 posix_time::second_clock::universal_time(),
                 move(r.retval)

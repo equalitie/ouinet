@@ -1,9 +1,8 @@
 #include "client.h"
-#include "../../util/hash.h"
+#include "announcer.h"
 #include "../../util/bytes.h"
 #include "../../util/file_io.h"
 #include "../../bittorrent/dht.h"
-#include "../../bittorrent/bep5_announcer.h"
 #include "../../bittorrent/is_martian.h"
 #include "../../ouiservice/utp.h"
 #include "../../ouiservice/bep5.h"
@@ -30,14 +29,14 @@ struct Client::Impl {
     shared_ptr<bt::MainlineDht> dht;
     fs::path cache_dir;
     Cancel cancel;
-    map<string, unique_ptr<bt::Bep5Announcer>> swarm_announcers;
-    // TODO: Should be Lru
+    Announcer announcer;
     map<string, udp::endpoint> peer_cache;
 
     Impl(shared_ptr<bt::MainlineDht> dht_, fs::path cache_dir)
         : ios(dht_->get_io_service())
         , dht(move(dht_))
         , cache_dir(move(cache_dir))
+        , announcer(dht)
     {
         start_accepting();
     }
@@ -351,7 +350,7 @@ struct Client::Impl {
             return or_throw(yield, ec);
         }
 
-        announce(key);
+        announcer.add(key);
     }
 
     template<class Stream>
@@ -363,17 +362,6 @@ struct Client::Impl {
         http::response<http::empty_body> msg{hdr};
         http::response_serializer<http::empty_body> s(msg);
         http::async_write_header(sink, s, yield);
-    }
-
-
-    void announce(string key)
-    {
-        auto infohash = util::sha1_digest(key);
-        auto res = swarm_announcers.emplace(move(key), nullptr);
-
-        if (res.second /* inserted? */) {
-            res.first->second.reset(new bt::Bep5Announcer(infohash, dht));
-        }
     }
 
     template<class Stream>
@@ -409,8 +397,7 @@ struct Client::Impl {
 
             if (key.empty()) { try_remove(p); continue; }
 
-            LOG_DEBUG("Announcing stored: ", key);
-            announce(key.to_string());
+            announcer.add(key.to_string());
         }
     }
 

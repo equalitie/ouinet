@@ -42,7 +42,26 @@ public:
             if (ec) return or_throw(yield, ec);
         }
 
-        _queue.push({std::move(val), ec_});
+        _queue.push_back({std::move(val), ec_});
+        _rx_cv.notify();
+    }
+
+    // Deprecated, use push_back
+    void push(T val)
+    {
+        _queue.push_back({std::move(val), sys::error_code{}});
+        _rx_cv.notify();
+    }
+
+    void push_back(T val)
+    {
+        _queue.push_back({std::move(val), sys::error_code{}});
+        _rx_cv.notify();
+    }
+
+    void push_front(T val)
+    {
+        _queue.push_front({std::move(val), sys::error_code{}});
         _rx_cv.notify();
     }
 
@@ -66,12 +85,22 @@ public:
             }
 
             while (_queue.size() < _max_size && i != end) {
-                _queue.push({*i, sys::error_code()});
+                _queue.push_back({*i, sys::error_code()});
                 ++i;
             }
 
             _rx_cv.notify();
         }
+    }
+
+    void async_wait_for_push(Cancel& cancel, asio::yield_context yield)
+    {
+        Cancel c(cancel);
+        auto slot = _destroy_signal.connect([&] { c(); });
+        sys::error_code ec;
+        _rx_cv.wait(c, yield[ec]);
+        if (c) ec = asio::error::operation_aborted;
+        if (ec) return or_throw(yield, ec);
     }
 
     T async_pop(Cancel& cancel, asio::yield_context yield)
@@ -89,7 +118,7 @@ public:
         assert(!_queue.empty());
 
         auto ret = std::move(_queue.front());
-        _queue.pop();
+        _queue.pop_front();
 
         _tx_cv.notify();
 
@@ -116,7 +145,7 @@ public:
 
         while (!_queue.empty()) {
             auto p = std::move(_queue.front());
-            _queue.pop();
+            _queue.pop_front();
             if (!p.second) {
                 ++ret;
                 out.push(std::move(p.first));
@@ -135,9 +164,14 @@ public:
         return _queue.back().first;
     }
 
+    T& front() {
+        assert(!_queue.empty());
+        return _queue.front().first;
+    }
+
     void pop() {
         assert(!_queue.empty());
-        _queue.pop();
+        _queue.pop_front();
         _tx_cv.notify();
     }
 
@@ -152,7 +186,7 @@ public:
 private:
     asio::io_service& _ios;
     size_t _max_size;
-    std::queue<std::pair<T, sys::error_code>> _queue;
+    std::deque<std::pair<T, sys::error_code>> _queue;
     ConditionVariable _rx_cv;
     ConditionVariable _tx_cv;
     Cancel _destroy_signal;
