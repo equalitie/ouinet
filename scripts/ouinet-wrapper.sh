@@ -56,6 +56,7 @@ CLIENT_PROXY_PORT=8077
 INJECTOR_LOOP_ADDR=127.7.2.1
 INJECTOR_TCP_PORT=7070
 INJECTOR_TCP_TLS_PORT=7077
+INJECTOR_UTP_TLS_PORT=7085
 
 # Fix some configuration parameters on repo creation.
 if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
@@ -75,6 +76,11 @@ if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
     # Set a well-known injector TCP/TLS port (and enable it).
     if [ "$PROG" = injector ]; then
         sed -i -E "s/^#?(listen-on-tcp-tls\s*=\s*:::)[0-9]+(.*)/\1${INJECTOR_TCP_TLS_PORT}\2/" "$CONF"
+    fi
+
+    # Set a well-known injector UTP/TLS port (and enable it).
+    if [ "$PROG" = injector ]; then
+        sed -i -E "s/^#?(listen-on-utp-tls\s*=\s*:::)[0-9]+(.*)/\1${INJECTOR_UTP_TLS_PORT}\2/" "$CONF"
     fi
 
     # Generate a random password for injector credentials.
