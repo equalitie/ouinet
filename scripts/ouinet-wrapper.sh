@@ -105,6 +105,15 @@ if grep -qP '^\s*injector-ep\s*=(?!\s*[A-Za-z][-\+\.0-9A-Za-z]*:)' "$CONF" && ! 
         "$CONF"
 fi
 
+# Convert completely changed configuration parameters.
+if grep -qE '^\s*disable-cache\s*=\b' "$CONF" && ! has_help_arg "$@"; then
+    # No Perl regular expressions for sed, bad luck.
+    sed -i -E \
+        -e 's/^(\s*)disable-cache(\s*=\s*)([Tt][Rr][Uu][Ee]|[Yy][Ee][Ss]|[Oo][Nn]|1|)(\s*)(#.*)?$/\1cache-type\2none\4\5/g' \
+        -e 's/^(\s*disable-cache\s*=\s*)([Ff][Aa][Ll][Ss][Ee]|[Nn][Oo]|[Oo][Ff][Ff]|0)(\s*)(#.*)?$/#\1\2\3\4/g' \
+        "$CONF"
+fi
+
 # Comment out some obsolete configuration parameters.
 if grep -qE '^\s*(cache-index|index-ipns-id)\s*=' "$CONF" && ! has_help_arg "$@"; then
     sed -i -E 's/^(\s*)(cache-index|index-ipns-id)(\s*=.*)/##\1\2\3  # obsolete/' "$CONF"
