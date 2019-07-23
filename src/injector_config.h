@@ -145,7 +145,7 @@ InjectorConfig::options_description()
         ("listen-on-i2p",
          po::value<string>(),
          "Whether we should be listening on I2P (true/false)")
-        ("listen-in-bep5-swarm", po::value<string>(), "Bep5 swarm name to announce our WAN IP")
+        ("listen-in-bep5-swarm", po::value<string>(), "Name of BEP5 swarm to announce our uTP/TLS WAN endpoint in")
         ("credentials", po::value<string>()
          , "<username>:<password> authentication pair. "
            "If unused, this injector shall behave as an open proxy.")
