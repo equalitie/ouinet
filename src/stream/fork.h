@@ -18,7 +18,7 @@ class Fork {
     using IntrusiveHook = boost::intrusive::list_member_hook
         <boost::intrusive::link_mode<boost::intrusive::auto_unlink>>;
 
-    class ForkState;
+    struct ForkState;
 
 public:
     class Tine {
