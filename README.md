@@ -526,9 +526,7 @@ unreachable.
 ## Android library and demo client
 
 Ouinet can also be built as an Android Archive library (AAR) to use in your
-Android addps.  As a demonstration of how to integrate Ouinet in your Android
-apps, Ouinet's sources include a minimal Android web browser based on the
-standard `WebView` using Ouinet as a transport.
+Android adds.  
 
 ### Build requirements
 
@@ -567,25 +565,7 @@ variable:
     vagrant $ env ABI=x86_64 /path/to/build-android.sh
 
 In any case, when the build script finishes successfully, it will leave the
-Ouinet AAR library at `<ANDROID BUILD DIR>/outputs/aar/ouinet-debug.aar`
-(where `<ANDROID BUILD DIR>=build-android/builddir/ouinet/build-android`
-unless instructed otherwise, e.g. via Android Studio).
-
-The script will also print out a path to the demo client APK package
-(`<ANDROID BUILD DIR>/outputs/apk/debug/browser-debug.apk` by default) which
-can now be copied to the host and deployed to the phone, for instance:
-
-    vagrant $ cp /path/to/browser-debug.apk /vagrant-rw
-    vagrant $ exit
-    host    $ adb install /path/to/browser-debug.apk
-
-Please note that merging different ABI builds at the same build directory is
-not yet supported.  If you want to rebuild for a different ABI, you can remove
-potentially conflicting files (including the generated AAR and APK!)  while
-keeping downloads and ABI-neutral source files so that you can reuse them for
-the next build.  Just run:
-
-    vagrant $ /path/to/build-android.sh abiclean
+Ouinet AAR library at `build.ouinet/build-android-$ABI/builddir/ouinet/build-android/outputs/aar/ouinet-debug.aar`.
 
 [Android ABI]: https://developer.android.com/ndk/guides/abis.html
 
@@ -604,23 +584,6 @@ can tune the script to use them:
     $ export BOOST_SOURCE=/path/to/Boost-for-Android
     $ export BOOST_INCLUDEDIR=$BOOST_SOURCE/build/out/${ABI}/include/boost-${BOOST_V}
     $ /path/to/build-android.sh
-
-### Setting up the demo client
-
-The Android app has user menus for specifying the injector's endpoint,
-injector's credentials, and the B-tree cache index IPNS ID (BEP44 index not
-yet supported), but that is very tedious to do.  Because of that, the app also
-gives you an option to read QR codes.  To generate one, create a text with
-these values:
-
-    injector=<INJECTOR ENDPOINT>
-    ipns=<CACHE INDEX IPNS ID>
-    credentials=<USER>:<PASSWORD>
-
-and the use an online QR code generator such as [this one](https://www.the-qrcode-generator.com/),
-or use a command line tool such as [qrencode](https://fukuchi.org/works/qrencode/)
-
-    $ qrencode -t PNG -o FILE.png < FILE.txt
 
 ### Testing with Android emulator
 
@@ -675,7 +638,7 @@ Then look for the following section of your `<PROJECT DIR>/build.gradle`:
 
     allprojects {
       repositories {
-      ...
+        ...
       }
     }
 
@@ -703,16 +666,22 @@ app import Ouinet:
 
 Then add a private member to your `MainActivity` class:
 
-    private Ouinet _ouinet;
+    private Ouinet ouinet;
 
 And in its `OnCreate` method initiate the Ouinet object (using the B-tree
 cache index):
 
-    _ouinet = new Ouinet(this);
-
-    _ouinet.setInjectorEndpoint("<INJECTOR ENDPOINT>");
-    _ouinet.setIPNS("<CACHE INDEX IPNS ID>");
-    _ouinet.setCredentialsFor("<INJECTOR ENDPOINT>", "<USER>:<PASSWORD>");
+    Config config = new Config.ConfigBuilder(this)
+                .setIndexBep44PubKey(<BEP_44_KEY>))
+                .setIndexIpnsId(<INDEX_IPNS_ID>)
+                .setInjectorEndpoint(<INJECTOR_ENDPOINT>))
+                .setInjectorCredentials(<INJECTOR_USERNAME>:<INJECTOR_PASSWORD>)
+                .setInjectorTlsCert(<INJECTOR_TLS_CERT>)
+                .setTlsCaCertStorePath(<TLS_CA_CERT_STORE_PATH>)
+                .build()
+    
+    ouinet = new Ouinet(this, config);
+    ouinet.start();
 
 Where `<INJECTOR ENDPOINT>` may be an I2P peer identity or an `<IP>:<PORT>`
 pair.  From now on all of the app's HTTP communication will be handled by
