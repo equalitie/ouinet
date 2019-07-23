@@ -2,26 +2,25 @@
 
 #include "../../bittorrent/bep5_announcer.h"
 #include "../../util/hash.h"
-#include <map>
+#include <memory>
 
 namespace ouinet { namespace cache { namespace bep5_http {
 
 class Announcer {
 private:
-    struct Entry;
+    struct Loop;
 
 public:
     using Key = std::string;
 
-    Announcer(std::shared_ptr<bittorrent::MainlineDht> dht);
+    Announcer(std::shared_ptr<bittorrent::MainlineDht>);
 
     void add(Key key);
 
     ~Announcer();
 
 private:
-    std::shared_ptr<bittorrent::MainlineDht> _dht;
-    std::map<Key, std::unique_ptr<Entry>> _entries;
+    std::unique_ptr<Loop> _loop;
 };
 
 }}} // namespaces
