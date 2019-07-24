@@ -65,7 +65,7 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     list(INSERT CMAKE_MODULE_PATH 0 ${OpenSSL_DIR})
 endif()
 
-find_package(OpenSSL 1.1.0 REQUIRED)
+find_package(OpenSSL REQUIRED)
 
 # Some container classes rely on openssl headers, but not on linking to
 # the library proper.
