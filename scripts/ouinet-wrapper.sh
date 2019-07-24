@@ -91,13 +91,14 @@ if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
 fi
 
 # Update some renamed configuration parameters.
-if grep -qE '^#*\s*(default-index|bittorrent-private-key|bittorrent-public-key|index-bep44-private-key|injector-ipns|listen-on-tls)\s*=' "$CONF" && ! has_help_arg "$@"; then
+if grep -qE '^#*\s*(default-index|bittorrent-private-key|bittorrent-public-key|index-bep44-private-key|injector-ipns|listen-in-bep5-swarm|listen-on-tls)\s*=' "$CONF" && ! has_help_arg "$@"; then
     sed -i -E \
         -e 's/^(#*\s*)default-index(\s*=.*)/\1cache-index\2/g' \
         -e 's/^(#*\s*)bittorrent-private-key(\s*=.*)/\1ed25519-private-key\2/g' \
         -e 's/^(#*\s*)bittorrent-public-key(\s*=.*)/\1index-bep44-public-key\2/g' \
         -e 's/^(#*\s*)index-bep44-private-key(\s*=.*)/\1ed25519-private-key\2/g' \
         -e 's/^(#*\s*)injector-ipns(\s*=.*)/\1index-ipns-id\2/g' \
+        -e 's/^(#*\s*)listen-in-bep5-swarm(\s*=.*)/\1announce-in-bep5-swarm\2/g' \
         -e 's/^(#*\s*)listen-on-tls(\s*=.*)/\1listen-on-tcp-tls\2/g' \
         "$CONF"
 fi

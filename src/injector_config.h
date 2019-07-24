@@ -143,7 +143,9 @@ InjectorConfig::options_description()
         ("listen-on-i2p",
          po::value<string>(),
          "Whether we should be listening on I2P (true/false)")
-        ("listen-in-bep5-swarm", po::value<string>(), "Name of BEP5 swarm to announce our uTP/TLS WAN endpoint in")
+        // It always announces the TLS uTP endpoint since
+        // a TLS certificate is always generated.
+        ("announce-in-bep5-swarm", po::value<string>(), "Listen on uTP/TLS and announce the WAN endpoint in a BEP5 swarm using the given name")
         ("credentials", po::value<string>()
          , "<username>:<password> authentication pair. "
            "If unused, this injector shall behave as an open proxy.")
@@ -287,8 +289,8 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         _obfs4_endpoint = util::parse_tcp_endpoint(vm["listen-on-obfs4"].as<string>());
     }
 
-    if (vm.count("listen-in-bep5-swarm")) {
-        _bep5_injector_swarm_name = vm["listen-in-bep5-swarm"].as<string>();
+    if (vm.count("announce-in-bep5-swarm")) {
+        _bep5_injector_swarm_name = vm["announce-in-bep5-swarm"].as<string>();
     }
 
     if (vm.count("index-bep44-capacity")) {
