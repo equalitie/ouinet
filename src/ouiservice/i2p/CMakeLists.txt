@@ -1,53 +1,52 @@
-cmake_minimum_required (VERSION 2.8)
-################################################################################
-set(BOOST_VERSION 1.62)
+cmake_minimum_required (VERSION 3.5)
 
 ################################################################################
 option(WITH_BINARY "" OFF)
 option(WITH_GUI "" OFF)
 add_subdirectory(./i2pd/build)
 
-################################################################################
-if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
-    set(IFADDRS_TARGET ifaddrs)
-    add_library(${IFADDRS_TARGET} ${IFADDRS_SOURCES})
-endif()
+# We link these libraries statically, which means their own dependencies must
+# be listed explicitly on the libraries themselves rather than ouiservice-i2p.
+set_target_properties(libi2pd PROPERTIES
+    INTERFACE_LINK_LIBRARIES
+        "Boost::date_time;Boost::filesystem;Boost::program_options;Boost::system"
+)
+set_target_properties(libi2pdclient PROPERTIES
+    INTERFACE_LINK_LIBRARIES
+        "Boost::date_time;Boost::filesystem;Boost::program_options;Boost::system"
+)
 
 ################################################################################
 project(ouiservice-i2p)
-find_package(OpenSSL REQUIRED)
-find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -Wall -ggdb ${SANITIZE}")
-
-include_directories(
-    "${Boost_INCLUDE_DIR}"
-    "./i2pd/libi2pd"
-    "./i2pd/libi2pd_client"
-)
-
-set(sources
+add_library(ouiservice-i2p
     "./tunnel.cpp"
     "./client.cpp"
     "./server.cpp"
     "./service.cpp"
     "../../logger.cpp"
 )
-
-
-add_library(ouiservice-i2p ${sources})
-add_dependencies(ouiservice-i2p i2pd ${IFADDRS_TARGET})
-
+add_library(ouinet::ouiservice-i2p ALIAS ouiservice-i2p)
+target_include_directories(ouiservice-i2p
+    PRIVATE
+        "./i2pd/libi2pd"
+        "./i2pd/libi2pd_client"
+    INTERFACE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
 target_link_libraries(ouiservice-i2p
-    libi2pdclient
-    libi2pd
-    z
-    ${OPENSSL_LIBRARIES}
-    ${IFADDRS_TARGET}
-    ${Boost_LIBRARIES}
-    ${CMAKE_THREAD_LIBS_INIT}
-    boost_asio
+    PRIVATE
+        libi2pdclient
+        libi2pd
+        z
+        OpenSSL::SSL
+    PUBLIC
+        ouinet::base
 )
 
-################################################################################
-set(I2POUI_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" PARENT_SCOPE)
+if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
+    add_library(ifaddrs ${IFADDRS_SOURCES})
+    target_link_libraries(ouiservice-i2p
+        PRIVATE ifaddrs
+    )
+endif()

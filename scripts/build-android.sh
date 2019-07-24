@@ -426,7 +426,7 @@ function build_ouinet_libs {
     add_library $DIR/$BUILD_DIR/gcrypt/src/gcrypt/src/.libs/libgcrypt.so
     add_library $DIR/$BUILD_DIR/gpg_error/out/lib/libgpg-error.so
     add_library $DIR/$BUILD_DIR/src/ouiservice/lampshade/lampshade_bindings/liblampshade_bindings.so
-    add_binary  $DIR/$BUILD_DIR/modules/obfs4proxy/obfs4proxy
+    add_binary  $DIR/$BUILD_DIR/src/ouiservice/obfs4proxy/obfs4proxy
 }
 
 ######################################################################
