@@ -1,0 +1,22 @@
+import os ;
+local ClangPath = [ os.environ CLANGPATH ] ;
+local Architecture = [ os.environ BOOSTARCH ] ;
+
+using clang : $(Architecture) : $(ClangPath)/clang++ :
+<archiver>$(ClangPath)/llvm-ar
+<compileflags>-fexceptions
+<compileflags>-frtti
+<compileflags>-ffunction-sections
+<compileflags>-funwind-tables
+<compileflags>-fstack-protector-strong
+<compileflags>-Wno-invalid-command-line-argument
+<compileflags>-Wno-unused-command-line-argument
+<compileflags>-no-canonical-prefixes
+<compileflags>-DANDROID
+<compileflags>-Wa,--noexecstack
+<compileflags>-Wformat
+<compileflags>-Werror=format-security
+<compileflags>-DNDEBUG
+<compileflags>-O2
+<compileflags>-g
+;

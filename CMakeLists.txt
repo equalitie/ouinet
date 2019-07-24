@@ -52,6 +52,8 @@ target_link_libraries(ouinet_base
         Boost::program_options
         Boost::regex
         Boost::system
+        # generic_stream.h needs openssl headers, but not the library.
+        OpenSSL::headers
 )
 
 

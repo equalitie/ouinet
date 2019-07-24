@@ -17,52 +17,38 @@ fi
 # Derive other variables from the selected ABI.
 # See `$NDK/build/tools/make_standalone_toolchain.py:get_{triple,abis}()`.
 # See <https://github.com/opencv/opencv/blob/5b868ccd829975da5372bf330994553e176aee09/platforms/android/android.toolchain.cmake#L658>.
-# See `$OPENSSL/config`.
 if [ "$ABI" = "armeabi-v7a" ]; then
     NDK_ARCH="arm"
     NDK_TOOLCHAIN_TARGET="arm-linux-androideabi"
     NDK_TOOLCHAIN_LIB_SUBDIR="lib/armv7-a"
     NDK_PLATFORM=19
     CMAKE_SYSTEM_PROCESSOR="armv7-a"
-    SSL_TARGET=android-armeabi
-    GCRYPT_TARGET=arm-unknown-linux-androideabi
 
 elif [ "$ABI" = "arm64-v8a" ]; then
-    # Not currently working, libgpg-error doesn't support armv8
     NDK_ARCH="arm64"
     NDK_TOOLCHAIN_TARGET="aarch64-linux-android"
     NDK_PLATFORM=21
     CMAKE_SYSTEM_PROCESSOR="aarch64"
-    SSL_TARGET=android64-aarch64
-    GCRYPT_TARGET=aarch64-linux-android
 
 elif [ "$ABI" = "armeabi" ]; then
-    # Untested
     NDK_ARCH="arm"
     NDK_TOOLCHAIN_TARGET="arm-linux-androideabi"
     NDK_PLATFORM=19
     CMAKE_SYSTEM_PROCESSOR="armv5te"
-    SSL_TARGET=android
-    GCRYPT_TARGET=arm-unknown-linux-androideabi
 
 elif [ "$ABI" = "x86" ]; then
-    # Not currently working, asio-ipfs & libgpg-error don't support x86
     NDK_ARCH="x86"
     NDK_TOOLCHAIN_TARGET="i686-linux-android"
     NDK_PLATFORM=19
     CMAKE_SYSTEM_PROCESSOR="i686"
-    SSL_TARGET=android-x86
-    GCRYPT_TARGET=arm-unknown-linux-androideabi
 
 elif [ "$ABI" = "x86_64" ]; then
-    # Not currently working, libgpg-error doesn't support x86_64
     NDK_ARCH="x86_64"
     NDK_TOOLCHAIN_TARGET="x86_64-linux-android"
     NDK_TOOLCHAIN_LIB_SUBDIR="lib64"
     NDK_PLATFORM=21
     CMAKE_SYSTEM_PROCESSOR="x86_64"
-    SSL_TARGET=android64
-    GCRYPT_TARGET=x86_64-linux-androideabi
+
 else
     >&2 echo "Unsupported ABI: '$ABI'"
     exit 1
@@ -86,16 +72,6 @@ NDK_TOOLCHAIN_DIR=${NDK_TOOLCHAIN_DIR:-${DIR}/${NDK}-toolchain-android$NDK_PLATF
 # Android API level, see https://redmine.equalit.ie/issues/12143
 PLATFORM=android-${NDK_PLATFORM}
 
-BOOST_V=${BOOST_V:-"1_67_0"}
-BOOST_V_DOT=${BOOST_V//_/.} # Replace '_' for '.'
-BOOST_SOURCE=${BOOST_SOURCE:-${DIR}/Boost-for-Android}
-BOOST_INCLUDEDIR=$BOOST_SOURCE/build/out/${ABI}/include
-BOOST_LIBRARYDIR=$BOOST_SOURCE/build/out/${ABI}/lib
-
-SSL_V="1.1.0g"
-SSL_SOURCE=${DIR}/openssl-${SSL_V}
-SSL_DIR=${DIR}/openssl-${SSL_V}-${SSL_TARGET}
-
 ANDROID_FLAGS="\
     -DBoost_COMPILER='-clang' \
     -DCMAKE_ANDROID_NDK_TOOLCHAIN_VERSION=clang \
@@ -104,10 +80,7 @@ ANDROID_FLAGS="\
     -DCMAKE_ANDROID_STANDALONE_TOOLCHAIN=${NDK_TOOLCHAIN_DIR} \
     -DCMAKE_SYSROOT=$NDK_TOOLCHAIN_DIR/sysroot \
     -DCMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR} \
-    -DCMAKE_ANDROID_ARCH_ABI=${ABI} \
-    -DOPENSSL_ROOT_DIR=${SSL_DIR} \
-    -DBOOST_INCLUDEDIR=${BOOST_INCLUDEDIR} \
-    -DBOOST_LIBRARYDIR=${BOOST_LIBRARYDIR}"
+    -DCMAKE_ANDROID_ARCH_ABI=${ABI}"
 
 EMULATOR_AVD=${EMULATOR_AVD:-ouinet-test}
 
@@ -127,8 +100,6 @@ echo "SDK_DIR: "$SDK_DIR
 echo "NDK_TOOLCHAIN_DIR: "$NDK_TOOLCHAIN_DIR
 echo "NDK_PLATFORM: "$NDK_PLATFORM
 echo "PLATFORM: "$PLATFORM
-echo "BOOST_SOURCE: "$BOOST_SOURCE
-echo "BOOST LIB: "$BOOST_LIBRARYDIR
 
 ######################################################################
 # This variable shall contain paths to generated libraries which
@@ -335,67 +306,6 @@ function maybe_install_gradle {
 }
 
 ######################################################################
-function maybe_install_boost {
-    BOOST_GIT=https://github.com/equalitie/Boost-for-Android
-
-    if [ ! -d "$BOOST_SOURCE" ]; then
-        cd "$(dirname "$BOOST_SOURCE")"
-        git clone $BOOST_GIT "$(basename "$BOOST_SOURCE")"
-        cd $BOOST_SOURCE
-        git reset --hard 67ed5c6e8669073fd5cb939e5914662057514d00
-        cd $DIR
-    fi
-
-    if [ ! -d "$BOOST_LIBRARYDIR" ]; then
-        echo "Building boost"
-        ( cd "$BOOST_SOURCE";
-          # TODO: Android doesn't need program_options and test.
-          # Build Boost for all architectures otherwise it will
-          # do a rebuild whenever the ABI changes.
-          ./build-android.sh \
-            --boost=${BOOST_V_DOT} \
-            --arch=arm64-v8a,armeabi-v7a,x86,x86_64 \
-            --with-libraries=regex,context,coroutine,program_options,system,test,thread,filesystem,date_time,iostreams \
-            --layout=system \
-            $NDK_DIR | tee "$DIR/boost.log"
-        )
-    fi
-}
-
-######################################################################
-function build_openssl {
-    export CROSS_SYSROOT="${NDK_TOOLCHAIN_DIR}/sysroot"
-    export ANDROID_DEV="${CROSS_SYSROOT}/usr"
-    export CROSS_COMPILE="$NDK_TOOLCHAIN_TARGET-"
-    export PATH="$NDK_TOOLCHAIN_DIR/bin:$PATH"
-    ./Configure ${SSL_TARGET} no-shared -no-ssl2 -no-ssl3 -no-comp -no-hw -no-engine -DAPP_PLATFORM=${PLATFORM} -D__ANDROID_API__=${NDK_PLATFORM}
-    make depend
-    make build_libs > "$DIR/$BUILD_DIR/openssl.log"
-}
-
-function maybe_install_openssl {
-    if [ -d "$SSL_DIR" ]; then
-        return
-    fi
-    if [ ! -d "$SSL_SOURCE" ]; then
-        if [ ! -f openssl-${SSL_V}.tar.gz ]; then
-            wget -nv https://www.openssl.org/source/openssl-${SSL_V}.tar.gz
-        fi
-        tar xf openssl-${SSL_V}.tar.gz
-        mv $SSL_SOURCE $SSL_DIR
-    fi
-    (cd $SSL_DIR && build_openssl)
-}
-
-######################################################################
-function maybe_clone_ifaddrs {
-    if [ ! -d "android-ifaddrs" ]; then
-        # TODO: Still need to compile the .c file and make use of it.
-        git clone https://github.com/PurpleI2P/android-ifaddrs.git
-    fi
-}
-
-######################################################################
 # TODO: miniupnp
 #   https://i2pd.readthedocs.io/en/latest/devs/building/android/
 
@@ -407,14 +317,8 @@ function build_ouinet_libs {
     fi
     cd $BUILD_DIR
     cmake ${ANDROID_FLAGS} \
-          -DANDROID=1 \
           -DWITH_INJECTOR=OFF \
-          -DIFADDRS_SOURCES="${DIR}/android-ifaddrs/ifaddrs.c" \
-          -DOPENSSL_INCLUDE_DIR=${SSL_DIR}/include \
-          -DCMAKE_CXX_FLAGS="-I ${DIR}/android-ifaddrs -I $SSL_DIR/include" \
-          -DBOOST_ROOT="$BOOST_SOURCE" \
           -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
-          -DGCRYPT_TARGET=${GCRYPT_TARGET} \
           ${ROOT}
     make -j `nproc`
     cd - >/dev/null
@@ -459,7 +363,7 @@ function build_ouinet_apk {
     export GRADLE_USER_HOME="${DIR}/.gradle-home"
     ( cd "${ROOT}/android";
       gradle build \
-        -Pboost_includedir=${BOOST_INCLUDEDIR} \
+        -Pboost_includedir="${DIR}/${BUILD_DIR}/boost/install/include" \
         -Pandroid_abi=${ABI} \
         -Pouinet_clientlib_path="${DIR}/${OUTPUT_DIR}/builddir/deps/${ABI}/libclient.so" \
         -Pasio_path="${DIR}/${OUTPUT_DIR}/builddir/deps/${ABI}/libboost_asio.so" \
@@ -540,9 +444,6 @@ if check_mode bootstrap; then
     maybe_install_ndk
     maybe_install_ndk_toolchain
     maybe_install_gradle
-    maybe_install_boost
-    maybe_install_openssl
-    maybe_clone_ifaddrs
     # TODO: miniupnp
 fi
 

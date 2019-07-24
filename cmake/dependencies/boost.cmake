@@ -1,4 +1,4 @@
-set(BOOST_VERSION 1.67)
+set(BOOST_VERSION 1.67.0)
 set(BOOST_COMPONENTS
     context
     coroutine
@@ -8,9 +8,81 @@ set(BOOST_COMPONENTS
     program_options
     regex
     system
-    thread
     unit_test_framework
 )
+
+
+if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
+    if (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "armv7-a")
+        set(BOOST_ARCH "armeabiv7a")
+        set(BOOST_ARCH_SETTINGS "abi=aapcs")
+    elseif (${CMAKE_SYSTEM_PROCESSOR} MATCHES "^arm.*")
+        # Is this still relevant? armv<7 seems to be obsolete
+        # from android 4.4 onwards.
+        set(BOOST_ARCH "armeabi")
+        set(BOOST_ARCH_SETTINGS "abi=aapcs")
+    elseif (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "aarch64")
+        set(BOOST_ARCH "arm64v8a")
+        set(BOOST_ARCH_SETTINGS "abi=aapcs")
+    elseif (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "i686")
+        set(BOOST_ARCH "x86")
+        set(BOOST_ARCH_SETTINGS "abi=sysv")
+    elseif (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
+        set(BOOST_ARCH "x8664")
+        set(BOOST_ARCH_SETTINGS "abi=sysv")
+    else()
+        message(FATAL_ERROR "Unsupported CMAKE_SYSTEM_PROCESSOR ${CMAKE_SYSTEM_PROCESSOR}")
+    endif()
+
+    string(REPLACE "." "_" BOOST_VERSION_FILENAME ${BOOST_VERSION})
+    set(ENABLE_BOOST_COMPONENTS )
+    foreach (component ${BOOST_COMPONENTS})
+        if (${component} STREQUAL "unit_test_framework")
+            set(ENABLE_BOOST_COMPONENTS ${ENABLE_BOOST_COMPONENTS} --with-test)
+            continue()
+        endif()
+        set(ENABLE_BOOST_COMPONENTS ${ENABLE_BOOST_COMPONENTS} --with-${component})
+    endforeach()
+
+    externalproject_add(built_boost
+        URL "https://sourceforge.net/projects/boost/files/boost/${BOOST_VERSION}/boost_${BOOST_VERSION_FILENAME}.tar.bz2"
+        URL_MD5 ced776cb19428ab8488774e1415535ab
+        PREFIX "${CMAKE_CURRENT_BINARY_DIR}/boost"
+        PATCH_COMMAND
+               cd ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost
+            && patch -p1 -i ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-${BOOST_VERSION_FILENAME}.patch
+        CONFIGURE_COMMAND
+               cd ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost
+            && ./bootstrap.sh
+        BUILD_COMMAND
+               cd ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost
+            && export PATH=${CMAKE_ANDROID_STANDALONE_TOOLCHAIN}/bin:$ENV{PATH}
+            && export CLANGPATH=${CMAKE_ANDROID_STANDALONE_TOOLCHAIN}/bin
+            && export BOOSTARCH=${BOOST_ARCH}
+            && ./b2
+                target-os=android
+                toolset=clang-${BOOST_ARCH}
+                link=static
+                threading=multi
+                --layout=system
+                --prefix=${CMAKE_CURRENT_BINARY_DIR}/boost/install
+                --user-config=${CMAKE_CURRENT_LIST_DIR}/inline-boost/user-config.jam
+                --no-cmake-config
+                ${ENABLE_BOOST_COMPONENTS}
+                ${BOOST_ARCH_SETTINGS}
+                install
+        INSTALL_COMMAND ""
+    )
+
+    set(BUILT_BOOST_VERSION ${BOOST_VERSION})
+    set(BUILT_BOOST_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/boost/install/include)
+    set(BUILT_BOOST_LIBRARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/boost/install/lib)
+    set(BUILT_BOOST_COMPONENTS ${BOOST_COMPONENTS})
+
+    set(Boost_DIR ${CMAKE_CURRENT_LIST_DIR}/inline-boost)
+    list(INSERT CMAKE_MODULE_PATH 0 ${Boost_DIR})
+endif()
+
 
 find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS ${BOOST_COMPONENTS})
 find_package(Threads REQUIRED)
@@ -60,20 +132,40 @@ target_compile_definitions(boost_asio
 add_library(boost_asio_ssl SHARED "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio_ssl.cpp")
 add_library(Boost::asio_ssl ALIAS boost_asio_ssl)
 target_link_libraries(boost_asio_ssl
-    PRIVATE OpenSSL::SSL
-    PUBLIC Boost::asio
+    PUBLIC
+        OpenSSL::SSL
+        Boost::asio
 )
 
 
 # FindBoost.cmake doesn't define targets for newer versions of boost.
 # Let's emulate it instead.
-if(NOT ${_Boost_IMPORTED_TARGETS})
-    foreach(component ${BOOST_COMPONENTS})
-        find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS ${component})
-        add_library(boost_${component} INTERFACE)
-        add_library(Boost::${component} ALIAS boost_${component})
-        target_include_directories(boost_${component} INTERFACE ${Boost_INCLUDE_DIRS})
-        target_link_libraries(boost_${component} INTERFACE ${Boost_LIBRARIES})
-    endforeach()
-endif()
+foreach(component ${BOOST_COMPONENTS})
+    if (NOT TARGET Boost::${component})
+        include(${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-dependencies.cmake)
+        string(TOUPPER ${component} UPPERCOMPONENT)
+
+        set(components ${component})
+        if (NOT "${_static_Boost_${UPPERCOMPONENT}_DEPENDENCIES}" STREQUAL "")
+            set(components ${components} ${_static_Boost_${UPPERCOMPONENT}_DEPENDENCIES})
+        endif()
+
+        find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS ${components})
+        list(GET Boost_LIBRARIES 0 imported_location)
+
+        add_library(Boost::${component} UNKNOWN IMPORTED)
+        set_target_properties(Boost::${component} PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIR}"
+            INTERFACE_LINK_LIBRARIES "${Boost_LIBRARIES}"
+            IMPORTED_LOCATION ${imported_location}
+            IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
+        )
+    endif()
+endforeach()
+
+
+#if(NOT ${_Boost_IMPORTED_TARGETS})
+#    include(${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-dependencies.cmake)
+#    find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS ${BOOST_COMPONENTS})
+#endif()
 
