@@ -121,6 +121,8 @@ WORKDIR /opt/ouinet
 COPY --from=builder \
      /opt/ouinet/gcrypt/src/gcrypt/src/.libs/libgcrypt.so.20 \
      /opt/ouinet/gpg_error/out/lib/libgpg-error.so.0 \
+     /opt/ouinet/libboost_asio.so \
+     /opt/ouinet/libboost_asio_ssl.so \
      /opt/ouinet/modules/asio-ipfs/ipfs_bindings/libipfs_bindings.so \
      /opt/ouinet/src/ouiservice/lampshade/lampshade_bindings/liblampshade_bindings.so \
      \
