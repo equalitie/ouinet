@@ -177,6 +177,26 @@ configure_file(src/version.h.in src/version.h)
 configure_file(ouinet.properties.in ouinet.properties)
 
 ################################################################################
+# Asio can be used as a header-only library _only_ if it is not used along any
+# shared library boundaries. In any program using asio across a library
+# boundary, both the library and the program must link asio as a shared library
+# instead. Boost does not ship this library, so we need to create it.
+
+add_library(boost_asio SHARED "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio.cpp")
+target_link_libraries(boost_asio
+    ${Boost_LIBRARIES}
+)
+target_compile_definitions(boost_asio PRIVATE -DBOOST_ASIO_DYN_LINK)
+
+add_library(boost_asio_ssl SHARED "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio_ssl.cpp")
+target_link_libraries(boost_asio_ssl
+    ${Boost_LIBRARIES}
+    boost_asio
+    ${OPENSSL_LIBRARIES}
+)
+
+
+################################################################################
 include_directories(
     "${Boost_INCLUDE_DIR}"
     "${ASIO_IPFS_INCLUDE_DIR}"
@@ -188,8 +208,6 @@ include_directories(
 
 file(GLOB client_sources
     "./src/client.cpp"
-    "./src/asio.cpp"
-    "./src/asio_ssl.cpp"
     "./src/connect_to_host.cpp"
     "./src/client_front_end.cpp"
     "./src/endpoint.cpp"
@@ -243,6 +261,8 @@ target_link_libraries(client
     ${LIBLAMPSHADE_LIBRARIES}
     ${URI_LIBRARY}
     ${GCRYPT_LIBRARIES}
+    boost_asio
+    boost_asio_ssl
 )
 
 add_dependencies(client json uri ${ASIO_IPFS_TARGET} gcrypt)
@@ -299,6 +319,8 @@ if (WITH_INJECTOR)
         ${LIBLAMPSHADE_LIBRARIES}
         ${URI_LIBRARY}
         ${GCRYPT_LIBRARIES}
+	boost_asio
+	boost_asio_ssl
     )
 endif() # if WITH_INJECTOR
 

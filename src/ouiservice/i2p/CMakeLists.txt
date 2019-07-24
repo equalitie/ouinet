@@ -46,6 +46,7 @@ target_link_libraries(ouiservice-i2p
     ${IFADDRS_TARGET}
     ${Boost_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
+    boost_asio
 )
 
 ################################################################################

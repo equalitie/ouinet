@@ -18,7 +18,8 @@ android {
             cmake {
                 arguments "-DBOOST_INCLUDEDIR=$boost_includedir",
                           "-DANDROID_STL='c++_shared'",
-                          "-DOUINET_CLIENTLIB_PATH=$ouinet_clientlib_path"
+                          "-DOUINET_CLIENTLIB_PATH=$ouinet_clientlib_path",
+                          "-DASIO_PATH=$asio_path"
                 cppFlags "-std=c++14 -frtti -fexceptions"
             }
         }

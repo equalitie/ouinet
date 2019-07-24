@@ -46,11 +46,15 @@ find_library( # Sets the name of the path variable.
 add_library(client-lib SHARED IMPORTED)
 set_property(TARGET client-lib PROPERTY IMPORTED_LOCATION ${OUINET_CLIENTLIB_PATH})
 
+add_library(boost_asio SHARED IMPORTED)
+set_property(TARGET boost_asio PROPERTY IMPORTED_LOCATION ${ASIO_PATH})
+
 # Ouinet sources
 
 target_link_libraries( # Specifies the target library.
                        native-lib
                        client-lib
+                       boost_asio
 
                        # Links the target library to the log library
                        # included in the NDK.

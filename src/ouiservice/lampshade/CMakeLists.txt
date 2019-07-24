@@ -135,12 +135,13 @@ file(GLOB sources
 
 add_library(lampshade-asio STATIC ${sources})
 set_target_properties(lampshade-asio PROPERTIES LINKER_LANGUAGE CXX)
-target_link_libraries(lampshade-asio lampshade-bindings ${Boost_LIBRARIES})
+target_link_libraries(lampshade-asio lampshade-bindings ${Boost_LIBRARIES} boost_asio)
 
 set(LIBLAMPSHADE_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" PARENT_SCOPE)
 set(LIBLAMPSHADE_TARGET "lampshade-asio" PARENT_SCOPE)
 set(LIBLAMPSHADE_LIBRARIES
     lampshade-asio
     lampshade-bindings
+    boost_asio
     PARENT_SCOPE
 )

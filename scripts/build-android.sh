@@ -420,6 +420,8 @@ function build_ouinet_libs {
     cd - >/dev/null
 
     add_library $DIR/$BUILD_DIR/libclient.so
+    add_library $DIR/$BUILD_DIR/libboost_asio.so
+    add_library $DIR/$BUILD_DIR/libboost_asio_ssl.so
     add_library $DIR/$BUILD_DIR/modules/asio-ipfs/ipfs_bindings/libipfs_bindings.so
     add_library $DIR/$BUILD_DIR/gcrypt/src/gcrypt/src/.libs/libgcrypt.so
     add_library $DIR/$BUILD_DIR/gpg_error/out/lib/libgpg-error.so
@@ -460,6 +462,7 @@ function build_ouinet_apk {
         -Pboost_includedir=${BOOST_INCLUDEDIR} \
         -Pandroid_abi=${ABI} \
         -Pouinet_clientlib_path="${DIR}/${OUTPUT_DIR}/builddir/deps/${ABI}/libclient.so" \
+        -Pasio_path="${DIR}/${OUTPUT_DIR}/builddir/deps/${ABI}/libboost_asio.so" \
         -Plibdir="${DIR}/${OUTPUT_DIR}/builddir/deps" \
         -Passetsdir="${DIR}/${OUTPUT_DIR}/builddir/assets" \
         -Pouinet_properties="${DIR}/${BUILD_DIR}/ouinet.properties";
