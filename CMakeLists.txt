@@ -21,7 +21,7 @@ option(WITH_ASAN "Build with Address sanitizer" OFF)
 # Global build flags
 if (WITH_ASAN)
     # NOTE: https://stackoverflow.com/questions/37603238/fsanitize-not-using-gold-linker-in-gcc-6-1
-    add_compile_options("-fsanitize=address -fuse-ld=gold -fno-omit-frame-pointer")
+    add_compile_options("-fsanitize=address" "-fuse-ld=gold" "-fno-omit-frame-pointer")
 endif()
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     add_compile_options("-ggdb")
