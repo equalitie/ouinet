@@ -129,20 +129,20 @@ fi
 # Update TCP/TLS endpoint file name.
 if ! has_help_arg "$@"; then
     if [ -e "$REPO/endpoint-tls" ]; then
-        mv "$REPO/endpoint-tls" "$REPO/endpoint-tcp-tls"
+        mv -n "$REPO/endpoint-tls" "$REPO/endpoint-tcp-tls"
     fi
 fi
 
 # Update BEP44 key file names.
 if ! has_help_arg "$@"; then
     if [ -e "$REPO/bt-private-key" ]; then
-        mv "$REPO/bt-private-key" "$REPO/ed25519-private-key"
+        mv -n "$REPO/bt-private-key" "$REPO/ed25519-private-key"
     fi
     if [ -e "$REPO/bt-public-key" ]; then
-        mv "$REPO/bt-public-key" "$REPO/bep44-public-key"
+        mv -n "$REPO/bt-public-key" "$REPO/bep44-public-key"
     fi
     if [ -e "$REPO/bep44-private-key" ]; then
-        mv "$REPO/bep44-private-key" "$REPO/ed25519-private-key"
+        mv -n "$REPO/bep44-private-key" "$REPO/ed25519-private-key"
     fi
 fi
 
