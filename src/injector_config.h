@@ -35,7 +35,6 @@ public:
 
     boost::optional<asio::ip::udp::endpoint> bittorrent_endpoint() const
     {
-        if (_bt_endpoint) return _bt_endpoint;
         if (_utp_tls_endpoint) return _utp_tls_endpoint;
         if (_utp_endpoint) return _utp_endpoint;
         return asio::ip::udp::endpoint(asio::ip::address_v4::any(), 4567);
@@ -105,7 +104,6 @@ private:
     boost::optional<asio::ip::tcp::endpoint> _obfs2_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _obfs3_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _obfs4_endpoint;
-    boost::optional<asio::ip::udp::endpoint> _bt_endpoint;
     boost::optional<std::string> _bep5_injector_swarm_name;
     boost::filesystem::path OUINET_CONF_FILE = "ouinet-injector.conf";
     std::string _credentials;
