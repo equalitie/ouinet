@@ -126,6 +126,13 @@ if grep -qE '^\s*(cache-index|index-ipns-id)\s*=' "$CONF" && ! has_help_arg "$@"
     sed -i -E 's/^(\s*)(cache-index|index-ipns-id)(\s*=.*)/##\1\2\3  # obsolete/' "$CONF"
 fi
 
+# Update TCP/TLS endpoint file name.
+if ! has_help_arg "$@"; then
+    if [ -e "$REPO/endpoint-tls" ]; then
+        mv "$REPO/endpoint-tls" "$REPO/endpoint-tcp-tls"
+    fi
+fi
+
 # Update BEP44 key file names.
 if ! has_help_arg "$@"; then
     if [ -e "$REPO/bt-private-key" ]; then
