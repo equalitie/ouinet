@@ -183,6 +183,9 @@ public:
         auto slot1 = cancel_.connect([&] { cancel(); });
         auto slot2 = _cancel.connect([&] { cancel(); });
 
+        // TODO: The persistent LRU cache computes the SHA1 digest of this
+        // to derive the file name.  Consider using `key` directly instead.
+        // (It would break persistent data compatibility.)
         auto lru_key = data.salt;
 
         sys::error_code ec;
