@@ -29,13 +29,18 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     # We need to supply an architecture/OS-specific config file,
     # and gpg-error does not supply it for most android builds.
     set(PATCH_COMMAND
-        cp ${GPG_ERROR_CONFIG} ${CMAKE_CURRENT_BINARY_DIR}/gpg_error/src/gpg_error/src/syscfg/lock-obj-pub.${HOSTTRIPLE}.h
+        cp ${GPG_ERROR_CONFIG} ${CMAKE_CURRENT_BINARY_DIR}/gpg_error/src/gpg_error/src/syscfg/lock-obj-pub.linux-android.h
     )
     set(HOST_CONFIG "--host=${HOSTTRIPLE}")
+    # For cross builds, gcrypt guesses an important toolchain characteristic
+    # that it can't test for. Unfortunately, this guess is often wrong. This
+    # value is right for android systems.
+    set(UNDERSCORE_CONFIG "ac_cv_sys_symbol_underscore=no")
 else()
     # TODO: Should probably support non-android cross compilation here.
     set(PATCH_COMMAND "")
     set(HOST_CONFIG "")
+    set(UNDERSCORE_CONFIG "")
 endif()
 
 externalproject_add(gpg_error
@@ -57,6 +62,7 @@ externalproject_add(gcrypt
     BUILD_IN_SOURCE 1
     CONFIGURE_COMMAND
         CC=${CMAKE_C_COMPILER}
+        ${UNDERSCORE_CONFIG}
             ./configure ${HOST_CONFIG}
             --with-libgpg-error-prefix=${CMAKE_CURRENT_BINARY_DIR}/gpg_error/out
     BUILD_COMMAND $(MAKE)
