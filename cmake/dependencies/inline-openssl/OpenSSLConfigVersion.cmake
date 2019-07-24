@@ -32,8 +32,8 @@ function(_parse_openssl_version version_string output_var)
     set(${output_var} ${normalized_version} PARENT_SCOPE)
 endfunction(_parse_openssl_version)
 
-_parse_openssl_version(${BUILT_OPENSSL_VERSION} built_version)
-_parse_openssl_version(${PACKAGE_FIND_VERSION} requested_version)
+_parse_openssl_version("${BUILT_OPENSSL_VERSION}" built_version)
+_parse_openssl_version("${PACKAGE_FIND_VERSION}" requested_version)
 
 set(PACKAGE_VERSION "${BUILT_OPENSSL_VERSION}")
 set(PACKAGE_VERSION_UNSUITABLE "false")
