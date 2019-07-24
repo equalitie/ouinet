@@ -139,10 +139,13 @@ if ! has_help_arg "$@"; then
         mv -n "$REPO/bt-private-key" "$REPO/ed25519-private-key"
     fi
     if [ -e "$REPO/bt-public-key" ]; then
-        mv -n "$REPO/bt-public-key" "$REPO/bep44-public-key"
+        mv -n "$REPO/bt-public-key" "$REPO/ed25519-public-key"
     fi
     if [ -e "$REPO/bep44-private-key" ]; then
         mv -n "$REPO/bep44-private-key" "$REPO/ed25519-private-key"
+    fi
+    if [ -e "$REPO/bep44-public-key" ]; then
+        mv -n "$REPO/bep44-public-key" "$REPO/ed25519-public-key"
     fi
 fi
 
