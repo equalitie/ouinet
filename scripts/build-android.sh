@@ -359,8 +359,10 @@ function copy_binaries {
 
 ######################################################################
 # Build the Ouinet AAR
-function build_ouinet_apk {
+function build_ouinet_aar {
     export GRADLE_USER_HOME="${DIR}/.gradle-home"
+    GRADLE_BUILDDIR="${DIR}/${OUTPUT_DIR}/ouinet"
+    mkdir -p "${GRADLE_BUILDDIR}"
     ( cd "${ROOT}/android";
       gradle build \
         -Pboost_includedir="${DIR}/${BUILD_DIR}/boost/install/include" \
@@ -369,8 +371,8 @@ function build_ouinet_apk {
         -Pasio_path="${DIR}/${OUTPUT_DIR}/builddir/deps/${ABI}/libboost_asio.so" \
         -Plibdir="${DIR}/${OUTPUT_DIR}/builddir/deps" \
         -Passetsdir="${DIR}/${OUTPUT_DIR}/builddir/assets" \
-        -Pouinet_properties="${DIR}/${BUILD_DIR}/ouinet.properties";
-      ln -sf $(realpath builddir/ouinet/) "$DIR/$OUTPUT_DIR/builddir/ouinet" )
+        -Pouinet_properties="${DIR}/${BUILD_DIR}/ouinet.properties" \
+        -PbuildDir="$GRADLE_BUILDDIR" )
 }
 
 ######################################################################
@@ -451,7 +453,7 @@ if check_mode build; then
     build_ouinet_libs
     copy_jni_libs
     copy_binaries
-    build_ouinet_apk
+    build_ouinet_aar
 fi
 
 if check_mode emu; then
