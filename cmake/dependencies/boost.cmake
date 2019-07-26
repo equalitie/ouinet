@@ -128,6 +128,9 @@ target_compile_definitions(boost_asio
         -DBOOST_COROUTINES_NO_DEPRECATION_WARNING
         -DBOOST_COROUTINE_NO_DEPRECATION_WARNING
 )
+target_compile_options(boost_asio
+    PUBLIC -std=c++14
+)
 
 add_library(boost_asio_ssl SHARED "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio_ssl.cpp")
 add_library(Boost::asio_ssl ALIAS boost_asio_ssl)
