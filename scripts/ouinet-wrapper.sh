@@ -83,6 +83,12 @@ if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
         sed -i -E "s/^#?(listen-on-utp-tls\s*=\s*:::)[0-9]+(.*)/\1${INJECTOR_UTP_TLS_PORT}\2/" "$CONF"
     fi
 
+    # Generate a random injector BEP5 swarm name.
+    if [ "$PROG" = injector ]; then
+        swarm=$(dd if=/dev/urandom bs=1024 count=1 status=none | sha256sum | cut -f1 -d' ')
+        sed -i -E "s/^(announce-in-bep5-swarm\s*=\s*).*/\1$swarm/" "$CONF"
+    fi
+
     # Generate a random password for injector credentials.
     if [ "$PROG" = injector ]; then
         password=$(dd if=/dev/urandom bs=1024 count=1 status=none | md5sum | cut -f1 -d' ')
