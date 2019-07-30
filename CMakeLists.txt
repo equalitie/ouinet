@@ -55,6 +55,12 @@ target_link_libraries(ouinet_base
         # generic_stream.h needs openssl headers, but not the library.
         OpenSSL::headers
 )
+if (WITH_ASAN)
+    # NOTE: https://stackoverflow.com/a/50163972
+    target_link_libraries(ouinet_base
+        INTERFACE -fsanitize=address
+    )
+endif()
 
 
 option(ASIO_IPFS_WITH_EXAMPLE_BINARIES "" OFF)
