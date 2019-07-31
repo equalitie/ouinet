@@ -1,6 +1,8 @@
 #pragma once
 
 #include "generic_stream.h"
+#include "http_forward.h"
+#include "util/yield.h"
 
 namespace ouinet {
 
@@ -8,11 +10,14 @@ class Session {
 private:
     struct State {
         GenericStream con;
-        beast::static_buffer<16384> buffer;
+        beast::static_buffer<http_forward_block> buffer;
         http::response_parser<http::buffer_body> parser;
         boost::optional<bool> response_keep_alive;
 
-        State(GenericStream&& con) : con(std::move(con)) {}
+        State(GenericStream&& con) : con(std::move(con)) {
+            // Allow an unlimited body size (not kept in memory).
+            parser.body_limit((std::numeric_limits<std::size_t>::max)());
+        }
     };
 
 public:
@@ -104,54 +109,15 @@ Session::flush_response(SinkStream& sink,
         return or_throw(yield, asio::error::bad_descriptor);
     }
 
-    // Used this as an example
-    // https://www.boost.org/doc/libs/1_70_0/libs/beast/doc/html/beast/more_examples/http_relay.html
+    // Just pass head, body data and trailer on.
+    auto hproc = [&] (auto inh, auto&, auto) { return inh; };
+    ProcInFunc<asio::const_buffer> dproc = [&] (auto ind, auto&, auto) { return ind; };
+    auto tproc = [&] (auto intr, auto&, auto) { return intr; };
 
-    auto c = cancel.connect([&] { _state->con.close(); });
-
-    sys::error_code ec;
-
-    http::response_serializer<http::buffer_body> sr{_state->parser.get()};
-
-    read_response_header(cancel , yield[ec]); // Won't read if already read.
-    return_or_throw_on_error(yield, cancel, ec);
-
-    http::async_write_header(sink, sr, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec);
-
-    char buf[2048];
-
-    auto& rs = _state->parser.get();
-
-    if (_state->response_keep_alive) {
-        rs.keep_alive(*_state->response_keep_alive);
-    }
-
-    do {
-        if (!_state->parser.is_done()) {
-            rs.body().data = buf;
-            rs.body().size = sizeof(buf);
-            http::async_read(_state->con, _state->buffer, _state->parser, yield[ec]);
-
-            if (ec == http::error::need_buffer) ec = {};
-            return_or_throw_on_error(yield, cancel, ec);
-
-            // At this point 'data' and 'size' represent the "buffer still
-            // available for reading".  We change it to represent the data we
-            // just read so the serializer can write them.
-            rs.body().size = sizeof(buf) - rs.body().size;
-            rs.body().data = buf;
-            rs.body().more = !_state->parser.is_done();
-        } else {
-            rs.body().data = nullptr;
-            rs.body().size = 0;
-        }
-
-        http::async_write(sink, sr, yield[ec]);
-        if (ec == http::error::need_buffer) ec = {};
-        return_or_throw_on_error(yield, cancel, ec);
-    }
-    while (!_state->parser.is_done() && !sr.is_done());
+    Yield yield_(sink.get_io_service(), yield, "flush_response");
+    http_forward( _state->con, sink, _state->buffer, _state->parser
+                , std::move(hproc), std::move(dproc), std::move(tproc)
+                , cancel, yield_);
 }
 
 template<class BodyType>

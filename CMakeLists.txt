@@ -132,6 +132,7 @@ file(GLOB client_sources
     "./src/util/hash.cpp"
     "./src/util.cpp"
     "./src/http_util.cpp"
+    "./src/http_forward.cpp"
     "${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp"
 )
 
