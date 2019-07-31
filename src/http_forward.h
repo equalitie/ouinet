@@ -128,6 +128,32 @@ http_forward( StreamIn& in
             , ProcInFunc<ConstBufferSequence> inproc
             , ProcTrailFunc trproc
             , Cancel& cancel
+            , Yield yield)
+{
+    beast::static_buffer<http_forward_block> inbuf;
+    http::response_parser<http::empty_body> rpp;
+    rpp.body_limit(detail::max_size_t);  // i.e. unlimited; callbacks can restrict this
+
+    return http_forward( in, out, inbuf, rpp
+                       , std::move(rshproc), std::move(inproc), std::move(trproc)
+                       , cancel, yield);
+}
+
+// Low-level version using an external buffer and response parser
+// (which may have already processed the response head).
+template< class StreamIn, class StreamOut
+        , class InputBuffer, class ResponseParser
+        , class ConstBufferSequence>
+inline
+http::response_header<>
+http_forward( StreamIn& in
+            , StreamOut& out
+            , InputBuffer& inbuf
+            , ResponseParser& rpp
+            , ProcHeadFunc rshproc
+            , ProcInFunc<ConstBufferSequence> inproc
+            , ProcTrailFunc trproc
+            , Cancel& cancel
             , Yield yield_)
 {
     // TODO: Split and refactor with `fetch_http` if still useful.
@@ -153,12 +179,11 @@ http_forward( StreamIn& in
 
     // Receive HTTP response head from input side and parse it
     // -------------------------------------------------------
-    beast::static_buffer<http_forward_block> inbuf;
-    http::response_parser<http::empty_body> rpp;
-    rpp.body_limit(detail::max_size_t);  // i.e. unlimited; callbacks can restrict this
-    http::async_read_header(in, inbuf, rpp, yield[ec]);
-    if (set_error(ec, "Failed to receive response head"))
-        return or_throw<ResponseH>(yield, ec);
+    if (!rpp.is_header_done()) {
+        http::async_read_header(in, inbuf, rpp, yield[ec]);
+        if (set_error(ec, "Failed to receive response head"))
+            return or_throw<ResponseH>(yield, ec);
+    }
 
     assert(rpp.is_header_done());
     auto rp = rpp.get();
