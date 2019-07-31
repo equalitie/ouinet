@@ -85,6 +85,42 @@ http_forward( StreamIn& in
             , ProcInFunc<ConstBufferSequence> inproc
             , ProcTrailFunc trproc
             , Cancel& cancel
+            , Yield yield)
+{
+    auto cancelled = cancel.connect([&] { in.close(); out.close(); });
+
+    // Send HTTP request to input side
+    // -------------------------------
+    sys::error_code ec;
+    http::async_write(in, rq, yield[ec]);
+    // Ignore `end_of_stream` error, there may still be data in
+    // the receive buffer we can read.
+    if (ec == http::error::end_of_stream)
+        ec = sys::error_code();
+    if (cancelled)
+        ec = asio::error::operation_aborted;
+    if (ec) {
+        yield.log("Failed to send request: ", ec.message());
+        return or_throw<http::response_header<>>(yield, ec);
+    }
+
+    // Forward the response
+    // --------------------
+    return http_forward( in, out
+                       , std::move(rshproc), std::move(inproc), std::move(trproc)
+                       , cancel, yield);
+}
+
+// Just as above, but assume that the request has already been sent.
+template<class StreamIn, class StreamOut, class ConstBufferSequence>
+inline
+http::response_header<>
+http_forward( StreamIn& in
+            , StreamOut& out
+            , ProcHeadFunc rshproc
+            , ProcInFunc<ConstBufferSequence> inproc
+            , ProcTrailFunc trproc
+            , Cancel& cancel
             , Yield yield_)
 {
     // TODO: Split and refactor with `fetch_http` if still useful.
@@ -107,16 +143,6 @@ http_forward( StreamIn& in
         if (ec) yield.log(msg, ": ", ec.message());
         return ec;
     };
-
-    // Send HTTP request to input side
-    // -------------------------------
-    http::async_write(in, rq, yield[ec]);
-    // Ignore `end_of_stream` error, there may still be data in
-    // the receive buffer we can read.
-    if (ec == http::error::end_of_stream)
-        ec = sys::error_code();
-    if (set_error(ec, "Failed to send request"))
-        return or_throw<ResponseH>(yield, ec);
 
     // Receive HTTP response head from input side and parse it
     // -------------------------------------------------------
