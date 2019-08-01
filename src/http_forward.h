@@ -223,7 +223,7 @@ http_forward( StreamIn& in
 
     // Prepare fixed-size forwarding buffer
     // (with body data already read for non-chunked input).
-    std::vector<uint8_t> fwd_data(inbuf.size());
+    std::vector<uint8_t> fwd_data(inbuf.max_size());
     size_t fwd_initial;
     if (!chunked_in)
         fwd_initial = asio::buffer_copy(asio::buffer(fwd_data), inbuf.data());
