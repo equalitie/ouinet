@@ -1,6 +1,6 @@
 #pragma once
 
-#include <array>
+#include <vector>
 
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/write.hpp>
@@ -223,7 +223,7 @@ http_forward( StreamIn& in
 
     // Prepare fixed-size forwarding buffer
     // (with body data already read for non-chunked input).
-    std::array<uint8_t, http_forward_block> fwd_data;
+    std::vector<uint8_t> fwd_data(inbuf.size());
     size_t fwd_initial;
     if (!chunked_in)
         fwd_initial = asio::buffer_copy(asio::buffer(fwd_data), inbuf.data());
