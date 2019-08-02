@@ -38,12 +38,6 @@ elif [ "$ABI" = "arm64-v8a" ]; then
     NDK_PLATFORM=21
     CMAKE_SYSTEM_PROCESSOR="aarch64"
 
-elif [ "$ABI" = "armeabi" ]; then
-    NDK_ARCH="arm"
-    NDK_TOOLCHAIN_TARGET="arm-linux-androideabi"
-    NDK_PLATFORM=19
-    CMAKE_SYSTEM_PROCESSOR="armv5te"
-
 elif [ "$ABI" = "x86" ]; then
     NDK_ARCH="x86"
     NDK_TOOLCHAIN_TARGET="i686-linux-android"
@@ -58,7 +52,7 @@ elif [ "$ABI" = "x86_64" ]; then
     CMAKE_SYSTEM_PROCESSOR="x86_64"
 
 else
-    >&2 echo "Unsupported ABI: '$ABI'"
+    >&2 echo "Unsupported ABI: '$ABI', valid values are armeabi-v7a, arm64-v8a, x86, x86_64."
     exit 1
 fi
 
