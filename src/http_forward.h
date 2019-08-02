@@ -1,6 +1,6 @@
 #pragma once
 
-#include <array>
+#include <vector>
 
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/write.hpp>
@@ -85,6 +85,75 @@ http_forward( StreamIn& in
             , ProcInFunc<ConstBufferSequence> inproc
             , ProcTrailFunc trproc
             , Cancel& cancel
+            , Yield yield)
+{
+    auto cancelled = cancel.connect([&] { in.close(); out.close(); });
+    bool timed_out = false;
+    sys::error_code ec;
+
+    // Send HTTP request to input side
+    // -------------------------------
+    {
+        WatchDog wdog( in.get_io_service(), default_timeout::http_forward()
+                     , [&] { timed_out = true; in.close(); out.close(); });
+        http::async_write(in, rq, yield[ec]);
+    }
+    // Ignore `end_of_stream` error, there may still be data in
+    // the receive buffer we can read.
+    if (ec == http::error::end_of_stream)
+        ec = sys::error_code();
+    if (timed_out)
+        ec = asio::error::timed_out;
+    if (cancelled)
+        ec = asio::error::operation_aborted;
+    if (ec) {
+        yield.log("Failed to send request: ", ec.message());
+        return or_throw<http::response_header<>>(yield, ec);
+    }
+
+    // Forward the response
+    // --------------------
+    return http_forward( in, out
+                       , std::move(rshproc), std::move(inproc), std::move(trproc)
+                       , cancel, yield);
+}
+
+// Just as above, but assume that the request has already been sent.
+template<class StreamIn, class StreamOut, class ConstBufferSequence>
+inline
+http::response_header<>
+http_forward( StreamIn& in
+            , StreamOut& out
+            , ProcHeadFunc rshproc
+            , ProcInFunc<ConstBufferSequence> inproc
+            , ProcTrailFunc trproc
+            , Cancel& cancel
+            , Yield yield)
+{
+    beast::static_buffer<http_forward_block> inbuf;
+    http::response_parser<http::empty_body> rpp;
+    rpp.body_limit(detail::max_size_t);  // i.e. unlimited; callbacks can restrict this
+
+    return http_forward( in, out, inbuf, rpp
+                       , std::move(rshproc), std::move(inproc), std::move(trproc)
+                       , cancel, yield);
+}
+
+// Low-level version using an external buffer and response parser
+// (which may have already processed the response head).
+template< class StreamIn, class StreamOut
+        , class InputBuffer, class ResponseParser
+        , class ConstBufferSequence>
+inline
+http::response_header<>
+http_forward( StreamIn& in
+            , StreamOut& out
+            , InputBuffer& inbuf
+            , ResponseParser& rpp
+            , ProcHeadFunc rshproc
+            , ProcInFunc<ConstBufferSequence> inproc
+            , ProcTrailFunc trproc
+            , Cancel& cancel
             , Yield yield_)
 {
     // TODO: Split and refactor with `fetch_http` if still useful.
@@ -108,24 +177,13 @@ http_forward( StreamIn& in
         return ec;
     };
 
-    // Send HTTP request to input side
-    // -------------------------------
-    http::async_write(in, rq, yield[ec]);
-    // Ignore `end_of_stream` error, there may still be data in
-    // the receive buffer we can read.
-    if (ec == http::error::end_of_stream)
-        ec = sys::error_code();
-    if (set_error(ec, "Failed to send request"))
-        return or_throw<ResponseH>(yield, ec);
-
     // Receive HTTP response head from input side and parse it
     // -------------------------------------------------------
-    beast::static_buffer<http_forward_block> inbuf;
-    http::response_parser<http::empty_body> rpp;
-    rpp.body_limit(detail::max_size_t);  // i.e. unlimited; callbacks can restrict this
-    http::async_read_header(in, inbuf, rpp, yield[ec]);
-    if (set_error(ec, "Failed to receive response head"))
-        return or_throw<ResponseH>(yield, ec);
+    if (!rpp.is_header_done()) {
+        http::async_read_header(in, inbuf, rpp, yield[ec]);
+        if (set_error(ec, "Failed to receive response head"))
+            return or_throw<ResponseH>(yield, ec);
+    }
 
     assert(rpp.is_header_done());
     auto rp = rpp.get();
@@ -165,7 +223,7 @@ http_forward( StreamIn& in
 
     // Prepare fixed-size forwarding buffer
     // (with body data already read for non-chunked input).
-    std::array<uint8_t, http_forward_block> fwd_data;
+    std::vector<uint8_t> fwd_data(inbuf.max_size());
     size_t fwd_initial;
     if (!chunked_in)
         fwd_initial = asio::buffer_copy(asio::buffer(fwd_data), inbuf.data());
