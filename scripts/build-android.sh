@@ -14,6 +14,14 @@ else
     DEBIAN=false
 fi
 
+RELEASE_BUILD=0
+while getopts r option; do
+    case "$option" in
+        r) RELEASE_BUILD=1;;
+    esac
+done
+shift $((OPTIND -1))
+
 # Derive other variables from the selected ABI.
 # See `$NDK/build/tools/make_standalone_toolchain.py:get_{triple,abis}()`.
 # See <https://github.com/opencv/opencv/blob/5b868ccd829975da5372bf330994553e176aee09/platforms/android/android.toolchain.cmake#L658>.
@@ -56,9 +64,14 @@ fi
 
 # Destination directory for Ouinet build outputs
 OUTPUT_DIR=build-android-${ABI}
-mkdir -p "${DIR}/${OUTPUT_DIR}"
+# Directory for Ouinet intermediate build artifacts
 BUILD_DIR=build-ouinet-${ABI}
-mkdir -p $BUILD_DIR
+if [ $RELEASE_BUILD -eq 1 ]; then
+    OUTPUT_DIR=${OUTPUT_DIR}-release
+    BUILD_DIR=${BUILD_DIR}-release
+fi
+mkdir -p "${DIR}/${OUTPUT_DIR}"
+mkdir -p "$BUILD_DIR"
 
 SDK_DIR=${SDK_DIR:-"$DIR/sdk"}
 
@@ -407,14 +420,6 @@ EOF
 ######################################################################
 
 # Parse modes and leave emulator arguments.
-
-RELEASE_BUILD=0
-while getopts r option; do
-    case "$option" in
-    r) RELEASE_BUILD=1;;
-    esac
-done
-shift $((OPTIND -1))
 
 progname=$(basename "$0")
 if [ "$1" = --help ]; then
