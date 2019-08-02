@@ -35,7 +35,7 @@ stages:
           tar xf ${boost}.tar.bz2
           cd ${boost}
           ./bootstrap.sh
-          ./b2 -j `nproc` -d+0 --link=shared --with-system --with-program_options --with-test --with-coroutine --with-filesystem --with-date_time --with-regex --with-iostreams
+          ./b2 -j `nproc` -d+0 --link=shared --with-system --with-program_options --with-test --with-coroutine --with-filesystem --with-date_time --with-regex --with-iostreams --with-thread --with-atomic
 
       - type: shell
         name: Build

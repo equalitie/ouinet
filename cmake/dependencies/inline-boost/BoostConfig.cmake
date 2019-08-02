@@ -46,14 +46,12 @@ foreach (component ${BUILT_BOOST_COMPONENTS})
             IMPORTED_LOCATION ${Boost_${UPPERCOMPONENT}_LIBRARY}
         )
         add_dependencies(Boost::${component} built_boost)
-        if (NOT "${_static_Boost_${UPPERCOMPONENT}_DEPENDENCIES}" STREQUAL "")
+        _static_Boost_recursive_dependencies(${component} dependencies)
+        if (NOT "${dependencies}" STREQUAL "")
             set(_Boost_${UPPERCOMPONENT}_FULL_DEPENDENCIES )
-            foreach (dependency ${_static_Boost_${UPPERCOMPONENT}_DEPENDENCIES})
+            foreach (dependency ${dependencies})
                 _boost_library_filename(${dependency} dependency_filename)
-                set(_Boost_${UPPERCOMPONENT}_FULL_DEPENDENCIES
-                    ${_Boost_${UPPERCOMPONENT}_FULL_DEPENDENCIES}
-                    ${dependency_filename}
-                )
+                list(APPEND _Boost_${UPPERCOMPONENT}_FULL_DEPENDENCIES ${dependency_filename})
             endforeach()
             set_target_properties(Boost::${component} PROPERTIES
                 INTERFACE_LINK_LIBRARIES "${_Boost_${UPPERCOMPONENT}_FULL_DEPENDENCIES}"

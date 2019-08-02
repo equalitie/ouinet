@@ -35,8 +35,11 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     endif()
 
     string(REPLACE "." "_" BOOST_VERSION_FILENAME ${BOOST_VERSION})
+
+    include(${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-dependencies.cmake)
+    _static_Boost_recursive_dependencies("${BOOST_COMPONENTS}" BOOST_DEPENDENT_COMPONENTS)
     set(ENABLE_BOOST_COMPONENTS )
-    foreach (component ${BOOST_COMPONENTS})
+    foreach (component ${BOOST_DEPENDENT_COMPONENTS})
         if (${component} STREQUAL "unit_test_framework")
             set(ENABLE_BOOST_COMPONENTS ${ENABLE_BOOST_COMPONENTS} --with-test)
             continue()
@@ -146,29 +149,17 @@ target_link_libraries(boost_asio_ssl
 foreach(component ${BOOST_COMPONENTS})
     if (NOT TARGET Boost::${component})
         include(${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-dependencies.cmake)
-        string(TOUPPER ${component} UPPERCOMPONENT)
+        _static_Boost_recursive_dependencies(${component} dependencies)
 
-        set(components ${component})
-        if (NOT "${_static_Boost_${UPPERCOMPONENT}_DEPENDENCIES}" STREQUAL "")
-            set(components ${components} ${_static_Boost_${UPPERCOMPONENT}_DEPENDENCIES})
-        endif()
-
-        find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS ${components})
+        find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS ${dependencies})
         list(GET Boost_LIBRARIES 0 imported_location)
 
         add_library(Boost::${component} UNKNOWN IMPORTED)
         set_target_properties(Boost::${component} PROPERTIES
             INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIR}"
             INTERFACE_LINK_LIBRARIES "${Boost_LIBRARIES}"
-            IMPORTED_LOCATION ${imported_location}
+            IMPORTED_LOCATION "${imported_location}"
             IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
         )
     endif()
 endforeach()
-
-
-#if(NOT ${_Boost_IMPORTED_TARGETS})
-#    include(${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-dependencies.cmake)
-#    find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS ${BOOST_COMPONENTS})
-#endif()
-
