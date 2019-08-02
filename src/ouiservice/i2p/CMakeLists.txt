@@ -11,11 +11,11 @@ add_subdirectory(./i2pd/build)
 # be listed explicitly on the libraries themselves rather than ouiservice-i2p.
 set_target_properties(libi2pd PROPERTIES
     INTERFACE_LINK_LIBRARIES
-        "Boost::date_time;Boost::filesystem;Boost::program_options;Boost::system"
+        "Boost::date_time;Boost::filesystem;Boost::program_options;Boost::system;OpenSSL::Crypto;OpenSSL::SSL"
 )
 set_target_properties(libi2pdclient PROPERTIES
     INTERFACE_LINK_LIBRARIES
-        "Boost::date_time;Boost::filesystem;Boost::program_options;Boost::system"
+        "Boost::date_time;Boost::filesystem;Boost::program_options;Boost::system;OpenSSL::Crypto;OpenSSL::SSL"
 )
 
 # i2pd messes with CMAKE_MODULE_PATH, which breaks automatic dependency handling.
