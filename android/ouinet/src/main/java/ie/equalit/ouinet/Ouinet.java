@@ -69,6 +69,7 @@ public class Ouinet {
         maybeAdd(args, "--index-ipns-id",          config.getIndexIpnsId());
         maybeAdd(args, "--tls-ca-cert-store-path", config.getTlsCaCertStorePath());
         maybeAdd(args, "--injector-tls-cert-file", config.getInjectorTlsCertPath());
+        maybeAdd(args, "--cache-type",             config.getCacheType());
 
         List<String> path = new ArrayList<>();
         if (config.getObfs4ProxyPath() != null) {

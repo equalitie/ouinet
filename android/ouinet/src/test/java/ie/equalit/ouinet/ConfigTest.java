@@ -36,6 +36,7 @@ public class ConfigTest {
     private static String TLS_CA_CERT_PATH = "file:///android_asset/tls-ca-cert.pem";
     private static String TLS_CA_CERT = "tlscacertcontent";
     private static String OBFS_PROXY_CONTENT = "obfs4assetcontent";
+    private static String CACHE_TYPE = "bep5-http";
 
     @Mock
     private Context mockContext;
@@ -72,13 +73,16 @@ public class ConfigTest {
                 .setInjectorCredentials(INJECTOR_CREDENTIALS)
                 .setInjectorTlsCert(INJECTOR_TLS_CERT)
                 .setTlsCaCertStorePath(TLS_CA_CERT_PATH)
+                .setCacheType(CACHE_TYPE)
                 .build();
+
         assertThat(config.getOuinetDirectory(), is(ouinetDir));
         assertThat(config.getIndexBep44PubKey(), is(INDEX_BEP_44_PUB_KEY));
         assertThat(config.getIndexIpnsId(), is(INDEX_IPNS_ID));
         assertThat(config.getInjectorEndpoint(), is(INJECTOR_ENDPOINT));
         assertThat(config.getInjectorCredentials(), is(INJECTOR_CREDENTIALS));
         assertThat(config.getCaRootCertPath(), is(caRootCertPath));
+        assertThat(config.getCacheType(), is(CACHE_TYPE));
 
         assertThat(config.getTlsCaCertStorePath(), is(tlsCaCertPath));
         assertThat(contentOf(new File(config.getTlsCaCertStorePath())), is(TLS_CA_CERT));

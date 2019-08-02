@@ -34,28 +34,29 @@ public class Config implements Parcelable {
         private String injectorCredentials;
         private String injectorTlsCert;
         private String tlsCaCertStorePath;
+        private String cacheType;
 
         public ConfigBuilder(Context context) {
             this.context = context;
         }
 
-        public ConfigBuilder setIndexBep44PubKey (String indexBep44PubKey){
+        public ConfigBuilder setIndexBep44PubKey(String indexBep44PubKey){
             this.indexBep44PubKey = indexBep44PubKey;
             return this;
         }
-        public ConfigBuilder setIndexIpnsId (String indexIpnsId){
+        public ConfigBuilder setIndexIpnsId(String indexIpnsId){
             this.indexIpnsId = indexIpnsId;
             return this;
         }
-        public ConfigBuilder setInjectorEndpoint (String injectorEndpoint){
+        public ConfigBuilder setInjectorEndpoint(String injectorEndpoint){
             this.injectorEndpoint = injectorEndpoint;
             return this;
         }
-        public ConfigBuilder setInjectorCredentials (String injectorCredentials){
+        public ConfigBuilder setInjectorCredentials(String injectorCredentials){
             this.injectorCredentials = injectorCredentials;
             return this;
         }
-        public ConfigBuilder setInjectorTlsCert (String injectorTlsCert){
+        public ConfigBuilder setInjectorTlsCert(String injectorTlsCert){
             this.injectorTlsCert = injectorTlsCert;
             return this;
         }
@@ -63,8 +64,12 @@ public class Config implements Parcelable {
          * Path to a .pem file with CA certificates.
          * One can get it from e.g.: https://curl.haxx.se/docs/caextract.html
          */
-        public ConfigBuilder setTlsCaCertStorePath (@Nullable String tlsCaCertStorePath){
+        public ConfigBuilder setTlsCaCertStorePath(@Nullable String tlsCaCertStorePath){
             this.tlsCaCertStorePath = tlsCaCertStorePath;
+            return this;
+        }
+        public ConfigBuilder setCacheType(String cacheType){
+            this.cacheType = cacheType;
             return this;
         }
 
@@ -200,7 +205,8 @@ public class Config implements Parcelable {
                     setupInjectorTlsCert(ouinetDirectory),
                     setupTlsCaCertStore(ouinetDirectory),
                     setupCaRootCert(ouinetDirectory),
-                    setupObfs4ProxyExecutable(ouinetDirectory));
+                    setupObfs4ProxyExecutable(ouinetDirectory),
+                    cacheType);
         }
     }
 
@@ -213,6 +219,7 @@ public class Config implements Parcelable {
     private String tlsCaCertStorePath;
     private String caRootCertPath;
     private String obfs4ProxyPath;
+    private String cacheType;
 
     private Config(String ouinetDirectory,
                   String indexBep44PubKey,
@@ -222,7 +229,8 @@ public class Config implements Parcelable {
                   String injectorTlsCertPath,
                   String tlsCaCertStorePath,
                   String caRootCertPath,
-                  String obfs4ProxyPath) {
+                  String obfs4ProxyPath,
+                  String cacheType) {
         this.ouinetDirectory = ouinetDirectory;
         this.indexBep44PubKey = indexBep44PubKey;
         this.indexIpnsId = indexIpnsId;
@@ -232,6 +240,7 @@ public class Config implements Parcelable {
         this.tlsCaCertStorePath = tlsCaCertStorePath;
         this.caRootCertPath = caRootCertPath;
         this.obfs4ProxyPath = obfs4ProxyPath;
+        this.cacheType = cacheType;
     }
     public String getOuinetDirectory() {
         return ouinetDirectory;
@@ -259,6 +268,9 @@ public class Config implements Parcelable {
     }
     public String getObfs4ProxyPath() {
         return obfs4ProxyPath;
+    }
+    public String getCacheType() {
+        return cacheType;
     }
 
     public static final Parcelable.Creator<Config> CREATOR
@@ -288,6 +300,7 @@ public class Config implements Parcelable {
         out.writeString(tlsCaCertStorePath);
         out.writeString(caRootCertPath);
         out.writeString(obfs4ProxyPath);
+        out.writeString(cacheType);
     }
     private Config(Parcel in) {
         ouinetDirectory = in.readString();
@@ -299,6 +312,7 @@ public class Config implements Parcelable {
         tlsCaCertStorePath = in.readString();
         caRootCertPath = in.readString();
         obfs4ProxyPath = in.readString();
+        cacheType = in.readString();
     }
 
 }
