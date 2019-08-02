@@ -1,5 +1,6 @@
 #include "client.h"
 #include "announcer.h"
+#include "../../util/atomic_file.h"
 #include "../../util/bytes.h"
 #include "../../util/file_io.h"
 #include "../../bittorrent/dht.h"
@@ -212,23 +213,23 @@ struct Client::Impl {
 
         sys::error_code file_ec;
         auto path = path_from_key(key);
-        auto file = open_or_create(path, file_ec);
+        auto file = util::mkatomic(ios, file_ec, path);
 
         if (!file_ec) {
             asio::spawn(ios, [
                     &cancel,
                     path = move(path),
                     src2 = move(src2),
-                    file = move(file)
+                    file = move(*file)
             ] (asio::yield_context yield) mutable {
                 Cancel c = cancel;
                 sys::error_code ec;
                 Session session(std::move(src2));
                 session.flush_response(file, c, yield[ec]);
+                if (!ec) file.commit(ec);
                 if (ec) {
                     LOG_WARN("Bep5Http cache: Failed to flush to file: ",
                             ec.message());
-                    try_remove(path);
                 }
             });
         } else {
@@ -241,10 +242,6 @@ struct Client::Impl {
 
         assert(!cancel || ec == asio::error::operation_aborted);
         if (cancel) ec = asio::error::operation_aborted;
-
-        if (ec) {
-            if (file.is_open()) file.close();
-        }
 
         return or_throw(yield, ec, move(session));
     }
@@ -340,15 +337,10 @@ struct Client::Impl {
         sys::error_code ec;
 
         auto path = path_from_key(key);
-        auto file = open_or_create(path, ec);
+        auto file = util::mkatomic(ios, ec, path);
+        if (!ec) s.flush_response(*file, cancel, yield[ec]);
+        if (!ec) file->commit(ec);
         if (ec) return or_throw(yield, ec);
-
-        s.flush_response(file, cancel, yield[ec]);
-
-        if (ec) {
-            try_remove(path);
-            return or_throw(yield, ec);
-        }
 
         announcer.add(key);
     }
@@ -420,18 +412,6 @@ struct Client::Impl {
     fs::path path_from_infohash(const bt::NodeID& infohash)
     {
         return data_dir()/infohash.to_hex();
-    }
-
-    asio::posix::stream_descriptor open_or_create( const fs::path& path
-                                                 , sys::error_code& ec)
-    {
-        auto file = util::file_io::open_or_create(ios, path, ec);
-
-        if (ec) return file;
-
-        util::file_io::truncate(file, 0, ec);
-
-        return file;
     }
 
     template<class Source, class Sink>

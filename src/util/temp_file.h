@@ -38,6 +38,7 @@ public:
 
     // <AsyncReadStream+AsyncWriteStream>
     auto get_executor() { return _file.get_executor(); }
+    auto& get_io_service() { return get_executor().context(); }
 
     template<class MutableBufferSequence, class Token>
     auto async_read_some(const MutableBufferSequence& mb, Token&& t) {
