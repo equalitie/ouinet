@@ -152,6 +152,7 @@ target_link_libraries(client
         lib::gcrypt
         lib::json
         lib::uri
+        OpenSSL::Crypto
         ouinet::lampshade-asio
         ouinet::ouiservice-i2p
     PUBLIC
@@ -201,6 +202,7 @@ if (WITH_INJECTOR)
         lib::gcrypt
         lib::json
         lib::uri
+        OpenSSL::Crypto
         ouinet::base
         ouinet::lampshade-asio
         ouinet::ouiservice-i2p
