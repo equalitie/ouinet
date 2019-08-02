@@ -40,6 +40,8 @@ RUN wget -q "https://downloads.sourceforge.net/project/boost/boost/1.67.0/boost_
          --with-date_time \
          --with-regex \
          --with-iostreams \
+         --with-thread \
+         --with-atomic \
          --prefix=/usr/local install
 
 FROM base as builder
