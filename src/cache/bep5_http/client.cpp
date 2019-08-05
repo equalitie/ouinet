@@ -195,7 +195,8 @@ struct Client::Impl {
                                 , Cancel cancel
                                 , Yield yield)
     {
-        http::request<http::string_body> rq{http::verb::get, key, 11 /* version */};
+        auto uri = uri_from_key(key);
+        http::request<http::string_body> rq{http::verb::get, uri, 11 /* version */};
         rq.set(http::field::host, "dummy_host");
         rq.set(http::field::user_agent, "Ouinet.Bep5.Client");
 

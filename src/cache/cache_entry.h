@@ -24,6 +24,13 @@ std::string key_from_http_url(const std::string& url) {
     return util::canonical_url(url);
 }
 
+template <class Key>
+inline
+Key uri_from_key(Key&& key) {
+    // The key is currently the canonical URI itself.
+    return key;
+}
+
 struct CacheEntry {
     using Response = Session;
 
