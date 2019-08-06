@@ -247,6 +247,7 @@ http_forward( StreamIn& in
 
         // Input buffer includes initial data on first read.
         if (chunked_in) {
+            fwdbuf = asio::buffer(fwd_data, 0);  // process empty if no body callback
             http::async_read(in, inbuf, rpp, yield[ec]);
             if (ec == http::error::end_of_chunk)
                 ec = {};  // just a signal that we have input to process
