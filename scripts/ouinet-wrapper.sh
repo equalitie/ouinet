@@ -79,8 +79,9 @@ if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
     fi
 
     # Set a well-known injector UTP/TLS port (and enable it).
+    # IPv6 is not yet properly supported, listen only on IPv4.
     if [ "$PROG" = injector ]; then
-        sed -i -E "s/^#?(listen-on-utp-tls\s*=\s*:::)[0-9]+(.*)/\1${INJECTOR_UTP_TLS_PORT}\2/" "$CONF"
+        sed -i -E "s/^#?(listen-on-utp-tls\s*=\s*0\.0\.0\.0:)[0-9]+(.*)/\1${INJECTOR_UTP_TLS_PORT}\2/" "$CONF"
     fi
 
     # Generate a random injector BEP5 swarm name.
@@ -115,6 +116,13 @@ if grep -qP '^\s*injector-ep\s*=(?!\s*[A-Za-z][-\+\.0-9A-Za-z]*:)' "$CONF" && ! 
         -e 's/^(\s*injector-ep\s*=\s*)([][\.\:0-9A-Fa-f]+:[0-9]+\s*)(#.*)?$/\1tcp:\2\3/g' \
         -e 's/^(\s*injector-ep\s*=\s*)([2-7A-Za-z]+\.b32\.i2p\s*)(#.*)?$/\1i2p:\2\3/g' \
         -e 's/^(\s*injector-ep\s*=\s*)([-~0-9A-Za-z]+=*\s*)(#.*)?$/\1i2p:\2\3/g' \
+        "$CONF"
+fi
+
+if grep -qE '^\s*listen-on-utp-tls\s*=\s*\S*:\S*:\S*:[0-9]+' "$CONF" && ! has_help_arg "$@"; then
+    sed -i -E \
+        -e 's/^(\s*listen-on-utp-tls\s*=\s*)::(:[0-9]+.*)/\10.0.0.0\2  # IPv6 not supported/'
+        -e 's/^(\s*listen-on-utp-tls\s*=\s*\S*:\S*:\S*:[0-9]+.*)/##\1  # IPv6 not supported/'
         "$CONF"
 fi
 
