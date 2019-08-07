@@ -241,15 +241,16 @@ private:
 
 //------------------------------------------------------------------------------
 static
-void handle_bad_request( GenericStream& con
-                       , const Request& req
-                       , string message
-                       , Yield yield)
+void handle_http_error( GenericStream& con
+                      , const Request& req
+                      , http::status status
+                      , string message
+                      , Yield yield)
 {
-    http::response<http::string_body> res{http::status::bad_request, req.version()};
+    http::response<http::string_body> res{status, req.version()};
 
     res.set(http::field::server, OUINET_CLIENT_SERVER_STRING);
-    res.set(http::field::content_type, "text/html");
+    res.set(http::field::content_type, "text/plain");
     res.keep_alive(req.keep_alive());
     res.body() = message;
     res.prepare_payload();
@@ -261,6 +262,25 @@ void handle_bad_request( GenericStream& con
 
     sys::error_code ec;
     http::async_write(con, res, yield[ec]);
+}
+
+static
+void handle_cache_error( GenericStream& con
+                       , const Request& req
+                       , string message
+                       , Yield yield)
+{
+    return handle_http_error( con, req, http::status::bad_gateway
+                            , "Cache failed to process response: " + message, yield);
+}
+
+static
+void handle_bad_request( GenericStream& con
+                       , const Request& req
+                       , string message
+                       , Yield yield)
+{
+    return handle_http_error(con, req, http::status::bad_request, move(message), yield);
 }
 
 //------------------------------------------------------------------------------
@@ -844,12 +864,18 @@ public:
                         s.flush_response(sink, cancel, yield[ec]);
                     }
 
-                    if (ec) {  // TODO: maybe handle this more subtly
+                    if (ec) {
                         // Abort store and forward tasks.
                         fork.close();
-                        // We do not know whether data was already sent to the agent,
-                        // so just close the connection.
-                        con.close();
+                        if (ec == sys::errc::make_error_code(sys::errc::no_message))
+                            // HTTP signature verification detected an early error
+                            // before sending anything to the agent;
+                            // try to report a meaningful error to it.
+                            handle_cache_error(con, rq, ec.message(), yield);
+                        else
+                            // Data may have already been sent to the agent,
+                            // so just close the connection.
+                            con.close();
                     }
 
                     wc.wait(yield);
