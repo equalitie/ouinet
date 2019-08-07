@@ -121,8 +121,8 @@ fi
 
 if grep -qE '^\s*listen-on-utp-tls\s*=\s*\S*:\S*:\S*:[0-9]+' "$CONF" && ! has_help_arg "$@"; then
     sed -i -E \
-        -e 's/^(\s*listen-on-utp-tls\s*=\s*)::(:[0-9]+.*)/\10.0.0.0\2  # IPv6 not supported/'
-        -e 's/^(\s*listen-on-utp-tls\s*=\s*\S*:\S*:\S*:[0-9]+.*)/##\1  # IPv6 not supported/'
+        -e 's/^(\s*listen-on-utp-tls\s*=\s*)::(:[0-9]+.*)/\10.0.0.0\2  # IPv6 not supported/' \
+        -e 's/^(\s*listen-on-utp-tls\s*=\s*\S*:\S*:\S*:[0-9]+.*)/##\1  # IPv6 not supported/' \
         "$CONF"
 fi
 
