@@ -70,7 +70,7 @@ if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
 
     # Set a well-known injector loopback TCP port (and enable it).
     if [ "$PROG" = injector ]; then
-        sed -i -E "s/^#?(listen-on-tcp\s*=\s*)127.0.0.1:[0-9]+(.*)/\1${INJECTOR_LOOP_ADDR}:${INJECTOR_TCP_PORT}\2/" "$CONF"
+        sed -i -E "s/^#?(listen-on-tcp\s*=\s*)127\.0\.0\.1:[0-9]+(.*)/\1${INJECTOR_LOOP_ADDR}:${INJECTOR_TCP_PORT}\2/" "$CONF"
     fi
 
     # Set a well-known injector TCP/TLS port (and enable it).
