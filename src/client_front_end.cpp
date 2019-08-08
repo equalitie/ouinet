@@ -41,6 +41,42 @@ struct ToggleInput {
     bool current_value;
 };
 
+template<typename E>
+struct ClientFrontEnd::Input {
+    string text;
+    string name;
+    vector<E> values;
+    E current_value;
+
+    Input(string text, string name, vector<E> values, E current_value)
+        : text(move(text))
+        , name(move(name))
+        , values(move(values))
+        , current_value(current_value)
+    {}
+
+    // Return true on change
+    bool update(beast::string_view s) {
+        auto i = s.find("?");
+        if (i == beast::string_view::npos) return false;
+        s = s.substr(i+1);
+        if (s.substr(0, name.size()) != name) return false;
+        s = s.substr(name.size());
+        if (s.empty() || s[0] != '=') return false;
+        s = s.substr(1);
+        for (auto v : values) {
+            stringstream ss;
+            ss << v;
+            if (ss.str() == s) {
+                E prev = current_value;
+                current_value = v;
+                return prev != current_value;
+            }
+        }
+        return false;
+    }
+};
+
 namespace ouinet { // Need namespace here for argument-dependent-lookups to work
 
 ostream& operator<<(ostream& os, const ToggleInput& i) {
@@ -55,6 +91,23 @@ ostream& operator<<(ostream& os, const ToggleInput& i) {
                            "accesskey=\""  << i.shortcut << "\" "
                            "value=\"" << next_value << "\"/>\n"
           "</form>\n";
+}
+
+template<typename E>
+ostream& operator<<(ostream& os, const ClientFrontEnd::Input<E>& i) {
+    os << "<form method=\"get\">\n"
+          "    " << i.text << ": " << i.current_value << "&nbsp;"
+          "        <select onchange=\"this.form.submit()\" name=\"" << i.name << "\">";
+
+    for (auto e : i.values) {
+        const char* selected = (e == i.current_value) ? "selected" : "";
+        os << "<option value=\"" << e << "\" " << selected << ">" << e << "</option>";
+    }
+
+    os << "        </select>"
+          "</form>\n";
+
+    return os;
 }
 
 static ostream& operator<<(ostream& os, const std::chrono::steady_clock::duration& d) {
@@ -77,6 +130,10 @@ static ostream& operator<<(ostream& os, const ClientFrontEnd::Task& task) {
 }
 
 } // ouinet namespace
+
+ClientFrontEnd::ClientFrontEnd()
+    : _log_level_input(new Input<log_level_t>("Log level", "loglevel", { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT }, logger.get_threshold()))
+{}
 
 void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, stringstream& ss
                                   , const CACertificate& ca)
@@ -283,6 +340,10 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
     auto target = req.target();
 
+    if (_log_level_input->update(target)) {
+        logger.set_threshold(_log_level_input->current_value);
+    }
+
     if (target.find('?') != string::npos) {
         // XXX: Extra primitive value parsing.
         if (target.find("?origin_access=enable") != string::npos) {
@@ -354,6 +415,8 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     ss << ToggleInput{"<u>P</u>roxy access",   "proxy_access",   'p', config.is_proxy_access_enabled()};
     ss << ToggleInput{"<u>I</u>njector proxy", "injector_proxy", 'i', config.is_injector_access_enabled()};
     ss << ToggleInput{"Distributed <u>C</u>ache", "ipfs_cache",  'c', config.is_cache_access_enabled()};
+
+    ss << *_log_level_input;
 
     ss << "<br>\n";
     ss << "Now: " << now_as_string()  << "<br>\n";
@@ -459,4 +522,6 @@ Response ClientFrontEnd::serve( ClientConfig& config
 
     return res;
 }
+
+ClientFrontEnd::~ClientFrontEnd() {}
 

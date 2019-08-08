@@ -5,9 +5,11 @@
 #include <boost/beast.hpp>
 #include <boost/intrusive/list.hpp>
 #include <chrono>
+//#include <ostream>
 #include "namespaces.h"
 #include "ssl/ca_certificate.h"
 #include "util/yield.h"
+#include "logger.h"
 
 namespace ouinet { namespace bep44_ipfs {
     class CacheClient;
@@ -19,6 +21,11 @@ class GenericStream;
 class ClientConfig;
 
 class ClientFrontEnd {
+    template<typename E> class Input;
+
+    template<typename E>
+        friend std::ostream& operator<<(std::ostream&, const Input<E>&);
+
     using Clock = std::chrono::steady_clock;
 
     using TaskHook
@@ -63,9 +70,14 @@ public:
         return task;
     }
 
+    ClientFrontEnd();
+    ~ClientFrontEnd();
+
 private:
     bool _auto_refresh_enabled = true;
     bool _show_pending_tasks = false;
+
+    std::unique_ptr<Input<log_level_t>> _log_level_input;
 
     boost::intrusive::list
         < Task
