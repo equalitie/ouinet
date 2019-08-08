@@ -297,7 +297,7 @@ asio::ip::tcp::socket connect_socks5(
     }
 
     // Connection accepted.
-    return std::move(socket);
+    return socket;
 }
 
 } // pt namespace
