@@ -81,6 +81,10 @@ static const fs::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
 static const fs::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
 static const fs::path OUINET_CA_DH_FILE = "ssl-ca-dh.pem";
 
+static bool log_transactions() {
+    return logger.get_threshold() <= DEBUG;
+}
+
 //------------------------------------------------------------------------------
 class Client::State : public enable_shared_from_this<Client::State> {
     friend class Client;
@@ -248,8 +252,10 @@ void handle_bad_request( GenericStream& con
     res.body() = message;
     res.prepare_payload();
 
-    yield.log("=== Sending back response ===");
-    yield.log(res);
+    if (log_transactions()) {
+        yield.log("=== Sending back response ===");
+        yield.log(res);
+    }
 
     sys::error_code ec;
     http::async_write(con, res, yield[ec]);
@@ -633,10 +639,12 @@ public:
                                                               , cancel
                                                               , yield[ec]);
 
-        if (!ec) {
-            yield.log("Fetched fresh success, status: ", s.response_header()->result());
-        } else {
-            yield.log("Fetched fresh error: ", ec.message());
+        if (log_transactions()) {
+            if (!ec) {
+                yield.log("Fetched fresh success, status: ", s.response_header()->result());
+            } else {
+                yield.log("Fetched fresh error: ", ec.message());
+            }
         }
 
         return or_throw(yield, ec, move(s));
@@ -644,7 +652,9 @@ public:
 
     CacheEntry
     fetch_stored(const Request& request, Cancel& cancel, Yield yield) {
-        yield.log("Fetching from cache");
+        if (log_transactions()) {
+            yield.log("Fetching from cache");
+        }
 
         sys::error_code ec;
         auto r = client_state.fetch_stored( request
@@ -652,7 +662,7 @@ public:
                                           , cancel
                                           , yield[ec]);
 
-        if (ec) {
+        if (ec && log_transactions()) {
             yield.log("Fetched from cache error: ", ec.message());
         }
 
@@ -1136,7 +1146,7 @@ void Client::State::serve_request( GenericStream&& con
           || ec == asio::ssl::error::stream_truncated) break;
 
         if (ec) {
-            cerr << "Failed to read request: " << ec.message() << endl;
+            LOG_WARN("Failed to read request: ", ec.message());
             return;
         }
 
@@ -1145,13 +1155,15 @@ void Client::State::serve_request( GenericStream&& con
         if (!authenticate(req, con, _config.client_credentials(), yield[ec].tag("auth"))) {
             continue;
         }
-#ifndef NDEBUG
-        yield.log("=== New request ===");
-        yield.log(req.base());
-        auto on_exit = defer([&] {
-            yield.log("Done");
-        });
-#endif
+
+        if (log_transactions()) {
+            yield.log("=== New request ===");
+            yield.log(req.base());
+            auto on_exit = defer([&] {
+                yield.log("Done");
+            });
+        }
+
         auto target = req.target();
 
         // Perform MitM for CONNECT requests (to be able to see encrypted requests)
@@ -1160,7 +1172,9 @@ void Client::State::serve_request( GenericStream&& con
             // Subsequent access to the connection will use the encrypted channel.
             con = ssl_mitm_handshake(move(con), req, yield[ec].tag("mitm_hanshake"));
             if (ec) {
-                yield.log("Mitm exception: ", ec.message());
+                if (log_transactions()) {
+                    yield.log("Mitm exception: ", ec.message());
+                }
                 return;
             }
             mitm = true;
@@ -1216,7 +1230,9 @@ void Client::State::serve_request( GenericStream&& con
             = cache_control.fetch(con, req, yield[ec].tag("cache_control.fetch"));
 
         if (ec) {
-            yield.log("error writing back response: ", ec.message());
+            if (log_transactions()) {
+                yield.log("error writing back response: ", ec.message());
+            }
             return;
         }
 
@@ -1310,7 +1326,7 @@ void Client::State::listen_tcp
 
     acceptor.open(local_endpoint.protocol(), ec);
     if (ec) {
-        cerr << "Failed to open tcp acceptor: " << ec.message() << endl;
+        LOG_ERROR("Failed to open tcp acceptor: ", ec.message());
         return;
     }
 
@@ -1319,14 +1335,14 @@ void Client::State::listen_tcp
     // Bind to the server address
     acceptor.bind(local_endpoint, ec);
     if (ec) {
-        cerr << "Failed to bind tcp acceptor: " << ec.message() << endl;
+        LOG_ERROR("Failed to bind tcp acceptor: ", ec.message());
         return;
     }
 
     // Start listening for connections
     acceptor.listen(asio::socket_base::max_connections, ec);
     if (ec) {
-        cerr << "Failed to 'listen' on tcp acceptor: " << ec.message() << endl;
+        LOG_ERROR("Failed to 'listen' on tcp acceptor: ", ec.message());
         return;
     }
 
@@ -1335,7 +1351,7 @@ void Client::State::listen_tcp
     });
 
     LOG_DEBUG("Successfully listening on TCP Port");
-    cout << "Client accepting on " << acceptor.local_endpoint() << endl;
+    LOG_INFO("Client accepting on ", acceptor.local_endpoint());
 
     WaitCondition wait_condition(_ios);
 
@@ -1347,7 +1363,7 @@ void Client::State::listen_tcp
         if(ec) {
             if (ec == asio::error::operation_aborted) break;
 
-            cerr << "Accept failed on tcp acceptor: " << ec.message() << endl;
+            LOG_WARN("Accept failed on tcp acceptor: ", ec.message());
 
             if (!async_sleep(_ios, chrono::seconds(1), _shutdown_signal, yield)) {
                 break;
@@ -1411,9 +1427,7 @@ void Client::State::start()
               if (was_stopped()) return;
 
               if (ec) {
-                  cerr << "Failed to setup injector: "
-                       << ec.message()
-                       << endl;
+                  LOG_ERROR("Failed to setup injector: ", ec.message());
               }
 
               setup_cache();
@@ -1486,7 +1500,7 @@ void Client::State::setup_injector(asio::yield_context yield)
 
     if (!injector_ep) return;
 
-    cout << "Setting up injector: " << *injector_ep << endl;
+    LOG_INFO("Setting up injector: ", *injector_ep);
 
     std::unique_ptr<OuiServiceImplementationClient> client;
 
@@ -1573,7 +1587,7 @@ void Client::State::set_injector(string injector_ep_str)
     auto injector_ep = parse_endpoint(injector_ep_str);
 
     if (!injector_ep) {
-        cerr << "Failed to parse endpoint \"" << injector_ep_str << "\"" << endl;
+        LOG_ERROR("Failed to parse endpoint \"", injector_ep_str, "\"");
         return;
     }
 
@@ -1591,7 +1605,7 @@ void Client::State::set_injector(string injector_ep_str)
             self->setup_injector(yield[ec]);
 
             if (ec == asio::error::invalid_argument) {
-                cerr << "Failed to parse endpoint \"" << injector_ep_str << "\"" << endl;
+                LOG_ERROR("Failed to parse endpoint \"", injector_ep_str, "\"");
             }
         });
 }
