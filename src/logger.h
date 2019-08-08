@@ -35,6 +35,18 @@ enum log_level_t { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT };
 
 log_level_t default_log_level();
 
+inline std::ostream& operator<<(std::ostream& os, log_level_t ll) {
+    switch (ll) {
+        case SILLY:   return os << "SILLY";
+        case DEBUG:   return os << "DEBUG";
+        case VERBOSE: return os << "VERBOSE";
+        case INFO:    return os << "INFO";
+        case WARN:    return os << "WARN";
+        case ERROR:   return os << "ERROR";
+        case ABORT:   return os << "ABORT";
+    }
+    return os << "???";
+}
 
 class Logger
 {
