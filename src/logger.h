@@ -32,7 +32,9 @@
 
 // Standard log levels, ascending order of specificity.
 enum log_level_t { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT };
-const log_level_t default_log_level = DEBUG;
+
+log_level_t default_log_level();
+
 
 class Logger
 {
