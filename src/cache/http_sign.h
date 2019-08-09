@@ -32,7 +32,7 @@ http_injection_head( const http::request_header<>& rqh
                    , const std::string& injection_id
                    , std::chrono::seconds::rep injection_ts
                    , const ouinet::util::Ed25519PrivateKey&
-                   , const std::string key_id);
+                   , const std::string& key_id);
 
 inline
 http::response_header<>  // use this for the rest of cases
@@ -40,7 +40,7 @@ http_injection_head( const http::request_header<>& rqh
                    , http::response_header<> rsh
                    , const std::string& injection_id
                    , const ouinet::util::Ed25519PrivateKey& sk
-                   , const std::string key_id)
+                   , const std::string& key_id)
 {
     auto ts = std::chrono::seconds(std::time(nullptr)).count();
     return http_injection_head(rqh, std::move(rsh), injection_id, ts, sk, key_id);
@@ -70,7 +70,7 @@ http_injection_trailer( const http::response_header<>& rsh
                       , size_t content_length
                       , const ouinet::util::SHA256::digest_type& content_digest
                       , const ouinet::util::Ed25519PrivateKey&
-                      , const std::string key_id
+                      , const std::string& key_id
                       , std::chrono::seconds::rep ts);
 
 inline
@@ -80,7 +80,7 @@ http_injection_trailer( const http::response_header<>& rsh
                       , size_t content_length
                       , const ouinet::util::SHA256::digest_type& content_digest
                       , const ouinet::util::Ed25519PrivateKey& sk
-                      , const std::string key_id)
+                      , const std::string& key_id)
 {
     auto ts = std::chrono::seconds(std::time(nullptr)).count();
     return http_injection_trailer( rsh, std::move(rst)
@@ -105,14 +105,14 @@ http_digest(const http::response<http::dynamic_body>&);
 std::string  // use this to enable setting the time stamp (e.g. for tests)
 http_signature( const http::response_header<>&
               , const ouinet::util::Ed25519PrivateKey&
-              , const std::string key_id
+              , const std::string& key_id
               , std::chrono::seconds::rep ts);
 
 inline  // use this for the rest of cases
 std::string
 http_signature( const http::response_header<>& rsh
               , const ouinet::util::Ed25519PrivateKey& sk
-              , const std::string key_id)
+              , const std::string& key_id)
 {
     auto ts = std::chrono::seconds(std::time(nullptr)).count();
     return http_signature(rsh, sk, key_id, ts);

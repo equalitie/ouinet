@@ -33,7 +33,7 @@ http_injection_head( const http::request_header<>& rqh
                    , const std::string& injection_id
                    , std::chrono::seconds::rep injection_ts
                    , const ouinet::util::Ed25519PrivateKey& sk
-                   , const std::string key_id)
+                   , const std::string& key_id)
 {
     using namespace ouinet::http_;
     assert(response_version_hdr_current == response_version_hdr_v0);
@@ -68,7 +68,7 @@ http_injection_trailer( const http::response_header<>& rsh
                       , size_t content_length
                       , const ouinet::util::SHA256::digest_type& content_digest
                       , const ouinet::util::Ed25519PrivateKey& sk
-                      , const std::string key_id
+                      , const std::string& key_id
                       , std::chrono::seconds::rep ts)
 {
     using namespace ouinet::http_;
@@ -164,7 +164,7 @@ get_sig_str_hdrs(const Head& sig_head)
 std::string
 http_signature( const http::response_header<>& rsh
               , const ouinet::util::Ed25519PrivateKey& sk
-              , const std::string key_id
+              , const std::string& key_id
               , std::chrono::seconds::rep ts)
 {
     auto fmt = boost::format("keyId=\"%s\""
