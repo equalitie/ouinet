@@ -77,9 +77,11 @@ http_injection_trailer( const http::response_header<>& rsh
     rst.set(http::field::digest, "SHA-256=" + util::base64_encode(content_digest));
 
     // Put together the head to be signed:
-    // initial head, minus chunking (and related headers), plus trailer headers.
+    // initial head, minus chunking (and related headers) and its signature,
+    // plus trailer headers.
     // Use `...-Data-Size` internal header instead on `Content-Length`.
     auto to_sign = without_framing(rsh);
+    to_sign.erase(header_prefix + "Sig0");
     for (auto& hdr : rst)
         to_sign.set(hdr.name_string(), hdr.value());
 
