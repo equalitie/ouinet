@@ -16,6 +16,17 @@
 
 namespace ouinet { namespace cache {
 
+static
+http::response_header<>
+without_framing(const http::response_header<>& rsh)
+{
+    http::response<http::empty_body> rs(rsh);
+    rs.chunked(false);  // easier with a whole response
+    rs.erase(http::field::content_length);  // 0 anyway because of empty body
+    rs.erase(http::field::trailer);
+    return rs.base();
+}
+
 http::response_header<>
 http_injection_head( const http::request_header<>& rqh
                    , http::response_header<> rsh
@@ -62,11 +73,7 @@ http_injection_trailer( const http::response_header<>& rsh
     // Put together the head to be signed:
     // initial head, minus chunking (and related headers), plus trailer headers.
     // Use `...-Data-Size` internal header instead on `Content-Length`.
-    http::response<http::empty_body> rs(rsh);
-    rs.chunked(false);  // easier with a whole response
-    rs.erase(http::field::content_length);  // 0 anyway because of empty body
-    rs.erase(http::field::trailer);
-    auto to_sign = std::move(rs.base());
+    auto to_sign = without_framing(rsh);
     for (auto& hdr : rst)
         to_sign.set(hdr.name_string(), hdr.value());
 
