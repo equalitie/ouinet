@@ -15,7 +15,9 @@
 namespace ouinet { namespace cache {
 
 // Get an extended version of the given response head
-// with added headers to support later signing the full message head.
+// with an additional signature header and
+// other headers required to support that signature and
+// a future one for the full message head (as part of the trailer).
 //
 // Example:
 //
@@ -23,8 +25,11 @@ namespace ouinet { namespace cache {
 //     X-Ouinet-Version: 0
 //     X-Ouinet-URI: https://example.com/foo
 //     X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
+//     X-Ouinet-Sig0: keyId="...",algorithm="hs2019",created=1516048310,
+//       headers="(response-status) (created) ... x-ouinet-injection",
+//       signature="..."
 //     Transfer-Encoding: chunked
-//     Trailer: X-Ouinet-Data-Size, Digest, X-Ouinet-Sig0
+//     Trailer: X-Ouinet-Data-Size, Digest, X-Ouinet-Sig1
 //
 http::response_header<>  // use this to enable setting the time stamp (e.g. for tests)
 http_injection_head( const http::request_header<>& rqh
@@ -56,13 +61,19 @@ http_injection_head( const http::request_header<>& rqh
 // a `Content-Length` header should be added with the value of `X-Ouinet-Data-Size`
 // (and the later be kept as well to avoid a signature verification failure).
 //
+// The signature of the initial head (`X-Ouinet-Sig0`) is not included among
+// the signed headers, so that the receiver may replace it with
+// the value of the signature in the trailer (`X-Ouinet-Sig1`)
+// for subsequent uses.
+//
 // Example:
 //
 //     ...
 //     X-Ouinet-Data-Size: 38
 //     Digest: SHA-256=j7uwtB/QQz0FJONbkyEmaqlJwGehJLqWoCO1ceuM30w=
-//     X-Ouinet-Sig0: keyId="...",algorithm="hs2019",created=1516048311,
-//       headers="(response-status) (created) ... digest",signature="..."
+//     X-Ouinet-Sig1: keyId="...",algorithm="hs2019",created=1516048311,
+//       headers="(response-status) (created) ... x-ouinet-injection x-ouinet-data-size digest",
+//       signature="..."
 //
 http::fields
 http_injection_trailer( const http::response_header<>& rsh
