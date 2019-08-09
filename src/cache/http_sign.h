@@ -30,16 +30,20 @@ http::response_header<>  // use this to enable setting the time stamp (e.g. for 
 http_injection_head( const http::request_header<>& rqh
                    , http::response_header<> rsh
                    , const std::string& injection_id
-                   , std::chrono::seconds::rep injection_ts);
+                   , std::chrono::seconds::rep injection_ts
+                   , const ouinet::util::Ed25519PrivateKey&
+                   , const std::string key_id);
 
 inline
 http::response_header<>  // use this for the rest of cases
 http_injection_head( const http::request_header<>& rqh
                    , http::response_header<> rsh
-                   , const std::string& injection_id)
+                   , const std::string& injection_id
+                   , const ouinet::util::Ed25519PrivateKey& sk
+                   , const std::string key_id)
 {
     auto ts = std::chrono::seconds(std::time(nullptr)).count();
-    return http_injection_head(rqh, std::move(rsh), injection_id, ts);
+    return http_injection_head(rqh, std::move(rsh), injection_id, ts, sk, key_id);
 }
 
 // Get an extended version of the given response trailer
