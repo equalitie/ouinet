@@ -80,7 +80,7 @@ BOOST_AUTO_TEST_CASE(test_http_sign) {
     // If Beast changes message representation or shuffles headers,
     // the example will need to be updated,
     // but the signature should stay the same.
-    // If comparing the whole head becomes too tricky, just check `Signature`.
+    // If comparing the whole head becomes too tricky, just check `X-Ouinet-Sig0`.
     const string signed_head = (
         "HTTP/1.1 200 OK\r\n"
         "Date: Mon, 15 Jan 2018 20:31:50 GMT\r\n"
@@ -93,7 +93,7 @@ BOOST_AUTO_TEST_CASE(test_http_sign) {
         "X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310\r\n"
         "X-Ouinet-Data-Size: 38\r\n"
         "Digest: SHA-256=j7uwtB/QQz0FJONbkyEmaqlJwGehJLqWoCO1ceuM30w=\r\n"
-        "Signature: keyId=\"ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=\","
+        "X-Ouinet-Sig0: keyId=\"ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=\","
         "algorithm=\"hs2019\",created=1516048311,"
         "headers=\"(response-status) (created) "
         "date server content-type content-disposition "

@@ -24,7 +24,7 @@ namespace ouinet { namespace cache {
 //     X-Ouinet-URI: https://example.com/foo
 //     X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
 //     Transfer-Encoding: chunked
-//     Trailer: X-Ouinet-Data-Size, Digest, Signature
+//     Trailer: X-Ouinet-Data-Size, Digest, X-Ouinet-Sig0
 //
 http::response_header<>  // use this to enable setting the time stamp (e.g. for tests)
 http_injection_head( const http::request_header<>& rqh
@@ -57,7 +57,7 @@ http_injection_head( const http::request_header<>& rqh
 //     ...
 //     X-Ouinet-Data-Size: 38
 //     Digest: SHA-256=j7uwtB/QQz0FJONbkyEmaqlJwGehJLqWoCO1ceuM30w=
-//     Signature: keyId="...",algorithm="hs2019",created=1516048311,
+//     X-Ouinet-Sig0: keyId="...",algorithm="hs2019",created=1516048311,
 //       headers="(response-status) (created) ... digest",signature="..."
 //
 http::fields

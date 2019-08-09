@@ -34,7 +34,10 @@ http_injection_head( const http::request_header<>& rqh
     // and we do not care about content length anyway.
     http::response<http::empty_body> rs(std::move(rsh));
     rs.chunked(true);
-    auto trfmt = boost::format("%s%s" + header_prefix + "Data-Size, Digest, Signature");
+    static const std::string trfmt_ = ( "%s%s"
+                                      + header_prefix + "Data-Size, Digest, "
+                                      + header_prefix + "Sig0");
+    auto trfmt = boost::format(trfmt_);
     auto trhdr = rs[http::field::trailer];
     rs.set( http::field::trailer
           , (trfmt % trhdr % (trhdr.empty() ? "" : ", ")).str() );
@@ -51,8 +54,9 @@ http_injection_trailer( const http::response_header<>& rsh
                       , const std::string key_id
                       , std::chrono::seconds::rep ts)
 {
+    using namespace ouinet::http_;
     // Pending trailer headers to support the signature.
-    rst.set(ouinet::http_::header_prefix + "Data-Size", content_length);
+    rst.set(header_prefix + "Data-Size", content_length);
     rst.set(http::field::digest, "SHA-256=" + util::base64_encode(content_digest));
 
     // Put together the head to be signed:
@@ -66,7 +70,7 @@ http_injection_trailer( const http::response_header<>& rsh
     for (auto& hdr : rst)
         to_sign.set(hdr.name_string(), hdr.value());
 
-    rst.set("Signature", http_signature(to_sign, sk, key_id, ts));
+    rst.set(header_prefix + "Sig0", http_signature(to_sign, sk, key_id, ts));
     return rst;
 }
 
