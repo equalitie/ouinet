@@ -16,11 +16,24 @@
 
 namespace ouinet { namespace cache {
 
+static
+http::response_header<>
+without_framing(const http::response_header<>& rsh)
+{
+    http::response<http::empty_body> rs(rsh);
+    rs.chunked(false);  // easier with a whole response
+    rs.erase(http::field::content_length);  // 0 anyway because of empty body
+    rs.erase(http::field::trailer);
+    return rs.base();
+}
+
 http::response_header<>
 http_injection_head( const http::request_header<>& rqh
                    , http::response_header<> rsh
                    , const std::string& injection_id
-                   , std::chrono::seconds::rep injection_ts)
+                   , std::chrono::seconds::rep injection_ts
+                   , const ouinet::util::Ed25519PrivateKey& sk
+                   , const std::string& key_id)
 {
     using namespace ouinet::http_;
     assert(response_version_hdr_current == response_version_hdr_v0);
@@ -30,13 +43,17 @@ http_injection_head( const http::request_header<>& rqh
     rsh.set( header_prefix + "Injection"
            , boost::format("id=%s,ts=%d") % injection_id % injection_ts);
 
+    // Create a signature of the initial head.
+    auto to_sign = without_framing(rsh);
+    rsh.set(header_prefix + "Sig0", http_signature(to_sign, sk, key_id, injection_ts));
+
     // Enabling chunking is easier with a whole respone,
     // and we do not care about content length anyway.
     http::response<http::empty_body> rs(std::move(rsh));
     rs.chunked(true);
     static const std::string trfmt_ = ( "%s%s"
                                       + header_prefix + "Data-Size, Digest, "
-                                      + header_prefix + "Sig0");
+                                      + header_prefix + "Sig1");
     auto trfmt = boost::format(trfmt_);
     auto trhdr = rs[http::field::trailer];
     rs.set( http::field::trailer
@@ -51,7 +68,7 @@ http_injection_trailer( const http::response_header<>& rsh
                       , size_t content_length
                       , const ouinet::util::SHA256::digest_type& content_digest
                       , const ouinet::util::Ed25519PrivateKey& sk
-                      , const std::string key_id
+                      , const std::string& key_id
                       , std::chrono::seconds::rep ts)
 {
     using namespace ouinet::http_;
@@ -60,17 +77,15 @@ http_injection_trailer( const http::response_header<>& rsh
     rst.set(http::field::digest, "SHA-256=" + util::base64_encode(content_digest));
 
     // Put together the head to be signed:
-    // initial head, minus chunking (and related headers), plus trailer headers.
+    // initial head, minus chunking (and related headers) and its signature,
+    // plus trailer headers.
     // Use `...-Data-Size` internal header instead on `Content-Length`.
-    http::response<http::empty_body> rs(rsh);
-    rs.chunked(false);  // easier with a whole response
-    rs.erase(http::field::content_length);  // 0 anyway because of empty body
-    rs.erase(http::field::trailer);
-    auto to_sign = std::move(rs.base());
+    auto to_sign = without_framing(rsh);
+    to_sign.erase(header_prefix + "Sig0");
     for (auto& hdr : rst)
         to_sign.set(hdr.name_string(), hdr.value());
 
-    rst.set(header_prefix + "Sig0", http_signature(to_sign, sk, key_id, ts));
+    rst.set(header_prefix + "Sig1", http_signature(to_sign, sk, key_id, ts));
     return rst;
 }
 
@@ -151,7 +166,7 @@ get_sig_str_hdrs(const Head& sig_head)
 std::string
 http_signature( const http::response_header<>& rsh
               , const ouinet::util::Ed25519PrivateKey& sk
-              , const std::string key_id
+              , const std::string& key_id
               , std::chrono::seconds::rep ts)
 {
     auto fmt = boost::format("keyId=\"%s\""

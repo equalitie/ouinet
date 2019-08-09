@@ -355,7 +355,8 @@ public:
             if (ec) return inh_orig;  // will not inject, just proxy
 
             do_inject = true;
-            inh = cache::http_injection_head(rq, move(inh), insert_id);
+            inh = cache::http_injection_head( rq, move(inh), insert_id
+                                            , config.cache_private_key(), httpsig_key_id);
             // We will use the trailer to send the body digest and head signature.
             assert(RespFromH(inh).chunked());
 

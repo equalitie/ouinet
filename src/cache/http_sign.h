@@ -15,7 +15,9 @@
 namespace ouinet { namespace cache {
 
 // Get an extended version of the given response head
-// with added headers to support later signing the full message head.
+// with an additional signature header and
+// other headers required to support that signature and
+// a future one for the full message head (as part of the trailer).
 //
 // Example:
 //
@@ -23,23 +25,30 @@ namespace ouinet { namespace cache {
 //     X-Ouinet-Version: 0
 //     X-Ouinet-URI: https://example.com/foo
 //     X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
+//     X-Ouinet-Sig0: keyId="...",algorithm="hs2019",created=1516048310,
+//       headers="(response-status) (created) ... x-ouinet-injection",
+//       signature="..."
 //     Transfer-Encoding: chunked
-//     Trailer: X-Ouinet-Data-Size, Digest, X-Ouinet-Sig0
+//     Trailer: X-Ouinet-Data-Size, Digest, X-Ouinet-Sig1
 //
 http::response_header<>  // use this to enable setting the time stamp (e.g. for tests)
 http_injection_head( const http::request_header<>& rqh
                    , http::response_header<> rsh
                    , const std::string& injection_id
-                   , std::chrono::seconds::rep injection_ts);
+                   , std::chrono::seconds::rep injection_ts
+                   , const ouinet::util::Ed25519PrivateKey&
+                   , const std::string& key_id);
 
 inline
 http::response_header<>  // use this for the rest of cases
 http_injection_head( const http::request_header<>& rqh
                    , http::response_header<> rsh
-                   , const std::string& injection_id)
+                   , const std::string& injection_id
+                   , const ouinet::util::Ed25519PrivateKey& sk
+                   , const std::string& key_id)
 {
     auto ts = std::chrono::seconds(std::time(nullptr)).count();
-    return http_injection_head(rqh, std::move(rsh), injection_id, ts);
+    return http_injection_head(rqh, std::move(rsh), injection_id, ts, sk, key_id);
 }
 
 // Get an extended version of the given response trailer
@@ -52,13 +61,19 @@ http_injection_head( const http::request_header<>& rqh
 // a `Content-Length` header should be added with the value of `X-Ouinet-Data-Size`
 // (and the later be kept as well to avoid a signature verification failure).
 //
+// The signature of the initial head (`X-Ouinet-Sig0`) is not included among
+// the signed headers, so that the receiver may replace it with
+// the value of the signature in the trailer (`X-Ouinet-Sig1`)
+// for subsequent uses.
+//
 // Example:
 //
 //     ...
 //     X-Ouinet-Data-Size: 38
 //     Digest: SHA-256=j7uwtB/QQz0FJONbkyEmaqlJwGehJLqWoCO1ceuM30w=
-//     X-Ouinet-Sig0: keyId="...",algorithm="hs2019",created=1516048311,
-//       headers="(response-status) (created) ... digest",signature="..."
+//     X-Ouinet-Sig1: keyId="...",algorithm="hs2019",created=1516048311,
+//       headers="(response-status) (created) ... x-ouinet-injection x-ouinet-data-size digest",
+//       signature="..."
 //
 http::fields
 http_injection_trailer( const http::response_header<>& rsh
@@ -66,7 +81,7 @@ http_injection_trailer( const http::response_header<>& rsh
                       , size_t content_length
                       , const ouinet::util::SHA256::digest_type& content_digest
                       , const ouinet::util::Ed25519PrivateKey&
-                      , const std::string key_id
+                      , const std::string& key_id
                       , std::chrono::seconds::rep ts);
 
 inline
@@ -76,7 +91,7 @@ http_injection_trailer( const http::response_header<>& rsh
                       , size_t content_length
                       , const ouinet::util::SHA256::digest_type& content_digest
                       , const ouinet::util::Ed25519PrivateKey& sk
-                      , const std::string key_id)
+                      , const std::string& key_id)
 {
     auto ts = std::chrono::seconds(std::time(nullptr)).count();
     return http_injection_trailer( rsh, std::move(rst)
@@ -101,14 +116,14 @@ http_digest(const http::response<http::dynamic_body>&);
 std::string  // use this to enable setting the time stamp (e.g. for tests)
 http_signature( const http::response_header<>&
               , const ouinet::util::Ed25519PrivateKey&
-              , const std::string key_id
+              , const std::string& key_id
               , std::chrono::seconds::rep ts);
 
 inline  // use this for the rest of cases
 std::string
 http_signature( const http::response_header<>& rsh
               , const ouinet::util::Ed25519PrivateKey& sk
-              , const std::string key_id)
+              , const std::string& key_id)
 {
     auto ts = std::chrono::seconds(std::time(nullptr)).count();
     return http_signature(rsh, sk, key_id, ts);
