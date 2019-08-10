@@ -1,5 +1,11 @@
 include(ExternalProject)
 
+# gcc 8 spits out warnings from Boost.Mpl about unnecessary parentheses
+# https://github.com/CauldronDevelopmentLLC/cbang/issues/26
+# (this library bundles Boost)
+# TODO: Perhaps do a check for Boost and gcc version before adding this flag?
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-parentheses")
+
 externalproject_add(uri
     GIT_REPOSITORY https://github.com/cpp-netlib/uri
     GIT_TAG 1.0.1
