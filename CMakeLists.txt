@@ -40,7 +40,7 @@ include(OuinetDependencies)
 add_library(ouinet_base INTERFACE)
 add_library(ouinet::base ALIAS ouinet_base)
 target_compile_options(ouinet_base
-    INTERFACE -std=c++14
+    INTERFACE -std=c++1z
 )
 target_link_libraries(ouinet_base
     INTERFACE
