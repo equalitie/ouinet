@@ -25,13 +25,18 @@
 #include "namespaces.h"
 #include "logger.h"
 
-Logger logger(DEBUG);
 
 const std::string log_level_announce[] =       {"SILLY"        , "DEBUG"     , "VERBOSE"   , "INFO"      , "WARN"        , "ERROR"      , "ABORT"};
 const std::string log_level_color_prefix[] =   {"\033[1;35;47m", "\033[1;32m", "\033[1;37m", "\033[1;34m", "\033[90;103m", "\033[31;40m", "\033[1;31;40m"};
 #ifndef __ANDROID__
 const bool log_level_colored_msg[] =           {true           , false       , false       , false       , true        , true          , true};
 #endif // ifndef __ANDROID__
+
+log_level_t default_log_level() {
+    return INFO;
+}
+
+Logger logger(default_log_level());
 
 void Logger::initiate_textual_conversions()
 {
@@ -44,7 +49,7 @@ Logger::Logger(log_level_t threshold)
     initiate_textual_conversions();
 
     if (threshold < SILLY || threshold > ERROR) {
-        this->threshold = default_log_level;
+        this->threshold = default_log_level();
     } else {
         this->threshold = threshold;
     }

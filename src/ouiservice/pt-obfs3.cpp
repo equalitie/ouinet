@@ -45,7 +45,7 @@ std::unique_ptr<pt::ServerProcess> Obfs3OuiServiceServer::start_server_process(
         return or_throw<std::unique_ptr<pt::ServerProcess>>(yield, ec);
     }
 
-    return std::move(server_process);
+    return server_process;
 }
 
 
@@ -109,7 +109,7 @@ std::unique_ptr<pt::ClientProcess> Obfs3OuiServiceClient::start_client_process(
         return or_throw<std::unique_ptr<pt::ClientProcess>>(yield, asio::error::address_family_not_supported);
     }
 
-    return std::move(client_process);
+    return client_process;
 }
 
 asio::ip::tcp::socket Obfs3OuiServiceClient::connect_through_transport(
