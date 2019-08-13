@@ -243,8 +243,7 @@ prep_sig_head(const Head& inh, Head& outh)
         boost::algorithm::to_lower(name);
 
         auto value_v = hdr.value();  // trimmed
-        while (value_v.starts_with(' ')) value_v.remove_prefix(1);
-        while (value_v.ends_with  (' ')) value_v.remove_suffix(1);
+        trim_whitespace(value_v);
 
         auto vit = hdr_values.find(name);
         if (vit == hdr_values.end()) {  // new entry, add
