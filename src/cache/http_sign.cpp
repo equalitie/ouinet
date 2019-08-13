@@ -99,6 +99,7 @@ struct HttpSignature {
     boost::string_view keyId;
     boost::string_view algorithm;
     boost::string_view created;
+    boost::string_view expires;
     boost::string_view headers;
     boost::string_view signature;
 
@@ -120,6 +121,7 @@ struct HttpSignature {
             std::tie(key, value) = split_string_pair(item, '=');
             // Unquoted values:
             if (key == "created") {hs.created = value; continue;}
+            if (key == "expires") {hs.expires = value; continue;}
             // Quoted values:
             if (value.size() < 2 || value[0] != '"' || value[value.size() - 1] != '"')
                 return {};
