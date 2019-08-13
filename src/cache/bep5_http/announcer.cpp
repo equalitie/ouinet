@@ -46,7 +46,17 @@ struct Announcer::Loop {
         , entries(ios)
     { }
 
+    bool already_has(const Key& key) const {
+        for (auto& e : entries) {
+            if (e.first.key == key) return true;
+        }
+        return false;
+    }
+
     void add(Key key) {
+
+        if (already_has(key)) return;
+
         entries.push_front(Entry(move(key)));
         _timer_cancel();
         _timer_cancel = Cancel();
