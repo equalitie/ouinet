@@ -12,6 +12,7 @@ namespace ouinet {
 template <class Request>
 inline
 std::string key_from_http_req(const Request& req) {
+    assert(req.target().starts_with("http"));
     // The key is currently the canonical URL itself.
     return util::canonical_url(req.target());
 }
@@ -21,6 +22,8 @@ std::string key_from_http_req(const Request& req) {
 // take other request parameters to compute cache index keys.
 inline
 std::string key_from_http_url(const std::string& url) {
+    beast::string_view sw(url);
+    assert(sw.starts_with("http"));
     return util::canonical_url(url);
 }
 
