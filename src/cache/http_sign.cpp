@@ -21,6 +21,9 @@ namespace ouinet { namespace cache {
 static const auto initial_signature_hdr = http_::response_signature_hdr_pfx + "0";
 static const auto final_signature_hdr = http_::response_signature_hdr_pfx + "1";
 
+// The only signature algorithm supported by this implementation.
+static const std::string sig_alg_hs2019("hs2019");
+
 static
 http::response_header<>
 without_framing(const http::response_header<>& rsh)
@@ -147,6 +150,9 @@ struct HttpSignature {
     bool verify( const http::response_header<>& rsh
                , const ouinet::util::Ed25519PublicKey& pk)
     {
+        // The key may imply an algorithm,
+        // but an explicit algorithm should not conflict with the key.
+        assert(algorithm.empty() || algorithm == sig_alg_hs2019);
         return true;  // TODO: implement
     }
 
@@ -187,6 +193,10 @@ http_injection_verify( const http::response_header<>& rsh
         }
         if (sig->keyId != keyId)
             continue;  // not for the public key we specified
+        if (!(sig->algorithm.empty()) && sig->algorithm != sig_alg_hs2019) {
+            LOG_WARN("Unsupported HTTP signature algorithm for matching key: ", sig->algorithm);
+            continue;
+        }
         sig_found = true;
         if (!(sig->verify(rsh, pk)))
             continue;  // head does not match signature
@@ -278,11 +288,12 @@ http_signature( const http::response_header<>& rsh
               , const std::string& key_id
               , std::chrono::seconds::rep ts)
 {
-    auto fmt = boost::format("keyId=\"%s\""
-                             ",algorithm=\"hs2019\""
+    static const auto fmt_ = "keyId=\"%s\""
+                             ",algorithm=\"" + sig_alg_hs2019 + "\""
                              ",created=%d"
                              ",headers=\"%s\""
-                             ",signature=\"%s\"");
+                             ",signature=\"%s\"";
+    boost::format fmt(fmt_);
 
     http::response_header<> sig_head;
     sig_head.set("(response-status)", rsh.result_int());
