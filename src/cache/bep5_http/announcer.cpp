@@ -3,6 +3,7 @@
 #include "../../logger.h"
 #include "../../async_sleep.h"
 #include "../../bittorrent/node_id.h"
+#include <boost/utility/string_view.hpp>
 
 using namespace std;
 using namespace ouinet;
@@ -17,7 +18,7 @@ using Clock = chrono::steady_clock;
 // Entry
 
 struct Entry {
-    string debug_key;
+    string key;
     bt::NodeID infohash;
 
     Clock::time_point update_attempt;
@@ -26,8 +27,8 @@ struct Entry {
     Entry() = default;
 
     Entry(Announcer::Key key)
-        : debug_key(move(key))
-        , infohash(util::sha1_digest(debug_key))
+        : key(move(key))
+        , infohash(util::sha1_digest(this->key))
     { }
 };
 
@@ -54,7 +55,6 @@ struct Announcer::Loop {
     }
 
     void add(Key key) {
-
         if (already_has(key)) return;
 
         entries.push_front(Entry(move(key)));
@@ -146,10 +146,10 @@ struct Announcer::Loop {
 
     void announce(Entry& e, Cancel& cancel, asio::yield_context yield)
     {
-        LOG_DEBUG("Announcing ", e.debug_key);
+        LOG_DEBUG("Announcing ", e.key);
         sys::error_code ec;
         dht->tracker_announce(e.infohash, boost::none, cancel, yield[ec]);
-        LOG_DEBUG("Announcing ended ", e.debug_key, " ec:", ec.message());
+        LOG_DEBUG("Announcing ended ", e.key, " ec:", ec.message());
         return or_throw(yield, ec);
     }
 

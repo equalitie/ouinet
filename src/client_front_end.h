@@ -21,7 +21,7 @@ class GenericStream;
 class ClientConfig;
 
 class ClientFrontEnd {
-    template<typename E> class Input;
+    template<typename E> struct Input;
 
     template<typename E>
         friend std::ostream& operator<<(std::ostream&, const Input<E>&);

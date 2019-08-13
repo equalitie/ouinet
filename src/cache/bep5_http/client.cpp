@@ -42,6 +42,12 @@ struct Client::Impl {
         start_accepting();
     }
 
+    // "http(s)://www.foo.org/bar/baz" -> "www.foo.org"
+    string dht_key(const string& s)
+    {
+        return get_host(s);
+    }
+
     void start_accepting()
     {
         for (auto ep : dht->local_endpoints()) {
@@ -169,7 +175,7 @@ struct Client::Impl {
 
         sys::error_code ec;
 
-        auto endpoints = dht->tracker_get_peers(util::sha1_digest(key), cancel, yield[ec]);
+        auto endpoints = dht->tracker_get_peers(util::sha1_digest(dht_key(key)), cancel, yield[ec]);
 
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw<Session>(yield, ec);
@@ -343,7 +349,7 @@ struct Client::Impl {
         if (!ec) file->commit(ec);
         if (ec) return or_throw(yield, ec);
 
-        announcer.add(key);
+        announcer.add(dht_key(key));
     }
 
     template<class Stream>
@@ -390,7 +396,7 @@ struct Client::Impl {
 
             if (key.empty()) { try_remove(p); continue; }
 
-            announcer.add(key.to_string());
+            announcer.add(dht_key(key.to_string()));
         }
     }
 
