@@ -19,7 +19,12 @@ std::string random(unsigned int size);
 
 class Ed25519PublicKey {
     public:
-    Ed25519PublicKey(std::array<uint8_t, 32> key = {});
+    static const size_t key_size = 32;
+    static const size_t sig_size = 64;
+    using key_array_t = std::array<uint8_t, key_size>;
+    using sig_array_t = std::array<uint8_t, sig_size>;
+
+    Ed25519PublicKey(key_array_t key = {});
     ~Ed25519PublicKey();
 
     Ed25519PublicKey(const Ed25519PublicKey& other);
@@ -27,9 +32,9 @@ class Ed25519PublicKey {
     Ed25519PublicKey& operator=(const Ed25519PublicKey& other);
     Ed25519PublicKey& operator=(Ed25519PublicKey&& other);
 
-    std::array<uint8_t, 32> serialize() const;
+    key_array_t serialize() const;
 
-    bool verify(const std::string& data, const std::array<uint8_t, 64>& signature) const;
+    bool verify(const std::string& data, const sig_array_t& signature) const;
 
     static
     boost::optional<Ed25519PublicKey> from_hex(boost::string_view);
@@ -40,7 +45,12 @@ class Ed25519PublicKey {
 
 class Ed25519PrivateKey {
     public:
-    Ed25519PrivateKey(std::array<uint8_t, 32> key = {});
+    static const size_t key_size = 32;
+    static const size_t sig_size = Ed25519PublicKey::sig_size;
+    using key_array_t = std::array<uint8_t, key_size>;
+    using sig_array_t = Ed25519PublicKey::sig_array_t;
+
+    Ed25519PrivateKey(key_array_t key = {});
     ~Ed25519PrivateKey();
 
     Ed25519PrivateKey(const Ed25519PrivateKey& other);
@@ -48,12 +58,12 @@ class Ed25519PrivateKey {
     Ed25519PrivateKey& operator=(const Ed25519PrivateKey& other);
     Ed25519PrivateKey& operator=(Ed25519PrivateKey&& other);
 
-    std::array<uint8_t, 32> serialize() const;
+    key_array_t serialize() const;
     Ed25519PublicKey public_key() const;
 
     static Ed25519PrivateKey generate();
 
-    std::array<uint8_t, 64> sign(const std::string& data) const;
+    sig_array_t sign(const std::string& data) const;
 
     static
     boost::optional<Ed25519PrivateKey> from_hex(boost::string_view);
