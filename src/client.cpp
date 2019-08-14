@@ -780,7 +780,9 @@ public:
                     auto s = cc.fetch(rq, fresh_ec, cache_ec, cancel, yield[ec]);
 
                     if (log_transactions()) {
-                        yield.log("cc.fetch ec:", ec.message());
+                        yield.log("cc.fetch ec:", ec.message(),
+                                " fresh_ec:", fresh_ec.message(),
+                                " cache_ec:", cache_ec.message());
                     }
 
                     if (ec) break;
@@ -797,43 +799,38 @@ public:
                         return false;
                     }
 
-                    if (!fresh_ec) {
-                        using Fork = stream::Fork<GenericStream>;
+                    using Fork = stream::Fork<GenericStream>;
 
-                        tcp::socket source(ios), sink(ios);
-                        tie(source, sink) = make_connection(ios, yield);
+                    tcp::socket source(ios), sink(ios);
+                    tie(source, sink) = make_connection(ios, yield);
 
-                        Fork fork(move(source));
-                        Fork::Tine src1(fork), src2(fork);
+                    Fork fork(move(source));
+                    Fork::Tine src1(fork), src2(fork);
 
-                        WaitCondition wc(ios);
+                    WaitCondition wc(ios);
 
-                        asio::spawn(ios, [
-                            &,
-                            lock = wc.lock()
-                        ] (asio::yield_context yield_) {
-                          auto y = yield.detach(yield_);
-                          Session s1(move(src1));
-                          sys::error_code ec;
-                          store(rq, s1, cancel, y[ec]);
-                        });
+                    asio::spawn(ios, [
+                        &,
+                        lock = wc.lock()
+                    ] (asio::yield_context yield_) {
+                      auto y = yield.detach(yield_);
+                      Session s1(move(src1));
+                      sys::error_code ec;
+                      store(rq, s1, cancel, y[ec]);
+                    });
 
-                        asio::spawn(ios, [
-                            &,
-                            lock = wc.lock()
-                        ] (asio::yield_context yield) {
-                            Session s2(move(src2));
-                            sys::error_code ec;
-                            s2.flush_response(con, cancel, yield[ec]);
-                        });
+                    asio::spawn(ios, [
+                        &,
+                        lock = wc.lock()
+                    ] (asio::yield_context yield_) {
+                        Session s2(move(src2));
+                        sys::error_code ec;
+                        s2.flush_response(con, cancel, yield_[ec]);
+                    });
 
-                        s.flush_response(sink, cancel, yield[ec]);
+                    s.flush_response(sink, cancel, yield[ec]);
 
-                        wc.wait(yield);
-                    }
-                    else {
-                      s.flush_response(con, cancel, yield[ec]);
-                    }
+                    wc.wait(yield);
 
                     return !ec && rq.keep_alive() && s.keep_alive();
                 }
