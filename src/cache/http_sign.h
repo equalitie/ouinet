@@ -149,4 +149,32 @@ http_signature( const http::response_header<>& rsh
     return http_signature(rsh, sk, key_id, ts);
 }
 
+// A simple container for a parsed HTTP signature,
+// e.g. as produced by `http_signature`.
+// Use the `parse` static method to parse the signature string into its components,
+// then use `verify` to check the signature against a public key,
+// which should be the same as that specified by the signature's `keyId`,
+// though how they are both linked is out of the scope of this code.
+//
+// Please note that all members point to the original signature string,
+// so it should be alive while using this.
+struct HttpSignature {
+    boost::string_view keyId;
+    boost::string_view algorithm;
+    boost::string_view created;
+    boost::string_view expires;
+    boost::string_view headers;
+    boost::string_view signature;
+
+    static
+    boost::optional<HttpSignature> parse(boost::string_view);
+
+    bool verify( const http::response_header<>&
+               , const util::Ed25519PublicKey&);
+
+private:
+    static
+    bool has_comma_in_quotes(const boost::string_view&);
+};
+
 }} // namespaces

@@ -98,77 +98,6 @@ http_injection_trailer( const http::response_header<>& rsh
     return rst;
 }
 
-struct HttpSignature {
-    // TODO: refine types
-    boost::string_view keyId;
-    boost::string_view algorithm;
-    boost::string_view created;
-    boost::string_view expires;
-    boost::string_view headers;
-    boost::string_view signature;
-
-    static
-    boost::optional<HttpSignature> parse(boost::string_view sig)
-    {
-        // TODO: proper support for quoted strings
-        if (has_comma_in_quotes(sig)) {
-            LOG_WARN("Commas in quoted arguments of HTTP signatures are not yet supported");
-            return {};
-        }
-
-        HttpSignature hs;
-        static const std::string def_headers = "(created)";
-        hs.headers = def_headers;  // missing is not the same as empty
-
-        for (boost::string_view item : SplitString(sig, ',')) {
-            beast::string_view key, value;
-            std::tie(key, value) = split_string_pair(item, '=');
-            // Unquoted values:
-            if (key == "created") {hs.created = value; continue;}
-            if (key == "expires") {hs.expires = value; continue;}
-            // Quoted values:
-            if (value.size() < 2 || value[0] != '"' || value[value.size() - 1] != '"')
-                return {};
-            value.remove_prefix(1);
-            value.remove_suffix(1);
-            if (key == "keyId") {hs.keyId = value; continue;}
-            if (key == "algorithm") {hs.algorithm = value; continue;}
-            if (key == "headers") {hs.headers = value; continue;}
-            if (key == "signature") {hs.signature = value; continue;}
-            return {};
-        }
-        if (hs.keyId.empty() || hs.signature.empty()) {  // required
-            LOG_WARN("HTTP signature contains empty key identifier or signature");
-            return {};
-        }
-        if (hs.algorithm.empty() || hs.created.empty() || hs.headers.empty()) {  // recommended
-            LOG_WARN("HTTP signature contains empty algorithm, creation time stamp, or header list");
-        }
-
-        return {std::move(hs)};
-    }
-
-    bool verify( const http::response_header<>&
-               , const util::Ed25519PublicKey&);
-
-private:
-    static inline
-    bool has_comma_in_quotes(const boost::string_view& s) {
-        // A comma is between quotes if
-        // the number of quotes before it is odd.
-        int quotes_seen = 0;
-        for (auto c : s) {
-            if (c == '"') {
-                quotes_seen++;
-                continue;
-            }
-            if ((c == ',') && (quotes_seen % 2 != 0))
-                return true;
-        }
-        return false;
-    }
-};
-
 bool
 http_injection_verify( const http::response_header<>& rsh
                      , const util::Ed25519PublicKey& pk
@@ -393,6 +322,47 @@ http_signature( const http::response_header<>& rsh
     return (fmt % key_id % ts % headers % encoded_sig).str();
 }
 
+boost::optional<HttpSignature>
+HttpSignature::parse(boost::string_view sig)
+{
+    // TODO: proper support for quoted strings
+    if (has_comma_in_quotes(sig)) {
+        LOG_WARN("Commas in quoted arguments of HTTP signatures are not yet supported");
+        return {};
+    }
+
+    HttpSignature hs;
+    static const std::string def_headers = "(created)";
+    hs.headers = def_headers;  // missing is not the same as empty
+
+    for (boost::string_view item : SplitString(sig, ',')) {
+        beast::string_view key, value;
+        std::tie(key, value) = split_string_pair(item, '=');
+        // Unquoted values:
+        if (key == "created") {hs.created = value; continue;}
+        if (key == "expires") {hs.expires = value; continue;}
+        // Quoted values:
+        if (value.size() < 2 || value[0] != '"' || value[value.size() - 1] != '"')
+            return {};
+        value.remove_prefix(1);
+        value.remove_suffix(1);
+        if (key == "keyId") {hs.keyId = value; continue;}
+        if (key == "algorithm") {hs.algorithm = value; continue;}
+        if (key == "headers") {hs.headers = value; continue;}
+        if (key == "signature") {hs.signature = value; continue;}
+        return {};
+    }
+    if (hs.keyId.empty() || hs.signature.empty()) {  // required
+        LOG_WARN("HTTP signature contains empty key identifier or signature");
+        return {};
+    }
+    if (hs.algorithm.empty() || hs.created.empty() || hs.headers.empty()) {  // recommended
+        LOG_WARN("HTTP signature contains empty algorithm, creation time stamp, or header list");
+    }
+
+    return {std::move(hs)};
+}
+
 bool
 HttpSignature::verify( const http::response_header<>& rsh
                      , const util::Ed25519PublicKey& pk)
@@ -416,6 +386,22 @@ HttpSignature::verify( const http::response_header<>& rsh
 
     auto sig_array = util::bytes::to_array<uint8_t, pk.sig_size>(decoded_sig);
     return pk.verify(sig_string, sig_array);
+}
+
+bool
+HttpSignature::has_comma_in_quotes(const boost::string_view& s) {
+    // A comma is between quotes if
+    // the number of quotes before it is odd.
+    int quotes_seen = 0;
+    for (auto c : s) {
+        if (c == '"') {
+            quotes_seen++;
+            continue;
+        }
+        if ((c == ',') && (quotes_seen % 2 != 0))
+            return true;
+    }
+    return false;
 }
 
 }} // namespaces
