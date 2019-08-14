@@ -341,7 +341,7 @@ verification_head(const Head& inh, const HttpSignature& hsig)
             return {};
         }
     }
-    return {vh};
+    return {std::move(vh)};
 }
 
 template<class Head>
@@ -363,7 +363,7 @@ get_sig_str_hdrs(const Head& sig_head)
         ins_sep = true;
     }
 
-    return {sig_string, headers};
+    return {std::move(sig_string), std::move(headers)};
 }
 
 std::string
