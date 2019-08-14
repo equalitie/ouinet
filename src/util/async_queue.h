@@ -182,6 +182,13 @@ public:
         _tx_cv.notify();
     }
 
+    iterator erase(iterator i)
+    {
+        iterator r = _queue.erase(i);
+        _tx_cv.notify();
+        return r;
+    }
+
     ~AsyncQueue()
     {
         _destroy_signal();
