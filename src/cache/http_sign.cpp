@@ -147,14 +147,8 @@ struct HttpSignature {
         return {std::move(hs)};
     }
 
-    bool verify( const http::response_header<>& rsh
-               , const ouinet::util::Ed25519PublicKey& pk)
-    {
-        // The key may imply an algorithm,
-        // but an explicit algorithm should not conflict with the key.
-        assert(algorithm.empty() || algorithm == sig_alg_hs2019);
-        return true;  // TODO: implement
-    }
+    bool verify( const http::response_header<>&
+               , const ouinet::util::Ed25519PublicKey&);
 
 private:
     static inline
@@ -259,6 +253,66 @@ prep_sig_head(const Head& inh, Head& outh)
         outh.set(name, hdr_values[name]);
 }
 
+static inline std::string
+request_target_ph(const http::request_header<>& rqh)
+{
+    auto method = rqh.method_string().to_string();
+    boost::algorithm::to_lower(method);
+    return util::str(method, ' ', rqh.target());
+}
+
+static inline std::string
+request_target_ph(const http::response_header<>&)
+{
+    return {};
+}
+
+static inline std::string
+response_status_ph(const http::request_header<>&)
+{
+    return {};
+}
+
+static inline std::string
+response_status_ph(const http::response_header<>& rsh)
+{
+    return std::to_string(rsh.result_int());
+}
+
+template<class Head>
+static boost::optional<Head>
+verification_head(const Head& inh, const HttpSignature& hsig)
+{
+    Head vh;
+    for (const auto& hn : SplitString(hsig.headers, ' ')) {
+        // A listed header missing in `inh` is considered an error,
+        // thus the verification should fail.
+        if (hn[0] != '(') {  // normal headers
+            // TODO: join multiple occurrences of same header
+            auto hv = inh[hn];
+            trim_whitespace(hv);
+            if (hv.empty()) return {};
+            vh.set(hn, hv);
+        } else if (hn == "(request-target)") {  // pseudo-headers
+            auto hv = request_target_ph(inh);
+            if (hv.empty()) return {};
+            vh.set(hn, std::move(hv));
+        } else if (hn == "(response-status)") {
+            auto hv = response_status_ph(inh);
+            if (hv.empty()) return {};
+            vh.set(hn, std::move(hv));
+        } else if (hn == "(created)") {
+            vh.set(hn, hsig.created);
+        } else if (hn == "(expires)") {
+            vh.set(hn, hsig.expires);
+        } else {
+            LOG_WARN("Unknown HTTP signature pseudo-header: ", hn);
+            return {};
+        }
+    }
+    return {vh};
+}
+
 template<class Head>
 static std::pair<std::string, std::string>
 get_sig_str_hdrs(const Head& sig_head)
@@ -305,6 +359,24 @@ http_signature( const http::response_header<>& rsh
     auto encoded_sig = ouinet::util::base64_encode(sk.sign(sig_string));
 
     return (fmt % key_id % ts % headers % encoded_sig).str();
+}
+
+bool
+HttpSignature::verify( const http::response_header<>& rsh
+                     , const ouinet::util::Ed25519PublicKey& pk)
+{
+    // The key may imply an algorithm,
+    // but an explicit algorithm should not conflict with the key.
+    assert(algorithm.empty() || algorithm == sig_alg_hs2019);
+
+    auto vfy_head = verification_head(rsh, *this);
+    if (!vfy_head)  // e.g. because of missing headers
+        return false;
+
+    std::string sig_string;
+    std::tie(sig_string, std::ignore) = get_sig_str_hdrs(*vfy_head);
+
+    return true;  // TODO: implement
 }
 
 }} // namespaces
