@@ -279,6 +279,38 @@ response_status_ph(const http::response_header<>& rsh)
     return std::to_string(rsh.result_int());
 }
 
+// For `hn` being ``X-Foo``, turn:
+//
+//     X-Foo: foo
+//     X-Bar: xxx
+//     X-Foo: 
+//     X-Foo: bar
+//
+// into optional ``foo, , bar``, and:
+//
+//     X-Bar: xxx
+//
+// into optional no value.
+template<class Head>
+static
+boost::optional<std::string>
+flatten_header_values(const Head& inh, const boost::string_view& hn)
+{
+    typename Head::const_iterator begin, end;
+    std::tie(begin, end) = inh.equal_range(hn);
+    if (begin == inh.end())  // missing header
+        return {};
+
+    std::string ret;
+    for (auto hit = begin; hit != end; hit++) {
+        auto hv = hit->value();
+        trim_whitespace(hv);
+        if (!ret.empty()) ret += ", ";
+        ret.append(hv.data(), hv.size());
+    }
+    return {std::move(ret)};
+}
+
 template<class Head>
 static boost::optional<Head>
 verification_head(const Head& inh, const HttpSignature& hsig)
@@ -288,11 +320,10 @@ verification_head(const Head& inh, const HttpSignature& hsig)
         // A listed header missing in `inh` is considered an error,
         // thus the verification should fail.
         if (hn[0] != '(') {  // normal headers
-            // TODO: join multiple occurrences of same header
-            auto hv = inh[hn];
-            trim_whitespace(hv);
-            if (hv.empty()) return {};
-            vh.set(hn, hv);
+            // Referring to an empty header is ok (a missing one is not).
+            auto hcv = flatten_header_values(inh, hn);
+            if (!hcv) return {};
+            vh.set(hn, *hcv);
         } else if (hn == "(request-target)") {  // pseudo-headers
             auto hv = request_target_ph(inh);
             if (hv.empty()) return {};
