@@ -41,7 +41,7 @@ http_injection_head( const http::request_header<>& rqh
                    , http::response_header<> rsh
                    , const std::string& injection_id
                    , std::chrono::seconds::rep injection_ts
-                   , const ouinet::util::Ed25519PrivateKey& sk
+                   , const util::Ed25519PrivateKey& sk
                    , const std::string& key_id)
 {
     using namespace ouinet::http_;
@@ -75,8 +75,8 @@ http::fields
 http_injection_trailer( const http::response_header<>& rsh
                       , http::fields rst
                       , size_t content_length
-                      , const ouinet::util::SHA256::digest_type& content_digest
-                      , const ouinet::util::Ed25519PrivateKey& sk
+                      , const util::SHA256::digest_type& content_digest
+                      , const util::Ed25519PrivateKey& sk
                       , const std::string& key_id
                       , std::chrono::seconds::rep ts)
 {
@@ -149,7 +149,7 @@ struct HttpSignature {
     }
 
     bool verify( const http::response_header<>&
-               , const ouinet::util::Ed25519PublicKey&);
+               , const util::Ed25519PublicKey&);
 
 private:
     static inline
@@ -171,7 +171,7 @@ private:
 
 bool
 http_injection_verify( const http::response_header<>& rsh
-                     , const ouinet::util::Ed25519PublicKey& pk
+                     , const util::Ed25519PublicKey& pk
                      , sys::error_code& ec)
 {
     auto keyId = http_key_id_for_injection(pk);  // TODO: cache this
@@ -204,21 +204,21 @@ http_injection_verify( const http::response_header<>& rsh
 }
 
 std::string
-http_key_id_for_injection(const ouinet::util::Ed25519PublicKey& pk)
+http_key_id_for_injection(const util::Ed25519PublicKey& pk)
 {
-    return "ed25519=" + ouinet::util::base64_encode(pk.serialize());
+    return "ed25519=" + util::base64_encode(pk.serialize());
 }
 
 std::string
 http_digest(const http::response<http::dynamic_body>& rs)
 {
-    ouinet::util::SHA256 hash;
+    util::SHA256 hash;
 
     // Feed each buffer of body data into the hash.
     for (auto it : rs.body().data())
         hash.update(it);
     auto digest = hash.close();
-    auto encoded_digest = ouinet::util::base64_encode(digest);
+    auto encoded_digest = util::base64_encode(digest);
     return "SHA-256=" + encoded_digest;
 }
 
@@ -369,7 +369,7 @@ get_sig_str_hdrs(const Head& sig_head)
 
 std::string
 http_signature( const http::response_header<>& rsh
-              , const ouinet::util::Ed25519PrivateKey& sk
+              , const util::Ed25519PrivateKey& sk
               , const std::string& key_id
               , std::chrono::seconds::rep ts)
 {
@@ -388,14 +388,14 @@ http_signature( const http::response_header<>& rsh
     std::string sig_string, headers;
     std::tie(sig_string, headers) = get_sig_str_hdrs(sig_head);
 
-    auto encoded_sig = ouinet::util::base64_encode(sk.sign(sig_string));
+    auto encoded_sig = util::base64_encode(sk.sign(sig_string));
 
     return (fmt % key_id % ts % headers % encoded_sig).str();
 }
 
 bool
 HttpSignature::verify( const http::response_header<>& rsh
-                     , const ouinet::util::Ed25519PublicKey& pk)
+                     , const util::Ed25519PublicKey& pk)
 {
     // The key may imply an algorithm,
     // but an explicit algorithm should not conflict with the key.
