@@ -14,6 +14,7 @@
 #include "../logger.h"
 #include "../split_string.h"
 #include "../util.h"
+#include "../util/bytes.h"
 #include "../util/hash.h"
 
 namespace ouinet { namespace cache {
@@ -407,7 +408,14 @@ HttpSignature::verify( const http::response_header<>& rsh
     std::string sig_string;
     std::tie(sig_string, std::ignore) = get_sig_str_hdrs(*vfy_head);
 
-    return true;  // TODO: implement
+    auto decoded_sig = util::base64_decode(signature);
+    if (decoded_sig.size() != pk.sig_size) {
+        LOG_WARN("Invalid HTTP signature length");
+        return false;
+    }
+
+    auto sig_array = util::bytes::to_array<uint8_t, pk.sig_size>(decoded_sig);
+    return pk.verify(sig_string, sig_array);
 }
 
 }} // namespaces
