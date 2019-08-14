@@ -778,7 +778,16 @@ public:
 
                     auto s = cc.fetch(rq, fresh_ec, cache_ec, cancel, yield[ec]);
 
+                    if (log_transactions()) {
+                        yield.log("cc.fetch ec:", ec.message());
+                    }
+
                     if (ec) break;
+
+                    if (log_transactions()) {
+                        yield.log("Response header:");
+                        yield.log(*s.response_header());
+                    }
 
                     assert(!fresh_ec || !cache_ec); // At least one success
                     assert( fresh_ec ||  cache_ec); // One needs to fail
@@ -1452,6 +1461,8 @@ void Client::State::start()
 
                   auto ep = _config.front_end_endpoint();
                   if (ep == tcp::endpoint()) return;
+
+                  LOG_INFO("Serving front end on ", ep);
 
                   listen_tcp( yield[ec]
                             , ep
