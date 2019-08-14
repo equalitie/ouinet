@@ -18,7 +18,7 @@ struct MutableDataItem {
     std::string salt;
     BencodedValue value;
     int64_t sequence_number;
-    std::array<uint8_t, 64> signature;
+    util::Ed25519PublicKey::sig_array_t signature;
 
     // Throws `std::length_error` if the value is too big.
     static MutableDataItem sign(
@@ -64,9 +64,9 @@ struct MutableDataItem {
             auto ins_map = ins->as_map();
             auto k = ins_map->at("k").as_string().value();
 
-            if (k.size() != 32) return boost::none;
+            if (k.size() != util::Ed25519PublicKey::key_size) return boost::none;
 
-            array<uint8_t, 32> ka;
+            util::Ed25519PublicKey::key_array_t ka;
             copy(begin(k), end(k), begin(ka));
 
             item.public_key      = move(ka);

@@ -530,14 +530,14 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
         if (!sequence_number) return;
 
         boost::optional<std::string> signature = response["sig"].as_string();
-        if (!signature || signature->size() != 64) return;
+        if (!signature || signature->size() != util::Ed25519PublicKey::sig_size) return;
 
         MutableDataItem item {
             public_key,
             salt.to_string(),
             response["v"],
             *sequence_number,
-            util::bytes::to_array<uint8_t, 64>(*signature)
+            util::bytes::to_array<uint8_t, util::Ed25519PublicKey::sig_size>(*signature)
         };
         if (item.verify()) {
             if (!data || *sequence_number > data->sequence_number) {
@@ -689,14 +689,14 @@ NodeID dht::DhtNode::data_put_mutable(
         if (!response_seq) return;
 
         boost::optional<std::string> response_sig = response["sig"].as_string();
-        if (!response_sig || response_sig->size() != 64) return;
+        if (!response_sig || response_sig->size() != util::Ed25519PublicKey::sig_size) return;
 
         MutableDataItem item {
             data.public_key,
             data.salt,
             response["v"],
             *response_seq,
-            util::bytes::to_array<uint8_t, 64>(*response_sig)
+            util::bytes::to_array<uint8_t, util::Ed25519PublicKey::sig_size>(*response_sig)
         };
 
         if (item.verify()) {
@@ -1272,19 +1272,19 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
             if (!public_key_) {
                 return send_error(203, "Missing argument 'k'");
             }
-            if (public_key_->size() != 32) {
+            if (public_key_->size() != util::Ed25519PublicKey::key_size) {
                 return send_error(203, "Malformed argument 'k'");
             }
-            util::Ed25519PublicKey public_key(util::bytes::to_array<uint8_t, 32>(*public_key_));
+            util::Ed25519PublicKey public_key(util::bytes::to_array<uint8_t, util::Ed25519PublicKey::key_size>(*public_key_));
 
             boost::optional<std::string> signature_ = arguments["sig"].as_string();
             if (!signature_) {
                 return send_error(203, "Missing argument 'sig'");
             }
-            if (signature_->size() != 64) {
+            if (signature_->size() != util::Ed25519PublicKey::sig_size) {
                 return send_error(203, "Malformed argument 'sig'");
             }
-            std::array<uint8_t, 64> signature = util::bytes::to_array<uint8_t, 64>(*signature_);
+            util::Ed25519PublicKey::sig_array_t signature = util::bytes::to_array<uint8_t, util::Ed25519PublicKey::sig_size>(*signature_);
 
             boost::optional<int64_t> sequence_number_ = arguments["seq"].as_int();
             if (!sequence_number_) {
