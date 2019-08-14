@@ -24,6 +24,9 @@ namespace ouinet { namespace http_ {
 
 namespace ouinet { namespace cache {
 
+// Ouinet-specific declarations for injection using HTTP signatures
+// ----------------------------------------------------------------
+
 // Get an extended version of the given response head
 // with an additional signature header and
 // other headers required to support that signature and
@@ -123,7 +126,9 @@ http_injection_verify( const http::response_header<>&
 std::string
 http_key_id_for_injection(const ouinet::util::Ed25519PublicKey&);
 
-// Get the body digest as per RFC 3230 and RFC 5843.
+
+// Body digest computation as per RFC 3230 and RFC 5843
+// ----------------------------------------------------
 //
 // Example:
 //
@@ -131,6 +136,13 @@ http_key_id_for_injection(const ouinet::util::Ed25519PublicKey&);
 //
 std::string
 http_digest(const http::response<http::dynamic_body>&);
+
+
+// Generic HTTP signatures
+// -----------------------
+//
+// These provide access to an implementation of
+// <https://tools.ietf.org/html/draft-cavage-http-signatures-11>.
 
 // Compute a signature as per draft-cavage-http-signatures-11.
 std::string  // use this to enable setting the time stamp (e.g. for tests)
