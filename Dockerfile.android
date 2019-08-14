@@ -1,5 +1,6 @@
 FROM registry.gitlab.com/equalitie/ouinet
 RUN apt-get install -qqy --no-install-recommends \
       libncurses5 \
-      unzip
+      unzip \
+      clang
 ENV UNZIPOPT=-q
