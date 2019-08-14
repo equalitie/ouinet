@@ -42,6 +42,11 @@ struct Announcer::Loop {
     Entries entries;
     Cancel _cancel;
     Cancel _timer_cancel;
+    log_level_t log_level = INFO;
+
+    void set_log_level(log_level_t l) { log_level = l; }
+
+    bool log_debug() const { return log_level <= DEBUG; }
 
     Loop(shared_ptr<bt::MainlineDht> dht)
         : ios(dht->get_io_service())
@@ -70,6 +75,24 @@ struct Announcer::Loop {
         if (e.update + 10min < now) return 0s;
         if (e.update_attempt + 5min < now) return 0s;
         return 5min - (now - e.update_attempt);
+    }
+
+    void print_entries() const {
+        auto now = Clock::now();
+        auto secs = [&] (Clock::time_point t) -> float {
+            using namespace std::chrono;
+            return duration_cast<milliseconds>(now - t).count() / 1000.f;
+        };
+
+        cerr << "===================================" << "\n";
+        cerr << "BEP5 HTTP announcer entries:" << "\n";
+        for (auto& ep : entries) {
+            auto& e = ep.first;
+            cerr << "> " << e.key << " -> " << e.infohash
+                << " update:" << secs(e.update) << "s ago"
+                << " update_attempt:" << secs(e.update_attempt) << "s ago\n";
+        }
+        cerr << "===================================" << "\n";
     }
 
     Entries::iterator pick_entry(Cancel& cancel, asio::yield_context yield)
@@ -115,6 +138,8 @@ struct Announcer::Loop {
             sys::error_code ec;
             auto ei = pick_entry(cancel, yield[ec]);
 
+            if (log_debug()) { print_entries(); }
+
             if (cancel) return;
             assert(!ec);
             ec = {};
@@ -146,9 +171,11 @@ struct Announcer::Loop {
     void announce(Entry& e, Cancel& cancel, asio::yield_context yield)
     {
         LOG_DEBUG("Announcing ", e.key);
+        LOG_INFO("Announcing ", e.key);
         sys::error_code ec;
         dht->tracker_announce(e.infohash, boost::none, cancel, yield[ec]);
         LOG_DEBUG("Announcing ended ", e.key, " ec:", ec.message());
+        LOG_INFO("Announcing ended ", e.key, " ec:", ec.message());
         return or_throw(yield, ec);
     }
 
@@ -166,6 +193,11 @@ Announcer::Announcer(std::shared_ptr<bittorrent::MainlineDht> dht)
 void Announcer::add(Key key)
 {
     _loop->add(move(key));
+}
+
+void Announcer::set_log_level(log_level_t l)
+{
+    _loop->set_log_level(l);
 }
 
 Announcer::~Announcer() {}

@@ -3,6 +3,7 @@
 #include "../../util/atomic_file.h"
 #include "../../util/bytes.h"
 #include "../../util/file_io.h"
+#include "../../util/set_io.h"
 #include "../../bittorrent/dht.h"
 #include "../../bittorrent/is_martian.h"
 #include "../../ouiservice/utp.h"
@@ -32,6 +33,10 @@ struct Client::Impl {
     Cancel cancel;
     Announcer announcer;
     map<string, udp::endpoint> peer_cache;
+    log_level_t log_level = INFO;
+
+    bool log_debug() const { return log_level <= DEBUG; }
+    bool log_info()  const { return log_level <= INFO; }
 
     Impl(shared_ptr<bt::MainlineDht> dht_, fs::path cache_dir)
         : ios(dht_->get_io_service())
@@ -154,11 +159,21 @@ struct Client::Impl {
 
         if (peer_i != peer_cache.end()) {
             sys::error_code ec;
+
+            if (log_debug()) {
+                yield.log("Bep5Http: Connecting to cache client: ", peer_i->second);
+            }
+
             auto con = connect(peer_i->second, cancel, yield[ec]);
+
+            if (log_debug()) {
+                yield.log("Bep5Http: Connect to cache client done, ec:", ec.message());
+            }
 
             if (cancel) return or_throw<Session>(yield, err::operation_aborted);
 
             if (!ec) {
+
                 auto ret = load_from_connection(key, con, cancel, yield[ec]);
                 assert(ec || ret.response_header());
 
@@ -175,13 +190,36 @@ struct Client::Impl {
 
         sys::error_code ec;
 
-        auto endpoints = dht->tracker_get_peers(util::sha1_digest(dht_key(key)), cancel, yield[ec]);
+        bt::NodeID infohash = util::sha1_digest(dht_key(key));
+
+        if (log_debug()) {
+            yield.log("Bep5Http: DHT BEP5 lookup:");
+            yield.log("    dht_key: ", dht_key(key));
+            yield.log("    infohash:", infohash);
+        }
+
+        auto endpoints = dht->tracker_get_peers(infohash, cancel, yield[ec]);
+
+        if (log_debug()) {
+            yield.log("Bep5Http: DHT BEP5 lookup result ec:", ec.message(),
+                    " eps:", endpoints);
+        }
 
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw<Session>(yield, ec);
 
         udp::endpoint con_ep;
+
+        if (log_debug()) {
+            yield.log("Bep5Http: Connecting to clients: ", endpoints);
+        }
+
         auto con = connect(tcp_to_udp(endpoints), con_ep, cancel, yield[ec]);
+
+        if (log_debug()) {
+            yield.log("Bep5Http: Connect to clients done, ec:", ec.message(),
+                " chosen ep:", con_ep);
+        }
 
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw<Session>(yield, ec);
@@ -452,6 +490,14 @@ struct Client::Impl {
     void stop() {
         cancel();
     }
+
+    void set_log_level(log_level_t l) {
+        cerr << "Setting Bep5Http Cache log level to " << l << "\n";
+        log_level = l;
+        announcer.set_log_level(l);
+    }
+
+    log_level_t get_log_level() const { return log_level; }
 };
 
 /* static */
@@ -492,6 +538,16 @@ void Client::store( const std::string& key
                   , asio::yield_context yield)
 {
     _impl->store(key, s, cancel, yield);
+}
+
+void Client::set_log_level(log_level_t l)
+{
+    _impl->set_log_level(l);
+}
+
+log_level_t Client::get_log_level() const
+{
+    return _impl->get_log_level();
 }
 
 Client::~Client()

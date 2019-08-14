@@ -11,6 +11,7 @@
 #include "bittorrent/mutable_data.h"
 #include "cache/bep44_ipfs/descidx.h"
 #include "cache/bep44_ipfs/http_desc.h"
+#include "cache/bep5_http/client.h"
 
 #include <boost/optional/optional_io.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
@@ -133,6 +134,7 @@ static ostream& operator<<(ostream& os, const ClientFrontEnd::Task& task) {
 
 ClientFrontEnd::ClientFrontEnd()
     : _log_level_input(new Input<log_level_t>("Log level", "loglevel", { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT }, logger.get_threshold()))
+    , _bep5_log_level_input(new Input<log_level_t>("Bep5Http log level", "bep5_loglevel", { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT }, INFO))
 {}
 
 void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, stringstream& ss
@@ -334,7 +336,8 @@ void ClientFrontEnd::handle_insert_bep44( const Request& req, Response& res, str
 
 void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , const Request& req, Response& res, stringstream& ss
-                                  , bep44_ipfs::CacheClient* cache_client)
+                                  , bep44_ipfs::CacheClient* bep44_cache
+                                  , cache::bep5_http::Client* bep5_cache)
 {
     res.set(http::field::content_type, "text/html");
 
@@ -342,6 +345,13 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
     if (_log_level_input->update(target)) {
         logger.set_threshold(_log_level_input->current_value);
+    }
+
+    if (bep5_cache) {
+        _bep5_log_level_input->current_value = bep5_cache->get_log_level();
+        if (_bep5_log_level_input->update(target)) {
+            bep5_cache->set_log_level(_bep5_log_level_input->current_value);
+        }
     }
 
     if (target.find('?') != string::npos) {
@@ -431,8 +441,12 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         ss << "        </ul>\n";
     }
 
-    if (cache_client) {
-        ss << "        Our IPFS ID (IPNS): " << cache_client->ipfs_id() << "<br>\n";
+    if (bep5_cache) {
+        ss << *_bep5_log_level_input;
+    }
+
+    if (bep44_cache) {
+        ss << "        Our IPFS ID (IPNS): " << bep44_cache->ipfs_id() << "<br>\n";
         ss << "        <h2>Index</h2>\n";
         ss << "        Please use the box below to query the descriptor of an arbitrary URI without fetching the associated content.<br>\n";
 
@@ -481,7 +495,8 @@ void ClientFrontEnd::handle_status( ClientConfig& config
 
 Response ClientFrontEnd::serve( ClientConfig& config
                               , const Request& req
-                              , bep44_ipfs::CacheClient* cache_client
+                              , bep44_ipfs::CacheClient* bep44_cache
+                              , cache::bep5_http::Client* bep5_cache
                               , const CACertificate& ca
                               , Yield yield)
 {
@@ -500,17 +515,17 @@ Response ClientFrontEnd::serve( ClientConfig& config
         handle_ca_pem(req, res, ss, ca);
     } else if (path == "/api/upload") {
         sys::error_code ec_;  // shouldn't throw, but just in case
-        handle_upload(config, req, res, ss, cache_client, yield[ec_]);
+        handle_upload(config, req, res, ss, bep44_cache, yield[ec_]);
     } else if (path == "/api/descriptor") {
         sys::error_code ec_;  // shouldn't throw, but just in case
-        handle_descriptor(config, req, res, ss, cache_client, yield[ec_]);
+        handle_descriptor(config, req, res, ss, bep44_cache, yield[ec_]);
     } else if (path == "/api/insert/bep44") {
         sys::error_code ec_;  // shouldn't throw, but just in case
-        handle_insert_bep44(req, res, ss, cache_client, yield[ec_]);
+        handle_insert_bep44(req, res, ss, bep44_cache, yield[ec_]);
     } else if (path == "/api/status") {
-        handle_status(config, req, res, ss, cache_client);
+        handle_status(config, req, res, ss, bep44_cache);
     } else {
-        handle_portal(config, req, res, ss, cache_client);
+        handle_portal(config, req, res, ss, bep44_cache, bep5_cache);
     }
 
     Response::body_type::reader reader(res, res.body());

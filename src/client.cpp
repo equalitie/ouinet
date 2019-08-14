@@ -372,6 +372,7 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
     return _front_end.serve( _config
                            , rq
                            , _bep44_ipfs_cache.get()
+                           , _bep5_http_cache.get()
                            , *_ca_certificate
                            , yield.tag("serve_frontend"));
 }
@@ -1479,6 +1480,7 @@ void Client::State::start()
                         auto rs = _front_end.serve( _config
                                                   , rq
                                                   , _bep44_ipfs_cache.get()
+                                                  , _bep5_http_cache.get()
                                                   , *_ca_certificate
                                                   , yield[ec]);
                         if (ec) return;

@@ -15,6 +15,10 @@ namespace ouinet { namespace bep44_ipfs {
     class CacheClient;
 } }
 
+namespace ouinet { namespace cache { namespace bep5_http {
+    class Client;
+} } }
+
 namespace ouinet {
 
 class GenericStream;
@@ -60,7 +64,9 @@ public:
 public:
     Response serve( ClientConfig&
                   , const http::request<http::string_body>&
-                  , bep44_ipfs::CacheClient*, const CACertificate&
+                  , bep44_ipfs::CacheClient*
+                  , cache::bep5_http::Client*
+                  , const CACertificate&
                   , Yield yield);
 
     Task notify_task(const std::string& task_name)
@@ -78,6 +84,7 @@ private:
     bool _show_pending_tasks = false;
 
     std::unique_ptr<Input<log_level_t>> _log_level_input;
+    std::unique_ptr<Input<log_level_t>> _bep5_log_level_input;
 
     boost::intrusive::list
         < Task
@@ -102,7 +109,8 @@ private:
                       , const Request&
                       , Response&
                       , std::stringstream&
-                      , bep44_ipfs::CacheClient*);
+                      , bep44_ipfs::CacheClient*
+                      , cache::bep5_http::Client*);
 
     void handle_status( ClientConfig&
                       , const Request&
