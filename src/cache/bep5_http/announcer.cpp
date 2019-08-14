@@ -35,9 +35,11 @@ struct Entry {
 //--------------------------------------------------------------------
 // Loop
 struct Announcer::Loop {
+    using Entries = util::AsyncQueue<Entry>;
+
     asio::io_service& ios;
     shared_ptr<bt::MainlineDht> dht;
-    util::AsyncQueue<Entry> entries;
+    Entries entries;
     Cancel _cancel;
     Cancel _timer_cancel;
 
@@ -70,30 +72,28 @@ struct Announcer::Loop {
         return 5min - (now - e.update_attempt);
     }
 
-    Entry pick_entry(Cancel& cancel, asio::yield_context yield)
+    Entries::iterator pick_entry(Cancel& cancel, asio::yield_context yield)
     {
+        auto end = entries.end();
+
         while (!cancel) {
             if (entries.empty()) {
                 sys::error_code ec;
                 entries.async_wait_for_push(cancel, yield[ec]);
                 if (cancel) ec = asio::error::operation_aborted;
-                if (ec) return or_throw<Entry>(yield, ec);
+                if (ec) return or_throw(yield, ec, end);
             }
 
-            auto& f = entries.front();
+            auto f = entries.begin();
 
-            auto d = next_update_after(f);
+            auto d = next_update_after(f->first);
 
-            if (d == 0s) {
-                Entry e = std::move(f);
-                entries.pop();
-                return e;
-            }
+            if (d == 0s) { return f; }
 
             async_sleep(ios, d, _timer_cancel, yield);
         }
 
-        return or_throw<Entry>(yield, asio::error::operation_aborted);
+        return or_throw(yield, asio::error::operation_aborted, end);
     }
 
     void start()
@@ -113,31 +113,30 @@ struct Announcer::Loop {
 
         while (!cancel) {
             sys::error_code ec;
-            auto e = pick_entry(cancel, yield[ec]);
+            auto ei = pick_entry(cancel, yield[ec]);
 
             if (cancel) return;
             assert(!ec);
             ec = {};
 
-            e.update_attempt = Clock::now();
+            ei->first.update_attempt = Clock::now();
 
             // Try inserting three times before moving to the next entry
             bool success = false;
             for (int i = 0; i != 3; ++i) {
-                announce(e, cancel, yield[ec]);
+                announce(ei->first, cancel, yield[ec]);
                 if (!ec) { success = true; break; }
                 async_sleep(ios, chrono::seconds(1+i), cancel, yield[ec]);
                 if (cancel) return;
                 ec = {};
             }
 
-            if (!success) {
-                entries.push_back(move(e));
-                continue;
+            if (success) {
+                ei->first.update = Clock::now();
             }
 
-            e.update = Clock::now();
-
+            Entry e = move(ei->first);
+            entries.erase(ei);
             entries.push_back(move(e));
         }
 
