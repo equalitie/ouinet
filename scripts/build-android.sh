@@ -289,7 +289,7 @@ function maybe_install_gradle {
     echo need gradle? $NEED_GRADLE
 
     if [ $NEED_GRADLE == true ]; then
-        local GRADLE=gradle-4.6
+        local GRADLE=gradle-5.5.1
         local GRADLE_ZIP=$GRADLE-bin.zip
         if [ ! -d "$GRADLE" ]; then
             if [ ! -f $GRADLE_ZIP ]; then
