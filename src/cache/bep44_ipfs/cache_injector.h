@@ -14,7 +14,7 @@
 #include "../cache_entry.h"
 
 namespace asio_ipfs { class node; }
-namespace ouinet { namespace bittorrent { class MainlineDht; class MutableDataItem; }}
+namespace ouinet { namespace bittorrent { class MainlineDht; struct MutableDataItem; }}
 
 namespace ouinet {
     
@@ -24,7 +24,7 @@ namespace bep44_ipfs {
 
 class Bep44InjectorIndex;
 class Publisher;
-class Descriptor;
+struct Descriptor;
 
 class CacheInjector {
 public:

@@ -39,7 +39,6 @@ private:
     std::list<std::unique_ptr<State>> _states;
     util::AsyncQueue<GenericStream> _accept_queue;
     Cancel _cancel;
-    bool _log_debug = false;
 };
 
 class Bep5Client : public OuiServiceImplementationClient
