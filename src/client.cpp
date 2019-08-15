@@ -115,6 +115,7 @@ public:
 
     void stop() {
         _bep44_ipfs_cache = nullptr;
+        _bep5_http_cache = nullptr;
         _shutdown_signal();
         if (_injector) _injector->stop();
         if (_bt_dht) {

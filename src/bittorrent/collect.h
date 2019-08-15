@@ -13,9 +13,11 @@ void collect(
     asio::io_service& ios,
     CandidateSet first_candidates,
     Evaluate&& evaluate,
-    Cancel& cancel_signal,
+    Cancel& cancel_signal_,
     asio::yield_context yield
 ) {
+    Cancel cancel_signal(cancel_signal_);
+
     using namespace std;
     using dht::NodeContact;
 

@@ -36,6 +36,9 @@ void UtpOuiServiceServer::start_listen(asio::yield_context yield)
         while (!cancel) {
             sys::error_code ec;
             asio_utp::socket s(_ios);
+
+            auto cancel_con = cancel.connect([&] { s.close(); });
+
             s.bind(_udp_multiplexer->local_endpoint(), ec);
             assert(!ec);
             s.async_accept(yield[ec]);

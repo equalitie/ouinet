@@ -1500,6 +1500,9 @@ dht::DhtNode::bootstrap_single( std::string bootstrap_domain
 
 void dht::DhtNode::bootstrap(asio::yield_context yield)
 {
+    // Create on heap so that the member one isn't used after ~DhtNode
+    Cancel cancel(_cancel);
+
     sys::error_code ec;
 
     asio::ip::udp::endpoint my_endpoint;
@@ -1528,7 +1531,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
 
                 if (!ec) { done = true; break; }
             }
-            if (!async_sleep(_ios, std::chrono::seconds(10), _cancel, yield))
+            if (!async_sleep(_ios, std::chrono::seconds(10), cancel, yield))
                 return or_throw(yield, asio::error::operation_aborted);
         }
         while (!done);
@@ -1561,7 +1564,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
     /*
      * Lookup our own ID, constructing a basic path to ourselves.
      */
-    find_closest_nodes(_node_id, _cancel, yield[ec]);
+    find_closest_nodes(_node_id, cancel, yield[ec]);
 
     if (ec) return or_throw(yield, ec);
 
@@ -2535,13 +2538,20 @@ void MainlineDht::wait_all_ready(
     Cancel& cancel_signal,
     asio::yield_context yield
 ) {
-    auto cancelled = _cancel.connect([&] {
-        cancel_signal();
-    });
+    assert(!cancel_signal);
+    if (cancel_signal) return;
+
+    Cancel c(cancel_signal);
+    auto cancelled = _cancel.connect([&] { c(); });
+
     sys::error_code ec;
-    while (!ec && !all_ready()) {
-        async_sleep(_ios, std::chrono::milliseconds(200), cancel_signal, yield[ec]);
+
+    while (!c && !all_ready()) {
+        async_sleep(_ios, std::chrono::milliseconds(200), c, yield[ec]);
     }
+
+    if (c) ec = asio::error::operation_aborted;
+
     return or_throw(yield, ec);
 }
 
