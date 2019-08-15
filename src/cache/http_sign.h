@@ -118,7 +118,12 @@ http_injection_trailer( const http::response_header<>& rsh
 // If such a signature exists, return true or false depending on
 // whether the head matches the signature.
 // If any other error happens, set the error code.
-bool
+//
+// If verification is successful,
+// also indicate which other extra headers are
+// present in the head but not covered by the signature
+// (extra field names and values point to the given head).
+std::pair<bool, http::fields>
 http_injection_verify( const http::response_header<>&
                      , const ouinet::util::Ed25519PublicKey&
                      , sys::error_code&);

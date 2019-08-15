@@ -98,7 +98,7 @@ http_injection_trailer( const http::response_header<>& rsh
     return rst;
 }
 
-bool
+std::pair<bool, http::fields>
 http_injection_verify( const http::response_header<>& rsh
                      , const util::Ed25519PublicKey& pk
                      , sys::error_code& ec)
@@ -133,16 +133,15 @@ http_injection_verify( const http::response_header<>& rsh
             continue;
         }
         sig_found = true;
-        bool sig_ok;
-        std::tie(sig_ok, std::ignore) = sig->verify(to_verify, pk); // TODO: handle extra headers
-        if (!sig_ok)
+        auto ret = sig->verify(to_verify, pk);
+        if (!ret.first)
             continue;  // head does not match signature
-        return true;
+        return ret;
     }
 
     if (!sig_found)
         ec = asio::error::invalid_argument;
-    return false;
+    return {false, {}};
 }
 
 std::string
