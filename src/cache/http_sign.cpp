@@ -103,16 +103,27 @@ http_injection_verify( const http::response_header<>& rsh
                      , const util::Ed25519PublicKey& pk
                      , sys::error_code& ec)
 {
+    // Put together the head to be verified:
+    // given head, minus chunking (and related headers), and signatures themselves.
+    // Collect signatures found in the meanwhile.
+    http::response_header<> to_verify, sig_headers;
+    to_verify = without_framing(rsh);
+    for (const auto& hdr : rsh) {
+        auto hn = hdr.name_string();
+        if (boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx)) {
+            to_verify.erase(hn);
+            sig_headers.insert(hdr.name(), hn, hdr.value());
+        }
+    }
+
     auto keyId = http_key_id_for_injection(pk);  // TODO: cache this
     bool sig_found = false;
 
-    for (auto& hdr : rsh) {
-        auto hn = hdr.name_string();
-        if (!boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx))
-            continue;  // not a signature header
+    // Go over signature headers: parse, select, verify, until one matches.
+    for (auto& hdr : sig_headers) {
         auto sig = HttpSignature::parse(hdr.value());
         if (!sig) {
-            LOG_WARN("Invalid HTTP signature in header: ", hn);
+            LOG_WARN("Invalid HTTP signature in header: ", hdr.name_string());
             continue;  // not with a usable value
         }
         if (sig->keyId != keyId)
@@ -123,7 +134,7 @@ http_injection_verify( const http::response_header<>& rsh
         }
         sig_found = true;
         bool sig_ok;
-        std::tie(sig_ok, std::ignore) = sig->verify(rsh, pk); // TODO: handle extra headers
+        std::tie(sig_ok, std::ignore) = sig->verify(to_verify, pk); // TODO: handle extra headers
         if (!sig_ok)
             continue;  // head does not match signature
         return true;
