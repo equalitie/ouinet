@@ -139,11 +139,11 @@ struct Announcer::Loop {
             sys::error_code ec;
             auto ei = pick_entry(cancel, yield[ec]);
 
-            if (log_debug()) { print_entries(); }
-
             if (cancel) return;
             assert(!ec);
             ec = {};
+
+            if (log_debug()) { print_entries(); }
 
             ei->first.update_attempt = Clock::now();
 
@@ -171,12 +171,17 @@ struct Announcer::Loop {
 
     void announce(Entry& e, Cancel& cancel, asio::yield_context yield)
     {
-        LOG_DEBUG("Announcing ", e.key);
-        LOG_INFO("Announcing ", e.key);
+        if (log_debug()) {
+            cerr << "Announcing " << e.key << "\n";
+        }
+
         sys::error_code ec;
         dht->tracker_announce(e.infohash, boost::none, cancel, yield[ec]);
-        LOG_DEBUG("Announcing ended ", e.key, " ec:", ec.message());
-        LOG_INFO("Announcing ended ", e.key, " ec:", ec.message());
+
+        if (log_debug()) {
+            cerr << "Announcing ended " << e.key << " ec:" << ec.message() << "\n";
+        }
+
         return or_throw(yield, ec);
     }
 
