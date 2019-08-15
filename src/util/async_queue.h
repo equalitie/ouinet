@@ -44,7 +44,7 @@ public:
         sys::error_code ec;
 
         while (_queue.size() >= _max_size) {
-            _tx_cv.wait(yield[ec]);
+            _tx_cv.wait(cancel, yield[ec]);
             if (cancel) ec = asio::error::operation_aborted;
             if (ec) return or_throw(yield, ec);
         }
@@ -86,7 +86,7 @@ public:
 
         while (i != end) {
             while (_queue.size() >= _max_size) {
-                _tx_cv.wait(yield[ec]);
+                _tx_cv.wait(cancel, yield[ec]);
                 if (cancel) ec = asio::error::operation_aborted;
                 if (ec) return or_throw(yield, ec);
             }
@@ -117,7 +117,7 @@ public:
         sys::error_code ec;
 
         while (_queue.empty()) {
-            _rx_cv.wait(yield[ec]);
+            _rx_cv.wait(cancel, yield[ec]);
             if (cancel) ec = asio::error::operation_aborted;
             if (ec) return or_throw<T>(yield, ec);
         }
@@ -141,7 +141,7 @@ public:
         sys::error_code ec;
 
         while (_queue.empty()) {
-            _rx_cv.wait(yield[ec]);
+            _rx_cv.wait(cancel, yield[ec]);
             if (cancel) ec = asio::error::operation_aborted;
             if (ec) return or_throw<size_t>(yield, ec, 0);
         }
