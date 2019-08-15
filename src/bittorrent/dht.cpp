@@ -1500,6 +1500,9 @@ dht::DhtNode::bootstrap_single( std::string bootstrap_domain
 
 void dht::DhtNode::bootstrap(asio::yield_context yield)
 {
+    // Create on heap so that the member one isn't used after ~DhtNode
+    Cancel cancel(_cancel);
+
     sys::error_code ec;
 
     asio::ip::udp::endpoint my_endpoint;
@@ -1528,7 +1531,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
 
                 if (!ec) { done = true; break; }
             }
-            if (!async_sleep(_ios, std::chrono::seconds(10), _cancel, yield))
+            if (!async_sleep(_ios, std::chrono::seconds(10), cancel, yield))
                 return or_throw(yield, asio::error::operation_aborted);
         }
         while (!done);
@@ -1561,7 +1564,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
     /*
      * Lookup our own ID, constructing a basic path to ourselves.
      */
-    find_closest_nodes(_node_id, _cancel, yield[ec]);
+    find_closest_nodes(_node_id, cancel, yield[ec]);
 
     if (ec) return or_throw(yield, ec);
 
