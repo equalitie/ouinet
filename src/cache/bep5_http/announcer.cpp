@@ -3,6 +3,7 @@
 #include "../../logger.h"
 #include "../../async_sleep.h"
 #include "../../bittorrent/node_id.h"
+#include <boost/utility/string_view.hpp>
 
 using namespace std;
 using namespace ouinet;
@@ -17,7 +18,7 @@ using Clock = chrono::steady_clock;
 // Entry
 
 struct Entry {
-    string debug_key;
+    string key;
     bt::NodeID infohash;
 
     Clock::time_point update_attempt;
@@ -26,19 +27,26 @@ struct Entry {
     Entry() = default;
 
     Entry(Announcer::Key key)
-        : debug_key(move(key))
-        , infohash(util::sha1_digest(debug_key))
+        : key(move(key))
+        , infohash(util::sha1_digest(this->key))
     { }
 };
 
 //--------------------------------------------------------------------
 // Loop
 struct Announcer::Loop {
+    using Entries = util::AsyncQueue<Entry>;
+
     asio::io_service& ios;
     shared_ptr<bt::MainlineDht> dht;
-    util::AsyncQueue<Entry> entries;
+    Entries entries;
     Cancel _cancel;
     Cancel _timer_cancel;
+    log_level_t log_level = INFO;
+
+    void set_log_level(log_level_t l) { log_level = l; }
+
+    bool log_debug() const { return log_level <= DEBUG; }
 
     Loop(shared_ptr<bt::MainlineDht> dht)
         : ios(dht->get_io_service())
@@ -46,7 +54,16 @@ struct Announcer::Loop {
         , entries(ios)
     { }
 
+    bool already_has(const Key& key) const {
+        for (auto& e : entries) {
+            if (e.first.key == key) return true;
+        }
+        return false;
+    }
+
     void add(Key key) {
+        if (already_has(key)) return;
+
         entries.push_front(Entry(move(key)));
         _timer_cancel();
         _timer_cancel = Cancel();
@@ -60,30 +77,46 @@ struct Announcer::Loop {
         return 5min - (now - e.update_attempt);
     }
 
-    Entry pick_entry(Cancel& cancel, asio::yield_context yield)
+    void print_entries() const {
+        auto now = Clock::now();
+        auto secs = [&] (Clock::time_point t) -> float {
+            using namespace std::chrono;
+            return duration_cast<milliseconds>(now - t).count() / 1000.f;
+        };
+
+        cerr << "===================================" << "\n";
+        cerr << "BEP5 HTTP announcer entries:" << "\n";
+        for (auto& ep : entries) {
+            auto& e = ep.first;
+            cerr << "> " << e.key << " -> " << e.infohash
+                << " update:" << secs(e.update) << "s ago"
+                << " update_attempt:" << secs(e.update_attempt) << "s ago\n";
+        }
+        cerr << "===================================" << "\n";
+    }
+
+    Entries::iterator pick_entry(Cancel& cancel, asio::yield_context yield)
     {
+        auto end = entries.end();
+
         while (!cancel) {
             if (entries.empty()) {
                 sys::error_code ec;
                 entries.async_wait_for_push(cancel, yield[ec]);
                 if (cancel) ec = asio::error::operation_aborted;
-                if (ec) return or_throw<Entry>(yield, ec);
+                if (ec) return or_throw(yield, ec, end);
             }
 
-            auto& f = entries.front();
+            auto f = entries.begin();
 
-            auto d = next_update_after(f);
+            auto d = next_update_after(f->first);
 
-            if (d == 0s) {
-                Entry e = std::move(f);
-                entries.pop();
-                return e;
-            }
+            if (d == 0s) { return f; }
 
             async_sleep(ios, d, _timer_cancel, yield);
         }
 
-        return or_throw<Entry>(yield, asio::error::operation_aborted);
+        return or_throw(yield, asio::error::operation_aborted, end);
     }
 
     void start()
@@ -103,31 +136,32 @@ struct Announcer::Loop {
 
         while (!cancel) {
             sys::error_code ec;
-            auto e = pick_entry(cancel, yield[ec]);
+            auto ei = pick_entry(cancel, yield[ec]);
+
+            if (log_debug()) { print_entries(); }
 
             if (cancel) return;
             assert(!ec);
             ec = {};
 
-            e.update_attempt = Clock::now();
+            ei->first.update_attempt = Clock::now();
 
             // Try inserting three times before moving to the next entry
             bool success = false;
             for (int i = 0; i != 3; ++i) {
-                announce(e, cancel, yield[ec]);
+                announce(ei->first, cancel, yield[ec]);
                 if (!ec) { success = true; break; }
                 async_sleep(ios, chrono::seconds(1+i), cancel, yield[ec]);
                 if (cancel) return;
                 ec = {};
             }
 
-            if (!success) {
-                entries.push_back(move(e));
-                continue;
+            if (success) {
+                ei->first.update = Clock::now();
             }
 
-            e.update = Clock::now();
-
+            Entry e = move(ei->first);
+            entries.erase(ei);
             entries.push_back(move(e));
         }
 
@@ -136,10 +170,12 @@ struct Announcer::Loop {
 
     void announce(Entry& e, Cancel& cancel, asio::yield_context yield)
     {
-        LOG_DEBUG("Announcing ", e.debug_key);
+        LOG_DEBUG("Announcing ", e.key);
+        LOG_INFO("Announcing ", e.key);
         sys::error_code ec;
         dht->tracker_announce(e.infohash, boost::none, cancel, yield[ec]);
-        LOG_DEBUG("Announcing ended ", e.debug_key, " ec:", ec.message());
+        LOG_DEBUG("Announcing ended ", e.key, " ec:", ec.message());
+        LOG_INFO("Announcing ended ", e.key, " ec:", ec.message());
         return or_throw(yield, ec);
     }
 
@@ -157,6 +193,11 @@ Announcer::Announcer(std::shared_ptr<bittorrent::MainlineDht> dht)
 void Announcer::add(Key key)
 {
     _loop->add(move(key));
+}
+
+void Announcer::set_log_level(log_level_t l)
+{
+    _loop->set_log_level(l);
 }
 
 Announcer::~Announcer() {}

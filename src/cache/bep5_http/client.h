@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../abstract_cache.h"
+#include "../../logger.h"
 #include <boost/filesystem.hpp>
 
 namespace ouinet {
@@ -32,6 +33,9 @@ public:
               , asio::yield_context) override;
 
     ~Client();
+
+    void        set_log_level(log_level_t);
+    log_level_t get_log_level() const;
 
 private:
     Client(std::unique_ptr<Impl>);

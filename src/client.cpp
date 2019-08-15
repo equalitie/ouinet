@@ -372,6 +372,7 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
     return _front_end.serve( _config
                            , rq
                            , _bep44_ipfs_cache.get()
+                           , _bep5_http_cache.get()
                            , *_ca_certificate
                            , yield.tag("serve_frontend"));
 }
@@ -778,7 +779,18 @@ public:
 
                     auto s = cc.fetch(rq, fresh_ec, cache_ec, cancel, yield[ec]);
 
+                    if (log_transactions()) {
+                        yield.log("cc.fetch ec:", ec.message(),
+                                " fresh_ec:", fresh_ec.message(),
+                                " cache_ec:", cache_ec.message());
+                    }
+
                     if (ec) break;
+
+                    if (log_transactions()) {
+                        yield.log("Response header:");
+                        yield.log(*s.response_header());
+                    }
 
                     assert(!fresh_ec || !cache_ec); // At least one success
                     assert( fresh_ec ||  cache_ec); // One needs to fail
@@ -787,43 +799,38 @@ public:
                         return false;
                     }
 
-                    if (!fresh_ec) {
-                        using Fork = stream::Fork<GenericStream>;
+                    using Fork = stream::Fork<GenericStream>;
 
-                        tcp::socket source(ios), sink(ios);
-                        tie(source, sink) = make_connection(ios, yield);
+                    tcp::socket source(ios), sink(ios);
+                    tie(source, sink) = make_connection(ios, yield);
 
-                        Fork fork(move(source));
-                        Fork::Tine src1(fork), src2(fork);
+                    Fork fork(move(source));
+                    Fork::Tine src1(fork), src2(fork);
 
-                        WaitCondition wc(ios);
+                    WaitCondition wc(ios);
 
-                        asio::spawn(ios, [
-                            &,
-                            lock = wc.lock()
-                        ] (asio::yield_context yield_) {
-                          auto y = yield.detach(yield_);
-                          Session s1(move(src1));
-                          sys::error_code ec;
-                          store(rq, s1, cancel, y[ec]);
-                        });
+                    asio::spawn(ios, [
+                        &,
+                        lock = wc.lock()
+                    ] (asio::yield_context yield_) {
+                      auto y = yield.detach(yield_);
+                      Session s1(move(src1));
+                      sys::error_code ec;
+                      store(rq, s1, cancel, y[ec]);
+                    });
 
-                        asio::spawn(ios, [
-                            &,
-                            lock = wc.lock()
-                        ] (asio::yield_context yield) {
-                            Session s2(move(src2));
-                            sys::error_code ec;
-                            s2.flush_response(con, cancel, yield[ec]);
-                        });
+                    asio::spawn(ios, [
+                        &,
+                        lock = wc.lock()
+                    ] (asio::yield_context yield_) {
+                        Session s2(move(src2));
+                        sys::error_code ec;
+                        s2.flush_response(con, cancel, yield_[ec]);
+                    });
 
-                        s.flush_response(sink, cancel, yield[ec]);
+                    s.flush_response(sink, cancel, yield[ec]);
 
-                        wc.wait(yield);
-                    }
-                    else {
-                      s.flush_response(con, cancel, yield[ec]);
-                    }
+                    wc.wait(yield);
 
                     return !ec && rq.keep_alive() && s.keep_alive();
                 }
@@ -1453,6 +1460,8 @@ void Client::State::start()
                   auto ep = _config.front_end_endpoint();
                   if (ep == tcp::endpoint()) return;
 
+                  LOG_INFO("Serving front end on ", ep);
+
                   listen_tcp( yield[ec]
                             , ep
                             , [this, self]
@@ -1468,6 +1477,7 @@ void Client::State::start()
                         auto rs = _front_end.serve( _config
                                                   , rq
                                                   , _bep44_ipfs_cache.get()
+                                                  , _bep5_http_cache.get()
                                                   , *_ca_certificate
                                                   , yield[ec]);
                         if (ec) return;

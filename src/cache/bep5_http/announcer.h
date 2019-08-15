@@ -2,6 +2,7 @@
 
 #include "../../bittorrent/bep5_announcer.h"
 #include "../../util/hash.h"
+#include "../../logger.h"
 #include <memory>
 
 namespace ouinet { namespace cache { namespace bep5_http {
@@ -18,6 +19,8 @@ public:
     void add(Key key);
 
     ~Announcer();
+
+    void set_log_level(log_level_t);
 
 private:
     std::unique_ptr<Loop> _loop;
