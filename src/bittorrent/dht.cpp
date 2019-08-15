@@ -2538,13 +2538,20 @@ void MainlineDht::wait_all_ready(
     Cancel& cancel_signal,
     asio::yield_context yield
 ) {
-    auto cancelled = _cancel.connect([&] {
-        cancel_signal();
-    });
+    assert(!cancel_signal);
+    if (cancel_signal) return;
+
+    Cancel c(cancel_signal);
+    auto cancelled = _cancel.connect([&] { c(); });
+
     sys::error_code ec;
-    while (!ec && !all_ready()) {
-        async_sleep(_ios, std::chrono::milliseconds(200), cancel_signal, yield[ec]);
+
+    while (!c && !all_ready()) {
+        async_sleep(_ios, std::chrono::milliseconds(200), c, yield[ec]);
     }
+
+    if (c) ec = asio::error::operation_aborted;
+
     return or_throw(yield, ec);
 }
 
