@@ -70,6 +70,8 @@ struct Client::Impl {
     {
         auto srv = make_unique<ouiservice::UtpOuiServiceServer>(ios, ep);
 
+        auto cancel_con = cancel.connect([&] { srv->stop_listen(); });
+
         sys::error_code ec;
         srv->start_listen(yield[ec]);
 
@@ -80,7 +82,7 @@ struct Client::Impl {
             return;
         }
 
-        while (true) {
+        while (!cancel) {
             sys::error_code ec;
 
             GenericStream con = srv->accept(yield[ec]);
