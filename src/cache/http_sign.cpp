@@ -376,7 +376,7 @@ HttpSignature::parse(boost::string_view sig)
     return {std::move(hs)};
 }
 
-std::pair<bool, HttpSignature::hdr_set>
+std::pair<bool, http::fields>
 HttpSignature::verify( const http::response_header<>& rsh
                      , const util::Ed25519PublicKey& pk)
 {
@@ -402,10 +402,12 @@ HttpSignature::verify( const http::response_header<>& rsh
         return {false, {}};
 
     // Collect headers not covered by signature.
-    hdr_set extra(&iequals_sv);
-    for (const auto& h : rsh)
-        if (vfy_head->find(h.name_string()) == vfy_head->end())
-            extra.insert(h.name_string());
+    http::fields extra;
+    for (const auto& hdr : rsh) {
+        auto hn = hdr.name_string();
+        if (vfy_head->find(hn) == vfy_head->end())
+            extra.insert(hdr.name(), hn, hdr.value());
+    }
 
     return {true, std::move(extra)};
 }
