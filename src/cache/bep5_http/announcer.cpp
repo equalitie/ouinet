@@ -123,7 +123,8 @@ struct Announcer::Loop {
     {
         asio::spawn(dht->get_io_service(), [&] (asio::yield_context yield) {
             Cancel cancel(_cancel);
-            loop(cancel, yield);
+            sys::error_code ec;
+            loop(cancel, yield[ec]);
         });
     }
 
