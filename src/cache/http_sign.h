@@ -2,8 +2,10 @@
 
 #include <chrono>
 #include <ctime>
+#include <set>
 #include <string>
 
+#include <boost/algorithm/string/predicate.hpp>
 #include <boost/beast/http/dynamic_body.hpp>
 #include <boost/beast/http/message.hpp>
 #include <boost/regex.hpp>
@@ -181,8 +183,23 @@ struct HttpSignature {
     static
     boost::optional<HttpSignature> parse(boost::string_view);
 
-    bool verify( const http::response_header<>&
-               , const util::Ed25519PublicKey&);
+private:
+    static
+    bool iequals_sv( const boost::string_view& a
+                   , const boost::string_view& b)
+    {
+        return boost::algorithm::iequals(a, b);
+    }
+
+public:
+    using hdr_set = std::set<boost::string_view, decltype(&iequals_sv)>;
+
+    // Return whether the given head does match the signature
+    // for the headers covered by the latter.
+    // If so, also indicate which other extra headers are
+    // present in the head but not covered by the signature.
+    std::pair<bool, hdr_set> verify( const http::response_header<>&
+                                   , const util::Ed25519PublicKey&);
 
 private:
     static

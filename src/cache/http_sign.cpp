@@ -122,7 +122,9 @@ http_injection_verify( const http::response_header<>& rsh
             continue;
         }
         sig_found = true;
-        if (!(sig->verify(rsh, pk)))
+        bool sig_ok;
+        std::tie(sig_ok, std::ignore) = sig->verify(rsh, pk); // TODO: handle extra headers
+        if (!sig_ok)
             continue;  // head does not match signature
         return true;
     }
@@ -363,7 +365,7 @@ HttpSignature::parse(boost::string_view sig)
     return {std::move(hs)};
 }
 
-bool
+std::pair<bool, HttpSignature::hdr_set>
 HttpSignature::verify( const http::response_header<>& rsh
                      , const util::Ed25519PublicKey& pk)
 {
@@ -373,7 +375,7 @@ HttpSignature::verify( const http::response_header<>& rsh
 
     auto vfy_head = verification_head(rsh, *this);
     if (!vfy_head)  // e.g. because of missing headers
-        return false;
+        return {false, {}};
 
     std::string sig_string;
     std::tie(sig_string, std::ignore) = get_sig_str_hdrs(*vfy_head);
@@ -381,11 +383,20 @@ HttpSignature::verify( const http::response_header<>& rsh
     auto decoded_sig = util::base64_decode(signature);
     if (decoded_sig.size() != pk.sig_size) {
         LOG_WARN("Invalid HTTP signature length");
-        return false;
+        return {false, {}};
     }
 
     auto sig_array = util::bytes::to_array<uint8_t, pk.sig_size>(decoded_sig);
-    return pk.verify(sig_string, sig_array);
+    if (!pk.verify(sig_string, sig_array))
+        return {false, {}};
+
+    // Collect headers not covered by signature.
+    hdr_set extra(&iequals_sv);
+    for (const auto& h : rsh)
+        if (vfy_head->find(h.name_string()) == vfy_head->end())
+            extra.insert(h.name_string());
+
+    return {true, std::move(extra)};
 }
 
 bool
