@@ -126,4 +126,45 @@ BOOST_AUTO_TEST_CASE(test_http_sign) {
 
 }
 
+BOOST_AUTO_TEST_CASE(test_http_verify) {
+
+    sys::error_code ec;
+
+    http::response_parser<http::string_body> parser;
+    parser.put(asio::buffer(rs_head_signed_s), ec);
+    BOOST_REQUIRE(!ec);
+    BOOST_REQUIRE(parser.is_header_done());
+    auto rs_head_signed = parser.get().base();
+
+    const auto pka = util::bytes::to_array<uint8_t, util::Ed25519PublicKey::key_size>(util::base64_decode(inj_b64pk));
+    const util::Ed25519PublicKey pk(std::move(pka));
+    const auto key_id = cache::http_key_id_for_injection(pk);
+    BOOST_REQUIRE(key_id == ("ed25519=" + inj_b64pk));
+
+    // Add an unexpected header.
+    rs_head_signed.set("X-Foo", "bar");
+    // Move a header, keeping the same value.
+    auto date = rs_head_signed[http::field::date].to_string();
+    rs_head_signed.erase(http::field::date);
+    rs_head_signed.set(http::field::date, date);
+    // Replace the first signature with one from another key.
+    auto other_sig = rs_head_signed["X-Ouinet-Sig0"].to_string();
+    auto kpos = other_sig.find(inj_b64pk);
+    BOOST_REQUIRE(kpos != string::npos);
+    other_sig.replace(kpos, 7, "GARBAGE");  // change keyId
+    string sstart(",signature=\"");
+    auto spos = other_sig.find(sstart);
+    BOOST_REQUIRE(spos != string::npos);
+    other_sig.replace(spos + sstart.length(), 7, "GARBAGE");  // change signature
+    rs_head_signed.set("X-Ouinet-Sig0", other_sig);
+
+    auto vfy_res = cache::http_injection_verify(rs_head_signed, pk, ec);
+    BOOST_REQUIRE(!ec);
+    BOOST_REQUIRE(vfy_res.first);  // successful verification
+    int nextra = 0; for ([[maybe_unused]] const auto& _ : vfy_res.second) nextra++;
+    BOOST_REQUIRE(nextra == 1);  // only one extra header
+    BOOST_REQUIRE(vfy_res.second.count("X-Foo") == 1);
+
+}
+
 BOOST_AUTO_TEST_SUITE_END()
