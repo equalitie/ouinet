@@ -64,6 +64,9 @@ static const string rs_head_signed_s = (
     "x-ouinet-version x-ouinet-uri x-ouinet-injection\","
     "signature=\"Aoh7kA8OEkiNIqJ6ewBoB7I8olM0T7JAd0wN1yEaQ6PmTuZAFv7C19NSURSmxiLS6q1Aw/o4wSVCYSgjhdlvDw==\"\r\n"
 
+    "Transfer-Encoding: chunked\r\n"
+    "Trailer: X-Ouinet-Data-Size, Digest, X-Ouinet-Sig1\r\n"
+
     "X-Ouinet-Data-Size: 38\r\n"
     "Digest: SHA-256=j7uwtB/QQz0FJONbkyEmaqlJwGehJLqWoCO1ceuM30w=\r\n"
 
@@ -114,11 +117,6 @@ BOOST_AUTO_TEST_CASE(test_http_sign) {
     // Add headers from the trailer to the injection head.
     for (auto& hdr : trailer)
         rs_head.set(hdr.name_string(), hdr.value());
-    // Remove framing headers from the injection head
-    // (they are never part of a signature).
-    rs_head.erase(http::field::content_length);
-    rs_head.erase(http::field::transfer_encoding);
-    rs_head.erase(http::field::trailer);
 
     std::stringstream rs_head_ss;
     rs_head_ss << rs_head;
