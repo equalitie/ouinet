@@ -165,6 +165,12 @@ BOOST_AUTO_TEST_CASE(test_http_verify) {
     BOOST_REQUIRE(nextra == 1);  // only one extra header
     BOOST_REQUIRE(vfy_res.second.count("X-Foo") == 1);
 
+    // Alter the value of one of the signed headers and verify again.
+    rs_head_signed.set(http::field::server, "NginX");
+    vfy_res = cache::http_injection_verify(rs_head_signed, pk, ec);
+    BOOST_REQUIRE(!ec);
+    BOOST_REQUIRE(!vfy_res.first);  // unsuccessful verification
+
 }
 
 BOOST_AUTO_TEST_SUITE_END()
