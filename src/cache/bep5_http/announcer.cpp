@@ -21,8 +21,8 @@ struct Entry {
     string key;
     bt::NodeID infohash;
 
-    Clock::time_point update_attempt;
-    Clock::time_point update;
+    Clock::time_point successful_update;
+    Clock::time_point failed_update;
 
     Entry() = default;
 
@@ -71,28 +71,57 @@ struct Announcer::Loop {
 
     Clock::duration next_update_after(const Entry& e) const
     {
+        if (e.successful_update == Clock::time_point()
+             && e.failed_update == Clock::time_point()) {
+            return 0s;
+        }
+
         auto now = Clock::now();
-        if (e.update + 10min < now) return 0s;
-        if (e.update_attempt + 5min < now) return 0s;
-        return 5min - (now - e.update_attempt);
+
+        if (e.successful_update >= e.failed_update) {
+            if (e.successful_update + 10min <= now) return 0s;
+            return e.successful_update + 10min - now;
+        }
+        else {
+            if (e.failed_update + 5min < now) return 0s;
+            return e.failed_update + 5min - now;
+        }
     }
 
     void print_entries() const {
         auto now = Clock::now();
-        auto secs = [&] (Clock::time_point t) -> float {
-            using namespace std::chrono;
-            return duration_cast<milliseconds>(now - t).count() / 1000.f;
+        auto print = [&] (Clock::time_point t) {
+            if (t == Clock::time_point()) {
+                cerr << "--:--:--";
+            }
+            else {
+                // TODO: For the purpose of analyzing logs, it would be better
+                // to print absolute times.
+                using namespace std::chrono;
+                unsigned secs = duration_cast<milliseconds>(now - t).count() / 1000.f;
+                unsigned hrs  = secs / (60*60);
+                secs -= hrs * 60*60;
+                unsigned mins = secs / 60;
+                secs -= mins * 60;
+
+                cerr << std::setfill('0') << std::setw(2) << hrs;
+                cerr << ':';
+                cerr << std::setfill('0') << std::setw(2) << mins;
+                cerr << ':';
+                cerr << std::setfill('0') << std::setw(2) << secs;
+            }
+            cerr << " ago";
         };
 
-        cerr << "===================================" << "\n";
         cerr << "BEP5 HTTP announcer entries:" << "\n";
         for (auto& ep : entries) {
             auto& e = ep.first;
-            cerr << "> " << e.key << " -> " << e.infohash
-                << " update:" << secs(e.update) << "s ago"
-                << " update_attempt:" << secs(e.update_attempt) << "s ago\n";
+            cerr << "  " << e.infohash << " | successful_update:";
+            print(e.successful_update);
+            cerr << " | failed_update:";
+            print(e.failed_update);
+            cerr << " | key:" << e.key << "\n";
         }
-        cerr << "===================================" << "\n";
     }
 
     Entries::iterator pick_entry(Cancel& cancel, asio::yield_context yield)
@@ -143,10 +172,6 @@ struct Announcer::Loop {
             assert(!ec);
             ec = {};
 
-            if (log_debug()) { print_entries(); }
-
-            ei->first.update_attempt = Clock::now();
-
             // Try inserting three times before moving to the next entry
             bool success = false;
             for (int i = 0; i != 3; ++i) {
@@ -157,13 +182,14 @@ struct Announcer::Loop {
                 ec = {};
             }
 
-            if (success) {
-                ei->first.update = Clock::now();
-            }
+            if (success) { ei->first.successful_update = Clock::now(); }
+            else         { ei->first.failed_update     = Clock::now(); }
 
             Entry e = move(ei->first);
             entries.erase(ei);
             entries.push_back(move(e));
+
+            if (log_debug()) { print_entries(); }
         }
 
         return or_throw(yield, asio::error::operation_aborted);
