@@ -320,10 +320,25 @@ void Bep5Client::add_injector_endpoints(const set<udp::endpoint>& eps)
 
 Bep5Client::Clients::iterator Bep5Client::choose_client()
 {
+    using Dist = std::uniform_int_distribution<unsigned>;
+
     if (_clients.empty()) return _clients.end();
 
     unsigned sum = 0;
     unsigned max = 0;
+
+    std::vector<Clients::iterator> zero_fail_clients;
+
+    for (auto i = _clients.begin(); i != _clients.end(); ++i) {
+        if (i->second->fail_count == 0) {
+            zero_fail_clients.push_back(i);
+        }
+    }
+
+    if (zero_fail_clients.size()) {
+        Dist dist(0, zero_fail_clients.size() - 1);
+        return zero_fail_clients[dist(_random_gen)];
+    }
 
     for (auto& inj : _clients) {
         max = std::max(max, inj.second->fail_count);
@@ -334,7 +349,7 @@ Bep5Client::Clients::iterator Bep5Client::choose_client()
         sum += n;
     }
 
-    std::uniform_int_distribution<unsigned> dist(0, sum - 1);
+    Dist dist(0, sum - 1);
 
     unsigned r = dist(_random_gen);
 
