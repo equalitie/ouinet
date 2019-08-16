@@ -30,6 +30,11 @@ struct Entry {
         : key(move(key))
         , infohash(util::sha1_digest(this->key))
     { }
+
+    bool attempted_update() const {
+        return successful_update != Clock::time_point()
+            || failed_update     != Clock::time_point();
+    }
 };
 
 //--------------------------------------------------------------------
@@ -64,7 +69,16 @@ struct Announcer::Loop {
     void add(Key key) {
         if (already_has(key)) return;
 
-        entries.push_front(Entry(move(key)));
+        // To preserve the order in which entries are added and updated we put
+        // this new entry _after_ all entries that have not yet been updated.
+        Entries::iterator i = entries.begin();
+
+        for (; i != entries.end(); ++i) {
+            const auto& e = i->first;
+            if (e.attempted_update()) break;
+        }
+
+        entries.insert(i, Entry(move(key)));
         _timer_cancel();
         _timer_cancel = Cancel();
     }
