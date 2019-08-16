@@ -35,7 +35,7 @@ struct Entry {
 //--------------------------------------------------------------------
 // Loop
 struct Announcer::Loop {
-    using Entries = util::AsyncQueue<Entry>;
+    using Entries = util::AsyncQueue<Entry, std::list>;
 
     asio::io_service& ios;
     shared_ptr<bt::MainlineDht> dht;
@@ -107,11 +107,11 @@ struct Announcer::Loop {
                 if (ec) return or_throw(yield, ec, end);
             }
 
-            auto f = entries.begin();
+            auto i = entries.begin();
 
-            auto d = next_update_after(f->first);
+            auto d = next_update_after(i->first);
 
-            if (d == 0s) { return f; }
+            if (d == 0s) { return i; }
 
             async_sleep(ios, d, _timer_cancel, yield);
         }
