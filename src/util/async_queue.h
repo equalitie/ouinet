@@ -29,6 +29,12 @@ public:
     AsyncQueue(AsyncQueue&&) = delete;
     AsyncQueue& operator=(AsyncQueue&&) = delete;
 
+    void insert(iterator pos, const T& value)
+    {
+        _queue.insert(pos, {std::move(value), {}});
+        _rx_cv.notify();
+    }
+
     void async_push(T val, Cancel& cancel, asio::yield_context yield)
     {
         async_push(std::move(val), sys::error_code(), cancel, yield);
