@@ -6,13 +6,13 @@
 
 namespace ouinet { namespace util {
 
-template<class T> class AsyncQueue {
+template<class T, template<typename...> class Q = std::deque> class AsyncQueue {
 private:
-    using Deque = std::deque<std::pair<T, sys::error_code>>;
+    using Queue = Q<std::pair<T, sys::error_code>>;
 
 public:
-    using iterator       = typename Deque::iterator;
-    using const_iterator = typename Deque::const_iterator;
+    using iterator       = typename Queue::iterator;
+    using const_iterator = typename Queue::const_iterator;
 
 public:
     AsyncQueue(asio::io_service& ios, size_t max_size = -1)
@@ -206,7 +206,7 @@ public:
 private:
     asio::io_service& _ios;
     size_t _max_size;
-    Deque _queue;
+    Queue _queue;
     ConditionVariable _rx_cv;
     ConditionVariable _tx_cv;
     Cancel _destroy_signal;
