@@ -4,6 +4,7 @@
 #include <sstream>
 #include <string>
 
+#include <boost/beast/core/buffers_to_string.hpp>
 #include <boost/beast/http/message.hpp>
 #include <boost/beast/http/parser.hpp>
 #include <boost/beast/http/string_body.hpp>
@@ -124,14 +125,37 @@ BOOST_AUTO_TEST_CASE(test_http_sign) {
 
 }
 
+// Put everything in the string to the given parser,
+// until everything is parsed or some error happens.
+template<class Parser>
+static
+void put_to_parser(Parser& p, const string& s, sys::error_code& ec) {
+    auto b = asio::const_buffer(s.data(), s.size());
+    while (b.size() > 0) {
+        auto consumed = p.put(b, ec);
+        if (ec) return;
+        b += consumed;
+    };
+}
+
 BOOST_AUTO_TEST_CASE(test_http_verify) {
 
     sys::error_code ec;
 
     http::response_parser<http::string_body> parser;
-    parser.put(asio::buffer(rs_head_signed_s), ec);
+    put_to_parser(parser, rs_head_signed_s, ec);
     BOOST_REQUIRE(!ec);
     BOOST_REQUIRE(parser.is_header_done());
+    BOOST_REQUIRE(parser.chunked());
+    // The signed response head signals chunked transfer encoding.
+    auto rs_body_s = ( beast::buffers_to_string(http::make_chunk(asio::buffer(rs_body)))
+                     // We should really be adding the trailer here,
+                     // but it is already part of `rs_head_signed_s`.
+                     // Beast seems to be fine with that, though.
+                     + beast::buffers_to_string(http::make_chunk_last()));
+    put_to_parser(parser, rs_body_s, ec);
+    BOOST_REQUIRE(!ec);
+    BOOST_REQUIRE(parser.is_done());
     auto rs_head_signed = parser.get().base();
 
     const auto pka = util::bytes::to_array<uint8_t, util::Ed25519PublicKey::key_size>(util::base64_decode(inj_b64pk));
