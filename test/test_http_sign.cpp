@@ -164,21 +164,13 @@ BOOST_AUTO_TEST_CASE(test_http_verify) {
     BOOST_REQUIRE(key_id == ("ed25519=" + inj_b64pk));
 
     // Add an unexpected header.
+    // It should not break signature verification, but it should be reported as an extra header.
     rs_head_signed.set("X-Foo", "bar");
     // Move a header, keeping the same value.
+    // It should not break signature verification.
     auto date = rs_head_signed[http::field::date].to_string();
     rs_head_signed.erase(http::field::date);
     rs_head_signed.set(http::field::date, date);
-    // Replace the first signature with one from another key.
-    auto other_sig = rs_head_signed["X-Ouinet-Sig0"].to_string();
-    auto kpos = other_sig.find(inj_b64pk);
-    BOOST_REQUIRE(kpos != string::npos);
-    other_sig.replace(kpos, 7, "GARBAGE");  // change keyId
-    string sstart(",signature=\"");
-    auto spos = other_sig.find(sstart);
-    BOOST_REQUIRE(spos != string::npos);
-    other_sig.replace(spos + sstart.length(), 7, "GARBAGE");  // change signature
-    rs_head_signed.set("X-Ouinet-Sig0", other_sig);
 
     auto vfy_res = cache::http_injection_verify(rs_head_signed, pk, ec);
     BOOST_REQUIRE(!ec);
@@ -187,7 +179,32 @@ BOOST_AUTO_TEST_CASE(test_http_verify) {
     BOOST_REQUIRE(nextra == 1);  // only one extra header
     BOOST_REQUIRE(vfy_res.second.count("X-Foo") == 1);
 
+    // Add a bad third signature (by altering the second one).
+    // It should break signature verification.
+    auto sig1_copy = rs_head_signed["X-Ouinet-Sig1"].to_string();
+    string sstart(",signature=\"");
+    auto spos = sig1_copy.find(sstart);
+    BOOST_REQUIRE(spos != string::npos);
+    sig1_copy.replace(spos + sstart.length(), 7, "GARBAGE");  // change signature
+    rs_head_signed.set("X-Ouinet-Sig2", sig1_copy);
+
+    vfy_res = cache::http_injection_verify(rs_head_signed, pk, ec);
+    BOOST_REQUIRE(!ec);
+    BOOST_REQUIRE(!vfy_res.first);  // unsuccessful verification
+
+    // Change the key id of the third signature to refer to some other key.
+    // It should not break signature verification.
+    auto kpos = sig1_copy.find(inj_b64pk);
+    BOOST_REQUIRE(kpos != string::npos);
+    sig1_copy.replace(kpos, 7, "GARBAGE");  // change keyId
+    rs_head_signed.set("X-Ouinet-Sig2", sig1_copy);
+
+    vfy_res = cache::http_injection_verify(rs_head_signed, pk, ec);
+    BOOST_REQUIRE(!ec);
+    BOOST_REQUIRE(vfy_res.first);  // successful verification
+
     // Alter the value of one of the signed headers and verify again.
+    // It should break signature verification.
     rs_head_signed.set(http::field::server, "NginX");
     vfy_res = cache::http_injection_verify(rs_head_signed, pk, ec);
     BOOST_REQUIRE(!ec);
