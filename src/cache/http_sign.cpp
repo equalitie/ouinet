@@ -118,6 +118,8 @@ http_injection_verify( const http::response_header<>& rsh
 
     auto keyId = http_key_id_for_injection(pk);  // TODO: cache this
     bool sig_found = false;
+    bool sig_ok = true;
+    http::fields extra = rsh;  // all extra for the moment
 
     // Go over signature headers: parse, select, verify, until one matches.
     for (auto& hdr : sig_headers) {
@@ -134,14 +136,24 @@ http_injection_verify( const http::response_header<>& rsh
         }
         sig_found = true;
         auto ret = sig->verify(to_verify, pk);
-        if (!ret.first)
-            continue;  // head does not match signature
-        return ret;
+        if (!ret.first) {
+            LOG_WARN("Head does not match HTTP signature: ", hdr.name_string());
+            sig_ok = false;  // head does not match signature
+            break;
+        }
+        // Head matches signature, note down extra headers.
+        for (auto ehit = extra.begin(); ehit != extra.end();)
+            if (ret.second.find(ehit->name_string()) == ret.second.end())
+                ehit = extra.erase(ehit);  // no longer an extra header
+            else
+                ehit++;  // still an extra header
     }
 
     if (!sig_found)
         ec = asio::error::invalid_argument;
-    return {false, {}};
+    if (ec || !sig_ok)
+        return {false, {}};
+    return {true, std::move(extra)};
 }
 
 std::string
