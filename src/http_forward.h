@@ -48,9 +48,6 @@ using ProcTrailFunc = std::function<http::fields(http::fields, Cancel&, Yield)>;
 namespace detail {
 static const auto max_size_t = (std::numeric_limits<std::size_t>::max)();
 
-size_t
-get_content_length(const http::response_header<>&, sys::error_code&);
-
 std::string
 process_head( const http::response_header<>&, const ProcHeadFunc&, bool& chunked_out
             , Cancel&, Yield);
@@ -186,16 +183,19 @@ http_forward( StreamIn& in
     }
 
     assert(rpp.is_header_done());
-    auto rp = rpp.get();
-    bool chunked_in = rp.chunked();
+    bool chunked_in = rpp.chunked();
 
     // Get content length if non-chunked.
     size_t nc_pending;
-    bool http_10_eob;  // HTTP/1.0 end of body on connection close, no `Content-Length`
+    bool http_10_eob = false;  // HTTP/1.0 end of body on connection close, no `Content-Length`
     if (!chunked_in) {
-        nc_pending = detail::get_content_length(rp, ec);
-        if (ec) return or_throw<ResponseH>(yield, ec);
-        http_10_eob = (nc_pending == detail::max_size_t);
+        auto clen = rpp.content_length();
+        if (clen)
+            nc_pending = *clen;
+        else if (rpp.get().version() == 10)
+            http_10_eob = true;
+        else
+            return or_throw<ResponseH>(yield, asio::error::invalid_argument);
     }
 
     wdog.expires_after(wdog_timeout);
@@ -204,7 +204,7 @@ http_forward( StreamIn& in
     // --------------------------------------------------
     bool chunked_out;
     {
-        auto outh = detail::process_head( rp.base(), rshproc, chunked_out
+        auto outh = detail::process_head( rpp.get().base(), rshproc, chunked_out
                                         , cancel, yield[ec]);
         if (set_error(ec, "Failed to process response head"))
             return or_throw<ResponseH>(yield, ec);
