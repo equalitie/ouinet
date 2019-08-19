@@ -107,49 +107,57 @@ http_injection_verify( http::response_header<> rsh
     // Collect signatures found in the meanwhile.
     http::response_header<> to_verify, sig_headers;
     to_verify = without_framing(rsh);
-    for (const auto& hdr : rsh) {
-        auto hn = hdr.name_string();
+    for (auto hit = rsh.begin(); hit != rsh.end();) {
+        auto hn = hit->name_string();
         if (boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx)) {
+            sig_headers.insert(hit->name(), hn, hit->value());
             to_verify.erase(hn);
-            sig_headers.insert(hdr.name(), hn, hdr.value());
-        }
+            hit = rsh.erase(hit);  // will re-add at the end, minus bad signatures
+        } else hit++;
     }
-    // TODO: remove signature headers, put back at the end
 
     auto keyId = http_key_id_for_injection(pk);  // TODO: cache this
-    bool sig_found = false;
-    bool sigs_ok = true;
+    bool sig_ok = false;
     http::fields extra = rsh;  // all extra for the moment
 
     // Go over signature headers: parse, select, verify.
+    int sig_idx = 0;
     for (auto& hdr : sig_headers) {
-        auto sig = HttpSignature::parse(hdr.value());
+        auto hn = hdr.name_string();
+        auto hv = hdr.value();
+        auto sig = HttpSignature::parse(hv);
         if (!sig) {
-            LOG_WARN("Invalid HTTP signature in header: ", hdr.name_string());
-            continue;  // not with a usable value
+            LOG_WARN("Malformed HTTP signature in header: ", hn);
+            continue;  // drop signature
         }
-        if (sig->keyId != keyId)
-            continue;  // not for the public key we specified
-        if (!(sig->algorithm.empty()) && sig->algorithm != sig_alg_hs2019) {
-            LOG_WARN("Unsupported HTTP signature algorithm for matching key: ", sig->algorithm);
+        if (sig->keyId != keyId) {
+            LOG_DEBUG("Unknown key for HTTP signature in header: ", hn);
+            rsh.insert(http_::response_signature_hdr_pfx + std::to_string(sig_idx), hv);
+            sig_idx++;  // keep signature
             continue;
         }
-        sig_found = true;
+        if (!(sig->algorithm.empty()) && sig->algorithm != sig_alg_hs2019) {
+            LOG_WARN( "Unsupported algorithm \"", sig->algorithm
+                    , "\" for HTTP signature in header: ", hn);
+            continue;  // drop signature
+        }
         auto ret = sig->verify(to_verify, pk);
         if (!ret.first) {
-            LOG_WARN("Head does not match HTTP signature: ", hdr.name_string());
-            sigs_ok = false;  // head does not match signature
-            break;  // TODO: remove signature from output and continue
+            LOG_WARN("Head does not match HTTP signature in header: ", hn);
+            continue;  // drop signature
         }
-        // Head matches signature, note down extra headers.
-        for (auto ehit = extra.begin(); ehit != extra.end();)
+        LOG_DEBUG("Head matches HTTP signature: ", hn);
+        sig_ok = true;
+        rsh.insert(http_::response_signature_hdr_pfx + std::to_string(sig_idx), hv);
+        sig_idx++;  // keep signature
+        for (auto ehit = extra.begin(); ehit != extra.end();)  // note extra headers
             if (ret.second.find(ehit->name_string()) == ret.second.end())
                 ehit = extra.erase(ehit);  // no longer an extra header
             else
                 ehit++;  // still an extra header
     }
 
-    if (!sig_found || !sigs_ok)
+    if (!sig_ok)
         return {};
 
     for (auto& eh : extra) {
