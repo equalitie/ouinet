@@ -114,26 +114,17 @@ http_injection_trailer( const http::response_header<>& rsh
 }
 
 // Verify that the given response head contains
-// valid signatures for it from the given public key.
-// If such signatures exist, return true or false depending on
-// whether the head matches each and every such signature.
-// If no such signatures exist, or any other error happens,
-// set the error code.
+// good signatures for it from the given public key.
+// Return a head which only contains headers covered by at least one such signature,
+// plus good signatures themselves and signatures for unknown keys.
+// Bad signatures are dropped to avoid propagating them along good signatures.
+// Framing headers are preserved.
 //
-// The reason to verify all such signatures is
-// to avoid propagating bad signatures which may be assumed to be good
-// because of being along good signatures.
-// An alternative would be to return a filtered version of the head
-// with such bad signatures and extra headers (see below) removed.
-//
-// If verification is successful,
-// also indicate which other extra headers are
-// present in the head but not covered by any verified signature
-// (extra field names and values point to the given head).
-std::pair<bool, http::fields>
-http_injection_verify( const http::response_header<>&
-                     , const ouinet::util::Ed25519PublicKey&
-                     , sys::error_code&);
+// If no good signatures exist, or any other error happens,
+// return an empty head.
+http::response_header<>
+http_injection_verify( http::response_header<>
+                     , const ouinet::util::Ed25519PublicKey);
 
 // Get a `keyId` encoding the given public key itself.
 std::string

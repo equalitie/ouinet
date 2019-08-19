@@ -98,10 +98,9 @@ http_injection_trailer( const http::response_header<>& rsh
     return rst;
 }
 
-std::pair<bool, http::fields>
-http_injection_verify( const http::response_header<>& rsh
-                     , const util::Ed25519PublicKey& pk
-                     , sys::error_code& ec)
+http::response_header<>
+http_injection_verify( http::response_header<> rsh
+                     , const util::Ed25519PublicKey& pk)
 {
     // Put together the head to be verified:
     // given head, minus chunking (and related headers), and signatures themselves.
@@ -115,13 +114,14 @@ http_injection_verify( const http::response_header<>& rsh
             sig_headers.insert(hdr.name(), hn, hdr.value());
         }
     }
+    // TODO: remove signature headers, put back at the end
 
     auto keyId = http_key_id_for_injection(pk);  // TODO: cache this
     bool sig_found = false;
-    bool sig_ok = true;
+    bool sigs_ok = true;
     http::fields extra = rsh;  // all extra for the moment
 
-    // Go over signature headers: parse, select, verify, until one matches.
+    // Go over signature headers: parse, select, verify.
     for (auto& hdr : sig_headers) {
         auto sig = HttpSignature::parse(hdr.value());
         if (!sig) {
@@ -138,8 +138,8 @@ http_injection_verify( const http::response_header<>& rsh
         auto ret = sig->verify(to_verify, pk);
         if (!ret.first) {
             LOG_WARN("Head does not match HTTP signature: ", hdr.name_string());
-            sig_ok = false;  // head does not match signature
-            break;
+            sigs_ok = false;  // head does not match signature
+            break;  // TODO: remove signature from output and continue
         }
         // Head matches signature, note down extra headers.
         for (auto ehit = extra.begin(); ehit != extra.end();)
@@ -149,11 +149,14 @@ http_injection_verify( const http::response_header<>& rsh
                 ehit++;  // still an extra header
     }
 
-    if (!sig_found)
-        ec = asio::error::invalid_argument;
-    if (ec || !sig_ok)
-        return {false, {}};
-    return {true, std::move(extra)};
+    if (!sig_found || !sigs_ok)
+        return {};
+
+    for (auto& eh : extra) {
+        LOG_WARN("Dropping header not in HTTP signatures: ", eh.name_string());
+        rsh.erase(eh.name_string());
+    }
+    return rsh;
 }
 
 std::string
