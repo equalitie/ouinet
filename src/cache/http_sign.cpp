@@ -122,6 +122,9 @@ http_injection_verify( http::response_header<> rsh
 
     // Go over signature headers: parse, select, verify.
     int sig_idx = 0;
+    auto keep_signature = [&] (const auto& sig) {
+        rsh.insert(http_::response_signature_hdr_pfx + std::to_string(sig_idx++), sig);
+    };
     for (auto& hdr : sig_headers) {
         auto hn = hdr.name_string();
         auto hv = hdr.value();
@@ -132,8 +135,7 @@ http_injection_verify( http::response_header<> rsh
         }
         if (sig->keyId != keyId) {
             LOG_DEBUG("Unknown key for HTTP signature in header: ", hn);
-            rsh.insert(http_::response_signature_hdr_pfx + std::to_string(sig_idx), hv);
-            sig_idx++;  // keep signature
+            keep_signature(hv);
             continue;
         }
         if (!(sig->algorithm.empty()) && sig->algorithm != sig_alg_hs2019) {
@@ -148,8 +150,7 @@ http_injection_verify( http::response_header<> rsh
         }
         LOG_DEBUG("Head matches HTTP signature: ", hn);
         sig_ok = true;
-        rsh.insert(http_::response_signature_hdr_pfx + std::to_string(sig_idx), hv);
-        sig_idx++;  // keep signature
+        keep_signature(hv);
         for (auto ehit = extra.begin(); ehit != extra.end();)  // note extra headers
             if (ret.second.find(ehit->name_string()) == ret.second.end())
                 ehit = extra.erase(ehit);  // no longer an extra header
