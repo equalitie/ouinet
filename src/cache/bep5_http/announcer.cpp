@@ -53,6 +53,9 @@ struct Announcer::Loop {
 
     bool log_debug() const { return log_level <= DEBUG; }
 
+    static Clock::duration success_reannounce_period() { return 20min; }
+    static Clock::duration failure_reannounce_period() { return 5min;  }
+
     Loop(shared_ptr<bt::MainlineDht> dht)
         : ios(dht->get_io_service())
         , dht(move(dht))
@@ -93,12 +96,14 @@ struct Announcer::Loop {
         auto now = Clock::now();
 
         if (e.successful_update >= e.failed_update) {
-            if (e.successful_update + 10min <= now) return 0s;
-            return e.successful_update + 10min - now;
+            auto p = success_reannounce_period();
+            if (e.successful_update + p <= now) return 0s;
+            return e.successful_update + p - now;
         }
         else {
-            if (e.failed_update + 5min < now) return 0s;
-            return e.failed_update + 5min - now;
+            auto p = failure_reannounce_period();
+            if (e.failed_update + p < now) return 0s;
+            return e.failed_update + p - now;
         }
     }
 
