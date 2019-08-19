@@ -124,7 +124,7 @@ http_injection_trailer( const http::response_header<>& rsh
 // to avoid propagating bad signatures which may be assumed to be good
 // because of being along good signatures.
 // An alternative would be to return a filtered version of the head
-// with such bad signatures removed, along with extra headers (see below).
+// with such bad signatures and extra headers (see below) removed.
 //
 // If verification is successful,
 // also indicate which other extra headers are
