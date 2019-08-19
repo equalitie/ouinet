@@ -3,7 +3,9 @@
 #include "../../util/atomic_file.h"
 #include "../../util/bytes.h"
 #include "../../util/file_io.h"
+#include "../../util/wait_condition.h"
 #include "../../util/set_io.h"
+#include "../../util/async_generator.h"
 #include "../../bittorrent/dht.h"
 #include "../../bittorrent/is_martian.h"
 #include "../../ouiservice/utp.h"
@@ -48,7 +50,7 @@ struct Client::Impl {
     }
 
     // "http(s)://www.foo.org/bar/baz" -> "www.foo.org"
-    string dht_key(const string& s)
+    boost::optional<string> dht_key(const string& s)
     {
         return get_host(s);
     }
@@ -144,95 +146,123 @@ struct Client::Impl {
         http::async_write(con, res, yield);
     }
 
-    string get_host(const string& uri_s)
+    boost::optional<string> get_host(const string& uri_s)
     {
+#if 0
+        // This code sometime throws an exception.
         network::uri uri(uri_s);
         return uri.host().to_string();
+#else
+        beast::string_view s(uri_s);
+
+        if (s.starts_with("http://")) {
+            s.remove_prefix(7);
+        } else if (s.starts_with("https://")) {
+            s.remove_prefix(8);
+        }
+
+        auto p = s.find('/');
+
+        if (p == s.npos) return boost::none;
+
+        s = s.substr(0, p);
+
+        return s.to_string();
+#endif
     }
 
     Session load(const std::string& key, Cancel cancel, Yield yield)
     {
         namespace err = asio::error;
 
-        auto host = get_host(key);
+        auto opt_host = get_host(key);
+
+        if (!opt_host) {
+            return or_throw<Session>(yield, err::invalid_argument);
+        }
+
+        auto& host = *opt_host;
+
         auto canceled = this->cancel.connect([&] { cancel(); });
 
-        auto peer_i = peer_cache.find(host);
-
-        if (peer_i != peer_cache.end()) {
+        for (int i = 0; i < 2 && !cancel; ++i) {
             sys::error_code ec;
 
-            if (log_debug()) {
-                yield.log("Bep5Http: Connecting to cache client: ", peer_i->second);
-            }
+            set<udp::endpoint> eps;
 
-            auto con = connect(peer_i->second, cancel, yield[ec]);
+            if (i == 0) {
+                auto peer_i = peer_cache.find(host);
+                if (peer_i == peer_cache.end()) continue;
+                auto ep = peer_i->second;
+                if (log_debug()) {
+                    yield.log("Bep5Http: using cached endpoint first:", ep);
+                }
+                eps = {ep};
+            } else {
+                bt::NodeID infohash = util::sha1_digest(host);
 
-            if (log_debug()) {
-                yield.log("Bep5Http: Connect to cache client done, ec:", ec.message());
-            }
-
-            if (cancel) return or_throw<Session>(yield, err::operation_aborted);
-
-            if (!ec) {
-
-                auto ret = load_from_connection(key, con, cancel, yield[ec]);
-                assert(ec || ret.response_header());
-
-                if (!ec) {
-                    return ret;
+                if (log_debug()) {
+                    yield.log("Bep5Http: DHT BEP5 lookup:");
+                    yield.log("    dht_key: ", host);
+                    yield.log("    infohash:", infohash);
                 }
 
-                peer_cache.erase(host);
+                eps = tcp_to_udp(dht->tracker_get_peers(infohash, cancel, yield[ec]));
+
+                if (cancel) return or_throw<Session>(yield, err::operation_aborted);
+                // TODO: Random shuffle eps
+
+                if (log_debug()) {
+                    yield.log("Bep5Http: DHT BEP5 lookup result ec:", ec.message(),
+                            " eps:", eps);
+                }
+
+                return_or_throw_on_error(yield, cancel, ec, Session());
             }
-            else {
-                peer_cache.erase(host);
+
+            if (cancel) ec = err::operation_aborted;
+            if (ec) return or_throw<Session>(yield, ec);
+
+            if (log_debug()) {
+                yield.log("Bep5Http: Connecting to clients: ", eps);
+            }
+
+            auto gen = make_connection_generator(eps);
+
+            while (auto opt_con = gen->async_get_value(cancel, yield[ec])) {
+                assert(!cancel || ec == err::operation_aborted);
+                if (cancel) ec = err::operation_aborted;
+                if (ec == err::operation_aborted) return or_throw<Session>(yield, ec);
+                if (ec) continue;
+
+                if (log_debug()) {
+                    yield.log("Bep5Http: Connect to clients done, ec:", ec.message(),
+                        " chosen ep:", opt_con->second);
+                }
+
+                if (cancel) ec = err::operation_aborted;
+                if (ec == err::operation_aborted) return or_throw<Session>(yield, ec);
+                if (ec) continue;
+
+                auto session = load_from_connection(key, opt_con->first, cancel, yield[ec]);
+                auto hdr = session.response_header();
+
+                assert(!cancel || ec == err::operation_aborted);
+                assert(ec || hdr);
+
+                if (ec || hdr->result() == http::status::not_found) {
+                    continue;
+                }
+
+                // We found the entry
+                // TODO: Check its age, store it if it's too old but keep trying
+                // other peers.
+                peer_cache[host] = opt_con->second;
+                return session;
             }
         }
 
-        sys::error_code ec;
-
-        bt::NodeID infohash = util::sha1_digest(dht_key(key));
-
-        if (log_debug()) {
-            yield.log("Bep5Http: DHT BEP5 lookup:");
-            yield.log("    dht_key: ", dht_key(key));
-            yield.log("    infohash:", infohash);
-        }
-
-        auto endpoints = dht->tracker_get_peers(infohash, cancel, yield[ec]);
-
-        if (log_debug()) {
-            yield.log("Bep5Http: DHT BEP5 lookup result ec:", ec.message(),
-                    " eps:", endpoints);
-        }
-
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<Session>(yield, ec);
-
-        udp::endpoint con_ep;
-
-        if (log_debug()) {
-            yield.log("Bep5Http: Connecting to clients: ", endpoints);
-        }
-
-        auto con = connect(tcp_to_udp(endpoints), con_ep, cancel, yield[ec]);
-
-        if (log_debug()) {
-            yield.log("Bep5Http: Connect to clients done, ec:", ec.message(),
-                " chosen ep:", con_ep);
-        }
-
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<Session>(yield, ec);
-
-        peer_cache[host] = con_ep;
-
-        auto ret = load_from_connection(key, con, cancel, yield[ec]);
-        assert(!cancel || ec == asio::error::operation_aborted);
-        assert(ec || ret.response_header());
-
-        return or_throw<Session>(yield, ec, move(ret));
+        return or_throw<Session>(yield, err::not_found);
     }
 
     template<class Con>
@@ -316,41 +346,33 @@ struct Client::Impl {
         return GenericStream(move(s));
     }
 
-    GenericStream connect( set<udp::endpoint> eps
-                         , udp::endpoint& ret_ep
-                         , Cancel& cancel
-                         , asio::yield_context yield)
+    unique_ptr<util::AsyncGenerator<pair<GenericStream, udp::endpoint>>>
+    make_connection_generator(set<udp::endpoint> eps)
     {
-        boost::optional<GenericStream> retval;
+        using Ret = util::AsyncGenerator<pair<GenericStream, udp::endpoint>>;
 
-        WaitCondition wc(ios);
+        return make_unique<Ret>(ios,
+        [&, lc = cancel, eps = move(eps)] (auto& q, auto c, auto y) mutable {
+            auto cn = lc.connect([&] { c(); });
 
-        Cancel local_cancel(cancel);
+            WaitCondition wc(ios);
+            set<udp::endpoint> our_endpoints = dht->wan_endpoints();
 
-        set<udp::endpoint> our_endpoints = dht->wan_endpoints();
+            for (auto& ep : eps) {
+                if (bt::is_martian(ep)) continue;
+                if (our_endpoints.count(ep)) continue;
 
-        for (auto& ep : eps) {
-            if (bt::is_martian(ep)) continue;
-            if (our_endpoints.count(ep)) continue;
+                asio::spawn(ios, [&, ep, lock = wc.lock()] (auto y) {
+                    sys::error_code ec;
+                    auto s = this->connect(ep, c, y[ec]);
+                    if (ec || c) return;
+                    q.push_back(make_pair(move(s), ep));
+                });
+            }
 
-            asio::spawn(ios, [&, ep, lock = wc.lock()] (asio::yield_context yield) {
-                sys::error_code ec;
-                auto s = connect(ep, local_cancel, yield[ec]);
-                if (ec || local_cancel) return;
-                ret_ep = ep;
-                retval = move(s);
-                local_cancel();
-            });
-        }
-
-        sys::error_code ec;
-        wc.wait(cancel, yield[ec]);
-
-        if (!retval) ec = asio::error::host_unreachable;
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<GenericStream>(yield, ec);
-
-        return move(*retval);
+            sys::error_code ec;
+            wc.wait(y[ec]);
+        });
     }
 
     static bool same_ipv(const udp::endpoint& ep1, const udp::endpoint& ep2)
@@ -383,13 +405,15 @@ struct Client::Impl {
     {
         sys::error_code ec;
 
+        auto dk = dht_key(key);
+        if (!dk) return or_throw(yield, asio::error::invalid_argument);
         auto path = path_from_key(key);
         auto file = util::mkatomic(ios, ec, path);
         if (!ec) s.flush_response(*file, cancel, yield[ec]);
         if (!ec) file->commit(ec);
         if (ec) return or_throw(yield, ec);
 
-        announcer.add(dht_key(key));
+        announcer.add(*dk);
     }
 
     template<class Stream>
@@ -436,7 +460,9 @@ struct Client::Impl {
 
             if (key.empty()) { try_remove(p); continue; }
 
-            announcer.add(dht_key(key.to_string()));
+            if (auto opt_k = dht_key(key.to_string())) {
+                announcer.add(*opt_k);
+            }
         }
     }
 
