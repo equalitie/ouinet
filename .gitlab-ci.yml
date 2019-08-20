@@ -27,6 +27,7 @@ build:
     paths:
       - build/client
       - build/injector
+      - build/*.so
       - build/test/test-*
       - build/gpg_error/out/lib/libgpg-error.so*
       - build/gcrypt/src/gcrypt/src/.libs/libgcrypt.so*
