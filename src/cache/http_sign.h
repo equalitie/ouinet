@@ -124,7 +124,7 @@ http_injection_trailer( const http::response_header<>& rsh
 // return an empty head.
 http::response_header<>
 http_injection_verify( http::response_header<>
-                     , const ouinet::util::Ed25519PublicKey);
+                     , const ouinet::util::Ed25519PublicKey&);
 
 // Get a `keyId` encoding the given public key itself.
 std::string
