@@ -118,8 +118,8 @@ struct HttpSignature {
     }
 
 private:
-    static
-    bool has_comma_in_quotes(boost::string_view s) {
+    static inline
+    bool has_comma_in_quotes(const boost::string_view& s) {
         // A comma is between quotes if
         // the number of quotes before it is odd.
         int quotes_seen = 0;
