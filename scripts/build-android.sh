@@ -149,17 +149,6 @@ function check_mode {
 
 ######################################################################
 function setup_deps {
-    ######################################################################
-    # Get JDK 8 bundled with Android Studio
-    if [ ! -d "$PWD/android-studio/jre" ]; then
-        local idefile='android-studio-ide-183.5692245-linux.tar.gz'
-        wget "https://dl.google.com/dl/android/studio/ide-zips/3.4.2.0/$idefile"
-        tar axf "$idefile" android-studio/jre
-        rm "$idefile"
-    fi
-    export PATH="$PWD/android-studio/jre/bin":$PATH
-
-    ######################################################################
     # Install SDK dependencies.
     local toolsfile=sdk-tools-linux-4333796.zip
     local sdkmanager="$SDK_DIR/tools/bin/sdkmanager"
