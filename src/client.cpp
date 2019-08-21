@@ -1261,6 +1261,7 @@ void Client::State::setup_cache()
                           , cancel = move(cancel)
                           ] (asio::yield_context yield) {
             if (cancel) return;
+            LOG_DEBUG("HTTP signatures pubkey: ", _config.cache_http_pub_key());
 
             sys::error_code ec;
 
@@ -1290,7 +1291,7 @@ void Client::State::setup_cache()
 
             if (_config.cache_enabled())
             {
-                LOG_DEBUG("And BitTorrent pubkey: ", _config.index_bep44_pub_key());
+                LOG_DEBUG("BitTorrent BEP44 pubkey: ", _config.index_bep44_pub_key());
 
                 auto on_exit = defer([&] { _is_ipns_being_setup = false; });
 
