@@ -372,6 +372,8 @@ struct Client::Impl {
 
             sys::error_code ec;
             wc.wait(y[ec]);
+
+            if (c) return or_throw(y, asio::error::operation_aborted);
         });
     }
 
