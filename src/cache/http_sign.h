@@ -99,6 +99,16 @@ http_injection_trailer( const http::response_header<>& rsh
                                  , sk, key_id, ts);
 }
 
+// Verify that the given response head contains
+// a valid signature for it from the given public key.
+// If such a signature exists, return true or false depending on
+// whether the head matches the signature.
+// If any other error happens, set the error code.
+bool
+http_injection_verify( const http::response_header<>&
+                     , const ouinet::util::Ed25519PublicKey&
+                     , sys::error_code&);
+
 // Get a `keyId` encoding the given public key itself.
 std::string
 http_key_id_for_injection(const ouinet::util::Ed25519PublicKey&);

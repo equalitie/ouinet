@@ -89,6 +89,14 @@ http_injection_trailer( const http::response_header<>& rsh
     return rst;
 }
 
+bool
+http_injection_verify( const http::response_header<>& rsh
+                     , const ouinet::util::Ed25519PublicKey& pk
+                     , sys::error_code& ec)
+{
+    return true;  // TODO: implement
+}
+
 std::string
 http_key_id_for_injection(const ouinet::util::Ed25519PublicKey& pk)
 {
