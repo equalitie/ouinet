@@ -44,6 +44,12 @@ public:
     template<class SinkStream>
     void flush_response(SinkStream&, Cancel&, asio::yield_context);
 
+    // Allows manipulating the head, body and trailer forwarded to the sink.
+    template<class SinkStream, class ProcHead, class ProcIn, class ProcTrail>
+    void flush_response( SinkStream&
+                       , ProcHead, ProcIn, ProcTrail
+                       , Cancel&, asio::yield_context);
+
     // Loads the entire response to memory, use only for debugging
     template<class BodyType>
     http::response<BodyType> slurp(Cancel&, asio::yield_context);
@@ -98,10 +104,11 @@ Session::read_response_header(Cancel& cancel, asio::yield_context yield)
     return response_header();
 }
 
-template<class SinkStream>
+template<class SinkStream, class ProcHead, class ProcIn, class ProcTrail>
 inline
 void
 Session::flush_response(SinkStream& sink,
+                        ProcHead hproc, ProcIn dproc, ProcTrail tproc,
                         Cancel& cancel,
                         asio::yield_context yield)
 {
@@ -109,15 +116,30 @@ Session::flush_response(SinkStream& sink,
         return or_throw(yield, asio::error::bad_descriptor);
     }
 
-    // Just pass head, body data and trailer on.
-    auto hproc = [&] (auto inh, auto&, auto) { return inh; };
-    ProcInFunc<asio::const_buffer> dproc = [&] (auto ind, auto&, auto) { return ind; };
-    auto tproc = [&] (auto intr, auto&, auto) { return intr; };
-
     Yield yield_(sink.get_io_service(), yield, "flush_response");
     http_forward( _state->con, sink, _state->buffer, _state->parser
                 , std::move(hproc), std::move(dproc), std::move(tproc)
                 , cancel, yield_);
+}
+
+template<class SinkStream>
+inline
+void
+Session::flush_response(SinkStream& sink,
+                        Cancel& cancel,
+                        asio::yield_context yield)
+{
+    // Just pass head, body data and trailer on.
+    static auto hproc =
+        [] (auto inh, auto&, auto) { return inh; };
+    static ProcInFunc<asio::const_buffer> dproc =
+        [] (auto ind, auto&, auto) { return ind; };
+    static auto tproc =
+        [] (auto intr, auto&, auto) { return intr; };
+
+    return flush_response( sink
+                         , std::move(hproc), std::move(dproc), std::move(tproc)
+                         , cancel, yield );
 }
 
 template<class BodyType>
