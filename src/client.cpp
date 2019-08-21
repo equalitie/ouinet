@@ -15,6 +15,7 @@
 
 #include "cache/bep44_ipfs/cache_client.h"
 #include "cache/bep5_http/client.h"
+#include "cache/http_sign.h"
 
 #include "namespaces.h"
 #include "origin_pools.h"
@@ -829,7 +830,19 @@ public:
                         s2.flush_response(con, cancel, yield_[ec]);
                     });
 
-                    s.flush_response(sink, cancel, yield[ec]);
+                    bool need_verify = (client_state._config.cache_type()
+                                        == ClientConfig::CacheType::Bep5Http);
+                    if (need_verify) {
+                        // This forwards an already verified response to the tasks above.
+                        auto pk = client_state._config.cache_http_pub_key();
+                        assert(pk);
+                        cache::session_flush_verified(s, sink, *pk, cancel, yield[ec]);
+                        if (ec == asio::error::bad_descriptor)
+                            LOG_WARN( "Failed to verify response against HTTP signatures; url="
+                                    , rq.target());
+                    } else {
+                        s.flush_response(sink, cancel, yield[ec]);
+                    }
 
                     wc.wait(yield);
 
