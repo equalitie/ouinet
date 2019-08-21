@@ -106,8 +106,10 @@ struct HttpSignature {
     boost::optional<HttpSignature> parse(boost::string_view sig)
     {
         // TODO: proper support for quoted strings
-        if (has_comma_in_quotes(sig))
+        if (has_comma_in_quotes(sig)) {
+            LOG_WARN("Commas in quoted arguments of HTTP signatures are not yet supported");
             return {};
+        }
 
         HttpSignature hs;
         for (boost::string_view item : SplitString(sig, ',')) {
