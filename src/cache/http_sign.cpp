@@ -16,6 +16,9 @@
 
 namespace ouinet { namespace cache {
 
+static const auto initial_signature_hdr = http_::response_signature_hdr_pfx + "0";
+static const auto final_signature_hdr = http_::response_signature_hdr_pfx + "1";
+
 static
 http::response_header<>
 without_framing(const http::response_header<>& rsh)
@@ -45,7 +48,7 @@ http_injection_head( const http::request_header<>& rqh
 
     // Create a signature of the initial head.
     auto to_sign = without_framing(rsh);
-    rsh.set(header_prefix + "Sig0", http_signature(to_sign, sk, key_id, injection_ts));
+    rsh.set(initial_signature_hdr, http_signature(to_sign, sk, key_id, injection_ts));
 
     // Enabling chunking is easier with a whole respone,
     // and we do not care about content length anyway.
@@ -53,7 +56,7 @@ http_injection_head( const http::request_header<>& rqh
     rs.chunked(true);
     static const std::string trfmt_ = ( "%s%s"
                                       + header_prefix + "Data-Size, Digest, "
-                                      + header_prefix + "Sig1");
+                                      + final_signature_hdr);
     auto trfmt = boost::format(trfmt_);
     auto trhdr = rs[http::field::trailer];
     rs.set( http::field::trailer
@@ -81,11 +84,11 @@ http_injection_trailer( const http::response_header<>& rsh
     // plus trailer headers.
     // Use `...-Data-Size` internal header instead on `Content-Length`.
     auto to_sign = without_framing(rsh);
-    to_sign.erase(header_prefix + "Sig0");
+    to_sign.erase(initial_signature_hdr);
     for (auto& hdr : rst)
         to_sign.set(hdr.name_string(), hdr.value());
 
-    rst.set(header_prefix + "Sig1", http_signature(to_sign, sk, key_id, ts));
+    rst.set(final_signature_hdr, http_signature(to_sign, sk, key_id, ts));
     return rst;
 }
 

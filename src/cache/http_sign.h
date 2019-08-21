@@ -7,10 +7,17 @@
 #include <boost/beast/http/dynamic_body.hpp>
 #include <boost/beast/http/message.hpp>
 
+#include "../constants.h"
 #include "../util/crypto.h"
 #include "../util/hash.h"
 
 #include "../namespaces.h"
+
+namespace ouinet { namespace http_ {
+    // A prefix for HTTP signature headers at the response head,
+    // each of them followed by a non-repeating, 0-based decimal integer.
+    static const std::string response_signature_hdr_pfx = header_prefix + "Sig";
+}}
 
 namespace ouinet { namespace cache {
 
