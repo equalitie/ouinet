@@ -11,6 +11,7 @@
 #include <boost/format.hpp>
 
 #include "../constants.h"
+#include "../logger.h"
 #include "../util.h"
 #include "../util/hash.h"
 
@@ -92,12 +93,55 @@ http_injection_trailer( const http::response_header<>& rsh
     return rst;
 }
 
+struct HttpSignature {
+    // TODO: refine types
+    boost::string_view keyId;
+    boost::string_view algorithm;
+    boost::string_view created;
+    boost::string_view headers;
+    boost::string_view signature;
+
+    static
+    boost::optional<HttpSignature> parse(boost::string_view sig)
+    {
+        return {{}};  // TODO: implement
+    }
+
+    bool verify( const http::response_header<>& rsh
+               , const ouinet::util::Ed25519PublicKey& pk)
+    {
+        return true;  // TODO: implement
+    }
+};
+
 bool
 http_injection_verify( const http::response_header<>& rsh
                      , const ouinet::util::Ed25519PublicKey& pk
                      , sys::error_code& ec)
 {
-    return true;  // TODO: implement
+    auto keyId = http_key_id_for_injection(pk);  // TODO: cache this
+    bool sig_found = false;
+
+    for (auto& hdr : rsh) {
+        auto hn = hdr.name_string();
+        if (!boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx))
+            continue;  // not a signature header
+        auto sig = HttpSignature::parse(hdr.value());
+        if (!sig) {
+            LOG_WARN("Invalid HTTP signature in header: ", hn);
+            continue;  // not with a usable value
+        }
+        if (sig->keyId != keyId)
+            continue;  // not for the public key we specified
+        sig_found = true;
+        if (!(sig->verify(rsh, pk)))
+            continue;  // head does not match signature
+        return true;
+    }
+
+    if (!sig_found)
+        ec = asio::error::invalid_argument;
+    return false;
 }
 
 std::string
