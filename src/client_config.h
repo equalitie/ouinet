@@ -144,13 +144,13 @@ public:
             , "Index ID for the IPFS IPNS subsystem")
            ("index-bep44-public-key"
             , po::value<string>()
-            , "Index public key for the BitTorrent BEP44 subsystem")
+            , "Index public key for the BitTorrent BEP44 subsystem (hex-encoded)")
            ("index-bep44-capacity"
             , po::value<unsigned int>()->default_value(_index_bep44_capacity)
             , "Maximum number of entries to be kept (and persisted) in the BEP44 index")
            ("cache-http-public-key"
             , po::value<string>()
-            , "Public key for HTTP signatures in the BEP5/HTTP cache")
+            , "Public key for HTTP signatures in the BEP5/HTTP cache (hex-encoded)")
            ("max-cached-age"
             , po::value<int>()->default_value(_max_cached_age.total_seconds())
             , "Discard cached content older than this many seconds "
