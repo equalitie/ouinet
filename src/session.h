@@ -1,5 +1,7 @@
 #pragma once
 
+#include <boost/beast/http/buffer_body.hpp>
+
 #include "generic_stream.h"
 #include "http_forward.h"
 #include "util/yield.h"
