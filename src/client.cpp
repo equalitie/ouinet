@@ -844,6 +844,14 @@ public:
                         s.flush_response(sink, cancel, yield[ec]);
                     }
 
+                    if (ec) {  // TODO: maybe handle this more subtly
+                        // Abort store and forward tasks.
+                        fork.close();
+                        // We do not know whether data was already sent to the agent,
+                        // so just close the connection.
+                        con.close();
+                    }
+
                     wc.wait(yield);
 
                     return !ec && rq.keep_alive() && s.keep_alive();
