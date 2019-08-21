@@ -131,6 +131,13 @@ struct HttpSignature {
             if (key == "signature") {hs.signature = value; continue;}
             return {};
         }
+        if (hs.keyId.empty() || hs.signature.empty()) {  // required
+            LOG_WARN("HTTP signature contains empty key identifier or signature");
+            return {};
+        }
+        if (hs.algorithm.empty() || hs.created.empty() || hs.headers.empty()) {  // recommended
+            LOG_WARN("HTTP signature contains empty algorithm, creation time stamp, or header list");
+        }
 
         return {std::move(hs)};
     }
