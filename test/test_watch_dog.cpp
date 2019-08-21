@@ -17,11 +17,6 @@ using namespace chrono;
 using Timer = boost::asio::steady_timer;
 using Clock = chrono::steady_clock;
 
-int millis_since(Clock::time_point start) {
-    auto end = Clock::now();
-    return duration_cast<milliseconds>(end - start).count();
-}
-
 BOOST_AUTO_TEST_CASE(test_watch_dog) {
     using namespace chrono_literals;
 
@@ -37,7 +32,6 @@ BOOST_AUTO_TEST_CASE(test_watch_dog) {
 
             Cancel cancel;
 
-            auto start = Clock::now();
             WatchDog wd(ios, 1s, [&] { cancel(); });
 
             async_sleep(ios, 2s, cancel, yield[ec]);
