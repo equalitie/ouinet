@@ -112,6 +112,9 @@ struct HttpSignature {
         }
 
         HttpSignature hs;
+        static const std::string def_headers = "(created)";
+        hs.headers = def_headers;  // missing is not the same as empty
+
         for (boost::string_view item : SplitString(sig, ',')) {
             beast::string_view key, value;
             std::tie(key, value) = split_string_pair(item, '=');
