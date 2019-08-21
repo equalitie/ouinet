@@ -9,6 +9,7 @@
 #include <boost/regex.hpp>
 
 #include "../constants.h"
+#include "../session.h"
 #include "../util/crypto.h"
 #include "../util/hash.h"
 
@@ -129,6 +130,33 @@ http_injection_verify( http::response_header<>
 // Get a `keyId` encoding the given public key itself.
 std::string
 http_key_id_for_injection(const ouinet::util::Ed25519PublicKey&);
+
+// Flush a response from session `in` to stream `out`
+// while verifying signatures by the provided public key.
+template<class SinkStream>
+inline
+void
+session_flush_verified( Session& in, SinkStream& out
+                      , const ouinet::util::Ed25519PublicKey& pk
+                      , Cancel& cancel, asio::yield_context yield)
+{
+    auto hproc = [&pk] (auto inh, auto&, auto y) {
+        inh = cache::http_injection_verify(move(inh), pk);
+        if (inh.cbegin() == inh.cend())
+            return or_throw(y, asio::error::bad_descriptor, inh);  // maybe not the best error code
+        return inh;
+    };
+    // TODO: feed body digest
+    ProcInFunc<asio::const_buffer> dproc =
+        [] (auto ind, auto&, auto) { return ind; };
+    // TODO: look for signed `Digest` header, compare
+    auto tproc =
+        [] (auto intr, auto&, auto) { return intr; };
+
+    in.flush_response( out
+                     , std::move(hproc), std::move(dproc), std::move(tproc)
+                     , cancel, yield);
+}
 
 
 // Body digest computation as per RFC 3230 and RFC 5843
