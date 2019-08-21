@@ -12,6 +12,7 @@
 
 #include "../constants.h"
 #include "../logger.h"
+#include "../split_string.h"
 #include "../util.h"
 #include "../util/hash.h"
 
@@ -108,7 +109,25 @@ struct HttpSignature {
         if (has_comma_in_quotes(sig))
             return {};
 
-        return {{}};  // TODO: implement
+        HttpSignature hs;
+        for (boost::string_view item : SplitString(sig, ',')) {
+            beast::string_view key, value;
+            std::tie(key, value) = split_string_pair(item, '=');
+            // Unquoted values:
+            if (key == "created") {hs.created = value; continue;}
+            // Quoted values:
+            if (value.size() < 2 || value[0] != '"' || value[value.size() - 1] != '"')
+                return {};
+            value.remove_prefix(1);
+            value.remove_suffix(1);
+            if (key == "keyId") {hs.keyId = value; continue;}
+            if (key == "algorithm") {hs.algorithm = value; continue;}
+            if (key == "headers") {hs.headers = value; continue;}
+            if (key == "signature") {hs.signature = value; continue;}
+            return {};
+        }
+
+        return {std::move(hs)};
     }
 
     bool verify( const http::response_header<>& rsh
