@@ -1,5 +1,9 @@
 #pragma once
 
+#include <boost/optional.hpp>
+#include "async_queue.h"
+#include "wait_condition.h"
+
 namespace ouinet { namespace util {
 
 // Class to asynchronously generate values.
@@ -43,14 +47,17 @@ public:
         , _shutdown_cancel(_lifetime_cancel)
         , _wc(ioc)
     {
-        asio::spawn(ioc, [ &
+        auto* last_ec = &_last_ec;
+
+        asio::spawn(ioc, [ last_ec
+                         , &q = _queue
                          , gen = std::move(gen)
                          , lifetime_cancel = _lifetime_cancel
                          , shutdown_cancel = _shutdown_cancel
                          , lock = _wc.lock()
                          ] (Yield yield) mutable {
             sys::error_code ec;
-            gen(_queue, shutdown_cancel, yield[ec]);
+            gen(q, shutdown_cancel, yield[ec]);
 
             // lifetime_cancel => shutdown_cancel
             assert(!lifetime_cancel || shutdown_cancel);
@@ -58,11 +65,25 @@ public:
             // shutdown_cancel => operation_aborted
             assert(!shutdown_cancel || ec == asio::error::operation_aborted);
 
-            if (!lifetime_cancel) _last_ec = ec;
+            if (!lifetime_cancel) {
+                *last_ec = shutdown_cancel ? asio::error::operation_aborted
+                                           : ec;
+            }
         });
     }
 
-    boost::optional<Value> async_get_value(Cancel cancel, Yield yield) {
+    boost::optional<Value> async_get_value(Cancel& cancel, Yield yield) {
+        if (_shutdown_cancel) {
+            return or_throw<boost::optional<Value>>(yield,
+                    asio::error::operation_aborted);
+        }
+
+        if (_queue.size()) {
+            Value v = std::move(_queue.front());
+            _queue.pop();
+            return v;
+        }
+
         // Return none if the coroutine is no longer running
         if (_last_ec) { return boost::none; }
 
