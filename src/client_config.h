@@ -359,31 +359,26 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         _client_credentials = move(cred);
     }
 
-    if (vm.count("index-bep44-public-key")) {
-        string value = vm["index-bep44-public-key"].as<string>();
+    auto maybe_set_pk = [&] (const string& opt, auto& pk) {
+        if (vm.count(opt)) {
+            string value = vm[opt].as<string>();
 
-        _index_bep44_pubkey = util::Ed25519PublicKey::from_hex(value);
+            pk = util::Ed25519PublicKey::from_hex(value);
 
-        if (!_index_bep44_pubkey) {
-            throw std::runtime_error(
-                    util::str("Failed parsing '", value, "' as Ed25519 public key"));
+            if (!pk) {
+                throw std::runtime_error(
+                        util::str("Failed parsing '", value, "' as Ed25519 public key"));
+            }
         }
-    }
+    };
+
+    maybe_set_pk("index-bep44-public-key", _index_bep44_pubkey);
 
     if (vm.count("index-bep44-capacity")) {
         _index_bep44_capacity = vm["index-bep44-capacity"].as<unsigned int>();
     }
 
-    if (vm.count("cache-http-public-key")) {
-        string value = vm["cache-http-public-key"].as<string>();
-
-        _cache_http_pubkey = util::Ed25519PublicKey::from_hex(value);
-
-        if (!_cache_http_pubkey) {
-            throw std::runtime_error(
-                    util::str("Failed parsing '", value, "' as Ed25519 public key"));
-        }
-    }
+    maybe_set_pk("cache-http-public-key", _cache_http_pubkey);
 
     if (vm.count("cache-type")) {
         auto type_str = vm["cache-type"].as<string>();
