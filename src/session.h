@@ -132,11 +132,11 @@ Session::flush_response(SinkStream& sink,
                         asio::yield_context yield)
 {
     // Just pass head, body data and trailer on.
-    static auto hproc =
+    auto hproc =
         [] (auto inh, auto&, auto) { return inh; };
-    static ProcInFunc<asio::const_buffer> dproc =
+    ProcInFunc<asio::const_buffer> dproc =
         [] (auto ind, auto&, auto) { return ind; };
-    static auto tproc =
+    auto tproc =
         [] (auto intr, auto&, auto) { return intr; };
 
     return flush_response( sink
