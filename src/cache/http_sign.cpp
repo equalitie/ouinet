@@ -104,6 +104,10 @@ struct HttpSignature {
     static
     boost::optional<HttpSignature> parse(boost::string_view sig)
     {
+        // TODO: proper support for quoted strings
+        if (has_comma_in_quotes(sig))
+            return {};
+
         return {{}};  // TODO: implement
     }
 
@@ -111,6 +115,23 @@ struct HttpSignature {
                , const ouinet::util::Ed25519PublicKey& pk)
     {
         return true;  // TODO: implement
+    }
+
+private:
+    static
+    bool has_comma_in_quotes(boost::string_view s) {
+        // A comma is between quotes if
+        // the number of quotes before it is odd.
+        int quotes_seen = 0;
+        for (auto c : s) {
+            if (c == '"') {
+                quotes_seen++;
+                continue;
+            }
+            if ((c == ',') && (quotes_seen % 2 != 0))
+                return true;
+        }
+        return false;
     }
 };
 
