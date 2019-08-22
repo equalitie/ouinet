@@ -432,7 +432,7 @@ struct Client::Impl {
             if (ec == asio::error::operation_aborted) return;
             if (ec) { try_remove(p); continue; }
 
-            auto key = hdr[http_::response_uri];
+            auto key = hdr[http_::response_uri_hdr];
 
             if (key.empty()) { try_remove(p); continue; }
 

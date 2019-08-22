@@ -324,7 +324,7 @@ Client::State::fetch_stored( const Request& request
                                    , asio::error::operation_not_supported);
     }
 
-    auto date = util::parse_date((*hdr)[http_::response_injection_time]);
+    auto date = util::parse_date((*hdr)[http_::response_injection_time_hdr]);
 
     return CacheEntry{date, move(s)};
 }
