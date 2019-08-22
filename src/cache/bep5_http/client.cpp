@@ -6,6 +6,8 @@
 #include "../../util/wait_condition.h"
 #include "../../util/set_io.h"
 #include "../../util/async_generator.h"
+#include "../../util/async_job.h"
+#include "../../util/lru_cache.h"
 #include "../../bittorrent/dht.h"
 #include "../../bittorrent/is_martian.h"
 #include "../../ouiservice/utp.h"
@@ -17,16 +19,143 @@
 #include "../../session.h"
 #include <map>
 #include <set>
-#include <network/uri.hpp>
 
 using namespace std;
 using namespace ouinet;
 using namespace cache::bep5_http;
 using udp = asio::ip::udp;
 using tcp = asio::ip::tcp;
+using Clock = chrono::steady_clock;
 
 namespace fs = boost::filesystem;
 namespace bt = bittorrent;
+
+namespace std {
+    template<> struct hash<bt::NodeID> {
+        using argument_type = bt::NodeID;
+        using result_type = typename std::hash<std::string>::result_type;
+
+        result_type operator()(argument_type const& a) const noexcept {
+            return std::hash<std::string>{}(a.to_hex());
+        }
+    };
+}
+
+class DhtLookup {
+private:
+    using Ret = set<udp::endpoint>;
+    using Job = AsyncJob<boost::none_t>;
+
+    struct Result {
+        sys::error_code   ec = asio::error::no_data;
+        Ret               value;
+        Clock::time_point time;
+
+        bool is_fresh() const {
+            using namespace chrono_literals;
+            if (ec) return false;
+            return time + 5min >= Clock::now();
+        }
+    };
+
+public:
+    DhtLookup(DhtLookup&&) = delete;
+
+    DhtLookup(weak_ptr<bt::MainlineDht> dht_w, bt::NodeID infohash)
+        : infohash(infohash)
+        , ioc(dht_w.lock()->get_io_service())
+        , dht_w(dht_w)
+        , cv(ioc)
+    { }
+
+    Ret get(Cancel c, asio::yield_context y) {
+        // * Start a new job if one isn't already running
+        // * Use previously returned result if it's not older than 5mins
+        // * Otherwise wait for the running job to finish
+
+        auto cancel_con = lifetime_cancel.connect([&] { c(); });
+
+        if (!job) {
+            job = make_job();
+        }
+
+        if (last_result.is_fresh()) {
+            return last_result.value;
+        }
+
+        sys::error_code ec;
+        cv.wait(c, y[ec]);
+
+        return_or_throw_on_error(y, c, ec, Ret{});
+
+        return or_throw(y, last_result.ec, last_result.value);
+    }
+
+    ~DhtLookup() { lifetime_cancel(); }
+
+private:
+
+    unique_ptr<Job> make_job() {
+        auto job = make_unique<Job>(ioc);
+
+        job->start([ self = this
+                   , dht_w = dht_w
+                   , infohash = infohash
+                   , lc = make_shared<Cancel>(lifetime_cancel)
+                   ] (Cancel c, asio::yield_context y) mutable {
+            auto cancel_con = lc->connect([&] { c(); });
+
+            auto on_exit = defer([&] {
+                    if (*lc) return;
+                    self->cv.notify();
+                    self->job = nullptr;
+                });
+
+            WatchDog wd(self->ioc, chrono::minutes(5), [&] {
+                    LOG_WARN("DHT BEP5 lookup ", infohash, " timed out");
+                    c();
+                });
+
+            auto dht = dht_w.lock();
+            assert(dht);
+
+            if (!dht)
+                return or_throw( y
+                               , asio::error::operation_aborted
+                               , boost::none);
+
+            sys::error_code ec;
+
+            auto eps = tcp_to_udp(dht->tracker_get_peers(infohash, c, y[ec]));
+
+            if (!c && !ec) {
+                self->last_result.ec    = ec;
+                self->last_result.value = move(eps);
+                self->last_result.time  = Clock::now();
+            }
+
+            return or_throw(y, ec, boost::none);
+        });
+
+        return job;
+    }
+
+    static Ret tcp_to_udp(const set<tcp::endpoint>& eps)
+    {
+        Ret ret;
+        for (auto& ep : eps) { ret.insert({ep.address(), ep.port()}); }
+        return ret;
+    }
+
+private:
+    bt::NodeID infohash;
+    asio::io_context& ioc;
+    weak_ptr<bt::MainlineDht> dht_w;
+    unique_ptr<Job> job;
+    ConditionVariable cv;
+    Result last_result;
+    Cancel lifetime_cancel;
+};
 
 struct Client::Impl {
     asio::io_service& ios;
@@ -35,6 +164,7 @@ struct Client::Impl {
     Cancel cancel;
     Announcer announcer;
     map<string, udp::endpoint> peer_cache;
+    util::LruCache<bt::NodeID, unique_ptr<DhtLookup>> dht_lookups;
     log_level_t log_level = INFO;
 
     bool log_debug() const { return log_level <= DEBUG; }
@@ -45,6 +175,7 @@ struct Client::Impl {
         , dht(move(dht_))
         , cache_dir(move(cache_dir))
         , announcer(dht)
+        , dht_lookups(256)
     {
         start_accepting();
     }
@@ -175,6 +306,20 @@ struct Client::Impl {
 #endif
     }
 
+    std::set<udp::endpoint> dht_get_peers( bt::NodeID infohash
+                                         , Cancel& cancel
+                                         , Yield yield)
+    {
+        auto* lookup = dht_lookups.get(infohash);
+
+        if (!lookup) {
+            lookup = dht_lookups.put( infohash
+                                    , make_unique<DhtLookup>(dht, infohash));
+        }
+
+        return (*lookup)->get(cancel, yield);
+    }
+
     Session load(const std::string& key, Cancel cancel, Yield yield)
     {
         namespace err = asio::error;
@@ -206,12 +351,13 @@ struct Client::Impl {
                 bt::NodeID infohash = util::sha1_digest(host);
 
                 if (log_debug()) {
-                    yield.log("Bep5Http: DHT BEP5 lookup:");
+                    yield.log("Bep5Http: DHT lookup:");
+                    yield.log("    key:     ", key);
                     yield.log("    dht_key: ", host);
                     yield.log("    infohash:", infohash);
                 }
 
-                eps = tcp_to_udp(dht->tracker_get_peers(infohash, cancel, yield[ec]));
+                eps = dht_get_peers(infohash, cancel, yield[ec]);
 
                 if (cancel) return or_throw<Session>(yield, err::operation_aborted);
                 // TODO: Random shuffle eps
@@ -266,6 +412,7 @@ struct Client::Impl {
             }
         }
 
+        if (cancel) return or_throw<Session>(yield, asio::error::operation_aborted);
         return or_throw<Session>(yield, err::not_found);
     }
 
@@ -325,13 +472,6 @@ struct Client::Impl {
         if (cancel) ec = asio::error::operation_aborted;
 
         return or_throw(yield, ec, move(session));
-    }
-
-    static set<udp::endpoint> tcp_to_udp(const set<tcp::endpoint>& eps)
-    {
-        set<udp::endpoint> ret;
-        for (auto& ep : eps) { ret.insert({ep.address(), ep.port()}); }
-        return ret;
     }
 
     GenericStream connect( udp::endpoint ep
