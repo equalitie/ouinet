@@ -126,6 +126,10 @@ struct Client::Impl {
             return handle_not_found(con, req, yield[ec]);
         }
 
+        if (log_debug()) {
+            cerr << "Bep5HTTP: Serving " << key << "\n";
+        }
+
         flush_from_to(file, con, cancel, yield[ec]);
 
         return or_throw(yield, ec);
@@ -452,15 +456,28 @@ struct Client::Impl {
 
             auto f = util::file_io::open_readonly(ios, p, ec);
             if (ec == asio::error::operation_aborted) return;
-            if (ec) { try_remove(p); continue; }
+            if (ec) {
+                LOG_WARN("Bep5HTTP: Failed to open cached file ", p
+                        , " ec:", ec.message());
+                try_remove(p); continue;
+            }
 
             auto hdr = read_response_header(f, yield[ec]);
             if (ec == asio::error::operation_aborted) return;
-            if (ec) { try_remove(p); continue; }
+            if (ec) {
+                LOG_WARN("Bep5HTTP: Failed read cached file ", p
+                        , " ec:", ec.message());
+                try_remove(p); continue;
+            }
 
             auto key = hdr[http_::response_injection_uri];
 
-            if (key.empty()) { try_remove(p); continue; }
+            if (key.empty()) {
+                LOG_WARN("Bep5HTTP: Cached file ", p
+                        , " does not contain ", http_::response_injection_uri
+                        , " header field (removing the file)");
+                try_remove(p); continue;
+            }
 
             if (auto opt_k = dht_key(key.to_string())) {
                 announcer.add(*opt_k);
