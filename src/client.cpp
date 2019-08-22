@@ -857,7 +857,8 @@ public:
                         auto pk = client_state._config.cache_http_pub_key();
                         assert(pk);
                         cache::session_flush_verified(s, sink, *pk, cancel, yield[ec]);
-                        if (ec == asio::error::bad_descriptor)
+                        if ( ec.value() == sys::errc::no_message
+                           || ec.value() == sys::errc::bad_message)
                             LOG_WARN( "Failed to verify response against HTTP signatures; url="
                                     , rq.target());
                     } else {
