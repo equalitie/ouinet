@@ -48,7 +48,7 @@ http_injection_head( const http::request_header<>& rqh
     assert(response_version_hdr_current == response_version_hdr_v0);
 
     rsh.set(response_version_hdr, response_version_hdr_v0);
-    rsh.set(response_injection_uri, rqh.target());
+    rsh.set(response_uri, rqh.target());
     rsh.set( header_prefix + "Injection"
            , boost::format("id=%s,ts=%d") % injection_id % injection_ts);
 
