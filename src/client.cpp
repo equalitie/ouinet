@@ -867,7 +867,7 @@ public:
                     if (ec) {
                         // Abort store and forward tasks.
                         fork.close();
-                        if (ec == sys::errc::make_error_code(sys::errc::no_message))
+                        if (ec.value() == sys::errc::no_message)
                             // HTTP signature verification detected an early error
                             // before sending anything to the agent;
                             // try to report a meaningful error to it.
