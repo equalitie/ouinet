@@ -7,6 +7,7 @@
 #include <boost/beast/http/dynamic_body.hpp>
 #include <boost/beast/http/message.hpp>
 #include <boost/regex.hpp>
+#include <boost/system/error_code.hpp>
 
 #include "../constants.h"
 #include "../session.h"
@@ -133,6 +134,13 @@ http_key_id_for_injection(const ouinet::util::Ed25519PublicKey&);
 
 // Flush a response from session `in` to stream `out`
 // while verifying signatures by the provided public key.
+//
+// Fail with error `boost::system::errc::no_message`
+// if the response head failed to be verified
+// (in which case no data should have been sent to `out`);
+// fail with error `boost::system::errc::bad_message`
+// if verification fails later on
+// (in which case data may have already been sent).
 template<class SinkStream>
 inline
 void
@@ -143,7 +151,7 @@ session_flush_verified( Session& in, SinkStream& out
     auto hproc = [&pk] (auto inh, auto&, auto y) {
         inh = cache::http_injection_verify(move(inh), pk);
         if (inh.cbegin() == inh.cend())
-            return or_throw(y, asio::error::bad_descriptor, inh);  // maybe not the best error code
+            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), inh);
         return inh;
     };
     // TODO: feed body digest
