@@ -27,11 +27,7 @@ process_trailers( const http::response_header<>& rph, const ProcTrailFunc& trpro
         auto hit = rph.find(hdr);
         if (hit == rph.end())
             continue;  // missing trailer
-        // One would expect `hit->name()` to return `X-Foo` (on such non-standard header),
-        // but it returns `<unknown-field>`, so use `hdr` instead
-        // to avoid an assertion error in the invocation of `insert`.
-        // This may be a bug in Boost Beast.
-        intrail.insert(hdr /* hit->name() */, hit->value());
+        intrail.insert(hit->name(), hit->name_string(), hit->value());
     }
     return trproc(std::move(intrail), cancel, yield);
 }
