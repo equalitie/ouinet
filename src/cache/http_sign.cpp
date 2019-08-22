@@ -175,6 +175,14 @@ http_key_id_for_injection(const util::Ed25519PublicKey& pk)
 }
 
 std::string
+http_digest(util::SHA256& hash)
+{
+    auto digest = hash.close();
+    auto encoded_digest = util::base64_encode(digest);
+    return "SHA-256=" + encoded_digest;
+}
+
+std::string
 http_digest(const http::response<http::dynamic_body>& rs)
 {
     util::SHA256 hash;
@@ -182,9 +190,8 @@ http_digest(const http::response<http::dynamic_body>& rs)
     // Feed each buffer of body data into the hash.
     for (auto it : rs.body().data())
         hash.update(it);
-    auto digest = hash.close();
-    auto encoded_digest = util::base64_encode(digest);
-    return "SHA-256=" + encoded_digest;
+
+    return http_digest(hash);
 }
 
 template<class Head>

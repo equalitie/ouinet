@@ -175,6 +175,9 @@ session_flush_verified( Session& in, SinkStream& out
 //     SHA-256=NYfLd2zg5OgjfyFYALff+6DyWGXLhFUOh+qLusg4xCM=
 //
 std::string
+http_digest(ouinet::util::SHA256&);
+
+std::string
 http_digest(const http::response<http::dynamic_body>&);
 
 
