@@ -482,7 +482,7 @@ struct Client::Impl {
     }
 
     GenericStream connect( udp::endpoint ep
-                         , Cancel& cancel
+                         , Cancel cancel
                          , asio::yield_context yield)
     {
         sys::error_code ec;
@@ -492,7 +492,10 @@ struct Client::Impl {
         s.bind(*opt_m, ec);
         if (ec) return or_throw<GenericStream>(yield, ec);
         auto c = cancel.connect([&] { s.close(); });
+        bool timed_out = false;
+        WatchDog wd(ios, chrono::seconds(30), [&] { timed_out = true; cancel(); });
         s.async_connect(ep, yield[ec]);
+        if (timed_out) return or_throw<GenericStream>(yield, asio::error::timed_out);
         if (ec || cancel) return or_throw<GenericStream>(yield, ec);
         return GenericStream(move(s));
     }
