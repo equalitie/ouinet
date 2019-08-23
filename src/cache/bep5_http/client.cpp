@@ -58,6 +58,14 @@ private:
         }
     };
 
+    static Clock::duration timeout() {
+#ifndef NDEBUG // debug
+        return chrono::minutes(1);
+#else // release
+        return chrono::minutes(3);
+#endif
+    }
+
 public:
     DhtLookup(DhtLookup&&) = delete;
 
@@ -82,6 +90,12 @@ public:
         if (last_result.is_fresh()) {
             return last_result.value;
         }
+
+#ifndef NDEBUG
+        WatchDog wd(ioc, timeout() + chrono::seconds(5), [&] {
+                LOG_ERROR("DHT BEP5 DhtLookup::get failed to time out");
+            });
+#endif
 
         sys::error_code ec;
         cv.wait(c, y[ec]);
@@ -111,7 +125,7 @@ private:
                     self->job = nullptr;
                 });
 
-            WatchDog wd(self->ioc, chrono::minutes(5), [&] {
+            WatchDog wd(self->ioc, timeout(), [&] {
                     LOG_WARN("DHT BEP5 lookup ", infohash, " timed out");
                     c();
                 });
