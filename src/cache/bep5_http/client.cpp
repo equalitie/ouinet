@@ -3,7 +3,11 @@
 #include "../../util/atomic_file.h"
 #include "../../util/bytes.h"
 #include "../../util/file_io.h"
+#include "../../util/wait_condition.h"
 #include "../../util/set_io.h"
+#include "../../util/async_generator.h"
+#include "../../util/async_job.h"
+#include "../../util/lru_cache.h"
 #include "../../bittorrent/dht.h"
 #include "../../bittorrent/is_martian.h"
 #include "../../ouiservice/utp.h"
@@ -15,24 +19,166 @@
 #include "../../session.h"
 #include <map>
 #include <set>
-#include <network/uri.hpp>
 
 using namespace std;
 using namespace ouinet;
 using namespace cache::bep5_http;
 using udp = asio::ip::udp;
 using tcp = asio::ip::tcp;
+using Clock = chrono::steady_clock;
 
 namespace fs = boost::filesystem;
 namespace bt = bittorrent;
+
+namespace std {
+    template<> struct hash<bt::NodeID> {
+        using argument_type = bt::NodeID;
+        using result_type = typename std::hash<std::string>::result_type;
+
+        result_type operator()(argument_type const& a) const noexcept {
+            return std::hash<std::string>{}(a.to_hex());
+        }
+    };
+}
+
+class DhtLookup {
+private:
+    using Ret = set<udp::endpoint>;
+    using Job = AsyncJob<boost::none_t>;
+
+    struct Result {
+        sys::error_code   ec = asio::error::no_data;
+        Ret               value;
+        Clock::time_point time;
+
+        bool is_fresh() const {
+            using namespace chrono_literals;
+            if (ec) return false;
+            return time + 5min >= Clock::now();
+        }
+    };
+
+    static Clock::duration timeout() {
+#ifndef NDEBUG // debug
+        return chrono::minutes(1);
+#else // release
+        return chrono::minutes(3);
+#endif
+    }
+
+public:
+    DhtLookup(DhtLookup&&) = delete;
+
+    DhtLookup(weak_ptr<bt::MainlineDht> dht_w, bt::NodeID infohash)
+        : infohash(infohash)
+        , ioc(dht_w.lock()->get_io_service())
+        , dht_w(dht_w)
+        , cv(ioc)
+    { }
+
+    Ret get(Cancel c, asio::yield_context y) {
+        // * Start a new job if one isn't already running
+        // * Use previously returned result if it's not older than 5mins
+        // * Otherwise wait for the running job to finish
+
+        auto cancel_con = lifetime_cancel.connect([&] { c(); });
+
+        if (!job) {
+            job = make_job();
+        }
+
+        if (last_result.is_fresh()) {
+            return last_result.value;
+        }
+
+#ifndef NDEBUG
+        WatchDog wd(ioc, timeout() + chrono::seconds(5), [&] {
+                LOG_ERROR("DHT BEP5 DhtLookup::get failed to time out");
+            });
+#endif
+
+        sys::error_code ec;
+        cv.wait(c, y[ec]);
+
+        return_or_throw_on_error(y, c, ec, Ret{});
+
+        return or_throw(y, last_result.ec, last_result.value);
+    }
+
+    ~DhtLookup() { lifetime_cancel(); }
+
+private:
+
+    unique_ptr<Job> make_job() {
+        auto job = make_unique<Job>(ioc);
+
+        job->start([ self = this
+                   , dht_w = dht_w
+                   , infohash = infohash
+                   , lc = make_shared<Cancel>(lifetime_cancel)
+                   ] (Cancel c, asio::yield_context y) mutable {
+            auto cancel_con = lc->connect([&] { c(); });
+
+            auto on_exit = defer([&] {
+                    if (*lc) return;
+                    self->cv.notify();
+                    self->job = nullptr;
+                });
+
+            WatchDog wd(self->ioc, timeout(), [&] {
+                    LOG_WARN("DHT BEP5 lookup ", infohash, " timed out");
+                    c();
+                });
+
+            auto dht = dht_w.lock();
+            assert(dht);
+
+            if (!dht)
+                return or_throw( y
+                               , asio::error::operation_aborted
+                               , boost::none);
+
+            sys::error_code ec;
+
+            auto eps = tcp_to_udp(dht->tracker_get_peers(infohash, c, y[ec]));
+
+            if (!c && !ec) {
+                self->last_result.ec    = ec;
+                self->last_result.value = move(eps);
+                self->last_result.time  = Clock::now();
+            }
+
+            return or_throw(y, ec, boost::none);
+        });
+
+        return job;
+    }
+
+    static Ret tcp_to_udp(const set<tcp::endpoint>& eps)
+    {
+        Ret ret;
+        for (auto& ep : eps) { ret.insert({ep.address(), ep.port()}); }
+        return ret;
+    }
+
+private:
+    bt::NodeID infohash;
+    asio::io_context& ioc;
+    weak_ptr<bt::MainlineDht> dht_w;
+    unique_ptr<Job> job;
+    ConditionVariable cv;
+    Result last_result;
+    Cancel lifetime_cancel;
+};
 
 struct Client::Impl {
     asio::io_service& ios;
     shared_ptr<bt::MainlineDht> dht;
     fs::path cache_dir;
-    Cancel cancel;
+    Cancel lifetime_cancel;
     Announcer announcer;
     map<string, udp::endpoint> peer_cache;
+    util::LruCache<bt::NodeID, unique_ptr<DhtLookup>> dht_lookups;
     log_level_t log_level = INFO;
 
     bool log_debug() const { return log_level <= DEBUG; }
@@ -43,12 +189,13 @@ struct Client::Impl {
         , dht(move(dht_))
         , cache_dir(move(cache_dir))
         , announcer(dht)
+        , dht_lookups(256)
     {
         start_accepting();
     }
 
     // "http(s)://www.foo.org/bar/baz" -> "www.foo.org"
-    string dht_key(const string& s)
+    boost::optional<string> dht_key(const string& s)
     {
         return get_host(s);
     }
@@ -57,7 +204,7 @@ struct Client::Impl {
     {
         for (auto ep : dht->local_endpoints()) {
             asio::spawn(ios, [&, ep] (asio::yield_context yield) {
-                Cancel c(cancel);
+                Cancel c(lifetime_cancel);
                 sys::error_code ec;
                 start_accepting_on(ep, c, yield[ec]);
             });
@@ -124,6 +271,10 @@ struct Client::Impl {
             return handle_not_found(con, req, yield[ec]);
         }
 
+        if (log_debug()) {
+            cerr << "Bep5HTTP: Serving " << key << "\n";
+        }
+
         flush_from_to(file, con, cancel, yield[ec]);
 
         return or_throw(yield, ec);
@@ -144,95 +295,150 @@ struct Client::Impl {
         http::async_write(con, res, yield);
     }
 
-    string get_host(const string& uri_s)
+    boost::optional<string> get_host(const string& uri_s)
     {
+#if 0
+        // This code sometime throws an exception.
         network::uri uri(uri_s);
         return uri.host().to_string();
+#else
+        beast::string_view s(uri_s);
+
+        if (s.starts_with("http://")) {
+            s.remove_prefix(7);
+        } else if (s.starts_with("https://")) {
+            s.remove_prefix(8);
+        }
+
+        auto p = s.find('/');
+
+        if (p == s.npos) return boost::none;
+
+        s = s.substr(0, p);
+
+        return s.to_string();
+#endif
+    }
+
+    std::set<udp::endpoint> dht_get_peers( bt::NodeID infohash
+                                         , Cancel& cancel
+                                         , Yield yield)
+    {
+        auto* lookup = dht_lookups.get(infohash);
+
+        if (!lookup) {
+            lookup = dht_lookups.put( infohash
+                                    , make_unique<DhtLookup>(dht, infohash));
+        }
+
+        return (*lookup)->get(cancel, yield);
     }
 
     Session load(const std::string& key, Cancel cancel, Yield yield)
     {
         namespace err = asio::error;
 
-        auto host = get_host(key);
-        auto canceled = this->cancel.connect([&] { cancel(); });
+        auto opt_host = get_host(key);
 
-        auto peer_i = peer_cache.find(host);
+        if (!opt_host) {
+            return or_throw<Session>(yield, err::invalid_argument);
+        }
 
-        if (peer_i != peer_cache.end()) {
+        auto& host = *opt_host;
+
+        auto canceled = lifetime_cancel.connect([&] { cancel(); });
+
+        for (int i = 0; i < 2 && !cancel; ++i) {
             sys::error_code ec;
 
-            if (log_debug()) {
-                yield.log("Bep5Http: Connecting to cache client: ", peer_i->second);
-            }
+            set<udp::endpoint> eps;
 
-            auto con = connect(peer_i->second, cancel, yield[ec]);
+            if (i == 0) {
+                auto peer_i = peer_cache.find(host);
+                if (peer_i == peer_cache.end()) continue;
+                auto ep = peer_i->second;
+                if (log_debug()) {
+                    yield.log("Bep5Http: using cached endpoint first:", ep);
+                }
+                eps = {ep};
+            } else {
+                bt::NodeID infohash = util::sha1_digest(host);
 
-            if (log_debug()) {
-                yield.log("Bep5Http: Connect to cache client done, ec:", ec.message());
-            }
-
-            if (cancel) return or_throw<Session>(yield, err::operation_aborted);
-
-            if (!ec) {
-
-                auto ret = load_from_connection(key, con, cancel, yield[ec]);
-                assert(ec || ret.response_header());
-
-                if (!ec) {
-                    return ret;
+                if (log_debug()) {
+                    yield.log("Bep5Http: DHT lookup:");
+                    yield.log("    key:     ", key);
+                    yield.log("    dht_key: ", host);
+                    yield.log("    infohash:", infohash);
                 }
 
-                peer_cache.erase(host);
+                eps = dht_get_peers(infohash, cancel, yield[ec]);
+
+                if (cancel) return or_throw<Session>(yield, err::operation_aborted);
+                // TODO: Random shuffle eps
+
+                if (log_debug()) {
+                    yield.log("Bep5Http: DHT BEP5 lookup result ec:", ec.message(),
+                            " eps:", eps);
+                }
+
+                return_or_throw_on_error(yield, cancel, ec, Session());
             }
-            else {
-                peer_cache.erase(host);
+
+            if (cancel) ec = err::operation_aborted;
+            if (ec) return or_throw<Session>(yield, ec);
+
+            if (log_debug()) {
+                yield.log("Bep5Http: Connecting to clients: ", eps);
+            }
+
+            auto gen = make_connection_generator(eps);
+
+            while (auto opt_con = gen->async_get_value(cancel, yield[ec])) {
+                assert(!cancel || ec == err::operation_aborted);
+                if (cancel) ec = err::operation_aborted;
+                if (ec == err::operation_aborted) return or_throw<Session>(yield, ec);
+                if (ec) continue;
+
+                if (log_debug()) {
+                    yield.log("Bep5Http: Connect to clients done, ec:", ec.message(),
+                        " chosen ep:", opt_con->second, "; fetching...");
+                }
+
+                auto session = load_from_connection(key, opt_con->first, cancel, yield[ec]);
+                auto hdr = session.response_header();
+
+                if (!cancel && log_debug()) {
+                    if (hdr) {
+                        yield.log("Bep5Http: fetch done,",
+                            " ec:", ec.message(), " result:", hdr->result());
+                    } else {
+                        yield.log("Bep5Http: fetch done,",
+                            " ec:", ec.message(), " result: <n/a>");
+                    }
+                }
+
+                assert(!cancel || ec == err::operation_aborted);
+                assert(ec || hdr);
+
+                if (ec || hdr->result() == http::status::not_found) {
+                    continue;
+                }
+
+                // We found the entry
+                // TODO: Check its age, store it if it's too old but keep trying
+                // other peers.
+                peer_cache[host] = opt_con->second;
+                return session;
             }
         }
 
-        sys::error_code ec;
-
-        bt::NodeID infohash = util::sha1_digest(dht_key(key));
-
-        if (log_debug()) {
-            yield.log("Bep5Http: DHT BEP5 lookup:");
-            yield.log("    dht_key: ", dht_key(key));
-            yield.log("    infohash:", infohash);
+        if (!cancel || log_debug()) {
+            yield.log("Bep5Http: done cancel:", bool(cancel));
         }
 
-        auto endpoints = dht->tracker_get_peers(infohash, cancel, yield[ec]);
 
-        if (log_debug()) {
-            yield.log("Bep5Http: DHT BEP5 lookup result ec:", ec.message(),
-                    " eps:", endpoints);
-        }
-
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<Session>(yield, ec);
-
-        udp::endpoint con_ep;
-
-        if (log_debug()) {
-            yield.log("Bep5Http: Connecting to clients: ", endpoints);
-        }
-
-        auto con = connect(tcp_to_udp(endpoints), con_ep, cancel, yield[ec]);
-
-        if (log_debug()) {
-            yield.log("Bep5Http: Connect to clients done, ec:", ec.message(),
-                " chosen ep:", con_ep);
-        }
-
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<Session>(yield, ec);
-
-        peer_cache[host] = con_ep;
-
-        auto ret = load_from_connection(key, con, cancel, yield[ec]);
-        assert(!cancel || ec == asio::error::operation_aborted);
-        assert(ec || ret.response_header());
-
-        return or_throw<Session>(yield, ec, move(ret));
+        if (cancel) return or_throw<Session>(yield, asio::error::operation_aborted);
+        return or_throw<Session>(yield, err::not_found);
     }
 
     template<class Con>
@@ -293,15 +499,8 @@ struct Client::Impl {
         return or_throw(yield, ec, move(session));
     }
 
-    static set<udp::endpoint> tcp_to_udp(const set<tcp::endpoint>& eps)
-    {
-        set<udp::endpoint> ret;
-        for (auto& ep : eps) { ret.insert({ep.address(), ep.port()}); }
-        return ret;
-    }
-
     GenericStream connect( udp::endpoint ep
-                         , Cancel& cancel
+                         , Cancel cancel
                          , asio::yield_context yield)
     {
         sys::error_code ec;
@@ -311,46 +510,44 @@ struct Client::Impl {
         s.bind(*opt_m, ec);
         if (ec) return or_throw<GenericStream>(yield, ec);
         auto c = cancel.connect([&] { s.close(); });
+        bool timed_out = false;
+        WatchDog wd(ios, chrono::seconds(30), [&] { timed_out = true; cancel(); });
         s.async_connect(ep, yield[ec]);
+        if (timed_out) return or_throw<GenericStream>(yield, asio::error::timed_out);
         if (ec || cancel) return or_throw<GenericStream>(yield, ec);
         return GenericStream(move(s));
     }
 
-    GenericStream connect( set<udp::endpoint> eps
-                         , udp::endpoint& ret_ep
-                         , Cancel& cancel
-                         , asio::yield_context yield)
+    unique_ptr<util::AsyncGenerator<pair<GenericStream, udp::endpoint>>>
+    make_connection_generator(set<udp::endpoint> eps)
     {
-        boost::optional<GenericStream> retval;
+        using Ret = util::AsyncGenerator<pair<GenericStream, udp::endpoint>>;
 
-        WaitCondition wc(ios);
+        return make_unique<Ret>(ios,
+        [&, lc = lifetime_cancel, eps = move(eps)]
+        (auto& q, auto c, auto y) mutable {
+            auto cn = lc.connect([&] { c(); });
 
-        Cancel local_cancel(cancel);
+            WaitCondition wc(ios);
+            set<udp::endpoint> our_endpoints = dht->wan_endpoints();
 
-        set<udp::endpoint> our_endpoints = dht->wan_endpoints();
+            for (auto& ep : eps) {
+                if (bt::is_martian(ep)) continue;
+                if (our_endpoints.count(ep)) continue;
 
-        for (auto& ep : eps) {
-            if (bt::is_martian(ep)) continue;
-            if (our_endpoints.count(ep)) continue;
+                asio::spawn(ios, [&, ep, lock = wc.lock()] (auto y) {
+                    sys::error_code ec;
+                    auto s = this->connect(ep, c, y[ec]);
+                    if (ec || c) return;
+                    q.push_back(make_pair(move(s), ep));
+                });
+            }
 
-            asio::spawn(ios, [&, ep, lock = wc.lock()] (asio::yield_context yield) {
-                sys::error_code ec;
-                auto s = connect(ep, local_cancel, yield[ec]);
-                if (ec || local_cancel) return;
-                ret_ep = ep;
-                retval = move(s);
-                local_cancel();
-            });
-        }
+            sys::error_code ec;
+            wc.wait(y[ec]);
 
-        sys::error_code ec;
-        wc.wait(cancel, yield[ec]);
-
-        if (!retval) ec = asio::error::host_unreachable;
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<GenericStream>(yield, ec);
-
-        return move(*retval);
+            if (c) return or_throw(y, asio::error::operation_aborted);
+        });
     }
 
     static bool same_ipv(const udp::endpoint& ep1, const udp::endpoint& ep2)
@@ -383,13 +580,15 @@ struct Client::Impl {
     {
         sys::error_code ec;
 
+        auto dk = dht_key(key);
+        if (!dk) return or_throw(yield, asio::error::invalid_argument);
         auto path = path_from_key(key);
         auto file = util::mkatomic(ios, ec, path);
         if (!ec) s.flush_response(*file, cancel, yield[ec]);
         if (!ec) file->commit(ec);
         if (ec) return or_throw(yield, ec);
 
-        announcer.add(dht_key(key));
+        announcer.add(*dk);
     }
 
     template<class Stream>
@@ -407,12 +606,14 @@ struct Client::Impl {
     http::response_header<>
     read_response_header(Stream& stream, asio::yield_context yield)
     {
+        Cancel lc(lifetime_cancel);
+
         sys::error_code ec;
         beast::flat_buffer buffer;
         http::response_parser<http::empty_body> parser;
         http::async_read_header(stream, buffer, parser, yield[ec]);
 
-        if (cancel) ec = asio::error::operation_aborted;
+        if (lc) ec = asio::error::operation_aborted;
         if (ec) return or_throw<http::response_header<>>(yield, ec);
 
         return parser.release();
@@ -426,17 +627,32 @@ struct Client::Impl {
 
             auto f = util::file_io::open_readonly(ios, p, ec);
             if (ec == asio::error::operation_aborted) return;
-            if (ec) { try_remove(p); continue; }
+            if (ec) {
+                LOG_WARN("Bep5HTTP: Failed to open cached file ", p
+                        , " ec:", ec.message());
+                try_remove(p); continue;
+            }
 
             auto hdr = read_response_header(f, yield[ec]);
             if (ec == asio::error::operation_aborted) return;
-            if (ec) { try_remove(p); continue; }
+            if (ec) {
+                LOG_WARN("Bep5HTTP: Failed read cached file ", p
+                        , " ec:", ec.message());
+                try_remove(p); continue;
+            }
 
-            auto key = hdr[http_::response_injection_key];
+            auto key = hdr[http_::response_injection_uri];
 
-            if (key.empty()) { try_remove(p); continue; }
+            if (key.empty()) {
+                LOG_WARN("Bep5HTTP: Cached file ", p
+                        , " does not contain ", http_::response_injection_uri
+                        , " header field (removing the file)");
+                try_remove(p); continue;
+            }
 
-            announcer.add(dht_key(key.to_string()));
+            if (auto opt_k = dht_key(key.to_string())) {
+                announcer.add(*opt_k);
+            }
         }
     }
 
@@ -490,7 +706,7 @@ struct Client::Impl {
     }
 
     void stop() {
-        cancel();
+        lifetime_cancel();
     }
 
     void set_log_level(log_level_t l) {

@@ -201,8 +201,12 @@ struct Announcer::Loop {
                 ec = {};
             }
 
-            if (success) { ei->first.successful_update = Clock::now(); }
-            else         { ei->first.failed_update     = Clock::now(); }
+            if (success) {
+                ei->first.failed_update     = {};
+                ei->first.successful_update = Clock::now();
+            } else  {
+                ei->first.failed_update     = Clock::now();
+            }
 
             Entry e = move(ei->first);
             entries.erase(ei);

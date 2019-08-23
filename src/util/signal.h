@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <iostream>
 
 #include <boost/intrusive/list.hpp>
 
@@ -21,12 +22,16 @@ public:
 
         Connection(Connection&& other)
             : _slot(std::move(other._slot))
+            , _call_count(other._call_count)
         {
+            other._call_count = 0;
             other.swap_nodes(*this);
         }
 
         Connection& operator=(Connection&& other) {
             _slot = std::move(other._slot);
+            _call_count = other._call_count;
+            other._call_count = 0;
             other.swap_nodes(*this);
             return *this;
         }
@@ -42,17 +47,40 @@ public:
     };
 
 public:
-    Signal() = default;
-    Signal(const Signal&) = delete;
+    Signal()                    = default;
+
+    Signal(const Signal&)            = delete;
     Signal& operator=(const Signal&) = delete;
-    Signal(Signal&&) = default;
-    Signal& operator=(Signal&&) = default;
 
     Signal(Signal& parent)
-        : _parent_connection(parent.connect([&] (auto&&... args) {
-                    (*this)(std::forward<decltype(args)>(args)...);
-                }))
+        : _parent_connection(parent.connect(call_to_self()))
     {}
+
+    Signal(Signal&& other)
+        : _connections(std::move(other._connections))
+        , _call_count(other._call_count)
+    {
+        other._call_count = 0;
+
+        if (other._parent_connection._slot) {
+            _parent_connection = std::move(other._parent_connection);
+            _parent_connection._slot = call_to_self();
+        }
+    }
+
+    Signal& operator=(Signal&& other)
+    {
+        _connections = std::move(other._connections);
+        _call_count = other._call_count;
+        other._call_count = 0;
+
+        if (other._parent_connection._slot) {
+            _parent_connection = std::move(other._parent_connection);
+            _parent_connection._slot = call_to_self();
+        }
+
+        return *this;
+    }
 
     template<typename... Args>
     void operator()(Args&&... args)
@@ -83,6 +111,13 @@ public:
     }
 
     size_t size() const { return _connections.size(); }
+
+private:
+    auto call_to_self() {
+        return [&] (auto&&... args) {
+                    (*this)(std::forward<decltype(args)>(args)...);
+               };
+    }
 
 private:
     List<Connection> _connections;

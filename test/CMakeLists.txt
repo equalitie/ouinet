@@ -71,6 +71,12 @@ target_link_libraries(test-bep5 lib::asio_utp lib::gcrypt)
 add_executable(test-watch-dog "test_watch_dog.cpp")
 
 ######################################################################
+add_executable(test-util "test-util.cpp")
+set_target_properties(test-util PROPERTIES COMPILE_FLAGS "-fsanitize=address")
+target_link_options(test-util PUBLIC "-fsanitize=address" "-fuse-ld=gold")
+target_link_libraries(test-util asan)
+
+######################################################################
 add_executable(test-logger "test_logger.cpp" "../src/logger.cpp")
 
 ######################################################################

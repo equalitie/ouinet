@@ -1118,6 +1118,9 @@ void Client::State::serve_request( GenericStream&& con
         Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*doubleclick\\.net/.*")
              , {false, queue<fresh_channel>({fresh_channel::origin})} ),
 
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*summerhamster\\.com/.*")
+             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
+
         Match( reqexpr::from_regex(target_getter, "https?://ping.chartbeat.net/.*")
              , {false, queue<fresh_channel>({fresh_channel::origin})} ),
 

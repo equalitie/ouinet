@@ -56,6 +56,7 @@ stages:
           boost_root=${HOME}/boost_${BOOST_MAJOR}_${BOOST_MINOR}_${BOOST_PATCH}
           export LD_LIBRARY_PATH=${boost_root}/stage/lib:$LD_LIBRARY_PATH
 
+          ./build/test/test-util                 --log_level=test_suite
           ./build/test/test-watch-dog            --log_level=test_suite
           ./build/test/test-cache                --log_level=test_suite
           ./build/test/test-wait-condition       --log_level=test_suite

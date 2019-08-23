@@ -116,7 +116,7 @@ public:
         if (ec) return or_throw(yield, ec);
     }
 
-    T async_pop(Cancel& cancel, asio::yield_context yield)
+    T async_pop(Cancel cancel, asio::yield_context yield)
     {
         auto slot = _destroy_signal.connect([&] { cancel(); });
 
