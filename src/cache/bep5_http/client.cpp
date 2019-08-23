@@ -161,7 +161,7 @@ struct Client::Impl {
     asio::io_service& ios;
     shared_ptr<bt::MainlineDht> dht;
     fs::path cache_dir;
-    Cancel cancel;
+    Cancel lifetime_cancel;
     Announcer announcer;
     map<string, udp::endpoint> peer_cache;
     util::LruCache<bt::NodeID, unique_ptr<DhtLookup>> dht_lookups;
@@ -190,7 +190,7 @@ struct Client::Impl {
     {
         for (auto ep : dht->local_endpoints()) {
             asio::spawn(ios, [&, ep] (asio::yield_context yield) {
-                Cancel c(cancel);
+                Cancel c(lifetime_cancel);
                 sys::error_code ec;
                 start_accepting_on(ep, c, yield[ec]);
             });
@@ -332,7 +332,7 @@ struct Client::Impl {
 
         auto& host = *opt_host;
 
-        auto canceled = this->cancel.connect([&] { cancel(); });
+        auto canceled = lifetime_cancel.connect([&] { cancel(); });
 
         for (int i = 0; i < 2 && !cancel; ++i) {
             sys::error_code ec;
@@ -394,9 +394,13 @@ struct Client::Impl {
                 auto hdr = session.response_header();
 
                 if (!cancel && log_debug()) {
-                    yield.log("Bep5Http: fetch done,",
-                        " ec:", ec.message(),
-                        " result:", hdr->result());
+                    if (hdr) {
+                        yield.log("Bep5Http: fetch done,",
+                            " ec:", ec.message(), " result:", hdr->result());
+                    } else {
+                        yield.log("Bep5Http: fetch done,",
+                            " ec:", ec.message(), " result: <n/a>");
+                    }
                 }
 
                 assert(!cancel || ec == err::operation_aborted);
@@ -506,7 +510,8 @@ struct Client::Impl {
         using Ret = util::AsyncGenerator<pair<GenericStream, udp::endpoint>>;
 
         return make_unique<Ret>(ios,
-        [&, lc = cancel, eps = move(eps)] (auto& q, auto c, auto y) mutable {
+        [&, lc = lifetime_cancel, eps = move(eps)]
+        (auto& q, auto c, auto y) mutable {
             auto cn = lc.connect([&] { c(); });
 
             WaitCondition wc(ios);
@@ -587,12 +592,14 @@ struct Client::Impl {
     http::response_header<>
     read_response_header(Stream& stream, asio::yield_context yield)
     {
+        Cancel lc(lifetime_cancel);
+
         sys::error_code ec;
         beast::flat_buffer buffer;
         http::response_parser<http::empty_body> parser;
         http::async_read_header(stream, buffer, parser, yield[ec]);
 
-        if (cancel) ec = asio::error::operation_aborted;
+        if (lc) ec = asio::error::operation_aborted;
         if (ec) return or_throw<http::response_header<>>(yield, ec);
 
         return parser.release();
@@ -685,7 +692,7 @@ struct Client::Impl {
     }
 
     void stop() {
-        cancel();
+        lifetime_cancel();
     }
 
     void set_log_level(log_level_t l) {
