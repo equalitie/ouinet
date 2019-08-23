@@ -68,6 +68,8 @@ void ConditionVariable::notify(const boost::system::error_code& ec)
 inline
 void ConditionVariable::wait(Cancel& cancel, boost::asio::yield_context yield)
 {
+    asio::executor_work_guard<asio::io_context::executor_type> work(_ios.get_executor());
+
     WaitEntry entry;
 
     boost::asio::async_completion<boost::asio::yield_context, Sig> init(yield);
