@@ -148,18 +148,38 @@ session_flush_verified( Session& in, SinkStream& out
                       , const ouinet::util::Ed25519PublicKey& pk
                       , Cancel& cancel, asio::yield_context yield)
 {
-    auto hproc = [&pk] (auto inh, auto&, auto y) {
+    http::response_header<> head;
+
+    auto hproc = [&] (auto inh, auto&, auto y) {
         inh = cache::http_injection_verify(move(inh), pk);
         if (inh.cbegin() == inh.cend())
             return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), inh);
+        head = inh;
         return inh;
     };
     // TODO: feed body digest
     ProcInFunc<asio::const_buffer> dproc =
         [] (auto ind, auto&, auto) { return ind; };
     // TODO: look for signed `Digest` header, compare
-    auto tproc =
-        [] (auto intr, auto&, auto) { return intr; };
+    auto tproc = [&] (auto intr, auto&, auto y) {
+        if (intr.cbegin() == intr.cend())
+            return intr;  // no headers in trailer
+
+        // Only expected trailer headers are received here, just extend initial head.
+        bool sigs_in_trailer = false;
+        for (const auto& h : intr) {
+            auto hn = h.name_string();
+            head.insert(h.name(), hn, h.value());
+            if (boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx))
+                sigs_in_trailer = true;
+        }
+        if (sigs_in_trailer) {
+            head = cache::http_injection_verify(std::move(head), pk);
+            if (head.cbegin() == head.cend())  // bad signature in trailer
+                return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), intr);
+        }
+        return intr;
+    };
 
     in.flush_response( out
                      , std::move(hproc), std::move(dproc), std::move(tproc)
