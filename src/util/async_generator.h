@@ -37,7 +37,8 @@ namespace ouinet { namespace util {
 
 template<class Value> class AsyncGenerator {
 private:
-    using Queue = AsyncQueue<Value>;
+    using OptValue = boost::optional<Value>;
+    using Queue = AsyncQueue<OptValue>;
     using Yield = asio::yield_context;
 
 public:
@@ -47,17 +48,14 @@ public:
         , _shutdown_cancel(_lifetime_cancel)
         , _wc(ioc)
     {
-        auto* last_ec = &_last_ec;
-
-        asio::spawn(ioc, [ last_ec
-                         , &q = _queue
+        asio::spawn(ioc, [ self = this
                          , gen = std::move(gen)
                          , lifetime_cancel = _lifetime_cancel
                          , shutdown_cancel = _shutdown_cancel
                          , lock = _wc.lock()
                          ] (Yield yield) mutable {
             sys::error_code ec;
-            gen(q, shutdown_cancel, yield[ec]);
+            gen(self->_queue, shutdown_cancel, yield[ec]);
 
             // lifetime_cancel => shutdown_cancel
             assert(!lifetime_cancel || shutdown_cancel);
@@ -66,20 +64,24 @@ public:
             assert(!shutdown_cancel || ec == asio::error::operation_aborted);
 
             if (!lifetime_cancel) {
-                *last_ec = shutdown_cancel ? asio::error::operation_aborted
-                                           : ec;
+                self->_last_ec = shutdown_cancel
+                               ? asio::error::operation_aborted
+                               : ec;
+
+                self->_queue.push_back(boost::none);
             }
         });
     }
 
-    boost::optional<Value> async_get_value(Cancel& cancel, Yield yield) {
+    boost::optional<Value> async_get_value(Cancel cancel, Yield yield) {
+        using Ret = boost::optional<Value>;
+
         if (_shutdown_cancel) {
-            return or_throw<boost::optional<Value>>(yield,
-                    asio::error::operation_aborted);
+            return or_throw<Ret>(yield, asio::error::operation_aborted);
         }
 
         if (_queue.size()) {
-            Value v = std::move(_queue.front());
+            OptValue v = std::move(_queue.front());
             _queue.pop();
             return v;
         }
@@ -87,8 +89,17 @@ public:
         // Return none if the coroutine is no longer running
         if (_last_ec) { return boost::none; }
 
+        Cancel lfc = _lifetime_cancel;
         auto c = _shutdown_cancel.connect([&] { cancel(); });
-        return _queue.async_pop(cancel, yield);
+
+        sys::error_code ec; // ignored
+        auto ret = _queue.async_pop(cancel, yield[ec]);
+
+        if (lfc || _shutdown_cancel) {
+            return or_throw<Ret>(yield, asio::error::operation_aborted);
+        }
+
+        return ret;
     }
 
     void async_shut_down(Yield yield) {

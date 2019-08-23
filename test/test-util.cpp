@@ -99,8 +99,9 @@ BOOST_AUTO_TEST_CASE(test_cancel) {
 }
 
 BOOST_AUTO_TEST_CASE(test_async_generator) {
+    using util::AsyncGenerator;
+
     {
-        using util::AsyncGenerator;
 
         asio::io_service ios;
 
@@ -119,8 +120,6 @@ BOOST_AUTO_TEST_CASE(test_async_generator) {
     }
 
     {
-        using util::AsyncGenerator;
-
         asio::io_service ios;
 
         asio::spawn(ios, [&] (asio::yield_context yield) {
@@ -135,6 +134,23 @@ BOOST_AUTO_TEST_CASE(test_async_generator) {
             auto opt_val = gen.async_get_value(cancel, yield);
 
             BOOST_REQUIRE(opt_val && *opt_val == 1);
+        });
+
+        ios.run();
+    }
+
+    {
+        asio::io_service ios;
+
+        asio::spawn(ios, [&] (asio::yield_context yield) {
+            AsyncGenerator<int> gen(ios, [&] (auto& q, auto c, auto y) {
+                ios.post(y);
+            });
+
+            Cancel cancel;
+            sys::error_code ec;
+            auto opt_val = gen.async_get_value(cancel, yield[ec]);
+            BOOST_REQUIRE(!opt_val);
         });
 
         ios.run();
