@@ -109,6 +109,7 @@ public:
         desc.add_options()
            ("help", "Produce this help message")
            ("repo", po::value<string>(), "Path to the repository root")
+           ("debug", "Enable debugging messages")
 
            // Client options
            ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen")
@@ -276,6 +277,10 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
     po::store(po::parse_config_file(ouinet_conf, desc), vm);
     po::notify(vm);
+
+    if (vm.count("debug")) {
+        logger.set_threshold(DEBUG);
+    }
 
     if (vm.count("open-file-limit")) {
         increase_open_file_limit(vm["open-file-limit"].as<unsigned int>());

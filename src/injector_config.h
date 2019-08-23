@@ -1,6 +1,8 @@
 #pragma once
 
 #include <boost/asio/ip/udp.hpp>
+
+#include "logger.h"
 #include "util/crypto.h"
 
 namespace ouinet {
@@ -125,6 +127,7 @@ InjectorConfig::options_description()
     desc.add_options()
         ("help", "Produce this help message")
         ("repo", po::value<string>(), "Path to the repository root")
+        ("debug", "Enable debugging messages")
 
         // Injector options
         ("open-file-limit"
@@ -222,6 +225,10 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
     po::store(po::parse_config_file(ouinet_conf, desc), vm);
     po::notify(vm);
+
+    if (vm.count("debug")) {
+        logger.set_threshold(DEBUG);
+    }
 
     if (vm.count("open-file-limit")) {
         _open_file_limit = vm["open-file-limit"].as<unsigned int>();
