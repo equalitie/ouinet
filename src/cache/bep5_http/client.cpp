@@ -387,15 +387,17 @@ struct Client::Impl {
 
                 if (log_debug()) {
                     yield.log("Bep5Http: Connect to clients done, ec:", ec.message(),
-                        " chosen ep:", opt_con->second);
+                        " chosen ep:", opt_con->second, "; fetching...");
                 }
-
-                if (cancel) ec = err::operation_aborted;
-                if (ec == err::operation_aborted) return or_throw<Session>(yield, ec);
-                if (ec) continue;
 
                 auto session = load_from_connection(key, opt_con->first, cancel, yield[ec]);
                 auto hdr = session.response_header();
+
+                if (!cancel && log_debug()) {
+                    yield.log("Bep5Http: fetch done,",
+                        " ec:", ec.message(),
+                        " result:", hdr->result());
+                }
 
                 assert(!cancel || ec == err::operation_aborted);
                 assert(ec || hdr);
@@ -411,6 +413,11 @@ struct Client::Impl {
                 return session;
             }
         }
+
+        if (!cancel || log_debug()) {
+            yield.log("Bep5Http: done cancel:", bool(cancel));
+        }
+
 
         if (cancel) return or_throw<Session>(yield, asio::error::operation_aborted);
         return or_throw<Session>(yield, err::not_found);
