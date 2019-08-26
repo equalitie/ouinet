@@ -200,11 +200,12 @@ http_sign_detail::check_body( const http::response_header<>& head
     auto h_digests = head.equal_range(http::field::digest);
     for (auto hit = h_digests.first; hit != h_digests.second; hit++) {
         auto h_digest_s = split_string_pair(hit->value(), '=');
-        if ( boost::algorithm::iequals(b_digest_s.first, h_digest_s.first)
-           && b_digest_s.second != h_digest_s.second) {
-            return false;
-        } else {
-            LOG_DEBUG("Body matches digest: ", b_digest);
+        if (boost::algorithm::iequals(b_digest_s.first, h_digest_s.first)) {
+            if (b_digest_s.second != h_digest_s.second) {
+                LOG_WARN("Body digest mismatch: ", hit->value(), "!=", b_digest);
+                return false;
+            }
+            LOG_DEBUG("Body matches signed digest: ", b_digest);
         }
     }
 
