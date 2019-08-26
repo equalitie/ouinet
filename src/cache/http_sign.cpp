@@ -13,6 +13,7 @@
 
 #include "../constants.h"
 #include "../logger.h"
+#include "../parse/number.h"
 #include "../split_string.h"
 #include "../util.h"
 #include "../util/bytes.h"
@@ -177,8 +178,20 @@ http_key_id_for_injection(const util::Ed25519PublicKey& pk)
 
 bool
 http_sign_detail::check_body( const http::response_header<>& head
+                            , size_t body_length
                             , util::SHA256& body_hash)
 {
+    // Check body length.
+    auto h_body_length_h = head[http_::header_prefix + "Data-Size"];
+    auto h_body_length = parse::number<size_t>(h_body_length_h);
+    if (h_body_length) {
+        if (*h_body_length != body_length) {
+            LOG_WARN("Body length mismatch: ", *h_body_length, "!=", body_length);
+            return false;
+        }
+        LOG_DEBUG("Body matches signed length: ", body_length);
+    }
+
     // Get body digest value.
     auto b_digest = http_digest(body_hash);
     auto b_digest_s = split_string_pair(b_digest, '=');

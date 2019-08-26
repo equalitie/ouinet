@@ -31,7 +31,7 @@ namespace ouinet { namespace cache {
 // ----------------------------------------------------------------
 
 namespace http_sign_detail {
-bool check_body(const http::response_header<>&, ouinet::util::SHA256&);
+bool check_body(const http::response_header<>&, size_t, ouinet::util::SHA256&);
 }
 
 // Get an extended version of the given response head
@@ -153,9 +153,10 @@ session_flush_verified( Session& in, SinkStream& out
                       , Cancel& cancel, asio::yield_context yield)
 {
     http::response_header<> head;
+    size_t body_length = 0;
     util::SHA256 body_hash;
     // If we process trailers, we may have a chance to
-    // detect and signal a body not matching its signed digest
+    // detect and signal a body not matching its signed length or digest
     // before completing its transfer,
     // so that the receiving end can see that something bad is going on.
     bool check_body_after = true;
@@ -169,6 +170,7 @@ session_flush_verified( Session& in, SinkStream& out
     };
 
     ProcInFunc<asio::const_buffer> dproc = [&] (auto ind, auto&, auto) {
+        body_length += ind.size();
         body_hash.update(ind);
         return ind;
     };
@@ -192,7 +194,7 @@ session_flush_verified( Session& in, SinkStream& out
         }
 
         check_body_after = false;
-        if (!http_sign_detail::check_body(head, body_hash))
+        if (!http_sign_detail::check_body(head, body_length, body_hash))
             return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), intr);
 
         return intr;
@@ -203,7 +205,7 @@ session_flush_verified( Session& in, SinkStream& out
                      , std::move(hproc), std::move(dproc), std::move(tproc)
                      , cancel, yield[ec]);
     if (!ec && check_body_after)
-        if (!http_sign_detail::check_body(head, body_hash))
+        if (!http_sign_detail::check_body(head, body_length, body_hash))
             ec = sys::errc::make_error_code(sys::errc::bad_message);
     return or_throw(yield, ec);
 }
