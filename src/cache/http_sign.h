@@ -30,6 +30,10 @@ namespace ouinet { namespace cache {
 // Ouinet-specific declarations for injection using HTTP signatures
 // ----------------------------------------------------------------
 
+namespace http_sign_detail {
+bool check_body(const http::response_header<>&, ouinet::util::SHA256&);
+}
+
 // Get an extended version of the given response head
 // with an additional signature header and
 // other headers required to support that signature and
@@ -149,6 +153,12 @@ session_flush_verified( Session& in, SinkStream& out
                       , Cancel& cancel, asio::yield_context yield)
 {
     http::response_header<> head;
+    util::SHA256 body_hash;
+    // If we process trailers, we may have a chance to
+    // detect and signal a body not matching its signed digest
+    // before completing its transfer,
+    // so that the receiving end can see that something bad is going on.
+    bool check_body_after = true;
 
     auto hproc = [&] (auto inh, auto&, auto y) {
         inh = cache::http_injection_verify(move(inh), pk);
@@ -157,10 +167,12 @@ session_flush_verified( Session& in, SinkStream& out
         head = inh;
         return inh;
     };
-    // TODO: feed body digest
-    ProcInFunc<asio::const_buffer> dproc =
-        [] (auto ind, auto&, auto) { return ind; };
-    // TODO: look for signed `Digest` header, compare
+
+    ProcInFunc<asio::const_buffer> dproc = [&] (auto ind, auto&, auto) {
+        body_hash.update(ind);
+        return ind;
+    };
+
     auto tproc = [&] (auto intr, auto&, auto y) {
         if (intr.cbegin() == intr.cend())
             return intr;  // no headers in trailer
@@ -178,12 +190,22 @@ session_flush_verified( Session& in, SinkStream& out
             if (head.cbegin() == head.cend())  // bad signature in trailer
                 return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), intr);
         }
+
+        check_body_after = false;
+        if (!http_sign_detail::check_body(head, body_hash))
+            return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), intr);
+
         return intr;
     };
 
+    sys::error_code ec;
     in.flush_response( out
                      , std::move(hproc), std::move(dproc), std::move(tproc)
-                     , cancel, yield);
+                     , cancel, yield[ec]);
+    if (!ec && check_body_after)
+        if (!http_sign_detail::check_body(head, body_hash))
+            ec = sys::errc::make_error_code(sys::errc::bad_message);
+    return or_throw(yield, ec);
 }
 
 

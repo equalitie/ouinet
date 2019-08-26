@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <boost/algorithm/string/case_conv.hpp>
+#include <boost/algorithm/string/predicate.hpp>
 #include <boost/beast/http/empty_body.hpp>
 #include <boost/beast/http/field.hpp>
 #include <boost/format.hpp>
@@ -172,6 +173,29 @@ std::string
 http_key_id_for_injection(const util::Ed25519PublicKey& pk)
 {
     return "ed25519=" + util::base64_encode(pk.serialize());
+}
+
+bool
+http_sign_detail::check_body( const http::response_header<>& head
+                            , util::SHA256& body_hash)
+{
+    // Get body digest value.
+    auto b_digest = http_digest(body_hash);
+    auto b_digest_s = split_string_pair(b_digest, '=');
+
+    // Get digest values in head and compare (if algorithm matches).
+    auto h_digests = head.equal_range(http::field::digest);
+    for (auto hit = h_digests.first; hit != h_digests.second; hit++) {
+        auto h_digest_s = split_string_pair(hit->value(), '=');
+        if ( boost::algorithm::iequals(b_digest_s.first, h_digest_s.first)
+           && b_digest_s.second != h_digest_s.second) {
+            return false;
+        } else {
+            LOG_DEBUG("Body matches digest: ", b_digest);
+        }
+    }
+
+    return true;
 }
 
 std::string
