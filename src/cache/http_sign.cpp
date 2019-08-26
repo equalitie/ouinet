@@ -63,7 +63,7 @@ http_injection_head( const http::request_header<>& rqh
     http::response<http::empty_body> rs(std::move(rsh));
     rs.chunked(true);
     static const std::string trfmt_ = ( "%s%s"
-                                      + header_prefix + "Data-Size, Digest, "
+                                      + response_data_size_hdr + ", Digest, "
                                       + final_signature_hdr);
     auto trfmt = boost::format(trfmt_);
     auto trhdr = rs[http::field::trailer];
@@ -84,7 +84,7 @@ http_injection_trailer( const http::response_header<>& rsh
 {
     using namespace ouinet::http_;
     // Pending trailer headers to support the signature.
-    rst.set(header_prefix + "Data-Size", content_length);
+    rst.set(response_data_size_hdr, content_length);
     rst.set(http::field::digest, "SHA-256=" + util::base64_encode(content_digest));
 
     // Put together the head to be signed:
@@ -182,7 +182,7 @@ http_sign_detail::check_body( const http::response_header<>& head
                             , util::SHA256& body_hash)
 {
     // Check body length.
-    auto h_body_length_h = head[http_::header_prefix + "Data-Size"];
+    auto h_body_length_h = head[http_::response_data_size_hdr];
     auto h_body_length = parse::number<size_t>(h_body_length_h);
     if (h_body_length) {
         if (*h_body_length != body_length) {

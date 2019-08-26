@@ -23,6 +23,9 @@ namespace ouinet { namespace http_ {
     // The corresponding regular expression, capturing the number.
     static const boost::regex response_signature_hdr_rx( response_signature_hdr_pfx + "([0-9]+)"
                                                        , boost::regex::normal|boost::regex::icase);
+    // This allows signing the size of body data
+    // without breaking on transfer encoding changes.
+    static const std::string response_data_size_hdr = header_prefix + "Data-Size";
 }}
 
 namespace ouinet { namespace cache {
