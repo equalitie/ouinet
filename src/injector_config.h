@@ -311,14 +311,11 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         _disable_cache = true;
     }
 
-    if (vm.count("ed25519-private-key") || !_disable_cache) {
-        // Only set this up when we actually need it. The problem being
-        // that generating keys takes a long time on CI machines and it
-        // causes time outs.
-        setup_ed25519_private_key( vm.count("ed25519-private-key")
-                                 ? vm["ed25519-private-key"].as<string>()
-                                 : string());
-    }
+    // Please note that generating keys takes a long time
+    // and it may causes time outs in CI tests.
+    setup_ed25519_private_key( vm.count("ed25519-private-key")
+                             ? vm["ed25519-private-key"].as<string>()
+                             : string());
 
 }
 
