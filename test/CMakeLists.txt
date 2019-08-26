@@ -107,6 +107,7 @@ add_executable(test-http-util "test_http_util.cpp")
 add_executable(test-http-sign
     "test_http_sign.cpp"
     "../src/cache/http_sign.cpp"
+    "../src/logger.cpp"
     "../src/util.cpp"
     "../src/util/crypto.cpp"
     "../src/util/hash.cpp"

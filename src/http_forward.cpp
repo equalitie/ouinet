@@ -1,20 +1,7 @@
 #include "http_forward.h"
-#include "parse/number.h"
 #include "util.h"
 
 namespace ouinet { namespace detail {
-
-size_t
-get_content_length(const http::response_header<>& rph, sys::error_code& ec) {
-    boost::string_view cl = rph[http::field::content_length];
-    auto length = parse::number<size_t>(cl);  // alters `cl` boundaries
-    if (!length) {
-        if (rph.version() != 10)
-            ec = asio::error::invalid_argument;
-        return max_size_t;
-    }
-    return *length;
-}
 
 std::string
 process_head( const http::response_header<>& rph, const ProcHeadFunc& rphproc, bool& chunked_out
@@ -40,11 +27,7 @@ process_trailers( const http::response_header<>& rph, const ProcTrailFunc& trpro
         auto hit = rph.find(hdr);
         if (hit == rph.end())
             continue;  // missing trailer
-        // One would expect `hit->name()` to return `X-Foo` (on such non-standard header),
-        // but it returns `<unknown-field>`, so use `hdr` instead
-        // to avoid an assertion error in the invocation of `insert`.
-        // This may be a bug in Boost Beast.
-        intrail.insert(hdr /* hit->name() */, hit->value());
+        intrail.insert(hit->name(), hit->name_string(), hit->value());
     }
     return trproc(std::move(intrail), cancel, yield);
 }

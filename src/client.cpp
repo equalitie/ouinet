@@ -15,6 +15,7 @@
 
 #include "cache/bep44_ipfs/cache_client.h"
 #include "cache/bep5_http/client.h"
+#include "cache/http_sign.h"
 
 #include "namespaces.h"
 #include "origin_pools.h"
@@ -240,15 +241,16 @@ private:
 
 //------------------------------------------------------------------------------
 static
-void handle_bad_request( GenericStream& con
-                       , const Request& req
-                       , string message
-                       , Yield yield)
+void handle_http_error( GenericStream& con
+                      , const Request& req
+                      , http::status status
+                      , string message
+                      , Yield yield)
 {
-    http::response<http::string_body> res{http::status::bad_request, req.version()};
+    http::response<http::string_body> res{status, req.version()};
 
     res.set(http::field::server, OUINET_CLIENT_SERVER_STRING);
-    res.set(http::field::content_type, "text/html");
+    res.set(http::field::content_type, "text/plain");
     res.keep_alive(req.keep_alive());
     res.body() = message;
     res.prepare_payload();
@@ -260,6 +262,25 @@ void handle_bad_request( GenericStream& con
 
     sys::error_code ec;
     http::async_write(con, res, yield[ec]);
+}
+
+static
+void handle_cache_error( GenericStream& con
+                       , const Request& req
+                       , string message
+                       , Yield yield)
+{
+    return handle_http_error( con, req, http::status::bad_gateway
+                            , "Cache failed to process response: " + message, yield);
+}
+
+static
+void handle_bad_request( GenericStream& con
+                       , const Request& req
+                       , string message
+                       , Yield yield)
+{
+    return handle_http_error(con, req, http::status::bad_request, move(message), yield);
 }
 
 //------------------------------------------------------------------------------
@@ -323,7 +344,7 @@ Client::State::fetch_stored( const Request& request
                                    , asio::error::operation_not_supported);
     }
 
-    auto date = util::parse_date((*hdr)[http_::response_injection_time]);
+    auto date = util::parse_date((*hdr)[http_::response_injection_time_hdr]);
 
     return CacheEntry{date, move(s)};
 }
@@ -829,7 +850,34 @@ public:
                         s2.flush_response(con, cancel, yield_[ec]);
                     });
 
-                    s.flush_response(sink, cancel, yield[ec]);
+                    bool need_verify = (client_state._config.cache_type()
+                                        == ClientConfig::CacheType::Bep5Http);
+                    if (need_verify) {
+                        // This forwards an already verified response to the tasks above.
+                        auto pk = client_state._config.cache_http_pub_key();
+                        assert(pk);
+                        cache::session_flush_verified(s, sink, *pk, cancel, yield[ec]);
+                        if ( ec.value() == sys::errc::no_message
+                           || ec.value() == sys::errc::bad_message)
+                            LOG_WARN( "Failed to verify response against HTTP signatures; url="
+                                    , rq.target());
+                    } else {
+                        s.flush_response(sink, cancel, yield[ec]);
+                    }
+
+                    if (ec) {
+                        // Abort store and forward tasks.
+                        fork.close();
+                        if (ec.value() == sys::errc::no_message)
+                            // HTTP signature verification detected an early error
+                            // before sending anything to the agent;
+                            // try to report a meaningful error to it.
+                            handle_cache_error(con, rq, ec.message(), yield);
+                        else
+                            // Data may have already been sent to the agent,
+                            // so just close the connection.
+                            con.close();
+                    }
 
                     wc.wait(yield);
 
@@ -1264,6 +1312,7 @@ void Client::State::setup_cache()
                           , cancel = move(cancel)
                           ] (asio::yield_context yield) {
             if (cancel) return;
+            LOG_DEBUG("HTTP signatures pubkey: ", _config.cache_http_pub_key());
 
             sys::error_code ec;
 
@@ -1293,7 +1342,7 @@ void Client::State::setup_cache()
 
             if (_config.cache_enabled())
             {
-                LOG_DEBUG("And BitTorrent pubkey: ", _config.index_bep44_pub_key());
+                LOG_DEBUG("BitTorrent BEP44 pubkey: ", _config.index_bep44_pub_key());
 
                 auto on_exit = defer([&] { _is_ipns_being_setup = false; });
 

@@ -1,6 +1,8 @@
 #pragma once
 
 #include <boost/asio/ip/udp.hpp>
+
+#include "logger.h"
 #include "util/crypto.h"
 
 namespace ouinet {
@@ -125,6 +127,7 @@ InjectorConfig::options_description()
     desc.add_options()
         ("help", "Produce this help message")
         ("repo", po::value<string>(), "Path to the repository root")
+        ("debug", "Enable debugging messages")
 
         // Injector options
         ("open-file-limit"
@@ -223,6 +226,10 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
     po::store(po::parse_config_file(ouinet_conf, desc), vm);
     po::notify(vm);
 
+    if (vm.count("debug")) {
+        logger.set_threshold(DEBUG);
+    }
+
     if (vm.count("open-file-limit")) {
         _open_file_limit = vm["open-file-limit"].as<unsigned int>();
     }
@@ -304,14 +311,11 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         _disable_cache = true;
     }
 
-    if (vm.count("ed25519-private-key") || !_disable_cache) {
-        // Only set this up when we actually need it. The problem being
-        // that generating keys takes a long time on CI machines and it
-        // causes time outs.
-        setup_ed25519_private_key( vm.count("ed25519-private-key")
-                                 ? vm["ed25519-private-key"].as<string>()
-                                 : string());
-    }
+    // Please note that generating keys takes a long time
+    // and it may causes time outs in CI tests.
+    setup_ed25519_private_key( vm.count("ed25519-private-key")
+                             ? vm["ed25519-private-key"].as<string>()
+                             : string());
 
 }
 

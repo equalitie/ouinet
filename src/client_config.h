@@ -91,6 +91,10 @@ public:
         return _index_bep44_capacity;
     }
 
+    boost::optional<util::Ed25519PublicKey> cache_http_pub_key() const {
+        return _cache_http_pubkey;
+    }
+
     const std::string& client_credentials() const { return _client_credentials; }
 
     bool is_help() const { return _is_help; }
@@ -105,6 +109,7 @@ public:
         desc.add_options()
            ("help", "Produce this help message")
            ("repo", po::value<string>(), "Path to the repository root")
+           ("debug", "Enable debugging messages")
 
            // Client options
            ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen")
@@ -140,10 +145,13 @@ public:
             , "Index ID for the IPFS IPNS subsystem")
            ("index-bep44-public-key"
             , po::value<string>()
-            , "Index public key for the BitTorrent BEP44 subsystem")
+            , "Index public key for the BitTorrent BEP44 subsystem (hex-encoded)")
            ("index-bep44-capacity"
             , po::value<unsigned int>()->default_value(_index_bep44_capacity)
             , "Maximum number of entries to be kept (and persisted) in the BEP44 index")
+           ("cache-http-public-key"
+            , po::value<string>()
+            , "Public key for HTTP signatures in the BEP5/HTTP cache (hex-encoded)")
            ("max-cached-age"
             , po::value<int>()->default_value(_max_cached_age.total_seconds())
             , "Discard cached content older than this many seconds "
@@ -211,6 +219,7 @@ private:
 
     boost::optional<util::Ed25519PublicKey> _index_bep44_pubkey;
     unsigned int _index_bep44_capacity = 1000;  // arbitrarily chosen default
+    boost::optional<util::Ed25519PublicKey> _cache_http_pubkey;
     CacheType _cache_type = CacheType::None;
     std::string _local_domain;
 };
@@ -268,6 +277,10 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
     po::store(po::parse_config_file(ouinet_conf, desc), vm);
     po::notify(vm);
+
+    if (vm.count("debug")) {
+        logger.set_threshold(DEBUG);
+    }
 
     if (vm.count("open-file-limit")) {
         increase_open_file_limit(vm["open-file-limit"].as<unsigned int>());
@@ -351,20 +364,26 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         _client_credentials = move(cred);
     }
 
-    if (vm.count("index-bep44-public-key")) {
-        string value = vm["index-bep44-public-key"].as<string>();
+    auto maybe_set_pk = [&] (const string& opt, auto& pk) {
+        if (vm.count(opt)) {
+            string value = vm[opt].as<string>();
 
-        _index_bep44_pubkey = util::Ed25519PublicKey::from_hex(value);
+            pk = util::Ed25519PublicKey::from_hex(value);
 
-        if (!_index_bep44_pubkey) {
-            throw std::runtime_error(
-                    util::str("Failed parsing '", value, "' as Ed25519 public key"));
+            if (!pk) {
+                throw std::runtime_error(
+                        util::str("Failed parsing '", value, "' as Ed25519 public key"));
+            }
         }
-    }
+    };
+
+    maybe_set_pk("index-bep44-public-key", _index_bep44_pubkey);
 
     if (vm.count("index-bep44-capacity")) {
         _index_bep44_capacity = vm["index-bep44-capacity"].as<unsigned int>();
     }
+
+    maybe_set_pk("cache-http-public-key", _cache_http_pubkey);
 
     if (vm.count("cache-type")) {
         auto type_str = vm["cache-type"].as<string>();
@@ -393,6 +412,10 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
     if (cache_enabled() && _cache_type == CacheType::Bep44Ipfs && !_index_bep44_pubkey) {
         throw std::runtime_error("BEP44 index selected but no injector BEP44 public key specified");
+    }
+
+    if (cache_enabled() && _cache_type == CacheType::Bep5Http && !_cache_http_pubkey) {
+        throw std::runtime_error("BEP5/HTTP cache selected but no injector HTTP public key specified");
     }
 
     if (vm.count("local-domain")) {

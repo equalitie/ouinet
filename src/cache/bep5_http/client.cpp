@@ -497,11 +497,11 @@ struct Client::Impl {
                 try_remove(p); continue;
             }
 
-            auto key = hdr[http_::response_injection_uri];
+            auto key = hdr[http_::response_uri_hdr];
 
             if (key.empty()) {
                 LOG_WARN("Bep5HTTP: Cached file ", p
-                        , " does not contain ", http_::response_injection_uri
+                        , " does not contain ", http_::response_uri_hdr
                         , " header field (removing the file)");
                 try_remove(p); continue;
             }

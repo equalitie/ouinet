@@ -79,7 +79,7 @@ entry_from_json(const nlohmann::json& json)
 
         if (sig.size() != ret.signature.size()) return boost::none;
 
-        ret.signature = util::bytes::to_array<uint8_t, 64>(sig);
+        ret.signature = util::bytes::to_array<uint8_t, util::Ed25519PublicKey::sig_size>(sig);
     }
     catch (...) {
         return boost::none;

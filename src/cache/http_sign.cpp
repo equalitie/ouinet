@@ -6,15 +6,26 @@
 #include <vector>
 
 #include <boost/algorithm/string/case_conv.hpp>
+#include <boost/algorithm/string/predicate.hpp>
 #include <boost/beast/http/empty_body.hpp>
 #include <boost/beast/http/field.hpp>
 #include <boost/format.hpp>
 
 #include "../constants.h"
+#include "../logger.h"
+#include "../parse/number.h"
+#include "../split_string.h"
 #include "../util.h"
+#include "../util/bytes.h"
 #include "../util/hash.h"
 
 namespace ouinet { namespace cache {
+
+static const auto initial_signature_hdr = http_::response_signature_hdr_pfx + "0";
+static const auto final_signature_hdr = http_::response_signature_hdr_pfx + "1";
+
+// The only signature algorithm supported by this implementation.
+static const std::string sig_alg_hs2019("hs2019");
 
 static
 http::response_header<>
@@ -32,28 +43,28 @@ http_injection_head( const http::request_header<>& rqh
                    , http::response_header<> rsh
                    , const std::string& injection_id
                    , std::chrono::seconds::rep injection_ts
-                   , const ouinet::util::Ed25519PrivateKey& sk
+                   , const util::Ed25519PrivateKey& sk
                    , const std::string& key_id)
 {
     using namespace ouinet::http_;
     assert(response_version_hdr_current == response_version_hdr_v0);
 
     rsh.set(response_version_hdr, response_version_hdr_v0);
-    rsh.set(response_injection_uri, rqh.target());
+    rsh.set(response_uri_hdr, rqh.target());
     rsh.set( header_prefix + "Injection"
            , boost::format("id=%s,ts=%d") % injection_id % injection_ts);
 
     // Create a signature of the initial head.
     auto to_sign = without_framing(rsh);
-    rsh.set(header_prefix + "Sig0", http_signature(to_sign, sk, key_id, injection_ts));
+    rsh.set(initial_signature_hdr, http_signature(to_sign, sk, key_id, injection_ts));
 
     // Enabling chunking is easier with a whole respone,
     // and we do not care about content length anyway.
     http::response<http::empty_body> rs(std::move(rsh));
     rs.chunked(true);
     static const std::string trfmt_ = ( "%s%s"
-                                      + header_prefix + "Data-Size, Digest, "
-                                      + header_prefix + "Sig1");
+                                      + response_data_size_hdr + ", Digest, "
+                                      + final_signature_hdr);
     auto trfmt = boost::format(trfmt_);
     auto trhdr = rs[http::field::trailer];
     rs.set( http::field::trailer
@@ -66,14 +77,14 @@ http::fields
 http_injection_trailer( const http::response_header<>& rsh
                       , http::fields rst
                       , size_t content_length
-                      , const ouinet::util::SHA256::digest_type& content_digest
-                      , const ouinet::util::Ed25519PrivateKey& sk
+                      , const util::SHA256::digest_type& content_digest
+                      , const util::Ed25519PrivateKey& sk
                       , const std::string& key_id
                       , std::chrono::seconds::rep ts)
 {
     using namespace ouinet::http_;
     // Pending trailer headers to support the signature.
-    rst.set(header_prefix + "Data-Size", content_length);
+    rst.set(response_data_size_hdr, content_length);
     rst.set(http::field::digest, "SHA-256=" + util::base64_encode(content_digest));
 
     // Put together the head to be signed:
@@ -81,31 +92,144 @@ http_injection_trailer( const http::response_header<>& rsh
     // plus trailer headers.
     // Use `...-Data-Size` internal header instead on `Content-Length`.
     auto to_sign = without_framing(rsh);
-    to_sign.erase(header_prefix + "Sig0");
+    to_sign.erase(initial_signature_hdr);
     for (auto& hdr : rst)
         to_sign.set(hdr.name_string(), hdr.value());
 
-    rst.set(header_prefix + "Sig1", http_signature(to_sign, sk, key_id, ts));
+    rst.set(final_signature_hdr, http_signature(to_sign, sk, key_id, ts));
     return rst;
 }
 
-std::string
-http_key_id_for_injection(const ouinet::util::Ed25519PublicKey& pk)
+http::response_header<>
+http_injection_verify( http::response_header<> rsh
+                     , const util::Ed25519PublicKey& pk)
 {
-    return "ed25519=" + ouinet::util::base64_encode(pk.serialize());
+    // Put together the head to be verified:
+    // given head, minus chunking (and related headers), and signatures themselves.
+    // Collect signatures found in the meanwhile.
+    http::response_header<> to_verify, sig_headers;
+    to_verify = without_framing(rsh);
+    for (auto hit = rsh.begin(); hit != rsh.end();) {
+        auto hn = hit->name_string();
+        if (boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx)) {
+            sig_headers.insert(hit->name(), hn, hit->value());
+            to_verify.erase(hn);
+            hit = rsh.erase(hit);  // will re-add at the end, minus bad signatures
+        } else hit++;
+    }
+
+    auto keyId = http_key_id_for_injection(pk);  // TODO: cache this
+    bool sig_ok = false;
+    http::fields extra = rsh;  // all extra for the moment
+
+    // Go over signature headers: parse, select, verify.
+    int sig_idx = 0;
+    auto keep_signature = [&] (const auto& sig) {
+        rsh.insert(http_::response_signature_hdr_pfx + std::to_string(sig_idx++), sig);
+    };
+    for (auto& hdr : sig_headers) {
+        auto hn = hdr.name_string();
+        auto hv = hdr.value();
+        auto sig = HttpSignature::parse(hv);
+        if (!sig) {
+            LOG_WARN("Malformed HTTP signature in header: ", hn);
+            continue;  // drop signature
+        }
+        if (sig->keyId != keyId) {
+            LOG_DEBUG("Unknown key for HTTP signature in header: ", hn);
+            keep_signature(hv);
+            continue;
+        }
+        if (!(sig->algorithm.empty()) && sig->algorithm != sig_alg_hs2019) {
+            LOG_WARN( "Unsupported algorithm \"", sig->algorithm
+                    , "\" for HTTP signature in header: ", hn);
+            continue;  // drop signature
+        }
+        auto ret = sig->verify(to_verify, pk);
+        if (!ret.first) {
+            LOG_WARN("Head does not match HTTP signature in header: ", hn);
+            continue;  // drop signature
+        }
+        LOG_DEBUG("Head matches HTTP signature: ", hn);
+        sig_ok = true;
+        keep_signature(hv);
+        for (auto ehit = extra.begin(); ehit != extra.end();)  // note extra headers
+            if (ret.second.find(ehit->name_string()) == ret.second.end())
+                ehit = extra.erase(ehit);  // no longer an extra header
+            else
+                ehit++;  // still an extra header
+    }
+
+    if (!sig_ok)
+        return {};
+
+    for (auto& eh : extra) {
+        LOG_WARN("Dropping header not in HTTP signatures: ", eh.name_string());
+        rsh.erase(eh.name_string());
+    }
+    return rsh;
+}
+
+std::string
+http_key_id_for_injection(const util::Ed25519PublicKey& pk)
+{
+    return "ed25519=" + util::base64_encode(pk.serialize());
+}
+
+bool
+http_sign_detail::check_body( const http::response_header<>& head
+                            , size_t body_length
+                            , util::SHA256& body_hash)
+{
+    // Check body length.
+    auto h_body_length_h = head[http_::response_data_size_hdr];
+    auto h_body_length = parse::number<size_t>(h_body_length_h);
+    if (h_body_length) {
+        if (*h_body_length != body_length) {
+            LOG_WARN("Body length mismatch: ", *h_body_length, "!=", body_length);
+            return false;
+        }
+        LOG_DEBUG("Body matches signed length: ", body_length);
+    }
+
+    // Get body digest value.
+    auto b_digest = http_digest(body_hash);
+    auto b_digest_s = split_string_pair(b_digest, '=');
+
+    // Get digest values in head and compare (if algorithm matches).
+    auto h_digests = head.equal_range(http::field::digest);
+    for (auto hit = h_digests.first; hit != h_digests.second; hit++) {
+        auto h_digest_s = split_string_pair(hit->value(), '=');
+        if (boost::algorithm::iequals(b_digest_s.first, h_digest_s.first)) {
+            if (b_digest_s.second != h_digest_s.second) {
+                LOG_WARN("Body digest mismatch: ", hit->value(), "!=", b_digest);
+                return false;
+            }
+            LOG_DEBUG("Body matches signed digest: ", b_digest);
+        }
+    }
+
+    return true;
+}
+
+std::string
+http_digest(util::SHA256& hash)
+{
+    auto digest = hash.close();
+    auto encoded_digest = util::base64_encode(digest);
+    return "SHA-256=" + encoded_digest;
 }
 
 std::string
 http_digest(const http::response<http::dynamic_body>& rs)
 {
-    ouinet::util::SHA256 hash;
+    util::SHA256 hash;
 
     // Feed each buffer of body data into the hash.
     for (auto it : rs.body().data())
         hash.update(it);
-    auto digest = hash.close();
-    auto encoded_digest = ouinet::util::base64_encode(digest);
-    return "SHA-256=" + encoded_digest;
+
+    return http_digest(hash);
 }
 
 template<class Head>
@@ -124,8 +248,7 @@ prep_sig_head(const Head& inh, Head& outh)
         boost::algorithm::to_lower(name);
 
         auto value_v = hdr.value();  // trimmed
-        while (value_v.starts_with(' ')) value_v.remove_prefix(1);
-        while (value_v.ends_with  (' ')) value_v.remove_suffix(1);
+        trim_whitespace(value_v);
 
         auto vit = hdr_values.find(name);
         if (vit == hdr_values.end()) {  // new entry, add
@@ -139,6 +262,97 @@ prep_sig_head(const Head& inh, Head& outh)
 
     for (auto name : hdr_sorted)
         outh.set(name, hdr_values[name]);
+}
+
+static inline std::string
+request_target_ph(const http::request_header<>& rqh)
+{
+    auto method = rqh.method_string().to_string();
+    boost::algorithm::to_lower(method);
+    return util::str(method, ' ', rqh.target());
+}
+
+static inline std::string
+request_target_ph(const http::response_header<>&)
+{
+    return {};
+}
+
+static inline std::string
+response_status_ph(const http::request_header<>&)
+{
+    return {};
+}
+
+static inline std::string
+response_status_ph(const http::response_header<>& rsh)
+{
+    return std::to_string(rsh.result_int());
+}
+
+// For `hn` being ``X-Foo``, turn:
+//
+//     X-Foo: foo
+//     X-Bar: xxx
+//     X-Foo: 
+//     X-Foo: bar
+//
+// into optional ``foo, , bar``, and:
+//
+//     X-Bar: xxx
+//
+// into optional no value.
+template<class Head>
+static
+boost::optional<std::string>
+flatten_header_values(const Head& inh, const boost::string_view& hn)
+{
+    typename Head::const_iterator begin, end;
+    std::tie(begin, end) = inh.equal_range(hn);
+    if (begin == inh.end())  // missing header
+        return {};
+
+    std::string ret;
+    for (auto hit = begin; hit != end; hit++) {
+        auto hv = hit->value();
+        trim_whitespace(hv);
+        if (!ret.empty()) ret += ", ";
+        ret.append(hv.data(), hv.size());
+    }
+    return {std::move(ret)};
+}
+
+template<class Head>
+static boost::optional<Head>
+verification_head(const Head& inh, const HttpSignature& hsig)
+{
+    Head vh;
+    for (const auto& hn : SplitString(hsig.headers, ' ')) {
+        // A listed header missing in `inh` is considered an error,
+        // thus the verification should fail.
+        if (hn[0] != '(') {  // normal headers
+            // Referring to an empty header is ok (a missing one is not).
+            auto hcv = flatten_header_values(inh, hn);
+            if (!hcv) return {};
+            vh.set(hn, *hcv);
+        } else if (hn == "(request-target)") {  // pseudo-headers
+            auto hv = request_target_ph(inh);
+            if (hv.empty()) return {};
+            vh.set(hn, std::move(hv));
+        } else if (hn == "(response-status)") {
+            auto hv = response_status_ph(inh);
+            if (hv.empty()) return {};
+            vh.set(hn, std::move(hv));
+        } else if (hn == "(created)") {
+            vh.set(hn, hsig.created);
+        } else if (hn == "(expires)") {
+            vh.set(hn, hsig.expires);
+        } else {
+            LOG_WARN("Unknown HTTP signature pseudo-header: ", hn);
+            return {};
+        }
+    }
+    return {std::move(vh)};
 }
 
 template<class Head>
@@ -160,20 +374,21 @@ get_sig_str_hdrs(const Head& sig_head)
         ins_sep = true;
     }
 
-    return {sig_string, headers};
+    return {std::move(sig_string), std::move(headers)};
 }
 
 std::string
 http_signature( const http::response_header<>& rsh
-              , const ouinet::util::Ed25519PrivateKey& sk
+              , const util::Ed25519PrivateKey& sk
               , const std::string& key_id
               , std::chrono::seconds::rep ts)
 {
-    auto fmt = boost::format("keyId=\"%s\""
-                             ",algorithm=\"hs2019\""
+    static const auto fmt_ = "keyId=\"%s\""
+                             ",algorithm=\"" + sig_alg_hs2019 + "\""
                              ",created=%d"
                              ",headers=\"%s\""
-                             ",signature=\"%s\"");
+                             ",signature=\"%s\"";
+    boost::format fmt(fmt_);
 
     http::response_header<> sig_head;
     sig_head.set("(response-status)", rsh.result_int());
@@ -183,9 +398,102 @@ http_signature( const http::response_header<>& rsh
     std::string sig_string, headers;
     std::tie(sig_string, headers) = get_sig_str_hdrs(sig_head);
 
-    auto encoded_sig = ouinet::util::base64_encode(sk.sign(sig_string));
+    auto encoded_sig = util::base64_encode(sk.sign(sig_string));
 
     return (fmt % key_id % ts % headers % encoded_sig).str();
+}
+
+boost::optional<HttpSignature>
+HttpSignature::parse(boost::string_view sig)
+{
+    // TODO: proper support for quoted strings
+    if (has_comma_in_quotes(sig)) {
+        LOG_WARN("Commas in quoted arguments of HTTP signatures are not yet supported");
+        return {};
+    }
+
+    HttpSignature hs;
+    static const std::string def_headers = "(created)";
+    hs.headers = def_headers;  // missing is not the same as empty
+
+    for (boost::string_view item : SplitString(sig, ',')) {
+        beast::string_view key, value;
+        std::tie(key, value) = split_string_pair(item, '=');
+        // Unquoted values:
+        if (key == "created") {hs.created = value; continue;}
+        if (key == "expires") {hs.expires = value; continue;}
+        // Quoted values:
+        if (value.size() < 2 || value[0] != '"' || value[value.size() - 1] != '"')
+            return {};
+        value.remove_prefix(1);
+        value.remove_suffix(1);
+        if (key == "keyId") {hs.keyId = value; continue;}
+        if (key == "algorithm") {hs.algorithm = value; continue;}
+        if (key == "headers") {hs.headers = value; continue;}
+        if (key == "signature") {hs.signature = value; continue;}
+        return {};
+    }
+    if (hs.keyId.empty() || hs.signature.empty()) {  // required
+        LOG_WARN("HTTP signature contains empty key identifier or signature");
+        return {};
+    }
+    if (hs.algorithm.empty() || hs.created.empty() || hs.headers.empty()) {  // recommended
+        LOG_WARN("HTTP signature contains empty algorithm, creation time stamp, or header list");
+    }
+
+    return {std::move(hs)};
+}
+
+std::pair<bool, http::fields>
+HttpSignature::verify( const http::response_header<>& rsh
+                     , const util::Ed25519PublicKey& pk)
+{
+    // The key may imply an algorithm,
+    // but an explicit algorithm should not conflict with the key.
+    assert(algorithm.empty() || algorithm == sig_alg_hs2019);
+
+    auto vfy_head = verification_head(rsh, *this);
+    if (!vfy_head)  // e.g. because of missing headers
+        return {false, {}};
+
+    std::string sig_string;
+    std::tie(sig_string, std::ignore) = get_sig_str_hdrs(*vfy_head);
+
+    auto decoded_sig = util::base64_decode(signature);
+    if (decoded_sig.size() != pk.sig_size) {
+        LOG_WARN("Invalid HTTP signature length");
+        return {false, {}};
+    }
+
+    auto sig_array = util::bytes::to_array<uint8_t, pk.sig_size>(decoded_sig);
+    if (!pk.verify(sig_string, sig_array))
+        return {false, {}};
+
+    // Collect headers not covered by signature.
+    http::fields extra;
+    for (const auto& hdr : rsh) {
+        auto hn = hdr.name_string();
+        if (vfy_head->find(hn) == vfy_head->end())
+            extra.insert(hdr.name(), hn, hdr.value());
+    }
+
+    return {true, std::move(extra)};
+}
+
+bool
+HttpSignature::has_comma_in_quotes(const boost::string_view& s) {
+    // A comma is between quotes if
+    // the number of quotes before it is odd.
+    int quotes_seen = 0;
+    for (auto c : s) {
+        if (c == '"') {
+            quotes_seen++;
+            continue;
+        }
+        if ((c == ',') && (quotes_seen % 2 != 0))
+            return true;
+    }
+    return false;
 }
 
 }} // namespaces
