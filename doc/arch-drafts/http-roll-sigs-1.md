@@ -39,7 +39,9 @@ When all data blocks have been sent to the client, the injector sends additional
   - Content digests for the whole body.
   - The final content length.
 
-HTTP chunked transfer encoding is used to enable providing a first set of headers, then a signature (as a chunk extension) after each sent block, then a final set of headers as a trailer.  The partial signature (and other headers related to transfer encoding) are not part of the final signature.
+HTTP chunked transfer encoding is used to enable providing a first set of headers, then a signature (as a chunk extension) after each sent block, then a final set of headers as a trailer.
+
+Please note that neither the partial signature nor framing headers (`Transfer-Encoding:`, `Trailer:`, `Content-Length:`) are part of the final signature, so that the receiving client may serve to other clients the final signature in the initial headers instead of the partial one, or even serve the response with identity transfer encoding (without block signatures nor a trailer) and still enable full (but not partial) response verification. The purpose of the `X-Ouinet-Data-Size:` header is to allow verifying data length without forcing the presence or absence of `Content-Length:`, which would break chunked or identity transfer-encoded messages, respectively.
 
 [Signing HTTP Messages][] is used here as a way to sign HTTP headers because of its simplicity, although other schemes may be used instead.
 
