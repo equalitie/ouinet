@@ -465,7 +465,7 @@ HttpSignature::verify( const http::response_header<>& rsh
         return {false, {}};
     }
 
-    auto sig_array = util::bytes::to_array<uint8_t, pk.sig_size>(decoded_sig);
+    auto sig_array = util::bytes::to_array<uint8_t, util::Ed25519PublicKey::sig_size>(decoded_sig);
     if (!pk.verify(sig_string, sig_array))
         return {false, {}};
 
