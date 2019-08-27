@@ -81,7 +81,7 @@ X-Ouinet-Sig1: keyId="ed25519=????",algorithm="hs2019",created=1516048311,
 
 The signature for a given block comes in a chunk extension in the chunk right after the block's end (for the last block, in the final chunk); if the signature was placed at the beginning of the block, the injector would need to buffer the whole block in memory before sending the corresponding chunks.
 
-Each block signature covers the injection identifier and block offset besides its content.  This avoids replay and reordering attacks, but it also binds the stream representation to this injection.  Storage that keeps signatures inline with block data should take this into account.
+Each block signature covers the injection identifier and block offset besides its content.  The former avoids replay attacks where the attacker sends a correctly signed block from a different injection (for the same or a different URI).  The latter avoids the attacker from reordering correctly signed blocks for this injection.  However, this inlining of signatures also binds the stream representation of the body to this particular injection.  Storage that keeps signatures inline with block data should take this into account when trying to reuse body data.
 
 Common parameters to all block signatures are kept the same and factored out to `X-Ouinet-Hashing` for simplicity and bandwidth efficiency.  Even if each block length could be inferred from the presence of a chunk extension, having the signer commit to a fixed and explicit length up front (with the exception of the last block) helps the consumer of the signed response to easily validate chunk boundaries and discard responses with too big blocks.
 
