@@ -81,6 +81,8 @@ X-Ouinet-Sig1: keyId="ed25519=????",algorithm="hs2019",created=1516048311,
 
 The signature for a given block comes in a chunk extension in the chunk right after the block's end (for the last block, in the final chunk), and it covers the injection identifier and block offset besides its content.  This avoids replay and reordering attacks, but it also binds the stream representation to this injection.  Storage that keeps signatures inline with block data should take this into account.
 
+Common parameters to all block signatures are kept the same and factored out to `X-Ouinet-Hashing` for simplicity and bandwidth efficiency.  Even if each block length could be inferred from the presence of a chunk extension, having the signer commit to a fixed and explicit length up front (with the exception of the last block) helps the consumer of the signed response to easily validate chunk boundaries and discard responses with too big blocks.
+
 If the client sends an HTTP range request, the injector aligns it to block boundaries (this is acceptable according to [RFC7233#4.1][] — "a client cannot rely on receiving the same ranges that it requested").  The partial response head includes a ``Range:`` header, but it is not part of the partial nor final signatures (to allow later sharing of subranges, whose blocks can be validated independently anyway).  ``Digest:`` and ``X-Ouinet-Data-Size:`` may be missing in the final response head, if the injector did not have access to the whole body data.
 
 [RFC7233#4.1]: https://tools.ietf.org/html/rfc7233#section-4.1
