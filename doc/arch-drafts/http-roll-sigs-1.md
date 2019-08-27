@@ -56,8 +56,8 @@ Date: Mon, 15 Jan 2018 20:31:50 GMT
 Server: Apache
 Content-Type: text/html
 Content-disposition: inline; filename="foo.html"
-X-Ouinet-Hashing: keyId="????",algorithm="????",length=1048576
-X-Ouinet-Sig0: keyId="????",algorithm="????",created=1516048310,
+X-Ouinet-Hashing: keyId="ed25519=????",algorithm="hs2019",length=1048576
+X-Ouinet-Sig0: keyId="ed25519=????",algorithm="hs2019",created=1516048310,
   headers="(response-status) (created) x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-http-status date server content-type content-disposition x-ouinet-hashing",
   signature="BASE64(...)"
 Transfer-Encoding: chunked
@@ -72,7 +72,7 @@ abcd
 0;s=BASE64(SIG(INJECTION_ID=d6076… SEP OFFSET=0x100000 SEP BLOCK3))
 Digest: SHA-256=BASE64(HASH_OF_FULL_BODY)
 X-Ouinet-Data-Size: 1048580
-X-Ouinet-Sig1: keyId="????",algorithm="????",created=1516048311,
+X-Ouinet-Sig1: keyId="ed25519=????",algorithm="hs2019",created=1516048311,
   headers="(response-status) (created) x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-http-status date server content-type content-disposition x-ouinet-hashing digest x-ouinet-data-size",
   signature="BASE64(...)"
 ```
