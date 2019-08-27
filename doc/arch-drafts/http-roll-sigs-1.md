@@ -49,20 +49,19 @@ HTTP chunked transfer encoding is used to enable providing a first set of header
 
 ```
 HTTP/1.1 200 OK
-X-Oui-Version: 1
-X-Oui-URI: https://example.com/foo
-X-Oui-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
-X-Oui-HTTP-Status: 200
+X-Ouinet-Version: 0
+X-Ouinet-URI: https://example.com/foo
+X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
 Date: Mon, 15 Jan 2018 20:31:50 GMT
 Server: Apache
 Content-Type: text/html
 Content-disposition: inline; filename="foo.html"
-X-Oui-Hashing: keyId="????",algorithm="????",length=1048576
-X-Oui-Part-Sig: keyId="????",algorithm="????",
-  headers="x-oui-version x-oui-uri x-oui-injection x-oui-http-status date server content-type content-disposition x-oui-hashing",
+X-Ouinet-Hashing: keyId="????",algorithm="????",length=1048576
+X-Ouinet-Sig0: keyId="????",algorithm="????",created=1516048310,
+  headers="(response-status) (created) x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-http-status date server content-type content-disposition x-ouinet-hashing",
   signature="BASE64(...)"
 Transfer-Encoding: chunked
-Trailer: Digest, X-Oui-Content-Length, X-Oui-Sig
+Trailer: Digest, X-Ouinet-Data-Size, X-Ouinet-Sig1
 
 80000
 0123456789...
@@ -72,19 +71,19 @@ Trailer: Digest, X-Oui-Content-Length, X-Oui-Sig
 abcd
 0;s=BASE64(SIG(INJECTION_ID=d6076… SEP OFFSET=0x100000 SEP BLOCK3))
 Digest: SHA-256=BASE64(HASH_OF_FULL_BODY)
-X-Oui-Content-Length: 1048580
-X-Oui-Sig: keyId="????",algorithm="????",
-  headers="x-oui-version x-oui-uri x-oui-injection x-oui-http-status date server content-type content-disposition x-oui-hashing digest x-oui-content-length",
+X-Ouinet-Data-Size: 1048580
+X-Ouinet-Sig1: keyId="????",algorithm="????",created=1516048311,
+  headers="(response-status) (created) x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-http-status date server content-type content-disposition x-ouinet-hashing digest x-ouinet-data-size",
   signature="BASE64(...)"
 ```
 
 The signature for a given block comes in a chunk extension in the chunk right after the block's end (for the last block, in the final chunk), and it covers the injection identifier and block offset besides its content.  This avoids replay and reordering attacks, but it also binds the stream representation to this injection.  Storage that keeps signatures inline with block data should take this into account.
 
-If the client sends an HTTP range request, the injector aligns it to block boundaries (this is acceptable according to [RFC7233#4.1][] — "a client cannot rely on receiving the same ranges that it requested").  The partial response head includes a ``Range:`` header, but it is not part of the partial nor final signatures (to allow later sharing of subranges, whose blocks can be validated independently anyway).  ``Digest:`` and ``X-Oui-Content-Length:`` may be missing in the final response head, if the injector did not have access to the whole body data.
+If the client sends an HTTP range request, the injector aligns it to block boundaries (this is acceptable according to [RFC7233#4.1][] — "a client cannot rely on receiving the same ranges that it requested").  The partial response head includes a ``Range:`` header, but it is not part of the partial nor final signatures (to allow later sharing of subranges, whose blocks can be validated independently anyway).  ``Digest:`` and ``X-Ouinet-Data-Size:`` may be missing in the final response head, if the injector did not have access to the whole body data.
 
 [RFC7233#4.1]: https://tools.ietf.org/html/rfc7233#section-4.1
 
-Client-to-client transmission works in a similar way, with the difference that when the first client got to get and save the full response from the injector, it may send to the second client the final response head straight away (i.e. without ``X-Oui-Part-Sig:`` nor a trailer).
+Client-to-client transmission works in a similar way, with the difference that when the first client got to get and save the full response from the injector, it may send to the second client the final response head straight away (i.e. without ``X-Ouinet-Sig0:`` nor a trailer).
 
 ## Issues
 
