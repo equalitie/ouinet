@@ -1648,12 +1648,6 @@ void Client::set_injector_endpoint(const char* injector_ep)
     _state->set_injector(injector_ep);
 }
 
-void Client::set_ipns(const char* ipns)
-{
-    _state->_config.set_index_ipns_id(move(ipns));
-    _state->setup_cache();
-}
-
 void Client::set_credentials(const char* injector, const char* cred)
 {
     _state->_config.set_credentials(injector, cred);
