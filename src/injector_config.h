@@ -78,12 +78,6 @@ public:
     util::Ed25519PrivateKey cache_private_key() const
     { return _ed25519_private_key; }
 
-    util::Ed25519PrivateKey index_bep44_private_key() const
-    { return _ed25519_private_key; }
-
-    unsigned int index_bep44_capacity() const
-    { return _index_bep44_capacity; }
-
     unsigned int cache_local_capacity() const
     { return _cache_local_capacity; }
 
@@ -110,7 +104,6 @@ private:
     boost::filesystem::path OUINET_CONF_FILE = "ouinet-injector.conf";
     std::string _credentials;
     util::Ed25519PrivateKey _ed25519_private_key;
-    unsigned int _index_bep44_capacity;
     unsigned int _cache_local_capacity;
     bool _disable_cache = false;
 };
@@ -165,19 +158,6 @@ InjectorConfig::options_description()
         ("cache-local-capacity"
          , po::value<unsigned int>()->default_value(10000)  // arbitrarily chosen
          , "Maximum number of resources to be cached locally")
-        // By default, it is not desirable that the injector actively republishes BEP44 entries.
-        // If a client caused a new injection of a URL (whether there was an existing injection of it or not),
-        // and the client goes immediately offline (so that its IPFS data is no longer available),
-        // we prefer that the newly inserted BEP44 entries fade away as fast as possible,
-        // so that they either disappear or are eventually replaced by others being actively seeded by clients.
-        // Better have stale content or no trace of the content at all,
-        // than index entries that keep clients stuck for some minutes trying to fetch unavailable data.
-        // A positive (and big) value may make sense for an injector that
-        // kept content for a long time or indefinitely
-        // (e.g. if IPFS' urlstore may be used in the future).
-        ("index-bep44-capacity"
-         , po::value<unsigned int>()->default_value(0)
-         , "Maximum number of entries to be kept (and persisted) in the BEP44 index")
         ;
 
     return desc;
@@ -300,9 +280,6 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         _bep5_injector_swarm_name = vm["announce-in-bep5-swarm"].as<string>();
     }
 
-    if (vm.count("index-bep44-capacity")) {
-        _index_bep44_capacity = vm["index-bep44-capacity"].as<unsigned int>();
-    }
     if (vm.count("cache-local-capacity")) {
         _cache_local_capacity = vm["cache-local-capacity"].as<unsigned int>();
     }
