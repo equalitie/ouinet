@@ -13,7 +13,6 @@
 #include <iostream>
 #include <cstdlib>  // for atexit()
 
-#include "cache/bep44_ipfs/cache_client.h"
 #include "cache/bep5_http/client.h"
 #include "cache/http_sign.h"
 
@@ -115,7 +114,6 @@ public:
     void start();
 
     void stop() {
-        _bep44_ipfs_cache = nullptr;
         _bep5_http_cache = nullptr;
         _shutdown_signal();
         if (_injector) _injector->stop();
@@ -218,7 +216,6 @@ private:
     std::unique_ptr<CACertificate> _ca_certificate;
     util::LruCache<string, string> _ssl_certificate_cache;
     std::unique_ptr<OuiServiceClient> _injector;
-    std::unique_ptr<bep44_ipfs::CacheClient> _bep44_ipfs_cache;
     std::unique_ptr<cache::bep5_http::Client> _bep5_http_cache;
 
     ClientFrontEnd _front_end;
@@ -1323,50 +1320,6 @@ void Client::State::setup_cache()
             if (ec) {
                 LOG_ERROR("Failed to initialize cache::bep5_http::Client: "
                          , ec.message());
-            }
-        });
-    }
-    else if (_config.cache_type() == ClientConfig::CacheType::Bep44Ipfs) {
-
-        if (_is_ipns_being_setup) {
-            return;
-        }
-
-        _is_ipns_being_setup = true;
-
-        asio::spawn(_ios, [ this
-                          , self = shared_from_this()
-                          ] (asio::yield_context yield) {
-            if (was_stopped()) return;
-
-            if (_config.cache_enabled())
-            {
-                LOG_DEBUG("BitTorrent BEP44 pubkey: ", _config.index_bep44_pub_key());
-
-                auto on_exit = defer([&] { _is_ipns_being_setup = false; });
-
-                sys::error_code ec;
-
-                bool wait_for_ready = false;
-
-#               ifndef NDEBUG
-                wait_for_ready = true;
-#               endif
-
-                _bep44_ipfs_cache
-                    = bep44_ipfs::CacheClient::build(_ios
-                                                    , bittorrent_dht()
-                                                    , _config.index_bep44_pub_key()
-                                                    , _config.repo_root()
-                                                    , _config.autoseed_updated()
-                                                    , _config.index_bep44_capacity()
-                                                    , wait_for_ready
-                                                    , _shutdown_signal
-                                                    , yield[ec]);
-
-                if (ec) {
-                    LOG_ERROR("Failed to build CacheClient: ", ec.message());
-                }
             }
         });
     }
