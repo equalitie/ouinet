@@ -63,10 +63,6 @@ if (WITH_ASAN)
 endif()
 
 
-option(ASIO_IPFS_WITH_EXAMPLE_BINARIES "" OFF)
-add_subdirectory(./modules/asio-ipfs)
-add_library(lib::asio-ipfs ALIAS asio-ipfs)
-
 option(ASIO_UTP_WITH_TESTS             "" OFF)
 option(ASIO_UTP_WITH_EXAMPLES          "" OFF)
 option(ASIO_UTP_DEBUG_LOGGING          "" OFF)
@@ -178,7 +174,6 @@ if (WITH_INJECTOR)
         "./src/logger.cpp"
         "./src/endpoint.cpp"
         "./src/cache/*.cpp"
-        "./src/cache/bep44_ipfs/*.cpp"
         "./src/bittorrent/*.cpp"
         "./src/util/atomic_file.cpp"
         "./src/util/persistent_lru_cache.cpp"
@@ -196,7 +191,6 @@ if (WITH_INJECTOR)
     target_link_libraries(injector
         Boost::asio_ssl
         Boost::iostreams
-        lib::asio-ipfs
         lib::asio_utp
         lib::gcrypt
         lib::json
