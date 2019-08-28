@@ -121,7 +121,6 @@ file(GLOB client_sources
     "./src/ouiservice/pluggable-transports/*.cpp"
     "./src/logger.cpp"
     "./src/cache/*.cpp"
-    "./src/cache/bep44_ipfs/*.cpp"
     "./src/cache/bep5_http/*.cpp"
     "./src/bittorrent/*.cpp"
     "./src/util/atomic_file.cpp"
@@ -148,7 +147,6 @@ target_link_libraries(client
     PRIVATE
         Boost::asio_ssl
         Boost::iostreams
-        lib::asio-ipfs
         lib::asio_utp
         lib::gcrypt
         lib::json
