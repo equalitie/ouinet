@@ -13,7 +13,6 @@
 #include <string>
 #include <cstdlib>  // for atexit()
 
-#include "cache/bep44_ipfs/cache_injector.h"
 #include "cache/http_sign.h"
 
 #include "bittorrent/dht.h"
@@ -79,8 +78,6 @@ using Response    = http::response<http::dynamic_body>;
 using TcpLookup   = asio::ip::tcp::resolver::results_type;
 using ResponseWithFileBody = http::response<http::basic_file_body<
     util::file_posix_with_offset>>;
-
-using bep44_ipfs::CacheInjector;
 
 static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
 static const fs::path OUINET_TLS_KEY_FILE = "tls-key.pem";
@@ -315,12 +312,10 @@ public:
                         , asio::ssl::context& ssl_ctx
                         , OriginPools& origin_pools
                         , const InjectorConfig& config
-                        , unique_ptr<CacheInjector>& injector
                         , uuid_generator& genuuid)
         : insert_id(to_string(genuuid()))
         , ios(ios)
         , ssl_ctx(ssl_ctx)
-        , injector(injector)
         , config(config)
         , httpsig_key_id(cache::http_key_id_for_injection(
               config.cache_private_key().public_key()))
@@ -555,138 +550,6 @@ public:
         return ret;
     }
 
-private:
-    CacheEntry
-    fetch_stored(const Request& rq, Cancel& cancel, Yield yield)
-    {
-        /*
-         * Currently fetching a resource from the distributed cache is a lot
-         * more resource hungry than simply fetching it from the origin.
-         *
-         * TODO: Perhaps modify the cache on the injector so that it only does
-         * storing and fething on local disk (that used to be the case with the
-         * B-tree database, but isn't with BEP44 one). Then re-enable this
-         * code.
-         */
-#if 0
-        if (!injector)
-            return or_throw<CacheEntry>( yield
-                                       , asio::error::operation_not_supported);
-
-        sys::error_code ec;
-
-        // TODO: use string_view
-        auto ret = injector->get_content( key_from_http_req(rq)
-                                        , config.cache_index_type()
-                                        , cancel
-                                        , yield[ec].tag("injector.get_content"));
-
-        if (ec) return or_throw(yield, ec, move(ret.second));
-
-        // Prevent others from inserting ouinet specific header fields.
-        ret.second.response = util::remove_ouinet_fields(move(ret.second.response));
-
-        // Add an injection identifier header
-        // to enable the client to track injection state.
-        ret.second.response.set(http_::response_injection_id_hdr, ret.first);
-
-        return move(ret.second);
-#else
-        return or_throw<CacheEntry>( yield
-                                   , asio::error::operation_not_supported);
-#endif
-    }
-
-    Response store(Request rq, Response rs, Yield yield)
-    {
-        if (!injector) return rs;
-
-        // Recover synchronous injection toggle.
-        bool sync = ( rq[http_::request_sync_injection_hdr]
-                      == http_::request_sync_injection_true );
-
-        // This injection code logs errors but does not propagate them
-        // (the `desc_data` field is set to the empty string).
-        auto inject = [
-            rq, rs, id = insert_id,
-            injector = injector.get()
-        ] (boost::asio::yield_context yield) mutable
-          -> CacheInjector::InsertionResult {
-            sys::error_code ec;
-
-            // Pop out Ouinet internal HTTP headers.
-            rq = util::to_cache_request(move(rq));
-            rs = util::to_cache_response(move(rs), ec);
-
-            CacheInjector::InsertionResult ret;
-            if (!ec)
-                ret = injector->insert_content( id, rq, move(rs)
-                                              , true
-                                              , yield[ec]);
-
-            if (ec) {
-                cout << "!Insert failed: " << rq.target()
-                     << " " << ec.message() << endl;
-                ret.desc_data = "";
-            }
-
-            return ret;
-        };
-
-        // Program or proceed to the real injection.
-
-        if (!sync) {
-            LOG_DEBUG("Async inject: ", rq.target(), " ", insert_id);
-            asio::spawn(asio::yield_context(yield), inject);
-            return rs;
-        }
-
-        LOG_DEBUG("Sync inject: ", rq.target(), " ", insert_id);
-
-        auto ins = inject(yield);
-
-        if (ins.desc_data.length() == 0)
-            return rs;  // insertion failed
-
-        return add_insertion_header_fields(move(rs), move(ins));
-    }
-
-    Response add_insertion_header_fields( Response&& rs
-                                        , CacheInjector::InsertionResult&& ins)
-    {
-        // Add descriptor storage link as is.
-        rs.set(http_::response_descriptor_link_hdr, move(ins.desc_link));
-
-        rs = add_descriptor_header_field(move(rs), move(ins.desc_data));
-        return add_re_insertion_header_field( move(rs)
-                                            , move(ins.index_ins_data));
-    }
-
-    template<class Rs>
-    Rs add_descriptor_header_field(Rs&& rs, string&& desc_data)
-    {
-        // Zlib-compress descriptor, Base64-encode and put in header.
-        auto compressed_desc = util::zlib_compress(move(desc_data));
-        auto encoded_desc = util::base64_encode(move(compressed_desc));
-
-        rs.set(http_::response_descriptor_hdr, move(encoded_desc));
-
-        return move(rs);
-    }
-
-    // TODO: Better name for this function
-    template<class Rs>
-    Rs add_re_insertion_header_field(Rs&& rs, string&& index_ins_data)
-    {
-        // Add Base64-encoded reinsertion data (if any).
-        if (index_ins_data.length() > 0) {
-            rs.set( http_::response_insert_hdr
-                  , util::base64_encode(index_ins_data));
-        }
-
-        return move(rs);
-    }
-
 public:
     Connection get_connection(const Request& rq_, Cancel& cancel, Yield yield) {
         Connection connection;
@@ -721,7 +584,6 @@ private:
     std::string insert_id;
     asio::io_service& ios;
     asio::ssl::context& ssl_ctx;
-    unique_ptr<CacheInjector>& injector;
     const InjectorConfig& config;
     string httpsig_key_id;
     uuid_generator& genuuid;
@@ -734,7 +596,6 @@ void serve( InjectorConfig& config
           , uint64_t connection_id
           , GenericStream con
           , asio::ssl::context& ssl_ctx
-          , unique_ptr<CacheInjector>& injector
           , OriginPools& origin_pools
           , uuid_generator& genuuid
           , Cancel& cancel
@@ -748,7 +609,6 @@ void serve( InjectorConfig& config
                            , ssl_ctx
                            , origin_pools
                            , config
-                           , injector
                            , genuuid);
 
     for (;;) {
@@ -851,7 +711,6 @@ void serve( InjectorConfig& config
 static
 void listen( InjectorConfig& config
            , OuiServiceServer& proxy_server
-           , unique_ptr<CacheInjector>& cache_injector
            , Cancel& cancel
            , asio::yield_context yield)
 {
@@ -898,7 +757,6 @@ void listen( InjectorConfig& config
         asio::spawn(ios, [
             connection = std::move(connection),
             &ssl_ctx,
-            &cache_injector,
             &cancel,
             &config,
             &genuuid,
@@ -910,50 +768,12 @@ void listen( InjectorConfig& config
                  , connection_id
                  , std::move(connection)
                  , ssl_ctx
-                 , cache_injector
                  , origin_pools
                  , genuuid
                  , cancel
                  , yield);
         });
     }
-}
-
-//------------------------------------------------------------------------------
-unique_ptr<CacheInjector> build_cache( asio::io_service& ios
-                                     , shared_ptr<bittorrent::MainlineDht> bt_dht
-                                     , const InjectorConfig& config
-                                     , Cancel& cancel
-                                     , asio::yield_context yield)
-{
-    auto bep44_privk = config.index_bep44_private_key();
-
-    sys::error_code ec;
-
-    auto cache_injector = CacheInjector::build( ios
-                                              , bt_dht
-                                              , bep44_privk
-                                              , config.repo_root()
-                                              , config.index_bep44_capacity()
-                                              , cancel
-                                              , yield[ec]);
-
-    assert(!cancel || ec == asio::error::operation_aborted);
-    if (cancel) ec = asio::error::operation_aborted;
-    if (ec) return or_throw(yield, ec, move(cache_injector));
-
-    // Although the IPNS ID is already in IPFS's config file,
-    // this just helps put all info relevant to the user right in the repo root.
-    auto ipns_id = cache_injector->ipfs_id();
-    LOG_DEBUG("IPNS Index: " + ipns_id);  // used by integration tests
-    util::create_state_file(config.repo_root()/"cache-ipns", ipns_id);
-
-    // Same for BEP44.
-    auto bep44_pubk = util::bytes::to_hex(bep44_privk.public_key().serialize());
-    LOG_DEBUG("BEP44 Index: " + bep44_pubk);  // used by integration tests
-    util::create_state_file(config.repo_root()/"cache-bep44", bep44_pubk);
-
-    return cache_injector;
 }
 
 //------------------------------------------------------------------------------
@@ -1136,42 +956,14 @@ int main(int argc, const char* argv[])
 
     Cancel cancel;
 
-    Cancel::Connection shutdown_ipfs_slot;
-
     asio::spawn(ios, [
         &ios,
-        &shutdown_ipfs_slot,
         &proxy_server,
         &config,
-        &cancel,
-        &bittorrent_dht
+        &cancel
     ] (asio::yield_context yield) {
         sys::error_code ec;
-
-        unique_ptr<CacheInjector> cache_injector;
-
-        if (config.cache_enabled()) {
-            cache_injector = build_cache( ios
-                                        , bittorrent_dht()
-                                        , config
-                                        , cancel
-                                        , yield[ec]);
-
-            if (ec) {
-                cerr << "Failed to build the cache: " << ec.message() << "\n";
-                return;
-            }
-
-            shutdown_ipfs_slot = cancel.connect([&] {
-                cache_injector = nullptr;
-            });
-        }
-
-        listen( config
-              , proxy_server
-              , cache_injector
-              , cancel
-              , yield);
+        listen(config, proxy_server, cancel, yield[ec]);
     });
 
     asio::signal_set signals(ios, SIGINT, SIGTERM);
