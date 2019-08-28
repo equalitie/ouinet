@@ -1,9 +1,10 @@
 #include "util.h"
 
+#include <algorithm>
+
 #include <boost/iostreams/filtering_streambuf.hpp>
 #include <boost/iostreams/filter/zlib.hpp>
 #include <boost/iostreams/copy.hpp>
-#include <boost/archive/iterators/binary_from_base64.hpp>
 #include <boost/archive/iterators/base64_from_binary.hpp>
 #include <boost/archive/iterators/binary_from_base64.hpp>
 #include <boost/archive/iterators/transform_width.hpp>
@@ -40,7 +41,8 @@ string ouinet::util::zlib_decompress(const boost::string_view& in, sys::error_co
     return zlib_filter<boost::iostreams::zlib_decompressor>(in);
 }
 
-// Based on <https://stackoverflow.com/a/28471421> by user "ltc".
+// Based on <https://stackoverflow.com/a/28471421> by user "ltc"
+// and <https://stackoverflow.com/a/10973348> by user "PiQuer".
 string ouinet::util::detail::base64_encode(const char* data, size_t size) {
     using namespace boost::archive::iterators;
     using It = base64_from_binary<transform_width<const char*, 6, 8>>;
@@ -55,7 +57,7 @@ string ouinet::util::base64_decode(const boost::string_view in) {
     using It = transform_width<binary_from_base64<const char*>, 8, 6>;
     It begin = in.data();
     It end   = in.data() + in.size();
-    return boost::algorithm::trim_right_copy_if(string(begin, end), [](char c) {
-        return c == '\0';
-    });
+    string out(begin, end);  // decode from base64
+    size_t npad = count(in.begin(), in.end(), '=');
+    return out.erase((npad > out.size()) ? 0 : out.size() - npad);  // remove padding
 }
