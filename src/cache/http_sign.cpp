@@ -461,7 +461,9 @@ HttpSignature::verify( const http::response_header<>& rsh
 
     auto decoded_sig = util::base64_decode(signature);
     if (decoded_sig.size() != pk.sig_size) {
-        LOG_WARN("Invalid HTTP signature length");
+        LOG_WARN( "Invalid HTTP signature length: "
+                , decoded_sig.size(), " != ", static_cast<size_t>(pk.sig_size)
+                , " ", signature);
         return {false, {}};
     }
 
