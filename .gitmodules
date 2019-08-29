@@ -2,9 +2,6 @@
 	path = src/ouiservice/i2p/i2pd
 	url = https://github.com/equalitie/i2pd.git
 	branch = openssl
-[submodule "modules/asio-ipfs"]
-	path = modules/asio-ipfs
-	url = https://github.com/equalitie/asio-ipfs.git
 [submodule "modules/asio-utp"]
 	path = modules/asio-utp
 	url = https://github.com/equalitie/asio-utp.git

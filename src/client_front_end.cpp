@@ -1,16 +1,11 @@
 #include "client_front_end.h"
 #include "generic_stream.h"
-#include "cache/bep44_ipfs/cache_client.h"
 #include "util.h"
 #include "util/bytes.h"
 #include "defer.h"
 #include "client_config.h"
 #include "version.h"
 
-// For parsing BEP44 insertion data.
-#include "bittorrent/mutable_data.h"
-#include "cache/bep44_ipfs/descidx.h"
-#include "cache/bep44_ipfs/http_desc.h"
 #include "cache/bep5_http/client.h"
 
 #include <boost/optional/optional_io.hpp>
@@ -146,197 +141,8 @@ void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, stringstr
     ss << ca.pem_certificate();
 }
 
-void ClientFrontEnd::handle_upload( const ClientConfig& config
-                                  , const Request& req, Response& res, stringstream& ss
-                                  , bep44_ipfs::CacheClient* cache_client
-                                  , asio::yield_context yield)
-{
-    static const string req_ctype = "application/octet-stream";
-
-    auto result = http::status::ok;
-    res.set(http::field::content_type, "application/json");
-    string err, cid;
-
-    if (req.method() != http::verb::post) {
-        result = http::status::method_not_allowed;
-        err = "request method is not POST";
-    } else if (req[http::field::content_type] != req_ctype) {
-        result = http::status::unsupported_media_type;
-        err = "request content type is not " + req_ctype;
-    } else if (!req[http::field::expect].empty()) {
-        // TODO: Support ``Expect: 100-continue`` as cURL does,
-        // e.g. to spot too big files before receiving the body.
-        result = http::status::expectation_failed;
-        err = "sorry, request expectations are not supported";
-    } else if (!cache_client || !config.is_cache_access_enabled()) {
-        result = http::status::service_unavailable;
-        err = "cache access is not available";
-    } else {  // perform the upload
-        sys::error_code ec;
-        cid = cache_client->ipfs_add(req.body(), yield[ec]);
-        if (ec) {
-            result = http::status::internal_server_error;
-            err = "failed to seed data to the cache";
-        }
-    }
-
-    res.result(result);
-    if (err.empty())
-        ss << "{\"data_links\": [\"ipfs:/ipfs/" << cid << "\"]}";
-    else
-        ss << "{\"error\": \"" << err << "\"}";
-}
-
-static bool percent_decode(const string& in, string& out) {
-    try {
-        network::uri::decode(begin(in), end(in), back_inserter(out));
-    } catch (const network::percent_decoding_error&) {
-        return false;
-    }
-    return true;
-}
-
-void ClientFrontEnd::handle_descriptor( const ClientConfig& config
-                                      , const Request& req, Response& res, stringstream& ss
-                                      , bep44_ipfs::CacheClient* cache_client, Yield yield)
-{
-    auto result = http::status::ok;
-    res.set(http::field::content_type, "application/json");
-    string err;
-
-    static const boost::regex uriqarx("[\\?&]uri=([^&]*)");
-    boost::smatch urimatch;  // contains percent-encoded URI
-    string uri;  // after percent-decoding
-    auto target = req.target().to_string();  // copy to preserve regex result
-
-    string file_descriptor;
-
-    if (req.method() != http::verb::get) {
-        result = http::status::method_not_allowed;
-        err = "request method is not GET";
-    } else if (!boost::regex_search(target, urimatch, uriqarx)) {
-        result = http::status::bad_request;
-        err = "missing \"uri\" query argument";
-    } else if (!percent_decode(urimatch[1], uri)) {
-        result = http::status::bad_request;
-        err = "illegal encoding of URI argument";
-    } else if (!cache_client || !config.is_cache_access_enabled()) {
-        result = http::status::service_unavailable;
-        err = "cache access is not available";
-    } else {  // perform the query
-        sys::error_code ec;
-
-        Cancel cancel; // TODO: This should come from above
-        file_descriptor = cache_client->get_descriptor( key_from_http_url(uri)
-                                                      , cancel
-                                                      , yield[ec]);
-
-        if (ec == asio::error::not_found) {
-            result = http::status::not_found;
-            err = "URI was not found in the cache";
-        } else if (ec) {
-            result = http::status::internal_server_error;
-            err = "failed to look up URI descriptor in the cache";
-        }
-    }
-
-    res.result(result);
-
-    if (err.empty())
-        ss << file_descriptor;
-    else
-        ss << "{\"error\": \"" << err << "\"}";
-}
-
-// Extract key from BEP44 insertion data containing an inlined descriptor
-// (linked descriptors are not yet supported).
-static
-string key_from_bep44(const string& data, Cancel& cancel, asio::yield_context yield)
-{
-    string key;
-    sys::error_code ec;
-    try {
-        auto item = bittorrent::MutableDataItem::bdecode(data);  // opt<bep44/m>
-        if (!item) throw invalid_argument("");
-
-        auto desc_path = item->value.as_string();  // opt<path to serialized desc>
-        if (!desc_path) throw invalid_argument("");
-
-        static auto desc_load = [](auto, auto&, auto y) {  // TODO: support linked descriptors
-                                    return or_throw(y, asio::error::operation_not_supported, "");
-                                };
-        auto desc_data = bep44_ipfs::descriptor::from_path( *desc_path, desc_load
-                                                          , cancel, yield[ec]);  // serialized desc
-        if (ec) throw invalid_argument("");
-
-        auto desc = bep44_ipfs::Descriptor::deserialize(desc_data);  // opt<desc>
-        if (!desc) throw invalid_argument("");
-
-        key = key_from_http_url(desc->url);
-    } catch (invalid_argument _) {
-        ec = asio::error::invalid_argument;
-    }
-    return or_throw(yield, ec, move(key));
-}
-
-void ClientFrontEnd::handle_insert_bep44( const Request& req, Response& res, stringstream& ss
-                                        , bep44_ipfs::CacheClient* cache_client
-                                        , asio::yield_context yield)
-{
-    static const string req_ctype = "application/x-bittorrent";
-
-    auto result = http::status::ok;
-    res.set(http::field::content_type, "application/json");
-    string err, key;
-
-    if (req.method() != http::verb::post) {
-        result = http::status::method_not_allowed;
-        err = "request method is not POST";
-    } else if (req[http::field::content_type] != req_ctype) {
-        result = http::status::unsupported_media_type;
-        err = "request content type is not " + req_ctype;
-    } else if (!req[http::field::expect].empty()) {
-        // TODO: Support ``Expect: 100-continue`` as cURL does,
-        // e.g. to spot too big files before receiving the body.
-        result = http::status::expectation_failed;
-        err = "sorry, request expectations are not supported";
-    } else {  // perform the insertion
-        sys::error_code ec;
-        Cancel cancel; // TODO: This should come from above
-
-        // `ClientIndex` does not know about descriptor format,
-        // and `CacheClient` does not know about BEP44 format,
-        // so the proper place to extract the key from insertion data is here.
-        auto body = req.body();
-        auto key = key_from_bep44(body, cancel, yield[ec]);
-        if (!ec)
-            key = cache_client->insert_mapping( key
-                                              , move(body)
-                                              , cancel
-                                              , yield[ec]);
-
-        if (ec == asio::error::operation_not_supported) {
-            result = http::status::service_unavailable;
-            err = "BEP44 index is not enabled";
-        } else if (ec == asio::error::invalid_argument) {
-            result = http::status::unprocessable_entity;
-            err = "malformed, incomplete or forged insertion data";
-        } else if (ec) {
-            result = http::status::internal_server_error;
-            err = "failed to insert entry in index";
-        }
-    }
-
-    res.result(result);
-    if (err.empty())
-        ss << "{\"key\": \"" << key << "\"}";
-    else
-        ss << "{\"error\": \"" << err << "\"}";
-}
-
 void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , const Request& req, Response& res, stringstream& ss
-                                  , bep44_ipfs::CacheClient* bep44_cache
                                   , cache::bep5_http::Client* bep5_cache)
 {
     res.set(http::field::content_type, "text/html");
@@ -445,30 +251,12 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         ss << *_bep5_log_level_input;
     }
 
-    if (bep44_cache) {
-        ss << "        Our IPFS ID (IPNS): " << bep44_cache->ipfs_id() << "<br>\n";
-        ss << "        <h2>Index</h2>\n";
-        ss << "        Please use the box below to query the descriptor of an arbitrary URI without fetching the associated content.<br>\n";
-
-        ss << "        <br>\n";
-        ss << "        <form action=\"/api/descriptor\" method=\"get\">\n"
-           << "            Query URI descriptor: <input name=\"uri\"/ placeholder=\"URI\" size=\"100\">\n"
-           << "        <input type=\"submit\" value=\"Submit\"/>\n"
-           << "        </form>\n";
-
-        auto bep44_pk = config.index_bep44_pub_key();
-        auto bep44_pk_s = bep44_pk ? util::bytes::to_hex(bep44_pk->serialize()) : "";
-        ss << "        <br>\n";
-        ss << "        BEP44 public key: " << bep44_pk_s << "<br>\n";
-    }
-
     ss << "    </body>\n"
           "</html>\n";
 }
 
 void ClientFrontEnd::handle_status( ClientConfig& config
-                                  , const Request& req, Response& res, stringstream& ss
-                                  , bep44_ipfs::CacheClient* cache_client)
+                                  , const Request& req, Response& res, stringstream& ss)
 {
     res.set(http::field::content_type, "application/json");
 
@@ -480,14 +268,6 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         {"ipfs_cache", config.is_cache_access_enabled()},
         {"ouinet_version", Version::VERSION_NAME},
         {"ouinet_build_id", Version::BUILD_ID}
-     // https://github.com/nlohmann/json#arbitrary-types-conversions
-     // {"misc", {
-         // {"injector_endpoint", config.injector_endpoint()},
-         // {"pending_tasks", _pending_tasks},
-         // {"our_ipfs_id", cache_client->ipfs_id()},
-         // {"cache_ipns_id", cache_client->ipns()},
-         // {"cache_ipns_id", cache_client->ipfs()}
-     // }}
     };
 
     ss << response;
@@ -495,7 +275,6 @@ void ClientFrontEnd::handle_status( ClientConfig& config
 
 Response ClientFrontEnd::serve( ClientConfig& config
                               , const Request& req
-                              , bep44_ipfs::CacheClient* bep44_cache
                               , cache::bep5_http::Client* bep5_cache
                               , const CACertificate& ca
                               , Yield yield)
@@ -513,19 +292,10 @@ Response ClientFrontEnd::serve( ClientConfig& config
 
     if (path == "/ca.pem") {
         handle_ca_pem(req, res, ss, ca);
-    } else if (path == "/api/upload") {
-        sys::error_code ec_;  // shouldn't throw, but just in case
-        handle_upload(config, req, res, ss, bep44_cache, yield[ec_]);
-    } else if (path == "/api/descriptor") {
-        sys::error_code ec_;  // shouldn't throw, but just in case
-        handle_descriptor(config, req, res, ss, bep44_cache, yield[ec_]);
-    } else if (path == "/api/insert/bep44") {
-        sys::error_code ec_;  // shouldn't throw, but just in case
-        handle_insert_bep44(req, res, ss, bep44_cache, yield[ec_]);
     } else if (path == "/api/status") {
-        handle_status(config, req, res, ss, bep44_cache);
+        handle_status(config, req, res, ss);
     } else {
-        handle_portal(config, req, res, ss, bep44_cache, bep5_cache);
+        handle_portal(config, req, res, ss, bep5_cache);
     }
 
     Response::body_type::reader reader(res, res.body());

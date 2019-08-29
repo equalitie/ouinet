@@ -28,8 +28,7 @@ import static org.mockito.Mockito.when;
 @PrepareForTest({Ouinet.class})
 @SuppressStaticInitializationFor("ie.equalit.ouinet.Ouinet")
 public class ConfigTest {
-    private static String INDEX_BEP_44_PUB_KEY = "bep44index1234567890";
-    private static String INDEX_IPNS_ID = "indexipnsid1234567";
+    private static String CACHE_HTTP_PUB_KEY = "cachehttppubkey1234567890";
     private static String INJECTOR_ENDPOINT = "injectorendpoint789123";
     private static String INJECTOR_CREDENTIALS = "injectorcredentials29384293847928498492849284";
     private static String INJECTOR_TLS_CERT = "injectortlscert123123123123123";
@@ -67,8 +66,7 @@ public class ConfigTest {
         when(Ouinet.getCARootCert(ouinetDir)).thenReturn(caRootCertPath);
 
         Config config = new Config.ConfigBuilder(mockContext)
-                .setIndexBep44PubKey(INDEX_BEP_44_PUB_KEY)
-                .setIndexIpnsId(INDEX_IPNS_ID)
+                .setCacheHttpPubKey(CACHE_HTTP_PUB_KEY)
                 .setInjectorEndpoint(INJECTOR_ENDPOINT)
                 .setInjectorCredentials(INJECTOR_CREDENTIALS)
                 .setInjectorTlsCert(INJECTOR_TLS_CERT)
@@ -77,8 +75,7 @@ public class ConfigTest {
                 .build();
 
         assertThat(config.getOuinetDirectory(), is(ouinetDir));
-        assertThat(config.getIndexBep44PubKey(), is(INDEX_BEP_44_PUB_KEY));
-        assertThat(config.getIndexIpnsId(), is(INDEX_IPNS_ID));
+        assertThat(config.getCacheHttpPubKey(), is(CACHE_HTTP_PUB_KEY));
         assertThat(config.getInjectorEndpoint(), is(INJECTOR_ENDPOINT));
         assertThat(config.getInjectorCredentials(), is(INJECTOR_CREDENTIALS));
         assertThat(config.getCaRootCertPath(), is(caRootCertPath));

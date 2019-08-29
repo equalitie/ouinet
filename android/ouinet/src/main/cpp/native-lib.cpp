@@ -169,21 +169,6 @@ Java_ie_equalit_ouinet_Ouinet_nSetInjectorEP(
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_ie_equalit_ouinet_Ouinet_nSetIPNS(
-        JNIEnv* env,
-        jobject /* this */,
-        jstring j_inps)
-{
-    string ipns = env->GetStringUTFChars(j_inps, NULL);
-
-    g_ios.post([ipns] {
-            if (!g_client) return;
-            g_client->set_ipns(ipns.c_str());
-        });
-}
-
-extern "C"
-JNIEXPORT void JNICALL
 Java_ie_equalit_ouinet_Ouinet_nSetCredentialsFor(
         JNIEnv* env,
         jobject /* this */,

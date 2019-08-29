@@ -19,7 +19,6 @@ import java.util.List;
 public class Ouinet {
     // Used to load the 'native-lib' library on application startup.
     static {
-        System.loadLibrary("ipfs_bindings");
         System.loadLibrary("client");
         System.loadLibrary("native-lib");
 
@@ -65,8 +64,7 @@ public class Ouinet {
 
         maybeAdd(args, "--injector-ep",            config.getInjectorEndpoint());
         maybeAdd(args, "--injector-credentials",   config.getInjectorCredentials());
-        maybeAdd(args, "--index-bep44-public-key", config.getIndexBep44PubKey());
-        maybeAdd(args, "--index-ipns-id",          config.getIndexIpnsId());
+        maybeAdd(args, "--cache-http-public-key",  config.getCacheHttpPubKey());
         maybeAdd(args, "--tls-ca-cert-store-path", config.getTlsCaCertStorePath());
         maybeAdd(args, "--injector-tls-cert-file", config.getInjectorTlsCertPath());
         maybeAdd(args, "--cache-type",             config.getCacheType());
@@ -118,11 +116,6 @@ public class Ouinet {
             context.unregisterReceiver(chargingChangeReceiver);
             chargingChangeReceiver = null;
         }
-    }
-
-    // Set injector's IPNS (A.k.a. it's IPFS ID)
-    public void setIPNS(String ipns) {
-        nSetIPNS(ipns);
     }
 
     // Set injector endpoint. Can be either in the form IP:PORT or it can be an
@@ -206,7 +199,6 @@ public class Ouinet {
     private native void nStopClient();
     private native void nSetInjectorEP(String endpoint);
     private native void nSetCredentialsFor(String injector, String cred);
-    private native void nSetIPNS(String ipns);
     private native void nChargingStateChange(boolean isCharging);
     private native void nWifiStateChange(boolean isWifiConnected);
 }

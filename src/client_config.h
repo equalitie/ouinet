@@ -15,7 +15,7 @@ namespace ouinet {
 
 class ClientConfig {
 public:
-    enum class CacheType { None, Bep44Ipfs, Bep5Http };
+    enum class CacheType { None, Bep5Http };
 
     ClientConfig();
 
@@ -47,14 +47,6 @@ public:
         return _local_ep;
     }
 
-    const std::string& index_ipns_id() const {
-        return _index_ipns_id;
-    }
-
-    void set_index_ipns_id(std::string ipns_id) {
-        _index_ipns_id = std::move(ipns_id);
-    }
-
     boost::posix_time::time_duration max_cached_age() const {
         return _max_cached_age;
     }
@@ -81,14 +73,6 @@ public:
 
     asio::ip::tcp::endpoint front_end_endpoint() const {
         return _front_end_endpoint;
-    }
-
-    boost::optional<util::Ed25519PublicKey> index_bep44_pub_key() const {
-        return _index_bep44_pubkey;
-    }
-
-    unsigned int index_bep44_capacity() const {
-        return _index_bep44_capacity;
     }
 
     boost::optional<util::Ed25519PublicKey> cache_http_pub_key() const {
@@ -139,16 +123,7 @@ public:
 
            // Cache options
            ("cache-type", po::value<string>()->default_value("none")
-            , "Type of d-cache {none, bep5-http, bep44-ipfs}")
-           ("index-ipns-id"
-            , po::value<string>()->default_value("")
-            , "Index ID for the IPFS IPNS subsystem")
-           ("index-bep44-public-key"
-            , po::value<string>()
-            , "Index public key for the BitTorrent BEP44 subsystem (hex-encoded)")
-           ("index-bep44-capacity"
-            , po::value<unsigned int>()->default_value(_index_bep44_capacity)
-            , "Maximum number of entries to be kept (and persisted) in the BEP44 index")
+            , "Type of d-cache {none, bep5-http}")
            ("cache-http-public-key"
             , po::value<string>()
             , "Public key for HTTP signatures in the BEP5/HTTP cache (hex-encoded)")
@@ -202,7 +177,6 @@ private:
     boost::optional<Endpoint> _injector_ep;
     std::string _tls_injector_cert_path;
     std::string _tls_ca_cert_store_path;
-    std::string _index_ipns_id;
     bool _enable_http_connect_requests = false;
     bool _disable_cache_access = false;
     bool _disable_origin_access = false;
@@ -217,8 +191,6 @@ private:
     std::string _client_credentials;
     std::map<std::string, std::string> _injector_credentials;
 
-    boost::optional<util::Ed25519PublicKey> _index_bep44_pubkey;
-    unsigned int _index_bep44_capacity = 1000;  // arbitrarily chosen default
     boost::optional<util::Ed25519PublicKey> _cache_http_pubkey;
     CacheType _cache_type = CacheType::None;
     std::string _local_domain;
@@ -327,10 +299,6 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         }
     }
 
-    if (vm.count("index-ipns-id")) {
-        _index_ipns_id = vm["index-ipns-id"].as<string>();
-    }
-
     if (vm.count("injector-credentials")) {
         auto cred = vm["injector-credentials"].as<string>();
 
@@ -377,12 +345,6 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         }
     };
 
-    maybe_set_pk("index-bep44-public-key", _index_bep44_pubkey);
-
-    if (vm.count("index-bep44-capacity")) {
-        _index_bep44_capacity = vm["index-bep44-capacity"].as<unsigned int>();
-    }
-
     maybe_set_pk("cache-http-public-key", _cache_http_pubkey);
 
     if (vm.count("cache-type")) {
@@ -391,10 +353,6 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         if (type_str == "bep5-http") {
             _cache_type = CacheType::Bep5Http;
             LOG_DEBUG("Using bep5-http cache");
-        }
-        else if (type_str == "bep44-ipfs") {
-            _cache_type = CacheType::Bep44Ipfs;
-            LOG_WARN("bep44-ipfs cache type has been disabled in the code");
         }
         else if (type_str == "none" || type_str == "") {
             _cache_type = CacheType::None;
@@ -408,10 +366,6 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
     if (_cache_type == CacheType::None) {
         LOG_WARN("Not using d-cache");
-    }
-
-    if (cache_enabled() && _cache_type == CacheType::Bep44Ipfs && !_index_bep44_pubkey) {
-        throw std::runtime_error("BEP44 index selected but no injector BEP44 public key specified");
     }
 
     if (cache_enabled() && _cache_type == CacheType::Bep5Http && !_cache_http_pubkey) {

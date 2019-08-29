@@ -11,10 +11,6 @@
 #include "util/yield.h"
 #include "logger.h"
 
-namespace ouinet { namespace bep44_ipfs {
-    class CacheClient;
-} }
-
 namespace ouinet { namespace cache { namespace bep5_http {
     class Client;
 } } }
@@ -64,7 +60,6 @@ public:
 public:
     Response serve( ClientConfig&
                   , const http::request<http::string_body>&
-                  , bep44_ipfs::CacheClient*
                   , cache::bep5_http::Client*
                   , const CACertificate&
                   , Yield yield);
@@ -94,29 +89,16 @@ private:
     void handle_ca_pem( const Request&, Response&, std::stringstream&
                       , const CACertificate& );
 
-    void handle_upload( const ClientConfig&
-                      , const Request&, Response&, std::stringstream&
-                      , bep44_ipfs::CacheClient*, asio::yield_context);
-
-    void handle_descriptor( const ClientConfig&
-                          , const Request&, Response&, std::stringstream&
-                          , bep44_ipfs::CacheClient*, Yield);
-
-    void handle_insert_bep44(const Request&, Response&, std::stringstream&
-                            , bep44_ipfs::CacheClient*, asio::yield_context);
-
     void handle_portal( ClientConfig&
                       , const Request&
                       , Response&
                       , std::stringstream&
-                      , bep44_ipfs::CacheClient*
                       , cache::bep5_http::Client*);
 
     void handle_status( ClientConfig&
                       , const Request&
                       , Response&
-                      , std::stringstream&
-                      , bep44_ipfs::CacheClient*);
+                      , std::stringstream&);
 };
 
 } // ouinet namespace

@@ -13,7 +13,6 @@
 #include <iostream>
 #include <cstdlib>  // for atexit()
 
-#include "cache/bep44_ipfs/cache_client.h"
 #include "cache/bep5_http/client.h"
 #include "cache/http_sign.h"
 
@@ -115,7 +114,6 @@ public:
     void start();
 
     void stop() {
-        _bep44_ipfs_cache = nullptr;
         _bep5_http_cache = nullptr;
         _shutdown_signal();
         if (_injector) _injector->stop();
@@ -218,7 +216,6 @@ private:
     std::unique_ptr<CACertificate> _ca_certificate;
     util::LruCache<string, string> _ssl_certificate_cache;
     std::unique_ptr<OuiServiceClient> _injector;
-    std::unique_ptr<bep44_ipfs::CacheClient> _bep44_ipfs_cache;
     std::unique_ptr<cache::bep5_http::Client> _bep5_http_cache;
 
     ClientFrontEnd _front_end;
@@ -393,7 +390,6 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
 {
     return _front_end.serve( _config
                            , rq
-                           , _bep44_ipfs_cache.get()
                            , _bep5_http_cache.get()
                            , *_ca_certificate
                            , yield.tag("serve_frontend"));
@@ -1327,50 +1323,6 @@ void Client::State::setup_cache()
             }
         });
     }
-    else if (_config.cache_type() == ClientConfig::CacheType::Bep44Ipfs) {
-
-        if (_is_ipns_being_setup) {
-            return;
-        }
-
-        _is_ipns_being_setup = true;
-
-        asio::spawn(_ios, [ this
-                          , self = shared_from_this()
-                          ] (asio::yield_context yield) {
-            if (was_stopped()) return;
-
-            if (_config.cache_enabled())
-            {
-                LOG_DEBUG("BitTorrent BEP44 pubkey: ", _config.index_bep44_pub_key());
-
-                auto on_exit = defer([&] { _is_ipns_being_setup = false; });
-
-                sys::error_code ec;
-
-                bool wait_for_ready = false;
-
-#               ifndef NDEBUG
-                wait_for_ready = true;
-#               endif
-
-                _bep44_ipfs_cache
-                    = bep44_ipfs::CacheClient::build(_ios
-                                                    , bittorrent_dht()
-                                                    , _config.index_bep44_pub_key()
-                                                    , _config.repo_root()
-                                                    , _config.autoseed_updated()
-                                                    , _config.index_bep44_capacity()
-                                                    , wait_for_ready
-                                                    , _shutdown_signal
-                                                    , yield[ec]);
-
-                if (ec) {
-                    LOG_ERROR("Failed to build CacheClient: ", ec.message());
-                }
-            }
-        });
-    }
 }
 
 //------------------------------------------------------------------------------
@@ -1529,7 +1481,6 @@ void Client::State::start()
 
                         auto rs = _front_end.serve( _config
                                                   , rq
-                                                  , _bep44_ipfs_cache.get()
                                                   , _bep5_http_cache.get()
                                                   , *_ca_certificate
                                                   , yield[ec]);
@@ -1695,12 +1646,6 @@ void Client::stop()
 void Client::set_injector_endpoint(const char* injector_ep)
 {
     _state->set_injector(injector_ep);
-}
-
-void Client::set_ipns(const char* ipns)
-{
-    _state->_config.set_index_ipns_id(move(ipns));
-    _state->setup_cache();
 }
 
 void Client::set_credentials(const char* injector, const char* cred)

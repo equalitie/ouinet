@@ -45,10 +45,6 @@ static const std::string response_descriptor_hdr = header_prefix + "Descriptor";
 // Also, this is added with a link to descriptor storage.
 static const std::string response_descriptor_link_hdr = header_prefix + "Descriptor-Link";
 
-// Also, this is added with Base64-encoded, index-specific data to help reinsert.
-// The name of the index is added at the end of the header name.
-static const std::string response_insert_hdr = header_prefix + "Insert-BEP44";
-
 static const std::string response_error_hdr = header_prefix + "Error";
 
 static const std::string response_error_hdr_version_too_low  = "1 Client's version too low";
