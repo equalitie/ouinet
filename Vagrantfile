@@ -122,7 +122,6 @@ Vagrant.configure("2") do |config|
         build-essential \
         pkg-config \
         wget \
-        cmake \
         rsync \
         libtool \
         autoconf \
@@ -136,6 +135,15 @@ Vagrant.configure("2") do |config|
         libunistring-dev \
         python-twisted \
         zlib1g-dev
+
+      cd /usr/local/src
+      wget -q "https://github.com/Kitware/CMake/releases/download/v3.13.4/cmake-3.13.4.tar.gz"
+      tar -xf cmake-3.13.4.tar.gz
+      cd cmake-3.13.4
+      ./bootstrap
+      make
+      make install
+
       cd /usr/local/src
       wget -q "https://downloads.sourceforge.net/project/boost/boost/1.67.0/boost_1_67_0.tar.bz2"
       tar -xf boost_1_67_0.tar.bz2

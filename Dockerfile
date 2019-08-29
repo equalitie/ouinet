@@ -10,7 +10,6 @@ RUN apt-get update && apt-get install -y \
     automake \
     autopoint \
     build-essential \
-    cmake \
     gettext \
     git \
     libgcrypt-dev \
@@ -27,6 +26,12 @@ RUN apt-get update && apt-get install -y \
 # quieten wget and unzip
 RUN echo 'quiet = on' >> /etc/wgetrc
 WORKDIR /usr/local/src
+RUN wget -q "https://github.com/Kitware/CMake/releases/download/v3.13.4/cmake-3.13.4.tar.gz" \
+ && tar -xf cmake-3.13.4.tar.gz \
+ && cd cmake-3.13.4 \
+ && ./bootstrap \
+ && make \
+ && make install
 RUN wget -q "https://downloads.sourceforge.net/project/boost/boost/1.67.0/boost_1_67_0.tar.bz2" \
  && tar -xf boost_1_67_0.tar.bz2 \
  && cd boost_1_67_0 \
