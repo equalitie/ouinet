@@ -65,6 +65,12 @@ stages:
           ./build/test/test-logger               --log_level=test_suite
           ./build/test/test-http-util            --log_level=test_suite
           ./build/test/test-persistent-lru-cache --log_level=test_suite
+          ./build/test/test-connection-pool      --log_level=test_suite
+          ./build/test/test-http-sign            --log_level=test_suite
+          ./build/test/test-parser               --log_level=test_suite
+          ./build/test/test-scheduler            --log_level=test_suite
+          ./build/test/test-stream-fork          --log_level=test_suite
+          ./build/test/test-timeout-stream       --log_level=test_suite
 
           export PYENV_VERSION=3.5.2
           python3 -m venv .venv
