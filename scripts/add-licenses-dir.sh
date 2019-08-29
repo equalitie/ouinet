@@ -25,6 +25,7 @@ gcrypt;${BUILD}/gcrypt/src/gcrypt/AUTHORS;${BUILD}/gcrypt/src/gcrypt/COPYING.LIB
 json;Niels Lohmann;${BUILD}/json/src/json/LICENSE.MIT
 uri;Glyn Matthews;${BUILD}/uri/src/uri/LICENSE_1_0.txt
 asio-utp;Peter Jankuliak;${SRC}/modules/asio-utp/LICENSE.txt
+lampshade;various;${BUILD}/src/ouiservice/lampshade/lampshade-prefix/src/lampshade/LICENSE
 "
 
 echo "$LICENSE_DATA" | (
