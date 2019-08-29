@@ -443,7 +443,7 @@ struct Client::Impl {
         if (!ec) s.flush_response(*file, cancel, yield[ec]);
         if (!ec) file->commit(ec);
         if (ec) return or_throw(yield, ec);
-        LOG_DEBUG( "Bep5Http cache: Flushed to file: "
+        LOG_DEBUG( "Bep5Http cache: Flushed to file;"
                  , " key=", key
                  , " path=", path);
 
