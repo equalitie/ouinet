@@ -28,8 +28,7 @@ public class Config implements Parcelable {
 
     public static class ConfigBuilder {
         private Context context;
-        private String indexBep44PubKey;
-        private String indexIpnsId;
+        private String cacheHttpPubKey;
         private String injectorEndpoint;
         private String injectorCredentials;
         private String injectorTlsCert;
@@ -40,12 +39,8 @@ public class Config implements Parcelable {
             this.context = context;
         }
 
-        public ConfigBuilder setIndexBep44PubKey(String indexBep44PubKey){
-            this.indexBep44PubKey = indexBep44PubKey;
-            return this;
-        }
-        public ConfigBuilder setIndexIpnsId(String indexIpnsId){
-            this.indexIpnsId = indexIpnsId;
+        public ConfigBuilder setCacheHttpPubKey(String cacheHttpPubKey){
+            this.cacheHttpPubKey = cacheHttpPubKey;
             return this;
         }
         public ConfigBuilder setInjectorEndpoint(String injectorEndpoint){
@@ -198,8 +193,7 @@ public class Config implements Parcelable {
 
             return new Config(
                     ouinetDirectory,
-                    indexBep44PubKey,
-                    indexIpnsId,
+                    cacheHttpPubKey,
                     injectorEndpoint,
                     injectorCredentials,
                     setupInjectorTlsCert(ouinetDirectory),
@@ -211,8 +205,7 @@ public class Config implements Parcelable {
     }
 
     private String ouinetDirectory;
-    private String indexBep44PubKey;
-    private String indexIpnsId;
+    private String cacheHttpPubKey;
     private String injectorEndpoint;
     private String injectorCredentials;
     private String injectorTlsCertPath;
@@ -222,8 +215,7 @@ public class Config implements Parcelable {
     private String cacheType;
 
     private Config(String ouinetDirectory,
-                  String indexBep44PubKey,
-                  String indexIpnsId,
+                  String cacheHttpPubKey,
                   String injectorEndpoint,
                   String injectorCredentials,
                   String injectorTlsCertPath,
@@ -232,8 +224,7 @@ public class Config implements Parcelable {
                   String obfs4ProxyPath,
                   String cacheType) {
         this.ouinetDirectory = ouinetDirectory;
-        this.indexBep44PubKey = indexBep44PubKey;
-        this.indexIpnsId = indexIpnsId;
+        this.cacheHttpPubKey = cacheHttpPubKey;
         this.injectorEndpoint = injectorEndpoint;
         this.injectorCredentials = injectorCredentials;
         this.injectorTlsCertPath = injectorTlsCertPath;
@@ -245,11 +236,8 @@ public class Config implements Parcelable {
     public String getOuinetDirectory() {
         return ouinetDirectory;
     }
-    public String getIndexBep44PubKey() {
-        return indexBep44PubKey;
-    }
-    public String getIndexIpnsId() {
-        return indexIpnsId;
+    public String getCacheHttpPubKey() {
+        return cacheHttpPubKey;
     }
     public String getInjectorEndpoint() {
         return injectorEndpoint;
@@ -292,8 +280,7 @@ public class Config implements Parcelable {
     @Override
     public void writeToParcel(Parcel out, int flags) {
         out.writeString(ouinetDirectory);
-        out.writeString(indexBep44PubKey);
-        out.writeString(indexIpnsId);
+        out.writeString(cacheHttpPubKey);
         out.writeString(injectorEndpoint);
         out.writeString(injectorCredentials);
         out.writeString(injectorTlsCertPath);
@@ -304,8 +291,7 @@ public class Config implements Parcelable {
     }
     private Config(Parcel in) {
         ouinetDirectory = in.readString();
-        indexBep44PubKey = in.readString();
-        indexIpnsId = in.readString();
+        cacheHttpPubKey = in.readString();
         injectorEndpoint = in.readString();
         injectorCredentials = in.readString();
         injectorTlsCertPath = in.readString();

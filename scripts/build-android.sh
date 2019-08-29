@@ -333,7 +333,6 @@ function build_ouinet_libs {
     add_library $DIR/$BUILD_DIR/libclient.so
     add_library $DIR/$BUILD_DIR/libboost_asio.so
     add_library $DIR/$BUILD_DIR/libboost_asio_ssl.so
-    add_library $DIR/$BUILD_DIR/modules/asio-ipfs/ipfs_bindings/libipfs_bindings.so
     add_library $DIR/$BUILD_DIR/gcrypt/src/gcrypt/src/.libs/libgcrypt.so
     add_library $DIR/$BUILD_DIR/gpg_error/out/lib/libgpg-error.so
     add_library $DIR/$BUILD_DIR/src/ouiservice/lampshade/lampshade_bindings/liblampshade_bindings.so
