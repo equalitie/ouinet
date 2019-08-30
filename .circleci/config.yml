@@ -56,21 +56,9 @@ stages:
           boost_root=${HOME}/boost_${BOOST_MAJOR}_${BOOST_MINOR}_${BOOST_PATCH}
           export LD_LIBRARY_PATH=${boost_root}/stage/lib:$LD_LIBRARY_PATH
 
-          ./build/test/test-util                 --log_level=test_suite
-          ./build/test/test-watch-dog            --log_level=test_suite
-          ./build/test/test-cache                --log_level=test_suite
-          ./build/test/test-wait-condition       --log_level=test_suite
-          ./build/test/test-bittorrent           --log_level=test_suite
-          ./build/test/test-routing-table        --log_level=test_suite
-          ./build/test/test-logger               --log_level=test_suite
-          ./build/test/test-http-util            --log_level=test_suite
-          ./build/test/test-persistent-lru-cache --log_level=test_suite
-          ./build/test/test-connection-pool      --log_level=test_suite
-          ./build/test/test-http-sign            --log_level=test_suite
-          ./build/test/test-parser               --log_level=test_suite
-          ./build/test/test-scheduler            --log_level=test_suite
-          ./build/test/test-stream-fork          --log_level=test_suite
-          ./build/test/test-timeout-stream       --log_level=test_suite
+          for test in ./build/test/test-*; do
+              "$test" --log_level=test_suite
+          done
 
           export PYENV_VERSION=3.5.2
           python3 -m venv .venv
