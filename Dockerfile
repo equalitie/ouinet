@@ -146,4 +146,9 @@ COPY --from=builder /opt/ouinet/repo-templates/ repo-templates/
 RUN echo "$OUINET_DOCKER_VERSION"
 COPY --from=builder /usr/local/src/ouinet/scripts/ouinet-wrapper.sh ouinet
 COPY --from=builder /opt/ouinet/licenses/ licenses/
+# This last step pulls in latest updates to Debian packages
+# (only if something changed above)
+# since the base image may not have been upgraded in a long while.
+RUN apt-get update && apt-get upgrade -y \
+ && rm -rf /var/lib/apt/lists/*
 ENTRYPOINT ["/opt/ouinet/ouinet"]
