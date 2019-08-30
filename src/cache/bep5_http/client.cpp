@@ -325,37 +325,7 @@ struct Client::Impl {
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw<Session>(yield, ec);
 
-        stream::Fork<Con> fork(move(con));
-        typename stream::Fork<Con>::Tine src1(fork);
-        typename stream::Fork<Con>::Tine src2(fork);
-
-        sys::error_code file_ec;
-        auto path = path_from_key(key);
-        auto file = util::mkatomic(ios, file_ec, path);
-
-        if (!file_ec) {
-            asio::spawn(ios, [
-                    &cancel,
-                    path = move(path),
-                    src2 = move(src2),
-                    file = move(*file)
-            ] (asio::yield_context yield) mutable {
-                Cancel c = cancel;
-                sys::error_code ec;
-                Session session(std::move(src2));
-                session.flush_response(file, c, yield[ec]);
-                if (!ec) file.commit(ec);
-                if (ec) {
-                    LOG_WARN("Bep5Http cache: Failed to flush to file: ",
-                            ec.message());
-                }
-            });
-        } else {
-            LOG_WARN("Bep5Http cache: Failed to open file: ", file_ec.message());
-        }
-
-        Session session(std::move(src1));
-
+        Session session(std::move(con));
         session.read_response_header(cancel, yield[ec]);
 
         assert(!cancel || ec == asio::error::operation_aborted);
