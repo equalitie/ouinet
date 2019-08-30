@@ -204,6 +204,8 @@ struct Client::Impl {
 
         auto canceled = lifetime_cancel.connect([&] { cancel(); });
 
+        boost::optional<udp::endpoint> tried;
+
         for (int i = 0; i < 2 && !cancel; ++i) {
             sys::error_code ec;
 
@@ -217,6 +219,7 @@ struct Client::Impl {
                     yield.log("Bep5Http: using cached endpoint first:", ep);
                 }
                 eps = {ep};
+                tried = ep;
             } else {
                 bt::NodeID infohash = util::sha1_digest(host);
 
@@ -235,6 +238,12 @@ struct Client::Impl {
                 if (log_debug()) {
                     yield.log("Bep5Http: DHT BEP5 lookup result ec:", ec.message(),
                             " eps:", eps);
+                }
+                if (tried) {
+                    eps.erase(*tried);
+                    if (log_debug()) {
+                        yield.log("Bep5Http: Removed alredy tried ep:", *tried);
+                    }
                 }
 
                 return_or_throw_on_error(yield, cancel, ec, Session());
