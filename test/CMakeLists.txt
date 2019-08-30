@@ -58,16 +58,16 @@ add_executable(test-bittorrent "test_bittorrent.cpp" ${bt_cpp_files})
 target_link_libraries(test-bittorrent lib::asio_utp lib::gcrypt)
 
 ################################################################################
-add_executable(test-dht "test-dht.cpp" ${bt_cpp_files})
-target_link_libraries(test-dht lib::asio_utp lib::gcrypt z)
+add_executable(bt-bep44 "bt-bep44.cpp" ${bt_cpp_files})
+target_link_libraries(bt-bep44 lib::asio_utp lib::gcrypt z)
 
 ################################################################################
 add_executable(test-routing-table "test-routing-table.cpp" ${bt_cpp_files})
 target_link_libraries(test-routing-table lib::asio_utp lib::gcrypt z)
 
 ################################################################################
-add_executable(test-bep5 "test-bep5.cpp" ${bt_cpp_files})
-target_link_libraries(test-bep5 lib::asio_utp lib::gcrypt)
+add_executable(bt-bep5 "bt-bep5.cpp" ${bt_cpp_files})
+target_link_libraries(bt-bep5 lib::asio_utp lib::gcrypt)
 
 ######################################################################
 add_executable(test-watch-dog "test_watch_dog.cpp")
@@ -85,7 +85,7 @@ add_executable(test-logger "test_logger.cpp" "../src/logger.cpp")
 add_executable(test-connection-pool "test-connection-pool.cpp")
 
 ######################################################################
-add_executable(test-oui-server
+add_executable(oui-server
     "ouiservice-server.cpp"
     "../src/logger.cpp"
     "../src/endpoint.cpp"
@@ -94,7 +94,7 @@ add_executable(test-oui-server
 )
 
 ######################################################################
-add_executable(test-oui-client
+add_executable(oui-client
     "ouiservice-client.cpp"
     "../src/logger.cpp"
     "../src/endpoint.cpp"
