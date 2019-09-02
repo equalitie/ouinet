@@ -1314,6 +1314,7 @@ void Client::State::setup_cache()
 
             _bep5_http_cache
                 = cache::bep5_http::Client::build( bittorrent_dht()
+                                                 , *_config.cache_http_pub_key()
                                                  , _config.repo_root()/"bep5_http"
                                                  , yield[ec]);
 

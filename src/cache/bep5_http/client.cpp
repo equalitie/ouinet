@@ -30,6 +30,7 @@ namespace bt = bittorrent;
 struct Client::Impl {
     asio::io_service& ios;
     shared_ptr<bt::MainlineDht> dht;
+    util::Ed25519PublicKey cache_pk;
     fs::path cache_dir;
     Cancel lifetime_cancel;
     Announcer announcer;
@@ -40,9 +41,12 @@ struct Client::Impl {
     bool log_debug() const { return log_level <= DEBUG; }
     bool log_info()  const { return log_level <= INFO; }
 
-    Impl(shared_ptr<bt::MainlineDht> dht_, fs::path cache_dir)
+    Impl( shared_ptr<bt::MainlineDht> dht_
+        , util::Ed25519PublicKey& cache_pk
+        , fs::path cache_dir)
         : ios(dht_->get_io_service())
         , dht(move(dht_))
+        , cache_pk(cache_pk)
         , cache_dir(move(cache_dir))
         , announcer(dht)
         , dht_lookups(256)
@@ -559,6 +563,7 @@ struct Client::Impl {
 /* static */
 std::unique_ptr<Client>
 Client::build( shared_ptr<bt::MainlineDht> dht
+             , util::Ed25519PublicKey cache_pk
              , fs::path cache_dir
              , asio::yield_context yield)
 {
@@ -570,7 +575,7 @@ Client::build( shared_ptr<bt::MainlineDht> dht
 
     if (ec) return or_throw<ClientPtr>(yield, ec);
 
-    unique_ptr<Impl> impl(new Impl(move(dht), move(cache_dir)));
+    unique_ptr<Impl> impl(new Impl(move(dht), cache_pk,  move(cache_dir)));
 
     impl->announce_stored_data(yield[ec]);
 
