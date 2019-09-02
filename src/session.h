@@ -47,9 +47,10 @@ public:
     void flush_response(SinkStream&, Cancel&, asio::yield_context);
 
     // Allows manipulating the head, body and trailer forwarded to the sink.
-    template<class SinkStream, class ProcHead, class ProcIn, class ProcTrail>
+    template< class SinkStream, class ProcHead, class ProcIn
+            , class ProcTrail, class ProcChkExt>
     void flush_response( SinkStream&
-                       , ProcHead, ProcIn, ProcTrail
+                       , ProcHead, ProcIn, ProcTrail, ProcChkExt
                        , Cancel&, asio::yield_context);
 
     // Loads the entire response to memory, use only for debugging
@@ -106,11 +107,11 @@ Session::read_response_header(Cancel& cancel, asio::yield_context yield)
     return response_header();
 }
 
-template<class SinkStream, class ProcHead, class ProcIn, class ProcTrail>
+template<class SinkStream, class ProcHead, class ProcIn, class ProcTrail, class ProcChkExt>
 inline
 void
 Session::flush_response(SinkStream& sink,
-                        ProcHead hproc, ProcIn dproc, ProcTrail tproc,
+                        ProcHead hproc, ProcIn dproc, ProcTrail tproc, ProcChkExt xproc,
                         Cancel& cancel,
                         asio::yield_context yield)
 {
@@ -120,7 +121,7 @@ Session::flush_response(SinkStream& sink,
 
     Yield yield_(sink.get_io_service(), yield, "flush_response");
     http_forward( _state->con, sink, _state->buffer, _state->parser
-                , std::move(hproc), std::move(dproc), std::move(tproc)
+                , std::move(hproc), std::move(dproc), std::move(tproc), std::move(xproc)
                 , cancel, yield_);
 }
 
@@ -131,16 +132,26 @@ Session::flush_response(SinkStream& sink,
                         Cancel& cancel,
                         asio::yield_context yield)
 {
-    // Just pass head, body data and trailer on.
-    auto hproc =
-        [] (auto inh, auto&, auto) { return inh; };
-    ProcInFunc<asio::const_buffer> dproc =
-        [] (auto ind, auto&, auto) { return ind; };
-    auto tproc =
-        [] (auto intr, auto&, auto) { return intr; };
+    // Just pass head, chunk extensions, body data and trailer on.
+    std::string chunk_exts;
+    auto hproc = [] (auto inh, auto&, auto) { return inh; };
+    ProcInFunc<asio::const_buffer> dproc = [&chunk_exts] (auto ind, auto&, auto) {
+        ProcInFunc<asio::const_buffer>::result_type ret{std::move(ind), std::move(chunk_exts)};
+        chunk_exts = {};
+        return ret;
+    };
+    ProcTrailFunc tproc = [&chunk_exts] (auto intr, auto&, auto) {
+        ProcTrailFunc::result_type ret{std::move(intr), std::move(chunk_exts)};
+        chunk_exts = {};
+        return ret;
+    };
+    auto xproc = [&chunk_exts] (auto exts, auto&, auto) {
+        chunk_exts = std::move(exts);
+    };
 
     return flush_response( sink
-                         , std::move(hproc), std::move(dproc), std::move(tproc)
+                         , std::move(hproc), std::move(dproc)
+                         , std::move(tproc), std::move(xproc)
                          , cancel, yield );
 }
 
