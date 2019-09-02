@@ -371,21 +371,29 @@ public:
             // Just count transferred data and feed the hash.
             forwarded += inbuf.size();
             if (do_inject) data_hash.update(inbuf);
-            return inbuf;  // pass data on
+            ProcInFunc<asio::const_buffer>::result_type ret{move(inbuf), {}};
+            return ret;  // pass data on, drop origin extensions
         };
 
-        auto trailer_proc = [&] (auto intr, auto&, auto) {
-            if (!do_inject) return intr;
+        ProcTrailFunc trailer_proc = [&] (auto intr, auto&, auto) {
+            if (do_inject) {
+                intr = util::to_cache_trailer(move(intr));
+                intr = cache::http_injection_trailer( outh, move(intr)
+                                                    , forwarded, data_hash.close()
+                                                    , config.cache_private_key()
+                                                    , httpsig_key_id);
+            }
+            ProcTrailFunc::result_type ret{move(intr), {}};
+            return ret;  // pass trailer on, drop origin extensions
+        };
 
-            intr = util::to_cache_trailer(move(intr));
-            return cache::http_injection_trailer( outh, move(intr)
-                                                , forwarded, data_hash.close()
-                                                , config.cache_private_key()
-                                                , httpsig_key_id);
+        auto ckxt_proc = [] (auto, auto&, auto) {
+            // Origin chunk extensions are ignored and dropped
+            // since we have no way to sign them.
         };
 
         RespFromH res(http_forward( orig_con, con, util::to_origin_request(rq)
-                                  , head_proc, data_proc, trailer_proc
+                                  , head_proc, data_proc, trailer_proc, ckxt_proc
                                   , cancel, yield[ec].tag("fetch_injector")));
 
         if (ec) yield.log("Injection failed: ", ec.message());
@@ -546,6 +554,7 @@ void serve( InjectorConfig& config
             auto orig_con = cc.get_connection(req, cancel, yield[ec]);
             size_t forwarded = 0;
             if (!ec) {
+                string chunk_exts;
                 auto reshproc = [&] (auto inh, auto&, auto) {
                     // Prevent others from inserting ouinet specific header fields.
                     auto outh = util::remove_ouinet_fields(move(inh));
@@ -555,14 +564,21 @@ void serve( InjectorConfig& config
                 };
                 ProcInFunc<asio::const_buffer> inproc = [&] (auto inbuf, auto&, auto) {
                     forwarded += inbuf.size();
-                    return inbuf;  // just pass data on
+                    ProcInFunc<asio::const_buffer>::result_type ret{move(inbuf), move(chunk_exts)};
+                    chunk_exts = {};
+                    return ret;  // just pass data on
                 };
-                auto trproc = [&] (auto intr, auto&, auto) {
-                    return intr;  // leave trailers untouched
+                ProcTrailFunc trproc = [&] (auto intr, auto&, auto) {
+                    ProcTrailFunc::result_type ret{move(intr), move(chunk_exts)};
+                    chunk_exts = {};
+                    return ret;  // leave trailers untouched
+                };
+                auto cxproc = [&] (auto exts, auto&, auto) {
+                    chunk_exts = move(exts);  // save exts for next chunk
                 };
                 res = RespFromH(http_forward( orig_con, con
                                             , util::to_origin_request(req)
-                                            , reshproc, inproc, trproc
+                                            , reshproc, inproc, trproc, cxproc
                                             , cancel, yield[ec].tag("fetch_proxy")));
             }
             if (ec) {
