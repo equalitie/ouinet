@@ -62,6 +62,7 @@
 #include "util/crypto.h"
 #include "util/lru_cache.h"
 #include "util/scheduler.h"
+#include "util/connected_pair.h"
 #include "stream/fork.h"
 
 #include "logger.h"
@@ -278,35 +279,6 @@ void handle_bad_request( GenericStream& con
                        , Yield yield)
 {
     return handle_http_error(con, req, http::status::bad_request, move(message), yield);
-}
-
-//------------------------------------------------------------------------------
-// Temporary code until we no longer need to store responses in memory.
-static
-pair<tcp::socket, tcp::socket>
-make_connection(asio::io_service& ios, asio::yield_context yield)
-{
-    using Ret = pair<tcp::socket, tcp::socket>;
-
-    tcp::acceptor a(ios, tcp::endpoint(tcp::v4(), 0));
-    tcp::socket s1(ios), s2(ios);
-
-    sys::error_code accept_ec;
-    sys::error_code connect_ec;
-
-    WaitCondition wc(ios);
-
-    asio::spawn(ios, [&, lock = wc.lock()] (asio::yield_context yield) mutable {
-            a.async_accept(s2, yield[accept_ec]);
-        });
-
-    s1.async_connect(a.local_endpoint(), yield[connect_ec]);
-    wc.wait(yield);
-
-    if (accept_ec)  return or_throw(yield, accept_ec, Ret(move(s1),move(s2)));
-    if (connect_ec) return or_throw(yield, connect_ec, Ret(move(s1),move(s2)));
-
-    return make_pair(move(s1), move(s2));
 }
 
 //------------------------------------------------------------------------------
@@ -820,7 +792,7 @@ public:
                     using Fork = stream::Fork<GenericStream>;
 
                     tcp::socket source(ios), sink(ios);
-                    tie(source, sink) = make_connection(ios, yield);
+                    tie(source, sink) = util::connected_pair(ios, yield);
 
                     Fork fork(move(source));
                     Fork::Tine src1(fork), src2(fork);
