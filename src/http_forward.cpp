@@ -19,7 +19,7 @@ process_head( const http::response_header<>& rph, const ProcHeadFunc& rphproc, b
     return util::str(rph_out);
 }
 
-http::fields
+std::pair<http::fields, std::string>
 process_trailers( const http::response_header<>& rph, const ProcTrailFunc& trproc
                 , Cancel& cancel, Yield yield) {
     http::fields intrail;
