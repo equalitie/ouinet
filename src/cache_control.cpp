@@ -289,11 +289,13 @@ CacheControl::do_fetch(
 
         if (!fresh_ec) {
             cache_ec = err::operation_aborted;
+            LOG_DEBUG(yield.tag(), ": Got revalidated fresh response");
             return res;
         }
 
         if (fresh_ec == err::operation_aborted) {
             cache_ec = err::operation_aborted;
+            LOG_DEBUG(yield.tag(), ": Revalidation aborted");
             return or_throw(yield, fresh_ec, move(res));
         }
 
@@ -301,15 +303,20 @@ CacheControl::do_fetch(
         auto cache_entry = do_fetch_stored(fetch_state, request, is_fresh, yield[cache_ec]);
         if (!cache_ec) {
             if (is_fresh) {
+                LOG_DEBUG(yield.tag(), ": Revalidation failed, cached entry is fresh");
                 return move(cache_entry.response);
             }
+            LOG_DEBUG(yield.tag(), ": Revalidation failed, cached entry is stale");
             return add_warning( move(cache_entry.response)
                                     , "111 Ouinet \"Revalidation Failed\"");
         }
 
-        if (cache_ec == err::operation_aborted)
+        if (cache_ec == err::operation_aborted) {
+            LOG_DEBUG(yield.tag(), ": Revalidation failed and cache retrieval was aborted");
             return or_throw(yield, fresh_ec, move(res));
+        }
 
+        LOG_DEBUG(yield.tag(), ": Revalidation and cache retrieval failed");
         return or_throw<Session>(yield, err::service_not_found);
     }
 
@@ -318,6 +325,7 @@ CacheControl::do_fetch(
 
     if (cache_ec == err::operation_aborted) {
         fresh_ec = err::operation_aborted;
+        LOG_DEBUG(yield.tag(), ": Revalidation not needed, cache retrieval aborted");
         return or_throw<Session>(yield, err::operation_aborted);
     }
 
@@ -325,18 +333,24 @@ CacheControl::do_fetch(
         // Retrieving from cache failed.
         auto res = do_fetch_fresh(fetch_state, request, yield[fresh_ec]);
 
-        if (!fresh_ec) return res;
+        if (!fresh_ec) {
+            LOG_DEBUG(yield.tag(), ": Cache retrieval failed, but we got fresh entry");
+            return res;
+        }
 
         if (fresh_ec == err::operation_aborted) {
+            LOG_DEBUG(yield.tag(), ": Cache retrieval failed, fetching fresh aborted");
             return or_throw<Session>(yield, err::operation_aborted);
         }
 
+        LOG_DEBUG(yield.tag(), ": Cache and fresh retrievals  failed");
         return or_throw<Session>(yield, err::no_data);
     }
 
     if (is_fresh) {
         cache_ec = err::operation_aborted;
         fresh_ec = {};
+        LOG_DEBUG(yield.tag(), ": Fresh retrieval succeeded first");
         return move(cache_entry.response);
     }
 
