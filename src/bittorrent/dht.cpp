@@ -277,7 +277,7 @@ std::set<tcp::endpoint> dht::DhtNode::tracker_announce(
     auto cancelled = cancel.connect([]{});
     WaitCondition wc(_ios);
     for (auto& i : responsible_nodes) {
-        asio::spawn(_ios, [&, lock = wc.lock()] (asio::yield_context yield) {
+        asio::spawn(_ios, [&, i, lock = wc.lock()] (asio::yield_context yield) {
             sys::error_code ec;
             send_write_query(
                 i.second.node_endpoint,
@@ -300,7 +300,9 @@ std::set<tcp::endpoint> dht::DhtNode::tracker_announce(
     }
     wc.wait(yield);
 
-    ec = cancelled ? boost::asio::error::operation_aborted : success ? sys::error_code() : boost::asio::error::network_down;
+    ec = cancelled ? boost::asio::error::operation_aborted
+                   : success ? sys::error_code()
+                             : boost::asio::error::network_down;
 
     return or_throw<std::set<tcp::endpoint>>(yield, ec, std::move(peers));
 }
@@ -2278,25 +2280,16 @@ std::set<tcp::endpoint> MainlineDht::tracker_announce(
 
     SuccessCondition condition(_ios);
     for (auto& i : _nodes) {
-        asio::spawn(_ios, [&, lock = condition.lock()] (asio::yield_context yield) {
+        asio::spawn(_ios, [&, ep = i.first, p = i.second.get(), lock = condition.lock()] (asio::yield_context yield) {
             sys::error_code ec;
             Signal<void()> cancel_dummy;
             std::set<tcp::endpoint> peers = i.second->tracker_announce(infohash, port, cancel_dummy, yield[ec]);
 
-            if (ec) {
-                return;
-            }
+            if (ec) { return; }
 
             output.insert(peers.begin(), peers.end());
 
-            /*
-             * TODO: We should distinguish here between
-             * "did not query successfully" and "did not find any peers".
-             * This needs error detection in _announce(), which does not exist.
-             */
-            if (peers.size()) {
-                lock.release(true);
-            }
+            lock.release(true);
         });
     }
 
