@@ -36,6 +36,7 @@ class chunk_last_x
     using view_type =
         buffers_cat_view<
             detail::chunk_size,     // "0" for the last chunk
+            boost::asio::const_buffer,   // chunk-extenstions
             chunk_crlf,             // CRLF
             buffers_type>;          // Trailer (includes CRLF)
 
@@ -204,6 +205,7 @@ chunk_last_x<Trailer>::
 chunk_last_x()
     : view_(
         0,
+        boost::asio::const_buffer{nullptr, 0},
         chunk_crlf{},
         Trailer{})
 {
@@ -214,6 +216,7 @@ chunk_last_x<Trailer>::
 chunk_last_x(Trailer const& trailer)
     : view_(
         0,
+        boost::asio::const_buffer{nullptr, 0},
         chunk_crlf{},
         prepare(trailer, is_fields<Trailer>{}))
 {
@@ -226,6 +229,7 @@ chunk_last_x(
     DeducedTrailer const& trailer, Allocator const& allocator)
     : view_(
         0,
+        boost::asio::const_buffer{nullptr, 0},
         chunk_crlf{},
         prepare(trailer, allocator))
 {
