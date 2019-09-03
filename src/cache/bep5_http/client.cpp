@@ -1,12 +1,14 @@
 #include "client.h"
 #include "announcer.h"
 #include "dht_lookup.h"
+#include "../http_sign.h"
 #include "../../util/atomic_file.h"
 #include "../../util/bytes.h"
 #include "../../util/file_io.h"
 #include "../../util/wait_condition.h"
 #include "../../util/set_io.h"
 #include "../../util/async_generator.h"
+#include "../../util/connected_pair.h"
 #include "../../util/lru_cache.h"
 #include "../../bittorrent/dht.h"
 #include "../../bittorrent/is_martian.h"
@@ -128,6 +130,10 @@ struct Client::Impl {
         auto file = util::file_io::open_readonly(ios, path, ec);
 
         if (ec) {
+            if (!cancel && log_debug()) {
+                cerr << "Bep5HTTP: Not Serving " << key
+                     << " ec:" << ec.message() << "\n";
+            }
             return handle_not_found(con, req, yield[ec]);
         }
 
@@ -311,7 +317,7 @@ struct Client::Impl {
     }
 
     template<class Con>
-    Session load_from_connection( const std::string& key
+    Session load_from_connection( const string& key
                                 , Con& con
                                 , Cancel cancel
                                 , Yield yield)
@@ -329,7 +335,28 @@ struct Client::Impl {
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw<Session>(yield, ec);
 
-        Session session(std::move(con));
+        auto src_sink = util::connected_pair(ios, yield[ec]);
+
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec) return or_throw<Session>(yield, ec);
+
+        asio::spawn(ios, [ pk = cache_pk
+                         , key = key
+                         , sink = move(src_sink.second)
+                         , con  = move(con)] (auto yield) mutable {
+            Session s(move(con));
+            sys::error_code ec;
+            Cancel cancel;
+
+            cache::session_flush_verified(s, sink, pk, cancel, yield[ec]);
+
+            if ( ec.value() == sys::errc::no_message
+               || ec.value() == sys::errc::bad_message)
+                LOG_WARN( "Failed to verify response against HTTP signatures; url="
+                        , key);
+        });
+
+        Session session(move(src_sink.first));
         session.read_response_header(cancel, yield[ec]);
 
         assert(!cancel || ec == asio::error::operation_aborted);
