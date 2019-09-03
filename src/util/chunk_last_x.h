@@ -35,7 +35,8 @@ class chunk_last_x
 
     using view_type =
         buffers_cat_view<
-            detail::chunk_size0,    // "0\r\n"
+            detail::chunk_size,     // "0" for the last chunk
+            chunk_crlf,             // CRLF
             buffers_type>;          // Trailer (includes CRLF)
 
     template<class Allocator>
@@ -202,7 +203,8 @@ template<class Trailer>
 chunk_last_x<Trailer>::
 chunk_last_x()
     : view_(
-        detail::chunk_size0{},
+        0,
+        chunk_crlf{},
         Trailer{})
 {
 }
@@ -211,7 +213,8 @@ template<class Trailer>
 chunk_last_x<Trailer>::
 chunk_last_x(Trailer const& trailer)
     : view_(
-        detail::chunk_size0{},
+        0,
+        chunk_crlf{},
         prepare(trailer, is_fields<Trailer>{}))
 {
 }
@@ -222,7 +225,8 @@ chunk_last_x<Trailer>::
 chunk_last_x(
     DeducedTrailer const& trailer, Allocator const& allocator)
     : view_(
-        detail::chunk_size0{},
+        0,
+        chunk_crlf{},
         prepare(trailer, allocator))
 {
 }
