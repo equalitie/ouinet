@@ -18,6 +18,7 @@
 #include "defer.h"
 #include "http_util.h"
 #include "or_throw.h"
+#include "util/chunk_last_x.h"
 #include "util/signal.h"
 #include "util/watch_dog.h"
 #include "util/yield.h"
@@ -329,10 +330,10 @@ http_forward( StreamIn& in
         // TODO: include chunk extensions,
         // but see <https://github.com/boostorg/beast/issues/1644>
         if (outtrail.begin() != outtrail.end())
-            asio::async_write( out, http::make_chunk_last(outtrail/*, outexts*/)
+            asio::async_write( out, http::make_chunk_last_x(outtrail/*, outexts*/)
                              , yield[ec]);
         else
-            asio::async_write(out, http::make_chunk_last(/*outexts*/), yield[ec]);
+            asio::async_write(out, http::make_chunk_last_x(/*outexts*/), yield[ec]);
         if (set_error(ec, "Failed to send last chunk and trailers"))
             return or_throw<ResponseH>(yield, ec);
     }
