@@ -58,6 +58,7 @@ class IdleConnection {
 
     void close()
     {
+        if (!_data) return; // Was moved from
         _data->connection.close();
     }
 

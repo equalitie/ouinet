@@ -550,6 +550,8 @@ Session Client::State::fetch_fresh_through_simple_proxy
 
     // Receive response
     Session session(move(con));
+    cancel_slot = cancel.connect([&] { session.close(); });
+
     auto hdr_p = session.read_response_header(cancel, yield[ec]);
 
     assert(!cancel || cancel_slot);
@@ -777,8 +779,13 @@ public:
                     if (ec) break;
 
                     if (log_transactions()) {
-                        yield.log("Response header:");
-                        yield.log(*s.response_header());
+                        auto rsh = s.response_header();
+                        if (rsh) {
+                            yield.log("Response header:");
+                            yield.log(*rsh);
+                        } else {
+                            yield.log("No response header.");
+                        }
                     }
 
                     assert(!fresh_ec || !cache_ec); // At least one success
