@@ -5,6 +5,7 @@
 #include "dht.h"
 #include "udp_multiplexer.h"
 #include "code.h"
+#include "debug_ctx.h"
 #include "collect.h"
 #include "proximity_map.h"
 #include "debug_ctx.h"

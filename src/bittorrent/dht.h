@@ -17,7 +17,6 @@
 #include "node_id.h"
 #include "routing_table.h"
 #include "contact.h"
-#include "debug_ctx.h"
 
 #include "../namespaces.h"
 #include "../util/crypto.h"
@@ -42,6 +41,8 @@ asio::ip::udp::endpoint resolve(
 namespace ip = asio::ip;
 using ip::tcp;
 using ip::udp;
+
+class DebugCtx;
 
 namespace dht {
 
