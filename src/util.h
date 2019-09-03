@@ -221,29 +221,6 @@ std::string base64_encode(const In& in) {
 std::string base64_decode(const boost::string_view);
 
 ///////////////////////////////////////////////////////////////////////////////
-namespace detail {
-inline
-std::string str_impl(std::stringstream& ss) {
-    return ss.str();
-}
-
-template<class Arg, class... Args>
-inline
-std::string str_impl(std::stringstream& ss, Arg&& arg, Args&&... args) {
-    ss << arg;
-    return str_impl(ss, std::forward<Args>(args)...);
-}
-
-} // detail namespace
-
-template<class... Args>
-inline
-std::string str(Args&&... args) {
-    std::stringstream ss;
-    return detail::str_impl(ss, std::forward<Args>(args)...);
-}
-
-///////////////////////////////////////////////////////////////////////////////
 // Write a small file at the given `path` with a `line` of content.
 // If existing, truncate it.
 inline

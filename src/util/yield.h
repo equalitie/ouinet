@@ -1,8 +1,12 @@
 #pragma once
 
 #include <sstream>
-#include "../util.h"
+#include "../namespaces.h"
+#include "../util/str.h"
 #include <boost/intrusive/list.hpp>
+#include <boost/asio/spawn.hpp>
+#include <boost/asio/io_service.hpp>
+#include <boost/asio/steady_timer.hpp>
 
 namespace ouinet {
 

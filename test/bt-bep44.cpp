@@ -12,7 +12,7 @@
 #include <boost/tokenizer.hpp>
 #include "../src/util/crypto.h"
 #include "../src/util/wait_condition.h"
-#include "../src/util.h"
+#include "../src/util/str.h"
 #include "../src/util/hash.h"
 
 

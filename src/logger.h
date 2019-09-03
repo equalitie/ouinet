@@ -19,7 +19,7 @@
 #include <fstream>
 
 #include "namespaces.h"
-#include "util.h"
+#include "util/str.h"
 
 //Logger micros which should be used for efficiency
 #define LOG_SILLY(...) if (logger.get_threshold() <= SILLY) { logger.silly(util::str(__VA_ARGS__)); }

@@ -5,7 +5,7 @@
 
 #include "util/condition_variable.h"
 #include "util/success_condition.h"
-#include "util.h"
+#include "util/str.h"
 #include "async_sleep.h"
 
 using namespace std;

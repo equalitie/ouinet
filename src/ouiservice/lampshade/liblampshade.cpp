@@ -9,7 +9,7 @@
 
 #include "liblampshade.h"
 #include "../../or_throw.h"
-#include "../../util.h"
+#include "../../util/str.h"
 
 #include <iostream>
 
