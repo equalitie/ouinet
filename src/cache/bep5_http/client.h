@@ -2,6 +2,7 @@
 
 #include "../abstract_cache.h"
 #include "../../logger.h"
+#include "../../util/crypto.h"
 #include <boost/filesystem.hpp>
 
 namespace ouinet {
@@ -22,6 +23,7 @@ private:
 public:
     static std::unique_ptr<Client>
     build( std::shared_ptr<bittorrent::MainlineDht>
+         , util::Ed25519PublicKey cache_pk
          , fs::path cache_dir
          , asio::yield_context);
 

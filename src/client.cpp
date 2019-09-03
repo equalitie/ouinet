@@ -14,7 +14,6 @@
 #include <cstdlib>  // for atexit()
 
 #include "cache/bep5_http/client.h"
-#include "cache/http_sign.h"
 
 #include "namespaces.h"
 #include "origin_pools.h"
@@ -62,6 +61,7 @@
 #include "util/crypto.h"
 #include "util/lru_cache.h"
 #include "util/scheduler.h"
+#include "util/connected_pair.h"
 #include "stream/fork.h"
 
 #include "logger.h"
@@ -278,35 +278,6 @@ void handle_bad_request( GenericStream& con
                        , Yield yield)
 {
     return handle_http_error(con, req, http::status::bad_request, move(message), yield);
-}
-
-//------------------------------------------------------------------------------
-// Temporary code until we no longer need to store responses in memory.
-static
-pair<tcp::socket, tcp::socket>
-make_connection(asio::io_service& ios, asio::yield_context yield)
-{
-    using Ret = pair<tcp::socket, tcp::socket>;
-
-    tcp::acceptor a(ios, tcp::endpoint(tcp::v4(), 0));
-    tcp::socket s1(ios), s2(ios);
-
-    sys::error_code accept_ec;
-    sys::error_code connect_ec;
-
-    WaitCondition wc(ios);
-
-    asio::spawn(ios, [&, lock = wc.lock()] (asio::yield_context yield) mutable {
-            a.async_accept(s2, yield[accept_ec]);
-        });
-
-    s1.async_connect(a.local_endpoint(), yield[connect_ec]);
-    wc.wait(yield);
-
-    if (accept_ec)  return or_throw(yield, accept_ec, Ret(move(s1),move(s2)));
-    if (connect_ec) return or_throw(yield, connect_ec, Ret(move(s1),move(s2)));
-
-    return make_pair(move(s1), move(s2));
 }
 
 //------------------------------------------------------------------------------
@@ -820,7 +791,7 @@ public:
                     using Fork = stream::Fork<GenericStream>;
 
                     tcp::socket source(ios), sink(ios);
-                    tie(source, sink) = make_connection(ios, yield);
+                    tie(source, sink) = util::connected_pair(ios, yield);
 
                     Fork fork(move(source));
                     Fork::Tine src1(fork), src2(fork);
@@ -846,20 +817,7 @@ public:
                         s2.flush_response(con, cancel, yield_[ec]);
                     });
 
-                    bool need_verify = (client_state._config.cache_type()
-                                        == ClientConfig::CacheType::Bep5Http);
-                    if (need_verify) {
-                        // This forwards an already verified response to the tasks above.
-                        auto pk = client_state._config.cache_http_pub_key();
-                        assert(pk);
-                        cache::session_flush_verified(s, sink, *pk, cancel, yield[ec]);
-                        if ( ec.value() == sys::errc::no_message
-                           || ec.value() == sys::errc::bad_message)
-                            LOG_WARN( "Failed to verify response against HTTP signatures; url="
-                                    , rq.target());
-                    } else {
-                        s.flush_response(sink, cancel, yield[ec]);
-                    }
+                    s.flush_response(sink, cancel, yield[ec]);
 
                     if (ec) {
                         // Abort store and forward tasks.
@@ -1314,6 +1272,7 @@ void Client::State::setup_cache()
 
             _bep5_http_cache
                 = cache::bep5_http::Client::build( bittorrent_dht()
+                                                 , *_config.cache_http_pub_key()
                                                  , _config.repo_root()/"bep5_http"
                                                  , yield[ec]);
 
