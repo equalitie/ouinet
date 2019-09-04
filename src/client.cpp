@@ -55,7 +55,7 @@
 #include "ouiservice/tcp.h"
 #include "ouiservice/utp.h"
 #include "ouiservice/tls.h"
-#include "ouiservice/bep5.h"
+#include "ouiservice/bep5/client.h"
 
 #include "util/signal.h"
 #include "util/crypto.h"

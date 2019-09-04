@@ -42,7 +42,7 @@
 #include "ouiservice/tcp.h"
 #include "ouiservice/utp.h"
 #include "ouiservice/tls.h"
-#include "ouiservice/bep5.h"
+#include "ouiservice/bep5/server.h"
 #include "ssl/ca_certificate.h"
 #include "ssl/util.h"
 

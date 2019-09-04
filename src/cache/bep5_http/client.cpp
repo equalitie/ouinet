@@ -13,7 +13,6 @@
 #include "../../bittorrent/dht.h"
 #include "../../bittorrent/is_martian.h"
 #include "../../ouiservice/utp.h"
-#include "../../ouiservice/bep5.h"
 #include "../../logger.h"
 #include "../../async_sleep.h"
 #include "../../constants.h"
