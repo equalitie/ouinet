@@ -404,45 +404,6 @@ public:
         return cache_dir() /  util::bytes::to_hex(util::sha1_digest(key));
     }
 
-    ResponseWithFileBody load_from_disk(string_view key, Cancel& cancel, Yield yield)
-    {
-        sys::error_code ec;
-
-        http::response<http::empty_body> head;
-        int fd;
-        size_t body_offset;
-        {
-            auto file = util::file_io::open_readonly(ios, cache_file(key), ec);
-            if (ec) return or_throw<ResponseWithFileBody>(yield, ec);
-
-            // Read the head from the file.
-            beast::flat_buffer buffer;
-            http::response_parser<http::empty_body> parser;
-            auto cancel_slot = cancel.connect([&] { file.close(); });
-            http::async_read_header(file, buffer, parser, yield[ec]);
-            if (cancel) ec = asio::error::operation_aborted;
-            if (!ec) head = parser.release();
-
-            // Rewind file to beginning of body, get its offset and duplicate its descriptor.
-            if (!ec) body_offset = util::file_io::current_position(file, ec) - buffer.size();
-            if (!ec) util::file_io::fseek(file, body_offset, ec);
-            if (!ec) fd = util::file_io::dup_fd(file, ec);  // do last...
-            return_or_throw_on_error(yield, cancel, ec, ResponseWithFileBody());
-        }
-
-        // Create a response body from the duplicate descriptor + offset.
-        ResponseWithFileBody::body_type::file_type body_file;
-        body_file.native_handle(fd);  // ...and assign ASAP (for auto close)
-        body_file.base_offset(body_offset, ec);
-        assert(ec != asio::error::invalid_argument);  // may indicate overwritten data
-        if (ec) return or_throw<ResponseWithFileBody>(yield, ec);
-
-        // Create a response with the parsed head and the body reader.
-        auto ret = ResponseWithFileBody(head);
-        ret.body().reset(move(body_file), ec);
-        return or_throw(yield, ec, move(ret));
-    }
-
     bool is_semi_fresh(http::response_header<>& hdr)
     {
         // TODO: If something like this must be used,
@@ -462,32 +423,14 @@ public:
 
     bool fetch( GenericStream& con
               , const Request& rq
-              , Cancel& cancel_
+              , Cancel cancel
               , Yield yield)
     {
         sys::error_code ec;
-
-        Cancel cancel(cancel_);
-
         bool keep_alive = rq.keep_alive();
-
-        auto rs = load_from_disk(key_from_http_req(rq), cancel, yield[ec]);
-
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec == asio::error::operation_aborted) {
-            return or_throw(yield, ec, keep_alive);
-        }
-
-        bool get_fresh = ec || !is_semi_fresh(rs);
-
-        if (get_fresh) {
-            inject_fresh(con, rq, cancel, yield[ec]);
-            return or_throw(yield, ec, keep_alive);
-        }
-
-        http::async_write(con, rs, yield[ec]);
-
-        return keep_alive;
+        inject_fresh(con, rq, cancel, yield[ec]);
+        // TODO: keep_alive should consider response as well
+        return or_throw(yield, ec, keep_alive);
     }
 
     // This gets whatever is considered a valid response from `origin_c`
