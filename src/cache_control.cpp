@@ -262,6 +262,9 @@ CacheControl::do_fetch(
 
     auto on_exit = defer([&] {
         auto& fs = fetch_state;
+        // Create new yield context so that we don't accidentally reset the
+        // returned error code.
+        asio::yield_context y(yield);
         {
 #           ifndef _NDEBUG
             WatchDog wdog(_ios, std::chrono::seconds(10), [&] {
@@ -269,7 +272,8 @@ CacheControl::do_fetch(
                     assert(0);
                 });
 #           endif
-            if (fs.fetch_fresh)  fs.fetch_fresh ->stop(yield);
+            sys::error_code ignored_ec;
+            if (fs.fetch_fresh)  fs.fetch_fresh ->stop(y[ignored_ec]);
         }
         {
 #           ifndef _NDEBUG
@@ -278,7 +282,8 @@ CacheControl::do_fetch(
                     assert(0);
                 });
 #           endif
-            if (fs.fetch_stored) fs.fetch_stored->stop(yield);
+            sys::error_code ignored_ec;
+            if (fs.fetch_stored) fs.fetch_stored->stop(y[ignored_ec]);
         }
     });
 
