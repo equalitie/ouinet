@@ -10,6 +10,7 @@
 #include "util/async_job.h"
 #include "util/condition_variable.h"
 #include "util/watch_dog.h"
+#include "parse/number.h"
 
 #include "logger.h"
 
@@ -79,13 +80,13 @@ optional<unsigned> get_max_age(const beast::string_view& cache_control_value)
                              , beast::string_view value) {
         trim_quotes(value);
 
-        unsigned delta = util::parse_num<unsigned>(value, unsigned(-1));
+        auto opt_delta = parse::number<unsigned>(value);
 
         // TODO: What does RFC say about malformed entries?
-        if (delta == unsigned(-1)) return;
+        if (!opt_delta) return;
 
-        if (!max_age || *max_age < delta) {
-            max_age = delta;
+        if (!max_age || *max_age < *opt_delta) {
+            max_age = *opt_delta;
         }
     };
 
