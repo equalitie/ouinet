@@ -443,30 +443,6 @@ public:
         return or_throw(yield, ec, move(ret));
     }
 
-    template<class Rs>
-    void save_to_disk(string_view key, Rs& rs, Cancel& cancel, Yield yield)
-    {
-        sys::error_code ec;
-
-        util::file_io::check_or_create_directory(cache_dir(), ec);
-        if (ec) return or_throw(yield, ec);
-
-        // Create a new file "atomically" (at least inside the program)
-        // by writing data to a temporary file and replacing the existing file.
-        // Otherwise we might be overwriting old data that others are reading.
-        auto af = util::mkatomic( ios, ec, cache_file(key)
-                                , "tmp.%%%%-%%%%-%%%%-%%%%");
-        if (ec) return or_throw(yield, ec);
-
-        auto cancel_slot = cancel.connect([&] { af->close(); });
-        http::async_write(*af, rs, yield[ec]);
-        if (cancel) ec = asio::error::operation_aborted;
-        return_or_throw_on_error(yield, cancel, ec);
-
-        af->commit(ec);
-        if (ec) return or_throw(yield, ec);
-    }
-
     bool is_semi_fresh(http::response_header<>& hdr)
     {
         // TODO: If something like this must be used,
