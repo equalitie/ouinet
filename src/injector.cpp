@@ -439,6 +439,34 @@ private:
 };
 
 //------------------------------------------------------------------------------
+bool is_request_to_this(const Request& rq) {
+    if (rq.method() == http::verb::connect) return false;
+    // TODO: Check this one
+    if (rq.method() == http::verb::options) return true;
+    // Check that the request is *not* in 'origin-form'
+    // https://tools.ietf.org/html/rfc7230#section-5.3
+    return rq.target().starts_with('/');
+}
+
+//------------------------------------------------------------------------------
+void handle_request_to_this(Request& rq, GenericStream& con, Yield yield)
+{
+    if (rq.target() == "/api/ok") {
+        http::response<http::empty_body> rs{http::status::ok, rq.version()};
+
+        rs.set(http::field::server, OUINET_INJECTOR_SERVER_STRING);
+        rs.set(http::field::content_type, "text/html");
+        rs.keep_alive(rq.keep_alive());
+        rs.prepare_payload();
+
+        http::async_write(con, rs, yield);
+        return;
+    }
+
+    handle_bad_request(con, rq, "Unknown injector request", yield);
+}
+
+//------------------------------------------------------------------------------
 static
 void serve( InjectorConfig& config
           , uint64_t connection_id
@@ -473,6 +501,12 @@ void serve( InjectorConfig& config
         yield.log("=== New request ===");
         yield.log(req.base());
         auto on_exit = defer([&] { yield.log("Done"); });
+
+        if (is_request_to_this(req)) {
+            handle_request_to_this(req, con, yield[ec]);
+            if (ec || !req.keep_alive()) break;
+            continue;
+        }
 
         if (!authenticate(req, con, config.credentials(), yield[ec].tag("auth"))) {
             continue;
