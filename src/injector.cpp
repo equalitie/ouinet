@@ -11,12 +11,10 @@
 #include <iostream>
 #include <fstream>
 #include <string>
-#include <cstdlib>  // for atexit()
 
 #include "cache/http_sign.h"
 
 #include "bittorrent/dht.h"
-#include "bittorrent/mutable_data.h"
 
 #include "namespaces.h"
 #include "util.h"
@@ -24,7 +22,6 @@
 #include "http_forward.h"
 #include "connect_to_host.h"
 #include "default_timeout.h"
-#include "cache_control.h"
 #include "generic_stream.h"
 #include "split_string.h"
 #include "async_sleep.h"
@@ -389,165 +386,16 @@ public:
         keep_connection(rq, res, move(orig_con));
     }
 
-    static bool is_old(boost::posix_time::ptime ts)
-    {
-        namespace pt = boost::posix_time;
-        return ts + pt::hours(1) < pt::second_clock::universal_time();
-    }
-
-    fs::path cache_dir() {
-        return config.repo_root() / "cache";
-    }
-
-    fs::path cache_file(string_view key)
-    {
-        return cache_dir() /  util::bytes::to_hex(util::sha1_digest(key));
-    }
-
-    ResponseWithFileBody load_from_disk(string_view key, Cancel& cancel, Yield yield)
-    {
-        sys::error_code ec;
-
-        http::response<http::empty_body> head;
-        int fd;
-        size_t body_offset;
-        {
-            auto file = util::file_io::open_readonly(ios, cache_file(key), ec);
-            if (ec) return or_throw<ResponseWithFileBody>(yield, ec);
-
-            // Read the head from the file.
-            beast::flat_buffer buffer;
-            http::response_parser<http::empty_body> parser;
-            auto cancel_slot = cancel.connect([&] { file.close(); });
-            http::async_read_header(file, buffer, parser, yield[ec]);
-            if (cancel) ec = asio::error::operation_aborted;
-            if (!ec) head = parser.release();
-
-            // Rewind file to beginning of body, get its offset and duplicate its descriptor.
-            if (!ec) body_offset = util::file_io::current_position(file, ec) - buffer.size();
-            if (!ec) util::file_io::fseek(file, body_offset, ec);
-            if (!ec) fd = util::file_io::dup_fd(file, ec);  // do last...
-            return_or_throw_on_error(yield, cancel, ec, ResponseWithFileBody());
-        }
-
-        // Create a response body from the duplicate descriptor + offset.
-        ResponseWithFileBody::body_type::file_type body_file;
-        body_file.native_handle(fd);  // ...and assign ASAP (for auto close)
-        body_file.base_offset(body_offset, ec);
-        assert(ec != asio::error::invalid_argument);  // may indicate overwritten data
-        if (ec) return or_throw<ResponseWithFileBody>(yield, ec);
-
-        // Create a response with the parsed head and the body reader.
-        auto ret = ResponseWithFileBody(head);
-        ret.body().reset(move(body_file), ec);
-        return or_throw(yield, ec, move(ret));
-    }
-
-    template<class Rs>
-    void save_to_disk(string_view key, Rs& rs, Cancel& cancel, Yield yield)
-    {
-        sys::error_code ec;
-
-        util::file_io::check_or_create_directory(cache_dir(), ec);
-        if (ec) return or_throw(yield, ec);
-
-        // Create a new file "atomically" (at least inside the program)
-        // by writing data to a temporary file and replacing the existing file.
-        // Otherwise we might be overwriting old data that others are reading.
-        auto af = util::mkatomic( ios, ec, cache_file(key)
-                                , "tmp.%%%%-%%%%-%%%%-%%%%");
-        if (ec) return or_throw(yield, ec);
-
-        auto cancel_slot = cancel.connect([&] { af->close(); });
-        http::async_write(*af, rs, yield[ec]);
-        if (cancel) ec = asio::error::operation_aborted;
-        return_or_throw_on_error(yield, cancel, ec);
-
-        af->commit(ec);
-        if (ec) return or_throw(yield, ec);
-    }
-
-    bool is_semi_fresh(http::response_header<>& hdr)
-    {
-        // TODO: If something like this must be used,
-        // please check injection metadata headers instead.
-        auto date = util::parse_date(hdr[http::field::date]);
-
-        if (date == boost::posix_time::ptime()) {
-            LOG_ERROR("Failed to parse header date: \"", hdr[http::field::date],"\"");
-            return false;
-        }
-
-        bool expired = CacheControl::is_expired(hdr, date);
-
-        if (!expired) return true;
-        return !is_old(date);
-    }
-
     bool fetch( GenericStream& con
               , const Request& rq
-              , Cancel& cancel_
+              , Cancel cancel
               , Yield yield)
     {
         sys::error_code ec;
-
-        Cancel cancel(cancel_);
-
         bool keep_alive = rq.keep_alive();
-
-        auto rs = load_from_disk(key_from_http_req(rq), cancel, yield[ec]);
-
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec == asio::error::operation_aborted) {
-            return or_throw(yield, ec, keep_alive);
-        }
-
-        bool get_fresh = ec || !is_semi_fresh(rs);
-
-        if (get_fresh) {
-            inject_fresh(con, rq, cancel, yield[ec]);
-            return or_throw(yield, ec, keep_alive);
-        }
-
-        http::async_write(con, rs, yield[ec]);
-
-        return keep_alive;
-    }
-
-    // This gets whatever is considered a valid response from `origin_c`
-    // and leaves any read but unused input in `buffer`.
-    template<class Rs, class DynamicBuffer>
-    Rs fetch_fresh( const Request& rq_
-                  , Connection& origin_c, DynamicBuffer& buffer
-                  , Cancel& cancel, Yield yield) {
-        Request rq = util::to_origin_request(rq_);
-        rq.keep_alive(true);
-
-        sys::error_code ec;
-        auto ret = fetch_http<typename Rs::body_type>( origin_c, buffer, rq
-                                                     , cancel, yield[ec].tag("fetch"));
-        return_or_throw_on_error(yield, cancel, ec, Rs());
-
-        // Prevent others from inserting ouinet specific header fields.
-        ret = util::remove_ouinet_fields(move(ret));
-
-        return ret;
-    }
-
-    // This gets a full response and handles origin connection and buffering.
-    Response fetch_fresh(const Request& rq_, Cancel& cancel, Yield yield) {
-        sys::error_code ec;
-
-        auto connection = get_connection(rq_, cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, Response());
-
-        beast::flat_buffer buffer;
-        auto ret = fetch_fresh<Response>(rq_, connection, buffer, cancel, yield[ec]);
-        if (ec) return or_throw<Response>(yield, ec, std::move(ret));
-
-        keep_connection(rq_, ret, move(connection));
-
-        return ret;
+        inject_fresh(con, rq, cancel, yield[ec]);
+        // TODO: keep_alive should consider response as well
+        return or_throw(yield, ec, keep_alive);
     }
 
 public:

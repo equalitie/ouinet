@@ -158,7 +158,6 @@ if (WITH_INJECTOR)
     file(GLOB injector_sources
         "./src/injector.cpp"
         "./src/connect_to_host.cpp"
-        "./src/cache_control.cpp"
         "./src/ouiservice.cpp"
         "./src/ouiservice/lampshade.cpp"
         "./src/ouiservice/pt-obfs2.cpp"
@@ -172,7 +171,7 @@ if (WITH_INJECTOR)
         "./src/ssl/ca_certificate.cpp"
         "./src/logger.cpp"
         "./src/endpoint.cpp"
-        "./src/cache/*.cpp"
+        "./src/cache/http_sign.cpp"
         "./src/bittorrent/*.cpp"
         "./src/util/atomic_file.cpp"
         "./src/util/persistent_lru_cache.cpp"
