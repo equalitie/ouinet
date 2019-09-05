@@ -96,6 +96,30 @@ public:
 
     /** Constructor
 
+        @param extensions The chunk extensions string. This
+        string must be formatted correctly as per rfc7230,
+        using this BNF syntax:
+        @code
+            chunk-ext       = *( ";" chunk-ext-name [ "=" chunk-ext-val ] )
+            chunk-ext-name  = token
+            chunk-ext-val   = token / quoted-string
+        @endcode
+        The data pointed to by this string view must remain
+        valid for the lifetime of any operations performed on
+        the object.
+
+        @param trailer The trailer to use. This may be
+        a type meeting the requirements of either Fields
+        or ConstBufferSequence. If it is a ConstBufferSequence,
+        the trailer must be formatted correctly as per rfc7230
+        including a CRLF on its own line to denote the end
+        of the trailer.
+    */
+    explicit
+    chunk_last_x(string_view extensions, Trailer const& trailer);
+
+    /** Constructor
+
         @param trailer The trailer to use. This type must
         meet the requirements of Fields.
 
@@ -277,6 +301,18 @@ chunk_last_x(string_view extensions)
             extensions.data(), extensions.size()},
         chunk_crlf{},
         Trailer{})
+{
+}
+
+template<class Trailer>
+chunk_last_x<Trailer>::
+chunk_last_x(string_view extensions, Trailer const& trailer)
+    : view_(
+        0,
+        boost::asio::const_buffer{
+            extensions.data(), extensions.size()},
+        chunk_crlf{},
+        prepare(trailer, is_fields<Trailer>{}))
 {
 }
 
