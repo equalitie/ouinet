@@ -328,10 +328,8 @@ http_forward( StreamIn& in
         if (set_error(ec, "Failed to process response trailers"))
             return or_throw<ResponseH>(yield, ec);
 
-        // TODO: include chunk extensions,
-        // but see <https://github.com/boostorg/beast/issues/1644>
         if (outtrail.begin() != outtrail.end())
-            asio::async_write( out, http::make_chunk_last_x(outtrail/*, outexts*/)
+            asio::async_write( out, http::chunk_last_x<http::fields>(outexts, outtrail)
                              , yield[ec]);
         else
             asio::async_write( out, http::make_chunk_last_x(boost::string_view(outexts))
