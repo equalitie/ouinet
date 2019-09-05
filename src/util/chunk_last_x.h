@@ -283,17 +283,6 @@ chunk_last_x()
 
 template<class Trailer>
 chunk_last_x<Trailer>::
-chunk_last_x(Trailer const& trailer)
-    : view_(
-        0,
-        boost::asio::const_buffer{nullptr, 0},
-        chunk_crlf{},
-        prepare(trailer, is_fields<Trailer>{}))
-{
-}
-
-template<class Trailer>
-chunk_last_x<Trailer>::
 chunk_last_x(string_view extensions)
     : view_(
         0,
@@ -301,6 +290,17 @@ chunk_last_x(string_view extensions)
             extensions.data(), extensions.size()},
         chunk_crlf{},
         Trailer{})
+{
+}
+
+template<class Trailer>
+chunk_last_x<Trailer>::
+chunk_last_x(Trailer const& trailer)
+    : view_(
+        0,
+        boost::asio::const_buffer{nullptr, 0},
+        chunk_crlf{},
+        prepare(trailer, is_fields<Trailer>{}))
 {
 }
 
