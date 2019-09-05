@@ -80,6 +80,8 @@ public:
     explicit
     chunk_last_x(string_view extensions);
 
+    // TODO: Add constructor with generic `ChunkExtensions`.
+
     /** Constructor
 
         The last chunk will have no chunk extensions.
@@ -118,6 +120,8 @@ public:
     explicit
     chunk_last_x(string_view extensions, Trailer const& trailer);
 
+    // TODO: Add constructor with generic `ChunkExtensions` and `Trailer`.
+
     /** Constructor
 
         @param trailer The trailer to use. This type must
@@ -136,6 +140,10 @@ public:
     chunk_last_x(
         DeducedTrailer const& trailer, Allocator const& allocator);
 #endif
+
+    // TODO: Add constructor with generic `ChunkExtensions` and `Allocator`.
+
+    // TODO: Add constructor with generic `ChunkExtensions`, `Trailer` and `Allocator`.
 
     //-----
 
