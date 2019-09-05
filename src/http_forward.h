@@ -13,6 +13,7 @@
 #include <boost/beast/http/parser.hpp>
 #include <boost/beast/http/read.hpp>
 #include <boost/beast/http/write.hpp>
+#include <boost/utility/string_view.hpp>
 
 #include "default_timeout.h"
 #include "defer.h"
@@ -333,7 +334,8 @@ http_forward( StreamIn& in
             asio::async_write( out, http::make_chunk_last_x(outtrail/*, outexts*/)
                              , yield[ec]);
         else
-            asio::async_write(out, http::make_chunk_last_x(/*outexts*/), yield[ec]);
+            asio::async_write( out, http::make_chunk_last_x(boost::string_view(outexts))
+                             , yield[ec]);
         if (set_error(ec, "Failed to send last chunk and trailers"))
             return or_throw<ResponseH>(yield, ec);
     }
