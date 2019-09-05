@@ -57,10 +57,32 @@ public:
     /** Constructor
 
         The last chunk will have an empty trailer
+        and no chunk extensions.
     */
     chunk_last_x();
 
     /** Constructor
+
+        The last chunk will have an empty trailer.
+
+        @param extensions The chunk extensions string. This
+        string must be formatted correctly as per rfc7230,
+        using this BNF syntax:
+        @code
+            chunk-ext       = *( ";" chunk-ext-name [ "=" chunk-ext-val ] )
+            chunk-ext-name  = token
+            chunk-ext-val   = token / quoted-string
+        @endcode
+        The data pointed to by this string view must remain
+        valid for the lifetime of any operations performed on
+        the object.
+    */
+    explicit
+    chunk_last_x(string_view extensions);
+
+    /** Constructor
+
+        The last chunk will have no chunk extensions.
 
         @param trailer The trailer to use. This may be
         a type meeting the requirements of either Fields
@@ -145,7 +167,31 @@ make_chunk_last_x()
 
     This function construct and returns a complete
     @ref chunk_last_x for a last chunk containing the
-    specified trailers.
+    specified chunk extensions and an empty trailer.
+
+    @note This function is provided as a notational convenience
+    to omit specification of the class template arguments.
+
+    @param extensions The chunk extensions string.
+
+    @param args Optional arguments passed to the @ref chunk_last_x
+    constructor.
+*/
+template<class... Args>
+chunk_last_x<chunk_crlf>
+make_chunk_last_x(
+    string_view extensions,
+    Args&&... args)
+{
+    return chunk_last_x<chunk_crlf>{
+        extensions, std::forward<Args>(args)...};
+}
+
+/** Returns a @ref chunk_last_x
+
+    This function construct and returns a complete
+    @ref chunk_last_x for a last chunk containing the
+    specified trailers and no chunk extensions.
 
     @param trailer A ConstBufferSequence or 
     @note This function is provided as a notational convenience
@@ -219,6 +265,18 @@ chunk_last_x(Trailer const& trailer)
         boost::asio::const_buffer{nullptr, 0},
         chunk_crlf{},
         prepare(trailer, is_fields<Trailer>{}))
+{
+}
+
+template<class Trailer>
+chunk_last_x<Trailer>::
+chunk_last_x(string_view extensions)
+    : view_(
+        0,
+        boost::asio::const_buffer{
+            extensions.data(), extensions.size()},
+        chunk_crlf{},
+        Trailer{})
 {
 }
 
