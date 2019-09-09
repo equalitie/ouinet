@@ -1522,6 +1522,7 @@ void Client::State::setup_injector(asio::yield_context yield)
             , injector_ep->endpoint_string
             , &inj_ctx);
 
+/*
     } else if (injector_ep->type == Endpoint::LampshadeEndpoint) {
         auto lampshade_client = make_unique<ouiservice::LampshadeOuiServiceClient>(_ios, injector_ep->endpoint_string);
 
@@ -1529,6 +1530,7 @@ void Client::State::setup_injector(asio::yield_context yield)
             return or_throw(yield, asio::error::invalid_argument);
         }
         client = std::move(lampshade_client);
+*/
     } else if (injector_ep->type == Endpoint::Obfs2Endpoint) {
         auto obfs2_client = make_unique<ouiservice::Obfs2OuiServiceClient>(_ios, injector_ep->endpoint_string, _config.repo_root()/"obfs2-client");
 
