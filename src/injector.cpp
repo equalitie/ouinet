@@ -42,7 +42,7 @@
 #include "ouiservice/tcp.h"
 #include "ouiservice/utp.h"
 #include "ouiservice/tls.h"
-#include "ouiservice/bep5.h"
+#include "ouiservice/bep5/server.h"
 #include "ssl/ca_certificate.h"
 #include "ssl/util.h"
 
@@ -54,6 +54,7 @@
 #include "util/file_io.h"
 #include "util/file_posix_with_offset.h"
 
+#include "parse/number.h"
 #include "logger.h"
 #include "defer.h"
 #include "http_util.h"
@@ -85,10 +86,18 @@ static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
 boost::optional<Response> version_error_response( const Request& rq
                                                 , string_view oui_version)
 {
-    unsigned version = util::parse_num<unsigned>(oui_version, 0);
+    unsigned version = 0;
 
-    unsigned supported_version
-        = util::parse_num<unsigned>(http_::request_version_hdr_current, -1);
+    if (auto opt_version = parse::number<unsigned>(oui_version)) {
+        version = *opt_version;
+    }
+
+    unsigned supported_version = -1;
+
+    string_view supported_version_s = http_::request_version_hdr_current;
+    if (auto opt_sv = parse::number<unsigned>(supported_version_s)) {
+        supported_version = *opt_sv;
+    }
 
     assert(supported_version != (unsigned) -1);
 

@@ -24,17 +24,6 @@ std::pair<std::string, std::string>
 get_host_port(const http::request<http::string_body>&);
 
 ///////////////////////////////////////////////////////////////////////////////
-// DEPRECATED: please use ouinet::parse::number instead
-template<class Num>
-Num parse_num(beast::string_view s, Num default_value) {
-    try {
-        return boost::lexical_cast<Num>(s);
-    }
-    catch (...) {
-        return default_value;
-    }
-}
-
 // Returns ptime() if parsing fails.
 boost::posix_time::ptime parse_date(beast::string_view);
 std::string format_date(boost::posix_time::ptime);
