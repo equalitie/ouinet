@@ -132,6 +132,7 @@ Session::flush_response(SinkStream& sink,
                         Cancel& cancel,
                         asio::yield_context yield)
 {
+    // TODO: Refactor with Proxy mechanism forwarding.
     // Just pass head, chunk extensions, body data and trailer on.
     std::string chunk_exts;
     auto hproc = [] (auto inh, auto&, auto) { return inh; };
@@ -139,17 +140,16 @@ Session::flush_response(SinkStream& sink,
         ProcInFunc<asio::const_buffer>::result_type ret;
         if (asio::buffer_size(ind) > 0) {
             ret = {std::move(ind), std::move(chunk_exts)};
-            chunk_exts = {};
+            chunk_exts = {};  // only send extensions in first output chunk
         }  // keep extensions when last chunk (size 0) was received
         return ret;
     };
     ProcTrailFunc tproc = [&chunk_exts] (auto intr, auto&, auto) {
         ProcTrailFunc::result_type ret{std::move(intr), std::move(chunk_exts)};
-        chunk_exts = {};
-        return ret;
+        return ret;  // leave trailers untouched
     };
     auto xproc = [&chunk_exts] (auto exts, auto&, auto) {
-        chunk_exts = std::move(exts);
+        chunk_exts = std::move(exts);  // save exts for next chunk
     };
 
     return flush_response( sink

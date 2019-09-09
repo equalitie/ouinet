@@ -554,34 +554,34 @@ void serve( InjectorConfig& config
             auto orig_con = cc.get_connection(req, cancel, yield[ec]);
             size_t forwarded = 0;
             if (!ec) {
+                // TODO: Refactor with session response flushing.
                 string chunk_exts;
-                auto reshproc = [&] (auto inh, auto&, auto) {
+                auto hproc = [&] (auto inh, auto&, auto) {
                     // Prevent others from inserting ouinet specific header fields.
                     auto outh = util::remove_ouinet_fields(move(inh));
                     yield.log("=== Sending back proxy response ===");
                     yield.log(outh);
                     return outh;
                 };
-                ProcInFunc<asio::const_buffer> inproc = [&] (auto inbuf, auto&, auto) {
-                    forwarded += inbuf.size();
+                ProcInFunc<asio::const_buffer> dproc = [&] (auto ind, auto&, auto) {
+                    forwarded += ind.size();
                     ProcInFunc<asio::const_buffer>::result_type ret;
                     if (asio::buffer_size(ind) > 0) {
-                        ret = {move(inbuf), move(chunk_exts)};
-                        chunk_exts = {};
+                        ret = {move(ind), move(chunk_exts)};
+                        chunk_exts = {};  // only send extensions in first output chunk
                     }  // keep extensions when last chunk (size 0) was received
                     return ret;  // just pass data on
                 };
-                ProcTrailFunc trproc = [&] (auto intr, auto&, auto) {
+                ProcTrailFunc tproc = [&] (auto intr, auto&, auto) {
                     ProcTrailFunc::result_type ret{move(intr), move(chunk_exts)};
-                    chunk_exts = {};
                     return ret;  // leave trailers untouched
                 };
-                auto cxproc = [&] (auto exts, auto&, auto) {
+                auto xproc = [&] (auto exts, auto&, auto) {
                     chunk_exts = move(exts);  // save exts for next chunk
                 };
                 res = RespFromH(http_forward( orig_con, con
                                             , util::to_origin_request(req)
-                                            , reshproc, inproc, trproc, cxproc
+                                            , hproc, dproc, tproc, xproc
                                             , cancel, yield[ec].tag("fetch_proxy")));
             }
             if (ec) {
