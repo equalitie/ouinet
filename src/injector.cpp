@@ -564,8 +564,11 @@ void serve( InjectorConfig& config
                 };
                 ProcInFunc<asio::const_buffer> inproc = [&] (auto inbuf, auto&, auto) {
                     forwarded += inbuf.size();
-                    ProcInFunc<asio::const_buffer>::result_type ret{move(inbuf), move(chunk_exts)};
-                    chunk_exts = {};
+                    ProcInFunc<asio::const_buffer>::result_type ret;
+                    if (asio::buffer_size(ind) > 0) {
+                        ret = {move(inbuf), move(chunk_exts)};
+                        chunk_exts = {};
+                    }  // keep extensions when last chunk (size 0) was received
                     return ret;  // just pass data on
                 };
                 ProcTrailFunc trproc = [&] (auto intr, auto&, auto) {
