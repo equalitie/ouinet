@@ -774,6 +774,7 @@ int main(int argc, const char* argv[])
                 (move(dht), &ssl_context, *config.bep5_injector_swarm_name()));
     }
 
+/*
     if (config.lampshade_endpoint()) {
         tcp::endpoint endpoint = *config.lampshade_endpoint();
         util::create_state_file( config.repo_root()/"endpoint-lampshade"
@@ -785,6 +786,7 @@ int main(int argc, const char* argv[])
 
         proxy_server.add(std::move(server));
     }
+*/
 
     if (config.obfs2_endpoint()) {
         tcp::endpoint endpoint = *config.obfs2_endpoint();

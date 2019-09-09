@@ -85,7 +85,7 @@ Vagrant.configure("2") do |config|
     end
 
     vm.vm.synced_folder ".", "/vagrant", type: "nfs", mount_options: ["ro", "noac"]
-    vm.vm.synced_folder ".", "/vagrant-rw", type: "nfs", mount_options: ["rw", "noac"]
+#    vm.vm.synced_folder ".", "/vagrant-rw", type: "nfs", mount_options: ["rw", "noac"]
 
     vm.vm.provision "shell", inline: <<-SHELL
       apt-get update

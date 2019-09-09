@@ -70,7 +70,7 @@ add_subdirectory(./modules/asio-utp)
 add_library(lib::asio_utp ALIAS asio_utp)
 
 add_subdirectory(./src/ouiservice/i2p)
-add_subdirectory(./src/ouiservice/lampshade)
+#add_subdirectory(./src/ouiservice/lampshade)
 add_subdirectory(./src/ouiservice/obfs4proxy)
 
 
@@ -105,7 +105,7 @@ file(GLOB client_sources
     "./src/ouiservice.cpp"
     "./src/ssl/ca_certificate.cpp"
     "./src/ssl/dummy_certificate.cpp"
-    "./src/ouiservice/lampshade.cpp"
+#    "./src/ouiservice/lampshade.cpp"
     "./src/ouiservice/pt-obfs2.cpp"
     "./src/ouiservice/pt-obfs3.cpp"
     "./src/ouiservice/pt-obfs4.cpp"
@@ -147,7 +147,7 @@ target_link_libraries(client
         lib::json
         lib::uri
         OpenSSL::Crypto
-        ouinet::lampshade-asio
+#        ouinet::lampshade-asio
         ouinet::ouiservice-i2p
     PUBLIC
         ouinet::base
@@ -159,7 +159,7 @@ if (WITH_INJECTOR)
         "./src/injector.cpp"
         "./src/connect_to_host.cpp"
         "./src/ouiservice.cpp"
-        "./src/ouiservice/lampshade.cpp"
+#        "./src/ouiservice/lampshade.cpp"
         "./src/ouiservice/pt-obfs2.cpp"
         "./src/ouiservice/pt-obfs3.cpp"
         "./src/ouiservice/pt-obfs4.cpp"
@@ -195,7 +195,7 @@ if (WITH_INJECTOR)
         lib::uri
         OpenSSL::Crypto
         ouinet::base
-        ouinet::lampshade-asio
+#        ouinet::lampshade-asio
         ouinet::ouiservice-i2p
     )
 endif() # if WITH_INJECTOR
