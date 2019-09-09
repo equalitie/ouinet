@@ -65,7 +65,8 @@ public:
 
     /** Constructor
 
-        The last chunk will have an empty trailer.
+        The last chunk will have an empty trailer
+        and the passed chunk extensions..
 
         @param extensions The chunk extensions string. This
         string must be formatted correctly as per rfc7230,
@@ -82,7 +83,33 @@ public:
     explicit
     chunk_last_x(string_view extensions);
 
-    // TODO: Add constructor with generic `ChunkExtensions`.
+    /** Constructor
+
+        The last chunk will have an empty trailer
+        and the passed chunk extensions.
+        The default allocator is used to provide storage for the
+        extensions object.
+
+        @param extensions The chunk extensions object. The expression
+        `extensions.str()` must be valid, and the return type must
+        be convertible to @ref string_view. This object will be copied
+        or moved as needed to ensure that the chunk header object retains
+        ownership of the buffers provided by the chunk extensions object.
+
+        @note This function participates in overload resolution only
+        if @b ChunkExtensions meets the requirements stated above.
+
+        @see https://tools.ietf.org/html/rfc7230#section-4.1
+    */
+    template<class ChunkExtensions
+#if ! BOOST_BEAST_DOXYGEN
+        , class = typename std::enable_if<
+            ! std::is_convertible<typename std::decay<
+                ChunkExtensions>::type, string_view>::value>::type
+#endif
+    >
+    explicit
+    chunk_last_x(ChunkExtensions&& extensions);
 
     /** Constructor
 
@@ -396,6 +423,21 @@ chunk_last_x(string_view extensions)
         0,
         boost::asio::const_buffer{
             extensions.data(), extensions.size()},
+        chunk_crlf{},
+        Trailer{})
+{
+}
+
+template<class Trailer>
+template<class ChunkExtensions, class>
+chunk_last_x<Trailer>::
+chunk_last_x(ChunkExtensions&& extensions)
+    : exts_(std::make_shared<detail::chunk_extensions_impl<
+        typename std::decay<ChunkExtensions>::type>>(
+            std::forward<ChunkExtensions>(extensions)))
+    , view_(
+        0,
+        exts_->str(),
         chunk_crlf{},
         Trailer{})
 {
