@@ -136,8 +136,11 @@ Session::flush_response(SinkStream& sink,
     std::string chunk_exts;
     auto hproc = [] (auto inh, auto&, auto) { return inh; };
     ProcInFunc<asio::const_buffer> dproc = [&chunk_exts] (auto ind, auto&, auto) {
-        ProcInFunc<asio::const_buffer>::result_type ret{std::move(ind), std::move(chunk_exts)};
-        chunk_exts = {};
+        ProcInFunc<asio::const_buffer>::result_type ret;
+        if (asio::buffer_size(ind) > 0) {
+            ret = {std::move(ind), std::move(chunk_exts)};
+            chunk_exts = {};
+        }  // keep extensions when last chunk (size 0) was received
         return ret;
     };
     ProcTrailFunc tproc = [&chunk_exts] (auto intr, auto&, auto) {
