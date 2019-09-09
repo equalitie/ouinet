@@ -51,6 +51,8 @@ class chunk_last_x
     prepare(Trailer const& trailer, std::false_type);
 
     std::shared_ptr<void> sp_;
+    std::shared_ptr<
+        detail::chunk_extensions> exts_;
     view_type view_;
 
 public:
@@ -120,7 +122,67 @@ public:
     explicit
     chunk_last_x(string_view extensions, Trailer const& trailer);
 
-    // TODO: Add constructor with generic `ChunkExtensions` and `Trailer`.
+    /** Constructor
+
+        @param extensions The chunk extensions object. The expression
+        `extensions.str()` must be valid, and the return type must
+        be convertible to @ref string_view. This object will be copied
+        or moved as needed to ensure that the chunk header object retains
+        ownership of the buffers provided by the chunk extensions object.
+
+        @param trailer The trailer to use. This may be
+        a type meeting the requirements of either Fields
+        or ConstBufferSequence. If it is a ConstBufferSequence,
+        the trailer must be formatted correctly as per rfc7230
+        including a CRLF on its own line to denote the end
+        of the trailer.
+
+        @note This function participates in overload resolution only
+        if @b ChunkExtensions meets the requirements stated above.
+
+        @see https://tools.ietf.org/html/rfc7230#section-4.1
+    */
+    template<class ChunkExtensions
+#if ! BOOST_BEAST_DOXYGEN
+        , class = typename std::enable_if<
+            ! std::is_convertible<typename std::decay<
+                ChunkExtensions>::type, string_view>::value>::type
+#endif
+    >
+    chunk_last_x(ChunkExtensions&& extensions, Trailer const& trailer);
+
+    /** Constructor
+
+        @param extensions The chunk extensions object. The expression
+        `extensions.str()` must be valid, and the return type must
+        be convertible to @ref string_view. This object will be copied
+        or moved as needed to ensure that the chunk header object retains
+        ownership of the buffers provided by the chunk extensions object.
+
+        @param allocator The allocator to use for storing
+        the moved or copied extensions object.
+
+        @note This function participates in overload resolution only
+        if @b ChunkExtensions meets the requirements stated above.
+
+        @see https://tools.ietf.org/html/rfc7230#section-4.1
+    */
+#if BOOST_BEAST_DOXYGEN
+    template<class ChunkExtensions, class Allocator>
+    chunk_last_x(
+        ChunkExtensions&& extensions,
+        Allocator const& allocator);
+#else
+    template<
+        class ChunkExtensions,
+        class Allocator,
+        class = typename std::enable_if<
+            ! std::is_convertible<typename std::decay<
+                ChunkExtensions>::type, string_view>::value>::type>
+    chunk_last_x(
+        ChunkExtensions&& extensions,
+        Allocator const& allocator);
+#endif
 
     /** Constructor
 
@@ -140,8 +202,6 @@ public:
     chunk_last_x(
         DeducedTrailer const& trailer, Allocator const& allocator);
 #endif
-
-    // TODO: Add constructor with generic `ChunkExtensions` and `Allocator`.
 
     /** Constructor
 
@@ -361,6 +421,37 @@ chunk_last_x(string_view extensions, Trailer const& trailer)
             extensions.data(), extensions.size()},
         chunk_crlf{},
         prepare(trailer, is_fields<Trailer>{}))
+{
+}
+
+template<class Trailer>
+template<class ChunkExtensions, class>
+chunk_last_x<Trailer>::
+chunk_last_x(ChunkExtensions&& extensions, Trailer const& trailer)
+    : exts_(std::make_shared<detail::chunk_extensions_impl<
+        typename std::decay<ChunkExtensions>::type>>(
+            std::forward<ChunkExtensions>(extensions)))
+    , view_(
+        0,
+        exts_->str(),
+        chunk_crlf{},
+        prepare(trailer, is_fields<Trailer>{}))
+{
+}
+
+template<class Trailer>
+template<class ChunkExtensions, class Allocator, class>
+chunk_last_x<Trailer>::
+chunk_last_x(
+    ChunkExtensions&& extensions, Allocator const& allocator)
+    : exts_(std::allocate_shared<detail::chunk_extensions_impl<
+        typename std::decay<ChunkExtensions>::type>>(allocator,
+            std::forward<ChunkExtensions>(extensions)))
+    , view_(
+        0,
+        exts_->str(),
+        chunk_crlf{},
+        Trailer{})
 {
 }
 
