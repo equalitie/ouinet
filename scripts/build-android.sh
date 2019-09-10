@@ -7,12 +7,7 @@ DIR=`pwd`
 SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
 ROOT=$(cd ${SCRIPT_DIR}/.. && pwd)
 ABI=${ABI:-armeabi-v7a}
-
-if which apt-get 1> /dev/null 2>&1; then
-    DEBIAN=true
-else
-    DEBIAN=false
-fi
+CMAKE_BUILD_PARALLEL_LEVEL=${CMAKE_BUILD_PARALLEL_LEVEL:-`nproc`}
 
 RELEASE_BUILD=0
 while getopts r option; do
@@ -154,22 +149,8 @@ function check_mode {
 
 ######################################################################
 function setup_deps {
-    # J2EE is no longer part of standard Java modules in Java 9,
-    # although the Android SDK uses some of its classes.
-    # This causes exception "java.lang.NoClassDefFoundError: javax/xml/bind/...",
-    # so we need to reenable J2EE modules explicitly when using JRE 9
-    # (see <https://stackoverflow.com/a/43574427>).
-    local java_add_modules=' --add-modules java.se.ee'
-    if [ $DEBIAN == true ] ; then
-        if [ $(java -version 2>&1 | awk -F[\"\.] -v OFS=. 'NR==1{print $3}') -ge 9 \
-             -a "${JAVA_OPTS%%$java_add_modules*}" = "$JAVA_OPTS" ] ; then
-            export JAVA_OPTS="$JAVA_OPTS$java_add_modules"
-        fi
-    fi
-
-    ######################################################################
     # Install SDK dependencies.
-    local toolsfile=sdk-tools-linux-3859397.zip
+    local toolsfile=sdk-tools-linux-4333796.zip
     local sdkmanager="$SDK_DIR/tools/bin/sdkmanager"
 
     # Reuse downloaded SDK stuff from old versions of this script.
@@ -194,9 +175,9 @@ function setup_deps {
     declare -A sdk_pkgs
     sdk_pkgs[build]="
 platforms;$PLATFORM
-build-tools;25.0.3
+build-tools;29.0.2
 platform-tools
-cmake;3.6.4111459
+cmake;3.10.2.4988404
 "
     sdk_pkgs[emu]="
 $EMULATOR_IMAGE
@@ -298,7 +279,7 @@ function maybe_install_gradle {
     echo need gradle? $NEED_GRADLE
 
     if [ $NEED_GRADLE == true ]; then
-        local GRADLE=gradle-4.6
+        local GRADLE=gradle-5.5.1
         local GRADLE_ZIP=$GRADLE-bin.zip
         if [ ! -d "$GRADLE" ]; then
             if [ ! -f $GRADLE_ZIP ]; then
@@ -327,7 +308,7 @@ function build_ouinet_libs {
           -DWITH_INJECTOR=OFF \
           -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
           ${ROOT}
-    make -j `nproc`
+    cmake --build .
     cd - >/dev/null
 
     add_library $DIR/$BUILD_DIR/libclient.so

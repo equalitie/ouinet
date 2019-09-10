@@ -45,6 +45,16 @@ build:
     - cmake ..
     - make -j `nproc`
 
+build-android:
+  stage: build
+  tags:
+    - docker
+  image: registry.gitlab.com/equalitie/ouinet:android
+  script:
+    - mkdir -p build.android
+    - cd build.android
+    - ../scripts/build-android.sh
+
 unit-test:
   stage: test
   tags:

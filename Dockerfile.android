@@ -1,6 +1,8 @@
 FROM registry.gitlab.com/equalitie/ouinet
 RUN apt-get install -qqy --no-install-recommends \
-      default-jre \
-      default-jdk \
-      unzip
+      libncurses5 \
+      unzip \
+      clang
+RUN wget 'https://dl.google.com/dl/android/studio/ide-zips/3.4.2.0/android-studio-ide-183.5692245-linux.tar.gz' -O - | tar -axz -C /opt android-studio/jre
+ENV PATH="/opt/android-studio/jre/bin":$PATH
 ENV UNZIPOPT=-q
