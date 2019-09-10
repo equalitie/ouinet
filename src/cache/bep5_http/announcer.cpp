@@ -1,3 +1,4 @@
+#include <list>
 #include "announcer.h"
 #include "../../util/async_queue.h"
 #include "../../logger.h"
