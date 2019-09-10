@@ -64,7 +64,7 @@ mkdir -p "$BUILD_DIR"
 
 SDK_DIR=${SDK_DIR:-"$DIR/sdk"}
 
-NDK=android-ndk-r16b
+NDK=android-ndk-r20
 NDK_DIR=${NDK_DIR:-"$DIR/$NDK"}
 NDK_ZIP=${NDK}-linux-x86_64.zip
 
@@ -75,12 +75,10 @@ NDK_TOOLCHAIN_DIR=${NDK_TOOLCHAIN_DIR:-${DIR}/${NDK}-toolchain-android$NDK_PLATF
 PLATFORM=android-${NDK_PLATFORM}
 
 ANDROID_FLAGS="\
-    -DBoost_COMPILER='-clang' \
     -DCMAKE_ANDROID_NDK_TOOLCHAIN_VERSION=clang \
     -DCMAKE_SYSTEM_NAME=Android \
     -DCMAKE_SYSTEM_VERSION=${NDK_PLATFORM} \
-    -DCMAKE_ANDROID_STANDALONE_TOOLCHAIN=${NDK_TOOLCHAIN_DIR} \
-    -DCMAKE_SYSROOT=$NDK_TOOLCHAIN_DIR/sysroot \
+    -DCMAKE_ANDROID_NDK=${NDK_DIR} \
     -DCMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR} \
     -DCMAKE_ANDROID_ARCH_ABI=${ABI}"
 
@@ -230,25 +228,6 @@ function maybe_install_ndk {
         fi
         unzip -q ${NDK_ZIP}
     fi
-}
-
-######################################################################
-function maybe_install_ndk_toolchain {
-    if [ ! -d "${NDK_TOOLCHAIN_DIR}" ]; then
-        echo "Installing NDK toolchain..."
-        $NDK_DIR/build/tools/make-standalone-toolchain.sh \
-            --platform=android-$NDK_PLATFORM \
-            --arch=$NDK_ARCH \
-            --stl=$NDK_STL \
-            --install-dir=${NDK_TOOLCHAIN_DIR}
-    fi
-
-    export ANDROID_NDK_HOME=$NDK_DIR
-
-    NDK_TOOLCHAIN_LIB_SUBDIR=${NDK_TOOLCHAIN_LIB_SUBDIR:-"lib"}
-    TOOLCHAIN_LIBCXX="$NDK_TOOLCHAIN_DIR/$NDK_TOOLCHAIN_TARGET/$NDK_TOOLCHAIN_LIB_SUBDIR/libc++_shared.so"
-    add_library $TOOLCHAIN_LIBCXX
-    echo "TOOLCHAIN_LIBCXX: $TOOLCHAIN_LIBCXX"
 }
 
 ######################################################################
@@ -423,7 +402,6 @@ fi
 if check_mode bootstrap; then
     setup_deps
     maybe_install_ndk
-    maybe_install_ndk_toolchain
     maybe_install_gradle
     # TODO: miniupnp
 fi
