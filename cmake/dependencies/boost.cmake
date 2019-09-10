@@ -74,7 +74,7 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
                 --no-cmake-config
                 ${ENABLE_BOOST_COMPONENTS}
                 ${BOOST_ARCH_SETTINGS}
-                install
+                install > b2.log
         INSTALL_COMMAND ""
     )
 

@@ -134,8 +134,6 @@ if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
     add_executable(client ${client_sources})
 else()
     add_library(client SHARED ${client_sources})
-    find_library(android_log log)
-    target_link_libraries(client PUBLIC ${android_log})
 endif()
 
 target_link_libraries(client

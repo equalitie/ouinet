@@ -31,7 +31,7 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     set(PATCH_COMMAND
         cp ${GPG_ERROR_CONFIG} ${CMAKE_CURRENT_BINARY_DIR}/gpg_error/src/gpg_error/src/syscfg/lock-obj-pub.linux-android.h
     )
-    set(HOST_CONFIG "--host=${HOSTTRIPLE}")
+    set(HOST_CONFIG "--target=${HOSTTRIPLE}")
     # For cross builds, gcrypt guesses an important toolchain characteristic
     # that it can't test for. Unfortunately, this guess is often wrong. This
     # value is right for android systems.
