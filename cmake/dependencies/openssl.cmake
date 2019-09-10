@@ -36,23 +36,23 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
                 ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl/Configurations/15-android.conf
         CONFIGURE_COMMAND
                cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
-            && export ANDROID_NDK_HOME=${CMAKE_ANDROID_STANDALONE_TOOLCHAIN}
+            && export ANDROID_NDK_HOME=${CMAKE_ANDROID_NDK}
             && export CROSS_COMPILE="${HOSTTRIPLE}-"
-            && export PATH=${CMAKE_ANDROID_STANDALONE_TOOLCHAIN}/bin:$ENV{PATH}
+            && export PATH=${CMAKE_ANDROID_NDK}/toolchains/llvm/prebuilt/linux-x86_64/bin:$ENV{PATH}
             && ./Configure
                 ${OPENSSL_TARGET}
                 no-shared -no-ssl2 -no-ssl3 -no-comp -no-hw -no-engine
                 --prefix=${CMAKE_CURRENT_BINARY_DIR}/openssl/install
         BUILD_COMMAND
                cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
-            && export ANDROID_NDK_HOME=${CMAKE_ANDROID_STANDALONE_TOOLCHAIN}
+            && export ANDROID_NDK_HOME=${CMAKE_ANDROID_NDK}
             && export CROSS_COMPILE="${HOSTTRIPLE}-"
-            && export PATH=${CMAKE_ANDROID_STANDALONE_TOOLCHAIN}/bin:$ENV{PATH}
+            && export PATH=${CMAKE_ANDROID_NDK}/toolchains/llvm/prebuilt/linux-x86_64/bin:$ENV{PATH}
             && make depend
             && make build_libs
         INSTALL_COMMAND
                cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
-            && export PATH=${CMAKE_ANDROID_STANDALONE_TOOLCHAIN}/bin:$ENV{PATH}
+            && export PATH=${CMAKE_ANDROID_NDK}/toolchains/llvm/prebuilt/linux-x86_64/bin:$ENV{PATH}
             && make install_dev
     )
 

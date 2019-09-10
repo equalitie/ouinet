@@ -59,8 +59,9 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
             && ./bootstrap.sh
         BUILD_COMMAND
                cd ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost
-            && export PATH=${CMAKE_ANDROID_STANDALONE_TOOLCHAIN}/bin:$ENV{PATH}
-            && export CLANGPATH=${CMAKE_ANDROID_STANDALONE_TOOLCHAIN}/bin
+            && export PATH=${CMAKE_ANDROID_NDK}/toolchains/llvm/prebuilt/linux-x86_64/bin:$ENV{PATH}
+            && export CLANGPATH=${CMAKE_ANDROID_NDK}/toolchains/llvm/prebuilt/linux-x86_64/bin
+            #                                       ${ANDROID_TOOLCHAIN_ROOT}
             && export BOOSTARCH=${BOOST_ARCH}
             && ./b2
                 target-os=android
