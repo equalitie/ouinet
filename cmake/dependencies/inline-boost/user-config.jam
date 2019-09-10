@@ -2,21 +2,24 @@ import os ;
 local ClangPath = [ os.environ CLANGPATH ] ;
 local Architecture = [ os.environ BOOSTARCH ] ;
 
-using clang : $(Architecture) : $(ClangPath)/clang++ :
+local Clang_arm64v8a = $(ClangPath)/aarch64-linux-android21-clang++ ;
+local Clang_armeabiv7a = $(ClangPath)/armv7a-linux-androideabi16-clang++ ;
+local Clang_x86 = $(ClangPath)/i686-linux-android16-clang++ ;
+local Clang_x8664 = $(ClangPath)/x86_64-linux-android21-clang++ ;
+
+using clang : $(Architecture) : $(Clang_$(Architecture)) :
 <archiver>$(ClangPath)/llvm-ar
-<compileflags>-fexceptions
-<compileflags>-frtti
+<compileflags>-fPIC
 <compileflags>-ffunction-sections
+<compileflags>-fdata-sections
 <compileflags>-funwind-tables
 <compileflags>-fstack-protector-strong
-<compileflags>-Wno-invalid-command-line-argument
-<compileflags>-Wno-unused-command-line-argument
 <compileflags>-no-canonical-prefixes
-<compileflags>-DANDROID
-<compileflags>-Wa,--noexecstack
 <compileflags>-Wformat
 <compileflags>-Werror=format-security
+<compileflags>-frtti
+<compileflags>-fexceptions
 <compileflags>-DNDEBUG
-<compileflags>-O2
 <compileflags>-g
+<compileflags>-Oz
 ;
