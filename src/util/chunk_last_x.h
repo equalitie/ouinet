@@ -58,15 +58,17 @@ class chunk_last_x
 public:
     /** Constructor
 
-        The last chunk will have an empty trailer
-        and no chunk extensions.
+        The last chunk will have no chunk extensions
+        and an empty trailer.
+
+        @see https://tools.ietf.org/html/rfc7230#section-4.1
     */
     chunk_last_x();
 
     /** Constructor
 
-        The last chunk will have an empty trailer
-        and the passed chunk extensions..
+        The last chunk will have the passed chunk extensions
+        and an empty trailer.
 
         @param extensions The chunk extensions string. This
         string must be formatted correctly as per rfc7230,
@@ -79,14 +81,16 @@ public:
         The data pointed to by this string view must remain
         valid for the lifetime of any operations performed on
         the object.
+
+        @see https://tools.ietf.org/html/rfc7230#section-4.1
     */
     explicit
     chunk_last_x(string_view extensions);
 
     /** Constructor
 
-        The last chunk will have an empty trailer
-        and the passed chunk extensions.
+        The last chunk will have the passed chunk extensions
+        and an empty trailer.
         The default allocator is used to provide storage for the
         extensions object.
 
@@ -113,7 +117,10 @@ public:
 
     /** Constructor
 
-        The last chunk will have no chunk extensions.
+        The last chunk will have the passed trailer
+        and no chunk extensions.
+        The default allocator is used to provide storage for the
+        trailer.
 
         @param trailer The trailer to use. This may be
         a type meeting the requirements of either Fields
@@ -121,11 +128,18 @@ public:
         the trailer must be formatted correctly as per rfc7230
         including a CRLF on its own line to denote the end
         of the trailer.
+
+        @see https://tools.ietf.org/html/rfc7230#section-4.1
     */
     explicit
     chunk_last_x(Trailer const& trailer);
 
     /** Constructor
+
+        The last chunk will have the passed chunk extensions
+        and trailer.
+        The default allocator is used to provide storage for the
+        trailer.
 
         @param extensions The chunk extensions string. This
         string must be formatted correctly as per rfc7230,
@@ -145,11 +159,18 @@ public:
         the trailer must be formatted correctly as per rfc7230
         including a CRLF on its own line to denote the end
         of the trailer.
+
+        @see https://tools.ietf.org/html/rfc7230#section-4.1
     */
     explicit
     chunk_last_x(string_view extensions, Trailer const& trailer);
 
     /** Constructor
+
+        The last chunk will have the passed chunk extensions
+        and trailer.
+        The default allocator is used to provide storage for the
+        extensions object and trailer.
 
         @param extensions The chunk extensions object. The expression
         `extensions.str()` must be valid, and the return type must
@@ -179,6 +200,9 @@ public:
     chunk_last_x(ChunkExtensions&& extensions, Trailer const& trailer);
 
     /** Constructor
+
+        The last chunk will have the passed chunk extensions
+        and trailer.
 
         @param extensions The chunk extensions object. The expression
         `extensions.str()` must be valid, and the return type must
@@ -213,11 +237,16 @@ public:
 
     /** Constructor
 
+        The last chunk will have no chunk extensions
+        and the passed trailer.
+
         @param trailer The trailer to use. This type must
         meet the requirements of Fields.
 
         @param allocator The allocator to use for storing temporary
         data associated with the serialized trailer buffers.
+
+        @see https://tools.ietf.org/html/rfc7230#section-4.1
     */
 #if BOOST_BEAST_DOXYGEN
     template<class Allocator>
@@ -231,6 +260,9 @@ public:
 #endif
 
     /** Constructor
+
+        The last chunk will have the passed chunk extensions
+        and trailer.
 
         @param extensions The chunk extensions object. The expression
         `extensions.str()` must be valid, and the return type must
