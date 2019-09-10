@@ -1,5 +1,6 @@
 #pragma once
 
+#include <utility>
 #include <vector>
 
 #include <boost/asio/buffer.hpp>
@@ -12,11 +13,13 @@
 #include <boost/beast/http/parser.hpp>
 #include <boost/beast/http/read.hpp>
 #include <boost/beast/http/write.hpp>
+#include <boost/utility/string_view.hpp>
 
 #include "default_timeout.h"
 #include "defer.h"
 #include "http_util.h"
 #include "or_throw.h"
+#include "util/chunk_last_x.h"
 #include "util/signal.h"
 #include "util/watch_dog.h"
 #include "util/yield.h"
@@ -37,13 +40,24 @@ using ProcHeadFunc = std::function<
 // if the output response is chunked.
 // If the received data is empty, no more data is to be received.
 // If the returned buffer is empty, nothing is sent.
+//
+// If a non-empty string is returned along the data,
+// it is attached as chunk extensions to the chunk to be sent
+// (only if chunked transfer encoding is enabled at the output).
 template<class ConstBufferSequence>
 using ProcInFunc = std::function<
-    ConstBufferSequence(asio::const_buffer inbuf, Cancel&, Yield)>;
+    std::pair<ConstBufferSequence, std::string>(asio::const_buffer inbuf, Cancel&, Yield)>;
 
 // Get copy of response trailers from input, return response trailers for output.
 // Only trailers declared in the input response's `Trailers:` header are considered.
-using ProcTrailFunc = std::function<http::fields(http::fields, Cancel&, Yield)>;
+//
+// If a non-empty string is returned along the trailers,
+// it is attached as chunk extensions to the last chunk to be sent.
+using ProcTrailFunc = std::function<
+    std::pair<http::fields, std::string>(http::fields, Cancel&, Yield)>;
+
+// Notify about the reception of chunk extensions.
+using ProcChkExtFunc = std::function<void(std::string, Cancel&, Yield)>;
 
 namespace detail {
 static const auto max_size_t = (std::numeric_limits<std::size_t>::max)();
@@ -52,7 +66,7 @@ std::string
 process_head( const http::response_header<>&, const ProcHeadFunc&, bool& chunked_out
             , Cancel&, Yield);
 
-http::fields
+std::pair<http::fields, std::string>
 process_trailers( const http::response_header<>&, const ProcTrailFunc&
                 , Cancel&, Yield);
 }
@@ -72,6 +86,9 @@ process_trailers( const http::response_header<>&, const ProcTrailFunc&
 //
 // The `trproc` callback can be used to manipulate trailers
 // before sending them to `out`.
+//
+// The `cxproc` callback is called whenever a non-empty chunk extension
+// is received.
 template<class StreamIn, class StreamOut, class Request, class ConstBufferSequence>
 inline
 http::response_header<>
@@ -81,6 +98,7 @@ http_forward( StreamIn& in
             , ProcHeadFunc rshproc
             , ProcInFunc<ConstBufferSequence> inproc
             , ProcTrailFunc trproc
+            , ProcChkExtFunc cxproc
             , Cancel& cancel
             , Yield yield)
 {
@@ -111,7 +129,8 @@ http_forward( StreamIn& in
     // Forward the response
     // --------------------
     return http_forward( in, out
-                       , std::move(rshproc), std::move(inproc), std::move(trproc)
+                       , std::move(rshproc), std::move(inproc)
+                       , std::move(trproc), std::move(cxproc)
                        , cancel, yield);
 }
 
@@ -124,6 +143,7 @@ http_forward( StreamIn& in
             , ProcHeadFunc rshproc
             , ProcInFunc<ConstBufferSequence> inproc
             , ProcTrailFunc trproc
+            , ProcChkExtFunc cxproc
             , Cancel& cancel
             , Yield yield)
 {
@@ -132,7 +152,8 @@ http_forward( StreamIn& in
     rpp.body_limit(detail::max_size_t);  // i.e. unlimited; callbacks can restrict this
 
     return http_forward( in, out, inbuf, rpp
-                       , std::move(rshproc), std::move(inproc), std::move(trproc)
+                       , std::move(rshproc), std::move(inproc)
+                       , std::move(trproc), std::move(cxproc)
                        , cancel, yield);
 }
 
@@ -150,6 +171,7 @@ http_forward( StreamIn& in
             , ProcHeadFunc rshproc
             , ProcInFunc<ConstBufferSequence> inproc
             , ProcTrailFunc trproc
+            , ProcChkExtFunc cxproc
             , Cancel& cancel
             , Yield yield_)
 {
@@ -217,8 +239,8 @@ http_forward( StreamIn& in
 
     wdog.expires_after(wdog_timeout);
 
-    // Process and forward body blocks
-    // -------------------------------
+    // Process and forward body blocks and chunk extensions
+    // ----------------------------------------------------
     // Based on "Boost.Beast / HTTP / Chunked Encoding / Parsing Chunks" example.
 
     // Prepare fixed-size forwarding buffer
@@ -241,6 +263,13 @@ http_forward( StreamIn& in
         return length;
     };
     rpp.on_chunk_body(body_cb);
+
+    std::string inexts;
+    auto cx_cb = [&] (auto, auto exts, auto&) {
+        // Just exfiltrate chunk extensions to be handled asynchronously.
+        inexts = exts.to_string();
+    };
+    rpp.on_chunk_header(cx_cb);
 
     while (chunked_in ? !rpp.is_done() : nc_pending > 0) {
         auto reset_wdog = defer([&] { wdog.expires_after(wdog_timeout); });
@@ -266,14 +295,22 @@ http_forward( StreamIn& in
         if (set_error(ec, "Failed to read response body"))
             break;
 
-        ConstBufferSequence outbuf = inproc(fwdbuf, cancel, yield[ec]);
+        if (!inexts.empty())
+            cxproc(std::move(inexts), cancel, yield[ec]);
+        if (set_error(ec, "Failed to process chunk extensions"))
+            break;
+        inexts = {};
+
+        ConstBufferSequence outbuf; std::string outexts;
+        std::tie(outbuf, outexts) = inproc(fwdbuf, cancel, yield[ec]);
+        assert(chunked_out || !outexts.empty());  // must enable chunked output for extensions
         if (set_error(ec, "Failed to process response body"))
             break;
         if (asio::buffer_size(outbuf) == 0)
             continue;  // e.g. input buffer filled but no output yet
 
         if (chunked_out)
-            asio::async_write(out, http::make_chunk(outbuf), yield[ec]);
+            asio::async_write(out, http::make_chunk(outbuf, outexts), yield[ec]);
         else
             asio::async_write(out, outbuf, yield[ec]);
         if (set_error(ec, "Failed to send response body"))
@@ -286,14 +323,17 @@ http_forward( StreamIn& in
     auto rph = rpp.release().base();
 
     if (chunked_out) {
-        auto outtrail = detail::process_trailers(rph, trproc, cancel, yield[ec]);
+        http::fields outtrail; std::string outexts;
+        std::tie(outtrail, outexts) = detail::process_trailers(rph, trproc, cancel, yield[ec]);
         if (set_error(ec, "Failed to process response trailers"))
             return or_throw<ResponseH>(yield, ec);
 
         if (outtrail.begin() != outtrail.end())
-            asio::async_write(out, http::make_chunk_last(outtrail), yield[ec]);
+            asio::async_write( out, http::chunk_last_x<http::fields>(outexts, outtrail)
+                             , yield[ec]);
         else
-            asio::async_write(out, http::make_chunk_last(), yield[ec]);
+            asio::async_write( out, http::make_chunk_last_x(boost::string_view(outexts))
+                             , yield[ec]);
         if (set_error(ec, "Failed to send last chunk and trailers"))
             return or_throw<ResponseH>(yield, ec);
     }

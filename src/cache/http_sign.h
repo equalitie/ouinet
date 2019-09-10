@@ -175,16 +175,19 @@ session_flush_verified( Session& in, SinkStream& out
     ProcInFunc<asio::const_buffer> dproc = [&] (auto ind, auto&, auto) {
         body_length += ind.size();
         body_hash.update(ind);
-        return ind;
+        ProcInFunc<asio::const_buffer>::result_type ret{std::move(ind), {}};
+        return ret;  // pass data on, drop chunk extensions
     };
 
-    auto tproc = [&] (auto intr, auto&, auto y) {
-        if (intr.cbegin() == intr.cend())
-            return intr;  // no headers in trailer
+    ProcTrailFunc tproc = [&] (auto intr, auto&, auto y) {
+        ProcTrailFunc::result_type ret{std::move(intr), {}};  // pass trailer on, drop chunk extensions
+
+        if (ret.first.cbegin() == ret.first.cend())
+            return ret;  // no headers in trailer
 
         // Only expected trailer headers are received here, just extend initial head.
         bool sigs_in_trailer = false;
-        for (const auto& h : intr) {
+        for (const auto& h : ret.first) {
             auto hn = h.name_string();
             head.insert(h.name(), hn, h.value());
             if (boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx))
@@ -193,19 +196,24 @@ session_flush_verified( Session& in, SinkStream& out
         if (sigs_in_trailer) {
             head = cache::http_injection_verify(std::move(head), pk);
             if (head.cbegin() == head.cend())  // bad signature in trailer
-                return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), intr);
+                return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), ret);
         }
 
         check_body_after = false;
         if (!http_sign_detail::check_body(head, body_length, body_hash))
-            return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), intr);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), ret);
 
-        return intr;
+        return ret;
+    };
+
+    auto xproc = [] (auto, auto&, auto) {
+        // Chunk extensions are not forwarded
+        // since we have no way to verify them.
     };
 
     sys::error_code ec;
     in.flush_response( out
-                     , std::move(hproc), std::move(dproc), std::move(tproc)
+                     , std::move(hproc), std::move(dproc), std::move(tproc), std::move(xproc)
                      , cancel, yield[ec]);
     if (!ec && check_body_after)
         if (!http_sign_detail::check_body(head, body_length, body_hash))
