@@ -175,9 +175,9 @@ function setup_deps {
     declare -A sdk_pkgs
     sdk_pkgs[build]="
 platforms;$PLATFORM
-build-tools;25.0.3
+build-tools;29.0.2
 platform-tools
-cmake;3.6.4111459
+cmake;3.10.2.4988404
 "
     sdk_pkgs[emu]="
 $EMULATOR_IMAGE
