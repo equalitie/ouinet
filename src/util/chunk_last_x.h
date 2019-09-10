@@ -50,7 +50,7 @@ class chunk_last_x
     buffers_type
     prepare(Trailer const& trailer, std::false_type);
 
-    std::shared_ptr<void> sp_;
+    std::shared_ptr<void> trsp_;
     std::shared_ptr<
         detail::chunk_extensions> exts_;
     view_type view_;
@@ -421,10 +421,10 @@ chunk_last_x<Trailer>::
 prepare(Trailer const& trailer, Allocator const& allocator) ->
     buffers_type
 {
-    auto sp = std::allocate_shared<typename
+    auto trsp = std::allocate_shared<typename
         Trailer::writer>(allocator, trailer);
-    sp_ = sp;
-    return sp->get();
+    trsp_ = trsp;
+    return trsp->get();
 }
 
 template<class Trailer>
@@ -433,10 +433,10 @@ chunk_last_x<Trailer>::
 prepare(Trailer const& trailer, std::true_type) ->
     buffers_type
 {
-    auto sp = std::make_shared<
+    auto trsp = std::make_shared<
         typename Trailer::writer>(trailer);
-    sp_ = sp;
-    return sp->get();
+    trsp_ = trsp;
+    return trsp->get();
 }
 
 template<class Trailer>
