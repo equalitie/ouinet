@@ -105,13 +105,15 @@ public:
 
         @see https://tools.ietf.org/html/rfc7230#section-4.1
     */
-    template<class ChunkExtensions
-#if ! BOOST_BEAST_DOXYGEN
-        , class = typename std::enable_if<
+#if BOOST_BEAST_DOXYGEN
+    template<class ChunkExtensions>
+#else
+    template<
+        class ChunkExtensions,
+        class = typename std::enable_if<
             ! std::is_convertible<typename std::decay<
-                ChunkExtensions>::type, string_view>::value>::type
+                ChunkExtensions>::type, string_view>::value>::type>
 #endif
-    >
     explicit
     chunk_last_x(ChunkExtensions&& extensions);
 
@@ -190,14 +192,18 @@ public:
 
         @see https://tools.ietf.org/html/rfc7230#section-4.1
     */
-    template<class ChunkExtensions
-#if ! BOOST_BEAST_DOXYGEN
-        , class = typename std::enable_if<
+#if BOOST_BEAST_DOXYGEN
+    template<class ChunkExtensions>
+#else
+    template<
+        class ChunkExtensions,
+        class = typename std::enable_if<
             ! std::is_convertible<typename std::decay<
-                ChunkExtensions>::type, string_view>::value>::type
+                ChunkExtensions>::type, string_view>::value>::type>
 #endif
-    >
-    chunk_last_x(ChunkExtensions&& extensions, Trailer const& trailer);
+    chunk_last_x(
+        ChunkExtensions&& extensions,
+        Trailer const& trailer);
 
     /** Constructor
 
@@ -250,13 +256,18 @@ public:
     */
 #if BOOST_BEAST_DOXYGEN
     template<class Allocator>
-    chunk_last_x(Trailer const& trailer, Allocator const& allocator);
+    chunk_last_x(
+        Trailer const& trailer,
+        Allocator const& allocator);
 #else
-    template<class DeducedTrailer, class Allocator,
+    template<
+        class DeducedTrailer,
+        class Allocator,
         class = typename std::enable_if<
             is_fields<DeducedTrailer>::value>::type>
     chunk_last_x(
-        DeducedTrailer const& trailer, Allocator const& allocator);
+        DeducedTrailer const& trailer,
+        Allocator const& allocator);
 #endif
 
     /** Constructor
