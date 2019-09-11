@@ -271,16 +271,27 @@ http_forward( StreamIn& in
     };
     rpp.on_chunk_header(cx_cb);
 
-    while (chunked_in ? !rpp.is_done() : nc_pending > 0) {
+    bool nc_done = false;
+    while (chunked_in ? !rpp.is_done() : !nc_done) {
         auto reset_wdog = defer([&] { wdog.expires_after(wdog_timeout); });
 
         // Input buffer includes initial data on first read.
         if (chunked_in) {
+            // Note this always produces a last empty read
+            // to signal the end of input.
             fwdbuf = asio::buffer(fwd_data, 0);  // process empty if no body callback
             http::async_read(in, inbuf, rpp, yield[ec]);
             if (ec == http::error::end_of_chunk)
                 ec = {};  // just a signal that we have input to process
+        } else if (nc_pending <= 0) {
+            // Arrange the explicit extra data processing call mentioned below
+            // for non-chunked transfers.
+            fwdbuf = {};
+            nc_done = true;
         } else {
+            // This does *not* produce a last empty read,
+            // thus we need an extra data processing call with an empty buffer
+            // to signal the end of input.
             auto buf = asio::buffer(fwd_data, nc_pending);
             size_t length = fwd_initial + in.async_read_some(buf + fwd_initial, yield[ec]);
             fwd_initial = 0;  // only usable on first read
