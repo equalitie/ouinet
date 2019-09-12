@@ -10,9 +10,11 @@
 #include <boost/system/error_code.hpp>
 
 #include "../constants.h"
+#include "../http_util.h"
 #include "../session.h"
 #include "../util/crypto.h"
 #include "../util/hash.h"
+#include "../util/quantized_buffer.h"
 
 #include "../namespaces.h"
 
@@ -138,6 +140,75 @@ http_injection_verify( http::response_header<>
 // Get a `keyId` encoding the given public key itself.
 std::string
 http_key_id_for_injection(const ouinet::util::Ed25519PublicKey&);
+
+// Flush a response from session `in` to stream `out`
+// while signing with the provided private key.
+template<class SinkStream>
+inline
+void
+session_flush_signed( Session& in, SinkStream& out
+                    , const http::request_header<>& rqh
+                    , const std::string& injection_id
+                    , const ouinet::util::Ed25519PrivateKey& sk
+                    , Cancel& cancel, asio::yield_context yield)
+{
+    auto httpsig_key_id = http_key_id_for_injection(sk.public_key());  // TODO: cache this
+
+    bool do_inject = false;
+    http::response_header<> outh;
+    auto head_proc = [&] (auto inh, auto&, auto yield_) {
+        auto inh_orig = inh;
+        sys::error_code ec_;
+        inh = util::to_cache_response(move(inh), ec_);
+        if (ec_) return inh_orig;  // will not inject, just proxy
+
+        do_inject = true;
+        inh = cache::http_injection_head( rqh, move(inh), injection_id
+                                        , sk, httpsig_key_id);
+        // We will use the trailer to send the body digest and head signature.
+        assert(http::response<http::empty_body>(inh).chunked());
+
+        outh = inh;
+        return inh;
+    };
+
+    size_t forwarded = 0;
+    util::SHA256 data_hash;
+    util::quantized_buffer<http_forward_block> qbuf;
+    ProcInFunc<asio::const_buffer> data_proc = [&] (auto inbuf, auto&, auto) {
+        // Just count transferred data and feed the hash.
+        forwarded += inbuf.size();
+        if (do_inject) data_hash.update(inbuf);
+        qbuf.put(inbuf);
+        ProcInFunc<asio::const_buffer>::result_type ret{
+            (inbuf.size() > 0) ? qbuf.get() : qbuf.get_rest(), {}
+        };  // send rest if no more input
+        return ret;  // pass data on, drop origin extensions
+    };
+
+    ProcTrailFunc trailer_proc = [&] (auto intr, auto&, auto) {
+        if (do_inject) {
+            intr = util::to_cache_trailer(move(intr));
+            intr = cache::http_injection_trailer( outh, move(intr)
+                                                , forwarded, data_hash.close()
+                                                , sk
+                                                , httpsig_key_id);
+        }
+        ProcTrailFunc::result_type ret{move(intr), {}};
+        return ret;  // pass trailer on, drop origin extensions
+    };
+
+    auto ckxt_proc = [] (auto, auto&, auto) {
+        // Origin chunk extensions are ignored and dropped
+        // since we have no way to sign them.
+    };
+
+    sys::error_code ec;
+    in.flush_response( out
+                     , head_proc, data_proc, trailer_proc, ckxt_proc
+                     , cancel, yield[ec]);
+    return or_throw(yield, ec);
+}
 
 // Flush a response from session `in` to stream `out`
 // while verifying signatures by the provided public key.
