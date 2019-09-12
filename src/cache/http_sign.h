@@ -156,7 +156,7 @@ session_flush_signed( Session& in, SinkStream& out
 
     bool do_inject = false;
     http::response_header<> outh;
-    auto head_proc = [&] (auto inh, auto&, auto yield_) {
+    auto hproc = [&] (auto inh, auto&, auto yield_) {
         auto inh_orig = inh;
         sys::error_code ec_;
         inh = util::to_cache_response(move(inh), ec_);
@@ -172,13 +172,13 @@ session_flush_signed( Session& in, SinkStream& out
         return inh;
     };
 
-    size_t forwarded = 0;
-    util::SHA256 data_hash;
+    size_t body_length = 0;
+    util::SHA256 body_hash;
     util::quantized_buffer<http_forward_block> qbuf;
-    ProcInFunc<asio::const_buffer> data_proc = [&] (auto inbuf, auto&, auto) {
+    ProcInFunc<asio::const_buffer> dproc = [&] (auto inbuf, auto&, auto) {
         // Just count transferred data and feed the hash.
-        forwarded += inbuf.size();
-        if (do_inject) data_hash.update(inbuf);
+        body_length += inbuf.size();
+        if (do_inject) body_hash.update(inbuf);
         qbuf.put(inbuf);
         ProcInFunc<asio::const_buffer>::result_type ret{
             (inbuf.size() > 0) ? qbuf.get() : qbuf.get_rest(), {}
@@ -186,11 +186,11 @@ session_flush_signed( Session& in, SinkStream& out
         return ret;  // pass data on, drop origin extensions
     };
 
-    ProcTrailFunc trailer_proc = [&] (auto intr, auto&, auto) {
+    ProcTrailFunc tproc = [&] (auto intr, auto&, auto) {
         if (do_inject) {
             intr = util::to_cache_trailer(move(intr));
             intr = cache::http_injection_trailer( outh, move(intr)
-                                                , forwarded, data_hash.close()
+                                                , body_length, body_hash.close()
                                                 , sk
                                                 , httpsig_key_id);
         }
@@ -198,14 +198,14 @@ session_flush_signed( Session& in, SinkStream& out
         return ret;  // pass trailer on, drop origin extensions
     };
 
-    auto ckxt_proc = [] (auto, auto&, auto) {
+    auto xproc = [] (auto, auto&, auto) {
         // Origin chunk extensions are ignored and dropped
         // since we have no way to sign them.
     };
 
     sys::error_code ec;
     in.flush_response( out
-                     , head_proc, data_proc, trailer_proc, ckxt_proc
+                     , std::move(hproc), std::move(dproc), std::move(tproc), std::move(xproc)
                      , cancel, yield[ec]);
     return or_throw(yield, ec);
 }
@@ -227,14 +227,6 @@ session_flush_verified( Session& in, SinkStream& out
                       , Cancel& cancel, asio::yield_context yield)
 {
     http::response_header<> head;
-    size_t body_length = 0;
-    util::SHA256 body_hash;
-    // If we process trailers, we may have a chance to
-    // detect and signal a body not matching its signed length or digest
-    // before completing its transfer,
-    // so that the receiving end can see that something bad is going on.
-    bool check_body_after = true;
-
     auto hproc = [&] (auto inh, auto&, auto y) {
         inh = cache::http_injection_verify(move(inh), pk);
         if (inh.cbegin() == inh.cend())
@@ -243,6 +235,8 @@ session_flush_verified( Session& in, SinkStream& out
         return inh;
     };
 
+    size_t body_length = 0;
+    util::SHA256 body_hash;
     ProcInFunc<asio::const_buffer> dproc = [&] (auto ind, auto&, auto) {
         body_length += ind.size();
         body_hash.update(ind);
@@ -250,6 +244,11 @@ session_flush_verified( Session& in, SinkStream& out
         return ret;  // pass data on, drop chunk extensions
     };
 
+    // If we process trailers, we may have a chance to
+    // detect and signal a body not matching its signed length or digest
+    // before completing its transfer,
+    // so that the receiving end can see that something bad is going on.
+    bool check_body_after = true;
     ProcTrailFunc tproc = [&] (auto intr, auto&, auto y) {
         ProcTrailFunc::result_type ret{std::move(intr), {}};  // pass trailer on, drop chunk extensions
 
