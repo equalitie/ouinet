@@ -348,6 +348,12 @@ public:
         auto orig_con = get_connection(rq, cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec);
 
+        // Send HTTP request to origin.
+        http_forward_request( orig_con, con, util::to_origin_request(rq)
+                            , cancel, yield[ec]);
+        if (ec) yield.log("Failed to send request: ", ec.message());
+        return_or_throw_on_error(yield, cancel, ec);
+
         bool do_inject = false;
         http::response_header<> outh;
         auto head_proc = [&] (auto inh, auto&, auto yield_) {
@@ -397,7 +403,7 @@ public:
             // since we have no way to sign them.
         };
 
-        RespFromH res(http_forward( orig_con, con, util::to_origin_request(rq)
+        RespFromH res(http_forward( orig_con, con
                                   , head_proc, data_proc, trailer_proc, ckxt_proc
                                   , cancel, yield[ec].tag("fetch_injector")));
 
