@@ -360,6 +360,7 @@ public:
 
         if (ec) yield.log("Injection failed: ", ec.message());
         return_or_throw_on_error(yield, cancel, ec);
+        yield.log("Injection end");  // TODO: report whether inject or just fwd
 
         auto rshp = orig_sess.response_header();
         assert(rshp != nullptr);
