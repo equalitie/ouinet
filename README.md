@@ -195,8 +195,8 @@ to `/usr/local/src/` inside (some we'll create first):
 - and container's `$HOME` (`../ouinet.home/`), where `.gradle`, `.cargo`, etc. will reside.
 
 Note that with the following incantations you won't be able to use `sudo` in
-the container, and that all the changes besides those to bind mounts will be
-lost after you exit.
+the container (`--user`), and that all the changes besides those in bind mounts will be
+lost after you exit (`--rm`).
 
 ```sh
 mkdir -p ../ouinet.build/ ../ouinet.home/
