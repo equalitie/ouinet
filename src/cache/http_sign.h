@@ -56,25 +56,13 @@ bool check_body(const http::response_header<>&, size_t, ouinet::util::SHA256&);
 //     Transfer-Encoding: chunked
 //     Trailer: X-Ouinet-Data-Size, Digest, X-Ouinet-Sig1
 //
-http::response_header<>  // use this to enable setting the time stamp (e.g. for tests)
+http::response_header<>
 http_injection_head( const http::request_header<>& rqh
                    , http::response_header<> rsh
                    , const std::string& injection_id
                    , std::chrono::seconds::rep injection_ts
                    , const ouinet::util::Ed25519PrivateKey&
                    , const std::string& key_id);
-
-inline
-http::response_header<>  // use this for the rest of cases
-http_injection_head( const http::request_header<>& rqh
-                   , http::response_header<> rsh
-                   , const std::string& injection_id
-                   , const ouinet::util::Ed25519PrivateKey& sk
-                   , const std::string& key_id)
-{
-    auto ts = std::chrono::seconds(std::time(nullptr)).count();
-    return http_injection_head(rqh, std::move(rsh), injection_id, ts, sk, key_id);
-}
 
 // Get an extended version of the given response trailer
 // with added headers completing the signature of the message.
@@ -149,6 +137,7 @@ void
 session_flush_signed( Session& in, SinkStream& out
                     , const http::request_header<>& rqh
                     , const std::string& injection_id
+                    , std::chrono::seconds::rep injection_ts
                     , const ouinet::util::Ed25519PrivateKey& sk
                     , Cancel& cancel, asio::yield_context yield)
 {
@@ -163,7 +152,8 @@ session_flush_signed( Session& in, SinkStream& out
         if (ec_) return inh_orig;  // will not inject, just proxy
 
         do_inject = true;
-        inh = cache::http_injection_head( rqh, move(inh), injection_id
+        inh = cache::http_injection_head( rqh, move(inh)
+                                        , injection_id, injection_ts
                                         , sk, httpsig_key_id);
         // We will use the trailer to send the body digest and head signature.
         assert(http::response<http::empty_body>(inh).chunked());

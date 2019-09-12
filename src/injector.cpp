@@ -8,6 +8,8 @@
 #include <boost/filesystem.hpp>
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
+#include <chrono>
+#include <ctime>
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -320,6 +322,7 @@ public:
                         , const InjectorConfig& config
                         , uuid_generator& genuuid)
         : insert_id(to_string(genuuid()))
+        , insert_ts(chrono::seconds(time(nullptr)).count())
         , ios(ios)
         , ssl_ctx(ssl_ctx)
         , config(config)
@@ -351,7 +354,7 @@ public:
 
         Session orig_sess(move(orig_con));
         cache::session_flush_signed( orig_sess, con
-                                   , rq, insert_id
+                                   , rq, insert_id, insert_ts
                                    , config.cache_private_key()
                                    , cancel, yield[ec]);  // .tag("fetch_injector")
 
@@ -408,6 +411,7 @@ public:
 
 private:
     std::string insert_id;
+    std::chrono::seconds::rep insert_ts;
     asio::io_service& ios;
     asio::ssl::context& ssl_ctx;
     const InjectorConfig& config;
