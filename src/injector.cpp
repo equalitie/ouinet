@@ -32,6 +32,7 @@
 #include "force_exit_on_signal.h"
 #include "http_util.h"
 #include "origin_pools.h"
+#include "session.h"
 
 #include "ouiservice.h"
 #include "ouiservice/i2p.h"
@@ -354,6 +355,8 @@ public:
         if (ec) yield.log("Failed to send request: ", ec.message());
         return_or_throw_on_error(yield, cancel, ec);
 
+        Session orig_sess(move(orig_con));
+
         bool do_inject = false;
         http::response_header<> outh;
         auto head_proc = [&] (auto inh, auto&, auto yield_) {
@@ -403,15 +406,16 @@ public:
             // since we have no way to sign them.
         };
 
-        RespFromH res(http_forward( orig_con, con
-                                  , head_proc, data_proc, trailer_proc, ckxt_proc
-                                  , cancel, yield[ec].tag("fetch_injector")));
+        orig_sess.flush_response( con, head_proc, data_proc, trailer_proc, ckxt_proc
+                                , cancel, yield[ec].tag("fetch_injector"));
 
         if (ec) yield.log("Injection failed: ", ec.message());
         return_or_throw_on_error(yield, cancel, ec);
         yield.log(do_inject ? "Injected data bytes: " : "Forwarded data bytes: ", forwarded);
 
-        keep_connection(rq, res, move(orig_con));
+        auto rshp = orig_sess.response_header();
+        assert(rshp != nullptr);
+        keep_connection(rq, RespFromH(*rshp), move(orig_sess));
     }
 
     bool fetch( GenericStream& con
@@ -444,7 +448,7 @@ public:
         return connection;
     }
 
-    template<class Response>
+    template<class Response, class Connection>
     bool keep_connection(const Request& rq, const Response& rs, Connection con) {
         if (!con.is_open()) return false;
 

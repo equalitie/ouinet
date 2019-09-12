@@ -57,6 +57,10 @@ public:
     template<class BodyType>
     http::response<BodyType> slurp(Cancel&, asio::yield_context);
 
+    bool is_open() const {
+        return _state->con.is_open();
+    }
+
     void close() {
         if (!_state) return;
         if (_state->con.is_open()) _state->con.close();
