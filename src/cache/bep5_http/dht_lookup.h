@@ -120,7 +120,7 @@ private:
 
             sys::error_code ec;
 
-            auto eps = tcp_to_udp(dht->tracker_get_peers(infohash, c, y[ec]));
+            auto eps = dht->tracker_get_peers(infohash, c, y[ec]);
 
             if (!c && !ec) {
                 self->last_result.ec    = ec;
@@ -132,13 +132,6 @@ private:
         });
 
         return job;
-    }
-
-    static Ret tcp_to_udp(const std::set<tcp::endpoint>& eps)
-    {
-        Ret ret;
-        for (auto& ep : eps) { ret.insert({ep.address(), ep.port()}); }
-        return ret;
     }
 
 private:

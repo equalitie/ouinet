@@ -1,6 +1,5 @@
 #pragma once
 
-#include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ip/udp.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/steady_timer.hpp>
@@ -39,7 +38,6 @@ asio::ip::udp::endpoint resolve(
 );
 
 namespace ip = asio::ip;
-using ip::tcp;
 using ip::udp;
 
 class DebugCtx;
@@ -91,7 +89,7 @@ class DhtNode {
      * Query peers for a bittorrent swarm surrounding a particular infohash.
      * This returns a randomized subset of all such peers, not the entire swarm.
      */
-    std::set<tcp::endpoint> tracker_get_peers(
+    std::set<udp::endpoint> tracker_get_peers(
         NodeID infohash,
         Cancel&,
         asio::yield_context
@@ -108,7 +106,7 @@ class DhtNode {
      *
      * TODO: [ruud] I am not clear to what degree this is actually followed in practice.
      */
-    std::set<tcp::endpoint> tracker_announce(
+    std::set<udp::endpoint> tracker_announce(
         NodeID infohash,
         boost::optional<int> port,
         Cancel&,
@@ -314,7 +312,7 @@ class DhtNode {
     };
     void tracker_do_search_peers(
         NodeID infohash,
-        std::set<tcp::endpoint>& peers,
+        std::set<udp::endpoint>& peers,
         std::map<NodeID, TrackerNode>& responsible_nodes,
         Cancel&,
         asio::yield_context
@@ -385,7 +383,7 @@ class MainlineDht {
     /*
      * TODO: announce() and put() functions don't have any real error detection.
      */
-    std::set<tcp::endpoint> tracker_announce(
+    std::set<udp::endpoint> tracker_announce(
         NodeID infohash,
         boost::optional<int> port,
         Cancel&,
@@ -394,8 +392,8 @@ class MainlineDht {
 
     void mutable_put(const MutableDataItem&, Cancel&, asio::yield_context);
 
-    std::set<tcp::endpoint> tracker_get_peers(NodeID infohash, Cancel&, asio::yield_context);
-    std::set<tcp::endpoint> tracker_get_peers(NodeID infohash, asio::yield_context yield)
+    std::set<udp::endpoint> tracker_get_peers(NodeID infohash, Cancel&, asio::yield_context);
+    std::set<udp::endpoint> tracker_get_peers(NodeID infohash, asio::yield_context yield)
         { Cancel cancel; return tracker_get_peers(infohash, cancel, yield); }
     boost::optional<BencodedValue> immutable_get(NodeID key, Cancel&, asio::yield_context);
     boost::optional<BencodedValue> immutable_get(NodeID key, asio::yield_context yield)

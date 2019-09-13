@@ -45,12 +45,6 @@ float seconds(Clock::duration d)
     return duration_cast<milliseconds>(d).count() / 1000.f;
 }
 
-static
-__attribute__((unused))
-tcp::endpoint as_tcp(udp::endpoint ep) {
-    return { ep.address(), ep.port() };
-}
-
 BOOST_AUTO_TEST_CASE(test_bep_5)
 {
     using namespace ouinet::bittorrent::dht;
@@ -74,7 +68,7 @@ BOOST_AUTO_TEST_CASE(test_bep_5)
         auto peers = dht.tracker_get_peers(infohash , cancel_signal, yield[ec]);
         BOOST_REQUIRE(!ec);
 
-        BOOST_REQUIRE(peers.count(as_tcp(dht.wan_endpoint())));
+        BOOST_REQUIRE(peers.count(dht.wan_endpoint()));
 
         dht.stop();
     });

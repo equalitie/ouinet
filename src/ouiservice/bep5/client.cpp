@@ -16,16 +16,6 @@ namespace bt = bittorrent;
 
 using AbstractClient = OuiServiceImplementationClient;
 using udp = asio::ip::udp;
-using tcp = asio::ip::tcp;
-
-//////////////////////////////////////////////////////////////////////
-// Client
-static set<udp::endpoint> tcp_to_udp(const set<tcp::endpoint>& eps)
-{
-    set<udp::endpoint> ret;
-    for (auto& ep : eps) { ret.insert({ep.address(), ep.port()}); }
-    return ret;
-}
 
 struct Bep5Client::Bep5Loop
 {
@@ -87,7 +77,7 @@ struct Bep5Client::Bep5Loop
                 }
             }
 
-            owner->add_injector_endpoints(tcp_to_udp(endpoints));
+            owner->add_injector_endpoints(move(endpoints));
 
             async_sleep(ios, 1min, cancel, yield);
         }
@@ -187,7 +177,7 @@ unique_ptr<Bep5Client::Client> Bep5Client::build_client(const udp::endpoint& ep)
     return make_unique<Client>(move(tls_client));
 }
 
-void Bep5Client::add_injector_endpoints(const set<udp::endpoint>& eps)
+void Bep5Client::add_injector_endpoints(set<udp::endpoint> eps)
 {
     for (auto ep : eps) {
         if (bittorrent::is_martian(ep)) continue;

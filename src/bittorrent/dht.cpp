@@ -247,30 +247,30 @@ dht::DhtNode::~DhtNode()
     stop();
 }
 
-std::set<tcp::endpoint> dht::DhtNode::tracker_get_peers(
+std::set<udp::endpoint> dht::DhtNode::tracker_get_peers(
     NodeID infohash,
     Cancel& cancel,
     asio::yield_context yield
 ) {
     sys::error_code ec;
-    std::set<tcp::endpoint> peers;
+    std::set<udp::endpoint> peers;
     std::map<NodeID, TrackerNode> responsible_nodes;
     tracker_do_search_peers(infohash, peers, responsible_nodes, cancel, yield[ec]);
     return or_throw(yield, ec, std::move(peers));
 }
 
-std::set<tcp::endpoint> dht::DhtNode::tracker_announce(
+std::set<udp::endpoint> dht::DhtNode::tracker_announce(
     NodeID infohash,
     boost::optional<int> port,
     Cancel& cancel,
     asio::yield_context yield
 ) {
     sys::error_code ec;
-    std::set<tcp::endpoint> peers;
+    std::set<udp::endpoint> peers;
     std::map<NodeID, TrackerNode> responsible_nodes;
     tracker_do_search_peers(infohash, peers, responsible_nodes, cancel, yield[ec]);
     if (ec) {
-        return or_throw<std::set<tcp::endpoint>>(yield, ec, std::move(peers));
+        return or_throw<std::set<udp::endpoint>>(yield, ec, std::move(peers));
     }
 
     bool success = false;
@@ -304,7 +304,7 @@ std::set<tcp::endpoint> dht::DhtNode::tracker_announce(
                    : success ? sys::error_code()
                              : boost::asio::error::network_down;
 
-    return or_throw<std::set<tcp::endpoint>>(yield, ec, std::move(peers));
+    return or_throw<std::set<udp::endpoint>>(yield, ec, std::move(peers));
 }
 
 boost::optional<BencodedValue> dht::DhtNode::data_get_immutable(
@@ -2143,7 +2143,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data3(
  */
 void dht::DhtNode::tracker_do_search_peers(
     NodeID infohash,
-    std::set<tcp::endpoint>& peers,
+    std::set<udp::endpoint>& peers,
     std::map<NodeID, TrackerNode>& responsible_nodes,
     Cancel& cancel_signal,
     asio::yield_context yield
@@ -2151,7 +2151,7 @@ void dht::DhtNode::tracker_do_search_peers(
     sys::error_code ec;
     struct ResponsibleNode {
         asio::ip::udp::endpoint node_endpoint;
-        std::vector<tcp::endpoint> peers;
+        std::vector<udp::endpoint> peers;
         std::string put_token;
     };
     ProximityMap<ResponsibleNode> responsible_nodes_full(infohash, RESPONSIBLE_TRACKERS_PER_SWARM);
@@ -2200,7 +2200,7 @@ void dht::DhtNode::tracker_do_search_peers(
                     boost::optional<udp::endpoint> endpoint = decode_endpoint(*peer_string);
                     if (!endpoint) continue;
 
-                    node.peers.push_back({endpoint->address(), endpoint->port()});
+                    node.peers.push_back(*endpoint);
                 }
             }
             responsible_nodes_full.insert({ *candidate.id, std::move(node) });
@@ -2270,20 +2270,20 @@ void MainlineDht::set_endpoint(asio_utp::udp_multiplexer m)
     });
 }
 
-std::set<tcp::endpoint> MainlineDht::tracker_announce(
+std::set<udp::endpoint> MainlineDht::tracker_announce(
     NodeID infohash,
     boost::optional<int> port,
     Cancel& cancel_signal,
     asio::yield_context yield
 ) {
-    std::set<tcp::endpoint> output;
+    std::set<udp::endpoint> output;
 
     SuccessCondition condition(_ios);
     for (auto& i : _nodes) {
         asio::spawn(_ios, [&, ep = i.first, p = i.second.get(), lock = condition.lock()] (asio::yield_context yield) {
             sys::error_code ec;
             Signal<void()> cancel_dummy;
-            std::set<tcp::endpoint> peers = i.second->tracker_announce(infohash, port, cancel_dummy, yield[ec]);
+            std::set<udp::endpoint> peers = i.second->tracker_announce(infohash, port, cancel_dummy, yield[ec]);
 
             if (ec) { return; }
 
@@ -2303,9 +2303,9 @@ std::set<tcp::endpoint> MainlineDht::tracker_announce(
 
     if (!condition.wait_for_success(yield)) {
         if (condition.cancelled()) {
-            return or_throw<std::set<tcp::endpoint>>(yield, asio::error::operation_aborted, std::move(output));
+            return or_throw<std::set<udp::endpoint>>(yield, asio::error::operation_aborted, std::move(output));
         } else {
-            return or_throw<std::set<tcp::endpoint>>(yield, asio::error::network_unreachable);
+            return or_throw<std::set<udp::endpoint>>(yield, asio::error::network_unreachable);
         }
     }
 
@@ -2362,9 +2362,9 @@ void MainlineDht::mutable_put(
     return or_throw(yield, ec);
 }
 
-std::set<tcp::endpoint> MainlineDht::tracker_get_peers(NodeID infohash, Cancel& cancel_signal, asio::yield_context yield)
+std::set<udp::endpoint> MainlineDht::tracker_get_peers(NodeID infohash, Cancel& cancel_signal, asio::yield_context yield)
 {
-    std::set<tcp::endpoint> output;
+    std::set<udp::endpoint> output;
     sys::error_code ec;
 
     Cancel cancel_attempts;
@@ -2382,7 +2382,7 @@ std::set<tcp::endpoint> MainlineDht::tracker_get_peers(NodeID infohash, Cancel& 
             }
 
             sys::error_code ec;
-            std::set<tcp::endpoint> peers = i.second->tracker_get_peers(infohash, cancel_attempts, yield[ec]);
+            std::set<udp::endpoint> peers = i.second->tracker_get_peers(infohash, cancel_attempts, yield[ec]);
 
             output.insert(peers.begin(), peers.end());
 

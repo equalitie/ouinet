@@ -45,7 +45,7 @@ public:
     void wait_for_bep5_resolve(bool value);
 
 private:
-    void add_injector_endpoints(const std::set<asio::ip::udp::endpoint>&);
+    void add_injector_endpoints(std::set<asio::ip::udp::endpoint>);
 
     Clients::iterator choose_client();
     unsigned lowest_fail_count() const;
