@@ -57,25 +57,25 @@ X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
 Date: Mon, 15 Jan 2018 20:31:50 GMT
 Server: Apache
 Content-Type: text/html
-Content-disposition: inline; filename="foo.html"
-X-Ouinet-Hashing: keyId="ed25519=????",algorithm="hs2019",length=1048576
+Content-Disposition: inline; filename="foo.html"
+X-Ouinet-BSigs: keyId="ed25519=????",algorithm="hs2019",length=1048576
 X-Ouinet-Sig0: keyId="ed25519=????",algorithm="hs2019",created=1516048310,
-  headers="(response-status) (created) x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-http-status date server content-type content-disposition x-ouinet-hashing",
+  headers="(response-status) (created) x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-http-status date server content-type content-disposition x-ouinet-bsigs",
   signature="BASE64(...)"
 Transfer-Encoding: chunked
 Trailer: Digest, X-Ouinet-Data-Size, X-Ouinet-Sig1
 
 80000
 0123456789...
-80000;s=BASE64(SIG(INJECTION_ID=d6076… SEP OFFSET=0x0 SEP BLOCK1))
+80000;ouisig=BASE64(SIG(INJECTION_ID="d6076…" NUL OFFSET="0" NUL BLOCK1))
 0123456789...
-4;s=BASE64(SIG(INJECTION_ID=d6076… SEP OFFSET=0x80000 SEP BLOCK2))
+4;ouisig=BASE64(SIG(INJECTION_ID="d6076…" NUL OFFSET="1048576" NUL BLOCK2))
 abcd
-0;s=BASE64(SIG(INJECTION_ID=d6076… SEP OFFSET=0x100000 SEP BLOCK3))
+0;ouisig=BASE64(SIG(INJECTION_ID="d6076…" NUL OFFSET="2097152" NUL BLOCK3))
 Digest: SHA-256=BASE64(HASH_OF_FULL_BODY)
 X-Ouinet-Data-Size: 1048580
 X-Ouinet-Sig1: keyId="ed25519=????",algorithm="hs2019",created=1516048311,
-  headers="(response-status) (created) x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-http-status date server content-type content-disposition x-ouinet-hashing digest x-ouinet-data-size",
+  headers="(response-status) (created) x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-http-status date server content-type content-disposition x-ouinet-bsigs digest x-ouinet-data-size",
   signature="BASE64(...)"
 ```
 
@@ -83,7 +83,7 @@ The signature for a given block comes in a chunk extension in the chunk right af
 
 Each block signature covers the injection identifier and block offset besides its content.  The former avoids replay attacks where the attacker sends a correctly signed block from a different injection (for the same or a different URI).  The latter avoids the attacker from reordering correctly signed blocks for this injection.  However, this inlining of signatures also binds the stream representation of the body to this particular injection.  Storage that keeps signatures inline with block data should take this into account when trying to reuse body data.
 
-Common parameters to all block signatures are kept the same and factored out to `X-Ouinet-Hashing` for simplicity and bandwidth efficiency.  Even if each block length could be inferred from the presence of a chunk extension, having the signer commit to a fixed and explicit length up front (with the exception of the last block) helps the consumer of the signed response to easily validate chunk boundaries and discard responses with too big blocks.  In the example, chunks are equivalent to blocks; this is the simplest implementation but it is not compulsory: blocks could be splitted in several chunks if needed.  However, for the sake of simplicity, chunks should be aligned to block boundaries (i.e. blocks should consist of a natural number of chunks).
+Common parameters to all block signatures are kept the same and factored out to `X-Ouinet-BSigs` for simplicity and bandwidth efficiency.  Even if each block length could be inferred from the presence of a chunk extension, having the signer commit to a fixed and explicit length up front (with the exception of the last block) helps the consumer of the signed response to easily validate chunk boundaries and discard responses with too big blocks.  In the example, chunks are equivalent to blocks; this is the simplest implementation but it is not compulsory: blocks could be splitted in several chunks if needed.  However, for the sake of simplicity, chunks should be aligned to block boundaries (i.e. blocks should consist of a natural number of chunks).
 
 If the client sends an HTTP range request, the injector aligns it to block boundaries (this is acceptable according to [RFC7233#4.1][] — "a client cannot rely on receiving the same ranges that it requested").  The partial response head includes a ``Range:`` header, but it is not part of the partial nor final signatures (to allow later sharing of subranges, whose blocks can be validated independently anyway).  ``Digest:`` and ``X-Ouinet-Data-Size:`` may be missing in the final response head, if the injector did not have access to the whole body data.
 
@@ -94,6 +94,6 @@ Client-to-client transmission works in a similar way, with the difference that w
 ## Issues
 
   - Choose an adequate data block length (can use different ones according to ``Content-Length:`` from the origin).
-  - Choose block signature algorithm.
-  - It may only be usable for single ranges (i.e. no ``multipart/byteranges`` body).
+  - This may only be usable for single ranges (i.e. no ``multipart/byteranges`` body).
   - Block hashes are outside of the signed HTTP head.  Inlining them in the final head may require long Base64-encoded headers for long files.
+  - While several signers are supported via different `keyId`s in `X-Ouinet-Sig<N>:` headers, only one signer can provide a single signature for data blocks.  Thi is to avoid mismatching block lengths and having to link each block signature to a key.  However, other signers may still trust those signatures by covering the `X-Ouinet-BSigs:` header (which includes the public key for validation) in their signature.
