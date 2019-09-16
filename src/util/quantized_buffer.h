@@ -43,7 +43,8 @@ public:
         if (buf.size() < N)
             return boost::asio::const_buffer();  // not enough data yet
 
-        auto data0 = boost::asio::buffer_sequence_begin(buf.data());
+        auto data = buf.data();
+        auto data0 = boost::asio::buffer_sequence_begin(data);
         assert(data0->size() >= N);
         boost::asio::const_buffer ret{data0->data(), N};
         buf.consume(N);
@@ -57,7 +58,8 @@ public:
     boost::asio::const_buffer get_rest() noexcept
     {
         assert(buf.size() < N);  // use `get` otherwise
-        auto data0 = boost::asio::buffer_sequence_begin(buf.data());
+        auto data = buf.data();
+        auto data0 = boost::asio::buffer_sequence_begin(data);
         assert(data0->size() == buf.size());
         boost::asio::const_buffer ret{data0->data(), data0->size()};
         buf.consume(buf.size());
