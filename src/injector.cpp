@@ -53,6 +53,7 @@
 #include "util/bytes.h"
 #include "util/file_io.h"
 #include "util/file_posix_with_offset.h"
+#include "util/quantized_buffer.h"
 
 #include "parse/number.h"
 #include "logger.h"
@@ -366,11 +367,15 @@ public:
 
         size_t forwarded = 0;
         util::SHA256 data_hash;
+        util::quantized_buffer<http_forward_block> qbuf;
         ProcInFunc<asio::const_buffer> data_proc = [&] (auto inbuf, auto&, auto) {
             // Just count transferred data and feed the hash.
             forwarded += inbuf.size();
             if (do_inject) data_hash.update(inbuf);
-            ProcInFunc<asio::const_buffer>::result_type ret{move(inbuf), {}};
+            qbuf.put(inbuf);
+            ProcInFunc<asio::const_buffer>::result_type ret{
+                (inbuf.size() > 0) ? qbuf.get() : qbuf.get_rest(), {}
+            };  // send rest if no more input
             return ret;  // pass data on, drop origin extensions
         };
 
