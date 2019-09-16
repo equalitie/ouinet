@@ -10,9 +10,11 @@
 #include <boost/system/error_code.hpp>
 
 #include "../constants.h"
+#include "../http_util.h"
 #include "../session.h"
 #include "../util/crypto.h"
 #include "../util/hash.h"
+#include "../util/quantized_buffer.h"
 
 #include "../namespaces.h"
 
@@ -54,25 +56,13 @@ bool check_body(const http::response_header<>&, size_t, ouinet::util::SHA256&);
 //     Transfer-Encoding: chunked
 //     Trailer: X-Ouinet-Data-Size, Digest, X-Ouinet-Sig1
 //
-http::response_header<>  // use this to enable setting the time stamp (e.g. for tests)
+http::response_header<>
 http_injection_head( const http::request_header<>& rqh
                    , http::response_header<> rsh
                    , const std::string& injection_id
                    , std::chrono::seconds::rep injection_ts
                    , const ouinet::util::Ed25519PrivateKey&
                    , const std::string& key_id);
-
-inline
-http::response_header<>  // use this for the rest of cases
-http_injection_head( const http::request_header<>& rqh
-                   , http::response_header<> rsh
-                   , const std::string& injection_id
-                   , const ouinet::util::Ed25519PrivateKey& sk
-                   , const std::string& key_id)
-{
-    auto ts = std::chrono::seconds(std::time(nullptr)).count();
-    return http_injection_head(rqh, std::move(rsh), injection_id, ts, sk, key_id);
-}
 
 // Get an extended version of the given response trailer
 // with added headers completing the signature of the message.
@@ -140,6 +130,77 @@ std::string
 http_key_id_for_injection(const ouinet::util::Ed25519PublicKey&);
 
 // Flush a response from session `in` to stream `out`
+// while signing with the provided private key.
+template<class SinkStream>
+inline
+void
+session_flush_signed( Session& in, SinkStream& out
+                    , const http::request_header<>& rqh
+                    , const std::string& injection_id
+                    , std::chrono::seconds::rep injection_ts
+                    , const ouinet::util::Ed25519PrivateKey& sk
+                    , Cancel& cancel, asio::yield_context yield)
+{
+    auto httpsig_key_id = http_key_id_for_injection(sk.public_key());  // TODO: cache this
+
+    bool do_inject = false;
+    http::response_header<> outh;
+    auto hproc = [&] (auto inh, auto&, auto yield_) {
+        auto inh_orig = inh;
+        sys::error_code ec_;
+        inh = util::to_cache_response(move(inh), ec_);
+        if (ec_) return inh_orig;  // will not inject, just proxy
+
+        do_inject = true;
+        inh = cache::http_injection_head( rqh, move(inh)
+                                        , injection_id, injection_ts
+                                        , sk, httpsig_key_id);
+        // We will use the trailer to send the body digest and head signature.
+        assert(http::response<http::empty_body>(inh).chunked());
+
+        outh = inh;
+        return inh;
+    };
+
+    size_t body_length = 0;
+    util::SHA256 body_hash;
+    util::quantized_buffer<http_forward_block> qbuf;
+    ProcInFunc<asio::const_buffer> dproc = [&] (auto inbuf, auto&, auto) {
+        // Just count transferred data and feed the hash.
+        body_length += inbuf.size();
+        if (do_inject) body_hash.update(inbuf);
+        qbuf.put(inbuf);
+        ProcInFunc<asio::const_buffer>::result_type ret{
+            (inbuf.size() > 0) ? qbuf.get() : qbuf.get_rest(), {}
+        };  // send rest if no more input
+        return ret;  // pass data on, drop origin extensions
+    };
+
+    ProcTrailFunc tproc = [&] (auto intr, auto&, auto) {
+        if (do_inject) {
+            intr = util::to_cache_trailer(move(intr));
+            intr = cache::http_injection_trailer( outh, move(intr)
+                                                , body_length, body_hash.close()
+                                                , sk
+                                                , httpsig_key_id);
+        }
+        ProcTrailFunc::result_type ret{move(intr), {}};
+        return ret;  // pass trailer on, drop origin extensions
+    };
+
+    auto xproc = [] (auto, auto&, auto) {
+        // Origin chunk extensions are ignored and dropped
+        // since we have no way to sign them.
+    };
+
+    sys::error_code ec;
+    in.flush_response( out
+                     , std::move(hproc), std::move(dproc), std::move(tproc), std::move(xproc)
+                     , cancel, yield[ec]);
+    return or_throw(yield, ec);
+}
+
+// Flush a response from session `in` to stream `out`
 // while verifying signatures by the provided public key.
 //
 // Fail with error `boost::system::errc::no_message`
@@ -156,14 +217,6 @@ session_flush_verified( Session& in, SinkStream& out
                       , Cancel& cancel, asio::yield_context yield)
 {
     http::response_header<> head;
-    size_t body_length = 0;
-    util::SHA256 body_hash;
-    // If we process trailers, we may have a chance to
-    // detect and signal a body not matching its signed length or digest
-    // before completing its transfer,
-    // so that the receiving end can see that something bad is going on.
-    bool check_body_after = true;
-
     auto hproc = [&] (auto inh, auto&, auto y) {
         inh = cache::http_injection_verify(move(inh), pk);
         if (inh.cbegin() == inh.cend())
@@ -172,6 +225,8 @@ session_flush_verified( Session& in, SinkStream& out
         return inh;
     };
 
+    size_t body_length = 0;
+    util::SHA256 body_hash;
     ProcInFunc<asio::const_buffer> dproc = [&] (auto ind, auto&, auto) {
         body_length += ind.size();
         body_hash.update(ind);
@@ -179,6 +234,11 @@ session_flush_verified( Session& in, SinkStream& out
         return ret;  // pass data on, drop chunk extensions
     };
 
+    // If we process trailers, we may have a chance to
+    // detect and signal a body not matching its signed length or digest
+    // before completing its transfer,
+    // so that the receiving end can see that something bad is going on.
+    bool check_body_after = true;
     ProcTrailFunc tproc = [&] (auto intr, auto&, auto y) {
         ProcTrailFunc::result_type ret{std::move(intr), {}};  // pass trailer on, drop chunk extensions
 

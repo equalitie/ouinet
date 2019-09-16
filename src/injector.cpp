@@ -8,6 +8,8 @@
 #include <boost/filesystem.hpp>
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
+#include <chrono>
+#include <ctime>
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -32,6 +34,7 @@
 #include "force_exit_on_signal.h"
 #include "http_util.h"
 #include "origin_pools.h"
+#include "session.h"
 
 #include "ouiservice.h"
 #include "ouiservice/i2p.h"
@@ -49,11 +52,9 @@
 #include "util/timeout.h"
 #include "util/atomic_file.h"
 #include "util/crypto.h"
-#include "util/hash.h"
 #include "util/bytes.h"
 #include "util/file_io.h"
 #include "util/file_posix_with_offset.h"
-#include "util/quantized_buffer.h"
 
 #include "parse/number.h"
 #include "logger.h"
@@ -320,11 +321,10 @@ public:
                         , const InjectorConfig& config
                         , uuid_generator& genuuid)
         : insert_id(to_string(genuuid()))
+        , insert_ts(chrono::seconds(time(nullptr)).count())
         , ios(ios)
         , ssl_ctx(ssl_ctx)
         , config(config)
-        , httpsig_key_id(cache::http_key_id_for_injection(
-              config.cache_private_key().public_key()))
         , genuuid(genuuid)
         , origin_pools(origin_pools)
     {
@@ -335,8 +335,6 @@ public:
                      , Cancel& cancel
                      , Yield yield)
     {
-        using RespFromH = http::response<http::empty_body>;
-
         yield.log("Injection begin");
 
         sys::error_code ec;
@@ -347,64 +345,26 @@ public:
         auto orig_con = get_connection(rq, cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec);
 
-        bool do_inject = false;
-        http::response_header<> outh;
-        auto head_proc = [&] (auto inh, auto&, auto yield_) {
-            auto inh_orig = inh;
-            sys::error_code ec_;
-            inh = util::to_cache_response(move(inh), ec_);
-            if (ec) return inh_orig;  // will not inject, just proxy
+        // Send HTTP request to origin.
+        http_forward_request( orig_con, con, util::to_origin_request(rq)
+                            , cancel, yield[ec]);  // .tag("fetch_injector")
+        if (ec) yield.log("Failed to send request: ", ec.message());
+        return_or_throw_on_error(yield, cancel, ec);
 
-            do_inject = true;
-            inh = cache::http_injection_head( rq, move(inh), insert_id
-                                            , config.cache_private_key(), httpsig_key_id);
-            // We will use the trailer to send the body digest and head signature.
-            assert(RespFromH(inh).chunked());
-
-            outh = inh;
-            return inh;
-        };
-
-        size_t forwarded = 0;
-        util::SHA256 data_hash;
-        util::quantized_buffer<http_forward_block> qbuf;
-        ProcInFunc<asio::const_buffer> data_proc = [&] (auto inbuf, auto&, auto) {
-            // Just count transferred data and feed the hash.
-            forwarded += inbuf.size();
-            if (do_inject) data_hash.update(inbuf);
-            qbuf.put(inbuf);
-            ProcInFunc<asio::const_buffer>::result_type ret{
-                (inbuf.size() > 0) ? qbuf.get() : qbuf.get_rest(), {}
-            };  // send rest if no more input
-            return ret;  // pass data on, drop origin extensions
-        };
-
-        ProcTrailFunc trailer_proc = [&] (auto intr, auto&, auto) {
-            if (do_inject) {
-                intr = util::to_cache_trailer(move(intr));
-                intr = cache::http_injection_trailer( outh, move(intr)
-                                                    , forwarded, data_hash.close()
-                                                    , config.cache_private_key()
-                                                    , httpsig_key_id);
-            }
-            ProcTrailFunc::result_type ret{move(intr), {}};
-            return ret;  // pass trailer on, drop origin extensions
-        };
-
-        auto ckxt_proc = [] (auto, auto&, auto) {
-            // Origin chunk extensions are ignored and dropped
-            // since we have no way to sign them.
-        };
-
-        RespFromH res(http_forward( orig_con, con, util::to_origin_request(rq)
-                                  , head_proc, data_proc, trailer_proc, ckxt_proc
-                                  , cancel, yield[ec].tag("fetch_injector")));
+        Session orig_sess(move(orig_con));
+        cache::session_flush_signed( orig_sess, con
+                                   , rq, insert_id, insert_ts
+                                   , config.cache_private_key()
+                                   , cancel, yield[ec]);  // .tag("fetch_injector")
 
         if (ec) yield.log("Injection failed: ", ec.message());
         return_or_throw_on_error(yield, cancel, ec);
-        yield.log(do_inject ? "Injected data bytes: " : "Forwarded data bytes: ", forwarded);
+        yield.log("Injection end");  // TODO: report whether inject or just fwd
 
-        keep_connection(rq, res, move(orig_con));
+        auto rshp = orig_sess.response_header();
+        assert(rshp != nullptr);
+        auto rsh = http::response<http::empty_body>(*rshp);
+        keep_connection(rq, rsh, move(orig_sess));
     }
 
     bool fetch( GenericStream& con
@@ -437,7 +397,7 @@ public:
         return connection;
     }
 
-    template<class Response>
+    template<class Response, class Connection>
     bool keep_connection(const Request& rq, const Response& rs, Connection con) {
         if (!con.is_open()) return false;
 
@@ -451,10 +411,10 @@ public:
 
 private:
     std::string insert_id;
+    std::chrono::seconds::rep insert_ts;
     asio::io_service& ios;
     asio::ssl::context& ssl_ctx;
     const InjectorConfig& config;
-    string httpsig_key_id;
     uuid_generator& genuuid;
     OriginPools& origin_pools;
 };

@@ -8,7 +8,6 @@
 #include "util/signal.h"
 #include "util/timeout.h"
 #include "util/yield.h"
-#include "util/watch_dog.h"
 #include "util.h"
 #include "connect_to_host.h"
 #include "ssl/util.h"

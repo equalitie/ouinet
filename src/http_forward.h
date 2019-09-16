@@ -71,6 +71,38 @@ process_trailers( const http::response_header<>&, const ProcTrailFunc&
                 , Cancel&, Yield);
 }
 
+// Send the HTTP request `rq` over `in`,
+// trigger an error on timeout or cancellation,
+// closing both `in` and `out`.
+template<class StreamIn, class StreamOut, class Request>
+inline
+void
+http_forward_request( StreamIn& in
+                    , StreamOut& out
+                    , Request rq
+                    , Cancel& cancel
+                    , Yield yield)
+{
+    auto cancelled = cancel.connect([&] { in.close(); out.close(); });
+    bool timed_out = false;
+    sys::error_code ec;
+
+    WatchDog wdog( in.get_io_service(), default_timeout::http_forward()
+                 , [&] { timed_out = true; in.close(); out.close(); });
+    http::async_write(in, rq, yield[ec]);
+
+    // Ignore `end_of_stream` error, there may still be data in
+    // the receive buffer we can read.
+    if (ec == http::error::end_of_stream)
+        ec = sys::error_code();
+    if (timed_out)
+        ec = asio::error::timed_out;
+    if (cancelled)
+        ec = asio::error::operation_aborted;
+    if (ec)
+        return or_throw(yield, ec);
+}
+
 // Send the HTTP request `rq` over `in`, send the response head over `out`,
 // then forward the response body from `in` to `out`.
 //
@@ -102,28 +134,14 @@ http_forward( StreamIn& in
             , Cancel& cancel
             , Yield yield)
 {
-    auto cancelled = cancel.connect([&] { in.close(); out.close(); });
-    bool timed_out = false;
     sys::error_code ec;
 
     // Send HTTP request to input side
     // -------------------------------
-    {
-        WatchDog wdog( in.get_io_service(), default_timeout::http_forward()
-                     , [&] { timed_out = true; in.close(); out.close(); });
-        http::async_write(in, rq, yield[ec]);
-    }
-    // Ignore `end_of_stream` error, there may still be data in
-    // the receive buffer we can read.
-    if (ec == http::error::end_of_stream)
-        ec = sys::error_code();
-    if (timed_out)
-        ec = asio::error::timed_out;
-    if (cancelled)
-        ec = asio::error::operation_aborted;
+    http_forward_request(in, out, rq, cancel, yield[ec]);
     if (ec) {
         yield.log("Failed to send request: ", ec.message());
-        return or_throw<http::response_header<>>(yield, ec);
+        return or_throw(yield, ec, http::response_header<>{});
     }
 
     // Forward the response
