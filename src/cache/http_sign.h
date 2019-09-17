@@ -28,6 +28,16 @@ namespace ouinet { namespace http_ {
     // This allows signing the size of body data
     // without breaking on transfer encoding changes.
     static const std::string response_data_size_hdr = header_prefix + "Data-Size";
+
+    // This contains common parameters for block signatures.
+    static const std::string response_block_signatures_hdr = header_prefix + "BSigs";
+
+    // A default size for data blocks to be signed.
+    // Small enough to avoid nodes buffering too much data
+    // and not take too much time to download on slow connections,
+    // but big enough to completely cover most responses
+    // and thus avoid having too many signatures per response.
+    static const size_t response_data_block = 65536;  // TODO: sensible value
 }}
 
 namespace ouinet { namespace cache {
@@ -50,6 +60,7 @@ bool check_body(const http::response_header<>&, size_t, ouinet::util::SHA256&);
 //     X-Ouinet-Version: 0
 //     X-Ouinet-URI: https://example.com/foo
 //     X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
+//     X-Ouinet-BSigs: keyId="...",algorithm="hs2019",size=65536
 //     X-Ouinet-Sig0: keyId="...",algorithm="hs2019",created=1516048310,
 //       headers="(response-status) (created) ... x-ouinet-injection",
 //       signature="..."

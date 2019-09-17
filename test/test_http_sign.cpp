@@ -57,13 +57,15 @@ static const string rs_head_signed_s = (
     "X-Ouinet-Version: 0\r\n"
     "X-Ouinet-URI: https://example.com/foo\r\n"
     "X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310\r\n"
+    "X-Ouinet-BSigs: keyId=\"ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=\","
+    "algorithm=\"hs2019\",size=65536\r\n"
 
     "X-Ouinet-Sig0: keyId=\"ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=\","
     "algorithm=\"hs2019\",created=1516048310,"
     "headers=\"(response-status) (created) "
     "date server content-type content-disposition "
-    "x-ouinet-version x-ouinet-uri x-ouinet-injection\","
-    "signature=\"Aoh7kA8OEkiNIqJ6ewBoB7I8olM0T7JAd0wN1yEaQ6PmTuZAFv7C19NSURSmxiLS6q1Aw/o4wSVCYSgjhdlvDw==\"\r\n"
+    "x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-bsigs\","
+    "signature=\"tqF93Xjif/4bZ94XN2jzGeURJT8x0TznfKuZCeG4aE5pigZDaHWESKJhwhKevlDqgjNdI6XdWG4WcaLRWhXXCg==\"\r\n"
 
     "Transfer-Encoding: chunked\r\n"
     "Trailer: X-Ouinet-Data-Size, Digest, X-Ouinet-Sig1\r\n"
@@ -75,10 +77,10 @@ static const string rs_head_signed_s = (
     "algorithm=\"hs2019\",created=1516048311,"
     "headers=\"(response-status) (created) "
     "date server content-type content-disposition "
-    "x-ouinet-version x-ouinet-uri x-ouinet-injection "
+    "x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-bsigs "
     "x-ouinet-data-size "
     "digest\","
-    "signature=\"wpxnlch8wwAgEne8ilmG4HtgMwKjSm063IlF1/TS8FEqEBAES1LEcQmsSGHuPEmFdzJ4JRnERkHFO49gfQG7BQ==\"\r\n"
+    "signature=\"BvE15gJsMk+I3GamD4UEJP5YkPaEMGXd3tAsHcqHTEzdQ9JJTDFONhoXZyJpqFgD1UD6KbWvn8Lybc45e6OcAQ==\"\r\n"
     "\r\n"
 );
 

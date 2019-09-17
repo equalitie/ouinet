@@ -53,6 +53,11 @@ http_injection_head( const http::request_header<>& rqh
     rsh.set(response_uri_hdr, rqh.target());
     rsh.set( header_prefix + "Injection"
            , boost::format("id=%s,ts=%d") % injection_id % injection_ts);
+    static const auto fmt_ = "keyId=\"%s\""
+                             ",algorithm=\"" + sig_alg_hs2019 + "\""
+                             ",size=%d";
+    rsh.set( response_block_signatures_hdr
+           , boost::format(fmt_) % key_id % response_data_block);
 
     // Create a signature of the initial head.
     auto to_sign = without_framing(rsh);
