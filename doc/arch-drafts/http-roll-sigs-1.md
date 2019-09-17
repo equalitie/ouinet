@@ -27,12 +27,12 @@ When the injector gets an injection request from the client, it gets the respons
 
   - The request URI (so that the response stands on its own).
   - The identifier of the injection and its time stamp (to tell this exchange apart from others of the same URI).
-  - The key, algorithm and **data block length** used to sign partial data blocks.
+  - The key, algorithm and **data block size** used to sign partial data blocks.
   - A **partial signature** of the headers so far.
 
 This signature is provided so that the partial response (head an body) can still be useful if the connection is interrupted later on.
 
-The injector then sends data blocks of the maximum length specified above, each of them followed by a **data block signature** bound to this injection and its offset.  The client need not check the signatures but it can save them to provide them to other clients in case the connection to the injector is interrupted.
+The injector then sends data blocks of the maximum size specified above, each of them followed by a **data block signature** bound to this injection and its offset.  The client need not check the signatures but it can save them to provide them to other clients in case the connection to the injector is interrupted.
 
 When all data blocks have been sent to the client, the injector sends additional headers to build the **final response head** including:
 
@@ -41,7 +41,7 @@ When all data blocks have been sent to the client, the injector sends additional
 
 HTTP chunked transfer encoding is used to enable providing a first set of headers, then a signature (as a chunk extension) after each sent block, then a final set of headers as a trailer.
 
-Please note that neither the partial signature nor framing headers (`Transfer-Encoding:`, `Trailer:`, `Content-Length:`) are part of the final signature, so that the receiving client may serve to other clients the final signature in the initial headers instead of the partial one, or even serve the response with identity transfer encoding (without block signatures nor a trailer) and still enable full (but not partial) response verification. The purpose of the `X-Ouinet-Data-Size:` header is to allow verifying data length without forcing the presence or absence of `Content-Length:`, which would break chunked or identity transfer-encoded messages, respectively.
+Please note that neither the partial signature nor framing headers (`Transfer-Encoding:`, `Trailer:`, `Content-Length:`) are part of the final signature, so that the receiving client may serve to other clients the final signature in the initial headers instead of the partial one, or even serve the response with identity transfer encoding (without block signatures nor a trailer) and still enable full (but not partial) response verification. The purpose of the `X-Ouinet-Data-Size:` header is to allow verifying data size without forcing the presence or absence of `Content-Length:`, which would break chunked or identity transfer-encoded messages, respectively.
 
 [Signing HTTP Messages][] is used here as a way to sign HTTP headers because of its simplicity, although other schemes may be used instead.
 
@@ -58,7 +58,7 @@ Date: Mon, 15 Jan 2018 20:31:50 GMT
 Server: Apache
 Content-Type: text/html
 Content-Disposition: inline; filename="foo.html"
-X-Ouinet-BSigs: keyId="ed25519=????",algorithm="hs2019",length=1048576
+X-Ouinet-BSigs: keyId="ed25519=????",algorithm="hs2019",size=1048576
 X-Ouinet-Sig0: keyId="ed25519=????",algorithm="hs2019",created=1516048310,
   headers="(response-status) (created) x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-http-status date server content-type content-disposition x-ouinet-bsigs",
   signature="BASE64(...)"
@@ -83,7 +83,7 @@ The signature for a given block comes in a chunk extension in the chunk right af
 
 Each block signature covers the injection identifier and block offset besides its content.  The former avoids replay attacks where the attacker sends a correctly signed block from a different injection (for the same or a different URI).  The latter avoids the attacker from reordering correctly signed blocks for this injection.  However, this inlining of signatures also binds the stream representation of the body to this particular injection.  Storage that keeps signatures inline with block data should take this into account when trying to reuse body data.
 
-Common parameters to all block signatures are kept the same and factored out to `X-Ouinet-BSigs` for simplicity and bandwidth efficiency.  Even if each block length could be inferred from the presence of a chunk extension, having the signer commit to a fixed and explicit length up front (with the exception of the last block) helps the consumer of the signed response to easily validate chunk boundaries and discard responses with too big blocks.  In the example, chunks are equivalent to blocks; this is the simplest implementation but it is not compulsory: blocks could be splitted in several chunks if needed.  However, for the sake of simplicity, chunks should be aligned to block boundaries (i.e. blocks should consist of a natural number of chunks).
+Common parameters to all block signatures are kept the same and factored out to `X-Ouinet-BSigs` for simplicity and bandwidth efficiency.  Even if each block size could be inferred from the presence of a chunk extension, having the signer commit to a fixed and explicit size up front (with the exception of the last block) helps the consumer of the signed response to easily validate chunk boundaries and discard responses with too big blocks.  In the example, chunks are equivalent to blocks; this is the simplest implementation but it is not compulsory: blocks could be splitted in several chunks if needed.  However, for the sake of simplicity, chunks should be aligned to block boundaries (i.e. blocks should consist of a natural number of chunks).
 
 If the client sends an HTTP range request, the injector aligns it to block boundaries (this is acceptable according to [RFC7233#4.1][] — "a client cannot rely on receiving the same ranges that it requested").  The partial response head includes a ``Range:`` header, but it is not part of the partial nor final signatures (to allow later sharing of subranges, whose blocks can be validated independently anyway).  ``Digest:`` and ``X-Ouinet-Data-Size:`` may be missing in the final response head, if the injector did not have access to the whole body data.
 
@@ -93,7 +93,7 @@ Client-to-client transmission works in a similar way, with the difference that w
 
 ## Issues
 
-  - Choose an adequate data block length (can use different ones according to ``Content-Length:`` from the origin).
+  - Choose an adequate data block size (can use different ones according to ``Content-Length:`` from the origin).
   - This may only be usable for single ranges (i.e. no ``multipart/byteranges`` body).
   - Block hashes are outside of the signed HTTP head.  Inlining them in the final head may require long Base64-encoded headers for long files.
-  - While several signers are supported via different `keyId`s in `X-Ouinet-Sig<N>:` headers, only one signer can provide a single signature for data blocks.  Thi is to avoid mismatching block lengths and having to link each block signature to a key.  However, other signers may still trust those signatures by covering the `X-Ouinet-BSigs:` header (which includes the public key for validation) in their signature.
+  - While several signers are supported via different `keyId`s in `X-Ouinet-Sig<N>:` headers, only one signer can provide a single signature for data blocks.  Thi is to avoid mismatching block sizes and having to link each block signature to a key.  However, other signers may still trust those signatures by covering the `X-Ouinet-BSigs:` header (which includes the public key for validation) in their signature.
