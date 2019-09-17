@@ -40,19 +40,15 @@ public:
 
     asio::io_service& get_io_service();
 
-    // Set to true to have the connect function wait until at least one
-    // BEP5 DHT resolution has taken place.
-    void wait_for_bep5_resolve(bool value);
-
 private:
     void add_injector_endpoints(std::set<asio::ip::udp::endpoint>);
 
-    Clients::iterator choose_client();
-    unsigned lowest_fail_count() const;
     std::unique_ptr<Client> build_client(const asio::ip::udp::endpoint&);
 
     boost::optional<asio_utp::udp_multiplexer>
     choose_multiplexer_for(const asio::ip::udp::endpoint&);
+
+    void maybe_wait_for_bep5_resolve(Cancel, asio::yield_context);
 
 private:
     std::shared_ptr<bittorrent::MainlineDht> _dht;

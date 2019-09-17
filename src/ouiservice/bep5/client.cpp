@@ -190,63 +190,10 @@ void Bep5Client::add_injector_endpoints(set<udp::endpoint> eps)
     }
 }
 
-Bep5Client::Clients::iterator Bep5Client::choose_client()
-{
-    using Dist = std::uniform_int_distribution<unsigned>;
-
-    if (_clients.empty()) return _clients.end();
-
-    unsigned sum = 0;
-    unsigned max = 0;
-
-    std::vector<Clients::iterator> zero_fail_clients;
-
-    for (auto i = _clients.begin(); i != _clients.end(); ++i) {
-        if (i->second->fail_count == 0) {
-            zero_fail_clients.push_back(i);
-        }
-    }
-
-    if (zero_fail_clients.size()) {
-        Dist dist(0, zero_fail_clients.size() - 1);
-        return zero_fail_clients[dist(_random_gen)];
-    }
-
-    for (auto& inj : _clients) {
-        max = std::max(max, inj.second->fail_count);
-    }
-
-    for (auto& inj : _clients) {
-        unsigned n = (max - inj.second->fail_count) + 1;
-        sum += n;
-    }
-
-    Dist dist(0, sum - 1);
-
-    unsigned r = dist(_random_gen);
-
-    for (auto i = _clients.begin(); i != _clients.end(); ++i) {
-        unsigned n = (max - i->second->fail_count) + 1;
-        if (n > r) return i;
-        r -= n;
-    }
-
-    assert(0);
-    return _clients.end();
-}
-
-unsigned Bep5Client::lowest_fail_count() const
-{
-    unsigned ret = std::numeric_limits<unsigned>::max();
-    for (auto& ep : _clients) ret = std::min(ret, ep.second->fail_count);
-    return ret;
-}
-
-GenericStream Bep5Client::connect(asio::yield_context yield, Cancel& cancel_)
-{
-    Cancel cancel(cancel_);
-    auto cancel_con = _cancel.connect([&] { cancel(); });
-
+void Bep5Client::maybe_wait_for_bep5_resolve(
+        Cancel cancel,
+        asio::yield_context yield
+) {
     if (_wait_for_bep5_resolve && _bep5_loop->get_peers_call_count == 0) {
         WaitCondition wc(_dht->get_io_service());
 
@@ -256,42 +203,54 @@ GenericStream Bep5Client::connect(asio::yield_context yield, Cancel& cancel_)
         wc.wait(cancel, yield[ec]);
 
         if (cancel)
-            return or_throw<GenericStream>(yield, asio::error::operation_aborted);
+            return or_throw(yield, asio::error::operation_aborted);
+    }
+}
+
+GenericStream Bep5Client::connect(asio::yield_context yield, Cancel& cancel_)
+{
+    Cancel cancel(cancel_);
+    auto cancel_con = _cancel.connect([&] { cancel(); });
+
+    sys::error_code ec;
+
+    maybe_wait_for_bep5_resolve(cancel, yield[ec]);
+
+    if (cancel)
+        return or_throw<GenericStream>(yield, asio::error::operation_aborted);
+
+    assert(!ec);
+
+    if (ec) return or_throw<GenericStream>(yield, ec);
+
+    WaitCondition wc(get_io_service());
+
+    Cancel spawn_cancel(cancel); // Cancels all spawned coroutines
+
+    GenericStream ret_con;
+
+    for (auto& cp : _clients) {
+        auto inj = cp.second.get();
+
+        asio::spawn(get_io_service(),
+        [ =
+        , &spawn_cancel
+        , &ret_con
+        , lock = wc.lock()
+        ] (asio::yield_context y) mutable {
+            sys::error_code ec;
+            auto con = inj->client->connect(y[ec], spawn_cancel);
+            assert(!spawn_cancel || ec == asio::error::operation_aborted);
+            if (spawn_cancel || ec) return;
+            ret_con = move(con);
+            spawn_cancel();
+        });
     }
 
-    while (lowest_fail_count() < 5) {
-        auto i = choose_client();
+    wc.wait(cancel, yield[ec]);
+    return_or_throw_on_error(yield, cancel, ec, GenericStream{});
 
-        if (_log_debug) LOG_DEBUG("Connecting...");
-
-        if (i == _clients.end()) {
-            if (_log_debug) LOG_DEBUG("Connect failed: no remote endpoints");
-            return or_throw<GenericStream>(yield, asio::error::host_unreachable);
-        }
-
-        auto p = i->second.get();
-
-        auto ep = i->first;
-
-        if (_log_debug) LOG_DEBUG("Connecting to: ", ep);
-
-        sys::error_code ec;
-        auto con = p->client->connect(yield[ec], cancel);
-
-        if (_log_debug) LOG_DEBUG("Connecting to: ", ep, " done: ", ec.message());
-
-        if (cancel)
-            return or_throw<GenericStream>(yield, asio::error::operation_aborted);
-
-        if (!ec) {
-            p->fail_count = 0;
-            return con;
-        }
-
-        p->fail_count++;
-    } 
-
-    return or_throw<GenericStream>(yield, asio::error::host_unreachable);
+    return ret_con;
 }
 
 Bep5Client::~Bep5Client()
