@@ -143,8 +143,8 @@ Session::flush_response(SinkStream& sink,
     auto xproc = [&chunk_exts] (auto exts, auto&, auto) {
         chunk_exts = std::move(exts);  // save exts for next chunk
     };
-    ProcInFunc<asio::const_buffer> dproc = [&chunk_exts] (auto ind, auto&, auto) {
-        ProcInFunc<asio::const_buffer>::result_type ret;
+    ProcDataFunc<asio::const_buffer> dproc = [&chunk_exts] (auto ind, auto&, auto) {
+        ProcDataFunc<asio::const_buffer>::result_type ret;
         if (asio::buffer_size(ind) > 0) {
             ret = {std::move(ind), std::move(chunk_exts)};
             chunk_exts = {};  // only send extensions in first output chunk

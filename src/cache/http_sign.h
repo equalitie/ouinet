@@ -189,12 +189,12 @@ session_flush_signed( Session& in, SinkStream& out
     // The big buffer may cause issues with coroutine stack management,
     // so allocate it in the heap.
     auto qbuf = std::make_unique<util::quantized_buffer<http_::response_data_block>>();
-    ProcInFunc<asio::const_buffer> dproc = [&] (auto inbuf, auto&, auto) {
+    ProcDataFunc<asio::const_buffer> dproc = [&] (auto inbuf, auto&, auto) {
         // Just count transferred data and feed the hash.
         body_length += inbuf.size();
         if (do_inject) body_hash.update(inbuf);
         qbuf->put(inbuf);
-        ProcInFunc<asio::const_buffer>::result_type ret{
+        ProcDataFunc<asio::const_buffer>::result_type ret{
             (inbuf.size() > 0) ? qbuf->get() : qbuf->get_rest(), {}
         };  // send rest if no more input
         if (do_inject && ret.first.size() > 0) {  // if injecting and sending data
@@ -261,10 +261,10 @@ session_flush_verified( Session& in, SinkStream& out
 
     size_t body_length = 0;
     util::SHA256 body_hash;
-    ProcInFunc<asio::const_buffer> dproc = [&] (auto ind, auto&, auto) {
+    ProcDataFunc<asio::const_buffer> dproc = [&] (auto ind, auto&, auto) {
         body_length += ind.size();
         body_hash.update(ind);
-        ProcInFunc<asio::const_buffer>::result_type ret{std::move(ind), {}};
+        ProcDataFunc<asio::const_buffer>::result_type ret{std::move(ind), {}};
         return ret;  // pass data on, drop chunk extensions
     };
 

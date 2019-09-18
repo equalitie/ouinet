@@ -48,7 +48,7 @@ using ProcChkExtFunc = std::function<void(std::string, Cancel&, Yield)>;
 // it is attached as chunk extensions to the chunk to be sent
 // (only if chunked transfer encoding is enabled at the output).
 template<class ConstBufferSequence>
-using ProcInFunc = std::function<
+using ProcDataFunc = std::function<
     std::pair<ConstBufferSequence, std::string>(asio::const_buffer inbuf, Cancel&, Yield)>;
 
 // Get copy of response trailers from input, return response trailers for output.
@@ -129,7 +129,7 @@ http_forward( StreamIn& in
             , Request rq
             , ProcHeadFunc hproc
             , ProcChkExtFunc xproc
-            , ProcInFunc<ConstBufferSequence> dproc
+            , ProcDataFunc<ConstBufferSequence> dproc
             , ProcTrailFunc tproc
             , Cancel& cancel
             , Yield yield)
@@ -160,7 +160,7 @@ http_forward( StreamIn& in
             , StreamOut& out
             , ProcHeadFunc hproc
             , ProcChkExtFunc xproc
-            , ProcInFunc<ConstBufferSequence> dproc
+            , ProcDataFunc<ConstBufferSequence> dproc
             , ProcTrailFunc tproc
             , Cancel& cancel
             , Yield yield)
@@ -188,7 +188,7 @@ http_forward( StreamIn& in
             , ResponseParser& rpp
             , ProcHeadFunc hproc
             , ProcChkExtFunc xproc
-            , ProcInFunc<ConstBufferSequence> dproc
+            , ProcDataFunc<ConstBufferSequence> dproc
             , ProcTrailFunc tproc
             , Cancel& cancel
             , Yield yield_)

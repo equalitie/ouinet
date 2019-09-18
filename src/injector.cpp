@@ -530,9 +530,9 @@ void serve( InjectorConfig& config
                 auto xproc = [&] (auto exts, auto&, auto) {
                     chunk_exts = move(exts);  // save exts for next chunk
                 };
-                ProcInFunc<asio::const_buffer> dproc = [&] (auto ind, auto&, auto) {
+                ProcDataFunc<asio::const_buffer> dproc = [&] (auto ind, auto&, auto) {
                     forwarded += ind.size();
-                    ProcInFunc<asio::const_buffer>::result_type ret;
+                    ProcDataFunc<asio::const_buffer>::result_type ret;
                     if (asio::buffer_size(ind) > 0) {
                         ret = {move(ind), move(chunk_exts)};
                         chunk_exts = {};  // only send extensions in first output chunk
