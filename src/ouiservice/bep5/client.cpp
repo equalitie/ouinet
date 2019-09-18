@@ -215,13 +215,7 @@ GenericStream Bep5Client::connect(asio::yield_context yield, Cancel& cancel_)
     sys::error_code ec;
 
     maybe_wait_for_bep5_resolve(cancel, yield[ec]);
-
-    if (cancel)
-        return or_throw<GenericStream>(yield, asio::error::operation_aborted);
-
-    assert(!ec);
-
-    if (ec) return or_throw<GenericStream>(yield, ec);
+    return_or_throw_on_error(yield, cancel, ec, GenericStream{});
 
     WaitCondition wc(get_io_service());
 

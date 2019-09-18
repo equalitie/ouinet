@@ -6,7 +6,8 @@
 
 namespace ouinet { namespace bittorrent {
 
-struct DebugCtx {
+class DebugCtx {
+public:
     using Clock = std::chrono::steady_clock;
 
     size_t id;
