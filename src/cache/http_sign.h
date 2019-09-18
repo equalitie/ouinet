@@ -158,7 +158,7 @@ session_flush_signed( Session& in, SinkStream& out
 
     bool do_inject = false;
     http::response_header<> outh;
-    auto hproc = [&] (auto inh, auto&, auto yield_) {
+    auto hproc = [&] (auto inh, auto&, auto) {
         auto inh_orig = inh;
         sys::error_code ec_;
         inh = util::to_cache_response(move(inh), ec_);
