@@ -34,6 +34,9 @@ static const size_t http_forward_block = 2048;
 using ProcHeadFunc = std::function<
     http::response_header<>(http::response_header<>, Cancel&, Yield)>;
 
+// Notify about the reception of chunk extensions.
+using ProcChkExtFunc = std::function<void(std::string, Cancel&, Yield)>;
+
 // Get a buffer of data to be sent after processing a buffer of received data.
 // The returned data must be alive while `http_forward` runs,
 // The returned data will be wrapped in a single chunk
@@ -55,9 +58,6 @@ using ProcInFunc = std::function<
 // it is attached as chunk extensions to the last chunk to be sent.
 using ProcTrailFunc = std::function<
     std::pair<http::fields, std::string>(http::fields, Cancel&, Yield)>;
-
-// Notify about the reception of chunk extensions.
-using ProcChkExtFunc = std::function<void(std::string, Cancel&, Yield)>;
 
 namespace detail {
 static const auto max_size_t = (std::numeric_limits<std::size_t>::max)();
@@ -110,6 +110,9 @@ http_forward_request( StreamIn& in
 // before sending it to `out`.
 // It can be used to set output transfer encoding to chunked.
 //
+// The `xproc` callback is called whenever a non-empty chunk extension
+// is received.
+//
 // The `dproc` callback can be used to manipulate blocks of input
 // (of at most `http_forward_block` size)
 // before sending the resulting data to `out`.
@@ -118,9 +121,6 @@ http_forward_request( StreamIn& in
 //
 // The `tproc` callback can be used to manipulate trailers
 // before sending them to `out`.
-//
-// The `xproc` callback is called whenever a non-empty chunk extension
-// is received.
 template<class StreamIn, class StreamOut, class Request, class ConstBufferSequence>
 inline
 http::response_header<>
@@ -128,9 +128,9 @@ http_forward( StreamIn& in
             , StreamOut& out
             , Request rq
             , ProcHeadFunc hproc
+            , ProcChkExtFunc xproc
             , ProcInFunc<ConstBufferSequence> dproc
             , ProcTrailFunc tproc
-            , ProcChkExtFunc xproc
             , Cancel& cancel
             , Yield yield)
 {
@@ -147,8 +147,8 @@ http_forward( StreamIn& in
     // Forward the response
     // --------------------
     return http_forward( in, out
-                       , std::move(hproc), std::move(dproc)
-                       , std::move(tproc), std::move(xproc)
+                       , std::move(hproc), std::move(xproc)
+                       , std::move(dproc), std::move(tproc)
                        , cancel, yield);
 }
 
@@ -159,9 +159,9 @@ http::response_header<>
 http_forward( StreamIn& in
             , StreamOut& out
             , ProcHeadFunc hproc
+            , ProcChkExtFunc xproc
             , ProcInFunc<ConstBufferSequence> dproc
             , ProcTrailFunc tproc
-            , ProcChkExtFunc xproc
             , Cancel& cancel
             , Yield yield)
 {
@@ -170,8 +170,8 @@ http_forward( StreamIn& in
     rpp.body_limit(detail::max_size_t);  // i.e. unlimited; callbacks can restrict this
 
     return http_forward( in, out, inbuf, rpp
-                       , std::move(hproc), std::move(dproc)
-                       , std::move(tproc), std::move(xproc)
+                       , std::move(hproc), std::move(xproc)
+                       , std::move(dproc), std::move(tproc)
                        , cancel, yield);
 }
 
@@ -187,9 +187,9 @@ http_forward( StreamIn& in
             , InputBuffer& inbuf
             , ResponseParser& rpp
             , ProcHeadFunc hproc
+            , ProcChkExtFunc xproc
             , ProcInFunc<ConstBufferSequence> dproc
             , ProcTrailFunc tproc
-            , ProcChkExtFunc xproc
             , Cancel& cancel
             , Yield yield_)
 {

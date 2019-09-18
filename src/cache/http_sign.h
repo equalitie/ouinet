@@ -175,6 +175,11 @@ session_flush_signed( Session& in, SinkStream& out
         return inh;
     };
 
+    auto xproc = [] (auto, auto&, auto) {
+        // Origin chunk extensions are ignored and dropped
+        // since we have no way to sign them.
+    };
+
     size_t body_length = 0;
     size_t block_offset = 0;
     util::SHA256 body_hash;
@@ -217,14 +222,9 @@ session_flush_signed( Session& in, SinkStream& out
         return ret;  // pass trailer on, drop origin extensions
     };
 
-    auto xproc = [] (auto, auto&, auto) {
-        // Origin chunk extensions are ignored and dropped
-        // since we have no way to sign them.
-    };
-
     sys::error_code ec;
     in.flush_response( out
-                     , std::move(hproc), std::move(dproc), std::move(tproc), std::move(xproc)
+                     , std::move(hproc), std::move(xproc), std::move(dproc), std::move(tproc)
                      , cancel, yield[ec]);
     return or_throw(yield, ec);
 }
@@ -252,6 +252,11 @@ session_flush_verified( Session& in, SinkStream& out
             return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), inh);
         head = inh;
         return inh;
+    };
+
+    auto xproc = [] (auto, auto&, auto) {
+        // Chunk extensions are not forwarded
+        // since we have no way to verify them.
     };
 
     size_t body_length = 0;
@@ -295,14 +300,9 @@ session_flush_verified( Session& in, SinkStream& out
         return ret;
     };
 
-    auto xproc = [] (auto, auto&, auto) {
-        // Chunk extensions are not forwarded
-        // since we have no way to verify them.
-    };
-
     sys::error_code ec;
     in.flush_response( out
-                     , std::move(hproc), std::move(dproc), std::move(tproc), std::move(xproc)
+                     , std::move(hproc), std::move(xproc), std::move(dproc), std::move(tproc)
                      , cancel, yield[ec]);
     if (!ec && check_body_after)
         if (!http_sign_detail::check_body(head, body_length, body_hash))
