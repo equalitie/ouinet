@@ -76,7 +76,14 @@ void ConditionVariable::wait(Cancel& cancel, boost::asio::yield_context yield)
     entry.handler = std::move(init.completion_handler);
     _on_notify.push_back(entry);
 
-    auto slot = cancel.connect([&] { notify(asio::error::operation_aborted); });
+    auto slot = cancel.connect([&] {
+        assert(entry.is_linked());
+        if (entry.is_linked()) entry.unlink();
+
+        _ios.post([h = std::move(entry.handler)] () mutable {
+            h(asio::error::operation_aborted);
+        });
+    });
 
     return init.result.get();
 }
