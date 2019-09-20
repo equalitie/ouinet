@@ -294,6 +294,8 @@ struct Client::Impl {
                 assert(!cancel || ec == err::operation_aborted);
                 assert(ec || hdr);
 
+                if (cancel) return or_throw<Session>(yield, err::operation_aborted);
+
                 if (ec || hdr->result() == http::status::not_found) {
                     continue;
                 }
