@@ -51,6 +51,12 @@ struct Bep5Client::Bep5Loop
     void loop(Cancel& cancel, asio::yield_context yield) {
         auto& ios = owner->get_io_service();
 
+        {
+            sys::error_code ec;
+            dht->wait_all_ready(cancel, yield[ec]);
+            return_or_throw_on_error(yield, cancel, ec);
+        }
+
         while (!cancel) {
             sys::error_code ec;
 
@@ -61,10 +67,12 @@ struct Bep5Client::Bep5Loop
             auto endpoints = dht->tracker_get_peers(infohash, cancel, yield[ec]);
 
             assert(!cancel || ec == asio::error::operation_aborted);
+
             if (cancel) break;
 
             get_peers_call_count++;
             wait_condition_locks.clear();
+
             if (ec) {
                 async_sleep(ios, 1s, cancel, yield);
                 continue;

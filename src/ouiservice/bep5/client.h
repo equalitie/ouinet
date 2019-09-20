@@ -62,7 +62,7 @@ private:
     Clients _clients;
 
     bool _log_debug = false;
-    bool _wait_for_bep5_resolve = false;
+    bool _wait_for_bep5_resolve = true;
 };
 
 }} // namespaces
