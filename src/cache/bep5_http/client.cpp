@@ -248,6 +248,9 @@ struct Client::Impl {
                     yield.log("Bep5Http: DHT BEP5 lookup result ec:", ec.message(),
                             " eps:", eps);
                 }
+
+                assert(ec != asio::error::operation_aborted || cancel);
+
                 if (tried) {
                     eps.erase(*tried);
                     if (log_debug()) {

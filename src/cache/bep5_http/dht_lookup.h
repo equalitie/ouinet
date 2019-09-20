@@ -82,6 +82,9 @@ public:
 
         return_or_throw_on_error(y, c, ec, Ret{});
 
+        // (ec == operation_aborted) implies (c == true)
+        assert(last_result.ec != asio::error::operation_aborted || c);
+
         return or_throw(y, last_result.ec, last_result.value);
     }
 
