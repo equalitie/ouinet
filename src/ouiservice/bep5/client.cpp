@@ -244,7 +244,11 @@ GenericStream Bep5Client::connect(asio::yield_context yield, Cancel& cancel_)
     wc.wait(cancel, yield[ec]);
     return_or_throw_on_error(yield, cancel, ec, GenericStream{});
 
-    return ret_con;
+    if (!ret_con.has_implementation()) {
+        ec = asio::error::network_unreachable;
+    }
+
+    return or_throw(yield, ec, move(ret_con));
 }
 
 Bep5Client::~Bep5Client()
