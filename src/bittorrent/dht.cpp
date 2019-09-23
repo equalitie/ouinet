@@ -1523,7 +1523,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
         auto rng = std::default_random_engine(r());
         std::shuffle(bootstraps.begin(), bootstraps.end(), rng);
 
-        do {
+        while (true) {
             for (const auto bs : bootstraps) {
                 ec = sys::error_code();
 
@@ -1534,10 +1534,12 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
 
                 if (!ec) { done = true; break; }
             }
+
+            if (done) break;
+
             if (!async_sleep(_ios, std::chrono::seconds(10), cancel, yield))
                 return or_throw(yield, asio::error::operation_aborted);
         }
-        while (!done);
     }
 
     _node_id = NodeID::generate(my_endpoint.address());
