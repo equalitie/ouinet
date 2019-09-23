@@ -515,13 +515,30 @@ Session Client::State::fetch_fresh_through_simple_proxy
     // Connect to the injector.
     ConnectionPool<std::string>::Connection con;
     if (_injector_connections.empty()) {
+        if (log_transactions()) {
+            yield.log("Connecting to the injector");
+        }
+
         auto c = _injector->connect(yield[ec].tag("connect_to_injector2"), cancel);
 
-        if (ec) return or_throw<Session>(yield, ec);
+        assert(!cancel || ec == asio::error::operation_aborted);
+
+        if (ec) {
+            if (log_transactions()) {
+                yield.log("Failed to connect to injector ec:", ec.message());
+            }
+            return or_throw<Session>(yield, ec);
+        }
+
+        assert(c.connection.has_implementation());
 
         con = _injector_connections.wrap(std::move(c.connection));
         *con = c.remote_endpoint;
     } else {
+        if (log_transactions()) {
+            yield.log("Reusing existing injector connection");
+        }
+
         con = _injector_connections.pop_front();
     }
 
@@ -539,23 +556,40 @@ Session Client::State::fetch_fresh_through_simple_proxy
         request.keep_alive(keepalive);
     }
 
+    if (log_transactions()) {
+        yield.log("Sending a request to the injector");
+    }
     // Send request
     http::async_write(con, request, yield[ec].tag("inj-request"));
 
     if (!ec && cancel_slot) {
         ec = asio::error::operation_aborted;
     }
+
+    if (ec && log_transactions()) {
+        yield.log("Failed to send request to the injector");
+    }
+
     if (ec) return or_throw<Session>(yield, ec);
 
     // Receive response
     Session session(move(con));
     cancel_slot = cancel.connect([&] { session.close(); });
 
+    if (log_transactions()) {
+        yield.log("Reading response");
+    }
+
     auto hdr_p = session.read_response_header(cancel, yield[ec]);
 
     assert(!cancel || cancel_slot);
     assert(!cancel_slot || cancel);
     if (cancel_slot) ec = asio::error::operation_aborted;
+
+    if (log_transactions()) {
+        yield.log("End reading response. ec:", ec.message());
+    }
+
     if (ec) return or_throw(yield, ec, std::move(session));
 
     // Store keep-alive connections in connection pool
