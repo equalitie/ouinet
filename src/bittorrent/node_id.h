@@ -39,11 +39,10 @@ struct NodeID {
 
     std::string to_hex() const { return util::bytes::to_hex(buffer); }
 
-    static NodeID from_hex(boost::string_view hex) {
+    static boost::optional<NodeID> from_hex(boost::string_view hex) {
         auto os = util::bytes::from_hex(hex);
-        assert(os);
-        if (!os) return zero();
-        return NodeID{util::bytes::to_array<uint8_t, size>(*os)};
+        if (!os) return boost::none;
+        return NodeID{ util::bytes::to_array<uint8_t, size>(*os) };
     }
 
     std::string to_printable() const { return util::bytes::to_printable(buffer); }

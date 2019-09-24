@@ -141,7 +141,7 @@ int main(int argc, const char** argv)
 
             if (args.size() == 5) {
                 udp::endpoint peer_ep = parse_endpoint(args[3]);
-                NodeID peer_id = NodeID::from_hex(args[4]);
+                NodeID peer_id = *NodeID::from_hex(args[4]);
                 nc = NodeContact{peer_id, peer_ep};
             }
             else {
@@ -163,7 +163,7 @@ int main(int argc, const char** argv)
                 return;
             }
 
-            NodeID infohash = NodeID::from_hex(args[3]);
+            NodeID infohash = *NodeID::from_hex(args[3]);
 
             auto peers = [&] {
                 Progress p(ios, "Announcing");
@@ -182,7 +182,7 @@ int main(int argc, const char** argv)
                 return;
             }
 
-            auto infohash = NodeID::from_hex(args[3]);
+            auto infohash = *NodeID::from_hex(args[3]);
 
             auto peers = [&] {
                 Progress p(ios, "Getting peers");
