@@ -187,12 +187,6 @@ static bool read_nodes( bool is_v4
     return true;
 }
 
-std::string dht::NodeContact::to_string() const
-{
-    return id.to_hex() + " at " + endpoint.address().to_string() + ":" + std::to_string(endpoint.port());
-}
-
-
 dht::DhtNode::DhtNode(asio::io_service& ios):
     _ios(ios),
     _ready(false),

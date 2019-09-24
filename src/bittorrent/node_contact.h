@@ -9,8 +9,6 @@ struct NodeContact {
     NodeID id;
     asio::ip::udp::endpoint endpoint;
 
-    std::string to_string() const;
-
     bool operator==(const NodeContact& other) const {
         return id == other.id && endpoint == other.endpoint;
     }
