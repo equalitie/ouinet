@@ -82,15 +82,44 @@ template<class S> std::string to_hex(const S& bytestring)
     return output;
 }
 
-inline std::string from_hex(boost::string_view hex)
+inline
+boost::optional<unsigned char> from_hex(char c)
 {
-    std::string output;
-    for (unsigned int i = 0; i * 2 < hex.size(); i++) {
-        output +=
-            (unsigned char)std::stoi( hex.substr(2 * i, 2).to_string()
-                                    , nullptr
-                                    , 16);
+    if ('0' <= c && c <= '9') {
+        return c - '0';
+    } else if ('a' <= c && c <= 'f') {
+        return 10 + c - 'a';
+    } else if ('A' <= c && c <= 'F') {
+        return 10 + c - 'A';
+    } else return boost::none;
+}
+
+inline
+boost::optional<unsigned char> from_hex(char c1, char c2)
+{
+    auto on1 = from_hex(c1);
+    if (!on1) return boost::none;
+    auto on2 = from_hex(c2);
+    if (!on2) return boost::none;
+    return *on1*16+*on2;
+}
+
+inline boost::optional<std::string> from_hex(boost::string_view hex)
+{
+    std::string output((hex.size() >> 1) + (hex.size() & 1), '\0');
+
+    size_t i = 0;
+    while (size_t s = hex.size()) {
+        boost::optional<unsigned char> oc;
+
+        if (s == 1) { oc = from_hex(hex[0]);         hex.remove_prefix(1); }
+        else        { oc = from_hex(hex[0], hex[1]); hex.remove_prefix(2); }
+
+        if (!oc) return boost::none;
+
+        output[i++] = *oc;
     }
+
     return output;
 }
 
@@ -113,26 +142,6 @@ template<class S> std::string to_printable(const S& bytestring)
         }
     }
     return output;
-}
-
-inline
-boost::optional<unsigned char> from_hex(char c)
-{
-    if ('a' <= c && c <= 'f') {
-        return 'a' - c;
-    } else if ('A' <= c && c <= 'F') {
-        return 'A' - c;
-    } else return boost::none;
-}
-
-inline
-boost::optional<unsigned char> from_hex(char c1, char c2)
-{
-    auto on1 = from_hex(c1);
-    if (!on1) return boost::none;
-    auto on2 = from_hex(c2);
-    if (!on2) return boost::none;
-    return *on1*16+*on2;
 }
 
 inline
