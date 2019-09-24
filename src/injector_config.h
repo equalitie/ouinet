@@ -4,6 +4,7 @@
 
 #include "logger.h"
 #include "util/crypto.h"
+#include "parse/endpoint.h"
 
 namespace ouinet {
 
@@ -239,41 +240,49 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
     }
 
     if (vm.count("listen-on-tcp")) {
-        _tcp_endpoint = util::parse_tcp_endpoint(vm["listen-on-tcp"].as<string>());
+        auto opt_tcp_endpoint = parse::endpoint<asio::ip::tcp>(vm["listen-on-tcp"].as<string>());
+        if (!opt_tcp_endpoint) {
+            throw std::runtime_error("Failed to parse listen-on-tcp argument");
+        }
+        _tcp_endpoint = *opt_tcp_endpoint;
     }
 
     if (vm.count("listen-on-tcp-tls")) {
-        _tcp_tls_endpoint = util::parse_tcp_endpoint(vm["listen-on-tcp-tls"].as<string>());
+        auto opt_tcp_tls_endpoint = parse::endpoint<asio::ip::tcp>(vm["listen-on-tcp-tls"].as<string>());
+        if (!opt_tcp_tls_endpoint) {
+            throw std::runtime_error("Failed to parse listen-on-tcp-tls argument");
+        }
+        _tcp_tls_endpoint = *opt_tcp_tls_endpoint;
     }
 
     if (vm.count("listen-on-utp")) {
         sys::error_code ec;
-        auto ep = util::parse_endpoint<asio::ip::udp>(vm["listen-on-utp"].as<string>(), ec);
+        auto ep = parse::endpoint<asio::ip::udp>(vm["listen-on-utp"].as<string>(), ec);
         if (ec) throw std::runtime_error("Failed to parse utp endpoint");
         _utp_endpoint = ep;
     }
 
     if (vm.count("listen-on-utp-tls")) {
         sys::error_code ec;
-        auto ep = util::parse_endpoint<asio::ip::udp>(vm["listen-on-utp-tls"].as<string>(), ec);
+        auto ep = parse::endpoint<asio::ip::udp>(vm["listen-on-utp-tls"].as<string>(), ec);
         if (ec) throw std::runtime_error("Failed to parse utp endpoint");
         _utp_tls_endpoint = ep;
     }
 
     if (vm.count("listen-on-lampshade")) {
-        _lampshade_endpoint = util::parse_tcp_endpoint(vm["listen-on-lampshade"].as<string>());
+        _lampshade_endpoint = *parse::endpoint<asio::ip::tcp>(vm["listen-on-lampshade"].as<string>());
     }
 
     if (vm.count("listen-on-obfs2")) {
-        _obfs2_endpoint = util::parse_tcp_endpoint(vm["listen-on-obfs2"].as<string>());
+        _obfs2_endpoint = *parse::endpoint<asio::ip::tcp>(vm["listen-on-obfs2"].as<string>());
     }
 
     if (vm.count("listen-on-obfs3")) {
-        _obfs3_endpoint = util::parse_tcp_endpoint(vm["listen-on-obfs3"].as<string>());
+        _obfs3_endpoint = *parse::endpoint<asio::ip::tcp>(vm["listen-on-obfs3"].as<string>());
     }
 
     if (vm.count("listen-on-obfs4")) {
-        _obfs4_endpoint = util::parse_tcp_endpoint(vm["listen-on-obfs4"].as<string>());
+        _obfs4_endpoint = *parse::endpoint<asio::ip::tcp>(vm["listen-on-obfs4"].as<string>());
     }
 
     if (vm.count("announce-in-bep5-swarm")) {

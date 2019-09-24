@@ -6,6 +6,7 @@
 
 #include "namespaces.h"
 #include "util.h"
+#include "parse/endpoint.h"
 #include "util/crypto.h"
 #include "increase_open_file_limit.h"
 #include "endpoint.h"
@@ -268,7 +269,13 @@ ClientConfig::ClientConfig(int argc, char* argv[])
                          , desc, "\n"));
     }
 
-    _local_ep = util::parse_tcp_endpoint(vm["listen-on-tcp"].as<string>());
+    auto opt_local_ep = parse::endpoint<asio::ip::tcp>(vm["listen-on-tcp"].as<string>());
+
+    if (!opt_local_ep) {
+        throw std::runtime_error("Failed to parse local endpoint");
+    }
+
+    _local_ep = *opt_local_ep;
 
     if (vm.count("injector-ep")) {
         auto injector_ep_str = vm["injector-ep"].as<string>();
@@ -290,7 +297,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
         if (!ep_str.empty()) {
             sys::error_code ec;
-            _front_end_endpoint = util::parse_tcp_endpoint(ep_str, ec);
+            _front_end_endpoint = parse::endpoint<asio::ip::tcp>(ep_str, ec);
 
             if (ec) {
                 throw std::runtime_error( "Failed to parse endpoint \""

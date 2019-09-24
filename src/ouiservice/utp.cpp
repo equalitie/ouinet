@@ -1,6 +1,6 @@
 #include "utp.h"
 #include "../or_throw.h"
-#include "../util.h"
+#include "../parse/endpoint.h"
 #include "../logger.h"
 #include "../util/watch_dog.h"
 
@@ -69,7 +69,7 @@ GenericStream UtpOuiServiceServer::accept(asio::yield_context yield)
 static boost::optional<asio::ip::udp::endpoint> parse_endpoint(std::string endpoint)
 {
     sys::error_code ec;
-    auto ep = util::parse_endpoint<asio::ip::udp>(endpoint, ec);
+    auto ep = parse::endpoint<asio::ip::udp>(endpoint, ec);
     if (ec) return boost::none;
     return ep;
 }
