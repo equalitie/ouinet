@@ -12,12 +12,14 @@
 #include "is_martian.h"
 
 #include "../async_sleep.h"
+#include "../parse/endpoint.h"
 #include "../or_throw.h"
 #include "../util/bytes.h"
 #include "../util/condition_variable.h"
 #include "../util/crypto.h"
 #include "../util/success_condition.h"
 #include "../util/wait_condition.h"
+#include "../util/file_io.h"
 #include "../logger.h"
 
 #include <boost/asio/buffer.hpp>
@@ -52,6 +54,7 @@ using Candidates = std::vector<NodeContact>;
 namespace accum = boost::accumulators;
 using Clock = std::chrono::steady_clock;
 using std::make_shared;
+namespace fs = boost::filesystem;
 
 #define DEBUG_SHOW_MESSAGES 0
 
@@ -187,10 +190,11 @@ static bool read_nodes( bool is_v4
     return true;
 }
 
-dht::DhtNode::DhtNode(asio::io_service& ios):
+dht::DhtNode::DhtNode(asio::io_service& ios, fs::path storage_dir):
     _ios(ios),
     _ready(false),
-    _stats(new Stats())
+    _stats(new Stats()),
+    _storage_dir(move(storage_dir))
 {
 }
 
@@ -228,8 +232,122 @@ void dht::DhtNode::start(asio_utp::udp_multiplexer m, asio::yield_context yield)
     return or_throw(yield, ec);
 }
 
+fs::path dht::DhtNode::stored_contacts_path() const
+{
+    if (_storage_dir == fs::path()) return fs::path();
+    string ipv = _local_endpoint.address().is_v4() ? "ipv4" : "ipv6";
+    return _storage_dir / util::str("stored_peers-", ipv, ".txt");
+}
+
+/* static */
+std::set<dht::NodeContact>
+dht::DhtNode::read_stored_contacts( asio::io_service& ios
+                                  , fs::path path
+                                  , Cancel cancel
+                                  , asio::yield_context yield)
+{
+    std::set<NodeContact> ret;
+
+    if (path == fs::path()) return ret;
+
+    sys::error_code ec;
+    auto file = util::file_io::open_readonly(ios, path, ec);
+    if (ec) return ret;
+
+    size_t filesize = util::file_io::file_size(file, ec);
+    if (ec) return ret;
+
+    std::string data(filesize, '\0');
+
+    util::file_io::read(file, asio::buffer(data), cancel, yield[ec]);
+    assert(!cancel || ec == asio::error::operation_aborted);
+    if (cancel) ec = asio::error::operation_aborted;
+    if (ec == asio::error::operation_aborted) return or_throw(yield, ec, ret);
+
+    boost::string_view sw = data;
+
+    while (!sw.empty()) {
+        auto pos = sw.find('\n');
+        auto s = sw.substr(0, pos);
+
+        if (pos == sw.npos) sw = sw.substr(sw.size(), 0);
+        else                sw = sw.substr(pos + 1);
+
+        auto comma_pos = s.find(',');
+
+        if (comma_pos == s.npos || comma_pos == s.npos - 1) continue;
+
+        auto id_s = s.substr(0, comma_pos);
+        auto ep_s = s.substr(comma_pos+1);
+
+        auto opt_id = NodeID::from_hex(id_s);
+        auto opt_ep = parse::endpoint<udp>(ep_s);
+
+        if (!opt_ep || !opt_id) continue;
+
+        ret.insert({*opt_id, *opt_ep});
+    }
+
+    return ret;
+}
+
+void dht::DhtNode::store_contacts() const
+{
+    if (!_routing_table) return;
+
+    fs::path path = stored_contacts_path();
+
+    if (path == fs::path()) return;
+
+    auto contacts = _routing_table->dump_contacts();
+
+    asio::spawn(_ios, [ &ios  = _ios
+                      , path  = move(path)
+                      , contacts = move(contacts)
+                      ] (asio::yield_context yield) mutable {
+        Cancel cancel;
+        sys::error_code ec;
+        sys::error_code ignored_ec;
+        auto old_contacts = read_stored_contacts(ios, path, cancel, yield[ignored_ec]);
+
+        util::file_io::check_or_create_directory(path.parent_path(), ec);
+        if (ec) return;
+
+        auto file = util::file_io::open_or_create(ios, path, ec);
+        if (ec) return;
+
+        util::file_io::truncate(file, 0, ec);
+        if (ec) return;
+
+        string data;
+
+        for (unsigned i = 0; i < 500; ++i) {
+            NodeContact c;
+
+            if (!contacts.empty()) {
+                auto iter = contacts.begin();
+                c = *iter;
+                contacts.erase(iter);
+            } else if (!old_contacts.empty()) {
+                auto iter = old_contacts.begin();
+                c = *iter;
+                old_contacts.erase(iter);
+            } else {
+                break;
+            }
+
+            if (i != 0) data += '\n';
+            data += util::str(c.id, ",", c.endpoint);
+        }
+
+        util::file_io::write(file, asio::buffer(data), cancel, yield[ec]);
+    });
+}
+
 void dht::DhtNode::stop()
 {
+    store_contacts();
+
     _multiplexer = nullptr;
     _tracker = nullptr;
     _data_store = nullptr;
@@ -1501,6 +1619,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
     Cancel cancel(_cancel);
 
     sys::error_code ec;
+    sys::error_code ignored_ec;
 
     asio::ip::udp::endpoint my_endpoint;
     asio::ip::udp::endpoint bootstrap_ep;
@@ -1521,7 +1640,9 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
             for (const auto bs : bootstraps) {
                 ec = sys::error_code();
 
+                LOG_INFO("Trying bootstrap node ", bs);
                 std::tie(my_endpoint, bootstrap_ep) = bootstrap_single(bs, yield[ec]);
+                LOG_INFO("Bootstrap attempt finished ec:", ec.message());
 
                 if (ec == asio::error::operation_aborted)
                     return or_throw(yield ,ec);
@@ -1536,16 +1657,22 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
         }
     }
 
-    _node_id = NodeID::generate(my_endpoint.address());
     _wan_endpoint = my_endpoint;
 
     LOG_INFO("BT WAN Endpoint: ", _wan_endpoint);
 
-    _routing_table =
-        std::make_unique<RoutingTable>( _node_id
-                                      , [&](const NodeContact& c) {
-                                            send_ping(c);
-                                        });
+    auto send_ping_fn = [&] (const NodeContact& c) { send_ping(c); };
+    _node_id = NodeID::generate(_wan_endpoint.address());
+    _routing_table = std::make_unique<RoutingTable>(_node_id, send_ping_fn);
+
+    auto old_contacts = read_stored_contacts(_ios
+                                            , stored_contacts_path()
+                                            , cancel
+                                            , yield[ignored_ec]);
+
+    for (auto c : old_contacts) {
+        _routing_table->try_add_node(c, false);
+    }
 
     /*
      * TODO: Make bootstrap node handling and ID determination more reliable.
@@ -2214,8 +2341,10 @@ void dht::DhtNode::tracker_do_search_peers(
 }
 
 
-MainlineDht::MainlineDht(asio::io_service& ios)
+MainlineDht::MainlineDht( asio::io_service& ios
+                        , fs::path storage_dir)
     : _ios(ios)
+    , _storage_dir(move(storage_dir))
 {
 }
 
@@ -2254,7 +2383,7 @@ void MainlineDht::set_endpoint(asio_utp::udp_multiplexer m)
         it = _nodes.erase(it);
     }
 
-    _nodes[m.local_endpoint()] = make_unique<dht::DhtNode>(_ios);
+    _nodes[m.local_endpoint()] = make_unique<dht::DhtNode>(_ios, _storage_dir);
 
     asio::spawn(_ios, [&, m = move(m)] (asio::yield_context yield) mutable {
         auto ep = m.local_endpoint();

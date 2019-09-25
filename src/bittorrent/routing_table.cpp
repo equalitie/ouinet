@@ -415,3 +415,20 @@ void RoutingTable::fail_node(NodeContact contact)
     }
 }
 
+set<NodeContact> RoutingTable::dump_contacts() const
+{
+    using asio::ip::udp;
+
+    set<NodeContact> ret;
+
+    for (auto& bucket : _buckets) {
+        for (auto& node : bucket.nodes) {
+            ret.insert(node.contact);
+        }
+        for (auto& node : bucket.verified_candidates) {
+            ret.insert(node.contact);
+        }
+    }
+
+    return ret;
+}

@@ -3,6 +3,7 @@
 #include <boost/asio/ip/udp.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/steady_timer.hpp>
+#include <boost/filesystem/path.hpp>
 
 #include <chrono>
 #include <vector>
@@ -72,7 +73,9 @@ class DhtNode {
     const size_t RESPONSIBLE_TRACKERS_PER_SWARM = 8;
 
     public:
-    DhtNode(asio::io_service& ios);
+    DhtNode( asio::io_service& ios
+           , boost::filesystem::path storage_dir = boost::filesystem::path());
+
     void start(udp::endpoint, asio::yield_context yield);
     void start(asio_utp::udp_multiplexer, asio::yield_context yield);
     void stop();
@@ -329,6 +332,14 @@ class DhtNode {
         asio::yield_context
     );
 
+    fs::path stored_contacts_path() const;
+
+    void store_contacts() const;
+
+    static
+    std::set<NodeContact>
+    read_stored_contacts(asio::io_service&, boost::filesystem::path, Cancel, asio::yield_context);
+
     private:
     asio::io_service& _ios;
     ip::udp::endpoint _local_endpoint;
@@ -352,13 +363,15 @@ class DhtNode {
 
     class Stats;
     std::unique_ptr<Stats> _stats;
+    boost::filesystem::path _storage_dir;
 };
 
 } // dht namespace
 
 class MainlineDht {
     public:
-    MainlineDht(asio::io_service& ios);
+    MainlineDht( asio::io_service& ios
+               , boost::filesystem::path storage_dir = boost::filesystem::path());
 
     MainlineDht(const MainlineDht&) = delete;
     MainlineDht& operator=(const MainlineDht&) = delete;
@@ -437,6 +450,7 @@ class MainlineDht {
     asio::io_service& _ios;
     std::map<udp::endpoint, std::unique_ptr<dht::DhtNode>> _nodes;
     Cancel _cancel;
+    boost::filesystem::path _storage_dir;
 };
 
 } // bittorrent namespace
