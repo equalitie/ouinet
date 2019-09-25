@@ -4,6 +4,9 @@
 #include <sstream>
 #include <string>
 
+#include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/read.hpp>
+#include <boost/asio/write.hpp>
 #include <boost/beast/core/buffers_to_string.hpp>
 #include <boost/beast/http/message.hpp>
 #include <boost/beast/http/parser.hpp>
@@ -12,8 +15,13 @@
 
 #include <util.h>
 #include <util/bytes.h>
+#include <util/connected_pair.h>
 #include <util/crypto.h>
+#include <util/wait_condition.h>
+#include <util/yield.h>
 #include <cache/http_sign.h>
+#include <http_forward.h>
+#include <session.h>
 
 #include <namespaces.h>
 
@@ -25,7 +33,7 @@ using namespace ouinet;
 static const string rq_target = "https://example.com/foo";  // proxy-like
 static const string rq_host = "example.com";
 
-static const string rs_body = "<!DOCTYPE html>\n<p>Tiny body here!</p>";
+static const string rs_body = "<!DOCTYPE html>\n<p>Tiny body here!</p>";  // TODO: span several data blocks
 static const string rs_body_b64digest = "j7uwtB/QQz0FJONbkyEmaqlJwGehJLqWoCO1ceuM30w=";
 static const string rs_head_s = (
     "HTTP/1.1 200 OK\r\n"
@@ -83,6 +91,23 @@ static const string rs_head_signed_s = (
     "signature=\"BvE15gJsMk+I3GamD4UEJP5YkPaEMGXd3tAsHcqHTEzdQ9JJTDFONhoXZyJpqFgD1UD6KbWvn8Lybc45e6OcAQ==\"\r\n"
     "\r\n"
 );
+
+static const array<string, 1> rs_block_cexts{
+    ";ouisig=\"CGbGB23bI3VqycONMohS556I+Ik/wBKCthX/98QMKUu4WX5Xp/D5B4KHl7MutkhiJ5KNOCcRkoR0F0E2sRKvAA==\"",  // offset 0
+};
+
+template<class F>
+static void run_spawned(asio::io_service& ios, F&& f) {
+    asio::spawn(ios, [&ios, f = forward<F>(f)] (auto yield) {
+            try {
+                f(Yield(ios, yield));
+            }
+            catch (const std::exception& e) {
+                BOOST_ERROR(string("Test ended with exception: ") + e.what());
+            }
+        });
+    ios.run();
+}
 
 static http::request_header<> get_request_header() {
     http::request_header<> req_h;
@@ -220,6 +245,94 @@ BOOST_AUTO_TEST_CASE(test_http_verify) {
     vfy_res = cache::http_injection_verify(rs_head_signed, pk);
     BOOST_REQUIRE(vfy_res.cbegin() == vfy_res.cend());  // unsuccessful verification
 
+}
+
+BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
+    asio::io_service ios;
+    run_spawned(ios, [&] (auto yield) {
+        WaitCondition wc(ios);
+
+        asio::ip::tcp::socket
+            origin_w(ios), origin_r(ios),
+            signed_w(ios), signed_r(ios),
+            tested_w(ios), tested_r(ios);
+        tie(origin_w, origin_r) = util::connected_pair(ios, yield);
+        tie(signed_w, signed_r) = util::connected_pair(ios, yield);
+        tie(tested_w, tested_r) = util::connected_pair(ios, yield);
+
+        // Send raw origin response.
+        asio::spawn(ios, [&origin_w, &ios, lock = wc.lock()] (auto y) {
+            sys::error_code e;
+            asio::async_write( origin_w
+                             , asio::const_buffer(rs_head_s.data(), rs_head_s.size())
+                             , y[e]);
+            BOOST_REQUIRE(!e);
+            asio::async_write( origin_w
+                             , asio::const_buffer(rs_body.data(), rs_body.size())
+                             , y[e]);
+            BOOST_REQUIRE(!e);
+            origin_w.close();
+        });
+
+        // Sign origin response.
+        asio::spawn(ios, [ origin_r = std::move(origin_r), &signed_w
+                         , &ios, lock = wc.lock()] (auto y) mutable {
+            Session origin_rs(std::move(origin_r));
+            auto req_h = get_request_header();
+            auto sk = get_private_key();
+            Cancel cancel;
+            sys::error_code e;
+            cache::session_flush_signed( origin_rs, signed_w
+                                       , req_h, inj_id, inj_ts, sk
+                                       , cancel, y[e]);
+            BOOST_REQUIRE(!e);
+            signed_w.close();
+        });
+
+        // Test signed output.
+        asio::spawn(ios, [ &signed_r, &tested_w
+                         , &ios, lock = wc.lock()](auto y) mutable {
+            auto hproc = [] (auto inh, auto&, auto) { return inh; };
+            int xidx = 0;
+            auto xproc = [&xidx] (auto exts, auto&, auto) {
+                BOOST_REQUIRE(xidx < rs_block_cexts.size());
+                BOOST_CHECK_EQUAL(exts, rs_block_cexts[xidx++]);
+            };
+            // Yes we drop chunk extensions but they do not affect the forwarding process,
+            // and they are going to be dumped anyway further down.
+            ProcDataFunc<asio::const_buffer> dproc = [] (auto ind, auto&, auto) {
+                return ProcDataFunc<asio::const_buffer>::result_type{std::move(ind), {}};
+            };
+            ProcTrailFunc tproc = [] (auto intr, auto&, auto) {
+                return ProcTrailFunc::result_type{std::move(intr), {}};
+            };
+
+            Cancel cancel;
+            sys::error_code e;
+            Yield yy(ios, y);
+            http_forward( signed_r, tested_w
+                        , std::move(hproc), std::move(xproc)
+                        , std::move(dproc), std::move(tproc)
+                        , cancel, yy[e]);
+            BOOST_REQUIRE(!e);
+            BOOST_CHECK_EQUAL(xidx, rs_block_cexts.size());
+            signed_r.close();
+            tested_w.close();
+        });
+
+        // Black hole.
+        asio::spawn(ios, [&tested_r, &ios, lock = wc.lock()] (auto y) {
+            char d[2048];
+            asio::mutable_buffer b(d, sizeof(d));
+
+            sys::error_code e;
+            while (!e) asio::async_read(tested_r, b, y[e]);
+            BOOST_REQUIRE(e == asio::error::eof || !e);
+            tested_r.close();
+        });
+
+        wc.wait(yield);
+    });
 }
 
 BOOST_AUTO_TEST_SUITE_END()
