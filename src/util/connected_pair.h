@@ -1,6 +1,9 @@
 #pragma once
 
 #include <boost/asio/ip/tcp.hpp>
+
+#include "wait_condition.h"
+
 #include "../namespaces.h"
 
 namespace ouinet { namespace util {
