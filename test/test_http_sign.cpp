@@ -84,6 +84,21 @@ static const string rs_head_signed_s = (
     "\r\n"
 );
 
+static http::request_header<> get_request_header() {
+    http::request_header<> req_h;
+    req_h.method(http::verb::get);
+    req_h.target(rq_target);
+    req_h.version(11);
+    req_h.set(http::field::host, rq_host);
+
+    return req_h;
+}
+
+static util::Ed25519PrivateKey get_private_key() {
+    auto ska = util::bytes::to_array<uint8_t, util::Ed25519PrivateKey::key_size>(util::base64_decode(inj_b64sk));
+    return util::Ed25519PrivateKey(std::move(ska));
+}
+
 BOOST_AUTO_TEST_CASE(test_http_sign) {
 
     sys::error_code ec;
@@ -100,14 +115,9 @@ BOOST_AUTO_TEST_CASE(test_http_sign) {
     BOOST_REQUIRE(parser.is_done());
     auto rs_head = parser.get().base();
 
-    http::request_header<> req_h;
-    req_h.method(http::verb::get);
-    req_h.target(rq_target);
-    req_h.version(11);
-    req_h.set(http::field::host, rq_host);
+    auto req_h = get_request_header();
 
-    const auto ska = util::bytes::to_array<uint8_t, util::Ed25519PrivateKey::key_size>(util::base64_decode(inj_b64sk));
-    const util::Ed25519PrivateKey sk(std::move(ska));
+    const auto sk = get_private_key();
     const auto key_id = cache::http_key_id_for_injection(sk.public_key());
     BOOST_REQUIRE(key_id == ("ed25519=" + inj_b64pk));
 
