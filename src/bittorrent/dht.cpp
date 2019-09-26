@@ -1550,30 +1550,37 @@ asio::ip::udp::endpoint resolve(
     return or_throw<udp::endpoint>(yield, asio::error::not_found);
 }
 
-std::pair< asio::ip::udp::endpoint
-         , asio::ip::udp::endpoint
-         >
+static void fix_cancel_invariant(const Cancel& cancel, sys::error_code& ec)
+{
+    assert(!cancel || ec == asio::error::operation_aborted);
+    if (cancel) ec = asio::error::operation_aborted;
+}
+
+dht::DhtNode::BootstrapResult
 dht::DhtNode::bootstrap_single( std::string bootstrap_domain
+                              , Cancel cancel
                               , asio::yield_context yield)
 {
-    using T = std::pair<asio::ip::udp::endpoint, asio::ip::udp::endpoint>;
     sys::error_code ec;
 
     auto bootstrap_ep = resolve(
         _ios,
         bootstrap_domain,
         "6881",
-        _cancel,
+        cancel,
         yield[ec]
     );
 
+    fix_cancel_invariant(cancel, ec);
+
     if (ec == asio::error::operation_aborted) {
-        return or_throw<T>(yield, asio::error::operation_aborted);
+        return or_throw<BootstrapResult>(yield, ec);
     }
+
     if (ec) {
         cerr << "Unable to resolve bootstrap server "
              << bootstrap_domain << " (" << ec.message() << ") giving up\n";
-        return or_throw<T>(yield, ec);
+        return or_throw<BootstrapResult>(yield, ec);
     }
 
     BencodedMap initial_ping_reply = send_query_await_reply(
@@ -1582,35 +1589,37 @@ dht::DhtNode::bootstrap_single( std::string bootstrap_domain
         BencodedMap{{ "id" , _node_id.to_bytestring() }},
         nullptr,
         nullptr,
-        _cancel,
+        cancel,
         yield[ec]
     );
 
+    fix_cancel_invariant(cancel, ec);
+
     if (ec == asio::error::operation_aborted) {
-        return or_throw<T>(yield, asio::error::operation_aborted);
+        return or_throw<BootstrapResult>(yield, ec);
     }
 
     if (ec) {
         std::cerr << "Bootstrap server " << bootstrap_domain
                   << " does not reply (" << ec.message() << ") giving up\n";
-        return or_throw<T>(yield, ec);
+        return or_throw<BootstrapResult>(yield, ec);
     }
 
     boost::optional<std::string> my_ip = initial_ping_reply["ip"].as_string();
 
     if (!my_ip) {
         std::cerr << "Unexpected bootstrap server reply, giving up\n";
-        return or_throw<T>(yield, asio::error::fault);
+        return or_throw<BootstrapResult>(yield, asio::error::fault);
     }
 
     boost::optional<asio::ip::udp::endpoint> my_endpoint = decode_endpoint(*my_ip);
 
     if (!my_endpoint) {
         std::cerr << "Unexpected bootstrap server reply, giving up\n";
-        return or_throw<T>(yield, asio::error::fault);
+        return or_throw<BootstrapResult>(yield, asio::error::fault);
     }
 
-    return std::make_pair(*my_endpoint, bootstrap_ep);
+    return {*my_endpoint, bootstrap_ep};
 }
 
 void dht::DhtNode::bootstrap(asio::yield_context yield)
@@ -1621,43 +1630,72 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
     sys::error_code ec;
     sys::error_code ignored_ec;
 
-    asio::ip::udp::endpoint my_endpoint;
-    asio::ip::udp::endpoint bootstrap_ep;
-
     vector<string> bootstraps { "router.bittorrent.com"
                               , "router.utorrent.com"
+                              // I don't think I have ever seen these two working
+                              // (Perhaps they only listen on TCP?)
                               , "dht.transmissionbt.com"
                               , "dht.vuze.com" };
 
-    {
-        bool done = false;
+    BootstrapResult bootstrap_result;
 
+    {
         std::random_device r;
         auto rng = std::default_random_engine(r());
         std::shuffle(bootstraps.begin(), bootstraps.end(), rng);
 
         while (true) {
+            using namespace std::chrono;
+
+            Cancel done_cancel(cancel);
+
+            std::vector<BootstrapResult> rs;
+
+            WaitCondition wc(_ios);
+
             for (const auto bs : bootstraps) {
-                ec = sys::error_code();
+                asio::spawn(_ios
+                           , [ &
+                             , lock = wc.lock()
+                             , bs = bs
+                             ] (asio::yield_context yield) {
+                    sys::error_code ec;
 
-                LOG_INFO("Trying bootstrap node ", bs);
-                std::tie(my_endpoint, bootstrap_ep) = bootstrap_single(bs, yield[ec]);
-                LOG_INFO("Bootstrap attempt finished ec:", ec.message());
+                    LOG_INFO("Trying bootstrap node ", bs);
 
-                if (ec == asio::error::operation_aborted)
-                    return or_throw(yield ,ec);
+                    auto r = bootstrap_single(bs, done_cancel, yield[ec]);
 
-                if (!ec) { done = true; break; }
+                    fix_cancel_invariant(done_cancel, ec);
+
+                    LOG_INFO("Bootstrap attempt finished ", bs, " ec:", ec.message());
+
+                    if (ec) return;
+
+                    rs.push_back(r);
+                    done_cancel();
+                });
+
+                async_sleep(_ios, milliseconds(500), done_cancel, yield);
+                if (done_cancel) break;
             }
 
-            if (done) break;
+            sys::error_code ec;
+            wc.wait(yield[ec]);
 
-            if (!async_sleep(_ios, std::chrono::seconds(10), cancel, yield))
+            if (cancel) return or_throw(yield, asio::error::operation_aborted);
+
+            if (rs.size()) {
+                bootstrap_result = rs[0];
+                break;
+            }
+
+            if (!async_sleep(_ios, seconds(10), cancel, yield))
                 return or_throw(yield, asio::error::operation_aborted);
         }
+
     }
 
-    _wan_endpoint = my_endpoint;
+    _wan_endpoint = bootstrap_result.my_ep;
 
     LOG_INFO("BT WAN Endpoint: ", _wan_endpoint);
 
@@ -1685,7 +1723,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
      * There also needs to be vastly more retrying and fallbacks here.
      */
 
-    _bootstrap_endpoints.push_back(bootstrap_ep);
+    _bootstrap_endpoints.push_back(bootstrap_result.node_ep);
 
     /*
      * Lookup our own ID, constructing a basic path to ourselves.

@@ -255,10 +255,13 @@ class DhtNode {
 
     void bootstrap(asio::yield_context);
 
-    std::pair< asio::ip::udp::endpoint
-             , asio::ip::udp::endpoint
-             >
-    bootstrap_single(std::string bootstrap_domain, asio::yield_context);
+    struct BootstrapResult {
+        asio::ip::udp::endpoint my_ep;
+        asio::ip::udp::endpoint node_ep;
+    };
+
+    BootstrapResult
+    bootstrap_single(std::string bootstrap_domain, Cancel, asio::yield_context);
 
     std::vector<NodeContact> find_closest_nodes(
         NodeID target_id,
