@@ -59,12 +59,15 @@ Ed25519PublicKey::Ed25519PublicKey(Ed25519PublicKey&& other):
 boost::optional<Ed25519PublicKey>
 Ed25519PublicKey::from_hex(boost::string_view hex)
 {
-    if (hex.size() != sig_size || !util::bytes::is_hex(hex)) {
+    if (hex.size() != sig_size) {
         return boost::none;
     }
 
-    return Ed25519PublicKey(
-            util::bytes::to_array<uint8_t, key_size>(util::bytes::from_hex(hex)));
+    auto os = util::bytes::from_hex(hex);
+
+    if (!os) return boost::none;
+
+    return Ed25519PublicKey(util::bytes::to_array<uint8_t, key_size>(*os));
 }
 
 Ed25519PublicKey& Ed25519PublicKey::operator=(const Ed25519PublicKey& other)
@@ -211,12 +214,15 @@ Ed25519PrivateKey::key_array_t Ed25519PrivateKey::serialize() const
 boost::optional<Ed25519PrivateKey>
 Ed25519PrivateKey::from_hex(boost::string_view hex)
 {
-    if (hex.size() != sig_size || !util::bytes::is_hex(hex)) {
+    if (hex.size() != sig_size) {
         return boost::none;
     }
 
-    return Ed25519PrivateKey(
-            util::bytes::to_array<uint8_t, key_size>(util::bytes::from_hex(hex)));
+    auto os = util::bytes::from_hex(hex);
+
+    if (!os) return boost::none;
+
+    return Ed25519PrivateKey(util::bytes::to_array<uint8_t, key_size>(*os));
 }
 
 Ed25519PublicKey Ed25519PrivateKey::public_key() const

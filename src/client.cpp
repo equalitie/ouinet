@@ -140,7 +140,8 @@ public:
     {
         if (_bt_dht) return _bt_dht;
 
-        _bt_dht = make_shared<bittorrent::MainlineDht>(_ios);
+        _bt_dht = make_shared<bt::MainlineDht>( _ios
+                                              , _config.repo_root() / "dht");
 
         sys::error_code ec;
         asio_utp::udp_multiplexer m(_ios);

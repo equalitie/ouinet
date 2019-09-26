@@ -52,6 +52,7 @@ file(GLOB bt_cpp_files
     "../src/util/hash.cpp"
     "../src/logger.cpp"
     "../src/util.cpp"
+    "../src/util/file_io.cpp"
 )
 
 add_executable(test-bittorrent "test_bittorrent.cpp" ${bt_cpp_files})

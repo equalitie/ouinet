@@ -453,7 +453,7 @@ struct Client::Impl {
         auto dk = dht_key(key);
         if (!dk) return or_throw(yield, asio::error::invalid_argument);
         auto path = path_from_key(key);
-        auto file = util::mkatomic(ios, ec, path);
+        auto file = util::atomic_file::make(ios, path, ec);
         if (!ec) s.flush_response(*file, cancel, yield[ec]);
         if (!ec) file->commit(ec);
         if (ec) return or_throw(yield, ec);

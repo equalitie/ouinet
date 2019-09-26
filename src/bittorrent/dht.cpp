@@ -12,12 +12,15 @@
 #include "is_martian.h"
 
 #include "../async_sleep.h"
+#include "../parse/endpoint.h"
 #include "../or_throw.h"
 #include "../util/bytes.h"
 #include "../util/condition_variable.h"
 #include "../util/crypto.h"
 #include "../util/success_condition.h"
 #include "../util/wait_condition.h"
+#include "../util/file_io.h"
+#include "../util/variant.h"
 #include "../logger.h"
 
 #include <boost/asio/buffer.hpp>
@@ -52,6 +55,7 @@ using Candidates = std::vector<NodeContact>;
 namespace accum = boost::accumulators;
 using Clock = std::chrono::steady_clock;
 using std::make_shared;
+namespace fs = boost::filesystem;
 
 #define DEBUG_SHOW_MESSAGES 0
 
@@ -187,16 +191,11 @@ static bool read_nodes( bool is_v4
     return true;
 }
 
-std::string dht::NodeContact::to_string() const
-{
-    return id.to_hex() + " at " + endpoint.address().to_string() + ":" + std::to_string(endpoint.port());
-}
-
-
-dht::DhtNode::DhtNode(asio::io_service& ios):
+dht::DhtNode::DhtNode(asio::io_service& ios, fs::path storage_dir):
     _ios(ios),
     _ready(false),
-    _stats(new Stats())
+    _stats(new Stats()),
+    _storage_dir(move(storage_dir))
 {
 }
 
@@ -234,8 +233,122 @@ void dht::DhtNode::start(asio_utp::udp_multiplexer m, asio::yield_context yield)
     return or_throw(yield, ec);
 }
 
+fs::path dht::DhtNode::stored_contacts_path() const
+{
+    if (_storage_dir == fs::path()) return fs::path();
+    string ipv = _local_endpoint.address().is_v4() ? "ipv4" : "ipv6";
+    return _storage_dir / util::str("stored_peers-", ipv, ".txt");
+}
+
+/* static */
+std::set<dht::NodeContact>
+dht::DhtNode::read_stored_contacts( asio::io_service& ios
+                                  , fs::path path
+                                  , Cancel cancel
+                                  , asio::yield_context yield)
+{
+    std::set<NodeContact> ret;
+
+    if (path == fs::path()) return ret;
+
+    sys::error_code ec;
+    auto file = util::file_io::open_readonly(ios, path, ec);
+    if (ec) return ret;
+
+    size_t filesize = util::file_io::file_size(file, ec);
+    if (ec) return ret;
+
+    std::string data(filesize, '\0');
+
+    util::file_io::read(file, asio::buffer(data), cancel, yield[ec]);
+    assert(!cancel || ec == asio::error::operation_aborted);
+    if (cancel) ec = asio::error::operation_aborted;
+    if (ec == asio::error::operation_aborted) return or_throw(yield, ec, ret);
+
+    boost::string_view sw = data;
+
+    while (!sw.empty()) {
+        auto pos = sw.find('\n');
+        auto s = sw.substr(0, pos);
+
+        if (pos == sw.npos) sw = sw.substr(sw.size(), 0);
+        else                sw = sw.substr(pos + 1);
+
+        auto comma_pos = s.find(',');
+
+        if (comma_pos == s.npos || comma_pos == s.npos - 1) continue;
+
+        auto id_s = s.substr(0, comma_pos);
+        auto ep_s = s.substr(comma_pos+1);
+
+        auto opt_id = NodeID::from_hex(id_s);
+        auto opt_ep = parse::endpoint<udp>(ep_s);
+
+        if (!opt_ep || !opt_id) continue;
+
+        ret.insert({*opt_id, *opt_ep});
+    }
+
+    return ret;
+}
+
+void dht::DhtNode::store_contacts() const
+{
+    if (!_routing_table) return;
+
+    fs::path path = stored_contacts_path();
+
+    if (path == fs::path()) return;
+
+    auto contacts = _routing_table->dump_contacts();
+
+    asio::spawn(_ios, [ &ios  = _ios
+                      , path  = move(path)
+                      , contacts = move(contacts)
+                      ] (asio::yield_context yield) mutable {
+        Cancel cancel;
+        sys::error_code ec;
+        sys::error_code ignored_ec;
+        auto old_contacts = read_stored_contacts(ios, path, cancel, yield[ignored_ec]);
+
+        util::file_io::check_or_create_directory(path.parent_path(), ec);
+        if (ec) return;
+
+        auto file = util::file_io::open_or_create(ios, path, ec);
+        if (ec) return;
+
+        util::file_io::truncate(file, 0, ec);
+        if (ec) return;
+
+        string data;
+
+        for (unsigned i = 0; i < 500; ++i) {
+            NodeContact c;
+
+            if (!contacts.empty()) {
+                auto iter = contacts.begin();
+                c = *iter;
+                contacts.erase(iter);
+            } else if (!old_contacts.empty()) {
+                auto iter = old_contacts.begin();
+                c = *iter;
+                old_contacts.erase(iter);
+            } else {
+                break;
+            }
+
+            if (i != 0) data += '\n';
+            data += util::str(c.id, ",", c.endpoint);
+        }
+
+        util::file_io::write(file, asio::buffer(data), cancel, yield[ec]);
+    });
+}
+
 void dht::DhtNode::stop()
 {
+    store_contacts();
+
     _multiplexer = nullptr;
     _tracker = nullptr;
     _data_store = nullptr;
@@ -1410,22 +1523,18 @@ asio::ip::udp::endpoint resolve(
     Cancel& cancel_signal,
     asio::yield_context yield
 ) {
-    using asio::ip::udp;
-
     sys::error_code ec;
 
-    udp::resolver::query bootstrap_query(addr, port);
-    udp::resolver bootstrap_resolver(ioc);
+    udp::resolver::query query(addr, port);
+    udp::resolver resolver(ioc);
 
     auto cancelled = cancel_signal.connect([&] {
-        bootstrap_resolver.cancel();
+        resolver.cancel();
     });
 
-    udp::resolver::iterator it = bootstrap_resolver.async_resolve(bootstrap_query, yield[ec]);
+    udp::resolver::iterator it = resolver.async_resolve(query, yield[ec]);
 
-    if (cancelled) {
-        return or_throw<udp::endpoint>(yield, asio::error::operation_aborted);
-    }
+    if (cancelled) ec = asio::error::operation_aborted;
 
     if (ec) {
         return or_throw<udp::endpoint>(yield, ec);
@@ -1438,30 +1547,44 @@ asio::ip::udp::endpoint resolve(
     return or_throw<udp::endpoint>(yield, asio::error::not_found);
 }
 
-std::pair< asio::ip::udp::endpoint
-         , asio::ip::udp::endpoint
-         >
-dht::DhtNode::bootstrap_single( std::string bootstrap_domain
+static void fix_cancel_invariant(const Cancel& cancel, sys::error_code& ec)
+{
+    assert(!cancel || ec == asio::error::operation_aborted);
+    if (cancel) ec = asio::error::operation_aborted;
+}
+
+dht::DhtNode::BootstrapResult
+dht::DhtNode::bootstrap_single( Address bootstrap_address
+                              , Cancel cancel
                               , asio::yield_context yield)
 {
-    using T = std::pair<asio::ip::udp::endpoint, asio::ip::udp::endpoint>;
     sys::error_code ec;
 
-    auto bootstrap_ep = resolve(
-        _ios,
-        bootstrap_domain,
-        "6881",
-        _cancel,
-        yield[ec]
-    );
+    udp::endpoint bootstrap_ep = util::apply(bootstrap_address,
+        [&] (udp::endpoint ep) {
+            return ep;
+        },
+        [&] (std::string addr) {
+            auto ep = resolve(
+                _ios,
+                addr,
+                "6881",
+                cancel,
+                yield[ec]
+            );
 
-    if (ec == asio::error::operation_aborted) {
-        return or_throw<T>(yield, asio::error::operation_aborted);
-    }
+            fix_cancel_invariant(cancel, ec);
+
+            if (ec && !cancel) {
+                LOG_DEBUG("Unable to resolve bootstrap server ",
+                     addr, " (", ec.message(), ") giving up");
+            }
+
+            return ep;
+        });
+
     if (ec) {
-        cerr << "Unable to resolve bootstrap server "
-             << bootstrap_domain << " (" << ec.message() << ") giving up\n";
-        return or_throw<T>(yield, ec);
+        return or_throw<BootstrapResult>(yield, ec);
     }
 
     BencodedMap initial_ping_reply = send_query_await_reply(
@@ -1470,88 +1593,189 @@ dht::DhtNode::bootstrap_single( std::string bootstrap_domain
         BencodedMap{{ "id" , _node_id.to_bytestring() }},
         nullptr,
         nullptr,
-        _cancel,
+        cancel,
         yield[ec]
     );
 
+    fix_cancel_invariant(cancel, ec);
+
     if (ec == asio::error::operation_aborted) {
-        return or_throw<T>(yield, asio::error::operation_aborted);
+        return or_throw<BootstrapResult>(yield, ec);
     }
 
     if (ec) {
-        std::cerr << "Bootstrap server " << bootstrap_domain
-                  << " does not reply (" << ec.message() << ") giving up\n";
-        return or_throw<T>(yield, ec);
+        LOG_DEBUG("Bootstrap server ", bootstrap_address
+                 , " does not reply (", ec.message(), ") giving up");
+        return or_throw<BootstrapResult>(yield, ec);
     }
 
     boost::optional<std::string> my_ip = initial_ping_reply["ip"].as_string();
 
     if (!my_ip) {
-        std::cerr << "Unexpected bootstrap server reply, giving up\n";
-        return or_throw<T>(yield, asio::error::fault);
+        LOG_DEBUG("Unexpected bootstrap server reply, giving up (no ip)");
+        LOG_DEBUG("   ", initial_ping_reply);
+        return or_throw<BootstrapResult>(yield, asio::error::fault);
     }
 
     boost::optional<asio::ip::udp::endpoint> my_endpoint = decode_endpoint(*my_ip);
 
     if (!my_endpoint) {
-        std::cerr << "Unexpected bootstrap server reply, giving up\n";
-        return or_throw<T>(yield, asio::error::fault);
+        LOG_DEBUG("Unexpected bootstrap server reply, giving up (can't parse ip)");
+        LOG_DEBUG("   ", initial_ping_reply);
+        return or_throw<BootstrapResult>(yield, asio::error::fault);
     }
 
-    return std::make_pair(*my_endpoint, bootstrap_ep);
+    return {*my_endpoint, bootstrap_ep};
 }
 
 void dht::DhtNode::bootstrap(asio::yield_context yield)
 {
-    // Create on heap so that the member one isn't used after ~DhtNode
+    // Create on stack so that the member one isn't used after ~DhtNode
     Cancel cancel(_cancel);
 
     sys::error_code ec;
+    sys::error_code ignored_ec;
 
-    asio::ip::udp::endpoint my_endpoint;
-    asio::ip::udp::endpoint bootstrap_ep;
+    vector<Address> bootstraps { "router.bittorrent.com"
+                               , "router.utorrent.com"
+                               // I don't think I have ever seen these two working
+                               // (Perhaps they only listen on TCP?)
+                               , "dht.transmissionbt.com"
+                               , "dht.vuze.com" };
 
-    vector<string> bootstraps { "router.bittorrent.com"
-                              , "router.utorrent.com"
-                              , "dht.transmissionbt.com"
-                              , "dht.vuze.com" };
+    auto old_contacts = read_stored_contacts(_ios
+                                            , stored_contacts_path()
+                                            , cancel
+                                            , yield[ignored_ec]);
+
+    if (cancel) return or_throw(yield, asio::error::operation_aborted);
+
+    for (auto& c : old_contacts) {
+        bootstraps.push_back(c.endpoint);
+    }
+
+    udp::endpoint my_endpoint;
+    std::set<udp::endpoint> node_endpoints;
 
     {
-        bool done = false;
+        constexpr size_t SCORE_GOAL = 5;
+
+        using MyEndpoint   = udp::endpoint;
+        using NodeEndpoint = udp::endpoint;
 
         std::random_device r;
         auto rng = std::default_random_engine(r());
         std::shuffle(bootstraps.begin(), bootstraps.end(), rng);
 
-        while (true) {
+        struct Stats {
+            size_t score;
+            std::set<NodeEndpoint> nodes;
+        };
+
+        auto add_result = [] (auto& rs, auto r, size_t score) -> Stats& {
+            auto p = rs.insert({r.my_ep, {score, {r.node_ep}}});
+            auto& stats = p.first->second;
+            if (p.second) return stats;
+            if (stats.nodes.insert(r.node_ep).second) {
+                stats.score += score;
+            }
+            return stats;
+        };
+
+        auto score_of = [](const Address a) {
+            // We don't necessarily fully trust the nodes we know from previous
+            // app runs. Thus we require SCORE_GOAL of them to respond with the
+            // same (our) IP address to consider them trust-worthy.
+            return util::apply(a, [](udp::endpoint) { return size_t(1); }
+                                , [](std::string)   { return SCORE_GOAL; });
+        };
+
+        while (!cancel) {
+            using namespace std::chrono;
+
+            Cancel done_cancel(cancel);
+
+            std::map<MyEndpoint, Stats> rs;
+
+            WaitCondition wc(_ios);
+
+            size_t k = 0;
             for (const auto bs : bootstraps) {
-                ec = sys::error_code();
+                asio::spawn(_ios
+                           , [ &
+                             , lock = wc.lock()
+                             , bs = bs
+                             ] (asio::yield_context yield) {
+                    sys::error_code ec;
 
-                std::tie(my_endpoint, bootstrap_ep) = bootstrap_single(bs, yield[ec]);
+                    LOG_DEBUG("Trying bootstrap node ", bs);
 
-                if (ec == asio::error::operation_aborted)
-                    return or_throw(yield ,ec);
+                    auto r = bootstrap_single(bs, done_cancel, yield[ec]);
 
-                if (!ec) { done = true; break; }
+                    fix_cancel_invariant(done_cancel, ec);
+
+                    LOG_DEBUG("Bootstrap attempt finished ", bs, " ec:", ec.message());
+
+                    if (ec || is_martian(r.my_ep)) return;
+
+                    auto& stats = add_result(rs, r, score_of(bs));
+
+                    if (stats.score >= SCORE_GOAL) {
+                        my_endpoint = r.my_ep;
+                        node_endpoints = move(stats.nodes);
+                        done_cancel();
+                    }
+                });
+
+                // Try enough nodes quickly in parallel. Then try the rest with
+                // 300ms delays.
+                k += score_of(bs);
+                if (k < SCORE_GOAL) {
+                    async_sleep(_ios, milliseconds(300), done_cancel, yield);
+                }
+
+                if (done_cancel) break;
             }
 
-            if (done) break;
+            sys::error_code ec;
+            wc.wait(yield[ec]);
 
-            if (!async_sleep(_ios, std::chrono::seconds(10), cancel, yield))
-                return or_throw(yield, asio::error::operation_aborted);
+            if (cancel) return or_throw(yield, asio::error::operation_aborted);
+            if (node_endpoints.size()) break;
+
+            // We did not get enough score, but perhaps we have at least
+            // something. If so, let's use that.
+            if (rs.size()) {
+                size_t max_score = 0;
+                for (auto r : rs) {
+                    if (r.second.score > max_score) {
+                        my_endpoint = r.first;
+                        node_endpoints = move(r.second.nodes);
+                        max_score = r.second.score;
+                    }
+                }
+                if (max_score) break;
+            }
+
+            // We could not bootstrap off any of the known nodes, wait a bit
+            // and try again.
+            !async_sleep(_ios, seconds(10), cancel, yield);
         }
     }
 
-    _node_id = NodeID::generate(my_endpoint.address());
+    assert(node_endpoints.size());
+
     _wan_endpoint = my_endpoint;
 
     LOG_INFO("BT WAN Endpoint: ", _wan_endpoint);
 
-    _routing_table =
-        std::make_unique<RoutingTable>( _node_id
-                                      , [&](const NodeContact& c) {
-                                            send_ping(c);
-                                        });
+    auto send_ping_fn = [&] (const NodeContact& c) { send_ping(c); };
+    _node_id = NodeID::generate(_wan_endpoint.address());
+    _routing_table = std::make_unique<RoutingTable>(_node_id, send_ping_fn);
+
+    for (auto c : old_contacts) {
+        _routing_table->try_add_node(c, false);
+    }
 
     /*
      * TODO: Make bootstrap node handling and ID determination more reliable.
@@ -1564,7 +1788,9 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
      * There also needs to be vastly more retrying and fallbacks here.
      */
 
-    _bootstrap_endpoints.push_back(bootstrap_ep);
+    for (auto ep : node_endpoints) {
+        _bootstrap_endpoints.push_back(ep);
+    }
 
     /*
      * Lookup our own ID, constructing a basic path to ourselves.
@@ -2220,8 +2446,10 @@ void dht::DhtNode::tracker_do_search_peers(
 }
 
 
-MainlineDht::MainlineDht(asio::io_service& ios)
+MainlineDht::MainlineDht( asio::io_service& ios
+                        , fs::path storage_dir)
     : _ios(ios)
+    , _storage_dir(move(storage_dir))
 {
 }
 
@@ -2260,7 +2488,7 @@ void MainlineDht::set_endpoint(asio_utp::udp_multiplexer m)
         it = _nodes.erase(it);
     }
 
-    _nodes[m.local_endpoint()] = make_unique<dht::DhtNode>(_ios);
+    _nodes[m.local_endpoint()] = make_unique<dht::DhtNode>(_ios, _storage_dir);
 
     asio::spawn(_ios, [&, m = move(m)] (asio::yield_context yield) mutable {
         auto ep = m.local_endpoint();

@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <deque>
+#include <set>
 
 #include "node_contact.h"
 
@@ -27,7 +28,7 @@ private:
 
         int queries_failed;
         bool ping_ongoing;
-    
+
         inline bool is_good() const {
             using namespace std::chrono_literals;
 
@@ -70,6 +71,10 @@ public:
     void try_add_node(NodeContact, bool is_verified);
 
     NodeID max_distance(size_t bucket_id) const;
+
+    NodeID node_id() const { return _node_id; }
+
+    std::set<NodeContact> dump_contacts() const;
 
 private:
     RoutingTable::Bucket* find_bucket(NodeID id);

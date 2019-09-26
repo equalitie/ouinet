@@ -195,8 +195,8 @@ public:
         // Create a new entry file "atomically" (at least inside the program)
         // by writing data to a temporary file and replacing the existing file.
         // Otherwise we might be overwriting old data that others are reading.
-        auto af = mkatomic( _ios, ec, _path
-                          , persisten_lru_cache_detail::temp_file_model);
+        auto af = atomic_file::make( _ios, _path
+                          , persisten_lru_cache_detail::temp_file_model, ec);
         if (ec) return or_throw(yield, ec);
         auto& f = af->lowest_layer();
         if (!ec) file_io::write_number<uint64_t>(f, ts, cancel, yield[ec]);
