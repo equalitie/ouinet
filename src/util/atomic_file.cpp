@@ -12,14 +12,25 @@ void atomic_file::commit(sys::error_code& ec) {
     _temp_file.keep_on_close(false);
 }
 
+/* static */
 boost::optional<atomic_file>
-mkatomic( asio::io_service& ios, sys::error_code& ec
-        , fs::path path, const fs::path& temp_model)
+atomic_file::make( asio::io_service& ios
+                 , fs::path path
+                 , const fs::path& temp_model
+                 , sys::error_code& ec)
 {
     auto temp_file = mktemp(ios, ec, path.parent_path(), temp_model);
     if (ec) return boost::none;
-
     return atomic_file(std::move(*temp_file), std::move(path));
+}
+
+/* static */
+boost::optional<atomic_file>
+atomic_file::make( asio::io_service& ios
+                 , fs::path path
+                 , sys::error_code& ec)
+{
+    return make(ios, std::move(path), "tmp.%%%%-%%%%-%%%%-%%%%", ec);
 }
 
 }} // namespaces

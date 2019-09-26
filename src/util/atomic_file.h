@@ -11,9 +11,23 @@
 namespace ouinet { namespace util {
 
 class atomic_file {
-    friend boost::optional<atomic_file>
-    mkatomic( asio::io_service&, sys::error_code&
-            , fs::path, const fs::path&);
+public:
+    // Create a file to atomically replace `path` once it is committed.
+    // Storage is backed by a temporary file in the parent directory of `path`
+    // named after the given `temp_model`.
+    // Use its `lowest_layer()` to perform I/O.
+    // If no commit is done or it fails,
+    // the temporary file is automatically removed.
+    static
+    boost::optional<atomic_file> make( asio::io_service&
+                                     , fs::path
+                                     , const fs::path& temp_model
+                                     , sys::error_code&);
+
+    static
+    boost::optional<atomic_file> make( asio::io_service&
+                                     , fs::path
+                                     , sys::error_code&);
 
 public:
     using lowest_layer_type = temp_file::lowest_layer_type;
@@ -69,16 +83,5 @@ private:
     temp_file _temp_file;
     fs::path _path;
 };
-
-// Create a file to atomically replace `path` once it is committed.
-// Storage is backed by a temporary file in the parent directory of `path`
-// named after the given `temp_model`.
-// Use its `lowest_layer()` to perform I/O.
-// If no commit is done or it fails,
-// the temporary file is automatically removed.
-boost::optional<atomic_file>
-mkatomic( asio::io_service&, sys::error_code&
-        , fs::path path
-        , const fs::path& temp_model="tmp.%%%%-%%%%-%%%%-%%%%");
 
 }} // namespaces

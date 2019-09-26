@@ -28,7 +28,7 @@ private:
 
         int queries_failed;
         bool ping_ongoing;
-    
+
         inline bool is_good() const {
             using namespace std::chrono_literals;
 
