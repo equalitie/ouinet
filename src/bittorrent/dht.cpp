@@ -20,6 +20,7 @@
 #include "../util/success_condition.h"
 #include "../util/wait_condition.h"
 #include "../util/file_io.h"
+#include "../util/variant.h"
 #include "../logger.h"
 
 #include <boost/asio/buffer.hpp>
@@ -1522,22 +1523,18 @@ asio::ip::udp::endpoint resolve(
     Cancel& cancel_signal,
     asio::yield_context yield
 ) {
-    using asio::ip::udp;
-
     sys::error_code ec;
 
-    udp::resolver::query bootstrap_query(addr, port);
-    udp::resolver bootstrap_resolver(ioc);
+    udp::resolver::query query(addr, port);
+    udp::resolver resolver(ioc);
 
     auto cancelled = cancel_signal.connect([&] {
-        bootstrap_resolver.cancel();
+        resolver.cancel();
     });
 
-    udp::resolver::iterator it = bootstrap_resolver.async_resolve(bootstrap_query, yield[ec]);
+    udp::resolver::iterator it = resolver.async_resolve(query, yield[ec]);
 
-    if (cancelled) {
-        return or_throw<udp::endpoint>(yield, asio::error::operation_aborted);
-    }
+    if (cancelled) ec = asio::error::operation_aborted;
 
     if (ec) {
         return or_throw<udp::endpoint>(yield, ec);
@@ -1557,29 +1554,36 @@ static void fix_cancel_invariant(const Cancel& cancel, sys::error_code& ec)
 }
 
 dht::DhtNode::BootstrapResult
-dht::DhtNode::bootstrap_single( std::string bootstrap_domain
+dht::DhtNode::bootstrap_single( Address bootstrap_address
                               , Cancel cancel
                               , asio::yield_context yield)
 {
     sys::error_code ec;
 
-    auto bootstrap_ep = resolve(
-        _ios,
-        bootstrap_domain,
-        "6881",
-        cancel,
-        yield[ec]
-    );
+    udp::endpoint bootstrap_ep = util::apply(bootstrap_address,
+        [&] (udp::endpoint ep) {
+            return ep;
+        },
+        [&] (std::string addr) {
+            auto ep = resolve(
+                _ios,
+                addr,
+                "6881",
+                cancel,
+                yield[ec]
+            );
 
-    fix_cancel_invariant(cancel, ec);
+            fix_cancel_invariant(cancel, ec);
 
-    if (ec == asio::error::operation_aborted) {
-        return or_throw<BootstrapResult>(yield, ec);
-    }
+            if (ec && !cancel) {
+                cerr << "Unable to resolve bootstrap server "
+                     << addr << " (" << ec.message() << ") giving up\n";
+            }
+
+            return ep;
+        });
 
     if (ec) {
-        cerr << "Unable to resolve bootstrap server "
-             << bootstrap_domain << " (" << ec.message() << ") giving up\n";
         return or_throw<BootstrapResult>(yield, ec);
     }
 
@@ -1600,7 +1604,7 @@ dht::DhtNode::bootstrap_single( std::string bootstrap_domain
     }
 
     if (ec) {
-        std::cerr << "Bootstrap server " << bootstrap_domain
+        std::cerr << "Bootstrap server " << bootstrap_address
                   << " does not reply (" << ec.message() << ") giving up\n";
         return or_throw<BootstrapResult>(yield, ec);
     }

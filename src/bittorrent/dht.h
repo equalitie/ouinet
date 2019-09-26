@@ -260,8 +260,11 @@ class DhtNode {
         asio::ip::udp::endpoint node_ep;
     };
 
+    using Address = boost::variant< udp::endpoint
+                                  , std::string /* domain name */>;
+
     BootstrapResult
-    bootstrap_single(std::string bootstrap_domain, Cancel, asio::yield_context);
+    bootstrap_single(Address, Cancel, asio::yield_context);
 
     std::vector<NodeContact> find_closest_nodes(
         NodeID target_id,
