@@ -225,10 +225,23 @@ http_forward( StreamIn& in
     assert(rpp.is_header_done());
     bool chunked_in = rpp.chunked();
 
+    // https://www.w3.org/Protocols/rfc2616/rfc2616-sec4.html#sec4.4
+    bool has_body = [] (auto result) {
+            auto result_i
+                = static_cast<std::underlying_type_t<http::status>>(result);
+
+            bool inv = (100 <= result_i && result_i < 200)
+                    || result == http::status::no_content // 204
+                    || result == http::status::not_modified // 304
+                    /* TODO: Request method == HEAD */ ;
+
+            return !inv;
+        }(rpp.get().result());
+
     // Get content length if non-chunked.
-    size_t nc_pending;
+    size_t nc_pending = 0;
     bool http_10_eob = false;  // HTTP/1.0 end of body on connection close, no `Content-Length`
-    if (!chunked_in) {
+    if (has_body && !chunked_in) {
         auto clen = rpp.content_length();
         if (clen)
             nc_pending = *clen;
