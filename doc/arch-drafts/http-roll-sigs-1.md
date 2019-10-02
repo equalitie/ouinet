@@ -67,12 +67,12 @@ Trailer: Digest, X-Ouinet-Data-Size, X-Ouinet-Sig1
 
 80000
 0123456789...
-80000;ouisig=BASE64(SIG(INJECTION_ID="d6076…" NUL OFFSET="0" NUL BLOCK1))
+80000;ouisig=BASE64(BSIG(INJECTION_ID="d6076…" NUL OFFSET="0" NUL SHA-512(BLOCK1)))
 0123456789...
-4;ouisig=BASE64(SIG(INJECTION_ID="d6076…" NUL OFFSET="1048576" NUL BLOCK2))
+4;ouisig=BASE64(BSIG(INJECTION_ID="d6076…" NUL OFFSET="1048576" NUL SHA-512(BLOCK2)))
 abcd
-0;ouisig=BASE64(SIG(INJECTION_ID="d6076…" NUL OFFSET="2097152" NUL BLOCK3))
-Digest: SHA-256=BASE64(HASH_OF_FULL_BODY)
+0;ouisig=BASE64(BSIG(INJECTION_ID="d6076…" NUL OFFSET="2097152" NUL SHA-512(BLOCK3)))
+Digest: SHA-256=BASE64(SHA-256(FULL_BODY))
 X-Ouinet-Data-Size: 1048580
 X-Ouinet-Sig1: keyId="ed25519=????",algorithm="hs2019",created=1516048311,
   headers="(response-status) (created) x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-http-status date server content-type content-disposition x-ouinet-bsigs digest x-ouinet-data-size",
@@ -81,7 +81,13 @@ X-Ouinet-Sig1: keyId="ed25519=????",algorithm="hs2019",created=1516048311,
 
 The signature for a given block comes in a chunk extension in the chunk right after the block's end (for the last block, in the final chunk); if the signature was placed at the beginning of the block, the injector would need to buffer the whole block in memory before sending the corresponding chunks.
 
-Each block signature covers the injection identifier and block offset besides its content.  The former avoids replay attacks where the attacker sends a correctly signed block from a different injection (for the same or a different URI).  The latter avoids the attacker from reordering correctly signed blocks for this injection.  However, this inlining of signatures also binds the stream representation of the body to this particular injection.  Storage that keeps signatures inline with block data should take this into account when trying to reuse body data.
+The signature string for each block covers:
+
+  - The injection identifier to avoid replay attacks where the attacker sends a correctly signed block from a different injection (for the same or a different URI).
+  - The offset to avoid the attacker from reordering correctly signed blocks for this injection.
+  - The data hash instead of the data itself to save the signer from keeping the whole block in memory for producing the signature (the hash algorithm can be fed as data comes in from the origin).
+
+Please note that this inlining of signatures also binds the stream representation of the body to this particular injection.  Storage that keeps signatures inline with block data should take this into account when trying to reuse body data.
 
 Common parameters to all block signatures are kept the same and factored out to `X-Ouinet-BSigs` for simplicity and bandwidth efficiency.  Even if each block size could be inferred from the presence of a chunk extension, having the signer commit to a fixed and explicit size up front (with the exception of the last block) helps the consumer of the signed response to easily validate chunk boundaries and discard responses with too big blocks.  In the example, chunks are equivalent to blocks; this is the simplest implementation but it is not compulsory: blocks could be splitted in several chunks if needed (to save injector memory, since otherwise it cannot start sending a chunk as its size comes before data, and the last chunk may be shorter).  However, for the sake of simplicity, chunks should be aligned to block boundaries (i.e. blocks should consist of a natural number of chunks).
 
