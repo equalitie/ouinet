@@ -47,6 +47,8 @@ hash_algo(hash_algorithm ha) {
             return ::gcry_md_algos::GCRY_MD_SHA1;
         case hash_algorithm::sha256:
             return ::gcry_md_algos::GCRY_MD_SHA256;
+        case hash_algorithm::sha512:
+            return ::gcry_md_algos::GCRY_MD_SHA512;
         default:
             return -1;
     }

@@ -14,6 +14,7 @@ namespace ouinet { namespace util {
 enum class hash_algorithm {
     sha1,
     sha256,
+    sha512,
 };
 
 
@@ -95,6 +96,7 @@ private:
 
 using SHA1 = Hash<hash_algorithm::sha1, 20>;
 using SHA256 = Hash<hash_algorithm::sha256, 32>;
+using SHA512 = Hash<hash_algorithm::sha512, 64>;
 
 
 namespace hash_detail {
@@ -152,6 +154,13 @@ template<class Arg, class... Rest>
 inline
 SHA256::digest_type sha256_digest(const Arg& arg, const Rest&... rest) {
     SHA256 hash;
+    return hash_detail::digest(hash, arg, rest...);
+}
+
+template<class Arg, class... Rest>
+inline
+SHA512::digest_type sha512_digest(const Arg& arg, const Rest&... rest) {
+    SHA512 hash;
     return hash_detail::digest(hash, arg, rest...);
 }
 
