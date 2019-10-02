@@ -93,7 +93,7 @@ static const string rs_head_signed_s = (
 );
 
 static const array<string, 1> rs_block_cexts{
-    ";ouisig=\"CGbGB23bI3VqycONMohS556I+Ik/wBKCthX/98QMKUu4WX5Xp/D5B4KHl7MutkhiJ5KNOCcRkoR0F0E2sRKvAA==\"",  // offset 0
+    ";ouisig=\"bjPAQLCV7Sj6S3EOUcrAWG3T+XddSQ1YBS7VwytXh6kw5f7vZ8AfWKz+JjkOIA2Lb5N8MH+3D7390mRUbzTWBQ==\"",  // offset 0
 };
 
 template<class F>

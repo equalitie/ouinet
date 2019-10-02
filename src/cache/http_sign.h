@@ -46,8 +46,8 @@ namespace ouinet { namespace cache {
 // ----------------------------------------------------------------
 
 namespace http_sign_detail {
-util::SHA256 block_base_hash(const std::string&, size_t);
-std::string block_chunk_ext(util::SHA256&, const util::Ed25519PrivateKey&);
+std::string block_sig_str_pfx(const std::string&, size_t);
+std::string block_chunk_ext(const std::string&, util::SHA512&, const util::Ed25519PrivateKey&);
 bool check_body(const http::response_header<>&, size_t, util::SHA256&);
 }
 
@@ -183,8 +183,9 @@ session_flush_signed( Session& in, SinkStream& out
     size_t body_length = 0;
     size_t block_offset = 0;
     util::SHA256 body_hash;
-    util::SHA256 block_hash  // for first block
-        = http_sign_detail::block_base_hash(injection_id, block_offset);
+    util::SHA512 block_hash;  // for first block
+    auto block_sig_str_pfx  // for first block
+        = http_sign_detail::block_sig_str_pfx(injection_id, block_offset);
     // Simplest implementation: one output chunk per data block.
     // The big buffer may cause issues with coroutine stack management,
     // so allocate it in the heap.
@@ -199,10 +200,11 @@ session_flush_signed( Session& in, SinkStream& out
         };  // send rest if no more input
         if (do_inject && ret.first.size() > 0) {  // if injecting and sending data
             if (block_offset > 0)  // add chunk extension for previous block
-                ret.second = http_sign_detail::block_chunk_ext(block_hash, sk);
+                ret.second = http_sign_detail::block_chunk_ext(block_sig_str_pfx, block_hash, sk);
             // Prepare chunk extension for next block.
-            block_hash = http_sign_detail::block_base_hash(injection_id, block_offset);
+            block_hash = {};
             block_hash.update(ret.first);
+            block_sig_str_pfx = http_sign_detail::block_sig_str_pfx(injection_id, block_offset);
             block_offset += ret.first.size();
         }
         return ret;  // pass data on, drop origin extensions
@@ -218,7 +220,7 @@ session_flush_signed( Session& in, SinkStream& out
         }
         ProcTrailFunc::result_type ret{move(intr), {}};
         if (do_inject)
-            ret.second = http_sign_detail::block_chunk_ext(block_hash, sk);
+            ret.second = http_sign_detail::block_chunk_ext(block_sig_str_pfx, block_hash, sk);
         return ret;  // pass trailer on, drop origin extensions
     };
 

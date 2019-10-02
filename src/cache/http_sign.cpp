@@ -181,25 +181,24 @@ http_key_id_for_injection(const util::Ed25519PublicKey& pk)
     return "ed25519=" + util::base64_encode(pk.serialize());
 }
 
-util::SHA256
-http_sign_detail::block_base_hash( const std::string& injection_id
-                                 , size_t offset)
+std::string
+http_sign_detail::block_sig_str_pfx( const std::string& injection_id
+                                   , size_t offset)
 {
     static const auto fmt_ = "%s%c%d%c";
-    util::SHA256 ret;
-    ret.update(( boost::format(fmt_)
-               % injection_id % '\0'
-               % offset % '\0').str());
-    return ret;
+    return ( boost::format(fmt_)
+           % injection_id % '\0'
+           % offset % '\0').str();
 }
 
 std::string
-http_sign_detail::block_chunk_ext( util::SHA256& hash
+http_sign_detail::block_chunk_ext( const std::string& sig_str_pfx
+                                 , util::SHA512& hash
                                  , const util::Ed25519PrivateKey& sk)
 {
     static const auto fmt_ = ";ouisig=\"%s\"";
     auto digest = util::bytes::to_string(hash.close());
-    auto encoded_sig = util::base64_encode(sk.sign(digest));
+    auto encoded_sig = util::base64_encode(sk.sign(sig_str_pfx + digest));
     return (boost::format(fmt_) % encoded_sig).str();
 }
 
