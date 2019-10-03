@@ -67,11 +67,11 @@ Trailer: Digest, X-Ouinet-Data-Size, X-Ouinet-Sig1
 
 80000
 0123456789...
-80000;ouisig=BASE64(BSIG(INJECTION_ID="d6076…" NUL OFFSET="0" NUL SHA-512(BLOCK1)))
+80000;ouisig=BASE64(BSIG(d607…e58d NUL 0 NUL SHA-512(BLOCK1)))
 0123456789...
-4;ouisig=BASE64(BSIG(INJECTION_ID="d6076…" NUL OFFSET="1048576" NUL SHA-512(BLOCK2)))
+4;ouisig=BASE64(BSIG(d607…e58d NUL 1048576 NUL SHA-512(BLOCK2)))
 abcd
-0;ouisig=BASE64(BSIG(INJECTION_ID="d6076…" NUL OFFSET="2097152" NUL SHA-512(BLOCK3)))
+0;ouisig=BASE64(BSIG(d607…e58d NUL 2097152 NUL SHA-512(BLOCK3)))
 Digest: SHA-256=BASE64(SHA-256(FULL_BODY))
 X-Ouinet-Data-Size: 1048580
 X-Ouinet-Sig1: keyId="ed25519=????",algorithm="hs2019",created=1516048311,
@@ -81,11 +81,11 @@ X-Ouinet-Sig1: keyId="ed25519=????",algorithm="hs2019",created=1516048311,
 
 The signature for a given block comes in a chunk extension in the chunk right after the block's end (for the last block, in the final chunk); if the signature was placed at the beginning of the block, the injector would need to buffer the whole block in memory before sending the corresponding chunks.
 
-The signature string for each block covers:
+The signature string for each block covers the following values (separated by null characters):
 
-  - The injection identifier to avoid replay attacks where the attacker sends a correctly signed block from a different injection (for the same or a different URI).
-  - The offset to avoid the attacker from reordering correctly signed blocks for this injection.
-  - The data hash instead of the data itself to save the signer from keeping the whole block in memory for producing the signature (the hash algorithm can be fed as data comes in from the origin).
+  - The injection identifier (string) to avoid replay attacks where the attacker sends a correctly signed block from a different injection (for the same or a different URI).
+  - The offset (decimal, no padding) to avoid the attacker from reordering correctly signed blocks for this injection.
+  - The data hash (binary) instead of the data itself to save the signer from keeping the whole block in memory for producing the signature (the hash algorithm can be fed as data comes in from the origin).
 
 Please note that this inlining of signatures also binds the stream representation of the body to this particular injection.  Storage that keeps signatures inline with block data should take this into account when trying to reuse body data.
 
