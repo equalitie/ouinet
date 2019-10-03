@@ -3,56 +3,55 @@ include(ExternalProject)
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     set(OPENSSL_VERSION "1.1.1c")
 
+    get_filename_component(COMPILER_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
+
     if (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "armv7-a")
-        set(HOSTTRIPLE "arm-linux-androideabi")
         set(OPENSSL_TARGET "android-arm")
-    elseif (${CMAKE_SYSTEM_PROCESSOR} MATCHES "^arm.*")
-        # Is this still relevant? armv<7 seems to be obsolete
-        # from android 4.4 onwards.
-        set(HOSTTRIPLE "armv5te-linux-androideabi")
-        set(OPENSSL_TARGET "android-arm")
+        set(MAX_API 19)
     elseif (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "aarch64")
-        set(HOSTTRIPLE "aarch64-linux-android")
         set(OPENSSL_TARGET "android-arm64")
+        set(MAX_API 21)
     elseif (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "i686")
-        set(HOSTTRIPLE "i686-linux-android")
         set(OPENSSL_TARGET "android-x86")
+        set(MAX_API 19)
     elseif (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
-        set(HOSTTRIPLE "x86_64-linux-android")
         set(OPENSSL_TARGET "android-x86_64")
+        set(MAX_API 21)
     else()
         message(FATAL_ERROR "Unsupported CMAKE_SYSTEM_PROCESSOR ${CMAKE_SYSTEM_PROCESSOR}")
+    endif()
+
+    # openssl does not compile with __ANDROID_API__ past a certain point.
+    # Presumably this will get fixed in a future openssl version.
+    # For now, defining an old version seems to work.
+    if (${ANDROID_PLATFORM_LEVEL} LESS ${MAX_API})
+        set(OPENSSL_ANDROID_VERSION ${ANDROID_PLATFORM_LEVEL})
+    else()
+        set(OPENSSL_ANDROID_VERSION ${MAX_API})
     endif()
 
     externalproject_add(built_openssl
         URL "https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz"
         URL_MD5 15e21da6efe8aa0e0768ffd8cd37a5f6
         PREFIX "${CMAKE_CURRENT_BINARY_DIR}/openssl"
-        # The openssl android support is _amazingly_ broken. The patch below
-        # fixes it for this particular version and this particular configuration.
-        # In any other setting, who the hell knows.
-        PATCH_COMMAND
-            sed -i -e "s:/\\$sysroot:/sysroot:"
-                ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl/Configurations/15-android.conf
         CONFIGURE_COMMAND
                cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
-            && export ANDROID_NDK_HOME=${CMAKE_ANDROID_STANDALONE_TOOLCHAIN}
-            && export CROSS_COMPILE="${HOSTTRIPLE}-"
-            && export PATH=${CMAKE_ANDROID_STANDALONE_TOOLCHAIN}/bin:$ENV{PATH}
+            && export ANDROID_NDK_HOME=${CMAKE_ANDROID_NDK}
+            && export PATH=${COMPILER_DIR}:$ENV{PATH}
             && ./Configure
                 ${OPENSSL_TARGET}
                 no-shared -no-ssl2 -no-ssl3 -no-comp -no-hw -no-engine
                 --prefix=${CMAKE_CURRENT_BINARY_DIR}/openssl/install
+                -D__ANDROID_API__=${OPENSSL_ANDROID_VERSION}
         BUILD_COMMAND
                cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
-            && export ANDROID_NDK_HOME=${CMAKE_ANDROID_STANDALONE_TOOLCHAIN}
-            && export CROSS_COMPILE="${HOSTTRIPLE}-"
-            && export PATH=${CMAKE_ANDROID_STANDALONE_TOOLCHAIN}/bin:$ENV{PATH}
+            && export ANDROID_NDK_HOME=${CMAKE_ANDROID_NDK}
+            && export PATH=${COMPILER_DIR}:$ENV{PATH}
             && make depend
             && make build_libs
         INSTALL_COMMAND
                cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
-            && export PATH=${CMAKE_ANDROID_STANDALONE_TOOLCHAIN}/bin:$ENV{PATH}
+            && export PATH=${COMPILER_DIR}:$ENV{PATH}
             && make install_dev
     )
 

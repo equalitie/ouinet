@@ -38,7 +38,7 @@ add_custom_command(
          && export GOARCH=${GOARCH}
          && export GOARM=${GOARM}
          && export CGO_ENABLED=1
-         && export CC=${CMAKE_C_COMPILER}
+         && export CC=${GO_CC}
          && mkdir -p ${GOPATH}/src/github.com/equalitie/lampshade/src
          && cd ${GOPATH}/src/github.com/equalitie/lampshade
          && rsync -r ${CMAKE_CURRENT_SOURCE_DIR}/ src

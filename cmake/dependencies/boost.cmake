@@ -13,13 +13,15 @@ set(BOOST_COMPONENTS
 
 
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
+    get_filename_component(COMPILER_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
+    get_filename_component(COMPILER_TOOLCHAIN_PREFIX ${_CMAKE_TOOLCHAIN_PREFIX} NAME)
+    string(REGEX REPLACE "-$" "" COMPILER_HOSTTRIPLE ${COMPILER_TOOLCHAIN_PREFIX})
+    # This is the same as COMPILER_HOSTTRIPLE, _except_ on arm32.
+    set(COMPILER_CC_PREFIX ${COMPILER_HOSTTRIPLE})
+
     if (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "armv7-a")
+        set(COMPILER_CC_PREFIX "armv7a-linux-androideabi")
         set(BOOST_ARCH "armeabiv7a")
-        set(BOOST_ARCH_SETTINGS "abi=aapcs")
-    elseif (${CMAKE_SYSTEM_PROCESSOR} MATCHES "^arm.*")
-        # Is this still relevant? armv<7 seems to be obsolete
-        # from android 4.4 onwards.
-        set(BOOST_ARCH "armeabi")
         set(BOOST_ARCH_SETTINGS "abi=aapcs")
     elseif (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "aarch64")
         set(BOOST_ARCH "arm64v8a")
@@ -59,9 +61,10 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
             && ./bootstrap.sh
         BUILD_COMMAND
                cd ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost
-            && export PATH=${CMAKE_ANDROID_STANDALONE_TOOLCHAIN}/bin:$ENV{PATH}
-            && export CLANGPATH=${CMAKE_ANDROID_STANDALONE_TOOLCHAIN}/bin
+            && export PATH=${COMPILER_DIR}:$ENV{PATH}
             && export BOOSTARCH=${BOOST_ARCH}
+            && export BINUTILS_PREFIX=${COMPILER_DIR}/${COMPILER_HOSTTRIPLE}-
+            && export COMPILER_FULL_PATH=${COMPILER_DIR}/${COMPILER_CC_PREFIX}${ANDROID_PLATFORM_LEVEL}-clang++
             && ./b2
                 target-os=android
                 toolset=clang-${BOOST_ARCH}
