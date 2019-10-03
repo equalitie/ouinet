@@ -251,6 +251,7 @@ BOOST_AUTO_TEST_CASE(test_http_verify) {
 
 BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
     // Test data block signatures are split according to this size.
+    // TODO: Parse block size from injection response head below and check this there.
     BOOST_CHECK_EQUAL(http_::response_data_block, 65536);
 
     asio::io_service ios;
@@ -297,6 +298,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
         // Test signed output.
         asio::spawn(ios, [ &signed_r, &tested_w
                          , &ios, lock = wc.lock()](auto y) mutable {
+            // TODO: Parse data block size and ensure it is the expected one.
             auto hproc = [] (auto inh, auto&, auto) { return inh; };
             int xidx = 0;
             auto xproc = [&xidx] (auto exts, auto&, auto) {
