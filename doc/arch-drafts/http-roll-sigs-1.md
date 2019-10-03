@@ -36,7 +36,7 @@ The injector then sends data blocks of the maximum size specified above, each of
 
 When all data blocks have been sent to the client, the injector sends additional headers to build the **final response head** including:
 
-  - Content digests for the whole body.
+  - Content digests for the whole body.  SHA2-256 is used as a compromise between security and digest size.
   - The final content length.
 
 HTTP chunked transfer encoding is used to enable providing a first set of headers, then a signature (as a chunk extension) after each sent block, then a final set of headers as a trailer.
@@ -67,12 +67,12 @@ Trailer: Digest, X-Ouinet-Data-Size, X-Ouinet-Sig1
 
 80000
 0123456789...
-80000;ouisig=BASE64(BSIG(d607…e58d NUL 0 NUL SHA-512(BLOCK1)))
+80000;ouisig=BASE64(BSIG(d607…e58d NUL 0 NUL SHA2-512(BLOCK1)))
 0123456789...
-4;ouisig=BASE64(BSIG(d607…e58d NUL 1048576 NUL SHA-512(BLOCK2)))
+4;ouisig=BASE64(BSIG(d607…e58d NUL 1048576 NUL SHA2-512(BLOCK2)))
 abcd
-0;ouisig=BASE64(BSIG(d607…e58d NUL 2097152 NUL SHA-512(BLOCK3)))
-Digest: SHA-256=BASE64(SHA-256(FULL_BODY))
+0;ouisig=BASE64(BSIG(d607…e58d NUL 2097152 NUL SHA2-512(BLOCK3)))
+Digest: SHA-256=BASE64(SHA2-256(FULL_BODY))
 X-Ouinet-Data-Size: 1048580
 X-Ouinet-Sig1: keyId="ed25519=????",algorithm="hs2019",created=1516048311,
   headers="(response-status) (created) x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-http-status date server content-type content-disposition x-ouinet-bsigs digest x-ouinet-data-size",
@@ -85,7 +85,7 @@ The signature string for each block covers the following values (separated by nu
 
   - The injection identifier (string) to avoid replay attacks where the attacker sends a correctly signed block from a different injection (for the same or a different URI).
   - The offset (decimal, no padding) to avoid the attacker from reordering correctly signed blocks for this injection.
-  - The data hash (binary) instead of the data itself to save the signer from keeping the whole block in memory for producing the signature (the hash algorithm can be fed as data comes in from the origin).
+  - The data hash (binary) instead of the data itself to save the signer from keeping the whole block in memory for producing the signature (the hash algorithm can be fed as data comes in from the origin).  SHA2-512 is used as a compromise between security and speed on 64-bit platforms (the longer digest size does not add transfer or storage overhead since it is not explicitly sent anywhere).
 
 Please note that this inlining of signatures also binds the stream representation of the body to this particular injection.  Storage that keeps signatures inline with block data should take this into account when trying to reuse body data.
 
