@@ -33,15 +33,15 @@ using namespace ouinet;
 static const string rq_target = "https://example.com/foo";  // proxy-like
 static const string rq_host = "example.com";
 
-static const string rs_body = "<!DOCTYPE html>\n<p>Tiny body here!</p>";  // TODO: span several data blocks
-static const string rs_body_b64digest = "j7uwtB/QQz0FJONbkyEmaqlJwGehJLqWoCO1ceuM30w=";
+static const string rs_body = string(128 * 1024, 'x') + "abcd";
+static const string rs_body_b64digest = "PcKmXT4Bi13pk1OsnR7dWA1bQxwsOQH2Ua+kvAtP3Zs=";
 static const string rs_head_s = (
     "HTTP/1.1 200 OK\r\n"
     "Date: Mon, 15 Jan 2018 20:31:50 GMT\r\n"
     "Server: Apache1\r\n"
     "Content-Type: text/html\r\n"
     "Content-Disposition: inline; filename=\"foo.html\"\r\n"
-    "Content-Length: 38\r\n"
+    "Content-Length: 131076\r\n"
     "Server: Apache2\r\n"
     "\r\n"
 );
@@ -78,8 +78,8 @@ static const string rs_head_signed_s = (
     "Transfer-Encoding: chunked\r\n"
     "Trailer: X-Ouinet-Data-Size, Digest, X-Ouinet-Sig1\r\n"
 
-    "X-Ouinet-Data-Size: 38\r\n"
-    "Digest: SHA-256=j7uwtB/QQz0FJONbkyEmaqlJwGehJLqWoCO1ceuM30w=\r\n"
+    "X-Ouinet-Data-Size: 131076\r\n"
+    "Digest: SHA-256=PcKmXT4Bi13pk1OsnR7dWA1bQxwsOQH2Ua+kvAtP3Zs=\r\n"
 
     "X-Ouinet-Sig1: keyId=\"ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=\","
     "algorithm=\"hs2019\",created=1516048311,"
@@ -88,12 +88,14 @@ static const string rs_head_signed_s = (
     "x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-bsigs "
     "x-ouinet-data-size "
     "digest\","
-    "signature=\"BvE15gJsMk+I3GamD4UEJP5YkPaEMGXd3tAsHcqHTEzdQ9JJTDFONhoXZyJpqFgD1UD6KbWvn8Lybc45e6OcAQ==\"\r\n"
+    "signature=\"chKZPonON7Y20HlXmJD+BPBsp9C8QRgTZNDBX6rsVfJZBI0t8ideiajJg2aLMBSo1wPTlhNIgm4sQt7oHI0KDA==\"\r\n"
     "\r\n"
 );
 
-static const array<string, 1> rs_block_cexts{
-    ";ouisig=\"bjPAQLCV7Sj6S3EOUcrAWG3T+XddSQ1YBS7VwytXh6kw5f7vZ8AfWKz+JjkOIA2Lb5N8MH+3D7390mRUbzTWBQ==\"",  // offset 0
+static const array<string, 3> rs_block_cexts{
+    ";ouisig=\"MOKjD3PcoeiS/4TTP8YNxdOVeKvoQJZmzzWRIh9PUycap8AL62O4kPubHFWZahqtJImoZHEuT+0V31urDMkoAw==\"",  // offset 0
+    ";ouisig=\"foKOFv/DkXCxLlkc7fL9argEf4IiqPvBkH0N1NmbR6OyZAEl5HYepD4xTc4cYc4wqMKOlWkKwfMdaFIf6fwEBA==\"",  // offset 65536
+    ";ouisig=\"B1LsKycoNZMGF3AdPegJySkEF42sp456P7yX2/75/T/ZlbP2UqyjKA7Bqy7SwGBTtms5g7ckQOMKbzT9KfT1Cg==\"",  // offset 131072
 };
 
 template<class F>
@@ -248,6 +250,9 @@ BOOST_AUTO_TEST_CASE(test_http_verify) {
 }
 
 BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
+    // Test data block signatures are split according to this size.
+    BOOST_CHECK_EQUAL(http_::response_data_block, 65536);
+
     asio::io_service ios;
     run_spawned(ios, [&] (auto yield) {
         WaitCondition wc(ios);
