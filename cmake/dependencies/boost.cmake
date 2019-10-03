@@ -36,17 +36,29 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
         message(FATAL_ERROR "Unsupported CMAKE_SYSTEM_PROCESSOR ${CMAKE_SYSTEM_PROCESSOR}")
     endif()
 
+    set(BUILT_BOOST_VERSION ${BOOST_VERSION})
+    set(BUILT_BOOST_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/boost/install/include)
+    set(BUILT_BOOST_LIBRARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/boost/install/lib)
+    set(BUILT_BOOST_COMPONENTS ${BOOST_COMPONENTS})
+
+    function(_boost_library_filename component output_var)
+        set(${output_var} "${BUILT_BOOST_LIBRARY_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}boost_${component}${CMAKE_STATIC_LIBRARY_SUFFIX}" PARENT_SCOPE)
+    endfunction(_boost_library_filename)
+
     string(REPLACE "." "_" BOOST_VERSION_FILENAME ${BOOST_VERSION})
 
     include(${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-dependencies.cmake)
     _static_Boost_recursive_dependencies("${BOOST_COMPONENTS}" BOOST_DEPENDENT_COMPONENTS)
     set(ENABLE_BOOST_COMPONENTS )
+    set(BOOST_LIBRARY_FILES )
     foreach (component ${BOOST_DEPENDENT_COMPONENTS})
         if (${component} STREQUAL "unit_test_framework")
             set(ENABLE_BOOST_COMPONENTS ${ENABLE_BOOST_COMPONENTS} --with-test)
             continue()
         endif()
         set(ENABLE_BOOST_COMPONENTS ${ENABLE_BOOST_COMPONENTS} --with-${component})
+        _boost_library_filename(${component} filename)
+        set(BOOST_LIBRARY_FILES ${BOOST_LIBRARY_FILES} ${filename})
     endforeach()
 
     externalproject_add(built_boost
@@ -77,13 +89,9 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
                 ${ENABLE_BOOST_COMPONENTS}
                 ${BOOST_ARCH_SETTINGS}
                 install
+        BUILD_BYPRODUCTS ${BOOST_LIBRARY_FILES}
         INSTALL_COMMAND ""
     )
-
-    set(BUILT_BOOST_VERSION ${BOOST_VERSION})
-    set(BUILT_BOOST_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/boost/install/include)
-    set(BUILT_BOOST_LIBRARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/boost/install/lib)
-    set(BUILT_BOOST_COMPONENTS ${BOOST_COMPONENTS})
 
     set(Boost_DIR ${CMAKE_CURRENT_LIST_DIR}/inline-boost)
     list(INSERT CMAKE_MODULE_PATH 0 ${Boost_DIR})
