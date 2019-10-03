@@ -760,14 +760,24 @@ public:
                     http::async_write(con, res, asio::yield_context(yield)[ec]);
                     return false;
                 }
+                case fresh_channel::secure_origin:
                 case fresh_channel::origin: {
-                    auto session = client_state.fetch_fresh_from_origin(rq, yield[ec]);
+                    auto rq_ = rq;
+
+                    if (r == fresh_channel::secure_origin
+                            && rq_.target().starts_with("http://")) {
+                        auto target = rq_.target().to_string();
+                        target.insert(4, "s"); // http:// -> https://
+                        rq_.target(move(target));
+                    }
+
+                    auto session = client_state.fetch_fresh_from_origin(rq_, yield[ec]);
 
                     if (ec) break;
 
                     session.flush_response(con, cancel, yield[ec]);
 
-                    if (ec || !rq.keep_alive() || !session.keep_alive()) {
+                    if (ec || !rq_.keep_alive() || !session.keep_alive()) {
                         session.close();
                         return false;
                     }
@@ -1061,6 +1071,14 @@ void Client::State::serve_request( GenericStream&& con
                                , fresh_channel::injector
                                , fresh_channel::proxy})};
 
+    // For use with non-tls (http://) sites
+    const rr::Config secure_first_config
+        { true
+        , queue<fresh_channel>({ fresh_channel::secure_origin
+                               , fresh_channel::injector
+                               , fresh_channel::proxy
+                               , fresh_channel::origin})};
+
     // This is the matching configuration for the one above,
     // but for uncacheable requests.
     const rr::Config nocache_request_config
@@ -1176,6 +1194,8 @@ void Client::State::serve_request( GenericStream&& con
         // Force cache and particular channels for this site.
         //Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example\\.net/.*")
         //     , {true, queue<fresh_channel>({fresh_channel::injector})} ),
+
+        Match(reqexpr::from_regex(target_getter, "http://.*"), secure_first_config)
     });
 
     auto connection_id = _next_connection_id++;

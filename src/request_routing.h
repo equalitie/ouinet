@@ -28,10 +28,11 @@ namespace request_route {
 // misses the opportunity to use the cache for it.
 enum class fresh_channel {
     // These channels may be configured by the user.
-    origin,      // send request to the origin HTTP server
-    proxy,       // send request to proxy ouiservice
-    injector,    // send request to injector ouiservice
-    _front_end,  // handle the request internally
+    secure_origin, // send request to the origin HTTP server while forcing TLS
+    origin,        // send request to the origin HTTP server as is (with or without TLS)
+    proxy,         // send request to proxy ouiservice
+    injector,      // send request to injector ouiservice
+    _front_end,    // handle the request internally
 };
 
 // A request router configuration will be
