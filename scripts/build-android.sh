@@ -350,7 +350,7 @@ function build_ouinet_aar {
     export GRADLE_USER_HOME="${DIR}/.gradle-home"
     GRADLE_BUILDDIR="${DIR}/${OUTPUT_DIR}/ouinet"
     mkdir -p "${GRADLE_BUILDDIR}"
-    ( cd "${ROOT}/android";
+    ( cd "${GRADLE_BUILDDIR}";
       gradle build \
         -Pboost_includedir="${DIR}/${BUILD_DIR}/boost/install/include" \
         -Pandroid_abi=${ABI} \
@@ -359,7 +359,11 @@ function build_ouinet_aar {
         -Plibdir="${DIR}/${OUTPUT_DIR}/builddir/deps" \
         -Passetsdir="${DIR}/${OUTPUT_DIR}/builddir/assets" \
         -Pouinet_properties="${DIR}/${BUILD_DIR}/ouinet.properties" \
-        -PbuildDir="$GRADLE_BUILDDIR" )
+        -PbuildDir="${GRADLE_BUILDDIR}" \
+       --project-dir="${ROOT}"/android \
+       --gradle-user-home "${GRADLE_BUILDDIR}"/.gradle-home \
+       --project-cache-dir "${GRADLE_BUILDDIR}"/.gradle-cache
+    )
 }
 
 ######################################################################
