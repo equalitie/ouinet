@@ -1101,6 +1101,7 @@ void Client::State::serve_request( GenericStream&& con
     auto method_getter([](const Request& r) {return r.method_string();});
     auto host_getter([](const Request& r) {return r["Host"];});
     auto x_oui_dest_getter([](const Request& r) {return r["X-Oui-Destination"];});
+    auto x_private_getter([](const Request& r) {return r["X-Is-Private"];});
     auto target_getter([](const Request& r) {return r.target();});
 
     auto local_rx = util::str("https?://[^:/]+\\.", _config.local_domain(), "(:[0-9]+)?/.*");
@@ -1135,6 +1136,9 @@ void Client::State::serve_request( GenericStream&& con
         // Do not use cache for validation HEADs.
         // Caching these is not yet supported.
         Match( reqexpr::from_regex(method_getter, "HEAD")
+             , nocache_request_config),
+
+        Match( reqexpr::from_regex(x_private_getter, "True")
              , nocache_request_config),
 
         // Disable cache and always go to origin for this site.
