@@ -527,9 +527,12 @@ void serve( InjectorConfig& config
                     yield.log(outh);
                     return outh;
                 };
-                ProcInFunc<asio::const_buffer> dproc = [&] (auto ind, auto&, auto) {
+                auto xproc = [&] (auto exts, auto&, auto) {
+                    chunk_exts = move(exts);  // save exts for next chunk
+                };
+                ProcDataFunc<asio::const_buffer> dproc = [&] (auto ind, auto&, auto) {
                     forwarded += ind.size();
-                    ProcInFunc<asio::const_buffer>::result_type ret;
+                    ProcDataFunc<asio::const_buffer>::result_type ret;
                     if (asio::buffer_size(ind) > 0) {
                         ret = {move(ind), move(chunk_exts)};
                         chunk_exts = {};  // only send extensions in first output chunk
@@ -540,12 +543,9 @@ void serve( InjectorConfig& config
                     ProcTrailFunc::result_type ret{move(intr), move(chunk_exts)};
                     return ret;  // leave trailers untouched
                 };
-                auto xproc = [&] (auto exts, auto&, auto) {
-                    chunk_exts = move(exts);  // save exts for next chunk
-                };
                 res = RespFromH(http_forward( orig_con, con
                                             , util::to_origin_request(req)
-                                            , hproc, dproc, tproc, xproc
+                                            , hproc, xproc, dproc, tproc
                                             , cancel, yield[ec].tag("fetch_proxy")));
             }
             if (ec) {

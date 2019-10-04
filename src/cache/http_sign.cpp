@@ -53,6 +53,11 @@ http_injection_head( const http::request_header<>& rqh
     rsh.set(response_uri_hdr, rqh.target());
     rsh.set( header_prefix + "Injection"
            , boost::format("id=%s,ts=%d") % injection_id % injection_ts);
+    static const auto fmt_ = "keyId=\"%s\""
+                             ",algorithm=\"" + sig_alg_hs2019 + "\""
+                             ",size=%d";
+    rsh.set( response_block_signatures_hdr
+           , boost::format(fmt_) % key_id % response_data_block);
 
     // Create a signature of the initial head.
     auto to_sign = without_framing(rsh);
@@ -174,6 +179,27 @@ std::string
 http_key_id_for_injection(const util::Ed25519PublicKey& pk)
 {
     return "ed25519=" + util::base64_encode(pk.serialize());
+}
+
+std::string
+http_sign_detail::block_sig_str_pfx( const std::string& injection_id
+                                   , size_t offset)
+{
+    static const auto fmt_ = "%s%c%d%c";
+    return ( boost::format(fmt_)
+           % injection_id % '\0'
+           % offset % '\0').str();
+}
+
+std::string
+http_sign_detail::block_chunk_ext( const std::string& sig_str_pfx
+                                 , util::SHA512& hash
+                                 , const util::Ed25519PrivateKey& sk)
+{
+    static const auto fmt_ = ";ouisig=\"%s\"";
+    auto digest = util::bytes::to_string(hash.close());
+    auto encoded_sig = util::base64_encode(sk.sign(sig_str_pfx + digest));
+    return (boost::format(fmt_) % encoded_sig).str();
 }
 
 bool

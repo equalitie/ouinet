@@ -4,12 +4,12 @@
 namespace ouinet { namespace detail {
 
 std::string
-process_head( const http::response_header<>& rph, const ProcHeadFunc& rphproc, bool& chunked_out
+process_head( const http::response_header<>& rph, const ProcHeadFunc& hproc, bool& chunked_out
             , Cancel& cancel, Yield yield) {
     sys::error_code ec;
 
     auto rph_out(rph);
-    rph_out = rphproc(std::move(rph_out), cancel, yield[ec]);
+    rph_out = hproc(std::move(rph_out), cancel, yield[ec]);
     if (ec) return or_throw<std::string>(yield, ec);
 
     chunked_out = http::response<http::empty_body>(rph_out).chunked();
@@ -20,7 +20,7 @@ process_head( const http::response_header<>& rph, const ProcHeadFunc& rphproc, b
 }
 
 std::pair<http::fields, std::string>
-process_trailers( const http::response_header<>& rph, const ProcTrailFunc& trproc
+process_trailers( const http::response_header<>& rph, const ProcTrailFunc& tproc
                 , Cancel& cancel, Yield yield) {
     http::fields intrail;
     for (const auto& hdr : http::token_list(rph[http::field::trailer])) {
@@ -29,7 +29,7 @@ process_trailers( const http::response_header<>& rph, const ProcTrailFunc& trpro
             continue;  // missing trailer
         intrail.insert(hit->name(), hit->name_string(), hit->value());
     }
-    return trproc(std::move(intrail), cancel, yield);
+    return tproc(std::move(intrail), cancel, yield);
 }
 
 }} // namespaces

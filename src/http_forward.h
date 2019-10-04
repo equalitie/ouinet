@@ -35,6 +35,9 @@ static const size_t http_forward_block = 16384;
 using ProcHeadFunc = std::function<
     http::response_header<>(http::response_header<>, Cancel&, Yield)>;
 
+// Notify about the reception of chunk extensions.
+using ProcChkExtFunc = std::function<void(std::string, Cancel&, Yield)>;
+
 // Get a buffer of data to be sent after processing a buffer of received data.
 // The returned data must be alive while `http_forward` runs,
 // The returned data will be wrapped in a single chunk
@@ -46,7 +49,7 @@ using ProcHeadFunc = std::function<
 // it is attached as chunk extensions to the chunk to be sent
 // (only if chunked transfer encoding is enabled at the output).
 template<class ConstBufferSequence>
-using ProcInFunc = std::function<
+using ProcDataFunc = std::function<
     std::pair<ConstBufferSequence, std::string>(asio::const_buffer inbuf, Cancel&, Yield)>;
 
 // Get copy of response trailers from input, return response trailers for output.
@@ -56,9 +59,6 @@ using ProcInFunc = std::function<
 // it is attached as chunk extensions to the last chunk to be sent.
 using ProcTrailFunc = std::function<
     std::pair<http::fields, std::string>(http::fields, Cancel&, Yield)>;
-
-// Notify about the reception of chunk extensions.
-using ProcChkExtFunc = std::function<void(std::string, Cancel&, Yield)>;
 
 namespace detail {
 static const auto max_size_t = (std::numeric_limits<std::size_t>::max)();
@@ -107,31 +107,31 @@ http_forward_request( StreamIn& in
 // Send the HTTP request `rq` over `in`, send the response head over `out`,
 // then forward the response body from `in` to `out`.
 //
-// The `rshproc` callback can be used to manipulate the response head
+// The `hproc` callback can be used to manipulate the response head
 // before sending it to `out`.
 // It can be used to set output transfer encoding to chunked.
 //
-// The `inproc` callback can be used to manipulate blocks of input
+// The `xproc` callback is called whenever a non-empty chunk extension
+// is received.
+//
+// The `dproc` callback can be used to manipulate blocks of input
 // (of at most `http_forward_block` size)
 // before sending the resulting data to `out`.
 // Every non-empty result is sent in a single write operation
 // (wrapped in a single chunk if the output is chunked).
 //
-// The `trproc` callback can be used to manipulate trailers
+// The `tproc` callback can be used to manipulate trailers
 // before sending them to `out`.
-//
-// The `cxproc` callback is called whenever a non-empty chunk extension
-// is received.
 template<class StreamIn, class StreamOut, class Request, class ConstBufferSequence>
 inline
 http::response_header<>
 http_forward( StreamIn& in
             , StreamOut& out
             , Request rq
-            , ProcHeadFunc rshproc
-            , ProcInFunc<ConstBufferSequence> inproc
-            , ProcTrailFunc trproc
-            , ProcChkExtFunc cxproc
+            , ProcHeadFunc hproc
+            , ProcChkExtFunc xproc
+            , ProcDataFunc<ConstBufferSequence> dproc
+            , ProcTrailFunc tproc
             , Cancel& cancel
             , Yield yield)
 {
@@ -148,8 +148,8 @@ http_forward( StreamIn& in
     // Forward the response
     // --------------------
     return http_forward( in, out
-                       , std::move(rshproc), std::move(inproc)
-                       , std::move(trproc), std::move(cxproc)
+                       , std::move(hproc), std::move(xproc)
+                       , std::move(dproc), std::move(tproc)
                        , cancel, yield);
 }
 
@@ -159,10 +159,10 @@ inline
 http::response_header<>
 http_forward( StreamIn& in
             , StreamOut& out
-            , ProcHeadFunc rshproc
-            , ProcInFunc<ConstBufferSequence> inproc
-            , ProcTrailFunc trproc
-            , ProcChkExtFunc cxproc
+            , ProcHeadFunc hproc
+            , ProcChkExtFunc xproc
+            , ProcDataFunc<ConstBufferSequence> dproc
+            , ProcTrailFunc tproc
             , Cancel& cancel
             , Yield yield)
 {
@@ -171,8 +171,8 @@ http_forward( StreamIn& in
     rpp.body_limit(detail::max_size_t);  // i.e. unlimited; callbacks can restrict this
 
     return http_forward( in, out, inbuf, rpp
-                       , std::move(rshproc), std::move(inproc)
-                       , std::move(trproc), std::move(cxproc)
+                       , std::move(hproc), std::move(xproc)
+                       , std::move(dproc), std::move(tproc)
                        , cancel, yield);
 }
 
@@ -187,10 +187,10 @@ http_forward( StreamIn& in
             , StreamOut& out
             , InputBuffer& inbuf
             , ResponseParser& rpp
-            , ProcHeadFunc rshproc
-            , ProcInFunc<ConstBufferSequence> inproc
-            , ProcTrailFunc trproc
-            , ProcChkExtFunc cxproc
+            , ProcHeadFunc hproc
+            , ProcChkExtFunc xproc
+            , ProcDataFunc<ConstBufferSequence> dproc
+            , ProcTrailFunc tproc
             , Cancel& cancel
             , Yield yield_)
 {
@@ -258,7 +258,7 @@ http_forward( StreamIn& in
     // --------------------------------------------------
     bool chunked_out;
     {
-        auto outh = detail::process_head( rpp.get().base(), rshproc, chunked_out
+        auto outh = detail::process_head( rpp.get().base(), hproc, chunked_out
                                         , cancel, yield[ec]);
         if (set_error(ec, "Failed to process response head"))
             return or_throw<ResponseH>(yield, ec);
@@ -339,13 +339,13 @@ http_forward( StreamIn& in
             break;
 
         if (!inexts.empty())
-            cxproc(std::move(inexts), cancel, yield[ec]);
+            xproc(std::move(inexts), cancel, yield[ec]);
         if (set_error(ec, "Failed to process chunk extensions"))
             break;
         inexts = {};
 
         ConstBufferSequence outbuf; std::string outexts;
-        std::tie(outbuf, outexts) = inproc(fwdbuf, cancel, yield[ec]);
+        std::tie(outbuf, outexts) = dproc(fwdbuf, cancel, yield[ec]);
         assert(outexts.empty() || chunked_out);  // must enable chunked output for extensions
         if (set_error(ec, "Failed to process response body"))
             break;
@@ -367,7 +367,7 @@ http_forward( StreamIn& in
 
     if (chunked_out) {
         http::fields outtrail; std::string outexts;
-        std::tie(outtrail, outexts) = detail::process_trailers(rph, trproc, cancel, yield[ec]);
+        std::tie(outtrail, outexts) = detail::process_trailers(rph, tproc, cancel, yield[ec]);
         if (set_error(ec, "Failed to process response trailers"))
             return or_throw<ResponseH>(yield, ec);
 

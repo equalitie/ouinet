@@ -28,6 +28,16 @@ namespace ouinet { namespace http_ {
     // This allows signing the size of body data
     // without breaking on transfer encoding changes.
     static const std::string response_data_size_hdr = header_prefix + "Data-Size";
+
+    // This contains common parameters for block signatures.
+    static const std::string response_block_signatures_hdr = header_prefix + "BSigs";
+
+    // A default size for data blocks to be signed.
+    // Small enough to avoid nodes buffering too much data
+    // and not take too much time to download on slow connections,
+    // but big enough to completely cover most responses
+    // and thus avoid having too many signatures per response.
+    static const size_t response_data_block = 65536;  // TODO: sensible value
 }}
 
 namespace ouinet { namespace cache {
@@ -36,7 +46,9 @@ namespace ouinet { namespace cache {
 // ----------------------------------------------------------------
 
 namespace http_sign_detail {
-bool check_body(const http::response_header<>&, size_t, ouinet::util::SHA256&);
+std::string block_sig_str_pfx(const std::string&, size_t);
+std::string block_chunk_ext(const std::string&, util::SHA512&, const util::Ed25519PrivateKey&);
+bool check_body(const http::response_header<>&, size_t, util::SHA256&);
 }
 
 // Get an extended version of the given response head
@@ -50,6 +62,7 @@ bool check_body(const http::response_header<>&, size_t, ouinet::util::SHA256&);
 //     X-Ouinet-Version: 0
 //     X-Ouinet-URI: https://example.com/foo
 //     X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
+//     X-Ouinet-BSigs: keyId="...",algorithm="hs2019",size=65536
 //     X-Ouinet-Sig0: keyId="...",algorithm="hs2019",created=1516048310,
 //       headers="(response-status) (created) ... x-ouinet-injection",
 //       signature="..."
@@ -145,7 +158,7 @@ session_flush_signed( Session& in, SinkStream& out
 
     bool do_inject = false;
     http::response_header<> outh;
-    auto hproc = [&] (auto inh, auto&, auto yield_) {
+    auto hproc = [&] (auto inh, auto&, auto) {
         auto inh_orig = inh;
         sys::error_code ec_;
         inh = util::to_cache_response(move(inh), ec_);
@@ -162,17 +175,38 @@ session_flush_signed( Session& in, SinkStream& out
         return inh;
     };
 
+    auto xproc = [] (auto, auto&, auto) {
+        // Origin chunk extensions are ignored and dropped
+        // since we have no way to sign them.
+    };
+
     size_t body_length = 0;
+    size_t block_offset = 0;
     util::SHA256 body_hash;
-    util::quantized_buffer<http_forward_block> qbuf;
-    ProcInFunc<asio::const_buffer> dproc = [&] (auto inbuf, auto&, auto) {
+    util::SHA512 block_hash;  // for first block
+    auto block_sig_str_pfx  // for first block
+        = http_sign_detail::block_sig_str_pfx(injection_id, block_offset);
+    // Simplest implementation: one output chunk per data block.
+    // The big buffer may cause issues with coroutine stack management,
+    // so allocate it in the heap.
+    auto qbuf = std::make_unique<util::quantized_buffer<http_::response_data_block>>();
+    ProcDataFunc<asio::const_buffer> dproc = [&] (auto inbuf, auto&, auto) {
         // Just count transferred data and feed the hash.
         body_length += inbuf.size();
         if (do_inject) body_hash.update(inbuf);
-        qbuf.put(inbuf);
-        ProcInFunc<asio::const_buffer>::result_type ret{
-            (inbuf.size() > 0) ? qbuf.get() : qbuf.get_rest(), {}
+        qbuf->put(inbuf);
+        ProcDataFunc<asio::const_buffer>::result_type ret{
+            (inbuf.size() > 0) ? qbuf->get() : qbuf->get_rest(), {}
         };  // send rest if no more input
+        if (do_inject && ret.first.size() > 0) {  // if injecting and sending data
+            if (block_offset > 0)  // add chunk extension for previous block
+                ret.second = http_sign_detail::block_chunk_ext(block_sig_str_pfx, block_hash, sk);
+            // Prepare chunk extension for next block.
+            block_hash = {};
+            block_hash.update(ret.first);
+            block_sig_str_pfx = http_sign_detail::block_sig_str_pfx(injection_id, block_offset);
+            block_offset += ret.first.size();
+        }
         return ret;  // pass data on, drop origin extensions
     };
 
@@ -185,17 +219,14 @@ session_flush_signed( Session& in, SinkStream& out
                                                 , httpsig_key_id);
         }
         ProcTrailFunc::result_type ret{move(intr), {}};
+        if (do_inject)
+            ret.second = http_sign_detail::block_chunk_ext(block_sig_str_pfx, block_hash, sk);
         return ret;  // pass trailer on, drop origin extensions
-    };
-
-    auto xproc = [] (auto, auto&, auto) {
-        // Origin chunk extensions are ignored and dropped
-        // since we have no way to sign them.
     };
 
     sys::error_code ec;
     in.flush_response( out
-                     , std::move(hproc), std::move(dproc), std::move(tproc), std::move(xproc)
+                     , std::move(hproc), std::move(xproc), std::move(dproc), std::move(tproc)
                      , cancel, yield[ec]);
     return or_throw(yield, ec);
 }
@@ -225,12 +256,17 @@ session_flush_verified( Session& in, SinkStream& out
         return inh;
     };
 
+    auto xproc = [] (auto, auto&, auto) {
+        // Chunk extensions are not forwarded
+        // since we have no way to verify them.
+    };
+
     size_t body_length = 0;
     util::SHA256 body_hash;
-    ProcInFunc<asio::const_buffer> dproc = [&] (auto ind, auto&, auto) {
+    ProcDataFunc<asio::const_buffer> dproc = [&] (auto ind, auto&, auto) {
         body_length += ind.size();
         body_hash.update(ind);
-        ProcInFunc<asio::const_buffer>::result_type ret{std::move(ind), {}};
+        ProcDataFunc<asio::const_buffer>::result_type ret{std::move(ind), {}};
         return ret;  // pass data on, drop chunk extensions
     };
 
@@ -266,14 +302,9 @@ session_flush_verified( Session& in, SinkStream& out
         return ret;
     };
 
-    auto xproc = [] (auto, auto&, auto) {
-        // Chunk extensions are not forwarded
-        // since we have no way to verify them.
-    };
-
     sys::error_code ec;
     in.flush_response( out
-                     , std::move(hproc), std::move(dproc), std::move(tproc), std::move(xproc)
+                     , std::move(hproc), std::move(xproc), std::move(dproc), std::move(tproc)
                      , cancel, yield[ec]);
     if (!ec && check_body_after)
         if (!http_sign_detail::check_body(head, body_length, body_hash))
