@@ -377,10 +377,6 @@ struct HttpSignature {
     // (extra field names and values point to the given head).
     std::pair<bool, http::fields> verify( const http::response_header<>&
                                         , const util::Ed25519PublicKey&);
-
-private:
-    static
-    bool has_comma_in_quotes(const boost::string_view&);
 };
 
 }} // namespaces

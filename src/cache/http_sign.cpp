@@ -429,6 +429,22 @@ http_signature( const http::response_header<>& rsh
     return (fmt % key_id % ts % headers % encoded_sig).str();
 }
 
+static bool
+has_comma_in_quotes(const boost::string_view& s) {
+    // A comma is between quotes if
+    // the number of quotes before it is odd.
+    int quotes_seen = 0;
+    for (auto c : s) {
+        if (c == '"') {
+            quotes_seen++;
+            continue;
+        }
+        if ((c == ',') && (quotes_seen % 2 != 0))
+            return true;
+    }
+    return false;
+}
+
 boost::optional<HttpSignature>
 HttpSignature::parse(boost::string_view sig)
 {
@@ -506,22 +522,6 @@ HttpSignature::verify( const http::response_header<>& rsh
     }
 
     return {true, std::move(extra)};
-}
-
-bool
-HttpSignature::has_comma_in_quotes(const boost::string_view& s) {
-    // A comma is between quotes if
-    // the number of quotes before it is odd.
-    int quotes_seen = 0;
-    for (auto c : s) {
-        if (c == '"') {
-            quotes_seen++;
-            continue;
-        }
-        if ((c == ',') && (quotes_seen % 2 != 0))
-            return true;
-    }
-    return false;
 }
 
 }} // namespaces
