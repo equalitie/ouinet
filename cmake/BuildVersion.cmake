@@ -1,0 +1,14 @@
+file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/version.txt VERSION_NAME)
+execute_process(
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/git-version-string.sh
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    OUTPUT_VARIABLE VERSION_STRING
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+set(BUILD_ID "${CMAKE_BUILD_TYPE} ${VERSION_STRING}")
+
+configure_file(src/version.cpp.in src/version.cpp)
+set(VERSION_CPP ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp)
+set_source_files_properties(${VERSION_CPP}
+    PROPERTIES INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/src
+)

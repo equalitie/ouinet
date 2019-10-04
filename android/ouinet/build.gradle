@@ -1,9 +1,7 @@
 apply plugin: 'com.android.library'
 
-def properties = new Properties()
-file("$ouinet_properties").withInputStream { properties.load(it) }
-def ouinetVersionName = properties.getProperty("versionName")
-def buildId = properties.getProperty("buildId")
+def ouinetVersionName = "$versionName"
+def ouinetBuildId = "$buildId"
 
 android {
     compileSdkVersion 26
@@ -12,7 +10,6 @@ android {
         targetSdkVersion 26
         versionCode 1
         versionName ouinetVersionName
-        buildConfigField("String", "BUILD_ID", "\"${buildId}\"")
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
         externalNativeBuild {
             cmake {
@@ -37,6 +34,10 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            buildConfigField("String", "BUILD_ID", "\"Release ${buildId}\"")
+        }
+        debug {
+            buildConfigField("String", "BUILD_ID", "\"Debug ${buildId}\"")
         }
     }
     externalNativeBuild {

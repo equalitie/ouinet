@@ -34,6 +34,7 @@ project(ouinet)
 
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 include(OuinetDependencies)
+include(BuildVersion)
 
 
 # This target needs to be linked by all code that includes ouinet headers.
@@ -73,28 +74,7 @@ add_subdirectory(./src/ouiservice/i2p)
 #add_subdirectory(./src/ouiservice/lampshade)
 add_subdirectory(./src/ouiservice/obfs4proxy)
 
-
 ################################################################################
-file(STRINGS "version.txt" VERSION_NAME)
-execute_process(COMMAND git rev-parse HEAD
-    RESULT_VARIABLE GIT_HASH_RESULT
-    OUTPUT_VARIABLE GIT_HASH
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
-execute_process(COMMAND git rev-parse --abbrev-ref HEAD
-    RESULT_VARIABLE GIT_BRANCH_RESULT
-    OUTPUT_VARIABLE GIT_BRANCH
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
-set(BUILD_ID "${CMAKE_BUILD_TYPE} ${GIT_BRANCH} ${GIT_HASH}")
-
-configure_file(src/version.cpp.in src/version.cpp)
-configure_file(src/version.h.in src/version.h)
-configure_file(ouinet.properties.in ouinet.properties)
-
-include_directories(
-    "${CMAKE_CURRENT_BINARY_DIR}/src"
-)
-################################################################################
-
 file(GLOB client_sources
     "./src/client.cpp"
     "./src/connect_to_host.cpp"
@@ -127,7 +107,7 @@ file(GLOB client_sources
     "./src/util.cpp"
     "./src/http_util.cpp"
     "./src/http_forward.cpp"
-    "${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp"
+    ${VERSION_CPP}
 )
 
 if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")

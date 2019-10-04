@@ -314,8 +314,9 @@ function copy_binaries {
 ######################################################################
 # Build the Ouinet AAR
 function build_ouinet_aar {
-    export GRADLE_USER_HOME="${DIR}/.gradle-home"
     GRADLE_BUILDDIR="${DIR}/${OUTPUT_DIR}/ouinet"
+    OUINET_VERSION_NAME=$(cat "${ROOT}"/version.txt)
+    OUINET_BUILD_ID=$(cd "${ROOT}" && "${ROOT}"/scripts/git-version-string.sh)
     mkdir -p "${GRADLE_BUILDDIR}"
     ( cd "${GRADLE_BUILDDIR}";
       gradle build \
@@ -325,11 +326,12 @@ function build_ouinet_aar {
         -Pasio_path="${DIR}/${OUTPUT_DIR}/builddir/deps/${ABI}/libboost_asio.so" \
         -Plibdir="${DIR}/${OUTPUT_DIR}/builddir/deps" \
         -Passetsdir="${DIR}/${OUTPUT_DIR}/builddir/assets" \
-        -Pouinet_properties="${DIR}/${BUILD_DIR}/ouinet.properties" \
+        -PversionName="${OUINET_VERSION_NAME}" \
+        -PbuildId="${OUINET_BUILD_ID}" \
         -PbuildDir="${GRADLE_BUILDDIR}" \
-       --project-dir="${ROOT}"/android \
-       --gradle-user-home "${GRADLE_BUILDDIR}"/.gradle-home \
-       --project-cache-dir "${GRADLE_BUILDDIR}"/.gradle-cache
+        --project-dir="${ROOT}"/android \
+        --gradle-user-home "${GRADLE_BUILDDIR}"/.gradle-home \
+        --project-cache-dir "${GRADLE_BUILDDIR}"/.gradle-cache
     )
 }
 
