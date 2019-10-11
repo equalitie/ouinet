@@ -28,8 +28,7 @@
 
 namespace ouinet {
 
-// 2048 was too small to read twitter.com's response head
-static const size_t http_forward_block = 16384;
+static const size_t http_forward_block = 2048;
 
 // Get copy of response head from input, return response head for output.
 using ProcHeadFunc = std::function<
