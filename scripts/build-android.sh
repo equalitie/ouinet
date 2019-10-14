@@ -7,7 +7,6 @@ DIR=`pwd`
 SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
 ROOT=$(cd ${SCRIPT_DIR}/.. && pwd)
 ABI=${ABI:-armeabi-v7a}
-CMAKE_BUILD_PARALLEL_LEVEL=${CMAKE_BUILD_PARALLEL_LEVEL:-`nproc`}
 
 RELEASE_BUILD=0
 while getopts r option; do
@@ -23,22 +22,18 @@ shift $((OPTIND -1))
 if [ "$ABI" = "armeabi-v7a" ]; then
     NDK_ARCH="arm"
     NDK_PLATFORM=19
-    CMAKE_SYSTEM_PROCESSOR="armv7-a"
 
 elif [ "$ABI" = "arm64-v8a" ]; then
     NDK_ARCH="arm64"
     NDK_PLATFORM=21
-    CMAKE_SYSTEM_PROCESSOR="aarch64"
 
 elif [ "$ABI" = "x86" ]; then
     NDK_ARCH="x86"
     NDK_PLATFORM=19
-    CMAKE_SYSTEM_PROCESSOR="i686"
 
 elif [ "$ABI" = "x86_64" ]; then
     NDK_ARCH="x86_64"
     NDK_PLATFORM=21
-    CMAKE_SYSTEM_PROCESSOR="x86_64"
 
 else
     >&2 echo "Unsupported ABI: '$ABI', valid values are armeabi-v7a, arm64-v8a, x86, x86_64."
@@ -47,14 +42,10 @@ fi
 
 # Destination directory for Ouinet build outputs
 OUTPUT_DIR=build-android-${ABI}
-# Directory for Ouinet intermediate build artifacts
-BUILD_DIR=build-ouinet-${ABI}
 if [ $RELEASE_BUILD -eq 1 ]; then
     OUTPUT_DIR=${OUTPUT_DIR}-release
-    BUILD_DIR=${BUILD_DIR}-release
 fi
 mkdir -p "${DIR}/${OUTPUT_DIR}"
-mkdir -p "$BUILD_DIR"
 
 SDK_DIR=${SDK_DIR:-"$DIR/sdk"}
 
@@ -64,12 +55,6 @@ NDK_ZIP=${NDK}-linux-x86_64.zip
 
 # Android API level, see https://redmine.equalit.ie/issues/12143
 PLATFORM=android-${NDK_PLATFORM}
-
-ANDROID_FLAGS="\
-    -DCMAKE_TOOLCHAIN_FILE=${DIR}/${NDK}/build/cmake/android.toolchain.cmake \
-    -DCMAKE_ANDROID_NDK=${DIR}/${NDK} \
-    -DANDROID_PLATFORM=${NDK_PLATFORM} \
-    -DANDROID_ABI=${ABI}"
 
 EMULATOR_AVD=${EMULATOR_AVD:-ouinet-test}
 
@@ -86,7 +71,6 @@ EMULATOR_SKIN=1440x2560  # automatically scaled down on smaller screens
 
 echo "NDK_DIR: "$NDK_DIR
 echo "SDK_DIR: "$SDK_DIR
-echo "NDK_PLATFORM: "$NDK_PLATFORM
 echo "PLATFORM: "$PLATFORM
 
 ######################################################################
@@ -261,57 +245,6 @@ function maybe_install_gradle {
 }
 
 ######################################################################
-# TODO: miniupnp
-#   https://i2pd.readthedocs.io/en/latest/devs/building/android/
-
-######################################################################
-function build_ouinet_libs {
-    BUILD_TYPE=Debug
-    if [ $RELEASE_BUILD -eq 1 ]; then
-        BUILD_TYPE=Release
-    fi
-    cd $BUILD_DIR
-    cmake ${ANDROID_FLAGS} \
-          -DWITH_INJECTOR=OFF \
-          -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
-          ${ROOT}
-    cmake --build .
-    cd - >/dev/null
-
-    add_library $DIR/$BUILD_DIR/libclient.so
-    add_library $DIR/$BUILD_DIR/libboost_asio.so
-    add_library $DIR/$BUILD_DIR/libboost_asio_ssl.so
-    add_library $DIR/$BUILD_DIR/gcrypt/src/gcrypt/src/.libs/libgcrypt.so
-    add_library $DIR/$BUILD_DIR/gpg_error/out/lib/libgpg-error.so
-    #add_library $DIR/$BUILD_DIR/src/ouiservice/lampshade/lampshade_bindings/liblampshade_bindings.so
-    add_binary  $DIR/$BUILD_DIR/src/ouiservice/obfs4proxy/obfs4proxy
-}
-
-######################################################################
-function copy_jni_libs {
-    local jni_dst_dir="${DIR}"/${OUTPUT_DIR}/builddir/deps/${ABI}
-    rm -rf "${jni_dst_dir}"
-    mkdir -p "${jni_dst_dir}"
-    local lib
-    for lib in "${OUT_LIBS[@]}"; do
-        echo "Copying $lib to $jni_dst_dir"
-        cp $lib $jni_dst_dir/
-    done
-}
-
-######################################################################
-function copy_binaries {
-    local binary_dst_dir="${DIR}"/${OUTPUT_DIR}/builddir/assets/
-    rm -rf "${binary_dst_dir}"
-    mkdir -p "${binary_dst_dir}"
-    local binary
-    for binary in "${OUT_BINARIES[@]}"; do
-        echo "Copying $binary to $binary_dst_dir"
-        cp $binary $binary_dst_dir/
-    done
-}
-
-######################################################################
 # Build the Ouinet AAR
 function build_ouinet_aar {
     GRADLE_BUILDDIR="${DIR}/${OUTPUT_DIR}/ouinet"
@@ -320,18 +253,14 @@ function build_ouinet_aar {
     mkdir -p "${GRADLE_BUILDDIR}"
     ( cd "${GRADLE_BUILDDIR}";
       gradle build \
-        -Pboost_includedir="${DIR}/${BUILD_DIR}/boost/install/include" \
         -Pandroid_abi=${ABI} \
-        -Pouinet_clientlib_path="${DIR}/${OUTPUT_DIR}/builddir/deps/${ABI}/libclient.so" \
-        -Pasio_path="${DIR}/${OUTPUT_DIR}/builddir/deps/${ABI}/libboost_asio.so" \
-        -Plibdir="${DIR}/${OUTPUT_DIR}/builddir/deps" \
-        -Passetsdir="${DIR}/${OUTPUT_DIR}/builddir/assets" \
         -PversionName="${OUINET_VERSION_NAME}" \
         -PbuildId="${OUINET_BUILD_ID}" \
         -PbuildDir="${GRADLE_BUILDDIR}" \
         --project-dir="${ROOT}"/android \
         --gradle-user-home "${GRADLE_BUILDDIR}"/.gradle-home \
-        --project-cache-dir "${GRADLE_BUILDDIR}"/.gradle-cache
+        --project-cache-dir "${GRADLE_BUILDDIR}"/.gradle-cache \
+        --no-daemon
     )
 }
 
@@ -401,9 +330,6 @@ if check_mode bootstrap; then
 fi
 
 if check_mode build; then
-    build_ouinet_libs
-    copy_jni_libs
-    copy_binaries
     build_ouinet_aar
 fi
 

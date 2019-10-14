@@ -32,7 +32,7 @@ add_compile_options("-Wall")
 project(ouinet)
 
 
-set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
+set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake;${CMAKE_MODULE_PATH})
 include(OuinetDependencies)
 include(BuildVersion)
 
@@ -42,6 +42,9 @@ add_library(ouinet_base INTERFACE)
 add_library(ouinet::base ALIAS ouinet_base)
 target_compile_options(ouinet_base
     INTERFACE -std=c++1z
+)
+target_include_directories(ouinet_base
+    INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 target_link_libraries(ouinet_base
     INTERFACE
@@ -114,6 +117,7 @@ if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
     add_executable(client ${client_sources})
 else()
     add_library(client SHARED ${client_sources})
+    add_library(ouinet::client ALIAS client)
     find_library(android_log log)
     target_link_libraries(client PUBLIC ${android_log})
 endif()
@@ -189,19 +193,18 @@ set(config_files
 )
 set(config_targets )
 
-if(NOT ${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
-    add_custom_target(config ALL DEPENDS test)
+if(NOT ${CMAKE_CURRENT_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_BINARY_DIR})
     foreach(config_file ${config_files})
         get_filename_component(config_dir ${config_file} DIRECTORY)
         add_custom_command(
-            OUTPUT ${CMAKE_BINARY_DIR}/${config_file}
-            MAIN_DEPENDENCY ${CMAKE_SOURCE_DIR}/${config_file}
-            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/${config_dir}
-            COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/${config_file} ${CMAKE_BINARY_DIR}/${config_file}
+            OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${config_file}
+            MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/${config_file}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/${config_dir}
+            COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/${config_file} ${CMAKE_CURRENT_BINARY_DIR}/${config_file}
         )
-        set(config_targets ${config_targets} ${CMAKE_BINARY_DIR}/${config_file})
+        set(config_targets ${config_targets} ${CMAKE_CURRENT_BINARY_DIR}/${config_file})
     endforeach()
-    add_custom_target(appel ALL DEPENDS ${config_targets})
+    add_custom_target(configfiles ALL DEPENDS ${config_targets})
 endif()
 
 ################################################################################

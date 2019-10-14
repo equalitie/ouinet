@@ -1,61 +1,37 @@
-# For more information about using CMake with Android Studio, read the
-# documentation: https://d.android.com/studio/projects/add-native-code.html
+cmake_minimum_required(VERSION 3.7.0)
 
-# Sets the minimum version of CMake required to build the native library.
+# Place compiled executables in the gradle Assets directory.
+# If there is any better way of finding this, such as getting it out of gradle
+# in some way, I'm all ears.
+get_filename_component(RUNTIME_DIR_1 ${CMAKE_LIBRARY_OUTPUT_DIRECTORY} DIRECTORY)
+get_filename_component(RUNTIME_DIR_2 ${RUNTIME_DIR_1} DIRECTORY)
+get_filename_component(RUNTIME_DIR_3 ${RUNTIME_DIR_2} DIRECTORY)
+get_filename_component(RUNTIME_DIR_4 ${RUNTIME_DIR_3} DIRECTORY)
+get_filename_component(RUNTIME_DIR_VARIANT ${RUNTIME_DIR_2} NAME)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${RUNTIME_DIR_4}/library_assets/${RUNTIME_DIR_VARIANT}/out")
 
-cmake_minimum_required(VERSION 3.4.1)
 
-# Creates and names a library, sets it as either STATIC
-# or SHARED, and provides the relative paths to its source code.
-# You can define multiple libraries, and CMake builds them for you.
-# Gradle automatically packages shared libraries with your APK.
+add_subdirectory(../.. libouinet)
 
-include_directories("../../src"
-                    "${BOOST_INCLUDEDIR}")
+add_library(native-lib SHARED src/main/cpp/native-lib.cpp )
+target_link_libraries(native-lib
+    PRIVATE
+        ouinet::client
+        ${android_log}
+)
 
-# https://www.boost.org/doc/libs/1_67_0/doc/html/boost_asio/using.html#boost_asio.using.optional_separate_compilation
-add_definitions(-DBOOST_ASIO_SEPARATE_COMPILATION)
-add_definitions(-DBOOST_COROUTINES_NO_DEPRECATION_WARNING)
+# Add libc++_shared.so to the aar file
+get_filename_component(COMPILER_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
+get_filename_component(COMPILER_TOOLCHAIN_PREFIX ${_CMAKE_TOOLCHAIN_PREFIX} NAME)
+string(REGEX REPLACE "-$" "" COMPILER_HOSTTRIPLE ${COMPILER_TOOLCHAIN_PREFIX})
+set(LIBCPP_SHARED_PATH
+    ${COMPILER_DIR}/../sysroot/usr/lib/${COMPILER_HOSTTRIPLE}/libc++_shared.so
+)
+add_custom_command(
+    OUTPUT ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libc++_shared.so
+    COMMAND ${CMAKE_COMMAND} -E copy ${LIBCPP_SHARED_PATH} ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
+)
+add_custom_target(libcpp_shared ALL DEPENDS ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libc++_shared.so)
 
-add_library( # Sets the name of the library.
-             native-lib
-
-             # Sets the library as a shared library.
-             SHARED
-
-             # Provides a relative path to your source file(s).
-             src/main/cpp/native-lib.cpp )
-
-# Searches for a specified prebuilt library and stores the path as a
-# variable. Because CMake includes system libraries in the search path by
-# default, you only need to specify the name of the public NDK library
-# you want to add. CMake verifies that the library exists before
-# completing its build.
-
-find_library( # Sets the name of the path variable.
-              log-lib
-
-              # Specifies the name of the NDK library that
-              # you want CMake to locate.
-              log )
-
-# Specifies libraries CMake should link to your target library. You
-# can link multiple libraries, such as libraries you define in this
-# build script, prebuilt third-party libraries, or system libraries.
-
-add_library(client-lib SHARED IMPORTED)
-set_property(TARGET client-lib PROPERTY IMPORTED_LOCATION ${OUINET_CLIENTLIB_PATH})
-
-add_library(boost_asio SHARED IMPORTED)
-set_property(TARGET boost_asio PROPERTY IMPORTED_LOCATION ${ASIO_PATH})
-
-# Ouinet sources
-
-target_link_libraries( # Specifies the target library.
-                       native-lib
-                       client-lib
-                       boost_asio
-
-                       # Links the target library to the log library
-                       # included in the NDK.
-                       ${log-lib} )
+add_dependencies(native-lib libcpp_shared)
+add_dependencies(native-lib obfs4proxy)
