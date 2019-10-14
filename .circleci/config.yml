@@ -40,3 +40,4 @@ jobs:
             mkdir -p build.android
             cd build.android
             ../scripts/build-android.sh
+          no_output_timeout: 30m
