@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     libtool \
     libunistring-dev \
+    ninja-build \
     pkg-config \
     python-twisted \
     rsync \
