@@ -183,7 +183,6 @@ http_key_id_for_injection(const util::Ed25519PublicKey& pk)
     return key_id_pfx + util::base64_encode(pk.serialize());
 }
 
-static
 boost::optional<util::Ed25519PublicKey>
 http_decode_key_id(boost::string_view key_id)
 {

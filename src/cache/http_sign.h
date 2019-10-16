@@ -142,6 +142,10 @@ http_injection_verify( http::response_header<>
 std::string
 http_key_id_for_injection(const ouinet::util::Ed25519PublicKey&);
 
+// Decode the given `keyId` into a public key.
+boost::optional<util::Ed25519PublicKey>
+http_decode_key_id(boost::string_view key_id);
+
 // A simple container for a parsed block signatures HTTP header.
 // Only the `hs2019` algorithm with an explicit key is supported,
 // so the ready-to-use key is left in `pk`.
