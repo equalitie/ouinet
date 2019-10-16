@@ -142,6 +142,18 @@ http_injection_verify( http::response_header<>
 std::string
 http_key_id_for_injection(const ouinet::util::Ed25519PublicKey&);
 
+// A simple container for a parsed block signatures HTTP header.
+// Only the `hs2019` algorithm with an explicit key is supported,
+// so the ready-to-use key is left in `pk`.
+struct HttpBlockSigs {
+    util::Ed25519PublicKey pk;
+    boost::string_view algorithm;  // always "hs2019"
+    size_t size;
+
+    static
+    boost::optional<HttpBlockSigs> parse(boost::string_view);
+};
+
 // Flush a response from session `in` to stream `out`
 // while signing with the provided private key.
 template<class SinkStream>

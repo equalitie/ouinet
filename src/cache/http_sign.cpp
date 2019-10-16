@@ -27,6 +27,8 @@ static const auto final_signature_hdr = http_::response_signature_hdr_pfx + "1";
 // The only signature algorithm supported by this implementation.
 static const std::string sig_alg_hs2019("hs2019");
 
+static const std::string key_id_pfx("ed25519=");
+
 static
 http::response_header<>
 without_framing(const http::response_header<>& rsh)
@@ -178,7 +180,7 @@ http_injection_verify( http::response_header<> rsh
 std::string
 http_key_id_for_injection(const util::Ed25519PublicKey& pk)
 {
-    return "ed25519=" + util::base64_encode(pk.serialize());
+    return key_id_pfx + util::base64_encode(pk.serialize());
 }
 
 std::string
@@ -443,6 +445,59 @@ has_comma_in_quotes(const boost::string_view& s) {
             return true;
     }
     return false;
+}
+
+boost::optional<HttpBlockSigs>
+HttpBlockSigs::parse(boost::string_view bsigs)
+{
+    // TODO: proper support for quoted strings
+    if (has_comma_in_quotes(bsigs)) {
+        LOG_WARN("Commas in quoted arguments of block signatures HTTP header are not yet supported");
+        return {};
+    }
+
+    HttpBlockSigs hbs;
+    bool valid_pk = false;
+    for (boost::string_view item : SplitString(bsigs, ',')) {
+        beast::string_view key, value;
+        std::tie(key, value) = split_string_pair(item, '=');
+        // Unquoted values:
+        if (key == "size") {
+            auto sz = parse::number<size_t>(value);
+            hbs.size = sz ? *sz : 0; continue;
+        }
+        // Quoted values:
+        if (value.size() < 2 || value[0] != '"' || value[value.size() - 1] != '"') {
+            LOG_WARN("Invalid quoting in block signatures HTTP header");
+            return {};
+        }
+        value.remove_prefix(1);
+        value.remove_suffix(1);
+        if (key == "keyId") {
+            if (!value.starts_with(key_id_pfx)) continue;
+            auto decoded_pk = util::base64_decode(value.substr(key_id_pfx.size()));
+            if (decoded_pk.size() != util::Ed25519PublicKey::key_size) continue;
+            auto pk_array = util::bytes::to_array<uint8_t, util::Ed25519PrivateKey::key_size>(decoded_pk);
+            hbs.pk = util::Ed25519PublicKey(std::move(pk_array));
+            valid_pk = true;
+            continue;
+        }
+        if (key == "algorithm") {hbs.algorithm = value; continue;}
+        return {};
+    }
+    if (!valid_pk) {
+        LOG_WARN("Missing or invalid key identifier in block signatures HTTP header");
+        return {};
+    }
+    if (hbs.algorithm != sig_alg_hs2019) {
+        LOG_WARN("Missing or invalid algorithm in block signatures HTTP header");
+        return {};
+    }
+    if (hbs.size == 0) {
+        LOG_WARN("Missing or invalid size in block signatures HTTP header");
+        return {};
+    }
+    return hbs;
 }
 
 boost::optional<HttpSignature>
