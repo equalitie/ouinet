@@ -183,6 +183,17 @@ http_key_id_for_injection(const util::Ed25519PublicKey& pk)
     return key_id_pfx + util::base64_encode(pk.serialize());
 }
 
+static
+boost::optional<util::Ed25519PublicKey>
+http_decode_key_id(boost::string_view key_id)
+{
+    if (!key_id.starts_with(key_id_pfx)) return {};
+    auto decoded_pk = util::base64_decode(key_id.substr(key_id_pfx.size()));
+    if (decoded_pk.size() != util::Ed25519PublicKey::key_size) return {};
+    auto pk_array = util::bytes::to_array<uint8_t, util::Ed25519PrivateKey::key_size>(decoded_pk);
+    return util::Ed25519PublicKey(std::move(pk_array));
+}
+
 std::string
 http_sign_detail::block_sig_str_pfx( const std::string& injection_id
                                    , size_t offset)
@@ -474,11 +485,9 @@ HttpBlockSigs::parse(boost::string_view bsigs)
         value.remove_prefix(1);
         value.remove_suffix(1);
         if (key == "keyId") {
-            if (!value.starts_with(key_id_pfx)) continue;
-            auto decoded_pk = util::base64_decode(value.substr(key_id_pfx.size()));
-            if (decoded_pk.size() != util::Ed25519PublicKey::key_size) continue;
-            auto pk_array = util::bytes::to_array<uint8_t, util::Ed25519PrivateKey::key_size>(decoded_pk);
-            hbs.pk = util::Ed25519PublicKey(std::move(pk_array));
+            auto pk = http_decode_key_id(value);
+            if (!pk) continue;
+            hbs.pk = *pk;
             valid_pk = true;
             continue;
         }
