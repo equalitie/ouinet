@@ -33,8 +33,11 @@ using namespace ouinet;
 static const string rq_target = "https://example.com/foo";  // proxy-like
 static const string rq_host = "example.com";
 
-static const string rs_body = string(128 * 1024, 'x') + "abcd";
-static const string rs_body_b64digest = "PcKmXT4Bi13pk1OsnR7dWA1bQxwsOQH2Ua+kvAtP3Zs=";
+static const string rs_body =
+  ( "0123" + string(http_::response_data_block - 8, 'x') + "4567"
+  + "89AB" + string(http_::response_data_block - 8, 'x') + "CDEF"
+  + "abcd");
+static const string rs_body_b64digest = "E4RswXyAONCaILm5T/ZezbHI87EKvKIdxURKxiVHwKE=";
 static const string rs_head_s = (
     "HTTP/1.1 200 OK\r\n"
     "Date: Mon, 15 Jan 2018 20:31:50 GMT\r\n"
@@ -79,7 +82,7 @@ static const string rs_head_signed_s = (
     "Trailer: X-Ouinet-Data-Size, Digest, X-Ouinet-Sig1\r\n"
 
     "X-Ouinet-Data-Size: 131076\r\n"
-    "Digest: SHA-256=PcKmXT4Bi13pk1OsnR7dWA1bQxwsOQH2Ua+kvAtP3Zs=\r\n"
+    "Digest: SHA-256=E4RswXyAONCaILm5T/ZezbHI87EKvKIdxURKxiVHwKE=\r\n"
 
     "X-Ouinet-Sig1: keyId=\"ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=\","
     "algorithm=\"hs2019\",created=1516048311,"
@@ -88,13 +91,13 @@ static const string rs_head_signed_s = (
     "x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-bsigs "
     "x-ouinet-data-size "
     "digest\","
-    "signature=\"chKZPonON7Y20HlXmJD+BPBsp9C8QRgTZNDBX6rsVfJZBI0t8ideiajJg2aLMBSo1wPTlhNIgm4sQt7oHI0KDA==\"\r\n"
+    "signature=\"ouLm95hwtXdshodDm/ncF9ZHX5cEvygG+ReokuKUc6K0AGg/rPuBM46vY2BG+Qox8doHFKKDF526v5JFcif8CA==\"\r\n"
     "\r\n"
 );
 
 static const array<string, 3> rs_block_cexts{
-    ";ouisig=\"MOKjD3PcoeiS/4TTP8YNxdOVeKvoQJZmzzWRIh9PUycap8AL62O4kPubHFWZahqtJImoZHEuT+0V31urDMkoAw==\"",  // offset 0
-    ";ouisig=\"foKOFv/DkXCxLlkc7fL9argEf4IiqPvBkH0N1NmbR6OyZAEl5HYepD4xTc4cYc4wqMKOlWkKwfMdaFIf6fwEBA==\"",  // offset 65536
+    ";ouisig=\"6gCnxL3lVHMAMSzhx+XJ1ZBt+JC/++m5hlak1adZMlUH0hnm2S3ZnbwjPQGMm9hDB45SqnybuQ9Bjo+PgnfnCw==\"",  // offset 0
+    ";ouisig=\"5R+TDVurWEZCPRxTBF0s7uDwxcbfxjj35Xr101C2ZDKyLbHw5tHIvhrJTjpfUIQKQ99OD5Xr08Q7j2fpQuoVDg==\"",  // offset 65536
     ";ouisig=\"B1LsKycoNZMGF3AdPegJySkEF42sp456P7yX2/75/T/ZlbP2UqyjKA7Bqy7SwGBTtms5g7ckQOMKbzT9KfT1Cg==\"",  // offset 131072
 };
 
