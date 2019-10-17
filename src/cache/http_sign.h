@@ -11,6 +11,7 @@
 
 #include "../constants.h"
 #include "../http_util.h"
+#include "../logger.h"
 #include "../session.h"
 #include "../util/crypto.h"
 #include "../util/hash.h"
@@ -38,6 +39,9 @@ namespace ouinet { namespace http_ {
     // but big enough to completely cover most responses
     // and thus avoid having too many signatures per response.
     static const size_t response_data_block = 65536;  // TODO: sensible value
+
+    // Maximum data block size that a receiver is going to accept.
+    static const size_t response_data_block_max = 1024 * 1024;  // TODO: sensible value
 }}
 
 namespace ouinet { namespace cache {
@@ -251,7 +255,7 @@ session_flush_signed( Session& in, SinkStream& out
 // while verifying signatures by the provided public key.
 //
 // Fail with error `boost::system::errc::no_message`
-// if the response head failed to be verified
+// if the response head failed to be verified or was not acceptable
 // (in which case no data should have been sent to `out`);
 // fail with error `boost::system::errc::bad_message`
 // if verification fails later on
@@ -264,10 +268,29 @@ session_flush_verified( Session& in, SinkStream& out
                       , Cancel& cancel, asio::yield_context yield)
 {
     http::response_header<> head;
+    boost::optional<HttpBlockSigs> bs_params;
     auto hproc = [&] (auto inh, auto&, auto y) {
+        // Verify head signature.
         inh = cache::http_injection_verify(move(inh), pk);
-        if (inh.cbegin() == inh.cend())
+        if (inh.cbegin() == inh.cend()) {
+            LOG_WARN("Failed to verify HTTP head signatures");
             return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), inh);
+        }
+        // Get and validate HTTP block signature parameters.
+        auto bsh = inh[http_::response_block_signatures_hdr];
+        if (bsh.empty()) {
+            LOG_WARN("Missing parameters for HTTP data block signatures");
+            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), inh);
+        }
+        bs_params = cache::HttpBlockSigs::parse(bsh);
+        if (!bs_params) {
+            LOG_WARN("Malformed parameters for HTTP data block signatures");
+            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), inh);
+        }
+        if (bs_params->size > http_::response_data_block_max) {
+            LOG_WARN("Size of signed HTTP data blocks is too large: ", bs_params->size);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), inh);
+        }
         head = inh;
         return inh;
     };

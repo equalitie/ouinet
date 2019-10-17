@@ -12,7 +12,6 @@
 #include <boost/format.hpp>
 
 #include "../constants.h"
-#include "../logger.h"
 #include "../parse/number.h"
 #include "../split_string.h"
 #include "../util.h"
