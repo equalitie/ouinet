@@ -270,6 +270,7 @@ session_flush_verified( Session& in, SinkStream& out
 {
     http::response_header<> head;
     boost::optional<HttpBlockSigs> bs_params;
+    std::unique_ptr<util::quantized_buffer> qbuf;
     auto hproc = [&] (auto inh, auto&, auto y) {
         // Verify head signature.
         inh = cache::http_injection_verify(move(inh), pk);
@@ -293,6 +294,7 @@ session_flush_verified( Session& in, SinkStream& out
             return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), inh);
         }
         head = inh;
+        qbuf = std::make_unique<util::quantized_buffer>(bs_params->size);
         return inh;
     };
 
@@ -303,10 +305,14 @@ session_flush_verified( Session& in, SinkStream& out
 
     size_t body_length = 0;
     util::SHA256 body_hash;
+    // Simplest implementation: one output chunk per data block.
     ProcDataFunc<asio::const_buffer> dproc = [&] (auto ind, auto&, auto) {
         body_length += ind.size();
         body_hash.update(ind);
-        ProcDataFunc<asio::const_buffer>::result_type ret{std::move(ind), {}};
+        qbuf->put(ind);
+        ProcDataFunc<asio::const_buffer>::result_type ret{
+            (ind.size() > 0) ? qbuf->get() : qbuf->get_rest(), {}
+        };  // send rest if no more input
         return ret;  // pass data on, drop chunk extensions
     };
 
