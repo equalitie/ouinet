@@ -207,16 +207,14 @@ session_flush_signed( Session& in, SinkStream& out
     auto block_sig_str_pfx  // for first block
         = http_sign_detail::block_sig_str_pfx(injection_id, block_offset);
     // Simplest implementation: one output chunk per data block.
-    // The big buffer may cause issues with coroutine stack management,
-    // so allocate it in the heap.
-    auto qbuf = std::make_unique<util::quantized_buffer>(http_::response_data_block);
+    util::quantized_buffer qbuf(http_::response_data_block);
     ProcDataFunc<asio::const_buffer> dproc = [&] (auto inbuf, auto&, auto) {
         // Just count transferred data and feed the hash.
         body_length += inbuf.size();
         if (do_inject) body_hash.update(inbuf);
-        qbuf->put(inbuf);
+        qbuf.put(inbuf);
         ProcDataFunc<asio::const_buffer>::result_type ret{
-            (inbuf.size() > 0) ? qbuf->get() : qbuf->get_rest(), {}
+            (inbuf.size() > 0) ? qbuf.get() : qbuf.get_rest(), {}
         };  // send rest if no more input
         if (do_inject && ret.first.size() > 0) {  // if injecting and sending data
             if (block_offset > 0)  // add chunk extension for previous block
