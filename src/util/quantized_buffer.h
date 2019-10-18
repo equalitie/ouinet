@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 #include <boost/asio/buffer.hpp>
 #include <boost/beast/core/static_buffer.hpp>
 
@@ -8,12 +10,22 @@ namespace ouinet { namespace util {
 // A silly wrapper class over a buffer
 // that allows arbitrary writes but only
 // fixed-size, one piece contiguous buffer reads
-// when at least N bytes have been put in the buffer.
-template <std::size_t N>
+// when at least `size` bytes have been put in the buffer.
 class quantized_buffer {
-    boost::beast::static_buffer<2 * N> buf;
+    std::size_t size;
+    std::vector<char> data;
+    boost::beast::static_buffer_base buf;
 
 public:
+    quantized_buffer(const quantized_buffer&) = delete;
+    quantized_buffer& operator=(const quantized_buffer&) = delete;
+
+    quantized_buffer(std::size_t size)
+        : size(size), data(2 * size)
+        , buf(data.data(), 2 * size)
+    {
+    }
+
     // May throw `std::length_error`.
     template <class ConstBufferSequence>
     std::size_t put(const ConstBufferSequence& source)
@@ -40,14 +52,14 @@ public:
     // may overwrite the data in the returned buffer.
     boost::asio::const_buffer get() noexcept
     {
-        if (buf.size() < N)
+        if (buf.size() < size)
             return boost::asio::const_buffer();  // not enough data yet
 
         auto data = buf.data();
         auto data0 = boost::asio::buffer_sequence_begin(data);
-        assert(data0->size() >= N);
-        boost::asio::const_buffer ret{data0->data(), N};
-        buf.consume(N);
+        assert(data0->size() >= size);
+        boost::asio::const_buffer ret{data0->data(), size};
+        buf.consume(size);
         return ret;
     }
 
@@ -57,7 +69,7 @@ public:
     // The buffer is cleared.
     boost::asio::const_buffer get_rest() noexcept
     {
-        assert(buf.size() < N);  // use `get` otherwise
+        assert(buf.size() < size);  // use `get` otherwise
         auto data = buf.data();
         auto data0 = boost::asio::buffer_sequence_begin(data);
         assert(data0->size() == buf.size());

@@ -209,7 +209,7 @@ session_flush_signed( Session& in, SinkStream& out
     // Simplest implementation: one output chunk per data block.
     // The big buffer may cause issues with coroutine stack management,
     // so allocate it in the heap.
-    auto qbuf = std::make_unique<util::quantized_buffer<http_::response_data_block>>();
+    auto qbuf = std::make_unique<util::quantized_buffer>(http_::response_data_block);
     ProcDataFunc<asio::const_buffer> dproc = [&] (auto inbuf, auto&, auto) {
         // Just count transferred data and feed the hash.
         body_length += inbuf.size();
