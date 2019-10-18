@@ -258,6 +258,9 @@ session_flush_signed( Session& in, SinkStream& out
 // fail with error `boost::system::errc::bad_message`
 // if verification fails later on
 // (in which case data may have already been sent).
+//
+// The resulting output contains all the information and formatting needed
+// to be verified again.
 template<class SinkStream>
 inline
 void

@@ -454,7 +454,12 @@ struct Client::Impl {
         if (!dk) return or_throw(yield, asio::error::invalid_argument);
         auto path = path_from_key(key);
         auto file = util::atomic_file::make(ios, path, ec);
-        if (!ec) s.flush_response(*file, cancel, yield[ec]);
+        // TODO: Do not verify, just handle storage format.
+        // Verification is not needed here at all
+        // (injectors are trusted and responses from other clients are verified when fetched),
+        // it is just done to get a storage output that respects all signatures
+        // so that we can resend the stored response as is when requested by another client.
+        if (!ec) cache::session_flush_verified(s, *file, cache_pk, cancel, yield[ec]);
         if (!ec) file->commit(ec);
         if (ec) return or_throw(yield, ec);
         LOG_DEBUG( "Bep5Http cache: Flushed to file;"
