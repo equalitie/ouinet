@@ -298,9 +298,14 @@ session_flush_verified( Session& in, SinkStream& out
         return inh;
     };
 
-    auto xproc = [] (auto, auto&, auto) {
-        // Chunk extensions are not forwarded
-        // since we have no way to verify them.
+    std::string inx, outx;
+    auto xproc = [&inx] (auto inx_, auto&, auto) {
+        if (inx_.empty()) return;
+        // Capture and keep the latest chunk extensions only.
+        // TODO: Parse and verify signature.
+        if (!inx.empty())
+            LOG_WARN("Dropping chunk extensions");
+        inx = std::move(inx_);
     };
 
     size_t body_length = 0;
@@ -317,6 +322,11 @@ session_flush_verified( Session& in, SinkStream& out
         ProcDataFunc<asio::const_buffer>::result_type ret{
             (ind.size() > 0) ? qbuf->get() : qbuf->get_rest(), {}
         };  // send rest if no more input
+        if (ret.first.size() > 0) {  // send last extensions, keep current for next
+            ret.second = std::move(outx);
+            outx = std::move(inx);
+            inx = {};
+        }
 
         // Save copy of current input data to last data buffer.
         if (ind.size() > lastd_.size())  // extend storage if needed
@@ -324,7 +334,7 @@ session_flush_verified( Session& in, SinkStream& out
         lastd = asio::buffer(lastd_.data(), ind.size());
         asio::buffer_copy(lastd, ind);
 
-        return ret;  // pass data on, drop chunk extensions
+        return ret;  // pass data on
     };
 
     // If we process trailers, we may have a chance to
@@ -333,7 +343,7 @@ session_flush_verified( Session& in, SinkStream& out
     // so that the receiving end can see that something bad is going on.
     bool check_body_after = true;
     ProcTrailFunc tproc = [&] (auto intr, auto&, auto y) {
-        ProcTrailFunc::result_type ret{std::move(intr), {}};  // pass trailer on, drop chunk extensions
+        ProcTrailFunc::result_type ret{std::move(intr), std::move(outx)};  // pass trailer on
 
         if (ret.first.cbegin() == ret.first.cend())
             return ret;  // no headers in trailer
