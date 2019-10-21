@@ -271,7 +271,6 @@ session_flush_verified( Session& in, SinkStream& out
     http::response_header<> head;
     boost::optional<HttpBlockSigs> bs_params;
     std::unique_ptr<util::quantized_buffer> qbuf;
-    std::vector<char> outb_data;
     auto hproc = [&] (auto inh, auto&, auto y) {
         // Verify head signature.
         inh = cache::http_injection_verify(move(inh), pk);
@@ -296,7 +295,6 @@ session_flush_verified( Session& in, SinkStream& out
         }
         head = inh;
         qbuf = std::make_unique<util::quantized_buffer>(bs_params->size);
-        outb_data.resize(bs_params->size);
         return inh;
     };
 
@@ -307,18 +305,25 @@ session_flush_verified( Session& in, SinkStream& out
 
     size_t body_length = 0;
     util::SHA256 body_hash;
+    std::vector<char> lastd_;
+    asio::mutable_buffer lastd;
     // Simplest implementation: one output chunk per data block.
     ProcDataFunc<asio::const_buffer> dproc = [&] (auto ind, auto&, auto) {
-        // Copy to separate buffer so that adding to `qbuf` below does not break it.
-        auto outb_ = (ind.size() > 0) ? qbuf->get() : qbuf->get_rest();
-        auto outb = asio::buffer(outb_data, outb_.size());
-        asio::buffer_copy(outb, outb_);
+        // Data block is sent when data following it is received
+        // (so process the last data buffer now).
+        body_length += lastd.size();
+        body_hash.update(lastd);
+        qbuf->put(lastd);
         ProcDataFunc<asio::const_buffer>::result_type ret{
-            outb, {}
-        };  // always send rest if no more input
-        body_length += ind.size();
-        body_hash.update(ind);
-        qbuf->put(ind);
+            (ind.size() > 0) ? qbuf->get() : qbuf->get_rest(), {}
+        };  // send rest if no more input
+
+        // Save copy of current input data to last data buffer.
+        if (ind.size() > lastd_.size())  // extend storage if needed
+            lastd_.resize(ind.size());
+        lastd = asio::buffer(lastd_.data(), ind.size());
+        asio::buffer_copy(lastd, ind);
+
         return ret;  // pass data on, drop chunk extensions
     };
 
