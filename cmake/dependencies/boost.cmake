@@ -1,4 +1,5 @@
-set(BOOST_VERSION 1.67.0)
+set(BOOST_VERSION 1.69.0)
+set(BOOST_URL_HASH SHA256=8f32d4617390d1c2d16f26a27ab60d97807b35440d45891fa340fc2648b04406)
 set(BOOST_COMPONENTS
     context
     coroutine
@@ -49,7 +50,7 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
 
     externalproject_add(built_boost
         URL "https://sourceforge.net/projects/boost/files/boost/${BOOST_VERSION}/boost_${BOOST_VERSION_FILENAME}.tar.bz2"
-        URL_MD5 ced776cb19428ab8488774e1415535ab
+        URL_HASH "${BOOST_URL_HASH}"
         PREFIX "${CMAKE_CURRENT_BINARY_DIR}/boost"
         PATCH_COMMAND
                cd ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost
