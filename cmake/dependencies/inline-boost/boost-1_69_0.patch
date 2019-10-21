@@ -84,3 +84,18 @@ diff -u -r boost_1_69_0.orig/tools/build/src/tools/common.jam boost_1_69_0/tools
  
      # On intel, version is not added, because it does not matter and it is the
      # version of vc used as backend that matters. Ideally, we should encode the
+diff -u -r boost_1_69_0.orig/boost/beast/http/impl/basic_parser.ipp boost_1_69_0/boost/beast/http/impl/basic_parser.ipp
+--- boost_1_69_0.orig/boost/beast/http/impl/basic_parser.ipp
++++ boost_1_69_0/boost/beast/http/impl/basic_parser.ipp
+@@ -119,9 +119,9 @@ put(ConstBufferSequence const& buffers,
+     }
+     // flatten
+     buffer_copy(boost::asio::buffer(
+-        buf_.get(), buf_len_), buffers);
++        buf_.get(), size), buffers);
+     return put(boost::asio::const_buffer{
+-        buf_.get(), buf_len_}, ec);
++        buf_.get(), size}, ec);
+ }
+ 
+ template<bool isRequest, class Derived>
