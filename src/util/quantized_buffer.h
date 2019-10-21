@@ -10,7 +10,7 @@ namespace ouinet { namespace util {
 // A silly wrapper class over a buffer
 // that allows arbitrary writes but only
 // fixed-size, one piece contiguous buffer reads
-// when at least `size` bytes have been put in the buffer.
+// when at least `size` bytes (quantum size) have been put in the buffer.
 class quantized_buffer {
     std::size_t size;
     std::vector<char> data;
@@ -24,6 +24,12 @@ public:
         : size(size), data(2 * size)
         , buf(data.data(), 2 * size)
     {
+    }
+
+    // Data quantum size.
+    std::size_t qsize() const noexcept
+    {
+        return size;
     }
 
     // May throw `std::length_error`.
