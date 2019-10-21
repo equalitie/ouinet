@@ -56,7 +56,7 @@ add_executable(test-bittorrent "test_bittorrent.cpp" ${bt_cpp_files})
 target_link_libraries(test-bittorrent lib::asio_utp lib::gcrypt z)
 
 ################################################################################
-add_executable(bt-bep44 "bt-bep44.cpp" ${bt_cpp_files})
+add_executable(bt-bep44 "bt-bep44.cpp" ${bt_cpp_files} "../src/util/get_if_addrs.cpp")
 target_link_libraries(bt-bep44 lib::asio_utp lib::gcrypt z)
 
 ################################################################################
