@@ -207,7 +207,7 @@ http_sign_detail::block_chunk_ext( const std::string& sig_str_pfx
                                  , util::SHA512& hash
                                  , const util::Ed25519PrivateKey& sk)
 {
-    static const auto fmt_ = ";ouisig=\"%s\"";
+    static const auto fmt_ = ";" + http_::response_block_signature_ext + "=\"%s\"";
     auto digest = util::bytes::to_string(hash.close());
     auto encoded_sig = util::base64_encode(sk.sign(sig_str_pfx + digest));
     return (boost::format(fmt_) % encoded_sig).str();

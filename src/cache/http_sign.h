@@ -33,6 +33,9 @@ namespace ouinet { namespace http_ {
     // This contains common parameters for block signatures.
     static const std::string response_block_signatures_hdr = header_prefix + "BSigs";
 
+    // Chunk extension used to hold data block signature.
+    static const std::string response_block_signature_ext = "ouisig";
+
     // A default size for data blocks to be signed.
     // Small enough to avoid nodes buffering too much data
     // and not take too much time to download on slow connections,
