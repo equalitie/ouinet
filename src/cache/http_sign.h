@@ -56,6 +56,7 @@ namespace http_sign_detail {
 boost::optional<util::Ed25519PublicKey::sig_array_t> block_sig_from_exts(boost::string_view);
 std::string block_sig_str_pfx(const std::string&, size_t);
 std::string block_chunk_ext(const std::string&, util::SHA512&, const util::Ed25519PrivateKey&);
+std::string block_chunk_ext(const boost::optional<util::Ed25519PublicKey::sig_array_t>&);
 bool check_body(const http::response_header<>&, size_t, util::SHA256&);
 }
 
@@ -302,16 +303,16 @@ session_flush_verified( Session& in, SinkStream& out
         return inh;
     };
 
-    std::string inx, outx;
-    auto xproc = [&inx] (auto inx_, auto&, auto) {
-        auto outbsig = http_sign_detail::block_sig_from_exts(inx_);
-        if (!outbsig) return;  // TODO: only forward signature
+    boost::optional<util::Ed25519PublicKey::sig_array_t> inbsig, outbsig;
+    auto xproc = [&inbsig] (auto inx_, auto&, auto) {
+        auto inbsig_ = http_sign_detail::block_sig_from_exts(inx_);
+        if (!inbsig_) return;
 
-        // Capture and keep the latest chunk extensions only.
+        // Capture and keep the latest block signature only.
         // TODO: Verify signature.
-        if (!inx.empty())
-            LOG_WARN("Dropping chunk extensions");
-        inx = std::move(inx_);
+        if (inbsig)
+            LOG_WARN("Dropping data block signature");
+        inbsig = std::move(inbsig_);
     };
 
     size_t body_length = 0;
@@ -329,9 +330,9 @@ session_flush_verified( Session& in, SinkStream& out
             (ind.size() > 0) ? qbuf->get() : qbuf->get_rest(), {}
         };  // send rest if no more input
         if (ret.first.size() > 0) {  // send last extensions, keep current for next
-            ret.second = std::move(outx);
-            outx = std::move(inx);
-            inx = {};
+            ret.second = http_sign_detail::block_chunk_ext(outbsig);
+            outbsig = std::move(inbsig);
+            inbsig = {};
         }
 
         // Save copy of current input data to last data buffer.
@@ -349,7 +350,8 @@ session_flush_verified( Session& in, SinkStream& out
     // so that the receiving end can see that something bad is going on.
     bool check_body_after = true;
     ProcTrailFunc tproc = [&] (auto intr, auto&, auto y) {
-        ProcTrailFunc::result_type ret{std::move(intr), std::move(outx)};  // pass trailer on
+        ProcTrailFunc::result_type ret{
+            std::move(intr), http_sign_detail::block_chunk_ext(outbsig)};  // pass trailer on
 
         if (ret.first.cbegin() == ret.first.cend())
             return ret;  // no headers in trailer

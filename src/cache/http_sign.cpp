@@ -228,15 +228,29 @@ http_sign_detail::block_sig_str_pfx( const std::string& injection_id
            % offset % '\0').str();
 }
 
+static inline
+std::string
+block_chunk_ext_(const util::Ed25519PublicKey::sig_array_t& sig)
+{
+    static const auto fmt_ = ";" + http_::response_block_signature_ext + "=\"%s\"";
+    auto encoded_sig = util::base64_encode(sig);
+    return (boost::format(fmt_) % encoded_sig).str();
+}
+
 std::string
 http_sign_detail::block_chunk_ext( const std::string& sig_str_pfx
                                  , util::SHA512& hash
                                  , const util::Ed25519PrivateKey& sk)
 {
-    static const auto fmt_ = ";" + http_::response_block_signature_ext + "=\"%s\"";
     auto digest = util::bytes::to_string(hash.close());
-    auto encoded_sig = util::base64_encode(sk.sign(sig_str_pfx + digest));
-    return (boost::format(fmt_) % encoded_sig).str();
+    return block_chunk_ext_(sk.sign(sig_str_pfx + digest));
+}
+
+std::string
+http_sign_detail::block_chunk_ext(const boost::optional<util::Ed25519PublicKey::sig_array_t>& s)
+{
+    if (!s) return {};
+    return block_chunk_ext_(*s);
 }
 
 bool
