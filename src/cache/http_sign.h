@@ -20,6 +20,9 @@
 #include "../namespaces.h"
 
 namespace ouinet { namespace http_ {
+    // This contains identifying data about the injection itself.
+    static const std::string response_injection_hdr = header_prefix + "Injection";
+
     // A prefix for HTTP signature headers at the response head,
     // each of them followed by a non-repeating, 0-based decimal integer.
     static const std::string response_signature_hdr_pfx = header_prefix + "Sig";
@@ -53,6 +56,7 @@ namespace ouinet { namespace cache {
 // ----------------------------------------------------------------
 
 namespace http_sign_detail {
+boost::string_view get_injection_id(const http::response_header<>&);
 boost::optional<util::Ed25519PublicKey::sig_array_t> block_sig_from_exts(boost::string_view);
 std::string block_sig_str_pfx(const std::string&, size_t);
 std::string block_chunk_ext(const std::string&, util::SHA512&, const util::Ed25519PrivateKey&);
@@ -274,6 +278,7 @@ session_flush_verified( Session& in, SinkStream& out
                       , Cancel& cancel, asio::yield_context yield)
 {
     http::response_header<> head;
+    std::string injection_id;
     boost::optional<HttpBlockSigs> bs_params;
     std::unique_ptr<util::quantized_buffer> qbuf;
     auto hproc = [&] (auto inh, auto&, auto y) {
@@ -296,6 +301,12 @@ session_flush_verified( Session& in, SinkStream& out
         }
         if (bs_params->size > http_::response_data_block_max) {
             LOG_WARN("Size of signed HTTP data blocks is too large: ", bs_params->size);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), inh);
+        }
+        // The injection id is also needed to verify block signatures.
+        injection_id = http_sign_detail::get_injection_id(inh).to_string();
+        if (injection_id.empty()) {
+            LOG_WARN("Missing injection identifier in HTTP head");
             return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), inh);
         }
         head = inh;

@@ -53,7 +53,7 @@ http_injection_head( const http::request_header<>& rqh
 
     rsh.set(response_version_hdr, response_version_hdr_v0);
     rsh.set(response_uri_hdr, rqh.target());
-    rsh.set( header_prefix + "Injection"
+    rsh.set(response_injection_hdr
            , boost::format("id=%s,ts=%d") % injection_id % injection_ts);
     static const auto fmt_ = "keyId=\"%s\""
                              ",algorithm=\"" + sig_alg_hs2019 + "\""
@@ -78,6 +78,19 @@ http_injection_head( const http::request_header<>& rqh
           , (trfmt % trhdr % (trhdr.empty() ? "" : ", ")).str() );
 
     return rs.base();
+}
+
+boost::string_view
+http_sign_detail::get_injection_id(const http::response_header<>& rsh)
+{
+    auto ih = rsh[http_::response_injection_hdr];
+    if (ih.empty()) return {};  // missing header
+    for (auto item : SplitString(ih, ',')) {
+        auto k_v = split_string_pair(item, '=');
+        if (k_v.first != "id") continue;
+        return k_v.second;
+    }
+    return {};  // missing id item in header
 }
 
 http::fields
