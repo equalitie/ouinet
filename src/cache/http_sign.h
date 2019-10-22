@@ -53,6 +53,7 @@ namespace ouinet { namespace cache {
 // ----------------------------------------------------------------
 
 namespace http_sign_detail {
+boost::optional<util::Ed25519PublicKey::sig_array_t> block_sig_from_exts(boost::string_view);
 std::string block_sig_str_pfx(const std::string&, size_t);
 std::string block_chunk_ext(const std::string&, util::SHA512&, const util::Ed25519PrivateKey&);
 bool check_body(const http::response_header<>&, size_t, util::SHA256&);
@@ -303,9 +304,11 @@ session_flush_verified( Session& in, SinkStream& out
 
     std::string inx, outx;
     auto xproc = [&inx] (auto inx_, auto&, auto) {
-        if (inx_.empty()) return;
+        auto outbsig = http_sign_detail::block_sig_from_exts(inx_);
+        if (!outbsig) return;  // TODO: only forward signature
+
         // Capture and keep the latest chunk extensions only.
-        // TODO: Parse and verify signature.
+        // TODO: Verify signature.
         if (!inx.empty())
             LOG_WARN("Dropping chunk extensions");
         inx = std::move(inx_);

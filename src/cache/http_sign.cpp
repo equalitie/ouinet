@@ -1,5 +1,6 @@
 #include "http_sign.h"
 
+#include <algorithm>
 #include <map>
 #include <tuple>
 #include <utility>
@@ -190,6 +191,31 @@ http_decode_key_id(boost::string_view key_id)
     if (decoded_pk.size() != util::Ed25519PublicKey::key_size) return {};
     auto pk_array = util::bytes::to_array<uint8_t, util::Ed25519PrivateKey::key_size>(decoded_pk);
     return util::Ed25519PublicKey(std::move(pk_array));
+}
+
+boost::optional<util::Ed25519PublicKey::sig_array_t>
+http_sign_detail::block_sig_from_exts(boost::string_view xs)
+{
+    if (xs.empty()) return {};  // no extensions
+
+    sys::error_code ec;
+    http::chunk_extensions xp;
+    xp.parse(xs, ec);
+    assert(!ec);  // this should have been validated upstream, fail hard otherwise
+
+    auto xit = std::find_if( xp.begin(), xp.end()
+                           , [](const auto& x) {
+                                 return x.first == http_::response_block_signature_ext;
+                             });
+    if (xit == xp.end()) return {};  // no signature
+
+    auto decoded_sig = util::base64_decode(xit->second);
+    if (decoded_sig.size() != util::Ed25519PublicKey::sig_size) {
+        LOG_WARN("Malformed data block signature");
+        return {};  // invalid Base64, invalid length
+    }
+
+    return util::bytes::to_array<uint8_t, util::Ed25519PublicKey::sig_size>(decoded_sig);
 }
 
 std::string
