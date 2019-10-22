@@ -1,9 +1,11 @@
 import os ;
-local ClangPath = [ os.environ CLANGPATH ] ;
 local Architecture = [ os.environ BOOSTARCH ] ;
+local BinutilsPrefix = [ os.environ BINUTILS_PREFIX ] ;
+local CompilerFullPath = [ os.environ COMPILER_FULL_PATH ] ;
 
-using clang : $(Architecture) : $(ClangPath)/clang++ :
-<archiver>$(ClangPath)/llvm-ar
+using clang : $(Architecture) : $(CompilerFullPath) :
+<archiver>$(BinutilsPrefix)ar
+<compileflags>-fPIC
 <compileflags>-fexceptions
 <compileflags>-frtti
 <compileflags>-ffunction-sections

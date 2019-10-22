@@ -1,9 +1,7 @@
 apply plugin: 'com.android.library'
 
-def properties = new Properties()
-file("$ouinet_properties").withInputStream { properties.load(it) }
-def ouinetVersionName = properties.getProperty("versionName")
-def buildId = properties.getProperty("buildId")
+def ouinetVersionName = "$versionName"
+def ouinetBuildId = "$buildId"
 
 android {
     compileSdkVersion 26
@@ -12,35 +10,31 @@ android {
         targetSdkVersion 26
         versionCode 1
         versionName ouinetVersionName
-        buildConfigField("String", "BUILD_ID", "\"${buildId}\"")
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
         externalNativeBuild {
             cmake {
-                arguments "-DBOOST_INCLUDEDIR=$boost_includedir",
-                          "-DANDROID_STL='c++_shared'",
-                          "-DOUINET_CLIENTLIB_PATH=$ouinet_clientlib_path",
-                          "-DASIO_PATH=$asio_path"
+                arguments "-DANDROID_STL='c++_shared'"
                 cppFlags "-std=c++14 -frtti -fexceptions"
+                targets "native-lib"
             }
         }
         ndk {
             abiFilters "$android_abi"
         }
     }
-    sourceSets {
-        main {
-            jniLibs.srcDirs = ["$libdir"]
-            assets.srcDirs = ["$assetsdir"]
-        }
-    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            buildConfigField("String", "BUILD_ID", "\"Release ${ouinetBuildId}\"")
+        }
+        debug {
+            buildConfigField("String", "BUILD_ID", "\"Debug ${ouinetBuildId}\"")
         }
     }
     externalNativeBuild {
         cmake {
+            version "3.12.0+"
             path "CMakeLists.txt"
             buildStagingDirectory (new File(project.buildDir, "../build-cmake"))
         }

@@ -7,7 +7,6 @@ DIR=`pwd`
 SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
 ROOT=$(cd ${SCRIPT_DIR}/.. && pwd)
 ABI=${ABI:-armeabi-v7a}
-CMAKE_BUILD_PARALLEL_LEVEL=${CMAKE_BUILD_PARALLEL_LEVEL:-`nproc`}
 
 RELEASE_BUILD=0
 while getopts r option; do
@@ -22,29 +21,19 @@ shift $((OPTIND -1))
 # See <https://github.com/opencv/opencv/blob/5b868ccd829975da5372bf330994553e176aee09/platforms/android/android.toolchain.cmake#L658>.
 if [ "$ABI" = "armeabi-v7a" ]; then
     NDK_ARCH="arm"
-    NDK_TOOLCHAIN_TARGET="arm-linux-androideabi"
-    NDK_TOOLCHAIN_LIB_SUBDIR="lib/armv7-a"
     NDK_PLATFORM=19
-    CMAKE_SYSTEM_PROCESSOR="armv7-a"
 
 elif [ "$ABI" = "arm64-v8a" ]; then
     NDK_ARCH="arm64"
-    NDK_TOOLCHAIN_TARGET="aarch64-linux-android"
     NDK_PLATFORM=21
-    CMAKE_SYSTEM_PROCESSOR="aarch64"
 
 elif [ "$ABI" = "x86" ]; then
     NDK_ARCH="x86"
-    NDK_TOOLCHAIN_TARGET="i686-linux-android"
     NDK_PLATFORM=19
-    CMAKE_SYSTEM_PROCESSOR="i686"
 
 elif [ "$ABI" = "x86_64" ]; then
     NDK_ARCH="x86_64"
-    NDK_TOOLCHAIN_TARGET="x86_64-linux-android"
-    NDK_TOOLCHAIN_LIB_SUBDIR="lib64"
     NDK_PLATFORM=21
-    CMAKE_SYSTEM_PROCESSOR="x86_64"
 
 else
     >&2 echo "Unsupported ABI: '$ABI', valid values are armeabi-v7a, arm64-v8a, x86, x86_64."
@@ -53,36 +42,19 @@ fi
 
 # Destination directory for Ouinet build outputs
 OUTPUT_DIR=build-android-${ABI}
-# Directory for Ouinet intermediate build artifacts
-BUILD_DIR=build-ouinet-${ABI}
 if [ $RELEASE_BUILD -eq 1 ]; then
     OUTPUT_DIR=${OUTPUT_DIR}-release
-    BUILD_DIR=${BUILD_DIR}-release
 fi
 mkdir -p "${DIR}/${OUTPUT_DIR}"
-mkdir -p "$BUILD_DIR"
 
 SDK_DIR=${SDK_DIR:-"$DIR/sdk"}
 
-NDK=android-ndk-r16b
+NDK=android-ndk-r19b
 NDK_DIR=${NDK_DIR:-"$DIR/$NDK"}
 NDK_ZIP=${NDK}-linux-x86_64.zip
 
-NDK_STL='libc++'
-NDK_TOOLCHAIN_DIR=${NDK_TOOLCHAIN_DIR:-${DIR}/${NDK}-toolchain-android$NDK_PLATFORM-$NDK_ARCH-$NDK_STL}
-
 # Android API level, see https://redmine.equalit.ie/issues/12143
 PLATFORM=android-${NDK_PLATFORM}
-
-ANDROID_FLAGS="\
-    -DBoost_COMPILER='-clang' \
-    -DCMAKE_ANDROID_NDK_TOOLCHAIN_VERSION=clang \
-    -DCMAKE_SYSTEM_NAME=Android \
-    -DCMAKE_SYSTEM_VERSION=${NDK_PLATFORM} \
-    -DCMAKE_ANDROID_STANDALONE_TOOLCHAIN=${NDK_TOOLCHAIN_DIR} \
-    -DCMAKE_SYSROOT=$NDK_TOOLCHAIN_DIR/sysroot \
-    -DCMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR} \
-    -DCMAKE_ANDROID_ARCH_ABI=${ABI}"
 
 EMULATOR_AVD=${EMULATOR_AVD:-ouinet-test}
 
@@ -99,8 +71,6 @@ EMULATOR_SKIN=1440x2560  # automatically scaled down on smaller screens
 
 echo "NDK_DIR: "$NDK_DIR
 echo "SDK_DIR: "$SDK_DIR
-echo "NDK_TOOLCHAIN_DIR: "$NDK_TOOLCHAIN_DIR
-echo "NDK_PLATFORM: "$NDK_PLATFORM
 echo "PLATFORM: "$PLATFORM
 
 ######################################################################
@@ -233,25 +203,6 @@ function maybe_install_ndk {
 }
 
 ######################################################################
-function maybe_install_ndk_toolchain {
-    if [ ! -d "${NDK_TOOLCHAIN_DIR}" ]; then
-        echo "Installing NDK toolchain..."
-        $NDK_DIR/build/tools/make-standalone-toolchain.sh \
-            --platform=android-$NDK_PLATFORM \
-            --arch=$NDK_ARCH \
-            --stl=$NDK_STL \
-            --install-dir=${NDK_TOOLCHAIN_DIR}
-    fi
-
-    export ANDROID_NDK_HOME=$NDK_DIR
-
-    NDK_TOOLCHAIN_LIB_SUBDIR=${NDK_TOOLCHAIN_LIB_SUBDIR:-"lib"}
-    TOOLCHAIN_LIBCXX="$NDK_TOOLCHAIN_DIR/$NDK_TOOLCHAIN_TARGET/$NDK_TOOLCHAIN_LIB_SUBDIR/libc++_shared.so"
-    add_library $TOOLCHAIN_LIBCXX
-    echo "TOOLCHAIN_LIBCXX: $TOOLCHAIN_LIBCXX"
-}
-
-######################################################################
 function maybe_install_gradle {
     GRADLE_REQUIRED_MAJOR_VERSION=4
     GRADLE_REQUIRED_MINOR_VERSION=6
@@ -294,72 +245,23 @@ function maybe_install_gradle {
 }
 
 ######################################################################
-# TODO: miniupnp
-#   https://i2pd.readthedocs.io/en/latest/devs/building/android/
-
-######################################################################
-function build_ouinet_libs {
-    BUILD_TYPE=Debug
-    if [ $RELEASE_BUILD -eq 1 ]; then
-        BUILD_TYPE=Release
-    fi
-    cd $BUILD_DIR
-    cmake ${ANDROID_FLAGS} \
-          -DWITH_INJECTOR=OFF \
-          -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
-          ${ROOT}
-    cmake --build .
-    cd - >/dev/null
-
-    add_library $DIR/$BUILD_DIR/libclient.so
-    add_library $DIR/$BUILD_DIR/libboost_asio.so
-    add_library $DIR/$BUILD_DIR/libboost_asio_ssl.so
-    add_library $DIR/$BUILD_DIR/gcrypt/src/gcrypt/src/.libs/libgcrypt.so
-    add_library $DIR/$BUILD_DIR/gpg_error/out/lib/libgpg-error.so
-    #add_library $DIR/$BUILD_DIR/src/ouiservice/lampshade/lampshade_bindings/liblampshade_bindings.so
-    add_binary  $DIR/$BUILD_DIR/src/ouiservice/obfs4proxy/obfs4proxy
-}
-
-######################################################################
-function copy_jni_libs {
-    local jni_dst_dir="${DIR}"/${OUTPUT_DIR}/builddir/deps/${ABI}
-    rm -rf "${jni_dst_dir}"
-    mkdir -p "${jni_dst_dir}"
-    local lib
-    for lib in "${OUT_LIBS[@]}"; do
-        echo "Copying $lib to $jni_dst_dir"
-        cp $lib $jni_dst_dir/
-    done
-}
-
-######################################################################
-function copy_binaries {
-    local binary_dst_dir="${DIR}"/${OUTPUT_DIR}/builddir/assets/
-    rm -rf "${binary_dst_dir}"
-    mkdir -p "${binary_dst_dir}"
-    local binary
-    for binary in "${OUT_BINARIES[@]}"; do
-        echo "Copying $binary to $binary_dst_dir"
-        cp $binary $binary_dst_dir/
-    done
-}
-
-######################################################################
 # Build the Ouinet AAR
 function build_ouinet_aar {
-    export GRADLE_USER_HOME="${DIR}/.gradle-home"
     GRADLE_BUILDDIR="${DIR}/${OUTPUT_DIR}/ouinet"
+    OUINET_VERSION_NAME=$(cat "${ROOT}"/version.txt)
+    OUINET_BUILD_ID=$(cd "${ROOT}" && "${ROOT}"/scripts/git-version-string.sh)
     mkdir -p "${GRADLE_BUILDDIR}"
-    ( cd "${ROOT}/android";
+    ( cd "${GRADLE_BUILDDIR}";
       gradle build \
-        -Pboost_includedir="${DIR}/${BUILD_DIR}/boost/install/include" \
         -Pandroid_abi=${ABI} \
-        -Pouinet_clientlib_path="${DIR}/${OUTPUT_DIR}/builddir/deps/${ABI}/libclient.so" \
-        -Pasio_path="${DIR}/${OUTPUT_DIR}/builddir/deps/${ABI}/libboost_asio.so" \
-        -Plibdir="${DIR}/${OUTPUT_DIR}/builddir/deps" \
-        -Passetsdir="${DIR}/${OUTPUT_DIR}/builddir/assets" \
-        -Pouinet_properties="${DIR}/${BUILD_DIR}/ouinet.properties" \
-        -PbuildDir="$GRADLE_BUILDDIR" )
+        -PversionName="${OUINET_VERSION_NAME}" \
+        -PbuildId="${OUINET_BUILD_ID}" \
+        -PbuildDir="${GRADLE_BUILDDIR}" \
+        --project-dir="${ROOT}"/android \
+        --gradle-user-home "${GRADLE_BUILDDIR}"/.gradle-home \
+        --project-cache-dir "${GRADLE_BUILDDIR}"/.gradle-cache \
+        --no-daemon
+    )
 }
 
 ######################################################################
@@ -423,15 +325,11 @@ fi
 if check_mode bootstrap; then
     setup_deps
     maybe_install_ndk
-    maybe_install_ndk_toolchain
     maybe_install_gradle
     # TODO: miniupnp
 fi
 
 if check_mode build; then
-    build_ouinet_libs
-    copy_jni_libs
-    copy_binaries
     build_ouinet_aar
 fi
 

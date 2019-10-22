@@ -133,6 +133,7 @@ Vagrant.configure("2") do |config|
         libidn11-dev \
         libssl-dev \
         libunistring-dev \
+        ninja-build \
         python-twisted \
         zlib1g-dev
 

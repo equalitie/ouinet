@@ -20,13 +20,19 @@ externalproject_add(lampshade
     INSTALL_COMMAND ""
 )
 
+if (CMAKE_LIBRARY_OUTPUT_DIRECTORY)
+    set(LAMPSHADE_OUTPUT_DIRECTORY ${CMAKE_LIBRARY_OUTPUT_DIRECTORY})
+else()
+    set(LAMPSHADE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+endif()
+
 set(BINDINGS_DIR "${CMAKE_CURRENT_BINARY_DIR}/lampshade_bindings")
-set(BINDINGS_HEADER  "${BINDINGS_DIR}/lampshade_bindings.h")
-set(BINDINGS_LIBRARY "${BINDINGS_DIR}/liblampshade_bindings.so")
-set(BINDINGS_OUTPUT ${BINDINGS_HEADER} ${BINDINGS_LIBRARY})
+set(BINDINGS_LIBRARY
+    ${LAMPSHADE_OUTPUT_DIRECTORY}/${CMAKE_SHARED_LIBRARY_PREFIX}lampshade_bindings${CMAKE_SHARED_LIBRARY_SUFFIX}
+)
 
 add_custom_command(
-    OUTPUT ${BINDINGS_OUTPUT}
+    OUTPUT ${BINDINGS_LIBRARY}
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/lampshade_bindings/lampshade_bindings.go
             golang
             lampshade
@@ -38,7 +44,7 @@ add_custom_command(
          && export GOARCH=${GOARCH}
          && export GOARM=${GOARM}
          && export CGO_ENABLED=1
-         && export CC=${CMAKE_C_COMPILER}
+         && export CC=${GO_CC}
          && mkdir -p ${GOPATH}/src/github.com/equalitie/lampshade/src
          && cd ${GOPATH}/src/github.com/equalitie/lampshade
          && rsync -r ${CMAKE_CURRENT_SOURCE_DIR}/ src
@@ -47,7 +53,7 @@ add_custom_command(
                      -o ${BINDINGS_DIR}/lampshade_bindings.so
                      ./src/lampshade_bindings
          && chmod u+w -R ${GOPATH} # Modules cache is ro by default which CI doesn't cope with; https://github.com/golang/go/issues/27161
-         && mv ${BINDINGS_DIR}/lampshade_bindings.so ${BINDINGS_DIR}/liblampshade_bindings.so
+         && cp ${BINDINGS_DIR}/lampshade_bindings.so ${BINDINGS_LIBRARY}
 )
 add_custom_target(lampshade-bindings DEPENDS ${BINDINGS_OUTPUT})
 

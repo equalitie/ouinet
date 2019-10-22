@@ -1,8 +1,5 @@
 cmake_minimum_required (VERSION 3.13)
 
-include_directories(
-    "../src"
-)
 link_libraries(
     Boost::iostreams
     Boost::system

@@ -39,13 +39,16 @@ foreach (component ${BUILT_BOOST_COMPONENTS})
     _boost_library_filename(${component} Boost_${UPPERCOMPONENT}_LIBRARY)
 
     if (NOT TARGET Boost::${component})
-        add_library(Boost::${component} UNKNOWN IMPORTED)
-        set_target_properties(Boost::${component} PROPERTIES
+        add_library(boost_${component} UNKNOWN IMPORTED)
+        set_target_properties(boost_${component} PROPERTIES
             INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIR}"
             IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
             IMPORTED_LOCATION ${Boost_${UPPERCOMPONENT}_LIBRARY}
         )
-        add_dependencies(Boost::${component} built_boost)
+
+        add_library(boost_${component}_ INTERFACE)
+        add_library(Boost::${component} ALIAS boost_${component}_)
+        add_dependencies(boost_${component}_ built_boost)
         _static_Boost_recursive_dependencies(${component} dependencies)
         if (NOT "${dependencies}" STREQUAL "")
             set(_Boost_${UPPERCOMPONENT}_FULL_DEPENDENCIES )
@@ -53,14 +56,10 @@ foreach (component ${BUILT_BOOST_COMPONENTS})
                 _boost_library_filename(${dependency} dependency_filename)
                 list(APPEND _Boost_${UPPERCOMPONENT}_FULL_DEPENDENCIES ${dependency_filename})
             endforeach()
-            set_target_properties(Boost::${component} PROPERTIES
-                INTERFACE_LINK_LIBRARIES "${_Boost_${UPPERCOMPONENT}_FULL_DEPENDENCIES}"
+            set_target_properties(boost_${component}_ PROPERTIES
+                INTERFACE_LINK_LIBRARIES "boost_${component};${_Boost_${UPPERCOMPONENT}_FULL_DEPENDENCIES}"
             )
         endif()
-
-        # Make sure that any packages that link against the raw library file still
-        # get the dependency order correct.
-        add_custom_command(OUTPUT ${Boost_${UPPERCOMPONENT}_LIBRARY} COMMAND "" DEPENDS built_boost)
     endif()
 endforeach()
 

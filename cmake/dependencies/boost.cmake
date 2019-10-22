@@ -1,4 +1,4 @@
-set(BOOST_VERSION 1.67.0)
+set(BOOST_VERSION 1.69.0)
 set(BOOST_COMPONENTS
     context
     coroutine
@@ -13,13 +13,15 @@ set(BOOST_COMPONENTS
 
 
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
+    get_filename_component(COMPILER_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
+    get_filename_component(COMPILER_TOOLCHAIN_PREFIX ${_CMAKE_TOOLCHAIN_PREFIX} NAME)
+    string(REGEX REPLACE "-$" "" COMPILER_HOSTTRIPLE ${COMPILER_TOOLCHAIN_PREFIX})
+    # This is the same as COMPILER_HOSTTRIPLE, _except_ on arm32.
+    set(COMPILER_CC_PREFIX ${COMPILER_HOSTTRIPLE})
+
     if (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "armv7-a")
+        set(COMPILER_CC_PREFIX "armv7a-linux-androideabi")
         set(BOOST_ARCH "armeabiv7a")
-        set(BOOST_ARCH_SETTINGS "abi=aapcs")
-    elseif (${CMAKE_SYSTEM_PROCESSOR} MATCHES "^arm.*")
-        # Is this still relevant? armv<7 seems to be obsolete
-        # from android 4.4 onwards.
-        set(BOOST_ARCH "armeabi")
         set(BOOST_ARCH_SETTINGS "abi=aapcs")
     elseif (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "aarch64")
         set(BOOST_ARCH "arm64v8a")
@@ -34,22 +36,34 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
         message(FATAL_ERROR "Unsupported CMAKE_SYSTEM_PROCESSOR ${CMAKE_SYSTEM_PROCESSOR}")
     endif()
 
+    set(BUILT_BOOST_VERSION ${BOOST_VERSION})
+    set(BUILT_BOOST_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/boost/install/include)
+    set(BUILT_BOOST_LIBRARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/boost/install/lib)
+    set(BUILT_BOOST_COMPONENTS ${BOOST_COMPONENTS})
+
+    function(_boost_library_filename component output_var)
+        set(${output_var} "${BUILT_BOOST_LIBRARY_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}boost_${component}${CMAKE_STATIC_LIBRARY_SUFFIX}" PARENT_SCOPE)
+    endfunction(_boost_library_filename)
+
     string(REPLACE "." "_" BOOST_VERSION_FILENAME ${BOOST_VERSION})
 
     include(${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-dependencies.cmake)
     _static_Boost_recursive_dependencies("${BOOST_COMPONENTS}" BOOST_DEPENDENT_COMPONENTS)
     set(ENABLE_BOOST_COMPONENTS )
+    set(BOOST_LIBRARY_FILES )
     foreach (component ${BOOST_DEPENDENT_COMPONENTS})
         if (${component} STREQUAL "unit_test_framework")
             set(ENABLE_BOOST_COMPONENTS ${ENABLE_BOOST_COMPONENTS} --with-test)
             continue()
         endif()
         set(ENABLE_BOOST_COMPONENTS ${ENABLE_BOOST_COMPONENTS} --with-${component})
+        _boost_library_filename(${component} filename)
+        set(BOOST_LIBRARY_FILES ${BOOST_LIBRARY_FILES} ${filename})
     endforeach()
 
     externalproject_add(built_boost
         URL "https://sourceforge.net/projects/boost/files/boost/${BOOST_VERSION}/boost_${BOOST_VERSION_FILENAME}.tar.bz2"
-        URL_MD5 ced776cb19428ab8488774e1415535ab
+        URL_MD5 a1332494397bf48332cb152abfefcec2
         PREFIX "${CMAKE_CURRENT_BINARY_DIR}/boost"
         PATCH_COMMAND
                cd ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost
@@ -59,9 +73,10 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
             && ./bootstrap.sh
         BUILD_COMMAND
                cd ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost
-            && export PATH=${CMAKE_ANDROID_STANDALONE_TOOLCHAIN}/bin:$ENV{PATH}
-            && export CLANGPATH=${CMAKE_ANDROID_STANDALONE_TOOLCHAIN}/bin
+            && export PATH=${COMPILER_DIR}:$ENV{PATH}
             && export BOOSTARCH=${BOOST_ARCH}
+            && export BINUTILS_PREFIX=${COMPILER_DIR}/${COMPILER_HOSTTRIPLE}-
+            && export COMPILER_FULL_PATH=${COMPILER_DIR}/${COMPILER_CC_PREFIX}${ANDROID_PLATFORM_LEVEL}-clang++
             && ./b2
                 target-os=android
                 toolset=clang-${BOOST_ARCH}
@@ -74,13 +89,9 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
                 ${ENABLE_BOOST_COMPONENTS}
                 ${BOOST_ARCH_SETTINGS}
                 install
+        BUILD_BYPRODUCTS ${BOOST_LIBRARY_FILES}
         INSTALL_COMMAND ""
     )
-
-    set(BUILT_BOOST_VERSION ${BOOST_VERSION})
-    set(BUILT_BOOST_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/boost/install/include)
-    set(BUILT_BOOST_LIBRARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/boost/install/lib)
-    set(BUILT_BOOST_COMPONENTS ${BOOST_COMPONENTS})
 
     set(Boost_DIR ${CMAKE_CURRENT_LIST_DIR}/inline-boost)
     list(INSERT CMAKE_MODULE_PATH 0 ${Boost_DIR})
