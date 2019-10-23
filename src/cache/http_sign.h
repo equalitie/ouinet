@@ -53,7 +53,6 @@ namespace ouinet { namespace cache {
 // ----------------------------------------------------------------
 
 namespace http_sign_detail {
-boost::string_view get_injection_id(const http::response_header<>&);
 boost::optional<util::Ed25519PublicKey::sig_array_t> block_sig_from_exts(boost::string_view);
 std::string block_sig_str_pfx(boost::string_view, size_t);
 std::string block_sig_str(boost::string_view, size_t, asio::const_buffer);
@@ -304,7 +303,7 @@ session_flush_verified( Session& in, SinkStream& out
             return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), head);
         }
         // The injection id is also needed to verify block signatures.
-        injection_id = http_sign_detail::get_injection_id(head);
+        injection_id = util::http_injection_id(head);
         if (injection_id.empty()) {
             LOG_WARN("Missing injection identifier in HTTP head; uri=", uri);
             return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), head);

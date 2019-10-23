@@ -80,19 +80,6 @@ http_injection_head( const http::request_header<>& rqh
     return rs.base();
 }
 
-boost::string_view
-http_sign_detail::get_injection_id(const http::response_header<>& rsh)
-{
-    auto ih = rsh[http_::response_injection_hdr];
-    if (ih.empty()) return {};  // missing header
-    for (auto item : SplitString(ih, ',')) {
-        auto k_v = split_string_pair(item, '=');
-        if (k_v.first != "id") continue;
-        return k_v.second;
-    }
-    return {};  // missing id item in header
-}
-
 http::fields
 http_injection_trailer( const http::response_header<>& rsh
                       , http::fields rst
