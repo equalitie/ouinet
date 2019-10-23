@@ -21,6 +21,11 @@ void crypto_init()
     }
 }
 
+void random(void* data, unsigned int size)
+{
+    ::gcry_create_nonce(data, size);
+}
+
 std::string random(unsigned int size)
 {
     std::vector<char> buffer(size, '\0');
