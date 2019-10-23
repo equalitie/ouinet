@@ -20,9 +20,6 @@
 #include "../namespaces.h"
 
 namespace ouinet { namespace http_ {
-    // This contains identifying data about the injection itself.
-    static const std::string response_injection_hdr = header_prefix + "Injection";
-
     // A prefix for HTTP signature headers at the response head,
     // each of them followed by a non-repeating, 0-based decimal integer.
     static const std::string response_signature_hdr_pfx = header_prefix + "Sig";
