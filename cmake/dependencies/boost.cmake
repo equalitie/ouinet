@@ -13,7 +13,9 @@ set(BOOST_COMPONENTS
 
 string(REPLACE "." "_" BOOST_VERSION_FILENAME ${BOOST_VERSION})
 
-set(BOOST_PATCHES )
+set(BOOST_PATCHES
+    ${CMAKE_CURRENT_LIST_DIR}/inline-boost/beast-header-parser-fix.patch
+)
 
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     get_filename_component(COMPILER_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
