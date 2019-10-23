@@ -238,7 +238,7 @@ http_sign_detail::block_sig_str( boost::string_view injection_id
     return ( boost::format(fmt_)
            % injection_id % '\0'
            % offset % '\0'
-           % util::bytes::to_string(block_digest)).str();
+           % util::bytes::to_string_view(block_digest)).str();
 }
 
 static inline

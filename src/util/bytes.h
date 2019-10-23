@@ -32,6 +32,12 @@ template<class S> std::string to_string(const S& bytestring)
     return std::string(reinterpret_cast<const char *>(bytestring.data()), bytestring.size());
 }
 
+template<class S> boost::string_view to_string_view(const S& bytestring)
+{
+    static_assert(is_bytestring_type<S>::value, "Not a bytestring type");
+    return boost::string_view(reinterpret_cast<const char *>(bytestring.data()), bytestring.size());
+}
+
 template<class B, class S> std::vector<B> to_vector(const S& bytestring)
 {
     static_assert(is_byte_type<B>::value, "Not a byte type");
