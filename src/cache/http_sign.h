@@ -59,6 +59,7 @@ namespace http_sign_detail {
 boost::string_view get_injection_id(const http::response_header<>&);
 boost::optional<util::Ed25519PublicKey::sig_array_t> block_sig_from_exts(boost::string_view);
 std::string block_sig_str_pfx(boost::string_view, size_t);
+std::string block_sig_str(boost::string_view, size_t, asio::const_buffer);
 std::string block_chunk_ext(const std::string&, util::SHA512&, const util::Ed25519PrivateKey&);
 std::string block_chunk_ext(const boost::optional<util::Ed25519PublicKey::sig_array_t>&);
 bool check_body(const http::response_header<>&, size_t, util::SHA256&);
@@ -319,18 +320,18 @@ session_flush_verified( Session& in, SinkStream& out
         if (!inbsig_) return;
 
         // Capture and keep the latest block signature only.
-        // TODO: Verify signature.
         if (inbsig)
             LOG_WARN("Dropping data block signature");
         inbsig = std::move(inbsig_);
     };
 
     size_t body_length = 0;
+    size_t block_offset = 0;
     util::SHA256 body_hash;
     std::vector<char> lastd_;
     asio::mutable_buffer lastd;
     // Simplest implementation: one output chunk per data block.
-    ProcDataFunc<asio::const_buffer> dproc = [&] (auto ind, auto&, auto) {
+    ProcDataFunc<asio::const_buffer> dproc = [&] (auto ind, auto&, auto y) {
         // Data block is sent when data following it is received
         // (so process the last data buffer now).
         body_length += lastd.size();
@@ -340,9 +341,21 @@ session_flush_verified( Session& in, SinkStream& out
             (ind.size() > 0) ? qbuf->get() : qbuf->get_rest(), {}
         };  // send rest if no more input
         if (ret.first.size() > 0) {  // send last extensions, keep current for next
+            // Verify signature of data block to be sent (fail if missing).
+            if (!inbsig) {
+                LOG_WARN("Missing signature for data block with offset ", block_offset);
+                return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), ret);
+            }
+            auto bsig_str = http_sign_detail::block_sig_str(injection_id, block_offset, ret.first);
+            if (!bs_params->pk.verify(bsig_str, *inbsig)) {
+                LOG_WARN("Failed to verify data block with offset ", block_offset);
+                return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), ret);
+            }
+
             ret.second = http_sign_detail::block_chunk_ext(outbsig);
             outbsig = std::move(inbsig);
             inbsig = {};
+            block_offset += ret.first.size();
         }
 
         // Save copy of current input data to last data buffer.

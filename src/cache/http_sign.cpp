@@ -241,6 +241,19 @@ http_sign_detail::block_sig_str_pfx( boost::string_view injection_id
            % offset % '\0').str();
 }
 
+std::string
+http_sign_detail::block_sig_str( boost::string_view injection_id
+                               , size_t offset
+                               , asio::const_buffer block)
+{
+    auto block_digest = util::sha512_digest(block);
+    static const auto fmt_ = "%s%c%d%c%s";
+    return ( boost::format(fmt_)
+           % injection_id % '\0'
+           % offset % '\0'
+           % util::bytes::to_string(block_digest)).str();
+}
+
 static inline
 std::string
 block_chunk_ext_(const util::Ed25519PublicKey::sig_array_t& sig)
