@@ -279,6 +279,7 @@ session_flush_verified( Session& in, SinkStream& out
                       , Cancel& cancel, asio::yield_context yield)
 {
     http::response_header<> head;  // keep for refs and later use
+    boost::string_view uri;  // for warnings, should use `Yield::log` instead
     boost::string_view injection_id;
     boost::optional<HttpBlockSigs> bs_params;
     std::unique_ptr<util::quantized_buffer> qbuf;
@@ -289,25 +290,26 @@ session_flush_verified( Session& in, SinkStream& out
             LOG_WARN("Failed to verify HTTP head signatures");
             return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), head);
         }
+        uri = head[http_::response_uri_hdr];
         // Get and validate HTTP block signature parameters.
         auto bsh = head[http_::response_block_signatures_hdr];
         if (bsh.empty()) {
-            LOG_WARN("Missing parameters for HTTP data block signatures");
+            LOG_WARN("Missing parameters for HTTP data block signatures; uri=", uri);
             return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), head);
         }
         bs_params = cache::HttpBlockSigs::parse(bsh);
         if (!bs_params) {
-            LOG_WARN("Malformed parameters for HTTP data block signatures");
+            LOG_WARN("Malformed parameters for HTTP data block signatures; uri=", uri);
             return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), head);
         }
         if (bs_params->size > http_::response_data_block_max) {
-            LOG_WARN("Size of signed HTTP data blocks is too large: ", bs_params->size);
+            LOG_WARN("Size of signed HTTP data blocks is too large: ", bs_params->size, "; uri=", uri);
             return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), head);
         }
         // The injection id is also needed to verify block signatures.
         injection_id = http_sign_detail::get_injection_id(head);
         if (injection_id.empty()) {
-            LOG_WARN("Missing injection identifier in HTTP head");
+            LOG_WARN("Missing injection identifier in HTTP head; uri=", uri);
             return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), head);
         }
         qbuf = std::make_unique<util::quantized_buffer>(bs_params->size);
@@ -315,13 +317,13 @@ session_flush_verified( Session& in, SinkStream& out
     };
 
     boost::optional<util::Ed25519PublicKey::sig_array_t> inbsig, outbsig;
-    auto xproc = [&inbsig] (auto inx_, auto&, auto) {
+    auto xproc = [&inbsig, &uri] (auto inx_, auto&, auto) {
         auto inbsig_ = http_sign_detail::block_sig_from_exts(inx_);
         if (!inbsig_) return;
 
         // Capture and keep the latest block signature only.
         if (inbsig)
-            LOG_WARN("Dropping data block signature");
+            LOG_WARN("Dropping data block signature; uri=", uri);
         inbsig = std::move(inbsig_);
     };
 
@@ -343,12 +345,12 @@ session_flush_verified( Session& in, SinkStream& out
         if (ret.first.size() > 0) {  // send last extensions, keep current for next
             // Verify signature of data block to be sent (fail if missing).
             if (!inbsig) {
-                LOG_WARN("Missing signature for data block with offset ", block_offset);
+                LOG_WARN("Missing signature for data block with offset ", block_offset, "; uri=", uri);
                 return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), ret);
             }
             auto bsig_str = http_sign_detail::block_sig_str(injection_id, block_offset, ret.first);
             if (!bs_params->pk.verify(bsig_str, *inbsig)) {
-                LOG_WARN("Failed to verify data block with offset ", block_offset);
+                LOG_WARN("Failed to verify data block with offset ", block_offset, "; uri=", uri);
                 return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), ret);
             }
 
