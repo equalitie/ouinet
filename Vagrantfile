@@ -63,7 +63,7 @@
 #
 
 Vagrant.configure("2") do |config|
-  def basic_setup(vm)
+  config.vm.define "linux", primary: true do |vm|
     vm.vm.box = "debian/buster64"
 
     vm.vm.provider "libvirt" do |v|
@@ -87,6 +87,11 @@ Vagrant.configure("2") do |config|
     vm.vm.synced_folder ".", "/vagrant", type: "nfs", mount_options: ["ro", "noac"]
     vm.vm.synced_folder ".", "/vagrant-rw", type: "nfs", mount_options: ["rw", "noac"]
 
+    # Uncomment this line to forward port 8081 on the host machine to port 8080 in the VM, so that you can access the VM ouinet-client from your local browser.
+    #vm.vm.network "forwarded_port", guest: 8080, host: 8081, guest_ip: "127.0.0.1"
+
+    vm.ssh.forward_x11 = true
+
     vm.vm.provision "shell", inline: <<-SHELL
       apt-get update
       apt-get install -y \
@@ -106,15 +111,6 @@ Vagrant.configure("2") do |config|
         update-locale LANG=en_US.UTF-8
         sed -i -E 's/^(\s*AcceptEnv\b)/#\1/' /etc/ssh/sshd_config
     SHELL
-  end
-
-  config.vm.define "linux", primary: true do |vm|
-    basic_setup(vm)
-
-    # Uncomment this line to forward port 8081 on the host machine to port 8080 in the VM, so that you can access the VM ouinet-client from your local browser.
-    #vm.vm.network "forwarded_port", guest: 8080, host: 8081, guest_ip: "127.0.0.1"
-
-    vm.ssh.forward_x11 = true
 
     vm.vm.provision "shell", inline: <<-SHELL
       # Install toolchain and dependencies
@@ -144,6 +140,10 @@ Vagrant.configure("2") do |config|
         wireshark \
         xauth
       adduser vagrant wireshark
+
+      # Install jdk
+      wget 'https://dl.google.com/dl/android/studio/ide-zips/3.4.2.0/android-studio-ide-183.5692245-linux.tar.gz' -O - | tar -axz -C /opt android-studio/jre
+      echo 'export PATH=/opt/android-studio/jre/bin:$PATH' >> /etc/profile
     SHELL
 
     vm.vm.provision "shell", inline: <<-SHELL
@@ -152,11 +152,4 @@ Vagrant.configure("2") do |config|
       ln -s /vagrant/scripts/firefox-proxy.sh /home/vagrant/
     SHELL
   end
-
-  config.vm.define "android", autostart: false do |vm|
-    basic_setup(vm)
-
-    # TODO: Setup android environment
-  end
-
 end

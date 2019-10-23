@@ -24,11 +24,8 @@ jobs:
                 cmake \
                 gettext \
                 git \
-                libgcrypt-dev \
-                libidn11-dev \
                 libssl-dev \
                 libtool \
-                libunistring-dev \
                 ninja-build \
                 pkg-config \
                 python-twisted \
@@ -37,23 +34,6 @@ jobs:
                 wget \
                 unzip \
                 zlib1g-dev
-            cd /usr/local/src
-            wget -q "https://downloads.sourceforge.net/project/boost/boost/1.69.0/boost_1_69_0.tar.bz2"
-            tar -xf boost_1_69_0.tar.bz2
-            cd boost_1_69_0
-            ./bootstrap.sh
-            ./b2 -j $CMAKE_BUILD_PARALLEL_LEVEL -d+0 --link=shared \
-                --with-system \
-                --with-program_options \
-                --with-test \
-                --with-coroutine \
-                --with-filesystem \
-                --with-date_time \
-                --with-regex \
-                --with-iostreams \
-                --with-thread \
-                --with-atomic \
-                --prefix=/usr/local install
             wget 'https://dl.google.com/dl/android/studio/ide-zips/3.4.2.0/android-studio-ide-183.5692245-linux.tar.gz' -O - | tar -axz -C /opt android-studio/jre
             echo 'export PATH=/opt/android-studio/jre/bin:$PATH' >> ~/.bashrc
 
