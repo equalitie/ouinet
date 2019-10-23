@@ -9,8 +9,10 @@ namespace ouinet { namespace parse {
 template<class Proto /* one of asio::ip::{tcp,udp} */>
 inline
 typename Proto::endpoint
-endpoint(boost::string_view s, sys::error_code& ec)
+endpoint(boost::string_view& s, sys::error_code& ec)
 {
+    boost::string_view s_orig = s;
+
     using namespace std;
     auto pos = s.rfind(':');
 
@@ -25,11 +27,12 @@ endpoint(boost::string_view s, sys::error_code& ec)
 
     if (ec) return {};
 
-    boost::string_view port_sv = s.substr(pos+1);
+    s = s.substr(pos+1);
 
-    auto opt_port = parse::number<uint16_t>(port_sv);
+    auto opt_port = parse::number<uint16_t>(s);
 
     if (!opt_port) {
+        s = s_orig;
         ec = asio::error::invalid_argument;
         return {};
     }
@@ -39,13 +42,31 @@ endpoint(boost::string_view s, sys::error_code& ec)
 
 template<class Proto /* one of asio::ip::{tcp,udp} */>
 inline
+typename Proto::endpoint
+endpoint(boost::string_view&& s, sys::error_code& ec)
+{
+    auto ss = s;
+    return endpoint<Proto>(ss, ec);
+}
+
+template<class Proto /* one of asio::ip::{tcp,udp} */>
+inline
 boost::optional<typename Proto::endpoint>
-endpoint(boost::string_view s)
+endpoint(boost::string_view& s)
 {
     sys::error_code ec;
     auto retval = endpoint<Proto>(s, ec);
     if (ec) return boost::none;
     return retval;
+}
+
+template<class Proto /* one of asio::ip::{tcp,udp} */>
+inline
+boost::optional<typename Proto::endpoint>
+endpoint(boost::string_view&& s)
+{
+    auto ss = s;
+    return endpoint<Proto>(ss);
 }
 
 }} // namespaces
