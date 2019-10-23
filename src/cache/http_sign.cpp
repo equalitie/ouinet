@@ -232,7 +232,7 @@ http_sign_detail::block_sig_from_exts(boost::string_view xs)
 }
 
 std::string
-http_sign_detail::block_sig_str_pfx( const std::string& injection_id
+http_sign_detail::block_sig_str_pfx( boost::string_view injection_id
                                    , size_t offset)
 {
     static const auto fmt_ = "%s%c%d%c";
