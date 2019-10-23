@@ -94,6 +94,11 @@ void Logger::set_threshold(log_level_t level)
     }
 }
 
+bool Logger::would_log(log_level_t level) const
+{
+    return get_threshold() <= level;
+}
+
 // Standard log function. Prints nice colors for each level.
 void Logger::log(log_level_t level, std::string msg, std::string function_name)
 {
