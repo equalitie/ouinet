@@ -128,29 +128,13 @@ Vagrant.configure("2") do |config|
         automake \
         autopoint \
         texinfo \
+        cmake \
         gettext \
-        libgcrypt-dev \
-        libidn11-dev \
         libssl-dev \
-        libunistring-dev \
         ninja-build \
         python-twisted \
+        unzip \
         zlib1g-dev
-
-      cd /usr/local/src
-      wget -q "https://github.com/Kitware/CMake/releases/download/v3.13.4/cmake-3.13.4.tar.gz"
-      tar -xf cmake-3.13.4.tar.gz
-      cd cmake-3.13.4
-      ./bootstrap
-      make
-      make install
-
-      cd /usr/local/src
-      wget -q "https://downloads.sourceforge.net/project/boost/boost/1.69.0/boost_1_69_0.tar.bz2"
-      tar -xf boost_1_69_0.tar.bz2
-      cd boost_1_69_0
-      ./bootstrap.sh
-      ./b2 -j `nproc` -d+0 --link=shared --with-system --with-program_options --with-test --with-coroutine --with-filesystem --with-date_time --with-regex --with-iostreams --with-thread --with-atomic --prefix=/usr/local install
 
       # Install testing tools
       echo wireshark-common wireshark-common/install-setuid boolean true | debconf-set-selections

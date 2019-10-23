@@ -53,7 +53,7 @@ file(GLOB bt_cpp_files
 )
 
 add_executable(test-bittorrent "test_bittorrent.cpp" ${bt_cpp_files})
-target_link_libraries(test-bittorrent lib::asio_utp lib::gcrypt)
+target_link_libraries(test-bittorrent lib::asio_utp lib::gcrypt z)
 
 ################################################################################
 add_executable(bt-bep44 "bt-bep44.cpp" ${bt_cpp_files})
@@ -65,7 +65,7 @@ target_link_libraries(test-routing-table lib::asio_utp lib::gcrypt z)
 
 ################################################################################
 add_executable(bt-bep5 "bt-bep5.cpp" ${bt_cpp_files})
-target_link_libraries(bt-bep5 lib::asio_utp lib::gcrypt)
+target_link_libraries(bt-bep5 lib::asio_utp lib::gcrypt z)
 
 ######################################################################
 add_executable(test-watch-dog "test_watch_dog.cpp")
