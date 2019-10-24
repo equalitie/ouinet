@@ -129,6 +129,11 @@ static util::Ed25519PrivateKey get_private_key() {
     return util::Ed25519PrivateKey(std::move(ska));
 }
 
+static util::Ed25519PublicKey get_public_key() {
+    auto pka = util::bytes::to_array<uint8_t, util::Ed25519PublicKey::key_size>(util::base64_decode(inj_b64pk));
+    return util::Ed25519PublicKey(std::move(pka));
+}
+
 BOOST_AUTO_TEST_CASE(test_http_sign) {
 
     sys::error_code ec;
@@ -200,8 +205,7 @@ BOOST_AUTO_TEST_CASE(test_http_verify) {
     BOOST_REQUIRE(parser.is_done());
     auto rs_head_signed = parser.get().base();
 
-    const auto pka = util::bytes::to_array<uint8_t, util::Ed25519PublicKey::key_size>(util::base64_decode(inj_b64pk));
-    const util::Ed25519PublicKey pk(std::move(pka));
+    const auto pk = get_public_key();
     const auto key_id = cache::http_key_id_for_injection(pk);
     BOOST_REQUIRE(key_id == ("ed25519=" + inj_b64pk));
 
@@ -330,6 +334,77 @@ BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
             BOOST_REQUIRE(!e);
             BOOST_CHECK_EQUAL(xidx, rs_block_cexts.size());
             signed_r.close();
+            tested_w.close();
+        });
+
+        // Black hole.
+        asio::spawn(ios, [&tested_r, &ios, lock = wc.lock()] (auto y) {
+            char d[2048];
+            asio::mutable_buffer b(d, sizeof(d));
+
+            sys::error_code e;
+            while (!e) asio::async_read(tested_r, b, y[e]);
+            BOOST_REQUIRE(e == asio::error::eof || !e);
+            tested_r.close();
+        });
+
+        wc.wait(yield);
+    });
+}
+
+BOOST_AUTO_TEST_CASE(test_http_flush_verified) {
+    asio::io_service ios;
+    run_spawned(ios, [&] (auto yield) {
+        WaitCondition wc(ios);
+
+        asio::ip::tcp::socket
+            origin_w(ios), origin_r(ios),
+            signed_w(ios), signed_r(ios),
+            tested_w(ios), tested_r(ios);
+        tie(origin_w, origin_r) = util::connected_pair(ios, yield);
+        tie(signed_w, signed_r) = util::connected_pair(ios, yield);
+        tie(tested_w, tested_r) = util::connected_pair(ios, yield);
+
+        // Send raw origin response.
+        asio::spawn(ios, [&origin_w, &ios, lock = wc.lock()] (auto y) {
+            sys::error_code e;
+            asio::async_write( origin_w
+                             , asio::const_buffer(rs_head_s.data(), rs_head_s.size())
+                             , y[e]);
+            BOOST_REQUIRE(!e);
+            asio::async_write( origin_w
+                             , asio::const_buffer(rs_body.data(), rs_body.size())
+                             , y[e]);
+            BOOST_REQUIRE(!e);
+            origin_w.close();
+        });
+
+        // Sign origin response.
+        asio::spawn(ios, [ origin_r = std::move(origin_r), &signed_w
+                         , &ios, lock = wc.lock()] (auto y) mutable {
+            Session origin_rs(std::move(origin_r));
+            auto req_h = get_request_header();
+            auto sk = get_private_key();
+            Cancel cancel;
+            sys::error_code e;
+            cache::session_flush_signed( origin_rs, signed_w
+                                       , req_h, inj_id, inj_ts, sk
+                                       , cancel, y[e]);
+            BOOST_REQUIRE(!e);
+            signed_w.close();
+        });
+
+        // Verify signed output.
+        asio::spawn(ios, [ signed_r = std::move(signed_r), &tested_w
+                         , &ios, lock = wc.lock()](auto y) mutable {
+            Session signed_rs(std::move(signed_r));
+            auto pk = get_public_key();
+            Cancel cancel;
+            sys::error_code e;
+            cache::session_flush_verified( signed_rs, tested_w
+                                         , pk
+                                         , cancel, y[e]);
+            BOOST_REQUIRE(!e);
             tested_w.close();
         });
 
