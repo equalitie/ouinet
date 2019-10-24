@@ -33,10 +33,19 @@ using namespace ouinet;
 static const string rq_target = "https://example.com/foo";  // proxy-like
 static const string rq_host = "example.com";
 
+static const string rs_block0_head = "0123";
+static const string rs_block0_tail = "4567";
+static const string rs_block1_head = "89AB";
+static const string rs_block1_tail = "CDEF";
+static const string rs_block2 = "abcd";
+static const char rs_block_fill_char = 'x';
+static const size_t rs_block_fill = ( http_::response_data_block
+                                    - rs_block0_head.size()
+                                    - rs_block0_tail.size());
 static const string rs_body =
-  ( "0123" + string(http_::response_data_block - 8, 'x') + "4567"
-  + "89AB" + string(http_::response_data_block - 8, 'x') + "CDEF"
-  + "abcd");
+  ( rs_block0_head + string(rs_block_fill, rs_block_fill_char) + rs_block0_tail
+  + rs_block1_head + string(rs_block_fill, rs_block_fill_char) + rs_block1_tail
+  + rs_block2);
 static const string rs_body_b64digest = "E4RswXyAONCaILm5T/ZezbHI87EKvKIdxURKxiVHwKE=";
 static const string rs_head_s = (
     "HTTP/1.1 200 OK\r\n"
@@ -480,9 +489,9 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
                 if (er && er != asio::error::eof) break;
 
                 // Alter forwarded content somewhere in the second data block.
-                auto rci = bsv.find("CDEF");
+                auto rci = bsv.find(rs_block1_tail);
                 if (rci != string::npos)
-                    d[rci] = 'c';
+                    d[rci] = rs_block1_tail[0] + 1;
 
                 asio::async_write(forged_w, asio::buffer(b, l), y[ew]);
                 if (ew && ew != asio::error::eof) break;
