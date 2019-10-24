@@ -1,6 +1,7 @@
 #include "client.h"
 #include "announcer.h"
 #include "dht_lookup.h"
+#include "local_peer_discovery.h"
 #include "../http_sign.h"
 #include "../../util/atomic_file.h"
 #include "../../util/bytes.h"
@@ -38,6 +39,8 @@ struct Client::Impl {
     map<string, udp::endpoint> peer_cache;
     util::LruCache<bt::NodeID, unique_ptr<DhtLookup>> dht_lookups;
     log_level_t log_level = INFO;
+    LocalPeerDiscovery local_peer_discovery;
+
 
     bool log_debug() const { return log_level <= DEBUG; }
     bool log_info()  const { return log_level <= INFO; }
@@ -51,6 +54,7 @@ struct Client::Impl {
         , cache_dir(move(cache_dir))
         , announcer(dht)
         , dht_lookups(256)
+        , local_peer_discovery(ios, dht->local_endpoints())
     {
         start_accepting();
     }
@@ -215,12 +219,21 @@ struct Client::Impl {
 
         boost::optional<udp::endpoint> tried;
 
-        for (int i = 0; i < 2 && !cancel; ++i) {
+        enum Try { local_peers, last_known, dht_peers };
+
+        static const vector<Try> _to_try{ local_peers, last_known, dht_peers };
+
+        for (auto do_try : _to_try) {
+            if (cancel) break;
             sys::error_code ec;
 
             set<udp::endpoint> eps;
 
-            if (i == 0) {
+            if (do_try == local_peers) {
+                eps = local_peer_discovery.found_peers();
+                if (eps.empty()) continue;
+            }
+            else if (do_try == last_known) {
                 auto peer_i = peer_cache.find(host);
                 if (peer_i == peer_cache.end()) continue;
                 auto ep = peer_i->second;
@@ -229,7 +242,8 @@ struct Client::Impl {
                 }
                 eps = {ep};
                 tried = ep;
-            } else {
+            }
+            else if (do_try == dht_peers) {
                 bt::NodeID infohash = util::sha1_digest(host);
 
                 if (log_debug()) {
