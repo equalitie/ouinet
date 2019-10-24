@@ -3,6 +3,8 @@
 #include <array>
 #include <string>
 #include <vector>
+
+#include <boost/asio/buffer.hpp>
 #include <boost/utility/string_view.hpp>
 #include <boost/optional.hpp>
 
@@ -19,6 +21,8 @@ template<> struct is_byte_type<unsigned char> { static const bool value = true; 
 
 template<> struct is_bytestring_type<std::string> { static const bool value = true; };
 template<> struct is_bytestring_type<boost::string_view> { static const bool value = true; };
+template<> struct is_bytestring_type<boost::asio::const_buffer> { static const bool value = true; };
+template<> struct is_bytestring_type<boost::asio::mutable_buffer> { static const bool value = true; };
 template<class B> struct is_bytestring_type<std::vector<B>> { static const bool value = is_byte_type<B>::value; };
 template<std::size_t N, class B> struct is_bytestring_type<std::array<B, N>> { static const bool value = is_byte_type<B>::value; };
 
