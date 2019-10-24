@@ -270,7 +270,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
         tie(tested_w, tested_r) = util::connected_pair(ios, yield);
 
         // Send raw origin response.
-        asio::spawn(ios, [&origin_w, &ios, lock = wc.lock()] (auto y) {
+        asio::spawn(ios, [&origin_w, lock = wc.lock()] (auto y) {
             sys::error_code e;
             asio::async_write( origin_w
                              , asio::const_buffer(rs_head_s.data(), rs_head_s.size())
@@ -285,7 +285,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
 
         // Sign origin response.
         asio::spawn(ios, [ origin_r = std::move(origin_r), &signed_w
-                         , &ios, lock = wc.lock()] (auto y) mutable {
+                         , lock = wc.lock()] (auto y) mutable {
             Session origin_rs(std::move(origin_r));
             auto req_h = get_request_header();
             auto sk = get_private_key();
@@ -338,7 +338,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
         });
 
         // Black hole.
-        asio::spawn(ios, [&tested_r, &ios, lock = wc.lock()] (auto y) {
+        asio::spawn(ios, [&tested_r, lock = wc.lock()] (auto y) {
             char d[2048];
             asio::mutable_buffer b(d, sizeof(d));
 
@@ -366,7 +366,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified) {
         tie(tested_w, tested_r) = util::connected_pair(ios, yield);
 
         // Send raw origin response.
-        asio::spawn(ios, [&origin_w, &ios, lock = wc.lock()] (auto y) {
+        asio::spawn(ios, [&origin_w, lock = wc.lock()] (auto y) {
             sys::error_code e;
             asio::async_write( origin_w
                              , asio::const_buffer(rs_head_s.data(), rs_head_s.size())
@@ -381,7 +381,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified) {
 
         // Sign origin response.
         asio::spawn(ios, [ origin_r = std::move(origin_r), &signed_w
-                         , &ios, lock = wc.lock()] (auto y) mutable {
+                         , lock = wc.lock()] (auto y) mutable {
             Session origin_rs(std::move(origin_r));
             auto req_h = get_request_header();
             auto sk = get_private_key();
@@ -396,7 +396,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified) {
 
         // Verify signed output.
         asio::spawn(ios, [ signed_r = std::move(signed_r), &tested_w
-                         , &ios, lock = wc.lock()](auto y) mutable {
+                         , lock = wc.lock()](auto y) mutable {
             Session signed_rs(std::move(signed_r));
             auto pk = get_public_key();
             Cancel cancel;
@@ -409,7 +409,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified) {
         });
 
         // Black hole.
-        asio::spawn(ios, [&tested_r, &ios, lock = wc.lock()] (auto y) {
+        asio::spawn(ios, [&tested_r, lock = wc.lock()] (auto y) {
             char d[2048];
             asio::mutable_buffer b(d, sizeof(d));
 
