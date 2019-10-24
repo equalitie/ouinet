@@ -423,4 +423,103 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified) {
     });
 }
 
+BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
+    asio::io_service ios;
+    run_spawned(ios, [&] (auto yield) {
+        WaitCondition wc(ios);
+
+        asio::ip::tcp::socket
+            origin_w(ios), origin_r(ios),
+            signed_w(ios), signed_r(ios),
+            forged_w(ios), forged_r(ios),
+            tested_w(ios), tested_r(ios);
+        tie(origin_w, origin_r) = util::connected_pair(ios, yield);
+        tie(signed_w, signed_r) = util::connected_pair(ios, yield);
+        tie(forged_w, forged_r) = util::connected_pair(ios, yield);
+        tie(tested_w, tested_r) = util::connected_pair(ios, yield);
+
+        // Send raw origin response.
+        asio::spawn(ios, [&origin_w, lock = wc.lock()] (auto y) {
+            sys::error_code e;
+            asio::async_write( origin_w
+                             , asio::const_buffer(rs_head_s.data(), rs_head_s.size())
+                             , y[e]);
+            BOOST_REQUIRE(!e);
+            asio::async_write( origin_w
+                             , asio::const_buffer(rs_body.data(), rs_body.size())
+                             , y[e]);
+            BOOST_REQUIRE(!e);
+            origin_w.close();
+        });
+
+        // Sign origin response.
+        asio::spawn(ios, [ origin_r = std::move(origin_r), &signed_w
+                         , lock = wc.lock()] (auto y) mutable {
+            Session origin_rs(std::move(origin_r));
+            auto req_h = get_request_header();
+            auto sk = get_private_key();
+            Cancel cancel;
+            sys::error_code e;
+            cache::session_flush_signed( origin_rs, signed_w
+                                       , req_h, inj_id, inj_ts, sk
+                                       , cancel, y[e]);
+            BOOST_REQUIRE(!e);
+            signed_w.close();
+        });
+
+        // Forge (alter) signed output.
+        asio::spawn(ios, [ &signed_r, &forged_w
+                         , lock = wc.lock()] (auto y) {
+            char d[2048];
+            asio::mutable_buffer b(d, sizeof(d));
+            auto bsv = util::bytes::to_string_view(b);
+
+            sys::error_code er, ew;
+            while (er != asio::error::eof && ew != asio::error::eof) {
+                auto l = signed_r.async_read_some(b, y[er]);
+                if (er && er != asio::error::eof) break;
+
+                // Alter forwarded content somewhere in the second data block.
+                auto rci = bsv.find("CDEF");
+                if (rci != string::npos)
+                    d[rci] = 'c';
+
+                asio::async_write(forged_w, asio::buffer(b, l), y[ew]);
+                if (ew && ew != asio::error::eof) break;
+            }
+            BOOST_REQUIRE(er == asio::error::eof || !er);
+            BOOST_REQUIRE(ew == asio::error::eof || !ew);
+            signed_r.close();
+            forged_w.close();
+        });
+
+        // Verify forged output.
+        asio::spawn(ios, [ forged_r = std::move(forged_r), &tested_w
+                         , lock = wc.lock()](auto y) mutable {
+            Session forged_rs(std::move(forged_r));
+            auto pk = get_public_key();
+            Cancel cancel;
+            sys::error_code e;
+            cache::session_flush_verified( forged_rs, tested_w
+                                         , pk
+                                         , cancel, y[e]);
+            BOOST_CHECK_EQUAL(e.value(), sys::errc::bad_message);
+            tested_w.close();
+        });
+
+        // Black hole.
+        asio::spawn(ios, [&tested_r, lock = wc.lock()] (auto y) {
+            char d[2048];
+            asio::mutable_buffer b(d, sizeof(d));
+
+            sys::error_code e;
+            while (!e) asio::async_read(tested_r, b, y[e]);
+            BOOST_REQUIRE(e == asio::error::eof || !e);
+            tested_r.close();
+        });
+
+        wc.wait(yield);
+    });
+}
+
 BOOST_AUTO_TEST_SUITE_END()
