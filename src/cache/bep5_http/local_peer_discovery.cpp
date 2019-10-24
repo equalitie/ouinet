@@ -1,4 +1,5 @@
 #include <boost/asio/spawn.hpp>
+#include <boost/asio/ip/multicast.hpp>
 #include "local_peer_discovery.h"
 #include "../../util/crypto.h" // random_number
 #include "../../parse/number.h"
@@ -9,12 +10,14 @@
 using namespace ouinet;
 using namespace std;
 
-// Arbitrarily chosen with wikipedia's help
-// https://en.wikipedia.org/wiki/List_of_TCP_and_UDP_port_numbers
-static constexpr uint16_t broadcast_listen_port = 9393;
-
 using udp = asio::ip::udp;
 using boost::string_view;
+namespace ip = asio::ip;
+
+// Arbitrarily chosen so as to not clash with any from:
+// https://www.iana.org/assignments/multicast-addresses/multicast-addresses.xhtml
+// TODO: IPv6
+static const udp::endpoint multicast_ep(ip::make_address("237.176.57.49"), 37391);
 
 static const string MSG_PREFIX = "OUINET-LPD-V0:";
 static const string MSG_QUERY_CMD = "QUERY:";
@@ -72,9 +75,9 @@ struct LocalPeerDiscovery::Impl {
 
         _socket.open(udp::v4());
         _socket.set_option(udp::socket::reuse_address(true));
-        _socket.set_option(udp::socket::broadcast(true));
+        _socket.bind({asio::ip::address_v4::any(), multicast_ep.port()}, ec);
 
-        _socket.bind({asio::ip::address_v4::any(), broadcast_listen_port}, ec);
+        _socket.set_option(ip::multicast::join_group(multicast_ep.address()));
 
         if (ec) {
             LOG_ERROR("LocalPeerDiscovery: Failed to bind recv socket (ec:"
@@ -88,13 +91,13 @@ struct LocalPeerDiscovery::Impl {
 
     void say_bye() {
         sys::error_code ec;
-        _socket.send_to(asio::buffer(bye_message()), broadcast_destination_ep(), 0, ec);
+        _socket.send_to(asio::buffer(bye_message()), multicast_ep, 0, ec);
     }
 
     void broadcast_search_query(Cancel& cancel) {
         asio::spawn(_ctx, [&, cancel = cancel] (asio::yield_context yield) {
             sys::error_code ec;
-            udp::endpoint ep = broadcast_destination_ep();
+            udp::endpoint ep = multicast_ep;
             _socket.async_send_to( asio::buffer(query_message())
                                  , ep
                                  , yield[ec]);
@@ -103,10 +106,6 @@ struct LocalPeerDiscovery::Impl {
                         , "(ec:", ec.message(), " ep:", ep, ")");
             }
         });
-    }
-
-    udp::endpoint broadcast_destination_ep() const {
-        return {asio::ip::address_v4::broadcast(), broadcast_listen_port};
     }
 
     void start_listening_to_broadcast(Cancel& cancel) {
@@ -179,8 +178,6 @@ struct LocalPeerDiscovery::Impl {
                              , Cancel& cancel
                              , asio::yield_context yield)
     {
-        std::cerr << "Received broadcast: " << sv << " from " << from << "\n";
-
         if (!consume(sv, MSG_PREFIX)) return;
 
         auto opt_peer_id = parse::number<decltype(_id)>(sv);
@@ -207,7 +204,6 @@ struct LocalPeerDiscovery::Impl {
         if (!opt_eps) return;
         add_endpoints(peer_id, peer_ep, move(*opt_eps));
         sys::error_code ec;
-        cerr << "------------------- Sending reply to " << peer_ep << "\n";
         _socket.async_send_to( asio::buffer(reply_message())
                              , peer_ep
                              , yield[ec]);
