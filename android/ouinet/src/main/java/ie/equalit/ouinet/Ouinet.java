@@ -51,6 +51,10 @@ public class Ouinet {
             Log.d(TAG, "Exception thrown while creating ouinet config file: ", e);
         }
 
+        if (!acquireMulticastLock()) {
+            Log.d(TAG, "Failed to acquire multicast lock");
+        }
+
         List<String> args = new ArrayList<>();
         args.add("ouinet-client"); // App name
         args.add("--repo=" + config.getOuinetDirectory());
@@ -89,7 +93,7 @@ public class Ouinet {
             return false;
         }
 
-        lock = wifi.createMulticastLock("mylock");
+        lock = wifi.createMulticastLock("ouinet.multicast.lock");
 
         try {
             lock.acquire();
