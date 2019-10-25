@@ -33,3 +33,13 @@ function(_static_Boost_recursive_dependencies components outputvar)
     endwhile()
     set(${outputvar} ${_processed} PARENT_SCOPE)
 endfunction()
+
+
+set(_static_Boost_IOSTREAMS_EXTERNAL_LIBRARIES z)
+
+
+# List the external library dependencies for a given boost module
+function(_static_Boost_external_libraries component outputvar)
+    string(TOUPPER ${component} UPPERCOMPONENT)
+    set(${outputvar} ${_static_Boost_${UPPERCOMPONENT}_EXTERNAL_LIBRARIES} PARENT_SCOPE)
+endfunction()

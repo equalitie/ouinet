@@ -49,17 +49,20 @@ foreach (component ${BUILT_BOOST_COMPONENTS})
         add_library(boost_${component}_ INTERFACE)
         add_library(Boost::${component} ALIAS boost_${component}_)
         add_dependencies(boost_${component}_ built_boost)
+
         _static_Boost_recursive_dependencies(${component} dependencies)
-        if (NOT "${dependencies}" STREQUAL "")
-            set(_Boost_${UPPERCOMPONENT}_FULL_DEPENDENCIES )
-            foreach (dependency ${dependencies})
-                _boost_library_filename(${dependency} dependency_filename)
-                list(APPEND _Boost_${UPPERCOMPONENT}_FULL_DEPENDENCIES ${dependency_filename})
-            endforeach()
-            set_target_properties(boost_${component}_ PROPERTIES
-                INTERFACE_LINK_LIBRARIES "boost_${component};${_Boost_${UPPERCOMPONENT}_FULL_DEPENDENCIES}"
-            )
-        endif()
+        _static_Boost_external_libraries(${component} libraries)
+        set(_Boost_${UPPERCOMPONENT}_LINK_LIBRARIES boost_${component})
+        foreach (dependency ${dependencies})
+            _boost_library_filename(${dependency} dependency_filename)
+            list(APPEND _Boost_${UPPERCOMPONENT}_LINK_LIBRARIES ${dependency_filename})
+        endforeach()
+        foreach (library ${libraries})
+            list(APPEND _Boost_${UPPERCOMPONENT}_LINK_LIBRARIES ${library})
+        endforeach()
+        set_target_properties(boost_${component}_ PROPERTIES
+            INTERFACE_LINK_LIBRARIES "${_Boost_${UPPERCOMPONENT}_LINK_LIBRARIES}"
+        )
     endif()
 endforeach()
 
