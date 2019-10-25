@@ -1710,6 +1710,8 @@ fs::path Client::get_or_gen_ca_root_cert(const string repo_root)
 #ifndef __ANDROID__
 int main(int argc, char* argv[])
 {
+    util::crypto_init();
+
     ClientConfig cfg;
 
     try {
@@ -1724,8 +1726,6 @@ int main(int argc, char* argv[])
         cout << cfg.description() << endl;
         return 0;
     }
-
-    util::crypto_init();
 
     asio::io_service ios;
 
