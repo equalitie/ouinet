@@ -105,8 +105,6 @@ COPY --from=builder \
      /opt/ouinet/gpg_error/out/lib/libgpg-error.so.0 \
      /opt/ouinet/libboost_asio.so \
      /opt/ouinet/libboost_asio_ssl.so \
-     /opt/ouinet/modules/asio-ipfs/ipfs_bindings/libipfs_bindings.so \
-     /opt/ouinet/src/ouiservice/lampshade/lampshade_bindings/liblampshade_bindings.so \
      \
      /usr/local/lib/
 # Update the dynamic linker cache after all non-system libraries have been copied.
