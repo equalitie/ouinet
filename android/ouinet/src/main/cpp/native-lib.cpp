@@ -38,7 +38,7 @@ bool g_crypto_initialized = false;
 
 void start_client_thread(const vector<string>& args, const vector<string>& extra_path)
 {
-    if (g_crypto_initialized) {
+    if (!g_crypto_initialized) {
         ouinet::util::crypto_init();
         g_crypto_initialized = true;
     }
