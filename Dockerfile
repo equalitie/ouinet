@@ -58,7 +58,7 @@ RUN cd /usr/local/src/ouinet \
 # Populate the licenses directory (avoid version numbers in source paths).
 RUN /usr/local/src/ouinet/scripts/add-licenses-dir.sh /usr/local/src/ouinet .
 
-FROM debian:stretch
+FROM debian:buster
 # To get the list of system library packages to install,
 # enter the build directory and execute:
 #
