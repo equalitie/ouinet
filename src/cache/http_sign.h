@@ -11,6 +11,7 @@
 
 #include "../constants.h"
 #include "../http_util.h"
+#include "../logger.h"
 #include "../session.h"
 #include "../util/crypto.h"
 #include "../util/hash.h"
@@ -32,12 +33,18 @@ namespace ouinet { namespace http_ {
     // This contains common parameters for block signatures.
     static const std::string response_block_signatures_hdr = header_prefix + "BSigs";
 
+    // Chunk extension used to hold data block signature.
+    static const std::string response_block_signature_ext = "ouisig";
+
     // A default size for data blocks to be signed.
     // Small enough to avoid nodes buffering too much data
     // and not take too much time to download on slow connections,
     // but big enough to completely cover most responses
     // and thus avoid having too many signatures per response.
     static const size_t response_data_block = 65536;  // TODO: sensible value
+
+    // Maximum data block size that a receiver is going to accept.
+    static const size_t response_data_block_max = 1024 * 1024;  // TODO: sensible value
 }}
 
 namespace ouinet { namespace cache {
@@ -46,8 +53,11 @@ namespace ouinet { namespace cache {
 // ----------------------------------------------------------------
 
 namespace http_sign_detail {
-std::string block_sig_str_pfx(const std::string&, size_t);
+boost::optional<util::Ed25519PublicKey::sig_array_t> block_sig_from_exts(boost::string_view);
+std::string block_sig_str_pfx(boost::string_view, size_t);
+std::string block_sig_str(boost::string_view, size_t, asio::const_buffer);
 std::string block_chunk_ext(const std::string&, util::SHA512&, const util::Ed25519PrivateKey&);
+std::string block_chunk_ext(const boost::optional<util::Ed25519PublicKey::sig_array_t>&);
 bool check_body(const http::response_header<>&, size_t, util::SHA256&);
 }
 
@@ -142,6 +152,22 @@ http_injection_verify( http::response_header<>
 std::string
 http_key_id_for_injection(const ouinet::util::Ed25519PublicKey&);
 
+// Decode the given `keyId` into a public key.
+boost::optional<util::Ed25519PublicKey>
+http_decode_key_id(boost::string_view key_id);
+
+// A simple container for a parsed block signatures HTTP header.
+// Only the `hs2019` algorithm with an explicit key is supported,
+// so the ready-to-use key is left in `pk`.
+struct HttpBlockSigs {
+    util::Ed25519PublicKey pk;
+    boost::string_view algorithm;  // always "hs2019"
+    size_t size;
+
+    static
+    boost::optional<HttpBlockSigs> parse(boost::string_view);
+};
+
 // Flush a response from session `in` to stream `out`
 // while signing with the provided private key.
 template<class SinkStream>
@@ -187,16 +213,14 @@ session_flush_signed( Session& in, SinkStream& out
     auto block_sig_str_pfx  // for first block
         = http_sign_detail::block_sig_str_pfx(injection_id, block_offset);
     // Simplest implementation: one output chunk per data block.
-    // The big buffer may cause issues with coroutine stack management,
-    // so allocate it in the heap.
-    auto qbuf = std::make_unique<util::quantized_buffer<http_::response_data_block>>();
+    util::quantized_buffer qbuf(http_::response_data_block);
     ProcDataFunc<asio::const_buffer> dproc = [&] (auto inbuf, auto&, auto) {
         // Just count transferred data and feed the hash.
         body_length += inbuf.size();
         if (do_inject) body_hash.update(inbuf);
-        qbuf->put(inbuf);
+        qbuf.put(inbuf);
         ProcDataFunc<asio::const_buffer>::result_type ret{
-            (inbuf.size() > 0) ? qbuf->get() : qbuf->get_rest(), {}
+            (inbuf.size() > 0) ? qbuf.get() : qbuf.get_rest(), {}
         };  // send rest if no more input
         if (do_inject && ret.first.size() > 0) {  // if injecting and sending data
             if (block_offset > 0)  // add chunk extension for previous block
@@ -235,11 +259,14 @@ session_flush_signed( Session& in, SinkStream& out
 // while verifying signatures by the provided public key.
 //
 // Fail with error `boost::system::errc::no_message`
-// if the response head failed to be verified
+// if the response head failed to be verified or was not acceptable
 // (in which case no data should have been sent to `out`);
 // fail with error `boost::system::errc::bad_message`
 // if verification fails later on
 // (in which case data may have already been sent).
+//
+// The resulting output contains all the information and formatting needed
+// to be verified again.
 template<class SinkStream>
 inline
 void
@@ -247,27 +274,95 @@ session_flush_verified( Session& in, SinkStream& out
                       , const ouinet::util::Ed25519PublicKey& pk
                       , Cancel& cancel, asio::yield_context yield)
 {
-    http::response_header<> head;
+    http::response_header<> head;  // keep for refs and later use
+    boost::string_view uri;  // for warnings, should use `Yield::log` instead
+    boost::string_view injection_id;
+    boost::optional<HttpBlockSigs> bs_params;
+    std::unique_ptr<util::quantized_buffer> qbuf;
     auto hproc = [&] (auto inh, auto&, auto y) {
-        inh = cache::http_injection_verify(move(inh), pk);
-        if (inh.cbegin() == inh.cend())
-            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), inh);
-        head = inh;
-        return inh;
+        // Verify head signature.
+        head = cache::http_injection_verify(move(inh), pk);
+        if (head.cbegin() == head.cend()) {
+            LOG_WARN("Failed to verify HTTP head signatures");
+            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), head);
+        }
+        uri = head[http_::response_uri_hdr];
+        // Get and validate HTTP block signature parameters.
+        auto bsh = head[http_::response_block_signatures_hdr];
+        if (bsh.empty()) {
+            LOG_WARN("Missing parameters for HTTP data block signatures; uri=", uri);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), head);
+        }
+        bs_params = cache::HttpBlockSigs::parse(bsh);
+        if (!bs_params) {
+            LOG_WARN("Malformed parameters for HTTP data block signatures; uri=", uri);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), head);
+        }
+        if (bs_params->size > http_::response_data_block_max) {
+            LOG_WARN("Size of signed HTTP data blocks is too large: ", bs_params->size, "; uri=", uri);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), head);
+        }
+        // The injection id is also needed to verify block signatures.
+        injection_id = util::http_injection_id(head);
+        if (injection_id.empty()) {
+            LOG_WARN("Missing injection identifier in HTTP head; uri=", uri);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), head);
+        }
+        qbuf = std::make_unique<util::quantized_buffer>(bs_params->size);
+        return head;
     };
 
-    auto xproc = [] (auto, auto&, auto) {
-        // Chunk extensions are not forwarded
-        // since we have no way to verify them.
+    boost::optional<util::Ed25519PublicKey::sig_array_t> inbsig, outbsig;
+    auto xproc = [&inbsig, &uri] (auto inx_, auto&, auto) {
+        auto inbsig_ = http_sign_detail::block_sig_from_exts(inx_);
+        if (!inbsig_) return;
+
+        // Capture and keep the latest block signature only.
+        if (inbsig)
+            LOG_WARN("Dropping data block signature; uri=", uri);
+        inbsig = std::move(inbsig_);
     };
 
     size_t body_length = 0;
+    size_t block_offset = 0;
     util::SHA256 body_hash;
-    ProcDataFunc<asio::const_buffer> dproc = [&] (auto ind, auto&, auto) {
-        body_length += ind.size();
-        body_hash.update(ind);
-        ProcDataFunc<asio::const_buffer>::result_type ret{std::move(ind), {}};
-        return ret;  // pass data on, drop chunk extensions
+    std::vector<char> lastd_;
+    asio::mutable_buffer lastd;
+    // Simplest implementation: one output chunk per data block.
+    ProcDataFunc<asio::const_buffer> dproc = [&] (auto ind, auto&, auto y) {
+        // Data block is sent when data following it is received
+        // (so process the last data buffer now).
+        body_length += lastd.size();
+        body_hash.update(lastd);
+        qbuf->put(lastd);
+        ProcDataFunc<asio::const_buffer>::result_type ret{
+            (ind.size() > 0) ? qbuf->get() : qbuf->get_rest(), {}
+        };  // send rest if no more input
+        if (ret.first.size() > 0) {  // send last extensions, keep current for next
+            // Verify signature of data block to be sent (fail if missing).
+            if (!inbsig) {
+                LOG_WARN("Missing signature for data block with offset ", block_offset, "; uri=", uri);
+                return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), ret);
+            }
+            auto bsig_str = http_sign_detail::block_sig_str(injection_id, block_offset, ret.first);
+            if (!bs_params->pk.verify(bsig_str, *inbsig)) {
+                LOG_WARN("Failed to verify data block with offset ", block_offset, "; uri=", uri);
+                return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), ret);
+            }
+
+            ret.second = http_sign_detail::block_chunk_ext(outbsig);
+            outbsig = std::move(inbsig);
+            inbsig = {};
+            block_offset += ret.first.size();
+        }
+
+        // Save copy of current input data to last data buffer.
+        if (ind.size() > lastd_.size())  // extend storage if needed
+            lastd_.resize(ind.size());
+        lastd = asio::buffer(lastd_.data(), ind.size());
+        asio::buffer_copy(lastd, ind);
+
+        return ret;  // pass data on
     };
 
     // If we process trailers, we may have a chance to
@@ -276,7 +371,8 @@ session_flush_verified( Session& in, SinkStream& out
     // so that the receiving end can see that something bad is going on.
     bool check_body_after = true;
     ProcTrailFunc tproc = [&] (auto intr, auto&, auto y) {
-        ProcTrailFunc::result_type ret{std::move(intr), {}};  // pass trailer on, drop chunk extensions
+        ProcTrailFunc::result_type ret{
+            std::move(intr), http_sign_detail::block_chunk_ext(outbsig)};  // pass trailer on
 
         if (ret.first.cbegin() == ret.first.cend())
             return ret;  // no headers in trailer
@@ -377,10 +473,6 @@ struct HttpSignature {
     // (extra field names and values point to the given head).
     std::pair<bool, http::fields> verify( const http::response_header<>&
                                         , const util::Ed25519PublicKey&);
-
-private:
-    static
-    bool has_comma_in_quotes(const boost::string_view&);
 };
 
 }} // namespaces

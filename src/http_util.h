@@ -28,6 +28,22 @@ get_host_port(const http::request<http::string_body>&);
 boost::posix_time::ptime parse_date(beast::string_view);
 std::string format_date(boost::posix_time::ptime);
 
+// Return empty is missing or malformed.
+boost::string_view http_injection_field( const http::response_header<>&
+                                       , const std::string&);
+
+inline
+boost::string_view http_injection_id(const http::response_header<>& rsh)
+{
+    return http_injection_field(rsh, "id");
+}
+
+inline
+boost::string_view http_injection_ts(const http::response_header<>& rsh)
+{
+    return http_injection_field(rsh, "ts");
+}
+
  ///////////////////////////////////////////////////////////////////////////////
 // Utility function to check whether an HTTP field belongs to a set. Where
 // the set is defined by second, third, fourth,... arguments.

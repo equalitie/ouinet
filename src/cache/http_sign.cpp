@@ -1,5 +1,6 @@
 #include "http_sign.h"
 
+#include <algorithm>
 #include <map>
 #include <tuple>
 #include <utility>
@@ -12,7 +13,6 @@
 #include <boost/format.hpp>
 
 #include "../constants.h"
-#include "../logger.h"
 #include "../parse/number.h"
 #include "../split_string.h"
 #include "../util.h"
@@ -26,6 +26,8 @@ static const auto final_signature_hdr = http_::response_signature_hdr_pfx + "1";
 
 // The only signature algorithm supported by this implementation.
 static const std::string sig_alg_hs2019("hs2019");
+
+static const std::string key_id_pfx("ed25519=");
 
 static
 http::response_header<>
@@ -51,7 +53,7 @@ http_injection_head( const http::request_header<>& rqh
 
     rsh.set(response_version_hdr, response_version_hdr_v0);
     rsh.set(response_uri_hdr, rqh.target());
-    rsh.set( header_prefix + "Injection"
+    rsh.set(response_injection_hdr
            , boost::format("id=%s,ts=%d") % injection_id % injection_ts);
     static const auto fmt_ = "keyId=\"%s\""
                              ",algorithm=\"" + sig_alg_hs2019 + "\""
@@ -178,11 +180,46 @@ http_injection_verify( http::response_header<> rsh
 std::string
 http_key_id_for_injection(const util::Ed25519PublicKey& pk)
 {
-    return "ed25519=" + util::base64_encode(pk.serialize());
+    return key_id_pfx + util::base64_encode(pk.serialize());
+}
+
+boost::optional<util::Ed25519PublicKey>
+http_decode_key_id(boost::string_view key_id)
+{
+    if (!key_id.starts_with(key_id_pfx)) return {};
+    auto decoded_pk = util::base64_decode(key_id.substr(key_id_pfx.size()));
+    if (decoded_pk.size() != util::Ed25519PublicKey::key_size) return {};
+    auto pk_array = util::bytes::to_array<uint8_t, util::Ed25519PrivateKey::key_size>(decoded_pk);
+    return util::Ed25519PublicKey(std::move(pk_array));
+}
+
+boost::optional<util::Ed25519PublicKey::sig_array_t>
+http_sign_detail::block_sig_from_exts(boost::string_view xs)
+{
+    if (xs.empty()) return {};  // no extensions
+
+    sys::error_code ec;
+    http::chunk_extensions xp;
+    xp.parse(xs, ec);
+    assert(!ec);  // this should have been validated upstream, fail hard otherwise
+
+    auto xit = std::find_if( xp.begin(), xp.end()
+                           , [](const auto& x) {
+                                 return x.first == http_::response_block_signature_ext;
+                             });
+    if (xit == xp.end()) return {};  // no signature
+
+    auto decoded_sig = util::base64_decode(xit->second);
+    if (decoded_sig.size() != util::Ed25519PublicKey::sig_size) {
+        LOG_WARN("Malformed data block signature");
+        return {};  // invalid Base64, invalid length
+    }
+
+    return util::bytes::to_array<uint8_t, util::Ed25519PublicKey::sig_size>(decoded_sig);
 }
 
 std::string
-http_sign_detail::block_sig_str_pfx( const std::string& injection_id
+http_sign_detail::block_sig_str_pfx( boost::string_view injection_id
                                    , size_t offset)
 {
     static const auto fmt_ = "%s%c%d%c";
@@ -192,14 +229,41 @@ http_sign_detail::block_sig_str_pfx( const std::string& injection_id
 }
 
 std::string
+http_sign_detail::block_sig_str( boost::string_view injection_id
+                               , size_t offset
+                               , asio::const_buffer block)
+{
+    auto block_digest = util::sha512_digest(block);
+    static const auto fmt_ = "%s%c%d%c%s";
+    return ( boost::format(fmt_)
+           % injection_id % '\0'
+           % offset % '\0'
+           % util::bytes::to_string_view(block_digest)).str();
+}
+
+static inline
+std::string
+block_chunk_ext_(const util::Ed25519PublicKey::sig_array_t& sig)
+{
+    static const auto fmt_ = ";" + http_::response_block_signature_ext + "=\"%s\"";
+    auto encoded_sig = util::base64_encode(sig);
+    return (boost::format(fmt_) % encoded_sig).str();
+}
+
+std::string
 http_sign_detail::block_chunk_ext( const std::string& sig_str_pfx
                                  , util::SHA512& hash
                                  , const util::Ed25519PrivateKey& sk)
 {
-    static const auto fmt_ = ";ouisig=\"%s\"";
     auto digest = util::bytes::to_string(hash.close());
-    auto encoded_sig = util::base64_encode(sk.sign(sig_str_pfx + digest));
-    return (boost::format(fmt_) % encoded_sig).str();
+    return block_chunk_ext_(sk.sign(sig_str_pfx + digest));
+}
+
+std::string
+http_sign_detail::block_chunk_ext(const boost::optional<util::Ed25519PublicKey::sig_array_t>& s)
+{
+    if (!s) return {};
+    return block_chunk_ext_(*s);
 }
 
 bool
@@ -429,6 +493,73 @@ http_signature( const http::response_header<>& rsh
     return (fmt % key_id % ts % headers % encoded_sig).str();
 }
 
+static bool
+has_comma_in_quotes(const boost::string_view& s) {
+    // A comma is between quotes if
+    // the number of quotes before it is odd.
+    int quotes_seen = 0;
+    for (auto c : s) {
+        if (c == '"') {
+            quotes_seen++;
+            continue;
+        }
+        if ((c == ',') && (quotes_seen % 2 != 0))
+            return true;
+    }
+    return false;
+}
+
+boost::optional<HttpBlockSigs>
+HttpBlockSigs::parse(boost::string_view bsigs)
+{
+    // TODO: proper support for quoted strings
+    if (has_comma_in_quotes(bsigs)) {
+        LOG_WARN("Commas in quoted arguments of block signatures HTTP header are not yet supported");
+        return {};
+    }
+
+    HttpBlockSigs hbs;
+    bool valid_pk = false;
+    for (boost::string_view item : SplitString(bsigs, ',')) {
+        beast::string_view key, value;
+        std::tie(key, value) = split_string_pair(item, '=');
+        // Unquoted values:
+        if (key == "size") {
+            auto sz = parse::number<size_t>(value);
+            hbs.size = sz ? *sz : 0; continue;
+        }
+        // Quoted values:
+        if (value.size() < 2 || value[0] != '"' || value[value.size() - 1] != '"') {
+            LOG_WARN("Invalid quoting in block signatures HTTP header");
+            return {};
+        }
+        value.remove_prefix(1);
+        value.remove_suffix(1);
+        if (key == "keyId") {
+            auto pk = http_decode_key_id(value);
+            if (!pk) continue;
+            hbs.pk = *pk;
+            valid_pk = true;
+            continue;
+        }
+        if (key == "algorithm") {hbs.algorithm = value; continue;}
+        return {};
+    }
+    if (!valid_pk) {
+        LOG_WARN("Missing or invalid key identifier in block signatures HTTP header");
+        return {};
+    }
+    if (hbs.algorithm != sig_alg_hs2019) {
+        LOG_WARN("Missing or invalid algorithm in block signatures HTTP header");
+        return {};
+    }
+    if (hbs.size == 0) {
+        LOG_WARN("Missing or invalid size in block signatures HTTP header");
+        return {};
+    }
+    return hbs;
+}
+
 boost::optional<HttpSignature>
 HttpSignature::parse(boost::string_view sig)
 {
@@ -506,22 +637,6 @@ HttpSignature::verify( const http::response_header<>& rsh
     }
 
     return {true, std::move(extra)};
-}
-
-bool
-HttpSignature::has_comma_in_quotes(const boost::string_view& s) {
-    // A comma is between quotes if
-    // the number of quotes before it is odd.
-    int quotes_seen = 0;
-    for (auto c : s) {
-        if (c == '"') {
-            quotes_seen++;
-            continue;
-        }
-        if ((c == ',') && (quotes_seen % 2 != 0))
-            return true;
-    }
-    return false;
 }
 
 }} // namespaces

@@ -25,11 +25,10 @@ static const std::string request_version_hdr_current = request_version_hdr_v1;
 static const std::string response_version_hdr = header_prefix + "Version";
 static const std::string response_version_hdr_v0 = "0";
 static const std::string response_version_hdr_current = response_version_hdr_v0;
-// Such a response should also carry an opaque identifier for this insertion.
-static const std::string response_injection_id_hdr   = header_prefix + "Injection-ID";
-static const std::string response_injection_time_hdr = header_prefix + "Injection-Time";
 // This allows the response to stand on its own (e.g. for reinsertion).
 static const std::string response_uri_hdr = header_prefix + "URI";
+// This contains identifying data about the injection itself.
+static const std::string response_injection_hdr = header_prefix + "Injection";
 
 // The presence of this HTTP request header with the true value below
 // instructs the injector to behave synchronously

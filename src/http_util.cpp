@@ -3,6 +3,8 @@
 #include <boost/asio/error.hpp>
 #include <network/uri.hpp>
 
+#include "split_string.h"
+
 
 using namespace std;
 
@@ -164,6 +166,20 @@ ouinet::util::format_date(posix_time::ptime date)
     ss.imbue(std::locale(std::locale::classic(), facet));
     ss << date;
     return ss.str();
+}
+
+boost::string_view
+ouinet::util::http_injection_field( const http::response_header<>& rsh
+                                  , const string& field)
+{
+    auto ih = rsh[http_::response_injection_hdr];
+    if (ih.empty()) return {};  // missing header
+    for (auto item : SplitString(ih, ',')) {
+        auto k_v = split_string_pair(item, '=');
+        if (k_v.first != field) continue;
+        return k_v.second;
+    }
+    return {};  // missing id item in header
 }
 
 http::response_header<>

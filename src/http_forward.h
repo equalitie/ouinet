@@ -349,6 +349,7 @@ http_forward( StreamIn& in
         ConstBufferSequence outbuf; std::string outexts;
         std::tie(outbuf, outexts) = dproc(fwdbuf, cancel, yield[ec]);
         assert(outexts.empty() || chunked_out);  // must enable chunked output for extensions
+        assert(outexts.empty() || outbuf.size() > 0);  // extensions would be lost
         if (set_error(ec, "Failed to process response body"))
             break;
         if (asio::buffer_size(outbuf) == 0)

@@ -3,6 +3,8 @@
 #include <array>
 #include <string>
 #include <vector>
+
+#include <boost/asio/buffer.hpp>
 #include <boost/utility/string_view.hpp>
 #include <boost/optional.hpp>
 
@@ -19,6 +21,8 @@ template<> struct is_byte_type<unsigned char> { static const bool value = true; 
 
 template<> struct is_bytestring_type<std::string> { static const bool value = true; };
 template<> struct is_bytestring_type<boost::string_view> { static const bool value = true; };
+template<> struct is_bytestring_type<boost::asio::const_buffer> { static const bool value = true; };
+template<> struct is_bytestring_type<boost::asio::mutable_buffer> { static const bool value = true; };
 template<class B> struct is_bytestring_type<std::vector<B>> { static const bool value = is_byte_type<B>::value; };
 template<std::size_t N, class B> struct is_bytestring_type<std::array<B, N>> { static const bool value = is_byte_type<B>::value; };
 
@@ -30,6 +34,12 @@ template<class S> std::string to_string(const S& bytestring)
 {
     static_assert(is_bytestring_type<S>::value, "Not a bytestring type");
     return std::string(reinterpret_cast<const char *>(bytestring.data()), bytestring.size());
+}
+
+template<class S> boost::string_view to_string_view(const S& bytestring)
+{
+    static_assert(is_bytestring_type<S>::value, "Not a bytestring type");
+    return boost::string_view(reinterpret_cast<const char *>(bytestring.data()), bytestring.size());
 }
 
 template<class B, class S> std::vector<B> to_vector(const S& bytestring)

@@ -57,6 +57,7 @@
 #include "ouiservice/tls.h"
 #include "ouiservice/bep5/client.h"
 
+#include "parse/number.h"
 #include "util/signal.h"
 #include "util/crypto.h"
 #include "util/lru_cache.h"
@@ -312,7 +313,11 @@ Client::State::fetch_stored( const Request& request
                                    , asio::error::operation_not_supported);
     }
 
-    auto date = util::parse_date((*hdr)[http_::response_injection_time_hdr]);
+    auto tsh = util::http_injection_ts(*hdr);
+    auto ts = parse::number<time_t>(tsh);
+    auto date = ( ts
+                ? boost::posix_time::from_time_t(*ts)
+                : boost::posix_time::not_a_date_time);
 
     return CacheEntry{date, move(s)};
 }
