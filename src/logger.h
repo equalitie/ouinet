@@ -94,6 +94,8 @@ class Logger
     // put name on states and message types
     void initiate_textual_conversions();
 
+    bool would_log(log_level_t) const;
+
     // Constructor sets an initial threshold
     Logger(log_level_t threshold);
     // Destructor closes an open log file
@@ -103,7 +105,7 @@ class Logger
     std::string current_log_file() { return log_filename; }
 
     // Get the current threshold
-    log_level_t get_threshold() { return threshold;}
+    log_level_t get_threshold() const { return threshold;}
     void enable_timestamp() { _stamp_with_time = true;}
     void disable_timestamp() { _stamp_with_time = false;}
     

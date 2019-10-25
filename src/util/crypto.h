@@ -15,7 +15,15 @@ namespace util {
 
 void crypto_init();
 
+void random(void*, unsigned int);
 std::string random(unsigned int size);
+
+template<typename N /* e.g. uint64_t */> N random_number()
+{
+    N ret;
+    random(reinterpret_cast<char*>(&ret), sizeof(N));
+    return ret;
+}
 
 class Ed25519PublicKey {
     public:
