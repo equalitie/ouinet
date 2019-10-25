@@ -95,8 +95,6 @@ Vagrant.configure("2") do |config|
     vm.vm.provision "shell", inline: <<-SHELL
       apt-get update
       apt-get install -y \
-        git \
-        wget \
         locales \
         aptitude \
         net-tools \
