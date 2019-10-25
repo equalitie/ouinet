@@ -17,7 +17,7 @@ BUILD="$2"
 LICENSE_DATA="\
 ouinet;eQualit.ie, Inc.;${SRC}/LICENSE
 obfs4proxy;Yawning Angel;${BUILD}/modules/obfs4proxy/obfs4proxy-prefix/src/obfs4proxy/LICENSE
-boost;various;/usr/local/src/boost/LICENSE_1_0.txt
+boost;various;${BUILD}/boost/src/built_boost/LICENSE_1_0.txt
 golang;${BUILD}/golang/AUTHORS;${BUILD}/golang/LICENSE
 i2pd;The PurpleI2P Project;${SRC}/src/ouiservice/i2p/i2pd/LICENSE
 gpg-error;${BUILD}/gpg_error/src/gpg_error/AUTHORS;${BUILD}/gpg_error/src/gpg_error/COPYING.LIB
