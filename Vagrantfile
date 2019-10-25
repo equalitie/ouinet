@@ -115,20 +115,21 @@ Vagrant.configure("2") do |config|
     vm.vm.provision "shell", inline: <<-SHELL
       # Install toolchain and dependencies
       apt-get install -y \
-        build-essential \
-        pkg-config \
-        wget \
-        rsync \
-        libtool \
         autoconf \
         automake \
         autopoint \
-        texinfo \
+        build-essential \
         cmake \
         gettext \
+        git \
         libssl-dev \
+        libtool \
         ninja-build \
+        pkg-config \
         python-twisted \
+        rsync \
+        texinfo \
+        wget \
         unzip \
         zlib1g-dev
 

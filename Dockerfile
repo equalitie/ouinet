@@ -10,20 +10,18 @@ RUN apt-get update && apt-get install -y \
     automake \
     autopoint \
     build-essential \
+    cmake \
     gettext \
     git \
-    libgcrypt-dev \
-    libidn11-dev \
     libssl-dev \
     libtool \
-    libunistring-dev \
     ninja-build \
     pkg-config \
     python-twisted \
     rsync \
     texinfo \
-    wget \
     unzip \
+    wget \
     zlib1g-dev
 # quieten wget and unzip
 RUN echo 'quiet = on' >> /etc/wgetrc

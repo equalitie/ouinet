@@ -31,8 +31,8 @@ jobs:
                 python-twisted \
                 rsync \
                 texinfo \
-                wget \
                 unzip \
+                wget \
                 zlib1g-dev
             wget 'https://dl.google.com/dl/android/studio/ide-zips/3.4.2.0/android-studio-ide-183.5692245-linux.tar.gz' -O - | tar -axz -C /opt android-studio/jre
             echo 'export PATH=/opt/android-studio/jre/bin:$PATH' >> ~/.bashrc
