@@ -92,8 +92,6 @@ RUN wget -q -P /tmp "https://github.com/PurpleI2P/i2pd/releases/download/${I2PD_
  && dpkg -i /tmp/i2pd_*.deb \
  && rm -f /tmp/i2pd_*.deb \
  && rm -rf /var/lib/apt/lists/*
-# Manually install Boost libraries.
-COPY --from=builder /usr/local/lib/libboost_* /usr/local/lib/
 WORKDIR /opt/ouinet
 # To get the list of locally built libraries to copy,
 # enter the build directory and execute:
