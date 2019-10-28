@@ -24,7 +24,8 @@ static const std::string request_version_hdr_current = request_version_hdr_v1;
 // indicating the protocol version used by the injector.
 static const std::string response_version_hdr = header_prefix + "Version";
 static const std::string response_version_hdr_v0 = "0";
-static const std::string response_version_hdr_current = response_version_hdr_v0;
+static const std::string response_version_hdr_v1 = "1";
+static const std::string response_version_hdr_current = response_version_hdr_v1;
 // This allows the response to stand on its own (e.g. for reinsertion).
 static const std::string response_uri_hdr = header_prefix + "URI";
 // This contains identifying data about the injection itself.

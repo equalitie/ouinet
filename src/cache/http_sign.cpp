@@ -49,9 +49,9 @@ http_injection_head( const http::request_header<>& rqh
                    , const std::string& key_id)
 {
     using namespace ouinet::http_;
-    assert(response_version_hdr_current == response_version_hdr_v0);
+    assert(response_version_hdr_current == response_version_hdr_v1);
 
-    rsh.set(response_version_hdr, response_version_hdr_v0);
+    rsh.set(response_version_hdr, response_version_hdr_v1);
     rsh.set(response_uri_hdr, rqh.target());
     rsh.set(response_injection_hdr
            , boost::format("id=%s,ts=%d") % injection_id % injection_ts);
