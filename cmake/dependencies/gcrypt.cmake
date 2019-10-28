@@ -1,5 +1,27 @@
 include(ExternalProject)
 
+set(GPGERROR_LIBRARY_BASE_FILENAME
+    ${CMAKE_SHARED_LIBRARY_PREFIX}gpg-error${CMAKE_SHARED_LIBRARY_SUFFIX}
+)
+set(GCRYPT_LIBRARY_BASE_FILENAME
+    ${CMAKE_SHARED_LIBRARY_PREFIX}gcrypt${CMAKE_SHARED_LIBRARY_SUFFIX}
+)
+
+# The order of these lists is important.
+# The first entry is a regular file, the remainder are symlinks.
+set(GPGERROR_LIBRARY_VERSION_FILENAMES
+    ${GPGERROR_LIBRARY_BASE_FILENAME}.0.24.3
+    ${GPGERROR_LIBRARY_BASE_FILENAME}.0
+    ${GPGERROR_LIBRARY_BASE_FILENAME}
+)
+set(GCRYPT_LIBRARY_VERSION_FILENAMES
+    ${GCRYPT_LIBRARY_BASE_FILENAME}.20.2.3
+    ${GCRYPT_LIBRARY_BASE_FILENAME}.20
+    ${GCRYPT_LIBRARY_BASE_FILENAME}
+)
+
+
+
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     get_filename_component(COMPILER_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
     get_filename_component(COMPILER_TOOLCHAIN_PREFIX ${_CMAKE_TOOLCHAIN_PREFIX} NAME)
@@ -35,13 +57,16 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     # that it can't test for. Unfortunately, this guess is often wrong. This
     # value is right for android systems.
     set(UNDERSCORE_CONFIG "ac_cv_sys_symbol_underscore=no")
+    set(VERSIONED_LIBRARIES 0)
 else()
     # TODO: Should probably support non-android cross compilation here.
     set(GCRYPT_CC ${CMAKE_C_COMPILER})
     set(PATCH_COMMAND "")
     set(HOST_CONFIG "")
     set(UNDERSCORE_CONFIG "")
+    set(VERSIONED_LIBRARIES 1)
 endif()
+
 
 
 if (CMAKE_LIBRARY_OUTPUT_DIRECTORY)
@@ -50,49 +75,96 @@ else()
     set(GCRYPT_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 endif()
 
-set(GPGERROR_FILENAME
-    ${GCRYPT_OUTPUT_DIRECTORY}/${CMAKE_SHARED_LIBRARY_PREFIX}gpg-error${CMAKE_SHARED_LIBRARY_SUFFIX}
+set(GPGERROR_BUILD_DIRECTORY
+    ${CMAKE_CURRENT_BINARY_DIR}/gpg_error/out
 )
-set(GPGERROR_BUILD_FILENAME
-    "${CMAKE_CURRENT_BINARY_DIR}/gpg_error/out/lib/${CMAKE_SHARED_LIBRARY_PREFIX}gpg-error${CMAKE_SHARED_LIBRARY_SUFFIX}"
+set(GCRYPT_BUILD_DIRECTORY
+    ${CMAKE_CURRENT_BINARY_DIR}/gcrypt/out
 )
-set(GCRYPT_FILENAME
-    ${GCRYPT_OUTPUT_DIRECTORY}/${CMAKE_SHARED_LIBRARY_PREFIX}gcrypt${CMAKE_SHARED_LIBRARY_SUFFIX}
-)
-set(GCRYPT_BUILD_FILENAME
-    "${CMAKE_CURRENT_BINARY_DIR}/gcrypt/src/gcrypt/src/.libs/${CMAKE_SHARED_LIBRARY_PREFIX}gcrypt${CMAKE_SHARED_LIBRARY_SUFFIX}"
-)
+
+
+
+# The procedure for installing built libraries into the target directory is
+# quite different for versions in which libraries are versioned
+# (libgcrypt.so.20.2.3) such as linux-gnu, versus where they are not (android).
+if (${VERSIONED_LIBRARIES})
+    list(GET GPGERROR_LIBRARY_VERSION_FILENAMES 0 primary)
+    list(REMOVE_AT GPGERROR_LIBRARY_VERSION_FILENAMES 0)
+
+    set(GPGERROR_BYPRODUCTS ${GCRYPT_OUTPUT_DIRECTORY}/${primary})
+    set(GPGERROR_INSTALL
+        ${CMAKE_COMMAND} -E copy ${GPGERROR_BUILD_DIRECTORY}/lib/${primary} ${GCRYPT_OUTPUT_DIRECTORY}
+    )
+    foreach (filename ${GPGERROR_LIBRARY_VERSION_FILENAMES})
+        set(GPGERROR_BYPRODUCTS ${GPGERROR_BYPRODUCTS}
+            ${GCRYPT_OUTPUT_DIRECTORY}/${filename}
+        )
+        set(GPGERROR_INSTALL ${GPGERROR_INSTALL}
+            && ${CMAKE_COMMAND} -E create_symlink ${primary} ${GCRYPT_OUTPUT_DIRECTORY}/${filename}
+        )
+    endforeach()
+
+    list(GET GCRYPT_LIBRARY_VERSION_FILENAMES 0 primary)
+    list(REMOVE_AT GCRYPT_LIBRARY_VERSION_FILENAMES 0)
+
+    set(GCRYPT_BYPRODUCTS ${GCRYPT_OUTPUT_DIRECTORY}/${primary})
+    set(GCRYPT_INSTALL
+        ${CMAKE_COMMAND} -E copy ${GCRYPT_BUILD_DIRECTORY}/lib/${primary} ${GCRYPT_OUTPUT_DIRECTORY}
+    )
+    foreach (filename ${GCRYPT_LIBRARY_VERSION_FILENAMES})
+        set(GCRYPT_BYPRODUCTS ${GCRYPT_BYPRODUCTS}
+            ${GCRYPT_OUTPUT_DIRECTORY}/${filename}
+        )
+        set(GCRYPT_INSTALL ${GCRYPT_INSTALL}
+            && ${CMAKE_COMMAND} -E create_symlink ${primary} ${GCRYPT_OUTPUT_DIRECTORY}/${filename}
+        )
+    endforeach()
+else()
+    set(GPGERROR_BYPRODUCTS ${GCRYPT_OUTPUT_DIRECTORY}/${GPGERROR_LIBRARY_BASE_FILENAME})
+    set(GCRYPT_BYPRODUCTS ${GCRYPT_OUTPUT_DIRECTORY}/${GCRYPT_LIBRARY_BASE_FILENAME})
+
+    set(GPGERROR_INSTALL
+        ${CMAKE_COMMAND} -E copy ${GPGERROR_BUILD_DIRECTORY}/lib/${GPGERROR_LIBRARY_BASE_FILENAME} ${GCRYPT_OUTPUT_DIRECTORY}
+    )
+    set(GCRYPT_INSTALL
+        ${CMAKE_COMMAND} -E copy ${GCRYPT_BUILD_DIRECTORY}/lib/${GCRYPT_LIBRARY_BASE_FILENAME} ${GCRYPT_OUTPUT_DIRECTORY}
+    )
+endif()
+
+
 
 externalproject_add(gpg_error
     URL https://www.gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-1.32.tar.bz2
-    BUILD_IN_SOURCE 1
     PATCH_COMMAND
         "${PATCH_COMMAND}"
     CONFIGURE_COMMAND
         CC=${GCRYPT_CC}
             ./configure ${HOST_CONFIG}
-            --prefix=${CMAKE_CURRENT_BINARY_DIR}/gpg_error/out
+            --prefix=${GPGERROR_BUILD_DIRECTORY}
     BUILD_COMMAND make
-    BUILD_BYPRODUCTS ${GPGERROR_FILENAME}
+    BUILD_IN_SOURCE 1
+    BUILD_BYPRODUCTS ${GPGERROR_BYPRODUCTS}
     INSTALL_COMMAND
            make install
-        && ${CMAKE_COMMAND} -E copy ${GPGERROR_BUILD_FILENAME} ${GCRYPT_OUTPUT_DIRECTORY}
+        && ${GPGERROR_INSTALL}
     PREFIX gpg_error
 )
 
 externalproject_add(gcrypt
     DEPENDS gpg_error
     URL https://www.gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.8.3.tar.bz2
-    BUILD_IN_SOURCE 1
     CONFIGURE_COMMAND
         CC=${GCRYPT_CC}
         ${UNDERSCORE_CONFIG}
             ./configure ${HOST_CONFIG}
-            --with-libgpg-error-prefix=${CMAKE_CURRENT_BINARY_DIR}/gpg_error/out
+            --prefix=${GCRYPT_BUILD_DIRECTORY}
+            --with-libgpg-error-prefix=${GPGERROR_BUILD_DIRECTORY}
     BUILD_COMMAND make
-    BUILD_BYPRODUCTS ${GCRYPT_FILENAME}
+    BUILD_IN_SOURCE 1
+    BUILD_BYPRODUCTS ${GCRYPT_BYPRODUCTS}
     INSTALL_COMMAND
-        ${CMAKE_COMMAND} -E copy ${GCRYPT_BUILD_FILENAME} ${GCRYPT_OUTPUT_DIRECTORY}
+           make install
+        && ${GCRYPT_INSTALL}
     PREFIX gcrypt
 )
 
@@ -102,9 +174,9 @@ add_library(lib::gcrypt ALIAS lib_gcrypt)
 
 target_include_directories(lib_gcrypt
     INTERFACE
-        "${CMAKE_CURRENT_BINARY_DIR}/gcrypt/src/gcrypt/src"
-        "${CMAKE_CURRENT_BINARY_DIR}/gpg_error/out/include"
+        ${GPGERROR_BUILD_DIRECTORY}/include
+        ${GCRYPT_BUILD_DIRECTORY}/include
 )
 target_link_libraries(lib_gcrypt
-    INTERFACE ${GCRYPT_FILENAME}
+    INTERFACE ${GCRYPT_OUTPUT_DIRECTORY}/${GCRYPT_LIBRARY_BASE_FILENAME}
 )
