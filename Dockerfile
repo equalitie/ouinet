@@ -101,10 +101,10 @@ WORKDIR /opt/ouinet
 #         | sed "s#$PWD#/opt/ouinet#"
 #
 COPY --from=builder \
-     /opt/ouinet/gcrypt/src/gcrypt/src/.libs/libgcrypt.so.20 \
      /opt/ouinet/gpg_error/out/lib/libgpg-error.so.0 \
      /opt/ouinet/libboost_asio.so \
      /opt/ouinet/libboost_asio_ssl.so \
+     /opt/ouinet/libgcrypt.so.20 \
      \
      /usr/local/lib/
 # Update the dynamic linker cache after all non-system libraries have been copied.
