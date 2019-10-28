@@ -67,6 +67,13 @@ services:
       resources:
         limits:
           memory: "${OUINET_MEM_LIMIT:-8g}"
+    # Uncomment the following if you run a debug image
+    # and the program fails to start because of
+    # GDB being unable to trace the inferior process
+    # (with "ptrace: Operation not permitted").
+    #
+    #cap_add:
+    #  - SYS_PTRACE
 
 volumes:
   data:
