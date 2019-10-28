@@ -6,8 +6,6 @@
 
 set -e
 
-NPROC=$(lscpu | grep '^CPU(s):' | awk '{ print $2 }')
-
 DIR=$(pwd)
 SOURCEDIR="${DIR}"/ouinet-git-source
 BINDIR="${DIR}"/ouinet-git-bin
@@ -32,14 +30,11 @@ if [[ ! -e ${BUILDDIR}/Makefile ]]; then
 	rm -rf "${BUILDDIR}"
 	mkdir "${BUILDDIR}"
 	cd "${BUILDDIR}"
-    CMAKE_ARGS="-DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=\"${BINDIR}\""
-    [ ! -z "$BOOST_ROOT" ] && CMAKE_ARGS=$CMAKE_ARGS" -DBOOST_ROOT=$BOOST_ROOT"
-	cmake "${SOURCEDIR}" $CMAKE_ARGS
+	cmake "${SOURCEDIR}" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX="${BINDIR}"
 fi
 
 cd "${BUILDDIR}"
-# Parallel build disabled until it is debugged
-make #-j${NPROC}
+make -j`nproc`
 
 # Not supported yet
 #make install
