@@ -93,21 +93,10 @@ RUN wget -q -P /tmp "https://github.com/PurpleI2P/i2pd/releases/download/${I2PD_
  && rm -f /tmp/i2pd_*.deb \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/ouinet
-# To get the list of locally built libraries to copy,
-# enter the build directory and execute:
-#
-#     ldd injector client $(find . -name '*.so' | grep -v '\.libs') \
-#         | sed -En "s#^.* => ($PWD/.*) \(.*#\1#p" | sort -u \
-#         | sed "s#$PWD#/opt/ouinet#"
-#
-COPY --from=builder \
-     /opt/ouinet/gpg_error/out/lib/libgpg-error.so.0 \
-     /opt/ouinet/libboost_asio.so \
-     /opt/ouinet/libboost_asio_ssl.so \
-     /opt/ouinet/libgcrypt.so.20 \
-     \
-     /usr/local/lib/
+# Copy locally built libraries (all placed along binaries).
+COPY --from=builder /opt/ouinet/lib*.so /usr/local/lib/
 # Update the dynamic linker cache after all non-system libraries have been copied.
+# This also creates the appropriate symbolic links to those libraries.
 RUN ldconfig
 # GNUnet support has been temporarily removed.
 #COPY --from=builder /opt/ouinet/modules/gnunet-channels/gnunet-bin/share/gnunet/ modules/gnunet-channels/gnunet-bin/share/gnunet/
