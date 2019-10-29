@@ -32,6 +32,7 @@ uint8_t* hash_impl_close(HashImpl&);
 } // namespace hash_detail
 
 
+
 /* Templated class to support running hashes.
  *
  * You may call `update` several times to feed the hash function with new
@@ -55,7 +56,7 @@ public:
         update(boost::string_view(c));
     }
 
-    inline void update(std::string& data)
+    inline void update(const std::string& data)
     {
         update(data.data(), data.size());
     }
@@ -85,6 +86,30 @@ public:
         return result;
     }
 
+    template<class... Args>
+    static
+    digest_type digest(Args&&... args)
+    {
+        Hash hash;
+        return digest_impl(hash, std::forward<Args>(args)...);
+    }
+
+private:
+    template<class Hash>
+    static
+    digest_type digest_impl(Hash& hash)
+    {
+        return hash.close();
+    }
+
+    template<class Hash, class Arg, class... Rest>
+    static
+    digest_type digest_impl(Hash& hash, const Arg& arg, const Rest&... rest)
+    {
+        hash.update(arg);
+        return digest_impl(hash, rest...);
+    }
+
 private:
     std::unique_ptr<hash_detail::HashImpl, hash_detail::HashImplDeleter> impl;
 
@@ -97,24 +122,6 @@ private:
 using SHA1 = Hash<hash_algorithm::sha1, 20>;
 using SHA256 = Hash<hash_algorithm::sha256, 32>;
 using SHA512 = Hash<hash_algorithm::sha512, 64>;
-
-
-namespace hash_detail {
-
-template<class Hash>
-inline
-typename Hash::digest_type digest(Hash& hash) {
-    return hash.close();
-}
-
-template<class Hash, class Arg, class... Rest>
-inline
-typename Hash::digest_type digest(Hash& hash, const Arg& arg, const Rest&... rest) {
-    hash.update(arg);
-    return digest(hash, rest...);
-}
-
-} // namespace hash_detail
 
 
 /* Utility functions to get the hash of a set of strings.
@@ -146,22 +153,19 @@ typename Hash::digest_type digest(Hash& hash, const Arg& arg, const Rest&... res
 template<class Arg, class... Rest>
 inline
 SHA1::digest_type sha1_digest(const Arg& arg, const Rest&... rest) {
-    SHA1 hash;
-    return hash_detail::digest(hash, arg, rest...);
+    return SHA1::digest(arg, rest...);
 }
 
 template<class Arg, class... Rest>
 inline
 SHA256::digest_type sha256_digest(const Arg& arg, const Rest&... rest) {
-    SHA256 hash;
-    return hash_detail::digest(hash, arg, rest...);
+    return SHA256::digest(arg, rest...);
 }
 
 template<class Arg, class... Rest>
 inline
 SHA512::digest_type sha512_digest(const Arg& arg, const Rest&... rest) {
-    SHA512 hash;
-    return hash_detail::digest(hash, arg, rest...);
+    return SHA512::digest(arg, rest...);
 }
 
 }} // namespaces
