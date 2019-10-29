@@ -73,6 +73,11 @@ class Ed25519PrivateKey {
 
     sig_array_t sign(boost::string_view data) const;
 
+    template<size_t N>
+    sig_array_t sign(const std::array<uint8_t, N>& a) const {
+        return sign(boost::string_view(reinterpret_cast<const char*>(a.data()), N));
+    }
+
     static
     boost::optional<Ed25519PrivateKey> from_hex(boost::string_view);
 
@@ -84,6 +89,11 @@ std::ostream& operator<<(std::ostream&, const Ed25519PublicKey&);
 std::ostream& operator<<(std::ostream&, const Ed25519PrivateKey&);
 std::istream& operator>>(std::istream&, Ed25519PublicKey&);
 std::istream& operator>>(std::istream&, Ed25519PrivateKey&);
+
+struct Ed25519 {
+    using PrivateKey = Ed25519PrivateKey;
+    using PublicKey  = Ed25519PublicKey;
+};
 
 } // util namespace
 } // ouinet namespace
