@@ -298,7 +298,7 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
     }
 
     // Please note that generating keys takes a long time
-    // and it may causes time outs in CI tests.
+    // and it may cause time outs in CI tests.
     setup_ed25519_private_key( vm.count("ed25519-private-key")
                              ? vm["ed25519-private-key"].as<string>()
                              : string());
