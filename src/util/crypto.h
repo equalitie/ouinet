@@ -71,7 +71,7 @@ class Ed25519PrivateKey {
 
     static Ed25519PrivateKey generate();
 
-    sig_array_t sign(const std::string& data) const;
+    sig_array_t sign(boost::string_view data) const;
 
     static
     boost::optional<Ed25519PrivateKey> from_hex(boost::string_view);
