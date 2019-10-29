@@ -30,6 +30,13 @@ add_executable(test-timeout-stream "test_timeout_stream.cpp")
 ######################################################################
 add_executable(test-stream-fork "test-stream-fork.cpp")
 
+######################################################################
+add_executable(test-merkle-tree
+    "test-merkle-tree.cpp"
+    "../src/util/hash.cpp"
+    "../src/util/crypto.cpp")
+target_link_libraries(test-merkle-tree lib::gcrypt)
+
 ################################################################################
 add_executable(test-persistent-lru-cache
     "test_persistent_lru_cache.cpp"
