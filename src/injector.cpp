@@ -698,7 +698,7 @@ int main(int argc, const char* argv[])
 
     if (config.tcp_endpoint()) {
         tcp::endpoint endpoint = *config.tcp_endpoint();
-        cout << "TCP Address: " << endpoint << endl;
+        LOG_INFO("TCP address: ", endpoint);
 
         util::create_state_file( config.repo_root()/"endpoint-tcp"
                                , util::str(endpoint));
@@ -718,7 +718,7 @@ int main(int argc, const char* argv[])
         ssl_context = read_ssl_certs();
 
         tcp::endpoint endpoint = *config.tcp_tls_endpoint();
-        cout << "TCP/TLS Address: " << endpoint << endl;
+        LOG_INFO("TCP/TLS address: ", endpoint);
         util::create_state_file( config.repo_root()/"endpoint-tcp-tls"
                                , util::str(endpoint));
 
@@ -728,7 +728,7 @@ int main(int argc, const char* argv[])
 
     if (config.utp_endpoint()) {
         udp::endpoint endpoint = *config.utp_endpoint();
-        cout << "uTP Address: " << endpoint << endl;
+        LOG_INFO("uTP address: ", endpoint);
 
         util::create_state_file( config.repo_root()/"endpoint-utp"
                                , util::str(endpoint));
@@ -747,7 +747,7 @@ int main(int argc, const char* argv[])
         auto local_ep = base->local_endpoint();
 
         if (local_ep) {
-            LOG_DEBUG("uTP/TLS Address: ", *local_ep);
+            LOG_INFO("uTP/TLS address: ", *local_ep);
             util::create_state_file( config.repo_root()/"endpoint-utp-tls"
                                    , util::str(*local_ep));
             proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(ios, move(base), ssl_context));
@@ -774,7 +774,7 @@ int main(int argc, const char* argv[])
 
         unique_ptr<ouiservice::LampshadeOuiServiceServer> server =
             make_unique<ouiservice::LampshadeOuiServiceServer>(ios, endpoint, config.repo_root()/"lampshade-server");
-        cout << "lampshade Address: " << util::str(endpoint) << ",key=" << server->public_key() << endl;
+        LOG_INFO("Lampshade address: ", endpoint, ",key=", server->public_key());
 
         proxy_server.add(std::move(server));
     }
@@ -782,7 +782,7 @@ int main(int argc, const char* argv[])
 
     if (config.obfs2_endpoint()) {
         tcp::endpoint endpoint = *config.obfs2_endpoint();
-        cout << "obfs2 Address: " << util::str(endpoint) << endl;
+        LOG_INFO("obfs2 address: ", endpoint);
         util::create_state_file( config.repo_root()/"endpoint-obfs2"
                                , util::str(endpoint));
 
@@ -791,7 +791,7 @@ int main(int argc, const char* argv[])
 
     if (config.obfs3_endpoint()) {
         tcp::endpoint endpoint = *config.obfs3_endpoint();
-        cout << "obfs3 Address: " << util::str(endpoint) << endl;
+        LOG_INFO("obfs3 address: ", endpoint);
         util::create_state_file( config.repo_root()/"endpoint-obfs3"
                                , util::str(endpoint));
 
@@ -813,7 +813,7 @@ int main(int argc, const char* argv[])
             sys::error_code ec;
             obfs4->wait_for_running(yield[ec]);
             if (!ec) {
-                cout << "obfs4 Address: " << util::str(endpoint) << "," << obfs4->connection_arguments() << endl;
+                LOG_INFO("obfs4 address: ", endpoint, ",", obfs4->connection_arguments());
             }
         });
         proxy_server.add(std::move(server));
@@ -824,11 +824,13 @@ int main(int argc, const char* argv[])
         std::unique_ptr<ouiservice::I2pOuiServiceServer> i2p_server = i2p_service->build_server("i2p-private-key");
 
         auto ep = i2p_server->public_identity();
-        cout << "I2P Public ID: " << ep << endl;
+        LOG_INFO("I2P public ID: ", ep);
         util::create_state_file(config.repo_root()/"endpoint-i2p", ep);
 
         proxy_server.add(std::move(i2p_server));
     }
+
+    LOG_INFO("HTTP signing public key (Ed25519): ", config.cache_private_key().public_key());
 
     Cancel cancel;
 

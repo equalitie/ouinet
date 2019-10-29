@@ -1336,7 +1336,7 @@ void Client::State::setup_cache()
                           , cancel = move(cancel)
                           ] (asio::yield_context yield) {
             if (cancel) return;
-            LOG_DEBUG("HTTP signatures pubkey: ", _config.cache_http_pub_key());
+            LOG_DEBUG("HTTP signing public key (Ed25519): ", _config.cache_http_pub_key());
 
             sys::error_code ec;
 
