@@ -300,7 +300,7 @@ Ed25519PrivateKey Ed25519PrivateKey::generate()
     return Ed25519PrivateKey(private_key);
 }
 
-Ed25519PrivateKey::sig_array_t Ed25519PrivateKey::sign(const std::string& data) const
+Ed25519PrivateKey::sig_array_t Ed25519PrivateKey::sign(boost::string_view data) const
 {
     ::gcry_sexp_t data_sexp;
     if (::gcry_sexp_build(&data_sexp, NULL, "(data (flags eddsa) (hash-algo sha512) (value %b))", data.size(), data.data())) {
