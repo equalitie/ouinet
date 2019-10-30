@@ -27,12 +27,8 @@ build:
     paths:
       - build/client
       - build/injector
-      - build/*.so
+      - build/lib*.so
       - build/test/test-*
-      - build/gpg_error/out/lib/libgpg-error.so*
-      - build/gcrypt/src/gcrypt/src/.libs/libgcrypt.so*
-      - build/modules/asio-ipfs/ipfs_bindings/libipfs_bindings.so
-      - build/src/ouiservice/lampshade/lampshade_bindings/liblampshade_bindings.so
     expire_in: 6h
   cache:
     key: single
