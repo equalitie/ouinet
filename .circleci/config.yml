@@ -52,13 +52,12 @@ jobs:
       - run:
           name: Test
           command: |
-            export LD_LIBRARY_PATH=/usr/local/lib
+            export LD_LIBRARY_PATH=$PWD/build:/usr/local/lib
 
             for test in ./build/test/test-*; do
                 "$test" --log_level=test_suite
             done
 
-            export LD_LIBRARY_PATH=/usr/local/lib:$PWD/build/gcrypt/src/gcrypt/src/.libs:$PWD/build/gpg_error/out/lib:$PWD/build/modules/asio-ipfs/ipfs_bindings:$PWD/build/src/ouiservice/lampshade/lampshade_bindings
             export OUINET_BUILD_DIR=$PWD/build
             ./scripts/run_integration_tests.sh
 
