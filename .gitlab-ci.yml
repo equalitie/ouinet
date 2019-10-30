@@ -64,6 +64,6 @@ integration-test:
   tags:
     - docker
   script:
-    - export LD_LIBRARY_PATH=/usr/local/lib:$PWD/build/gcrypt/src/gcrypt/src/.libs:$PWD/build/gpg_error/out/lib:$PWD/build/modules/asio-ipfs/ipfs_bindings:$PWD/build/src/ouiservice/lampshade/lampshade_bindings
+    - export LD_LIBRARY_PATH=$PWD/build:/usr/local/lib
     - export OUINET_BUILD_DIR=$PWD/build
     - ./scripts/run_integration_tests.sh
