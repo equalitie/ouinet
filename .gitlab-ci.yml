@@ -56,13 +56,8 @@ unit-test:
   tags:
     - docker
   script:
-    - export LD_LIBRARY_PATH=/usr/local/lib
-    - ./build/test/test-cache                --log_level=test_suite
-    - ./build/test/test-wait-condition       --log_level=test_suite
-    - ./build/test/test-bittorrent           --log_level=test_suite
-    - ./build/test/test-logger               --log_level=test_suite
-    - ./build/test/test-http-util            --log_level=test_suite
-    - ./build/test/test-persistent-lru-cache --log_level=test_suite
+    - export LD_LIBRARY_PATH=$PWD/build:/usr/local/lib
+    - for test in ./build/test/test-*; do "$test" --log_level=test_suite; done
 
 integration-test:
   stage: test
