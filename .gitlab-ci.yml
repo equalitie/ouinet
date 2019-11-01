@@ -28,6 +28,7 @@ build:
       - build/client
       - build/injector
       - build/lib*.so
+      - build/lib*.so.*
       - build/test/test-*
     expire_in: 6h
   cache:
