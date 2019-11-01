@@ -172,7 +172,9 @@ emulator
     sdk_pkgs_install=$(echo "$sdk_pkgs_install" | tr [:space:] '\n' | sort -u)
     # Install missing packages.
     if [ "$sdk_pkgs_install" ]; then
-        echo y | "$sdkmanager" $sdk_pkgs_install
+        # This produces progress bars that are very frequently updated
+        # and clutter build logs.
+        echo y | "$sdkmanager" $sdk_pkgs_install > /dev/null
     fi
 
     # Prefer locally installed platform tools to those in the system.
