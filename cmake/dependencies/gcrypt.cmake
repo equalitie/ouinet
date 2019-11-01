@@ -24,6 +24,8 @@ set(GPG_ERROR_PATCHES
     # This will not be needed once a released version supports gawk 5,
     # see <https://dev.gnupg.org/T4459> and <https://dev.gnupg.org/T4469>
     ${CMAKE_CURRENT_LIST_DIR}/inline-gpg-error/libgpg-error-gawk-compat.patch
+    # This avoids having to run `aclocal` and `automake` again.
+    ${CMAKE_CURRENT_LIST_DIR}/inline-gpg-error/libgpg-error-gawk-compat-in.patch
 )
 
 
@@ -152,7 +154,6 @@ externalproject_add(gpg_error
         "${PATCH_COMMAND}"
     CONFIGURE_COMMAND
         CC=${GCRYPT_CC}
-            aclocal && automake &&
             ./configure ${HOST_CONFIG}
             --prefix=${GPGERROR_BUILD_DIRECTORY}
     BUILD_COMMAND make
