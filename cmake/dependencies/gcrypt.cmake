@@ -20,6 +20,12 @@ set(GCRYPT_LIBRARY_VERSION_FILENAMES
     ${GCRYPT_LIBRARY_BASE_FILENAME}
 )
 
+set(GPG_ERROR_PATCHES
+    # This will not be needed once a released version supports gawk 5,
+    # see <https://dev.gnupg.org/T4459> and <https://dev.gnupg.org/T4469>
+    ${CMAKE_CURRENT_LIST_DIR}/inline-gpg-error/libgpg-error-gawk-compat.patch
+)
+
 
 
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
@@ -61,11 +67,18 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
 else()
     # TODO: Should probably support non-android cross compilation here.
     set(GCRYPT_CC ${CMAKE_C_COMPILER})
-    set(PATCH_COMMAND "")
+    set(PATCH_COMMAND "true")
     set(HOST_CONFIG "")
     set(UNDERSCORE_CONFIG "")
     set(VERSIONED_LIBRARIES 1)
 endif()
+
+set(PATCH_COMMAND
+    ${PATCH_COMMAND} && cd ${CMAKE_CURRENT_BINARY_DIR}/gpg_error/src/gpg_error
+)
+foreach (patch ${GPG_ERROR_PATCHES})
+    set(PATCH_COMMAND ${PATCH_COMMAND} && patch -p1 -i ${patch})
+endforeach()
 
 
 
@@ -139,6 +152,7 @@ externalproject_add(gpg_error
         "${PATCH_COMMAND}"
     CONFIGURE_COMMAND
         CC=${GCRYPT_CC}
+            aclocal && automake &&
             ./configure ${HOST_CONFIG}
             --prefix=${GPGERROR_BUILD_DIRECTORY}
     BUILD_COMMAND make
