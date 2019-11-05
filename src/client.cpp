@@ -308,10 +308,12 @@ Client::State::fetch_stored( const Request& request
     auto hdr = s.response_header();
     assert(hdr);
 
-    if (!hdr) {
-        return or_throw<CacheEntry>( yield
-                                   , asio::error::operation_not_supported);
-    }
+    if (!hdr)
+        return or_throw<CacheEntry>(yield, asio::error::operation_not_supported);
+    if ((*hdr)[http_::protocol_version_hdr] != http_::protocol_version_hdr_current)
+        // The cached resource cannot be used, treat it like
+        // not being found.
+        return or_throw<CacheEntry>(yield, asio::error::not_found);
 
     auto tsh = util::http_injection_ts(*hdr);
     auto ts = parse::number<time_t>(tsh);
@@ -590,7 +592,14 @@ Session Client::State::fetch_fresh_through_simple_proxy
 
     assert(!cancel || cancel_slot);
     assert(!cancel_slot || cancel);
-    if (cancel_slot) ec = asio::error::operation_aborted;
+    if (cancel_slot)
+        ec = asio::error::operation_aborted;
+    else if ( !ec
+            && ( !hdr_p
+               || (*hdr_p)[http_::protocol_version_hdr] != http_::protocol_version_hdr_current))
+        // The injector using an unacceptable protocol version is treated like
+        // the Injector mechanism being disabled.
+        ec = asio::error::operation_not_supported;
 
     if (log_transactions()) {
         yield.log("End reading response. ec:", ec.message());
