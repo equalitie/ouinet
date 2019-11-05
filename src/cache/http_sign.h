@@ -69,7 +69,7 @@ bool check_body(const http::response_header<>&, size_t, util::SHA256&);
 // Example:
 //
 //     ...
-//     X-Ouinet-Version: 1
+//     X-Ouinet-Version: 2
 //     X-Ouinet-URI: https://example.com/foo
 //     X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
 //     X-Ouinet-BSigs: keyId="...",algorithm="hs2019",size=65536

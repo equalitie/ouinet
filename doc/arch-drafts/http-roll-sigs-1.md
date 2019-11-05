@@ -51,7 +51,7 @@ Please note that neither the partial signature nor framing headers (`Transfer-En
 
 ```
 HTTP/1.1 200 OK
-X-Ouinet-Version: 1
+X-Ouinet-Version: 2
 X-Ouinet-URI: https://example.com/foo
 X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
 Date: Mon, 15 Jan 2018 20:31:50 GMT
