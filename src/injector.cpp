@@ -56,7 +56,6 @@
 #include "util/file_io.h"
 #include "util/file_posix_with_offset.h"
 
-#include "parse/number.h"
 #include "logger.h"
 #include "defer.h"
 #include "http_util.h"
@@ -82,45 +81,6 @@ static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
 static const fs::path OUINET_TLS_KEY_FILE = "tls-key.pem";
 static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
 
-
-//------------------------------------------------------------------------------
-boost::optional<Response> version_error_response( const Request& rq
-                                                , beast::string_view oui_version)
-{
-    unsigned version = 0;
-
-    if (auto opt_version = parse::number<unsigned>(oui_version)) {
-        version = *opt_version;
-    }
-
-    unsigned supported_version = -1;
-
-    beast::string_view supported_version_s = http_::protocol_version_hdr_current;
-    if (auto opt_sv = parse::number<unsigned>(supported_version_s)) {
-        supported_version = *opt_sv;
-    }
-
-    assert(supported_version != (unsigned) -1);
-
-    if (version == supported_version) {
-        return boost::none;
-    }
-
-    Response res{http::status::bad_request, rq.version()};
-    res.set(http::field::server, OUINET_INJECTOR_SERVER_STRING);
-    res.keep_alive(false);
-
-    if (version < supported_version) {
-        res.set( http_::response_error_hdr
-               , http_::response_error_hdr_version_too_low);
-    }
-    else if (version > supported_version) {
-        res.set( http_::response_error_hdr
-               , http_::response_error_hdr_version_too_high);
-    }
-
-    return res;
-}
 
 //------------------------------------------------------------------------------
 static
@@ -559,7 +519,8 @@ void serve( InjectorConfig& config
         }
         else {
             // Ouinet header found, behave like a Ouinet injector.
-            auto opt_err_res = version_error_response(req, version_hdr_i->value());
+            auto opt_err_res = util::http_proto_version_error( req, version_hdr_i->value()
+                                                             , OUINET_INJECTOR_SERVER_STRING);
 
             if (opt_err_res) {
                 http::async_write(con, *opt_err_res, yield[ec]);

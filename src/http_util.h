@@ -7,6 +7,7 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/beast/http/fields.hpp>
 #include <boost/beast/http/message.hpp>
+#include <boost/beast/http/empty_body.hpp>
 #include <boost/beast/http/string_body.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 
@@ -44,7 +45,28 @@ boost::string_view http_injection_ts(const http::response_header<>& rsh)
     return http_injection_field(rsh, "ts");
 }
 
- ///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+// Return an error response message if
+// the request contains a protocol version number not matching the current one.
+namespace detail_http_proto_version_error {
+    boost::optional<http::response<http::empty_body>> impl( unsigned rv
+                                                          , beast::string_view ov
+                                                          , beast::string_view ss);
+}
+
+template<class Request>
+inline
+boost::optional<http::response<http::empty_body>>
+http_proto_version_error( const Request& rq
+                        , beast::string_view oui_version
+                        , beast::string_view server_string)
+{
+    return detail_http_proto_version_error::impl( rq.version()
+                                                , oui_version
+                                                , server_string);
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Utility function to check whether an HTTP field belongs to a set. Where
 // the set is defined by second, third, fourth,... arguments.
 // E.g.:

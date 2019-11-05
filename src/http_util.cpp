@@ -3,6 +3,7 @@
 #include <boost/asio/error.hpp>
 #include <network/uri.hpp>
 
+#include "parse/number.h"
 #include "split_string.h"
 
 
@@ -180,6 +181,46 @@ ouinet::util::http_injection_field( const http::response_header<>& rsh
         return k_v.second;
     }
     return {};  // missing id item in header
+}
+
+boost::optional<http::response<http::empty_body>>
+ouinet::util::detail_http_proto_version_error::impl( unsigned rq_version
+                                                   , beast::string_view oui_version
+                                                   , beast::string_view server_string)
+{
+    unsigned version = 0;
+
+    if (auto opt_version = parse::number<unsigned>(oui_version)) {
+        version = *opt_version;
+    }
+
+    unsigned supported_version = -1;
+
+    beast::string_view supported_version_s = http_::protocol_version_hdr_current;
+    if (auto opt_sv = parse::number<unsigned>(supported_version_s)) {
+        supported_version = *opt_sv;
+    }
+
+    assert(supported_version != (unsigned) -1);
+
+    if (version == supported_version) {
+        return boost::none;
+    }
+
+    http::response<http::empty_body> res{http::status::bad_request, rq_version};
+    res.set(http::field::server, server_string);
+    res.keep_alive(false);
+
+    if (version < supported_version) {
+        res.set( http_::response_error_hdr
+               , http_::response_error_hdr_version_too_low);
+    }
+    else if (version > supported_version) {
+        res.set( http_::response_error_hdr
+               , http_::response_error_hdr_version_too_high);
+    }
+
+    return res;
 }
 
 http::response_header<>
