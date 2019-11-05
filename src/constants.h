@@ -18,7 +18,8 @@ static const std::string header_prefix = "X-Ouinet-";
 static const std::string request_version_hdr = header_prefix + "Version";
 static const std::string request_version_hdr_v0 = "0";
 static const std::string request_version_hdr_v1 = "1";
-static const std::string request_version_hdr_current = request_version_hdr_v1;
+static const std::string request_version_hdr_v2 = "2";
+static const std::string request_version_hdr_current = request_version_hdr_v2;
 
 // Such a request should get the following HTTP response header
 // indicating the protocol version used by the injector.
