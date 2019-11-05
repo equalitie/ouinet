@@ -15,18 +15,15 @@ static const std::string header_prefix = "X-Ouinet-";
 // The presence of this (non-empty) HTTP request header
 // shows the protocol version used by the client
 // and hints the receiving injector to behave like an injector instead of a proxy.
-static const std::string request_version_hdr = header_prefix + "Version";
-static const std::string request_version_hdr_v0 = "0";
-static const std::string request_version_hdr_v1 = "1";
-static const std::string request_version_hdr_v2 = "2";
-static const std::string request_version_hdr_current = request_version_hdr_v2;
-
+//
 // Such a request should get the following HTTP response header
 // indicating the protocol version used by the injector.
-static const std::string response_version_hdr = header_prefix + "Version";
-static const std::string response_version_hdr_v0 = "0";
-static const std::string response_version_hdr_v1 = "1";
-static const std::string response_version_hdr_current = response_version_hdr_v1;
+static const std::string protocol_version_hdr = header_prefix + "Version";
+static const std::string protocol_version_hdr_v0 = "0";
+static const std::string protocol_version_hdr_v1 = "1";
+static const std::string protocol_version_hdr_v2 = "2";
+static const std::string protocol_version_hdr_current = protocol_version_hdr_v2;
+
 // This allows the response to stand on its own (e.g. for reinsertion).
 static const std::string response_uri_hdr = header_prefix + "URI";
 // This contains identifying data about the injection itself.

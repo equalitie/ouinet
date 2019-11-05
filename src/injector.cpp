@@ -95,7 +95,7 @@ boost::optional<Response> version_error_response( const Request& rq
 
     unsigned supported_version = -1;
 
-    beast::string_view supported_version_s = http_::request_version_hdr_current;
+    beast::string_view supported_version_s = http_::protocol_version_hdr_current;
     if (auto opt_sv = parse::number<unsigned>(supported_version_s)) {
         supported_version = *opt_sv;
     }
@@ -500,7 +500,7 @@ void serve( InjectorConfig& config
                                          , yield.tag("handle_connect"));
         }
 
-        auto version_hdr_i = req.find(http_::request_version_hdr);
+        auto version_hdr_i = req.find(http_::protocol_version_hdr);
 
         // Check for a Ouinet version header hinting us on
         // whether to behave like an injector or a proxy.

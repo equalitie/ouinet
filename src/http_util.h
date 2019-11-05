@@ -219,7 +219,7 @@ template<class Request>
 static Request to_injector_request(Request rq) {
     // The Ouinet version header hints the endpoint
     // to behave like an injector instead of a proxy.
-    rq.set(http_::request_version_hdr, http_::request_version_hdr_current);
+    rq.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
     return to_canonical_request( move(rq)
                                // PROXY AUTHENTICATION HEADERS (PASS)
                                , http::field::proxy_authorization
