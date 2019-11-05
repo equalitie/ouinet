@@ -66,6 +66,17 @@ http_proto_version_error( const Request& rq
                                                 , server_string);
 }
 
+template<class Request>
+inline
+boost::optional<http::response<http::empty_body>>
+http_proto_version_error( const Request& rq
+                        , beast::string_view server_string)
+{
+    return http_proto_version_error( rq
+                                   , rq[http_::protocol_version_hdr]
+                                   , server_string);
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // Utility function to check whether an HTTP field belongs to a set. Where
 // the set is defined by second, third, fourth,... arguments.

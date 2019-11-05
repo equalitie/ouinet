@@ -3,6 +3,7 @@
 #include "dht_lookup.h"
 #include "local_peer_discovery.h"
 #include "../http_sign.h"
+#include "../../http_util.h"
 #include "../../util/atomic_file.h"
 #include "../../util/bytes.h"
 #include "../../util/file_io.h"
@@ -125,6 +126,13 @@ struct Client::Impl {
         http::async_read(con, buffer, req, yield[ec]);
 
         if (ec || cancel) return;
+
+        // Do not proceed if the other cache client speaks the wrong protocol.
+        auto opt_err_res = util::http_proto_version_error(req, OUINET_CLIENT_SERVER_STRING);
+        if (opt_err_res) {
+            http::async_write(con, *opt_err_res, yield[ec]);
+            return;  // ignore error
+        }
 
         string key = key_from_http_req(req);
 
