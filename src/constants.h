@@ -36,6 +36,11 @@ static const std::string protocol_version_hdr_current = protocol_version_hdr_v2;
 //
 // The format of this header is guaranteed to be `[0-9]+ [\x21-\x7E][\x20-\x7E]*`
 // for all versions of the protocol (including future ones).
+//
+// This means that, for any request with any value of `X-Ouinet-Version`
+// (even newer than those accepted by the receiver),
+// a response with just the same `X-Ouinet-Version` and an `X-Ouinet-Error`
+// shall always be accepted.
 static const std::string response_error_hdr = header_prefix + "Error";
 
 // Internal error codes.
