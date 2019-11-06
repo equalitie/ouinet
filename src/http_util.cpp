@@ -208,6 +208,10 @@ ouinet::util::detail_http_proto_version_error::impl( unsigned rq_version
     }
 
     http::response<http::empty_body> res{http::status::bad_request, rq_version};
+    // Set the response's protocol version to that of the request
+    // (so that the requester does try to parse the response)
+    // and add an error message which should be accepted regardless of that version.
+    res.set(http_::protocol_version_hdr, oui_version);
     res.set(http::field::server, server_string);
     res.keep_alive(false);
 
