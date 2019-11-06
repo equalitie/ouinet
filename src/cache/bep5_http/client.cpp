@@ -385,10 +385,17 @@ struct Client::Impl {
         });
 
         Session session(move(src_sink.first));
-        session.read_response_header(cancel, yield[ec]);
+        auto hdr_p = session.read_response_header(cancel, yield[ec]);
 
         assert(!cancel || ec == asio::error::operation_aborted);
-        if (cancel) ec = asio::error::operation_aborted;
+        assert(hdr_p || ec);
+        if (cancel)
+            ec = asio::error::operation_aborted;
+        else if ( !ec
+                && (*hdr_p)[http_::protocol_version_hdr] != http_::protocol_version_hdr_current)
+            // The client expects an injection belonging to a supported protocol version,
+            // otherwise we just discard this copy.
+            ec = asio::error::not_found;
 
         return or_throw(yield, ec, move(session));
     }
