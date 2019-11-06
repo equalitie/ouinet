@@ -628,18 +628,21 @@ bool handle_if_injector_error(
     auto err_hdr_i = rs_hdr.find(http_::response_error_hdr);
 
     if (err_hdr_i == rs_hdr.end()) return false; // No error
+    auto err_hdr_v = err_hdr_i->value();
 
     Response res{http::status::bad_request, 11};
     res.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
     res.set(http::field::server, OUINET_CLIENT_SERVER_STRING);
-    res.set(http_::response_error_hdr, err_hdr_i->value());
+    res.set(http_::response_error_hdr, err_hdr_v);
     res.keep_alive(false);
 
-    string body = "Incompatible Ouinet request version";
+    string body = "Error from Ouinet injector: ";
 
     Response::body_type::reader reader(res, res.body());
     sys::error_code ec;
     reader.put(asio::buffer(body), ec);
+    assert(!ec);
+    reader.put(asio::buffer(err_hdr_v.data(), err_hdr_v.size()), ec);
     assert(!ec);
 
     res.prepare_payload();
