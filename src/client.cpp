@@ -247,6 +247,7 @@ void handle_http_error( GenericStream& con
 {
     http::response<http::string_body> res{status, req.version()};
 
+    res.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
     res.set(http::field::server, OUINET_CLIENT_SERVER_STRING);
     res.set(http::field::content_type, "text/plain");
     res.keep_alive(req.keep_alive());
@@ -629,6 +630,7 @@ bool handle_if_injector_error(
     if (err_hdr_i == rs_hdr.end()) return false; // No error
 
     Response res{http::status::bad_request, 11};
+    res.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
     res.set(http::field::server, OUINET_CLIENT_SERVER_STRING);
     res.set(http_::response_error_hdr, err_hdr_i->value());
     res.keep_alive(false);
