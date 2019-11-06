@@ -12,17 +12,38 @@ namespace ouinet { namespace http_ {
 // Common prefix for all Ouinet-specific internal HTTP headers.
 static const std::string header_prefix = "X-Ouinet-";
 
+
+// Version-independent headers:
+
 // The presence of this (non-empty) HTTP request header
 // shows the protocol version used by the client
 // and hints the receiving injector to behave like an injector instead of a proxy.
 //
 // Such a request should get the following HTTP response header
 // indicating the protocol version used by the injector.
+//
+// The format of this header is guaranteed to be `[0-9]+`
+// for all versions of the protocol (including future ones).
 static const std::string protocol_version_hdr = header_prefix + "Version";
 static const std::string protocol_version_hdr_v0 = "0";
 static const std::string protocol_version_hdr_v1 = "1";
 static const std::string protocol_version_hdr_v2 = "2";
 static const std::string protocol_version_hdr_current = protocol_version_hdr_v2;
+
+// The presence of this HTTP request header
+// indicates that an error happened processing the request,
+// with informatio complementing the HTTP status code.
+//
+// The format of this header is guaranteed to be `[0-9]+ [\x21-\x7E][\x20-\x7E]*`
+// for all versions of the protocol (including future ones).
+static const std::string response_error_hdr = header_prefix + "Error";
+
+// Internal error codes.
+static const std::string response_error_hdr_version_too_low  = "1 Client's version too low";
+static const std::string response_error_hdr_version_too_high = "2 Client's version too high";
+
+
+// Version-dependent headers:
 
 // This allows the response to stand on its own (e.g. for reinsertion).
 static const std::string response_uri_hdr = header_prefix + "URI";
@@ -42,10 +63,5 @@ static const std::string response_descriptor_hdr = header_prefix + "Descriptor";
 
 // Also, this is added with a link to descriptor storage.
 static const std::string response_descriptor_link_hdr = header_prefix + "Descriptor-Link";
-
-static const std::string response_error_hdr = header_prefix + "Error";
-
-static const std::string response_error_hdr_version_too_low  = "1 Client's version too low";
-static const std::string response_error_hdr_version_too_high = "2 Client's version too high";
 
 }} // namespaces
