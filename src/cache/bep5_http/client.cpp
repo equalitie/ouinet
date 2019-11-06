@@ -164,6 +164,7 @@ struct Client::Impl {
         http::response<http::empty_body>
             res{http::status::not_found, req.version()};
 
+        res.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
         res.set(http::field::server, OUINET_CLIENT_SERVER_STRING);
         res.set(http::field::content_type, "text/html");
         res.keep_alive(req.keep_alive());
@@ -351,6 +352,7 @@ struct Client::Impl {
         auto uri = uri_from_key(key);
         http::request<http::string_body> rq{http::verb::get, uri, 11 /* version */};
         rq.set(http::field::host, "dummy_host");
+        rq.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
         rq.set(http::field::user_agent, "Ouinet.Bep5.Client");
 
         auto cancelled2 = cancel.connect([&] { con.close(); });
