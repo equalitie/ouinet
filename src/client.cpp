@@ -184,6 +184,13 @@ private:
     // only call with protocol version coming from a trusted source.
     bool check_proto_version_trusted(boost::string_view);
 
+    void maybe_add_proto_version_warning(http::response_header<>& rsh) const {
+        if (newest_proto_seen > http_::protocol_version_current)
+            rsh.set( http_::response_warning_hdr
+                   , "Newer Ouinet protocol found in network, "
+                     "please consider upgrading.");
+    };
+
     CacheControl build_cache_control(request_route::Config& request_config);
 
     void listen_tcp( asio::yield_context
@@ -330,6 +337,7 @@ Client::State::fetch_stored( const Request& request
                 ? boost::posix_time::from_time_t(*ts)
                 : boost::posix_time::not_a_date_time);
 
+    maybe_add_proto_version_warning(*hdr);
     return CacheEntry{date, move(s)};
 }
 
@@ -619,7 +627,9 @@ Session Client::State::fetch_fresh_through_simple_proxy
 
     // Store keep-alive connections in connection pool
 
-    if (!can_inject) {
+    if (can_inject) {
+        maybe_add_proto_version_warning(*hdr_p);
+    } else {
         // Prevent others from inserting ouinet headers.
         util::remove_ouinet_fields_ref(*hdr_p);
     }
