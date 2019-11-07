@@ -55,6 +55,8 @@ static const std::string response_error_hdr_version_too_high = "2 Client's versi
 
 // Version-dependent headers:
 
+static const std::string response_warning_hdr = header_prefix + "Warning";
+
 // This allows the response to stand on its own (e.g. for reinsertion).
 static const std::string response_uri_hdr = header_prefix + "URI";
 // This contains identifying data about the injection itself.
