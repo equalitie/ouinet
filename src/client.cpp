@@ -180,6 +180,10 @@ private:
                                             , Cancel& cancel
                                             , Yield);
 
+    // Sets newest protocol version seen,
+    // only call with protocol version coming from a trusted source.
+    bool check_proto_version_trusted(boost::string_view);
+
     CacheControl build_cache_control(request_route::Config& request_config);
 
     void listen_tcp( asio::yield_context
@@ -212,6 +216,10 @@ private:
     AbstractCache* get_cache() { return _bep5_http_cache.get(); }
 
 private:
+    // The newest protocol version number seen in a trusted exchange
+    // (i.e. from an injector exchange or injector-signed cached content).
+    unsigned newest_proto_seen = http_::protocol_version_current;
+
     asio::io_service& _ios;
     ClientConfig _config;
     std::unique_ptr<CACertificate> _ca_certificate;
@@ -311,7 +319,7 @@ Client::State::fetch_stored( const Request& request
 
     if (!hdr)
         return or_throw<CacheEntry>(yield, asio::error::operation_not_supported);
-    if ((*hdr)[http_::protocol_version_hdr] != http_::protocol_version_hdr_current)
+    if (!check_proto_version_trusted((*hdr)[http_::protocol_version_hdr]))
         // The cached resource cannot be used, treat it like
         // not being found.
         return or_throw<CacheEntry>(yield, asio::error::not_found);
@@ -597,7 +605,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
         ec = asio::error::operation_aborted;
     else if ( !ec
             && ( !hdr_p
-               || (*hdr_p)[http_::protocol_version_hdr] != http_::protocol_version_hdr_current))
+               || !check_proto_version_trusted((*hdr_p)[http_::protocol_version_hdr])))
         // The injector using an unacceptable protocol version is treated like
         // the Injector mechanism being disabled.
         ec = asio::error::operation_not_supported;
@@ -616,6 +624,23 @@ Session Client::State::fetch_fresh_through_simple_proxy
     }
 
     return session;
+}
+
+//------------------------------------------------------------------------------
+bool Client::State::check_proto_version_trusted(boost::string_view proto_vs)
+{
+    if (!boost::regex_match( proto_vs.begin(), proto_vs.end()
+                           , http_::protocol_version_rx))
+        return false;  // malformed version header
+
+    auto proto_vn = *(parse::number<unsigned>(proto_vs));
+    if (proto_vn > newest_proto_seen) {
+        LOG_WARN( "Found new protocol version in trusted source: "
+                , proto_vn, " > ", http_::protocol_version_current);
+        newest_proto_seen = proto_vn;  // saw a newest protocol in the wild
+    }
+
+    return (proto_vn == http_::protocol_version_current);  // unsupported version?
 }
 
 //------------------------------------------------------------------------------
