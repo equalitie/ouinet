@@ -550,6 +550,13 @@ struct Client::Impl {
                 try_remove(p); continue;
             }
 
+            if (hdr[http_::protocol_version_hdr] != http_::protocol_version_hdr_current) {
+                LOG_WARN("Bep5HTTP: Cached file ", p
+                        , " contains an invalid ", http_::protocol_version_hdr
+                        , " header field (removing the file)");
+                try_remove(p); continue;
+            }
+
             auto key = hdr[http_::response_uri_hdr];
 
             if (key.empty()) {
