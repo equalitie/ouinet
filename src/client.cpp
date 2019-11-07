@@ -604,6 +604,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
     if (cancel_slot)
         ec = asio::error::operation_aborted;
     else if ( !ec
+            && can_inject
             && ( !hdr_p
                || !check_proto_version_trusted((*hdr_p)[http_::protocol_version_hdr])))
         // The injector using an unacceptable protocol version is treated like
