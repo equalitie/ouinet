@@ -1,6 +1,7 @@
 #pragma once
 
 #include <boost/config.hpp>
+#include <boost/regex.hpp>
 
 #define OUINET_CLIENT_SERVER_STRING   "Ouinet.Client"
 #define OUINET_INJECTOR_SERVER_STRING "Ouinet.Injector"
@@ -25,10 +26,13 @@ static const std::string header_prefix = "X-Ouinet-";
 // The format of this header is guaranteed to be `[0-9]+`
 // for all versions of the protocol (including future ones).
 static const std::string protocol_version_hdr = header_prefix + "Version";
+static const boost::regex protocol_version_rx("^([0-9]+)$");
+
 static const std::string protocol_version_hdr_v0 = "0";
 static const std::string protocol_version_hdr_v1 = "1";
 static const std::string protocol_version_hdr_v2 = "2";
 static const std::string protocol_version_hdr_current = protocol_version_hdr_v2;
+static const unsigned protocol_version_current = 2;
 
 // The presence of this HTTP request header
 // indicates that an error happened processing the request,
@@ -42,6 +46,7 @@ static const std::string protocol_version_hdr_current = protocol_version_hdr_v2;
 // a response with just the same `X-Ouinet-Version` and an `X-Ouinet-Error`
 // shall always be accepted.
 static const std::string response_error_hdr = header_prefix + "Error";
+static const boost::regex response_error_rx("^([0-9]+) ([\\x21-\\x7E][\\x20-\\x7E]*)$");
 
 // Internal error codes.
 static const std::string response_error_hdr_version_too_low  = "1 Client's version too low";
@@ -49,6 +54,8 @@ static const std::string response_error_hdr_version_too_high = "2 Client's versi
 
 
 // Version-dependent headers:
+
+static const std::string response_warning_hdr = header_prefix + "Warning";
 
 // This allows the response to stand on its own (e.g. for reinsertion).
 static const std::string response_uri_hdr = header_prefix + "URI";
