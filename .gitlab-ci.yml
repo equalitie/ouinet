@@ -56,6 +56,7 @@ unit-test:
   stage: test
   tags:
     - docker
+    - ptrace
   script:
     - export LD_LIBRARY_PATH=$PWD/build:/usr/local/lib
     - for test in ./build/test/test-*; do "$test" --log_level=test_suite; done
