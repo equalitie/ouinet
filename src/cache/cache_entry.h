@@ -9,10 +9,12 @@
 
 namespace ouinet {
 
+// If a key cannot be correctly derived from the request,
+// return the empty string.
 template <class Request>
 inline
 std::string key_from_http_req(const Request& req) {
-    assert(req.target().starts_with("http"));
+    if (!req.target().starts_with("http")) return {};
     // The key is currently the canonical URL itself.
     return util::canonical_url(req.target());
 }
