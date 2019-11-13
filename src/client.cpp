@@ -319,8 +319,8 @@ Client::State::fetch_stored( const Request& request
     sys::error_code ec;
 
     auto key = key_from_http_req(request);
-    assert(!key.empty());
-    auto s = c->load(move(key), cancel, yield[ec]);
+    assert(key);
+    auto s = c->load(move(*key), cancel, yield[ec]);
     return_or_throw_on_error(yield, cancel, ec, CacheEntry{});
 
     auto hdr = s.response_header();
@@ -786,8 +786,8 @@ public:
         if (!CacheControl::ok_to_cache(rq, *rs_hdr)) return;
 
         auto key = key_from_http_req(rq);
-        assert(!key.empty());
-        cache->store(key, s, cancel, yield);
+        assert(key);
+        cache->store(move(*key), s, cancel, yield);
     }
 
     bool fetch(GenericStream& con, const Request& rq, Yield yield)

@@ -134,28 +134,28 @@ struct Client::Impl {
             return;  // ignore error
         }
 
-        string key = key_from_http_req(req);
-        if (key.empty()) {
+        auto key = key_from_http_req(req);
+        if (!key) {
             if (log_debug()) {
                 cerr << "Bep5HTTP: Cannot derive key from request\n";
             }
             return handle_bad_request(con, req, yield[ec]);
         }
 
-        auto path = path_from_key(key);
+        auto path = path_from_key(*key);
 
         auto file = util::file_io::open_readonly(ios, path, ec);
 
         if (ec) {
             if (!cancel && log_debug()) {
-                cerr << "Bep5HTTP: Not Serving " << key
+                cerr << "Bep5HTTP: Not Serving " << *key
                      << " ec:" << ec.message() << "\n";
             }
             return handle_not_found(con, req, yield[ec]);
         }
 
         if (log_debug()) {
-            cerr << "Bep5HTTP: Serving " << key << "\n";
+            cerr << "Bep5HTTP: Serving " << *key << "\n";
         }
 
         flush_from_to(file, con, cancel, yield[ec]);
