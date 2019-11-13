@@ -135,6 +135,12 @@ struct Client::Impl {
         }
 
         string key = key_from_http_req(req);
+        if (key.empty()) {
+            if (log_debug()) {
+                cerr << "Bep5HTTP: Cannot derive key from request\n";
+            }
+            return handle_bad_request(con, req, yield[ec]);
+        }
 
         auto path = path_from_key(key);
 
@@ -157,12 +163,13 @@ struct Client::Impl {
         return or_throw(yield, ec);
     }
 
-    void handle_not_found( GenericStream& con
-                         , const http::request<http::empty_body>& req
-                         , asio::yield_context yield)
+    void handle_http_error( GenericStream& con
+                          , const http::request<http::empty_body>& req
+                          , http::status status
+                          , asio::yield_context yield)
     {
         http::response<http::empty_body>
-            res{http::status::not_found, req.version()};
+            res{status, req.version()};
 
         res.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
         res.set(http::field::server, OUINET_CLIENT_SERVER_STRING);
@@ -171,6 +178,20 @@ struct Client::Impl {
         res.prepare_payload();
 
         http::async_write(con, res, yield);
+    }
+
+    void handle_bad_request( GenericStream& con
+                           , const http::request<http::empty_body>& req
+                           , asio::yield_context yield)
+    {
+        return handle_http_error(con, req, http::status::bad_request, yield);
+    }
+
+    void handle_not_found( GenericStream& con
+                         , const http::request<http::empty_body>& req
+                         , asio::yield_context yield)
+    {
+        return handle_http_error(con, req, http::status::not_found, yield);
     }
 
     boost::optional<string> get_host(const string& uri_s)
