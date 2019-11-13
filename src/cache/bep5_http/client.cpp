@@ -127,11 +127,23 @@ struct Client::Impl {
 
         if (ec || cancel) return;
 
-        // Do not proceed if the other cache client speaks the wrong protocol.
-        auto opt_err_res = util::http_proto_version_error(req, OUINET_CLIENT_SERVER_STRING);
-        if (opt_err_res) {
-            http::async_write(con, *opt_err_res, yield[ec]);
-            return;  // ignore error
+        // Usually we would
+        // (1) check that the request matches our protocol version, and
+        // (2) check that we can derive a key to look up the local cache.
+        // However, we still want to blindly send a response we have cached
+        // if the request looks like a Ouinet one and we can derive a key,
+        // to help the requesting client get the result and other information
+        // like a potential new protocol version.
+        // The requesting client may choose to drop the response
+        // or attempt to extract useful information from it.
+
+        auto req_proto = req[http_::protocol_version_hdr];
+        if (!boost::regex_match( req_proto.begin(), req_proto.end()
+                               , http_::protocol_version_rx)) {
+            if (log_debug()) {
+                cerr << "Bep5HTTP: Not a Ouinet request\n";
+            }
+            return handle_bad_request(con, req, yield[ec]);
         }
 
         auto key = key_from_http_req(req);
