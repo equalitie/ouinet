@@ -257,12 +257,16 @@ static
 void handle_http_error( GenericStream& con
                       , const Request& req
                       , http::status status
-                      , string message
+                      , const string& message
+                      , const string& internal_error
                       , Yield yield)
 {
     http::response<http::string_body> res{status, req.version()};
 
-    res.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
+    if (!internal_error.empty()) {
+        res.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
+        res.set(http_::response_error_hdr, internal_error);
+    }
     res.set(http::field::server, OUINET_CLIENT_SERVER_STRING);
     res.set(http::field::content_type, "text/plain");
     res.keep_alive(req.keep_alive());
@@ -276,15 +280,30 @@ void handle_http_error( GenericStream& con
 
     sys::error_code ec;
     http::async_write(con, res, yield[ec]);
+    if (ec) return or_throw(yield, ec);
 }
 
 static
 void handle_bad_request( GenericStream& con
                        , const Request& req
-                       , string message
+                       , const string& message
                        , Yield yield)
 {
-    return handle_http_error(con, req, http::status::bad_request, move(message), yield);
+    auto yield_ = yield.tag("handle_bad_request");
+    return handle_http_error(con, req, http::status::bad_request, message, "", yield_);
+}
+
+static
+void handle_retrieval_failure( GenericStream& con
+                             , const Request& req
+                             , Yield yield)
+{
+    auto yield_ = yield.tag("handle_retrieval_failed");
+    return handle_http_error( con, req, http::status::bad_gateway
+                            , "Failed to retrieve the resource "
+                              "(after attempting all configured mechanisms)"
+                            , http_::response_error_hdr_retrieval_failed
+                            , yield_);
 }
 
 //------------------------------------------------------------------------------
@@ -939,11 +958,8 @@ public:
 
         assert(last_error);
 
-        // TODO: Better error message.
-        handle_bad_request( con
-                          , rq
-                          , "Not cached"
-                          , yield.tag("handle_bad_request"));
+        sys::error_code ec_;
+        handle_retrieval_failure(con, rq, yield[ec_]);
 
         return or_throw<bool>(yield, last_error, rq.keep_alive());
     }
@@ -1036,7 +1052,8 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
 
     if (!rq.target().starts_with("ws:") && !rq.target().starts_with("wss:")) {
         if (connect_hp.empty()) {
-            handle_bad_request(browser, rq, "Not a websocket server", yield[ec]);
+            sys::error_code ec_;
+            handle_bad_request(browser, rq, "Not a websocket server", yield[ec_]);
             return true;
         }
 
@@ -1336,10 +1353,8 @@ void Client::State::serve_request( GenericStream&& con
                 // TODO: Maybe later we want to support front-end and API calls
                 // as plain HTTP requests (as if we were a plain HTTP server)
                 // but for the moment we only accept proxy requests.
-                handle_bad_request( con
-                                  , req
-                                  , "Not a proxy request"
-                                  , yield.tag("handle_bad_request"));
+                sys::error_code ec_;
+                handle_bad_request(con, req, "Not a proxy request", yield[ec_]);
                 if (req.keep_alive()) continue;
                 else return;
             }
