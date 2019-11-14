@@ -278,9 +278,7 @@ void handle_http_error( GenericStream& con
         yield.log(res);
     }
 
-    sys::error_code ec;
-    http::async_write(con, res, yield[ec]);
-    if (ec) return or_throw(yield, ec);
+    http::async_write(con, res, yield);
 }
 
 static
