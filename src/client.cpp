@@ -287,7 +287,7 @@ void handle_retrieval_failure( GenericStream& con
                              , const Request& req
                              , Yield yield)
 {
-    auto yield_ = yield.tag("handle_retrieval_failed");
+    auto yield_ = yield.tag("handle_retrieval_failure");
     return handle_http_error( con, req
                             , http::status::bad_gateway
                             , http_::response_error_hdr_retrieval_failed
