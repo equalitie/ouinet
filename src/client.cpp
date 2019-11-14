@@ -279,16 +279,6 @@ void handle_http_error( GenericStream& con
 }
 
 static
-void handle_cache_error( GenericStream& con
-                       , const Request& req
-                       , string message
-                       , Yield yield)
-{
-    return handle_http_error( con, req, http::status::bad_gateway
-                            , "Cache failed to process response: " + message, yield);
-}
-
-static
 void handle_bad_request( GenericStream& con
                        , const Request& req
                        , string message
@@ -932,15 +922,9 @@ public:
                     if (ec) {
                         // Abort store and forward tasks.
                         fork.close();
-                        if (ec.value() == sys::errc::no_message)
-                            // HTTP signature verification detected an early error
-                            // before sending anything to the agent;
-                            // try to report a meaningful error to it.
-                            handle_cache_error(con, rq, ec.message(), yield);
-                        else
-                            // Data may have already been sent to the agent,
-                            // so just close the connection.
-                            con.close();
+                        // Data may have already been sent to the agent,
+                        // so just close the connection.
+                        con.close();
                     }
 
                     wc.wait(yield);
