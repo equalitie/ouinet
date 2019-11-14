@@ -77,6 +77,34 @@ http_proto_version_error( const Request& rq
                                    , server_string);
 }
 
+// Create an HTTP client error response for the given request `rq`
+// with the given `status` and `message` body (text/plain).
+// If `proto_error` is not empty,
+// make this a Ouinet protocol message with that error.
+template<class Request>
+inline
+http::response<http::string_body>
+http_client_error( const Request& rq
+                 , http::status status
+                 , const std::string& proto_error
+                 , const std::string& message = "")
+{
+    http::response<http::string_body> rs{status, rq.version()};
+
+    if (!proto_error.empty()) {
+        assert(boost::regex_match(proto_error, http_::response_error_rx));
+        rs.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
+        rs.set(http_::response_error_hdr, proto_error);
+    }
+    rs.set(http::field::server, OUINET_CLIENT_SERVER_STRING);
+    rs.set(http::field::content_type, "text/plain");
+    rs.keep_alive(rq.keep_alive());
+    rs.body() = message;
+    rs.prepare_payload();
+
+    return rs;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // Utility function to check whether an HTTP field belongs to a set. Where
 // the set is defined by second, third, fourth,... arguments.

@@ -178,17 +178,10 @@ struct Client::Impl {
     void handle_http_error( GenericStream& con
                           , const http::request<http::empty_body>& req
                           , http::status status
+                          , const string& proto_error
                           , asio::yield_context yield)
     {
-        http::response<http::empty_body>
-            res{status, req.version()};
-
-        res.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
-        res.set(http::field::server, OUINET_CLIENT_SERVER_STRING);
-        res.set(http::field::content_type, "text/html");
-        res.keep_alive(req.keep_alive());
-        res.prepare_payload();
-
+        auto res = util::http_client_error(req, status, proto_error);
         http::async_write(con, res, yield);
     }
 
@@ -196,14 +189,15 @@ struct Client::Impl {
                            , const http::request<http::empty_body>& req
                            , asio::yield_context yield)
     {
-        return handle_http_error(con, req, http::status::bad_request, yield);
+        return handle_http_error(con, req, http::status::bad_request, "", yield);
     }
 
     void handle_not_found( GenericStream& con
                          , const http::request<http::empty_body>& req
                          , asio::yield_context yield)
     {
-        return handle_http_error(con, req, http::status::not_found, yield);
+        return handle_http_error( con, req, http::status::not_found
+                                , http_::response_error_hdr_retrieval_failed, yield);
     }
 
     boost::optional<string> get_host(const string& uri_s)

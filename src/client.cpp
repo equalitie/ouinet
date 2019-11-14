@@ -257,22 +257,11 @@ static
 void handle_http_error( GenericStream& con
                       , const Request& req
                       , http::status status
+                      , const string& proto_error
                       , const string& message
-                      , const string& internal_error
                       , Yield yield)
 {
-    http::response<http::string_body> res{status, req.version()};
-
-    if (!internal_error.empty()) {
-        res.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
-        res.set(http_::response_error_hdr, internal_error);
-    }
-    res.set(http::field::server, OUINET_CLIENT_SERVER_STRING);
-    res.set(http::field::content_type, "text/plain");
-    res.keep_alive(req.keep_alive());
-    res.body() = message;
-    res.prepare_payload();
-
+    auto res = util::http_client_error(req, status, proto_error, message);
     if (log_transactions()) {
         yield.log("=== Sending back response ===");
         yield.log(res);
@@ -288,7 +277,9 @@ void handle_bad_request( GenericStream& con
                        , Yield yield)
 {
     auto yield_ = yield.tag("handle_bad_request");
-    return handle_http_error(con, req, http::status::bad_request, message, "", yield_);
+    return handle_http_error( con, req
+                            , http::status::bad_request, ""
+                            , message, yield_);
 }
 
 static
@@ -297,10 +288,11 @@ void handle_retrieval_failure( GenericStream& con
                              , Yield yield)
 {
     auto yield_ = yield.tag("handle_retrieval_failed");
-    return handle_http_error( con, req, http::status::bad_gateway
+    return handle_http_error( con, req
+                            , http::status::bad_gateway
+                            , http_::response_error_hdr_retrieval_failed
                             , "Failed to retrieve the resource "
                               "(after attempting all configured mechanisms)"
-                            , http_::response_error_hdr_retrieval_failed
                             , yield_);
 }
 
