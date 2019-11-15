@@ -656,6 +656,10 @@ struct Client::Impl {
         lifetime_cancel();
     }
 
+    unsigned get_newest_proto_version() const {
+        return newest_proto_seen;
+    }
+
     void set_log_level(log_level_t l) {
         cerr << "Setting Bep5Http Cache log level to " << l << "\n";
         log_level = l;
@@ -704,6 +708,11 @@ void Client::store( const std::string& key
                   , asio::yield_context yield)
 {
     _impl->store(key, s, cancel, yield);
+}
+
+unsigned Client::get_newest_proto_version() const
+{
+    return _impl->get_newest_proto_version();
 }
 
 void Client::set_log_level(log_level_t l)

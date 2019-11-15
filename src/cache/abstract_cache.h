@@ -17,6 +17,11 @@ public:
               , Session&
               , Cancel
               , asio::yield_context) = 0;
+
+    // Get the newest protocol version that has been seen in the network
+    // (e.g. to warn about potential upgrades).
+    virtual
+    unsigned get_newest_proto_version() const = 0;
 };
 
 } // namespace
