@@ -46,14 +46,15 @@ boost::string_view http_injection_ts(const http::response_header<>& rsh)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Return an error response message if
-// the request contains a protocol version number not matching the current one.
-namespace detail_http_proto_version_error {
-    boost::optional<http::response<http::empty_body>> impl( unsigned rv
-                                                          , beast::string_view ov
-                                                          , beast::string_view ss);
+namespace detail {
+    boost::optional<http::response<http::empty_body>>
+    http_proto_version_error( unsigned rv
+                            , beast::string_view ov
+                            , beast::string_view ss);
 }
 
+// Return an error response message if
+// the request contains a protocol version number not matching the current one.
 template<class Request>
 inline
 boost::optional<http::response<http::empty_body>>
@@ -61,9 +62,9 @@ http_proto_version_error( const Request& rq
                         , beast::string_view oui_version
                         , beast::string_view server_string)
 {
-    return detail_http_proto_version_error::impl( rq.version()
-                                                , oui_version
-                                                , server_string);
+    return detail::http_proto_version_error( rq.version()
+                                           , oui_version
+                                           , server_string);
 }
 
 template<class Request>

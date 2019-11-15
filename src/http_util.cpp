@@ -184,9 +184,9 @@ ouinet::util::http_injection_field( const http::response_header<>& rsh
 }
 
 boost::optional<http::response<http::empty_body>>
-ouinet::util::detail_http_proto_version_error::impl( unsigned rq_version
-                                                   , beast::string_view oui_version
-                                                   , beast::string_view server_string)
+ouinet::util::detail::http_proto_version_error( unsigned rq_version
+                                              , beast::string_view oui_version
+                                              , beast::string_view server_string)
 {
     unsigned version = 0;
 
