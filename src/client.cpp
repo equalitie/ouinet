@@ -876,13 +876,8 @@ public:
 
                     s.flush_response(sink, cancel, yield[ec]);
 
-                    if (ec) {
-                        // Abort store and forward tasks.
-                        fork.close();
-                        // Data may have already been sent to the agent,
-                        // so just close the connection.
-                        con.close();
-                    }
+                    // Abort store and forward tasks on error.
+                    if (ec) fork.close();
 
                     wc.wait(yield);
 
