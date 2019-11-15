@@ -635,40 +635,6 @@ Session Client::State::fetch_fresh_through_simple_proxy
 }
 
 //------------------------------------------------------------------------------
-// Return true if res indicated an error from the injector
-bool handle_if_injector_error(
-        GenericStream& con,
-        const http::response_header<>& rs_hdr,
-        Yield yield)
-{
-    auto err_hdr_i = rs_hdr.find(http_::response_error_hdr);
-
-    if (err_hdr_i == rs_hdr.end()) return false; // No error
-    auto err_hdr_v = err_hdr_i->value();
-
-    Response res{http::status::bad_request, 11};
-    res.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
-    res.set(http::field::server, OUINET_CLIENT_SERVER_STRING);
-    res.set(http_::response_error_hdr, err_hdr_v);
-    res.keep_alive(false);
-
-    string body = "Error from Ouinet injector: ";
-
-    Response::body_type::reader reader(res, res.body());
-    sys::error_code ec;
-    reader.put(asio::buffer(body), ec);
-    assert(!ec);
-    reader.put(asio::buffer(err_hdr_v.data(), err_hdr_v.size()), ec);
-    assert(!ec);
-
-    res.prepare_payload();
-
-    http::async_write(con, res, yield[ec]);
-
-    return true;
-}
-
-//------------------------------------------------------------------------------
 class Client::ClientCacheControl {
 public:
     ClientCacheControl( Client::State& client_state
@@ -872,8 +838,11 @@ public:
                     assert(!fresh_ec || !cache_ec); // At least one success
                     assert( fresh_ec ||  cache_ec); // One needs to fail
 
-                    if (handle_if_injector_error(con, *s.response_header(), yield[ec])) {
-                        return false;
+                    auto injector_error = (*s.response_header())[http_::response_error_hdr];
+                    if (!injector_error.empty()) {
+                        LOG_WARN("Error from Ouinet injector: ", injector_error);
+                        ec = asio::error::invalid_argument;
+                        break;
                     }
 
                     using Fork = stream::Fork<GenericStream>;
