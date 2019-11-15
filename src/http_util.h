@@ -78,6 +78,24 @@ http_proto_version_error( const Request& rq
                                    , server_string);
 }
 
+namespace detail {
+    bool http_proto_version_check_trusted(boost::string_view, unsigned&);
+}
+
+// Does the `message` contain a usable Ouinet protocol version?
+//
+// Also set `newest_proto_seen` if the `message` contains a greater value,
+// so only call this with a `message` coming from a trusted source.
+template<class Message>
+inline
+bool http_proto_version_check_trusted( const Message& message
+                                     , unsigned& newest_proto_seen)
+{
+    return detail::http_proto_version_check_trusted
+        ( message[http_::protocol_version_hdr]
+        , newest_proto_seen);
+}
+
 // Create an HTTP client error response for the given request `rq`
 // with the given `status` and `message` body (text/plain).
 // If `proto_error` is not empty,

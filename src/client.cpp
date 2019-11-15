@@ -180,10 +180,6 @@ private:
                                             , Cancel& cancel
                                             , Yield);
 
-    // Sets newest protocol version seen,
-    // only call with protocol version coming from a trusted source.
-    bool check_proto_version_trusted(boost::string_view);
-
     void maybe_add_proto_version_warning(http::response_header<>& rsh) const {
         if (newest_proto_seen > http_::protocol_version_current)
             rsh.set( http_::response_warning_hdr
@@ -327,7 +323,7 @@ Client::State::fetch_stored( const Request& request
 
     if (!hdr)
         return or_throw<CacheEntry>(yield, asio::error::operation_not_supported);
-    if (!check_proto_version_trusted((*hdr)[http_::protocol_version_hdr]))
+    if (!util::http_proto_version_check_trusted(*hdr, newest_proto_seen))
         // The cached resource cannot be used, treat it like
         // not being found.
         return or_throw<CacheEntry>(yield, asio::error::not_found);
@@ -615,7 +611,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
     else if ( !ec
             && can_inject
             && ( !hdr_p
-               || !check_proto_version_trusted((*hdr_p)[http_::protocol_version_hdr])))
+               || !util::http_proto_version_check_trusted(*hdr_p, newest_proto_seen)))
         // The injector using an unacceptable protocol version is treated like
         // the Injector mechanism being disabled.
         ec = asio::error::operation_not_supported;
@@ -636,23 +632,6 @@ Session Client::State::fetch_fresh_through_simple_proxy
     }
 
     return session;
-}
-
-//------------------------------------------------------------------------------
-bool Client::State::check_proto_version_trusted(boost::string_view proto_vs)
-{
-    if (!boost::regex_match( proto_vs.begin(), proto_vs.end()
-                           , http_::protocol_version_rx))
-        return false;  // malformed version header
-
-    auto proto_vn = *(parse::number<unsigned>(proto_vs));
-    if (proto_vn > newest_proto_seen) {
-        LOG_WARN( "Found new protocol version in trusted source: "
-                , proto_vn, " > ", http_::protocol_version_current);
-        newest_proto_seen = proto_vn;  // saw a newest protocol in the wild
-    }
-
-    return (proto_vn == http_::protocol_version_current);  // unsupported version?
 }
 
 //------------------------------------------------------------------------------
