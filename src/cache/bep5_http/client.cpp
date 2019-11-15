@@ -31,6 +31,10 @@ namespace fs = boost::filesystem;
 namespace bt = bittorrent;
 
 struct Client::Impl {
+    // The newest protocol version number seen in a trusted exchange
+    // (i.e. from injector-signed cached content).
+    unsigned newest_proto_seen = http_::protocol_version_current;
+
     asio::io_service& ios;
     shared_ptr<bt::MainlineDht> dht;
     util::Ed25519PublicKey cache_pk;
@@ -419,7 +423,7 @@ struct Client::Impl {
         if (cancel)
             ec = asio::error::operation_aborted;
         else if ( !ec
-                && (*hdr_p)[http_::protocol_version_hdr] != http_::protocol_version_hdr_current)
+                && !util::http_proto_version_check_trusted(*hdr_p, newest_proto_seen))
             // The client expects an injection belonging to a supported protocol version,
             // otherwise we just discard this copy.
             ec = asio::error::not_found;
