@@ -182,7 +182,12 @@ private:
 
     template<class Resp>
     void maybe_add_proto_version_warning(Resp& res) const {
-        if (newest_proto_seen > http_::protocol_version_current)
+        auto newest = newest_proto_seen;
+        // Check if cache client knows about a newer protocol version too.
+        auto c = get_cache();
+        if (c && c->get_newest_proto_version() > newest)
+            newest = c->get_newest_proto_version();
+        if (newest > http_::protocol_version_current)
             res.set( http_::response_warning_hdr
                    , "Newer Ouinet protocol found in network, "
                      "please consider upgrading.");
@@ -218,7 +223,7 @@ private:
     unique_ptr<OuiServiceImplementationClient>
     maybe_wrap_tls(unique_ptr<OuiServiceImplementationClient>);
 
-    AbstractCache* get_cache() { return _bep5_http_cache.get(); }
+    AbstractCache* get_cache() const { return _bep5_http_cache.get(); }
 
 private:
     // The newest protocol version number seen in a trusted exchange
