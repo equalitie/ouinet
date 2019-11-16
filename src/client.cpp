@@ -180,9 +180,10 @@ private:
                                             , Cancel& cancel
                                             , Yield);
 
-    void maybe_add_proto_version_warning(http::response_header<>& rsh) const {
+    template<class Resp>
+    void maybe_add_proto_version_warning(Resp& res) const {
         if (newest_proto_seen > http_::protocol_version_current)
-            rsh.set( http_::response_warning_hdr
+            res.set( http_::response_warning_hdr
                    , "Newer Ouinet protocol found in network, "
                      "please consider upgrading.");
     };
@@ -210,6 +211,7 @@ private:
                                        , beast::string_view connect_host_port
                                        , Request&
                                        , Yield);
+    void handle_retrieval_failure(GenericStream&, const Request&, Yield);
 
     GenericStream connect_to_origin(const Request&, Cancel&, Yield);
 
@@ -249,15 +251,12 @@ private:
 };
 
 //------------------------------------------------------------------------------
+template<class Resp>
 static
 void handle_http_error( GenericStream& con
-                      , const Request& req
-                      , http::status status
-                      , const string& proto_error
-                      , const string& message
+                      , Resp& res
                       , Yield yield)
 {
-    auto res = util::http_client_error(req, status, proto_error, message);
     if (log_transactions()) {
         yield.log("=== Sending back response ===");
         yield.log(res);
@@ -272,24 +271,9 @@ void handle_bad_request( GenericStream& con
                        , const string& message
                        , Yield yield)
 {
+    auto res = util::http_client_error(req, http::status::bad_request, "", message);
     auto yield_ = yield.tag("handle_bad_request");
-    return handle_http_error( con, req
-                            , http::status::bad_request, ""
-                            , message, yield_);
-}
-
-static
-void handle_retrieval_failure( GenericStream& con
-                             , const Request& req
-                             , Yield yield)
-{
-    auto yield_ = yield.tag("handle_retrieval_failure");
-    return handle_http_error( con, req
-                            , http::status::bad_gateway
-                            , http_::response_error_hdr_retrieval_failed
-                            , "Failed to retrieve the resource "
-                              "(after attempting all configured mechanisms)"
-                            , yield_);
+    return handle_http_error(con, res, yield_);
 }
 
 //------------------------------------------------------------------------------
@@ -1031,6 +1015,20 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
     full_duplex(move(browser), move(origin), yield[ec]);
 
     return or_throw(yield, ec, true);
+}
+
+//------------------------------------------------------------------------------
+void Client::State::handle_retrieval_failure( GenericStream& con
+                                            , const Request& req
+                                            , Yield yield)
+{
+    auto res = util::http_client_error
+        ( req, http::status::bad_gateway, http_::response_error_hdr_retrieval_failed
+        , "Failed to retrieve the resource "
+          "(after attempting all configured mechanisms)");
+    maybe_add_proto_version_warning(res);
+    auto yield_ = yield.tag("handle_retrieval_failure");
+    return handle_http_error(con, res, yield_);
 }
 
 //------------------------------------------------------------------------------
