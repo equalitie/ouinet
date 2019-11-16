@@ -734,6 +734,11 @@ public:
         cache->store(move(*key), s, cancel, yield);
     }
 
+    // Closes `con` when it can no longer be used.
+    // If an error is reported and it is still open,
+    // a response may still be sent to it.
+    // The return value indicates whether the connection
+    // should be kept alive afterwards.
     bool fetch(GenericStream& con, const Request& rq, Yield yield)
     {
         namespace err = asio::error;
@@ -743,7 +748,7 @@ public:
 
         while (!request_config.fresh_channels.empty()) {
             if (client_state._shutdown_signal)
-                return or_throw<bool>(yield, err::operation_aborted);
+                return or_throw(yield, err::operation_aborted, false);
 
             auto r = request_config.fresh_channels.front();
             request_config.fresh_channels.pop();
@@ -759,9 +764,10 @@ public:
             switch (r) {
                 case fresh_channel::_front_end: {
                     Response res = client_state.fetch_fresh_from_front_end(rq, yield);
-                    res.keep_alive(false);
+                    res.keep_alive(false);  // never keep-alive; TODO: why not?
                     http::async_write(con, res, asio::yield_context(yield)[ec]);
-                    return false;
+                    if (ec) con.close();
+                    return or_throw(yield, ec, false);  // never keep-alive; TODO: why not?
                 }
                 case fresh_channel::secure_origin:
                 case fresh_channel::origin: {
@@ -780,11 +786,12 @@ public:
 
                     session.flush_response(con, cancel, yield[ec]);
 
-                    if (ec || !rq_.keep_alive() || !session.keep_alive()) {
+                    bool keep_alive = !ec && rq_.keep_alive() && session.keep_alive();
+                    if (!keep_alive) {
                         session.close();
-                        return false;
+                        con.close();
                     }
-                    return true;
+                    return or_throw(yield, ec, keep_alive);
                 }
                 case fresh_channel::proxy: {
                     if (!client_state._config.is_proxy_access_enabled()) {
@@ -804,12 +811,12 @@ public:
 
                     session.flush_response(con, cancel, yield[ec]);
 
-                    if (ec || !rq.keep_alive() || !session.keep_alive()) {
+                    bool keep_alive = !ec && rq.keep_alive() && session.keep_alive();
+                    if (!keep_alive) {
                         session.close();
-                        return false;
+                        con.close();
                     }
-
-                    return true;
+                    return or_throw(yield, ec, keep_alive);
                 }
                 case fresh_channel::injector: {
                     sys::error_code fresh_ec;
@@ -825,8 +832,8 @@ public:
 
                     if (ec) break;
 
+                    auto rsh = s.response_header();
                     if (log_transactions()) {
-                        auto rsh = s.response_header();
                         if (rsh) {
                             yield.log("Response header:");
                             yield.log(*rsh);
@@ -838,7 +845,7 @@ public:
                     assert(!fresh_ec || !cache_ec); // At least one success
                     assert( fresh_ec ||  cache_ec); // One needs to fail
 
-                    auto injector_error = (*s.response_header())[http_::response_error_hdr];
+                    auto injector_error = (*rsh)[http_::response_error_hdr];
                     if (!injector_error.empty()) {
                         if (log_transactions())
                             yield.log("Error from injector: ", injector_error);
@@ -879,10 +886,14 @@ public:
 
                     // Abort store and forward tasks on error.
                     if (ec) fork.close();
-
                     wc.wait(yield);
 
-                    return !ec && rq.keep_alive() && s.keep_alive();
+                    bool keep_alive = !ec && rq.keep_alive() && s.keep_alive();
+                    if (!keep_alive) {
+                        s.close();
+                        con.close();
+                    }
+                    return or_throw(yield, ec, keep_alive);
                 }
             }
 
@@ -891,11 +902,7 @@ public:
         }
 
         assert(last_error);
-
-        sys::error_code ec_;
-        handle_retrieval_failure(con, rq, yield[ec_]);
-
-        return or_throw<bool>(yield, last_error, rq.keep_alive());
+        return or_throw(yield, last_error, rq.keep_alive());
     }
 
 private:
@@ -1303,7 +1310,11 @@ void Client::State::serve_request( GenericStream&& con
             if (log_transactions()) {
                 yield.log("error writing back response: ", ec.message());
             }
-            return;
+            if (con.is_open()) {
+                sys::error_code ec_;
+                handle_retrieval_failure(con, req, yield[ec_]);
+                if (ec_) keep_alive = false;
+            }
         }
 
         if (!keep_alive) {
