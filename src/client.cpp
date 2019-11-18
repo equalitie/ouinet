@@ -753,10 +753,12 @@ public:
             switch (r) {
                 case fresh_channel::_front_end: {
                     Response res = client_state.fetch_fresh_from_front_end(rq, yield);
-                    res.keep_alive(false);  // never keep-alive; TODO: why not?
+                    res.keep_alive(rq.keep_alive());
                     http::async_write(con, res, asio::yield_context(yield)[ec]);
-                    if (ec) con.close();
-                    return or_throw(yield, ec, false);  // never keep-alive; TODO: why not?
+
+                    bool keep_alive = !ec && rq.keep_alive();
+                    if (!keep_alive) con.close();
+                    return or_throw(yield, ec, keep_alive);
                 }
                 case fresh_channel::secure_origin:
                 case fresh_channel::origin: {
