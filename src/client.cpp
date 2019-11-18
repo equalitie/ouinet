@@ -836,8 +836,7 @@ public:
 
                     auto injector_error = (*rsh)[http_::response_error_hdr];
                     if (!injector_error.empty()) {
-                        if (log_transactions())
-                            yield.log("Error from injector: ", injector_error);
+                        yield.log("Error from injector: ", injector_error);
                         ec = asio::error::invalid_argument;
                         break;
                     }
