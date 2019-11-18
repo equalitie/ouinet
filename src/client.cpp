@@ -180,13 +180,15 @@ private:
                                             , Cancel& cancel
                                             , Yield);
 
-    // Sets newest protocol version seen,
-    // only call with protocol version coming from a trusted source.
-    bool check_proto_version_trusted(boost::string_view);
-
-    void maybe_add_proto_version_warning(http::response_header<>& rsh) const {
-        if (newest_proto_seen > http_::protocol_version_current)
-            rsh.set( http_::response_warning_hdr
+    template<class Resp>
+    void maybe_add_proto_version_warning(Resp& res) const {
+        auto newest = newest_proto_seen;
+        // Check if cache client knows about a newer protocol version too.
+        auto c = get_cache();
+        if (c && c->get_newest_proto_version() > newest)
+            newest = c->get_newest_proto_version();
+        if (newest > http_::protocol_version_current)
+            res.set( http_::response_warning_hdr
                    , "Newer Ouinet protocol found in network, "
                      "please consider upgrading.");
     };
@@ -214,13 +216,14 @@ private:
                                        , beast::string_view connect_host_port
                                        , Request&
                                        , Yield);
+    void handle_retrieval_failure(GenericStream&, const Request&, Yield);
 
     GenericStream connect_to_origin(const Request&, Cancel&, Yield);
 
     unique_ptr<OuiServiceImplementationClient>
     maybe_wrap_tls(unique_ptr<OuiServiceImplementationClient>);
 
-    AbstractCache* get_cache() { return _bep5_http_cache.get(); }
+    AbstractCache* get_cache() const { return _bep5_http_cache.get(); }
 
 private:
     // The newest protocol version number seen in a trusted exchange
@@ -253,48 +256,29 @@ private:
 };
 
 //------------------------------------------------------------------------------
+template<class Resp>
 static
 void handle_http_error( GenericStream& con
-                      , const Request& req
-                      , http::status status
-                      , string message
+                      , Resp& res
                       , Yield yield)
 {
-    http::response<http::string_body> res{status, req.version()};
-
-    res.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
-    res.set(http::field::server, OUINET_CLIENT_SERVER_STRING);
-    res.set(http::field::content_type, "text/plain");
-    res.keep_alive(req.keep_alive());
-    res.body() = message;
-    res.prepare_payload();
-
     if (log_transactions()) {
         yield.log("=== Sending back response ===");
         yield.log(res);
     }
 
-    sys::error_code ec;
-    http::async_write(con, res, yield[ec]);
-}
-
-static
-void handle_cache_error( GenericStream& con
-                       , const Request& req
-                       , string message
-                       , Yield yield)
-{
-    return handle_http_error( con, req, http::status::bad_gateway
-                            , "Cache failed to process response: " + message, yield);
+    http::async_write(con, res, yield);
 }
 
 static
 void handle_bad_request( GenericStream& con
                        , const Request& req
-                       , string message
+                       , const string& message
                        , Yield yield)
 {
-    return handle_http_error(con, req, http::status::bad_request, move(message), yield);
+    auto res = util::http_client_error(req, http::status::bad_request, "", message);
+    auto yield_ = yield.tag("handle_bad_request");
+    return handle_http_error(con, res, yield_);
 }
 
 //------------------------------------------------------------------------------
@@ -328,7 +312,7 @@ Client::State::fetch_stored( const Request& request
 
     if (!hdr)
         return or_throw<CacheEntry>(yield, asio::error::operation_not_supported);
-    if (!check_proto_version_trusted((*hdr)[http_::protocol_version_hdr]))
+    if (!util::http_proto_version_check_trusted(*hdr, newest_proto_seen))
         // The cached resource cannot be used, treat it like
         // not being found.
         return or_throw<CacheEntry>(yield, asio::error::not_found);
@@ -616,7 +600,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
     else if ( !ec
             && can_inject
             && ( !hdr_p
-               || !check_proto_version_trusted((*hdr_p)[http_::protocol_version_hdr])))
+               || !util::http_proto_version_check_trusted(*hdr_p, newest_proto_seen)))
         // The injector using an unacceptable protocol version is treated like
         // the Injector mechanism being disabled.
         ec = asio::error::operation_not_supported;
@@ -637,57 +621,6 @@ Session Client::State::fetch_fresh_through_simple_proxy
     }
 
     return session;
-}
-
-//------------------------------------------------------------------------------
-bool Client::State::check_proto_version_trusted(boost::string_view proto_vs)
-{
-    if (!boost::regex_match( proto_vs.begin(), proto_vs.end()
-                           , http_::protocol_version_rx))
-        return false;  // malformed version header
-
-    auto proto_vn = *(parse::number<unsigned>(proto_vs));
-    if (proto_vn > newest_proto_seen) {
-        LOG_WARN( "Found new protocol version in trusted source: "
-                , proto_vn, " > ", http_::protocol_version_current);
-        newest_proto_seen = proto_vn;  // saw a newest protocol in the wild
-    }
-
-    return (proto_vn == http_::protocol_version_current);  // unsupported version?
-}
-
-//------------------------------------------------------------------------------
-// Return true if res indicated an error from the injector
-bool handle_if_injector_error(
-        GenericStream& con,
-        const http::response_header<>& rs_hdr,
-        Yield yield)
-{
-    auto err_hdr_i = rs_hdr.find(http_::response_error_hdr);
-
-    if (err_hdr_i == rs_hdr.end()) return false; // No error
-    auto err_hdr_v = err_hdr_i->value();
-
-    Response res{http::status::bad_request, 11};
-    res.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
-    res.set(http::field::server, OUINET_CLIENT_SERVER_STRING);
-    res.set(http_::response_error_hdr, err_hdr_v);
-    res.keep_alive(false);
-
-    string body = "Error from Ouinet injector: ";
-
-    Response::body_type::reader reader(res, res.body());
-    sys::error_code ec;
-    reader.put(asio::buffer(body), ec);
-    assert(!ec);
-    reader.put(asio::buffer(err_hdr_v.data(), err_hdr_v.size()), ec);
-    assert(!ec);
-
-    res.prepare_payload();
-
-    http::async_write(con, res, yield[ec]);
-
-    return true;
 }
 
 //------------------------------------------------------------------------------
@@ -790,6 +723,11 @@ public:
         cache->store(move(*key), s, cancel, yield);
     }
 
+    // Closes `con` when it can no longer be used.
+    // If an error is reported and it is still open,
+    // a response may still be sent to it.
+    // The return value indicates whether the connection
+    // should be kept alive afterwards.
     bool fetch(GenericStream& con, const Request& rq, Yield yield)
     {
         namespace err = asio::error;
@@ -799,7 +737,7 @@ public:
 
         while (!request_config.fresh_channels.empty()) {
             if (client_state._shutdown_signal)
-                return or_throw<bool>(yield, err::operation_aborted);
+                return or_throw(yield, err::operation_aborted, false);
 
             auto r = request_config.fresh_channels.front();
             request_config.fresh_channels.pop();
@@ -815,9 +753,12 @@ public:
             switch (r) {
                 case fresh_channel::_front_end: {
                     Response res = client_state.fetch_fresh_from_front_end(rq, yield);
-                    res.keep_alive(false);
+                    res.keep_alive(rq.keep_alive());
                     http::async_write(con, res, asio::yield_context(yield)[ec]);
-                    return false;
+
+                    bool keep_alive = !ec && rq.keep_alive();
+                    if (!keep_alive) con.close();
+                    return or_throw(yield, ec, keep_alive);
                 }
                 case fresh_channel::secure_origin:
                 case fresh_channel::origin: {
@@ -836,11 +777,12 @@ public:
 
                     session.flush_response(con, cancel, yield[ec]);
 
-                    if (ec || !rq_.keep_alive() || !session.keep_alive()) {
+                    bool keep_alive = !ec && rq_.keep_alive() && session.keep_alive();
+                    if (!keep_alive) {
                         session.close();
-                        return false;
+                        con.close();
                     }
-                    return true;
+                    return or_throw(yield, ec, keep_alive);
                 }
                 case fresh_channel::proxy: {
                     if (!client_state._config.is_proxy_access_enabled()) {
@@ -860,12 +802,12 @@ public:
 
                     session.flush_response(con, cancel, yield[ec]);
 
-                    if (ec || !rq.keep_alive() || !session.keep_alive()) {
+                    bool keep_alive = !ec && rq.keep_alive() && session.keep_alive();
+                    if (!keep_alive) {
                         session.close();
-                        return false;
+                        con.close();
                     }
-
-                    return true;
+                    return or_throw(yield, ec, keep_alive);
                 }
                 case fresh_channel::injector: {
                     sys::error_code fresh_ec;
@@ -881,8 +823,8 @@ public:
 
                     if (ec) break;
 
+                    auto rsh = s.response_header();
                     if (log_transactions()) {
-                        auto rsh = s.response_header();
                         if (rsh) {
                             yield.log("Response header:");
                             yield.log(*rsh);
@@ -894,8 +836,11 @@ public:
                     assert(!fresh_ec || !cache_ec); // At least one success
                     assert( fresh_ec ||  cache_ec); // One needs to fail
 
-                    if (handle_if_injector_error(con, *s.response_header(), yield[ec])) {
-                        return false;
+                    auto injector_error = (*rsh)[http_::response_error_hdr];
+                    if (!injector_error.empty()) {
+                        yield.log("Error from injector: ", injector_error);
+                        ec = asio::error::invalid_argument;
+                        break;
                     }
 
                     using Fork = stream::Fork<GenericStream>;
@@ -929,23 +874,16 @@ public:
 
                     s.flush_response(sink, cancel, yield[ec]);
 
-                    if (ec) {
-                        // Abort store and forward tasks.
-                        fork.close();
-                        if (ec.value() == sys::errc::no_message)
-                            // HTTP signature verification detected an early error
-                            // before sending anything to the agent;
-                            // try to report a meaningful error to it.
-                            handle_cache_error(con, rq, ec.message(), yield);
-                        else
-                            // Data may have already been sent to the agent,
-                            // so just close the connection.
-                            con.close();
-                    }
-
+                    // Abort store and forward tasks on error.
+                    if (ec) fork.close();
                     wc.wait(yield);
 
-                    return !ec && rq.keep_alive() && s.keep_alive();
+                    bool keep_alive = !ec && rq.keep_alive() && s.keep_alive();
+                    if (!keep_alive) {
+                        s.close();
+                        con.close();
+                    }
+                    return or_throw(yield, ec, keep_alive);
                 }
             }
 
@@ -954,14 +892,7 @@ public:
         }
 
         assert(last_error);
-
-        // TODO: Better error message.
-        handle_bad_request( con
-                          , rq
-                          , "Not cached"
-                          , yield.tag("handle_bad_request"));
-
-        return or_throw<bool>(yield, last_error, rq.keep_alive());
+        return or_throw(yield, last_error, rq.keep_alive());
     }
 
 private:
@@ -1052,7 +983,8 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
 
     if (!rq.target().starts_with("ws:") && !rq.target().starts_with("wss:")) {
         if (connect_hp.empty()) {
-            handle_bad_request(browser, rq, "Not a websocket server", yield[ec]);
+            sys::error_code ec_;
+            handle_bad_request(browser, rq, "Not a websocket server", yield[ec_]);
             return true;
         }
 
@@ -1089,6 +1021,20 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
     full_duplex(move(browser), move(origin), yield[ec]);
 
     return or_throw(yield, ec, true);
+}
+
+//------------------------------------------------------------------------------
+void Client::State::handle_retrieval_failure( GenericStream& con
+                                            , const Request& req
+                                            , Yield yield)
+{
+    auto res = util::http_client_error
+        ( req, http::status::bad_gateway, http_::response_error_hdr_retrieval_failed
+        , "Failed to retrieve the resource "
+          "(after attempting all configured mechanisms)");
+    maybe_add_proto_version_warning(res);
+    auto yield_ = yield.tag("handle_retrieval_failure");
+    return handle_http_error(con, res, yield_);
 }
 
 //------------------------------------------------------------------------------
@@ -1352,10 +1298,8 @@ void Client::State::serve_request( GenericStream&& con
                 // TODO: Maybe later we want to support front-end and API calls
                 // as plain HTTP requests (as if we were a plain HTTP server)
                 // but for the moment we only accept proxy requests.
-                handle_bad_request( con
-                                  , req
-                                  , "Not a proxy request"
-                                  , yield.tag("handle_bad_request"));
+                sys::error_code ec_;
+                handle_bad_request(con, req, "Not a proxy request", yield[ec_]);
                 if (req.keep_alive()) continue;
                 else return;
             }
@@ -1370,7 +1314,11 @@ void Client::State::serve_request( GenericStream&& con
             if (log_transactions()) {
                 yield.log("error writing back response: ", ec.message());
             }
-            return;
+            if (con.is_open()) {
+                sys::error_code ec_;
+                handle_retrieval_failure(con, req, yield[ec_]);
+                if (ec_) keep_alive = false;
+            }
         }
 
         if (!keep_alive) {

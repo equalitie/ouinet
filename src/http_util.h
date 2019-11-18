@@ -46,14 +46,15 @@ boost::string_view http_injection_ts(const http::response_header<>& rsh)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Return an error response message if
-// the request contains a protocol version number not matching the current one.
-namespace detail_http_proto_version_error {
-    boost::optional<http::response<http::empty_body>> impl( unsigned rv
-                                                          , beast::string_view ov
-                                                          , beast::string_view ss);
+namespace detail {
+    boost::optional<http::response<http::empty_body>>
+    http_proto_version_error( unsigned rv
+                            , beast::string_view ov
+                            , beast::string_view ss);
 }
 
+// Return an error response message if
+// the request contains a protocol version number not matching the current one.
 template<class Request>
 inline
 boost::optional<http::response<http::empty_body>>
@@ -61,9 +62,9 @@ http_proto_version_error( const Request& rq
                         , beast::string_view oui_version
                         , beast::string_view server_string)
 {
-    return detail_http_proto_version_error::impl( rq.version()
-                                                , oui_version
-                                                , server_string);
+    return detail::http_proto_version_error( rq.version()
+                                           , oui_version
+                                           , server_string);
 }
 
 template<class Request>
@@ -75,6 +76,52 @@ http_proto_version_error( const Request& rq
     return http_proto_version_error( rq
                                    , rq[http_::protocol_version_hdr]
                                    , server_string);
+}
+
+namespace detail {
+    bool http_proto_version_check_trusted(boost::string_view, unsigned&);
+}
+
+// Does the `message` contain a usable Ouinet protocol version?
+//
+// Also set `newest_proto_seen` if the `message` contains a greater value,
+// so only call this with a `message` coming from a trusted source.
+template<class Message>
+inline
+bool http_proto_version_check_trusted( const Message& message
+                                     , unsigned& newest_proto_seen)
+{
+    return detail::http_proto_version_check_trusted
+        ( message[http_::protocol_version_hdr]
+        , newest_proto_seen);
+}
+
+// Create an HTTP client error response for the given request `rq`
+// with the given `status` and `message` body (text/plain).
+// If `proto_error` is not empty,
+// make this a Ouinet protocol message with that error.
+template<class Request>
+inline
+http::response<http::string_body>
+http_client_error( const Request& rq
+                 , http::status status
+                 , const std::string& proto_error
+                 , const std::string& message = "")
+{
+    http::response<http::string_body> rs{status, rq.version()};
+
+    if (!proto_error.empty()) {
+        assert(boost::regex_match(proto_error, http_::response_error_rx));
+        rs.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
+        rs.set(http_::response_error_hdr, proto_error);
+    }
+    rs.set(http::field::server, OUINET_CLIENT_SERVER_STRING);
+    rs.set(http::field::content_type, "text/plain");
+    rs.keep_alive(rq.keep_alive());
+    rs.body() = message;
+    rs.prepare_payload();
+
+    return rs;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

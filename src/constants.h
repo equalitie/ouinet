@@ -51,6 +51,7 @@ static const boost::regex response_error_rx("^([0-9]+) ([\\x21-\\x7E][\\x20-\\x7
 // Internal error codes.
 static const std::string response_error_hdr_version_too_low  = "1 Client's version too low";
 static const std::string response_error_hdr_version_too_high = "2 Client's version too high";
+static const std::string response_error_hdr_retrieval_failed = "3 Resource retrieval failed";
 
 
 // Version-dependent headers:

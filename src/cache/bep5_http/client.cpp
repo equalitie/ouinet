@@ -31,6 +31,10 @@ namespace fs = boost::filesystem;
 namespace bt = bittorrent;
 
 struct Client::Impl {
+    // The newest protocol version number seen in a trusted exchange
+    // (i.e. from injector-signed cached content).
+    unsigned newest_proto_seen = http_::protocol_version_current;
+
     asio::io_service& ios;
     shared_ptr<bt::MainlineDht> dht;
     util::Ed25519PublicKey cache_pk;
@@ -127,11 +131,23 @@ struct Client::Impl {
 
         if (ec || cancel) return;
 
-        // Do not proceed if the other cache client speaks the wrong protocol.
-        auto opt_err_res = util::http_proto_version_error(req, OUINET_CLIENT_SERVER_STRING);
-        if (opt_err_res) {
-            http::async_write(con, *opt_err_res, yield[ec]);
-            return;  // ignore error
+        // Usually we would
+        // (1) check that the request matches our protocol version, and
+        // (2) check that we can derive a key to look up the local cache.
+        // However, we still want to blindly send a response we have cached
+        // if the request looks like a Ouinet one and we can derive a key,
+        // to help the requesting client get the result and other information
+        // like a potential new protocol version.
+        // The requesting client may choose to drop the response
+        // or attempt to extract useful information from it.
+
+        auto req_proto = req[http_::protocol_version_hdr];
+        if (!boost::regex_match( req_proto.begin(), req_proto.end()
+                               , http_::protocol_version_rx)) {
+            if (log_debug()) {
+                cerr << "Bep5HTTP: Not a Ouinet request\n";
+            }
+            return handle_bad_request(con, req, yield[ec]);
         }
 
         auto key = key_from_http_req(req);
@@ -166,17 +182,10 @@ struct Client::Impl {
     void handle_http_error( GenericStream& con
                           , const http::request<http::empty_body>& req
                           , http::status status
+                          , const string& proto_error
                           , asio::yield_context yield)
     {
-        http::response<http::empty_body>
-            res{status, req.version()};
-
-        res.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
-        res.set(http::field::server, OUINET_CLIENT_SERVER_STRING);
-        res.set(http::field::content_type, "text/html");
-        res.keep_alive(req.keep_alive());
-        res.prepare_payload();
-
+        auto res = util::http_client_error(req, status, proto_error);
         http::async_write(con, res, yield);
     }
 
@@ -184,14 +193,15 @@ struct Client::Impl {
                            , const http::request<http::empty_body>& req
                            , asio::yield_context yield)
     {
-        return handle_http_error(con, req, http::status::bad_request, yield);
+        return handle_http_error(con, req, http::status::bad_request, "", yield);
     }
 
     void handle_not_found( GenericStream& con
                          , const http::request<http::empty_body>& req
                          , asio::yield_context yield)
     {
-        return handle_http_error(con, req, http::status::not_found, yield);
+        return handle_http_error( con, req, http::status::not_found
+                                , http_::response_error_hdr_retrieval_failed, yield);
     }
 
     boost::optional<string> get_host(const string& uri_s)
@@ -413,7 +423,7 @@ struct Client::Impl {
         if (cancel)
             ec = asio::error::operation_aborted;
         else if ( !ec
-                && (*hdr_p)[http_::protocol_version_hdr] != http_::protocol_version_hdr_current)
+                && !util::http_proto_version_check_trusted(*hdr_p, newest_proto_seen))
             // The client expects an injection belonging to a supported protocol version,
             // otherwise we just discard this copy.
             ec = asio::error::not_found;
@@ -646,6 +656,10 @@ struct Client::Impl {
         lifetime_cancel();
     }
 
+    unsigned get_newest_proto_version() const {
+        return newest_proto_seen;
+    }
+
     void set_log_level(log_level_t l) {
         cerr << "Setting Bep5Http Cache log level to " << l << "\n";
         log_level = l;
@@ -694,6 +708,11 @@ void Client::store( const std::string& key
                   , asio::yield_context yield)
 {
     _impl->store(key, s, cancel, yield);
+}
+
+unsigned Client::get_newest_proto_version() const
+{
+    return _impl->get_newest_proto_version();
 }
 
 void Client::set_log_level(log_level_t l)

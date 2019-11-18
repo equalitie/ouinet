@@ -34,6 +34,8 @@ public:
               , Cancel
               , asio::yield_context) override;
 
+    unsigned get_newest_proto_version() const override;
+
     ~Client();
 
     void        set_log_level(log_level_t);

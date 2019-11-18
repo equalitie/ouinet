@@ -3,6 +3,7 @@
 #include <boost/asio/error.hpp>
 #include <network/uri.hpp>
 
+#include "logger.h"
 #include "parse/number.h"
 #include "split_string.h"
 
@@ -184,9 +185,9 @@ ouinet::util::http_injection_field( const http::response_header<>& rsh
 }
 
 boost::optional<http::response<http::empty_body>>
-ouinet::util::detail_http_proto_version_error::impl( unsigned rq_version
-                                                   , beast::string_view oui_version
-                                                   , beast::string_view server_string)
+ouinet::util::detail::http_proto_version_error( unsigned rq_version
+                                              , beast::string_view oui_version
+                                              , beast::string_view server_string)
 {
     unsigned version = 0;
 
@@ -226,6 +227,26 @@ ouinet::util::detail_http_proto_version_error::impl( unsigned rq_version
 
     return res;
 }
+
+bool
+ouinet::util::detail::http_proto_version_check_trusted( boost::string_view proto_vs
+                                                      , unsigned& newest_proto_seen)
+{
+    if (!boost::regex_match( proto_vs.begin(), proto_vs.end()
+                           , http_::protocol_version_rx))
+        return false;  // malformed version header
+
+    auto proto_vn = *(parse::number<unsigned>(proto_vs));
+    if (proto_vn > newest_proto_seen) {
+        LOG_WARN( "Found new protocol version in trusted source: "
+                , proto_vn, " > ", http_::protocol_version_current);
+        newest_proto_seen = proto_vn;  // saw a newest protocol in the wild
+    }
+
+    return (proto_vn == http_::protocol_version_current);  // unsupported version?
+}
+
+
 
 http::response_header<>
 ouinet::util::to_cache_response(http::response_header<> rs, sys::error_code& ec) {
