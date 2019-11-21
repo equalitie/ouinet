@@ -28,10 +28,8 @@
 
 namespace ouinet {
 
-// This should be raised to 16384 to support reading twitter.com's head,
-// however it triggers a bug in `boost::http::basic_parser::put`
-// (which we will report ASAP).
-static const size_t http_forward_block = 2048;
+// 2048 was too small to read twitter.com's response head
+static const size_t http_forward_block = 16384;
 
 // Get copy of response head from input, return response head for output.
 using ProcHeadFunc = std::function<
