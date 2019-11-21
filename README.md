@@ -185,7 +185,31 @@ the Vagrant environment to Amazon Web Services (AWS):
     $ vagrant sshfs --mount linux
     $ vagrant ssh
 
-## Using Docker containers
+## Docker development environment
+
+To exchange data with the container, we'll bind mount the following directories
+to `/usr/local/src/` inside (some we'll create first):
+
+- source (assumed to be `$PWD`),
+- build (`../ouinet.build/`),
+- and container's `$HOME` (`../ouinet.home/`), where `.gradle`, `.cargo`, etc. will reside.
+
+Note that with the following incantations you won't be able to use `sudo` in
+the container (`--user`), and that all the changes besides those in bind mounts will be
+lost after you exit (`--rm`).
+
+```sh
+mkdir -p ../ouinet.build/ ../ouinet.home/
+sudo docker run --rm -it --user $(id -u):$(id -g) --mount type=bind,source="$(pwd)",target=/usr/local/src/ouinet --mount type=bind,source="$(pwd)/../ouinet.build",target=/usr/local/src/ouinet.build --mount type=bind,source="$(pwd)/../ouinet.home",target=/mnt/home/ -e HOME=/mnt/home registry.gitlab.com/equalitie/ouinet:android
+```
+
+You should now find yourself in a new console with all the prerequisites for
+working on Ouinet preinstalled (you can also make use of `registry.gitlab.com/equalitie/ouinet`
+image if you only need desktop builds); you can proceed [per normal instructions](#build-requirements-desktop).
+
+Consult the CI scripts to see how to build the image locally.
+
+## Docker deployment
 
 Ouinet injectors and clients can be run as Docker containers.  An application
 configuration file for Docker Compose is included for easily deploying all
