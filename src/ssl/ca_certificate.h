@@ -71,17 +71,17 @@ public:
     ~EndCertificate() {};
 };
 
-inline void _report_load(const CACertificate&) {
+inline void _report_load(const std::unique_ptr<CACertificate>&) {
     LOG_DEBUG("Loading existing CA certificate");
 }
-inline void _report_generate(const CACertificate&) {
+inline void _report_generate(const std::unique_ptr<CACertificate>&) {
     LOG_DEBUG("Generating and storing CA certificate");
 }
 
-inline void _report_load(const EndCertificate&) {
+inline void _report_load(const std::unique_ptr<EndCertificate>&) {
     LOG_DEBUG("Loading existing TLS end certificate");
 }
-inline void _report_generate(const EndCertificate&) {
+inline void _report_generate(const std::unique_ptr<EndCertificate>&) {
     LOG_DEBUG("Generating and storing TLS end certificate");
 }
 
@@ -103,7 +103,7 @@ get_or_gen_tls_cert( const std::string& cn
     std::unique_ptr<Cert> tls_certificate;
 
     if (fs::exists(tls_cert_path) && fs::exists(tls_key_path) && fs::exists(tls_dh_path)) {
-        _report_load(*tls_certificate);
+        _report_load(tls_certificate);
         auto read_pem = [](auto path) {
             std::stringstream ss;
             ss << fs::ifstream(path).rdbuf();
@@ -114,7 +114,7 @@ get_or_gen_tls_cert( const std::string& cn
         auto dh = read_pem(tls_dh_path);
         tls_certificate = std::make_unique<Cert>(cert, key, dh);
     } else {
-        _report_generate(*tls_certificate);
+        _report_generate(tls_certificate);
         tls_certificate = std::make_unique<Cert>(cn);
         fs::ofstream(tls_cert_path) << tls_certificate->pem_certificate();
         fs::ofstream(tls_key_path) << tls_certificate->pem_private_key();
