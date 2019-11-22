@@ -74,15 +74,47 @@ public:
 inline void _report_load(const std::unique_ptr<CACertificate>&) {
     LOG_DEBUG("Loading existing CA certificate");
 }
+inline void _report_load_failure(const std::unique_ptr<CACertificate>&
+                                , const boost::filesystem::path& cp
+                                , const boost::filesystem::path& kp
+                                , const boost::filesystem::path& dp
+                                , const std::exception& e) {
+    LOG_ERROR( "Failed to load existing CA certificate: ", e.what()
+             , "; cert=", cp, " key=", kp, " dh=", dp);
+}
 inline void _report_generate(const std::unique_ptr<CACertificate>&) {
     LOG_DEBUG("Generating and storing CA certificate");
+}
+inline void _report_generate_failure(const std::unique_ptr<CACertificate>&
+                                    , const boost::filesystem::path& cp
+                                    , const boost::filesystem::path& kp
+                                    , const boost::filesystem::path& dp
+                                    , const std::exception& e) {
+    LOG_ERROR( "Failed to generate and store CA certificate: ", e.what()
+             , "; cert=", cp, " key=", kp, " dh=", dp);
 }
 
 inline void _report_load(const std::unique_ptr<EndCertificate>&) {
     LOG_DEBUG("Loading existing TLS end certificate");
 }
+inline void _report_load_failure(const std::unique_ptr<EndCertificate>&
+                                , const boost::filesystem::path& cp
+                                , const boost::filesystem::path& kp
+                                , const boost::filesystem::path& dp
+                                , const std::exception& e) {
+    LOG_ERROR( "Failed to load existing TLS end certificate: ", e.what()
+             , "; cert=", cp, " key=", kp, " dh=", dp);
+}
 inline void _report_generate(const std::unique_ptr<EndCertificate>&) {
     LOG_DEBUG("Generating and storing TLS end certificate");
+}
+inline void _report_generate_failure(const std::unique_ptr<EndCertificate>&
+                                    , const boost::filesystem::path& cp
+                                    , const boost::filesystem::path& kp
+                                    , const boost::filesystem::path& dp
+                                    , const std::exception& e) {
+    LOG_ERROR( "Failed to generate and store TLS end certificate: ", e.what()
+             , "; cert=", cp, " key=", kp, " dh=", dp);
 }
 
 // Load a TLS certificate of the given class `Cert`
@@ -112,10 +144,20 @@ get_or_gen_tls_cert( const std::string& cn
         auto cert = read_pem(tls_cert_path);
         auto key = read_pem(tls_key_path);
         auto dh = read_pem(tls_dh_path);
-        tls_certificate = std::make_unique<Cert>(cert, key, dh);
+        try {
+            tls_certificate = std::make_unique<Cert>(cert, key, dh);
+        } catch (const std::exception& e) {
+            _report_load_failure(tls_certificate, tls_cert_path, tls_key_path, tls_dh_path, e);
+            throw;
+        }
     } else {
         _report_generate(tls_certificate);
-        tls_certificate = std::make_unique<Cert>(cn);
+        try {
+            tls_certificate = std::make_unique<Cert>(cn);
+        } catch (const std::exception& e) {
+            _report_generate_failure(tls_certificate, tls_cert_path, tls_key_path, tls_dh_path, e);
+            throw;
+        }
         fs::ofstream(tls_cert_path) << tls_certificate->pem_certificate();
         fs::ofstream(tls_key_path) << tls_certificate->pem_private_key();
         fs::ofstream(tls_dh_path) << tls_certificate->pem_dh_param();
