@@ -150,7 +150,9 @@ BaseCertificate::BaseCertificate(const std::string& cn, bool is_ca)
 }
 
 BaseCertificate::BaseCertificate(std::string pem_cert, std::string pem_key, std::string pem_dh)
-    : _pem_private_key(move(pem_key))
+    : _x(nullptr)
+    , _pk(nullptr)
+    , _pem_private_key(move(pem_key))
     , _pem_certificate(move(pem_cert))
     , _pem_dh_param(move(pem_dh))
     , _next_serial_number(std::time(nullptr) * CERT_SERNUM_SCALE)
