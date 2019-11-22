@@ -71,51 +71,48 @@ public:
     ~EndCertificate() {};
 };
 
-inline void _report_load(const std::unique_ptr<CACertificate>&) {
+namespace detail { namespace get_or_gen_tls_cert {
+using path = boost::filesystem::path;
+
+inline void log_load(const std::unique_ptr<CACertificate>&) {
     LOG_DEBUG("Loading existing CA certificate");
 }
-inline void _report_load_failure(const std::unique_ptr<CACertificate>&
-                                , const boost::filesystem::path& cp
-                                , const boost::filesystem::path& kp
-                                , const boost::filesystem::path& dp
-                                , const std::exception& e) {
+inline void log_load_fail( const std::unique_ptr<CACertificate>&
+                         , const path& cp, const path& kp, const path& dp
+                         , const std::exception& e) {
     LOG_ERROR( "Failed to load existing CA certificate: ", e.what()
              , "; cert=", cp, " key=", kp, " dh=", dp);
 }
-inline void _report_generate(const std::unique_ptr<CACertificate>&) {
+inline void log_gen(const std::unique_ptr<CACertificate>&) {
     LOG_DEBUG("Generating and storing CA certificate");
 }
-inline void _report_generate_failure(const std::unique_ptr<CACertificate>&
-                                    , const boost::filesystem::path& cp
-                                    , const boost::filesystem::path& kp
-                                    , const boost::filesystem::path& dp
-                                    , const std::exception& e) {
+inline void log_gen_fail( const std::unique_ptr<CACertificate>&
+                        , const path& cp, const path& kp, const path& dp
+                        , const std::exception& e) {
     LOG_ERROR( "Failed to generate and store CA certificate: ", e.what()
              , "; cert=", cp, " key=", kp, " dh=", dp);
 }
 
-inline void _report_load(const std::unique_ptr<EndCertificate>&) {
+inline void log_load(const std::unique_ptr<EndCertificate>&) {
     LOG_DEBUG("Loading existing TLS end certificate");
 }
-inline void _report_load_failure(const std::unique_ptr<EndCertificate>&
-                                , const boost::filesystem::path& cp
-                                , const boost::filesystem::path& kp
-                                , const boost::filesystem::path& dp
-                                , const std::exception& e) {
+inline void log_load_fail( const std::unique_ptr<EndCertificate>&
+                         , const path& cp, const path& kp, const path& dp
+                         , const std::exception& e) {
     LOG_ERROR( "Failed to load existing TLS end certificate: ", e.what()
              , "; cert=", cp, " key=", kp, " dh=", dp);
 }
-inline void _report_generate(const std::unique_ptr<EndCertificate>&) {
+inline void log_gen(const std::unique_ptr<EndCertificate>&) {
     LOG_DEBUG("Generating and storing TLS end certificate");
 }
-inline void _report_generate_failure(const std::unique_ptr<EndCertificate>&
-                                    , const boost::filesystem::path& cp
-                                    , const boost::filesystem::path& kp
-                                    , const boost::filesystem::path& dp
-                                    , const std::exception& e) {
+inline void log_gen_fail( const std::unique_ptr<EndCertificate>&
+                        , const path& cp, const path& kp, const path& dp
+                        , const std::exception& e) {
     LOG_ERROR( "Failed to generate and store TLS end certificate: ", e.what()
              , "; cert=", cp, " key=", kp, " dh=", dp);
 }
+
+}}  // namespaces
 
 // Load a TLS certificate of the given class `Cert`
 // from the PEM files for certificate, key and Diffie-Hellman parameters
@@ -132,10 +129,11 @@ get_or_gen_tls_cert( const std::string& cn
                    , const boost::filesystem::path& tls_dh_path )
 {
     namespace fs = boost::filesystem;
+    namespace d = detail::get_or_gen_tls_cert;
     std::unique_ptr<Cert> tls_certificate;
 
     if (fs::exists(tls_cert_path) && fs::exists(tls_key_path) && fs::exists(tls_dh_path)) {
-        _report_load(tls_certificate);
+        d::log_load(tls_certificate);
         auto read_pem = [](auto path) {
             std::stringstream ss;
             ss << fs::ifstream(path).rdbuf();
@@ -147,15 +145,15 @@ get_or_gen_tls_cert( const std::string& cn
         try {
             tls_certificate = std::make_unique<Cert>(cert, key, dh);
         } catch (const std::exception& e) {
-            _report_load_failure(tls_certificate, tls_cert_path, tls_key_path, tls_dh_path, e);
+            d::log_load_fail(tls_certificate, tls_cert_path, tls_key_path, tls_dh_path, e);
             throw;
         }
     } else {
-        _report_generate(tls_certificate);
+        d::log_gen(tls_certificate);
         try {
             tls_certificate = std::make_unique<Cert>(cn);
         } catch (const std::exception& e) {
-            _report_generate_failure(tls_certificate, tls_cert_path, tls_key_path, tls_dh_path, e);
+            d::log_gen_fail(tls_certificate, tls_cert_path, tls_key_path, tls_dh_path, e);
             throw;
         }
         fs::ofstream(tls_cert_path) << tls_certificate->pem_certificate();
