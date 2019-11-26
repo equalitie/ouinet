@@ -223,7 +223,7 @@ private:
     unique_ptr<OuiServiceImplementationClient>
     maybe_wrap_tls(unique_ptr<OuiServiceImplementationClient>);
 
-    AbstractCache* get_cache() const { return _bep5_http_cache.get(); }
+    cache::bep5_http::Client* get_cache() const { return _bep5_http_cache.get(); }
 
 private:
     // The newest protocol version number seen in a trusted exchange

@@ -1,8 +1,9 @@
 #pragma once
 
-#include "../abstract_cache.h"
 #include "../../logger.h"
 #include "../../util/crypto.h"
+#include "../../util/yield.h"
+#include "../cache_entry.h"
 #include <boost/filesystem.hpp>
 
 namespace ouinet {
@@ -16,7 +17,7 @@ class Session;
 namespace cache {
 namespace bep5_http {
 
-class Client : public AbstractCache {
+class Client {
 private:
     struct Impl;
 
@@ -27,14 +28,14 @@ public:
          , fs::path cache_dir
          , asio::yield_context);
 
-    Session load(const std::string& key, Cancel, Yield) override;
+    Session load(const std::string& key, Cancel, Yield);
 
     void store( const std::string& key
               , Session&
               , Cancel
-              , asio::yield_context) override;
+              , asio::yield_context);
 
-    unsigned get_newest_proto_version() const override;
+    unsigned get_newest_proto_version() const;
 
     ~Client();
 

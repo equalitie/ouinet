@@ -7,6 +7,7 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/io_service.hpp>
 #include <boost/asio/steady_timer.hpp>
+#include <boost/utility.hpp>
 
 namespace ouinet {
 
@@ -152,7 +153,7 @@ public:
 
     template<class... Args>
     void log(Args&&...);
-    void log(beast::string_view);
+    void log(boost::string_view);
 
 private:
 
@@ -239,13 +240,13 @@ template<class... Args>
 inline
 void Yield::log(Args&&... args)
 {
-    Yield::log(beast::string_view(util::str(std::forward<Args>(args)...)));
+    Yield::log(boost::string_view(util::str(std::forward<Args>(args)...)));
 }
 
 inline
-void Yield::log(beast::string_view str)
+void Yield::log(boost::string_view str)
 {
-    using beast::string_view;
+    using boost::string_view;
 
     while (str.size()) {
         auto endl = str.find('\n');
