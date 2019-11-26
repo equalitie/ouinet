@@ -57,10 +57,11 @@ struct Announcer::Loop {
     static Clock::duration success_reannounce_period() { return 20min; }
     static Clock::duration failure_reannounce_period() { return 5min;  }
 
-    Loop(shared_ptr<bt::MainlineDht> dht)
+    Loop(shared_ptr<bt::MainlineDht> dht, log_level_t log_level)
         : ios(dht->get_io_service())
         , dht(move(dht))
         , entries(ios)
+        , log_level(log_level)
     { }
 
     bool already_has(const Key& key) const {
@@ -240,8 +241,9 @@ struct Announcer::Loop {
 
 //--------------------------------------------------------------------
 // Announcer
-Announcer::Announcer(std::shared_ptr<bittorrent::MainlineDht> dht)
-    : _loop(new Loop(std::move(dht)))
+Announcer::Announcer( std::shared_ptr<bittorrent::MainlineDht> dht
+                    , log_level_t log_level)
+    : _loop(new Loop(std::move(dht), log_level))
 {
     _loop->start();
 }

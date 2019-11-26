@@ -52,13 +52,15 @@ struct Client::Impl {
 
     Impl( shared_ptr<bt::MainlineDht> dht_
         , util::Ed25519PublicKey& cache_pk
-        , fs::path cache_dir)
+        , fs::path cache_dir
+        , log_level_t log_level)
         : ios(dht_->get_io_service())
         , dht(move(dht_))
         , cache_pk(cache_pk)
         , cache_dir(move(cache_dir))
-        , announcer(dht)
+        , announcer(dht, log_level)
         , dht_lookups(256)
+        , log_level(log_level)
         , local_peer_discovery(ios, dht->local_endpoints())
     {
         start_accepting();
@@ -674,6 +676,7 @@ std::unique_ptr<Client>
 Client::build( shared_ptr<bt::MainlineDht> dht
              , util::Ed25519PublicKey cache_pk
              , fs::path cache_dir
+             , log_level_t log_level
              , asio::yield_context yield)
 {
     using ClientPtr = unique_ptr<Client>;
@@ -684,7 +687,7 @@ Client::build( shared_ptr<bt::MainlineDht> dht
 
     if (ec) return or_throw<ClientPtr>(yield, ec);
 
-    unique_ptr<Impl> impl(new Impl(move(dht), cache_pk,  move(cache_dir)));
+    unique_ptr<Impl> impl(new Impl(move(dht), cache_pk, move(cache_dir), log_level));
 
     impl->announce_stored_data(yield[ec]);
 

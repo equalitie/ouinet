@@ -14,7 +14,7 @@ private:
 public:
     using Key = std::string;
 
-    Announcer(std::shared_ptr<bittorrent::MainlineDht>);
+    Announcer(std::shared_ptr<bittorrent::MainlineDht>, log_level_t);
 
     void add(Key key);
 

@@ -26,6 +26,7 @@ public:
     build( std::shared_ptr<bittorrent::MainlineDht>
          , util::Ed25519PublicKey cache_pk
          , fs::path cache_dir
+         , log_level_t
          , asio::yield_context);
 
     Session load(const std::string& key, Cancel, Yield);
