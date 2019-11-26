@@ -35,6 +35,8 @@ public:
               , Cancel
               , asio::yield_context);
 
+    // Get the newest protocol version that has been seen in the network
+    // (e.g. to warn about potential upgrades).
     unsigned get_newest_proto_version() const;
 
     ~Client();
