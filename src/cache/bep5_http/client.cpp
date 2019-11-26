@@ -45,6 +45,7 @@ struct Client::Impl {
     util::LruCache<bt::NodeID, unique_ptr<DhtLookup>> dht_lookups;
     log_level_t log_level = INFO;
     LocalPeerDiscovery local_peer_discovery;
+    uint32_t debug_next_load_nr = 0;
 
 
     bool log_debug() const { return log_level <= DEBUG; }
@@ -247,6 +248,12 @@ struct Client::Impl {
 
     Session load(const std::string& key, Cancel cancel, Yield yield)
     {
+        boost::optional<decltype(debug_next_load_nr)> dbg;
+
+        if (log_debug()) {
+            dbg = debug_next_load_nr++;
+        }
+
         namespace err = asio::error;
 
         auto opt_host = get_host(key);
@@ -279,8 +286,8 @@ struct Client::Impl {
                 auto peer_i = peer_cache.find(host);
                 if (peer_i == peer_cache.end()) continue;
                 auto ep = peer_i->second;
-                if (log_debug()) {
-                    yield.log("Bep5Http: using cached endpoint first:", ep);
+                if (dbg) {
+                    yield.log(*dbg, " Bep5Http: using cached endpoint first:", ep);
                 }
                 eps = {ep};
                 tried = ep;
@@ -288,11 +295,11 @@ struct Client::Impl {
             else if (do_try == dht_peers) {
                 bt::NodeID infohash = util::sha1_digest(host);
 
-                if (log_debug()) {
-                    yield.log("Bep5Http: DHT lookup:");
-                    yield.log("    key:     ", key);
-                    yield.log("    dht_key: ", host);
-                    yield.log("    infohash:", infohash);
+                if (dbg) {
+                    yield.log(*dbg, " Bep5Http: DHT lookup:");
+                    yield.log(*dbg, "     key:     ", key);
+                    yield.log(*dbg, "     dht_key: ", host);
+                    yield.log(*dbg, "     infohash:", infohash);
                 }
 
                 eps = dht_get_peers(infohash, cancel, yield[ec]);
@@ -300,8 +307,8 @@ struct Client::Impl {
                 if (cancel) return or_throw<Session>(yield, err::operation_aborted);
                 // TODO: Random shuffle eps
 
-                if (log_debug()) {
-                    yield.log("Bep5Http: DHT BEP5 lookup result ec:", ec.message(),
+                if (dbg) {
+                    yield.log(*dbg, " Bep5Http: DHT BEP5 lookup result ec:", ec.message(),
                             " eps:", eps);
                 }
 
@@ -309,22 +316,22 @@ struct Client::Impl {
 
                 if (tried) {
                     eps.erase(*tried);
-                    if (log_debug()) {
-                        yield.log("Bep5Http: Removed alredy tried ep:", *tried);
+                    if (dbg) {
+                        yield.log(*dbg, " Bep5Http: Removed alredy tried ep:", *tried);
                     }
                 }
 
                 return_or_throw_on_error(yield, cancel, ec, Session());
             }
 
+            if (dbg) {
+                yield.log(*dbg, " Bep5Http: clients: ", eps, " ec:", ec.message());
+            }
+
             if (cancel) ec = err::operation_aborted;
             if (ec) return or_throw<Session>(yield, ec);
 
-            if (log_debug()) {
-                yield.log("Bep5Http: Connecting to clients: ", eps);
-            }
-
-            auto gen = make_connection_generator(eps);
+            auto gen = make_connection_generator(eps, dbg);
 
             while (auto opt_con = gen->async_get_value(cancel, yield[ec])) {
                 assert(!cancel || ec == err::operation_aborted);
@@ -332,20 +339,20 @@ struct Client::Impl {
                 if (ec == err::operation_aborted) return or_throw<Session>(yield, ec);
                 if (ec) continue;
 
-                if (log_debug()) {
-                    yield.log("Bep5Http: Connect to clients done, ec:", ec.message(),
+                if (dbg) {
+                    yield.log(*dbg, " Bep5Http: Connect to clients done, ec:", ec.message(),
                         " chosen ep:", opt_con->second, "; fetching...");
                 }
 
                 auto session = load_from_connection(key, opt_con->first, cancel, yield[ec]);
                 auto hdr = session.response_header();
 
-                if (!cancel && log_debug()) {
+                if (dbg) {
                     if (hdr) {
-                        yield.log("Bep5Http: fetch done,",
+                        yield.log(*dbg, " Bep5Http: fetch done,",
                             " ec:", ec.message(), " result:", hdr->result());
                     } else {
-                        yield.log("Bep5Http: fetch done,",
+                        yield.log(*dbg, " Bep5Http: fetch done,",
                             " ec:", ec.message(), " result: <n/a>");
                     }
                 }
@@ -367,8 +374,8 @@ struct Client::Impl {
             }
         }
 
-        if (!cancel || log_debug()) {
-            yield.log("Bep5Http: done cancel:", bool(cancel));
+        if (dbg) {
+            yield.log(*dbg, " Bep5Http: done cancel:", bool(cancel));
         }
 
 
@@ -453,12 +460,12 @@ struct Client::Impl {
     }
 
     unique_ptr<util::AsyncGenerator<pair<GenericStream, udp::endpoint>>>
-    make_connection_generator(set<udp::endpoint> eps)
+    make_connection_generator(set<udp::endpoint> eps, boost::optional<uint32_t> dbg)
     {
         using Ret = util::AsyncGenerator<pair<GenericStream, udp::endpoint>>;
 
         return make_unique<Ret>(ios,
-        [&, lc = lifetime_cancel, eps = move(eps)]
+        [&, lc = lifetime_cancel, eps = move(eps), dbg]
         (auto& q, auto c, auto y) mutable {
             auto cn = lc.connect([&] { c(); });
 
@@ -471,7 +478,14 @@ struct Client::Impl {
 
                 asio::spawn(ios, [&, ep, lock = wc.lock()] (auto y) {
                     sys::error_code ec;
+                    if (dbg) {
+                        std::cerr << *dbg << " Bep5Http: connecting to: " << ep << "\n";
+                    }
                     auto s = this->connect(ep, c, y[ec]);
+                    if (dbg) {
+                        std::cerr << *dbg << " Bep5Http: done connecting to: " << ep << ": "
+                            << " ec:" << ec.message() << " c:" << bool(c) << "\n";
+                    }
                     if (ec || c) return;
                     q.push_back(make_pair(move(s), ep));
                 });
