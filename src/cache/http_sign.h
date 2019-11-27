@@ -54,7 +54,7 @@ namespace ouinet { namespace cache {
 
 namespace http_sign_detail {
 boost::optional<util::Ed25519PublicKey::sig_array_t> block_sig_from_exts(boost::string_view);
-std::string block_sig_str(boost::string_view, asio::const_buffer);
+std::string block_sig_str(boost::string_view, const util::SHA512::digest_type&);
 std::string block_chunk_ext( boost::string_view, const util::SHA512::digest_type&
                            , const util::Ed25519PrivateKey&);
 std::string block_chunk_ext(const boost::optional<util::Ed25519PublicKey::sig_array_t>&);
@@ -346,7 +346,8 @@ session_flush_verified( Session& in, SinkStream& out
                 LOG_WARN("Missing signature for data block with offset ", block_offset, "; uri=", uri);
                 return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), ret);
             }
-            auto bsig_str = http_sign_detail::block_sig_str(injection_id, ret.first);
+            auto block_digest = util::sha512_digest(ret.first);
+            auto bsig_str = http_sign_detail::block_sig_str(injection_id, block_digest);
             if (!bs_params->pk.verify(bsig_str, *inbsig)) {
                 LOG_WARN("Failed to verify data block with offset ", block_offset, "; uri=", uri);
                 return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), ret);
