@@ -220,13 +220,11 @@ http_sign_detail::block_sig_from_exts(boost::string_view xs)
 }
 
 std::string
-http_sign_detail::block_sig_str_pfx( boost::string_view injection_id
-                                   , size_t offset)
+http_sign_detail::block_sig_str_pfx(boost::string_view injection_id)
 {
-    static const auto fmt_ = "%s%c%d%c";
+    static const auto fmt_ = "%s%c";
     return ( boost::format(fmt_)
-           % injection_id % '\0'
-           % offset % '\0').str();
+           % injection_id % '\0').str();
 }
 
 std::string

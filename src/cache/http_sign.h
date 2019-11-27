@@ -54,7 +54,7 @@ namespace ouinet { namespace cache {
 
 namespace http_sign_detail {
 boost::optional<util::Ed25519PublicKey::sig_array_t> block_sig_from_exts(boost::string_view);
-std::string block_sig_str_pfx(boost::string_view, size_t);
+std::string block_sig_str_pfx(boost::string_view);
 std::string block_sig_str(boost::string_view, size_t, asio::const_buffer);
 std::string block_chunk_ext( const std::string&, const util::SHA512::digest_type&
                            , const util::Ed25519PrivateKey&);
@@ -212,7 +212,7 @@ session_flush_signed( Session& in, SinkStream& out
     util::SHA256 body_hash;
     util::SHA512 block_hash;  // for first block
     auto block_sig_str_pfx  // for first block
-        = http_sign_detail::block_sig_str_pfx(injection_id, block_offset);
+        = http_sign_detail::block_sig_str_pfx(injection_id);
     // Simplest implementation: one output chunk per data block.
     util::quantized_buffer qbuf(http_::response_data_block);
     ProcDataFunc<asio::const_buffer> dproc = [&] (auto inbuf, auto&, auto) {
@@ -227,11 +227,12 @@ session_flush_signed( Session& in, SinkStream& out
             if (block_offset > 0) {  // add chunk extension for previous block
                 auto block_digest = block_hash.close();
                 ret.second = http_sign_detail::block_chunk_ext(block_sig_str_pfx, block_digest, sk);
-            }
-            // Prepare chunk extension for next block.
-            block_hash = {};
+                // Prepare chunk extension for next block: HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])
+                block_hash = {};
+                block_hash.update(block_digest);
+            }  // else HASH[0]=SHA2-512(BLOCK[0])
             block_hash.update(ret.first);
-            block_sig_str_pfx = http_sign_detail::block_sig_str_pfx(injection_id, block_offset);
+            block_sig_str_pfx = http_sign_detail::block_sig_str_pfx(injection_id);
             block_offset += ret.first.size();
         }
         return ret;  // pass data on, drop origin extensions
