@@ -44,14 +44,22 @@ stream(string response, asio::io_service& ios, asio::yield_context yield)
     return move(s1);
 }
 
-Http::Rsp::Part body(boost::string_view s) {
+vector<uint8_t> str_to_vec(boost::string_view s) {
     const uint8_t* p = reinterpret_cast<const uint8_t*>(s.data());
-    return Http::Rsp::Body(vector<uint8_t>(p, p + s.size()));
+    return {p, p + s.size()};
+}
+
+string vec_to_str(const vector<uint8_t>& v) {
+    const char* p = reinterpret_cast<const char*>(v.data());
+    return {p, v.size()};
+}
+
+Http::Rsp::Part body(boost::string_view s) {
+    return Http::Rsp::Body(str_to_vec(s));
 }
 
 Http::Rsp::Part chunk_data(boost::string_view s) {
-    const uint8_t* p = reinterpret_cast<const uint8_t*>(s.data());
-    return Http::Rsp::ChunkBody(p, p + s.size());
+    return Http::Rsp::ChunkBody(str_to_vec(s));
 }
 
 Http::Rsp::Part chunk_hdr(size_t size, boost::string_view s) {
@@ -70,12 +78,12 @@ namespace ouinet { namespace Http { namespace Rsp {
         return os << "ChunkHdr(" << hdr.size << " exts:\"" << hdr.exts << "\")";
     }
     
-    std::ostream& operator<<(std::ostream& os, const ChunkBody&) {
-        return os << "ChunkBody";
+    std::ostream& operator<<(std::ostream& os, const ChunkBody& b) {
+        return os << "ChunkBody(" << vec_to_str(b) << ")";
     }
     
-    std::ostream& operator<<(std::ostream& os, const Body&) {
-        return os << "Body";
+    std::ostream& operator<<(std::ostream& os, const Body& b) {
+        return os << "Body(" << vec_to_str(b) << ")";
     }
     
     std::ostream& operator<<(std::ostream& os, const Trailer&) {
@@ -101,8 +109,7 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
             "\r\n"
             "0123456789";
 
-        auto rsp_s = stream(move(rsp), ios, y);
-        ResponseReader rr(move(rsp_s));
+        ResponseReader rr(stream(move(rsp), ios, y));
 
         Cancel c;
         Rsp::Part part;
@@ -136,8 +143,7 @@ BOOST_AUTO_TEST_CASE(test_http11_chunk) {
             "0\r\n"
             "\r\n";
 
-        auto rsp_s = stream(move(rsp), ios, y);
-        ResponseReader rr(move(rsp_s));
+        ResponseReader rr(stream(move(rsp), ios, y));
 
         Cancel c;
         Rsp::Part part;
