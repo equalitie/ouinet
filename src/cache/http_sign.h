@@ -328,6 +328,7 @@ session_flush_verified( Session& in, SinkStream& out
     size_t body_length = 0;
     size_t block_offset = 0;
     util::SHA256 body_hash;
+    util::SHA512 block_hash;
     std::vector<char> lastd_;
     asio::mutable_buffer lastd;
     // Simplest implementation: one output chunk per data block.
@@ -346,7 +347,9 @@ session_flush_verified( Session& in, SinkStream& out
                 LOG_WARN("Missing signature for data block with offset ", block_offset, "; uri=", uri);
                 return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), ret);
             }
-            auto block_digest = util::sha512_digest(ret.first);
+            // Complete hash for this block; note that HASH[0]=SHA2-512(BLOCK[0])
+            block_hash.update(ret.first);
+            auto block_digest = block_hash.close();
             auto bsig_str = http_sign_detail::block_sig_str(injection_id, block_digest);
             if (!bs_params->pk.verify(bsig_str, *inbsig)) {
                 LOG_WARN("Failed to verify data block with offset ", block_offset, "; uri=", uri);
@@ -356,6 +359,8 @@ session_flush_verified( Session& in, SinkStream& out
             ret.second = http_sign_detail::block_chunk_ext(outbsig);
             outbsig = std::move(inbsig);
             inbsig = {};
+            // Prepare hash for next block: HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])
+            block_hash = {}; block_hash.update(block_digest);
             block_offset += ret.first.size();
         }
 
