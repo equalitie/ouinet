@@ -219,25 +219,23 @@ http_sign_detail::block_sig_from_exts(boost::string_view xs)
     return util::bytes::to_array<uint8_t, util::Ed25519PublicKey::sig_size>(decoded_sig);
 }
 
+static inline
 std::string
-http_sign_detail::block_sig_str_pfx(boost::string_view injection_id)
+block_sig_str_( boost::string_view injection_id
+              , const util::SHA512::digest_type& block_digest)
 {
-    static const auto fmt_ = "%s%c";
+    static const auto fmt_ = "%s%c%s";
     return ( boost::format(fmt_)
-           % injection_id % '\0').str();
+           % injection_id % '\0'
+           % util::bytes::to_string_view(block_digest)).str();
 }
 
 std::string
 http_sign_detail::block_sig_str( boost::string_view injection_id
-                               , size_t offset
                                , asio::const_buffer block)
 {
     auto block_digest = util::sha512_digest(block);
-    static const auto fmt_ = "%s%c%d%c%s";
-    return ( boost::format(fmt_)
-           % injection_id % '\0'
-           % offset % '\0'
-           % util::bytes::to_string_view(block_digest)).str();
+    return block_sig_str_(injection_id, block_digest);
 }
 
 static inline
@@ -250,12 +248,12 @@ block_chunk_ext_(const util::Ed25519PublicKey::sig_array_t& sig)
 }
 
 std::string
-http_sign_detail::block_chunk_ext( const std::string& sig_str_pfx
-                                 , const util::SHA512::digest_type& digest_
+http_sign_detail::block_chunk_ext( boost::string_view injection_id
+                                 , const util::SHA512::digest_type& digest
                                  , const util::Ed25519PrivateKey& sk)
 {
-    auto digest = util::bytes::to_string(digest_);
-    return block_chunk_ext_(sk.sign(sig_str_pfx + digest));
+    auto sig_str = block_sig_str_(injection_id, digest);
+    return block_chunk_ext_(sk.sign(sig_str));
 }
 
 std::string
