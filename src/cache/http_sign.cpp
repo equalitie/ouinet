@@ -253,10 +253,10 @@ block_chunk_ext_(const util::Ed25519PublicKey::sig_array_t& sig)
 
 std::string
 http_sign_detail::block_chunk_ext( const std::string& sig_str_pfx
-                                 , util::SHA512& hash
+                                 , const util::SHA512::digest_type& digest_
                                  , const util::Ed25519PrivateKey& sk)
 {
-    auto digest = util::bytes::to_string(hash.close());
+    auto digest = util::bytes::to_string(digest_);
     return block_chunk_ext_(sk.sign(sig_str_pfx + digest));
 }
 

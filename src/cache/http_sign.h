@@ -56,7 +56,8 @@ namespace http_sign_detail {
 boost::optional<util::Ed25519PublicKey::sig_array_t> block_sig_from_exts(boost::string_view);
 std::string block_sig_str_pfx(boost::string_view, size_t);
 std::string block_sig_str(boost::string_view, size_t, asio::const_buffer);
-std::string block_chunk_ext(const std::string&, util::SHA512&, const util::Ed25519PrivateKey&);
+std::string block_chunk_ext( const std::string&, const util::SHA512::digest_type&
+                           , const util::Ed25519PrivateKey&);
 std::string block_chunk_ext(const boost::optional<util::Ed25519PublicKey::sig_array_t>&);
 bool check_body(const http::response_header<>&, size_t, util::SHA256&);
 }
@@ -223,8 +224,10 @@ session_flush_signed( Session& in, SinkStream& out
             (inbuf.size() > 0) ? qbuf.get() : qbuf.get_rest(), {}
         };  // send rest if no more input
         if (do_inject && ret.first.size() > 0) {  // if injecting and sending data
-            if (block_offset > 0)  // add chunk extension for previous block
-                ret.second = http_sign_detail::block_chunk_ext(block_sig_str_pfx, block_hash, sk);
+            if (block_offset > 0) {  // add chunk extension for previous block
+                auto block_digest = block_hash.close();
+                ret.second = http_sign_detail::block_chunk_ext(block_sig_str_pfx, block_digest, sk);
+            }
             // Prepare chunk extension for next block.
             block_hash = {};
             block_hash.update(ret.first);
@@ -243,8 +246,10 @@ session_flush_signed( Session& in, SinkStream& out
                                                 , httpsig_key_id);
         }
         ProcTrailFunc::result_type ret{move(intr), {}};
-        if (do_inject)
-            ret.second = http_sign_detail::block_chunk_ext(block_sig_str_pfx, block_hash, sk);
+        if (do_inject) {
+            auto block_digest = block_hash.close();
+            ret.second = http_sign_detail::block_chunk_ext(block_sig_str_pfx, block_digest, sk);
+        }
         return ret;  // pass trailer on, drop origin extensions
     };
 
