@@ -104,10 +104,16 @@ static const string rs_head_signed_s = (
     "\r\n"
 );
 
-static const array<string, 3> rs_block_cexts{
-    ";ouisig=\"6gCnxL3lVHMAMSzhx+XJ1ZBt+JC/++m5hlak1adZMlUH0hnm2S3ZnbwjPQGMm9hDB45SqnybuQ9Bjo+PgnfnCw==\"",  // offset 0
-    ";ouisig=\"5R+TDVurWEZCPRxTBF0s7uDwxcbfxjj35Xr101C2ZDKyLbHw5tHIvhrJTjpfUIQKQ99OD5Xr08Q7j2fpQuoVDg==\"",  // offset 65536
-    ";ouisig=\"B1LsKycoNZMGF3AdPegJySkEF42sp456P7yX2/75/T/ZlbP2UqyjKA7Bqy7SwGBTtms5g7ckQOMKbzT9KfT1Cg==\"",  // offset 131072
+static const array<string, 3> rs_block_hash_cx{
+    ";ouihash=\"aERfr5o+kpvR4ZH7xC0mBJ4QjqPUELDzjmzt14WmntxH2p3EQmATZODXMPoFiXaZL6KNI50Ve4WJf/x3ma4ieA==\"",
+    ";ouihash=\"slwciqMQBddB71VWqpba+MpP9tBiyTE/XFmO5I1oiVJy3iFniKRkksbP78hCEWOM6tH31TGEFWP1loa4pqrLww==\"",
+    ";ouihash=\"vyUR6T034qN7qDZO5vUILMP9FsJYPys1KIELlGDFCSqSFI7ZowrT3U9ffwsQAZSCLJvKQhT+GhtO0aM2jNnm5A==\"",
+};
+
+static const array<string, 3> rs_block_sig_cx{
+    ";ouisig=\"AwiYuUjLYh/jZz9d0/ev6dpoWqjU/sUWUmGL36/D9tI30oaqFgQGgcbVCyBtl0a7x4saCmxRHC4JW7cYEPWwCw==\"",
+    ";ouisig=\"c+ZJUJI/kc81q8sLMhwe813Zdc+VPa4DejdVkO5ZhdIPPojbZnRt8OMyFMEiQtHYHXrZIK2+pKj2AO03j70TBA==\"",
+    ";ouisig=\"m6sz1NpU/8iF6KNN6drY+Yk361GiW0lfa0aaX5TH0GGW/L5GsHyg8ozA0ejm29a+aTjp/qIoI1VrEVj1XG/gDA==\"",
 };
 
 template<class F>
@@ -321,8 +327,8 @@ BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
             };
             int xidx = 0;
             auto xproc = [&xidx] (auto exts, auto&, auto) {
-                BOOST_REQUIRE(xidx < rs_block_cexts.size());
-                BOOST_CHECK_EQUAL(exts, rs_block_cexts[xidx++]);
+                BOOST_REQUIRE(xidx < rs_block_sig_cx.size());
+                BOOST_CHECK_EQUAL(exts, rs_block_sig_cx[xidx++]);
             };
             // Yes we drop chunk extensions but they do not affect the forwarding process,
             // and they are going to be dumped anyway further down.
@@ -341,7 +347,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
                         , std::move(dproc), std::move(tproc)
                         , cancel, yy[e]);
             BOOST_REQUIRE(!e);
-            BOOST_CHECK_EQUAL(xidx, rs_block_cexts.size());
+            BOOST_CHECK_EQUAL(xidx, rs_block_sig_cx.size());
             signed_r.close();
             tested_w.close();
         });
