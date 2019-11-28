@@ -48,7 +48,7 @@ Please note that neither the partial signature nor framing headers (`Transfer-En
 
 [Signing HTTP Messages][] is used here as a way to sign HTTP headers because of its simplicity, although other schemes may be used instead.
 
-[Signing HTTP Messages]: https://datatracker.ietf.org/doc/html/draft-cavage-http-signatures-11
+[Signing HTTP Messages]: https://datatracker.ietf.org/doc/html/draft-cavage-http-signatures-12
 
 ## Example of injection result
 

@@ -435,9 +435,9 @@ http_digest(const http::response<http::dynamic_body>&);
 // -----------------------
 //
 // These provide access to an implementation of
-// <https://tools.ietf.org/html/draft-cavage-http-signatures-11>.
+// <https://tools.ietf.org/html/draft-cavage-http-signatures-12>.
 
-// Compute a signature as per draft-cavage-http-signatures-11.
+// Compute a signature as per draft-cavage-http-signatures-12.
 std::string  // use this to enable setting the time stamp (e.g. for tests)
 http_signature( const http::response_header<>&
               , const ouinet::util::Ed25519PrivateKey&
