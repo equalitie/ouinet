@@ -15,7 +15,6 @@ using namespace ouinet;
 using tcp = asio::ip::tcp;
 using RR = ResponseReader;
 
-
 // TODO: There should be a more straight forward way to do this.
 tcp::socket
 stream(string response, asio::io_service& ios, asio::yield_context yield)
@@ -112,6 +111,12 @@ namespace ouinet {
     }
 } // ouinet namespaces
 
+bool is_end_of_stream(RR& rr, Cancel& c, Yield& y) {
+    sys::error_code ec;
+    rr.async_read_part(c, y[ec]);
+    return ec == http::error::end_of_stream;
+}
+
 BOOST_AUTO_TEST_SUITE(ouinet_response_reader)
 
 BOOST_AUTO_TEST_CASE(test_http11_body) {
@@ -138,6 +143,8 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE_EQUAL(part, body("0123456789"));
+
+        BOOST_REQUIRE(is_end_of_stream(rr, c, y));
     });
 
     ios.run();
@@ -179,6 +186,8 @@ BOOST_AUTO_TEST_CASE(test_http11_chunk) {
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE_EQUAL(part, end({}));
+
+        BOOST_REQUIRE(is_end_of_stream(rr, c, y));
     });
 
     ios.run();
@@ -222,6 +231,8 @@ BOOST_AUTO_TEST_CASE(test_http11_trailer) {
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE_EQUAL(part, end({{"Hash", "hash_of_1234"}}));
+
+        BOOST_REQUIRE(is_end_of_stream(rr, c, y));
     });
 
     ios.run();
@@ -264,6 +275,8 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE_EQUAL(part, body("abcde"));
+
+        BOOST_REQUIRE(is_end_of_stream(rr, c, y));
     });
 
     ios.run();
@@ -322,6 +335,8 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
             part = rr.async_read_part(c, y);
             BOOST_REQUIRE_EQUAL(part, body("abcde"));
         }
+
+        BOOST_REQUIRE(is_end_of_stream(rr, c, y));
     });
 
     ios.run();

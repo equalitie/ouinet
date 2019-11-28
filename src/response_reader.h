@@ -115,22 +115,6 @@ private:
     std::queue<Part> _queued_parts;
 };
 
-//auto printbuf = [](auto buf) {
-//    const char* begin = (const char*) buf.data();
-//    const char* end   = begin + buf.size();
-
-//    for (auto c = begin; c != end; ++c) {
-//        if (*c == '\n') std::cerr << "\\n";
-//        else if (*c == '\r') std::cerr << "\\r";
-//        else std::cerr << *c;
-//    }
-//};
-//auto printbufs = [&printbuf](auto bufs) {
-//    for (auto buf : bufs) {
-//        printbuf(buf);
-//    }
-//};
-
 ResponseReader::ResponseReader(GenericStream in)
     : _in(std::move(in))
 {
@@ -183,6 +167,9 @@ ResponseReader::async_read_part(Cancel cancel, Yield yield_) {
     // -------------------------------------------------------
     if (!_parser.is_header_done()) {
         http::async_read_header(_in, _buffer, _parser, yield[ec]);
+        if (ec == http::error::end_of_stream) {
+            return or_throw<Part>(yield, ec);
+        }
         if (set_error(ec, "Failed to receive response head"))
             return or_throw<Part>(yield, ec);
         return Head(_parser.get().base());
