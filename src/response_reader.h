@@ -55,11 +55,11 @@ public:
         Body(Base&& b) : Base(std::move(b)) {}
     };
 
-    struct Trailer : public http::fields {
-        using http::fields::fields;
+    struct End {
+        http::fields trailer;
     };
 
-    using Part = boost::variant<Head, ChunkHdr, ChunkBody, Body, Trailer>;
+    using Part = boost::variant<Head, ChunkHdr, ChunkBody, Body, End>;
 
 public:
     ResponseReader(GenericStream in);
@@ -82,6 +82,24 @@ private:
         return !inv;
     };
 
+    http::fields filter_trailer_fields(const http::fields& hdr)
+    {
+        http::fields trailer;
+        for (const auto& field : http::token_list(hdr[http::field::trailer])) {
+            auto i = hdr.find(field);
+            if (i == hdr.end())
+                continue;  // missing trailer
+            trailer.insert(i->name(), i->name_string(), i->value());
+        }
+        return trailer;
+    }
+
+    void reset_parser()
+    {
+        (&_parser)->~parser();
+        new (&_parser) (decltype(_parser))();
+    }
+
 private:
     GenericStream _in;
     Cancel _lifetime_cancel;
@@ -96,6 +114,22 @@ private:
 
     std::queue<Part> _queued_parts;
 };
+
+//auto printbuf = [](auto buf) {
+//    const char* begin = (const char*) buf.data();
+//    const char* end   = begin + buf.size();
+
+//    for (auto c = begin; c != end; ++c) {
+//        if (*c == '\n') std::cerr << "\\n";
+//        else if (*c == '\r') std::cerr << "\\r";
+//        else std::cerr << *c;
+//    }
+//};
+//auto printbufs = [&printbuf](auto bufs) {
+//    for (auto buf : bufs) {
+//        printbuf(buf);
+//    }
+//};
 
 ResponseReader::ResponseReader(GenericStream in)
     : _in(std::move(in))
@@ -155,6 +189,11 @@ ResponseReader::async_read_part(Cancel cancel, Yield yield_) {
     }
 
     if (_parser.chunked()) {
+        if (_parser.is_done()) {
+            auto hdr = _parser.release().base();
+            return End{filter_trailer_fields(hdr)};
+        }
+
         while (true) {
             http::async_read(_in, _buffer, _parser, yield[ec]);
 
@@ -187,10 +226,19 @@ ResponseReader::async_read_part(Cancel cancel, Yield yield_) {
         assert(opt_len && "TODO");
         std::vector<uint8_t> body(*opt_len);
         asio::mutable_buffer buf(body.data(), body.size());
-        buf += asio::buffer_copy(buf, _buffer.data());
+        size_t s = asio::buffer_copy(buf, _buffer.data());
+        _buffer.consume(s);
+        buf += s;
+
         while (buf.size()) {
             buf += _in.async_read_some(buf, yield[ec]);
+            if (ec) return or_throw<Part>(yield, ec);
         }
+
+        // We're done with parsing this response, prepare to read next the one
+        // (if any).
+        reset_parser();
+
         return Body(move(body));
     }
 

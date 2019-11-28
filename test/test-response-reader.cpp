@@ -56,21 +56,40 @@ string vec_to_str(const vector<uint8_t>& v) {
     return {p, v.size()};
 }
 
-ResponseReader::Part body(boost::string_view s) {
-    return ResponseReader::Body(str_to_vec(s));
+map<string, string> fields_to_map(http::fields fields) {
+    map<string, string> ret;
+    for (auto& f : fields) {
+        ret.insert({f.name_string().to_string(), f.value().to_string()}); 
+    }
+    return ret;
 }
 
-ResponseReader::Part chunk_data(boost::string_view s) {
-    return ResponseReader::ChunkBody(str_to_vec(s));
+RR::Part body(boost::string_view s) {
+    return RR::Body(str_to_vec(s));
 }
 
-ResponseReader::Part chunk_hdr(size_t size, boost::string_view s) {
-    return ResponseReader::ChunkHdr{size, s.to_string()};
+RR::Part chunk_data(boost::string_view s) {
+    return RR::ChunkBody(str_to_vec(s));
+}
+
+RR::Part chunk_hdr(size_t size, boost::string_view s) {
+    return RR::ChunkHdr{size, s.to_string()};
+}
+
+RR::Part end(map<string, string> trailer) {
+    http::fields fields;
+    for (auto& p : trailer) {
+        fields.insert(p.first, p.second);
+    }
+    return RR::End{move(fields)};
 }
 
 namespace ouinet {
     bool operator==(const RR::Head&, const RR::Head&) { return false; /* TODO */ }
-    bool operator==(const RR::Trailer&, const RR::Trailer&) { return false; /* TODO */ }
+
+    bool operator==(const RR::End& e1, const RR::End& e2) {
+        return fields_to_map(e1.trailer) == fields_to_map(e2.trailer);
+    }
 
     std::ostream& operator<<(std::ostream& os, const RR::Head&) {
         return os << "Head";
@@ -88,8 +107,8 @@ namespace ouinet {
         return os << "Body(" << vec_to_str(b) << ")";
     }
     
-    std::ostream& operator<<(std::ostream& os, const RR::Trailer&) {
-        return os << "Trailer";
+    std::ostream& operator<<(std::ostream& os, const RR::End&) {
+        return os << "End";
     }
 } // ouinet namespaces
 
@@ -109,7 +128,7 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
             "\r\n"
             "0123456789";
 
-        ResponseReader rr(stream(move(rsp), ios, y));
+        RR rr(stream(move(rsp), ios, y));
 
         Cancel c;
         RR::Part part;
@@ -141,7 +160,7 @@ BOOST_AUTO_TEST_CASE(test_http11_chunk) {
             "0\r\n"
             "\r\n";
 
-        ResponseReader rr(stream(move(rsp), ios, y));
+        RR rr(stream(move(rsp), ios, y));
 
         Cancel c;
         RR::Part part;
@@ -157,6 +176,94 @@ BOOST_AUTO_TEST_CASE(test_http11_chunk) {
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE_EQUAL(part, chunk_hdr(0, ""));
+
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE_EQUAL(part, end({}));
+    });
+
+    ios.run();
+}
+
+BOOST_AUTO_TEST_CASE(test_http11_trailer) {
+    asio::io_service ios;
+
+    asio::spawn(ios, [&] (auto y_) {
+        Yield y(ios, y_);
+
+        string rsp =
+            "HTTP/1.1 200 OK\r\n"
+            "Date: Mon, 27 Jul 2019 12:30:20 GMT\r\n"
+            "Content-Type: text/html\r\n"
+            "Transfer-Encoding: chunked\r\n"
+            "Trailer: Hash\r\n"
+            "\r\n"
+            "4\r\n"
+            "1234\r\n"
+            "0\r\n"
+            "Hash: hash_of_1234\r\n"
+            "\r\n";
+
+        RR rr(stream(move(rsp), ios, y));
+
+        Cancel c;
+        RR::Part part;
+
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE(get<RR::Head>(&part));
+
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE_EQUAL(part, chunk_hdr(4, ""));
+
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE_EQUAL(part, chunk_data("1234"));
+
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE_EQUAL(part, chunk_hdr(0, ""));
+
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE_EQUAL(part, end({{"Hash", "hash_of_1234"}}));
+    });
+
+    ios.run();
+}
+
+BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
+    asio::io_service ios;
+
+    asio::spawn(ios, [&] (auto y_) {
+        Yield y(ios, y_);
+
+        string rsp =
+            "HTTP/1.1 200 OK\r\n"
+            "Date: Mon, 27 Jul 2019 12:30:20 GMT\r\n"
+            "Content-Type: text/html\r\n"
+            "Content-Length: 10\r\n"
+            "\r\n"
+            "0123456789"
+
+            "HTTP/1.1 200 OK\r\n"
+            "Date: Mon, 27 Jul 2019 12:30:21 GMT\r\n"
+            "Content-Type: text/html\r\n"
+            "Content-Length: 5\r\n"
+            "\r\n"
+            "abcde";
+
+        RR rr(stream(move(rsp), ios, y));
+
+        Cancel c;
+        RR::Part part;
+
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE(get<RR::Head>(&part));
+
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE_EQUAL(part, body("0123456789"));
+
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE(get<RR::Head>(&part));
+
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE_EQUAL(part, body("abcde"));
     });
 
     ios.run();
