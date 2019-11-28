@@ -300,6 +300,8 @@ static Request to_injector_request(Request rq) {
     // The Ouinet version header hints the endpoint
     // to behave like an injector instead of a proxy.
     rq.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
+    // Some cache back-ends may use trailers for hashes, signatures, etc.
+    rq.set(http::field::te, "trailers");
     return to_canonical_request( move(rq)
                                // PROXY AUTHENTICATION HEADERS (PASS)
                                , http::field::proxy_authorization
