@@ -10,68 +10,61 @@
 
 namespace ouinet {
 
-namespace Http {
-    namespace Rsp {
-        struct Head : public http::response_header<>  {
-            using Base = http::response_header<>;
-            using Base::Base;
-            Head(const Head&) = default;
-            Head(Head&&) = default;
-            Head& operator=(const Head&) = default;
-            Head(const Base& b) : Base(b) {}
-            Head(Base&& b) : Base(std::move(b)) {}
-        };
-
-        struct ChunkHdr {
-            size_t size = 0; // Size of chunk body
-            std::string exts;
-
-            bool operator==(const ChunkHdr& other) const {
-                return size == other.size && exts == other.exts;
-            }
-        };
-
-        struct ChunkBody : public std::vector<uint8_t> {
-            using Base = std::vector<uint8_t>;
-            using Base::Base;
-            ChunkBody(const ChunkBody&) = default;
-            ChunkBody(ChunkBody&&) = default;
-            ChunkBody& operator=(const ChunkBody&) = default;
-            ChunkBody(const Base& b) : Base(b) {}
-            ChunkBody(Base&& b) : Base(std::move(b)) {}
-        };
-
-        struct Body      : public std::vector<uint8_t> {
-            using Base = std::vector<uint8_t>;
-            using Base::Base;
-            Body(const Body&) = default;
-            Body(Body&&) = default;
-            Body& operator=(const Body&) = default;
-            Body(const Base& b) : Base(b) {}
-            Body(Base&& b) : Base(std::move(b)) {}
-        };
-
-        struct Trailer   : public http::fields {
-            using http::fields::fields;
-        };
-
-        using Part = boost::variant<Head, ChunkHdr, ChunkBody, Body, Trailer>;
-    }
-
-} // Http namespace
-
 class ResponseReader {
 private:
     static const size_t http_forward_block = 16384;
     using string_view = boost::string_view;
 
 public:
-    using Part = Http::Rsp::Part;
+    struct Head : public http::response_header<>  {
+        using Base = http::response_header<>;
+        using Base::Base;
+        Head(const Head&) = default;
+        Head(Head&&) = default;
+        Head& operator=(const Head&) = default;
+        Head(const Base& b) : Base(b) {}
+        Head(Base&& b) : Base(std::move(b)) {}
+    };
+
+    struct ChunkHdr {
+        size_t size = 0; // Size of chunk body
+        std::string exts;
+
+        bool operator==(const ChunkHdr& other) const {
+            return size == other.size && exts == other.exts;
+        }
+    };
+
+    struct ChunkBody : public std::vector<uint8_t> {
+        using Base = std::vector<uint8_t>;
+        using Base::Base;
+        ChunkBody(const ChunkBody&) = default;
+        ChunkBody(ChunkBody&&) = default;
+        ChunkBody& operator=(const ChunkBody&) = default;
+        ChunkBody(const Base& b) : Base(b) {}
+        ChunkBody(Base&& b) : Base(std::move(b)) {}
+    };
+
+    struct Body : public std::vector<uint8_t> {
+        using Base = std::vector<uint8_t>;
+        using Base::Base;
+        Body(const Body&) = default;
+        Body(Body&&) = default;
+        Body& operator=(const Body&) = default;
+        Body(const Base& b) : Base(b) {}
+        Body(Base&& b) : Base(std::move(b)) {}
+    };
+
+    struct Trailer : public http::fields {
+        using http::fields::fields;
+    };
+
+    using Part = boost::variant<Head, ChunkHdr, ChunkBody, Body, Trailer>;
 
 public:
     ResponseReader(GenericStream in);
 
-    Http::Rsp::Part async_read_part(Cancel, Yield);
+    Part async_read_part(Cancel, Yield);
 
 private:
     // https://www.w3.org/Protocols/rfc2616/rfc2616-sec4.html#sec4.4
@@ -98,28 +91,24 @@ private:
     std::function<void(size_t, string_view, sys::error_code&)> _on_chunk_header;
     std::function<size_t(size_t, string_view, sys::error_code&)> _on_chunk_body;
 
-    Http::Rsp::ChunkHdr*  _chunk_hdr  = nullptr;
-    Http::Rsp::ChunkBody* _chunk_body = nullptr;
+    ChunkHdr*  _chunk_hdr  = nullptr;
+    ChunkBody* _chunk_body = nullptr;
 
-    std::queue<Http::Rsp::Part> _queued_parts;
+    std::queue<Part> _queued_parts;
 };
 
 ResponseReader::ResponseReader(GenericStream in)
     : _in(std::move(in))
 {
     _on_chunk_header = [&] (auto size, auto exts, auto& ec) {
-        using Hdr  = Http::Rsp::ChunkHdr;
-
-        _queued_parts.push(Hdr{size, std::move(exts.to_string())});
-        _chunk_hdr = boost::get<Hdr>(&_queued_parts.back());
+        _queued_parts.push(ChunkHdr{size, std::move(exts.to_string())});
+        _chunk_hdr = boost::get<ChunkHdr>(&_queued_parts.back());
     };
 
     _on_chunk_body = [&] (auto remain, auto data, auto& ec) -> size_t {
-        using Body = Http::Rsp::ChunkBody;
-
         if (!_chunk_body) {
-            _queued_parts.push(Body(remain));
-            _chunk_body = boost::get<Body>(&_queued_parts.back());
+            _queued_parts.push(ChunkBody(remain));
+            _chunk_body = boost::get<ChunkBody>(&_queued_parts.back());
         }
 
         asio::mutable_buffer buf(asio::buffer(*_chunk_body));
@@ -132,8 +121,8 @@ ResponseReader::ResponseReader(GenericStream in)
     _parser.on_chunk_body(_on_chunk_body);
 }
 
-Http::Rsp::Part ResponseReader::async_read_part(Cancel cancel, Yield yield_) {
-    namespace Rsp = Http::Rsp;
+ResponseReader::Part
+ResponseReader::async_read_part(Cancel cancel, Yield yield_) {
     namespace Err = asio::error;
 
     if (!_queued_parts.empty()) {
@@ -161,11 +150,9 @@ Http::Rsp::Part ResponseReader::async_read_part(Cancel cancel, Yield yield_) {
     if (!_parser.is_header_done()) {
         http::async_read_header(_in, _buffer, _parser, yield[ec]);
         if (set_error(ec, "Failed to receive response head"))
-            return or_throw<Rsp::Part>(yield, ec);
-        return Rsp::Head(_parser.get().base());
+            return or_throw<Part>(yield, ec);
+        return Head(_parser.get().base());
     }
-
-    assert(_parser.is_header_done());
 
     if (_parser.chunked()) {
         while (true) {
@@ -181,12 +168,12 @@ Http::Rsp::Part ResponseReader::async_read_part(Cancel cancel, Yield yield_) {
             }
 
             if (set_error(ec, "Failed to parse chunk")) {
-                return or_throw<Rsp::Part>(yield, ec);
+                return or_throw<Part>(yield, ec);
             }
 
             if (_queued_parts.empty()) continue;
 
-            auto hdr = boost::get<Rsp::ChunkHdr>(&_queued_parts.front());
+            auto hdr = boost::get<ChunkHdr>(&_queued_parts.front());
 
             if (hdr) {
                 auto ret = std::move(*hdr);
@@ -204,10 +191,10 @@ Http::Rsp::Part ResponseReader::async_read_part(Cancel cancel, Yield yield_) {
         while (buf.size()) {
             buf += _in.async_read_some(buf, yield[ec]);
         }
-        return Rsp::Body(move(body));
+        return Body(move(body));
     }
 
-    return Http::Rsp::Part();
+    return Part();
 }
 
 } // namespace ouinet

@@ -13,6 +13,8 @@ using namespace std;
 using namespace ouinet;
 
 using tcp = asio::ip::tcp;
+using RR = ResponseReader;
+
 
 // TODO: There should be a more straight forward way to do this.
 tcp::socket
@@ -54,48 +56,46 @@ string vec_to_str(const vector<uint8_t>& v) {
     return {p, v.size()};
 }
 
-Http::Rsp::Part body(boost::string_view s) {
-    return Http::Rsp::Body(str_to_vec(s));
+ResponseReader::Part body(boost::string_view s) {
+    return ResponseReader::Body(str_to_vec(s));
 }
 
-Http::Rsp::Part chunk_data(boost::string_view s) {
-    return Http::Rsp::ChunkBody(str_to_vec(s));
+ResponseReader::Part chunk_data(boost::string_view s) {
+    return ResponseReader::ChunkBody(str_to_vec(s));
 }
 
-Http::Rsp::Part chunk_hdr(size_t size, boost::string_view s) {
-    return Http::Rsp::ChunkHdr{size, s.to_string()};
+ResponseReader::Part chunk_hdr(size_t size, boost::string_view s) {
+    return ResponseReader::ChunkHdr{size, s.to_string()};
 }
 
-namespace ouinet { namespace Http { namespace Rsp {
-    bool operator==(const Head&, const Head&) { return false; /* TODO */ }
-    bool operator==(const Trailer&, const Trailer&) { return false; /* TODO */ }
+namespace ouinet {
+    bool operator==(const RR::Head&, const RR::Head&) { return false; /* TODO */ }
+    bool operator==(const RR::Trailer&, const RR::Trailer&) { return false; /* TODO */ }
 
-    std::ostream& operator<<(std::ostream& os, const Head&) {
+    std::ostream& operator<<(std::ostream& os, const RR::Head&) {
         return os << "Head";
     }
     
-    std::ostream& operator<<(std::ostream& os, const ChunkHdr& hdr) {
+    std::ostream& operator<<(std::ostream& os, const RR::ChunkHdr& hdr) {
         return os << "ChunkHdr(" << hdr.size << " exts:\"" << hdr.exts << "\")";
     }
     
-    std::ostream& operator<<(std::ostream& os, const ChunkBody& b) {
+    std::ostream& operator<<(std::ostream& os, const RR::ChunkBody& b) {
         return os << "ChunkBody(" << vec_to_str(b) << ")";
     }
     
-    std::ostream& operator<<(std::ostream& os, const Body& b) {
+    std::ostream& operator<<(std::ostream& os, const RR::Body& b) {
         return os << "Body(" << vec_to_str(b) << ")";
     }
     
-    std::ostream& operator<<(std::ostream& os, const Trailer&) {
+    std::ostream& operator<<(std::ostream& os, const RR::Trailer&) {
         return os << "Trailer";
     }
-}}} // namespaces
+} // ouinet namespaces
 
 BOOST_AUTO_TEST_SUITE(ouinet_response_reader)
 
 BOOST_AUTO_TEST_CASE(test_http11_body) {
-    namespace Rsp = Http::Rsp;
-
     asio::io_service ios;
 
     asio::spawn(ios, [&] (auto y_) {
@@ -112,10 +112,10 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
         ResponseReader rr(stream(move(rsp), ios, y));
 
         Cancel c;
-        Rsp::Part part;
+        RR::Part part;
 
         part = rr.async_read_part(c, y);
-        BOOST_REQUIRE(get<Rsp::Head>(&part));
+        BOOST_REQUIRE(get<RR::Head>(&part));
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE_EQUAL(part, body("0123456789"));
@@ -125,8 +125,6 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
 }
 
 BOOST_AUTO_TEST_CASE(test_http11_chunk) {
-    namespace Rsp = Http::Rsp;
-
     asio::io_service ios;
 
     asio::spawn(ios, [&] (auto y_) {
@@ -146,10 +144,10 @@ BOOST_AUTO_TEST_CASE(test_http11_chunk) {
         ResponseReader rr(stream(move(rsp), ios, y));
 
         Cancel c;
-        Rsp::Part part;
+        RR::Part part;
 
         part = rr.async_read_part(c, y);
-        BOOST_REQUIRE(get<Rsp::Head>(&part));
+        BOOST_REQUIRE(get<RR::Head>(&part));
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE_EQUAL(part, chunk_hdr(4, ""));
