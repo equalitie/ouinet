@@ -191,6 +191,7 @@ ResponseReader::async_read_part(Cancel cancel, Yield yield_) {
     if (_parser.chunked()) {
         if (_parser.is_done()) {
             auto hdr = _parser.release().base();
+            reset_parser();
             return End{filter_trailer_fields(hdr)};
         }
 
@@ -235,8 +236,6 @@ ResponseReader::async_read_part(Cancel cancel, Yield yield_) {
             if (ec) return or_throw<Part>(yield, ec);
         }
 
-        // We're done with parsing this response, prepare to read next the one
-        // (if any).
         reset_parser();
 
         return Body(move(body));

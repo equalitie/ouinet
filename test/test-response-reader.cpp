@@ -269,6 +269,64 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
     ios.run();
 }
 
+BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
+    asio::io_service ios;
+
+    asio::spawn(ios, [&] (auto y_) {
+        Yield y(ios, y_);
+
+        string rsp =
+            "HTTP/1.1 200 OK\r\n"
+            "Date: Mon, 27 Jul 2019 12:30:20 GMT\r\n"
+            "Content-Type: text/html\r\n"
+            "Transfer-Encoding: chunked\r\n"
+            "\r\n"
+            "4\r\n"
+            "1234\r\n"
+            "0\r\n"
+            "\r\n"
+
+            "HTTP/1.1 200 OK\r\n"
+            "Date: Mon, 27 Jul 2019 12:30:21 GMT\r\n"
+            "Content-Type: text/html\r\n"
+            "Content-Length: 5\r\n"
+            "\r\n"
+            "abcde";
+
+        RR rr(stream(move(rsp), ios, y));
+
+        Cancel c;
+        RR::Part part;
+
+        {
+            part = rr.async_read_part(c, y);
+            BOOST_REQUIRE(get<RR::Head>(&part));
+
+            part = rr.async_read_part(c, y);
+            BOOST_REQUIRE_EQUAL(part, chunk_hdr(4, ""));
+
+            part = rr.async_read_part(c, y);
+            BOOST_REQUIRE_EQUAL(part, chunk_data("1234"));
+
+            part = rr.async_read_part(c, y);
+            BOOST_REQUIRE_EQUAL(part, chunk_hdr(0, ""));
+
+            part = rr.async_read_part(c, y);
+            BOOST_REQUIRE_EQUAL(part, end({}));
+        }
+
+        {
+            part = rr.async_read_part(c, y);
+            BOOST_REQUIRE(get<RR::Head>(&part));
+
+            part = rr.async_read_part(c, y);
+            BOOST_REQUIRE_EQUAL(part, body("abcde"));
+        }
+    });
+
+    ios.run();
+}
+
 BOOST_AUTO_TEST_SUITE_END()
 
 
