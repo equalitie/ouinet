@@ -75,19 +75,19 @@ RR::Part chunk_hdr(size_t size, boost::string_view s) {
     return RR::ChunkHdr{size, s.to_string()};
 }
 
-RR::Part end(map<string, string> trailer) {
+RR::Part trailer(map<string, string> trailer) {
     http::fields fields;
     for (auto& p : trailer) {
         fields.insert(p.first, p.second);
     }
-    return RR::End{move(fields)};
+    return RR::Trailer{move(fields)};
 }
 
 namespace ouinet {
     bool operator==(const RR::Head&, const RR::Head&) { return false; /* TODO */ }
 
-    bool operator==(const RR::End& e1, const RR::End& e2) {
-        return fields_to_map(e1.trailer) == fields_to_map(e2.trailer);
+    bool operator==(const RR::Trailer& t1, const RR::Trailer& t2) {
+        return fields_to_map(t1) == fields_to_map(t2);
     }
 
     std::ostream& operator<<(std::ostream& os, const RR::Head&) {
@@ -106,8 +106,8 @@ namespace ouinet {
         return os << "Body(" << vec_to_str(b) << ")";
     }
     
-    std::ostream& operator<<(std::ostream& os, const RR::End&) {
-        return os << "End";
+    std::ostream& operator<<(std::ostream& os, const RR::Trailer&) {
+        return os << "Trailer";
     }
 } // ouinet namespaces
 
@@ -185,7 +185,7 @@ BOOST_AUTO_TEST_CASE(test_http11_chunk) {
         BOOST_REQUIRE_EQUAL(part, chunk_hdr(0, ""));
 
         part = rr.async_read_part(c, y);
-        BOOST_REQUIRE_EQUAL(part, end({}));
+        BOOST_REQUIRE_EQUAL(part, trailer({}));
 
         BOOST_REQUIRE(is_end_of_stream(rr, c, y));
     });
@@ -230,7 +230,7 @@ BOOST_AUTO_TEST_CASE(test_http11_trailer) {
         BOOST_REQUIRE_EQUAL(part, chunk_hdr(0, ""));
 
         part = rr.async_read_part(c, y);
-        BOOST_REQUIRE_EQUAL(part, end({{"Hash", "hash_of_1234"}}));
+        BOOST_REQUIRE_EQUAL(part, trailer({{"Hash", "hash_of_1234"}}));
 
         BOOST_REQUIRE(is_end_of_stream(rr, c, y));
     });
@@ -325,7 +325,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
             BOOST_REQUIRE_EQUAL(part, chunk_hdr(0, ""));
 
             part = rr.async_read_part(c, y);
-            BOOST_REQUIRE_EQUAL(part, end({}));
+            BOOST_REQUIRE_EQUAL(part, trailer({}));
         }
 
         {

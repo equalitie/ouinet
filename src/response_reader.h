@@ -55,11 +55,17 @@ public:
         Body(Base&& b) : Base(std::move(b)) {}
     };
 
-    struct End {
-        http::fields trailer;
+    struct Trailer : public http::fields {
+        using Base = http::fields;
+        using Base::Base;
+        Trailer(const Trailer&) = default;
+        Trailer(Trailer&&) = default;
+        Trailer& operator=(const Trailer&) = default;
+        Trailer(const Base& b) : Base(b) {}
+        Trailer(Base&& b) : Base(std::move(b)) {}
     };
 
-    using Part = boost::variant<Head, ChunkHdr, ChunkBody, Body, End>;
+    using Part = boost::variant<Head, ChunkHdr, ChunkBody, Body, Trailer>;
 
 public:
     ResponseReader(GenericStream in);
@@ -179,7 +185,7 @@ ResponseReader::async_read_part(Cancel cancel, Yield yield_) {
         if (_parser.is_done()) {
             auto hdr = _parser.release().base();
             reset_parser();
-            return End{filter_trailer_fields(hdr)};
+            return Trailer{filter_trailer_fields(hdr)};
         }
 
         while (true) {
