@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <map>
+#include <sstream>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -194,7 +195,7 @@ http_decode_key_id(boost::string_view key_id)
     return util::Ed25519PublicKey(std::move(pk_array));
 }
 
-boost::optional<util::Ed25519PublicKey::sig_array_t>
+http_sign_detail::opt_sig_array_t
 http_sign_detail::block_sig_from_exts(boost::string_view xs)
 {
     if (xs.empty()) return {};  // no extensions
@@ -221,7 +222,7 @@ http_sign_detail::block_sig_from_exts(boost::string_view xs)
 
 std::string
 http_sign_detail::block_sig_str( boost::string_view injection_id
-                               , const util::SHA512::digest_type& block_digest)
+                               , const http_sign_detail::block_digest_t& block_digest)
 {
     static const auto fmt_ = "%s%c%s";
     return ( boost::format(fmt_)
@@ -229,29 +230,34 @@ http_sign_detail::block_sig_str( boost::string_view injection_id
            % util::bytes::to_string_view(block_digest)).str();
 }
 
-static inline
 std::string
-block_chunk_ext_(const util::Ed25519PublicKey::sig_array_t& sig)
+http_sign_detail::block_chunk_ext( const http_sign_detail::opt_sig_array_t& sig
+                                 , const http_sign_detail::opt_block_digest_t& prev_digest = {})
 {
-    static const auto fmt_ = ";" + http_::response_block_signature_ext + "=\"%s\"";
-    auto encoded_sig = util::base64_encode(sig);
-    return (boost::format(fmt_) % encoded_sig).str();
+    std::stringstream exts;
+
+    static const auto fmt_sx = ";" + http_::response_block_signature_ext + "=\"%s\"";
+    if (sig) {
+        auto encoded_sig = util::base64_encode(*sig);
+        exts << (boost::format(fmt_sx) % encoded_sig);
+    }
+
+    static const auto fmt_hx = ";" + http_::response_block_chain_hash_ext + "=\"%s\"";
+    if (prev_digest) {
+        auto encoded_hash = util::base64_encode(*prev_digest);
+        exts << (boost::format(fmt_hx) % encoded_hash);
+    }
+
+    return exts.str();
 }
 
 std::string
 http_sign_detail::block_chunk_ext( boost::string_view injection_id
-                                 , const util::SHA512::digest_type& digest
+                                 , const http_sign_detail::block_digest_t& digest
                                  , const util::Ed25519PrivateKey& sk)
 {
     auto sig_str = http_sign_detail::block_sig_str(injection_id, digest);
-    return block_chunk_ext_(sk.sign(sig_str));
-}
-
-std::string
-http_sign_detail::block_chunk_ext(const boost::optional<util::Ed25519PublicKey::sig_array_t>& s)
-{
-    if (!s) return {};
-    return block_chunk_ext_(*s);
+    return http_sign_detail::block_chunk_ext(sk.sign(sig_str));
 }
 
 bool

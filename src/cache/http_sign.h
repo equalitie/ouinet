@@ -36,6 +36,9 @@ namespace ouinet { namespace http_ {
     // Chunk extension used to hold data block signature.
     static const std::string response_block_signature_ext = "ouisig";
 
+    // Chunk extension used to hold data block chained hashes.
+    static const std::string response_block_chain_hash_ext = "ouihash";
+
     // A default size for data blocks to be signed.
     // Small enough to avoid nodes buffering too much data
     // and not take too much time to download on slow connections,
@@ -53,11 +56,16 @@ namespace ouinet { namespace cache {
 // ----------------------------------------------------------------
 
 namespace http_sign_detail {
-boost::optional<util::Ed25519PublicKey::sig_array_t> block_sig_from_exts(boost::string_view);
-std::string block_sig_str(boost::string_view, const util::SHA512::digest_type&);
-std::string block_chunk_ext( boost::string_view, const util::SHA512::digest_type&
+using sig_array_t = util::Ed25519PublicKey::sig_array_t;
+using block_digest_t = util::SHA512::digest_type;
+using opt_sig_array_t = boost::optional<sig_array_t>;
+using opt_block_digest_t = boost::optional<block_digest_t>;
+
+opt_sig_array_t block_sig_from_exts(boost::string_view);
+std::string block_sig_str(boost::string_view, const block_digest_t&);
+std::string block_chunk_ext( boost::string_view, const block_digest_t&
                            , const util::Ed25519PrivateKey&);
-std::string block_chunk_ext(const boost::optional<util::Ed25519PublicKey::sig_array_t>&);
+std::string block_chunk_ext(const opt_sig_array_t&, const opt_block_digest_t&);
 bool check_body(const http::response_header<>&, size_t, util::SHA256&);
 }
 
@@ -314,7 +322,7 @@ session_flush_verified( Session& in, SinkStream& out
         return head;
     };
 
-    boost::optional<util::Ed25519PublicKey::sig_array_t> inbsig, outbsig;
+    http_sign_detail::opt_sig_array_t inbsig, outbsig;
     auto xproc = [&inbsig, &uri] (auto inx_, auto&, auto) {
         auto inbsig_ = http_sign_detail::block_sig_from_exts(inx_);
         if (!inbsig_) return;
@@ -331,6 +339,7 @@ session_flush_verified( Session& in, SinkStream& out
     util::SHA512 block_hash;
     std::vector<char> lastd_;
     asio::mutable_buffer lastd;
+    http_sign_detail::opt_block_digest_t inbdig, outbdig;
     // Simplest implementation: one output chunk per data block.
     ProcDataFunc<asio::const_buffer> dproc = [&] (auto ind, auto&, auto y) {
         // Data block is sent when data following it is received
@@ -356,12 +365,18 @@ session_flush_verified( Session& in, SinkStream& out
                 return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), ret);
             }
 
-            ret.second = http_sign_detail::block_chunk_ext(outbsig);
+            ret.second = http_sign_detail::block_chunk_ext(outbsig, outbdig);
             outbsig = std::move(inbsig);
             inbsig = {};
             // Prepare hash for next block: HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])
             block_hash = {}; block_hash.update(block_digest);
             block_offset += ret.first.size();
+            // Chain hash is to be sent along the signature of the following block,
+            // so that it may convey the missing information for computing the signing string
+            // if the receiver does not have the previous blocks (e.g. for range requests).
+            // (Bk0) (Sig0 Bk1) (Sig1 Hash0 Bk2) ... (SigN-1 HashN-2 BkN) (SigN HashN-1)
+            outbdig = std::move(inbdig);
+            inbdig = std::move(block_digest);
         }
 
         // Save copy of current input data to last data buffer.
@@ -380,7 +395,7 @@ session_flush_verified( Session& in, SinkStream& out
     bool check_body_after = true;
     ProcTrailFunc tproc = [&] (auto intr, auto&, auto y) {
         ProcTrailFunc::result_type ret{
-            std::move(intr), http_sign_detail::block_chunk_ext(outbsig)};  // pass trailer on
+            std::move(intr), http_sign_detail::block_chunk_ext(outbsig, outbdig)};  // pass trailer on
 
         if (ret.first.cbegin() == ret.first.cend())
             return ret;  // no headers in trailer

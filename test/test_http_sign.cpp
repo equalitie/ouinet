@@ -105,9 +105,10 @@ static const string rs_head_signed_s = (
 );
 
 static const array<string, 3> rs_block_hash_cx{
+    "",  // no previous block to hash
     ";ouihash=\"aERfr5o+kpvR4ZH7xC0mBJ4QjqPUELDzjmzt14WmntxH2p3EQmATZODXMPoFiXaZL6KNI50Ve4WJf/x3ma4ieA==\"",
     ";ouihash=\"slwciqMQBddB71VWqpba+MpP9tBiyTE/XFmO5I1oiVJy3iFniKRkksbP78hCEWOM6tH31TGEFWP1loa4pqrLww==\"",
-    ";ouihash=\"vyUR6T034qN7qDZO5vUILMP9FsJYPys1KIELlGDFCSqSFI7ZowrT3U9ffwsQAZSCLJvKQhT+GhtO0aM2jNnm5A==\"",
+    //";ouihash=\"vyUR6T034qN7qDZO5vUILMP9FsJYPys1KIELlGDFCSqSFI7ZowrT3U9ffwsQAZSCLJvKQhT+GhtO0aM2jNnm5A==\"",  // never actually sent
 };
 
 static const array<string, 3> rs_block_sig_cx{
@@ -375,9 +376,11 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified) {
         asio::ip::tcp::socket
             origin_w(ios), origin_r(ios),
             signed_w(ios), signed_r(ios),
+            hashed_w(ios), hashed_r(ios),
             tested_w(ios), tested_r(ios);
         tie(origin_w, origin_r) = util::connected_pair(ios, yield);
         tie(signed_w, signed_r) = util::connected_pair(ios, yield);
+        tie(hashed_w, hashed_r) = util::connected_pair(ios, yield);
         tie(tested_w, tested_r) = util::connected_pair(ios, yield);
 
         // Send raw origin response.
@@ -410,16 +413,45 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified) {
         });
 
         // Verify signed output.
-        asio::spawn(ios, [ signed_r = std::move(signed_r), &tested_w
+        asio::spawn(ios, [ signed_r = std::move(signed_r), &hashed_w
                          , lock = wc.lock()](auto y) mutable {
             Session signed_rs(std::move(signed_r));
             auto pk = get_public_key();
             Cancel cancel;
             sys::error_code e;
-            cache::session_flush_verified( signed_rs, tested_w
+            cache::session_flush_verified( signed_rs, hashed_w
                                          , pk
                                          , cancel, y[e]);
             BOOST_REQUIRE(!e);
+            hashed_w.close();
+        });
+
+        // Check generation of chained hashes.
+        asio::spawn(ios, [ &hashed_r, &tested_w
+                         , &ios, lock = wc.lock()](auto y) mutable {
+            auto hproc = [] (auto inh, auto&, auto) { return inh; };
+            int xidx = 0;
+            auto xproc = [&xidx] (auto exts, auto&, auto) {
+                BOOST_REQUIRE(xidx < rs_block_hash_cx.size());
+                BOOST_CHECK(exts.find(rs_block_hash_cx[xidx++]) != string::npos);
+            };
+            ProcDataFunc<asio::const_buffer> dproc = [] (auto ind, auto&, auto) {
+                return ProcDataFunc<asio::const_buffer>::result_type{std::move(ind), {}};
+            };
+            ProcTrailFunc tproc = [] (auto intr, auto&, auto) {
+                return ProcTrailFunc::result_type{std::move(intr), {}};
+            };
+
+            Cancel cancel;
+            sys::error_code e;
+            Yield yy(ios, y);
+            http_forward( hashed_r, tested_w
+                        , std::move(hproc), std::move(xproc)
+                        , std::move(dproc), std::move(tproc)
+                        , cancel, yy[e]);
+            BOOST_REQUIRE(!e);
+            BOOST_CHECK_EQUAL(xidx, rs_block_hash_cx.size());
+            hashed_r.close();
             tested_w.close();
         });
 
