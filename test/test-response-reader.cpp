@@ -67,7 +67,7 @@ RR::Part body(boost::string_view s) {
     return RR::Body(str_to_vec(s));
 }
 
-RR::Part chunk_data(boost::string_view s) {
+RR::Part chunk_body(boost::string_view s) {
     return RR::ChunkBody(str_to_vec(s));
 }
 
@@ -179,7 +179,7 @@ BOOST_AUTO_TEST_CASE(test_http11_chunk) {
         BOOST_REQUIRE_EQUAL(part, chunk_hdr(4, ""));
 
         part = rr.async_read_part(c, y);
-        BOOST_REQUIRE_EQUAL(part, chunk_data("1234"));
+        BOOST_REQUIRE_EQUAL(part, chunk_body("1234"));
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE_EQUAL(part, chunk_hdr(0, ""));
@@ -224,7 +224,7 @@ BOOST_AUTO_TEST_CASE(test_http11_trailer) {
         BOOST_REQUIRE_EQUAL(part, chunk_hdr(4, ""));
 
         part = rr.async_read_part(c, y);
-        BOOST_REQUIRE_EQUAL(part, chunk_data("1234"));
+        BOOST_REQUIRE_EQUAL(part, chunk_body("1234"));
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE_EQUAL(part, chunk_hdr(0, ""));
@@ -319,7 +319,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
             BOOST_REQUIRE_EQUAL(part, chunk_hdr(4, ""));
 
             part = rr.async_read_part(c, y);
-            BOOST_REQUIRE_EQUAL(part, chunk_data("1234"));
+            BOOST_REQUIRE_EQUAL(part, chunk_body("1234"));
 
             part = rr.async_read_part(c, y);
             BOOST_REQUIRE_EQUAL(part, chunk_hdr(0, ""));

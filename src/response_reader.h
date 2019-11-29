@@ -26,9 +26,25 @@ public:
         Head(Base&& b) : Base(std::move(b)) {}
     };
 
+    struct Body : public std::vector<uint8_t> {
+        using Base = std::vector<uint8_t>;
+        using Base::Base;
+        Body(const Body&) = default;
+        Body(Body&&) = default;
+        Body& operator=(const Body&) = default;
+        Body(const Base& b) : Base(b) {}
+        Body(Base&& b) : Base(std::move(b)) {}
+    };
+
     struct ChunkHdr {
-        size_t size = 0; // Size of chunk body
+        size_t size; // Size of chunk body
         std::string exts;
+
+        ChunkHdr() : size(0) {}
+        ChunkHdr(size_t size, std::string exts)
+            : size(size)
+            , exts(std::move(exts))
+        {}
 
         bool operator==(const ChunkHdr& other) const {
             return size == other.size && exts == other.exts;
@@ -45,16 +61,6 @@ public:
         ChunkBody(Base&& b) : Base(std::move(b)) {}
     };
 
-    struct Body : public std::vector<uint8_t> {
-        using Base = std::vector<uint8_t>;
-        using Base::Base;
-        Body(const Body&) = default;
-        Body(Body&&) = default;
-        Body& operator=(const Body&) = default;
-        Body(const Base& b) : Base(b) {}
-        Body(Base&& b) : Base(std::move(b)) {}
-    };
-
     struct Trailer : public http::fields {
         using Base = http::fields;
         using Base::Base;
@@ -65,7 +71,26 @@ public:
         Trailer(Base&& b) : Base(std::move(b)) {}
     };
 
-    using Part = boost::variant<Head, ChunkHdr, ChunkBody, Body, Trailer>;
+private:
+    using PartVariant = boost::variant<Head, ChunkHdr, ChunkBody, Body, Trailer>;
+
+public:
+    struct Part : public PartVariant
+    {
+        using Base = PartVariant;
+        using Base::Base;
+        Part() = default;
+        Part(const Part&) = default;
+        Part(Part&&) = default;
+        Part& operator=(const Part&) = default;
+        Part(const Base& b) : Base(b) {}
+        Part(Base&& b) : Base(std::move(b)) {}
+
+        bool operator==(const Part& that) const {
+            return static_cast<const Base&>(*this)
+                == static_cast<const Base&>(that);
+        }
+    };
 
 public:
     ResponseReader(GenericStream in);
