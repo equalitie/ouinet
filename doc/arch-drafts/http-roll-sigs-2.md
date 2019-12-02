@@ -39,7 +39,7 @@ HTTP chunked transfer encoding is used to enable providing a first set of header
 
 [Signing HTTP Messages][] is used here as a way to sign HTTP headers because of its simplicity, although other schemes may be used instead.
 
-[Signing HTTP Messages]: https://datatracker.ietf.org/doc/html/draft-cavage-http-signatures-11
+[Signing HTTP Messages]: https://datatracker.ietf.org/doc/html/draft-cavage-http-signatures-12
 
 ## Signature scheme using Merkle DAGs
 

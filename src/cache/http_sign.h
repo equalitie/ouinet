@@ -36,6 +36,9 @@ namespace ouinet { namespace http_ {
     // Chunk extension used to hold data block signature.
     static const std::string response_block_signature_ext = "ouisig";
 
+    // Chunk extension used to hold data block chained hashes.
+    static const std::string response_block_chain_hash_ext = "ouihash";
+
     // A default size for data blocks to be signed.
     // Small enough to avoid nodes buffering too much data
     // and not take too much time to download on slow connections,
@@ -53,11 +56,16 @@ namespace ouinet { namespace cache {
 // ----------------------------------------------------------------
 
 namespace http_sign_detail {
-boost::optional<util::Ed25519PublicKey::sig_array_t> block_sig_from_exts(boost::string_view);
-std::string block_sig_str_pfx(boost::string_view, size_t);
-std::string block_sig_str(boost::string_view, size_t, asio::const_buffer);
-std::string block_chunk_ext(const std::string&, util::SHA512&, const util::Ed25519PrivateKey&);
-std::string block_chunk_ext(const boost::optional<util::Ed25519PublicKey::sig_array_t>&);
+using sig_array_t = util::Ed25519PublicKey::sig_array_t;
+using block_digest_t = util::SHA512::digest_type;
+using opt_sig_array_t = boost::optional<sig_array_t>;
+using opt_block_digest_t = boost::optional<block_digest_t>;
+
+opt_sig_array_t block_sig_from_exts(boost::string_view);
+std::string block_sig_str(boost::string_view, const block_digest_t&);
+std::string block_chunk_ext( boost::string_view, const block_digest_t&
+                           , const util::Ed25519PrivateKey&);
+std::string block_chunk_ext(const opt_sig_array_t&, const opt_block_digest_t&);
 bool check_body(const http::response_header<>&, size_t, util::SHA256&);
 }
 
@@ -210,8 +218,6 @@ session_flush_signed( Session& in, SinkStream& out
     size_t block_offset = 0;
     util::SHA256 body_hash;
     util::SHA512 block_hash;  // for first block
-    auto block_sig_str_pfx  // for first block
-        = http_sign_detail::block_sig_str_pfx(injection_id, block_offset);
     // Simplest implementation: one output chunk per data block.
     util::quantized_buffer qbuf(http_::response_data_block);
     ProcDataFunc<asio::const_buffer> dproc = [&] (auto inbuf, auto&, auto) {
@@ -223,12 +229,14 @@ session_flush_signed( Session& in, SinkStream& out
             (inbuf.size() > 0) ? qbuf.get() : qbuf.get_rest(), {}
         };  // send rest if no more input
         if (do_inject && ret.first.size() > 0) {  // if injecting and sending data
-            if (block_offset > 0)  // add chunk extension for previous block
-                ret.second = http_sign_detail::block_chunk_ext(block_sig_str_pfx, block_hash, sk);
-            // Prepare chunk extension for next block.
-            block_hash = {};
+            if (block_offset > 0) {  // add chunk extension for previous block
+                auto block_digest = block_hash.close();
+                ret.second = http_sign_detail::block_chunk_ext(injection_id, block_digest, sk);
+                // Prepare chunk extension for next block: HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])
+                block_hash = {};
+                block_hash.update(block_digest);
+            }  // else HASH[0]=SHA2-512(BLOCK[0])
             block_hash.update(ret.first);
-            block_sig_str_pfx = http_sign_detail::block_sig_str_pfx(injection_id, block_offset);
             block_offset += ret.first.size();
         }
         return ret;  // pass data on, drop origin extensions
@@ -243,8 +251,10 @@ session_flush_signed( Session& in, SinkStream& out
                                                 , httpsig_key_id);
         }
         ProcTrailFunc::result_type ret{move(intr), {}};
-        if (do_inject)
-            ret.second = http_sign_detail::block_chunk_ext(block_sig_str_pfx, block_hash, sk);
+        if (do_inject) {
+            auto block_digest = block_hash.close();
+            ret.second = http_sign_detail::block_chunk_ext(injection_id, block_digest, sk);
+        }
         return ret;  // pass trailer on, drop origin extensions
     };
 
@@ -312,7 +322,7 @@ session_flush_verified( Session& in, SinkStream& out
         return head;
     };
 
-    boost::optional<util::Ed25519PublicKey::sig_array_t> inbsig, outbsig;
+    http_sign_detail::opt_sig_array_t inbsig, outbsig;
     auto xproc = [&inbsig, &uri] (auto inx_, auto&, auto) {
         auto inbsig_ = http_sign_detail::block_sig_from_exts(inx_);
         if (!inbsig_) return;
@@ -326,8 +336,10 @@ session_flush_verified( Session& in, SinkStream& out
     size_t body_length = 0;
     size_t block_offset = 0;
     util::SHA256 body_hash;
+    util::SHA512 block_hash;
     std::vector<char> lastd_;
     asio::mutable_buffer lastd;
+    http_sign_detail::opt_block_digest_t inbdig, outbdig;
     // Simplest implementation: one output chunk per data block.
     ProcDataFunc<asio::const_buffer> dproc = [&] (auto ind, auto&, auto y) {
         // Data block is sent when data following it is received
@@ -344,16 +356,27 @@ session_flush_verified( Session& in, SinkStream& out
                 LOG_WARN("Missing signature for data block with offset ", block_offset, "; uri=", uri);
                 return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), ret);
             }
-            auto bsig_str = http_sign_detail::block_sig_str(injection_id, block_offset, ret.first);
+            // Complete hash for this block; note that HASH[0]=SHA2-512(BLOCK[0])
+            block_hash.update(ret.first);
+            auto block_digest = block_hash.close();
+            auto bsig_str = http_sign_detail::block_sig_str(injection_id, block_digest);
             if (!bs_params->pk.verify(bsig_str, *inbsig)) {
                 LOG_WARN("Failed to verify data block with offset ", block_offset, "; uri=", uri);
                 return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), ret);
             }
 
-            ret.second = http_sign_detail::block_chunk_ext(outbsig);
+            ret.second = http_sign_detail::block_chunk_ext(outbsig, outbdig);
             outbsig = std::move(inbsig);
             inbsig = {};
+            // Prepare hash for next block: HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])
+            block_hash = {}; block_hash.update(block_digest);
             block_offset += ret.first.size();
+            // Chain hash is to be sent along the signature of the following block,
+            // so that it may convey the missing information for computing the signing string
+            // if the receiver does not have the previous blocks (e.g. for range requests).
+            // (Bk0) (Sig0 Bk1) (Sig1 Hash0 Bk2) ... (SigN-1 HashN-2 BkN) (SigN HashN-1)
+            outbdig = std::move(inbdig);
+            inbdig = std::move(block_digest);
         }
 
         // Save copy of current input data to last data buffer.
@@ -372,7 +395,7 @@ session_flush_verified( Session& in, SinkStream& out
     bool check_body_after = true;
     ProcTrailFunc tproc = [&] (auto intr, auto&, auto y) {
         ProcTrailFunc::result_type ret{
-            std::move(intr), http_sign_detail::block_chunk_ext(outbsig)};  // pass trailer on
+            std::move(intr), http_sign_detail::block_chunk_ext(outbsig, outbdig)};  // pass trailer on
 
         if (ret.first.cbegin() == ret.first.cend())
             return ret;  // no headers in trailer
@@ -427,9 +450,9 @@ http_digest(const http::response<http::dynamic_body>&);
 // -----------------------
 //
 // These provide access to an implementation of
-// <https://tools.ietf.org/html/draft-cavage-http-signatures-11>.
+// <https://tools.ietf.org/html/draft-cavage-http-signatures-12>.
 
-// Compute a signature as per draft-cavage-http-signatures-11.
+// Compute a signature as per draft-cavage-http-signatures-12.
 std::string  // use this to enable setting the time stamp (e.g. for tests)
 http_signature( const http::response_header<>&
               , const ouinet::util::Ed25519PrivateKey&
