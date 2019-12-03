@@ -52,13 +52,17 @@ public:
     };
 
     struct ChunkBody : public std::vector<uint8_t> {
+        size_t remain;
+
         using Base = std::vector<uint8_t>;
-        using Base::Base;
+
+        ChunkBody(const Base& data, size_t remain)
+            : Base(data)
+            , remain(remain) {}
+
         ChunkBody(const ChunkBody&) = default;
         ChunkBody(ChunkBody&&) = default;
         ChunkBody& operator=(const ChunkBody&) = default;
-        ChunkBody(const Base& b) : Base(b) {}
-        ChunkBody(Base&& b) : Base(std::move(b)) {}
     };
 
     struct Trailer : public http::fields {
@@ -144,8 +148,6 @@ private:
     std::function<void(size_t, string_view, sys::error_code&)> _on_chunk_header;
     std::function<size_t(size_t, string_view, sys::error_code&)> _on_chunk_body;
 
-    ChunkBody* _chunk_body = nullptr;
-
     std::queue<Part> _queued_parts;
 };
 
@@ -163,15 +165,10 @@ void ResponseReader::set_callbacks()
     };
 
     _on_chunk_body = [&] (auto remain, auto data, auto& ec) -> size_t {
-        if (!_chunk_body) {
-            _queued_parts.push(ChunkBody(remain));
-            _chunk_body = boost::get<ChunkBody>(&_queued_parts.back());
-        }
-
-        asio::mutable_buffer buf(asio::buffer(*_chunk_body));
-        buf += buf.size() - remain;
-
-        return asio::buffer_copy(buf, asio::buffer(data.data(), data.size()));
+        _queued_parts.push(ChunkBody( std::vector<uint8_t>( data.begin()
+                                                          , data.end())
+                                    , remain));
+        return data.size();
     };
 
     _parser.on_chunk_header(_on_chunk_header);
@@ -221,32 +218,23 @@ ResponseReader::async_read_part(Cancel cancel, Yield yield_) {
             return Trailer{filter_trailer_fields(hdr)};
         }
 
-        while (true) {
+        while (_queued_parts.empty()) {
             http::async_read(_in, _buffer, _parser, yield[ec]);
 
             if (ec == http::error::end_of_chunk) {
-                assert(!_queued_parts.empty());
-                auto ret = _queued_parts.front();
-                _queued_parts.pop();
-                _chunk_body = nullptr;
-                return ret;
+                ec = {};
             }
 
             if (set_error(ec, "Failed to parse chunk")) {
                 return or_throw<Part>(yield, ec);
             }
-
-            if (_queued_parts.empty()) continue;
-
-            auto hdr = boost::get<ChunkHdr>(&_queued_parts.front());
-
-            if (hdr) {
-                auto ret = std::move(*hdr);
-                _queued_parts.pop();
-                return ret;
-            }
         }
-    } else {
+
+        auto part = std::move(_queued_parts.front());
+        _queued_parts.pop();
+        return part;
+    }
+    else {
         auto opt_len = _parser.content_length();
         assert(opt_len && "TODO");
         std::vector<uint8_t> body(*opt_len);

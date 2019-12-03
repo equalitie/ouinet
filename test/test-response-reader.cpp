@@ -68,7 +68,7 @@ RR::Part body(boost::string_view s) {
 }
 
 RR::Part chunk_body(boost::string_view s) {
-    return RR::ChunkBody(str_to_vec(s));
+    return RR::ChunkBody(str_to_vec(s), 0);
 }
 
 RR::Part chunk_hdr(size_t size, boost::string_view s) {
