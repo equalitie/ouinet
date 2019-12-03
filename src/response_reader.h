@@ -129,21 +129,6 @@ public:
     Part async_read_part(Cancel, Yield);
 
 private:
-    // https://www.w3.org/Protocols/rfc2616/rfc2616-sec4.html#sec4.4
-    bool has_body() const {
-        auto result = _parser.get().result();
-
-        auto result_i
-            = static_cast<std::underlying_type_t<http::status>>(result);
-
-        bool inv = (100 <= result_i && result_i < 200)
-                || result == http::status::no_content // 204
-                || result == http::status::not_modified // 304
-                /* TODO: Request method == HEAD */ ;
-
-        return !inv;
-    };
-
     http::fields filter_trailer_fields(const http::fields& hdr)
     {
         http::fields trailer;
