@@ -129,7 +129,11 @@ private:
     {
         (&_parser)->~parser();
         new (&_parser) (decltype(_parser))();
+
+        set_callbacks();
     }
+
+    void set_callbacks();
 
 private:
     GenericStream _in;
@@ -148,6 +152,12 @@ private:
 
 ResponseReader::ResponseReader(GenericStream in)
     : _in(std::move(in))
+{
+    set_callbacks();
+}
+
+inline
+void ResponseReader::set_callbacks()
 {
     _on_chunk_header = [&] (auto size, auto exts, auto& ec) {
         _queued_parts.push(ChunkHdr{size, std::move(exts.to_string())});
