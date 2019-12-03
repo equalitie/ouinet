@@ -27,13 +27,18 @@ public:
     };
 
     struct Body : public std::vector<uint8_t> {
+        bool is_last;
+
         using Base = std::vector<uint8_t>;
-        using Base::Base;
+
+        Body(bool is_last, Base data)
+            : Base(move(data))
+            , is_last(is_last)
+        {}
+
         Body(const Body&) = default;
         Body(Body&&) = default;
         Body& operator=(const Body&) = default;
-        Body(const Base& b) : Base(b) {}
-        Body(Base&& b) : Base(std::move(b)) {}
     };
 
     struct ChunkHdr {
@@ -124,7 +129,7 @@ public:
     //
     // Or:
     //
-    // Head >> Body(size > 0)* >> Body(size == 0)
+    // Head >> Body(is_last == false)* >> Body(is_last == true)
     //
     Part async_read_part(Cancel, Yield);
 
@@ -191,6 +196,7 @@ ResponseReader::Part
 ResponseReader::async_read_part(Cancel cancel, Yield yield_) {
     namespace Err = asio::error;
 
+    std::cerr << "----------- start\n";
     if (!_queued_parts.empty()) {
         auto part = std::move(_queued_parts.front());
         _queued_parts.pop();
@@ -247,9 +253,10 @@ ResponseReader::async_read_part(Cancel cancel, Yield yield_) {
         return part;
     }
     else {
+        std::cerr << "start is_done:" << _parser.is_done() << "\n";
         if (_parser.is_done()) {
             reset_parser();
-            return Body{};
+            return or_throw<Part>(yield, http::error::end_of_stream);
         }
 
         char buf[2048];
@@ -257,12 +264,28 @@ ResponseReader::async_read_part(Cancel cancel, Yield yield_) {
         _parser.get().body().data = buf;
         _parser.get().body().size = sizeof(buf);
 
+        sys::error_code ec;
         auto s = http::async_read_some(_in, _buffer, _parser, yield[ec]);
 
-        if (ec == http::error::need_buffer) ec = {};
+        std::cerr << ">>> s:" << s << " ec:" << ec.message() << " is_done:" << _parser.is_done() << " need_eof:" << _parser.need_eof() << "\n";
+        if (ec == http::error::need_buffer) ec = sys::error_code();
         if (ec) return or_throw<Part>(yield, ec);
 
-        return Body(buf, buf + s);
+        bool is_done = _parser.is_done();
+
+        if (ec != sys::error_code()) {
+            // This is some strange behavior from Boost.Beast (currently
+            // working on 1.69). It happens when
+            // * HTTP version is: 1.0
+            // * Body is empty
+            // * No Content-Length is specified
+            // * Remote closed connection
+            return or_throw<Part>(yield, http::error::end_of_stream);
+            //return Body(is_done, std::vector<uint8_t>(buf, buf + s));
+        }
+
+
+        return Body(is_done, std::vector<uint8_t>(buf, buf + s));
     }
 
     return Part();

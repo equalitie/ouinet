@@ -63,8 +63,8 @@ map<string, string> fields_to_map(http::fields fields) {
     return ret;
 }
 
-RR::Part body(boost::string_view s) {
-    return RR::Body(str_to_vec(s));
+RR::Part body(bool is_last, boost::string_view s) {
+    return RR::Body(is_last, str_to_vec(s));
 }
 
 RR::Part chunk_body(boost::string_view s) {
@@ -103,7 +103,7 @@ namespace ouinet {
     }
     
     std::ostream& operator<<(std::ostream& os, const RR::Body& b) {
-        return os << "Body(" << vec_to_str(b) << ")";
+        return os << "Body(" << (b.is_last ? "last " : "not-last ") << vec_to_str(b) << ")";
     }
     
     std::ostream& operator<<(std::ostream& os, const RR::Trailer&) {
@@ -113,12 +113,13 @@ namespace ouinet {
 
 bool is_end_of_stream(RR& rr, Cancel& c, Yield& y) {
     sys::error_code ec;
-    rr.async_read_part(c, y[ec]);
+    auto part = rr.async_read_part(c, y[ec]);
+    cerr << ">>>>>> " << ec.message() << " " << part << "\n";
     return ec == http::error::end_of_stream;
 }
 
 RR::Part read_full_body(RR& rr, Cancel& c, Yield& y) {
-    RR::Body body;
+    RR::Body body(true, {});
 
     while (true) {
         sys::error_code ec;
@@ -126,14 +127,75 @@ RR::Part read_full_body(RR& rr, Cancel& c, Yield& y) {
         BOOST_REQUIRE(!ec);
         auto body_p = part.as_body();
         BOOST_REQUIRE(body_p);
-        if (body_p->empty()) break;
         body.insert(body.end(), body_p->begin(), body_p->end());
+        if (body_p->is_last) break;
     }
 
     return body;
 }
 
 BOOST_AUTO_TEST_SUITE(ouinet_response_reader)
+
+BOOST_AUTO_TEST_CASE(test_http10_no_body) {
+    asio::io_service ios;
+
+    asio::spawn(ios, [&] (auto y_) {
+        Yield y(ios, y_);
+
+        string rsp =
+            "HTTP/1.0 200 OK\r\n"
+            "\r\n";
+
+        RR rr(stream(move(rsp), ios, y));
+
+        Cancel c;
+        RR::Part part;
+
+        cerr << "--------------- 1\n";
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE(part.is_head());
+
+        cerr << "--------------- 2\n";
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE_EQUAL(part, body(true, ""));
+
+        cerr << "--------------- 3\n";
+        BOOST_REQUIRE(is_end_of_stream(rr, c, y));
+    });
+
+    ios.run();
+}
+
+BOOST_AUTO_TEST_CASE(test_http10_body_no_length) {
+    asio::io_service ios;
+
+    asio::spawn(ios, [&] (auto y_) {
+        Yield y(ios, y_);
+
+        string rsp =
+            "HTTP/1.0 200 OK\r\n"
+            "\r\n"
+            "abcdef";
+
+        RR rr(stream(move(rsp), ios, y));
+
+        Cancel c;
+        RR::Part part;
+
+        cerr << "--------------- 1\n";
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE(part.is_head());
+
+        cerr << "--------------- 2\n";
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE_EQUAL(part, body(true, "abcdef"));
+
+        cerr << "--------------- 3\n";
+        BOOST_REQUIRE(is_end_of_stream(rr, c, y));
+    });
+
+    ios.run();
+}
 
 BOOST_AUTO_TEST_CASE(test_http11_body) {
     asio::io_service ios;
@@ -158,7 +220,7 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
         BOOST_REQUIRE(part.is_head());
 
         part = read_full_body(rr, c, y);
-        BOOST_REQUIRE_EQUAL(part, body("0123456789"));
+        BOOST_REQUIRE_EQUAL(part, body(true, "0123456789"));
 
         BOOST_REQUIRE(is_end_of_stream(rr, c, y));
     });
@@ -284,13 +346,13 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
         BOOST_REQUIRE(part.is_head());
 
         part = read_full_body(rr, c, y);
-        BOOST_REQUIRE_EQUAL(part, body("0123456789"));
+        BOOST_REQUIRE_EQUAL(part, body(true, "0123456789"));
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(part.is_head());
 
         part = read_full_body(rr, c, y);
-        BOOST_REQUIRE_EQUAL(part, body("abcde"));
+        BOOST_REQUIRE_EQUAL(part, body(true, "abcde"));
 
         BOOST_REQUIRE(is_end_of_stream(rr, c, y));
     });
@@ -349,7 +411,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
             BOOST_REQUIRE(part.is_head());
 
             part = read_full_body(rr, c, y);
-            BOOST_REQUIRE_EQUAL(part, body("abcde"));
+            BOOST_REQUIRE_EQUAL(part, body(true, "abcde"));
         }
 
         BOOST_REQUIRE(is_end_of_stream(rr, c, y));
