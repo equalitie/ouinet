@@ -144,7 +144,6 @@ private:
     std::function<void(size_t, string_view, sys::error_code&)> _on_chunk_header;
     std::function<size_t(size_t, string_view, sys::error_code&)> _on_chunk_body;
 
-    ChunkHdr*  _chunk_hdr  = nullptr;
     ChunkBody* _chunk_body = nullptr;
 
     std::queue<Part> _queued_parts;
@@ -161,7 +160,6 @@ void ResponseReader::set_callbacks()
 {
     _on_chunk_header = [&] (auto size, auto exts, auto& ec) {
         _queued_parts.push(ChunkHdr{size, std::move(exts.to_string())});
-        _chunk_hdr = boost::get<ChunkHdr>(&_queued_parts.back());
     };
 
     _on_chunk_body = [&] (auto remain, auto data, auto& ec) -> size_t {
@@ -230,7 +228,6 @@ ResponseReader::async_read_part(Cancel cancel, Yield yield_) {
                 assert(!_queued_parts.empty());
                 auto ret = _queued_parts.front();
                 _queued_parts.pop();
-                _chunk_hdr  = nullptr;
                 _chunk_body = nullptr;
                 return ret;
             }
@@ -246,7 +243,6 @@ ResponseReader::async_read_part(Cancel cancel, Yield yield_) {
             if (hdr) {
                 auto ret = std::move(*hdr);
                 _queued_parts.pop();
-                _chunk_hdr = nullptr;
                 return ret;
             }
         }
