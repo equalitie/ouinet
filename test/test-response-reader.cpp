@@ -117,6 +117,22 @@ bool is_end_of_stream(RR& rr, Cancel& c, Yield& y) {
     return ec == http::error::end_of_stream;
 }
 
+RR::Part read_full_body(RR& rr, Cancel& c, Yield& y) {
+    RR::Body body;
+
+    while (true) {
+        sys::error_code ec;
+        auto part = rr.async_read_part(c, y[ec]);
+        BOOST_REQUIRE(!ec);
+        auto body_p = part.as_body();
+        BOOST_REQUIRE(body_p);
+        if (body_p->empty()) break;
+        body.insert(body.end(), body_p->begin(), body_p->end());
+    }
+
+    return body;
+}
+
 BOOST_AUTO_TEST_SUITE(ouinet_response_reader)
 
 BOOST_AUTO_TEST_CASE(test_http11_body) {
@@ -141,7 +157,7 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(part.is_head());
 
-        part = rr.async_read_part(c, y);
+        part = read_full_body(rr, c, y);
         BOOST_REQUIRE_EQUAL(part, body("0123456789"));
 
         BOOST_REQUIRE(is_end_of_stream(rr, c, y));
@@ -267,13 +283,13 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(part.is_head());
 
-        part = rr.async_read_part(c, y);
+        part = read_full_body(rr, c, y);
         BOOST_REQUIRE_EQUAL(part, body("0123456789"));
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(part.is_head());
 
-        part = rr.async_read_part(c, y);
+        part = read_full_body(rr, c, y);
         BOOST_REQUIRE_EQUAL(part, body("abcde"));
 
         BOOST_REQUIRE(is_end_of_stream(rr, c, y));
@@ -332,7 +348,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
             part = rr.async_read_part(c, y);
             BOOST_REQUIRE(part.is_head());
 
-            part = rr.async_read_part(c, y);
+            part = read_full_body(rr, c, y);
             BOOST_REQUIRE_EQUAL(part, body("abcde"));
         }
 

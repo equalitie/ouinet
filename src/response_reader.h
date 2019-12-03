@@ -117,6 +117,15 @@ public:
 public:
     ResponseReader(GenericStream in);
 
+    //
+    // Possible output on subsequent invocations per one response:
+    //
+    // Head >> (ChunkHdr(size > 0) ChunkBody*)* >> ChunkHdr(size == 0) >> Trailer
+    //
+    // Or:
+    //
+    // Head >> Body(size > 0)* >> Body(size == 0)
+    //
     Part async_read_part(Cancel, Yield);
 
 private:
@@ -253,22 +262,22 @@ ResponseReader::async_read_part(Cancel cancel, Yield yield_) {
         return part;
     }
     else {
-        auto opt_len = _parser.content_length();
-        assert(opt_len && "TODO");
-        std::vector<uint8_t> body(*opt_len);
-        asio::mutable_buffer buf(body.data(), body.size());
-        size_t s = asio::buffer_copy(buf, _buffer.data());
-        _buffer.consume(s);
-        buf += s;
-
-        while (buf.size()) {
-            buf += _in.async_read_some(buf, yield[ec]);
-            if (ec) return or_throw<Part>(yield, ec);
+        if (_parser.is_done()) {
+            reset_parser();
+            return Body{};
         }
 
-        reset_parser();
+        char buf[2048];
 
-        return Body(move(body));
+        _parser.get().body().data = buf;
+        _parser.get().body().size = sizeof(buf);
+
+        auto s = http::async_read_some(_in, _buffer, _parser, yield[ec]);
+
+        if (ec == http::error::need_buffer) ec = {};
+        if (ec) return or_throw<Part>(yield, ec);
+
+        return Body(buf, buf + s);
     }
 
     return Part();
