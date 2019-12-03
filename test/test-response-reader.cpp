@@ -139,7 +139,7 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
         RR::Part part;
 
         part = rr.async_read_part(c, y);
-        BOOST_REQUIRE(get<RR::Head>(&part));
+        BOOST_REQUIRE(part.is_head());
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE_EQUAL(part, body("0123456789"));
@@ -173,7 +173,7 @@ BOOST_AUTO_TEST_CASE(test_http11_chunk) {
         RR::Part part;
 
         part = rr.async_read_part(c, y);
-        BOOST_REQUIRE(get<RR::Head>(&part));
+        BOOST_REQUIRE(part.is_head());
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE_EQUAL(part, chunk_hdr(4, ""));
@@ -218,7 +218,7 @@ BOOST_AUTO_TEST_CASE(test_http11_trailer) {
         RR::Part part;
 
         part = rr.async_read_part(c, y);
-        BOOST_REQUIRE(get<RR::Head>(&part));
+        BOOST_REQUIRE(part.is_head());
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE_EQUAL(part, chunk_hdr(4, ""));
@@ -265,13 +265,13 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
         RR::Part part;
 
         part = rr.async_read_part(c, y);
-        BOOST_REQUIRE(get<RR::Head>(&part));
+        BOOST_REQUIRE(part.is_head());
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE_EQUAL(part, body("0123456789"));
 
         part = rr.async_read_part(c, y);
-        BOOST_REQUIRE(get<RR::Head>(&part));
+        BOOST_REQUIRE(part.is_head());
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE_EQUAL(part, body("abcde"));
@@ -313,7 +313,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
 
         {
             part = rr.async_read_part(c, y);
-            BOOST_REQUIRE(get<RR::Head>(&part));
+            BOOST_REQUIRE(part.is_head());
 
             part = rr.async_read_part(c, y);
             BOOST_REQUIRE_EQUAL(part, chunk_hdr(4, ""));
@@ -330,7 +330,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
 
         {
             part = rr.async_read_part(c, y);
-            BOOST_REQUIRE(get<RR::Head>(&part));
+            BOOST_REQUIRE(part.is_head());
 
             part = rr.async_read_part(c, y);
             BOOST_REQUIRE_EQUAL(part, body("abcde"));

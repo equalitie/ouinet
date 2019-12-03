@@ -94,6 +94,24 @@ public:
             return static_cast<const Base&>(*this)
                 == static_cast<const Base&>(that);
         }
+
+        Head*      as_head()       { return boost::get<Head>     (this); }
+        Body*      as_body()       { return boost::get<Body>     (this); }
+        ChunkHdr*  as_chunk_hdr()  { return boost::get<ChunkHdr> (this); }
+        ChunkBody* as_chunk_body() { return boost::get<ChunkBody>(this); }
+        Trailer*   as_trailer()    { return boost::get<Trailer>  (this); }
+
+        const Head*      as_head()       const { return boost::get<Head>     (this); }
+        const Body*      as_body()       const { return boost::get<Body>     (this); }
+        const ChunkHdr*  as_chunk_hdr()  const { return boost::get<ChunkHdr> (this); }
+        const ChunkBody* as_chunk_body() const { return boost::get<ChunkBody>(this); }
+        const Trailer*   as_trailer()    const { return boost::get<Trailer>  (this); }
+
+        bool is_head()       const { return as_head()       != nullptr; }
+        bool is_body()       const { return as_body()       != nullptr; }
+        bool is_chunk_hdr()  const { return as_chunk_hdr()  != nullptr; }
+        bool is_chunk_body() const { return as_chunk_body() != nullptr; }
+        bool is_trailer()    const { return as_trailer()    != nullptr; }
     };
 
 public:
