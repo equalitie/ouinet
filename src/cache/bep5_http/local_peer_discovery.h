@@ -12,7 +12,7 @@ class LocalPeerDiscovery {
     struct Impl;
 
 public:
-    LocalPeerDiscovery(asio::io_context&, std::set<udp::endpoint> advertised_eps);
+    LocalPeerDiscovery(const asio::executor&, std::set<udp::endpoint> advertised_eps);
 
     LocalPeerDiscovery(const LocalPeerDiscovery&) = delete;
 
@@ -21,7 +21,7 @@ public:
     ~LocalPeerDiscovery();
 
 private:
-    asio::io_context& _ctx;
+    asio::executor _ex;
     std::unique_ptr<Impl> _impl;
     Cancel _lifetime_cancel;
 };

@@ -56,18 +56,18 @@ struct LocalPeerDiscovery::Impl {
         set<udp::endpoint> advertised_eps;
     };
 
-    asio::io_context& _ctx;
+    asio::executor _ex;
     udp::socket _socket;
     PeerId _id;
     set<udp::endpoint> _advertised_eps;
     map<PeerId, Peer> _peers;
 
-    Impl( asio::io_context& ctx
+    Impl( const asio::executor& ex
         , uint64_t id
         , set<udp::endpoint> advertised_eps
         , Cancel& cancel)
-        : _ctx(ctx)
-        , _socket(ctx)
+        : _ex(ex)
+        , _socket(ex)
         , _id(id)
         , _advertised_eps(move(advertised_eps))
     {
@@ -95,7 +95,7 @@ struct LocalPeerDiscovery::Impl {
     }
 
     void broadcast_search_query(Cancel& cancel) {
-        asio::spawn(_ctx, [&, cancel = cancel] (asio::yield_context yield) {
+        asio::spawn(_ex, [&, cancel = cancel] (asio::yield_context yield) {
             sys::error_code ec;
             udp::endpoint ep = multicast_ep;
             _socket.async_send_to( asio::buffer(query_message())
@@ -109,7 +109,7 @@ struct LocalPeerDiscovery::Impl {
     }
 
     void start_listening_to_broadcast(Cancel& cancel) {
-        asio::spawn(_ctx, [&, cancel = cancel] (asio::yield_context yield) mutable {
+        asio::spawn(_ex, [&, cancel = cancel] (asio::yield_context yield) mutable {
             sys::error_code ec;
             if (cancel) return;
             listen_to_broadcast(cancel, yield[ec]);
@@ -138,7 +138,7 @@ struct LocalPeerDiscovery::Impl {
             if (ec) {
                 LOG_ERROR("LocalPeerDiscovery: failed to receive (ec:"
                         , ec.message(), ")");
-                async_sleep(_ctx, chrono::seconds(1), cancel, yield);
+                async_sleep(_ex, chrono::seconds(1), cancel, yield);
                 if (cancel) break;
                 continue;
             }
@@ -258,12 +258,12 @@ set<udp::endpoint> LocalPeerDiscovery::found_peers() const
     return ret;
 }
 
-LocalPeerDiscovery::LocalPeerDiscovery( asio::io_context& ctx
+LocalPeerDiscovery::LocalPeerDiscovery( const asio::executor& ex
                                       , set<udp::endpoint> advertised_eps)
-    : _ctx(ctx)
+    : _ex(ex)
 {
     auto id = util::random_number<uint64_t>();
-    _impl = make_unique<Impl>(_ctx, id, advertised_eps, _lifetime_cancel);
+    _impl = make_unique<Impl>(_ex, id, advertised_eps, _lifetime_cancel);
 }
 
 LocalPeerDiscovery::~LocalPeerDiscovery() {
