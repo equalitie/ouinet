@@ -1,7 +1,6 @@
 #pragma once
 
 #include <boost/asio/ip/tcp.hpp>
-#include <boost/asio/io_service.hpp>
 #include <boost/asio/spawn.hpp>
 
 #include <chrono>
@@ -75,7 +74,7 @@ class Swarm {
 
 class Tracker {
     public:
-    Tracker(asio::io_service& ios);
+    Tracker(const asio::executor&);
     ~Tracker();
 
     std::string generate_token(asio::ip::address address, NodeID id)
@@ -92,7 +91,7 @@ class Tracker {
     std::vector<tcp::endpoint> list_peers(NodeID swarm, unsigned int count);
 
     private:
-    asio::io_service& _ios;
+    asio::executor _exec;
     detail::DhtWriteTokenStorage _token_storage;
     std::map<NodeID, std::unique_ptr<detail::Swarm>> _swarms;
     Signal<void()> _terminate_signal;
@@ -107,7 +106,7 @@ class DataStore {
     const int PUT_VALIDITY_SECONDS = 3600 * 2;
 
     public:
-    DataStore(asio::io_service& ios);
+    DataStore(const asio::executor&);
     ~DataStore();
 
     std::string generate_token(asio::ip::address address, NodeID id)
@@ -138,7 +137,7 @@ class DataStore {
         std::chrono::steady_clock::time_point last_seen;
     };
 
-    asio::io_service& _ios;
+    asio::executor _exec;
     detail::DhtWriteTokenStorage _token_storage;
     std::map<NodeID, ImmutableStoredItem> _immutable_data;
     std::map<NodeID, MutableStoredItem> _mutable_data;
