@@ -15,11 +15,15 @@ public:
     using const_iterator = typename Queue::const_iterator;
 
 public:
-    AsyncQueue(asio::io_service& ios, size_t max_size = -1)
-        : _ios(ios)
+    AsyncQueue(asio::io_context& ctx, size_t max_size = -1)
+        : AsyncQueue(ctx.get_executor(), max_size)
+    {}
+
+    AsyncQueue(const asio::executor& ex, size_t max_size = -1)
+        : _ex(ex)
         , _max_size(max_size)
-        , _rx_cv(_ios)
-        , _tx_cv(_ios)
+        , _rx_cv(_ex)
+        , _tx_cv(_ex)
     {}
 
     AsyncQueue(const AsyncQueue&) = delete;
@@ -210,7 +214,7 @@ public:
     const_iterator end()   const { return _queue.end();   }
 
 private:
-    asio::io_service& _ios;
+    asio::executor _ex;
     size_t _max_size;
     Queue _queue;
     ConditionVariable _rx_cv;

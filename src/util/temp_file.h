@@ -1,6 +1,5 @@
 #pragma once
 
-#include <boost/asio/io_service.hpp>
 #include <boost/asio/posix/stream_descriptor.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/optional.hpp>
@@ -12,7 +11,7 @@ namespace ouinet { namespace util {
 
 class temp_file {
     friend boost::optional<temp_file>
-    mktemp( asio::io_service&, sys::error_code&
+    mktemp( const asio::executor&, sys::error_code&
           , const fs::path&, const fs::path&);
 
 public:
@@ -38,7 +37,6 @@ public:
 
     // <AsyncReadStream+AsyncWriteStream>
     auto get_executor() { return _file.get_executor(); }
-    auto& get_io_service() { return get_executor().context(); }
 
     template<class MutableBufferSequence, class Token>
     auto async_read_some(const MutableBufferSequence& mb, Token&& t) {
@@ -70,7 +68,7 @@ private:
 // Use its `lowest_layer()` to perform I/O.
 // If `keep_on_close(false)`, remove the file on close.
 boost::optional<temp_file>
-mktemp( asio::io_service&, sys::error_code&
+mktemp( const asio::executor&, sys::error_code&
       , const fs::path& dir="."
       , const fs::path& model="tmp.%%%%-%%%%-%%%%-%%%%");
 

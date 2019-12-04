@@ -14,23 +14,23 @@ void atomic_file::commit(sys::error_code& ec) {
 
 /* static */
 boost::optional<atomic_file>
-atomic_file::make( asio::io_service& ios
+atomic_file::make( const asio::executor& ex
                  , fs::path path
                  , const fs::path& temp_model
                  , sys::error_code& ec)
 {
-    auto temp_file = mktemp(ios, ec, path.parent_path(), temp_model);
+    auto temp_file = mktemp(ex, ec, path.parent_path(), temp_model);
     if (ec) return boost::none;
     return atomic_file(std::move(*temp_file), std::move(path));
 }
 
 /* static */
 boost::optional<atomic_file>
-atomic_file::make( asio::io_service& ios
+atomic_file::make( const asio::executor& ex
                  , fs::path path
                  , sys::error_code& ec)
 {
-    return make(ios, std::move(path), "tmp.%%%%-%%%%-%%%%-%%%%", ec);
+    return make(ex, std::move(path), "tmp.%%%%-%%%%-%%%%-%%%%", ec);
 }
 
 }} // namespaces

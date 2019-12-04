@@ -10,17 +10,17 @@ class Timeout {
         Signal<void()> local_abort_signal;
         bool finished = false;
 
-        State(asio::io_service& ios)
-            : timer(ios)
+        State(const asio::executor& ex)
+            : timer(ex)
         {}
     };
 
 public:
     template<class Duration>
-    Timeout( asio::io_service& ios
+    Timeout( const asio::executor& ex
            , Signal<void()>& signal
            , Duration duration)
-        : _state(std::make_shared<State>(ios))
+        : _state(std::make_shared<State>(ex))
     {
         _signal_connection = signal.connect([s = _state] {
                 if (s->local_abort_signal.call_count() == 0) {
@@ -28,7 +28,7 @@ public:
                 }
             });
 
-        asio::spawn(ios, [s = _state, duration] (asio::yield_context yield) {
+        asio::spawn(ex, [s = _state, duration] (asio::yield_context yield) {
                 if (s->finished) return;
 
                 sys::error_code ec;
@@ -66,13 +66,13 @@ private:
 };
 
 template<class Duration, class F, class Yield>
-auto with_timeout( asio::io_service& ios
+auto with_timeout( const asio::executor& ex
                  , Signal<void()>& abort_signal
                  , Duration duration
                  , const F& f
                  , Yield& yield)
 {
-    Timeout timeout(ios, abort_signal, duration);
+    Timeout timeout(ex, abort_signal, duration);
 
     sys::error_code ec;
 

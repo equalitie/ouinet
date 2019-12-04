@@ -47,7 +47,7 @@ private:
             return remaining_locks > 0 && !success;
         }
 
-        WaitState(boost::asio::io_service& ios);
+        WaitState(const boost::asio::executor&);
     };
 
 public:
@@ -68,7 +68,7 @@ public:
     };
 
 public:
-    SuccessCondition(boost::asio::io_service& ios);
+    SuccessCondition(const boost::asio::executor&);
     SuccessCondition(const SuccessCondition&) = delete;
     SuccessCondition& operator=(const SuccessCondition&) = delete;
 
@@ -82,7 +82,7 @@ public:
     }
 
 private:
-    boost::asio::io_service& _ios;
+    boost::asio::executor _exec;
     std::shared_ptr<WaitState> _wait_state;
     Signal<void()> _cancel_signal;
     bool _cancelled;
@@ -91,8 +91,8 @@ private:
 
 
 inline
-SuccessCondition::WaitState::WaitState(boost::asio::io_service& ios):
-    condition(ios),
+SuccessCondition::WaitState::WaitState(const boost::asio::executor& exec):
+    condition(exec),
     remaining_locks(0),
     success(false)
 {}
@@ -143,8 +143,8 @@ void SuccessCondition::Lock::release(bool success) const
 }
 
 inline
-SuccessCondition::SuccessCondition(boost::asio::io_service& ios):
-    _ios(ios),
+SuccessCondition::SuccessCondition(const boost::asio::executor& exec):
+    _exec(exec),
     _cancelled(false)
 {}
 
@@ -152,7 +152,7 @@ inline
 bool SuccessCondition::wait_for_success(boost::asio::yield_context yield)
 {
     if (!_wait_state) {
-        _wait_state = std::make_shared<WaitState>(_ios);
+        _wait_state = std::make_shared<WaitState>(_exec);
     }
 
     std::shared_ptr<WaitState> wait_state = std::move(_wait_state);
@@ -169,7 +169,7 @@ inline
 SuccessCondition::Lock SuccessCondition::lock()
 {
     if (!_wait_state) {
-        _wait_state = std::make_shared<WaitState>(_ios);
+        _wait_state = std::make_shared<WaitState>(_exec);
     }
 
     return SuccessCondition::Lock(_wait_state);

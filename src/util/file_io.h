@@ -1,7 +1,6 @@
 #pragma once
 
 #include <boost/asio/posix/stream_descriptor.hpp>
-#include <boost/asio/io_service.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/filesystem.hpp>
 
@@ -12,10 +11,10 @@
 namespace ouinet { namespace util { namespace file_io {
 
 asio::posix::stream_descriptor
-open_or_create(asio::io_service& ios, const fs::path&, sys::error_code&);
+open_or_create(const asio::executor&, const fs::path&, sys::error_code&);
 
 asio::posix::stream_descriptor
-open_readonly(asio::io_service& ios, const fs::path&, sys::error_code&);
+open_readonly(const asio::executor&, const fs::path&, sys::error_code&);
 
 // Duplicate the descriptor, see dup(2).
 // The descriptor shares offset and flags with that of the original file,

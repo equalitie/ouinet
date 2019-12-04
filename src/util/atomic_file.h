@@ -1,6 +1,5 @@
 #pragma once
 
-#include <boost/asio/io_service.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/optional.hpp>
 #include <boost/system/error_code.hpp>
@@ -19,13 +18,13 @@ public:
     // If no commit is done or it fails,
     // the temporary file is automatically removed.
     static
-    boost::optional<atomic_file> make( asio::io_service&
+    boost::optional<atomic_file> make( const asio::executor&
                                      , fs::path
                                      , const fs::path& temp_model
                                      , sys::error_code&);
 
     static
-    boost::optional<atomic_file> make( asio::io_service&
+    boost::optional<atomic_file> make( const asio::executor&
                                      , fs::path
                                      , sys::error_code&);
 
@@ -52,7 +51,6 @@ public:
 
     // <AsyncReadStream+AsyncWriteStream>
     auto get_executor() { return _temp_file.get_executor(); }
-    auto& get_io_service() { return get_executor().context(); }
 
     template<class MutableBufferSequence, class Token>
     auto async_read_some(const MutableBufferSequence& mb, Token&& t) {
