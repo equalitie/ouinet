@@ -59,7 +59,7 @@ bool match_http_url(const boost::string_view url, url_match& match) {
 inline
 auto tcp_async_resolve( const std::string& host
                       , const std::string& port
-                      , asio::io_service& ios
+                      , asio::executor exec
                       , Cancel& cancel
                       , asio::yield_context yield)
 {
@@ -84,7 +84,7 @@ auto tcp_async_resolve( const std::string& host
     // https://stackoverflow.com/questions/41352985/abort-a-call-to-getaddrinfo
     sys::error_code ec;
     Results results;
-    ConditionVariable cv(ios);
+    ConditionVariable cv(exec);
     tcp::resolver* rp = nullptr;
 
     auto cancel_lookup_slot = cancel.connect([&] {
@@ -95,11 +95,11 @@ auto tcp_async_resolve( const std::string& host
 
     bool* finished_p = nullptr;
 
-    asio::spawn(ios, [&] (asio::yield_context yield) {
+    asio::spawn(exec, [&] (asio::yield_context yield) {
         bool finished = false;
         finished_p = &finished;
 
-        tcp::resolver resolver{ios};
+        tcp::resolver resolver{exec};
         rp = &resolver;
         sys::error_code ec_;
         auto r = resolver.async_resolve({host, port}, yield[ec_]);
