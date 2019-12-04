@@ -112,7 +112,7 @@ void handle_bad_request( GenericStream& con
 static
 TcpLookup
 resolve_target( const Request& req
-              , asio::io_service& ios
+              , asio::executor exec
               , Cancel& cancel
               , Yield yield)
 {
@@ -128,7 +128,7 @@ resolve_target( const Request& req
     // Resolve address and also use result for more sophisticaded checking.
     if (!local)
         lookup = util::tcp_async_resolve( host, port
-                                        , ios
+                                        , exec
                                         , cancel
                                         , yield[ec]);
 
@@ -159,13 +159,13 @@ void handle_connect_request( GenericStream client_c
 {
     sys::error_code ec;
 
-    asio::io_service& ios = client_c.get_io_service();
+    asio::executor exec = client_c.get_executor();
 
     auto disconnect_client_slot = cancel.connect([&client_c] {
         client_c.close();
     });
 
-    TcpLookup lookup = resolve_target(req, ios, cancel, yield[ec]);
+    TcpLookup lookup = resolve_target(req, exec, cancel, yield[ec]);
 
     if (ec) {
         // Prepare and send error message to `con`.
@@ -199,7 +199,7 @@ void handle_connect_request( GenericStream client_c
                                  , yield[ec]);
     }
 
-    auto origin_c = connect_to_host( lookup, ios
+    auto origin_c = connect_to_host( lookup, exec
                                    , default_timeout::tcp_connect()
                                    , cancel, yield[ec]);
 
@@ -249,12 +249,12 @@ public:
         sys::error_code ec;
 
         // Resolve target endpoint and check its validity.
-        TcpLookup lookup = resolve_target(rq, ios, cancel, yield[ec]);
+        TcpLookup lookup = resolve_target(rq, executor, cancel, yield[ec]);
 
         if (ec) return or_throw<GenericStream>(yield, ec);
 
         auto socket = connect_to_host( lookup
-                                     , ios
+                                     , executor
                                      , cancel
                                      , yield[ec]);
 
@@ -275,14 +275,14 @@ public:
 
     // TODO: Replace this with cancellation support in which fetch_ operations
     // get a signal parameter
-    InjectorCacheControl( asio::io_service& ios
+    InjectorCacheControl( asio::executor executor
                         , asio::ssl::context& ssl_ctx
                         , OriginPools& origin_pools
                         , const InjectorConfig& config
                         , uuid_generator& genuuid)
         : insert_id(to_string(genuuid()))
         , insert_ts(chrono::seconds(time(nullptr)).count())
-        , ios(ios)
+        , executor(move(executor))
         , ssl_ctx(ssl_ctx)
         , config(config)
         , genuuid(genuuid)
@@ -372,7 +372,7 @@ public:
 private:
     std::string insert_id;
     std::chrono::seconds::rep insert_ts;
-    asio::io_service& ios;
+    asio::executor executor;
     asio::ssl::context& ssl_ctx;
     const InjectorConfig& config;
     uuid_generator& genuuid;
@@ -555,7 +555,7 @@ void listen( InjectorConfig& config
         proxy_server.stop_listen();
     });
 
-    asio::io_service& ios = proxy_server.get_io_service();
+    asio::executor exec = proxy_server.get_executor();
 
     sys::error_code ec;
     proxy_server.start_listen(yield[ec]);
@@ -564,7 +564,7 @@ void listen( InjectorConfig& config
         return;
     }
 
-    WaitCondition shutdown_connections(ios);
+    WaitCondition shutdown_connections(exec);
 
     uint64_t next_connection_id = 0;
 
@@ -581,7 +581,7 @@ void listen( InjectorConfig& config
         if (ec == boost::asio::error::operation_aborted) {
             break;
         } else if (ec) {
-            if (!async_sleep(ios, std::chrono::milliseconds(100), cancel, yield)) {
+            if (!async_sleep(exec, std::chrono::milliseconds(100), cancel, yield)) {
                 break;
             }
             continue;
@@ -589,7 +589,7 @@ void listen( InjectorConfig& config
 
         uint64_t connection_id = next_connection_id++;
 
-        asio::spawn(ios, [
+        asio::spawn(exec, [
             connection = std::move(connection),
             &ssl_ctx,
             &cancel,
@@ -643,19 +643,19 @@ int main(int argc, const char* argv[])
         , config.repo_root() / OUINET_TLS_DH_FILE );
 
     // The io_service is required for all I/O
-    asio::io_service ios;
+    asio::io_context ioc;
 
     shared_ptr<bt::MainlineDht> bt_dht_ptr;
 
-    auto bittorrent_dht = [&bt_dht_ptr, &config, &ios] {
+    auto bittorrent_dht = [&bt_dht_ptr, &config, &ioc] {
         if (!config.bittorrent_endpoint() || bt_dht_ptr) return bt_dht_ptr;
-        bt_dht_ptr = make_shared<bt::MainlineDht>(ios);
+        bt_dht_ptr = make_shared<bt::MainlineDht>(ioc);
         bt_dht_ptr->set_endpoints({*config.bittorrent_endpoint()});
         assert(!bt_dht_ptr->local_endpoints().empty());
         return bt_dht_ptr;
     };
 
-    OuiServiceServer proxy_server(ios);
+    OuiServiceServer proxy_server(ioc);
 
     if (config.tcp_endpoint()) {
         tcp::endpoint endpoint = *config.tcp_endpoint();
@@ -664,7 +664,7 @@ int main(int argc, const char* argv[])
         util::create_state_file( config.repo_root()/"endpoint-tcp"
                                , util::str(endpoint));
 
-        proxy_server.add(make_unique<ouiservice::TcpOuiServiceServer>(ios, endpoint));
+        proxy_server.add(make_unique<ouiservice::TcpOuiServiceServer>(ioc, endpoint));
     }
 
     auto read_ssl_certs = [&] {
@@ -683,8 +683,8 @@ int main(int argc, const char* argv[])
         util::create_state_file( config.repo_root()/"endpoint-tcp-tls"
                                , util::str(endpoint));
 
-        auto base = make_unique<ouiservice::TcpOuiServiceServer>(ios, endpoint);
-        proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(ios, move(base), ssl_context));
+        auto base = make_unique<ouiservice::TcpOuiServiceServer>(ioc, endpoint);
+        proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(ioc, move(base), ssl_context));
     }
 
     if (config.utp_endpoint()) {
@@ -694,7 +694,7 @@ int main(int argc, const char* argv[])
         util::create_state_file( config.repo_root()/"endpoint-utp"
                                , util::str(endpoint));
 
-        auto srv = make_unique<ouiservice::UtpOuiServiceServer>(ios, endpoint);
+        auto srv = make_unique<ouiservice::UtpOuiServiceServer>(ioc, endpoint);
         proxy_server.add(move(srv));
     }
 
@@ -703,7 +703,7 @@ int main(int argc, const char* argv[])
 
         udp::endpoint endpoint = *config.utp_tls_endpoint();
 
-        auto base = make_unique<ouiservice::UtpOuiServiceServer>(ios, endpoint);
+        auto base = make_unique<ouiservice::UtpOuiServiceServer>(ioc, endpoint);
 
         auto local_ep = base->local_endpoint();
 
@@ -711,7 +711,7 @@ int main(int argc, const char* argv[])
             LOG_INFO("uTP/TLS address: ", *local_ep);
             util::create_state_file( config.repo_root()/"endpoint-utp-tls"
                                    , util::str(*local_ep));
-            proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(ios, move(base), ssl_context));
+            proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(ioc, move(base), ssl_context));
 
         } else {
             LOG_ERROR("Failed to start uTP/TLS service on ", *config.utp_tls_endpoint());
@@ -747,7 +747,7 @@ int main(int argc, const char* argv[])
         util::create_state_file( config.repo_root()/"endpoint-obfs2"
                                , util::str(endpoint));
 
-        proxy_server.add(make_unique<ouiservice::Obfs2OuiServiceServer>(ios, endpoint, config.repo_root()/"obfs2-server"));
+        proxy_server.add(make_unique<ouiservice::Obfs2OuiServiceServer>(ioc, endpoint, config.repo_root()/"obfs2-server"));
     }
 
     if (config.obfs3_endpoint()) {
@@ -756,7 +756,7 @@ int main(int argc, const char* argv[])
         util::create_state_file( config.repo_root()/"endpoint-obfs3"
                                , util::str(endpoint));
 
-        proxy_server.add(make_unique<ouiservice::Obfs3OuiServiceServer>(ios, endpoint, config.repo_root()/"obfs3-server"));
+        proxy_server.add(make_unique<ouiservice::Obfs3OuiServiceServer>(ioc, endpoint, config.repo_root()/"obfs3-server"));
     }
 
     if (config.obfs4_endpoint()) {
@@ -766,8 +766,8 @@ int main(int argc, const char* argv[])
                                , util::str(endpoint));
 
         unique_ptr<ouiservice::Obfs4OuiServiceServer> server =
-            make_unique<ouiservice::Obfs4OuiServiceServer>(ios, endpoint, config.repo_root()/"obfs4-server");
-        asio::spawn(ios, [
+            make_unique<ouiservice::Obfs4OuiServiceServer>(ioc, endpoint, config.repo_root()/"obfs4-server");
+        asio::spawn(ioc, [
             obfs4 = server.get(),
             endpoint
         ] (asio::yield_context yield) {
@@ -781,7 +781,7 @@ int main(int argc, const char* argv[])
     }
 
     if (config.listen_on_i2p()) {
-        auto i2p_service = make_shared<ouiservice::I2pOuiService>((config.repo_root()/"i2p").string(), ios);
+        auto i2p_service = make_shared<ouiservice::I2pOuiService>((config.repo_root()/"i2p").string(), ioc);
         std::unique_ptr<ouiservice::I2pOuiServiceServer> i2p_server = i2p_service->build_server("i2p-private-key");
 
         auto ep = i2p_server->public_identity();
@@ -795,8 +795,8 @@ int main(int argc, const char* argv[])
 
     Cancel cancel;
 
-    asio::spawn(ios, [
-        &ios,
+    asio::spawn(ioc, [
+        &ioc,
         &proxy_server,
         &config,
         &cancel
@@ -805,11 +805,11 @@ int main(int argc, const char* argv[])
         listen(config, proxy_server, cancel, yield[ec]);
     });
 
-    asio::signal_set signals(ios, SIGINT, SIGTERM);
+    asio::signal_set signals(ioc, SIGINT, SIGTERM);
 
     unique_ptr<ForceExitOnSignal> force_exit;
 
-    signals.async_wait([&cancel, &signals, &ios, &force_exit, &bt_dht_ptr]
+    signals.async_wait([&cancel, &signals, &ioc, &force_exit, &bt_dht_ptr]
                        (const sys::error_code& ec, int signal_number) {
             if (bt_dht_ptr) {
                 bt_dht_ptr->stop();
@@ -820,7 +820,7 @@ int main(int argc, const char* argv[])
             force_exit = make_unique<ForceExitOnSignal>();
         });
 
-    ios.run();
+    ioc.run();
 
     return EXIT_SUCCESS;
 }
