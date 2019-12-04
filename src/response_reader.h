@@ -8,9 +8,9 @@
 #include <boost/variant.hpp>
 #include <queue>
 
-namespace ouinet {
+namespace ouinet { namespace http_response {
 
-class ResponseReader {
+class Reader {
 private:
     static const size_t http_forward_block = 16384;
     using string_view = boost::string_view;
@@ -120,7 +120,7 @@ public:
     };
 
 public:
-    ResponseReader(GenericStream in);
+    Reader(GenericStream in);
 
     //
     // Possible output on subsequent invocations per one response:
@@ -168,14 +168,14 @@ private:
     std::queue<Part> _queued_parts;
 };
 
-ResponseReader::ResponseReader(GenericStream in)
+Reader::Reader(GenericStream in)
     : _in(std::move(in))
 {
     set_callbacks();
 }
 
 inline
-void ResponseReader::set_callbacks()
+void Reader::set_callbacks()
 {
     _on_chunk_header = [&] (auto size, auto exts, auto& ec) {
         _queued_parts.push(ChunkHdr{size, std::move(exts.to_string())});
@@ -192,8 +192,8 @@ void ResponseReader::set_callbacks()
     _parser.on_chunk_body(_on_chunk_body);
 }
 
-ResponseReader::Part
-ResponseReader::async_read_part(Cancel cancel, Yield yield_) {
+Reader::Part
+Reader::async_read_part(Cancel cancel, Yield yield_) {
     namespace Err = asio::error;
 
     std::cerr << "----------- start\n";
@@ -291,4 +291,4 @@ ResponseReader::async_read_part(Cancel cancel, Yield yield_) {
     return Part();
 }
 
-} // namespace ouinet
+}} // namespace ouinet::http_response

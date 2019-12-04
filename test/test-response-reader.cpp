@@ -13,7 +13,7 @@ using namespace std;
 using namespace ouinet;
 
 using tcp = asio::ip::tcp;
-using RR = ResponseReader;
+using RR = http_response::Reader;
 
 // TODO: There should be a more straight forward way to do this.
 tcp::socket
@@ -83,7 +83,7 @@ RR::Part trailer(map<string, string> trailer) {
     return RR::Trailer{move(fields)};
 }
 
-namespace ouinet {
+namespace ouinet { namespace http_response {
     bool operator==(const RR::Head&, const RR::Head&) { return false; /* TODO */ }
 
     bool operator==(const RR::Trailer& t1, const RR::Trailer& t2) {
@@ -109,7 +109,7 @@ namespace ouinet {
     std::ostream& operator<<(std::ostream& os, const RR::Trailer&) {
         return os << "Trailer";
     }
-} // ouinet namespaces
+}} // ouinet namespaces::http_response
 
 bool is_end_of_stream(RR& rr, Cancel& c, Yield& y) {
     sys::error_code ec;
