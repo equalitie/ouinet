@@ -8,12 +8,12 @@
 namespace ouinet {
 
 inline
-bool async_sleep( asio::io_context& ioc
+bool async_sleep( const asio::executor& exec
                 , asio::steady_timer::duration duration
                 , Signal<void()>& cancel
                 , asio::yield_context yield)
 {
-    asio::steady_timer timer(ioc);
+    asio::steady_timer timer(exec);
     timer.expires_from_now(duration);
     sys::error_code ec;
 
