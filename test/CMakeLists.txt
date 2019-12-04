@@ -33,6 +33,9 @@ add_executable(test-stream-fork "test-stream-fork.cpp")
 ######################################################################
 add_executable(test-response-reader "test-response-reader.cpp")
 
+######################################################################
+add_executable(test-response-writer "test-response-writer.cpp")
+
 ################################################################################
 add_executable(test-persistent-lru-cache
     "test_persistent_lru_cache.cpp"
