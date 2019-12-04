@@ -18,7 +18,7 @@ class ClientProcess : public DispatcherProcess
 
     public:
     ClientProcess(
-        asio::io_service& ios,
+        asio::io_context&,
         std::string command,
         std::vector<std::string> command_line_arguments,
         std::string transport_name,

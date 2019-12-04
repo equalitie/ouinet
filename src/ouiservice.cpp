@@ -15,9 +15,9 @@ using namespace ouinet;
 // OuiServiceServer
 //--------------------------------------------------------------------
 
-OuiServiceServer::OuiServiceServer(asio::io_service& ios):
-    _ios(ios),
-    _connection_available(ios)
+OuiServiceServer::OuiServiceServer(const asio::executor& ex):
+    _ex(ex),
+    _connection_available(ex)
 {}
 
 void OuiServiceServer::add(std::unique_ptr<OuiServiceImplementationServer> implementation)
@@ -29,13 +29,13 @@ void OuiServiceServer::start_listen(asio::yield_context yield)
 {
     using namespace std::chrono_literals;
 
-    SuccessCondition success_condition(_ios);
+    SuccessCondition success_condition(_ex);
 
     for (auto& implementation : _implementations) {
-        asio::spawn(_ios, [ this
-                          , implementation = implementation.get()
-                          , lock = success_condition.lock()
-                          ] (asio::yield_context yield) mutable {
+        asio::spawn(_ex, [ this
+                         , implementation = implementation.get()
+                         , lock = success_condition.lock()
+                         ] (asio::yield_context yield) mutable {
             sys::error_code ec;
 
             auto slot_connection = _stop_listen.connect([implementation] () {
@@ -57,7 +57,7 @@ void OuiServiceServer::start_listen(asio::yield_context yield)
 
                 if (ec) {
                     // Retry after a short while to avoid CPU hogging
-                    async_sleep(_ios, 1s, _stop_listen, yield);
+                    async_sleep(_ex, 1s, _stop_listen, yield);
                     ec = sys::error_code();
                     continue;
                 }
@@ -114,9 +114,9 @@ void OuiServiceServer::cancel_accept()
 // OuiServiceClient
 //--------------------------------------------------------------------
 
-OuiServiceClient::OuiServiceClient(asio::io_service& ios):
+OuiServiceClient::OuiServiceClient(const asio::executor& ex):
     _started(false),
-    _started_condition(ios)
+    _started_condition(ex)
 {}
 
 void OuiServiceClient::add( Endpoint endpoint

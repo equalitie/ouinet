@@ -14,7 +14,7 @@ Tunnel::Tunnel(const boost::asio::executor& exec, std::shared_ptr<i2p::client::I
   : _exec(exec), _i2p_tunnel(std::move(i2p_tunnel)),
     _was_destroyed(make_shared<bool>(false))
 {
-  // I2Pd doesn't implicitly keep io_service busy, so we need to
+  // I2Pd doesn't implicitly keep executor busy, so we need to
   // do it ourselves.
   _waiting_work = std::make_shared<WorkGuard>(_exec);
   _i2p_tunnel->Start();

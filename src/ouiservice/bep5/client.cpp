@@ -40,7 +40,7 @@ struct Bep5Client::Bep5Loop
     }
 
     void start() {
-        asio::spawn(owner->get_io_service()
+        asio::spawn(owner->get_executor()
                    , [&] (asio::yield_context yield) {
                          Cancel cancel(cancel_);
                          sys::error_code ec;
@@ -49,7 +49,7 @@ struct Bep5Client::Bep5Loop
     }
 
     void loop(Cancel& cancel, asio::yield_context yield) {
-        auto& ios = owner->get_io_service();
+        auto ex = owner->get_executor();
 
         {
             sys::error_code ec;
@@ -74,7 +74,7 @@ struct Bep5Client::Bep5Loop
             wait_condition_locks.clear();
 
             if (ec) {
-                async_sleep(ios, 1s, cancel, yield);
+                async_sleep(ex, 1s, cancel, yield);
                 continue;
             }
 
@@ -87,7 +87,7 @@ struct Bep5Client::Bep5Loop
 
             owner->add_injector_endpoints(move(endpoints));
 
-            async_sleep(ios, 1min, cancel, yield);
+            async_sleep(ex, 1min, cancel, yield);
         }
     }
 
@@ -148,7 +148,7 @@ Bep5Client::choose_multiplexer_for(const udp::endpoint& ep)
 
     for (auto& e : eps) {
         if (same_ipv(ep, e)) {
-            asio_utp::udp_multiplexer m(get_io_service());
+            asio_utp::udp_multiplexer m(get_executor());
             sys::error_code ec;
             m.bind(e, ec);
             assert(!ec);
@@ -169,7 +169,7 @@ unique_ptr<Bep5Client::Client> Bep5Client::build_client(const udp::endpoint& ep)
     }
 
     auto utp_client = make_unique<UtpOuiServiceClient>
-        (get_io_service(), move(*opt_m), util::str(ep));
+        (get_executor(), move(*opt_m), util::str(ep));
 
     if (!utp_client->verify_remote_endpoint()) {
         LOG_ERROR("Bep5Client: Failed to bind uTP client");
@@ -203,7 +203,7 @@ void Bep5Client::maybe_wait_for_bep5_resolve(
         asio::yield_context yield
 ) {
     if (_wait_for_bep5_resolve && _bep5_loop->get_peers_call_count == 0) {
-        WaitCondition wc(_dht->get_io_service());
+        WaitCondition wc(_dht->get_executor());
 
         _bep5_loop->wait_condition_locks.push_back(wc.lock());
 
@@ -225,7 +225,7 @@ GenericStream Bep5Client::connect(asio::yield_context yield, Cancel& cancel_)
     maybe_wait_for_bep5_resolve(cancel, yield[ec]);
     return_or_throw_on_error(yield, cancel, ec, GenericStream{});
 
-    WaitCondition wc(get_io_service());
+    WaitCondition wc(get_executor());
 
     Cancel spawn_cancel(cancel); // Cancels all spawned coroutines
 
@@ -234,7 +234,7 @@ GenericStream Bep5Client::connect(asio::yield_context yield, Cancel& cancel_)
     for (auto& cp : _clients) {
         auto inj = cp.second.get();
 
-        asio::spawn(get_io_service(),
+        asio::spawn(get_executor(),
         [ =
         , &spawn_cancel
         , &ret_con
@@ -264,7 +264,7 @@ Bep5Client::~Bep5Client()
     stop();
 }
 
-asio::io_service& Bep5Client::get_io_service()
+asio::executor Bep5Client::get_executor()
 {
-    return _dht->get_io_service();
+    return _dht->get_executor();
 }

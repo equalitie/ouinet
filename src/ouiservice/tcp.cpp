@@ -6,9 +6,9 @@
 namespace ouinet {
 namespace ouiservice {
 
-TcpOuiServiceServer::TcpOuiServiceServer(asio::io_service& ios, asio::ip::tcp::endpoint endpoint):
-    _ios(ios),
-    _acceptor(ios),
+TcpOuiServiceServer::TcpOuiServiceServer(const asio::executor& ex, asio::ip::tcp::endpoint endpoint):
+    _ex(ex),
+    _acceptor(ex),
     _endpoint(endpoint)
 {}
 
@@ -51,7 +51,7 @@ GenericStream TcpOuiServiceServer::accept(asio::yield_context yield)
 {
     sys::error_code ec;
 
-    asio::ip::tcp::socket socket(_ios);
+    asio::ip::tcp::socket socket(_ex);
     _acceptor.async_accept(socket, yield[ec]);
 
     if (ec) {
@@ -88,8 +88,8 @@ static boost::optional<asio::ip::tcp::endpoint> parse_endpoint(std::string endpo
     return asio::ip::tcp::endpoint(address, port);
 }
 
-TcpOuiServiceClient::TcpOuiServiceClient(asio::io_service& ios, std::string endpoint):
-    _ios(ios),
+TcpOuiServiceClient::TcpOuiServiceClient(const asio::executor& ex, std::string endpoint):
+    _ex(ex),
     _endpoint(parse_endpoint(endpoint))
 {}
 
@@ -102,7 +102,7 @@ TcpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
 
     sys::error_code ec;
 
-    asio::ip::tcp::socket socket(_ios);
+    asio::ip::tcp::socket socket(_ex);
 
     auto cancel_slot = cancel.connect([&] {
         // tcp::socket::cancel() does not work properly on all platforms

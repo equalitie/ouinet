@@ -12,7 +12,7 @@ class ServerProcess : public DispatcherProcess
 {
     public:
     ServerProcess(
-        asio::io_service& ios,
+        asio::io_context&,
         std::string command,
         std::vector<std::string> command_line_arguments,
         std::string transport_name,

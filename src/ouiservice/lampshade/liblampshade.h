@@ -1,6 +1,5 @@
 #pragma once
 
-#include <boost/asio/io_service.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/intrusive/list.hpp>
 
@@ -25,16 +24,16 @@ struct Cancellable : public boost::intrusive::list_base_hook<boost::intrusive::l
 class Dialer
 {
     public:
-    Dialer(asio::io_service& ios);
+    Dialer(const asio::executor&);
     ~Dialer();
 
-    asio::io_service& get_io_service() { return _ios; }
+    asio::executor get_executor() { return _ex; }
 
     void init(asio::ip::tcp::endpoint endpoint, std::string public_key_der, asio::yield_context yield);
     GenericStream dial(asio::yield_context yield, Signal<void()>& cancel);
 
     protected:
-    asio::io_service& _ios;
+    asio::executor _ex;
     boost::intrusive::list<detail::Cancellable, boost::intrusive::constant_time_size<false>> _pending_operations;
     uint64_t _dialer_id;
 };
@@ -42,17 +41,17 @@ class Dialer
 class Listener
 {
     public:
-    Listener(asio::io_service& ios);
+    Listener(const asio::executor&);
     ~Listener();
 
-    asio::io_service& get_io_service() { return _ios; }
+    asio::executor get_executor() { return _ex; }
 
     void listen(asio::ip::tcp::endpoint endpoint, std::string private_key_der, asio::yield_context yield);
     GenericStream accept(asio::yield_context yield);
     void close();
 
     protected:
-    asio::io_service& _ios;
+    asio::executor _ex;
     boost::intrusive::list<detail::Cancellable, boost::intrusive::constant_time_size<false>> _pending_operations;
     uint64_t _listener_id;
     bool _listening;

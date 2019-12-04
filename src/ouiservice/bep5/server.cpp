@@ -40,7 +40,7 @@ struct Bep5Server::State
     {
         announcer = bt::Bep5Announcer(infohash, dht);
 
-        auto& ios = dht->get_io_service();
+        auto ex = dht->get_executor();
 
         sys::error_code ec;
         server->start_listen(yield[ec]);
@@ -48,7 +48,7 @@ struct Bep5Server::State
 
         Cancel cancel(outer_cancel);
 
-        asio::spawn(ios, [&, cancel = move(cancel)]
+        asio::spawn(ex, [&, ex, cancel = move(cancel)]
                 (asio::yield_context yield) mutable {
             while (!cancel) {
                 sys::error_code ec;
@@ -57,7 +57,7 @@ struct Bep5Server::State
                 if (cancel) break;
 
                 if (ec) {
-                    async_sleep(ios, 100ms, cancel, yield);
+                    async_sleep(ex, 100ms, cancel, yield);
                     if (cancel) break;
                     continue;
                 }
@@ -78,11 +78,11 @@ Bep5Server::Bep5Server( shared_ptr<bt::MainlineDht> dht
                       , boost::asio::ssl::context* ssl_context
                       , string swarm_name)
     : _dht(dht)
-    , _accept_queue(_dht->get_io_service())
+    , _accept_queue(_dht->get_executor())
 {
     assert(_dht);
 
-    auto& ios = _dht->get_io_service();
+    auto ex = _dht->get_executor();
 
     auto endpoints = _dht->local_endpoints();
 
@@ -94,10 +94,10 @@ Bep5Server::Bep5Server( shared_ptr<bt::MainlineDht> dht
     LOG_INFO("Injector swarm: sha1('", swarm_name, "'): ", infohash.to_hex());
 
     for (auto ep : endpoints) {
-        auto base = make_unique<ouiservice::UtpOuiServiceServer>(ios, ep);
+        auto base = make_unique<ouiservice::UtpOuiServiceServer>(ex, ep);
         if (ssl_context) {
             LOG_INFO("Bep5: uTP/TLS Address: ", ep);
-            auto tls = make_unique<ouiservice::TlsOuiServiceServer>(ios, move(base), *ssl_context);
+            auto tls = make_unique<ouiservice::TlsOuiServiceServer>(ex, move(base), *ssl_context);
             _states.emplace_back(new State(dht, infohash, move(tls)));
         } else {
             LOG_INFO("Bep5: uTP Address: ", ep);

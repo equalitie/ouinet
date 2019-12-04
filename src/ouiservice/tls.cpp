@@ -16,7 +16,7 @@ void TlsOuiServiceServer::start_listen(asio::yield_context yield) /* override */
 
     _base->start_listen(yield);
 
-    asio::spawn(_ios, [&] (asio::yield_context yield) {
+    asio::spawn(_ex, [&] (asio::yield_context yield) {
             using namespace chrono_literals;
 
             Cancel cancel(_cancel);
@@ -29,7 +29,7 @@ void TlsOuiServiceServer::start_listen(asio::yield_context yield) /* override */
                 if (cancel || ec == asio::error::operation_aborted) break;
 
                 if (ec) {
-                    async_sleep(_ios, 100ms, cancel, yield);
+                    async_sleep(_ex, 100ms, cancel, yield);
                     if (cancel) break;
                     continue;
                 }
@@ -39,18 +39,18 @@ void TlsOuiServiceServer::start_listen(asio::yield_context yield) /* override */
 
                 // Spawn a new coroutine to avoid blocking accept of the next
                 // socket.
-                asio::spawn(_ios, [ tls_con = move(tls_con)
+                asio::spawn(_ex, [ tls_con = move(tls_con)
                                   , cancel = move(cancel)
                                   , &q = _accept_queue
-                                  , &ios = _ios
+                                  , ex = _ex
                                   ] (auto yield) mutable {
                     sys::error_code ec;
                     bool timed_out = false;
 
-                    WatchDog wd(ios, 10s, [&] {
-                                              tls_con->next_layer().close();
-                                              timed_out = true;
-                                          });
+                    WatchDog wd(ex, 10s, [&] {
+                                             tls_con->next_layer().close();
+                                             timed_out = true;
+                                         });
 
                     tls_con->async_handshake( asio::ssl::stream_base::server
                                             , yield[ec]);

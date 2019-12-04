@@ -14,7 +14,7 @@ class ServerProcess;
 class PtOuiServiceServer : public OuiServiceImplementationServer
 {
     public:
-    PtOuiServiceServer(asio::io_service& ios);
+    PtOuiServiceServer(asio::io_context&);
     ~PtOuiServiceServer();
 
     void start_listen(asio::yield_context yield) final;
@@ -31,14 +31,14 @@ class PtOuiServiceServer : public OuiServiceImplementationServer
 
     protected:
     virtual std::unique_ptr<ServerProcess> start_server_process(
-        asio::io_service& ios,
+        asio::io_context&,
         asio::ip::tcp::endpoint destination_endpoint,
         asio::yield_context yield,
         Signal<void()>& cancel_signal
     ) = 0;
 
     private:
-    asio::io_service& _ios;
+    asio::io_context& _ioc;
 
     asio::ip::tcp::acceptor _acceptor;
     std::unique_ptr<pt::ServerProcess> _server_process;
@@ -48,7 +48,7 @@ class PtOuiServiceServer : public OuiServiceImplementationServer
 class PtOuiServiceClient : public OuiServiceImplementationClient
 {
     public:
-    PtOuiServiceClient(asio::io_service& ios);
+    PtOuiServiceClient(asio::io_context&);
     ~PtOuiServiceClient();
 
     void start(asio::yield_context yield) final;
@@ -61,12 +61,12 @@ class PtOuiServiceClient : public OuiServiceImplementationClient
 
     protected:
     virtual std::unique_ptr<ClientProcess> start_client_process(
-        asio::io_service& ios,
+        asio::io_context&,
         asio::yield_context yield,
         Signal<void()>& cancel_signal
     ) = 0;
     virtual asio::ip::tcp::socket connect_through_transport(
-        asio::io_service& ios,
+        const asio::executor&,
         asio::ip::tcp::endpoint transport_endpoint,
         std::string& remote_endpoint_string,
         asio::yield_context yield,
@@ -74,7 +74,7 @@ class PtOuiServiceClient : public OuiServiceImplementationClient
     ) = 0;
 
     private:
-    asio::io_service& _ios;
+    asio::io_context& _ioc;
 
     std::unique_ptr<pt::ClientProcess> _client_process;
 };
