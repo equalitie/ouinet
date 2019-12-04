@@ -422,7 +422,7 @@ void serve( InjectorConfig& config
         con.close();
     });
 
-    InjectorCacheControl cc( con.get_io_service()
+    InjectorCacheControl cc( con.get_executor()
                            , ssl_ctx
                            , origin_pools
                            , config
@@ -437,7 +437,7 @@ void serve( InjectorConfig& config
 
         if (ec) break;
 
-        Yield yield(con.get_io_service(), yield_, util::str('C', connection_id));
+        Yield yield(con.get_executor(), yield_, util::str('C', connection_id));
 
         yield.log("=== New request ===");
         yield.log(req.base());
@@ -642,20 +642,21 @@ int main(int argc, const char* argv[])
         , config.repo_root() / OUINET_TLS_KEY_FILE
         , config.repo_root() / OUINET_TLS_DH_FILE );
 
-    // The io_service is required for all I/O
+    // The io_context is required for all I/O
     asio::io_context ioc;
+    asio::executor ex = ioc.get_executor();
 
     shared_ptr<bt::MainlineDht> bt_dht_ptr;
 
-    auto bittorrent_dht = [&bt_dht_ptr, &config, &ioc] {
+    auto bittorrent_dht = [&bt_dht_ptr, &config, ex] {
         if (!config.bittorrent_endpoint() || bt_dht_ptr) return bt_dht_ptr;
-        bt_dht_ptr = make_shared<bt::MainlineDht>(ioc);
+        bt_dht_ptr = make_shared<bt::MainlineDht>(ex);
         bt_dht_ptr->set_endpoints({*config.bittorrent_endpoint()});
         assert(!bt_dht_ptr->local_endpoints().empty());
         return bt_dht_ptr;
     };
 
-    OuiServiceServer proxy_server(ioc);
+    OuiServiceServer proxy_server(ex);
 
     if (config.tcp_endpoint()) {
         tcp::endpoint endpoint = *config.tcp_endpoint();
@@ -664,7 +665,7 @@ int main(int argc, const char* argv[])
         util::create_state_file( config.repo_root()/"endpoint-tcp"
                                , util::str(endpoint));
 
-        proxy_server.add(make_unique<ouiservice::TcpOuiServiceServer>(ioc, endpoint));
+        proxy_server.add(make_unique<ouiservice::TcpOuiServiceServer>(ex, endpoint));
     }
 
     auto read_ssl_certs = [&] {
@@ -683,8 +684,8 @@ int main(int argc, const char* argv[])
         util::create_state_file( config.repo_root()/"endpoint-tcp-tls"
                                , util::str(endpoint));
 
-        auto base = make_unique<ouiservice::TcpOuiServiceServer>(ioc, endpoint);
-        proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(ioc, move(base), ssl_context));
+        auto base = make_unique<ouiservice::TcpOuiServiceServer>(ex, endpoint);
+        proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(ex, move(base), ssl_context));
     }
 
     if (config.utp_endpoint()) {
@@ -694,7 +695,7 @@ int main(int argc, const char* argv[])
         util::create_state_file( config.repo_root()/"endpoint-utp"
                                , util::str(endpoint));
 
-        auto srv = make_unique<ouiservice::UtpOuiServiceServer>(ioc, endpoint);
+        auto srv = make_unique<ouiservice::UtpOuiServiceServer>(ex, endpoint);
         proxy_server.add(move(srv));
     }
 
@@ -703,7 +704,7 @@ int main(int argc, const char* argv[])
 
         udp::endpoint endpoint = *config.utp_tls_endpoint();
 
-        auto base = make_unique<ouiservice::UtpOuiServiceServer>(ioc, endpoint);
+        auto base = make_unique<ouiservice::UtpOuiServiceServer>(ex, endpoint);
 
         auto local_ep = base->local_endpoint();
 
@@ -711,7 +712,7 @@ int main(int argc, const char* argv[])
             LOG_INFO("uTP/TLS address: ", *local_ep);
             util::create_state_file( config.repo_root()/"endpoint-utp-tls"
                                    , util::str(*local_ep));
-            proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(ioc, move(base), ssl_context));
+            proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(ex, move(base), ssl_context));
 
         } else {
             LOG_ERROR("Failed to start uTP/TLS service on ", *config.utp_tls_endpoint());
@@ -767,7 +768,7 @@ int main(int argc, const char* argv[])
 
         unique_ptr<ouiservice::Obfs4OuiServiceServer> server =
             make_unique<ouiservice::Obfs4OuiServiceServer>(ioc, endpoint, config.repo_root()/"obfs4-server");
-        asio::spawn(ioc, [
+        asio::spawn(ex, [
             obfs4 = server.get(),
             endpoint
         ] (asio::yield_context yield) {
@@ -781,7 +782,7 @@ int main(int argc, const char* argv[])
     }
 
     if (config.listen_on_i2p()) {
-        auto i2p_service = make_shared<ouiservice::I2pOuiService>((config.repo_root()/"i2p").string(), ioc);
+        auto i2p_service = make_shared<ouiservice::I2pOuiService>((config.repo_root()/"i2p").string(), ex);
         std::unique_ptr<ouiservice::I2pOuiServiceServer> i2p_server = i2p_service->build_server("i2p-private-key");
 
         auto ep = i2p_server->public_identity();
@@ -795,8 +796,8 @@ int main(int argc, const char* argv[])
 
     Cancel cancel;
 
-    asio::spawn(ioc, [
-        &ioc,
+    asio::spawn(ex, [
+        &ex,
         &proxy_server,
         &config,
         &cancel
@@ -805,11 +806,11 @@ int main(int argc, const char* argv[])
         listen(config, proxy_server, cancel, yield[ec]);
     });
 
-    asio::signal_set signals(ioc, SIGINT, SIGTERM);
+    asio::signal_set signals(ex, SIGINT, SIGTERM);
 
     unique_ptr<ForceExitOnSignal> force_exit;
 
-    signals.async_wait([&cancel, &signals, &ioc, &force_exit, &bt_dht_ptr]
+    signals.async_wait([&cancel, &signals, &force_exit, &bt_dht_ptr]
                        (const sys::error_code& ec, int signal_number) {
             if (bt_dht_ptr) {
                 bt_dht_ptr->stop();
