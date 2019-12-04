@@ -44,7 +44,7 @@ stream(string response, asio::io_service& ios, asio::yield_context yield)
             asio::async_write(s, asio::buffer(rsp), yield);
         });
 
-    return move(s1);
+    return s1;
 }
 
 vector<uint8_t> str_to_vec(boost::string_view s) {
