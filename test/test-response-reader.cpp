@@ -15,6 +15,8 @@ using namespace ouinet;
 using tcp = asio::ip::tcp;
 using RR = http_response::Reader;
 
+namespace HR = http_response;
+
 // TODO: There should be a more straight forward way to do this.
 tcp::socket
 stream(string response, asio::io_service& ios, asio::yield_context yield)
@@ -63,50 +65,50 @@ map<string, string> fields_to_map(http::fields fields) {
     return ret;
 }
 
-RR::Part body(bool is_last, boost::string_view s) {
-    return RR::Body(is_last, str_to_vec(s));
+HR::Part body(bool is_last, boost::string_view s) {
+    return HR::Body(is_last, str_to_vec(s));
 }
 
-RR::Part chunk_body(boost::string_view s) {
-    return RR::ChunkBody(str_to_vec(s), 0);
+HR::Part chunk_body(boost::string_view s) {
+    return HR::ChunkBody(str_to_vec(s), 0);
 }
 
-RR::Part chunk_hdr(size_t size, boost::string_view s) {
-    return RR::ChunkHdr{size, s.to_string()};
+HR::Part chunk_hdr(size_t size, boost::string_view s) {
+    return HR::ChunkHdr{size, s.to_string()};
 }
 
-RR::Part trailer(map<string, string> trailer) {
+HR::Part trailer(map<string, string> trailer) {
     http::fields fields;
     for (auto& p : trailer) {
         fields.insert(p.first, p.second);
     }
-    return RR::Trailer{move(fields)};
+    return HR::Trailer{move(fields)};
 }
 
 namespace ouinet { namespace http_response {
-    bool operator==(const RR::Head&, const RR::Head&) { return false; /* TODO */ }
+    bool operator==(const HR::Head&, const HR::Head&) { return false; /* TODO */ }
 
-    bool operator==(const RR::Trailer& t1, const RR::Trailer& t2) {
+    bool operator==(const HR::Trailer& t1, const HR::Trailer& t2) {
         return fields_to_map(t1) == fields_to_map(t2);
     }
 
-    std::ostream& operator<<(std::ostream& os, const RR::Head&) {
+    std::ostream& operator<<(std::ostream& os, const HR::Head&) {
         return os << "Head";
     }
     
-    std::ostream& operator<<(std::ostream& os, const RR::ChunkHdr& hdr) {
+    std::ostream& operator<<(std::ostream& os, const HR::ChunkHdr& hdr) {
         return os << "ChunkHdr(" << hdr.size << " exts:\"" << hdr.exts << "\")";
     }
     
-    std::ostream& operator<<(std::ostream& os, const RR::ChunkBody& b) {
+    std::ostream& operator<<(std::ostream& os, const HR::ChunkBody& b) {
         return os << "ChunkBody(" << vec_to_str(b) << ")";
     }
     
-    std::ostream& operator<<(std::ostream& os, const RR::Body& b) {
+    std::ostream& operator<<(std::ostream& os, const HR::Body& b) {
         return os << "Body(" << (b.is_last ? "last " : "not-last ") << vec_to_str(b) << ")";
     }
     
-    std::ostream& operator<<(std::ostream& os, const RR::Trailer&) {
+    std::ostream& operator<<(std::ostream& os, const HR::Trailer&) {
         return os << "Trailer";
     }
 }} // ouinet namespaces::http_response
@@ -118,8 +120,8 @@ bool is_end_of_stream(RR& rr, Cancel& c, Yield& y) {
     return ec == http::error::end_of_stream;
 }
 
-RR::Part read_full_body(RR& rr, Cancel& c, Yield& y) {
-    RR::Body body(true, {});
+HR::Part read_full_body(RR& rr, Cancel& c, Yield& y) {
+    HR::Body body(true, {});
 
     while (true) {
         sys::error_code ec;
@@ -149,7 +151,7 @@ BOOST_AUTO_TEST_CASE(test_http10_no_body) {
         RR rr(stream(move(rsp), ios, y));
 
         Cancel c;
-        RR::Part part;
+        HR::Part part;
 
         cerr << "--------------- 1\n";
         part = rr.async_read_part(c, y);
@@ -180,7 +182,7 @@ BOOST_AUTO_TEST_CASE(test_http10_body_no_length) {
         RR rr(stream(move(rsp), ios, y));
 
         Cancel c;
-        RR::Part part;
+        HR::Part part;
 
         cerr << "--------------- 1\n";
         part = rr.async_read_part(c, y);
@@ -214,7 +216,7 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
         RR rr(stream(move(rsp), ios, y));
 
         Cancel c;
-        RR::Part part;
+        HR::Part part;
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(part.is_head());
@@ -248,7 +250,7 @@ BOOST_AUTO_TEST_CASE(test_http11_chunk) {
         RR rr(stream(move(rsp), ios, y));
 
         Cancel c;
-        RR::Part part;
+        HR::Part part;
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(part.is_head());
@@ -293,7 +295,7 @@ BOOST_AUTO_TEST_CASE(test_http11_trailer) {
         RR rr(stream(move(rsp), ios, y));
 
         Cancel c;
-        RR::Part part;
+        HR::Part part;
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(part.is_head());
@@ -340,7 +342,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
         RR rr(stream(move(rsp), ios, y));
 
         Cancel c;
-        RR::Part part;
+        HR::Part part;
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(part.is_head());
@@ -387,7 +389,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
         RR rr(stream(move(rsp), ios, y));
 
         Cancel c;
-        RR::Part part;
+        HR::Part part;
 
         {
             part = rr.async_read_part(c, y);
