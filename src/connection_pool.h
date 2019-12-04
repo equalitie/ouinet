@@ -31,7 +31,7 @@ class IdleConnection {
             *_data->was_destroyed = true;
 
             if (_data->read_callback) {
-                asio::post(_data->connection.get_io_service(), [
+                asio::post(_data->connection.get_executor(), [
                     handler = std::move(_data->read_callback)
                 ] () mutable {
                     handler(asio::error::operation_aborted, 0);
@@ -46,14 +46,9 @@ class IdleConnection {
     IdleConnection(IdleConnection&&) = default;
     IdleConnection& operator=(IdleConnection&&) = default;
 
-    boost::asio::io_context::executor_type get_executor()
+    boost::asio::executor get_executor()
     {
         return _data->connection.get_executor();
-    }
-
-    boost::asio::io_context& get_io_service()
-    {
-        return _data->connection.get_io_service();
     }
 
     void close()
@@ -100,7 +95,7 @@ class IdleConnection {
                 void(sys::error_code, std::size_t)
             > completion(token);
 
-            asio::post(_data->connection.get_io_service(), [
+            asio::post(_data->connection.get_executor(), [
                 handler = std::move(completion.completion_handler)
             ] () mutable {
                 handler(sys::error_code(), 0);
@@ -117,7 +112,7 @@ class IdleConnection {
                 void(sys::error_code, std::size_t)
             > completion(token);
 
-            asio::post(_data->connection.get_io_service(), [
+            asio::post(_data->connection.get_executor(), [
                 handler = std::move(completion.completion_handler)
             ] () mutable {
                 handler(asio::error::already_started, 0);
@@ -149,7 +144,7 @@ class IdleConnection {
                 void(sys::error_code, std::size_t)
             > completion(token);
 
-            asio::post(_data->connection.get_io_service(), [
+            asio::post(_data->connection.get_executor(), [
                 handler = std::move(completion.completion_handler),
                 read,
                 ec = _data->queued_read_error
@@ -232,7 +227,7 @@ class IdleConnection {
                         *data->read_buffer = data->queued_read_buffer;
                     }
 
-                    asio::post(data->connection.get_io_service(), [
+                    asio::post(data->connection.get_executor(), [
                         handler = std::move(data->read_callback),
                         ec,
                         read
