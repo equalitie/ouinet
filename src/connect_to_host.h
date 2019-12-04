@@ -14,7 +14,7 @@
 namespace ouinet {
 
 asio::ip::tcp::socket
-connect_to_host( asio::io_service& ios
+connect_to_host( asio::executor&
                , const std::string& host
                , const std::string& port
                , Signal<void()>& cancel_signal
@@ -22,13 +22,13 @@ connect_to_host( asio::io_service& ios
 
 asio::ip::tcp::socket
 connect_to_host( const asio::ip::tcp::resolver::results_type& lookup
-               , asio::io_service& ios
+               , asio::executor&
                , Signal<void()>& cancel_signal
                , asio::yield_context yield);
 
 asio::ip::tcp::socket
 connect_to_host( const asio::ip::tcp::resolver::results_type& lookup
-               , asio::io_service& ios
+               , asio::executor&
                , std::chrono::steady_clock::duration timeout
                , Signal<void()>& cancel_signal
                , asio::yield_context yield);
