@@ -90,8 +90,8 @@ class Client::State : public enable_shared_from_this<Client::State> {
     friend class Client;
 
 public:
-    State(asio::io_service& ios, ClientConfig cfg)
-        : _ios(ios)
+    State(asio::io_context& ctx, ClientConfig cfg)
+        : _ctx(ctx)
         , _config(move(cfg))
         // A certificate chain with OUINET_CA + SUBJECT_CERT
         // can be around 2 KiB, so this would be around 2 MiB.
@@ -131,7 +131,7 @@ public:
         if (_udp_multiplexer) return *_udp_multiplexer;
 
         _udp_multiplexer
-            = create_udp_multiplexer( _ios
+            = create_udp_multiplexer( _ctx
                                     , _config.repo_root() / "last_used_udp_port");
 
         return *_udp_multiplexer;
@@ -141,11 +141,11 @@ public:
     {
         if (_bt_dht) return _bt_dht;
 
-        _bt_dht = make_shared<bt::MainlineDht>( _ios
+        _bt_dht = make_shared<bt::MainlineDht>( _ctx.get_executor()
                                               , _config.repo_root() / "dht");
 
         sys::error_code ec;
-        asio_utp::udp_multiplexer m(_ios);
+        asio_utp::udp_multiplexer m(_ctx);
         m.bind(common_udp_multiplexer(), ec);
         assert(!ec);
 
@@ -209,7 +209,9 @@ private:
     fs::path ca_key_path()  const { return _config.repo_root() / OUINET_CA_KEY_FILE;  }
     fs::path ca_dh_path()   const { return _config.repo_root() / OUINET_CA_DH_FILE;   }
 
-    asio::io_service& get_io_service() { return _ios; }
+    asio::io_context& get_io_context() { return _ctx; }
+    asio::executor get_executor() { return _ctx.get_executor(); }
+
     Signal<void()>& get_shutdown_signal() { return _shutdown_signal; }
 
     bool maybe_handle_websocket_upgrade( GenericStream&
@@ -230,7 +232,7 @@ private:
     // (i.e. from an injector exchange or injector-signed cached content).
     unsigned newest_proto_seen = http_::protocol_version_current;
 
-    asio::io_service& _ios;
+    asio::io_context& _ctx;
     ClientConfig _config;
     std::unique_ptr<CACertificate> _ca_certificate;
     util::LruCache<string, string> _ssl_certificate_cache;
@@ -339,13 +341,13 @@ Client::State::connect_to_origin( const Request& rq
     sys::error_code ec;
 
     auto lookup = util::tcp_async_resolve( host, port
-                                         , _ios
+                                         , _ctx.get_executor()
                                          , cancel
                                          , yield[ec]);
 
     if (ec) return or_throw<GenericStream>(yield, ec);
 
-    auto sock = connect_to_host(lookup, _ios, cancel, yield[ec]);
+    auto sock = connect_to_host(lookup, _ctx.get_executor(), cancel, yield[ec]);
 
     if (ec) return or_throw<GenericStream>(yield, ec);
 
@@ -385,7 +387,7 @@ Session Client::State::fetch_fresh_from_origin(const Request& rq, Yield yield)
 
     Cancel cancel;
 
-    WatchDog watch_dog(_ios
+    WatchDog watch_dog(_ctx
                       , default_timeout::fetch_http()
                       , [&] { cancel(); });
 
@@ -433,7 +435,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     // and responses and thus can't be used for full-dupplex forwarding.
 
     Cancel cancel(cancel_);
-    WatchDog watch_dog(_ios, default_timeout::fetch_http(), [&]{ cancel(); });
+    WatchDog watch_dog(_ctx, default_timeout::fetch_http(), [&]{ cancel(); });
 
     // Parse the URL to tell HTTP/HTTPS, host, port.
     util::url_match url;
@@ -468,7 +470,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     // a body whose length we do not know
     // since the respone should have no content length).
     auto connres = fetch_http<http::empty_body>
-                        ( _ios
+                        ( _ctx.get_executor()
                         , inj.connection
                         , connreq
                         , default_timeout::fetch_http()
@@ -630,7 +632,7 @@ public:
                       , request_route::Config& request_config)
         : client_state(client_state)
         , request_config(request_config)
-        , cc(client_state.get_io_service(), OUINET_CLIENT_SERVER_STRING)
+        , cc(client_state.get_executor(), OUINET_CLIENT_SERVER_STRING)
     {
         cc.fetch_fresh = [&] (const Request& rq, Cancel& cancel, Yield yield) {
             return fetch_fresh(rq, cancel, yield);
@@ -744,9 +746,9 @@ public:
 
             Cancel cancel(client_state._shutdown_signal);
 
-            auto& ios = client_state.get_io_service();
+            auto& ctx = client_state.get_io_context();
 
-            WatchDog wd(ios, chrono::minutes(3), [&] { cancel(); });
+            WatchDog wd(ctx, chrono::minutes(3), [&] { cancel(); });
 
             sys::error_code ec;
 
@@ -845,15 +847,15 @@ public:
 
                     using Fork = stream::Fork<GenericStream>;
 
-                    tcp::socket source(ios), sink(ios);
-                    tie(source, sink) = util::connected_pair(ios, yield);
+                    tcp::socket source(ctx), sink(ctx);
+                    tie(source, sink) = util::connected_pair(ctx.get_executor(), yield);
 
                     Fork fork(move(source));
                     Fork::Tine src1(fork), src2(fork);
 
-                    WaitCondition wc(ios);
+                    WaitCondition wc(ctx);
 
-                    asio::spawn(ios, [
+                    asio::spawn(ctx, [
                         &,
                         lock = wc.lock()
                     ] (asio::yield_context yield_) {
@@ -863,7 +865,7 @@ public:
                       store(rq, s1, cancel, y[ec]);
                     });
 
-                    asio::spawn(ios, [
+                    asio::spawn(ctx, [
                         &,
                         lock = wc.lock()
                     ] (asio::yield_context yield_) {
@@ -1223,7 +1225,7 @@ void Client::State::serve_request( GenericStream&& con
         reqhp.body_limit((std::numeric_limits<std::uint64_t>::max)());
         http::async_read(con, buffer, reqhp, yield_[ec]);
 
-        Yield yield(con.get_io_service(), yield_, util::str('C', connection_id));
+        Yield yield(_ctx.get_executor(), yield_, util::str('C', connection_id));
 
         if ( ec == http::error::end_of_stream
           || ec == asio::ssl::error::stream_truncated) break;
@@ -1334,7 +1336,7 @@ void Client::State::setup_cache()
     if (_config.cache_type() == ClientConfig::CacheType::Bep5Http) {
         Cancel cancel = _shutdown_signal;
 
-        asio::spawn(_ios, [ this
+        asio::spawn(_ctx, [ this
                           , cancel = move(cancel)
                           ] (asio::yield_context yield) {
             if (cancel) return;
@@ -1366,7 +1368,7 @@ void Client::State::listen_tcp
     sys::error_code ec;
 
     // Open the acceptor
-    tcp::acceptor acceptor(_ios);
+    tcp::acceptor acceptor(_ctx);
 
     acceptor.open(local_endpoint.protocol(), ec);
     if (ec) {
@@ -1397,11 +1399,11 @@ void Client::State::listen_tcp
     LOG_DEBUG("Successfully listening on TCP Port");
     LOG_INFO("Client accepting on ", acceptor.local_endpoint());
 
-    WaitCondition wait_condition(_ios);
+    WaitCondition wait_condition(_ctx);
 
     for(;;)
     {
-        tcp::socket socket(_ios);
+        tcp::socket socket(_ctx);
         acceptor.async_accept(socket, yield[ec]);
 
         if(ec) {
@@ -1409,7 +1411,7 @@ void Client::State::listen_tcp
 
             LOG_WARN("Accept failed on tcp acceptor: ", ec.message());
 
-            if (!async_sleep(_ios, chrono::seconds(1), _shutdown_signal, yield)) {
+            if (!async_sleep(_ctx, chrono::seconds(1), _shutdown_signal, yield)) {
                 break;
             }
         } else {
@@ -1421,7 +1423,7 @@ void Client::State::listen_tcp
 
             GenericStream connection(move(socket) , move(tcp_shutter));
 
-            asio::spawn( _ios
+            asio::spawn( _ctx
                        , [ this
                          , self = shared_from_this()
                          , c = move(connection)
@@ -1459,7 +1461,7 @@ void Client::State::start()
     }
 
     asio::spawn
-        ( _ios
+        ( _ctx
         , [this, self = shared_from_this()]
           (asio::yield_context yield) {
               if (was_stopped()) return;
@@ -1486,7 +1488,7 @@ void Client::State::start()
 
     if (_config.front_end_endpoint() != tcp::endpoint()) {
         asio::spawn
-            ( _ios
+            ( _ctx
             , [this, self = shared_from_this()]
               (asio::yield_context yield) {
 
@@ -1503,7 +1505,7 @@ void Client::State::start()
                             , ep
                             , [this, self]
                               (GenericStream c, asio::yield_context yield_) {
-                        Yield yield(_ios, yield_, "Frontend");
+                        Yield yield(_ctx, yield_, "Frontend");
                         sys::error_code ec;
                         Request rq;
                         beast::flat_buffer buffer;
@@ -1540,7 +1542,7 @@ Client::State::maybe_wrap_tls(unique_ptr<OuiServiceImplementationClient> client)
 
 void Client::State::setup_injector(asio::yield_context yield)
 {
-    _injector = std::make_unique<OuiServiceClient>(_ios);
+    _injector = std::make_unique<OuiServiceClient>(_ctx.get_executor());
 
     auto injector_ep = _config.injector_endpoint();
 
@@ -1551,7 +1553,7 @@ void Client::State::setup_injector(asio::yield_context yield)
     std::unique_ptr<OuiServiceImplementationClient> client;
 
     if (injector_ep->type == Endpoint::I2pEndpoint) {
-        auto i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ios);
+        auto i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ctx.get_executor());
         auto i2p_client = i2p_service->build_client(injector_ep->endpoint_string);
 
         /*
@@ -1561,7 +1563,7 @@ void Client::State::setup_injector(asio::yield_context yield)
         */
         client = std::move(i2p_client);
     } else if (injector_ep->type == Endpoint::TcpEndpoint) {
-        auto tcp_client = make_unique<ouiservice::TcpOuiServiceClient>(_ios, injector_ep->endpoint_string);
+        auto tcp_client = make_unique<ouiservice::TcpOuiServiceClient>(_ctx.get_executor(), injector_ep->endpoint_string);
 
         if (!tcp_client->verify_endpoint()) {
             return or_throw(yield, asio::error::invalid_argument);
@@ -1569,12 +1571,12 @@ void Client::State::setup_injector(asio::yield_context yield)
         client = maybe_wrap_tls(move(tcp_client));
     } else if (injector_ep->type == Endpoint::UtpEndpoint) {
         sys::error_code ec;
-        asio_utp::udp_multiplexer m(_ios);
+        asio_utp::udp_multiplexer m(_ctx);
         m.bind(common_udp_multiplexer(), ec);
         assert(!ec);
 
         auto utp_client = make_unique<ouiservice::UtpOuiServiceClient>
-            (_ios, move(m), injector_ep->endpoint_string);
+            (_ctx.get_executor(), move(m), injector_ep->endpoint_string);
 
         if (!utp_client->verify_remote_endpoint()) {
             return or_throw(yield, asio::error::invalid_argument);
@@ -1590,7 +1592,7 @@ void Client::State::setup_injector(asio::yield_context yield)
 
 /*
     } else if (injector_ep->type == Endpoint::LampshadeEndpoint) {
-        auto lampshade_client = make_unique<ouiservice::LampshadeOuiServiceClient>(_ios, injector_ep->endpoint_string);
+        auto lampshade_client = make_unique<ouiservice::LampshadeOuiServiceClient>(_ctx, injector_ep->endpoint_string);
 
         if (!lampshade_client->verify_endpoint()) {
             return or_throw(yield, asio::error::invalid_argument);
@@ -1598,21 +1600,21 @@ void Client::State::setup_injector(asio::yield_context yield)
         client = std::move(lampshade_client);
 */
     } else if (injector_ep->type == Endpoint::Obfs2Endpoint) {
-        auto obfs2_client = make_unique<ouiservice::Obfs2OuiServiceClient>(_ios, injector_ep->endpoint_string, _config.repo_root()/"obfs2-client");
+        auto obfs2_client = make_unique<ouiservice::Obfs2OuiServiceClient>(_ctx, injector_ep->endpoint_string, _config.repo_root()/"obfs2-client");
 
         if (!obfs2_client->verify_endpoint()) {
             return or_throw(yield, asio::error::invalid_argument);
         }
         client = std::move(obfs2_client);
     } else if (injector_ep->type == Endpoint::Obfs3Endpoint) {
-        auto obfs3_client = make_unique<ouiservice::Obfs3OuiServiceClient>(_ios, injector_ep->endpoint_string, _config.repo_root()/"obfs3-client");
+        auto obfs3_client = make_unique<ouiservice::Obfs3OuiServiceClient>(_ctx, injector_ep->endpoint_string, _config.repo_root()/"obfs3-client");
 
         if (!obfs3_client->verify_endpoint()) {
             return or_throw(yield, asio::error::invalid_argument);
         }
         client = std::move(obfs3_client);
     } else if (injector_ep->type == Endpoint::Obfs4Endpoint) {
-        auto obfs4_client = make_unique<ouiservice::Obfs4OuiServiceClient>(_ios, injector_ep->endpoint_string, _config.repo_root()/"obfs4-client");
+        auto obfs4_client = make_unique<ouiservice::Obfs4OuiServiceClient>(_ctx, injector_ep->endpoint_string, _config.repo_root()/"obfs4-client");
 
         if (!obfs4_client->verify_endpoint()) {
             return or_throw(yield, asio::error::invalid_argument);
@@ -1647,7 +1649,7 @@ void Client::State::set_injector(string injector_ep_str)
 
     _config.set_injector_endpoint(*injector_ep);
 
-    asio::spawn(_ios, [self = shared_from_this(), injector_ep_str] (auto yield) {
+    asio::spawn(_ctx, [self = shared_from_this(), injector_ep_str] (auto yield) {
             if (self->was_stopped()) return;
             sys::error_code ec;
             self->setup_injector(yield[ec]);
@@ -1659,8 +1661,8 @@ void Client::State::set_injector(string injector_ep_str)
 }
 
 //------------------------------------------------------------------------------
-Client::Client(asio::io_service& ios, ClientConfig cfg)
-    : _state(make_shared<State>(ios, move(cfg)))
+Client::Client(asio::io_context& ctx, ClientConfig cfg)
+    : _state(make_shared<State>(ctx, move(cfg)))
 {}
 
 Client::~Client()
@@ -1735,15 +1737,15 @@ int main(int argc, char* argv[])
         return 0;
     }
 
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    asio::signal_set signals(ios, SIGINT, SIGTERM);
+    asio::signal_set signals(ctx, SIGINT, SIGTERM);
 
-    Client client(ios, move(cfg));
+    Client client(ctx, move(cfg));
 
     unique_ptr<ForceExitOnSignal> force_exit;
 
-    signals.async_wait([&client, &signals, &ios, &force_exit]
+    signals.async_wait([&client, &signals, &force_exit]
                        (const sys::error_code& ec, int signal_number) {
             client.stop();
             signals.clear();
@@ -1757,7 +1759,7 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    ios.run();
+    ctx.run();
 
     return EXIT_SUCCESS;
 }
