@@ -23,6 +23,8 @@ template<> struct is_bytestring_type<std::string> { static const bool value = tr
 template<> struct is_bytestring_type<boost::string_view> { static const bool value = true; };
 template<> struct is_bytestring_type<boost::asio::const_buffer> { static const bool value = true; };
 template<> struct is_bytestring_type<boost::asio::mutable_buffer> { static const bool value = true; };
+template<> struct is_bytestring_type<boost::asio::const_buffers_1> { static const bool value = true; };
+template<> struct is_bytestring_type<boost::asio::mutable_buffers_1> { static const bool value = true; };
 template<class B> struct is_bytestring_type<std::vector<B>> { static const bool value = is_byte_type<B>::value; };
 template<std::size_t N, class B> struct is_bytestring_type<std::array<B, N>> { static const bool value = is_byte_type<B>::value; };
 
