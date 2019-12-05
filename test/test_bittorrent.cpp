@@ -49,11 +49,11 @@ BOOST_AUTO_TEST_CASE(test_bep_5)
 {
     using namespace ouinet::bittorrent::dht;
 
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    DhtNode dht(ios);
+    DhtNode dht(ctx);
 
-    asio::spawn(ios, [&] (auto yield) {
+    asio::spawn(ctx, [&] (auto yield) {
         sys::error_code ec;
         Signal<void()> cancel_signal;
 
@@ -73,16 +73,16 @@ BOOST_AUTO_TEST_CASE(test_bep_5)
         dht.stop();
     });
 
-    ios.run();
+    ctx.run();
 }
 
 BOOST_AUTO_TEST_CASE(test_bep_44)
 {
     using namespace ouinet::bittorrent::dht;
 
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    DhtNode dht(ios);
+    DhtNode dht(ctx);
 
     auto mutable_data = []( const string& value
                           , const string& salt
@@ -109,16 +109,16 @@ BOOST_AUTO_TEST_CASE(test_bep_44)
     size_t push_get_count = 15;
     size_t success_count = 0;
 
-    asio::spawn(ios, [&] (auto yield) {
+    asio::spawn(ctx, [&] (auto yield) {
         dht.start({asio::ip::make_address("0.0.0.0"), 0}, yield[ec]); // TODO: IPv6
 
         BOOST_REQUIRE(!ec);
         BOOST_REQUIRE(dht.ready());
 
-        WaitCondition wc(ios);
+        WaitCondition wc(ctx);
 
         for (size_t i = 0; i < push_get_count; i++) {
-            asio::spawn(ios, [&, lock = wc.lock(), i] (auto yield) {
+            asio::spawn(ctx, [&, lock = wc.lock(), i] (auto yield) {
                 BOOST_REQUIRE(!ec);
 
                 stringstream salt;
@@ -165,7 +165,7 @@ BOOST_AUTO_TEST_CASE(test_bep_44)
         dht.stop();
     });
 
-    ios.run();
+    ctx.run();
 
     BOOST_REQUIRE_EQUAL(push_get_count, success_count);
 }

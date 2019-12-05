@@ -1,7 +1,6 @@
 #define BOOST_TEST_MODULE utility
 #include <boost/test/included/unit_test.hpp>
 
-#include <boost/asio/io_service.hpp>
 #include <boost/asio/spawn.hpp>
 #include <namespaces.h>
 #include <async_sleep.h>
@@ -28,54 +27,54 @@ BOOST_AUTO_TEST_CASE(test_cancel) {
 
 
     {
-        asio::io_service ios;
+        asio::io_context ctx;
 
-        asio::spawn(ios, [&] (asio::yield_context yield) {
+        asio::spawn(ctx, [&] (asio::yield_context yield) {
                 sys::error_code ec;
                 Cancel cancel;
 
                 auto start = Clock::now();
 
-                asio::spawn(ios, [&] (asio::yield_context yield) {
-                    ios.post(yield);
+                asio::spawn(ctx, [&] (asio::yield_context yield) {
+                    ctx.post(yield);
                     cancel();
                 });
 
                 BOOST_REQUIRE(!cancel);
-                async_sleep(ios, 1s, cancel, yield[ec]);
+                async_sleep(ctx, 1s, cancel, yield[ec]);
                 BOOST_REQUIRE(millis_since(start) < 100);
         });
 
-        ios.run();
+        ctx.run();
     }
 
     {
-        asio::io_service ios;
+        asio::io_context ctx;
 
-        asio::spawn(ios, [&] (asio::yield_context yield) {
+        asio::spawn(ctx, [&] (asio::yield_context yield) {
                 sys::error_code ec;
                 Cancel c1;
                 Cancel c2 = c1;
 
                 auto start = Clock::now();
 
-                asio::spawn(ios, [c1 = move(c1), &ios]
+                asio::spawn(ctx, [c1 = move(c1), &ctx]
                                  (asio::yield_context yield) mutable {
-                    ios.post(yield);
+                    ctx.post(yield);
                     c1();
                 });
 
                 BOOST_REQUIRE(!c1);
                 BOOST_REQUIRE(!c2);
-                async_sleep(ios, 1s, c2, yield[ec]);
+                async_sleep(ctx, 1s, c2, yield[ec]);
                 BOOST_REQUIRE(millis_since(start) < 100);
         });
     }
 
     {
-        asio::io_service ios;
+        asio::io_context ctx;
 
-        asio::spawn(ios, [&] (asio::yield_context yield) {
+        asio::spawn(ctx, [&] (asio::yield_context yield) {
                 sys::error_code ec;
                 Cancel c;
 
@@ -86,7 +85,7 @@ BOOST_AUTO_TEST_CASE(test_cancel) {
                 c();
         });
 
-        ios.run();
+        ctx.run();
     }
 
     {
@@ -102,11 +101,10 @@ BOOST_AUTO_TEST_CASE(test_async_generator) {
     using util::AsyncGenerator;
 
     {
+        asio::io_context ctx;
 
-        asio::io_service ios;
-
-        asio::spawn(ios, [&] (asio::yield_context yield) {
-            AsyncGenerator<int> gen(ios, [&] (auto& q, auto c, auto y) {
+        asio::spawn(ctx, [&] (asio::yield_context yield) {
+            AsyncGenerator<int> gen(ctx, [&] (auto& q, auto c, auto y) {
                 q.push_back(1);
             });
 
@@ -116,17 +114,17 @@ BOOST_AUTO_TEST_CASE(test_async_generator) {
             BOOST_REQUIRE(opt_val && *opt_val == 1);
         });
 
-        ios.run();
+        ctx.run();
     }
 
     {
-        asio::io_service ios;
+        asio::io_context ctx;
 
-        asio::spawn(ios, [&] (asio::yield_context yield) {
-            AsyncGenerator<int> gen(ios, [&] (auto& q, auto c, auto y) {
-                ios.post(y);
+        asio::spawn(ctx, [&] (asio::yield_context yield) {
+            AsyncGenerator<int> gen(ctx, [&] (auto& q, auto c, auto y) {
+                ctx.post(y);
                 q.push_back(1);
-                ios.post(y);
+                ctx.post(y);
                 if (c) or_throw(y, asio::error::operation_aborted);
             });
 
@@ -136,15 +134,15 @@ BOOST_AUTO_TEST_CASE(test_async_generator) {
             BOOST_REQUIRE(opt_val && *opt_val == 1);
         });
 
-        ios.run();
+        ctx.run();
     }
 
     {
-        asio::io_service ios;
+        asio::io_context ctx;
 
-        asio::spawn(ios, [&] (asio::yield_context yield) {
-            AsyncGenerator<int> gen(ios, [&] (auto& q, auto c, auto y) {
-                ios.post(y);
+        asio::spawn(ctx, [&] (asio::yield_context yield) {
+            AsyncGenerator<int> gen(ctx, [&] (auto& q, auto c, auto y) {
+                ctx.post(y);
             });
 
             Cancel cancel;
@@ -153,7 +151,7 @@ BOOST_AUTO_TEST_CASE(test_async_generator) {
             BOOST_REQUIRE(!opt_val);
         });
 
-        ios.run();
+        ctx.run();
     }
 }
 

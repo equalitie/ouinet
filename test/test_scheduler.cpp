@@ -1,7 +1,6 @@
 #define BOOST_TEST_MODULE blocker
 #include <boost/test/included/unit_test.hpp>
 
-#include <boost/asio/io_service.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <namespaces.h>
@@ -23,17 +22,17 @@ int millis_since(Clock::time_point start) {
 }
 
 BOOST_AUTO_TEST_CASE(test_scheduler) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
     std::srand(time(0));
 
-    Scheduler scheduler(ios, (std::rand() % 8) + 2);
+    Scheduler scheduler(ctx, (std::rand() % 8) + 2);
 
     unsigned run_count = 0;
 
     for (unsigned i = 0; i < 20; ++i) {
-        spawn(ios, [&ios, &scheduler, &run_count, i](auto yield) {
-            ios.post(yield);
+        spawn(ctx, [&ctx, &scheduler, &run_count, i](auto yield) {
+            ctx.post(yield);
 
             sys::error_code ec;
             auto slot = scheduler.wait_for_slot(yield[ec]);
@@ -44,7 +43,7 @@ BOOST_AUTO_TEST_CASE(test_scheduler) {
 
             BOOST_REQUIRE(run_count <= scheduler.max_running_jobs());
 
-            Timer timer(ios);
+            Timer timer(ctx);
             timer.expires_from_now(chrono::milliseconds(std::rand() % 500));
             timer.async_wait(yield[ec]);
 
@@ -52,18 +51,18 @@ BOOST_AUTO_TEST_CASE(test_scheduler) {
         });
     }
 
-    ios.run();
+    ctx.run();
 }
 
 BOOST_AUTO_TEST_CASE(test_scheduler_cancel) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    Scheduler scheduler(ios, 0);
+    Scheduler scheduler(ctx, 0);
 
-    spawn(ios, [&ios, &scheduler](auto yield) {
+    spawn(ctx, [&ctx, &scheduler](auto yield) {
         Cancel cancel;
-        spawn(ios, [&ios, &scheduler, &cancel](auto yield) {
-            ios.post(yield);
+        spawn(ctx, [&ctx, &scheduler, &cancel](auto yield) {
+            ctx.post(yield);
             cancel();
         });
         sys::error_code ec;
@@ -71,17 +70,17 @@ BOOST_AUTO_TEST_CASE(test_scheduler_cancel) {
         BOOST_REQUIRE_EQUAL(ec, asio::error::operation_aborted);
     });
 
-    ios.run();
+    ctx.run();
 }
 
 BOOST_AUTO_TEST_CASE(test_scheduler_destroy_mid_run) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    auto scheduler = make_unique<Scheduler>(ios, 0);
+    auto scheduler = make_unique<Scheduler>(ctx, 0);
 
-    spawn(ios, [&ios, &scheduler](auto yield) {
-        spawn(ios, [&ios, &scheduler](auto yield) {
-            ios.post(yield);
+    spawn(ctx, [&ctx, &scheduler](auto yield) {
+        spawn(ctx, [&ctx, &scheduler](auto yield) {
+            ctx.post(yield);
             scheduler.reset();
         });
 
@@ -90,7 +89,7 @@ BOOST_AUTO_TEST_CASE(test_scheduler_destroy_mid_run) {
         BOOST_REQUIRE_EQUAL(ec, asio::error::operation_aborted);
     });
 
-    ios.run();
+    ctx.run();
 }
 
 BOOST_AUTO_TEST_SUITE_END()

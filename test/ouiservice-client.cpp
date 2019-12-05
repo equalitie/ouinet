@@ -22,14 +22,14 @@ int main(int argc, const char* argv[])
     std::string message(argv[1]);
     message += "\n";
 
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    OuiServiceClient client(ios);
+    OuiServiceClient client(ctx.get_executor());
 
     auto endpoint = Endpoint{Endpoint::TcpEndpoint, "127.0.0.1:10203"};
-    client.add(endpoint, make_unique<ouiservice::TcpOuiServiceClient>(ios, endpoint.endpoint_string));
+    client.add(endpoint, make_unique<ouiservice::TcpOuiServiceClient>(ctx.get_executor(), endpoint.endpoint_string));
 
-    asio::spawn(ios, [&ios, &client, &message] (asio::yield_context yield) {
+    asio::spawn(ctx, [&client, &message] (asio::yield_context yield) {
         sys::error_code ec;
         client.start(yield[ec]);
 
@@ -69,6 +69,6 @@ int main(int argc, const char* argv[])
         }
     });
 
-    ios.run();
+    ctx.run();
     return 0;
 }
