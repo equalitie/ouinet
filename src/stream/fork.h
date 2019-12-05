@@ -4,7 +4,6 @@
 #include <boost/asio/error.hpp>
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/async_result.hpp>
-#include <boost/asio/io_service.hpp>
 #include <boost/optional.hpp>
 #include <vector>
 #include "../util/unique_function.h"
@@ -46,9 +45,7 @@ public:
 
         bool is_open() const;
 
-        asio::io_service& get_io_service();
-
-        asio::io_context::executor_type get_executor();
+        asio::executor get_executor();
 
         private:
         void flush_rx_handler(sys::error_code, size_t);
@@ -79,8 +76,7 @@ public:
 
     void close();
 
-    asio::io_service& get_io_service();
-    asio::io_context::executor_type get_executor();
+    asio::executor get_executor();
 
 private:
     using Tines = boost::intrusive::list
@@ -122,11 +118,9 @@ private:
 
         void on_read(sys::error_code, size_t);
 
-        boost::asio::io_context::executor_type get_executor() { return source.get_executor(); }
-
         void flush_rx_handlers(sys::error_code, size_t);
 
-        asio::io_service& get_io_service() { return source.get_io_service(); }
+        asio::executor get_executor() { return source.get_executor(); }
 
         void on_tine_closed(size_t);
     };
@@ -259,7 +253,7 @@ void Fork<SourceStream>::Tine::flush_rx_handler(sys::error_code ec, size_t size)
 
     assert(fork_state);
 
-    fork_state->get_io_service().post(
+    asio::post(fork_state->get_executor(),
         [ p = std::make_shared<decltype(rx_handler)>(std::move(rx_handler))
         , ec
         , size]
@@ -349,7 +343,7 @@ auto Fork<SourceStream>::Tine::async_read_some( const MutableBufferSequence& bs
         unread_data_buffer += size;
         fs->total_unread_data_size -= size;
 
-        asio::post(fs->get_io_service(),
+        asio::post(fs->get_executor(),
             [ fs
             , size
             , h = std::move(init.completion_handler)
@@ -407,7 +401,7 @@ void Fork<SourceStream>::ForkState::on_read(sys::error_code ec, size_t size)
             size_t s = asio::buffer_copy(i->rx_buffers, buf);
             total_unread_data_size += size - s;
             i->unread_data_buffer = buf + s;
-            // XXX: Shouldn't we post this to the io_service?
+            // XXX: Shouldn't we post this to the executor?
             h(ec, s);
         } else {
             total_unread_data_size += size;
@@ -453,15 +447,7 @@ Fork<SourceStream>::~Fork()
 
 template<class SourceStream>
 inline
-asio::io_service& Fork<SourceStream>::get_io_service()
-{
-    assert(_state);
-    return _state->get_io_service();
-}
-
-template<class SourceStream>
-inline
-asio::io_context::executor_type Fork<SourceStream>::get_executor()
+asio::executor Fork<SourceStream>::get_executor()
 {
     assert(_state);
     return _state->get_executor();
@@ -469,17 +455,9 @@ asio::io_context::executor_type Fork<SourceStream>::get_executor()
 
 template<class SourceStream>
 inline
-asio::io_service& Fork<SourceStream>::Tine::get_io_service() {
-    assert(fork_state);
-    return fork_state->get_io_service();
-}
-
-template<class SourceStream>
-inline
-asio::io_context::executor_type Fork<SourceStream>::Tine::get_executor() {
+asio::executor Fork<SourceStream>::Tine::get_executor() {
     assert(fork_state);
     return fork_state->get_executor();
 }
-
 
 }} // namespaces
