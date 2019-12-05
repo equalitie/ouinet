@@ -85,7 +85,6 @@ BOOST_AUTO_TEST_CASE(test_simple) {
     asio::spawn(ios, [&] (auto y_) {
         Cancel c;
         Yield y(ios, y_);
-        sys::error_code ec;
 
         stringstream outs;
         WaitCondition outwc(ios);
@@ -102,15 +101,12 @@ BOOST_AUTO_TEST_CASE(test_simple) {
             HR::Part part;
 
             part = HR::Head(move(rh));
-            rw.async_write_part(part, c, y[ec]);
-            BOOST_REQUIRE(!ec);
+            rw.async_write_part(part, c, y);
 
             part = HR::Body(true, str_to_vec(rb));
-            rw.async_write_part(part, c, y[ec]);
-            BOOST_REQUIRE(!ec);
+            rw.async_write_part(part, c, y);
         }
-        outwc.wait(y[ec]);
-        BOOST_REQUIRE(!ec);
+        outwc.wait(y);
 
         const string rs =
             "HTTP/1.1 200 OK\r\n"
