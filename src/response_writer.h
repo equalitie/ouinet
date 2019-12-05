@@ -3,6 +3,7 @@
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/write.hpp>
 #include <boost/beast/http/chunk_encode.hpp>
+#include <boost/format.hpp>
 
 #include "generic_stream.h"
 #include "namespaces.h"
@@ -58,7 +59,13 @@ Writer::async_write_part(const Part& part, Cancel cancel, Yield yield_)
     } else if (auto bodyp = part.as_body()) {
         asio::async_write(_out, asio::buffer(*bodyp), yield[ec]);
     } else if (auto chunkhp = part.as_chunk_hdr()) {
-        asio::async_write(_out, http::chunk_header{chunkhp->size, chunkhp->exts}, yield[ec]);
+        if (chunkhp->size > 0)
+            asio::async_write(_out, http::chunk_header{chunkhp->size, chunkhp->exts}, yield[ec]);
+        else {  // `http::chunk_last` carries a trailer itself, do not use
+            static const auto hdrf = "0%s\r\n";
+            auto hdr = (boost::format(hdrf) % chunkhp->exts).str();
+            asio::async_write(_out, asio::buffer(hdr), yield[ec]);
+        }
     } else if (auto chunkbp = part.as_chunk_body()) {
         asio::async_write(_out, asio::buffer(*chunkbp), yield[ec]);
     } else if (auto trailerp = part.as_trailer()) {
