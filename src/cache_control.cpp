@@ -265,7 +265,7 @@ CacheControl::do_fetch(
         asio::yield_context y(yield);
         {
 #           ifndef _NDEBUG
-            WatchDog wdog(_ios, std::chrono::seconds(10), [&] {
+            WatchDog wdog(_ex, std::chrono::seconds(10), [&] {
                     yield.log("Fetch fresh failed to stop");
                     assert(0);
                 });
@@ -275,7 +275,7 @@ CacheControl::do_fetch(
         }
         {
 #           ifndef _NDEBUG
-            WatchDog wdog(_ios, std::chrono::seconds(10), [&] {
+            WatchDog wdog(_ex, std::chrono::seconds(10), [&] {
                     yield.log("Fetch stored failed to stop");
                     assert(0);
                 });
@@ -442,7 +442,7 @@ posix_time::time_duration CacheControl::max_cached_age() const
 //------------------------------------------------------------------------------
 auto CacheControl::make_fetch_fresh_job(const Request& rq, Yield& yield)
 {
-    AsyncJob<Session> job(_ios);
+    AsyncJob<Session> job(_ex);
 
     job.start([&] (Cancel& cancel, asio::yield_context yield_) mutable {
             auto y = yield.detach(yield_);
@@ -469,7 +469,7 @@ CacheControl::do_fetch_fresh(FetchState& fs, const Request& rq, Yield yield)
         fs.fetch_fresh = make_fetch_fresh_job(rq, yield);
     }
 
-    ConditionVariable cv(_ios);
+    ConditionVariable cv(_ex);
     fs.fetch_fresh->on_finish([&cv] { cv.notify(); });
     cv.wait(yield);
 
@@ -497,7 +497,7 @@ CacheControl::do_fetch_stored(FetchState& fs,
     }
 
     if (!fs.fetch_stored) {
-        fs.fetch_stored = AsyncJob<CacheEntry>(_ios);
+        fs.fetch_stored = AsyncJob<CacheEntry>(_ex);
         fs.fetch_stored->start(
                 [&] (Cancel& cancel, asio::yield_context yield_) mutable {
                     return fetch_stored(rq, cancel, yield.detach(yield_));
@@ -506,7 +506,7 @@ CacheControl::do_fetch_stored(FetchState& fs,
 
     enum Which { fresh, stored, none };
     Which which = none;
-    ConditionVariable cv(_ios);
+    ConditionVariable cv(_ex);
 
     if (fs.fetch_fresh) {
         fs.fetch_fresh ->on_finish([&] {
@@ -535,7 +535,7 @@ CacheControl::do_fetch_stored(FetchState& fs,
         }
 
         // fetch_fresh errored, wait for the stored version
-        ConditionVariable cv(_ios);
+        ConditionVariable cv(_ex);
         fs.fetch_stored->on_finish([&] { cv.notify(); });
         cv.wait(yield);
 
