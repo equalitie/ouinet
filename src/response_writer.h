@@ -68,7 +68,8 @@ Writer::async_write_part(const Part& part, Cancel cancel, Yield yield_)
         }
     } else if (auto chunkbp = part.as_chunk_body()) {
         asio::async_write(_out, asio::buffer(*chunkbp), yield[ec]);
-        asio::async_write(_out, http::chunk_crlf{}, yield[ec]);
+        if (chunkbp->remain == 0)
+            asio::async_write(_out, http::chunk_crlf{}, yield[ec]);
     } else if (auto trailerp = part.as_trailer()) {
         Trailer::writer trailerw(*trailerp);
         asio::async_write(_out, trailerw.get(), yield[ec]);

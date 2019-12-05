@@ -216,7 +216,10 @@ BOOST_AUTO_TEST_CASE(test_http11_chunk) {
             part = HR::ChunkHdr(4, "");
             rw.async_write_part(part, c, y);
 
-            part = HR::ChunkBody(str_to_vec("1234"), 0);
+            part = HR::ChunkBody(str_to_vec("12"), 2);
+            rw.async_write_part(part, c, y);
+
+            part = HR::ChunkBody(str_to_vec("34"), 0);
             rw.async_write_part(part, c, y);
 
             part = HR::ChunkHdr(0, "");
@@ -270,7 +273,10 @@ BOOST_AUTO_TEST_CASE(test_http11_trailer) {
             part = HR::ChunkHdr(4, "");
             rw.async_write_part(part, c, y);
 
-            part = HR::ChunkBody(str_to_vec("1234"), 0);
+            part = HR::ChunkBody(str_to_vec("12"), 2);
+            rw.async_write_part(part, c, y);
+
+            part = HR::ChunkBody(str_to_vec("34"), 0);
             rw.async_write_part(part, c, y);
 
             part = HR::ChunkHdr(0, "");
@@ -402,7 +408,10 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
             part = HR::ChunkHdr(4, "");
             rw.async_write_part(part, c, y);
 
-            part = HR::ChunkBody(str_to_vec("1234"), 0);
+            part = HR::ChunkBody(str_to_vec("12"), 2);
+            rw.async_write_part(part, c, y);
+
+            part = HR::ChunkBody(str_to_vec("34"), 0);
             rw.async_write_part(part, c, y);
 
             part = HR::ChunkHdr(0, "");
