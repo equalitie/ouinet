@@ -93,7 +93,6 @@ Part
 Reader::async_read_part(Cancel cancel, Yield yield_) {
     namespace Err = asio::error;
 
-    std::cerr << "----------- start\n";
     if (!_queued_parts.empty()) {
         auto part = std::move(_queued_parts.front());
         _queued_parts.pop();
@@ -101,6 +100,14 @@ Reader::async_read_part(Cancel cancel, Yield yield_) {
     }
 
     Yield yield = yield_.tag("http_forward");
+
+    if (_parser.is_done() && !_parser.chunked()) {
+        bool need_eof = _parser.need_eof();
+        reset_parser();
+        if (need_eof) {
+            return or_throw<Part>(yield, http::error::end_of_stream);
+        }
+    }
 
     // Cancellation, time out and error handling
     auto lifetime_cancelled = _lifetime_cancel.connect([&] { cancel(); });
@@ -150,39 +157,19 @@ Reader::async_read_part(Cancel cancel, Yield yield_) {
         return part;
     }
     else {
-        std::cerr << "start is_done:" << _parser.is_done() << "\n";
-        if (_parser.is_done()) {
-            reset_parser();
-            return or_throw<Part>(yield, http::error::end_of_stream);
-        }
-
         char buf[2048];
 
         _parser.get().body().data = buf;
         _parser.get().body().size = sizeof(buf);
 
-        sys::error_code ec;
-        auto s = http::async_read_some(_in, _buffer, _parser, yield[ec]);
+        http::async_read(_in, _buffer, _parser, yield[ec]);
 
-        std::cerr << ">>> s:" << s << " ec:" << ec.message() << " is_done:" << _parser.is_done() << " need_eof:" << _parser.need_eof() << "\n";
+        size_t s = sizeof(buf) - _parser.get().body().size;
+
         if (ec == http::error::need_buffer) ec = sys::error_code();
         if (ec) return or_throw<Part>(yield, ec);
 
-        bool is_done = _parser.is_done();
-
-        if (ec != sys::error_code()) {
-            // This is some strange behavior from Boost.Beast (currently
-            // working on 1.69). It happens when
-            // * HTTP version is: 1.0
-            // * Body is empty
-            // * No Content-Length is specified
-            // * Remote closed connection
-            return or_throw<Part>(yield, http::error::end_of_stream);
-            //return Body(is_done, std::vector<uint8_t>(buf, buf + s));
-        }
-
-
-        return Body(is_done, std::vector<uint8_t>(buf, buf + s));
+        return Body(_parser.is_done(), std::vector<uint8_t>(buf, buf + s));
     }
 
     return Part();

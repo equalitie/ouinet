@@ -105,7 +105,9 @@ namespace ouinet { namespace http_response {
     }
     
     std::ostream& operator<<(std::ostream& os, const HR::Body& b) {
-        return os << "Body(" << (b.is_last ? "last " : "not-last ") << vec_to_str(b) << ")";
+        os << "Body(" << (b.is_last ? "last" : "not-last");
+        if (!b.empty()) os << " ";
+        return os << vec_to_str(b) << ")";
     }
     
     std::ostream& operator<<(std::ostream& os, const HR::Trailer&) {
@@ -116,7 +118,6 @@ namespace ouinet { namespace http_response {
 bool is_end_of_stream(RR& rr, Cancel& c, Yield& y) {
     sys::error_code ec;
     auto part = rr.async_read_part(c, y[ec]);
-    cerr << ">>>>>> " << ec.message() << " " << part << "\n";
     return ec == http::error::end_of_stream;
 }
 
@@ -153,15 +154,12 @@ BOOST_AUTO_TEST_CASE(test_http10_no_body) {
         Cancel c;
         HR::Part part;
 
-        cerr << "--------------- 1\n";
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(part.is_head());
 
-        cerr << "--------------- 2\n";
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE_EQUAL(part, body(true, ""));
 
-        cerr << "--------------- 3\n";
         BOOST_REQUIRE(is_end_of_stream(rr, c, y));
     });
 
@@ -184,15 +182,12 @@ BOOST_AUTO_TEST_CASE(test_http10_body_no_length) {
         Cancel c;
         HR::Part part;
 
-        cerr << "--------------- 1\n";
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(part.is_head());
 
-        cerr << "--------------- 2\n";
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE_EQUAL(part, body(true, "abcdef"));
 
-        cerr << "--------------- 3\n";
         BOOST_REQUIRE(is_end_of_stream(rr, c, y));
     });
 
