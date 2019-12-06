@@ -27,9 +27,9 @@ class OuiServiceImplementationServer
 class OuiServiceServer
 {
     public:
-    OuiServiceServer(asio::io_service& ios);
+    OuiServiceServer(const asio::executor&);
 
-    asio::io_service& get_io_service() { return _ios; }
+    asio::executor get_executor() { return _ex; }
 
     void add(std::unique_ptr<OuiServiceImplementationServer> implementation);
 
@@ -44,7 +44,7 @@ class OuiServiceServer
     void cancel_accept();
 
     private:
-    asio::io_service& _ios;
+    asio::executor _ex;
 
     std::vector<std::unique_ptr<OuiServiceImplementationServer>> _implementations;
 
@@ -78,7 +78,7 @@ class OuiServiceClient
     };
 
     public:
-    OuiServiceClient(asio::io_service& ios);
+    OuiServiceClient(const asio::executor&);
 
     void add(Endpoint, std::unique_ptr<OuiServiceImplementationClient>);
 

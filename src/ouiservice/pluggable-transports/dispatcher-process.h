@@ -2,7 +2,6 @@
 
 #include <vector>
 
-#include <boost/asio/io_service.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/optional.hpp>
 #include <boost/process/async_pipe.hpp>
@@ -19,7 +18,7 @@ class DispatcherProcess
 {
     public:
     DispatcherProcess(
-        asio::io_service& ios,
+        asio::io_context&,
         std::string command,
         std::vector<std::string> command_line_arguments,
         boost::optional<std::string> state_directory
@@ -42,7 +41,8 @@ class DispatcherProcess
     );
 
     protected:
-    asio::io_service& _ios;
+    asio::io_context& _ioc;
+
     std::string _command;
     std::vector<std::string> _command_line_arguments;
     boost::optional<std::string> _state_directory;

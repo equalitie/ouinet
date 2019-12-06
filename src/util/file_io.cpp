@@ -67,35 +67,35 @@ size_t file_remaining_size(posix::stream_descriptor& f, sys::error_code& ec)
 
 static
 posix::stream_descriptor open( int file
-                             , asio::io_service& ios
+                             , const asio::executor& exec
                              , sys::error_code& ec)
 {
     if (file == -1) {
         ec = last_error();
         if (!ec) ec = make_error_code(errc::no_message);
-        return asio::posix::stream_descriptor(ios);
+        return asio::posix::stream_descriptor(exec);
     }
 
-    asio::posix::stream_descriptor f(ios, file);
+    asio::posix::stream_descriptor f(exec, file);
     fseek(f, 0, ec);
 
     return f;
 }
 
-posix::stream_descriptor open_or_create( asio::io_service& ios
+posix::stream_descriptor open_or_create( const asio::executor& exec
                                        , const fs::path& p
                                        , sys::error_code& ec)
 {
     int file = ::open(p.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
-    return open(file, ios, ec);
+    return open(file, exec, ec);
 }
 
-posix::stream_descriptor open_readonly( asio::io_service& ios
+posix::stream_descriptor open_readonly( const asio::executor& exec
                                       , const fs::path& p
                                       , sys::error_code& ec)
 {
     int file = ::open(p.c_str(), O_RDONLY);
-    return open(file, ios, ec);
+    return open(file, exec, ec);
 }
 
 int dup_fd(asio::posix::stream_descriptor& f, sys::error_code& ec)

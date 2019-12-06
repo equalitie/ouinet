@@ -1,8 +1,8 @@
 #pragma once
 
-#include <boost/asio/io_service.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/error.hpp>
+#include <boost/asio/post.hpp>
 #include <boost/intrusive/list.hpp>
 #include "signal.h"
 
@@ -23,14 +23,14 @@ class ConditionVariable {
         <WaitEntry, boost::intrusive::constant_time_size<false>>;
 
 public:
-    ConditionVariable(boost::asio::io_service& ios);
+    ConditionVariable(const boost::asio::executor&);
 
     ConditionVariable(const ConditionVariable&) = delete;
     ConditionVariable& operator=(const ConditionVariable&) = delete;
 
     ~ConditionVariable();
 
-    asio::io_service& get_io_service() { return _ios; }
+    asio::executor get_executor() { return _exec; }
 
     void notify(const boost::system::error_code& ec
                     = boost::system::error_code());
@@ -39,13 +39,13 @@ public:
     void wait(boost::asio::yield_context yield);
 
 private:
-    boost::asio::io_service& _ios;
+    asio::executor _exec;
     IntrusiveList _on_notify;
 };
 
 inline
-ConditionVariable::ConditionVariable(boost::asio::io_service& ios)
-    : _ios(ios)
+ConditionVariable::ConditionVariable(const boost::asio::executor& exec)
+    : _exec(exec)
 {
 }
 
@@ -60,7 +60,7 @@ void ConditionVariable::notify(const boost::system::error_code& ec)
 {
     while (!_on_notify.empty()) {
         auto& e = _on_notify.front();
-        _ios.post([h = std::move(e.handler), ec] () mutable { h(ec); });
+        asio::post(_exec, [h = std::move(e.handler), ec] () mutable { h(ec); });
         _on_notify.pop_front();
     }
 }
@@ -68,7 +68,7 @@ void ConditionVariable::notify(const boost::system::error_code& ec)
 inline
 void ConditionVariable::wait(Cancel& cancel, boost::asio::yield_context yield)
 {
-    asio::executor_work_guard<asio::io_context::executor_type> work(_ios.get_executor());
+    auto work = asio::make_work_guard(_exec);
 
     WaitEntry entry;
 
@@ -80,7 +80,7 @@ void ConditionVariable::wait(Cancel& cancel, boost::asio::yield_context yield)
         assert(entry.is_linked());
         if (entry.is_linked()) entry.unlink();
 
-        _ios.post([h = std::move(entry.handler)] () mutable {
+        asio::post(_exec, [h = std::move(entry.handler)] () mutable {
             h(asio::error::operation_aborted);
         });
     });

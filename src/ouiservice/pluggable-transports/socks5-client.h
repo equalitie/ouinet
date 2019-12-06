@@ -1,6 +1,5 @@
 #pragma once
 
-#include <boost/asio/io_service.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/optional.hpp>
@@ -22,7 +21,7 @@ asio::ip::tcp::socket connect_socks5(
     asio::ip::tcp::endpoint proxy_endpoint,
     asio::ip::tcp::endpoint destination_endpoint,
     boost::optional<std::map<std::string, std::string>> connection_arguments,
-    asio::io_service& ios,
+    const asio::executor&,
     asio::yield_context yield,
     Signal<void()>& cancel
 );

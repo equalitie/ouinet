@@ -16,7 +16,7 @@ namespace i2poui {
 
   class Tunnel  {
 public:
-  boost::asio::io_service& get_io_service() {  return _ios; }
+  boost::asio::executor get_executor() {  return _exec; }
 
   /**
      Sets the timeout value where the tunnel raise an error
@@ -34,7 +34,7 @@ public:
 
   bool has_timed_out() {return _has_timed_out;}
   
-  Tunnel(boost::asio::io_service& ios, std::shared_ptr<i2p::client::I2PService> _i2p_tunnel, uint32_t timeout);
+  Tunnel(const boost::asio::executor&, std::shared_ptr<i2p::client::I2PService> _i2p_tunnel, uint32_t timeout);
   
   ~Tunnel();
   
@@ -42,11 +42,13 @@ public:
   friend class Client;
   friend class Server;
 
-  boost::asio::io_service& _ios;
+  boost::asio::executor _exec;
+
+  using WorkGuard = asio::executor_work_guard<asio::executor>;
 
   //the tunnel will use this mock work to prevent asio service
   //from exiting while channel is waiting for accepting or connecting
-  std::shared_ptr<boost::asio::io_service::work> _waiting_work;
+  std::shared_ptr<WorkGuard> _waiting_work;
 
   // I2PService derives from std::enable_shared_from_this, so it must
   // be a shared_ptr.

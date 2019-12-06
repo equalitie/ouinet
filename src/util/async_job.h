@@ -16,14 +16,14 @@ public:
     };
 
 public:
-    AsyncJob(asio::io_service& ios)
-        : _ios(ios)
+    AsyncJob(const asio::executor& ex)
+        : _ex(ex)
     {}
 
     AsyncJob(const AsyncJob&) = delete;
 
     AsyncJob(AsyncJob&& other)
-        : _ios(other._ios)
+        : _ex(std::move(other._ex))
         , _result(std::move(other._result))
         , _cancel_signal(other._cancel_signal)
         , _self(other._self)
@@ -36,8 +36,6 @@ public:
     }
 
     AsyncJob& operator=(AsyncJob&& other) {
-        assert(&_ios == &other._ios);
-
         _result = std::move(other._result);
         _cancel_signal = other._cancel_signal;
         _on_finish = std::move(other._on_finish);
@@ -55,8 +53,8 @@ public:
         if (_self) return;
 
         AsyncJob* s = this;
-        asio::spawn(_ios, [s, job = std::move(job)]
-                          (asio::yield_context yield) {
+        asio::spawn(_ex, [s, job = std::move(job)]
+                         (asio::yield_context yield) {
             AsyncJob* self = s;
 
             Signal<void()> cancel;
@@ -101,7 +99,7 @@ public:
         assert((_self || _result) && "Job is/was not running");
 
         if (!_self) {
-            if (on_finish) _ios.post(std::move(on_finish));
+            if (on_finish) asio::post(_ex, std::move(on_finish));
         }
         else {
             _on_finish = std::move(on_finish);
@@ -114,7 +112,7 @@ public:
         if (!_self) return;
         assert(!_on_finish);
         cancel();
-        ConditionVariable cv(_ios);
+        ConditionVariable cv(_ex);
         _on_finish = [&cv] { cv.notify(); };
         cv.wait(yield);
     }
@@ -127,7 +125,7 @@ public:
     }
 
 private:
-    asio::io_service& _ios;
+    asio::executor _ex;
     boost::optional<Result> _result;
     Signal<void()>* _cancel_signal = nullptr;
     AsyncJob** _self = nullptr;

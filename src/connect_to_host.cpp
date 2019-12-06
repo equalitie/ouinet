@@ -4,7 +4,6 @@
 #include "http_util.h"
 #include "util/timeout.h"
 
-#include <boost/asio/io_service.hpp>
 #include <boost/asio/connect.hpp>
 #include <boost/asio/spawn.hpp>
 
@@ -16,7 +15,7 @@ using TcpLookup = asio::ip::tcp::resolver::results_type;
 
 
 tcp::socket
-ouinet::connect_to_host( asio::io_service& ios
+ouinet::connect_to_host( const asio::executor& ex
                        , const string& host
                        , const string& port
                        , Signal<void()>& cancel_signal
@@ -25,22 +24,22 @@ ouinet::connect_to_host( asio::io_service& ios
     sys::error_code ec;
 
     auto const lookup = util::tcp_async_resolve( host, port
-                                               , ios, cancel_signal
+                                               , ex, cancel_signal
                                                , yield[ec]);
 
-    if (ec) return or_throw(yield, ec, tcp::socket(ios));
+    if (ec) return or_throw(yield, ec, tcp::socket(ex));
 
-    return connect_to_host(lookup, ios, cancel_signal, yield);
+    return connect_to_host(lookup, ex, cancel_signal, yield);
 }
 
 tcp::socket
 ouinet::connect_to_host( const TcpLookup& lookup
-                       , asio::io_service& ios
+                       , const asio::executor& ex
                        , Signal<void()>& cancel_signal
                        , asio::yield_context yield)
 {
     sys::error_code ec;
-    tcp::socket socket(ios);
+    tcp::socket socket(ex);
 
     auto disconnect_slot = cancel_signal.connect([&socket] {
         sys::error_code ec;
@@ -50,24 +49,24 @@ ouinet::connect_to_host( const TcpLookup& lookup
 
     // Make the connection on the IP address we get from a lookup
     asio::async_connect(socket, lookup, yield[ec]);
-    if (ec) return or_throw(yield, ec, tcp::socket(ios));
+    if (ec) return or_throw(yield, ec, tcp::socket(ex));
 
     return socket;
 }
 
 tcp::socket
 ouinet::connect_to_host( const TcpLookup& lookup
-                       , asio::io_service& ios
+                       , const asio::executor& ex
                        , std::chrono::steady_clock::duration timeout
                        , Signal<void()>& cancel_signal
                        , asio::yield_context yield)
 {
     return util::with_timeout
-        ( ios
+        ( ex
         , cancel_signal
         , timeout
         , [&] (auto& signal, auto yield) {
-              return connect_to_host(lookup, ios, signal, yield);
+              return connect_to_host(lookup, ex, signal, yield);
           }
         , yield);
 }

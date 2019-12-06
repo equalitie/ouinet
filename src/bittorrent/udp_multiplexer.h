@@ -41,7 +41,7 @@ private:
 public:
     UdpMultiplexer(asio_utp::udp_multiplexer&&);
 
-    asio::io_service& get_io_service();
+    asio::executor get_executor();
 
     void send(std::string&& message, const udp::endpoint& to, Cancel&, asio::yield_context);
     void send(std::string&& message, const udp::endpoint& to);
@@ -81,15 +81,15 @@ private:
 inline
 UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s):
     _socket(std::move(s)),
-    _send_queue_nonempty(_socket.get_io_service()),
-    _rate_limiting_timer(_socket.get_io_service())
+    _send_queue_nonempty(_socket.get_executor()),
+    _rate_limiting_timer(_socket.get_executor())
 {
     assert(_socket.is_open());
 
     std::cerr << "BT is operating on endpoint: UDP:" << _socket.local_endpoint() << "\n";
 
 #if 0
-    asio::spawn(get_io_service(), [this] (asio::yield_context yield) {
+    asio::spawn(get_executor(), [this] (asio::yield_context yield) {
             using namespace std::chrono;
             using std::cerr;
 
@@ -103,7 +103,7 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s):
 
             while (true) {
                 sys::error_code ec;
-                async_sleep(get_io_service(), seconds(1), cancel, yield[ec]);
+                async_sleep(get_executor(), seconds(1), cancel, yield[ec]);
                 if (cancel) return;
 
                 cerr << "Current BT rate rx:";
@@ -118,7 +118,7 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s):
     });
 #endif
 
-    asio::spawn(get_io_service(), [this] (asio::yield_context yield) {
+    asio::spawn(get_executor(), [this] (asio::yield_context yield) {
         Cancel cancel(_terminate_signal);
 
         auto terminated = cancel.connect([&] {
@@ -160,7 +160,7 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s):
         }
     });
 
-    asio::spawn(get_io_service(), [this] (asio::yield_context yield) {
+    asio::spawn(get_executor(), [this] (asio::yield_context yield) {
         auto terminated = _terminate_signal.connect([]{});
 
         std::vector<uint8_t> buf;
@@ -215,7 +215,7 @@ void UdpMultiplexer::send(
     Cancel& cancel_signal,
     asio::yield_context yield
 ) {
-    ConditionVariable condition(get_io_service());
+    ConditionVariable condition(get_executor());
 
     sys::error_code ec;
 
@@ -263,7 +263,7 @@ inline
 const boost::string_view
 UdpMultiplexer::receive(udp::endpoint& from, Cancel& cancel, asio::yield_context yield)
 {
-    ConditionVariable condition(get_io_service());
+    ConditionVariable condition(get_executor());
 
     sys::error_code ec;
     boost::string_view buffer;
@@ -299,9 +299,9 @@ UdpMultiplexer::receive(udp::endpoint& from, Cancel& cancel, asio::yield_context
 }
 
 inline
-asio::io_service& UdpMultiplexer::get_io_service()
+asio::executor UdpMultiplexer::get_executor()
 {
-    return _socket.get_io_service();
+    return _socket.get_executor();
 }
 
 }} // namespaces

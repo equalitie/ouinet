@@ -120,17 +120,17 @@ void detail::Swarm::expire()
 
 
 
-Tracker::Tracker(asio::io_service& ios):
-    _ios(ios)
+Tracker::Tracker(const asio::executor& exec):
+    _exec(exec)
 {
     /*
      * Every so often, remove expired peers from swarms.
      */
-    asio::spawn(_ios, [this] (asio::yield_context yield) {
+    asio::spawn(_exec, [this] (asio::yield_context yield) {
         auto terminated = _terminate_signal.connect([]{});
 
         while (true) {
-            async_sleep(_ios, std::chrono::seconds(60), _terminate_signal, yield);
+            async_sleep(_exec, std::chrono::seconds(60), _terminate_signal, yield);
             if (terminated) {
                 break;
             }
@@ -172,17 +172,17 @@ std::vector<tcp::endpoint> Tracker::list_peers(NodeID swarm, unsigned int count)
 
 
 
-DataStore::DataStore(asio::io_service& ios):
-    _ios(ios)
+DataStore::DataStore(const asio::executor& exec):
+    _exec(exec)
 {
     /*
      * Every so often, remove expired data items.
      */
-    asio::spawn(_ios, [this] (asio::yield_context yield) {
+    asio::spawn(_exec, [this] (asio::yield_context yield) {
         auto terminated = _terminate_signal.connect([]{});
 
         while (true) {
-            async_sleep(_ios, std::chrono::seconds(60), _terminate_signal, yield);
+            async_sleep(_exec, std::chrono::seconds(60), _terminate_signal, yield);
             if (terminated) {
                 break;
             }

@@ -40,12 +40,12 @@ static void parse_output_line(std::string line, std::string& command, std::vecto
 }
 
 DispatcherProcess::DispatcherProcess(
-    asio::io_service& ios,
+    asio::io_context& ioc,
     std::string command,
     std::vector<std::string> command_line_arguments,
     boost::optional<std::string> state_directory
 ):
-    _ios(ios),
+    _ioc(ioc),
     _command(command),
     _command_line_arguments(command_line_arguments),
     _state_directory(state_directory)
@@ -83,8 +83,8 @@ void DispatcherProcess::start_process(
         env[i.first] = i.second;
     }
 
-    _standard_input = std::make_unique<boost::process::async_pipe>(_ios);
-    auto standard_output = std::make_unique<boost::process::async_pipe>(_ios);
+    _standard_input = std::make_unique<boost::process::async_pipe>(_ioc);
+    auto standard_output = std::make_unique<boost::process::async_pipe>(_ioc);
     _process_exit = std::make_unique<Signal<void()>>();
 
     std::error_code error_code;
@@ -101,7 +101,7 @@ void DispatcherProcess::start_process(
         ] (int exit, const std::error_code& error_code) {
             (*signal)();
         }),
-        _ios
+        _ioc
     );
 
     if (error_code) {
@@ -124,15 +124,15 @@ void DispatcherProcess::start_process(
     struct InitializationStatus {
         ConditionVariable stop_condition;
         boost::optional<sys::error_code> ec;
-        InitializationStatus(asio::io_service& ios):
-            stop_condition(ios),
+        InitializationStatus(asio::io_context& ioc):
+            stop_condition(ioc.get_executor()),
             ec(boost::none)
         {}
     };
     std::shared_ptr<InitializationStatus> initialization =
-        std::make_shared<InitializationStatus>(_ios);
+        std::make_shared<InitializationStatus>(_ioc);
 
-    asio::steady_timer timeout_timer(_ios);
+    asio::steady_timer timeout_timer(_ioc);
     timeout_timer.expires_from_now(std::chrono::seconds(15));
     timeout_timer.async_wait([initialization] (const sys::error_code&) {
         if (!initialization->ec) {
@@ -151,7 +151,7 @@ void DispatcherProcess::start_process(
         timeout_timer.cancel();
     });
 
-    asio::spawn(_ios, [
+    asio::spawn(_ioc, [
         this,
         standard_output = std::move(standard_output),
         initialization
@@ -254,11 +254,11 @@ void DispatcherProcess::stop_process()
     auto process = std::move(_process);
     auto standard_input = std::move(_standard_input);
     auto process_exit = std::move(_process_exit);
-    asio::io_service& ios = _ios;
+    auto& ioc = _ioc;
     _stop_signal();
 
-    asio::spawn(_ios, [
-        &ios,
+    asio::spawn(_ioc, [
+        &ioc,
         process = std::move(process),
         standard_input = std::move(standard_input),
         process_exit = std::move(process_exit)
@@ -269,7 +269,7 @@ void DispatcherProcess::stop_process()
          * Closing the standard input triggers the process to quit.
          * Wait for process exit or a timeout.
          */
-        asio::steady_timer timeout_timer(ios);
+        asio::steady_timer timeout_timer(ioc);
         timeout_timer.expires_from_now(std::chrono::seconds(5));
 
         auto exited = process_exit->connect([&] {

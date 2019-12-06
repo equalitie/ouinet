@@ -15,10 +15,10 @@ namespace ouinet {
  *
  * const size_t max_running_jobs = 5;
  *
- * Scheduler s(ios, max_running_jobs);
+ * Scheduler s(exec, max_running_jobs);
  *
  * for (size_t i = 0; i < 100; ++i) {
- *     spawn(ios, [&s] (asio::yield_context yield) {
+ *     spawn(exec, [&s] (asio::yield_context yield) {
  *         system::error_code ec;
  *
  *         // This blocks if we have more than `max_running_jobs` number of
@@ -45,7 +45,7 @@ private:
     using List = boost::intrusive::list<T>;
 
     struct Waiter : public ListHook {
-        Waiter(asio::io_service& ios) : cv(ios) {}
+        Waiter(const asio::executor& exec) : cv(exec) {}
         ConditionVariable cv;
     };
 
@@ -85,7 +85,8 @@ public:
     };
 
 public:
-    Scheduler(asio::io_service& ios, size_t max_running_jobs = 1);
+    Scheduler(const asio::executor&, size_t max_running_jobs = 1);
+    Scheduler(asio::io_context&, size_t max_running_jobs = 1);
 
     Slot wait_for_slot(asio::yield_context yield);
     Slot wait_for_slot(Cancel&, asio::yield_context yield);
@@ -106,15 +107,21 @@ private:
     void release_slot(Slot&);
 
 private:
-    asio::io_service& _ios;
+    asio::executor _exec;
     size_t _max_running_jobs;
     List<Slot> _slots;
     List<Waiter> _waiters;
 };
 
 inline
-Scheduler::Scheduler(asio::io_service& ios, size_t max_running_jobs)
-    : _ios(ios)
+Scheduler::Scheduler(const asio::executor& exec, size_t max_running_jobs)
+    : _exec(exec)
+    , _max_running_jobs(max_running_jobs)
+{}
+
+inline
+Scheduler::Scheduler(asio::io_context& ctx, size_t max_running_jobs)
+    : _exec(ctx.get_executor())
     , _max_running_jobs(max_running_jobs)
 {}
 
@@ -130,7 +137,7 @@ Scheduler::Slot Scheduler::wait_for_slot( Cancel& cancel
                                         , asio::yield_context yield)
 {
     while (_slots.size() >= _max_running_jobs) {
-        Waiter waiter(_ios);
+        Waiter waiter(_exec);
 
         _waiters.push_back(waiter);
 

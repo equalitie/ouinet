@@ -35,7 +35,7 @@ struct Client::Impl {
     // (i.e. from injector-signed cached content).
     unsigned newest_proto_seen = http_::protocol_version_current;
 
-    asio::io_service& ios;
+    asio::executor ex;
     shared_ptr<bt::MainlineDht> dht;
     util::Ed25519PublicKey cache_pk;
     fs::path cache_dir;
@@ -55,14 +55,14 @@ struct Client::Impl {
         , util::Ed25519PublicKey& cache_pk
         , fs::path cache_dir
         , log_level_t log_level)
-        : ios(dht_->get_io_service())
+        : ex(dht_->get_executor())
         , dht(move(dht_))
         , cache_pk(cache_pk)
         , cache_dir(move(cache_dir))
         , announcer(dht, log_level)
         , dht_lookups(256)
         , log_level(log_level)
-        , local_peer_discovery(ios, dht->local_endpoints())
+        , local_peer_discovery(ex, dht->local_endpoints())
     {
         start_accepting();
     }
@@ -76,7 +76,7 @@ struct Client::Impl {
     void start_accepting()
     {
         for (auto ep : dht->local_endpoints()) {
-            asio::spawn(ios, [&, ep] (asio::yield_context yield) {
+            asio::spawn(ex, [&, ep] (asio::yield_context yield) {
                 Cancel c(lifetime_cancel);
                 sys::error_code ec;
                 start_accepting_on(ep, c, yield[ec]);
@@ -88,7 +88,7 @@ struct Client::Impl {
                            , Cancel& cancel
                            , asio::yield_context yield)
     {
-        auto srv = make_unique<ouiservice::UtpOuiServiceServer>(ios, ep);
+        auto srv = make_unique<ouiservice::UtpOuiServiceServer>(ex, ep);
 
         auto cancel_con = cancel.connect([&] { srv->stop_listen(); });
 
@@ -111,12 +111,12 @@ struct Client::Impl {
             if (ec == asio::error::operation_aborted) return;
             if (ec) {
                 LOG_WARN("Bep5Http: Failure to accept:", ec.message());
-                async_sleep(ios, 200ms, cancel, yield);
+                async_sleep(ex, 200ms, cancel, yield);
                 continue;
             }
 
-            asio::spawn(ios, [&, con = move(con)]
-                             (asio::yield_context yield) mutable {
+            asio::spawn(ex, [&, con = move(con)]
+                            (asio::yield_context yield) mutable {
                 Cancel c(cancel);
                 sys::error_code ec;
                 serve(con, c, yield[ec]);
@@ -163,7 +163,7 @@ struct Client::Impl {
 
         auto path = path_from_key(*key);
 
-        auto file = util::file_io::open_readonly(ios, path, ec);
+        auto file = util::file_io::open_readonly(ex, path, ec);
 
         if (ec) {
             if (!cancel && log_debug()) {
@@ -403,15 +403,15 @@ struct Client::Impl {
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw<Session>(yield, ec);
 
-        auto src_sink = util::connected_pair(ios, yield[ec]);
+        auto src_sink = util::connected_pair(ex, yield[ec]);
 
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw<Session>(yield, ec);
 
-        asio::spawn(ios, [ pk = cache_pk
-                         , key = key
-                         , sink = move(src_sink.second)
-                         , con  = move(con)] (auto yield) mutable {
+        asio::spawn(ex, [ pk = cache_pk
+                        , key = key
+                        , sink = move(src_sink.second)
+                        , con  = move(con)] (auto yield) mutable {
             Session s(move(con));
             sys::error_code ec;
             Cancel cancel;
@@ -447,12 +447,12 @@ struct Client::Impl {
         sys::error_code ec;
         auto opt_m = choose_multiplexer_for(ep);
         assert(opt_m);
-        asio_utp::socket s(ios);
+        asio_utp::socket s(ex);
         s.bind(*opt_m, ec);
         if (ec) return or_throw<GenericStream>(yield, ec);
         auto c = cancel.connect([&] { s.close(); });
         bool timed_out = false;
-        WatchDog wd(ios, chrono::seconds(30), [&] { timed_out = true; cancel(); });
+        WatchDog wd(ex, chrono::seconds(30), [&] { timed_out = true; cancel(); });
         s.async_connect(ep, yield[ec]);
         if (timed_out) return or_throw<GenericStream>(yield, asio::error::timed_out);
         if (ec || cancel) return or_throw<GenericStream>(yield, ec);
@@ -464,19 +464,19 @@ struct Client::Impl {
     {
         using Ret = util::AsyncGenerator<pair<GenericStream, udp::endpoint>>;
 
-        return make_unique<Ret>(ios,
+        return make_unique<Ret>(ex,
         [&, lc = lifetime_cancel, eps = move(eps), dbg]
         (auto& q, auto c, auto y) mutable {
             auto cn = lc.connect([&] { c(); });
 
-            WaitCondition wc(ios);
+            WaitCondition wc(ex);
             set<udp::endpoint> our_endpoints = dht->wan_endpoints();
 
             for (auto& ep : eps) {
                 if (bt::is_martian(ep)) continue;
                 if (our_endpoints.count(ep)) continue;
 
-                asio::spawn(ios, [&, ep, lock = wc.lock()] (auto y) {
+                asio::spawn(ex, [&, ep, lock = wc.lock()] (auto y) {
                     sys::error_code ec;
                     if (dbg) {
                         std::cerr << *dbg << " Bep5Http: connecting to: " << ep << "\n";
@@ -510,7 +510,7 @@ struct Client::Impl {
 
         for (auto& e : eps) {
             if (same_ipv(ep, e)) {
-                asio_utp::udp_multiplexer m(ios);
+                asio_utp::udp_multiplexer m(ex);
                 sys::error_code ec;
                 m.bind(e, ec);
                 assert(!ec);
@@ -531,7 +531,7 @@ struct Client::Impl {
         auto dk = dht_key(key);
         if (!dk) return or_throw(yield, asio::error::invalid_argument);
         auto path = path_from_key(key);
-        auto file = util::atomic_file::make(ios, path, ec);
+        auto file = util::atomic_file::make(ex, path, ec);
         // TODO: Do not verify, just handle storage format.
         // Verification is not needed here at all
         // (injectors are trusted and responses from other clients are verified when fetched),
@@ -581,7 +581,7 @@ struct Client::Impl {
             if (!fs::is_regular_file(p)) continue;
             sys::error_code ec;
 
-            auto f = util::file_io::open_readonly(ios, p, ec);
+            auto f = util::file_io::open_readonly(ex, p, ec);
             if (ec == asio::error::operation_aborted) return;
             if (ec) {
                 LOG_WARN("Bep5HTTP: Failed to open cached file ", p

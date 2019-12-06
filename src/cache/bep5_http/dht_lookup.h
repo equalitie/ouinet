@@ -51,9 +51,9 @@ public:
 
     DhtLookup(std::weak_ptr<bittorrent::MainlineDht> dht_w, NodeID infohash)
         : infohash(infohash)
-        , ioc(dht_w.lock()->get_io_service())
+        , exec(dht_w.lock()->get_executor())
         , dht_w(dht_w)
-        , cv(ioc)
+        , cv(exec)
     { }
 
     Ret get(Cancel c, asio::yield_context y) {
@@ -72,7 +72,7 @@ public:
         }
 
 #ifndef NDEBUG
-        WatchDog wd(ioc, timeout() + std::chrono::seconds(5), [&] {
+        WatchDog wd(exec, timeout() + std::chrono::seconds(5), [&] {
                 LOG_ERROR("DHT BEP5 DhtLookup::get failed to time out");
             });
 #endif
@@ -93,7 +93,7 @@ public:
 private:
 
     std::unique_ptr<Job> make_job() {
-        auto job = std::make_unique<Job>(ioc);
+        auto job = std::make_unique<Job>(exec);
 
         job->start([ self = this
                    , dht_w = dht_w
@@ -108,7 +108,7 @@ private:
                     self->job = nullptr;
                 });
 
-            WatchDog wd(self->ioc, timeout(), [&] {
+            WatchDog wd(self->exec, timeout(), [&] {
                     LOG_WARN("DHT BEP5 lookup ", infohash, " timed out");
                     c();
                 });
@@ -139,7 +139,7 @@ private:
 
 private:
     NodeID infohash;
-    asio::io_context& ioc;
+    asio::executor exec;
     std::weak_ptr<bittorrent::MainlineDht> dht_w;
     std::unique_ptr<Job> job;
     ConditionVariable cv;

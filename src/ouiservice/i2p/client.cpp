@@ -12,9 +12,9 @@ using namespace std;
 using namespace ouinet::ouiservice;
 using namespace ouinet::ouiservice::i2poui;
 
-Client::Client(std::shared_ptr<Service> service, const string& target_id, uint32_t timeout, asio::io_service& ios)
+Client::Client(std::shared_ptr<Service> service, const string& target_id, uint32_t timeout, const asio::executor& exec)
     : _service(service)
-    , _ios(ios)
+    , _exec(exec)
     , _target_id(target_id)
     , _timeout(timeout)
 {}
@@ -30,7 +30,7 @@ void Client::start(asio::yield_context yield)
 
   do {
     std::unique_ptr<i2p::client::I2PClientTunnel> i2p_client_tunnel = std::make_unique<i2p::client::I2PClientTunnel>("i2p_oui_client", _target_id, "127.0.0.1", 0, _service ? _service->get_local_destination () : nullptr);
-    _client_tunnel = std::make_unique<Tunnel>(_ios, std::move(i2p_client_tunnel), _timeout);
+    _client_tunnel = std::make_unique<Tunnel>(_exec, std::move(i2p_client_tunnel), _timeout);
 
     _client_tunnel->wait_to_get_ready(yield[ec]);
   } while(_client_tunnel->has_timed_out());
@@ -58,7 +58,7 @@ Client::connect(asio::yield_context yield, Signal<void()>& cancel)
 {
     sys::error_code ec;
 
-    Connection connection(_ios);
+    Connection connection(_exec);
     
     auto cancel_slot = cancel.connect([&] {
         // tcp::socket::cancel() does not work properly on all platforms

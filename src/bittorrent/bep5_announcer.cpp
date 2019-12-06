@@ -41,16 +41,16 @@ struct Bep5Announcer::Impl
         auto self = shared_from_this();
 
         if (auto dht = dht_w.lock()) {
-            ios = &dht->get_io_service();
+            auto exec = dht->get_executor();
 
-            asio::spawn( *ios
-                       , [&, self] (asio::yield_context yield) {
-                             loop(yield);
+            asio::spawn( exec
+                       , [&, self, exec] (asio::yield_context yield) mutable {
+                             loop(exec, yield);
                          });
         }
     }
 
-    void loop(asio::yield_context yield)
+    void loop(asio::executor& exec, asio::yield_context yield)
     {
         using namespace std::chrono_literals;
 
@@ -78,7 +78,7 @@ struct Bep5Announcer::Impl
 
             if (ec) {
                 // TODO: Arbitrary timeout
-                async_sleep(*ios, random_timeout(1s, 1min), cancel, yield);
+                async_sleep(exec, random_timeout(1s, 1min), cancel, yield);
                 if (cancel) return;
                 continue;
             }
@@ -89,13 +89,12 @@ struct Bep5Announcer::Impl
                 LOG_DEBUG("ANNOUNCING ", infohash, " next in: ", (sleep.count()/1000.f), "s");
             }
 
-            async_sleep(*ios, sleep, cancel, yield);
+            async_sleep(exec, sleep, cancel, yield);
         }
     }
 
     NodeID infohash;
     weak_ptr<MainlineDht> dht_w;
-    asio::io_service* ios = nullptr;
     Cancel cancel;
     bool debug = false;
 };

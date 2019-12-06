@@ -1,6 +1,5 @@
 #pragma once
 
-#include <boost/asio/io_service.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/spawn.hpp>
 
@@ -81,7 +80,7 @@ fetch_http( Stream& con
 template<class ResponseBodyType, class Stream, class Duration, class RequestType>
 inline
 http::response<ResponseBodyType>
-fetch_http( asio::io_service& ios
+fetch_http( const asio::executor& ex
           , Stream& con
           , RequestType req
           , Duration timeout
@@ -89,7 +88,7 @@ fetch_http( asio::io_service& ios
           , Yield yield)
 {
     return util::with_timeout
-        ( ios
+        ( ex
         , abort_signal
         , timeout
         , [&] (auto& abort_signal, auto yield) {

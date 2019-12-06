@@ -43,7 +43,7 @@ struct Entry {
 struct Announcer::Loop {
     using Entries = util::AsyncQueue<Entry, std::list>;
 
-    asio::io_service& ios;
+    asio::executor ex;
     shared_ptr<bt::MainlineDht> dht;
     Entries entries;
     Cancel _cancel;
@@ -58,9 +58,9 @@ struct Announcer::Loop {
     static Clock::duration failure_reannounce_period() { return 5min;  }
 
     Loop(shared_ptr<bt::MainlineDht> dht, log_level_t log_level)
-        : ios(dht->get_io_service())
+        : ex(dht->get_executor())
         , dht(move(dht))
-        , entries(ios)
+        , entries(ex)
         , log_level(log_level)
     { }
 
@@ -163,7 +163,7 @@ struct Announcer::Loop {
 
             if (d == 0s) { return i; }
 
-            async_sleep(ios, d, _timer_cancel, yield);
+            async_sleep(ex, d, _timer_cancel, yield);
         }
 
         return or_throw(yield, asio::error::operation_aborted, end);
@@ -171,7 +171,7 @@ struct Announcer::Loop {
 
     void start()
     {
-        asio::spawn(dht->get_io_service(), [&] (asio::yield_context yield) {
+        asio::spawn(dht->get_executor(), [&] (asio::yield_context yield) {
             Cancel cancel(_cancel);
             sys::error_code ec;
             loop(cancel, yield[ec]);
@@ -198,7 +198,7 @@ struct Announcer::Loop {
             for (int i = 0; i != 3; ++i) {
                 announce(ei->first, cancel, yield[ec]);
                 if (!ec) { success = true; break; }
-                async_sleep(ios, chrono::seconds(1+i), cancel, yield[ec]);
+                async_sleep(ex, chrono::seconds(1+i), cancel, yield[ec]);
                 if (cancel) return;
                 ec = {};
             }

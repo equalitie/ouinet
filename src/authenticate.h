@@ -3,6 +3,7 @@
 #include <boost/beast/core/detail/base64.hpp>
 #include "namespaces.h"
 #include "generic_stream.h"
+#include "util.h"
 
 namespace ouinet {
 
@@ -20,7 +21,7 @@ namespace authenticate_detail {
 
         while(encoded.starts_with(" ")) encoded.remove_prefix(1);
 
-        std::string decoded = beast::detail::base64_decode(encoded.to_string());
+        std::string decoded = ouinet::util::base64_decode(encoded);
 
         // Trim the Unicode character U+00A3 (POUND SIGN) from the end if present.
         if (const auto s = decoded.size() >= 2) {
@@ -77,9 +78,7 @@ inline
 Request authorize( const Request& req
                  , beast::string_view credentials /* e.g.: "test:123" */)
 {
-    std::string c = beast::detail::base64_encode(
-            reinterpret_cast<const unsigned char*>(credentials.data()),
-                                                   credentials.size());
+    std::string c = ouinet::util::base64_encode(credentials);
 
     Request ret = req;
 

@@ -9,11 +9,11 @@ namespace ouinet {
 namespace ouiservice {
 
 LampshadeOuiServiceServer::LampshadeOuiServiceServer(
-    asio::io_service& ios,
+    const asio::executor& ex,
     asio::ip::tcp::endpoint endpoint,
     boost::filesystem::path state_directory
 ):
-    _ios(ios),
+    _ex(ex),
     _endpoint(endpoint)
 {
     boost::filesystem::path private_key_file = state_directory/"private.key";
@@ -70,12 +70,12 @@ LampshadeOuiServiceServer::LampshadeOuiServiceServer(
 }
 
 LampshadeOuiServiceServer::LampshadeOuiServiceServer(
-    asio::io_service& ios,
+    const asio::executor& ex,
     asio::ip::tcp::endpoint endpoint,
     std::string private_key_der,
     std::string public_key_der
 ):
-    _ios(ios),
+    _ex(ex),
     _endpoint(endpoint),
     _private_key_der(private_key_der),
     _public_key_der(public_key_der)
@@ -85,7 +85,7 @@ void LampshadeOuiServiceServer::start_listen(asio::yield_context yield)
 {
     sys::error_code ec;
 
-    _listener = std::make_unique<lampshade::Listener>(_ios);
+    _listener = std::make_unique<lampshade::Listener>(_ex);
     _listener->listen(_endpoint, _private_key_der, yield[ec]);
     if (ec) {
         _listener.reset();
@@ -145,10 +145,10 @@ static void parse_endpoint(
 }
 
 LampshadeOuiServiceClient::LampshadeOuiServiceClient(
-    asio::io_service& ios,
+    const asio::executor& ex,
     std::string endpoint_string
 ):
-    _ios(ios)
+    _ex(ex)
 {
     parse_endpoint(endpoint_string, _endpoint, _public_key_der);
 }
@@ -161,7 +161,7 @@ void LampshadeOuiServiceClient::start(asio::yield_context yield)
 
     sys::error_code ec;
 
-    _dialer = std::make_unique<lampshade::Dialer>(_ios);
+    _dialer = std::make_unique<lampshade::Dialer>(_ex);
     _dialer->init(*_endpoint, _public_key_der, yield[ec]);
     if (ec) {
         _dialer.reset();

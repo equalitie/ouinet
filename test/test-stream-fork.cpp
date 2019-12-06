@@ -17,19 +17,19 @@ using namespace ouinet;
 using tcp = asio::ip::tcp;
 
 pair<tcp::socket, tcp::socket>
-make_connection(asio::io_service& ios, asio::yield_context yield)
+make_connection(asio::io_context& ctx, asio::yield_context yield)
 {
     using Ret = pair<tcp::socket, tcp::socket>;
 
-    tcp::acceptor a(ios, tcp::endpoint(tcp::v4(), 0));
-    tcp::socket s1(ios), s2(ios);
+    tcp::acceptor a(ctx, tcp::endpoint(tcp::v4(), 0));
+    tcp::socket s1(ctx), s2(ctx);
 
     sys::error_code accept_ec;
     sys::error_code connect_ec;
 
-    WaitCondition wc(ios);
+    WaitCondition wc(ctx);
 
-    asio::spawn(ios, [&, lock = wc.lock()] (asio::yield_context yield) mutable {
+    asio::spawn(ctx, [&, lock = wc.lock()] (asio::yield_context yield) mutable {
             a.async_accept(s2, yield[accept_ec]);
         });
 
@@ -43,15 +43,15 @@ make_connection(asio::io_service& ios, asio::yield_context yield)
 }
 
 BOOST_AUTO_TEST_CASE(test_single) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
     bool done = false;
 
-    asio::spawn(ios, [&] (asio::yield_context yield) {
+    asio::spawn(ctx, [&] (asio::yield_context yield) {
         sys::error_code ec;
-        tcp::socket source(ios), sink(ios);
+        tcp::socket source(ctx), sink(ctx);
 
-        tie(source, sink) = make_connection(ios, yield[ec]);
+        tie(source, sink) = make_connection(ctx, yield[ec]);
         BOOST_REQUIRE(!ec);
 
         stream::Fork<tcp::socket> fork(move(source));
@@ -70,21 +70,21 @@ BOOST_AUTO_TEST_CASE(test_single) {
         done = true;
     });
 
-    ios.run();
+    ctx.run();
 
     BOOST_REQUIRE(done);
 }
 
 BOOST_AUTO_TEST_CASE(test_two) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
     bool done = false;
 
-    asio::spawn(ios, [&] (asio::yield_context yield) {
+    asio::spawn(ctx, [&] (asio::yield_context yield) {
         sys::error_code ec;
-        tcp::socket source(ios), sink(ios);
+        tcp::socket source(ctx), sink(ctx);
 
-        tie(source, sink) = make_connection(ios, yield[ec]);
+        tie(source, sink) = make_connection(ctx, yield[ec]);
         BOOST_REQUIRE(!ec);
 
         stream::Fork<tcp::socket> fork(move(source));
@@ -107,21 +107,21 @@ BOOST_AUTO_TEST_CASE(test_two) {
         done = true;
     });
 
-    ios.run();
+    ctx.run();
 
     BOOST_REQUIRE(done);
 }
 
 BOOST_AUTO_TEST_CASE(test_small_buffer_single) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
     bool done = false;
 
-    asio::spawn(ios, [&] (asio::yield_context yield) {
+    asio::spawn(ctx, [&] (asio::yield_context yield) {
         sys::error_code ec;
-        tcp::socket source(ios), sink(ios);
+        tcp::socket source(ctx), sink(ctx);
 
-        tie(source, sink) = make_connection(ios, yield[ec]);
+        tie(source, sink) = make_connection(ctx, yield[ec]);
         BOOST_REQUIRE(!ec);
 
         stream::Fork<tcp::socket> fork(move(source), 1);
@@ -140,21 +140,21 @@ BOOST_AUTO_TEST_CASE(test_small_buffer_single) {
         done = true;
     });
 
-    ios.run();
+    ctx.run();
 
     BOOST_REQUIRE(done);
 }
 
 BOOST_AUTO_TEST_CASE(test_small_buffer_two) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
     bool done = false;
 
-    asio::spawn(ios, [&] (asio::yield_context yield) {
+    asio::spawn(ctx, [&] (asio::yield_context yield) {
         sys::error_code ec;
-        tcp::socket source(ios), sink(ios);
+        tcp::socket source(ctx), sink(ctx);
 
-        tie(source, sink) = make_connection(ios, yield[ec]);
+        tie(source, sink) = make_connection(ctx, yield[ec]);
         BOOST_REQUIRE(!ec);
 
         stream::Fork<tcp::socket> fork(move(source), 1);
@@ -166,9 +166,9 @@ BOOST_AUTO_TEST_CASE(test_small_buffer_two) {
         asio::async_write(sink, asio::buffer(tx_buf), yield[ec]);
         BOOST_REQUIRE(!ec);
 
-        WaitCondition wc(ios);
+        WaitCondition wc(ctx);
         
-        asio::spawn(ios,
+        asio::spawn(ctx,
             [&, lock = wc.lock()] (asio::yield_context yield)
             {
                 string rx_buf1(tx_buf.size(), '\0');
@@ -185,21 +185,21 @@ BOOST_AUTO_TEST_CASE(test_small_buffer_two) {
         done = true;
     });
 
-    ios.run();
+    ctx.run();
 
     BOOST_REQUIRE(done);
 }
 
 BOOST_AUTO_TEST_CASE(test_two_small_buffers) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
     bool done = false;
 
-    asio::spawn(ios, [&] (asio::yield_context yield) {
+    asio::spawn(ctx, [&] (asio::yield_context yield) {
         sys::error_code ec;
-        tcp::socket source(ios), sink(ios);
+        tcp::socket source(ctx), sink(ctx);
 
-        tie(source, sink) = make_connection(ios, yield[ec]);
+        tie(source, sink) = make_connection(ctx, yield[ec]);
         BOOST_REQUIRE(!ec);
 
         stream::Fork<tcp::socket> fork(move(source));
@@ -211,9 +211,9 @@ BOOST_AUTO_TEST_CASE(test_two_small_buffers) {
         asio::async_write(sink, asio::buffer(tx_buf), yield[ec]);
         BOOST_REQUIRE(!ec);
 
-        WaitCondition wc(ios);
+        WaitCondition wc(ctx);
         
-        asio::spawn(ios,
+        asio::spawn(ctx,
             [&, lock = wc.lock()] (asio::yield_context yield)
             {
                 for (unsigned i = 0; i < tx_buf.size(); ++i) {
@@ -236,29 +236,29 @@ BOOST_AUTO_TEST_CASE(test_two_small_buffers) {
         done = true;
     });
 
-    ios.run();
+    ctx.run();
 
     BOOST_REQUIRE(done);
 }
 
 BOOST_AUTO_TEST_CASE(test_close_fork) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
     bool done = false;
 
-    asio::spawn(ios, [&] (asio::yield_context yield) {
+    asio::spawn(ctx, [&] (asio::yield_context yield) {
         sys::error_code ec;
-        tcp::socket source(ios), sink(ios);
+        tcp::socket source(ctx), sink(ctx);
 
-        tie(source, sink) = make_connection(ios, yield[ec]);
+        tie(source, sink) = make_connection(ctx, yield[ec]);
         BOOST_REQUIRE(!ec);
 
-        WaitCondition wc(ios);
+        WaitCondition wc(ctx);
 
         {
             stream::Fork<tcp::socket> fork(move(source), 1);
 
-            asio::spawn(ios,
+            asio::spawn(ctx,
                 [&, lock = wc.lock()] (asio::yield_context yield)
                 {
                     sys::error_code ec;
@@ -276,24 +276,24 @@ BOOST_AUTO_TEST_CASE(test_close_fork) {
         done = true;
     });
 
-    ios.run();
+    ctx.run();
 
     BOOST_REQUIRE(done);
 }
 
 BOOST_AUTO_TEST_CASE(test_close_fork_after_read) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
     bool done = false;
 
-    asio::spawn(ios, [&] (asio::yield_context yield) {
+    asio::spawn(ctx, [&] (asio::yield_context yield) {
         sys::error_code ec;
-        tcp::socket source(ios), sink(ios);
+        tcp::socket source(ctx), sink(ctx);
 
-        tie(source, sink) = make_connection(ios, yield[ec]);
+        tie(source, sink) = make_connection(ctx, yield[ec]);
         BOOST_REQUIRE(!ec);
 
-        WaitCondition wc(ios);
+        WaitCondition wc(ctx);
 
         stream::Fork<tcp::socket> fork(move(source));
         stream::Fork<tcp::socket>::Tine tine(fork);
@@ -305,7 +305,7 @@ BOOST_AUTO_TEST_CASE(test_close_fork_after_read) {
         BOOST_REQUIRE(!ec);
         BOOST_REQUIRE_EQUAL(rx_buf, "h");
 
-        asio::spawn(ios,
+        asio::spawn(ctx,
             [&, lock = wc.lock()] (asio::yield_context yield)
             {
                 sys::error_code ec;
@@ -321,21 +321,21 @@ BOOST_AUTO_TEST_CASE(test_close_fork_after_read) {
         done = true;
     });
 
-    ios.run();
+    ctx.run();
 
     BOOST_REQUIRE(done);
 }
 
 BOOST_AUTO_TEST_CASE(test_close_one_tine) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
     bool done = false;
 
-    asio::spawn(ios, [&] (asio::yield_context yield) {
+    asio::spawn(ctx, [&] (asio::yield_context yield) {
         sys::error_code ec;
-        tcp::socket source(ios), sink(ios);
+        tcp::socket source(ctx), sink(ctx);
 
-        tie(source, sink) = make_connection(ios, yield[ec]);
+        tie(source, sink) = make_connection(ctx, yield[ec]);
         BOOST_REQUIRE(!ec);
 
         stream::Fork<tcp::socket> fork(move(source), 1);
@@ -347,9 +347,9 @@ BOOST_AUTO_TEST_CASE(test_close_one_tine) {
         asio::async_write(sink, asio::buffer(tx_buf), yield[ec]);
         BOOST_REQUIRE(!ec);
 
-        WaitCondition wc(ios);
+        WaitCondition wc(ctx);
         
-        asio::spawn(ios,
+        asio::spawn(ctx,
             [&, lock = wc.lock()] (asio::yield_context yield) mutable
             {
                 string rx_buf(strlen("hello"), '\0');
@@ -357,7 +357,7 @@ BOOST_AUTO_TEST_CASE(test_close_one_tine) {
                 BOOST_REQUIRE(!ec);
                 BOOST_REQUIRE_EQUAL(rx_buf, "hello");
                 auto l = make_shared<decltype(lock)>(wc.lock());
-                ios.post([&, l] () mutable { tine1.close(); });
+                ctx.post([&, l] () mutable { tine1.close(); });
             });
 
         for (unsigned i = 0; i < tx_buf.size();) {
@@ -373,21 +373,21 @@ BOOST_AUTO_TEST_CASE(test_close_one_tine) {
         done = true;
     });
 
-    ios.run();
+    ctx.run();
 
     BOOST_REQUIRE(done);
 }
 
 BOOST_AUTO_TEST_CASE(test_close_one_tine_while_blocked) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
     bool done = false;
 
-    asio::spawn(ios, [&] (asio::yield_context yield) {
+    asio::spawn(ctx, [&] (asio::yield_context yield) {
         sys::error_code ec;
-        tcp::socket source(ios), sink(ios);
+        tcp::socket source(ctx), sink(ctx);
 
-        tie(source, sink) = make_connection(ios, yield[ec]);
+        tie(source, sink) = make_connection(ctx, yield[ec]);
         BOOST_REQUIRE(!ec);
 
         stream::Fork<tcp::socket> fork(move(source), 1);
@@ -399,7 +399,7 @@ BOOST_AUTO_TEST_CASE(test_close_one_tine_while_blocked) {
         asio::async_write(sink, asio::buffer(tx_buf), yield[ec]);
         BOOST_REQUIRE(!ec);
 
-        WaitCondition wc(ios);
+        WaitCondition wc(ctx);
 
         for (unsigned i = 0; i < tx_buf.size(); ++i) {
             string rx_buf(1, '\0');
@@ -409,7 +409,7 @@ BOOST_AUTO_TEST_CASE(test_close_one_tine_while_blocked) {
                 // closing tine1 after that shall "release" reading on
                 // tine2.
                 auto l = make_shared<WaitCondition::Lock>(wc.lock());
-                ios.post([&, l] { tine1.close(); });
+                ctx.post([&, l] { tine1.close(); });
             }
             size_t s = asio::async_read(tine2, asio::buffer(rx_buf), yield[ec]);
             BOOST_REQUIRE(!ec);
@@ -421,7 +421,7 @@ BOOST_AUTO_TEST_CASE(test_close_one_tine_while_blocked) {
         done = true;
     });
 
-    ios.run();
+    ctx.run();
 
     BOOST_REQUIRE(done);
 }

@@ -13,8 +13,8 @@ using namespace std;
 using namespace ouinet::ouiservice;
 using namespace ouinet::ouiservice::i2poui;
 
-Service::Service(const string& datadir, boost::asio::io_service& ios)
-    : _ios(ios)
+Service::Service(const string& datadir, const boost::asio::executor& exec)
+    : _exec(exec)
     , _data_dir(datadir)
 {
     //here we are going to read the config file and
@@ -52,13 +52,12 @@ Service::Service(const string& datadir, boost::asio::io_service& ios)
 }
 
 Service::Service(Service&& other)
-    : _ios(other._ios)
+    : _exec(std::move(other._exec))
     , _data_dir(std::move(other._data_dir))
 {}
 
 Service& Service::operator=(Service&& other)
 {
-    assert(&_ios == &other._ios);
     _data_dir = std::move(other._data_dir);
     return *this;
 }
@@ -71,10 +70,10 @@ Service::~Service()
 
 std::unique_ptr<Server> Service::build_server(const std::string& private_key_filename)
 {
-    return std::unique_ptr<Server>(new Server(shared_from_this(), _data_dir + "/" + private_key_filename, get_i2p_tunnel_ready_timeout(), _ios));
+    return std::unique_ptr<Server>(new Server(shared_from_this(), _data_dir + "/" + private_key_filename, get_i2p_tunnel_ready_timeout(), _exec));
 }
 
 std::unique_ptr<Client> Service::build_client(const std::string& target_id)
 {
-    return std::unique_ptr<Client>(new Client(shared_from_this(), target_id, get_i2p_tunnel_ready_timeout(), _ios));
+    return std::unique_ptr<Client>(new Client(shared_from_this(), target_id, get_i2p_tunnel_ready_timeout(), _exec));
 }

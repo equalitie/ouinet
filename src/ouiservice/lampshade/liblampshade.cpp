@@ -25,7 +25,7 @@ namespace lampshade {
 
 template<class... As>
 struct AsyncCall : public detail::Cancellable {
-    boost::asio::io_service& _ios;
+    boost::asio::executor _ex;
     std::function<void(boost::system::error_code, As&&...)> _callback;
     std::function<void()> _cancel_function;
     boost::optional<Signal<void()>::Connection> _cancel_connection;
@@ -33,15 +33,15 @@ struct AsyncCall : public detail::Cancellable {
     boost::asio::io_service::work _work;
 
     AsyncCall(
-        boost::asio::io_service& ios,
+        const boost::asio::executor& ex,
         boost::intrusive::list<detail::Cancellable, boost::intrusive::constant_time_size<false>>* call_list,
         boost::optional<uint64_t> cancellation_id,
         Signal<void()>& cancel_signal,
         std::function<void(boost::system::error_code, As&&...)> callback
     ):
-        _ios(ios),
+        _ex(ex),
         _cancellation_id(cancellation_id),
-        _work(boost::asio::io_service::work(_ios))
+        _work(boost::asio::io_service::work(_ex))
     {
         if (call_list) {
             call_list->push_back(*this);
@@ -65,7 +65,7 @@ struct AsyncCall : public detail::Cancellable {
             if (_cancellation_id) {
                 go_lampshade_cancellation_cancel(*_cancellation_id);
             }
-            _ios.post([this, callback = std::move(_callback)] {
+            asio::post(_ex, [this, callback = std::move(_callback)] {
                 std::tuple<boost::system::error_code, As...> args;
                 std::get<0>(args) = boost::asio::error::operation_aborted;
                 std::experimental::apply(callback, std::move(args));
@@ -97,7 +97,7 @@ struct AsyncCall : public detail::Cancellable {
         if (error) {
             ec = boost::system::errc::make_error_code(boost::system::errc::no_message);
         }
-        self->_ios.post([
+        asio::post(self->_ex, [
             self,
             full_args = std::make_tuple(ec, std::move(args)...)
         ] {
@@ -141,7 +141,7 @@ template<> struct YieldHandler<void> {
 
 template<class Output, class F, class... As>
 Output call_lampshade_cancellable(
-    boost::asio::io_service& ios,
+    const boost::asio::executor& ex,
     asio::yield_context yield,
     boost::intrusive::list<detail::Cancellable, boost::intrusive::constant_time_size<false>>* operation_list,
     Signal<void()>& cancel,
@@ -157,7 +157,7 @@ Output call_lampshade_cancellable(
         args...,
         cancellation_id,
         (void*) &callback_function<Output>::callback,
-        (void*) (new typename YieldHandler<Output>::Call{ ios, operation_list, cancellation_id, cancel, handler })
+        (void*) (new typename YieldHandler<Output>::Call{ ex, operation_list, cancellation_id, cancel, handler })
     );
 
     return result.get();
@@ -165,7 +165,7 @@ Output call_lampshade_cancellable(
 
 template<class Output, class F, class... As>
 Output call_lampshade_uncancellable(
-    boost::asio::io_service& ios,
+    const boost::asio::executor& ex,
     asio::yield_context yield,
     boost::intrusive::list<detail::Cancellable, boost::intrusive::constant_time_size<false>>* operation_list,
     Signal<void()>& cancel,
@@ -178,7 +178,7 @@ Output call_lampshade_uncancellable(
     lampshade_function(
         args...,
         (void*) &callback_function<Output>::callback,
-        (void*) (new typename YieldHandler<Output>::Call{ ios, operation_list, boost::none, cancel, handler })
+        (void*) (new typename YieldHandler<Output>::Call{ ex, operation_list, boost::none, cancel, handler })
     );
 
     return result.get();
@@ -195,14 +195,14 @@ void empty_lampshade_callback_void(void* arg, int error)
 class LampshadeStream
 {
     public:
-    LampshadeStream(asio::io_service& ios, uint64_t connection_id):
-        _ios(ios),
+    LampshadeStream(const asio::executor& ex, uint64_t connection_id):
+        _ex(ex),
         _connection_id(connection_id),
         _closed(false)
     {}
 
     LampshadeStream(LampshadeStream&& other):
-        _ios(other._ios),
+        _ex(std::move(other._ex)),
         _pending_operations(std::move(other._pending_operations)),
         _connection_id(other._connection_id),
         _closed(other._closed)
@@ -229,17 +229,10 @@ class LampshadeStream
         }
     }
 
-    asio::io_service& get_io_service()
+    asio::executor get_executor()
     {
-        return _ios;
+        return _ex;
     }
-
-#if BOOST_VERSION >= 106700
-    asio::io_context::executor_type get_executor()
-    {
-        return _ios.get_executor();
-    }
-#endif
 
     void async_read_some(std::vector<asio::mutable_buffer>& buffers, std::function<void(sys::error_code, size_t)>&& callback)
     {
@@ -253,12 +246,12 @@ class LampshadeStream
             }
         }
         if (!found) {
-            _ios.post([this, callback = std::move(callback)] {
+            asio::post(_ex, [this, callback = std::move(callback)] {
                 callback(sys::error_code(), 0);
             });
         }
 
-        asio::spawn(_ios, [
+        asio::spawn(_ex, [
             this,
             buffer,
             callback = std::move(callback)
@@ -267,7 +260,7 @@ class LampshadeStream
             Signal<void()> cancel_signal;
 
             uint64_t read = call_lampshade_uncancellable<uint64_t>(
-                _ios,
+                _ex,
                 yield[ec],
                 &_pending_operations,
                 cancel_signal,
@@ -278,7 +271,7 @@ class LampshadeStream
                 buffer.size()
             );
 
-            _ios.post([this, ec, read, callback = std::move(callback)] {
+            asio::post(_ex, [this, ec, read, callback = std::move(callback)] {
                 callback(ec, read);
             });
         });
@@ -296,12 +289,12 @@ class LampshadeStream
             }
         }
         if (!found) {
-            _ios.post([this, callback = std::move(callback)] {
+            asio::post(_ex, [this, callback = std::move(callback)] {
                 callback(sys::error_code(), 0);
             });
         }
 
-        asio::spawn(_ios, [
+        asio::spawn(_ex, [
             this,
             buffer,
             callback = std::move(callback)
@@ -310,7 +303,7 @@ class LampshadeStream
             Signal<void()> cancel_signal;
 
             uint64_t read = call_lampshade_uncancellable<uint64_t>(
-                _ios,
+                _ex,
                 yield[ec],
                 &_pending_operations,
                 cancel_signal,
@@ -321,7 +314,7 @@ class LampshadeStream
                 buffer.size()
             );
 
-            _ios.post([this, ec, read, callback = std::move(callback)] {
+            asio::post(_ex, [this, ec, read, callback = std::move(callback)] {
                 callback(ec, read);
             });
         });
@@ -338,7 +331,7 @@ class LampshadeStream
     }
 
     protected:
-    asio::io_service& _ios;
+    asio::executor _ex;
     boost::intrusive::list<detail::Cancellable, boost::intrusive::constant_time_size<false>> _pending_operations;
     boost::optional<uint64_t> _connection_id;
     bool _closed;
@@ -346,8 +339,8 @@ class LampshadeStream
 
 
 
-Dialer::Dialer(asio::io_service& ios):
-    _ios(ios)
+Dialer::Dialer(const asio::executor& ex):
+    _ex(ex)
 {
     _dialer_id = go_lampshade_dialer_allocate();
 }
@@ -374,7 +367,7 @@ void Dialer::init(asio::ip::tcp::endpoint endpoint, std::string public_key_der, 
     Signal<void()> cancel_signal;
 
     call_lampshade_uncancellable<void>(
-        _ios,
+        _ex,
         yield[ec],
         &_pending_operations,
         cancel_signal,
@@ -397,7 +390,7 @@ GenericStream Dialer::dial(asio::yield_context yield, Signal<void()>& cancel)
 
     sys::error_code ec;
     call_lampshade_cancellable<void>(
-        _ios,
+        _ex,
         yield[ec],
         &_pending_operations,
         cancel,
@@ -412,13 +405,13 @@ GenericStream Dialer::dial(asio::yield_context yield, Signal<void()>& cancel)
         return or_throw(yield, ec, GenericStream());
     }
 
-    return GenericStream(LampshadeStream(_ios, connection_id));
+    return GenericStream(LampshadeStream(_ex, connection_id));
 }
 
 
 
-Listener::Listener(asio::io_service& ios):
-    _ios(ios),
+Listener::Listener(const asio::executor& ex):
+    _ex(ex),
     _listening(false)
 {
     _listener_id = go_lampshade_listener_allocate();
@@ -456,7 +449,7 @@ void Listener::listen(asio::ip::tcp::endpoint endpoint, std::string private_key_
     Signal<void()> cancel_signal;
 
     call_lampshade_uncancellable<void>(
-        _ios,
+        _ex,
         yield[ec],
         &_pending_operations,
         cancel_signal,
@@ -483,7 +476,7 @@ GenericStream Listener::accept(asio::yield_context yield)
     Signal<void()> cancel_signal;
 
     call_lampshade_uncancellable<void>(
-        _ios,
+        _ex,
         yield[ec],
         &_pending_operations,
         cancel_signal,
@@ -498,7 +491,7 @@ GenericStream Listener::accept(asio::yield_context yield)
         return or_throw(yield, ec, GenericStream());
     }
 
-    return GenericStream(LampshadeStream(_ios, connection_id));
+    return GenericStream(LampshadeStream(_ex, connection_id));
 }
 
 void Listener::close()

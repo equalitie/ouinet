@@ -9,6 +9,7 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/error.hpp>
 #include <boost/asio/ssl/stream.hpp>
+#include <boost/asio/post.hpp>
 #include <functional>
 #include <vector>
 #include <iostream>
@@ -52,7 +53,9 @@ namespace generic_stream_detail {
 
 class GenericStream {
 public:
-#if BOOST_VERSION >= 106700
+#if BOOST_VERSION >= 107100
+    using executor_type = boost::asio::executor;
+#elif BOOST_VERSION >= 106700
     using executor_type = asio::io_context::executor_type;
 #else
    template<class Token, class Ret>
@@ -72,9 +75,10 @@ private:
     using WriteBuffers = std::vector<asio::const_buffer>;
 
     struct Base {
-        virtual asio::io_service& get_io_service() = 0;
 #if BOOST_VERSION >= 106700
         virtual executor_type     get_executor() = 0;
+#else
+        virtual asio::io_service& get_io_service() = 0;
 #endif
 
         virtual void read_impl (OnRead&&)  = 0;
@@ -105,15 +109,16 @@ private:
             , _shutter(std::move(shutter))
         {}
 
-        virtual asio::io_service& get_io_service() override
-        {
-            return _impl->get_io_service();
-        }
 
 #if BOOST_VERSION >= 106700
         virtual executor_type get_executor() override
         {
             return _impl->get_executor();
+        }
+#else
+        virtual asio::io_service& get_io_service() override
+        {
+            return _impl->get_io_service();
         }
 #endif
 
@@ -168,7 +173,7 @@ public:
 
     template<class AsyncRWStream>
     GenericStream(AsyncRWStream&& impl)
-        : _ios(&impl.get_io_service())
+        : _executor(impl.get_executor())
         , _impl(new Wrapper<AsyncRWStream>(std::forward<AsyncRWStream>(impl)))
     {
         if (_debug) {
@@ -182,7 +187,7 @@ public:
     template<class AsyncRWStream, class Shutter>
     GenericStream( AsyncRWStream&& impl
                  , Shutter shutter)
-        : _ios(&generic_stream_detail::deref(impl).get_io_service())
+        : _executor(generic_stream_detail::deref(impl).get_executor())
         , _impl(new Wrapper<AsyncRWStream>( std::forward<AsyncRWStream>(impl)
                                           , std::move(shutter)))
     {
@@ -195,11 +200,9 @@ public:
     }
 
     GenericStream(GenericStream&& other)
-        : _ios(other._ios)
+        : _executor(std::move(other._executor))
         , _impl(std::move(other._impl))
     {
-        other._ios = nullptr;
-
         if (_debug) {
             std::cerr << this << " " << (void*)nullptr
                       << " GenericStream::GenericStream(&& "
@@ -208,8 +211,7 @@ public:
     }
 
     GenericStream& operator=(GenericStream&& other) {
-        assert(!_ios || _ios == other._ios);
-        _ios = other._ios;
+        _executor = std::move(other._executor);
 
         if (_debug) {
             std::cerr << this << " " << _impl
@@ -217,7 +219,6 @@ public:
                       << &other << " " << other._impl <<  ")" << std::endl;
         }
 
-        other._ios = nullptr;
         _impl = std::move(other._impl);
         return *this;
     }
@@ -237,13 +238,17 @@ public:
         }
     }
 
-    asio::io_service& get_io_service()
-    {
-        assert(_ios);
-        return *_ios;
-    }
+    //asio::io_service& get_io_service()
+    //{
+    //    return *_ios;
+    //}
 
-#if BOOST_VERSION >= 106700
+#if BOOST_VERSION >= 107100
+    executor_type get_executor()
+    {
+        return _executor;
+    }
+#elif BOOST_VERSION >= 106700
     executor_type get_executor()
     {
         assert(_impl);
@@ -276,8 +281,6 @@ public:
             std::cerr << this << " " << _impl
                       << " GenericStream::async_read_some()" << std::endl;
         }
-
-        assert(_ios);
 
         using namespace std;
 
@@ -318,8 +321,8 @@ public:
                              });
         }
         else {
-            _ios->post([h = move(handler)]
-                       { (*h)(asio::error::bad_descriptor, 0); });
+            asio::post(_executor, [h = move(handler)]
+                                  { (*h)(asio::error::bad_descriptor, 0); });
         }
 
         return init.result.get();
@@ -333,7 +336,6 @@ public:
             std::cerr << this << " " << _impl
                       << " GenericStream::async_write_some()" << std::endl;
         }
-        assert(_ios);
 
         using namespace std;
 
@@ -368,15 +370,20 @@ public:
                               });
         }
         else {
-            _ios->post([h = move(handler)]
-                       { (*h)(asio::error::bad_descriptor, 0); });
+            asio::post(_executor, [h = move(handler)]
+                                  { (*h)(asio::error::bad_descriptor, 0); });
         }
 
         return init.result.get();
     }
 
 private:
+#if BOOST_VERSION >= 107100
+    asio::executor _executor;
+#elif BOOST_VERSION >= 106700
     asio::io_service* _ios = nullptr;
+#endif
+
     // Note: we must use shared_ptr because some stream implementations (such
     // as the asio::ssl::stream) require that their lifetime is preserved while
     // an async action is pending on them.

@@ -15,14 +15,14 @@ int main(int argc, const char* argv[])
 {
 //    util::crypto_init();
 
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    OuiServiceServer server(ios);
+    OuiServiceServer server(ctx.get_executor());
 
     asio::ip::tcp::endpoint endpoint(asio::ip::address::from_string("127.0.0.1"), 10203);
-    server.add(make_unique<ouiservice::TcpOuiServiceServer>(ios, endpoint));
+    server.add(make_unique<ouiservice::TcpOuiServiceServer>(ctx.get_executor(), endpoint));
 
-    asio::spawn(ios, [&ios, &server] (asio::yield_context yield) {
+    asio::spawn(ctx, [&ctx, &server] (asio::yield_context yield) {
         sys::error_code ec;
         server.start_listen(yield[ec]);
 
@@ -39,7 +39,7 @@ int main(int argc, const char* argv[])
                 break;
             }
 
-            asio::spawn(ios, [connection = std::move(connection)] (asio::yield_context yield) mutable {
+            asio::spawn(ctx, [connection = std::move(connection)] (asio::yield_context yield) mutable {
                 sys::error_code ec;
                 std::string line;
                 while (true) {
@@ -65,6 +65,6 @@ int main(int argc, const char* argv[])
         }
     });
 
-    ios.run();
+    ctx.run();
     return 0;
 }

@@ -4,7 +4,6 @@
 #include <cstddef>
 #include <stdexcept>
 #include <boost/filesystem.hpp>
-#include <boost/asio/io_service.hpp>
 #include <boost/asio/spawn.hpp>
 #include <dirent.h>
 
@@ -75,7 +74,7 @@ public:
 
 private:
     /* private, use the static `load` function */
-    PersistentLruCache( asio::io_service&
+    PersistentLruCache( const asio::executor&
                       , boost::filesystem::path dir
                       , size_t max_size);
 
@@ -84,7 +83,14 @@ public:
     PersistentLruCache(PersistentLruCache&&) = delete;
 
     static
-    std::unique_ptr<PersistentLruCache> load( asio::io_service&
+    std::unique_ptr<PersistentLruCache> load( const asio::executor&
+                                            , boost::filesystem::path dir
+                                            , size_t max_size
+                                            , Cancel&
+                                            , asio::yield_context);
+
+    static
+    std::unique_ptr<PersistentLruCache> load( asio::io_context&
                                             , boost::filesystem::path dir
                                             , size_t max_size
                                             , Cancel&
@@ -133,7 +139,7 @@ private:
     fs::path path_from_key(const std::string&);
 
 private:
-    asio::io_service& _ios;
+    asio::executor _ex;
     boost::filesystem::path _dir;
     List _list;
     Map _map;
@@ -144,7 +150,7 @@ template<class Value>
 class PersistentLruCache<Value>::Element {
 public:
     static
-    std::shared_ptr<Element> read( asio::io_service& ios
+    std::shared_ptr<Element> read( const asio::executor& ex
                                  , fs::path path
                                  , uint64_t* ts_out
                                  , Cancel& cancel
@@ -156,7 +162,7 @@ public:
 
         auto on_exit = defer([&] { if (ec) file_io::remove_file(path); });
 
-        auto file = file_io::open_readonly(ios, path, ec);
+        auto file = file_io::open_readonly(ex, path, ec);
         if (ec) return or_throw<Ret>(yield, ec);
 
         auto ts = file_io::read_number<uint64_t>(file, cancel, yield[ec]);
@@ -176,7 +182,7 @@ public:
         value.read(file, cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec, Ret());
 
-        return std::make_shared<Element>( ios
+        return std::make_shared<Element>( ex
                                         , std::move(key)
                                         , std::move(path)
                                         , std::move(value));
@@ -195,7 +201,7 @@ public:
         // Create a new entry file "atomically" (at least inside the program)
         // by writing data to a temporary file and replacing the existing file.
         // Otherwise we might be overwriting old data that others are reading.
-        auto af = atomic_file::make( _ios, _path
+        auto af = atomic_file::make( _ex, _path
                           , persisten_lru_cache_detail::temp_file_model, ec);
         if (ec) return or_throw(yield, ec);
         auto& f = af->lowest_layer();
@@ -215,7 +221,7 @@ public:
 
     // Read-only byte-oriented access to on-disk data.
     asio::posix::stream_descriptor open_value(sys::error_code& ec) const {
-        auto f = file_io::open_readonly(_ios, _path, ec);
+        auto f = file_io::open_readonly(_ex, _path, ec);
         if (!ec) file_io::fseek(f, content_start(), ec);
         return f;
     }
@@ -227,12 +233,12 @@ public:
         }
     }
 
-    Element( asio::io_service& ios
+    Element( const asio::executor& ex
            , std::string key
            , fs::path path
            , Value value)
-        : _ios(ios)
-        , _scheduler(ios, 1)
+        : _ex(ex)
+        , _scheduler(ex, 1)
         , _key(std::move(key))
         , _path(std::move(path))
         , _value(std::move(value))
@@ -257,7 +263,7 @@ private:
     }
 
 private:
-    asio::io_service& _ios;
+    asio::executor _ex;
     Scheduler _scheduler;
     std::string _key;
     fs::path _path;
@@ -268,7 +274,23 @@ private:
 template<class Value>
 inline
 std::unique_ptr<PersistentLruCache<Value>>
-PersistentLruCache<Value>::load( asio::io_service& ios
+PersistentLruCache<Value>::load( asio::io_context& ctx
+                               , boost::filesystem::path dir
+                               , size_t max_size
+                               , Cancel& cancel
+                               , asio::yield_context yield)
+{
+    return load( ctx.get_executor()
+               , std::move(dir)
+               , max_size
+               , cancel
+               , std::move(yield));
+}
+
+template<class Value>
+inline
+std::unique_ptr<PersistentLruCache<Value>>
+PersistentLruCache<Value>::load( const asio::executor& ex
                                , boost::filesystem::path dir
                                , size_t max_size
                                , Cancel& cancel
@@ -287,7 +309,7 @@ PersistentLruCache<Value>::load( asio::io_service& ios
     if (!ec) file_io::check_or_create_directory(dir, ec);
     if (ec) return or_throw<Ret>(yield, ec);
 
-    Ret lru(new PersistentLruCache<Value>(ios, dir, max_size));
+    Ret lru(new PersistentLruCache<Value>(ex, dir, max_size));
 
     // Id helps us resolve the case when two entries have the same timestamp
     using Id = std::pair<uint64_t, uint64_t>;
@@ -304,7 +326,7 @@ PersistentLruCache<Value>::load( asio::io_service& ios
             if (is_cache_entry(entry)) {
                 fs::path path(dir / entry->d_name);
                 uint64_t ts;
-                auto e = Element::read(ios, path, &ts, cancel, yield[ec]);
+                auto e = Element::read(ex, path, &ts, cancel, yield[ec]);
 
                 if (cancel) {
                     return or_throw<Ret>(yield, asio::error::operation_aborted);
@@ -336,10 +358,10 @@ PersistentLruCache<Value>::load( asio::io_service& ios
 
 template<class Value>
 inline
-PersistentLruCache<Value>::PersistentLruCache( asio::io_service& ios
+PersistentLruCache<Value>::PersistentLruCache( const asio::executor& ex
                                              , boost::filesystem::path dir
                                              , size_t max_size)
-    : _ios(ios)
+    : _ex(ex)
     , _dir(std::move(dir))
     , _max_size(max_size)
 {
@@ -360,7 +382,7 @@ void PersistentLruCache<Value>::insert( std::string key
         e = it->second->second;
     } else {
         // TODO: Value is set twice, here and at the end of this fn
-        e = std::make_shared<Element>(_ios, key, path_from_key(key), value);
+        e = std::make_shared<Element>(_ex, key, path_from_key(key), value);
     }
 
     _list.push_front({key, e});

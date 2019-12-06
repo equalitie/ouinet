@@ -6,7 +6,7 @@ jobs:
       - image: debian:buster
 
     environment:
-      CMAKE_BUILD_PARALLEL_LEVEL: 3
+      CMAKE_BUILD_PARALLEL_LEVEL: 1
       # cmake fails without this for some reason
       LANG: C.UTF-8
       BASH_ENV: ~/.bashrc
