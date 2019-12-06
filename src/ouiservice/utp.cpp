@@ -10,11 +10,11 @@ namespace ouiservice {
 using udp = asio::ip::udp;
 using namespace std;
 
-UtpOuiServiceServer::UtpOuiServiceServer( asio::io_service& ios
+UtpOuiServiceServer::UtpOuiServiceServer( const asio::executor& ex
                                         , udp::endpoint local_endpoint):
-    _ios(ios),
-    _udp_multiplexer(new asio_utp::udp_multiplexer(_ios)),
-    _accept_queue(_ios)
+    _ex(ex),
+    _udp_multiplexer(new asio_utp::udp_multiplexer(_ex)),
+    _accept_queue(_ex)
 {
     sys::error_code ec;
 
@@ -30,12 +30,12 @@ UtpOuiServiceServer::UtpOuiServiceServer( asio::io_service& ios
 
 void UtpOuiServiceServer::start_listen(asio::yield_context yield)
 {
-    asio::spawn(_ios, [&] (asio::yield_context yield) {
+    asio::spawn(_ex, [&] (asio::yield_context yield) {
         Cancel cancel(_cancel);
 
         while (!cancel) {
             sys::error_code ec;
-            asio_utp::socket s(_ios);
+            asio_utp::socket s(_ex);
 
             auto cancel_con = cancel.connect([&] { s.close(); });
 
@@ -74,10 +74,10 @@ static boost::optional<asio::ip::udp::endpoint> parse_endpoint(std::string endpo
     return ep;
 }
 
-UtpOuiServiceClient::UtpOuiServiceClient( asio::io_service& ios
+UtpOuiServiceClient::UtpOuiServiceClient( const asio::executor& ex
                                         , asio_utp::udp_multiplexer m
                                         , std::string endpoint):
-    _ios(ios),
+    _ex(ex),
     _remote_endpoint(parse_endpoint(endpoint)),
     _udp_multiplexer(move(m))
 {
@@ -100,7 +100,7 @@ UtpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
     for (int i = 0; i != sizeof(retry_timeout)/sizeof(*retry_timeout); ++i) {
         ec = sys::error_code();
 
-        socket = asio_utp::socket(_ios);
+        socket = asio_utp::socket(_ex);
         socket.bind(_udp_multiplexer, ec);
         assert(!ec);
 
@@ -110,7 +110,7 @@ UtpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
 
         bool timed_out = false;
 
-        WatchDog wd(_ios, retry_timeout[i], [&] {
+        WatchDog wd(_ex, retry_timeout[i], [&] {
                 timed_out = true;
                 socket.close();
         });

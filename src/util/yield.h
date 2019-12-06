@@ -5,7 +5,6 @@
 #include "../util/str.h"
 #include <boost/intrusive/list.hpp>
 #include <boost/asio/spawn.hpp>
-#include <boost/asio/io_service.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/utility/string_view.hpp>
 #include <boost/optional.hpp>
@@ -24,9 +23,9 @@ class Yield : public boost::intrusive::list_base_hook
         Yield* self;
         asio::steady_timer timer;
 
-        TimeoutState(asio::io_service& ios, Yield* self)
+        TimeoutState(const asio::executor& ex, Yield* self)
             : self(self)
-            , timer(ios)
+            , timer(ex)
         {}
 
         void stop() {
@@ -36,10 +35,16 @@ class Yield : public boost::intrusive::list_base_hook
     };
 
 public:
-    Yield(asio::io_service& ios
+    Yield( asio::io_context& ctx
          , asio::yield_context asio_yield
          , std::string con_id = "")
-        : _ios(ios)
+        : Yield(ctx.get_executor(), asio_yield, std::move(con_id))
+    {}
+
+    Yield(const asio::executor& ex
+         , asio::yield_context asio_yield
+         , std::string con_id = "")
+        : _ex(ex)
         , _asio_yield(asio_yield)
         , _ignored_error(std::make_shared<sys::error_code>())
         , _tag(util::str("R", generate_context_id()))
@@ -64,7 +69,7 @@ public:
 
 private:
     Yield(Yield& parent, asio::yield_context asio_yield)
-        : _ios(parent._ios)
+        : _ex(parent._ex)
         , _asio_yield(asio_yield)
         , _ignored_error(parent._ignored_error)
         , _tag(parent.tag())
@@ -76,7 +81,7 @@ private:
 
 public:
     Yield(Yield&& y)
-        : _ios(y._ios)
+        : _ex(y._ex)
         , _asio_yield(y._asio_yield)
         , _ignored_error(std::move(y._ignored_error))
         , _tag(std::move(y._tag))
@@ -172,7 +177,7 @@ private:
     }
 
 private:
-    asio::io_service& _ios;
+    asio::executor _ex;
     asio::yield_context _asio_yield;
     std::shared_ptr<sys::error_code> _ignored_error;
     std::string _tag;
@@ -201,9 +206,9 @@ void Yield::start_timing()
 
     stop_timing();
 
-    _timeout_state = std::make_shared<TimeoutState>(_ios, this);
+    _timeout_state = std::make_shared<TimeoutState>(_ex, this);
 
-    asio::spawn(_ios
+    asio::spawn(_ex
                , [ ts = _timeout_state, timeout]
                  (asio::yield_context yield) {
 

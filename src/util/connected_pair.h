@@ -8,23 +8,23 @@
 
 namespace ouinet { namespace util {
 
-static
+inline
 std::pair<asio::ip::tcp::socket, asio::ip::tcp::socket>
-connected_pair(asio::io_service& ios, asio::yield_context yield)
+connected_pair(const asio::executor& ex, asio::yield_context yield)
 {
     using namespace std;
     using tcp = asio::ip::tcp;
     using Ret = pair<tcp::socket, tcp::socket>;
 
-    tcp::acceptor a(ios, tcp::endpoint(tcp::v4(), 0));
-    tcp::socket s1(ios), s2(ios);
+    tcp::acceptor a(ex, tcp::endpoint(tcp::v4(), 0));
+    tcp::socket s1(ex), s2(ex);
 
     sys::error_code accept_ec;
     sys::error_code connect_ec;
 
-    WaitCondition wc(ios);
+    WaitCondition wc(ex);
 
-    asio::spawn(ios, [&, lock = wc.lock()] (asio::yield_context yield) mutable {
+    asio::spawn(ex, [&, lock = wc.lock()] (asio::yield_context yield) mutable {
             a.async_accept(s2, yield[accept_ec]);
         });
 
@@ -35,6 +35,13 @@ connected_pair(asio::io_service& ios, asio::yield_context yield)
     if (connect_ec) return or_throw(yield, connect_ec, Ret(move(s1),move(s2)));
 
     return make_pair(move(s1), move(s2));
+}
+
+inline
+std::pair<asio::ip::tcp::socket, asio::ip::tcp::socket>
+connected_pair(asio::io_context& ctx, asio::yield_context yield)
+{
+    return connected_pair(ctx.get_executor(), yield);
 }
 
 

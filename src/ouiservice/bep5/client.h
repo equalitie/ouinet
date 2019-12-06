@@ -38,7 +38,7 @@ public:
 
     ~Bep5Client();
 
-    asio::io_service& get_io_service();
+    asio::executor get_executor();
 
 private:
     void add_injector_endpoints(std::set<asio::ip::udp::endpoint>);

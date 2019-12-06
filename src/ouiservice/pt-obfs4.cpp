@@ -12,23 +12,23 @@ namespace ouinet {
 namespace ouiservice {
 
 Obfs4OuiServiceServer::Obfs4OuiServiceServer(
-    asio::io_service& ios,
+    asio::io_context& ioc,
     asio::ip::tcp::endpoint endpoint,
     fs::path state_directory
 ):
-    PtOuiServiceServer(ios),
+    PtOuiServiceServer(ioc),
     _endpoint(endpoint),
     _state_directory(state_directory)
 {}
 
 std::unique_ptr<pt::ServerProcess> Obfs4OuiServiceServer::start_server_process(
-    asio::io_service& ios,
+    asio::io_context& ioc,
     asio::ip::tcp::endpoint destination_endpoint,
     asio::yield_context yield,
     Signal<void()>& cancel_signal
 ) {
     auto server_process = std::make_unique<pt::ServerProcess>(
-        ios,
+        ioc,
         "obfs4proxy",
         std::vector<std::string>(),
         "obfs4",
@@ -92,18 +92,18 @@ static void parse_endpoint(
 }
 
 Obfs4OuiServiceClient::Obfs4OuiServiceClient(
-    asio::io_service& ios,
+    asio::io_context& ioc,
     std::string endpoint,
     fs::path state_directory
 ):
-    PtOuiServiceClient(ios),
+    PtOuiServiceClient(ioc),
     _state_directory(state_directory)
 {
     parse_endpoint(endpoint, _endpoint, _certificate, _iat_mode);
 }
 
 std::unique_ptr<pt::ClientProcess> Obfs4OuiServiceClient::start_client_process(
-    asio::io_service& ios,
+    asio::io_context& ioc,
     asio::yield_context yield,
     Signal<void()>& cancel_signal
 ) {
@@ -112,7 +112,7 @@ std::unique_ptr<pt::ClientProcess> Obfs4OuiServiceClient::start_client_process(
     }
 
     auto client_process = std::make_unique<pt::ClientProcess>(
-        ios,
+        ioc,
         "obfs4proxy",
         std::vector<std::string>(),
         "obfs4",
@@ -134,7 +134,7 @@ std::unique_ptr<pt::ClientProcess> Obfs4OuiServiceClient::start_client_process(
 }
 
 asio::ip::tcp::socket Obfs4OuiServiceClient::connect_through_transport(
-    asio::io_service& ios,
+    const asio::executor& ex,
     asio::ip::tcp::endpoint transport_endpoint,
     std::string& remote_endpoint_string,
     asio::yield_context yield,
@@ -150,7 +150,7 @@ asio::ip::tcp::socket Obfs4OuiServiceClient::connect_through_transport(
         transport_endpoint,
         *_endpoint,
         connection_arguments,
-        ios,
+        ex,
         yield,
         cancel_signal
     );

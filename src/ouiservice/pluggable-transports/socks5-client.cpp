@@ -89,13 +89,13 @@ asio::ip::tcp::socket connect_socks5(
     asio::ip::tcp::endpoint proxy_endpoint,
     asio::ip::tcp::endpoint destination_endpoint,
     boost::optional<std::map<std::string, std::string>> connection_arguments,
-    asio::io_service& ios,
+    const asio::executor& ex,
     asio::yield_context yield,
     Signal<void()>& cancel
 ) {
     sys::error_code ec;
 
-    asio::ip::tcp::socket socket(ios);
+    asio::ip::tcp::socket socket(ex);
 
     auto cancel_slot = cancel.connect([&] {
         // tcp::socket::cancel() does not work properly on all platforms

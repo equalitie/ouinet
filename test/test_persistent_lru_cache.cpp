@@ -55,7 +55,7 @@ using Lru = PersistentLruCache<StringEntry>;
 
 BOOST_AUTO_TEST_CASE(test_initialize)
 {
-    asio::io_service ios;
+    asio::io_context ctx;
     Cancel cancel;
 
     auto dir = fs::temp_directory_path()
@@ -67,7 +67,7 @@ BOOST_AUTO_TEST_CASE(test_initialize)
 
     // Sometimes it's useful to comment out the above requirement and just
     // delete the existing one. Note that it'll also be deleted once the
-    // io_service is done (at the bottom of this functions).
+    // io_context is done (at the bottom of this functions).
     if (exists(dir)) {
         fs::remove_all(dir);
     }
@@ -76,11 +76,11 @@ BOOST_AUTO_TEST_CASE(test_initialize)
 
     const unsigned max_cache_size = 2;
 
-    asio::spawn(ios, [&] (auto yield) {
+    asio::spawn(ctx, [&] (auto yield) {
         sys::error_code ec;
 
         {
-            auto lru = Lru::load(ios, dir, max_cache_size, cancel, yield[ec]);
+            auto lru = Lru::load(ctx, dir, max_cache_size, cancel, yield[ec]);
 
             BOOST_REQUIRE(!ec);
 
@@ -125,7 +125,7 @@ BOOST_AUTO_TEST_CASE(test_initialize)
         {
             BOOST_REQUIRE_EQUAL(count_files_in_dir(dir), max_cache_size);
 
-            auto lru = Lru::load(ios, dir, max_cache_size, cancel, yield[ec]);
+            auto lru = Lru::load(ctx, dir, max_cache_size, cancel, yield[ec]);
 
             BOOST_REQUIRE_EQUAL(count_files_in_dir(dir), max_cache_size);
             BOOST_REQUIRE_EQUAL(lru->size(), count_files_in_dir(dir));
@@ -139,14 +139,14 @@ BOOST_AUTO_TEST_CASE(test_initialize)
 
             BOOST_REQUIRE_EQUAL(count_files_in_dir(dir), max_cache_size);
 
-            auto lru = Lru::load(ios, dir, new_max_cache_size, cancel, yield[ec]);
+            auto lru = Lru::load(ctx, dir, new_max_cache_size, cancel, yield[ec]);
 
             BOOST_REQUIRE_EQUAL(count_files_in_dir(dir), new_max_cache_size);
             BOOST_REQUIRE_EQUAL(lru->size(), count_files_in_dir(dir));
         }
     });
 
-    ios.run();
+    ctx.run();
 }
 
 struct DataEntry {
@@ -167,7 +167,7 @@ using DataLru = PersistentLruCache<DataEntry>;
 
 BOOST_AUTO_TEST_CASE(test_open_value)
 {
-    asio::io_service ios;
+    asio::io_context ctx;
     Cancel cancel;
 
     auto dir = fs::temp_directory_path()
@@ -183,12 +183,12 @@ BOOST_AUTO_TEST_CASE(test_open_value)
     const std::string key("test");
     const std::string data(4200, 'x');  // bigger than usual cache block
 
-    asio::spawn(ios, [&] (auto yield) {
+    asio::spawn(ctx, [&] (auto yield) {
         sys::error_code ec;
 
         // Create cache and insert element
         {
-            auto lru = DataLru::load(ios, dir, max_cache_size, cancel, yield[ec]);
+            auto lru = DataLru::load(ctx, dir, max_cache_size, cancel, yield[ec]);
             BOOST_REQUIRE(!ec);
 
             lru->insert(key, DataEntry{&data}, cancel, yield[ec]);
@@ -197,7 +197,7 @@ BOOST_AUTO_TEST_CASE(test_open_value)
 
         // Reload cache and open element data
         {
-            auto lru = DataLru::load(ios, dir, max_cache_size, cancel, yield[ec]);
+            auto lru = DataLru::load(ctx, dir, max_cache_size, cancel, yield[ec]);
             BOOST_REQUIRE(!ec);
 
             auto i = lru->find(key);
@@ -216,7 +216,7 @@ BOOST_AUTO_TEST_CASE(test_open_value)
         {
             std::string data_in;
 
-            auto lru = DataLru::load(ios, dir, max_cache_size, cancel, yield[ec]);
+            auto lru = DataLru::load(ctx, dir, max_cache_size, cancel, yield[ec]);
             BOOST_REQUIRE(!ec);
 
             auto i = lru->find(key);
@@ -246,7 +246,7 @@ BOOST_AUTO_TEST_CASE(test_open_value)
         }
     });
 
-    ios.run();
+    ctx.run();
 }
 
 BOOST_AUTO_TEST_SUITE_END()

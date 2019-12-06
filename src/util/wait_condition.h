@@ -13,12 +13,12 @@ namespace ouinet {
  *
  * Usage:
  *
- * WaitCondition wait_condition(ios);
+ * WaitCondition wait_condition(executor);
  *
- * spawn(ios, [lock = wait_condition.lock()](auto yield) {
+ * spawn(executor, [lock = wait_condition.lock()](auto yield) {
  *     do_something(yield);
  * }
- * spawn(ios, [lock = wait_condition.lock()](auto yield) {
+ * spawn(executor, [lock = wait_condition.lock()](auto yield) {
  *     do_something(yield);
  *     // This is unnecessary, for release() is called on lock destructor
  *     lock.release();
@@ -39,7 +39,7 @@ private:
             return remaining_locks > 0;
         }
 
-        WaitState(boost::asio::io_service& ios);
+        WaitState(const boost::asio::executor&);
     };
 
 public:
@@ -60,7 +60,8 @@ public:
     };
 
 public:
-    WaitCondition(boost::asio::io_service& ios);
+    WaitCondition(const boost::asio::executor&);
+    WaitCondition(boost::asio::io_context&);
     WaitCondition(const WaitCondition&) = delete;
     WaitCondition& operator=(const WaitCondition&) = delete;
 
@@ -78,15 +79,15 @@ private:
     void do_wait(Cancel*, boost::asio::yield_context yield);
 
 private:
-    boost::asio::io_service& _ios;
+    boost::asio::executor _exec;
     std::shared_ptr<WaitState> _wait_state;
 };
 
 
 
 inline
-WaitCondition::WaitState::WaitState(boost::asio::io_service& ios):
-    condition(ios),
+WaitCondition::WaitState::WaitState(const boost::asio::executor& exec):
+    condition(exec),
     remaining_locks(0)
 {}
 
@@ -140,8 +141,13 @@ void WaitCondition::Lock::release() const
 }
 
 inline
-WaitCondition::WaitCondition(boost::asio::io_service& ios):
-    _ios(ios)
+WaitCondition::WaitCondition(const boost::asio::executor& exec):
+    _exec(exec)
+{}
+
+inline
+WaitCondition::WaitCondition(boost::asio::io_context& ctx):
+    _exec(ctx.get_executor())
 {}
 
 inline
@@ -160,7 +166,7 @@ inline
 void WaitCondition::do_wait(Cancel* cancel, boost::asio::yield_context yield)
 {
     if (!_wait_state) {
-        _wait_state = std::make_shared<WaitState>(_ios);
+        _wait_state = std::make_shared<WaitState>(_exec);
     }
 
     std::shared_ptr<WaitState> wait_state = std::move(_wait_state);
@@ -188,7 +194,7 @@ inline
 WaitCondition::Lock WaitCondition::lock()
 {
     if (!_wait_state) {
-        _wait_state = std::make_shared<WaitState>(_ios);
+        _wait_state = std::make_shared<WaitState>(_exec);
     }
 
     return WaitCondition::Lock(_wait_state);

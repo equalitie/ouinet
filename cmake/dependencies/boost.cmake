@@ -1,4 +1,4 @@
-set(BOOST_VERSION 1.69.0)
+set(BOOST_VERSION 1.71.0)
 set(BOOST_COMPONENTS
     context
     coroutine
@@ -14,7 +14,7 @@ set(BOOST_COMPONENTS
 string(REPLACE "." "_" BOOST_VERSION_FILENAME ${BOOST_VERSION})
 
 set(BOOST_PATCHES
-    ${CMAKE_CURRENT_LIST_DIR}/inline-boost/beast-header-parser-fix.patch
+    ${CMAKE_CURRENT_LIST_DIR}/inline-boost/beast-header-parser-fix-${BOOST_VERSION_FILENAME}.patch
 )
 
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
@@ -92,8 +92,8 @@ foreach (patch ${BOOST_PATCHES})
 endforeach()
 
 externalproject_add(built_boost
-    URL "https://sourceforge.net/projects/boost/files/boost/${BOOST_VERSION}/boost_${BOOST_VERSION_FILENAME}.tar.bz2"
-    URL_MD5 a1332494397bf48332cb152abfefcec2
+    URL "https://dl.bintray.com/boostorg/release/${BOOST_VERSION}/source/boost_${BOOST_VERSION_FILENAME}.tar.bz2"
+    URL_HASH SHA256=d73a8da01e8bf8c7eda40b4c84915071a8c8a0df4a6734537ddde4a8580524ee
     PREFIX "${CMAKE_CURRENT_BINARY_DIR}/boost"
     PATCH_COMMAND ${BOOST_PATCH_COMMAND}
     CONFIGURE_COMMAND

@@ -150,6 +150,7 @@ endif()
 
 externalproject_add(gpg_error
     URL https://www.gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-1.32.tar.bz2
+    URL_MD5 ef3d928a5a453fa701ecc3bb22be1c64
     PATCH_COMMAND
         "${PATCH_COMMAND}"
     CONFIGURE_COMMAND
@@ -168,6 +169,7 @@ externalproject_add(gpg_error
 externalproject_add(gcrypt
     DEPENDS gpg_error
     URL https://www.gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.8.3.tar.bz2
+    URL_MD5 3139c2402e844985a67fb288a930534d
     CONFIGURE_COMMAND
         CC=${GCRYPT_CC}
         ${UNDERSCORE_CONFIG}

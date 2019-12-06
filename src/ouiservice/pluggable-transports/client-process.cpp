@@ -6,13 +6,13 @@ namespace ouiservice {
 namespace pt {
 
 ClientProcess::ClientProcess(
-    asio::io_service& ios,
+    asio::io_context& ioc,
     std::string command,
     std::vector<std::string> command_line_arguments,
     std::string transport_name,
     boost::optional<std::string> state_directory
 ):
-    DispatcherProcess(ios, command, command_line_arguments, state_directory),
+    DispatcherProcess(ioc, command, command_line_arguments, state_directory),
     _transport_name(transport_name),
     _transport_initialized(false)
 {

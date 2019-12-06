@@ -16,7 +16,7 @@ private:
 public:
     static boost::filesystem::path get_or_gen_ca_root_cert(const std::string repo_root);
 
-    Client(asio::io_service& ios, ClientConfig);
+    Client(asio::io_context&, ClientConfig);
 
     ~Client();
 

@@ -15,11 +15,11 @@ using namespace std;
 using namespace ouinet::ouiservice;
 using namespace ouinet::ouiservice::i2poui;
 
-Server::Server(std::shared_ptr<Service> service, const string& private_key_filename, uint32_t timeout, asio::io_service& ios)
+Server::Server(std::shared_ptr<Service> service, const string& private_key_filename, uint32_t timeout, const asio::executor& exec)
     : _service(service)
-    , _ios(ios)
+    , _exec(exec)
     , _timeout(timeout)
-    , _tcp_acceptor(ios)
+    , _tcp_acceptor(exec)
 {
     load_private_key(private_key_filename);
 }
@@ -81,7 +81,7 @@ void Server::start_listen(asio::yield_context yield)
     do {
       std::unique_ptr<i2p::client::I2PServerTunnel> i2p_server_tunnel = std::make_unique<i2p::client::I2PServerTunnel>("i2p_oui_server", "127.0.0.1", port, local_dst);
     //i2p_server_tunnel->Start();
-      _server_tunnel = std::make_unique<Tunnel>(_ios, std::move(i2p_server_tunnel), _timeout);
+      _server_tunnel = std::make_unique<Tunnel>(_exec, std::move(i2p_server_tunnel), _timeout);
       _server_tunnel->wait_to_get_ready(yield);
     } while(_server_tunnel->has_timed_out());
 
@@ -104,7 +104,7 @@ ouinet::GenericStream Server::accept(asio::yield_context yield)
 {
     sys::error_code ec;
 
-    Connection connection(_ios);
+    Connection connection(_exec);
 
     _tcp_acceptor.async_accept(connection.socket(), yield[ec]);
 

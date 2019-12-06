@@ -123,7 +123,7 @@ Session::flush_response(SinkStream& sink,
         return or_throw(yield, asio::error::bad_descriptor);
     }
 
-    Yield yield_(sink.get_io_service(), yield, "flush_response");
+    Yield yield_(sink.get_executor(), yield, "flush_response");
     http_forward( _state->con, sink, _state->buffer, _state->parser
                 , std::move(hproc), std::move(xproc), std::move(dproc), std::move(tproc)
                 , cancel, yield_);

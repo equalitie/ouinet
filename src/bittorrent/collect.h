@@ -10,7 +10,7 @@ namespace ouinet { namespace bittorrent {
 template<class CandidateSet, class Evaluate>
 void collect(
     DebugCtx dbg,
-    asio::io_service& ios,
+    asio::executor& exec,
     CandidateSet first_candidates,
     Evaluate&& evaluate,
     Cancel& cancel_signal_,
@@ -37,10 +37,10 @@ void collect(
         candidates.insert(candidates.end(), { c, unused });
     }
 
-    WaitCondition all_done(ios);
-    util::AsyncQueue<dht::NodeContact> new_candidates(ios);
+    WaitCondition all_done(exec);
+    util::AsyncQueue<dht::NodeContact> new_candidates(exec);
 
-    Scheduler scheduler(ios, 8);
+    Scheduler scheduler(exec, 8);
 
     auto pick_candidate = [&] {
         // Pick the closest untried candidate...
@@ -114,12 +114,12 @@ void collect(
         auto job_id = next_job_id++;
         active_jobs.insert(job_id);
 
-        asio::spawn(ios, [ &
-                         , candidate = candidate_i->first
-                         , job_id
-                         , lock = all_done.lock()
-                         , slot = std::move(slot)
-                         ] (asio::yield_context yield) mutable {
+        asio::spawn(exec, [ &
+                          , candidate = candidate_i->first
+                          , job_id
+                          , lock = all_done.lock()
+                          , slot = std::move(slot)
+                          ] (asio::yield_context yield) mutable {
             sys::error_code ec;
 
             bool on_finish_called = false;
@@ -144,7 +144,7 @@ void collect(
             bool is_first_round = first_candidates.count(candidate);
 
             if (is_first_round) {
-                WatchDog wd(ios, std::chrono::seconds(5), [&] () mutable {
+                WatchDog wd(exec, std::chrono::seconds(5), [&] () mutable {
                         if (dbg) cerr << dbg << "dismiss " << candidate << "\n";
                         on_finish();
                     });
@@ -157,7 +157,7 @@ void collect(
                         , local_cancel
                         , yield[ec]);
             } else {
-                WatchDog wd(ios, std::chrono::milliseconds(200), [&] () mutable {
+                WatchDog wd(exec, std::chrono::milliseconds(200), [&] () mutable {
                         if (dbg) cerr << dbg << "dismiss " << candidate << "\n";
                         on_finish();
                     });

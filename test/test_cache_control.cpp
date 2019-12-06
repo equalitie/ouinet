@@ -1,7 +1,6 @@
 #define BOOST_TEST_MODULE cache_control
 #include <boost/test/included/unit_test.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
-#include <boost/asio/io_service.hpp>
 #include <boost/optional.hpp>
 #include <boost/asio/posix/stream_descriptor.hpp>
 
@@ -38,16 +37,16 @@ static optional<string_view> get(const Request& rq, http::field f)
     return i->value();
 }
 
-template<class F> static void run_spawned(asio::io_service& ios, F&& f) {
-    asio::spawn(ios, [&ios, f = forward<F>(f)](auto yield) {
+template<class F> static void run_spawned(asio::io_context& ctx, F&& f) {
+    asio::spawn(ctx, [&ctx, f = forward<F>(f)](auto yield) {
             try {
-                f(Yield(ios, yield));
+                f(Yield(ctx, yield));
             }
             catch (const std::exception& e) {
                 BOOST_ERROR(string("Test ended with exception: ") + e.what());
             }
         });
-    ios.run();
+    ctx.run();
 }
 
 BOOST_AUTO_TEST_CASE(test_parse_date)
@@ -71,21 +70,21 @@ struct Pipe {
     stream sink;
 };
 
-Pipe make_pipe(asio::io_service& ios) {
+Pipe make_pipe(asio::io_context& ctx) {
     int fds[2];
     auto s = ::pipe(fds);
     BOOST_REQUIRE_NE(s, -1);
-    return { stream(ios, fds[0]), stream(ios, fds[1]) };
+    return { stream(ctx, fds[0]), stream(ctx, fds[1]) };
 }
 
 Session make_session(
-        asio::io_service& ios,
+        asio::io_context& ctx,
         Response rs,
         asio::yield_context y)
 {
-    auto pipe = make_pipe(ios);
+    auto pipe = make_pipe(ctx);
 
-    asio::spawn(ios, [rs, &ios, sink = move(pipe.sink)] (auto yield) mutable {
+    asio::spawn(ctx, [rs, &ctx, sink = move(pipe.sink)] (auto yield) mutable {
         http::async_write(sink, rs, yield);
     });
 
@@ -96,12 +95,12 @@ Session make_session(
 }
 
 Entry make_entry(
-        asio::io_service& ios,
+        asio::io_context& ctx,
         posix_time::ptime created,
         Response rs,
         asio::yield_context y)
 {
-    Session s = make_session(ios, move(rs), y);
+    Session s = make_session(ctx, move(rs), y);
     Cancel c;
     s.read_response_header(c, y);
     return Entry{ created , move(s) };
@@ -109,8 +108,8 @@ Entry make_entry(
 
 BOOST_AUTO_TEST_CASE(test_cache_origin_fail)
 {
-    asio::io_service ios;
-    CacheControl cc(ios, "test");
+    asio::io_context ctx;
+    CacheControl cc(ctx, "test");
 
     unsigned cache_check = 0;
     unsigned origin_check = 0;
@@ -118,7 +117,7 @@ BOOST_AUTO_TEST_CASE(test_cache_origin_fail)
     cc.fetch_stored = [&](auto rq, auto& c, auto y) {
         cache_check++;
         return make_entry(
-                ios,
+                ctx,
                 current_time(),
                 {http::status::ok, rq.version()},
                 y);
@@ -129,7 +128,7 @@ BOOST_AUTO_TEST_CASE(test_cache_origin_fail)
         return or_throw<Session>(y, asio::error::connection_reset);
     };
 
-    run_spawned(ios, [&](auto yield) {
+    run_spawned(ctx, [&](auto yield) {
             Request req{http::verb::get, "foo", 11};
             Cancel cancel;
             sys::error_code fresh_ec, cache_ec;
@@ -147,8 +146,8 @@ BOOST_AUTO_TEST_CASE(test_cache_origin_fail)
 
 BOOST_AUTO_TEST_CASE(test_max_cached_age)
 {
-    asio::io_service ios;
-    CacheControl cc(ios, "test");
+    asio::io_context ctx;
+    CacheControl cc(ctx, "test");
 
     cc.enable_parallel_fetch(false);
 
@@ -167,16 +166,16 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age)
         if (rq.target() == "old") created -= seconds(5);
         else                      created += seconds(5);
 
-        return make_entry(ios, created, rs, y);
+        return make_entry(ctx, created, rs, y);
     };
 
     cc.fetch_fresh = [&](auto rq, auto&, auto y) {
         origin_check++;
         BOOST_CHECK_EQUAL(rq.target(), "old");
-        return make_session(ios, {http::status::ok, rq.version()}, y);
+        return make_session(ctx, {http::status::ok, rq.version()}, y);
     };
 
-    run_spawned(ios, [&](auto yield) {
+    run_spawned(ctx, [&](auto yield) {
             {
                 Request req{http::verb::get, "old", 11};
                 Cancel cancel;
@@ -202,9 +201,9 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age)
 
 BOOST_AUTO_TEST_CASE(test_maxage)
 {
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    CacheControl cc(ios, "test");
+    CacheControl cc(ctx, "test");
 
     cc.enable_parallel_fetch(false);
 
@@ -227,16 +226,16 @@ BOOST_AUTO_TEST_CASE(test_maxage)
             BOOST_CHECK(rq.target() == "new");
         }
 
-        return make_entry(ios, created, rs, y);
+        return make_entry(ctx, created, rs, y);
     };
 
     cc.fetch_fresh = [&](auto rq, auto&, auto y) {
         origin_check++;
         Response rs{http::status::ok, rq.version()};
-        return make_session(ios, rs, y);
+        return make_session(ctx, rs, y);
     };
 
-    run_spawned(ios, [&](auto yield) {
+    run_spawned(ctx, [&](auto yield) {
             {
                 Request req{http::verb::get, "old", 11};
                 Cancel cancel;
@@ -257,8 +256,8 @@ BOOST_AUTO_TEST_CASE(test_maxage)
 
 BOOST_AUTO_TEST_CASE(test_http10_expires)
 {
-    asio::io_service ios;
-    CacheControl cc(ios, "test");
+    asio::io_context ctx;
+    CacheControl cc(ctx, "test");
 
     cc.enable_parallel_fetch(false);
 
@@ -293,16 +292,16 @@ BOOST_AUTO_TEST_CASE(test_http10_expires)
                   , format_time(current_time() + posix_time::seconds(10)));
         }
 
-        return make_entry(ios, created, rs, y);
+        return make_entry(ctx, created, rs, y);
     };
 
     cc.fetch_fresh = [&](auto rq, auto&, auto y) {
         origin_check++;
         Response rs{http::status::ok, rq.version()};
-        return make_session(ios, rs, y);
+        return make_session(ctx, rs, y);
     };
 
-    run_spawned(ios, [&](auto yield) {
+    run_spawned(ctx, [&](auto yield) {
             {
                 Request req{http::verb::get, "old", 11};
                 Cancel cancel;
@@ -323,24 +322,24 @@ BOOST_AUTO_TEST_CASE(test_http10_expires)
 
 BOOST_AUTO_TEST_CASE(test_dont_load_cache_when_If_None_Match)
 {
-    asio::io_service ios;
-    CacheControl cc(ios, "test");
+    asio::io_context ctx;
+    CacheControl cc(ctx, "test");
 
     unsigned origin_check = 0;
 
     cc.fetch_stored = [&](auto rq, auto&, auto y) {
         BOOST_ERROR("Shouldn't go to cache");
-        return make_entry(ios, current_time(), Response{}, y);
+        return make_entry(ctx, current_time(), Response{}, y);
     };
 
     cc.fetch_fresh = [&](auto rq, auto&, auto y) {
         origin_check++;
         Response rs{http::status::ok, rq.version()};
         rs.set("X-Test", "from-origin");
-        return make_session(ios, rs, y);
+        return make_session(ctx, rs, y);
     };
 
-    run_spawned(ios, [&](auto yield) {
+    run_spawned(ctx, [&](auto yield) {
             Request req{http::verb::get, "foo", 11};
             req.set(http::field::if_none_match, "abc");
             Cancel cancel;
@@ -356,14 +355,14 @@ BOOST_AUTO_TEST_CASE(test_dont_load_cache_when_If_None_Match)
 
 BOOST_AUTO_TEST_CASE(test_no_etag_override)
 {
-    asio::io_service ios;
-    CacheControl cc(ios, "test");
+    asio::io_context ctx;
+    CacheControl cc(ctx, "test");
 
     unsigned origin_check = 0;
 
     cc.fetch_stored = [&](auto rq, auto&, auto y) {
         BOOST_ERROR("Shouldn't go to cache");
-        return make_entry(ios, current_time(), {}, y);
+        return make_entry(ctx, current_time(), {}, y);
     };
 
     cc.fetch_fresh = [&](auto rq, auto&, auto y) {
@@ -373,10 +372,10 @@ BOOST_AUTO_TEST_CASE(test_no_etag_override)
         BOOST_CHECK(etag);
         BOOST_CHECK_EQUAL(*etag, "origin-etag");
 
-        return make_session(ios, {http::status::ok, rq.version()}, y);
+        return make_session(ctx, {http::status::ok, rq.version()}, y);
     };
 
-    run_spawned(ios, [&](auto yield) {
+    run_spawned(ctx, [&](auto yield) {
             // In this test, the user agent provides its own etag.
             Request rq{http::verb::get, "mypage", 11};
             rq.set(http::field::if_none_match, "origin-etag");
@@ -400,8 +399,8 @@ BOOST_AUTO_TEST_CASE(test_request_no_store)
 
 BOOST_AUTO_TEST_CASE(test_if_none_match)
 {
-    asio::io_service ios;
-    CacheControl cc(ios, "test");
+    asio::io_context ctx;
+    CacheControl cc(ctx, "test");
 
     cc.enable_parallel_fetch(false);
 
@@ -416,7 +415,7 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
         rs.set(http::field::etag, "123");
         rs.set("X-Test", "from-cache");
 
-        return make_entry(ios, current_time() - seconds(20), rs, y);
+        return make_entry(ctx, current_time() - seconds(20), rs, y);
     };
 
     cc.fetch_fresh = [&](auto rq, auto&, auto y) {
@@ -428,16 +427,16 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
         if (*etag == "123") {
             Response rs{http::status::not_modified, rq.version()};
             rs.set("X-Test", "from-origin-not-modified");
-            return make_session(ios, rs, y);
+            return make_session(ctx, rs, y);
         }
 
         Response rs{http::status::ok, rq.version()};
         rs.set("X-Test", "from-origin-ok");
 
-        return make_session(ios, rs, y);
+        return make_session(ctx, rs, y);
     };
 
-    run_spawned(ios, [&](auto yield) {
+    run_spawned(ctx, [&](auto yield) {
             {
                 Request rq{http::verb::get, "mypage", 11};
                 Cancel cancel;
@@ -467,8 +466,8 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
 
 BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
 {
-    asio::io_service ios;
-    CacheControl cc(ios, "test");
+    asio::io_context ctx;
+    CacheControl cc(ctx, "test");
 
     cc.enable_parallel_fetch(false);
 
@@ -481,7 +480,7 @@ BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
         // Return a fresh cached version.
         rs.set(http::field::cache_control, "max-age=3600");
         rs.set("X-Test", "from-cache");
-        return make_entry(ios, current_time(), rs, y);
+        return make_entry(ctx, current_time(), rs, y);
     };
 
     cc.fetch_fresh = [&](auto rq, auto&, auto y) {
@@ -490,10 +489,10 @@ BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
         // (i.e. not returning "304 Not Modified" here).
         Response rs{http::status::ok, rq.version()};
         rs.set("X-Test", "from-origin");
-        return make_session(ios, rs, y);
+        return make_session(ctx, rs, y);
     };
 
-    run_spawned(ios, [&](auto yield) {
+    run_spawned(ctx, [&](auto yield) {
             {
                 // Cached resources requested without "no-cache" should come from the cache
                 // since the cached version is fresh enough.

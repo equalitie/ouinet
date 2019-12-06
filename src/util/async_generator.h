@@ -11,7 +11,7 @@ namespace ouinet { namespace util {
 // Usage:
 //
 // //----------------------------------------------------------------
-// AsyncGenerator gen(ioc, [&] (auto& queue, auto cancel, auto yield) {
+// AsyncGenerator gen(ex, [&] (auto& queue, auto cancel, auto yield) {
 //     unsigned n = 0;
 //     while (!cancel) {
 //         sleep(ios, 1s, cancel, yield);
@@ -43,17 +43,22 @@ private:
 
 public:
     template<class Generator /* void(Queue&, Cancel, Yield) */>
-    AsyncGenerator(asio::io_context& ioc, Generator&& gen)
-        : _queue(ioc)
+    AsyncGenerator(asio::io_context& ctx, Generator&& gen)
+        : AsyncGenerator(ctx.get_executor(), std::forward<Generator>(gen))
+    {}
+
+    template<class Generator /* void(Queue&, Cancel, Yield) */>
+    AsyncGenerator(const asio::executor& ex, Generator&& gen)
+        : _queue(ex)
         , _shutdown_cancel(_lifetime_cancel)
-        , _wc(ioc)
+        , _wc(ex)
     {
-        asio::spawn(ioc, [ self = this
-                         , gen = std::move(gen)
-                         , lifetime_cancel = _lifetime_cancel
-                         , shutdown_cancel = _shutdown_cancel
-                         , lock = _wc.lock()
-                         ] (Yield yield) mutable {
+        asio::spawn(ex, [ self = this
+                        , gen = std::move(gen)
+                        , lifetime_cancel = _lifetime_cancel
+                        , shutdown_cancel = _shutdown_cancel
+                        , lock = _wc.lock()
+                        ] (Yield yield) mutable {
             sys::error_code ec;
             gen(self->_queue, shutdown_cancel, yield[ec]);
 

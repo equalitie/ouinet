@@ -88,7 +88,7 @@ http_forward_request( StreamIn& in
     bool timed_out = false;
     sys::error_code ec;
 
-    WatchDog wdog( in.get_io_service(), default_timeout::http_forward()
+    WatchDog wdog( in.get_executor(), default_timeout::http_forward()
                  , [&] { timed_out = true; in.close(); out.close(); });
     http::async_write(in, rq, yield[ec]);
 
@@ -204,7 +204,7 @@ http_forward( StreamIn& in
     auto cancelled = cancel.connect([&] { in.close(); out.close(); });
     bool timed_out = false;
     auto wdog_timeout = default_timeout::http_forward();
-    WatchDog wdog( in.get_io_service(), wdog_timeout
+    WatchDog wdog( in.get_executor(), wdog_timeout
                  , [&] { timed_out = true; in.close(); out.close(); });
 
     sys::error_code ec;

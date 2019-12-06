@@ -24,8 +24,13 @@ public:
     using FetchFresh  = std::function<Session(const Request&, Cancel&, Yield)>;
 
 public:
-    CacheControl(asio::io_service& ios, std::string server_name)
-        : _ios(ios)
+    CacheControl(const asio::executor& ex, std::string server_name)
+        : _ex(ex)
+        , _server_name(std::move(server_name))
+    {}
+
+    CacheControl(asio::io_context& ctx, std::string server_name)
+        : _ex(ctx.get_executor())
         , _server_name(std::move(server_name))
     {}
 
@@ -78,7 +83,7 @@ private:
     bool has_temporary_result(const Session&) const;
 
 private:
-    asio::io_service& _ios;
+    asio::executor _ex;
     std::string _server_name;
     bool _parallel_fetch_enabled = true;
 

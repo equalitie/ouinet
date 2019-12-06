@@ -74,7 +74,7 @@ static const string rs_head_signed_s = (
     "Content-Type: text/html\r\n"
     "Content-Disposition: inline; filename=\"foo.html\"\r\n"
 
-    "X-Ouinet-Version: 2\r\n"
+    "X-Ouinet-Version: 3\r\n"
     "X-Ouinet-URI: https://example.com/foo\r\n"
     "X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310\r\n"
     "X-Ouinet-BSigs: keyId=\"ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=\","
@@ -85,7 +85,7 @@ static const string rs_head_signed_s = (
     "headers=\"(response-status) (created) "
     "date server content-type content-disposition "
     "x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-bsigs\","
-    "signature=\"uHPXxCGWKedAl+CV4y8sG+el6FcFyPtFTt1/7eC2V/gvF99KLnNeCascBB9s++LZe4PWyTxtHn0Wlu6l4MfoBg==\"\r\n"
+    "signature=\"tnVAAW/8FJs2PRgtUEwUYzMxBBlZpd7Lx3iucAt9q5hYXuY5ci9T7nEn7UxyKMGA1ZvnDMDBbs40dO1OQUkdCA==\"\r\n"
 
     "Transfer-Encoding: chunked\r\n"
     "Trailer: X-Ouinet-Data-Size, Digest, X-Ouinet-Sig1\r\n"
@@ -100,27 +100,34 @@ static const string rs_head_signed_s = (
     "x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-bsigs "
     "x-ouinet-data-size "
     "digest\","
-    "signature=\"UgdTrdqWx4tEmRxKiHofP++BV3Je+T86PRqzZoLbRBOvbA3oyjPRno3ZFvgQ/8L8ufV01MZLjBEdTzATdbmiAw==\"\r\n"
+    "signature=\"h/PmOlFvScNzDAUvV7tLNjoA0A39OL67/9wbfrzqEY7j47IYVe1ipXuhhCfTnPeCyXBKiMlc4BP+nf0VmYzoAw==\"\r\n"
     "\r\n"
 );
 
-static const array<string, 3> rs_block_cexts{
-    ";ouisig=\"6gCnxL3lVHMAMSzhx+XJ1ZBt+JC/++m5hlak1adZMlUH0hnm2S3ZnbwjPQGMm9hDB45SqnybuQ9Bjo+PgnfnCw==\"",  // offset 0
-    ";ouisig=\"5R+TDVurWEZCPRxTBF0s7uDwxcbfxjj35Xr101C2ZDKyLbHw5tHIvhrJTjpfUIQKQ99OD5Xr08Q7j2fpQuoVDg==\"",  // offset 65536
-    ";ouisig=\"B1LsKycoNZMGF3AdPegJySkEF42sp456P7yX2/75/T/ZlbP2UqyjKA7Bqy7SwGBTtms5g7ckQOMKbzT9KfT1Cg==\"",  // offset 131072
+static const array<string, 3> rs_block_hash_cx{
+    "",  // no previous block to hash
+    ";ouihash=\"aERfr5o+kpvR4ZH7xC0mBJ4QjqPUELDzjmzt14WmntxH2p3EQmATZODXMPoFiXaZL6KNI50Ve4WJf/x3ma4ieA==\"",
+    ";ouihash=\"slwciqMQBddB71VWqpba+MpP9tBiyTE/XFmO5I1oiVJy3iFniKRkksbP78hCEWOM6tH31TGEFWP1loa4pqrLww==\"",
+    //";ouihash=\"vyUR6T034qN7qDZO5vUILMP9FsJYPys1KIELlGDFCSqSFI7ZowrT3U9ffwsQAZSCLJvKQhT+GhtO0aM2jNnm5A==\"",  // never actually sent
+};
+
+static const array<string, 3> rs_block_sig_cx{
+    ";ouisig=\"AwiYuUjLYh/jZz9d0/ev6dpoWqjU/sUWUmGL36/D9tI30oaqFgQGgcbVCyBtl0a7x4saCmxRHC4JW7cYEPWwCw==\"",
+    ";ouisig=\"c+ZJUJI/kc81q8sLMhwe813Zdc+VPa4DejdVkO5ZhdIPPojbZnRt8OMyFMEiQtHYHXrZIK2+pKj2AO03j70TBA==\"",
+    ";ouisig=\"m6sz1NpU/8iF6KNN6drY+Yk361GiW0lfa0aaX5TH0GGW/L5GsHyg8ozA0ejm29a+aTjp/qIoI1VrEVj1XG/gDA==\"",
 };
 
 template<class F>
-static void run_spawned(asio::io_service& ios, F&& f) {
-    asio::spawn(ios, [&ios, f = forward<F>(f)] (auto yield) {
+static void run_spawned(asio::io_context& ctx, F&& f) {
+    asio::spawn(ctx, [&ctx, f = forward<F>(f)] (auto yield) {
             try {
-                f(Yield(ios, yield));
+                f(Yield(ctx, yield));
             }
             catch (const std::exception& e) {
                 BOOST_ERROR(string("Test ended with exception: ") + e.what());
             }
         });
-    ios.run();
+    ctx.run();
 }
 
 static http::request_header<> get_request_header() {
@@ -266,20 +273,20 @@ BOOST_AUTO_TEST_CASE(test_http_verify) {
 }
 
 BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
-    asio::io_service ios;
-    run_spawned(ios, [&] (auto yield) {
-        WaitCondition wc(ios);
+    asio::io_context ctx;
+    run_spawned(ctx, [&] (auto yield) {
+        WaitCondition wc(ctx);
 
         asio::ip::tcp::socket
-            origin_w(ios), origin_r(ios),
-            signed_w(ios), signed_r(ios),
-            tested_w(ios), tested_r(ios);
-        tie(origin_w, origin_r) = util::connected_pair(ios, yield);
-        tie(signed_w, signed_r) = util::connected_pair(ios, yield);
-        tie(tested_w, tested_r) = util::connected_pair(ios, yield);
+            origin_w(ctx), origin_r(ctx),
+            signed_w(ctx), signed_r(ctx),
+            tested_w(ctx), tested_r(ctx);
+        tie(origin_w, origin_r) = util::connected_pair(ctx, yield);
+        tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
+        tie(tested_w, tested_r) = util::connected_pair(ctx, yield);
 
         // Send raw origin response.
-        asio::spawn(ios, [&origin_w, lock = wc.lock()] (auto y) {
+        asio::spawn(ctx, [&origin_w, lock = wc.lock()] (auto y) {
             sys::error_code e;
             asio::async_write( origin_w
                              , asio::const_buffer(rs_head_s.data(), rs_head_s.size())
@@ -293,7 +300,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
         });
 
         // Sign origin response.
-        asio::spawn(ios, [ origin_r = std::move(origin_r), &signed_w
+        asio::spawn(ctx, [ origin_r = std::move(origin_r), &signed_w
                          , lock = wc.lock()] (auto y) mutable {
             Session origin_rs(std::move(origin_r));
             auto req_h = get_request_header();
@@ -308,8 +315,8 @@ BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
         });
 
         // Test signed output.
-        asio::spawn(ios, [ &signed_r, &tested_w
-                         , &ios, lock = wc.lock()](auto y) mutable {
+        asio::spawn(ctx, [ &signed_r, &tested_w
+                         , &ctx, lock = wc.lock()](auto y) mutable {
             auto hproc = [] (auto inh, auto&, auto) {
                 auto hbsh = inh[http_::response_block_signatures_hdr];
                 BOOST_REQUIRE(!hbsh.empty());
@@ -321,8 +328,8 @@ BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
             };
             int xidx = 0;
             auto xproc = [&xidx] (auto exts, auto&, auto) {
-                BOOST_REQUIRE(xidx < rs_block_cexts.size());
-                BOOST_CHECK_EQUAL(exts, rs_block_cexts[xidx++]);
+                BOOST_REQUIRE(xidx < rs_block_sig_cx.size());
+                BOOST_CHECK_EQUAL(exts, rs_block_sig_cx[xidx++]);
             };
             // Yes we drop chunk extensions but they do not affect the forwarding process,
             // and they are going to be dumped anyway further down.
@@ -335,19 +342,19 @@ BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
 
             Cancel cancel;
             sys::error_code e;
-            Yield yy(ios, y);
+            Yield yy(ctx, y);
             http_forward( signed_r, tested_w
                         , std::move(hproc), std::move(xproc)
                         , std::move(dproc), std::move(tproc)
                         , cancel, yy[e]);
             BOOST_REQUIRE(!e);
-            BOOST_CHECK_EQUAL(xidx, rs_block_cexts.size());
+            BOOST_CHECK_EQUAL(xidx, rs_block_sig_cx.size());
             signed_r.close();
             tested_w.close();
         });
 
         // Black hole.
-        asio::spawn(ios, [&tested_r, lock = wc.lock()] (auto y) {
+        asio::spawn(ctx, [&tested_r, lock = wc.lock()] (auto y) {
             char d[2048];
             asio::mutable_buffer b(d, sizeof(d));
 
@@ -362,20 +369,22 @@ BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
 }
 
 BOOST_AUTO_TEST_CASE(test_http_flush_verified) {
-    asio::io_service ios;
-    run_spawned(ios, [&] (auto yield) {
-        WaitCondition wc(ios);
+    asio::io_context ctx;
+    run_spawned(ctx, [&] (auto yield) {
+        WaitCondition wc(ctx);
 
         asio::ip::tcp::socket
-            origin_w(ios), origin_r(ios),
-            signed_w(ios), signed_r(ios),
-            tested_w(ios), tested_r(ios);
-        tie(origin_w, origin_r) = util::connected_pair(ios, yield);
-        tie(signed_w, signed_r) = util::connected_pair(ios, yield);
-        tie(tested_w, tested_r) = util::connected_pair(ios, yield);
+            origin_w(ctx), origin_r(ctx),
+            signed_w(ctx), signed_r(ctx),
+            hashed_w(ctx), hashed_r(ctx),
+            tested_w(ctx), tested_r(ctx);
+        tie(origin_w, origin_r) = util::connected_pair(ctx, yield);
+        tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
+        tie(hashed_w, hashed_r) = util::connected_pair(ctx, yield);
+        tie(tested_w, tested_r) = util::connected_pair(ctx, yield);
 
         // Send raw origin response.
-        asio::spawn(ios, [&origin_w, lock = wc.lock()] (auto y) {
+        asio::spawn(ctx, [&origin_w, lock = wc.lock()] (auto y) {
             sys::error_code e;
             asio::async_write( origin_w
                              , asio::const_buffer(rs_head_s.data(), rs_head_s.size())
@@ -389,7 +398,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified) {
         });
 
         // Sign origin response.
-        asio::spawn(ios, [ origin_r = std::move(origin_r), &signed_w
+        asio::spawn(ctx, [ origin_r = std::move(origin_r), &signed_w
                          , lock = wc.lock()] (auto y) mutable {
             Session origin_rs(std::move(origin_r));
             auto req_h = get_request_header();
@@ -404,21 +413,50 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified) {
         });
 
         // Verify signed output.
-        asio::spawn(ios, [ signed_r = std::move(signed_r), &tested_w
+        asio::spawn(ctx, [ signed_r = std::move(signed_r), &hashed_w
                          , lock = wc.lock()](auto y) mutable {
             Session signed_rs(std::move(signed_r));
             auto pk = get_public_key();
             Cancel cancel;
             sys::error_code e;
-            cache::session_flush_verified( signed_rs, tested_w
+            cache::session_flush_verified( signed_rs, hashed_w
                                          , pk
                                          , cancel, y[e]);
             BOOST_REQUIRE(!e);
+            hashed_w.close();
+        });
+
+        // Check generation of chained hashes.
+        asio::spawn(ctx, [ &hashed_r, &tested_w
+                         , &ctx, lock = wc.lock()](auto y) mutable {
+            auto hproc = [] (auto inh, auto&, auto) { return inh; };
+            int xidx = 0;
+            auto xproc = [&xidx] (auto exts, auto&, auto) {
+                BOOST_REQUIRE(xidx < rs_block_hash_cx.size());
+                BOOST_CHECK(exts.find(rs_block_hash_cx[xidx++]) != string::npos);
+            };
+            ProcDataFunc<asio::const_buffer> dproc = [] (auto ind, auto&, auto) {
+                return ProcDataFunc<asio::const_buffer>::result_type{std::move(ind), {}};
+            };
+            ProcTrailFunc tproc = [] (auto intr, auto&, auto) {
+                return ProcTrailFunc::result_type{std::move(intr), {}};
+            };
+
+            Cancel cancel;
+            sys::error_code e;
+            Yield yy(ctx, y);
+            http_forward( hashed_r, tested_w
+                        , std::move(hproc), std::move(xproc)
+                        , std::move(dproc), std::move(tproc)
+                        , cancel, yy[e]);
+            BOOST_REQUIRE(!e);
+            BOOST_CHECK_EQUAL(xidx, rs_block_hash_cx.size());
+            hashed_r.close();
             tested_w.close();
         });
 
         // Black hole.
-        asio::spawn(ios, [&tested_r, lock = wc.lock()] (auto y) {
+        asio::spawn(ctx, [&tested_r, lock = wc.lock()] (auto y) {
             char d[2048];
             asio::mutable_buffer b(d, sizeof(d));
 
@@ -433,22 +471,22 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified) {
 }
 
 BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
-    asio::io_service ios;
-    run_spawned(ios, [&] (auto yield) {
-        WaitCondition wc(ios);
+    asio::io_context ctx;
+    run_spawned(ctx, [&] (auto yield) {
+        WaitCondition wc(ctx);
 
         asio::ip::tcp::socket
-            origin_w(ios), origin_r(ios),
-            signed_w(ios), signed_r(ios),
-            forged_w(ios), forged_r(ios),
-            tested_w(ios), tested_r(ios);
-        tie(origin_w, origin_r) = util::connected_pair(ios, yield);
-        tie(signed_w, signed_r) = util::connected_pair(ios, yield);
-        tie(forged_w, forged_r) = util::connected_pair(ios, yield);
-        tie(tested_w, tested_r) = util::connected_pair(ios, yield);
+            origin_w(ctx), origin_r(ctx),
+            signed_w(ctx), signed_r(ctx),
+            forged_w(ctx), forged_r(ctx),
+            tested_w(ctx), tested_r(ctx);
+        tie(origin_w, origin_r) = util::connected_pair(ctx, yield);
+        tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
+        tie(forged_w, forged_r) = util::connected_pair(ctx, yield);
+        tie(tested_w, tested_r) = util::connected_pair(ctx, yield);
 
         // Send raw origin response.
-        asio::spawn(ios, [&origin_w, lock = wc.lock()] (auto y) {
+        asio::spawn(ctx, [&origin_w, lock = wc.lock()] (auto y) {
             sys::error_code e;
             asio::async_write( origin_w
                              , asio::const_buffer(rs_head_s.data(), rs_head_s.size())
@@ -462,7 +500,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
         });
 
         // Sign origin response.
-        asio::spawn(ios, [ origin_r = std::move(origin_r), &signed_w
+        asio::spawn(ctx, [ origin_r = std::move(origin_r), &signed_w
                          , lock = wc.lock()] (auto y) mutable {
             Session origin_rs(std::move(origin_r));
             auto req_h = get_request_header();
@@ -477,7 +515,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
         });
 
         // Forge (alter) signed output.
-        asio::spawn(ios, [ &signed_r, &forged_w
+        asio::spawn(ctx, [ &signed_r, &forged_w
                          , lock = wc.lock()] (auto y) {
             char d[2048];
             asio::mutable_buffer b(d, sizeof(d));
@@ -503,7 +541,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
         });
 
         // Verify forged output.
-        asio::spawn(ios, [ forged_r = std::move(forged_r), &tested_w
+        asio::spawn(ctx, [ forged_r = std::move(forged_r), &tested_w
                          , lock = wc.lock()](auto y) mutable {
             Session forged_rs(std::move(forged_r));
             auto pk = get_public_key();
@@ -517,7 +555,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
         });
 
         // Black hole.
-        asio::spawn(ios, [&tested_r, lock = wc.lock()] (auto y) {
+        asio::spawn(ctx, [&tested_r, lock = wc.lock()] (auto y) {
             char d[2048];
             asio::mutable_buffer b(d, sizeof(d));
 

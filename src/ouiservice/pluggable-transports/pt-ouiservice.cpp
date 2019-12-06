@@ -9,10 +9,10 @@ namespace ouinet {
 namespace ouiservice {
 namespace pt {
 
-PtOuiServiceServer::PtOuiServiceServer(asio::io_service& ios):
-    _ios(ios),
-    _acceptor(ios),
-    _start_listen_condition(ios)
+PtOuiServiceServer::PtOuiServiceServer(asio::io_context& ioc):
+    _ioc(ioc),
+    _acceptor(ioc),
+    _start_listen_condition(ioc.get_executor())
 {}
 
 PtOuiServiceServer::~PtOuiServiceServer()
@@ -57,7 +57,7 @@ void PtOuiServiceServer::start_listen(asio::yield_context yield)
 
     Signal<void()> cancel;
     _server_process = start_server_process(
-        _ios,
+        _ioc,
         _acceptor.local_endpoint(),
         yield[ec],
         cancel
@@ -87,7 +87,7 @@ GenericStream PtOuiServiceServer::accept(asio::yield_context yield)
 {
     sys::error_code ec;
 
-    asio::ip::tcp::socket socket(_ios);
+    asio::ip::tcp::socket socket(_ioc);
     _acceptor.async_accept(socket, yield[ec]);
 
     if (ec) {
@@ -115,8 +115,8 @@ std::string PtOuiServiceServer::connection_arguments() const
 
 
 
-PtOuiServiceClient::PtOuiServiceClient(asio::io_service& ios):
-    _ios(ios)
+PtOuiServiceClient::PtOuiServiceClient(asio::io_context& ioc):
+    _ioc(ioc)
 {}
 
 PtOuiServiceClient::~PtOuiServiceClient()
@@ -131,7 +131,7 @@ void PtOuiServiceClient::start(asio::yield_context yield)
     sys::error_code ec;
     Signal<void()> cancel;
     _client_process = start_client_process(
-        _ios,
+        _ioc,
         yield[ec],
         cancel
     );
@@ -157,7 +157,7 @@ GenericStream PtOuiServiceClient::connect(
     sys::error_code ec;
     std::string remote_endpoint_string;
     asio::ip::tcp::socket socket = connect_through_transport(
-        _ios,
+        _ioc.get_executor(),
         _client_process->endpoint(),
         remote_endpoint_string,
         yield[ec],

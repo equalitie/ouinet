@@ -21,7 +21,7 @@ namespace ouinet {
  */
 template<class InnerStream> class TimeoutStream {
 public:
-    using executor_type = asio::io_context::executor_type;
+    using executor_type = boost::asio::executor;
     using next_layer_type = InnerStream;
     using endpoint_type = typename InnerStream::endpoint_type;
 
@@ -36,8 +36,8 @@ private:
     class Deadline : public std::enable_shared_from_this<Deadline> {
         using Parent = std::enable_shared_from_this<Deadline>;
     public:
-        Deadline(asio::io_context& ioc)
-            : _timer(ioc)
+        Deadline(asio::executor& exec)
+            : _timer(exec)
         {}
 
         void start(Duration d, std::function<void()> h)
@@ -113,11 +113,11 @@ private:
         State(InnerStream&& in)
             : inner(std::move(in))
         {
-            auto& ctx = inner.get_executor().context();
+            auto exec = inner.get_executor();
 
-            read_deadline    = std::make_shared<Deadline>(ctx);
-            write_deadline   = std::make_shared<Deadline>(ctx);
-            connect_deadline = std::make_shared<Deadline>(ctx);
+            read_deadline    = std::make_shared<Deadline>(exec);
+            write_deadline   = std::make_shared<Deadline>(exec);
+            connect_deadline = std::make_shared<Deadline>(exec);
         }
 
         bool is_open() const { return inner.is_open(); }

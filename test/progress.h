@@ -5,18 +5,18 @@
 namespace ouinet {
 
 struct Progress {
-    Progress(asio::io_service& ios, std::string message)
+    Progress(const asio::executor& ex, std::string message)
         : _message(move(message))
     {
         using namespace std;
 
-        asio::spawn(ios, [&] (asio::yield_context yield) {
+        asio::spawn(ex, [&] (asio::yield_context yield) {
             Cancel cancel(_cancel);
             const char p[] = {'|', '/', '-', '\\'};
 
             while (!cancel) {
                 cerr << _message << "... " << p[_i++ % 4] << '\r';
-                async_sleep(ios, chrono::milliseconds(200), cancel, yield);
+                async_sleep(ex, chrono::milliseconds(200), cancel, yield);
             }
         });
     }

@@ -13,10 +13,10 @@ private:
         Clock::time_point  deadline;
         asio::steady_timer timer;
 
-        State(WatchDog* self, Clock::time_point d, asio::io_service& ios)
+        State(WatchDog* self, Clock::time_point d, const asio::executor& ex)
             : self(self)
             , deadline(d)
-            , timer(ios)
+            , timer(ex)
         {}
     };
 
@@ -43,10 +43,15 @@ public:
     }
 
     template<class Duration, class OnTimeout>
-    WatchDog(asio::io_service& ios, Duration d, OnTimeout on_timeout)
+    WatchDog(const asio::executor& ex, Duration d, OnTimeout on_timeout)
     {
-        start(ios, d, std::move(on_timeout));
+        start(ex, d, std::move(on_timeout));
     }
+
+    template<class Duration, class OnTimeout>
+    WatchDog(asio::io_context& ctx, Duration d, OnTimeout on_timeout)
+        : WatchDog(ctx.get_executor(), d, std::move(on_timeout))
+    {}
 
     template<class Duration>
     void expires_after(Duration d)
@@ -86,12 +91,12 @@ public:
     }
 
     template<class Duration, class OnTimeout>
-    void start(asio::io_service& ios, Duration d, OnTimeout on_timeout) {
+    void start(const asio::executor& ex, Duration d, OnTimeout on_timeout) {
         stop();
 
-        asio::spawn(ios, [self_ = this, &ios, d, on_timeout = std::move(on_timeout)]
+        asio::spawn(ex, [self_ = this, ex, d, on_timeout = std::move(on_timeout)]
                          (asio::yield_context yield) mutable {
-            State state(self_, Clock::now() + d, ios);
+            State state(self_, Clock::now() + d, ex);
             self_->state = &state;
 
             {

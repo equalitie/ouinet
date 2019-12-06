@@ -32,13 +32,11 @@ void full_duplex(Stream1 c1, Stream2 c2, asio::yield_context yield)
         }
     };
 
-    assert(&c1.get_io_service() == &c2.get_io_service());
-
-    WatchDog wdog( c1.get_io_service()
+    WatchDog wdog( c1.get_executor()
                  , timeout
                  , [&] { c1.close(); c2.close(); });
 
-    WaitCondition wait_condition(c1.get_io_service());
+    WaitCondition wait_condition(c1.get_executor());
 
     asio::spawn
         ( yield

@@ -15,13 +15,13 @@ class TlsOuiServiceServer : public OuiServiceImplementationServer
     public:
     using BaseServicePtr = std::unique_ptr<OuiServiceImplementationServer>;
 
-    TlsOuiServiceServer( asio::io_service& ios
+    TlsOuiServiceServer( const asio::executor& ex
                        , BaseServicePtr base
                        , asio::ssl::context& context)
-        : _ios(ios)
+        : _ex(ex)
         , _base(std::move(base))
         , _ssl_context(context)
-        , _accept_queue(_ios /*, TODO: max size? */)
+        , _accept_queue(_ex /*, TODO: max size? */)
     {};
 
     void start_listen(asio::yield_context) override;
@@ -32,7 +32,7 @@ class TlsOuiServiceServer : public OuiServiceImplementationServer
     ~TlsOuiServiceServer();
 
     private:
-    asio::io_service& _ios;
+    asio::executor _ex;
     BaseServicePtr _base;
     asio::ssl::context& _ssl_context;
     Cancel _cancel;

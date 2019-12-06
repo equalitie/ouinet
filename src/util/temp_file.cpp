@@ -14,13 +14,13 @@ void temp_file::close() {
 }
 
 boost::optional<temp_file>
-mktemp( asio::io_service& ios, sys::error_code& ec
+mktemp( const asio::executor& ex, sys::error_code& ec
       , const fs::path& dir, const fs::path& model)
 {
     auto path = dir / fs::unique_path(model, ec);
     if (ec) return boost::none;
 
-    auto file = file_io::open_or_create(ios, path, ec);
+    auto file = file_io::open_or_create(ex, path, ec);
     if (ec) return boost::none;
 
     return temp_file(std::move(file), path);

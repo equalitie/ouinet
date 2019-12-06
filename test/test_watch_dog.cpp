@@ -1,7 +1,6 @@
 #define BOOST_TEST_MODULE watch_dog
 #include <boost/test/included/unit_test.hpp>
 
-#include <boost/asio/io_service.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <namespaces.h>
@@ -20,11 +19,11 @@ using Clock = chrono::steady_clock;
 BOOST_AUTO_TEST_CASE(test_watch_dog) {
     using namespace chrono_literals;
 
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    asio::spawn(ios, [&] (asio::yield_context yield) {
+    asio::spawn(ctx, [&] (asio::yield_context yield) {
         {
-            WatchDog wd(ios, 1s, [&] { BOOST_REQUIRE(false); });
+            WatchDog wd(ctx, 1s, [&] { BOOST_REQUIRE(false); });
         }
 
         {
@@ -32,15 +31,15 @@ BOOST_AUTO_TEST_CASE(test_watch_dog) {
 
             Cancel cancel;
 
-            WatchDog wd(ios, 1s, [&] { cancel(); });
+            WatchDog wd(ctx, 1s, [&] { cancel(); });
 
-            async_sleep(ios, 2s, cancel, yield[ec]);
+            async_sleep(ctx, 2s, cancel, yield[ec]);
 
             BOOST_REQUIRE(cancel.call_count());
         }
     });
 
-    ios.run();
+    ctx.run();
 }
 
 BOOST_AUTO_TEST_SUITE_END()

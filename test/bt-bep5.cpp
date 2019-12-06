@@ -79,14 +79,14 @@ void parse_args( const vector<string>& args
 
 void wait_for_ready(DhtNode& dht, udp::endpoint ep, asio::yield_context yield)
 {
-    auto& ios = dht.get_io_service();
+    auto ex = dht.get_executor();
 
     sys::error_code ec;
-    Progress progress(ios, "Bootstrapping");
+    Progress progress(ex, "Bootstrapping");
 
     dht.start(ep, yield[ec]);
 
-    asio::steady_timer timer(ios);
+    asio::steady_timer timer(ex);
 
     while (!ec && !dht.ready()) {
         timer.expires_from_now(chrono::milliseconds(200));
@@ -96,9 +96,9 @@ void wait_for_ready(DhtNode& dht, udp::endpoint ep, asio::yield_context yield)
 
 int main(int argc, const char** argv)
 {
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    DhtNode dht {ios};
+    DhtNode dht {ctx};
 
     vector<string> args;
 
@@ -114,7 +114,7 @@ int main(int argc, const char** argv)
 
     parse_args(args, &ifaddrs, &ping_cmd, &announce_cmd, &get_peers_cmd);
 
-    asio::spawn(ios, [&] (asio::yield_context yield) {
+    asio::spawn(ctx, [&] (asio::yield_context yield) {
         sys::error_code ec;
 
         wait_for_ready(dht, { asio::ip::address_v4::any(), 0 }, yield);
@@ -123,7 +123,7 @@ int main(int argc, const char** argv)
 
         Cancel cancel;
 
-        auto ep = resolve( ios
+        auto ep = resolve( ctx.get_executor()
                          , "router.bittorrent.com"
                          , "6881"
                          , cancel
@@ -166,7 +166,7 @@ int main(int argc, const char** argv)
             NodeID infohash = *NodeID::from_hex(args[3]);
 
             auto peers = [&] {
-                Progress p(ios, "Announcing");
+                Progress p(ctx.get_executor(), "Announcing");
                 return dht.tracker_announce( infohash
                                            , boost::none
                                            , cancel
@@ -185,7 +185,7 @@ int main(int argc, const char** argv)
             auto infohash = *NodeID::from_hex(args[3]);
 
             auto peers = [&] {
-                Progress p(ios, "Getting peers");
+                Progress p(ctx.get_executor(), "Getting peers");
                 return dht.tracker_get_peers(infohash, cancel, yield[ec]);
             }();
 
@@ -206,5 +206,5 @@ int main(int argc, const char** argv)
         dht.stop();
     });
 
-    ios.run();
+    ctx.run();
 }
