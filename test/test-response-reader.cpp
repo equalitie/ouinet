@@ -157,9 +157,6 @@ BOOST_AUTO_TEST_CASE(test_http10_no_body) {
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(part.is_head());
 
-        part = rr.async_read_part(c, y);
-        BOOST_REQUIRE_EQUAL(part, body(true, ""));
-
         BOOST_REQUIRE(is_end_of_stream(rr, c, y));
     });
 

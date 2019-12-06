@@ -7,7 +7,6 @@
 #include "util/signal.h"
 #include "util/yield.h"
 #include <boost/beast.hpp>
-#include <queue>
 
 namespace ouinet { namespace http_response {
 
@@ -62,9 +61,10 @@ private:
     std::function<void(size_t, string_view, sys::error_code&)> _on_chunk_header;
     std::function<size_t(size_t, string_view, sys::error_code&)> _on_chunk_body;
 
-    std::queue<Part> _queued_parts;
+    boost::optional<Part> _next_part;
 };
 
+inline
 Reader::Reader(GenericStream in)
     : _in(std::move(in))
 {
@@ -75,13 +75,14 @@ inline
 void Reader::set_callbacks()
 {
     _on_chunk_header = [&] (auto size, auto exts, auto& ec) {
-        _queued_parts.push(ChunkHdr{size, std::move(exts.to_string())});
+        assert(!_next_part);
+        _next_part = ChunkHdr{size, std::move(exts.to_string())};
     };
 
     _on_chunk_body = [&] (auto remain, auto data, auto& ec) -> size_t {
-        _queued_parts.push(ChunkBody( std::vector<uint8_t>( data.begin()
-                                                          , data.end())
-                                    , remain));
+        assert(!_next_part);
+        _next_part = ChunkBody( std::vector<uint8_t>(data.begin(), data.end())
+                              , remain);
         return data.size();
     };
 
@@ -89,16 +90,9 @@ void Reader::set_callbacks()
     _parser.on_chunk_body(_on_chunk_body);
 }
 
+inline
 Part
 Reader::async_read_part(Cancel cancel, Yield yield_) {
-    namespace Err = asio::error;
-
-    if (!_queued_parts.empty()) {
-        auto part = std::move(_queued_parts.front());
-        _queued_parts.pop();
-        return part;
-    }
-
     Yield yield = yield_.tag("http_forward");
 
     if (_parser.is_done() && !_parser.chunked()) {
@@ -116,7 +110,7 @@ Reader::async_read_part(Cancel cancel, Yield yield_) {
     sys::error_code ec;
 
     auto set_error = [&] (sys::error_code& ec, const auto& msg) {
-        if (cancelled) ec = Err::operation_aborted;
+        if (cancelled) ec = asio::error::operation_aborted;
         if (ec) yield.log(msg, ": ", ec.message());
         return ec;
     };
@@ -128,51 +122,65 @@ Reader::async_read_part(Cancel cancel, Yield yield_) {
         if (ec == http::error::end_of_stream) {
             return or_throw<Part>(yield, ec);
         }
+
         if (set_error(ec, "Failed to receive response head"))
             return or_throw<Part>(yield, ec);
+
         return Head(_parser.get().base());
     }
 
     if (_parser.chunked()) {
+        // Setting eager to false ensures that the callbacks shall be run only
+        // once per each async_read_some call.
+        _parser.eager(false);
+
         if (_parser.is_done()) {
             auto hdr = _parser.release().base();
             reset_parser();
             return Trailer{filter_trailer_fields(hdr)};
         }
 
-        while (_queued_parts.empty()) {
-            http::async_read(_in, _buffer, _parser, yield[ec]);
+        assert(!_next_part);
+        http::async_read_some(_in, _buffer, _parser, yield[ec]);
 
-            if (ec == http::error::end_of_chunk) {
-                ec = {};
-            }
-
-            if (set_error(ec, "Failed to parse chunk")) {
-                return or_throw<Part>(yield, ec);
-            }
+        if (ec == http::error::end_of_chunk) {
+            ec = {};
         }
 
-        auto part = std::move(_queued_parts.front());
-        _queued_parts.pop();
-        return part;
+        if (set_error(ec, "Failed to parse chunk")) {
+            return or_throw<Part>(yield, ec);
+        }
+
+        assert(_next_part);
+        Part ret = std::move(*_next_part);
+        _next_part = boost::none;
+        return ret;
     }
     else {
-        char buf[2048];
+        char buf[http_forward_block];
 
         _parser.get().body().data = buf;
         _parser.get().body().size = sizeof(buf);
 
-        http::async_read(_in, _buffer, _parser, yield[ec]);
+        if (_parser.need_eof() && _parser.is_done()) {
+            reset_parser();
+            return or_throw<Part>(yield, http::error::end_of_stream);
+        }
+
+        http::async_read_some(_in, _buffer, _parser, yield[ec]);
 
         size_t s = sizeof(buf) - _parser.get().body().size;
 
         if (ec == http::error::need_buffer) ec = sys::error_code();
         if (ec) return or_throw<Part>(yield, ec);
 
+        if (_parser.need_eof() && _parser.is_done()) {
+            reset_parser();
+            return or_throw<Part>(yield, http::error::end_of_stream);
+        }
+
         return Body(_parser.is_done(), std::vector<uint8_t>(buf, buf + s));
     }
-
-    return Part();
 }
 
 }} // namespace ouinet::http_response
