@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../logger.h"
+#include "../../response_reader.h"
 #include "../../util/crypto.h"
 #include "../../util/yield.h"
 #include "../cache_entry.h"
@@ -32,7 +33,8 @@ public:
     Session load(const std::string& key, Cancel, Yield);
 
     void store( const std::string& key
-              , Session&
+              , http_response::Head rh
+              , http_response::Reader& rr
               , Cancel
               , asio::yield_context);
 

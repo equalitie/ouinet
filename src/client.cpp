@@ -34,6 +34,7 @@
 #include "defer.h"
 #include "default_timeout.h"
 #include "constants.h"
+#include "response_reader.h"
 #include "session.h"
 #include "create_udp_multiplexer.h"
 #include "ssl/ca_certificate.h"
@@ -66,6 +67,18 @@
 #include "stream/fork.h"
 
 #include "logger.h"
+
+// Heads and trailers do not have default comparison operations,
+// implement some dummy ones to be able to build.
+namespace ouinet { namespace http_response {
+    static bool operator==(const Head&, const Head&) {
+        return false;  // dummy
+    }
+
+    static bool operator==(const Trailer&, const Trailer&) {
+        return false;  // dummy
+    }
+}} // namespace ouinet::http_response
 
 using namespace std;
 using namespace ouinet;
@@ -688,7 +701,7 @@ public:
     }
 
     void store( const Request& rq
-              , Session& s
+              , http_response::Reader& rr
               , Cancel& cancel, Yield yield)
     {
         namespace err = asio::error;
@@ -713,16 +726,18 @@ public:
 
         sys::error_code ec;
 
-        auto rs_hdr = s.read_response_header(cancel, yield[ec]);
+        auto rs_hdr = rr.async_read_part(cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec);
-        assert(rs_hdr);
-        if (!rs_hdr) return;
+        assert(rs_hdr.is_head());
+        if (!rs_hdr.is_head()) return;
 
-        if (!CacheControl::ok_to_cache(rq, *rs_hdr)) return;
+        if (!CacheControl::ok_to_cache(rq, *(rs_hdr.as_head()))) return;
 
         auto key = key_from_http_req(rq);
         assert(key);
-        cache->store(move(*key), s, cancel, yield);
+        // TODO: Does it make sense to cache the head at the reader as `Session` does?
+        // (To have a simpler interface and just pass the reader, not the head.)
+        cache->store(move(*key), move(*(rs_hdr.as_head())), rr, cancel, yield);
     }
 
     // Closes `con` when it can no longer be used.
@@ -860,9 +875,9 @@ public:
                         lock = wc.lock()
                     ] (asio::yield_context yield_) {
                       auto y = yield.detach(yield_);
-                      Session s1(move(src1));
+                      http_response::Reader r1(move(src1));
                       sys::error_code ec;
-                      store(rq, s1, cancel, y[ec]);
+                      store(rq, r1, cancel, y[ec]);
                     });
 
                     asio::spawn(ctx, [

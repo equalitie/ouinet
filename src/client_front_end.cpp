@@ -23,6 +23,18 @@ using json = nlohmann::json;
 using Request = ClientFrontEnd::Request;
 using Response = ClientFrontEnd::Response;
 
+// Heads and trailers do not have default comparison operations,
+// implement some dummy ones to be able to build.
+namespace ouinet { namespace http_response {
+    static bool operator==(const Head&, const Head&) {
+        return false;  // dummy
+    }
+
+    static bool operator==(const Trailer&, const Trailer&) {
+        return false;  // dummy
+    }
+}} // namespace ouinet::http_response
+
 static string now_as_string() {
     namespace pt = boost::posix_time;
     auto entry_ts = pt::microsec_clock::universal_time();

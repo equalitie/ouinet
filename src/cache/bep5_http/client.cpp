@@ -18,9 +18,22 @@
 #include "../../logger.h"
 #include "../../async_sleep.h"
 #include "../../constants.h"
+#include "../../response_writer.h"
 #include "../../stream/fork.h"
 #include "../../session.h"
 #include <map>
+
+// Heads and trailers do not have default comparison operations,
+// implement some dummy ones to be able to build.
+namespace ouinet { namespace http_response {
+    static bool operator==(const Head&, const Head&) {
+        return false;  // dummy
+    }
+
+    static bool operator==(const Trailer&, const Trailer&) {
+        return false;  // dummy
+    }
+}} // namespace ouinet::http_response
 
 using namespace std;
 using namespace ouinet;
@@ -522,7 +535,8 @@ struct Client::Impl {
     }
 
     void store( const std::string& key
-              , Session& s
+              , http_response::Head rh
+              , http_response::Reader& rr
               , Cancel cancel
               , asio::yield_context yield)
     {
@@ -532,13 +546,25 @@ struct Client::Impl {
         if (!dk) return or_throw(yield, asio::error::invalid_argument);
         auto path = path_from_key(key);
         auto file = util::atomic_file::make(ex, path, ec);
-        // TODO: Do not verify, just handle storage format.
-        // Verification is not needed here at all
-        // (injectors are trusted and responses from other clients are verified when fetched),
-        // it is just done to get a storage output that respects all signatures
-        // so that we can resend the stored response as is when requested by another client.
-        if (!ec) cache::session_flush_verified(s, *file, cache_pk, cancel, yield[ec]);
-        if (!ec) file->commit(ec);
+        if (ec) return or_throw(yield, ec);
+
+        http_response::Writer rw(move(file->lowest_layer()));  // TODO: safe?
+        {
+            // FIXME: This code does not produce `ouihash` chunk extensions.
+            // TODO: Create `ouinet::cache::flush_with_hashes(rh, rr, rw, c, y)` or similar.
+            assert(http::response<http::empty_body>(rh).chunked());  // needed for end detection
+            http_response::Part part(move(rh));
+            Yield yield_(file->get_executor(), yield);
+            do {
+                rw.async_write_part(part, cancel, yield_[ec]);
+                if (ec || cancel) break;
+                if (part.is_trailer()) break;
+                part = rr.async_read_part(cancel, yield_[ec]);
+            } while (!ec && !cancel);
+            return_or_throw_on_error(yield, cancel, ec);
+        }
+
+        file->commit(ec);  // TODO: still safe?
         if (ec) return or_throw(yield, ec);
         LOG_DEBUG( "Bep5Http cache: Flushed to file;"
                  , " key=", key
@@ -720,11 +746,12 @@ Session Client::load(const std::string& key, Cancel cancel, Yield yield)
 }
 
 void Client::store( const std::string& key
-                  , Session& s
+                  , http_response::Head rh
+                  , http_response::Reader& rr
                   , Cancel cancel
                   , asio::yield_context yield)
 {
-    _impl->store(key, s, cancel, yield);
+    _impl->store(key, move(rh), rr, cancel, yield);
 }
 
 unsigned Client::get_newest_proto_version() const
