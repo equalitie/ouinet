@@ -108,21 +108,13 @@ Reader::async_read_part(Cancel cancel, asio::yield_context yield) {
 
     sys::error_code ec;
 
-    auto set_error = [&] (sys::error_code& ec, const auto& msg) {
-        if (cancelled) ec = asio::error::operation_aborted;
-        return ec;
-    };
-
     // Receive HTTP response head from input side and parse it
     // -------------------------------------------------------
     if (!_parser.is_header_done()) {
         http::async_read_header(_in, _buffer, _parser, yield[ec]);
-        if (ec == http::error::end_of_stream) {
-            return or_throw<Part>(yield, ec);
-        }
 
-        if (set_error(ec, "Failed to receive response head"))
-            return or_throw<Part>(yield, ec);
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec) return or_throw<Part>(yield, ec);
 
         return Head(_parser.get().base());
     }
@@ -141,17 +133,14 @@ Reader::async_read_part(Cancel cancel, asio::yield_context yield) {
         assert(!_next_part);
         http::async_read_some(_in, _buffer, _parser, yield[ec]);
 
-        if (ec == http::error::end_of_chunk) {
-            ec = {};
-        }
-
-        if (set_error(ec, "Failed to parse chunk")) {
-            return or_throw<Part>(yield, ec);
-        }
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec == http::error::end_of_chunk) ec = {};
+        if (ec) return or_throw<Part>(yield, ec);
 
         assert(_next_part);
         Part ret = std::move(*_next_part);
         _next_part = boost::none;
+
         return ret;
     }
     else {
@@ -167,10 +156,11 @@ Reader::async_read_part(Cancel cancel, asio::yield_context yield) {
 
         http::async_read_some(_in, _buffer, _parser, yield[ec]);
 
-        size_t s = sizeof(buf) - _parser.get().body().size;
-
+        if (cancel) ec = asio::error::operation_aborted;
         if (ec == http::error::need_buffer) ec = sys::error_code();
         if (ec) return or_throw<Part>(yield, ec);
+
+        size_t s = sizeof(buf) - _parser.get().body().size;
 
         if (_parser.need_eof() && _parser.is_done()) {
             reset_parser();
