@@ -5,7 +5,6 @@
 #include "or_throw.h"
 #include "response_part.h"
 #include "util/signal.h"
-#include "util/yield.h"
 #include <boost/beast.hpp>
 
 namespace ouinet { namespace http_response {
@@ -27,7 +26,7 @@ public:
     //
     // Head >> Body(is_last == false)* >> Body(is_last == true)
     //
-    Part async_read_part(Cancel, Yield);
+    Part async_read_part(Cancel, asio::yield_context);
 
 private:
     http::fields filter_trailer_fields(const http::fields& hdr)
@@ -92,8 +91,8 @@ void Reader::set_callbacks()
 
 inline
 Part
-Reader::async_read_part(Cancel cancel, Yield yield_) {
-    Yield yield = yield_.tag("http_forward");
+Reader::async_read_part(Cancel cancel, asio::yield_context yield) {
+    assert(!cancel);
 
     if (_parser.is_done() && !_parser.chunked()) {
         bool need_eof = _parser.need_eof();
@@ -111,7 +110,6 @@ Reader::async_read_part(Cancel cancel, Yield yield_) {
 
     auto set_error = [&] (sys::error_code& ec, const auto& msg) {
         if (cancelled) ec = asio::error::operation_aborted;
-        if (ec) yield.log(msg, ": ", ec.message());
         return ec;
     };
 

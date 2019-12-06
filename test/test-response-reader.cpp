@@ -115,13 +115,13 @@ namespace ouinet { namespace http_response {
     }
 }} // ouinet namespaces::http_response
 
-bool is_end_of_stream(RR& rr, Cancel& c, Yield& y) {
+bool is_end_of_stream(RR& rr, Cancel& c, asio::yield_context y) {
     sys::error_code ec;
     auto part = rr.async_read_part(c, y[ec]);
     return ec == http::error::end_of_stream;
 }
 
-HR::Part read_full_body(RR& rr, Cancel& c, Yield& y) {
+HR::Part read_full_body(RR& rr, Cancel& c, asio::yield_context y) {
     HR::Body body(true, {});
 
     while (true) {
@@ -142,9 +142,7 @@ BOOST_AUTO_TEST_SUITE(ouinet_response_reader)
 BOOST_AUTO_TEST_CASE(test_http10_no_body) {
     asio::io_service ios;
 
-    asio::spawn(ios, [&] (auto y_) {
-        Yield y(ios, y_);
-
+    asio::spawn(ios, [&] (auto y) {
         string rsp =
             "HTTP/1.0 200 OK\r\n"
             "\r\n";
@@ -166,9 +164,7 @@ BOOST_AUTO_TEST_CASE(test_http10_no_body) {
 BOOST_AUTO_TEST_CASE(test_http10_body_no_length) {
     asio::io_service ios;
 
-    asio::spawn(ios, [&] (auto y_) {
-        Yield y(ios, y_);
-
+    asio::spawn(ios, [&] (auto y) {
         string rsp =
             "HTTP/1.0 200 OK\r\n"
             "\r\n"
@@ -194,9 +190,7 @@ BOOST_AUTO_TEST_CASE(test_http10_body_no_length) {
 BOOST_AUTO_TEST_CASE(test_http11_body) {
     asio::io_service ios;
 
-    asio::spawn(ios, [&] (auto y_) {
-        Yield y(ios, y_);
-
+    asio::spawn(ios, [&] (auto y) {
         string rsp =
             "HTTP/1.1 200 OK\r\n"
             "Date: Mon, 27 Jul 2019 12:30:20 GMT\r\n"
@@ -225,9 +219,7 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
 BOOST_AUTO_TEST_CASE(test_http11_chunk) {
     asio::io_service ios;
 
-    asio::spawn(ios, [&] (auto y_) {
-        Yield y(ios, y_);
-
+    asio::spawn(ios, [&] (auto y) {
         string rsp =
             "HTTP/1.1 200 OK\r\n"
             "Date: Mon, 27 Jul 2019 12:30:20 GMT\r\n"
@@ -268,9 +260,7 @@ BOOST_AUTO_TEST_CASE(test_http11_chunk) {
 BOOST_AUTO_TEST_CASE(test_http11_trailer) {
     asio::io_service ios;
 
-    asio::spawn(ios, [&] (auto y_) {
-        Yield y(ios, y_);
-
+    asio::spawn(ios, [&] (auto y) {
         string rsp =
             "HTTP/1.1 200 OK\r\n"
             "Date: Mon, 27 Jul 2019 12:30:20 GMT\r\n"
@@ -313,9 +303,7 @@ BOOST_AUTO_TEST_CASE(test_http11_trailer) {
 BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
     asio::io_service ios;
 
-    asio::spawn(ios, [&] (auto y_) {
-        Yield y(ios, y_);
-
+    asio::spawn(ios, [&] (auto y) {
         string rsp =
             "HTTP/1.1 200 OK\r\n"
             "Date: Mon, 27 Jul 2019 12:30:20 GMT\r\n"
@@ -357,9 +345,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
 BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
     asio::io_service ios;
 
-    asio::spawn(ios, [&] (auto y_) {
-        Yield y(ios, y_);
-
+    asio::spawn(ios, [&] (auto y) {
         string rsp =
             "HTTP/1.1 200 OK\r\n"
             "Date: Mon, 27 Jul 2019 12:30:20 GMT\r\n"
