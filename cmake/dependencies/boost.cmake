@@ -104,6 +104,7 @@ externalproject_add(built_boost
         && ${BOOST_ENVIRONMENT} ./b2
             link=static
             threading=multi
+            -j2
             --layout=system
             --prefix=${CMAKE_CURRENT_BINARY_DIR}/boost/install
             --no-cmake-config
