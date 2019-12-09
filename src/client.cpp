@@ -56,6 +56,7 @@
 #include "ouiservice/utp.h"
 #include "ouiservice/tls.h"
 #include "ouiservice/bep5/client.h"
+#include "ouiservice/bep5/server.h"
 
 #include "parse/number.h"
 #include "util/signal.h"
@@ -227,6 +228,37 @@ private:
 
     cache::bep5_http::Client* get_cache() const { return _bep5_http_cache.get(); }
 
+    void serve_utp_request(GenericStream, asio::yield_context);
+
+    void idempotent_start_accepting_on_utp() {
+        if (_bep5_server) return;
+        assert(!_shutdown_signal);
+
+        auto dht = bittorrent_dht();
+        _bep5_server = make_unique<ouiservice::Bep5Server>(bittorrent_dht(),
+                nullptr, "ouinet-client-proxies");
+
+        asio::spawn(_ctx, [&, c = _shutdown_signal] (asio::yield_context yield) mutable {
+            auto slot = c.connect([&] () mutable { _bep5_server = nullptr; });
+
+            while (!c) {
+                sys::error_code ec;
+                auto con = _bep5_server->accept(yield[ec]);
+                if (c) return;
+                if (ec == asio::error::operation_aborted) return;
+                if (ec) {
+                    LOG_WARN("Bep5Http: Failure to accept:", ec.message());
+                    async_sleep(_ctx, 200ms, c, yield);
+                    continue;
+                }
+                asio::spawn(_ctx, [&, con = move(con)]
+                                  (asio::yield_context yield) mutable {
+                    serve_utp_request(move(con), yield[ec]);
+                });
+            }
+        });
+    }
+
 private:
     // The newest protocol version number seen in a trusted exchange
     // (i.e. from an injector exchange or injector-signed cached content).
@@ -242,8 +274,6 @@ private:
     ClientFrontEnd _front_end;
     Signal<void()> _shutdown_signal;
 
-    bool _is_ipns_being_setup = false;
-
     // For debugging
     uint64_t _next_connection_id = 0;
     ConnectionPool<std::string> _injector_connections;
@@ -255,6 +285,8 @@ private:
     boost::optional<asio::ip::udp::endpoint> _local_utp_endpoint;
     boost::optional<asio_utp::udp_multiplexer> _udp_multiplexer;
     shared_ptr<bt::MainlineDht> _bt_dht;
+
+    unique_ptr<ouiservice::Bep5Server> _bep5_server;
 };
 
 //------------------------------------------------------------------------------
@@ -281,6 +313,24 @@ void handle_bad_request( GenericStream& con
     auto res = util::http_client_error(req, http::status::bad_request, "", message);
     auto yield_ = yield.tag("handle_bad_request");
     return handle_http_error(con, res, yield_);
+}
+
+//------------------------------------------------------------------------------
+void
+Client::State::serve_utp_request(GenericStream con, asio::yield_context yield)
+{
+    assert(_bep5_http_cache);
+    Cancel cancel = _shutdown_signal;
+
+    sys::error_code ec;
+
+    http::request<http::empty_body> req;
+    beast::flat_buffer buffer;
+    http::async_read(con, buffer, req, yield[ec]);
+
+    if (ec || cancel) return;
+
+    _bep5_http_cache->serve_local(req, con, cancel, yield[ec]);
 }
 
 //------------------------------------------------------------------------------
@@ -1355,6 +1405,8 @@ void Client::State::setup_cache()
                 LOG_ERROR("Failed to initialize cache::bep5_http::Client: "
                          , ec.message());
             }
+
+            idempotent_start_accepting_on_utp();
         });
     }
 }
@@ -1590,6 +1642,7 @@ void Client::State::setup_injector(asio::yield_context yield)
             , injector_ep->endpoint_string
             , &inj_ctx);
 
+        idempotent_start_accepting_on_utp();
 /*
     } else if (injector_ep->type == Endpoint::LampshadeEndpoint) {
         auto lampshade_client = make_unique<ouiservice::LampshadeOuiServiceClient>(_ctx, injector_ep->endpoint_string);

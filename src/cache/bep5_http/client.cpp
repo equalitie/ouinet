@@ -63,9 +63,7 @@ struct Client::Impl {
         , dht_lookups(256)
         , log_level(log_level)
         , local_peer_discovery(ex, dht->local_endpoints())
-    {
-        start_accepting();
-    }
+    {}
 
     // "http(s)://www.foo.org/bar/baz" -> "www.foo.org"
     boost::optional<string> dht_key(const string& s)
@@ -73,66 +71,12 @@ struct Client::Impl {
         return get_host(s);
     }
 
-    void start_accepting()
-    {
-        for (auto ep : dht->local_endpoints()) {
-            asio::spawn(ex, [&, ep] (asio::yield_context yield) {
-                Cancel c(lifetime_cancel);
-                sys::error_code ec;
-                start_accepting_on(ep, c, yield[ec]);
-            });
-        }
-    }
-
-    void start_accepting_on( udp::endpoint ep
-                           , Cancel& cancel
-                           , asio::yield_context yield)
-    {
-        auto srv = make_unique<ouiservice::UtpOuiServiceServer>(ex, ep);
-
-        auto cancel_con = cancel.connect([&] { srv->stop_listen(); });
-
-        sys::error_code ec;
-        srv->start_listen(yield[ec]);
-
-        if (cancel) return;
-
-        if (ec) {
-            LOG_ERROR("Bep5Http: Failed to start listening on uTP: ", ep);
-            return;
-        }
-
-        while (!cancel) {
-            sys::error_code ec;
-
-            GenericStream con = srv->accept(yield[ec]);
-
-            if (cancel) return;
-            if (ec == asio::error::operation_aborted) return;
-            if (ec) {
-                LOG_WARN("Bep5Http: Failure to accept:", ec.message());
-                async_sleep(ex, 200ms, cancel, yield);
-                continue;
-            }
-
-            asio::spawn(ex, [&, con = move(con)]
-                            (asio::yield_context yield) mutable {
-                Cancel c(cancel);
-                sys::error_code ec;
-                serve(con, c, yield[ec]);
-            });
-        }
-    }
-
-    void serve(GenericStream& con, Cancel& cancel, asio::yield_context yield)
+    void serve_local( const http::request<http::empty_body>& req
+                    , GenericStream& sink
+                    , Cancel& cancel
+                    , asio::yield_context yield)
     {
         sys::error_code ec;
-
-        http::request<http::empty_body> req;
-        beast::flat_buffer buffer;
-        http::async_read(con, buffer, req, yield[ec]);
-
-        if (ec || cancel) return;
 
         // Usually we would
         // (1) check that the request matches our protocol version, and
@@ -150,7 +94,7 @@ struct Client::Impl {
             if (log_debug()) {
                 cerr << "Bep5HTTP: Not a Ouinet request\n";
             }
-            return handle_bad_request(con, req, yield[ec]);
+            return handle_bad_request(sink, req, yield[ec]);
         }
 
         auto key = key_from_http_req(req);
@@ -158,7 +102,7 @@ struct Client::Impl {
             if (log_debug()) {
                 cerr << "Bep5HTTP: Cannot derive key from request\n";
             }
-            return handle_bad_request(con, req, yield[ec]);
+            return handle_bad_request(sink, req, yield[ec]);
         }
 
         auto path = path_from_key(*key);
@@ -170,14 +114,14 @@ struct Client::Impl {
                 cerr << "Bep5HTTP: Not Serving " << *key
                      << " ec:" << ec.message() << "\n";
             }
-            return handle_not_found(con, req, yield[ec]);
+            return handle_not_found(sink, req, yield[ec]);
         }
 
         if (log_debug()) {
             cerr << "Bep5HTTP: Serving " << *key << "\n";
         }
 
-        flush_from_to(file, con, cancel, yield[ec]);
+        flush_from_to(file, sink, cancel, yield[ec]);
 
         return or_throw(yield, ec);
     }
@@ -725,6 +669,14 @@ void Client::store( const std::string& key
                   , asio::yield_context yield)
 {
     _impl->store(key, s, cancel, yield);
+}
+
+void Client::serve_local( const http::request<http::empty_body>& req
+                        , GenericStream& sink
+                        , Cancel& cancel
+                        , asio::yield_context yield)
+{
+    _impl->serve_local(req, sink, cancel, yield);
 }
 
 unsigned Client::get_newest_proto_version() const
