@@ -236,7 +236,7 @@ private:
 
         auto dht = bittorrent_dht();
         _bep5_server = make_unique<ouiservice::Bep5Server>(bittorrent_dht(),
-                nullptr, "ouinet-client-proxies");
+                nullptr, injector_helpers_swarm_name);
 
         asio::spawn(_ctx, [&, c = _shutdown_signal] (asio::yield_context yield) mutable {
             auto slot = c.connect([&] () mutable { _bep5_server = nullptr; });
