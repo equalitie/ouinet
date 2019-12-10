@@ -249,24 +249,23 @@ void Bep5Client::start(asio::yield_context)
 void Bep5Client::stop()
 {
     _injector_swarm = nullptr;
+    _helpers_swarm  = nullptr;
 }
 
 std::vector<Bep5Client::Candidate> Bep5Client::get_peers()
 {
-    using Ptr = std::shared_ptr<AbstractClient>;
-
-    std::vector<Ptr> inj;
-    std::vector<Ptr> hlp;
+    std::vector<Candidate> inj;
+    std::vector<Candidate> hlp;
 
     auto& inj_m = _injector_swarm->peers();
     auto* hlp_m = _helpers_swarm ? &_helpers_swarm->peers() : nullptr;
 
     inj.reserve(inj_m.size());
-    for (auto p : inj_m) inj.push_back(p.second);
+    for (auto p : inj_m) inj.push_back({p.first, p.second});
 
     if (hlp_m) {
         hlp.reserve(hlp_m->size());
-        for (auto p : *hlp_m) hlp.push_back(p.second);
+        for (auto p : *hlp_m) hlp.push_back({p.first, p.second});
     }
 
     std::shuffle(inj.begin(), inj.end(), _random_generator);
@@ -275,16 +274,19 @@ std::vector<Bep5Client::Candidate> Bep5Client::get_peers()
     std::vector<Candidate> ret;
     ret.reserve(inj.size() + hlp.size());
 
-    uint32_t next_delay = 0;
+    for (auto& p : inj) { ret.push_back(p); }
+    for (auto& p : hlp) { ret.push_back(p); }
 
-    for (auto& p : inj) {
-        ret.push_back({next_delay, p});
-        if (ret.size() > 10) next_delay += 200;
-    }
-
-    for (auto& p : hlp) {
-        ret.push_back({next_delay, p});
-        if (ret.size() > 10) next_delay += 100;
+    // If there is a peer that has woked recently then use that one
+    if (_last_working_ep) {
+        for (auto i = ret.begin(); i != ret.end(); ++i) {
+            if (i->endpoint == *_last_working_ep) {
+                if (i != ret.begin()) {
+                    std::swap(*i, ret.front());
+                }
+                break;
+            }
+        }
     }
 
     return ret;
@@ -309,20 +311,29 @@ GenericStream Bep5Client::connect(asio::yield_context yield, Cancel& cancel_)
 
     Cancel spawn_cancel(cancel); // Cancels all spawned coroutines
 
+    asio::ip::udp::endpoint ret_ep;
     GenericStream ret_con;
 
+    uint32_t i = 0;
+
     for (auto peer : get_peers()) {
+        auto j = i++;
+
+        const uint32_t k = 10;
+        uint32_t delay_ms = (j <= k) ? 0 : ((j-k) * 100);
+
         asio::spawn(get_executor(),
         [ =
         , ex = get_executor()
         , &spawn_cancel
         , &ret_con
+        , &ret_ep
         , lock = wc.lock()
         ] (asio::yield_context y) mutable {
             sys::error_code ec;
 
-            if (peer.delay_ms) {
-                async_sleep(ex, chrono::milliseconds(peer.delay_ms), spawn_cancel, yield);
+            if (delay_ms) {
+                async_sleep(ex, chrono::milliseconds(delay_ms), spawn_cancel, yield);
                 if (spawn_cancel) return;
             }
 
@@ -330,15 +341,27 @@ GenericStream Bep5Client::connect(asio::yield_context yield, Cancel& cancel_)
             assert(!spawn_cancel || ec == asio::error::operation_aborted);
             if (spawn_cancel || ec) return;
             ret_con = move(con);
+            ret_ep  = peer.endpoint;
             spawn_cancel();
         });
     }
 
     wc.wait(cancel, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec, GenericStream{});
 
-    if (!ret_con.has_implementation()) {
+    if (cancel) {
+        ec = asio::error::operation_aborted;
+    }
+    else if (!ret_con.has_implementation()) {
         ec = asio::error::network_unreachable;
+    } else {
+        assert(!ec);
+        ec = {};
+    }
+
+    if (ec) {
+        _last_working_ep = boost::none;
+    } else {
+        _last_working_ep = ret_ep;
     }
 
     return or_throw(yield, ec, move(ret_con));

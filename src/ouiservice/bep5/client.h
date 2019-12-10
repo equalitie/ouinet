@@ -22,7 +22,7 @@ private:
     struct Swarm;
 
     struct Candidate {
-        uint32_t delay_ms;
+        asio::ip::udp::endpoint endpoint;
         std::shared_ptr<AbstractClient> client;
     };
 
@@ -63,6 +63,8 @@ private:
     std::mt19937 _random_generator;
 
     bool _log_debug = false;
+
+    boost::optional<asio::ip::udp::endpoint> _last_working_ep;
 };
 
 }} // namespaces
