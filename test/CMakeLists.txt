@@ -46,6 +46,7 @@ target_link_libraries(test-persistent-lru-cache lib::gcrypt)
 file(GLOB bt_cpp_files
     "../src/bittorrent/*.cpp"
     "../src/util/crypto.cpp"
+    "../src/util/random.cpp"
     "../src/util/hash.cpp"
     "../src/logger.cpp"
     "../src/util.cpp"

@@ -21,18 +21,6 @@ void crypto_init()
     }
 }
 
-void random(void* data, unsigned int size)
-{
-    ::gcry_create_nonce(data, size);
-}
-
-std::string random(unsigned int size)
-{
-    std::vector<char> buffer(size, '\0');
-    ::gcry_create_nonce(buffer.data(), size);
-    return std::string(buffer.data(), buffer.size());
-}
-
 Ed25519PublicKey::Ed25519PublicKey(Ed25519PublicKey::key_array_t key):
     _public_key(nullptr)
 {

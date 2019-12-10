@@ -3,6 +3,7 @@
 #include "../async_sleep.h"
 #include "../util/bytes.h"
 #include "../util/crypto.h"
+#include "../util/random.h"
 #include "../util/hash.h"
 
 #include <cstdlib>
@@ -12,7 +13,7 @@ namespace bittorrent {
 namespace dht {
 
 detail::DhtWriteTokenStorage::DhtWriteTokenStorage():
-    _salt(util::random(32))
+    _salt(util::random::string(32))
 {}
 
 std::string detail::DhtWriteTokenStorage::generate_token(asio::ip::address address, NodeID id)
