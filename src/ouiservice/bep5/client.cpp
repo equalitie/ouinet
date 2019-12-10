@@ -248,6 +248,7 @@ void Bep5Client::start(asio::yield_context)
 
 void Bep5Client::stop()
 {
+    _cancel();
     _injector_swarm = nullptr;
     _helpers_swarm  = nullptr;
 }
@@ -294,6 +295,9 @@ std::vector<Bep5Client::Candidate> Bep5Client::get_peers()
 
 GenericStream Bep5Client::connect(asio::yield_context yield, Cancel& cancel_)
 {
+    assert(!_cancel);
+    assert(!cancel_);
+
     Cancel cancel(cancel_);
     auto cancel_con = _cancel.connect([&] { cancel(); });
 
@@ -353,7 +357,8 @@ GenericStream Bep5Client::connect(asio::yield_context yield, Cancel& cancel_)
     }
     else if (!ret_con.has_implementation()) {
         ec = asio::error::network_unreachable;
-    } else {
+    }
+    else {
         assert(!ec);
         ec = {};
     }
