@@ -14,7 +14,6 @@ using namespace ouiservice;
 
 namespace bt = bittorrent;
 
-using AbstractClient = OuiServiceImplementationClient;
 using udp = asio::ip::udp;
 
 static bool same_ipv(const udp::endpoint& ep1, const udp::endpoint& ep2)
@@ -46,7 +45,7 @@ struct Bep5Client::Swarm
 {
 private:
     using Peer  = AbstractClient;
-    using Peers = std::map<asio::ip::udp::endpoint, std::unique_ptr<Peer>>;
+    using Peers = std::map<asio::ip::udp::endpoint, std::shared_ptr<Peer>>;
 
 public:
     Bep5Client* owner;
@@ -150,7 +149,7 @@ private:
         return owner->_log_debug;
     }
 
-    unique_ptr<Peer> make_peer(const udp::endpoint& ep)
+    shared_ptr<Peer> make_peer(const udp::endpoint& ep)
     {
         auto opt_m = choose_multiplexer_for(*_dht, ep);
 
@@ -171,7 +170,7 @@ private:
             return utp_client;
         }
 
-        auto tls_client = make_unique<TlsOuiServiceClient>(move(utp_client), *_tls_ctx);
+        auto tls_client = make_shared<TlsOuiServiceClient>(move(utp_client), *_tls_ctx);
 
         return tls_client;
     }
@@ -200,10 +199,26 @@ private:
 
 Bep5Client::Bep5Client( shared_ptr<bt::MainlineDht> dht
                       , string injector_swarm_name
-                      , asio::ssl::context* tls_ctx)
+                      , asio::ssl::context* injector_tls_ctx)
     : _dht(dht)
     , _injector_swarm_name(move(injector_swarm_name))
-    , _tls_ctx(tls_ctx)
+    , _injector_tls_ctx(injector_tls_ctx)
+    , _random_generator(std::random_device()())
+{
+    if (_dht->local_endpoints().empty()) {
+        LOG_ERROR("Bep5Client: DHT has no endpoints!");
+    }
+}
+
+Bep5Client::Bep5Client( shared_ptr<bt::MainlineDht> dht
+                      , string injector_swarm_name
+                      , string helpers_swarm_name
+                      , asio::ssl::context* injector_tls_ctx)
+    : _dht(dht)
+    , _injector_swarm_name(move(injector_swarm_name))
+    , _helpers_swarm_name(move(helpers_swarm_name))
+    , _injector_tls_ctx(injector_tls_ctx)
+    , _random_generator(std::random_device()())
 {
     if (_dht->local_endpoints().empty()) {
         LOG_ERROR("Bep5Client: DHT has no endpoints!");
@@ -212,17 +227,67 @@ Bep5Client::Bep5Client( shared_ptr<bt::MainlineDht> dht
 
 void Bep5Client::start(asio::yield_context)
 {
-    bt::NodeID infohash = util::sha1_digest(_injector_swarm_name);
+    {
+        bt::NodeID infohash = util::sha1_digest(_injector_swarm_name);
 
-    LOG_INFO("Injector swarm: sha1('", _injector_swarm_name, "'): ", infohash.to_hex());
+        LOG_INFO("Injector swarm: sha1('", _injector_swarm_name, "'): ", infohash.to_hex());
 
-    _injector_swarm.reset(new Swarm(this, infohash, _dht, _tls_ctx));
-    _injector_swarm->start();
+        _injector_swarm.reset(new Swarm(this, infohash, _dht, _injector_tls_ctx));
+        _injector_swarm->start();
+    }
+
+    if (!_helpers_swarm_name.empty()) {
+        bt::NodeID infohash = util::sha1_digest(_helpers_swarm_name);
+
+        LOG_INFO("Helpers swarm: sha1('", _helpers_swarm_name, "'): ", infohash.to_hex());
+
+        _helpers_swarm.reset(new Swarm(this, infohash, _dht, nullptr));
+        _helpers_swarm->start();
+    }
 }
 
 void Bep5Client::stop()
 {
     _injector_swarm = nullptr;
+}
+
+std::vector<Bep5Client::Candidate> Bep5Client::get_peers()
+{
+    using Ptr = std::shared_ptr<AbstractClient>;
+
+    std::vector<Ptr> inj;
+    std::vector<Ptr> hlp;
+
+    auto& inj_m = _injector_swarm->peers();
+    auto* hlp_m = _helpers_swarm ? &_helpers_swarm->peers() : nullptr;
+
+    inj.reserve(inj_m.size());
+    for (auto p : inj_m) inj.push_back(p.second);
+
+    if (hlp_m) {
+        hlp.reserve(hlp_m->size());
+        for (auto p : *hlp_m) hlp.push_back(p.second);
+    }
+
+    std::shuffle(inj.begin(), inj.end(), _random_generator);
+    std::shuffle(hlp.begin(), hlp.end(), _random_generator);
+
+    std::vector<Candidate> ret;
+    ret.reserve(inj.size() + hlp.size());
+
+    uint32_t next_delay = 0;
+
+    for (auto& p : inj) {
+        ret.push_back({next_delay, p});
+        if (ret.size() > 10) next_delay += 200;
+    }
+
+    for (auto& p : hlp) {
+        ret.push_back({next_delay, p});
+        if (ret.size() > 10) next_delay += 100;
+    }
+
+    return ret;
 }
 
 GenericStream Bep5Client::connect(asio::yield_context yield, Cancel& cancel_)
@@ -235,23 +300,33 @@ GenericStream Bep5Client::connect(asio::yield_context yield, Cancel& cancel_)
     _injector_swarm->wait_for_ready(cancel, yield[ec]);
     return_or_throw_on_error(yield, cancel, ec, GenericStream{});
 
+    if (_helpers_swarm) {
+        _helpers_swarm->wait_for_ready(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, GenericStream{});
+    }
+
     WaitCondition wc(get_executor());
 
     Cancel spawn_cancel(cancel); // Cancels all spawned coroutines
 
     GenericStream ret_con;
 
-    for (auto& cp : _injector_swarm->peers()) {
-        auto peer = cp.second.get();
-
+    for (auto peer : get_peers()) {
         asio::spawn(get_executor(),
         [ =
+        , ex = get_executor()
         , &spawn_cancel
         , &ret_con
         , lock = wc.lock()
         ] (asio::yield_context y) mutable {
             sys::error_code ec;
-            auto con = peer->connect(y[ec], spawn_cancel);
+
+            if (peer.delay_ms) {
+                async_sleep(ex, chrono::milliseconds(peer.delay_ms), spawn_cancel, yield);
+                if (spawn_cancel) return;
+            }
+
+            auto con = peer.client->connect(y[ec], spawn_cancel);
             assert(!spawn_cancel || ec == asio::error::operation_aborted);
             if (spawn_cancel || ec) return;
             ret_con = move(con);
