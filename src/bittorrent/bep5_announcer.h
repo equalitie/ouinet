@@ -6,10 +6,11 @@ namespace ouinet { namespace bittorrent {
 
 class MainlineDht;
 
-class Bep5PeriodicAnnouncer {
-private:
-    struct Impl;
+namespace detail {
+    struct Bep5AnnouncerImpl;
+}
 
+class Bep5PeriodicAnnouncer {
 public:
     Bep5PeriodicAnnouncer() = default;
 
@@ -24,7 +25,30 @@ public:
     ~Bep5PeriodicAnnouncer();
 
 private:
-    std::shared_ptr<Impl> _impl;
+    std::shared_ptr<detail::Bep5AnnouncerImpl> _impl;
+};
+
+class Bep5ManualAnnouncer {
+private:
+    struct Impl;
+
+public:
+    Bep5ManualAnnouncer() = default;
+
+    Bep5ManualAnnouncer(NodeID infohash, std::weak_ptr<MainlineDht>);
+
+    Bep5ManualAnnouncer(const Bep5ManualAnnouncer&)            = delete;
+    Bep5ManualAnnouncer& operator=(const Bep5ManualAnnouncer&) = delete;
+
+    Bep5ManualAnnouncer(Bep5ManualAnnouncer&&)            = default;
+    Bep5ManualAnnouncer& operator=(Bep5ManualAnnouncer&&) = default;
+
+    ~Bep5ManualAnnouncer();
+
+    void update();
+
+private:
+    std::shared_ptr<detail::Bep5AnnouncerImpl> _impl;
 };
 
 }} // namespaces

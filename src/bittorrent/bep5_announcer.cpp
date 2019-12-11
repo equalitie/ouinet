@@ -28,11 +28,15 @@ private:
     mt19937 gen;
 };
 
-struct Bep5PeriodicAnnouncer::Impl
-    : public enable_shared_from_this<Bep5PeriodicAnnouncer::Impl>
+enum class Type { Periodic, Manual };
+
+struct detail::Bep5AnnouncerImpl
+    : public enable_shared_from_this<detail::Bep5AnnouncerImpl>
 {
-    Impl(NodeID infohash, std::weak_ptr<MainlineDht> dht_w)
-        : infohash(infohash)
+    Bep5AnnouncerImpl(NodeID infohash, std::weak_ptr<MainlineDht> dht_w, Type type)
+        : type(type)
+        , cv(dht_w.lock()->get_executor())
+        , infohash(infohash)
         , dht_w(move(dht_w))
     {}
 
@@ -57,10 +61,18 @@ struct Bep5PeriodicAnnouncer::Impl
         UniformRandomDuration random_timeout;
 
         while (!cancel) {
+            sys::error_code ec;
+
+            if (type == Type::Manual) {
+                while (!go_again) {
+                    cv.wait(cancel, yield[ec]);
+                    if (cancel) break;
+                }
+                go_again = false;
+            }
+
             auto dht = dht_w.lock();
             if (!dht) return;
-
-            sys::error_code ec;
 
             if (debug) {
                 LOG_DEBUG("ANNOUNCING ", infohash, " ...");
@@ -93,6 +105,15 @@ struct Bep5PeriodicAnnouncer::Impl
         }
     }
 
+    void update() {
+        if (type != Type::Manual) return;
+        go_again = true;
+        cv.notify();
+    }
+
+    Type type;
+    ConditionVariable cv;
+    bool go_again = false;
     NodeID infohash;
     weak_ptr<MainlineDht> dht_w;
     Cancel cancel;
@@ -101,7 +122,7 @@ struct Bep5PeriodicAnnouncer::Impl
 
 Bep5PeriodicAnnouncer::Bep5PeriodicAnnouncer( NodeID infohash
                                             , std::weak_ptr<MainlineDht> dht)
-    : _impl(make_shared<Impl>(infohash, move(dht)))
+    : _impl(make_shared<detail::Bep5AnnouncerImpl>(infohash, move(dht), Type::Periodic))
 {
     _impl->start();
 }
@@ -110,4 +131,22 @@ Bep5PeriodicAnnouncer::~Bep5PeriodicAnnouncer()
 {
     if (!_impl) return;
     _impl->cancel();
+}
+
+Bep5ManualAnnouncer::Bep5ManualAnnouncer( NodeID infohash
+                                        , std::weak_ptr<MainlineDht> dht)
+    : _impl(make_shared<detail::Bep5AnnouncerImpl>(infohash, move(dht), Type::Manual))
+{
+    _impl->start();
+}
+
+Bep5ManualAnnouncer::~Bep5ManualAnnouncer()
+{
+    if (!_impl) return;
+    _impl->cancel();
+}
+
+void Bep5ManualAnnouncer::update()
+{
+    _impl->update();
 }
