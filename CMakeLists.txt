@@ -96,7 +96,6 @@ file(GLOB client_sources
     "./src/ouiservice/utp.cpp"
     "./src/ouiservice/tls.cpp"
     "./src/ouiservice/bep5/client.cpp"
-    "./src/ouiservice/bep5/server.cpp"
     "./src/ouiservice/multi_utp_server.cpp"
     "./src/ouiservice/pluggable-transports/*.cpp"
     "./src/logger.cpp"

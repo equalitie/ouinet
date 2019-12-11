@@ -56,7 +56,7 @@
 #include "ouiservice/utp.h"
 #include "ouiservice/tls.h"
 #include "ouiservice/bep5/client.h"
-#include "ouiservice/bep5/server.h"
+#include "ouiservice/multi_utp_server.h"
 
 #include "parse/number.h"
 #include "util/signal.h"
@@ -235,8 +235,11 @@ private:
         assert(!_shutdown_signal);
 
         auto dht = bittorrent_dht();
-        _bep5_server = make_unique<ouiservice::Bep5Server>(bittorrent_dht(),
-                nullptr, injector_helpers_swarm_name);
+        _bep5_server
+            = make_unique<ouiservice::MultiUtpServer>(
+                    _ctx.get_executor(),
+                    bittorrent_dht()->local_endpoints(),
+                    nullptr);
 
         asio::spawn(_ctx, [&, c = _shutdown_signal] (asio::yield_context yield) mutable {
             auto slot = c.connect([&] () mutable { _bep5_server = nullptr; });
@@ -287,7 +290,7 @@ private:
     boost::optional<asio_utp::udp_multiplexer> _udp_multiplexer;
     shared_ptr<bt::MainlineDht> _bt_dht;
 
-    unique_ptr<ouiservice::Bep5Server> _bep5_server;
+    unique_ptr<ouiservice::MultiUtpServer> _bep5_server;
 };
 
 //------------------------------------------------------------------------------
