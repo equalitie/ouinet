@@ -1676,6 +1676,7 @@ void Client::State::setup_injector(asio::yield_context yield)
         client = make_unique<ouiservice::Bep5Client>
             ( bittorrent_dht()
             , injector_ep->endpoint_string
+            , injector_helpers_swarm_name
             , &inj_ctx);
 
         idempotent_start_accepting_on_utp();

@@ -11,6 +11,7 @@ namespace ouinet {
 
 namespace bittorrent {
     class MainlineDht;
+    class Bep5PeriodicAnnouncer;
 }
 
 namespace ouiservice {
@@ -56,6 +57,8 @@ private:
 
     std::unique_ptr<Swarm> _injector_swarm;
     std::unique_ptr<Swarm> _helpers_swarm;
+
+    std::unique_ptr<bittorrent::Bep5PeriodicAnnouncer> _helper_announcer;
 
     asio::ssl::context* _injector_tls_ctx;
     Cancel _cancel;

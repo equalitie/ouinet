@@ -223,6 +223,13 @@ Bep5Client::Bep5Client( shared_ptr<bt::MainlineDht> dht
     if (_dht->local_endpoints().empty()) {
         LOG_ERROR("Bep5Client: DHT has no endpoints!");
     }
+
+    assert(_helpers_swarm_name.size());
+
+    if (_helpers_swarm_name.size()) {
+        bt::NodeID infohash = util::sha1_digest(_helpers_swarm_name);
+        _helper_announcer = make_unique<bt::Bep5PeriodicAnnouncer>(infohash, _dht);
+    }
 }
 
 void Bep5Client::start(asio::yield_context)
