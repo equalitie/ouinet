@@ -28,8 +28,8 @@ private:
     mt19937 gen;
 };
 
-struct Bep5Announcer::Impl
-    : public enable_shared_from_this<Bep5Announcer::Impl>
+struct Bep5PeriodicAnnouncer::Impl
+    : public enable_shared_from_this<Bep5PeriodicAnnouncer::Impl>
 {
     Impl(NodeID infohash, std::weak_ptr<MainlineDht> dht_w)
         : infohash(infohash)
@@ -99,13 +99,14 @@ struct Bep5Announcer::Impl
     bool debug = false;
 };
 
-Bep5Announcer::Bep5Announcer(NodeID infohash, std::weak_ptr<MainlineDht> dht)
+Bep5PeriodicAnnouncer::Bep5PeriodicAnnouncer( NodeID infohash
+                                            , std::weak_ptr<MainlineDht> dht)
     : _impl(make_shared<Impl>(infohash, move(dht)))
 {
     _impl->start();
 }
 
-Bep5Announcer::~Bep5Announcer()
+Bep5PeriodicAnnouncer::~Bep5PeriodicAnnouncer()
 {
     if (!_impl) return;
     _impl->cancel();

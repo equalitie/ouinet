@@ -38,7 +38,7 @@ struct Bep5Server::State
               , Cancel& outer_cancel
               , asio::yield_context yield)
     {
-        announcer = bt::Bep5Announcer(infohash, dht);
+        announcer = bt::Bep5PeriodicAnnouncer(infohash, dht);
 
         auto ex = dht->get_executor();
 
@@ -69,7 +69,7 @@ struct Bep5Server::State
     }
 
     std::shared_ptr<bt::MainlineDht> dht;
-    bt::Bep5Announcer announcer;
+    bt::Bep5PeriodicAnnouncer announcer;
     std::unique_ptr<AbstractServer> server;
     bt::NodeID infohash;
 };
