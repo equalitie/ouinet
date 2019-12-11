@@ -10,7 +10,7 @@ struct Progress {
     {
         using namespace std;
 
-        asio::spawn(ex, [&] (asio::yield_context yield) {
+        asio::spawn(ex, [&, ex] (asio::yield_context yield) {
             Cancel cancel(_cancel);
             const char p[] = {'|', '/', '-', '\\'};
 
