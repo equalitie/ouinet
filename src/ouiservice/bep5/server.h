@@ -1,23 +1,18 @@
 #pragma once
 
-#include <boost/asio/ssl.hpp>
-
-#include "../../ouiservice.h"
-#include "../../util/async_queue.h"
+#include "../multi_utp_server.h"
 
 namespace ouinet {
 
 namespace bittorrent {
     class MainlineDht;
+    class Bep5PeriodicAnnouncer;
 }
 
 namespace ouiservice {
 
 class Bep5Server : public OuiServiceImplementationServer
 {
-private:
-    struct State;
-
 public:
     Bep5Server( std::shared_ptr<bittorrent::MainlineDht>
               , boost::asio::ssl::context* ssl_context
@@ -31,9 +26,8 @@ public:
     ~Bep5Server();
 
 private:
-    std::list<std::unique_ptr<State>> _states;
-    util::AsyncQueue<GenericStream> _accept_queue;
-    Cancel _cancel;
+    std::unique_ptr<MultiUtpServer> _multi_utp_server;
+    std::unique_ptr<bittorrent::Bep5PeriodicAnnouncer> _announcer;
 };
 
 }} // namespaces
