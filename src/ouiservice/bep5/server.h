@@ -31,7 +31,6 @@ public:
     ~Bep5Server();
 
 private:
-    std::shared_ptr<bittorrent::MainlineDht> _dht;
     std::list<std::unique_ptr<State>> _states;
     util::AsyncQueue<GenericStream> _accept_queue;
     Cancel _cancel;

@@ -77,14 +77,13 @@ struct Bep5Server::State
 Bep5Server::Bep5Server( shared_ptr<bt::MainlineDht> dht
                       , boost::asio::ssl::context* ssl_context
                       , string swarm_name)
-    : _dht(dht)
-    , _accept_queue(_dht->get_executor())
+    : _accept_queue(dht->get_executor())
 {
-    assert(_dht);
+    assert(dht);
 
-    auto ex = _dht->get_executor();
+    auto ex = dht->get_executor();
 
-    auto endpoints = _dht->local_endpoints();
+    auto endpoints = dht->local_endpoints();
 
     if (endpoints.empty()) {
         LOG_ERROR("Bep5Server: DHT has no endpoints!");
