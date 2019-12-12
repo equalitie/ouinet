@@ -15,6 +15,7 @@ using namespace ouiservice;
 namespace bt = bittorrent;
 
 using udp = asio::ip::udp;
+using Clock = chrono::steady_clock;
 
 static bool same_ipv(const udp::endpoint& ep1, const udp::endpoint& ep2)
 {
@@ -47,10 +48,8 @@ private:
     using Peer  = AbstractClient;
     using Peers = std::map<asio::ip::udp::endpoint, std::shared_ptr<Peer>>;
 
-public:
-    Bep5Client* owner;
-
 private:
+    Bep5Client* _owner;
     shared_ptr<bt::MainlineDht> _dht;
     bt::NodeID _infohash;
     Cancel _lifetime_cancel;
@@ -63,10 +62,12 @@ public:
     Swarm( Bep5Client* owner
          , bt::NodeID infohash
          , shared_ptr<bt::MainlineDht> dht
+         , Cancel& cancel
          , asio::ssl::context* tls_ctx)
-        : owner(owner)
+        : _owner(owner)
         , _dht(move(dht))
         , _infohash(infohash)
+        , _lifetime_cancel(cancel)
         , _tls_ctx(tls_ctx)
     {}
 
@@ -99,6 +100,8 @@ public:
         if (cancel)
             return or_throw(yield, asio::error::operation_aborted);
     }
+
+    asio::executor get_executor() { return _dht->get_executor(); }
 
 private:
     void loop(Cancel& cancel, asio::yield_context yield) {
@@ -145,8 +148,8 @@ private:
     }
 
     bool log_debug() {
-        if (!owner) return false;
-        return owner->_log_debug;
+        if (!_owner) return false;
+        return _owner->_log_debug;
     }
 
     shared_ptr<Peer> make_peer(const udp::endpoint& ep)
@@ -197,6 +200,131 @@ private:
     }
 };
 
+class Bep5Client::InjectorPinger {
+public:
+    InjectorPinger( shared_ptr<Bep5Client::Swarm> injector_swarm
+                  , string helper_swarm_name
+                  , shared_ptr<bt::MainlineDht> dht
+                  , Cancel& cancel)
+        : _lifetime_cancel(cancel)
+        , _injector_swarm(move(injector_swarm))
+        , _random_generator(std::random_device()())
+        , _helper_announcer(new bt::Bep5ManualAnnouncer(util::sha1_digest(helper_swarm_name), dht))
+    {
+        asio::spawn(_injector_swarm->get_executor(),
+                [=] (asio::yield_context yield) {
+            sys::error_code ec;
+            loop(yield[ec]);
+        });
+    }
+
+    ~InjectorPinger() { _lifetime_cancel(); }
+
+    // Let this pinger known that injector was seen from somewhere else so that
+    // it can postpone pinging.
+    void injector_was_seen_now()
+    {
+        _last_ping_time = Clock::now();
+    }
+
+private:
+    void loop(asio::yield_context yield) {
+        Cancel cancel(_lifetime_cancel);
+
+        sys::error_code ec;
+        _injector_swarm->wait_for_ready(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec);
+
+        while (!cancel) {
+            auto injs = _injector_swarm->peers();
+
+            while (_last_ping_time && (Clock::now() - *_last_ping_time) < _ping_frequency) {
+                auto d = Clock::now() - *_last_ping_time;
+                async_sleep(get_executor(), d, cancel, yield);
+                if (cancel) return;
+            }
+
+            bool got_reply = ping_injectors(select_injectors_to_ping(), cancel, yield[ec]);
+            return_or_throw_on_error(yield, cancel, ec);
+
+            _last_ping_time = Clock::now();
+
+            if (got_reply) {
+                _helper_announcer->update();
+            }
+        }
+    }
+
+    bool ping_one_injector( shared_ptr<AbstractClient> injector
+                          , Cancel& cancel
+                          , asio::yield_context yield)
+    {
+        sys::error_code ec;
+        auto con = injector->connect(yield[ec], cancel);
+        return_or_throw_on_error(yield, cancel, ec, false);
+        return true;
+    }
+
+    bool ping_injectors( const std::vector<shared_ptr<AbstractClient>>& injectors
+                       , Cancel cancel
+                       , asio::yield_context yield)
+    {
+        auto ex = get_executor();
+
+        WaitCondition wc(ex);
+
+        Cancel success_cancel(cancel);
+
+        for (auto inj : injectors) {
+            asio::spawn(ex, [&, inj, lock = wc.lock()]
+                    (asio::yield_context yield) {
+                Cancel c(cancel);
+                auto sc = success_cancel.connect([&] { c(); });
+
+                sys::error_code ec;
+                WatchDog wd(ex, chrono::seconds(60), [&] { c(); });
+                if (ping_one_injector(inj, c, yield[ec])) {
+                    success_cancel();
+                }
+            });
+        }
+
+        sys::error_code ec;
+        wc.wait(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, false);
+
+        return bool(success_cancel);
+    }
+
+    std::vector<shared_ptr<AbstractClient>> select_injectors_to_ping() {
+        static const unsigned max = 30;
+
+        auto injector_map = _injector_swarm->peers();
+        std::vector<shared_ptr<AbstractClient>> injectors;
+        injectors.reserve(std::min<unsigned>(max, injector_map.size()));
+
+        unsigned i = 0;
+        for (auto& p : injector_map) {
+            if (i++ == max) break;
+            injectors.push_back(p.second);
+        }
+
+        std::shuffle(injectors.begin(), injectors.end(), _random_generator);
+
+        return injectors;
+    }
+
+    asio::executor get_executor() { return _injector_swarm->get_executor(); }
+
+private:
+    Cancel _lifetime_cancel;
+    shared_ptr<Bep5Client::Swarm> _injector_swarm;
+    boost::optional<chrono::steady_clock::time_point> _last_ping_time;
+    const Clock::duration _ping_frequency = chrono::minutes(10);
+    std::mt19937 _random_generator;
+    std::unique_ptr<bt::Bep5ManualAnnouncer> _helper_announcer;
+};
+
 Bep5Client::Bep5Client( shared_ptr<bt::MainlineDht> dht
                       , string injector_swarm_name
                       , asio::ssl::context* injector_tls_ctx)
@@ -225,11 +353,6 @@ Bep5Client::Bep5Client( shared_ptr<bt::MainlineDht> dht
     }
 
     assert(_helpers_swarm_name.size());
-
-    if (_helpers_swarm_name.size()) {
-        bt::NodeID infohash = util::sha1_digest(_helpers_swarm_name);
-        _helper_announcer = make_unique<bt::Bep5PeriodicAnnouncer>(infohash, _dht);
-    }
 }
 
 void Bep5Client::start(asio::yield_context)
@@ -239,7 +362,7 @@ void Bep5Client::start(asio::yield_context)
 
         LOG_INFO("Injector swarm: sha1('", _injector_swarm_name, "'): ", infohash.to_hex());
 
-        _injector_swarm.reset(new Swarm(this, infohash, _dht, _injector_tls_ctx));
+        _injector_swarm.reset(new Swarm(this, infohash, _dht, _cancel, _injector_tls_ctx));
         _injector_swarm->start();
     }
 
@@ -248,8 +371,10 @@ void Bep5Client::start(asio::yield_context)
 
         LOG_INFO("Helpers swarm: sha1('", _helpers_swarm_name, "'): ", infohash.to_hex());
 
-        _helpers_swarm.reset(new Swarm(this, infohash, _dht, nullptr));
+        _helpers_swarm.reset(new Swarm(this, infohash, _dht, _cancel, nullptr));
         _helpers_swarm->start();
+
+        _injector_pinger.reset(new InjectorPinger(_injector_swarm, _helpers_swarm_name, _dht, _cancel));
     }
 }
 
@@ -258,6 +383,7 @@ void Bep5Client::stop()
     _cancel();
     _injector_swarm = nullptr;
     _helpers_swarm  = nullptr;
+    _injector_pinger = nullptr;
 }
 
 std::vector<Bep5Client::Candidate> Bep5Client::get_peers()
@@ -374,6 +500,9 @@ GenericStream Bep5Client::connect(asio::yield_context yield, Cancel& cancel_)
         _last_working_ep = boost::none;
     } else {
         _last_working_ep = ret_ep;
+        if (_injector_pinger) {
+            _injector_pinger->injector_was_seen_now();
+        }
     }
 
     return or_throw(yield, ec, move(ret_con));
