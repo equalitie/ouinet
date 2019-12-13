@@ -11,6 +11,7 @@
 #include "response_part.h"
 #include "util/signal.h"
 #include "util/yield.h"
+#include "util/variant.h"
 
 
 namespace ouinet { namespace http_response {
@@ -51,31 +52,35 @@ Writer::async_write_part(const Part& part, Cancel cancel, Yield yield_)
         return ec;
     };
 
-    // Dumb approach, just write the parts as they come.
-    // TODO: Implement a state machine that catches illegal writes.
-    if (auto headp = part.as_head()) {
-        Head::writer headw(*headp, headp->version(), headp->result_int());
-        asio::async_write(_out, headw.get(), yield[ec]);
-    } else if (auto bodyp = part.as_body()) {
-        asio::async_write(_out, asio::buffer(*bodyp), yield[ec]);
-    } else if (auto chunkhp = part.as_chunk_hdr()) {
-        if (chunkhp->size > 0)
-            asio::async_write(_out, http::chunk_header{chunkhp->size, chunkhp->exts}, yield[ec]);
-        else {  // `http::chunk_last` carries a trailer itself, do not use
-            static const auto hdrf = "0%s\r\n";
-            auto hdr = (boost::format(hdrf) % chunkhp->exts).str();
-            asio::async_write(_out, asio::buffer(hdr), yield[ec]);
-        }
-    } else if (auto chunkbp = part.as_chunk_body()) {
-        asio::async_write(_out, asio::buffer(*chunkbp), yield[ec]);
-        if (chunkbp->remain == 0)
-            asio::async_write(_out, http::chunk_crlf{}, yield[ec]);
-    } else if (auto trailerp = part.as_trailer()) {
-        Trailer::writer trailerw(*trailerp);
-        asio::async_write(_out, trailerw.get(), yield[ec]);
-    } else {
-        assert(0 && "Unknown response part");
-    }
+    util::apply(part,
+        [&] (const http_response::Head& head) {
+            Head::writer headw(head, head.version(), head.result_int());
+            asio::async_write(_out, headw.get(), yield[ec]);
+        },
+        [&] (const http_response::Body& body) {
+            asio::async_write(_out, asio::buffer(body), yield[ec]);
+        },
+        [&] (const http_response::ChunkHdr& chunk_hdr) {
+            if (chunk_hdr.size > 0)
+                asio::async_write(_out
+                                 , http::chunk_header{ chunk_hdr.size
+                                                     , chunk_hdr.exts}
+                                 , yield[ec]);
+            else {  // `http::chunk_last` carries a trailer itself, do not use
+                static const auto hdrf = "0%s\r\n";
+                auto hdr = (boost::format(hdrf) % chunk_hdr.exts).str();
+                asio::async_write(_out, asio::buffer(hdr), yield[ec]);
+            }
+        },
+        [&] (const http_response::ChunkBody& chunk_body) {
+            asio::async_write(_out, asio::buffer(chunk_body), yield[ec]);
+            if (chunk_body.remain == 0)
+                asio::async_write(_out, http::chunk_crlf{}, yield[ec]);
+        },
+        [&] (const http_response::Trailer& trailer) {
+            Trailer::writer trailerw(trailer);
+            asio::async_write(_out, trailerw.get(), yield[ec]);
+        });
 
     if (set_error(ec, "Failed to send response part"))
         return or_throw(yield, ec);
