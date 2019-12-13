@@ -6,25 +6,49 @@ namespace ouinet { namespace bittorrent {
 
 class MainlineDht;
 
-class Bep5Announcer {
+namespace detail {
+    struct Bep5AnnouncerImpl;
+}
+
+class Bep5PeriodicAnnouncer {
+public:
+    Bep5PeriodicAnnouncer() = default;
+
+    Bep5PeriodicAnnouncer(NodeID infohash, std::weak_ptr<MainlineDht>);
+
+    Bep5PeriodicAnnouncer(const Bep5PeriodicAnnouncer&)            = delete;
+    Bep5PeriodicAnnouncer& operator=(const Bep5PeriodicAnnouncer&) = delete;
+
+    Bep5PeriodicAnnouncer(Bep5PeriodicAnnouncer&&)            = default;
+    Bep5PeriodicAnnouncer& operator=(Bep5PeriodicAnnouncer&&) = default;
+
+    ~Bep5PeriodicAnnouncer();
+
+private:
+    std::shared_ptr<detail::Bep5AnnouncerImpl> _impl;
+};
+
+class Bep5ManualAnnouncer {
 private:
     struct Impl;
 
 public:
-    Bep5Announcer() = default;
+    Bep5ManualAnnouncer() = default;
 
-    Bep5Announcer(NodeID infohash, std::weak_ptr<MainlineDht>);
+    Bep5ManualAnnouncer(NodeID infohash, std::weak_ptr<MainlineDht>);
 
-    Bep5Announcer(const Bep5Announcer&)            = delete;
-    Bep5Announcer& operator=(const Bep5Announcer&) = delete;
+    Bep5ManualAnnouncer(const Bep5ManualAnnouncer&)            = delete;
+    Bep5ManualAnnouncer& operator=(const Bep5ManualAnnouncer&) = delete;
 
-    Bep5Announcer(Bep5Announcer&&)            = default;
-    Bep5Announcer& operator=(Bep5Announcer&&) = default;
+    Bep5ManualAnnouncer(Bep5ManualAnnouncer&&)            = default;
+    Bep5ManualAnnouncer& operator=(Bep5ManualAnnouncer&&) = default;
 
-    ~Bep5Announcer();
+    ~Bep5ManualAnnouncer();
+
+    void update();
 
 private:
-    std::shared_ptr<Impl> _impl;
+    std::shared_ptr<detail::Bep5AnnouncerImpl> _impl;
 };
 
 }} // namespaces

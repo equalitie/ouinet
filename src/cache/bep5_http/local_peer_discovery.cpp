@@ -1,7 +1,7 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/ip/multicast.hpp>
 #include "local_peer_discovery.h"
-#include "../../util/crypto.h" // random_number
+#include "../../util/random.h"
 #include "../../parse/number.h"
 #include "../../parse/endpoint.h"
 #include "../../logger.h"
@@ -262,7 +262,7 @@ LocalPeerDiscovery::LocalPeerDiscovery( const asio::executor& ex
                                       , set<udp::endpoint> advertised_eps)
     : _ex(ex)
 {
-    auto id = util::random_number<uint64_t>();
+    auto id = util::random::number<uint64_t>();
     _impl = make_unique<Impl>(_ex, id, advertised_eps, _lifetime_cancel);
 }
 

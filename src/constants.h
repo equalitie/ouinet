@@ -78,4 +78,8 @@ static const std::string response_descriptor_hdr = header_prefix + "Descriptor";
 // Also, this is added with a link to descriptor storage.
 static const std::string response_descriptor_link_hdr = header_prefix + "Descriptor-Link";
 
-}} // namespaces
+} // http_ namespace
+
+static const std::string injector_helpers_swarm_name = "ouinet-injector-helpers";
+
+} // ouinet namespace

@@ -3,15 +3,15 @@
 #include <boost/asio/ip/udp.hpp>
 #include <boost/asio/ssl.hpp>
 #include <asio_utp/udp_multiplexer.hpp>
-#include <set>
-#include <random>
 
 #include "../../ouiservice.h"
+#include <random>
 
 namespace ouinet {
 
 namespace bittorrent {
     class MainlineDht;
+    class Bep5PeriodicAnnouncer;
 }
 
 namespace ouiservice {
@@ -19,16 +19,23 @@ namespace ouiservice {
 class Bep5Client : public OuiServiceImplementationClient
 {
 private:
-    struct Bep5Loop;
-    struct Client;
+    using AbstractClient = OuiServiceImplementationClient;
+    struct Swarm;
+    class InjectorPinger;
 
-    using Clients = std::map< asio::ip::udp::endpoint
-                            , std::unique_ptr<Client>
-                            >;
+    struct Candidate {
+        asio::ip::udp::endpoint endpoint;
+        std::shared_ptr<AbstractClient> client;
+    };
 
 public:
     Bep5Client( std::shared_ptr<bittorrent::MainlineDht>
-              , std::string swarm_name
+              , std::string injector_swarm_name
+              , asio::ssl::context*);
+
+    Bep5Client( std::shared_ptr<bittorrent::MainlineDht>
+              , std::string injector_swarm_name
+              , std::string helpers_swarm_name
               , asio::ssl::context*);
 
     void start(asio::yield_context) override;
@@ -41,28 +48,27 @@ public:
     asio::executor get_executor();
 
 private:
-    void add_injector_endpoints(std::set<asio::ip::udp::endpoint>);
-
-    std::unique_ptr<Client> build_client(const asio::ip::udp::endpoint&);
-
-    boost::optional<asio_utp::udp_multiplexer>
-    choose_multiplexer_for(const asio::ip::udp::endpoint&);
-
-    void maybe_wait_for_bep5_resolve(Cancel, asio::yield_context);
+    std::vector<Candidate> get_peers();
 
 private:
     std::shared_ptr<bittorrent::MainlineDht> _dht;
-    std::unique_ptr<Bep5Loop> _bep5_loop;
-    std::string _swarm_name;
-    asio::ssl::context* _tls_ctx;
+
+    std::string _injector_swarm_name;
+    std::string _helpers_swarm_name;
+
+    std::shared_ptr<Swarm> _injector_swarm;
+    std::unique_ptr<Swarm> _helpers_swarm;
+
+    std::unique_ptr<InjectorPinger> _injector_pinger;
+
+    asio::ssl::context* _injector_tls_ctx;
     Cancel _cancel;
 
-    std::mt19937 _random_gen;
-
-    Clients _clients;
+    std::mt19937 _random_generator;
 
     bool _log_debug = false;
-    bool _wait_for_bep5_resolve = true;
+
+    boost::optional<asio::ip::udp::endpoint> _last_working_ep;
 };
 
 }} // namespaces

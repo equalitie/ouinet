@@ -52,6 +52,7 @@ target_link_libraries(test-persistent-lru-cache lib::gcrypt)
 file(GLOB bt_cpp_files
     "../src/bittorrent/*.cpp"
     "../src/util/crypto.cpp"
+    "../src/util/random.cpp"
     "../src/util/hash.cpp"
     "../src/logger.cpp"
     "../src/util.cpp"
@@ -79,10 +80,6 @@ add_executable(test-watch-dog "test_watch_dog.cpp")
 ######################################################################
 add_executable(test-util "test-util.cpp")
 set_target_properties(test-util PROPERTIES COMPILE_FLAGS "-fsanitize=address")
-# CircleCI still includes an ancient version of GCC 6,
-# so we need to use the gold linker to enable ASan,
-# see <https://stackoverflow.com/q/37603238>.
-target_link_options(test-util PUBLIC "-fsanitize=address" "-fuse-ld=gold")
 target_link_libraries(test-util asan)
 
 ######################################################################
