@@ -20,7 +20,7 @@ class Writer {
 public:
     Writer(GenericStream out);
 
-    void async_write_part(const Part&, Cancel, Yield);
+    void async_write_part(const Part&, Cancel, asio::yield_context);
 
 private:
     GenericStream _out;
@@ -34,11 +34,9 @@ Writer::Writer(GenericStream out)
 }
 
 void
-Writer::async_write_part(const Part& part, Cancel cancel, Yield yield_)
+Writer::async_write_part(const Part& part, Cancel cancel, asio::yield_context yield)
 {
     namespace Err = asio::error;
-
-    Yield yield = yield_.tag("http_forward");
 
     // Cancellation, time out and error handling
     auto lifetime_cancelled = _lifetime_cancel.connect([&] { cancel(); });
@@ -48,7 +46,6 @@ Writer::async_write_part(const Part& part, Cancel cancel, Yield yield_)
 
     auto set_error = [&] (sys::error_code& ec, const auto& msg) {
         if (cancelled) ec = Err::operation_aborted;
-        if (ec) yield.log(msg, ": ", ec.message());
         return ec;
     };
 

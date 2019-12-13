@@ -21,6 +21,7 @@ using RW = http_response::Writer;
 namespace HR = http_response;
 
 
+
 // Heads and trailers do not have default comparison operations,
 // implement some dummy ones to be able to build.
 namespace ouinet { namespace http_response {
@@ -82,9 +83,8 @@ BOOST_AUTO_TEST_SUITE(ouinet_response_writer)
 BOOST_AUTO_TEST_CASE(test_http10_no_body) {
     asio::io_service ios;
 
-    asio::spawn(ios, [&] (auto y_) {
+    asio::spawn(ios, [&] (auto y) {
         Cancel c;
-        Yield y(ios, y_);
 
         stringstream outs;
         WaitCondition outwc(ios);
@@ -113,9 +113,8 @@ BOOST_AUTO_TEST_CASE(test_http10_no_body) {
 BOOST_AUTO_TEST_CASE(test_http10_body_no_length) {
     asio::io_service ios;
 
-    asio::spawn(ios, [&] (auto y_) {
+    asio::spawn(ios, [&] (auto y) {
         Cancel c;
-        Yield y(ios, y_);
 
         stringstream outs;
         WaitCondition outwc(ios);
@@ -150,9 +149,8 @@ BOOST_AUTO_TEST_CASE(test_http10_body_no_length) {
 BOOST_AUTO_TEST_CASE(test_http11_body) {
     asio::io_service ios;
 
-    asio::spawn(ios, [&] (auto y_) {
+    asio::spawn(ios, [&] (auto y) {
         Cancel c;
-        Yield y(ios, y_);
 
         stringstream outs;
         WaitCondition outwc(ios);
@@ -193,9 +191,8 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
 BOOST_AUTO_TEST_CASE(test_http11_chunk) {
     asio::io_service ios;
 
-    asio::spawn(ios, [&] (auto y_) {
+    asio::spawn(ios, [&] (auto y) {
         Cancel c;
-        Yield y(ios, y_);
 
         stringstream outs;
         WaitCondition outwc(ios);
@@ -249,9 +246,8 @@ BOOST_AUTO_TEST_CASE(test_http11_chunk) {
 BOOST_AUTO_TEST_CASE(test_http11_trailer) {
     asio::io_service ios;
 
-    asio::spawn(ios, [&] (auto y_) {
+    asio::spawn(ios, [&] (auto y) {
         Cancel c;
-        Yield y(ios, y_);
 
         stringstream outs;
         WaitCondition outwc(ios);
@@ -311,9 +307,8 @@ BOOST_AUTO_TEST_CASE(test_http11_trailer) {
 BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
     asio::io_service ios;
 
-    asio::spawn(ios, [&] (auto y_) {
+    asio::spawn(ios, [&] (auto y) {
         Cancel c;
-        Yield y(ios, y_);
 
         stringstream outs;
         WaitCondition outwc(ios);
@@ -376,9 +371,8 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
 BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
     asio::io_service ios;
 
-    asio::spawn(ios, [&] (auto y_) {
+    asio::spawn(ios, [&] (auto y) {
         Cancel c;
-        Yield y(ios, y_);
 
         stringstream outs;
         WaitCondition outwc(ios);
