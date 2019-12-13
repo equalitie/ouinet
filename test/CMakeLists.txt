@@ -31,7 +31,9 @@ add_executable(test-timeout-stream "test_timeout_stream.cpp")
 add_executable(test-stream-fork "test-stream-fork.cpp")
 
 ######################################################################
-add_executable(test-response-reader "test-response-reader.cpp")
+add_executable(test-response-reader
+    "test-response-reader.cpp"
+    "../src/response_part.cpp")
 
 ######################################################################
 add_executable(test-response-writer
