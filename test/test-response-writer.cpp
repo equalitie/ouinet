@@ -19,18 +19,6 @@ using tcp = asio::ip::tcp;
 
 namespace HR = http_response;
 
-// Heads and trailers do not have default comparison operations,
-// implement some dummy ones to be able to build.
-namespace ouinet { namespace http_response {
-    bool operator==(const HR::Head&, const HR::Head&) {
-        return false;  // dummy
-    }
-
-    bool operator==(const HR::Trailer&, const HR::Trailer&) {
-        return false;  // dummy
-    }
-}} // ouinet namespaces::http_response
-
 // Data written to the returned socket is collected in `outs`,
 // and locks in `outwc` are released when an error occurs
 // (or the socket is closed).

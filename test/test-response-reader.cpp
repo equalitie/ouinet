@@ -57,14 +57,6 @@ string vec_to_str(const vector<uint8_t>& v) {
     return {p, v.size()};
 }
 
-map<string, string> fields_to_map(http::fields fields) {
-    map<string, string> ret;
-    for (auto& f : fields) {
-        ret.insert({f.name_string().to_string(), f.value().to_string()}); 
-    }
-    return ret;
-}
-
 HR::Part body(bool is_last, boost::string_view s) {
     return HR::Body(is_last, str_to_vec(s));
 }
@@ -86,30 +78,24 @@ HR::Part trailer(map<string, string> trailer) {
 }
 
 namespace ouinet { namespace http_response {
-    bool operator==(const HR::Head&, const HR::Head&) { return false; /* TODO */ }
-
-    bool operator==(const HR::Trailer& t1, const HR::Trailer& t2) {
-        return fields_to_map(t1) == fields_to_map(t2);
-    }
-
     std::ostream& operator<<(std::ostream& os, const HR::Head&) {
         return os << "Head";
     }
-    
+
     std::ostream& operator<<(std::ostream& os, const HR::ChunkHdr& hdr) {
         return os << "ChunkHdr(" << hdr.size << " exts:\"" << hdr.exts << "\")";
     }
-    
+
     std::ostream& operator<<(std::ostream& os, const HR::ChunkBody& b) {
         return os << "ChunkBody(" << vec_to_str(b) << ")";
     }
-    
+
     std::ostream& operator<<(std::ostream& os, const HR::Body& b) {
         os << "Body(" << (b.is_last ? "last" : "not-last");
         if (!b.empty()) os << " ";
         return os << vec_to_str(b) << ")";
     }
-    
+
     std::ostream& operator<<(std::ostream& os, const HR::Trailer&) {
         return os << "Trailer";
     }

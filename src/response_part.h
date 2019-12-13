@@ -6,11 +6,27 @@
 #include <boost/beast/http/fields.hpp>
 #include <boost/beast/http/message.hpp>
 #include <boost/variant.hpp>
+#include <boost/container/flat_map.hpp>
 
 #include "namespaces.h"
 
 
 namespace ouinet { namespace http_response {
+
+namespace detail {
+    boost::container::flat_map<boost::string_view, boost::string_view>
+    fields_to_map(const http::fields& fields) {
+        using boost::container::flat_map;
+        using boost::string_view;
+        using Map = flat_map<string_view, string_view>;
+        Map ret;
+        ret.reserve(std::distance(fields.begin(), fields.end()));
+        for (auto& f : fields) {
+            ret.insert(Map::value_type(f.name_string(), f.value()));
+        }
+        return ret;
+    }
+} // detail namespace
 
 struct Head : public http::response_header<>  {
     using Base = http::response_header<>;
@@ -20,6 +36,11 @@ struct Head : public http::response_header<>  {
     Head& operator=(const Head&) = default;
     Head(const Base& b) : Base(b) {}
     Head(Base&& b) : Base(std::move(b)) {}
+
+    bool operator==(const Head& other) const {
+        using namespace detail;
+        return fields_to_map(*this) == fields_to_map(other);
+    }
 };
 
 struct Body : public std::vector<uint8_t> {
@@ -74,6 +95,11 @@ struct Trailer : public http::fields {
     Trailer& operator=(const Trailer&) = default;
     Trailer(const Base& b) : Base(b) {}
     Trailer(Base&& b) : Base(std::move(b)) {}
+
+    bool operator==(const Trailer& other) const {
+        using namespace detail;
+        return fields_to_map(*this) == fields_to_map(other);
+    }
 };
 
 namespace detail {
