@@ -8,8 +8,9 @@
 #include <boost/asio/spawn.hpp>
 
 #include "../src/util/bytes.h"
-#include "../src/response_writer.h"
+#include "../src/response_part.h"
 #include "../src/util/wait_condition.h"
+#include "../src/generic_stream.h"
 
 
 using namespace std;
@@ -82,7 +83,7 @@ BOOST_AUTO_TEST_CASE(test_http10_no_body) {
             HR::Part part;
 
             part = HR::Head(move(rh));
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
         }
         outwc.wait(y);
 
@@ -114,10 +115,10 @@ BOOST_AUTO_TEST_CASE(test_http10_body_no_length) {
             HR::Part part;
 
             part = HR::Head(move(rh));
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
 
             part = HR::Body(true, str_to_vec(rb));
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
         }
         outwc.wait(y);
 
@@ -153,10 +154,10 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
             HR::Part part;
 
             part = HR::Head(move(rh));
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
 
             part = HR::Body(true, str_to_vec(rb));
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
         }
         outwc.wait(y);
 
@@ -193,22 +194,22 @@ BOOST_AUTO_TEST_CASE(test_http11_chunk) {
             HR::Part part;
 
             part = HR::Head(move(rh));
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
 
             part = HR::ChunkHdr(4, "");
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
 
             part = HR::ChunkBody(str_to_vec("12"), 2);
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
 
             part = HR::ChunkBody(str_to_vec("34"), 0);
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
 
             part = HR::ChunkHdr(0, "");
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
 
             part = HR::Trailer();
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
         }
         outwc.wait(y);
 
@@ -249,25 +250,25 @@ BOOST_AUTO_TEST_CASE(test_http11_trailer) {
             HR::Part part;
 
             part = HR::Head(move(rh));
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
 
             part = HR::ChunkHdr(4, "");
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
 
             part = HR::ChunkBody(str_to_vec("12"), 2);
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
 
             part = HR::ChunkBody(str_to_vec("34"), 0);
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
 
             part = HR::ChunkHdr(0, "");
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
 
             http::fields trailer;
             trailer.set("Hash", "hash_of_1234");
 
             part = HR::Trailer(move(trailer));
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
         }
         outwc.wait(y);
 
@@ -320,16 +321,16 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
             HR::Part part;
 
             part = HR::Head(move(rh1));
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
 
             part = HR::Body(true, str_to_vec(rb1));
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
 
             part = HR::Head(move(rh2));
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
 
             part = HR::Body(true, str_to_vec(rb2));
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
         }
         outwc.wait(y);
 
@@ -382,28 +383,28 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
             HR::Part part;
 
             part = HR::Head(move(rh1));
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
 
             part = HR::ChunkHdr(4, "");
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
 
             part = HR::ChunkBody(str_to_vec("12"), 2);
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
 
             part = HR::ChunkBody(str_to_vec("34"), 0);
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
 
             part = HR::ChunkHdr(0, "");
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
 
             part = HR::Trailer();
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
 
             part = HR::Head(move(rh2));
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
 
             part = HR::Body(true, str_to_vec(rb2));
-            async_write_part(con, part, c, y);
+            part.async_write(con, c, y);
         }
         outwc.wait(y);
 

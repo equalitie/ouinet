@@ -8,10 +8,14 @@
 #include <boost/variant.hpp>
 #include <boost/container/flat_map.hpp>
 
+#include "util/signal.h"
 #include "namespaces.h"
 
+namespace ouinet {
 
-namespace ouinet { namespace http_response {
+class GenericStream;
+
+namespace http_response {
 
 namespace detail {
     boost::container::flat_map<boost::string_view, boost::string_view>
@@ -139,6 +143,8 @@ struct Part : public detail::PartVariant
     bool is_chunk_hdr()  const { return as_chunk_hdr()  != nullptr; }
     bool is_chunk_body() const { return as_chunk_body() != nullptr; }
     bool is_trailer()    const { return as_trailer()    != nullptr; }
+
+    void async_write(GenericStream&, Cancel, asio::yield_context) const;
 };
 
 }} // namespace ouinet::http_response
