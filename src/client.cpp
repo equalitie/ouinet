@@ -56,6 +56,7 @@
 #include "ouiservice/utp.h"
 #include "ouiservice/tls.h"
 #include "ouiservice/bep5/client.h"
+#include "ouiservice/multi_utp_server.h"
 
 #include "parse/number.h"
 #include "util/signal.h"
@@ -227,6 +228,41 @@ private:
 
     cache::bep5_http::Client* get_cache() const { return _bep5_http_cache.get(); }
 
+    void serve_utp_request(GenericStream, Yield);
+
+    void idempotent_start_accepting_on_utp() {
+        if (_bep5_server) return;
+        assert(!_shutdown_signal);
+
+        auto dht = bittorrent_dht();
+        _bep5_server
+            = make_unique<ouiservice::MultiUtpServer>(
+                    _ctx.get_executor(),
+                    bittorrent_dht()->local_endpoints(),
+                    nullptr);
+
+        asio::spawn(_ctx, [&, c = _shutdown_signal] (asio::yield_context yield) mutable {
+            auto slot = c.connect([&] () mutable { _bep5_server = nullptr; });
+
+            while (!c) {
+                sys::error_code ec;
+                auto con = _bep5_server->accept(yield[ec]);
+                if (c) return;
+                if (ec == asio::error::operation_aborted) return;
+                if (ec) {
+                    LOG_WARN("Bep5Http: Failure to accept:", ec.message());
+                    async_sleep(_ctx, 200ms, c, yield);
+                    continue;
+                }
+                asio::spawn(_ctx, [&, con = move(con)]
+                                  (asio::yield_context yield) mutable {
+                    Yield y(_ctx, yield, "uTPAccept");
+                    serve_utp_request(move(con), y[ec]);
+                });
+            }
+        });
+    }
+
 private:
     // The newest protocol version number seen in a trusted exchange
     // (i.e. from an injector exchange or injector-signed cached content).
@@ -242,8 +278,6 @@ private:
     ClientFrontEnd _front_end;
     Signal<void()> _shutdown_signal;
 
-    bool _is_ipns_being_setup = false;
-
     // For debugging
     uint64_t _next_connection_id = 0;
     ConnectionPool<std::string> _injector_connections;
@@ -255,6 +289,8 @@ private:
     boost::optional<asio::ip::udp::endpoint> _local_utp_endpoint;
     boost::optional<asio_utp::udp_multiplexer> _udp_multiplexer;
     shared_ptr<bt::MainlineDht> _bt_dht;
+
+    unique_ptr<ouiservice::MultiUtpServer> _bep5_server;
 };
 
 //------------------------------------------------------------------------------
@@ -272,15 +308,65 @@ void handle_http_error( GenericStream& con
     http::async_write(con, res, yield);
 }
 
+template<class ReqBody>
 static
 void handle_bad_request( GenericStream& con
-                       , const Request& req
+                       , const http::request<ReqBody>& req
                        , const string& message
                        , Yield yield)
 {
     auto res = util::http_client_error(req, http::status::bad_request, "", message);
     auto yield_ = yield.tag("handle_bad_request");
     return handle_http_error(con, res, yield_);
+}
+
+//------------------------------------------------------------------------------
+void
+Client::State::serve_utp_request(GenericStream con, Yield yield)
+{
+    assert(_bep5_http_cache);
+    Cancel cancel = _shutdown_signal;
+
+    sys::error_code ec;
+
+    http::request<http::empty_body> req;
+    beast::flat_buffer buffer;
+    http::async_read(con, buffer, req, yield[ec]);
+
+    if (ec || cancel) return;
+
+    if (req.method() != http::verb::connect) {
+        _bep5_http_cache->serve_local(req, con, cancel, yield[ec]);
+        return;
+    }
+
+    // Connect to the injector and tunnel the transaction through it
+
+    if (!_injector) {
+        return handle_bad_request(con, req, "No known injectors", yield[ec]);
+    }
+
+    auto inj = _injector->connect(yield[ec].tag("connect_to_injector"), cancel);
+
+    if (cancel) ec = asio::error::operation_aborted;
+    if (ec == asio::error::operation_aborted) return;
+    if (ec) {
+        ec = {};
+        return handle_bad_request(con, req, "Failed to connect to injector", yield[ec]);
+    }
+
+    // Send the client an OK message indicating that the tunnel
+    // has been established.
+    http::response<http::empty_body> res{http::status::ok, req.version()};
+    // No ``res.prepare_payload()`` since no payload is allowed for CONNECT:
+    // <https://tools.ietf.org/html/rfc7231#section-6.3.1>.
+
+    http::async_write(con, res, yield[ec]);
+
+    if (cancel) ec = asio::error::operation_aborted;
+    if (ec) return;
+
+    full_duplex(move(con), move(inj.connection), yield[ec]);
 }
 
 //------------------------------------------------------------------------------
@@ -1355,6 +1441,8 @@ void Client::State::setup_cache()
                 LOG_ERROR("Failed to initialize cache::bep5_http::Client: "
                          , ec.message());
             }
+
+            idempotent_start_accepting_on_utp();
         });
     }
 }
@@ -1588,8 +1676,10 @@ void Client::State::setup_injector(asio::yield_context yield)
         client = make_unique<ouiservice::Bep5Client>
             ( bittorrent_dht()
             , injector_ep->endpoint_string
+            , injector_helpers_swarm_name
             , &inj_ctx);
 
+        idempotent_start_accepting_on_utp();
 /*
     } else if (injector_ep->type == Endpoint::LampshadeEndpoint) {
         auto lampshade_client = make_unique<ouiservice::LampshadeOuiServiceClient>(_ctx, injector_ep->endpoint_string);
