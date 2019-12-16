@@ -39,6 +39,10 @@ struct Head : public http::response_header<> {
     Head(const Base& b) : Base(b) {}
     Head(Base&& b) : Base(std::move(b)) {}
 
+    bool keep_alive() const {
+        return Base::get_keep_alive_impl(Base::version());
+    }
+
     bool operator==(const Head& other) const;
 
     template<class S>
