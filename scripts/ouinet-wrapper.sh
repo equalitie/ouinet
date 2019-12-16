@@ -215,8 +215,10 @@ if [ "$PROG" = injector ] && ! has_help_arg "$@"; then
     /etc/init.d/i2pd start
 
     # Attempt to show injector I2P endpoint.
-    i2p_tuns_url='http://127.0.0.1:7070/?page=i2p_tunnels'
-    i2p_dests_pfx='http://127.0.0.1:7070/?page=local_destination&b32='
+    i2p_http_addr="$(sed -En '/^\[http\]/,/^\[.*\]/ s/^\s*address\s*=\s*(\S+).*/\1/p' /etc/i2pd/i2pd.conf)"
+    i2p_http_port="$(sed -En '/^\[http\]/,/^\[.*\]/ s/^\s*port\s*=\s*(\S+).*/\1/p' /etc/i2pd/i2pd.conf)"
+    i2p_tuns_url="http://$i2p_http_addr:$i2p_http_port/?page=i2p_tunnels"
+    i2p_dests_pfx="http://$i2p_http_addr:$i2p_http_port/?page=local_destination&b32="
     for _ in $(seq 10); do
         i2p_b32_ep=$(wget -qO- "$i2p_tuns_url" | sed -nE 's/.*\bouinet-injector\b.*\b(\S+.b32.i2p):[0-9]+.*/\1/p')
         if [ "$i2p_b32_ep" ]; then
