@@ -5,18 +5,32 @@
 
 #include <boost/beast/http/fields.hpp>
 #include <boost/beast/http/message.hpp>
+#include <boost/asio/write.hpp>
 #include <boost/variant.hpp>
+#include <boost/format.hpp>
 
 #include "util/signal.h"
+#include "util/variant.h"
 #include "namespaces.h"
+#include "or_throw.h"
 
 namespace ouinet {
 
-class GenericStream;
-
 namespace http_response {
 
-struct Head : public http::response_header<>  {
+namespace detail {
+    template<class P, class S>
+    void async_write_c(const P* p, S& s, Cancel& c, asio::yield_context y)
+    {
+        auto cancelled = c.connect([&] { s.close(); });
+        sys::error_code ec;
+        p->async_write(s, y[ec]);
+        if (cancelled) ec = asio::error::operation_aborted;
+        return or_throw(y, ec);
+    }
+}
+
+struct Head : public http::response_header<> {
     using Base = http::response_header<>;
     using Base::Base;
     Head(const Head&) = default;
@@ -27,7 +41,16 @@ struct Head : public http::response_header<>  {
 
     bool operator==(const Head& other) const;
 
-    void async_write(GenericStream&, Cancel, asio::yield_context) const;
+    template<class S>
+    void async_write(S& s, asio::yield_context yield) const
+    {
+        Head::writer headw(*this, Base::version(), Base::result_int());
+        asio::async_write(s, headw.get(), yield);
+    }
+
+    template<class S>
+    void async_write(S& s, Cancel& c, asio::yield_context y) const
+    { return detail::async_write_c(this, s, c, y); }
 };
 
 struct Body : public std::vector<uint8_t> {
@@ -39,7 +62,15 @@ struct Body : public std::vector<uint8_t> {
     Body(Body&&) = default;
     Body& operator=(const Body&) = default;
 
-    void async_write(GenericStream&, Cancel, asio::yield_context) const;
+    template<class S>
+    void async_write(S& s, asio::yield_context yield) const
+    {
+        asio::async_write(s, asio::buffer(*this), yield);
+    }
+
+    template<class S>
+    void async_write(S& s, Cancel& c, asio::yield_context y) const
+    { return detail::async_write_c(this, s, c, y); }
 };
 
 struct ChunkHdr {
@@ -56,7 +87,22 @@ struct ChunkHdr {
         return size == other.size && exts == other.exts;
     }
 
-    void async_write(GenericStream&, Cancel, asio::yield_context) const;
+    template<class S>
+    void async_write(S& s, asio::yield_context yield) const
+    {
+        if (size > 0) {
+            asio::async_write(s, http::chunk_header{size, exts}, yield);
+        }
+        else {  // `http::chunk_last` carries a trailer itself, do not use
+            static const auto hdrf = "0%s\r\n";
+            auto hdr = (boost::format(hdrf) % exts).str();
+            asio::async_write(s, asio::buffer(hdr), yield);
+        }
+    }
+
+    template<class S>
+    void async_write(S& s, Cancel& c, asio::yield_context y) const
+    { return detail::async_write_c(this, s, c, y); }
 };
 
 struct ChunkBody : public std::vector<uint8_t> {
@@ -72,7 +118,22 @@ struct ChunkBody : public std::vector<uint8_t> {
     ChunkBody(ChunkBody&&) = default;
     ChunkBody& operator=(const ChunkBody&) = default;
 
-    void async_write(GenericStream&, Cancel, asio::yield_context) const;
+    template<class S>
+    void async_write(S& s, asio::yield_context yield) const
+    {
+        sys::error_code ec;
+        asio::async_write(s, asio::buffer(*this), yield[ec]);
+    
+        if (ec) return or_throw(yield, ec);
+    
+        if (remain == 0) {
+            asio::async_write(s, http::chunk_crlf{}, yield[ec]);
+        }
+    }
+
+    template<class S>
+    void async_write(S& s, Cancel& c, asio::yield_context y) const
+    { return detail::async_write_c(this, s, c, y); }
 };
 
 struct Trailer : public http::fields {
@@ -86,7 +147,16 @@ struct Trailer : public http::fields {
 
     bool operator==(const Trailer& other) const;
 
-    void async_write(GenericStream&, Cancel, asio::yield_context) const;
+    template<class S>
+    void async_write(S& s, asio::yield_context yield) const
+    {
+        Trailer::writer trailerw(*this);
+        asio::async_write(s, trailerw.get(), yield);
+    }
+
+    template<class S>
+    void async_write(S& s, Cancel& c, asio::yield_context y) const
+    { return detail::async_write_c(this, s, c, y); }
 };
 
 namespace detail {
@@ -127,7 +197,15 @@ struct Part : public detail::PartVariant
     bool is_chunk_body() const { return as_chunk_body() != nullptr; }
     bool is_trailer()    const { return as_trailer()    != nullptr; }
 
-    void async_write(GenericStream&, Cancel, asio::yield_context) const;
+    template<class S>
+    void async_write(S& s, asio::yield_context y) const
+    {
+        util::apply(*this, [&](const auto& p) { p.async_write(s, y); });
+    }
+
+    template<class S>
+    void async_write(S& s, Cancel& c, asio::yield_context y) const
+    { return detail::async_write_c(this, s, c, y); }
 };
 
 }} // namespace ouinet::http_response
