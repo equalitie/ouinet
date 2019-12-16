@@ -20,13 +20,24 @@ public:
     //
     // Possible output on subsequent invocations per one response:
     //
-    // Head >> (ChunkHdr(size > 0) ChunkBody*)* >> ChunkHdr(size == 0) >> Trailer
+    // Head >> (ChunkHdr(size > 0) ChunkBody*)* >> ChunkHdr(size == 0) >> Trailer >> boost::none*
     //
     // Or:
     //
-    // Head >> Body(is_last == false)* >> Body(is_last == true)
+    // Head >> Body* >> boost::none*
     //
-    Part async_read_part(Cancel, asio::yield_context);
+    boost::optional<Part> async_read_part(Cancel, asio::yield_context);
+
+    void restart()
+    {
+        // It is only valid to call restart() if we've finished reading
+        // the whole response, or we haven't even started reading one.
+        assert(!_parser.is_header_done() || _is_done || _parser.is_done());
+        _is_done = false;
+        (&_parser)->~parser();
+        new (&_parser) (decltype(_parser))();
+        set_callbacks();
+    }
 
 private:
     http::fields filter_trailer_fields(const http::fields& hdr)
@@ -41,14 +52,6 @@ private:
         return trailer;
     }
 
-    void reset_parser()
-    {
-        (&_parser)->~parser();
-        new (&_parser) (decltype(_parser))();
-
-        set_callbacks();
-    }
-
     void set_callbacks();
 
 private:
@@ -61,11 +64,14 @@ private:
     std::function<size_t(size_t, string_view, sys::error_code&)> _on_chunk_body;
 
     boost::optional<Part> _next_part;
+
+    bool _is_done;
 };
 
 inline
 Reader::Reader(GenericStream in)
     : _in(std::move(in))
+    , _is_done(false)
 {
     set_callbacks();
 }
@@ -90,16 +96,12 @@ void Reader::set_callbacks()
 }
 
 inline
-Part
+boost::optional<Part>
 Reader::async_read_part(Cancel cancel, asio::yield_context yield) {
     assert(!cancel);
 
-    if (_parser.is_done() && !_parser.chunked()) {
-        bool need_eof = _parser.need_eof();
-        reset_parser();
-        if (need_eof) {
-            return or_throw<Part>(yield, http::error::end_of_stream);
-        }
+    if (_is_done) {
+        return boost::none;
     }
 
     // Cancellation, time out and error handling
@@ -116,26 +118,26 @@ Reader::async_read_part(Cancel cancel, asio::yield_context yield) {
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw<Part>(yield, ec);
 
-        return Head(_parser.get().base());
+        return Part(Head(_parser.get().base()));
     }
 
     if (_parser.chunked()) {
+        if (_parser.is_done() && !_is_done) {
+            _is_done = true;
+            auto hdr = _parser.release().base();
+            return Part(Trailer{filter_trailer_fields(hdr)});
+        }
+
         // Setting eager to false ensures that the callbacks shall be run only
         // once per each async_read_some call.
         _parser.eager(false);
-
-        if (_parser.is_done()) {
-            auto hdr = _parser.release().base();
-            reset_parser();
-            return Trailer{filter_trailer_fields(hdr)};
-        }
 
         assert(!_next_part);
         http::async_read_some(_in, _buffer, _parser, yield[ec]);
 
         if (cancel) ec = asio::error::operation_aborted;
         if (ec == http::error::end_of_chunk) ec = {};
-        if (ec) return or_throw<Part>(yield, ec);
+        if (ec) return or_throw(yield, ec, boost::none);
 
         assert(_next_part);
         Part ret = std::move(*_next_part);
@@ -144,15 +146,15 @@ Reader::async_read_part(Cancel cancel, asio::yield_context yield) {
         return ret;
     }
     else {
+        if (_parser.is_done() && !_is_done) {
+            _is_done = true;
+            return boost::none;
+        }
+
         char buf[http_forward_block];
 
         _parser.get().body().data = buf;
         _parser.get().body().size = sizeof(buf);
-
-        if (_parser.need_eof() && _parser.is_done()) {
-            reset_parser();
-            return or_throw<Part>(yield, http::error::end_of_stream);
-        }
 
         http::async_read_some(_in, _buffer, _parser, yield[ec]);
 
@@ -162,12 +164,12 @@ Reader::async_read_part(Cancel cancel, asio::yield_context yield) {
 
         size_t s = sizeof(buf) - _parser.get().body().size;
 
-        if (_parser.need_eof() && _parser.is_done()) {
-            reset_parser();
-            return or_throw<Part>(yield, http::error::end_of_stream);
+        if (s == 0 && _parser.is_done()) {
+            _is_done = true;
+            return boost::none;
         }
 
-        return Body(_parser.is_done(), std::vector<uint8_t>(buf, buf + s));
+        return Part(Body(std::vector<uint8_t>(buf, buf + s)));
     }
 }
 

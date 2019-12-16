@@ -5,6 +5,7 @@
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/write.hpp>
 #include <boost/asio/read.hpp>
+#include <boost/optional/optional_io.hpp>
 #include "../src/or_throw.h"
 #include "../src/response_reader.h"
 #include "../src/util/wait_condition.h"
@@ -57,8 +58,8 @@ string vec_to_str(const vector<uint8_t>& v) {
     return {p, v.size()};
 }
 
-HR::Part body(bool is_last, boost::string_view s) {
-    return HR::Body(is_last, str_to_vec(s));
+HR::Part body(boost::string_view s) {
+    return HR::Body(str_to_vec(s));
 }
 
 HR::Part chunk_body(boost::string_view s) {
@@ -91,9 +92,7 @@ namespace ouinet { namespace http_response {
     }
 
     std::ostream& operator<<(std::ostream& os, const HR::Body& b) {
-        os << "Body(" << (b.is_last ? "last" : "not-last");
-        if (!b.empty()) os << " ";
-        return os << vec_to_str(b) << ")";
+        return os << "Body(" << vec_to_str(b) << ")";
     }
 
     std::ostream& operator<<(std::ostream& os, const HR::Trailer&) {
@@ -101,23 +100,17 @@ namespace ouinet { namespace http_response {
     }
 }} // ouinet namespaces::http_response
 
-bool is_end_of_stream(RR& rr, Cancel& c, asio::yield_context y) {
-    sys::error_code ec;
-    auto part = rr.async_read_part(c, y[ec]);
-    return ec == http::error::end_of_stream;
-}
-
 HR::Part read_full_body(RR& rr, Cancel& c, asio::yield_context y) {
-    HR::Body body(true, {});
+    HR::Body body({});
 
     while (true) {
         sys::error_code ec;
-        auto part = rr.async_read_part(c, y[ec]);
+        auto opt_part = rr.async_read_part(c, y[ec]);
+        if (!opt_part) break;
         BOOST_REQUIRE(!ec);
-        auto body_p = part.as_body();
+        auto body_p = opt_part->as_body();
         BOOST_REQUIRE(body_p);
         body.insert(body.end(), body_p->begin(), body_p->end());
-        if (body_p->is_last) break;
     }
 
     return body;
@@ -136,12 +129,14 @@ BOOST_AUTO_TEST_CASE(test_http10_no_body) {
         RR rr(stream(move(rsp), ios, y));
 
         Cancel c;
-        HR::Part part;
+        boost::optional<HR::Part> part;
 
         part = rr.async_read_part(c, y);
-        BOOST_REQUIRE(part.is_head());
+        BOOST_REQUIRE(part);
+        BOOST_REQUIRE(part->is_head());
 
-        BOOST_REQUIRE(is_end_of_stream(rr, c, y));
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE(!part);
     });
 
     ios.run();
@@ -159,15 +154,18 @@ BOOST_AUTO_TEST_CASE(test_http10_body_no_length) {
         RR rr(stream(move(rsp), ios, y));
 
         Cancel c;
-        HR::Part part;
+        boost::optional<HR::Part> part;
 
         part = rr.async_read_part(c, y);
-        BOOST_REQUIRE(part.is_head());
+        BOOST_REQUIRE(part);
+        BOOST_REQUIRE(part->is_head());
 
         part = rr.async_read_part(c, y);
-        BOOST_REQUIRE_EQUAL(part, body(true, "abcdef"));
+        BOOST_REQUIRE(part);
+        BOOST_REQUIRE_EQUAL(*part, body("abcdef"));
 
-        BOOST_REQUIRE(is_end_of_stream(rr, c, y));
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE(!part);
     });
 
     ios.run();
@@ -188,15 +186,17 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
         RR rr(stream(move(rsp), ios, y));
 
         Cancel c;
-        HR::Part part;
+        boost::optional<HR::Part> part;
 
         part = rr.async_read_part(c, y);
-        BOOST_REQUIRE(part.is_head());
+        BOOST_REQUIRE(part);
+        BOOST_REQUIRE(part->is_head());
 
         part = read_full_body(rr, c, y);
-        BOOST_REQUIRE_EQUAL(part, body(true, "0123456789"));
+        BOOST_REQUIRE_EQUAL(part, body("0123456789"));
 
-        BOOST_REQUIRE(is_end_of_stream(rr, c, y));
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE(!part);
     });
 
     ios.run();
@@ -220,24 +220,30 @@ BOOST_AUTO_TEST_CASE(test_http11_chunk) {
         RR rr(stream(move(rsp), ios, y));
 
         Cancel c;
-        HR::Part part;
+        boost::optional<HR::Part> part;
 
         part = rr.async_read_part(c, y);
-        BOOST_REQUIRE(part.is_head());
+        BOOST_REQUIRE(part);
+        BOOST_REQUIRE(part->is_head());
 
         part = rr.async_read_part(c, y);
-        BOOST_REQUIRE_EQUAL(part, chunk_hdr(4, ""));
+        BOOST_REQUIRE(part);
+        BOOST_REQUIRE_EQUAL(*part, chunk_hdr(4, ""));
 
         part = rr.async_read_part(c, y);
-        BOOST_REQUIRE_EQUAL(part, chunk_body("1234"));
+        BOOST_REQUIRE(part);
+        BOOST_REQUIRE_EQUAL(*part, chunk_body("1234"));
 
         part = rr.async_read_part(c, y);
-        BOOST_REQUIRE_EQUAL(part, chunk_hdr(0, ""));
+        BOOST_REQUIRE(part);
+        BOOST_REQUIRE_EQUAL(*part, chunk_hdr(0, ""));
 
         part = rr.async_read_part(c, y);
-        BOOST_REQUIRE_EQUAL(part, trailer({}));
+        BOOST_REQUIRE(part);
+        BOOST_REQUIRE_EQUAL(*part, trailer({}));
 
-        BOOST_REQUIRE(is_end_of_stream(rr, c, y));
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE(!part);
     });
 
     ios.run();
@@ -263,24 +269,30 @@ BOOST_AUTO_TEST_CASE(test_http11_trailer) {
         RR rr(stream(move(rsp), ios, y));
 
         Cancel c;
-        HR::Part part;
+        boost::optional<HR::Part> part;
 
         part = rr.async_read_part(c, y);
-        BOOST_REQUIRE(part.is_head());
+        BOOST_REQUIRE(part);
+        BOOST_REQUIRE(part->is_head());
 
         part = rr.async_read_part(c, y);
-        BOOST_REQUIRE_EQUAL(part, chunk_hdr(4, ""));
+        BOOST_REQUIRE(part);
+        BOOST_REQUIRE_EQUAL(*part, chunk_hdr(4, ""));
 
         part = rr.async_read_part(c, y);
-        BOOST_REQUIRE_EQUAL(part, chunk_body("1234"));
+        BOOST_REQUIRE(part);
+        BOOST_REQUIRE_EQUAL(*part, chunk_body("1234"));
 
         part = rr.async_read_part(c, y);
-        BOOST_REQUIRE_EQUAL(part, chunk_hdr(0, ""));
+        BOOST_REQUIRE(part);
+        BOOST_REQUIRE_EQUAL(*part, chunk_hdr(0, ""));
 
         part = rr.async_read_part(c, y);
-        BOOST_REQUIRE_EQUAL(part, trailer({{"Hash", "hash_of_1234"}}));
+        BOOST_REQUIRE(part);
+        BOOST_REQUIRE_EQUAL(*part, trailer({{"Hash", "hash_of_1234"}}));
 
-        BOOST_REQUIRE(is_end_of_stream(rr, c, y));
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE(!part);
     });
 
     ios.run();
@@ -308,21 +320,31 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
         RR rr(stream(move(rsp), ios, y));
 
         Cancel c;
-        HR::Part part;
+        boost::optional<HR::Part> part;
 
         part = rr.async_read_part(c, y);
-        BOOST_REQUIRE(part.is_head());
+        BOOST_REQUIRE(part);
+        BOOST_REQUIRE(part->is_head());
 
         part = read_full_body(rr, c, y);
-        BOOST_REQUIRE_EQUAL(part, body(true, "0123456789"));
+        BOOST_REQUIRE(part);
+        BOOST_REQUIRE_EQUAL(*part, body("0123456789"));
 
         part = rr.async_read_part(c, y);
-        BOOST_REQUIRE(part.is_head());
+        BOOST_REQUIRE(!part);
+
+        rr.restart();
+
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE(part);
+        BOOST_REQUIRE(part->is_head());
 
         part = read_full_body(rr, c, y);
-        BOOST_REQUIRE_EQUAL(part, body(true, "abcde"));
+        BOOST_REQUIRE(part);
+        BOOST_REQUIRE_EQUAL(*part, body("abcde"));
 
-        BOOST_REQUIRE(is_end_of_stream(rr, c, y));
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE(!part);
     });
 
     ios.run();
@@ -353,34 +375,47 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
         RR rr(stream(move(rsp), ios, y));
 
         Cancel c;
-        HR::Part part;
+        boost::optional<HR::Part> part;
 
         {
             part = rr.async_read_part(c, y);
-            BOOST_REQUIRE(part.is_head());
+            BOOST_REQUIRE(part);
+            BOOST_REQUIRE(part->is_head());
 
             part = rr.async_read_part(c, y);
-            BOOST_REQUIRE_EQUAL(part, chunk_hdr(4, ""));
+            BOOST_REQUIRE(part);
+            BOOST_REQUIRE_EQUAL(*part, chunk_hdr(4, ""));
 
             part = rr.async_read_part(c, y);
-            BOOST_REQUIRE_EQUAL(part, chunk_body("1234"));
+            BOOST_REQUIRE(part);
+            BOOST_REQUIRE_EQUAL(*part, chunk_body("1234"));
 
             part = rr.async_read_part(c, y);
-            BOOST_REQUIRE_EQUAL(part, chunk_hdr(0, ""));
+            BOOST_REQUIRE(part);
+            BOOST_REQUIRE_EQUAL(*part, chunk_hdr(0, ""));
 
             part = rr.async_read_part(c, y);
-            BOOST_REQUIRE_EQUAL(part, trailer({}));
+            BOOST_REQUIRE(part);
+            BOOST_REQUIRE_EQUAL(*part, trailer({}));
         }
 
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE(!part);
+
+        rr.restart();
+
         {
             part = rr.async_read_part(c, y);
-            BOOST_REQUIRE(part.is_head());
+            BOOST_REQUIRE(part);
+            BOOST_REQUIRE(part->is_head());
 
             part = read_full_body(rr, c, y);
-            BOOST_REQUIRE_EQUAL(part, body(true, "abcde"));
+            BOOST_REQUIRE(part);
+            BOOST_REQUIRE_EQUAL(*part, body("abcde"));
         }
 
-        BOOST_REQUIRE(is_end_of_stream(rr, c, y));
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE(!part);
     });
 
     ios.run();

@@ -117,7 +117,7 @@ BOOST_AUTO_TEST_CASE(test_http10_body_no_length) {
             part = HR::Head(move(rh));
             part.async_write(con, c, y);
 
-            part = HR::Body(true, str_to_vec(rb));
+            part = HR::Body(str_to_vec(rb));
             part.async_write(con, c, y);
         }
         outwc.wait(y);
@@ -156,7 +156,7 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
             part = HR::Head(move(rh));
             part.async_write(con, c, y);
 
-            part = HR::Body(true, str_to_vec(rb));
+            part = HR::Body(str_to_vec(rb));
             part.async_write(con, c, y);
         }
         outwc.wait(y);
@@ -323,13 +323,13 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
             part = HR::Head(move(rh1));
             part.async_write(con, c, y);
 
-            part = HR::Body(true, str_to_vec(rb1));
+            part = HR::Body(str_to_vec(rb1));
             part.async_write(con, c, y);
 
             part = HR::Head(move(rh2));
             part.async_write(con, c, y);
 
-            part = HR::Body(true, str_to_vec(rb2));
+            part = HR::Body(str_to_vec(rb2));
             part.async_write(con, c, y);
         }
         outwc.wait(y);
@@ -403,7 +403,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
             part = HR::Head(move(rh2));
             part.async_write(con, c, y);
 
-            part = HR::Body(true, str_to_vec(rb2));
+            part = HR::Body(str_to_vec(rb2));
             part.async_write(con, c, y);
         }
         outwc.wait(y);

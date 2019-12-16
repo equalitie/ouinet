@@ -31,14 +31,9 @@ struct Head : public http::response_header<>  {
 };
 
 struct Body : public std::vector<uint8_t> {
-    bool is_last;
-
     using Base = std::vector<uint8_t>;
 
-    Body(bool is_last, Base data)
-        : Base(move(data))
-        , is_last(is_last)
-    {}
+    Body(Base data) : Base(move(data)) {}
 
     Body(const Body&) = default;
     Body(Body&&) = default;
