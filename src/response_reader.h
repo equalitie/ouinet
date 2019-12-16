@@ -39,6 +39,9 @@ public:
         set_callbacks();
     }
 
+    bool is_open() const { return _in.is_open(); }
+    void close()         { return _in.close(); }
+
 private:
     http::fields filter_trailer_fields(const http::fields& hdr)
     {
@@ -136,6 +139,7 @@ Reader::async_read_part(Cancel cancel, asio::yield_context yield) {
         http::async_read_some(_in, _buffer, _parser, yield[ec]);
 
         if (cancel) ec = asio::error::operation_aborted;
+        assert(ec != http::error::end_of_stream);
         if (ec == http::error::end_of_chunk) ec = {};
         if (ec) return or_throw(yield, ec, boost::none);
 
@@ -159,8 +163,9 @@ Reader::async_read_part(Cancel cancel, asio::yield_context yield) {
         http::async_read_some(_in, _buffer, _parser, yield[ec]);
 
         if (cancel) ec = asio::error::operation_aborted;
+        assert(ec != http::error::end_of_stream);
         if (ec == http::error::need_buffer) ec = sys::error_code();
-        if (ec) return or_throw<Part>(yield, ec);
+        if (ec) return or_throw(yield, ec, boost::none);
 
         size_t s = sizeof(buf) - _parser.get().body().size;
 
