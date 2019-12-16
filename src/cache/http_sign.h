@@ -11,6 +11,7 @@
 
 #include "../constants.h"
 #include "../http_util.h"
+#include "../http_forward.h"
 #include "../logger.h"
 #include "../session.h"
 #include "../util/crypto.h"
