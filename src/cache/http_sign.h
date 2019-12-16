@@ -188,6 +188,11 @@ session_flush_signed( Session& in, SinkStream& out
                     , const ouinet::util::Ed25519PrivateKey& sk
                     , Cancel& cancel, asio::yield_context yield)
 {
+#ifndef NDEBUG // debug
+#   warning TODO
+    sys::error_code ec;
+    in.flush_response(out, cancel, yield[ec]);
+#else // release
     auto httpsig_key_id = http_key_id_for_injection(sk.public_key());  // TODO: cache this
 
     bool do_inject = false;
@@ -262,6 +267,7 @@ session_flush_signed( Session& in, SinkStream& out
     in.flush_response( out
                      , std::move(hproc), std::move(xproc), std::move(dproc), std::move(tproc)
                      , cancel, yield[ec]);
+#endif
     return or_throw(yield, ec);
 }
 
@@ -284,6 +290,12 @@ session_flush_verified( Session& in, SinkStream& out
                       , const ouinet::util::Ed25519PublicKey& pk
                       , Cancel& cancel, asio::yield_context yield)
 {
+#ifndef NDEBUG // debug
+#   warning TODO
+    sys::error_code ec;
+    in.flush_response(out, cancel, yield[ec]);
+    return or_throw(yield, ec);
+#else // release
     http::response_header<> head;  // keep for refs and later use
     boost::string_view uri;  // for warnings, should use `Yield::log` instead
     boost::string_view injection_id;
@@ -429,6 +441,7 @@ session_flush_verified( Session& in, SinkStream& out
         if (!http_sign_detail::check_body(head, body_length, body_hash))
             ec = sys::errc::make_error_code(sys::errc::bad_message);
     return or_throw(yield, ec);
+#endif
 }
 
 
