@@ -88,10 +88,8 @@ Session make_session(
         http::async_write(sink, rs, yield);
     });
 
-    Session s(move(pipe.source));
     Cancel c;
-    s.read_response_header(c, y);
-    return s;
+    return Session::create(move(pipe.source), c, y);
 }
 
 Entry make_entry(
@@ -101,8 +99,6 @@ Entry make_entry(
         asio::yield_context y)
 {
     Session s = make_session(ctx, move(rs), y);
-    Cancel c;
-    s.read_response_header(c, y);
     return Entry{ created , move(s) };
 }
 
@@ -135,9 +131,8 @@ BOOST_AUTO_TEST_CASE(test_cache_origin_fail)
             auto s = cc.fetch(req, fresh_ec, cache_ec, cancel, yield);
             BOOST_REQUIRE(fresh_ec);
             BOOST_REQUIRE(!cache_ec);
-            auto hdr = s.response_header();
-            BOOST_REQUIRE(hdr);
-            BOOST_CHECK_EQUAL(hdr->result(), http::status::ok);
+            auto& hdr = s.response_header();
+            BOOST_CHECK_EQUAL(hdr.result(), http::status::ok);
         });
 
     BOOST_CHECK_EQUAL(cache_check, 1u);
@@ -345,9 +340,8 @@ BOOST_AUTO_TEST_CASE(test_dont_load_cache_when_If_None_Match)
             Cancel cancel;
             sys::error_code fresh_ec, cache_ec;
             auto s = cc.fetch(req, fresh_ec, cache_ec, cancel, yield);
-            auto hdr = s.response_header();
-            BOOST_REQUIRE(hdr);
-            BOOST_CHECK_EQUAL(hdr->result(), http::status::ok);
+            auto& hdr = s.response_header();
+            BOOST_CHECK_EQUAL(hdr.result(), http::status::ok);
         });
 
     BOOST_CHECK_EQUAL(origin_check, 1u);
@@ -442,7 +436,7 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
                 Cancel cancel;
                 sys::error_code fresh_ec, cache_ec;
                 auto s = cc.fetch(rq, fresh_ec, cache_ec, cancel, yield);
-                auto h = *s.response_header();
+                auto h = s.response_header();
                 BOOST_CHECK_EQUAL(h.result(), http::status::ok);
                 BOOST_CHECK_EQUAL(h["X-Test"], "from-cache");
             }
@@ -454,7 +448,7 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
                 Cancel cancel;
                 sys::error_code fresh_ec, cache_ec;
                 auto s = cc.fetch(rq, fresh_ec, cache_ec, cancel, yield);
-                auto h = *s.response_header();
+                auto h = s.response_header();
                 BOOST_CHECK_EQUAL(h.result(), http::status::ok);
                 BOOST_CHECK_EQUAL(h["X-Test"], "from-origin-ok");
             }
@@ -500,7 +494,7 @@ BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
                 Cancel cancel;
                 sys::error_code fresh_ec, cache_ec;
                 auto s = cc.fetch(req, fresh_ec, cache_ec, cancel, yield);
-                auto h = *s.response_header();
+                auto h = s.response_header();
                 BOOST_CHECK_EQUAL(h.result(), http::status::ok);
                 BOOST_CHECK_EQUAL(h["X-Test"], "from-cache");
             }
@@ -512,7 +506,7 @@ BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
                 Cancel cancel;
                 sys::error_code fresh_ec, cache_ec;
                 auto s = cc.fetch(req, fresh_ec, cache_ec, cancel, yield);
-                auto h = *s.response_header();
+                auto h = s.response_header();
                 BOOST_CHECK_EQUAL(h.result(), http::status::ok);
                 BOOST_CHECK_EQUAL(h["X-Test"], "from-origin");
             }

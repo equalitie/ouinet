@@ -311,7 +311,9 @@ public:
         if (ec) yield.log("Failed to send request: ", ec.message());
         return_or_throw_on_error(yield, cancel, ec);
 
-        Session orig_sess(move(orig_con));
+        Session orig_sess = Session::create(move(orig_con), cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec);
+
         cache::session_flush_signed( orig_sess, con
                                    , rq, insert_id, insert_ts
                                    , config.cache_private_key()
@@ -321,9 +323,7 @@ public:
         return_or_throw_on_error(yield, cancel, ec);
         yield.log("Injection end");  // TODO: report whether inject or just fwd
 
-        auto rshp = orig_sess.response_header();
-        assert(rshp != nullptr);
-        auto rsh = http::response<http::empty_body>(*rshp);
+        auto rsh = http::response<http::empty_body>(orig_sess.response_header());
         keep_connection(rq, rsh, move(orig_sess));
     }
 

@@ -289,24 +289,18 @@ struct Client::Impl {
                 }
 
                 auto session = load_from_connection(key, opt_con->first, cancel, yield[ec]);
-                auto hdr = session.response_header();
+                auto& hdr = session.response_header();
 
                 if (dbg) {
-                    if (hdr) {
-                        yield.log(*dbg, " Bep5Http: fetch done,",
-                            " ec:", ec.message(), " result:", hdr->result());
-                    } else {
-                        yield.log(*dbg, " Bep5Http: fetch done,",
-                            " ec:", ec.message(), " result: <n/a>");
-                    }
+                    yield.log(*dbg, " Bep5Http: fetch done,",
+                        " ec:", ec.message(), " result:", hdr.result());
                 }
 
                 assert(!cancel || ec == err::operation_aborted);
-                assert(ec || hdr);
 
                 if (cancel) return or_throw<Session>(yield, err::operation_aborted);
 
-                if (ec || hdr->result() == http::status::not_found) {
+                if (ec || hdr.result() == http::status::not_found) {
                     continue;
                 }
 
@@ -356,9 +350,10 @@ struct Client::Impl {
                         , key = key
                         , sink = move(src_sink.second)
                         , con  = move(con)] (auto yield) mutable {
-            Session s(move(con));
             sys::error_code ec;
             Cancel cancel;
+            auto s = Session::create(move(con), cancel, yield[ec]);
+            return_or_throw_on_error(yield, cancel, ec);
 
             cache::session_flush_verified(s, sink, pk, cancel, yield[ec]);
 
@@ -368,15 +363,14 @@ struct Client::Impl {
                         , key);
         });
 
-        Session session(move(src_sink.first));
-        auto hdr_p = session.read_response_header(cancel, yield[ec]);
+        auto session = Session::create(move(src_sink.first), cancel, yield[ec]);
 
         assert(!cancel || ec == asio::error::operation_aborted);
-        assert(hdr_p || ec);
+
         if (cancel)
             ec = asio::error::operation_aborted;
         else if ( !ec
-                && !util::http_proto_version_check_trusted(*hdr_p, newest_proto_seen))
+                && !util::http_proto_version_check_trusted(session.response_header(), newest_proto_seen))
             // The client expects an injection belonging to a supported protocol version,
             // otherwise we just discard this copy.
             ec = asio::error::not_found;

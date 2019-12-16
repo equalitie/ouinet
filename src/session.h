@@ -15,23 +15,11 @@ public:
     Session(Session&&) = default;
     Session& operator=(Session&&) = default;
 
-    Session(GenericStream con)
-        : _reader(new http_response::Reader(std::move(con)))
-    {}
+    // Construct the session and read response head
+    static Session create(GenericStream, Cancel, asio::yield_context);
 
-    const http_response::Head* response_header() const {
-        if (!_reader) return nullptr;
-        if (!_head) return nullptr;
-        return &*_head;
-    }
-
-    http_response::Head* response_header() {
-        if (!_reader) return nullptr;
-        if (!_head) return nullptr;
-        return &*_head;
-    }
-
-    http_response::Head* read_response_header(Cancel&, asio::yield_context);
+          http_response::Head& response_header()       { return _head; }
+    const http_response::Head& response_header() const { return _head; }
 
     template<class SinkStream>
     void flush_response(SinkStream&, Cancel&, asio::yield_context);
@@ -46,53 +34,49 @@ public:
     }
 
     bool keep_alive() const {
-        assert(_head);
-        if (!_head) return false;
-        return _head->keep_alive();
+        return _head.keep_alive();
     }
 
 private:
-    boost::optional<http_response::Head> _head;
+    Session( http_response::Head&& head
+           , std::unique_ptr<http_response::Reader>&& reader)
+        : _head(std::move(head))
+        , _reader(std::move(reader))
+    {}
+
+private:
+    http_response::Head _head;
     std::unique_ptr<http_response::Reader> _reader;
 };
 
 inline
-http_response::Head*
-Session::read_response_header(Cancel& cancel, asio::yield_context yield)
+Session Session::create(GenericStream con, Cancel cancel, asio::yield_context yield)
 {
-    using http_response::Head;
-
     assert(!cancel);
 
-    if (!_reader) {
-        return or_throw<Head*>(yield, asio::error::bad_descriptor);
-    }
-
-    if (_head) return &*_head;
+    auto reader = std::make_unique<http_response::Reader>(std::move(con));
 
     sys::error_code ec;
 
-    auto part = _reader->async_read_part(cancel, yield[ec]);
+    auto head_opt_part = reader->async_read_part(cancel, yield[ec]);
 
     if (cancel) {
         assert(ec == asio::error::operation_aborted);
         ec = asio::error::operation_aborted;
     }
 
-    if (!part) {
+    if (!ec && !head_opt_part) {
         assert(ec);
         ec = http::error::unexpected_body;
     }
 
-    if (ec) return or_throw<Head*>(yield, ec, nullptr);
+    if (ec) return or_throw<Session>(yield, ec);
 
-    auto head = part->as_head();
+    auto head = head_opt_part->as_head();
 
-    if (!head) return or_throw<Head*>(yield, http::error::unexpected_body, nullptr);
+    if (!head) return or_throw<Session>(yield, http::error::unexpected_body);
 
-    _head = std::move(*head);
-
-    return &*_head;
+    return Session{std::move(*head), std::move(reader)};
 }
 
 template<class SinkStream>
@@ -104,11 +88,8 @@ Session::flush_response(SinkStream& sink,
 {
     sys::error_code ec;
 
-    if (_head) {
-        http_response::Head* p = &*_head;
-        p->async_write(sink, cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec);
-    }
+    _head.async_write(sink, cancel, yield[ec]);
+    return_or_throw_on_error(yield, cancel, ec);
 
     while (true) {
         auto opt_part = _reader->async_read_part(cancel, yield[ec]);

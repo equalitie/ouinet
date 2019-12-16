@@ -30,12 +30,10 @@ static
 bool has_cache_control_directive( const Session& session
                                 , const beast::string_view& directive)
 {
-    auto hdr_p = session.response_header();
-    assert(hdr_p);
-    if (!hdr_p) return false;
+    auto& hdr = session.response_header();
 
-    auto cache_control_i = hdr_p->find(http::field::cache_control);
-    if (cache_control_i == hdr_p->end()) return false;
+    auto cache_control_i = hdr.find(http::field::cache_control);
+    if (cache_control_i == hdr.end()) return false;
 
     for (auto kv : SplitString(cache_control_i->value(), ',')) {
         if (boost::iequals(kv, directive)) return true;
@@ -56,10 +54,8 @@ static boost::optional<beast::string_view> get(const R& r, http::field f)
 
 static boost::optional<beast::string_view> get(const Session& s, http::field f)
 {
-    auto hdr = s.response_header();
-    assert(hdr);
-    if (!hdr) return boost::none;
-    return get(*hdr, f);
+    auto& hdr = s.response_header();
+    return get(hdr, f);
 }
 
 inline void trim_quotes(beast::string_view& v) {
@@ -108,10 +104,8 @@ boost::optional<unsigned> get_max_age(const beast::string_view& cache_control_va
 /* static */
 bool CacheControl::is_expired(const CacheEntry& entry)
 {
-    auto hdr_p = entry.response.response_header();
-    assert(hdr_p);
-    if (!hdr_p) return true;
-    return is_expired(*hdr_p, entry.time_stamp);
+    auto& hdr = entry.response.response_header();
+    return is_expired(hdr, entry.time_stamp);
 }
 
 /* static */
@@ -164,13 +158,8 @@ CacheControl::is_older_than_max_cache_age(const posix_time::ptime& time_stamp) c
 static
 Session add_warning(Session s, const char* value)
 {
-    auto hdr_p = s.response_header();
-
-    assert(hdr_p);
-    if (!hdr_p) return s;
-
-    hdr_p->set(http::field::warning, value);
-
+    auto& hdr = s.response_header();
+    hdr.set(http::field::warning, value);
     return s;
 }
 
@@ -226,14 +215,11 @@ static bool must_revalidate(const Request& request)
 //------------------------------------------------------------------------------
 bool CacheControl::has_temporary_result(const Session& rs) const
 {
-    auto hdr = rs.response_header();
-
-    assert(hdr);
-    if (!hdr) return false;
+    auto& hdr = rs.response_header();
 
     // TODO: More statuses
-    return hdr->result() == http::status::found
-        || hdr->result() == http::status::temporary_redirect;
+    return hdr.result() == http::status::found
+        || hdr.result() == http::status::temporary_redirect;
 }
 
 //------------------------------------------------------------------------------
@@ -403,10 +389,9 @@ CacheControl::do_fetch(
             return add_stale_warning(move(cache_entry.response));
         }
 
-        auto hdr = response.response_header();
-        assert(hdr);
+        auto& hdr = response.response_header();
 
-        if (hdr->result() == http::status::not_modified) {
+        if (hdr.result() == http::status::not_modified) {
             LOG_DEBUG(yield.tag(), ": Response was served from cache: not modified");
             return move(cache_entry.response);
         }
@@ -450,7 +435,6 @@ auto CacheControl::make_fetch_fresh_job(const Request& rq, Yield& yield)
             auto r = fetch_fresh(rq, cancel, y[ec]);
             assert(!cancel || ec == asio::error::operation_aborted);
             if (ec) return or_throw(y, ec, move(r));
-            assert(r.response_header());
             return r;
         });
 

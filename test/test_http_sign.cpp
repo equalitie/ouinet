@@ -302,10 +302,10 @@ BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
         // Sign origin response.
         asio::spawn(ctx, [ origin_r = std::move(origin_r), &signed_w
                          , lock = wc.lock()] (auto y) mutable {
-            Session origin_rs(std::move(origin_r));
+            Cancel cancel;
+            auto origin_rs = Session::create(std::move(origin_r), cancel, y);
             auto req_h = get_request_header();
             auto sk = get_private_key();
-            Cancel cancel;
             sys::error_code e;
             cache::session_flush_signed( origin_rs, signed_w
                                        , req_h, inj_id, inj_ts, sk
@@ -400,10 +400,10 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified) {
         // Sign origin response.
         asio::spawn(ctx, [ origin_r = std::move(origin_r), &signed_w
                          , lock = wc.lock()] (auto y) mutable {
-            Session origin_rs(std::move(origin_r));
+            Cancel cancel;
+            auto origin_rs = Session::create(std::move(origin_r), cancel, y);
             auto req_h = get_request_header();
             auto sk = get_private_key();
-            Cancel cancel;
             sys::error_code e;
             cache::session_flush_signed( origin_rs, signed_w
                                        , req_h, inj_id, inj_ts, sk
@@ -415,9 +415,9 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified) {
         // Verify signed output.
         asio::spawn(ctx, [ signed_r = std::move(signed_r), &hashed_w
                          , lock = wc.lock()](auto y) mutable {
-            Session signed_rs(std::move(signed_r));
-            auto pk = get_public_key();
             Cancel cancel;
+            auto signed_rs = Session::create(std::move(signed_r), cancel, y);
+            auto pk = get_public_key();
             sys::error_code e;
             cache::session_flush_verified( signed_rs, hashed_w
                                          , pk
@@ -502,10 +502,10 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
         // Sign origin response.
         asio::spawn(ctx, [ origin_r = std::move(origin_r), &signed_w
                          , lock = wc.lock()] (auto y) mutable {
-            Session origin_rs(std::move(origin_r));
+            Cancel cancel;
+            auto origin_rs = Session::create(std::move(origin_r), cancel, y);
             auto req_h = get_request_header();
             auto sk = get_private_key();
-            Cancel cancel;
             sys::error_code e;
             cache::session_flush_signed( origin_rs, signed_w
                                        , req_h, inj_id, inj_ts, sk
@@ -543,9 +543,9 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
         // Verify forged output.
         asio::spawn(ctx, [ forged_r = std::move(forged_r), &tested_w
                          , lock = wc.lock()](auto y) mutable {
-            Session forged_rs(std::move(forged_r));
-            auto pk = get_public_key();
             Cancel cancel;
+            auto forged_rs = Session::create(std::move(forged_r), cancel, y);
+            auto pk = get_public_key();
             sys::error_code e;
             cache::session_flush_verified( forged_rs, tested_w
                                          , pk

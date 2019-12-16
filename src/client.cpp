@@ -395,23 +395,20 @@ Client::State::fetch_stored( const Request& request
     auto s = c->load(move(*key), cancel, yield[ec]);
     return_or_throw_on_error(yield, cancel, ec, CacheEntry{});
 
-    auto hdr = s.response_header();
-    assert(hdr);
+    auto& hdr = s.response_header();
 
-    if (!hdr)
-        return or_throw<CacheEntry>(yield, asio::error::operation_not_supported);
-    if (!util::http_proto_version_check_trusted(*hdr, newest_proto_seen))
+    if (!util::http_proto_version_check_trusted(hdr, newest_proto_seen))
         // The cached resource cannot be used, treat it like
         // not being found.
         return or_throw<CacheEntry>(yield, asio::error::not_found);
 
-    auto tsh = util::http_injection_ts(*hdr);
+    auto tsh = util::http_injection_ts(hdr);
     auto ts = parse::number<time_t>(tsh);
     auto date = ( ts
                 ? boost::posix_time::from_time_t(*ts)
                 : boost::posix_time::not_a_date_time);
 
-    maybe_add_proto_version_warning(*hdr);
+    maybe_add_proto_version_warning(hdr);
     return CacheEntry{date, move(s)};
 }
 
@@ -501,12 +498,11 @@ Session Client::State::fetch_fresh_from_origin(const Request& rq, Yield yield)
 
     if (ec) return or_throw<Session>(yield, ec);
 
-    Session ret(std::move(con));
-    auto hdr_p = ret.read_response_header(cancel, yield[ec]);
-    if (ec) return or_throw(yield, ec, std::move(ret));
+    auto ret = Session::create(std::move(con), cancel, yield[ec]);
+    return_or_throw_on_error(yield, cancel, ec, Session());
 
     // Prevent others from inserting ouinet headers.
-    util::remove_ouinet_fields_ref(*hdr_p);
+    util::remove_ouinet_fields_ref(ret.response_header());
 
     return or_throw(yield, ec, move(ret));
 }
@@ -593,12 +589,11 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
         return_or_throw_on_error(yield, cancel, ec, Session());
     }
 
-    Session session(move(con));
-    auto hdr_p = session.read_response_header(cancel, yield[ec]);
+    auto session = Session::create(move(con), cancel, yield[ec]);
     return_or_throw_on_error(yield, cancel, ec, Session());
 
     // Prevent others from inserting ouinet headers.
-    util::remove_ouinet_fields_ref(*hdr_p);
+    util::remove_ouinet_fields_ref(session.response_header());
 
     return session;
 }
@@ -671,24 +666,22 @@ Session Client::State::fetch_fresh_through_simple_proxy
 
     if (ec) return or_throw<Session>(yield, ec);
 
-    // Receive response
-    Session session(move(con));
-    cancel_slot = cancel.connect([&] { session.close(); });
-
     if (log_transactions()) {
         yield.log("Reading response");
     }
 
-    auto hdr_p = session.read_response_header(cancel, yield[ec]);
+    cancel_slot = {};
 
-    assert(!cancel || cancel_slot);
-    assert(!cancel_slot || cancel);
-    if (cancel_slot)
+    // Receive response
+    auto session = Session::create(move(con), cancel, yield[ec]);
+
+    auto& hdr = session.response_header();
+
+    if (cancel)
         ec = asio::error::operation_aborted;
     else if ( !ec
             && can_inject
-            && ( !hdr_p
-               || !util::http_proto_version_check_trusted(*hdr_p, newest_proto_seen)))
+            && !util::http_proto_version_check_trusted(hdr, newest_proto_seen))
         // The injector using an unacceptable protocol version is treated like
         // the Injector mechanism being disabled.
         ec = asio::error::operation_not_supported;
@@ -702,10 +695,10 @@ Session Client::State::fetch_fresh_through_simple_proxy
     // Store keep-alive connections in connection pool
 
     if (can_inject) {
-        maybe_add_proto_version_warning(*hdr_p);
+        maybe_add_proto_version_warning(hdr);
     } else {
         // Prevent others from inserting ouinet headers.
-        util::remove_ouinet_fields_ref(*hdr_p);
+        util::remove_ouinet_fields_ref(hdr);
     }
 
     return session;
@@ -745,7 +738,7 @@ public:
 
         if (log_transactions()) {
             if (!ec) {
-                yield.log("Fetched fresh success, status: ", s.response_header()->result());
+                yield.log("Fetched fresh success, status: ", s.response_header().result());
             } else {
                 yield.log("Fetched fresh error: ", ec.message());
             }
@@ -799,12 +792,7 @@ public:
 
         sys::error_code ec;
 
-        auto rs_hdr = s.read_response_header(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec);
-        assert(rs_hdr);
-        if (!rs_hdr) return;
-
-        if (!CacheControl::ok_to_cache(rq, *rs_hdr)) return;
+        if (!CacheControl::ok_to_cache(rq, s.response_header())) return;
 
         auto key = key_from_http_req(rq);
         assert(key);
@@ -911,20 +899,17 @@ public:
 
                     if (ec) break;
 
-                    auto rsh = s.response_header();
+                    auto& rsh = s.response_header();
+
                     if (log_transactions()) {
-                        if (rsh) {
-                            yield.log("Response header:");
-                            yield.log(*rsh);
-                        } else {
-                            yield.log("No response header.");
-                        }
+                        yield.log("Response header:");
+                        yield.log(rsh);
                     }
 
                     assert(!fresh_ec || !cache_ec); // At least one success
                     assert( fresh_ec ||  cache_ec); // One needs to fail
 
-                    auto injector_error = (*rsh)[http_::response_error_hdr];
+                    auto injector_error = rsh[http_::response_error_hdr];
                     if (!injector_error.empty()) {
                         yield.log("Error from injector: ", injector_error);
                         ec = asio::error::invalid_argument;
@@ -946,8 +931,9 @@ public:
                         lock = wc.lock()
                     ] (asio::yield_context yield_) {
                       auto y = yield.detach(yield_);
-                      Session s1(move(src1));
                       sys::error_code ec;
+                      Session s1 = Session::create(move(src1), cancel, y[ec]);
+                      return_or_throw_on_error(y, cancel, ec);
                       store(rq, s1, cancel, y[ec]);
                     });
 
@@ -955,8 +941,9 @@ public:
                         &,
                         lock = wc.lock()
                     ] (asio::yield_context yield_) {
-                        Session s2(move(src2));
                         sys::error_code ec;
+                        Session s2 = Session::create(move(src2), cancel, yield_[ec]);
+                        return_or_throw_on_error(yield_, cancel, ec);
                         s2.flush_response(con, cancel, yield_[ec]);
                     });
 
