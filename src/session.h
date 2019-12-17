@@ -17,6 +17,8 @@ public:
 
     // Construct the session and read response head
     static Session create(GenericStream, Cancel, asio::yield_context);
+    static Session create( std::unique_ptr<http_response::Reader>&&
+                         , Cancel, asio::yield_context);
 
           http_response::Head& response_header()       { return _head; }
     const http_response::Head& response_header() const { return _head; }
@@ -55,6 +57,15 @@ Session Session::create(GenericStream con, Cancel cancel, asio::yield_context yi
     assert(!cancel);
 
     auto reader = std::make_unique<http_response::Reader>(std::move(con));
+
+    return Session::create(std::move(reader), cancel, yield);
+}
+
+inline
+Session Session::create( std::unique_ptr<http_response::Reader>&& reader
+                       , Cancel cancel, asio::yield_context yield)
+{
+    assert(!cancel);
 
     sys::error_code ec;
 
