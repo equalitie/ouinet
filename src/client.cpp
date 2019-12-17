@@ -767,8 +767,8 @@ public:
     }
 
     void store( const Request& rq
-              , Session& s
-              , Cancel& cancel, Yield yield)
+              , GenericStream s
+              , Cancel& cancel, asio::yield_context yield)
     {
         namespace err = asio::error;
 
@@ -790,13 +790,9 @@ public:
             return or_throw(yield, err::operation_not_supported);
         }
 
-        sys::error_code ec;
-
-        if (!CacheControl::ok_to_cache(rq, s.response_header())) return;
-
         auto key = key_from_http_req(rq);
         assert(key);
-        cache->store(move(*key), s, cancel, yield);
+        cache->store(move(*key), move(s), cancel, yield);
     }
 
     // Closes `con` when it can no longer be used.
@@ -926,16 +922,15 @@ public:
 
                     WaitCondition wc(ctx);
 
-                    asio::spawn(ctx, [
-                        &,
-                        lock = wc.lock()
-                    ] (asio::yield_context yield_) {
-                      auto y = yield.detach(yield_);
-                      sys::error_code ec;
-                      Session s1 = Session::create(move(src1), cancel, y[ec]);
-                      return_or_throw_on_error(y, cancel, ec);
-                      store(rq, s1, cancel, y[ec]);
-                    });
+                    if (CacheControl::ok_to_cache(rq, s.response_header())) {
+                        asio::spawn(ctx, [
+                            &,
+                            lock = wc.lock()
+                        ] (asio::yield_context yield_) {
+                          sys::error_code ec;
+                          store(rq, move(src1), cancel, yield_[ec]);
+                        });
+                    }
 
                     asio::spawn(ctx, [
                         &,

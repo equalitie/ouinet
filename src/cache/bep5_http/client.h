@@ -32,7 +32,7 @@ public:
     Session load(const std::string& key, Cancel, Yield);
 
     void store( const std::string& key
-              , Session&
+              , GenericStream
               , Cancel
               , asio::yield_context);
 
