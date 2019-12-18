@@ -633,4 +633,20 @@ HttpSignature::verify( const http::response_header<>& rsh
     return {true, std::move(extra)};
 }
 
+// begin VerifyingReader
+
+VerifyingReader::VerifyingReader(GenericStream in, const ouinet::util::Ed25519PublicKey& pk)
+    : http_response::Reader(std::move(in))
+    , _pk(pk)
+{
+}
+
+boost::optional<http_response::Part>
+VerifyingReader::async_read_part(Cancel cancel, asio::yield_context yield)
+{
+    return http_response::Reader::async_read_part(cancel, yield);
+}
+
+// end VerifyingReader
+
 }} // namespaces

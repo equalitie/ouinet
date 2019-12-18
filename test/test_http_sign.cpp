@@ -416,12 +416,12 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified) {
         asio::spawn(ctx, [ signed_r = std::move(signed_r), &hashed_w
                          , lock = wc.lock()](auto y) mutable {
             Cancel cancel;
-            auto signed_rs = Session::create(std::move(signed_r), cancel, y);
-            auto pk = get_public_key();
             sys::error_code e;
-            cache::session_flush_verified( signed_rs, hashed_w
-                                         , pk
-                                         , cancel, y[e]);
+            auto pk = get_public_key();
+            Session::reader_uptr signed_rvr = make_unique<cache::VerifyingReader>(move(signed_r), pk);
+            auto signed_rs = Session::create(move(signed_rvr), cancel, y[e]);
+            BOOST_REQUIRE(!e);
+            signed_rs.flush_response(hashed_w, cancel, y[e]);
             BOOST_REQUIRE(!e);
             hashed_w.close();
         });
@@ -544,12 +544,12 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
         asio::spawn(ctx, [ forged_r = std::move(forged_r), &tested_w
                          , lock = wc.lock()](auto y) mutable {
             Cancel cancel;
-            auto forged_rs = Session::create(std::move(forged_r), cancel, y);
-            auto pk = get_public_key();
             sys::error_code e;
-            cache::session_flush_verified( forged_rs, tested_w
-                                         , pk
-                                         , cancel, y[e]);
+            auto pk = get_public_key();
+            Session::reader_uptr forged_rvr = make_unique<cache::VerifyingReader>(move(forged_r), pk);
+            auto forged_rs = Session::create(move(forged_rvr), cancel, y[e]);
+            BOOST_REQUIRE(!e);
+            forged_rs.flush_response(tested_w, cancel, y[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::bad_message);
             tested_w.close();
         });
