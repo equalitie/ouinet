@@ -280,7 +280,7 @@ private:
 
     // For debugging
     uint64_t _next_connection_id = 0;
-    ConnectionPool<std::string> _injector_connections;
+    ConnectionPool<Endpoint> _injector_connections;
     OriginPools _origin_pools;
 
     asio::ssl::context ssl_ctx;
@@ -612,7 +612,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
     sys::error_code ec;
 
     // Connect to the injector.
-    ConnectionPool<std::string>::Connection con;
+    ConnectionPool<Endpoint>::Connection con;
     if (_injector_connections.empty()) {
         if (log_transactions()) {
             yield.log("Connecting to the injector");
@@ -1774,9 +1774,14 @@ void Client::set_injector_endpoint(const char* injector_ep)
     _state->set_injector(injector_ep);
 }
 
-void Client::set_credentials(const char* injector, const char* cred)
+void Client::set_credentials(const char* injector_ep, const char* cred)
 {
-    _state->_config.set_credentials(injector, cred);
+    auto opt_ep = parse_endpoint(injector_ep);
+    if (!opt_ep) {
+        LOG_ERROR("Client::set_credentials: Failed to parse endpoint:", injector_ep);
+        return;
+    }
+    _state->_config.set_credentials(*opt_ep, cred);
 }
 
 void Client::charging_state_change(bool is_charging) {

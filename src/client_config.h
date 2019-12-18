@@ -57,13 +57,13 @@ public:
     }
 
     boost::optional<std::string>
-    credentials_for(const std::string& injector) const {
+    credentials_for(const Endpoint& injector) const {
         auto i = _injector_credentials.find(injector);
         if (i == _injector_credentials.end()) return {};
         return i->second;
     }
 
-    void set_credentials( const std::string& injector
+    void set_credentials( const Endpoint& injector
                         , const std::string& cred) {
         _injector_credentials[injector] = cred;
     }
@@ -190,7 +190,7 @@ private:
     bool _autoseed_updated = false;
 
     std::string _client_credentials;
-    std::map<std::string, std::string> _injector_credentials;
+    std::map<Endpoint, std::string> _injector_credentials;
 
     boost::optional<util::Ed25519PublicKey> _cache_http_pubkey;
     CacheType _cache_type = CacheType::None;
@@ -323,7 +323,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
                 "'--injector-ep'"));
         }
 
-        set_credentials(util::str(*_injector_ep), cred);
+        set_credentials(*_injector_ep, cred);
     }
 
     if (vm.count("client-credentials")) {
