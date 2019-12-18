@@ -231,22 +231,22 @@ private:
     void serve_utp_request(GenericStream, Yield);
 
     void idempotent_start_accepting_on_utp() {
-        if (_bep5_server) return;
+        if (_multi_utp_server) return;
         assert(!_shutdown_signal);
 
         auto dht = bittorrent_dht();
-        _bep5_server
+        _multi_utp_server
             = make_unique<ouiservice::MultiUtpServer>(
                     _ctx.get_executor(),
                     bittorrent_dht()->local_endpoints(),
                     nullptr);
 
         asio::spawn(_ctx, [&, c = _shutdown_signal] (asio::yield_context yield) mutable {
-            auto slot = c.connect([&] () mutable { _bep5_server = nullptr; });
+            auto slot = c.connect([&] () mutable { _multi_utp_server = nullptr; });
 
             while (!c) {
                 sys::error_code ec;
-                auto con = _bep5_server->accept(yield[ec]);
+                auto con = _multi_utp_server->accept(yield[ec]);
                 if (c) return;
                 if (ec == asio::error::operation_aborted) return;
                 if (ec) {
@@ -290,7 +290,7 @@ private:
     boost::optional<asio_utp::udp_multiplexer> _udp_multiplexer;
     shared_ptr<bt::MainlineDht> _bt_dht;
 
-    unique_ptr<ouiservice::MultiUtpServer> _bep5_server;
+    unique_ptr<ouiservice::MultiUtpServer> _multi_utp_server;
 };
 
 //------------------------------------------------------------------------------
