@@ -16,6 +16,7 @@ private:
 
 public:
     Reader(GenericStream in);
+    virtual ~Reader() = default;
 
     //
     // Possible output on subsequent invocations per one response:
@@ -26,7 +27,7 @@ public:
     //
     // Head >> Body* >> boost::none*
     //
-    boost::optional<Part> async_read_part(Cancel, asio::yield_context);
+    virtual boost::optional<Part> async_read_part(Cancel, asio::yield_context);
 
     void restart()
     {
