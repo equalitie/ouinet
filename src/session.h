@@ -7,6 +7,9 @@ namespace ouinet {
 
 class Session {
 public:
+    using reader_uptr = std::unique_ptr<http_response::Reader>;
+
+public:
     Session() = default;
 
     Session(const Session&) = delete;
@@ -17,8 +20,7 @@ public:
 
     // Construct the session and read response head
     static Session create(GenericStream, Cancel, asio::yield_context);
-    static Session create( std::unique_ptr<http_response::Reader>&&
-                         , Cancel, asio::yield_context);
+    static Session create(reader_uptr&&, Cancel, asio::yield_context);
 
           http_response::Head& response_header()       { return _head; }
     const http_response::Head& response_header() const { return _head; }
@@ -40,15 +42,14 @@ public:
     }
 
 private:
-    Session( http_response::Head&& head
-           , std::unique_ptr<http_response::Reader>&& reader)
+    Session(http_response::Head&& head, reader_uptr&& reader)
         : _head(std::move(head))
         , _reader(std::move(reader))
     {}
 
 private:
     http_response::Head _head;
-    std::unique_ptr<http_response::Reader> _reader;
+    reader_uptr _reader;
 };
 
 inline
@@ -62,7 +63,7 @@ Session Session::create(GenericStream con, Cancel cancel, asio::yield_context yi
 }
 
 inline
-Session Session::create( std::unique_ptr<http_response::Reader>&& reader
+Session Session::create( reader_uptr&& reader
                        , Cancel cancel, asio::yield_context yield)
 {
     assert(!cancel);
