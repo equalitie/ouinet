@@ -286,12 +286,14 @@ session_flush_signed( Session& in, SinkStream& out
 class VerifyingReader : public ouinet::http_response::Reader {
 public:
     VerifyingReader(GenericStream in, const ouinet::util::Ed25519PublicKey& pk);
+    ~VerifyingReader() override;
 
     boost::optional<ouinet::http_response::Part>
     async_read_part(Cancel, asio::yield_context) override;
 
 private:
-    const ouinet::util::Ed25519PublicKey& _pk;
+    struct Impl;
+    std::unique_ptr<Impl> _impl;
 };
 
 // Flush a response from session `in` to stream `out`
