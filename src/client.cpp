@@ -55,6 +55,7 @@
 #include "ouiservice/tcp.h"
 #include "ouiservice/utp.h"
 #include "ouiservice/tls.h"
+#include "ouiservice/weak_client.h"
 #include "ouiservice/bep5/client.h"
 #include "ouiservice/multi_utp_server.h"
 
@@ -244,6 +245,14 @@ private:
         asio::spawn(_ctx, [&, c = _shutdown_signal] (asio::yield_context yield) mutable {
             auto slot = c.connect([&] () mutable { _multi_utp_server = nullptr; });
 
+            sys::error_code ec;
+            _multi_utp_server->start_listen(yield[ec]);
+
+            if (ec) {
+                LOG_ERROR("Failed to start accepting on multi uTP service: ", ec.message());
+                return;
+            }
+
             while (!c) {
                 sys::error_code ec;
                 auto con = _multi_utp_server->accept(yield[ec]);
@@ -291,6 +300,8 @@ private:
     shared_ptr<bt::MainlineDht> _bt_dht;
 
     unique_ptr<ouiservice::MultiUtpServer> _multi_utp_server;
+    Endpoint _bep5_client_ep;
+    shared_ptr<ouiservice::Bep5Client> _bep5_client;
 };
 
 //------------------------------------------------------------------------------
@@ -346,7 +357,8 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
         return handle_bad_request(con, req, "No known injectors", yield[ec]);
     }
 
-    auto inj = _injector->connect(yield[ec].tag("connect_to_injector"), cancel);
+    auto inj = _bep5_client->connect(yield[ec].tag("connect_to_injector"), cancel, false, ouiservice::Bep5Client::injectors);
+    inj.remote_endpoint = _bep5_client_ep;
 
     if (cancel) ec = asio::error::operation_aborted;
     if (ec == asio::error::operation_aborted) return;
@@ -358,6 +370,8 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
     // Send the client an OK message indicating that the tunnel
     // has been established.
     http::response<http::empty_body> res{http::status::ok, req.version()};
+    res.prepare_payload();
+
     // No ``res.prepare_payload()`` since no payload is allowed for CONNECT:
     // <https://tools.ietf.org/html/rfc7231#section-6.3.1>.
 
@@ -533,7 +547,15 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
 
     // Connect to the injector/proxy.
     sys::error_code ec;
-    auto inj = _injector->connect(yield[ec].tag("connect_to_injector"), cancel);
+
+    // TODO: This is temporary
+    auto inj = _bep5_client->connect( yield[ec].tag("connect_to_injector")
+                                    , cancel
+                                    , true
+                                    , ouiservice::Bep5Client::helpers
+                                    | ouiservice::Bep5Client::injectors);
+    inj.remote_endpoint = _bep5_client_ep;
+    //auto inj = _injector->connect(yield[ec].tag("connect_to_injector"), cancel);
 
     if (ec) return or_throw<Session>(yield, ec);
 
@@ -618,7 +640,14 @@ Session Client::State::fetch_fresh_through_simple_proxy
             yield.log("Connecting to the injector");
         }
 
-        auto c = _injector->connect(yield[ec].tag("connect_to_injector2"), cancel);
+        // TODO: This is temporary
+        auto c = _bep5_client->connect( yield[ec].tag("connect_to_injector")
+                                      , cancel
+                                      , true
+                                      , ouiservice::Bep5Client::helpers
+                                      | ouiservice::Bep5Client::injectors);
+        c.remote_endpoint = _bep5_client_ep;
+        //auto c = _injector->connect(yield[ec].tag("connect_to_injector2"), cancel);
 
         assert(!cancel || ec == asio::error::operation_aborted);
 
@@ -1673,11 +1702,15 @@ void Client::State::setup_injector(asio::yield_context yield)
         client = maybe_wrap_tls(move(utp_client));
     } else if (injector_ep->type == Endpoint::Bep5Endpoint) {
 
-        client = make_unique<ouiservice::Bep5Client>
+        _bep5_client_ep = *injector_ep;
+
+        _bep5_client = make_shared<ouiservice::Bep5Client>
             ( bittorrent_dht()
             , injector_ep->endpoint_string
             , injector_helpers_swarm_name
             , &inj_ctx);
+
+        client = make_unique<ouiservice::WeakOuiServiceClient>(_bep5_client);
 
         idempotent_start_accepting_on_utp();
 /*
