@@ -303,13 +303,14 @@ BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
         asio::spawn(ctx, [ origin_r = std::move(origin_r), &signed_w
                          , lock = wc.lock()] (auto y) mutable {
             Cancel cancel;
-            auto origin_rs = Session::create(std::move(origin_r), cancel, y);
+            sys::error_code e;
             auto req_h = get_request_header();
             auto sk = get_private_key();
-            sys::error_code e;
-            cache::session_flush_signed( origin_rs, signed_w
-                                       , req_h, inj_id, inj_ts, sk
-                                       , cancel, y[e]);
+            Session::reader_uptr origin_rvr = make_unique<cache::SigningReader>
+                (move(origin_r), move(req_h), inj_id, inj_ts, sk);
+            auto origin_rs = Session::create(std::move(origin_rvr), cancel, y[e]);
+            BOOST_REQUIRE(!e);
+            origin_rs.flush_response(signed_w, cancel, y[e]);
             BOOST_REQUIRE(!e);
             signed_w.close();
         });

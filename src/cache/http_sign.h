@@ -13,6 +13,7 @@
 #include "../http_util.h"
 #include "../http_forward.h"
 #include "../logger.h"
+#include "../response_reader.h"
 #include "../session.h"
 #include "../util/crypto.h"
 #include "../util/hash.h"
@@ -175,6 +176,26 @@ struct HttpBlockSigs {
 
     static
     boost::optional<HttpBlockSigs> parse(boost::string_view);
+};
+
+// Allows reading parts of a response from stream `in`
+// while signing with the private key `sk`.
+class SigningReader : public ouinet::http_response::Reader {
+public:
+    SigningReader( GenericStream in
+                 , http::request_header<> rqh
+                 , std::string injection_id
+                 , std::chrono::seconds::rep injection_ts
+                 , const ouinet::util::Ed25519PrivateKey& sk);
+
+    boost::optional<ouinet::http_response::Part>
+    async_read_part(Cancel, asio::yield_context) override;
+
+private:
+    const http::request_header<> _rqh;
+    const std::string _injection_id;
+    const std::chrono::seconds::rep _injection_ts;
+    const ouinet::util::Ed25519PrivateKey& _sk;
 };
 
 // Flush a response from session `in` to stream `out`

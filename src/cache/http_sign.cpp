@@ -487,6 +487,29 @@ http_signature( const http::response_header<>& rsh
     return (fmt % key_id % ts % headers % encoded_sig).str();
 }
 
+// begin SigningReader
+
+SigningReader::SigningReader( GenericStream in
+                            , http::request_header<> rqh
+                            , std::string injection_id
+                            , std::chrono::seconds::rep injection_ts
+                            , const ouinet::util::Ed25519PrivateKey& sk)
+    : http_response::Reader(std::move(in))
+    , _rqh(std::move(rqh))
+    , _injection_id(std::move(injection_id))
+    , _injection_ts(std::move(injection_ts))
+    , _sk(sk)
+{
+}
+
+boost::optional<http_response::Part>
+SigningReader::async_read_part(Cancel cancel, asio::yield_context yield)
+{
+    return http_response::Reader::async_read_part(cancel, yield);
+}
+
+// end SigningReader
+
 static bool
 has_comma_in_quotes(const boost::string_view& s) {
     // A comma is between quotes if
