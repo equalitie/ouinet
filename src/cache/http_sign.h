@@ -187,15 +187,14 @@ public:
                  , std::string injection_id
                  , std::chrono::seconds::rep injection_ts
                  , const ouinet::util::Ed25519PrivateKey& sk);
+    ~SigningReader() override;
 
     boost::optional<ouinet::http_response::Part>
     async_read_part(Cancel, asio::yield_context) override;
 
 private:
-    const http::request_header<> _rqh;
-    const std::string _injection_id;
-    const std::chrono::seconds::rep _injection_ts;
-    const ouinet::util::Ed25519PrivateKey& _sk;
+    struct Impl;
+    std::unique_ptr<Impl> _impl;
 };
 
 // Flush a response from session `in` to stream `out`

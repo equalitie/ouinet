@@ -489,16 +489,37 @@ http_signature( const http::response_header<>& rsh
 
 // begin SigningReader
 
+struct SigningReader::Impl {
+    const http::request_header<> rqh;
+    const std::string injection_id;
+    const std::chrono::seconds::rep injection_ts;
+    const ouinet::util::Ed25519PrivateKey& sk;
+
+    Impl( http::request_header<> rqh
+        , std::string injection_id
+        , std::chrono::seconds::rep injection_ts
+        , const util::Ed25519PrivateKey& sk)
+        : rqh(std::move(rqh))
+        , injection_id(std::move(injection_id))
+        , injection_ts(std::move(injection_ts))
+        , sk(sk)
+    {}
+};
+
 SigningReader::SigningReader( GenericStream in
                             , http::request_header<> rqh
                             , std::string injection_id
                             , std::chrono::seconds::rep injection_ts
                             , const ouinet::util::Ed25519PrivateKey& sk)
     : http_response::Reader(std::move(in))
-    , _rqh(std::move(rqh))
-    , _injection_id(std::move(injection_id))
-    , _injection_ts(std::move(injection_ts))
-    , _sk(sk)
+    , _impl(std::make_unique<Impl>( std::move(rqh)
+                                  , std::move(injection_id)
+                                  , std::move(injection_ts)
+                                  , sk))
+{
+}
+
+SigningReader::~SigningReader()
 {
 }
 
