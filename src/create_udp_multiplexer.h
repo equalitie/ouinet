@@ -5,6 +5,7 @@
 #include <boost/filesystem.hpp>
 #include "namespaces.h"
 #include "logger.h"
+#include "constants.h"
 
 namespace ouinet {
 
@@ -23,6 +24,12 @@ create_udp_multiplexer( asio::io_service& ios
 
     asio_utp::udp_multiplexer ret(ios);
 
+    auto bind = [] ( asio_utp::udp_multiplexer& m
+                   , uint16_t port
+                   , sys::error_code& ec) {
+        m.bind(ip::udp::endpoint(ip::address_v4::any(), port), ec);
+    };
+
     if (fs::exists(last_used_port)) {
         fstream file(last_used_port.native());
 
@@ -30,13 +37,11 @@ create_udp_multiplexer( asio::io_service& ios
             uint16_t port = 0;
             file >> port;
 
-            ip::udp::endpoint ep(ip::address_v4::any(), port);
-
             sys::error_code ec;
-            ret.bind(ep, ec);
+            bind(ret, port, ec);
 
             if (!ec) {
-                LOG_DEBUG("UDP multiplexer bound to last used:", ep);
+                LOG_INFO("UDP multiplexer bound to last used port:", port);
                 return ret;
             }
 
@@ -52,9 +57,15 @@ create_udp_multiplexer( asio::io_service& ios
 
     sys::error_code ec;
 
-    ret.bind(ip::udp::endpoint(ip::address_v4::any(), 0), ec);
+    bind(ret, default_udp_port, ec);
 
-    assert(!ec);
+    if (ec) {
+        LOG_WARN("Failed to bind to the default UDP port ", default_udp_port
+                , " picking another port at random");
+        ec = {};
+        bind(ret, 0, ec);
+        assert(!ec);
+    }
 
     LOG_DEBUG("UDP multiplexer bound to:", ret.local_endpoint());
 

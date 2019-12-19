@@ -82,4 +82,6 @@ static const std::string response_descriptor_link_hdr = header_prefix + "Descrip
 
 static const std::string injector_helpers_swarm_name = "ouinet-injector-helpers";
 
+static const uint16_t default_udp_port = 28729;
+
 } // ouinet namespace
