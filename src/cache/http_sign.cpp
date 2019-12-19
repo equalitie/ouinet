@@ -495,6 +495,8 @@ struct SigningReader::Impl {
     const std::chrono::seconds::rep injection_ts;
     const util::Ed25519PrivateKey& sk;
 
+    std::string httpsig_key_id;
+
     Impl( http::request_header<> rqh
         , std::string injection_id
         , std::chrono::seconds::rep injection_ts
@@ -503,7 +505,31 @@ struct SigningReader::Impl {
         , injection_id(std::move(injection_id))
         , injection_ts(std::move(injection_ts))
         , sk(sk)
-    {}
+    {
+        httpsig_key_id = http_key_id_for_injection(sk.public_key());  // TODO: cache this
+    }
+
+    bool do_inject = false;
+    http::response_header<> outh;
+
+    boost::optional<http_response::Part>
+    process_part(http_response::Head inh, Cancel, asio::yield_context y)
+    {
+        auto inh_orig = inh;
+        sys::error_code ec_;
+        inh = util::to_cache_response(move(inh), ec_);
+        if (ec_) return http_response::Part(inh_orig);  // will not inject, just proxy
+
+        do_inject = true;
+        inh = cache::http_injection_head( rqh, move(inh)
+                                        , injection_id, injection_ts
+                                        , sk, httpsig_key_id);
+        // We will use the trailer to send the body digest and head signature.
+        assert(http::response<http::empty_body>(inh).chunked());
+
+        outh = inh;
+        return http_response::Part(inh);
+    }
 };
 
 SigningReader::SigningReader( GenericStream in
@@ -526,7 +552,16 @@ SigningReader::~SigningReader()
 boost::optional<http_response::Part>
 SigningReader::async_read_part(Cancel cancel, asio::yield_context yield)
 {
-    return http_response::Reader::async_read_part(cancel, yield);
+    sys::error_code ec;
+    auto part = http_response::Reader::async_read_part(cancel, yield[ec]);
+    return_or_throw_on_error(yield, cancel, ec, boost::none);
+    if (!part) return boost::none;
+
+    if (auto head = part->as_head()) {
+        return _impl->process_part(std::move(*head), cancel, yield[ec]);
+    }
+
+    return part;
 }
 
 // end SigningReader
