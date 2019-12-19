@@ -493,7 +493,7 @@ struct SigningReader::Impl {
     const http::request_header<> rqh;
     const std::string injection_id;
     const std::chrono::seconds::rep injection_ts;
-    const ouinet::util::Ed25519PrivateKey& sk;
+    const util::Ed25519PrivateKey& sk;
 
     Impl( http::request_header<> rqh
         , std::string injection_id
@@ -510,7 +510,7 @@ SigningReader::SigningReader( GenericStream in
                             , http::request_header<> rqh
                             , std::string injection_id
                             , std::chrono::seconds::rep injection_ts
-                            , const ouinet::util::Ed25519PrivateKey& sk)
+                            , const util::Ed25519PrivateKey& sk)
     : http_response::Reader(std::move(in))
     , _impl(std::make_unique<Impl>( std::move(rqh)
                                   , std::move(injection_id)
