@@ -431,13 +431,14 @@ std::vector<Bep5Client::Candidate> Bep5Client::get_peers(Target target)
 
 GenericStream Bep5Client::connect(asio::yield_context yield, Cancel& cancel_)
 {
-    return connect(yield, cancel_, true, Target::helpers | Target::injectors).connection;
+    return connect(yield, cancel_, true, Target::helpers | Target::injectors);
 }
 
-OuiServiceClient::ConnectInfo Bep5Client::connect(asio::yield_context yield, Cancel& cancel_, bool tls, Target target)
+GenericStream Bep5Client::connect( asio::yield_context yield
+                                 , Cancel& cancel_
+                                 , bool tls
+                                 , Target target)
 {
-    using Ret = OuiServiceClient::ConnectInfo;
-
     assert(!_cancel);
     assert(!cancel_);
 
@@ -448,12 +449,12 @@ OuiServiceClient::ConnectInfo Bep5Client::connect(asio::yield_context yield, Can
 
     if (_injector_swarm && (target & Target::injectors)) {
         _injector_swarm->wait_for_ready(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, Ret{});
+        return_or_throw_on_error(yield, cancel, ec, GenericStream());
     }
 
     if (_helpers_swarm && (target & Target::helpers)) {
         _helpers_swarm->wait_for_ready(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, Ret{});
+        return_or_throw_on_error(yield, cancel, ec, GenericStream());
     }
 
     WaitCondition wc(get_executor());
@@ -517,7 +518,7 @@ OuiServiceClient::ConnectInfo Bep5Client::connect(asio::yield_context yield, Can
         }
     }
 
-    return or_throw(yield, ec, Ret{move(ret_con), Endpoint()});
+    return or_throw(yield, ec, move(ret_con));
 }
 
 GenericStream

@@ -50,8 +50,7 @@ public:
     void stop() override;
 
     GenericStream connect(asio::yield_context, Cancel&) override;
-
-    OuiServiceClient::ConnectInfo connect(asio::yield_context, Cancel&, bool tls, Target);
+    GenericStream connect(asio::yield_context, Cancel&, bool tls, Target);
 
     ~Bep5Client();
 

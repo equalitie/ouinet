@@ -300,7 +300,6 @@ private:
     shared_ptr<bt::MainlineDht> _bt_dht;
 
     unique_ptr<ouiservice::MultiUtpServer> _multi_utp_server;
-    Endpoint _bep5_client_ep;
     shared_ptr<ouiservice::Bep5Client> _bep5_client;
 };
 
@@ -353,12 +352,11 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
 
     // Connect to the injector and tunnel the transaction through it
 
-    if (!_injector) {
+    if (!_bep5_client) {
         return handle_bad_request(con, req, "No known injectors", yield[ec]);
     }
 
     auto inj = _bep5_client->connect(yield[ec].tag("connect_to_injector"), cancel, false, ouiservice::Bep5Client::injectors);
-    inj.remote_endpoint = _bep5_client_ep;
 
     if (cancel) ec = asio::error::operation_aborted;
     if (ec == asio::error::operation_aborted) return;
@@ -380,7 +378,7 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
     if (cancel) ec = asio::error::operation_aborted;
     if (ec) return;
 
-    full_duplex(move(con), move(inj.connection), yield[ec]);
+    full_duplex(move(con), move(inj), yield[ec]);
 }
 
 //------------------------------------------------------------------------------
@@ -555,14 +553,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     // Connect to the injector/proxy.
     sys::error_code ec;
 
-    // TODO: This is temporary
-    auto inj = _bep5_client->connect( yield[ec].tag("connect_to_injector")
-                                    , cancel
-                                    , true
-                                    , ouiservice::Bep5Client::helpers
-                                    | ouiservice::Bep5Client::injectors);
-    inj.remote_endpoint = _bep5_client_ep;
-    //auto inj = _injector->connect(yield[ec].tag("connect_to_injector"), cancel);
+    auto inj = _injector->connect(yield[ec].tag("connect_to_injector"), cancel);
 
     if (ec) return or_throw<Session>(yield, ec);
 
@@ -647,14 +638,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
             yield.log("Connecting to the injector");
         }
 
-        // TODO: This is temporary
-        auto c = _bep5_client->connect( yield[ec].tag("connect_to_injector")
-                                      , cancel
-                                      , true
-                                      , ouiservice::Bep5Client::helpers
-                                      | ouiservice::Bep5Client::injectors);
-        c.remote_endpoint = _bep5_client_ep;
-        //auto c = _injector->connect(yield[ec].tag("connect_to_injector2"), cancel);
+        auto c = _injector->connect(yield[ec].tag("connect_to_injector2"), cancel);
 
         assert(!cancel || ec == asio::error::operation_aborted);
 
@@ -1705,8 +1689,6 @@ void Client::State::setup_injector(asio::yield_context yield)
 
         client = maybe_wrap_tls(move(utp_client));
     } else if (injector_ep->type == Endpoint::Bep5Endpoint) {
-
-        _bep5_client_ep = *injector_ep;
 
         _bep5_client = make_shared<ouiservice::Bep5Client>
             ( bittorrent_dht()
