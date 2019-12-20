@@ -173,10 +173,10 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         else if (target.find("?proxy_access=disable") != string::npos) {
             config.is_proxy_access_enabled(false);
         }
-        else if (target.find("?injector_proxy=enable") != string::npos) {
+        else if (target.find("?injector_access=enable") != string::npos) {
             config.is_injector_access_enabled(true);
         }
-        else if (target.find("?injector_proxy=disable") != string::npos) {
+        else if (target.find("?injector_access=disable") != string::npos) {
             config.is_injector_access_enabled(false);
         }
         else if (target.find("?auto_refresh=enable") != string::npos) {
@@ -185,10 +185,10 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         else if (target.find("?auto_refresh=disable") != string::npos) {
             _auto_refresh_enabled = false;
         }
-        else if (target.find("?ipfs_cache=enable") != string::npos) {
+        else if (target.find("?distributed_cache=enable") != string::npos) {
             config.is_cache_access_enabled(true);
         }
-        else if (target.find("?ipfs_cache=disable") != string::npos) {
+        else if (target.find("?distributed_cache=disable") != string::npos) {
             config.is_cache_access_enabled(false);
         }
 
@@ -228,8 +228,8 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     ss << ToggleInput{"<u>A</u>uto refresh",   "auto_refresh",   'a', _auto_refresh_enabled};
     ss << ToggleInput{"<u>O</u>rigin access",  "origin_access",  'o', config.is_origin_access_enabled()};
     ss << ToggleInput{"<u>P</u>roxy access",   "proxy_access",   'p', config.is_proxy_access_enabled()};
-    ss << ToggleInput{"<u>I</u>njector proxy", "injector_proxy", 'i', config.is_injector_access_enabled()};
-    ss << ToggleInput{"Distributed <u>C</u>ache", "ipfs_cache",  'c', config.is_cache_access_enabled()};
+    ss << ToggleInput{"<u>I</u>njector proxy", "injector_access",'i', config.is_injector_access_enabled()};
+    ss << ToggleInput{"Distributed <u>C</u>ache", "distributed_cache",  'c', config.is_cache_access_enabled()};
 
     ss << *_log_level_input;
 
