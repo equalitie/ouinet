@@ -150,9 +150,15 @@ static util::Ed25519PublicKey get_public_key() {
     return util::Ed25519PublicKey(std::move(pka));
 }
 
-BOOST_AUTO_TEST_CASE(test_http_sign) {
-    ouinet::util::crypto_init();
+struct TestGlobalFixture {
+    void setup() {
+        ouinet::util::crypto_init();
+    }
+};
 
+BOOST_TEST_GLOBAL_FIXTURE(TestGlobalFixture);
+
+BOOST_AUTO_TEST_CASE(test_http_sign) {
     sys::error_code ec;
 
     const auto digest = util::sha256_digest(rs_body);
@@ -203,8 +209,6 @@ void put_to_parser(Parser& p, const string& s, sys::error_code& ec) {
 }
 
 BOOST_AUTO_TEST_CASE(test_http_verify) {
-    ouinet::util::crypto_init();
-
     sys::error_code ec;
 
     http::response_parser<http::string_body> parser;
@@ -275,8 +279,6 @@ BOOST_AUTO_TEST_CASE(test_http_verify) {
 }
 
 BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
-    ouinet::util::crypto_init();
-
     asio::io_context ctx;
     run_spawned(ctx, [&] (auto yield) {
         WaitCondition wc(ctx);
@@ -374,8 +376,6 @@ BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
 }
 
 BOOST_AUTO_TEST_CASE(test_http_flush_verified) {
-    ouinet::util::crypto_init();
-
     asio::io_context ctx;
     run_spawned(ctx, [&] (auto yield) {
         WaitCondition wc(ctx);
@@ -478,8 +478,6 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified) {
 }
 
 BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
-    ouinet::util::crypto_init();
-
     asio::io_context ctx;
     run_spawned(ctx, [&] (auto yield) {
         WaitCondition wc(ctx);
