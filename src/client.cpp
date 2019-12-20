@@ -471,10 +471,17 @@ Client::State::connect_to_origin( const Request& rq
 //------------------------------------------------------------------------------
 Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yield)
 {
+    boost::optional<uint32_t> udp_port;
+
+    if (_udp_multiplexer) {
+        udp_port = _udp_multiplexer->local_endpoint().port();
+    }
+
     return _front_end.serve( _config
                            , rq
                            , _bep5_http_cache.get()
                            , *_ca_certificate
+                           , udp_port
                            , yield.tag("serve_frontend"));
 }
 
@@ -1630,11 +1637,8 @@ void Client::State::start()
 
                         if (ec) return;
 
-                        auto rs = _front_end.serve( _config
-                                                  , rq
-                                                  , _bep5_http_cache.get()
-                                                  , *_ca_certificate
-                                                  , yield[ec]);
+                        auto rs = fetch_fresh_from_front_end(rq, yield[ec]);
+
                         if (ec) return;
 
                         http::async_write(c, rs, yield[ec]);
