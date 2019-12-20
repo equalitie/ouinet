@@ -39,12 +39,14 @@ public:
 public:
     Bep5Client( std::shared_ptr<bittorrent::MainlineDht>
               , std::string injector_swarm_name
-              , asio::ssl::context*);
+              , asio::ssl::context*
+              , Target targets = helpers | injectors);
 
     Bep5Client( std::shared_ptr<bittorrent::MainlineDht>
               , std::string injector_swarm_name
               , std::string helpers_swarm_name
-              , asio::ssl::context*);
+              , asio::ssl::context*
+              , Target targets = helpers | injectors);
 
     void start(asio::yield_context) override;
     void stop() override;
@@ -80,6 +82,8 @@ private:
     bool _log_debug = false;
 
     boost::optional<asio::ip::udp::endpoint> _last_working_ep;
+
+    Target _default_targets;
 };
 
 }} // namespaces

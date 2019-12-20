@@ -356,7 +356,10 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
         return handle_bad_request(con, req, "No known injectors", yield[ec]);
     }
 
-    auto inj = _bep5_client->connect(yield[ec].tag("connect_to_injector"), cancel, false, ouiservice::Bep5Client::injectors);
+    auto inj = _bep5_client->connect( yield[ec].tag("connect_to_injector")
+                                    , cancel
+                                    , false
+                                    , ouiservice::Bep5Client::injectors);
 
     if (cancel) ec = asio::error::operation_aborted;
     if (ec == asio::error::operation_aborted) return;

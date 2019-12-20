@@ -328,11 +328,13 @@ private:
 
 Bep5Client::Bep5Client( shared_ptr<bt::MainlineDht> dht
                       , string injector_swarm_name
-                      , asio::ssl::context* injector_tls_ctx)
+                      , asio::ssl::context* injector_tls_ctx
+                      , Target targets)
     : _dht(dht)
     , _injector_swarm_name(move(injector_swarm_name))
     , _injector_tls_ctx(injector_tls_ctx)
     , _random_generator(std::random_device()())
+    , _default_targets(targets)
 {
     if (_dht->local_endpoints().empty()) {
         LOG_ERROR("Bep5Client: DHT has no endpoints!");
@@ -342,12 +344,14 @@ Bep5Client::Bep5Client( shared_ptr<bt::MainlineDht> dht
 Bep5Client::Bep5Client( shared_ptr<bt::MainlineDht> dht
                       , string injector_swarm_name
                       , string helpers_swarm_name
-                      , asio::ssl::context* injector_tls_ctx)
+                      , asio::ssl::context* injector_tls_ctx
+                      , Target targets)
     : _dht(dht)
     , _injector_swarm_name(move(injector_swarm_name))
     , _helpers_swarm_name(move(helpers_swarm_name))
     , _injector_tls_ctx(injector_tls_ctx)
     , _random_generator(std::random_device()())
+    , _default_targets(targets)
 {
     if (_dht->local_endpoints().empty()) {
         LOG_ERROR("Bep5Client: DHT has no endpoints!");
@@ -414,6 +418,13 @@ std::vector<Bep5Client::Candidate> Bep5Client::get_peers(Target target)
     for (auto& p : inj) { ret.push_back(p); }
     for (auto& p : hlp) { ret.push_back(p); }
 
+    //auto wan_eps = _dht->wan_endpoints();
+    //auto lan_eps = _dht->local_endpoints();
+    //cerr << "wan: "; for (auto& i : wan_eps) cerr << i << ","; cerr << "\n";
+    //cerr << "lan: "; for (auto& i : lan_eps) cerr << i << ","; cerr << "\n";
+    //cerr << "inj: "; for (auto& i : inj) cerr << i.endpoint << ","; cerr << "\n";
+    //cerr << "hlp: "; for (auto& i : hlp) cerr << i.endpoint << ","; cerr << "\n";
+
     // If there is a peer that has woked recently then use that one
     if (_last_working_ep) {
         for (auto i = ret.begin(); i != ret.end(); ++i) {
@@ -429,9 +440,9 @@ std::vector<Bep5Client::Candidate> Bep5Client::get_peers(Target target)
     return ret;
 }
 
-GenericStream Bep5Client::connect(asio::yield_context yield, Cancel& cancel_)
+GenericStream Bep5Client::connect(asio::yield_context yield, Cancel& cancel)
 {
-    return connect(yield, cancel_, true, Target::helpers | Target::injectors);
+    return connect(yield, cancel, true, _default_targets);
 }
 
 GenericStream Bep5Client::connect( asio::yield_context yield
