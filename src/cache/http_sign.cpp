@@ -513,7 +513,7 @@ struct SigningReader::Impl {
     http::response_header<> outh;
 
     boost::optional<http_response::Part>
-    process_part(http_response::Head inh, Cancel, asio::yield_context y)
+    process_part(http_response::Head inh, Cancel, asio::yield_context)
     {
         auto inh_orig = inh;
         sys::error_code ec_;
