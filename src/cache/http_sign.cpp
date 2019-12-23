@@ -540,6 +540,47 @@ struct SigningReader::Impl {
         // since we have no way to sign them.
         return boost::none;
     }
+
+    size_t body_length = 0;
+    size_t block_offset = 0;
+    util::SHA256 body_hash;
+    util::SHA512 block_hash;  // for first block
+    // Simplest implementation: one output chunk per data block.
+    util::quantized_buffer qbuf{http_::response_data_block};
+    boost::optional<http_response::Part> block = boost::none;
+
+    // If a whole data block has been processed,
+    // return a chunk header and keep block as chunk body.
+    boost::optional<http_response::Part>
+    process_part(std::vector<uint8_t> inbuf, Cancel, asio::yield_context)
+    {
+        // Just count transferred data and feed the hash.
+        body_length += inbuf.size();
+        if (do_inject) body_hash.update(inbuf);
+        qbuf.put(asio::buffer(inbuf));
+        auto block_buf =
+            (inbuf.size() > 0) ? qbuf.get() : qbuf.get_rest();  // send rest if no more input
+
+        if (block_buf.size() == 0)
+            return boost::none;  // no data to send yet
+        // Keep block as chunk body.
+        auto block_vec = util::bytes::to_vector<uint8_t>(block_buf);
+        block = http_response::ChunkBody(std::move(block_vec), 0);
+
+        http_response::ChunkHdr ch(block_buf.size(), {});
+        if (do_inject) {  // if injecting and sending data
+            if (block_offset > 0) {  // add chunk extension for previous block
+                auto block_digest = block_hash.close();
+                ch.exts = http_sign_detail::block_chunk_ext(injection_id, block_digest, sk);
+                // Prepare chunk extension for next block: HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])
+                block_hash = {};
+                block_hash.update(block_digest);
+            }  // else HASH[0]=SHA2-512(BLOCK[0])
+            block_hash.update(block_buf);
+            block_offset += block_buf.size();
+        }
+        return http_response::Part(ch);  // pass data on, drop origin extensions
+    }
 };
 
 SigningReader::SigningReader( GenericStream in
@@ -562,16 +603,26 @@ SigningReader::~SigningReader()
 boost::optional<http_response::Part>
 SigningReader::async_read_part(Cancel cancel, asio::yield_context yield)
 {
+    if (_impl->block) {
+        auto b = std::move(*(_impl->block));
+        _impl->block = boost::none;
+        return b;
+    }
+
     while (true) {
         sys::error_code ec;
         auto part = http_response::Reader::async_read_part(cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec, boost::none);
-        if (!part) break;
+        if (!part) break;  // TODO: still handle signature end after empty read
 
         if (auto head = part->as_head()) {
             part = _impl->process_part(std::move(*head), cancel, yield[ec]);
+        } else if (auto body = part->as_chunk_hdr()) {
+            part = _impl->process_part(std::move(*body), cancel, yield[ec]);
         } else if (auto ch = part->as_chunk_hdr()) {
             part = _impl->process_part(std::move(*ch), cancel, yield[ec]);
+        } else if (auto cb = part->as_chunk_body()) {
+            part = _impl->process_part(std::move(*cb), cancel, yield[ec]);
         }
         return_or_throw_on_error(yield, cancel, ec, boost::none);
         if (!part) continue;
