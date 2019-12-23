@@ -530,6 +530,16 @@ struct SigningReader::Impl {
         outh = inh;
         return http_response::Part(inh);
     }
+
+    boost::optional<http_response::Part>
+    process_part(http_response::ChunkHdr, Cancel, asio::yield_context)
+    {
+        // Origin chunk size is ignored
+        // since we use our own block size.
+        // Origin chunk extensions are ignored and dropped
+        // since we have no way to sign them.
+        return boost::none;
+    }
 };
 
 SigningReader::SigningReader( GenericStream in
@@ -552,16 +562,24 @@ SigningReader::~SigningReader()
 boost::optional<http_response::Part>
 SigningReader::async_read_part(Cancel cancel, asio::yield_context yield)
 {
-    sys::error_code ec;
-    auto part = http_response::Reader::async_read_part(cancel, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec, boost::none);
-    if (!part) return boost::none;
+    while (true) {
+        sys::error_code ec;
+        auto part = http_response::Reader::async_read_part(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, boost::none);
+        if (!part) break;
 
-    if (auto head = part->as_head()) {
-        return _impl->process_part(std::move(*head), cancel, yield[ec]);
-    }
+        if (auto head = part->as_head()) {
+            part = _impl->process_part(std::move(*head), cancel, yield[ec]);
+        } else if (auto ch = part->as_chunk_hdr()) {
+            part = _impl->process_part(std::move(*ch), cancel, yield[ec]);
+        }
+        return_or_throw_on_error(yield, cancel, ec, boost::none);
+        if (!part) continue;
 
-    return part;
+        return part;
+    };
+
+    return boost::none;
 }
 
 // end SigningReader
