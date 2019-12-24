@@ -19,6 +19,7 @@
 #include "../util.h"
 #include "../util/bytes.h"
 #include "../util/hash.h"
+#include "../util/variant.h"
 
 namespace ouinet { namespace cache {
 
@@ -633,17 +634,9 @@ SigningReader::async_read_part(Cancel cancel, asio::yield_context yield)
             return or_throw(yield, ec, std::move(part));
         }
 
-        if (auto head = part->as_head()) {
-            part = _impl->process_part(std::move(*head), cancel, yield[ec]);
-        } else if (auto body = part->as_body()) {
-            part = _impl->process_part(std::move(*body), cancel, yield[ec]);
-        } else if (auto ch = part->as_chunk_hdr()) {
-            part = _impl->process_part(std::move(*ch), cancel, yield[ec]);
-        } else if (auto cb = part->as_chunk_body()) {
-            part = _impl->process_part(std::move(*cb), cancel, yield[ec]);
-        } else if (auto tr = part->as_trailer()) {
-            part = _impl->process_part(std::move(*tr), cancel, yield[ec]);
-        }
+        part = util::apply(std::move(*part), [&](auto&& p) {
+            return _impl->process_part(std::move(p), cancel, yield[ec]);
+        });
         return_or_throw_on_error(yield, cancel, ec, boost::none);
         if (!part) continue;
 
