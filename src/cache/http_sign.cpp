@@ -581,6 +581,12 @@ struct SigningReader::Impl {
         }
         return http_response::Part(ch);  // pass data on, drop origin extensions
     }
+
+    boost::optional<http_response::Part>
+    process_end(Cancel c, asio::yield_context y)
+    {
+        return process_part(std::vector<uint8_t>(), c, y);
+    }
 };
 
 SigningReader::SigningReader( GenericStream in
@@ -613,7 +619,10 @@ SigningReader::async_read_part(Cancel cancel, asio::yield_context yield)
         sys::error_code ec;
         auto part = http_response::Reader::async_read_part(cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec, boost::none);
-        if (!part) break;  // TODO: still handle signature end after empty read
+        if (!part) {  // no more input, but stuff may still need to be sent
+            part = _impl->process_end(cancel, yield[ec]);
+            return or_throw(yield, ec, std::move(part));
+        }
 
         if (auto head = part->as_head()) {
             part = _impl->process_part(std::move(*head), cancel, yield[ec]);
