@@ -592,10 +592,31 @@ struct SigningReader::Impl {
         return boost::none;
     }
 
+    boost::optional<http_response::Part> last_chdr;
+    boost::optional<http_response::Part> trailer_out;
+
     boost::optional<http_response::Part>
-    process_end(Cancel c, asio::yield_context y)
+    process_end(Cancel cancel, asio::yield_context yield)
     {
-        return process_part(std::vector<uint8_t>(), c, y);
+        sys::error_code ec;
+        auto last_block = process_part(std::vector<uint8_t>(), cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, boost::none);
+
+        if (do_inject) {
+            auto block_digest = block_hash.close();
+            last_chdr = http_response::Part(http_response::ChunkHdr(
+                0, http_sign_detail::block_chunk_ext(injection_id, block_digest, sk)));
+            trailer_out = http_response::Part(
+                cache::http_injection_trailer( outh, std::move(trailer_in)
+                                             , body_length, body_hash.close()
+                                             , sk
+                                             , httpsig_key_id));
+        } else {
+            last_chdr = http_response::Part(http_response::ChunkHdr());
+            trailer_out = http_response::Part(std::move(trailer_in));
+        }
+
+        return last_block;
     }
 };
 
@@ -623,6 +644,18 @@ SigningReader::async_read_part(Cancel cancel, asio::yield_context yield)
         auto b = std::move(*(_impl->block));
         _impl->block = boost::none;
         return b;
+    }
+
+    if (_impl->last_chdr) {
+        auto ch = std::move(*(_impl->last_chdr));
+        _impl->last_chdr = boost::none;
+        return ch;
+    }
+
+    if (_impl->trailer_out) {
+        auto t = std::move(*(_impl->trailer_out));
+        _impl->trailer_out = boost::none;
+        return t;
     }
 
     while (true) {
