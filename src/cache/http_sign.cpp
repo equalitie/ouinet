@@ -617,7 +617,7 @@ SigningReader::async_read_part(Cancel cancel, asio::yield_context yield)
 
         if (auto head = part->as_head()) {
             part = _impl->process_part(std::move(*head), cancel, yield[ec]);
-        } else if (auto body = part->as_chunk_hdr()) {
+        } else if (auto body = part->as_body()) {
             part = _impl->process_part(std::move(*body), cancel, yield[ec]);
         } else if (auto ch = part->as_chunk_hdr()) {
             part = _impl->process_part(std::move(*ch), cancel, yield[ec]);
