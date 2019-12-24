@@ -582,6 +582,15 @@ struct SigningReader::Impl {
         return http_response::Part(ch);  // pass data on, drop origin extensions
     }
 
+    http::fields trailer_in;
+
+    boost::optional<http_response::Part>
+    process_part(http_response::Trailer intr, Cancel, asio::yield_context)
+    {
+        trailer_in = util::to_cache_trailer(move(intr));
+        return boost::none;
+    }
+
     boost::optional<http_response::Part>
     process_end(Cancel c, asio::yield_context y)
     {
@@ -632,6 +641,8 @@ SigningReader::async_read_part(Cancel cancel, asio::yield_context yield)
             part = _impl->process_part(std::move(*ch), cancel, yield[ec]);
         } else if (auto cb = part->as_chunk_body()) {
             part = _impl->process_part(std::move(*cb), cancel, yield[ec]);
+        } else if (auto tr = part->as_trailer()) {
+            part = _impl->process_part(std::move(*tr), cancel, yield[ec]);
         }
         return_or_throw_on_error(yield, cancel, ec, boost::none);
         if (!part) continue;
