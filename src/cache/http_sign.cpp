@@ -588,7 +588,7 @@ struct SigningReader::Impl {
     boost::optional<http_response::Part>
     process_part(http_response::Trailer intr, Cancel, asio::yield_context)
     {
-        trailer_in = util::to_cache_trailer(move(intr));
+        trailer_in = do_inject ? util::to_cache_trailer(std::move(intr)) : std::move(intr);
         return boost::none;
     }
 
