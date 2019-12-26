@@ -604,16 +604,15 @@ struct SigningReader::Impl {
 
         if (do_inject) {
             auto block_digest = block_hash.close();
-            last_chdr = http_response::Part(http_response::ChunkHdr(
-                0, http_sign_detail::block_chunk_ext(injection_id, block_digest, sk)));
-            trailer_out = http_response::Part(
-                cache::http_injection_trailer( outh, std::move(trailer_in)
-                                             , body_length, body_hash.close()
-                                             , sk
-                                             , httpsig_key_id));
+            last_chdr = http_response::ChunkHdr(
+                0, http_sign_detail::block_chunk_ext(injection_id, block_digest, sk));
+            trailer_out = cache::http_injection_trailer( outh, std::move(trailer_in)
+                                                       , body_length, body_hash.close()
+                                                       , sk
+                                                       , httpsig_key_id);
         } else {
-            last_chdr = http_response::Part(http_response::ChunkHdr());
-            trailer_out = http_response::Part(std::move(trailer_in));
+            last_chdr = http_response::ChunkHdr();
+            trailer_out = std::move(trailer_in);
         }
 
         return last_block;
