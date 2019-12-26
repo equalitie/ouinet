@@ -186,7 +186,7 @@ public:
                  , http::request_header<> rqh
                  , std::string injection_id
                  , std::chrono::seconds::rep injection_ts
-                 , const ouinet::util::Ed25519PrivateKey& sk);
+                 , ouinet::util::Ed25519PrivateKey sk);
     ~SigningReader() override;
 
     boost::optional<ouinet::http_response::Part>

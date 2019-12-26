@@ -497,18 +497,18 @@ struct SigningReader::Impl {
     const http::request_header<> rqh;
     const std::string injection_id;
     const std::chrono::seconds::rep injection_ts;
-    const util::Ed25519PrivateKey& sk;
+    const util::Ed25519PrivateKey sk;
 
     std::string httpsig_key_id;
 
     Impl( http::request_header<> rqh
         , std::string injection_id
         , std::chrono::seconds::rep injection_ts
-        , const util::Ed25519PrivateKey& sk)
+        , util::Ed25519PrivateKey sk)
         : rqh(std::move(rqh))
         , injection_id(std::move(injection_id))
         , injection_ts(std::move(injection_ts))
-        , sk(sk)
+        , sk(std::move(sk))
     {
         httpsig_key_id = http_key_id_for_injection(sk.public_key());  // TODO: cache this
     }
@@ -623,12 +623,12 @@ SigningReader::SigningReader( GenericStream in
                             , http::request_header<> rqh
                             , std::string injection_id
                             , std::chrono::seconds::rep injection_ts
-                            , const util::Ed25519PrivateKey& sk)
+                            , util::Ed25519PrivateKey sk)
     : http_response::Reader(std::move(in))
     , _impl(std::make_unique<Impl>( std::move(rqh)
                                   , std::move(injection_id)
                                   , std::move(injection_ts)
-                                  , sk))
+                                  , std::move(sk)))
 {
 }
 
