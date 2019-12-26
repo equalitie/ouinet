@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <map>
+#include <queue>
 #include <sstream>
 #include <tuple>
 #include <utility>
@@ -550,7 +551,7 @@ struct SigningReader::Impl {
     util::SHA512 block_hash;  // for first block
     // Simplest implementation: one output chunk per data block.
     util::quantized_buffer qbuf{http_::response_data_block};
-    optional_part block = boost::none;
+    std::queue<http_response::Part> pending_parts;
 
     // If a whole data block has been processed,
     // return a chunk header and keep block as chunk body.
@@ -568,7 +569,7 @@ struct SigningReader::Impl {
             return boost::none;  // no data to send yet
         // Keep block as chunk body.
         auto block_vec = util::bytes::to_vector<uint8_t>(block_buf);
-        block = http_response::ChunkBody(std::move(block_vec), 0);
+        pending_parts.push(http_response::ChunkBody(std::move(block_vec), 0));
 
         http_response::ChunkHdr ch(block_buf.size(), {});
         if (do_inject) {  // if injecting and sending data
@@ -594,9 +595,6 @@ struct SigningReader::Impl {
         return boost::none;
     }
 
-    optional_part last_chdr;
-    optional_part trailer_out;
-
     optional_part
     process_end(Cancel cancel, asio::yield_context yield)
     {
@@ -606,15 +604,15 @@ struct SigningReader::Impl {
 
         if (do_inject) {
             auto block_digest = block_hash.close();
-            last_chdr = http_response::ChunkHdr(
-                0, http_sign_detail::block_chunk_ext(injection_id, block_digest, sk));
-            trailer_out = cache::http_injection_trailer( outh, std::move(trailer_in)
-                                                       , body_length, body_hash.close()
-                                                       , sk
-                                                       , httpsig_key_id);
+            pending_parts.push(http_response::ChunkHdr(
+                0, http_sign_detail::block_chunk_ext(injection_id, block_digest, sk)));
+            pending_parts.push(cache::http_injection_trailer( outh, std::move(trailer_in)
+                                                            , body_length, body_hash.close()
+                                                            , sk
+                                                            , httpsig_key_id));
         } else {
-            last_chdr = http_response::ChunkHdr();
-            trailer_out = std::move(trailer_in);
+            pending_parts.push(http_response::ChunkHdr());
+            pending_parts.push(std::move(trailer_in));
         }
 
         return last_block;
@@ -641,22 +639,10 @@ SigningReader::~SigningReader()
 optional_part
 SigningReader::async_read_part(Cancel cancel, asio::yield_context yield)
 {
-    if (_impl->block) {
-        auto b = std::move(*(_impl->block));
-        _impl->block = boost::none;
-        return b;
-    }
-
-    if (_impl->last_chdr) {
-        auto ch = std::move(*(_impl->last_chdr));
-        _impl->last_chdr = boost::none;
-        return ch;
-    }
-
-    if (_impl->trailer_out) {
-        auto t = std::move(*(_impl->trailer_out));
-        _impl->trailer_out = boost::none;
-        return t;
+    if (!_impl->pending_parts.empty()) {
+        auto part = std::move(_impl->pending_parts.front());
+        _impl->pending_parts.pop();
+        return part;
     }
 
     while (true) {
