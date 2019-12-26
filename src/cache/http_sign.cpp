@@ -490,6 +490,8 @@ http_signature( const http::response_header<>& rsh
 
 // begin SigningReader
 
+using optional_part = boost::optional<http_response::Part>;
+
 struct SigningReader::Impl {
     const http::request_header<> rqh;
     const std::string injection_id;
@@ -513,7 +515,7 @@ struct SigningReader::Impl {
     bool do_inject = false;
     http::response_header<> outh;
 
-    boost::optional<http_response::Part>
+    optional_part
     process_part(http_response::Head inh, Cancel, asio::yield_context)
     {
         auto inh_orig = inh;
@@ -532,7 +534,7 @@ struct SigningReader::Impl {
         return http_response::Part(inh);
     }
 
-    boost::optional<http_response::Part>
+    optional_part
     process_part(http_response::ChunkHdr, Cancel, asio::yield_context)
     {
         // Origin chunk size is ignored
@@ -548,11 +550,11 @@ struct SigningReader::Impl {
     util::SHA512 block_hash;  // for first block
     // Simplest implementation: one output chunk per data block.
     util::quantized_buffer qbuf{http_::response_data_block};
-    boost::optional<http_response::Part> block = boost::none;
+    optional_part block = boost::none;
 
     // If a whole data block has been processed,
     // return a chunk header and keep block as chunk body.
-    boost::optional<http_response::Part>
+    optional_part
     process_part(std::vector<uint8_t> inbuf, Cancel, asio::yield_context)
     {
         // Just count transferred data and feed the hash.
@@ -585,17 +587,17 @@ struct SigningReader::Impl {
 
     http::fields trailer_in;
 
-    boost::optional<http_response::Part>
+    optional_part
     process_part(http_response::Trailer intr, Cancel, asio::yield_context)
     {
         trailer_in = do_inject ? util::to_cache_trailer(std::move(intr)) : std::move(intr);
         return boost::none;
     }
 
-    boost::optional<http_response::Part> last_chdr;
-    boost::optional<http_response::Part> trailer_out;
+    optional_part last_chdr;
+    optional_part trailer_out;
 
-    boost::optional<http_response::Part>
+    optional_part
     process_end(Cancel cancel, asio::yield_context yield)
     {
         sys::error_code ec;
@@ -636,7 +638,7 @@ SigningReader::~SigningReader()
 {
 }
 
-boost::optional<http_response::Part>
+optional_part
 SigningReader::async_read_part(Cancel cancel, asio::yield_context yield)
 {
     if (_impl->block) {
