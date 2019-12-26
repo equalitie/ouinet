@@ -109,6 +109,7 @@ Session::flush_response(SinkStream& sink,
         return_or_throw_on_error(yield, cancel, ec);
         if (!opt_part) break;
         opt_part->async_write(sink, cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec);
     }
 }
 
