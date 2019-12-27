@@ -834,7 +834,7 @@ struct VerifyingReader::Impl {
     process_part(http_response::Head inh, Cancel, asio::yield_context y)
     {
         // Verify head signature.
-        head = cache::http_injection_verify(move(inh), pk);
+        head = cache::http_injection_verify(std::move(inh), pk);
         if (head.cbegin() == head.cend()) {
             LOG_WARN("Failed to verify HTTP head signatures");
             return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
