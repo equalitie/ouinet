@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <map>
+#include <queue>
 #include <sstream>
 #include <tuple>
 #include <utility>
@@ -19,6 +20,7 @@
 #include "../util.h"
 #include "../util/bytes.h"
 #include "../util/hash.h"
+#include "../util/variant.h"
 
 namespace ouinet { namespace cache {
 
@@ -486,6 +488,185 @@ http_signature( const http::response_header<>& rsh
 
     return (fmt % key_id % ts % headers % encoded_sig).str();
 }
+
+// begin SigningReader
+
+using optional_part = boost::optional<http_response::Part>;
+
+struct SigningReader::Impl {
+    const http::request_header<> rqh;
+    const std::string injection_id;
+    const std::chrono::seconds::rep injection_ts;
+    const util::Ed25519PrivateKey sk;
+
+    std::string httpsig_key_id;
+
+    Impl( http::request_header<> rqh
+        , std::string injection_id
+        , std::chrono::seconds::rep injection_ts
+        , util::Ed25519PrivateKey sk)
+        : rqh(std::move(rqh))
+        , injection_id(std::move(injection_id))
+        , injection_ts(std::move(injection_ts))
+        , sk(std::move(sk))
+    {
+        httpsig_key_id = http_key_id_for_injection(sk.public_key());  // TODO: cache this
+    }
+
+    bool do_inject = false;
+    http::response_header<> outh;
+
+    optional_part
+    process_part(http_response::Head inh, Cancel, asio::yield_context)
+    {
+        auto inh_orig = inh;
+        sys::error_code ec_;
+        inh = util::to_cache_response(move(inh), ec_);
+        if (ec_) return http_response::Part(inh_orig);  // will not inject, just proxy
+
+        do_inject = true;
+        inh = cache::http_injection_head( rqh, move(inh)
+                                        , injection_id, injection_ts
+                                        , sk, httpsig_key_id);
+        // We will use the trailer to send the body digest and head signature.
+        assert(http::response<http::empty_body>(inh).chunked());
+
+        outh = inh;
+        return http_response::Part(inh);
+    }
+
+    optional_part
+    process_part(http_response::ChunkHdr, Cancel, asio::yield_context)
+    {
+        // Origin chunk size is ignored
+        // since we use our own block size.
+        // Origin chunk extensions are ignored and dropped
+        // since we have no way to sign them.
+        return boost::none;
+    }
+
+    size_t body_length = 0;
+    size_t block_offset = 0;
+    util::SHA256 body_hash;
+    util::SHA512 block_hash;  // for first block
+    // Simplest implementation: one output chunk per data block.
+    util::quantized_buffer qbuf{http_::response_data_block};
+    std::queue<http_response::Part> pending_parts;
+
+    // If a whole data block has been processed,
+    // return a chunk header and keep block as chunk body.
+    optional_part
+    process_part(std::vector<uint8_t> inbuf, Cancel, asio::yield_context)
+    {
+        // Just count transferred data and feed the hash.
+        body_length += inbuf.size();
+        if (do_inject) body_hash.update(inbuf);
+        qbuf.put(asio::buffer(inbuf));
+        auto block_buf =
+            (inbuf.size() > 0) ? qbuf.get() : qbuf.get_rest();  // send rest if no more input
+
+        if (block_buf.size() == 0)
+            return boost::none;  // no data to send yet
+        // Keep block as chunk body.
+        auto block_vec = util::bytes::to_vector<uint8_t>(block_buf);
+        pending_parts.push(http_response::ChunkBody(std::move(block_vec), 0));
+
+        http_response::ChunkHdr ch(block_buf.size(), {});
+        if (do_inject) {  // if injecting and sending data
+            if (block_offset > 0) {  // add chunk extension for previous block
+                auto block_digest = block_hash.close();
+                ch.exts = http_sign_detail::block_chunk_ext(injection_id, block_digest, sk);
+                // Prepare chunk extension for next block: HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])
+                block_hash = {};
+                block_hash.update(block_digest);
+            }  // else HASH[0]=SHA2-512(BLOCK[0])
+            block_hash.update(block_buf);
+            block_offset += block_buf.size();
+        }
+        return http_response::Part(ch);  // pass data on, drop origin extensions
+    }
+
+    http::fields trailer_in;
+
+    optional_part
+    process_part(http_response::Trailer intr, Cancel, asio::yield_context)
+    {
+        trailer_in = do_inject ? util::to_cache_trailer(std::move(intr)) : std::move(intr);
+        return boost::none;
+    }
+
+    optional_part
+    process_end(Cancel cancel, asio::yield_context yield)
+    {
+        sys::error_code ec;
+        auto last_block = process_part(std::vector<uint8_t>(), cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, boost::none);
+
+        if (do_inject) {
+            auto block_digest = block_hash.close();
+            pending_parts.push(http_response::ChunkHdr(
+                0, http_sign_detail::block_chunk_ext(injection_id, block_digest, sk)));
+            pending_parts.push(cache::http_injection_trailer( outh, std::move(trailer_in)
+                                                            , body_length, body_hash.close()
+                                                            , sk
+                                                            , httpsig_key_id));
+        } else {
+            pending_parts.push(http_response::ChunkHdr());
+            pending_parts.push(std::move(trailer_in));
+        }
+
+        return last_block;
+    }
+};
+
+SigningReader::SigningReader( GenericStream in
+                            , http::request_header<> rqh
+                            , std::string injection_id
+                            , std::chrono::seconds::rep injection_ts
+                            , util::Ed25519PrivateKey sk)
+    : http_response::Reader(std::move(in))
+    , _impl(std::make_unique<Impl>( std::move(rqh)
+                                  , std::move(injection_id)
+                                  , std::move(injection_ts)
+                                  , std::move(sk)))
+{
+}
+
+SigningReader::~SigningReader()
+{
+}
+
+optional_part
+SigningReader::async_read_part(Cancel cancel, asio::yield_context yield)
+{
+    if (!_impl->pending_parts.empty()) {
+        auto part = std::move(_impl->pending_parts.front());
+        _impl->pending_parts.pop();
+        return part;
+    }
+
+    while (true) {
+        sys::error_code ec;
+        auto part = http_response::Reader::async_read_part(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, boost::none);
+        if (!part) {  // no more input, but stuff may still need to be sent
+            part = _impl->process_end(cancel, yield[ec]);
+            return or_throw(yield, ec, std::move(part));
+        }
+
+        part = util::apply(std::move(*part), [&](auto&& p) {
+            return _impl->process_part(std::move(p), cancel, yield[ec]);
+        });
+        return_or_throw_on_error(yield, cancel, ec, boost::none);
+        if (!part) continue;
+
+        return part;
+    };
+
+    return boost::none;
+}
+
+// end SigningReader
 
 static bool
 has_comma_in_quotes(const boost::string_view& s) {

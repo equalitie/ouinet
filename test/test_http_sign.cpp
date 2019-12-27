@@ -150,8 +150,15 @@ static util::Ed25519PublicKey get_public_key() {
     return util::Ed25519PublicKey(std::move(pka));
 }
 
-BOOST_AUTO_TEST_CASE(test_http_sign) {
+struct TestGlobalFixture {
+    void setup() {
+        ouinet::util::crypto_init();
+    }
+};
 
+BOOST_TEST_GLOBAL_FIXTURE(TestGlobalFixture);
+
+BOOST_AUTO_TEST_CASE(test_http_sign) {
     sys::error_code ec;
 
     const auto digest = util::sha256_digest(rs_body);
@@ -202,7 +209,6 @@ void put_to_parser(Parser& p, const string& s, sys::error_code& ec) {
 }
 
 BOOST_AUTO_TEST_CASE(test_http_verify) {
-
     sys::error_code ec;
 
     http::response_parser<http::string_body> parser;
@@ -303,13 +309,14 @@ BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
         asio::spawn(ctx, [ origin_r = std::move(origin_r), &signed_w
                          , lock = wc.lock()] (auto y) mutable {
             Cancel cancel;
-            auto origin_rs = Session::create(std::move(origin_r), cancel, y);
+            sys::error_code e;
             auto req_h = get_request_header();
             auto sk = get_private_key();
-            sys::error_code e;
-            cache::session_flush_signed( origin_rs, signed_w
-                                       , req_h, inj_id, inj_ts, sk
-                                       , cancel, y[e]);
+            Session::reader_uptr origin_rvr = make_unique<cache::SigningReader>
+                (move(origin_r), move(req_h), inj_id, inj_ts, sk);
+            auto origin_rs = Session::create(std::move(origin_rvr), cancel, y[e]);
+            BOOST_REQUIRE(!e);
+            origin_rs.flush_response(signed_w, cancel, y[e]);
             BOOST_REQUIRE(!e);
             signed_w.close();
         });
@@ -401,13 +408,14 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified) {
         asio::spawn(ctx, [ origin_r = std::move(origin_r), &signed_w
                          , lock = wc.lock()] (auto y) mutable {
             Cancel cancel;
-            auto origin_rs = Session::create(std::move(origin_r), cancel, y);
+            sys::error_code e;
             auto req_h = get_request_header();
             auto sk = get_private_key();
-            sys::error_code e;
-            cache::session_flush_signed( origin_rs, signed_w
-                                       , req_h, inj_id, inj_ts, sk
-                                       , cancel, y[e]);
+            Session::reader_uptr origin_rvr = make_unique<cache::SigningReader>
+                (move(origin_r), move(req_h), inj_id, inj_ts, sk);
+            auto origin_rs = Session::create(std::move(origin_rvr), cancel, y[e]);
+            BOOST_REQUIRE(!e);
+            origin_rs.flush_response(signed_w, cancel, y[e]);
             BOOST_REQUIRE(!e);
             signed_w.close();
         });
@@ -503,13 +511,14 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
         asio::spawn(ctx, [ origin_r = std::move(origin_r), &signed_w
                          , lock = wc.lock()] (auto y) mutable {
             Cancel cancel;
-            auto origin_rs = Session::create(std::move(origin_r), cancel, y);
+            sys::error_code e;
             auto req_h = get_request_header();
             auto sk = get_private_key();
-            sys::error_code e;
-            cache::session_flush_signed( origin_rs, signed_w
-                                       , req_h, inj_id, inj_ts, sk
-                                       , cancel, y[e]);
+            Session::reader_uptr origin_rvr = make_unique<cache::SigningReader>
+                (move(origin_r), move(req_h), inj_id, inj_ts, sk);
+            auto origin_rs = Session::create(std::move(origin_rvr), cancel, y[e]);
+            BOOST_REQUIRE(!e);
+            origin_rs.flush_response(signed_w, cancel, y[e]);
             BOOST_REQUIRE(!e);
             signed_w.close();
         });

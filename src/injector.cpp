@@ -311,14 +311,12 @@ public:
         if (ec) yield.log("Failed to send request: ", ec.message());
         return_or_throw_on_error(yield, cancel, ec);
 
-        Session orig_sess = Session::create(move(orig_con), cancel, yield[ec]);
+        Session::reader_uptr sig_reader = make_unique<cache::SigningReader>
+            (move(orig_con), rq, insert_id, insert_ts, config.cache_private_key());
+        auto orig_sess = Session::create(move(sig_reader), cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec);
 
-        cache::session_flush_signed( orig_sess, con
-                                   , rq, insert_id, insert_ts
-                                   , config.cache_private_key()
-                                   , cancel, yield[ec]);  // .tag("fetch_injector")
-
+        orig_sess.flush_response(con, cancel, yield[ec]);
         if (ec) yield.log("Injection failed: ", ec.message());
         return_or_throw_on_error(yield, cancel, ec);
         yield.log("Injection end");  // TODO: report whether inject or just fwd

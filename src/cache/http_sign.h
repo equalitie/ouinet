@@ -13,6 +13,7 @@
 #include "../http_util.h"
 #include "../http_forward.h"
 #include "../logger.h"
+#include "../response_reader.h"
 #include "../session.h"
 #include "../util/crypto.h"
 #include "../util/hash.h"
@@ -177,100 +178,24 @@ struct HttpBlockSigs {
     boost::optional<HttpBlockSigs> parse(boost::string_view);
 };
 
-// Flush a response from session `in` to stream `out`
-// while signing with the provided private key.
-template<class SinkStream>
-inline
-void
-session_flush_signed( Session& in, SinkStream& out
-                    , const http::request_header<>& rqh
-                    , const std::string& injection_id
-                    , std::chrono::seconds::rep injection_ts
-                    , const ouinet::util::Ed25519PrivateKey& sk
-                    , Cancel& cancel, asio::yield_context yield)
-{
-#ifndef NDEBUG // debug
-#   warning TODO
-    sys::error_code ec;
-    in.flush_response(out, cancel, yield[ec]);
-#else // release
-    auto httpsig_key_id = http_key_id_for_injection(sk.public_key());  // TODO: cache this
+// Allows reading parts of a response from stream `in`
+// while signing with the private key `sk`.
+class SigningReader : public ouinet::http_response::Reader {
+public:
+    SigningReader( GenericStream in
+                 , http::request_header<> rqh
+                 , std::string injection_id
+                 , std::chrono::seconds::rep injection_ts
+                 , ouinet::util::Ed25519PrivateKey sk);
+    ~SigningReader() override;
 
-    bool do_inject = false;
-    http::response_header<> outh;
-    auto hproc = [&] (auto inh, auto&, auto) {
-        auto inh_orig = inh;
-        sys::error_code ec_;
-        inh = util::to_cache_response(move(inh), ec_);
-        if (ec_) return inh_orig;  // will not inject, just proxy
+    boost::optional<ouinet::http_response::Part>
+    async_read_part(Cancel, asio::yield_context) override;
 
-        do_inject = true;
-        inh = cache::http_injection_head( rqh, move(inh)
-                                        , injection_id, injection_ts
-                                        , sk, httpsig_key_id);
-        // We will use the trailer to send the body digest and head signature.
-        assert(http::response<http::empty_body>(inh).chunked());
-
-        outh = inh;
-        return inh;
-    };
-
-    auto xproc = [] (auto, auto&, auto) {
-        // Origin chunk extensions are ignored and dropped
-        // since we have no way to sign them.
-    };
-
-    size_t body_length = 0;
-    size_t block_offset = 0;
-    util::SHA256 body_hash;
-    util::SHA512 block_hash;  // for first block
-    // Simplest implementation: one output chunk per data block.
-    util::quantized_buffer qbuf(http_::response_data_block);
-    ProcDataFunc<asio::const_buffer> dproc = [&] (auto inbuf, auto&, auto) {
-        // Just count transferred data and feed the hash.
-        body_length += inbuf.size();
-        if (do_inject) body_hash.update(inbuf);
-        qbuf.put(inbuf);
-        ProcDataFunc<asio::const_buffer>::result_type ret{
-            (inbuf.size() > 0) ? qbuf.get() : qbuf.get_rest(), {}
-        };  // send rest if no more input
-        if (do_inject && ret.first.size() > 0) {  // if injecting and sending data
-            if (block_offset > 0) {  // add chunk extension for previous block
-                auto block_digest = block_hash.close();
-                ret.second = http_sign_detail::block_chunk_ext(injection_id, block_digest, sk);
-                // Prepare chunk extension for next block: HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])
-                block_hash = {};
-                block_hash.update(block_digest);
-            }  // else HASH[0]=SHA2-512(BLOCK[0])
-            block_hash.update(ret.first);
-            block_offset += ret.first.size();
-        }
-        return ret;  // pass data on, drop origin extensions
-    };
-
-    ProcTrailFunc tproc = [&] (auto intr, auto&, auto) {
-        if (do_inject) {
-            intr = util::to_cache_trailer(move(intr));
-            intr = cache::http_injection_trailer( outh, move(intr)
-                                                , body_length, body_hash.close()
-                                                , sk
-                                                , httpsig_key_id);
-        }
-        ProcTrailFunc::result_type ret{move(intr), {}};
-        if (do_inject) {
-            auto block_digest = block_hash.close();
-            ret.second = http_sign_detail::block_chunk_ext(injection_id, block_digest, sk);
-        }
-        return ret;  // pass trailer on, drop origin extensions
-    };
-
-    sys::error_code ec;
-    in.flush_response( out
-                     , std::move(hproc), std::move(xproc), std::move(dproc), std::move(tproc)
-                     , cancel, yield[ec]);
-#endif
-    return or_throw(yield, ec);
-}
+private:
+    struct Impl;
+    std::unique_ptr<Impl> _impl;
+};
 
 // Flush a response from session `in` to stream `out`
 // while verifying signatures by the provided public key.
