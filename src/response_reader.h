@@ -90,8 +90,9 @@ void Reader::set_callbacks()
 
     _on_chunk_body = [&] (auto remain, auto data, auto& ec) -> size_t {
         assert(!_next_part);
+        assert(remain >= data.size());
         _next_part = ChunkBody( std::vector<uint8_t>(data.begin(), data.end())
-                              , remain);
+                              , remain - data.size());
         return data.size();
     };
 
