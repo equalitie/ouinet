@@ -823,6 +823,47 @@ struct VerifyingReader::Impl {
         : pk(std::move(pk))
     {
     }
+
+    ouinet::http_response::Head head;  // keep for refs and later use
+    boost::string_view uri;  // for warnings, should use `Yield::log` instead
+    boost::string_view injection_id;
+    boost::optional<HttpBlockSigs> bs_params;
+    std::unique_ptr<util::quantized_buffer> qbuf;
+
+    optional_part
+    process_part(http_response::Head inh, Cancel, asio::yield_context y)
+    {
+        // Verify head signature.
+        head = cache::http_injection_verify(move(inh), pk);
+        if (head.cbegin() == head.cend()) {
+            LOG_WARN("Failed to verify HTTP head signatures");
+            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
+        }
+        uri = head[http_::response_uri_hdr];
+        // Get and validate HTTP block signature parameters.
+        auto bsh = head[http_::response_block_signatures_hdr];
+        if (bsh.empty()) {
+            LOG_WARN("Missing parameters for HTTP data block signatures; uri=", uri);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
+        }
+        bs_params = cache::HttpBlockSigs::parse(bsh);
+        if (!bs_params) {
+            LOG_WARN("Malformed parameters for HTTP data block signatures; uri=", uri);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
+        }
+        if (bs_params->size > http_::response_data_block_max) {
+            LOG_WARN("Size of signed HTTP data blocks is too large: ", bs_params->size, "; uri=", uri);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
+        }
+        // The injection id is also needed to verify block signatures.
+        injection_id = util::http_injection_id(head);
+        if (injection_id.empty()) {
+            LOG_WARN("Missing injection identifier in HTTP head; uri=", uri);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
+        }
+        qbuf = std::make_unique<util::quantized_buffer>(bs_params->size);
+        return http_response::Part(head);
+    }
 };
 
 VerifyingReader::VerifyingReader( GenericStream in
@@ -839,7 +880,16 @@ VerifyingReader::~VerifyingReader()
 optional_part
 VerifyingReader::async_read_part(Cancel cancel, asio::yield_context yield)
 {
-    return http_response::Reader::async_read_part(cancel, yield);
+    sys::error_code ec;
+    auto part = http_response::Reader::async_read_part(cancel, yield[ec]);
+    return_or_throw_on_error(yield, cancel, ec, boost::none);
+    if (!part) return boost::none;
+
+    if (auto head = part->as_head()) {
+        return _impl->process_part(std::move(*head), cancel, yield[ec]);
+    }
+
+    return part;
 }
 
 // end VerifyingReader
