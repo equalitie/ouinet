@@ -66,6 +66,7 @@
 #include "util/scheduler.h"
 #include "util/connected_pair.h"
 #include "stream/fork.h"
+#include "stream/debug.h"
 
 #include "logger.h"
 
@@ -696,7 +697,9 @@ Session Client::State::fetch_fresh_through_simple_proxy
     cancel_slot = {};
 
     // Receive response
-    auto session = Session::create(move(con), cancel, yield[ec]);
+    stream::Debug<decltype(con)> debug_con(move(con));
+    debug_con.set_tag("source");
+    auto session = Session::create(move(debug_con), cancel, yield[ec]);
 
     auto& hdr = session.response_header();
 
@@ -970,7 +973,10 @@ public:
                         s2.flush_response(con, cancel, yield_[ec]);
                     });
 
-                    s.flush_response(sink, cancel, yield[ec]);
+                    stream::Debug<decltype(sink)> debug_sink(move(sink));
+                    debug_sink.set_tag("sink");
+
+                    s.flush_response(debug_sink, cancel, yield[ec]);
 
                     // Abort store and forward tasks on error.
                     if (ec) fork.close();
