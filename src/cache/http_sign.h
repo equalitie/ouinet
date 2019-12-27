@@ -197,6 +197,29 @@ private:
     std::unique_ptr<Impl> _impl;
 };
 
+// Allows reading parts of a response from stream `in`
+// while verifying signatures from the public key `pk`.
+//
+// The read operation fails with error `boost::system::errc::no_message`
+// if the response head failed to be verified or was not acceptable;
+// or with error `boost::system::errc::bad_message`
+// if verification fails later on.
+//
+// The resulting output preserves all the information and formatting needed
+// to be verified again.
+class VerifyingReader : public ouinet::http_response::Reader {
+public:
+    VerifyingReader(GenericStream in, ouinet::util::Ed25519PublicKey pk);
+    ~VerifyingReader() override;
+
+    boost::optional<ouinet::http_response::Part>
+    async_read_part(Cancel, asio::yield_context) override;
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> _impl;
+};
+
 // Flush a response from session `in` to stream `out`
 // while verifying signatures by the provided public key.
 //
