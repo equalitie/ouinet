@@ -864,6 +864,85 @@ struct VerifyingReader::Impl {
         qbuf = std::make_unique<util::quantized_buffer>(bs_params->size);
         return http_response::Part(head);
     }
+
+    http_sign_detail::opt_sig_array_t inbsig;
+
+    optional_part
+    process_part(http_response::ChunkHdr inch, Cancel, asio::yield_context)
+    {
+        auto inbsig_ = http_sign_detail::block_sig_from_exts(inch.exts);
+        if (!inbsig_) return boost::none;
+
+        // Capture and keep the latest block signature only.
+        if (inbsig)
+            LOG_WARN("Dropping data block signature; uri=", uri);
+        inbsig = std::move(inbsig_);
+
+        return boost::none;
+    }
+
+    size_t body_length = 0;
+    size_t block_offset = 0;
+    util::SHA256 body_hash;
+    util::SHA512 block_hash;
+    std::vector<uint8_t> lastd;
+    http_sign_detail::opt_sig_array_t outbsig;
+    http_sign_detail::opt_block_digest_t inbdig, outbdig;
+    // Simplest implementation: one output chunk per data block.
+    std::queue<http_response::Part> pending_parts;
+
+    // If a whole data block has been processed,
+    // return a chunk header and keep block as chunk body.
+    optional_part
+    process_part(std::vector<uint8_t> ind, Cancel, asio::yield_context y)
+    {
+        // Data block is sent when data following it is received
+        // (so process the last data buffer now).
+        body_length += lastd.size();
+        body_hash.update(lastd);
+        qbuf->put(asio::buffer(lastd));
+        lastd = ind;  // save copy of current input data to last data buffer
+        auto block_buf =
+            (ind.size() > 0) ? qbuf->get() : qbuf->get_rest();  // send rest if no more input
+
+        if (block_buf.size() == 0)
+            return boost::none;  // no data to send yet
+
+        // Verify signature of data block to be sent (fail if missing).
+        if (!inbsig) {
+            LOG_WARN("Missing signature for data block with offset ", block_offset, "; uri=", uri);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
+        }
+        // Complete hash for this block; note that HASH[0]=SHA2-512(BLOCK[0])
+        block_hash.update(block_buf);
+        auto block_digest = block_hash.close();
+        auto bsig_str = http_sign_detail::block_sig_str(injection_id, block_digest);
+        if (!bs_params->pk.verify(bsig_str, *inbsig)) {
+            LOG_WARN("Failed to verify data block with offset ", block_offset, "; uri=", uri);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
+        }
+
+        // Keep block as chunk body.
+        auto block_vec = util::bytes::to_vector<uint8_t>(block_buf);
+        pending_parts.push(http_response::ChunkBody(std::move(block_vec), 0));
+        // Send last extensions, keep current for next.
+        http_response::ChunkHdr ch( block_buf.size()
+                                  , http_sign_detail::block_chunk_ext(outbsig, outbdig));
+
+        outbsig = std::move(inbsig);
+        inbsig = {};
+        // Prepare hash for next block: HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])
+        block_hash = {}; block_hash.update(block_digest);
+        block_offset += block_buf.size();
+        // Chain hash is to be sent along the signature of the following block,
+        // so that it may convey the missing information for computing the signing string
+        // if the receiver does not have the previous blocks (e.g. for range requests).
+        // (Bk0) (Sig0 Bk1) (Sig1 Hash0 Bk2) ... (SigN-1 HashN-2 BkN) (SigN HashN-1)
+        outbdig = std::move(inbdig);
+        inbdig = std::move(block_digest);
+
+        return http_response::Part(std::move(ch));  // pass data on
+    }
 };
 
 VerifyingReader::VerifyingReader( GenericStream in
@@ -880,16 +959,34 @@ VerifyingReader::~VerifyingReader()
 optional_part
 VerifyingReader::async_read_part(Cancel cancel, asio::yield_context yield)
 {
-    sys::error_code ec;
-    auto part = http_response::Reader::async_read_part(cancel, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec, boost::none);
-    if (!part) return boost::none;
-
-    if (auto head = part->as_head()) {
-        return _impl->process_part(std::move(*head), cancel, yield[ec]);
+    if (!_impl->pending_parts.empty()) {
+        auto part = std::move(_impl->pending_parts.front());
+        _impl->pending_parts.pop();
+        return part;
     }
 
-    return part;
+    while (true) {
+        sys::error_code ec;
+        auto part = http_response::Reader::async_read_part(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, boost::none);
+        if (!part) break;
+
+        if (auto head = part->as_head()) {
+            part = _impl->process_part(std::move(*head), cancel, yield[ec]);
+        } else if (auto body = part->as_body()) {
+            part = _impl->process_part(std::move(*body), cancel, yield[ec]);
+        } else if (auto ch = part->as_chunk_hdr()) {
+            part = _impl->process_part(std::move(*ch), cancel, yield[ec]);
+        } else if (auto cb = part->as_chunk_body()) {
+            part = _impl->process_part(std::move(*cb), cancel, yield[ec]);
+        }
+        return_or_throw_on_error(yield, cancel, ec, boost::none);
+        if (!part) continue;
+
+        return part;
+    }
+
+    return boost::none;
 }
 
 // end VerifyingReader
