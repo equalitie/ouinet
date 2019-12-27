@@ -1,5 +1,6 @@
 #include "client.h"
 #include "../utp.h"
+#include "../connect_proxy.h"
 #include "../tls.h"
 #include "../../async_sleep.h"
 #include "../../bittorrent/dht.h"
@@ -7,6 +8,7 @@
 #include "../../bittorrent/is_martian.h"
 #include "../../logger.h"
 #include "../../util/hash.h"
+#include "../../ssl/util.h"
 
 using namespace std;
 using namespace ouinet;
@@ -56,19 +58,19 @@ private:
     size_t _get_peers_call_count = 0;
     std::vector<WaitCondition::Lock> _wait_condition_locks;
     Peers _peers;
-    asio::ssl::context* _tls_ctx;
+    const bool _connect_proxy;
 
 public:
     Swarm( Bep5Client* owner
          , bt::NodeID infohash
          , shared_ptr<bt::MainlineDht> dht
          , Cancel& cancel
-         , asio::ssl::context* tls_ctx)
+         , bool connect_proxy)
         : _owner(owner)
         , _dht(move(dht))
         , _infohash(infohash)
         , _lifetime_cancel(cancel)
-        , _tls_ctx(tls_ctx)
+        , _connect_proxy(connect_proxy)
     {}
 
     ~Swarm() {
@@ -169,13 +171,12 @@ private:
             return nullptr;
         }
 
-        if (!_tls_ctx) {
+        if (_connect_proxy) {
+            return make_unique<ConnectProxyOuiServiceClient>(move(utp_client));
+        }
+        else {
             return utp_client;
         }
-
-        auto tls_client = make_shared<TlsOuiServiceClient>(move(utp_client), *_tls_ctx);
-
-        return tls_client;
     }
 
     void add_peers(set<udp::endpoint> eps)
@@ -327,11 +328,13 @@ private:
 
 Bep5Client::Bep5Client( shared_ptr<bt::MainlineDht> dht
                       , string injector_swarm_name
-                      , asio::ssl::context* injector_tls_ctx)
+                      , asio::ssl::context* injector_tls_ctx
+                      , Target targets)
     : _dht(dht)
     , _injector_swarm_name(move(injector_swarm_name))
     , _injector_tls_ctx(injector_tls_ctx)
     , _random_generator(std::random_device()())
+    , _default_targets(targets)
 {
     if (_dht->local_endpoints().empty()) {
         LOG_ERROR("Bep5Client: DHT has no endpoints!");
@@ -341,12 +344,14 @@ Bep5Client::Bep5Client( shared_ptr<bt::MainlineDht> dht
 Bep5Client::Bep5Client( shared_ptr<bt::MainlineDht> dht
                       , string injector_swarm_name
                       , string helpers_swarm_name
-                      , asio::ssl::context* injector_tls_ctx)
+                      , asio::ssl::context* injector_tls_ctx
+                      , Target targets)
     : _dht(dht)
     , _injector_swarm_name(move(injector_swarm_name))
     , _helpers_swarm_name(move(helpers_swarm_name))
     , _injector_tls_ctx(injector_tls_ctx)
     , _random_generator(std::random_device()())
+    , _default_targets(targets)
 {
     if (_dht->local_endpoints().empty()) {
         LOG_ERROR("Bep5Client: DHT has no endpoints!");
@@ -362,7 +367,7 @@ void Bep5Client::start(asio::yield_context)
 
         LOG_INFO("Injector swarm: sha1('", _injector_swarm_name, "'): ", infohash.to_hex());
 
-        _injector_swarm.reset(new Swarm(this, infohash, _dht, _cancel, _injector_tls_ctx));
+        _injector_swarm.reset(new Swarm(this, infohash, _dht, _cancel, false));
         _injector_swarm->start();
     }
 
@@ -371,7 +376,7 @@ void Bep5Client::start(asio::yield_context)
 
         LOG_INFO("Helpers swarm: sha1('", _helpers_swarm_name, "'): ", infohash.to_hex());
 
-        _helpers_swarm.reset(new Swarm(this, infohash, _dht, _cancel, nullptr));
+        _helpers_swarm.reset(new Swarm(this, infohash, _dht, _cancel, true));
         _helpers_swarm->start();
 
         _injector_pinger.reset(new InjectorPinger(_injector_swarm, _helpers_swarm_name, _dht, _cancel));
@@ -386,7 +391,7 @@ void Bep5Client::stop()
     _injector_pinger = nullptr;
 }
 
-std::vector<Bep5Client::Candidate> Bep5Client::get_peers()
+std::vector<Bep5Client::Candidate> Bep5Client::get_peers(Target target)
 {
     std::vector<Candidate> inj;
     std::vector<Candidate> hlp;
@@ -394,10 +399,12 @@ std::vector<Bep5Client::Candidate> Bep5Client::get_peers()
     auto& inj_m = _injector_swarm->peers();
     auto* hlp_m = _helpers_swarm ? &_helpers_swarm->peers() : nullptr;
 
-    inj.reserve(inj_m.size());
-    for (auto p : inj_m) inj.push_back({p.first, p.second});
+    if (target & Target::injectors) {
+        inj.reserve(inj_m.size());
+        for (auto p : inj_m) inj.push_back({p.first, p.second});
+    }
 
-    if (hlp_m) {
+    if (hlp_m && (target & Target::helpers)) {
         hlp.reserve(hlp_m->size());
         for (auto p : *hlp_m) hlp.push_back({p.first, p.second});
     }
@@ -410,6 +417,13 @@ std::vector<Bep5Client::Candidate> Bep5Client::get_peers()
 
     for (auto& p : inj) { ret.push_back(p); }
     for (auto& p : hlp) { ret.push_back(p); }
+
+    //auto wan_eps = _dht->wan_endpoints();
+    //auto lan_eps = _dht->local_endpoints();
+    //cerr << "wan: "; for (auto& i : wan_eps) cerr << i << ","; cerr << "\n";
+    //cerr << "lan: "; for (auto& i : lan_eps) cerr << i << ","; cerr << "\n";
+    //cerr << "inj: "; for (auto& i : inj) cerr << i.endpoint << ","; cerr << "\n";
+    //cerr << "hlp: "; for (auto& i : hlp) cerr << i.endpoint << ","; cerr << "\n";
 
     // If there is a peer that has woked recently then use that one
     if (_last_working_ep) {
@@ -426,7 +440,15 @@ std::vector<Bep5Client::Candidate> Bep5Client::get_peers()
     return ret;
 }
 
-GenericStream Bep5Client::connect(asio::yield_context yield, Cancel& cancel_)
+GenericStream Bep5Client::connect(asio::yield_context yield, Cancel& cancel)
+{
+    return connect(yield, cancel, true, _default_targets);
+}
+
+GenericStream Bep5Client::connect( asio::yield_context yield
+                                 , Cancel& cancel_
+                                 , bool tls
+                                 , Target target)
 {
     assert(!_cancel);
     assert(!cancel_);
@@ -436,12 +458,14 @@ GenericStream Bep5Client::connect(asio::yield_context yield, Cancel& cancel_)
 
     sys::error_code ec;
 
-    _injector_swarm->wait_for_ready(cancel, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec, GenericStream{});
+    if (_injector_swarm && (target & Target::injectors)) {
+        _injector_swarm->wait_for_ready(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, GenericStream());
+    }
 
-    if (_helpers_swarm) {
+    if (_helpers_swarm && (target & Target::helpers)) {
         _helpers_swarm->wait_for_ready(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, GenericStream{});
+        return_or_throw_on_error(yield, cancel, ec, GenericStream());
     }
 
     WaitCondition wc(get_executor());
@@ -453,7 +477,7 @@ GenericStream Bep5Client::connect(asio::yield_context yield, Cancel& cancel_)
 
     uint32_t i = 0;
 
-    for (auto peer : get_peers()) {
+    for (auto peer : get_peers(target)) {
         auto j = i++;
 
         const uint32_t k = 10;
@@ -474,7 +498,7 @@ GenericStream Bep5Client::connect(asio::yield_context yield, Cancel& cancel_)
                 if (spawn_cancel) return;
             }
 
-            auto con = peer.client->connect(y[ec], spawn_cancel);
+            auto con = connect_single(*peer.client, tls, spawn_cancel, y[ec]);
             assert(!spawn_cancel || ec == asio::error::operation_aborted);
             if (spawn_cancel || ec) return;
             ret_con = move(con);
@@ -506,6 +530,30 @@ GenericStream Bep5Client::connect(asio::yield_context yield, Cancel& cancel_)
     }
 
     return or_throw(yield, ec, move(ret_con));
+}
+
+GenericStream
+Bep5Client::connect_single( AbstractClient& cli
+                          , bool tls
+                          , Cancel& cancel
+                          , asio::yield_context yield)
+{
+    sys::error_code ec;
+    auto con = cli.connect(yield[ec], cancel);
+    return_or_throw_on_error(yield, cancel, ec, GenericStream{});
+
+    if (!tls) return con;
+
+    assert(_injector_tls_ctx);
+
+    if (!_injector_tls_ctx) {
+        return or_throw<GenericStream>(yield, asio::error::bad_descriptor);
+    }
+
+    return ssl::util::client_handshake( std::move(con)
+                                      , *_injector_tls_ctx, ""
+                                      , cancel
+                                      , yield);
 }
 
 Bep5Client::~Bep5Client()

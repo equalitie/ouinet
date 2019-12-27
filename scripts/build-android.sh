@@ -44,6 +44,8 @@ fi
 OUTPUT_DIR=build-android-${ABI}
 if [ $RELEASE_BUILD -eq 1 ]; then
     OUTPUT_DIR=${OUTPUT_DIR}-release
+else
+    OUTPUT_DIR=${OUTPUT_DIR}-debug
 fi
 mkdir -p "${DIR}/${OUTPUT_DIR}"
 

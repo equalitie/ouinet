@@ -74,7 +74,7 @@ class OuiServiceClient
     public:
     struct ConnectInfo {
         GenericStream connection;
-        std::string remote_endpoint;
+        Endpoint remote_endpoint;
     };
 
     public:

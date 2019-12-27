@@ -8,6 +8,7 @@
 
 #include "cache/bep5_http/client.h"
 
+#include <boost/asio/ip/address.hpp>
 #include <boost/optional/optional_io.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/format.hpp>
@@ -173,10 +174,10 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         else if (target.find("?proxy_access=disable") != string::npos) {
             config.is_proxy_access_enabled(false);
         }
-        else if (target.find("?injector_proxy=enable") != string::npos) {
+        else if (target.find("?injector_access=enable") != string::npos) {
             config.is_injector_access_enabled(true);
         }
-        else if (target.find("?injector_proxy=disable") != string::npos) {
+        else if (target.find("?injector_access=disable") != string::npos) {
             config.is_injector_access_enabled(false);
         }
         else if (target.find("?auto_refresh=enable") != string::npos) {
@@ -185,10 +186,10 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         else if (target.find("?auto_refresh=disable") != string::npos) {
             _auto_refresh_enabled = false;
         }
-        else if (target.find("?ipfs_cache=enable") != string::npos) {
+        else if (target.find("?distributed_cache=enable") != string::npos) {
             config.is_cache_access_enabled(true);
         }
-        else if (target.find("?ipfs_cache=disable") != string::npos) {
+        else if (target.find("?distributed_cache=disable") != string::npos) {
             config.is_cache_access_enabled(false);
         }
 
@@ -228,8 +229,8 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     ss << ToggleInput{"<u>A</u>uto refresh",   "auto_refresh",   'a', _auto_refresh_enabled};
     ss << ToggleInput{"<u>O</u>rigin access",  "origin_access",  'o', config.is_origin_access_enabled()};
     ss << ToggleInput{"<u>P</u>roxy access",   "proxy_access",   'p', config.is_proxy_access_enabled()};
-    ss << ToggleInput{"<u>I</u>njector proxy", "injector_proxy", 'i', config.is_injector_access_enabled()};
-    ss << ToggleInput{"Distributed <u>C</u>ache", "ipfs_cache",  'c', config.is_cache_access_enabled()};
+    ss << ToggleInput{"<u>I</u>njector proxy", "injector_access",'i', config.is_injector_access_enabled()};
+    ss << ToggleInput{"Distributed <u>C</u>ache", "distributed_cache",  'c', config.is_cache_access_enabled()};
 
     ss << *_log_level_input;
 
@@ -254,7 +255,25 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
           "</html>\n";
 }
 
+template<class Proto>
+static
+boost::optional<asio::ip::udp::endpoint>
+local_endpoint(Proto proto, uint16_t port) {
+    using namespace asio::ip;
+    asio::io_context ctx;
+    udp::socket s(ctx, proto);
+    sys::error_code ec;
+    if (proto == udp::v4()) {
+        s.connect(udp::endpoint(make_address_v4("192.0.2.1"), 1234), ec);
+    } else {
+        s.connect(udp::endpoint(make_address_v6("2001:db8::1"), 1234), ec);
+    }
+    if (ec) return boost::none;
+    return udp::endpoint(s.local_endpoint().address(), port);
+}
+
 void ClientFrontEnd::handle_status( ClientConfig& config
+                                  , boost::optional<uint32_t> udp_port
                                   , const Request& req, Response& res, stringstream& ss)
 {
     res.set(http::field::content_type, "application/json");
@@ -263,11 +282,26 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         {"auto_refresh", _auto_refresh_enabled},
         {"origin_access", config.is_origin_access_enabled()},
         {"proxy_access", config.is_proxy_access_enabled()},
-        {"injector_proxy", config.is_injector_access_enabled()},
-        {"ipfs_cache", config.is_cache_access_enabled()},
+        {"injector_access", config.is_injector_access_enabled()},
+        {"distributed_cache", config.is_cache_access_enabled()},
         {"ouinet_version", Version::VERSION_NAME},
         {"ouinet_build_id", Version::BUILD_ID}
     };
+
+    if (udp_port) {
+        using namespace asio::ip;
+
+        auto epv4 = local_endpoint(udp::v4(), *udp_port);
+        auto epv6 = local_endpoint(udp::v6(), *udp_port);
+
+        std::vector<std::string> eps;
+        eps.reserve(2);
+
+        if (epv4) eps.push_back(util::str(*epv4));
+        if (epv6) eps.push_back(util::str(*epv6));
+
+        response["local_udp_endpoints"] = std::move(eps);
+    }
 
     ss << response;
 }
@@ -276,6 +310,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
                               , const Request& req
                               , cache::bep5_http::Client* bep5_cache
                               , const CACertificate& ca
+                              , boost::optional<uint32_t> udp_port
                               , Yield yield)
 {
     Response res{http::status::ok, req.version()};
@@ -292,7 +327,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
     if (path == "/ca.pem") {
         handle_ca_pem(req, res, ss, ca);
     } else if (path == "/api/status") {
-        handle_status(config, req, res, ss);
+        handle_status(config, udp_port, req, res, ss);
     } else {
         handle_portal(config, req, res, ss, bep5_cache);
     }

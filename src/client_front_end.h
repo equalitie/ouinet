@@ -1,6 +1,6 @@
 #pragma once
 
-#include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/ip/udp.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/beast.hpp>
 #include <boost/intrusive/list.hpp>
@@ -62,6 +62,7 @@ public:
                   , const http::request<http::string_body>&
                   , cache::bep5_http::Client*
                   , const CACertificate&
+                  , boost::optional<uint32_t> udp_port
                   , Yield yield);
 
     Task notify_task(const std::string& task_name)
@@ -96,6 +97,7 @@ private:
                       , cache::bep5_http::Client*);
 
     void handle_status( ClientConfig&
+                      , boost::optional<uint32_t> udp_port
                       , const Request&
                       , Response&
                       , std::stringstream&);

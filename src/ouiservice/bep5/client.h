@@ -29,26 +29,39 @@ private:
     };
 
 public:
+    enum Target : uint8_t { helpers = 1, injectors = 2 };
+
+    friend Target operator|(Target t1, Target t2) {
+        return static_cast<Target>( static_cast<uint8_t>(t1)
+                                  | static_cast<uint8_t>(t2));
+    }
+
+public:
     Bep5Client( std::shared_ptr<bittorrent::MainlineDht>
               , std::string injector_swarm_name
-              , asio::ssl::context*);
+              , asio::ssl::context*
+              , Target targets = helpers | injectors);
 
     Bep5Client( std::shared_ptr<bittorrent::MainlineDht>
               , std::string injector_swarm_name
               , std::string helpers_swarm_name
-              , asio::ssl::context*);
+              , asio::ssl::context*
+              , Target targets = helpers | injectors);
 
     void start(asio::yield_context) override;
     void stop() override;
 
     GenericStream connect(asio::yield_context, Cancel&) override;
+    GenericStream connect(asio::yield_context, Cancel&, bool tls, Target);
 
     ~Bep5Client();
 
     asio::executor get_executor();
 
 private:
-    std::vector<Candidate> get_peers();
+    std::vector<Candidate> get_peers(Target);
+
+    GenericStream connect_single(AbstractClient&, bool tls, Cancel&, asio::yield_context);
 
 private:
     std::shared_ptr<bittorrent::MainlineDht> _dht;
@@ -69,6 +82,8 @@ private:
     bool _log_debug = false;
 
     boost::optional<asio::ip::udp::endpoint> _last_working_ep;
+
+    Target _default_targets;
 };
 
 }} // namespaces
