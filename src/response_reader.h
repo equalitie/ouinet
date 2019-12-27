@@ -21,7 +21,8 @@ public:
     //
     // Possible output on subsequent invocations per one response:
     //
-    // Head >> (ChunkHdr(size > 0) ChunkBody*)* >> ChunkHdr(size == 0) >> Trailer >> boost::none*
+    // Head >> ( ChunkHdr(size > 0) >> ChunkBody(remain > 0)* >> ChunkBody(remain == 0) )*
+    //      >> ChunkHdr(size == 0) >> Trailer >> boost::none*
     //
     // Or:
     //
@@ -91,7 +92,7 @@ void Reader::set_callbacks()
     _on_chunk_body = [&] (auto remain, auto data, auto& ec) -> size_t {
         assert(!_next_part);
         _next_part = ChunkBody( std::vector<uint8_t>(data.begin(), data.end())
-                              , remain);
+                              , remain - data.size());
         return data.size();
     };
 
