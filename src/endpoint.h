@@ -28,6 +28,11 @@ struct Endpoint {
     bool operator==(const Endpoint& other) const {
         return type == other.type && endpoint_string == other.endpoint_string;
     }
+
+    bool operator<(const Endpoint& other) const {
+        return std::tie(type, endpoint_string)
+             < std::tie(other.type, other.endpoint_string);
+    }
 };
 
 boost::optional<Endpoint> parse_endpoint(beast::string_view endpoint);

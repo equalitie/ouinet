@@ -55,6 +55,7 @@
 #include "ouiservice/tcp.h"
 #include "ouiservice/utp.h"
 #include "ouiservice/tls.h"
+#include "ouiservice/weak_client.h"
 #include "ouiservice/bep5/client.h"
 #include "ouiservice/multi_utp_server.h"
 
@@ -231,22 +232,30 @@ private:
     void serve_utp_request(GenericStream, Yield);
 
     void idempotent_start_accepting_on_utp() {
-        if (_bep5_server) return;
+        if (_multi_utp_server) return;
         assert(!_shutdown_signal);
 
         auto dht = bittorrent_dht();
-        _bep5_server
+        _multi_utp_server
             = make_unique<ouiservice::MultiUtpServer>(
                     _ctx.get_executor(),
                     bittorrent_dht()->local_endpoints(),
                     nullptr);
 
         asio::spawn(_ctx, [&, c = _shutdown_signal] (asio::yield_context yield) mutable {
-            auto slot = c.connect([&] () mutable { _bep5_server = nullptr; });
+            auto slot = c.connect([&] () mutable { _multi_utp_server = nullptr; });
+
+            sys::error_code ec;
+            _multi_utp_server->start_listen(yield[ec]);
+
+            if (ec) {
+                LOG_ERROR("Failed to start accepting on multi uTP service: ", ec.message());
+                return;
+            }
 
             while (!c) {
                 sys::error_code ec;
-                auto con = _bep5_server->accept(yield[ec]);
+                auto con = _multi_utp_server->accept(yield[ec]);
                 if (c) return;
                 if (ec == asio::error::operation_aborted) return;
                 if (ec) {
@@ -280,7 +289,7 @@ private:
 
     // For debugging
     uint64_t _next_connection_id = 0;
-    ConnectionPool<std::string> _injector_connections;
+    ConnectionPool<Endpoint> _injector_connections;
     OriginPools _origin_pools;
 
     asio::ssl::context ssl_ctx;
@@ -290,7 +299,8 @@ private:
     boost::optional<asio_utp::udp_multiplexer> _udp_multiplexer;
     shared_ptr<bt::MainlineDht> _bt_dht;
 
-    unique_ptr<ouiservice::MultiUtpServer> _bep5_server;
+    unique_ptr<ouiservice::MultiUtpServer> _multi_utp_server;
+    shared_ptr<ouiservice::Bep5Client> _bep5_client;
 };
 
 //------------------------------------------------------------------------------
@@ -342,11 +352,14 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
 
     // Connect to the injector and tunnel the transaction through it
 
-    if (!_injector) {
+    if (!_bep5_client) {
         return handle_bad_request(con, req, "No known injectors", yield[ec]);
     }
 
-    auto inj = _injector->connect(yield[ec].tag("connect_to_injector"), cancel);
+    auto inj = _bep5_client->connect( yield[ec].tag("connect_to_injector")
+                                    , cancel
+                                    , false
+                                    , ouiservice::Bep5Client::injectors);
 
     if (cancel) ec = asio::error::operation_aborted;
     if (ec == asio::error::operation_aborted) return;
@@ -358,6 +371,8 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
     // Send the client an OK message indicating that the tunnel
     // has been established.
     http::response<http::empty_body> res{http::status::ok, req.version()};
+    res.prepare_payload();
+
     // No ``res.prepare_payload()`` since no payload is allowed for CONNECT:
     // <https://tools.ietf.org/html/rfc7231#section-6.3.1>.
 
@@ -366,7 +381,7 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
     if (cancel) ec = asio::error::operation_aborted;
     if (ec) return;
 
-    full_duplex(move(con), move(inj.connection), yield[ec]);
+    full_duplex(move(con), move(inj), yield[ec]);
 }
 
 //------------------------------------------------------------------------------
@@ -454,10 +469,17 @@ Client::State::connect_to_origin( const Request& rq
 //------------------------------------------------------------------------------
 Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yield)
 {
+    boost::optional<uint32_t> udp_port;
+
+    if (_udp_multiplexer) {
+        udp_port = _udp_multiplexer->local_endpoint().port();
+    }
+
     return _front_end.serve( _config
                            , rq
                            , _bep5_http_cache.get()
                            , *_ca_certificate
+                           , udp_port
                            , yield.tag("serve_frontend"));
 }
 
@@ -529,6 +551,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
 
     // Connect to the injector/proxy.
     sys::error_code ec;
+
     auto inj = _injector->connect(yield[ec].tag("connect_to_injector"), cancel);
 
     if (ec) return or_throw<Session>(yield, ec);
@@ -607,7 +630,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
     sys::error_code ec;
 
     // Connect to the injector.
-    ConnectionPool<std::string>::Connection con;
+    ConnectionPool<Endpoint>::Connection con;
     if (_injector_connections.empty()) {
         if (log_transactions()) {
             yield.log("Connecting to the injector");
@@ -1588,11 +1611,8 @@ void Client::State::start()
 
                         if (ec) return;
 
-                        auto rs = _front_end.serve( _config
-                                                  , rq
-                                                  , _bep5_http_cache.get()
-                                                  , *_ca_certificate
-                                                  , yield[ec]);
+                        auto rs = fetch_fresh_from_front_end(rq, yield[ec]);
+
                         if (ec) return;
 
                         http::async_write(c, rs, yield[ec]);
@@ -1660,11 +1680,13 @@ void Client::State::setup_injector(asio::yield_context yield)
         client = maybe_wrap_tls(move(utp_client));
     } else if (injector_ep->type == Endpoint::Bep5Endpoint) {
 
-        client = make_unique<ouiservice::Bep5Client>
+        _bep5_client = make_shared<ouiservice::Bep5Client>
             ( bittorrent_dht()
             , injector_ep->endpoint_string
             , injector_helpers_swarm_name
             , &inj_ctx);
+
+        client = make_unique<ouiservice::WeakOuiServiceClient>(_bep5_client);
 
         idempotent_start_accepting_on_utp();
 /*
@@ -1761,9 +1783,14 @@ void Client::set_injector_endpoint(const char* injector_ep)
     _state->set_injector(injector_ep);
 }
 
-void Client::set_credentials(const char* injector, const char* cred)
+void Client::set_credentials(const char* injector_ep, const char* cred)
 {
-    _state->_config.set_credentials(injector, cred);
+    auto opt_ep = parse_endpoint(injector_ep);
+    if (!opt_ep) {
+        LOG_ERROR("Client::set_credentials: Failed to parse endpoint:", injector_ep);
+        return;
+    }
+    _state->_config.set_credentials(*opt_ep, cred);
 }
 
 void Client::charging_state_change(bool is_charging) {
