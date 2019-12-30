@@ -953,6 +953,38 @@ struct VerifyingReader::Impl {
 
         return http_response::Part(std::move(ch));  // pass data on
     }
+
+    // If we process trailers, we may have a chance to
+    // detect and signal a body not matching its signed length or digest
+    // before completing its transfer,
+    // so that the receiving end can see that something bad is going on.
+    bool check_body_after = true;
+
+    optional_part
+    process_part(http_response::Trailer intr, Cancel, asio::yield_context y)
+    {
+        if (intr.cbegin() == intr.cend())
+            return http_response::Part(intr);  // no headers in trailer
+        // Only expected trailer headers are received here, just extend initial head.
+        bool sigs_in_trailer = false;
+        for (const auto& h : intr) {
+            auto hn = h.name_string();
+            head.insert(h.name(), hn, h.value());
+            if (boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx))
+                sigs_in_trailer = true;
+        }
+        if (sigs_in_trailer) {
+            head = cache::http_injection_verify(std::move(head), pk);
+            if (head.cbegin() == head.cend())  // bad signature in trailer
+                return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
+        }
+
+        check_body_after = false;
+        if (!http_sign_detail::check_body(head, body_length, body_hash))
+            return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
+
+        return http_response::Part(intr);
+    };
 };
 
 VerifyingReader::VerifyingReader( GenericStream in
@@ -989,6 +1021,8 @@ VerifyingReader::async_read_part(Cancel cancel, asio::yield_context yield)
             part = _impl->process_part(std::move(*ch), cancel, yield[ec]);
         } else if (auto cb = part->as_chunk_body()) {
             part = _impl->process_part(std::move(*cb), cancel, yield[ec]);
+        } else if (auto tr = part->as_trailer()) {
+            part = _impl->process_part(std::move(*tr), cancel, yield[ec]);
         }
         return_or_throw_on_error(yield, cancel, ec, boost::none);
         if (!part) continue;
