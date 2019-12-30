@@ -865,10 +865,13 @@ struct VerifyingReader::Impl {
         return http_response::Part(head);
     }
 
-    http_sign_detail::opt_sig_array_t inbsig;
+    http_sign_detail::opt_sig_array_t inbsig, outbsig;
+    http_sign_detail::opt_block_digest_t inbdig, outbdig;
+    // Simplest implementation: one output chunk per data block.
+    std::queue<http_response::Part> pending_parts;
 
     optional_part
-    process_part(http_response::ChunkHdr inch, Cancel, asio::yield_context)
+    process_part(http_response::ChunkHdr inch, Cancel cancel, asio::yield_context yield)
     {
         auto inbsig_ = http_sign_detail::block_sig_from_exts(inch.exts);
         if (!inbsig_) return boost::none;
@@ -878,7 +881,18 @@ struct VerifyingReader::Impl {
             LOG_WARN("Dropping data block signature; uri=", uri);
         inbsig = std::move(inbsig_);
 
-        return boost::none;
+        // Normal chunk, processing its body will generate output chunks.
+        if (inch.size > 0)
+            return boost::none;
+
+        // Last chunk, process empty data to finalize output,
+        // then queue the header of the generated last chunk.
+        sys::error_code ec;
+        auto part = process_part(std::vector<uint8_t>(), cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, boost::none);
+        pending_parts.push(
+            http_response::ChunkHdr(0, http_sign_detail::block_chunk_ext(outbsig, outbdig)));
+        return part;
     }
 
     size_t body_length = 0;
@@ -886,10 +900,6 @@ struct VerifyingReader::Impl {
     util::SHA256 body_hash;
     util::SHA512 block_hash;
     std::vector<uint8_t> lastd;
-    http_sign_detail::opt_sig_array_t outbsig;
-    http_sign_detail::opt_block_digest_t inbdig, outbdig;
-    // Simplest implementation: one output chunk per data block.
-    std::queue<http_response::Part> pending_parts;
 
     // If a whole data block has been processed,
     // return a chunk header and keep block as chunk body.
