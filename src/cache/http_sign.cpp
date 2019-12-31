@@ -13,13 +13,18 @@
 #include <boost/beast/http/empty_body.hpp>
 #include <boost/beast/http/field.hpp>
 #include <boost/format.hpp>
+#include <boost/system/error_code.hpp>
 
 #include "../constants.h"
+#include "../http_forward.h"
+#include "../http_util.h"
+#include "../logger.h"
 #include "../parse/number.h"
 #include "../split_string.h"
 #include "../util.h"
 #include "../util/bytes.h"
 #include "../util/hash.h"
+#include "../util/quantized_buffer.h"
 #include "../util/variant.h"
 
 namespace ouinet { namespace cache {
