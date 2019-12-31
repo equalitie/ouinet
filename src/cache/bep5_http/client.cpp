@@ -352,11 +352,11 @@ struct Client::Impl {
                         , con  = move(con)] (auto yield) mutable {
             sys::error_code ec;
             Cancel cancel;
-            auto s = Session::create(move(con), cancel, yield[ec]);
+            Session::reader_uptr vfy_reader = make_unique<cache::VerifyingReader>(move(con), pk);
+            auto s = Session::create(move(vfy_reader), cancel, yield[ec]);
             return_or_throw_on_error(yield, cancel, ec);
 
-            cache::session_flush_verified(s, sink, pk, cancel, yield[ec]);
-
+            s.flush_response(sink, cancel, yield[ec]);
             if ( ec.value() == sys::errc::no_message
                || ec.value() == sys::errc::bad_message)
                 LOG_WARN( "Failed to verify response against HTTP signatures; url="
