@@ -29,6 +29,7 @@ public:
     // Head >> Body* >> boost::none*
     //
     virtual boost::optional<Part> async_read_part(Cancel, asio::yield_context);
+    virtual bool is_done() const { return _is_done; }
 
     void restart()
     {
