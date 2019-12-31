@@ -57,20 +57,6 @@ namespace ouinet { namespace cache {
 // Ouinet-specific declarations for injection using HTTP signatures
 // ----------------------------------------------------------------
 
-namespace http_sign_detail {
-using sig_array_t = util::Ed25519PublicKey::sig_array_t;
-using block_digest_t = util::SHA512::digest_type;
-using opt_sig_array_t = boost::optional<sig_array_t>;
-using opt_block_digest_t = boost::optional<block_digest_t>;
-
-opt_sig_array_t block_sig_from_exts(boost::string_view);
-std::string block_sig_str(boost::string_view, const block_digest_t&);
-std::string block_chunk_ext( boost::string_view, const block_digest_t&
-                           , const util::Ed25519PrivateKey&);
-std::string block_chunk_ext(const opt_sig_array_t&, const opt_block_digest_t&);
-bool check_body(const http::response_header<>&, size_t, util::SHA256&);
-}
-
 // Get an extended version of the given response head
 // with an additional signature header and
 // other headers required to support that signature and

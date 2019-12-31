@@ -32,6 +32,11 @@ static const std::string sig_alg_hs2019("hs2019");
 
 static const std::string key_id_pfx("ed25519=");
 
+using sig_array_t = util::Ed25519PublicKey::sig_array_t;
+using block_digest_t = util::SHA512::digest_type;
+using opt_sig_array_t = boost::optional<sig_array_t>;
+using opt_block_digest_t = boost::optional<block_digest_t>;
+
 static
 http::response_header<>
 without_framing(const http::response_header<>& rsh)
@@ -197,8 +202,9 @@ http_decode_key_id(boost::string_view key_id)
     return util::Ed25519PublicKey(std::move(pk_array));
 }
 
-http_sign_detail::opt_sig_array_t
-http_sign_detail::block_sig_from_exts(boost::string_view xs)
+static
+opt_sig_array_t
+block_sig_from_exts(boost::string_view xs)
 {
     if (xs.empty()) return {};  // no extensions
 
@@ -222,9 +228,10 @@ http_sign_detail::block_sig_from_exts(boost::string_view xs)
     return util::bytes::to_array<uint8_t, util::Ed25519PublicKey::sig_size>(decoded_sig);
 }
 
+static
 std::string
-http_sign_detail::block_sig_str( boost::string_view injection_id
-                               , const http_sign_detail::block_digest_t& block_digest)
+block_sig_str( boost::string_view injection_id
+             , const block_digest_t& block_digest)
 {
     static const auto fmt_ = "%s%c%s";
     return ( boost::format(fmt_)
@@ -232,9 +239,10 @@ http_sign_detail::block_sig_str( boost::string_view injection_id
            % util::bytes::to_string_view(block_digest)).str();
 }
 
+static
 std::string
-http_sign_detail::block_chunk_ext( const http_sign_detail::opt_sig_array_t& sig
-                                 , const http_sign_detail::opt_block_digest_t& prev_digest = {})
+block_chunk_ext( const opt_sig_array_t& sig
+               , const opt_block_digest_t& prev_digest = {})
 {
     std::stringstream exts;
 
@@ -253,19 +261,21 @@ http_sign_detail::block_chunk_ext( const http_sign_detail::opt_sig_array_t& sig
     return exts.str();
 }
 
+static
 std::string
-http_sign_detail::block_chunk_ext( boost::string_view injection_id
-                                 , const http_sign_detail::block_digest_t& digest
-                                 , const util::Ed25519PrivateKey& sk)
+block_chunk_ext( boost::string_view injection_id
+               , const block_digest_t& digest
+               , const util::Ed25519PrivateKey& sk)
 {
-    auto sig_str = http_sign_detail::block_sig_str(injection_id, digest);
-    return http_sign_detail::block_chunk_ext(sk.sign(sig_str));
+    auto sig_str = block_sig_str(injection_id, digest);
+    return block_chunk_ext(sk.sign(sig_str));
 }
 
+static
 bool
-http_sign_detail::check_body( const http::response_header<>& head
-                            , size_t body_length
-                            , util::SHA256& body_hash)
+check_body( const http::response_header<>& head
+          , size_t body_length
+          , util::SHA256& body_hash)
 {
     // Check body length.
     auto h_body_length_h = head[http_::response_data_size_hdr];
@@ -575,7 +585,7 @@ struct SigningReader::Impl {
         if (do_inject) {  // if injecting and sending data
             if (block_offset > 0) {  // add chunk extension for previous block
                 auto block_digest = block_hash.close();
-                ch.exts = http_sign_detail::block_chunk_ext(injection_id, block_digest, sk);
+                ch.exts = block_chunk_ext(injection_id, block_digest, sk);
                 // Prepare chunk extension for next block: HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])
                 block_hash = {};
                 block_hash.update(block_digest);
@@ -608,7 +618,7 @@ struct SigningReader::Impl {
         if (do_inject) {
             auto block_digest = block_hash.close();
             pending_parts.push(http_response::ChunkHdr(
-                0, http_sign_detail::block_chunk_ext(injection_id, block_digest, sk)));
+                0, block_chunk_ext(injection_id, block_digest, sk)));
             pending_parts.push(cache::http_injection_trailer( outh, std::move(trailer_in)
                                                             , body_length, body_hash.close()
                                                             , sk
@@ -875,15 +885,15 @@ struct VerifyingReader::Impl {
         return http_response::Part(head);
     }
 
-    http_sign_detail::opt_sig_array_t inbsig, outbsig;
-    http_sign_detail::opt_block_digest_t inbdig, outbdig;
+    opt_sig_array_t inbsig, outbsig;
+    opt_block_digest_t inbdig, outbdig;
     // Simplest implementation: one output chunk per data block.
     std::queue<http_response::Part> pending_parts;
 
     optional_part
     process_part(http_response::ChunkHdr inch, Cancel cancel, asio::yield_context yield)
     {
-        auto inbsig_ = http_sign_detail::block_sig_from_exts(inch.exts);
+        auto inbsig_ = block_sig_from_exts(inch.exts);
         if (!inbsig_) return boost::none;
 
         // Capture and keep the latest block signature only.
@@ -901,7 +911,7 @@ struct VerifyingReader::Impl {
         auto part = process_part(std::vector<uint8_t>(), cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec, boost::none);
         pending_parts.push(
-            http_response::ChunkHdr(0, http_sign_detail::block_chunk_ext(outbsig, outbdig)));
+            http_response::ChunkHdr(0, block_chunk_ext(outbsig, outbdig)));
         return part;
     }
 
@@ -936,7 +946,7 @@ struct VerifyingReader::Impl {
         // Complete hash for this block; note that HASH[0]=SHA2-512(BLOCK[0])
         block_hash.update(block_buf);
         auto block_digest = block_hash.close();
-        auto bsig_str = http_sign_detail::block_sig_str(injection_id, block_digest);
+        auto bsig_str = block_sig_str(injection_id, block_digest);
         if (!bs_params->pk.verify(bsig_str, *inbsig)) {
             LOG_WARN("Failed to verify data block with offset ", block_offset, "; uri=", uri);
             return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
@@ -947,7 +957,7 @@ struct VerifyingReader::Impl {
         pending_parts.push(http_response::ChunkBody(std::move(block_vec), 0));
         // Send last extensions, keep current for next.
         http_response::ChunkHdr ch( block_buf.size()
-                                  , http_sign_detail::block_chunk_ext(outbsig, outbdig));
+                                  , block_chunk_ext(outbsig, outbdig));
 
         outbsig = std::move(inbsig);
         inbsig = {};
@@ -991,7 +1001,7 @@ struct VerifyingReader::Impl {
         }
 
         check_body_after = false;
-        if (!http_sign_detail::check_body(head, body_length, body_hash))
+        if (!check_body(head, body_length, body_hash))
             return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
 
         return http_response::Part(intr);
@@ -1000,7 +1010,7 @@ struct VerifyingReader::Impl {
     void
     maybe_check_body(sys::error_code& ec)
     {
-        if (check_body_after && !http_sign_detail::check_body(head, body_length, body_hash))
+        if (check_body_after && !check_body(head, body_length, body_hash))
             ec = sys::errc::make_error_code(sys::errc::bad_message);
     }
 };
