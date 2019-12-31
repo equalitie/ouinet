@@ -595,6 +595,8 @@ struct SigningReader::Impl {
         return boost::none;
     }
 
+    bool is_done = false;
+
     optional_part
     process_end(Cancel cancel, asio::yield_context yield)
     {
@@ -615,6 +617,7 @@ struct SigningReader::Impl {
             pending_parts.push(std::move(trailer_in));
         }
 
+        is_done = true;
         return last_block;
     }
 };
@@ -664,6 +667,12 @@ SigningReader::async_read_part(Cancel cancel, asio::yield_context yield)
     };
 
     return boost::none;
+}
+
+bool
+SigningReader::is_done() const
+{
+    return _impl->is_done;
 }
 
 // end SigningReader
