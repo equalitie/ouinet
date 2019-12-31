@@ -965,6 +965,7 @@ struct VerifyingReader::Impl {
     {
         if (intr.cbegin() == intr.cend())
             return http_response::Part(intr);  // no headers in trailer
+
         // Only expected trailer headers are received here, just extend initial head.
         bool sigs_in_trailer = false;
         for (const auto& h : intr) {
@@ -984,7 +985,14 @@ struct VerifyingReader::Impl {
             return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
 
         return http_response::Part(intr);
-    };
+    }
+
+    void
+    maybe_check_body(sys::error_code& ec)
+    {
+        if (check_body_after && !http_sign_detail::check_body(head, body_length, body_hash))
+            ec = sys::errc::make_error_code(sys::errc::bad_message);
+    }
 };
 
 VerifyingReader::VerifyingReader( GenericStream in
@@ -1019,6 +1027,11 @@ VerifyingReader::async_read_part(Cancel cancel, asio::yield_context yield)
         return_or_throw_on_error(yield, cancel, ec, boost::none);
         if (!part) continue;
 
+        if (is_done()) {
+            // Check body hash if needed (e.g. in non-chunked responses).
+            _impl->maybe_check_body(ec);
+            return_or_throw_on_error(yield, cancel, ec, boost::none);
+        }
         return part;
     }
 
