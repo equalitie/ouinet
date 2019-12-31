@@ -603,6 +603,7 @@ struct SigningReader::Impl {
         sys::error_code ec;
         auto last_block = process_part(std::vector<uint8_t>(), cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec, boost::none);
+        if (!last_block) return boost::none;  // avoid adding a last chunk indefinitely
 
         if (do_inject) {
             auto block_digest = block_hash.close();
