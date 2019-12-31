@@ -521,18 +521,18 @@ struct SigningReader::Impl {
     {
         auto inh_orig = inh;
         sys::error_code ec_;
-        inh = util::to_cache_response(move(inh), ec_);
-        if (ec_) return http_response::Part(inh_orig);  // will not inject, just proxy
+        inh = util::to_cache_response(std::move(inh), ec_);
+        if (ec_) return http_response::Part(std::move(inh_orig));  // will not inject, just proxy
 
         do_inject = true;
-        inh = cache::http_injection_head( rqh, move(inh)
+        inh = cache::http_injection_head( rqh, std::move(inh)
                                         , injection_id, injection_ts
                                         , sk, httpsig_key_id);
         // We will use the trailer to send the body digest and head signature.
         assert(http::response<http::empty_body>(inh).chunked());
 
         outh = inh;
-        return http_response::Part(inh);
+        return http_response::Part(std::move(inh));
     }
 
     optional_part
@@ -583,7 +583,7 @@ struct SigningReader::Impl {
             block_hash.update(block_buf);
             block_offset += block_buf.size();
         }
-        return http_response::Part(ch);  // pass data on, drop origin extensions
+        return http_response::Part(std::move(ch));  // pass data on, drop origin extensions
     }
 
     http::fields trailer_in;
