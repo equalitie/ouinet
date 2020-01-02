@@ -16,7 +16,6 @@
 #include <boost/system/error_code.hpp>
 
 #include "../constants.h"
-#include "../http_forward.h"
 #include "../http_util.h"
 #include "../logger.h"
 #include "../parse/number.h"
