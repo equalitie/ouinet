@@ -9,10 +9,15 @@
 #include <boost/beast/http/message.hpp>
 #include <boost/beast/http/empty_body.hpp>
 #include <boost/beast/http/string_body.hpp>
+#include <boost/beast/http/write.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 
 #include "constants.h"
+#include "default_timeout.h"
+#include "or_throw.h"
 #include "util.h"
+#include "util/signal.h"
+#include "util/watch_dog.h"
 
 namespace ouinet {
 
@@ -43,6 +48,37 @@ inline
 boost::string_view http_injection_ts(const http::response_header<>& rsh)
 {
     return http_injection_field(rsh, "ts");
+}
+
+// Send the HTTP request `rq` over `in`,
+// trigger an error on timeout or cancellation,
+// closing `in`.
+template<class StreamIn, class Request>
+inline
+void
+http_request( StreamIn& in
+            , const Request& rq
+            , Cancel& cancel
+            , asio::yield_context yield)
+{
+    auto cancelled = cancel.connect([&] { in.close(); });
+    bool timed_out = false;
+    sys::error_code ec;
+
+    WatchDog wdog( in.get_executor(), default_timeout::http_request()
+                 , [&] { timed_out = true; in.close(); });
+    http::async_write(in, rq, yield[ec]);
+
+    // Ignore `end_of_stream` error, there may still be data in
+    // the receive buffer we can read.
+    if (ec == http::error::end_of_stream)
+        ec = sys::error_code();
+    if (timed_out)
+        ec = asio::error::timed_out;
+    if (cancelled)
+        ec = asio::error::operation_aborted;
+    if (ec)
+        return or_throw(yield, ec);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
