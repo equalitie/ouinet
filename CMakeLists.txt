@@ -113,7 +113,6 @@ file(GLOB client_sources
     "./src/util/hash.cpp"
     "./src/util.cpp"
     "./src/http_util.cpp"
-    "./src/http_forward.cpp"
     ${VERSION_CPP}
 )
 
@@ -172,7 +171,6 @@ if (WITH_INJECTOR)
         "./src/util/hash.cpp"
         "./src/util.cpp"
         "./src/http_util.cpp"
-        "./src/http_forward.cpp"
     )
 
     add_executable(injector ${injector_sources})
