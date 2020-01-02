@@ -20,7 +20,7 @@
 #include <util/wait_condition.h>
 #include <util/yield.h>
 #include <cache/http_sign.h>
-#include <http_forward.h>
+#include <response_reader.h>
 #include <session.h>
 
 #include <namespaces.h>
@@ -322,41 +322,33 @@ BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
         });
 
         // Test signed output.
-        asio::spawn(ctx, [ &signed_r, &tested_w
+        asio::spawn(ctx, [ signed_r = std::move(signed_r), &tested_w
                          , &ctx, lock = wc.lock()](auto y) mutable {
-            auto hproc = [] (auto inh, auto&, auto) {
-                auto hbsh = inh[http_::response_block_signatures_hdr];
-                BOOST_REQUIRE(!hbsh.empty());
-                auto hbs = cache::HttpBlockSigs::parse(hbsh);
-                BOOST_REQUIRE(hbs);
-                // Test data block signatures are split according to this size.
-                BOOST_CHECK_EQUAL(hbs->size, 65536);
-                return inh;
-            };
             int xidx = 0;
-            auto xproc = [&xidx] (auto exts, auto&, auto) {
-                BOOST_REQUIRE(xidx < rs_block_sig_cx.size());
-                BOOST_CHECK_EQUAL(exts, rs_block_sig_cx[xidx++]);
-            };
-            // Yes we drop chunk extensions but they do not affect the forwarding process,
-            // and they are going to be dumped anyway further down.
-            ProcDataFunc<asio::const_buffer> dproc = [] (auto ind, auto&, auto) {
-                return ProcDataFunc<asio::const_buffer>::result_type{std::move(ind), {}};
-            };
-            ProcTrailFunc tproc = [] (auto intr, auto&, auto) {
-                return ProcTrailFunc::result_type{std::move(intr), {}};
-            };
-
             Cancel cancel;
             sys::error_code e;
-            Yield yy(ctx, y);
-            http_forward( signed_r, tested_w
-                        , std::move(hproc), std::move(xproc)
-                        , std::move(dproc), std::move(tproc)
-                        , cancel, yy[e]);
-            BOOST_REQUIRE(!e);
+            http_response::Reader rr(std::move(signed_r));
+            while (true) {
+                auto opt_part = rr.async_read_part(cancel, y[e]);
+                BOOST_REQUIRE(!e);
+                if (!opt_part) break;
+                if (auto inh = opt_part->as_head()) {
+                    auto hbsh = (*inh)[http_::response_block_signatures_hdr];
+                    BOOST_REQUIRE(!hbsh.empty());
+                    auto hbs = cache::HttpBlockSigs::parse(hbsh);
+                    BOOST_REQUIRE(hbs);
+                    // Test data block signatures are split according to this size.
+                    BOOST_CHECK_EQUAL(hbs->size, 65536);
+                } else if (auto ch = opt_part->as_chunk_hdr()) {
+                    if (!ch->exts.empty()) {
+                        BOOST_REQUIRE(xidx < rs_block_sig_cx.size());
+                        BOOST_CHECK_EQUAL(ch->exts, rs_block_sig_cx[xidx++]);
+                    }
+                }
+                opt_part->async_write(tested_w, cancel, y[e]);
+                BOOST_REQUIRE(!e);
+            }
             BOOST_CHECK_EQUAL(xidx, rs_block_sig_cx.size());
-            signed_r.close();
             tested_w.close();
         });
 
@@ -436,31 +428,26 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified) {
         });
 
         // Check generation of chained hashes.
-        asio::spawn(ctx, [ &hashed_r, &tested_w
+        asio::spawn(ctx, [ hashed_r = std::move(hashed_r), &tested_w
                          , &ctx, lock = wc.lock()](auto y) mutable {
-            auto hproc = [] (auto inh, auto&, auto) { return inh; };
             int xidx = 0;
-            auto xproc = [&xidx] (auto exts, auto&, auto) {
-                BOOST_REQUIRE(xidx < rs_block_hash_cx.size());
-                BOOST_CHECK(exts.find(rs_block_hash_cx[xidx++]) != string::npos);
-            };
-            ProcDataFunc<asio::const_buffer> dproc = [] (auto ind, auto&, auto) {
-                return ProcDataFunc<asio::const_buffer>::result_type{std::move(ind), {}};
-            };
-            ProcTrailFunc tproc = [] (auto intr, auto&, auto) {
-                return ProcTrailFunc::result_type{std::move(intr), {}};
-            };
-
             Cancel cancel;
             sys::error_code e;
-            Yield yy(ctx, y);
-            http_forward( hashed_r, tested_w
-                        , std::move(hproc), std::move(xproc)
-                        , std::move(dproc), std::move(tproc)
-                        , cancel, yy[e]);
-            BOOST_REQUIRE(!e);
+            http_response::Reader rr(std::move(hashed_r));
+            while (true) {
+                auto opt_part = rr.async_read_part(cancel, y[e]);
+                BOOST_REQUIRE(!e);
+                if (!opt_part) break;
+                if (auto ch = opt_part->as_chunk_hdr()) {
+                    if (!ch->exts.empty()) {
+                        BOOST_REQUIRE(xidx < rs_block_hash_cx.size());
+                        BOOST_CHECK(ch->exts.find(rs_block_hash_cx[xidx++]) != string::npos);
+                    }
+                }
+                opt_part->async_write(tested_w, cancel, y[e]);
+                BOOST_REQUIRE(!e);
+            }
             BOOST_CHECK_EQUAL(xidx, rs_block_hash_cx.size());
-            hashed_r.close();
             tested_w.close();
         });
 
