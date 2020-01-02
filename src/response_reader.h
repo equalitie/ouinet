@@ -31,6 +31,10 @@ public:
     virtual boost::optional<Part> async_read_part(Cancel, asio::yield_context);
     virtual bool is_done() const { return _is_done; }
 
+    // This leaves the reader in an undefined state,
+    // do not use afterwards.
+    virtual GenericStream release_stream();
+
     void restart()
     {
         // It is only valid to call restart() if we've finished reading
@@ -80,6 +84,19 @@ Reader::Reader(GenericStream in)
     , _is_done(false)
 {
     set_callbacks();
+}
+
+inline
+GenericStream
+Reader::release_stream()
+{
+    _parser.release();
+    _on_chunk_header = nullptr;
+    _on_chunk_body = nullptr;
+    _next_part = boost::none;
+
+    auto stream = std::move(_in);
+    return stream;
 }
 
 inline
