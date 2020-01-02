@@ -21,7 +21,6 @@
 #include "namespaces.h"
 #include "util.h"
 #include "fetch_http_page.h"
-#include "http_forward.h"
 #include "connect_to_host.h"
 #include "default_timeout.h"
 #include "generic_stream.h"
@@ -306,8 +305,8 @@ public:
         return_or_throw_on_error(yield, cancel, ec);
 
         // Send HTTP request to origin.
-        http_forward_request( orig_con, con, util::to_origin_request(rq)
-                            , cancel, yield[ec]);  // .tag("fetch_injector")
+        auto orig_rq = util::to_origin_request(rq);
+        util::http_request(orig_con, orig_rq, cancel, yield[ec]);
         if (ec) yield.log("Failed to send request: ", ec.message());
         return_or_throw_on_error(yield, cancel, ec);
 
@@ -476,8 +475,8 @@ void serve( InjectorConfig& config
             auto orig_con = cc.get_connection(req, cancel, yield[ec]);
             size_t forwarded = 0;
             if (!ec) {
-                http_forward_request( orig_con, con, util::to_origin_request(req)
-                                    , cancel, yield[ec]);
+                auto orig_req = util::to_origin_request(req);
+                util::http_request(orig_con, orig_req, cancel, yield[ec]);
             }
             if (!ec) {
                 http_response::Reader rr(move(orig_con));
