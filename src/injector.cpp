@@ -21,7 +21,6 @@
 #include "namespaces.h"
 #include "util.h"
 #include "fetch_http_page.h"
-#include "http_forward.h"
 #include "connect_to_host.h"
 #include "default_timeout.h"
 #include "generic_stream.h"
@@ -306,8 +305,8 @@ public:
         return_or_throw_on_error(yield, cancel, ec);
 
         // Send HTTP request to origin.
-        http_forward_request( orig_con, con, util::to_origin_request(rq)
-                            , cancel, yield[ec]);  // .tag("fetch_injector")
+        auto orig_rq = util::to_origin_request(rq);
+        util::http_request(orig_con, orig_rq, cancel, yield[ec]);
         if (ec) yield.log("Failed to send request: ", ec.message());
         return_or_throw_on_error(yield, cancel, ec);
 
@@ -476,35 +475,29 @@ void serve( InjectorConfig& config
             auto orig_con = cc.get_connection(req, cancel, yield[ec]);
             size_t forwarded = 0;
             if (!ec) {
-                // TODO: Refactor with session response flushing.
-                string chunk_exts;
-                auto hproc = [&] (auto inh, auto&, auto) {
-                    // Prevent others from inserting ouinet specific header fields.
-                    auto outh = util::remove_ouinet_fields(move(inh));
-                    yield.log("=== Sending back proxy response ===");
-                    yield.log(outh);
-                    return outh;
-                };
-                auto xproc = [&] (auto exts, auto&, auto) {
-                    chunk_exts = move(exts);  // save exts for next chunk
-                };
-                ProcDataFunc<asio::const_buffer> dproc = [&] (auto ind, auto&, auto) {
-                    forwarded += ind.size();
-                    ProcDataFunc<asio::const_buffer>::result_type ret;
-                    if (asio::buffer_size(ind) > 0) {
-                        ret = {move(ind), move(chunk_exts)};
-                        chunk_exts = {};  // only send extensions in first output chunk
-                    }  // keep extensions when last chunk (size 0) was received
-                    return ret;  // just pass data on
-                };
-                ProcTrailFunc tproc = [&] (auto intr, auto&, auto) {
-                    ProcTrailFunc::result_type ret{move(intr), move(chunk_exts)};
-                    return ret;  // leave trailers untouched
-                };
-                res = RespFromH(http_forward( orig_con, con
-                                            , util::to_origin_request(req)
-                                            , hproc, xproc, dproc, tproc
-                                            , cancel, yield[ec].tag("fetch_proxy")));
+                auto orig_req = util::to_origin_request(req);
+                util::http_request(orig_con, orig_req, cancel, yield[ec]);
+            }
+            if (!ec) {
+                http_response::Reader rr(move(orig_con));
+                while (!ec) {
+                    auto opt_part = rr.async_read_part(cancel, yield[ec]);
+                    if (ec || !opt_part) break;
+                    if (auto inh = opt_part->as_head()) {
+                        // Prevent others from inserting ouinet specific header fields.
+                        auto outh = util::remove_ouinet_fields(move(*inh));
+                        yield.log("=== Sending back proxy response ===");
+                        yield.log(outh);
+                        res = RespFromH(outh);
+                        opt_part = move(outh);
+                    } else if (auto b = opt_part->as_body()) {
+                        forwarded += b->size();
+                    } else if (auto cb = opt_part->as_chunk_body()) {
+                        forwarded += cb->size();
+                    }
+                    opt_part->async_write(con, cancel, yield[ec]);
+                }
+                orig_con = rr.release_stream();  // may be reused with keep-alive
             }
             if (ec) {
                 handle_bad_request( con, req
