@@ -614,26 +614,28 @@ struct SigningReader::Impl {
     optional_part
     process_end(Cancel cancel, asio::yield_context yield)
     {
-        sys::error_code ec;
-        auto last_block = process_part(std::vector<uint8_t>(), cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, boost::none);
-        if (!last_block) return boost::none;  // avoid adding a last chunk indefinitely
+        if (is_done) return boost::none;  // avoid adding a last chunk indefinitely
 
-        if (do_inject) {
-            auto block_digest = block_hash.close();
-            pending_parts.push(http_response::ChunkHdr(
-                0, block_chunk_ext(injection_id, block_digest, sk)));
-            pending_parts.push(cache::http_injection_trailer( outh, std::move(trailer_in)
-                                                            , body_length, body_hash.close()
-                                                            , sk
-                                                            , httpsig_key_id));
-        } else {
-            pending_parts.push(http_response::ChunkHdr());
-            pending_parts.push(std::move(trailer_in));
-        }
+        sys::error_code ec;
+        auto last_block_ch = process_part(std::vector<uint8_t>(), cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, boost::none);
+        if (last_block_ch) return last_block_ch;
 
         is_done = true;
-        return last_block;
+        if (!do_inject) {
+            pending_parts.push(std::move(trailer_in));
+            return http_response::Part(http_response::ChunkHdr());
+        }
+
+        auto block_digest = block_hash.close();
+        auto last_ch = http_response::ChunkHdr(
+            0, block_chunk_ext(injection_id, block_digest, sk));
+        auto trailer = cache::http_injection_trailer( outh, std::move(trailer_in)
+                                                    , body_length, body_hash.close()
+                                                    , sk
+                                                    , httpsig_key_id);
+        pending_parts.push(std::move(trailer));
+        return http_response::Part(last_ch);
     }
 };
 
@@ -666,6 +668,7 @@ SigningReader::async_read_part(Cancel cancel, asio::yield_context yield)
     while (true) {
         sys::error_code ec;
         auto part = http_response::Reader::async_read_part(cancel, yield[ec]);
+        assert(!_impl->is_done || (_impl->is_done && !part));
         return_or_throw_on_error(yield, cancel, ec, boost::none);
         if (!part) {  // no more input, but stuff may still need to be sent
             part = _impl->process_end(cancel, yield[ec]);
