@@ -958,8 +958,7 @@ public:
                       auto y = yield.detach(yield_);
                       sys::error_code ec;
                       Session s1 = Session::create(move(src1), cancel, y[ec]);
-                      return_or_throw_on_error(y, cancel, ec);
-                      store(rq, s1, cancel, y[ec]);
+                      if (!ec) store(rq, s1, cancel, y[ec]);
                     });
 
                     asio::spawn(ctx, [
@@ -968,8 +967,7 @@ public:
                     ] (asio::yield_context yield_) {
                         sys::error_code ec;
                         Session s2 = Session::create(move(src2), cancel, yield_[ec]);
-                        return_or_throw_on_error(yield_, cancel, ec);
-                        s2.flush_response(con, cancel, yield_[ec]);
+                        if (!ec) s2.flush_response(con, cancel, yield_[ec]);
                     });
 
                     s.flush_response(sink, cancel, yield[ec]);
