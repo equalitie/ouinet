@@ -354,13 +354,15 @@ struct Client::Impl {
             Cancel cancel;
             Session::reader_uptr vfy_reader = make_unique<cache::VerifyingReader>(move(con), pk);
             auto s = Session::create(move(vfy_reader), cancel, yield[ec]);
-            return_or_throw_on_error(yield, cancel, ec);
+            if (!ec) s.flush_response(sink, cancel, yield[ec]);
 
-            s.flush_response(sink, cancel, yield[ec]);
             if ( ec.value() == sys::errc::no_message
                || ec.value() == sys::errc::bad_message)
                 LOG_WARN( "Failed to verify response against HTTP signatures; url="
                         , key);
+            else if (ec)
+                LOG_WARN( "Error while verifying cached response; url="
+                        , key, " ec=", ec.message());
         });
 
         auto session = Session::create(move(src_sink.first), cancel, yield[ec]);
