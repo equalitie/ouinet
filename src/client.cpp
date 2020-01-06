@@ -899,6 +899,8 @@ public:
                                 (rq, false, cancel, yield[ec]);
                     }
 
+                    if (ec) break;
+
                     session.flush_response(con, cancel, yield[ec]);
 
                     bool keep_alive = !ec && rq.keep_alive() && session.keep_alive();
