@@ -1,5 +1,7 @@
 #pragma once
 
+#include <limits>
+
 #include "generic_stream.h"
 #include "namespaces.h"
 #include "or_throw.h"
@@ -43,7 +45,7 @@ public:
         _is_done = false;
         (&_parser)->~parser();
         new (&_parser) (decltype(_parser))();
-        set_callbacks();
+        setup_parser();
     }
 
     bool is_open() const { return _in.is_open(); }
@@ -62,7 +64,7 @@ private:
         return trailer;
     }
 
-    void set_callbacks();
+    void setup_parser();
 
 private:
     GenericStream _in;
@@ -83,7 +85,7 @@ Reader::Reader(GenericStream in)
     : _in(std::move(in))
     , _is_done(false)
 {
-    set_callbacks();
+    setup_parser();
 }
 
 inline
@@ -100,7 +102,7 @@ Reader::release_stream()
 }
 
 inline
-void Reader::set_callbacks()
+void Reader::setup_parser()
 {
     _on_chunk_header = [&] (auto size, auto exts, auto& ec) {
         assert(!_next_part);
@@ -114,6 +116,9 @@ void Reader::set_callbacks()
         return data.size();
     };
 
+    // Reads are both streamed and parts limited to `_buffer` size,
+    // so remove the whole body size limit.
+    _parser.body_limit((std::numeric_limits<std::size_t>::max)());
     _parser.on_chunk_header(_on_chunk_header);
     _parser.on_chunk_body(_on_chunk_body);
 }
