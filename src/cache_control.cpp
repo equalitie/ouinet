@@ -377,7 +377,7 @@ CacheControl::do_fetch(
     auto rq_etag = get(request, http::field::if_none_match);
 
     if (cache_etag && !rq_etag) {
-        LOG_DEBUG(yield.tag(), ": Attempting to revalidate cached response")
+        LOG_DEBUG(yield.tag(), ": Attempting to revalidate cached response");
         auto rq = request; // Make a copy because `request` is const&.
 
         rq.set(http::field::if_none_match, *cache_etag);
