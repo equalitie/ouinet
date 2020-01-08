@@ -851,9 +851,9 @@ struct VerifyingReader::Impl {
     {
     }
 
-    ouinet::http_response::Head head;  // keep for refs and later use
-    boost::string_view uri;  // for warnings, should use `Yield::log` instead
-    boost::string_view injection_id;
+    ouinet::http_response::Head head;  // keep for later use
+    std::string uri;  // for warnings, should use `Yield::log` instead
+    std::string injection_id;
     boost::optional<HttpBlockSigs> bs_params;
     std::unique_ptr<util::quantized_buffer> qbuf;
 
@@ -866,7 +866,7 @@ struct VerifyingReader::Impl {
             LOG_WARN("Failed to verify HTTP head signatures");
             return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
         }
-        uri = head[http_::response_uri_hdr];
+        uri = head[http_::response_uri_hdr].to_string();
         // Get and validate HTTP block signature parameters.
         auto bsh = head[http_::response_block_signatures_hdr];
         if (bsh.empty()) {
@@ -883,7 +883,7 @@ struct VerifyingReader::Impl {
             return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
         }
         // The injection id is also needed to verify block signatures.
-        injection_id = util::http_injection_id(head);
+        injection_id = util::http_injection_id(head).to_string();
         if (injection_id.empty()) {
             LOG_WARN("Missing injection identifier in HTTP head; uri=", uri);
             return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
