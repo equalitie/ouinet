@@ -871,12 +871,12 @@ struct VerifyingReader::Impl {
     process_part(http_response::ChunkHdr inch, Cancel cancel, asio::yield_context yield)
     {
         auto inbsig_ = block_sig_from_exts(inch.exts);
-        if (!inbsig_) return boost::none;
-
-        // Capture and keep the latest block signature only.
-        if (inbsig)
-            LOG_WARN("Dropping data block signature; uri=", uri);
-        inbsig = std::move(inbsig_);
+        if (inbsig_) {
+            // Capture and keep the latest block signature only.
+            if (inbsig)
+                LOG_WARN("Dropping data block signature; uri=", uri);
+            inbsig = std::move(inbsig_);
+        }
 
         // Normal chunk, processing its body will generate output chunks.
         if (inch.size > 0)
