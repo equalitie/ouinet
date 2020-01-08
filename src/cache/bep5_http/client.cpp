@@ -341,38 +341,13 @@ struct Client::Impl {
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw<Session>(yield, ec);
 
-        auto src_sink = util::connected_pair(ex, yield[ec]);
-
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<Session>(yield, ec);
-
-        asio::spawn(ex, [ pk = cache_pk
-                        , key = key
-                        , sink = move(src_sink.second)
-                        , con  = move(con)] (auto yield) mutable {
-            sys::error_code ec;
-            Cancel cancel;
-            Session::reader_uptr vfy_reader = make_unique<cache::VerifyingReader>(move(con), pk);
-            auto s = Session::create(move(vfy_reader), cancel, yield[ec]);
-            if (!ec) s.flush_response(sink, cancel, yield[ec]);
-
-            if ( ec.value() == sys::errc::no_message
-               || ec.value() == sys::errc::bad_message)
-                LOG_WARN( "Failed to verify response against HTTP signatures; url="
-                        , key);
-            else if (ec)
-                LOG_WARN( "Error while verifying cached response; url="
-                        , key, " ec=", ec.message());
-        });
-
-        auto session = Session::create(move(src_sink.first), cancel, yield[ec]);
+        Session::reader_uptr vfy_reader = make_unique<cache::VerifyingReader>(move(con), cache_pk);
+        auto session = Session::create(move(vfy_reader), cancel, yield[ec]);
 
         assert(!cancel || ec == asio::error::operation_aborted);
 
-        if (cancel)
-            ec = asio::error::operation_aborted;
-        else if ( !ec
-                && !util::http_proto_version_check_trusted(session.response_header(), newest_proto_seen))
+        if ( !ec
+            && !util::http_proto_version_check_trusted(session.response_header(), newest_proto_seen))
             // The client expects an injection belonging to a supported protocol version,
             // otherwise we just discard this copy.
             ec = asio::error::not_found;
