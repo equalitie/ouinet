@@ -171,6 +171,33 @@ BOOST_AUTO_TEST_CASE(test_http10_body_no_length) {
     ios.run();
 }
 
+BOOST_AUTO_TEST_CASE(test_http11_no_body) {
+    asio::io_service ios;
+
+    asio::spawn(ios, [&] (auto y) {
+        string rsp =
+            "HTTP/1.1 200 OK\r\n"
+            "Date: Mon, 27 Jul 2019 12:30:20 GMT\r\n"
+            "Content-Type: text/html\r\n"
+            "Content-Length: 0\r\n"
+            "\r\n";
+
+        RR rr(stream(move(rsp), ios, y));
+
+        Cancel c;
+        boost::optional<HR::Part> part;
+
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE(part);
+        BOOST_REQUIRE(part->is_head());
+
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE(!part);
+    });
+
+    ios.run();
+}
+
 BOOST_AUTO_TEST_CASE(test_http11_body) {
     asio::io_service ios;
 
