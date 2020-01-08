@@ -282,43 +282,6 @@ block_chunk_ext( boost::string_view injection_id
     return block_chunk_ext(sk.sign(sig_str));
 }
 
-static
-bool
-check_body( const http::response_header<>& head
-          , size_t body_length
-          , util::SHA256& body_hash)
-{
-    // Check body length.
-    auto h_body_length_h = head[http_::response_data_size_hdr];
-    auto h_body_length = parse::number<size_t>(h_body_length_h);
-    if (h_body_length) {
-        if (*h_body_length != body_length) {
-            LOG_WARN("Body length mismatch: ", *h_body_length, "!=", body_length);
-            return false;
-        }
-        LOG_DEBUG("Body matches signed length: ", body_length);
-    }
-
-    // Get body digest value.
-    auto b_digest = http_digest(body_hash);
-    auto b_digest_s = split_string_pair(b_digest, '=');
-
-    // Get digest values in head and compare (if algorithm matches).
-    auto h_digests = head.equal_range(http::field::digest);
-    for (auto hit = h_digests.first; hit != h_digests.second; hit++) {
-        auto h_digest_s = split_string_pair(hit->value(), '=');
-        if (boost::algorithm::iequals(b_digest_s.first, h_digest_s.first)) {
-            if (b_digest_s.second != h_digest_s.second) {
-                LOG_WARN("Body digest mismatch: ", hit->value(), "!=", b_digest);
-                return false;
-            }
-            LOG_DEBUG("Body matches signed digest: ", b_digest);
-        }
-    }
-
-    return true;
-}
-
 std::string
 http_digest(util::SHA256& hash)
 {
@@ -992,8 +955,6 @@ struct VerifyingReader::Impl {
     // detect and signal a body not matching its signed length or digest
     // before completing its transfer,
     // so that the receiving end can see that something bad is going on.
-    bool check_body_after = true;
-
     optional_part
     process_part(http_response::Trailer intr, Cancel, asio::yield_context y)
     {
@@ -1014,18 +975,46 @@ struct VerifyingReader::Impl {
                 return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
         }
 
-        check_body_after = false;
-        if (!check_body(head, body_length, body_hash))
-            return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
-
         return http_response::Part(intr);
     }
 
     void
-    maybe_check_body(sys::error_code& ec)
+    check_body(sys::error_code& ec)
     {
-        if (check_body_after && !check_body(head, body_length, body_hash))
+        // Check body length.
+        auto h_body_length_h = head[http_::response_data_size_hdr];
+        auto h_body_length = parse::number<size_t>(h_body_length_h);
+        if (!h_body_length) {
+            LOG_WARN("Missing signed length; uri=", uri);
             ec = sys::errc::make_error_code(sys::errc::bad_message);
+            return;
+        }
+        if (*h_body_length != body_length) {
+            LOG_WARN( "Body length mismatch: ", *h_body_length, "!=", body_length
+                    , "; uri=", uri);
+            ec = sys::errc::make_error_code(sys::errc::bad_message);
+            return;
+        }
+        LOG_DEBUG("Body matches signed length: ", body_length, "; uri=", uri);
+
+        // Get body digest value.
+        auto b_digest = http_digest(body_hash);
+        auto b_digest_s = split_string_pair(b_digest, '=');
+
+        // Get digest values in head and compare (if algorithm matches).
+        auto h_digests = head.equal_range(http::field::digest);
+        for (auto hit = h_digests.first; hit != h_digests.second; hit++) {
+            auto h_digest_s = split_string_pair(hit->value(), '=');
+            if (boost::algorithm::iequals(b_digest_s.first, h_digest_s.first)) {
+                if (b_digest_s.second != h_digest_s.second) {
+                    LOG_WARN( "Body digest mismatch: ", hit->value(), "!=", b_digest
+                            , "; uri=", uri);
+                    ec = sys::errc::make_error_code(sys::errc::bad_message);
+                    return;
+                }
+                LOG_DEBUG("Body matches signed digest: ", b_digest, "; uri=", uri);
+            }
+        }
     }
 };
 
@@ -1062,8 +1051,8 @@ VerifyingReader::async_read_part(Cancel cancel, asio::yield_context yield)
         if (!part) continue;
 
         if (is_done()) {
-            // Check body hash if needed (e.g. in non-chunked responses).
-            _impl->maybe_check_body(ec);
+            // Check full body hash and length.
+            _impl->check_body(ec);
             return_or_throw_on_error(yield, cancel, ec, boost::none);
         }
         return part;
