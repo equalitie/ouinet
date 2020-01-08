@@ -973,7 +973,10 @@ public:
                     s.flush_response(sink, cancel, yield[ec]);
 
                     // Abort store and forward tasks on error.
-                    if (ec) fork.close();
+                    if (ec) {
+                        sink.close();
+                        fork.close();
+                    }
                     wc.wait(yield);
 
                     bool keep_alive = !ec && rq.keep_alive() && s.keep_alive();
