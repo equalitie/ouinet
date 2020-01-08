@@ -124,6 +124,13 @@ http::response_header<>
 http_injection_verify( http::response_header<> rsh
                      , const util::Ed25519PublicKey& pk)
 {
+    // Check that the response is either chunked or has a known content length,
+    // so as to avoid accepting
+    // e.g. HTTP/1.0 responses with a correctly signed head but no body.
+    http::response<http::empty_body> rs(rsh);
+    if (!rs.chunked() && rs[http::field::content_length].empty())
+        return {};
+
     // Put together the head to be verified:
     // given head, minus chunking (and related headers), and signatures themselves.
     // Collect signatures found in the meanwhile.
