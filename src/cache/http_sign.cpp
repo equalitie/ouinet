@@ -912,8 +912,8 @@ struct VerifyingReader::Impl {
         auto block_buf =
             (ind.size() > 0) ? qbuf->get() : qbuf->get_rest();  // send rest if no more input
 
-        if (block_buf.size() == 0)
-            return boost::none;  // no data to send yet
+        if (block_buf.size() == 0 && ind.size() != 0)
+            return boost::none;  // no data to send yet (unless no more input)
 
         // Verify signature of data block to be sent (fail if missing).
         if (!inbsig) {
@@ -929,9 +929,11 @@ struct VerifyingReader::Impl {
             return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
         }
 
-        // Keep block as chunk body.
-        auto block_vec = util::bytes::to_vector<uint8_t>(block_buf);
-        pending_parts.push(http_response::ChunkBody(std::move(block_vec), 0));
+        // Keep block as chunk body (unless empty, i.e. last chunk).
+        if (block_buf.size() > 0) {
+            auto block_vec = util::bytes::to_vector<uint8_t>(block_buf);
+            pending_parts.push(http_response::ChunkBody(std::move(block_vec), 0));
+        }
         // Send last extensions, keep current for next.
         http_response::ChunkHdr ch( block_buf.size()
                                   , block_chunk_ext(outbsig, outbdig));
