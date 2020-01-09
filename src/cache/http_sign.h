@@ -198,6 +198,9 @@ public:
     boost::optional<ouinet::http_response::Part>
     async_read_part(Cancel, asio::yield_context) override;
 
+    bool
+    is_done() const override;
+
 private:
     struct Impl;
     std::unique_ptr<Impl> _impl;

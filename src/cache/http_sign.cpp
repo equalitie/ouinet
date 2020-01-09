@@ -980,9 +980,14 @@ struct VerifyingReader::Impl {
         return http_response::Part(intr);
     }
 
+    bool is_done = false;
+
     void
     check_body(sys::error_code& ec)
     {
+        if (is_done) return;  // avoid re-checking body indefinitely
+        is_done = true;
+
         // Check body length.
         auto h_body_length_h = head[http_::response_data_size_hdr];
         auto h_body_length = parse::number<size_t>(h_body_length_h);
@@ -1052,7 +1057,7 @@ VerifyingReader::async_read_part(Cancel cancel, asio::yield_context yield)
         return_or_throw_on_error(yield, cancel, ec, boost::none);
         if (!part) continue;
 
-        if (is_done()) {
+        if (http_response::Reader::is_done()) {
             // Check full body hash and length.
             _impl->check_body(ec);
             return_or_throw_on_error(yield, cancel, ec, boost::none);
@@ -1061,6 +1066,12 @@ VerifyingReader::async_read_part(Cancel cancel, asio::yield_context yield)
     }
 
     return boost::none;
+}
+
+bool
+VerifyingReader::is_done() const
+{
+    return _impl->is_done;
 }
 
 // end VerifyingReader
