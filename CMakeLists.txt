@@ -65,13 +65,20 @@ if (WITH_ASAN)
     )
 endif()
 
-
+###########################################################
 option(ASIO_UTP_WITH_TESTS             "" OFF)
 option(ASIO_UTP_WITH_EXAMPLES          "" OFF)
 option(ASIO_UTP_DEBUG_LOGGING          "" OFF)
 option(UTP_DEBUG_LOGGING               "" OFF)
 add_subdirectory(./modules/asio-utp)
 add_library(lib::asio_utp ALIAS asio_utp)
+
+###########################################################
+set(CPP_UPNP_WITH_TESTS    OFF CACHE BOOL "")
+set(CPP_UPNP_WITH_EXAMPLES OFF CACHE BOOL "")
+add_subdirectory(./modules/cpp-upnp)
+add_library(lib::cpp_upnp ALIAS cpp_upnp)
+###########################################################
 
 add_subdirectory(./src/ouiservice/i2p)
 #add_subdirectory(./src/ouiservice/lampshade)
@@ -130,6 +137,7 @@ target_link_libraries(client
         Boost::asio_ssl
         Boost::iostreams
         lib::asio_utp
+        lib::cpp_upnp
         lib::gcrypt
         lib::json
         lib::uri
