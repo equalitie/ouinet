@@ -1,6 +1,6 @@
 #pragma once
 
-#include <upnp.hpp>
+#include <upnp.h>
 #include <util/signal.h>
 #include <async_sleep.h>
 
@@ -47,7 +47,8 @@ private:
                 // work in many scenarios to require that the external port is
                 // equal to the internal one.
                 uint16_t external_port = _internal_port;
-                auto r = igd.add_port_mapping( external_port
+                auto r = igd.add_port_mapping( upnp::igd::udp
+                                             , external_port
                                              , _internal_port
                                              , "Ouinet"
                                              , minutes(1)
