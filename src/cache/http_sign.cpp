@@ -859,95 +859,91 @@ struct VerifyingReader::Impl {
         return http_response::Part(head);
     }
 
-    opt_sig_array_t inbsig, outbsig;
-    opt_block_digest_t inbdig, outbdig;
+    size_t block_offset = 0;
+    util::SHA512 block_hash;
+    opt_sig_array_t prev_block_sig;
+    opt_block_digest_t block_dig, prev_block_dig;
     // Simplest implementation: one output chunk per data block.
+    // If a whole data block has been processed,
+    // return its chunk header and push the block as its chunk body.
     std::queue<http_response::Part> pending_parts;
 
     optional_part
-    process_part(http_response::ChunkHdr inch, Cancel cancel, asio::yield_context yield)
+    process_part(http_response::ChunkHdr inch, Cancel cancel, asio::yield_context y)
     {
-        auto inbsig_ = block_sig_from_exts(inch.exts);
-        if (inbsig_) {
-            // Capture and keep the latest block signature only.
-            if (inbsig)
-                LOG_WARN("Dropping data block signature; uri=", uri);
-            inbsig = std::move(inbsig_);
+        if (inch.size > bs_params->size) {
+            LOG_WARN( "Chunk size exceeds expected data block size: "
+                    , inch.size, " > ", bs_params->size, "; uri=", uri);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
         }
 
-        // Normal chunk, processing its body will generate output chunks.
-        if (inch.size > 0)
+        // Have we buffered a whole data block?
+        // An empty data block is fine if this is the last chunk header
+        // (a chunk for it will not be produced, though).
+        auto block_buf =
+            (inch.size > 0) ? qbuf->get() : qbuf->get_rest();  // send rest if no more chunks
+        if (block_buf.size() == 0 && inch.size > 0)
             return boost::none;
 
-        // Last chunk, process empty data to finalize output,
-        // then queue the header of the generated last chunk.
-        sys::error_code ec;
-        auto part = process_part(std::vector<uint8_t>(), cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, boost::none);
-        pending_parts.push(
-            http_response::ChunkHdr(0, block_chunk_ext(outbsig, outbdig)));
-        return part;
-    }
-
-    size_t body_length = 0;
-    size_t block_offset = 0;
-    util::SHA256 body_hash;
-    util::SHA512 block_hash;
-    std::vector<uint8_t> lastd;
-
-    // If a whole data block has been processed,
-    // return a chunk header and keep block as chunk body.
-    optional_part
-    process_part(std::vector<uint8_t> ind, Cancel, asio::yield_context y)
-    {
-        // Data block is sent when data following it is received
-        // (so process the last data buffer now).
-        body_length += lastd.size();
-        body_hash.update(lastd);
-        qbuf->put(asio::buffer(lastd));
-        lastd = ind;  // save copy of current input data to last data buffer
-        auto block_buf =
-            (ind.size() > 0) ? qbuf->get() : qbuf->get_rest();  // send rest if no more input
-
-        if (block_buf.size() == 0 && ind.size() != 0)
-            return boost::none;  // no data to send yet (unless no more input)
-
-        // Verify signature of data block to be sent (fail if missing).
-        if (!inbsig) {
+        // Verify the whole data block.
+        auto block_sig = block_sig_from_exts(inch.exts);
+        if (!block_sig) {
             LOG_WARN("Missing signature for data block with offset ", block_offset, "; uri=", uri);
             return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
         }
-        // Complete hash for this block; note that HASH[0]=SHA2-512(BLOCK[0])
+        // Complete hash for the data block; note that HASH[0]=SHA2-512(BLOCK[0])
         block_hash.update(block_buf);
         auto block_digest = block_hash.close();
         auto bsig_str = block_sig_str(injection_id, block_digest);
-        if (!bs_params->pk.verify(bsig_str, *inbsig)) {
+        if (!bs_params->pk.verify(bsig_str, *block_sig)) {
             LOG_WARN("Failed to verify data block with offset ", block_offset, "; uri=", uri);
             return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
         }
 
-        // Keep block as chunk body (unless empty, i.e. last chunk).
-        if (block_buf.size() > 0) {
-            auto block_vec = util::bytes::to_vector<uint8_t>(block_buf);
-            pending_parts.push(http_response::ChunkBody(std::move(block_vec), 0));
-        }
-        // Send last extensions, keep current for next.
-        http_response::ChunkHdr ch( block_buf.size()
-                                  , block_chunk_ext(outbsig, outbdig));
-
-        outbsig = std::move(inbsig);
-        inbsig = {};
-        // Prepare hash for next block: HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])
+        // Keep data block signature for next chunk header.
+        auto prev_prev_block_sig = std::move(prev_block_sig);
+        prev_block_sig = std::move(block_sig);
+        // Prepare hash for next data block: HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])
         block_hash = {}; block_hash.update(block_digest);
         block_offset += block_buf.size();
-        // Chain hash is to be sent along the signature of the following block,
+        // Chain hash is to be sent along the signature of the following data block,
         // so that it may convey the missing information for computing the signing string
-        // if the receiver does not have the previous blocks (e.g. for range requests).
+        // if the receiver does not have the previous data blocks (e.g. for range requests).
         // (Bk0) (Sig0 Bk1) (Sig1 Hash0 Bk2) ... (SigN-1 HashN-2 BkN) (SigN HashN-1)
-        outbdig = std::move(inbdig);
-        inbdig = std::move(block_digest);
+        auto prev_prev_block_dig = std::move(prev_block_dig);
+        prev_block_dig = std::move(block_dig);
+        block_dig = std::move(block_digest);
 
-        return http_response::Part(std::move(ch));  // pass data on
+        if (block_buf.size() == 0)
+            return boost::none;  // empty data block
+
+        // Chunk header for data block (with previous extensions),
+        // keep data block as chunk body.
+        http_response::ChunkBody cb(util::bytes::to_vector<uint8_t>(block_buf), 0);
+        pending_parts.push(std::move(cb));
+
+        http_response::ChunkHdr ch( block_buf.size()
+                                  , block_chunk_ext(prev_prev_block_sig, prev_prev_block_dig));
+        return http_response::Part(std::move(ch));
+    }
+
+    size_t body_length = 0;
+    util::SHA256 body_hash;
+
+    optional_part
+    process_part(std::vector<uint8_t> ind, Cancel, asio::yield_context y)
+    {
+        body_length += ind.size();
+        body_hash.update(ind);
+        try {
+            qbuf->put(asio::buffer(ind));
+        } catch (const std::length_error&) {
+            LOG_ERROR("Chunk data overflows data block boundary; uri=", uri);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
+        }
+
+        // Data is returned when processing chunk headers.
+        return boost::none;
     }
 
     // If we process trailers, we may have a chance to
@@ -974,7 +970,10 @@ struct VerifyingReader::Impl {
                 return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
         }
 
-        return http_response::Part(intr);
+        pending_parts.push(std::move(intr));
+
+        http_response::ChunkHdr ch(0, block_chunk_ext(prev_block_sig, prev_block_dig));
+        return http_response::Part(std::move(ch));
     }
 
     bool is_done = false;
