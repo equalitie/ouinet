@@ -598,7 +598,7 @@ struct SigningReader::Impl {
                                                     , sk
                                                     , httpsig_key_id);
         pending_parts.push(std::move(trailer));
-        return http_response::Part(last_ch);
+        return http_response::Part(std::move(last_ch));
     }
 };
 
@@ -856,7 +856,7 @@ struct VerifyingReader::Impl {
             return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
         }
         qbuf = std::make_unique<util::quantized_buffer>(bs_params->size);
-        return http_response::Part(head);
+        return http_response::Part(head);  // do not move
     }
 
     size_t block_offset = 0;
@@ -954,7 +954,7 @@ struct VerifyingReader::Impl {
     process_part(http_response::Trailer intr, Cancel, asio::yield_context y)
     {
         if (intr.cbegin() == intr.cend())
-            return http_response::Part(intr);  // no headers in trailer
+            return http_response::Part(std::move(intr));  // no headers in trailer
 
         // Only expected trailer headers are received here, just extend initial head.
         bool sigs_in_trailer = false;
