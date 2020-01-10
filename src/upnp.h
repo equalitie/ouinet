@@ -43,6 +43,8 @@ private:
             auto igds = move(r_igds.value());
 
             for(auto& igd : igds) {
+                auto cancelled = cancel.connect([&] { igd.close(); });
+
                 // TODO: This shouldn't be a requirement and will probably not
                 // work in many scenarios to require that the external port is
                 // equal to the internal one.
