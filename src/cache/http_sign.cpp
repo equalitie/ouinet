@@ -124,13 +124,6 @@ http::response_header<>
 http_injection_verify( http::response_header<> rsh
                      , const util::Ed25519PublicKey& pk)
 {
-    // Check that the response is either chunked or has a known content length,
-    // so as to avoid accepting
-    // e.g. HTTP/1.0 responses with a correctly signed head but no body.
-    http::response<http::empty_body> rs(rsh);
-    if (!rs.chunked() && rs[http::field::content_length].empty())
-        return {};
-
     // Put together the head to be verified:
     // given head, minus chunking (and related headers), and signatures themselves.
     // Collect signatures found in the meanwhile.
@@ -836,6 +829,11 @@ struct VerifyingReader::Impl {
             return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
         }
         uri = head[http_::response_uri_hdr].to_string();
+        // Check that the response is chunked.
+        if (!http_response::Head(head).chunked()) {
+            LOG_WARN("Verification of non-chunked HTTP responses is not supported; uri=", uri);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
+        }
         // Get and validate HTTP block signature parameters.
         auto bsh = head[http_::response_block_signatures_hdr];
         if (bsh.empty()) {
