@@ -629,32 +629,31 @@ SigningReader::~SigningReader()
 optional_part
 SigningReader::async_read_part(Cancel cancel, asio::yield_context yield)
 {
+    sys::error_code ec;
+    optional_part part;
+
     if (!_impl->pending_parts.empty()) {
-        auto part = std::move(_impl->pending_parts.front());
+        part = std::move(_impl->pending_parts.front());
         _impl->pending_parts.pop();
-        return part;
     }
 
-    while (true) {
-        sys::error_code ec;
-        auto part = http_response::Reader::async_read_part(cancel, yield[ec]);
+    while (!part) {
+        part = http_response::Reader::async_read_part(cancel, yield[ec]);
         assert(!_impl->is_done || (_impl->is_done && !part));
         return_or_throw_on_error(yield, cancel, ec, boost::none);
         if (!part) {  // no more input, but stuff may still need to be sent
             part = _impl->process_end(cancel, yield[ec]);
-            return or_throw(yield, ec, std::move(part));
+            return_or_throw_on_error(yield, cancel, ec, boost::none);
+            break;
         }
 
         part = util::apply(std::move(*part), [&](auto&& p) {
             return _impl->process_part(std::move(p), cancel, yield[ec]);
         });
         return_or_throw_on_error(yield, cancel, ec, boost::none);
-        if (!part) continue;
-
-        return part;
     };
 
-    return boost::none;
+    return part;
 }
 
 bool
