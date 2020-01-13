@@ -134,9 +134,11 @@ BOOST_AUTO_TEST_CASE(test_http10_no_body) {
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE(part->is_head());
+        BOOST_REQUIRE(!rr.is_done());
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(!part);
+        BOOST_REQUIRE(rr.is_done());
     });
 
     ios.run();
@@ -159,13 +161,17 @@ BOOST_AUTO_TEST_CASE(test_http10_body_no_length) {
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE(part->is_head());
+        BOOST_REQUIRE(!rr.is_done());
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE_EQUAL(*part, body("abcdef"));
+        // No way to know when done until hitting EOT.
+        //BOOST_REQUIRE(!rr.is_done());
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(!part);
+        BOOST_REQUIRE(rr.is_done());
     });
 
     ios.run();
@@ -190,9 +196,11 @@ BOOST_AUTO_TEST_CASE(test_http11_no_body) {
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE(part->is_head());
+        BOOST_REQUIRE(rr.is_done());
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(!part);
+        BOOST_REQUIRE(rr.is_done());
     });
 
     ios.run();
@@ -218,12 +226,15 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE(part->is_head());
+        BOOST_REQUIRE(!rr.is_done());
 
         part = read_full_body(rr, c, y);
         BOOST_REQUIRE_EQUAL(part, body("0123456789"));
+        BOOST_REQUIRE(rr.is_done());
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(!part);
+        BOOST_REQUIRE(rr.is_done());
     });
 
     ios.run();
@@ -252,25 +263,31 @@ BOOST_AUTO_TEST_CASE(test_http11_chunk) {
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE(part->is_head());
+        BOOST_REQUIRE(!rr.is_done());
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE_EQUAL(*part, chunk_hdr(4, ""));
+        BOOST_REQUIRE(!rr.is_done());
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE_EQUAL(*part, chunk_body("1234"));
+        BOOST_REQUIRE(!rr.is_done());
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE_EQUAL(*part, chunk_hdr(0, ""));
+        BOOST_REQUIRE(!rr.is_done());
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE_EQUAL(*part, trailer({}));
+        BOOST_REQUIRE(rr.is_done());
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(!part);
+        BOOST_REQUIRE(rr.is_done());
     });
 
     ios.run();
@@ -301,25 +318,31 @@ BOOST_AUTO_TEST_CASE(test_http11_trailer) {
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE(part->is_head());
+        BOOST_REQUIRE(!rr.is_done());
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE_EQUAL(*part, chunk_hdr(4, ""));
+        BOOST_REQUIRE(!rr.is_done());
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE_EQUAL(*part, chunk_body("1234"));
+        BOOST_REQUIRE(!rr.is_done());
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE_EQUAL(*part, chunk_hdr(0, ""));
+        BOOST_REQUIRE(!rr.is_done());
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE_EQUAL(*part, trailer({{"Hash", "hash_of_1234"}}));
+        BOOST_REQUIRE(rr.is_done());
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(!part);
+        BOOST_REQUIRE(rr.is_done());
     });
 
     ios.run();
@@ -352,26 +375,32 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE(part->is_head());
+        BOOST_REQUIRE(!rr.is_done());
 
         part = read_full_body(rr, c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE_EQUAL(*part, body("0123456789"));
+        BOOST_REQUIRE(rr.is_done());
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(!part);
+        BOOST_REQUIRE(rr.is_done());
 
         rr.restart();
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE(part->is_head());
+        BOOST_REQUIRE(!rr.is_done());
 
         part = read_full_body(rr, c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE_EQUAL(*part, body("abcde"));
+        BOOST_REQUIRE(rr.is_done());
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(!part);
+        BOOST_REQUIRE(rr.is_done());
     });
 
     ios.run();
@@ -408,26 +437,32 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
             part = rr.async_read_part(c, y);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_head());
+            BOOST_REQUIRE(!rr.is_done());
 
             part = rr.async_read_part(c, y);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE_EQUAL(*part, chunk_hdr(4, ""));
+            BOOST_REQUIRE(!rr.is_done());
 
             part = rr.async_read_part(c, y);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE_EQUAL(*part, chunk_body("1234"));
+            BOOST_REQUIRE(!rr.is_done());
 
             part = rr.async_read_part(c, y);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE_EQUAL(*part, chunk_hdr(0, ""));
+            BOOST_REQUIRE(!rr.is_done());
 
             part = rr.async_read_part(c, y);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE_EQUAL(*part, trailer({}));
+            BOOST_REQUIRE(rr.is_done());
         }
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(!part);
+        BOOST_REQUIRE(rr.is_done());
 
         rr.restart();
 
@@ -435,14 +470,17 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
             part = rr.async_read_part(c, y);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_head());
+            BOOST_REQUIRE(!rr.is_done());
 
             part = read_full_body(rr, c, y);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE_EQUAL(*part, body("abcde"));
+            BOOST_REQUIRE(rr.is_done());
         }
 
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(!part);
+        BOOST_REQUIRE(rr.is_done());
     });
 
     ios.run();
