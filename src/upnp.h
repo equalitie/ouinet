@@ -34,7 +34,7 @@ private:
         using namespace std;
         using namespace std::chrono;
 
-        auto on_exit = defer([&] ({
+        auto on_exit = defer([&] {
             if (cancel) return;
             _mapping_is_active = false;
         });
@@ -74,10 +74,10 @@ private:
                 }
             }
 
-            if (success_cnt == 0) _mapping_is_active false;
+            if (success_cnt == 0) _mapping_is_active = false;
 
             auto wait_time = [&] {
-                if (!r) return seconds(30);
+                if (success_cnt == 0) return seconds(30);
                 return seconds(55);
             }();
 
