@@ -5,3 +5,6 @@
 [submodule "modules/asio-utp"]
 	path = modules/asio-utp
 	url = https://github.com/equalitie/asio-utp.git
+[submodule "modules/cpp-upnp"]
+	path = modules/cpp-upnp
+	url = https://github.com/equalitie/cpp-upnp

@@ -66,6 +66,7 @@
 #include "util/scheduler.h"
 #include "util/connected_pair.h"
 #include "stream/fork.h"
+#include "upnp.h"
 
 #include "logger.h"
 
@@ -231,16 +232,30 @@ private:
 
     void serve_utp_request(GenericStream, Yield);
 
+    void setup_upnp(const std::set<asio::ip::udp::endpoint>& eps) {
+        auto ex = _ctx.get_executor();
+
+        for (auto ep : eps) {
+            if (!ep.address().is_v4()) continue;
+            auto& p = _upnps[ep];
+            if (p) continue;
+            p = make_unique<UPnPUpdater>(ex, ep.port());
+        }
+    }
+
     void idempotent_start_accepting_on_utp() {
         if (_multi_utp_server) return;
         assert(!_shutdown_signal);
 
         auto dht = bittorrent_dht();
+
+        auto exec = _ctx.get_executor();
+        auto local_eps = dht->local_endpoints();
+
         _multi_utp_server
-            = make_unique<ouiservice::MultiUtpServer>(
-                    _ctx.get_executor(),
-                    bittorrent_dht()->local_endpoints(),
-                    nullptr);
+            = make_unique<ouiservice::MultiUtpServer>(exec, local_eps, nullptr);
+
+        setup_upnp(local_eps);
 
         asio::spawn(_ctx, [&, c = _shutdown_signal] (asio::yield_context yield) mutable {
             auto slot = c.connect([&] () mutable { _multi_utp_server = nullptr; });
@@ -301,6 +316,8 @@ private:
 
     unique_ptr<ouiservice::MultiUtpServer> _multi_utp_server;
     shared_ptr<ouiservice::Bep5Client> _bep5_client;
+
+    std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>> _upnps;
 };
 
 //------------------------------------------------------------------------------
