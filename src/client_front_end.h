@@ -19,6 +19,7 @@ namespace ouinet {
 
 class GenericStream;
 class ClientConfig;
+class UPnPUpdater;
 
 class ClientFrontEnd {
     template<typename E> struct Input;
@@ -35,6 +36,7 @@ class ClientFrontEnd {
 public:
     using Request = http::request<http::string_body>;
     using Response = http::response<http::dynamic_body>;
+    using UPnPs = std::map<asio::ip::udp::endpoint, std::unique_ptr<UPnPUpdater>>;
 
 public:
     class Task : public TaskHook {
@@ -63,6 +65,7 @@ public:
                   , cache::bep5_http::Client*
                   , const CACertificate&
                   , boost::optional<uint32_t> udp_port
+                  , const UPnPs&
                   , Yield yield);
 
     Task notify_task(const std::string& task_name)
@@ -98,6 +101,7 @@ private:
 
     void handle_status( ClientConfig&
                       , boost::optional<uint32_t> udp_port
+                      , const UPnPs&
                       , const Request&
                       , Response&
                       , std::stringstream&);

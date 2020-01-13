@@ -500,6 +500,7 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
                            , _bep5_http_cache.get()
                            , *_ca_certificate
                            , udp_port
+                           , _upnps
                            , yield.tag("serve_frontend"));
 }
 
