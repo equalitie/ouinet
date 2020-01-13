@@ -146,6 +146,10 @@ Reader::async_read_part(Cancel cancel, asio::yield_context yield) {
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw<Part>(yield, ec);
 
+        if (_parser.is_done() && !_is_done) {  // e.g. no body
+            _is_done = true;
+        }
+
         return Part(Head(_parser.get().base()));
     }
 
