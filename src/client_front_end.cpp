@@ -310,7 +310,9 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         for (auto& pair : upnps) {
             if (pair.second->mapping_is_active()) enabled = true;
         }
-        response["is_upnp_active"] = enabled ? "yes" : "no";
+        response["is_upnp_active"] = enabled ? "enabled" : "inactive";
+    } else {
+        response["is_upnp_active"] = "disabled";
     }
 
     ss << response;
