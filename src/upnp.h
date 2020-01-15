@@ -9,8 +9,11 @@ namespace ouinet {
 
 class UPnPUpdater {
 public:
-    UPnPUpdater(asio::executor exec, uint16_t internal_port)
-        : _internal_port(internal_port)
+    UPnPUpdater( asio::executor exec
+               , uint16_t external_port
+               , uint16_t internal_port)
+        : _external_port(external_port)
+        , _internal_port(internal_port)
     {
         asio::spawn(exec, [this, exec, c = _lifetime_cancel
         ] (asio::yield_context yield) mutable {
@@ -36,8 +39,12 @@ private:
 
         auto on_exit = defer([&] {
             if (cancel) return;
-            _mapping_is_active = false;
+            mapping_disabled();
         });
+
+        auto lease_duration    = minutes(3);
+        auto success_wait_time = lease_duration - seconds(10);
+        auto failure_wait_time = minutes(1);
 
         while (true)
         {
@@ -45,8 +52,8 @@ private:
             if (cancel) return;
 
             if (!r_igds) {
-                _mapping_is_active = false;
-                async_sleep(exec, minutes(1), cancel, yield);
+                mapping_disabled();
+                async_sleep(exec, failure_wait_time, cancel, yield);
                 if (cancel) return;
                 continue;
             }
@@ -57,28 +64,24 @@ private:
             for(auto& igd : igds) {
                 auto cancelled = cancel.connect([&] { igd.stop(); });
 
-                // TODO: This shouldn't be a requirement and will probably not
-                // work in many scenarios to require that the external port is
-                // equal to the internal one.
-                uint16_t external_port = _internal_port;
                 auto r = igd.add_port_mapping( upnp::igd::udp
-                                             , external_port
+                                             , _external_port
                                              , _internal_port
                                              , "Ouinet"
-                                             , minutes(1)
+                                             , lease_duration
                                              , yield);
                 if (cancel) return;
                 if (r) {
                     success_cnt++;
-                    _mapping_is_active = true;
+                    mapping_enabled();
                 }
             }
 
-            if (success_cnt == 0) _mapping_is_active = false;
+            if (success_cnt == 0) mapping_disabled();
 
-            auto wait_time = [&] {
-                if (success_cnt == 0) return seconds(30);
-                return seconds(55);
+            auto wait_time = [&] () -> seconds {
+                if (success_cnt == 0) return failure_wait_time;
+                return success_wait_time;
             }();
 
             async_sleep(exec, wait_time, cancel, yield);
@@ -86,8 +89,23 @@ private:
         }
     }
 
+    void mapping_enabled() {
+        if (!_mapping_is_active) {
+            LOG_INFO("UPnP mapping enabled EXT port:", _external_port
+                    , " INT port:", _internal_port);
+        }
+        _mapping_is_active = true;
+    }
+    void mapping_disabled() {
+        if (_mapping_is_active) {
+            LOG_WARN("UPnP mapping disabled");
+        }
+        _mapping_is_active = false;
+    }
+
 private:
     Cancel _lifetime_cancel;
+    uint16_t _external_port;
     uint16_t _internal_port;
     bool _mapping_is_active = false;
 };
