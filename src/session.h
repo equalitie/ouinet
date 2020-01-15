@@ -1,26 +1,13 @@
 #pragma once
 
-#include <boost/beast/http/buffer_body.hpp>
-
 #include "generic_stream.h"
-#include "http_forward.h"
-#include "util/yield.h"
+#include "response_reader.h"
 
 namespace ouinet {
 
 class Session {
-private:
-    struct State {
-        GenericStream con;
-        beast::static_buffer<http_forward_block> buffer;
-        http::response_parser<http::buffer_body> parser;
-        boost::optional<bool> response_keep_alive;
-
-        State(GenericStream&& con) : con(std::move(con)) {
-            // Allow an unlimited body size (not kept in memory).
-            parser.body_limit((std::numeric_limits<std::size_t>::max)());
-        }
-    };
+public:
+    using reader_uptr = std::unique_ptr<http_response::Reader>;
 
 public:
     Session() = default;
@@ -31,102 +18,77 @@ public:
     Session(Session&&) = default;
     Session& operator=(Session&&) = default;
 
-    Session(GenericStream con)
-        : _state(new State(std::move(con)))
-    {}
+    // Construct the session and read response head
+    static Session create(GenericStream, Cancel, asio::yield_context);
+    static Session create(reader_uptr&&, Cancel, asio::yield_context);
 
-    http::response_header<>* response_header() const {
-        if (!_state) return nullptr;
-        if (!_state->parser.is_header_done()) return nullptr;
-        return &_state->parser.get().base();
-    }
-
-    http::response_header<>* read_response_header(Cancel&, asio::yield_context);
+          http_response::Head& response_header()       { return _head; }
+    const http_response::Head& response_header() const { return _head; }
 
     template<class SinkStream>
     void flush_response(SinkStream&, Cancel&, asio::yield_context);
 
-    // Allows manipulating the head, body and trailer forwarded to the sink.
-    template< class SinkStream, class ProcHead, class ProcChkExt
-            , class ProcIn, class ProcTrail>
-    void flush_response( SinkStream&
-                       , ProcHead, ProcChkExt, ProcIn, ProcTrail
-                       , Cancel&, asio::yield_context);
-
-    // Loads the entire response to memory, use only for debugging
-    template<class BodyType>
-    http::response<BodyType> slurp(Cancel&, asio::yield_context);
-
     bool is_open() const {
-        return _state->con.is_open();
+        return _reader->is_open();
     }
 
     void close() {
-        if (!_state) return;
-        if (_state->con.is_open()) _state->con.close();
-    }
-
-    void keep_alive(bool v) {
-        assert(_state);
-        if (!_state) return;
-        _state->response_keep_alive = v;
+        if (!_reader) return;
+        if (_reader->is_open()) _reader->close();
     }
 
     bool keep_alive() const {
-        assert(_state);
-        if (!_state) return false;
-        return _state->parser.get().keep_alive();
+        return _head.keep_alive();
     }
 
 private:
-    std::unique_ptr<State> _state;
+    Session(http_response::Head&& head, reader_uptr&& reader)
+        : _head(std::move(head))
+        , _reader(std::move(reader))
+    {}
+
+private:
+    http_response::Head _head;
+    reader_uptr _reader;
 };
 
 inline
-http::response_header<>*
-Session::read_response_header(Cancel& cancel, asio::yield_context yield)
+Session Session::create(GenericStream con, Cancel cancel, asio::yield_context yield)
 {
     assert(!cancel);
 
-    if (!_state) {
-        return or_throw<http::response_header<>*>(
-                yield, asio::error::bad_descriptor);
-    }
+    auto reader = std::make_unique<http_response::Reader>(std::move(con));
 
-    if (auto h = response_header()) return h;
-
-    auto c = cancel.connect([&] { _state->con.close(); });
-
-    sys::error_code ec;
-    http::async_read_header(_state->con,
-                            _state->buffer,
-                            _state->parser,
-                            yield[ec]);
-
-    if (cancel) ec = asio::error::operation_aborted;
-    if (ec) return or_throw<http::response_header<>*>(yield, ec, nullptr);
-
-    assert(_state->parser.is_header_done());
-
-    return response_header();
+    return Session::create(std::move(reader), cancel, yield);
 }
 
-template<class SinkStream, class ProcHead, class ProcChkExt, class ProcIn, class ProcTrail>
 inline
-void
-Session::flush_response(SinkStream& sink,
-                        ProcHead hproc, ProcChkExt xproc, ProcIn dproc, ProcTrail tproc,
-                        Cancel& cancel,
-                        asio::yield_context yield)
+Session Session::create( reader_uptr&& reader
+                       , Cancel cancel, asio::yield_context yield)
 {
-    if (!_state) {
-        return or_throw(yield, asio::error::bad_descriptor);
+    assert(!cancel);
+
+    sys::error_code ec;
+
+    auto head_opt_part = reader->async_read_part(cancel, yield[ec]);
+
+    if (cancel) {
+        assert(ec == asio::error::operation_aborted);
+        ec = asio::error::operation_aborted;
     }
 
-    Yield yield_(sink.get_executor(), yield, "flush_response");
-    http_forward( _state->con, sink, _state->buffer, _state->parser
-                , std::move(hproc), std::move(xproc), std::move(dproc), std::move(tproc)
-                , cancel, yield_);
+    if (!ec && !head_opt_part) {
+        assert(ec);
+        ec = http::error::unexpected_body;
+    }
+
+    if (ec) return or_throw<Session>(yield, ec);
+
+    auto head = head_opt_part->as_head();
+
+    if (!head) return or_throw<Session>(yield, http::error::unexpected_body);
+
+    return Session{std::move(*head), std::move(reader)};
 }
 
 template<class SinkStream>
@@ -136,70 +98,19 @@ Session::flush_response(SinkStream& sink,
                         Cancel& cancel,
                         asio::yield_context yield)
 {
-    // TODO: Refactor with Proxy mechanism forwarding.
-    // Just pass head, chunk extensions, body data and trailer on.
-    std::string chunk_exts;
-    auto hproc = [] (auto inh, auto&, auto) { return inh; };
-    auto xproc = [&chunk_exts] (auto exts, auto&, auto) {
-        chunk_exts = std::move(exts);  // save exts for next chunk
-    };
-    ProcDataFunc<asio::const_buffer> dproc = [&chunk_exts] (auto ind, auto&, auto) {
-        ProcDataFunc<asio::const_buffer>::result_type ret;
-        if (asio::buffer_size(ind) > 0) {
-            ret = {std::move(ind), std::move(chunk_exts)};
-            chunk_exts = {};  // only send extensions in first output chunk
-        }  // keep extensions when last chunk (size 0) was received
-        return ret;
-    };
-    ProcTrailFunc tproc = [&chunk_exts] (auto intr, auto&, auto) {
-        ProcTrailFunc::result_type ret{std::move(intr), std::move(chunk_exts)};
-        return ret;  // leave trailers untouched
-    };
-
-    return flush_response( sink
-                         , std::move(hproc), std::move(xproc)
-                         , std::move(dproc), std::move(tproc)
-                         , cancel, yield );
-}
-
-template<class BodyType>
-http::response<BodyType> Session::slurp(Cancel& cancel, asio::yield_context yield)
-{
-    if (!_state) {
-        return or_throw<http::response<BodyType>>(
-                yield, asio::error::bad_descriptor);
-    }
-
-    auto c = cancel.connect([&] { _state->con.close(); });
-
     sys::error_code ec;
 
-    read_response_header(cancel , yield[ec]); // Won't read if already read.
-    return_or_throw_on_error(yield, cancel, ec, http::response<BodyType>{});
+    _head.async_write(sink, cancel, yield[ec]);
+    return_or_throw_on_error(yield, cancel, ec);
 
-    http::response<BodyType> rs{*response_header()};
-
-    char buf[2048];
-
-    std::string s;
-    while (!_state->parser.is_done()) {
-        _state->parser.get().body().data = buf;
-        _state->parser.get().body().size = sizeof(buf);
-
-        http::async_read(_state->con, _state->buffer, _state->parser, yield[ec]);
-
-        if (ec == http::error::need_buffer) ec = {};
-        return_or_throw_on_error(yield, cancel, ec, http::response<BodyType>{});
-
-        size_t size = sizeof(buf) - _state->parser.get().body().size;
-        s += std::string(buf, size);
+    while (true) {
+        auto opt_part = _reader->async_read_part(cancel, yield[ec]);
+        assert(ec != http::error::end_of_stream);
+        return_or_throw_on_error(yield, cancel, ec);
+        if (!opt_part) break;
+        opt_part->async_write(sink, cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec);
     }
-
-    typename BodyType::reader reader(rs, rs.body());
-    reader.put(asio::buffer(s), ec);
-    assert(!ec);
-
-    return rs;
 }
 
 } // namespaces

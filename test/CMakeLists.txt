@@ -30,6 +30,16 @@ add_executable(test-timeout-stream "test_timeout_stream.cpp")
 ######################################################################
 add_executable(test-stream-fork "test-stream-fork.cpp")
 
+######################################################################
+add_executable(test-response-reader
+    "test-response-reader.cpp"
+    "../src/response_part.cpp")
+
+######################################################################
+add_executable(test-response-writer
+    "test-response-writer.cpp"
+    "../src/response_part.cpp")
+
 ################################################################################
 add_executable(test-persistent-lru-cache
     "test_persistent_lru_cache.cpp"
@@ -107,7 +117,6 @@ add_executable(test-http-util "test_http_util.cpp")
 add_executable(test-http-sign
     "test_http_sign.cpp"
     "../src/cache/http_sign.cpp"
-    "../src/http_forward.cpp"
     "../src/http_util.cpp"
     "../src/logger.cpp"
     "../src/util.cpp"

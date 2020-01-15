@@ -21,13 +21,14 @@
 #include "namespaces.h"
 #include "util/str.h"
 
-//Logger micros which should be used for efficiency
-#define LOG_SILLY(...) if (logger.get_threshold() <= SILLY) { logger.silly(util::str(__VA_ARGS__)); }
-#define LOG_DEBUG(...) if (logger.get_threshold() <= DEBUG) { logger.debug(util::str(__VA_ARGS__)); }
-#define LOG_VERBOSE(...) if (logger.get_threshold() <= VERBOSE) { logger.verbose(util::str(__VA_ARGS__)); }
-#define LOG_INFO(...) if (logger.get_threshold() <= INFO) { logger.info(util::str(__VA_ARGS__)); }
-#define LOG_WARN(...) if (logger.get_threshold() <= WARN) { logger.warn(util::str(__VA_ARGS__)); }
-#define LOG_ERROR(...) if (logger.get_threshold() <= ERROR) { logger.error(util::str(__VA_ARGS__)); }
+// Logger macros which should be used for efficiency
+// (also see <https://pzemtsov.github.io/2014/05/05/do-macro.html> for statement protection)
+#define LOG_SILLY(...) do { if (logger.get_threshold() <= SILLY) logger.silly(util::str(__VA_ARGS__)); } while (false)
+#define LOG_DEBUG(...) do { if (logger.get_threshold() <= DEBUG) logger.debug(util::str(__VA_ARGS__)); } while (false)
+#define LOG_VERBOSE(...) do { if (logger.get_threshold() <= VERBOSE) logger.verbose(util::str(__VA_ARGS__)); } while (false)
+#define LOG_INFO(...) do { if (logger.get_threshold() <= INFO) logger.info(util::str(__VA_ARGS__)); } while (false)
+#define LOG_WARN(...) do { if (logger.get_threshold() <= WARN) logger.warn(util::str(__VA_ARGS__)); } while (false)
+#define LOG_ERROR(...) do { if (logger.get_threshold() <= ERROR) logger.error(util::str(__VA_ARGS__)); } while (false)
 #define LOG_ABORT(...) logger.abort(util::str(__VA_ARGS__)) 
 
 // Standard log levels, ascending order of specificity.

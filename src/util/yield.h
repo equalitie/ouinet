@@ -6,7 +6,8 @@
 #include <boost/intrusive/list.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/steady_timer.hpp>
-#include <boost/utility.hpp>
+#include <boost/utility/string_view.hpp>
+#include <boost/optional.hpp>
 
 namespace ouinet {
 

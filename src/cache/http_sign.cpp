@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <map>
+#include <queue>
 #include <sstream>
 #include <tuple>
 #include <utility>
@@ -12,13 +13,18 @@
 #include <boost/beast/http/empty_body.hpp>
 #include <boost/beast/http/field.hpp>
 #include <boost/format.hpp>
+#include <boost/system/error_code.hpp>
 
 #include "../constants.h"
+#include "../http_util.h"
+#include "../logger.h"
 #include "../parse/number.h"
 #include "../split_string.h"
 #include "../util.h"
 #include "../util/bytes.h"
 #include "../util/hash.h"
+#include "../util/quantized_buffer.h"
+#include "../util/variant.h"
 
 namespace ouinet { namespace cache {
 
@@ -29,6 +35,11 @@ static const auto final_signature_hdr = http_::response_signature_hdr_pfx + "1";
 static const std::string sig_alg_hs2019("hs2019");
 
 static const std::string key_id_pfx("ed25519=");
+
+using sig_array_t = util::Ed25519PublicKey::sig_array_t;
+using block_digest_t = util::SHA512::digest_type;
+using opt_sig_array_t = boost::optional<sig_array_t>;
+using opt_block_digest_t = boost::optional<block_digest_t>;
 
 static
 http::response_header<>
@@ -195,8 +206,9 @@ http_decode_key_id(boost::string_view key_id)
     return util::Ed25519PublicKey(std::move(pk_array));
 }
 
-http_sign_detail::opt_sig_array_t
-http_sign_detail::block_sig_from_exts(boost::string_view xs)
+static
+opt_sig_array_t
+block_sig_from_exts(boost::string_view xs)
 {
     if (xs.empty()) return {};  // no extensions
 
@@ -220,9 +232,10 @@ http_sign_detail::block_sig_from_exts(boost::string_view xs)
     return util::bytes::to_array<uint8_t, util::Ed25519PublicKey::sig_size>(decoded_sig);
 }
 
+static
 std::string
-http_sign_detail::block_sig_str( boost::string_view injection_id
-                               , const http_sign_detail::block_digest_t& block_digest)
+block_sig_str( boost::string_view injection_id
+             , const block_digest_t& block_digest)
 {
     static const auto fmt_ = "%s%c%s";
     return ( boost::format(fmt_)
@@ -230,9 +243,10 @@ http_sign_detail::block_sig_str( boost::string_view injection_id
            % util::bytes::to_string_view(block_digest)).str();
 }
 
+static
 std::string
-http_sign_detail::block_chunk_ext( const http_sign_detail::opt_sig_array_t& sig
-                                 , const http_sign_detail::opt_block_digest_t& prev_digest = {})
+block_chunk_ext( const opt_sig_array_t& sig
+               , const opt_block_digest_t& prev_digest = {})
 {
     std::stringstream exts;
 
@@ -251,49 +265,14 @@ http_sign_detail::block_chunk_ext( const http_sign_detail::opt_sig_array_t& sig
     return exts.str();
 }
 
+static
 std::string
-http_sign_detail::block_chunk_ext( boost::string_view injection_id
-                                 , const http_sign_detail::block_digest_t& digest
-                                 , const util::Ed25519PrivateKey& sk)
+block_chunk_ext( boost::string_view injection_id
+               , const block_digest_t& digest
+               , const util::Ed25519PrivateKey& sk)
 {
-    auto sig_str = http_sign_detail::block_sig_str(injection_id, digest);
-    return http_sign_detail::block_chunk_ext(sk.sign(sig_str));
-}
-
-bool
-http_sign_detail::check_body( const http::response_header<>& head
-                            , size_t body_length
-                            , util::SHA256& body_hash)
-{
-    // Check body length.
-    auto h_body_length_h = head[http_::response_data_size_hdr];
-    auto h_body_length = parse::number<size_t>(h_body_length_h);
-    if (h_body_length) {
-        if (*h_body_length != body_length) {
-            LOG_WARN("Body length mismatch: ", *h_body_length, "!=", body_length);
-            return false;
-        }
-        LOG_DEBUG("Body matches signed length: ", body_length);
-    }
-
-    // Get body digest value.
-    auto b_digest = http_digest(body_hash);
-    auto b_digest_s = split_string_pair(b_digest, '=');
-
-    // Get digest values in head and compare (if algorithm matches).
-    auto h_digests = head.equal_range(http::field::digest);
-    for (auto hit = h_digests.first; hit != h_digests.second; hit++) {
-        auto h_digest_s = split_string_pair(hit->value(), '=');
-        if (boost::algorithm::iequals(b_digest_s.first, h_digest_s.first)) {
-            if (b_digest_s.second != h_digest_s.second) {
-                LOG_WARN("Body digest mismatch: ", hit->value(), "!=", b_digest);
-                return false;
-            }
-            LOG_DEBUG("Body matches signed digest: ", b_digest);
-        }
-    }
-
-    return true;
+    auto sig_str = block_sig_str(injection_id, digest);
+    return block_chunk_ext(sk.sign(sig_str));
 }
 
 std::string
@@ -487,6 +466,197 @@ http_signature( const http::response_header<>& rsh
     return (fmt % key_id % ts % headers % encoded_sig).str();
 }
 
+// begin SigningReader
+
+using optional_part = boost::optional<http_response::Part>;
+
+struct SigningReader::Impl {
+    const http::request_header<> rqh;
+    const std::string injection_id;
+    const std::chrono::seconds::rep injection_ts;
+    const util::Ed25519PrivateKey sk;
+
+    std::string httpsig_key_id;
+
+    Impl( http::request_header<> rqh
+        , std::string injection_id
+        , std::chrono::seconds::rep injection_ts
+        , util::Ed25519PrivateKey sk)
+        : rqh(std::move(rqh))
+        , injection_id(std::move(injection_id))
+        , injection_ts(std::move(injection_ts))
+        , sk(std::move(sk))
+    {
+        httpsig_key_id = http_key_id_for_injection(sk.public_key());  // TODO: cache this
+    }
+
+    bool do_inject = false;
+    http::response_header<> outh;
+
+    optional_part
+    process_part(http_response::Head inh, Cancel, asio::yield_context)
+    {
+        auto inh_orig = inh;
+        sys::error_code ec_;
+        inh = util::to_cache_response(std::move(inh), ec_);
+        if (ec_) return http_response::Part(std::move(inh_orig));  // will not inject, just proxy
+
+        do_inject = true;
+        inh = cache::http_injection_head( rqh, std::move(inh)
+                                        , injection_id, injection_ts
+                                        , sk, httpsig_key_id);
+        // We will use the trailer to send the body digest and head signature.
+        assert(http::response<http::empty_body>(inh).chunked());
+
+        outh = inh;
+        return http_response::Part(std::move(inh));
+    }
+
+    optional_part
+    process_part(http_response::ChunkHdr, Cancel, asio::yield_context)
+    {
+        // Origin chunk size is ignored
+        // since we use our own block size.
+        // Origin chunk extensions are ignored and dropped
+        // since we have no way to sign them.
+        return boost::none;
+    }
+
+    size_t body_length = 0;
+    size_t block_offset = 0;
+    util::SHA256 body_hash;
+    util::SHA512 block_hash;  // for first block
+    // Simplest implementation: one output chunk per data block.
+    util::quantized_buffer qbuf{http_::response_data_block};
+    std::queue<http_response::Part> pending_parts;
+
+    // If a whole data block has been processed,
+    // return a chunk header and keep block as chunk body.
+    optional_part
+    process_part(std::vector<uint8_t> inbuf, Cancel, asio::yield_context)
+    {
+        // Just count transferred data and feed the hash.
+        body_length += inbuf.size();
+        if (do_inject) body_hash.update(inbuf);
+        qbuf.put(asio::buffer(inbuf));
+        auto block_buf =
+            (inbuf.size() > 0) ? qbuf.get() : qbuf.get_rest();  // send rest if no more input
+
+        if (block_buf.size() == 0)
+            return boost::none;  // no data to send yet
+        // Keep block as chunk body.
+        auto block_vec = util::bytes::to_vector<uint8_t>(block_buf);
+        pending_parts.push(http_response::ChunkBody(std::move(block_vec), 0));
+
+        http_response::ChunkHdr ch(block_buf.size(), {});
+        if (do_inject) {  // if injecting and sending data
+            if (block_offset > 0) {  // add chunk extension for previous block
+                auto block_digest = block_hash.close();
+                ch.exts = block_chunk_ext(injection_id, block_digest, sk);
+                // Prepare chunk extension for next block: HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])
+                block_hash = {};
+                block_hash.update(block_digest);
+            }  // else HASH[0]=SHA2-512(BLOCK[0])
+            block_hash.update(block_buf);
+            block_offset += block_buf.size();
+        }
+        return http_response::Part(std::move(ch));  // pass data on, drop origin extensions
+    }
+
+    http::fields trailer_in;
+
+    optional_part
+    process_part(http_response::Trailer intr, Cancel, asio::yield_context)
+    {
+        trailer_in = do_inject ? util::to_cache_trailer(std::move(intr)) : std::move(intr);
+        return boost::none;
+    }
+
+    bool is_done = false;
+
+    optional_part
+    process_end(Cancel cancel, asio::yield_context yield)
+    {
+        if (is_done) return boost::none;  // avoid adding a last chunk indefinitely
+
+        sys::error_code ec;
+        auto last_block_ch = process_part(std::vector<uint8_t>(), cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, boost::none);
+        if (last_block_ch) return last_block_ch;
+
+        is_done = true;
+        if (!do_inject) {
+            pending_parts.push(std::move(trailer_in));
+            return http_response::Part(http_response::ChunkHdr());
+        }
+
+        auto block_digest = block_hash.close();
+        auto last_ch = http_response::ChunkHdr(
+            0, block_chunk_ext(injection_id, block_digest, sk));
+        auto trailer = cache::http_injection_trailer( outh, std::move(trailer_in)
+                                                    , body_length, body_hash.close()
+                                                    , sk
+                                                    , httpsig_key_id);
+        pending_parts.push(std::move(trailer));
+        return http_response::Part(std::move(last_ch));
+    }
+};
+
+SigningReader::SigningReader( GenericStream in
+                            , http::request_header<> rqh
+                            , std::string injection_id
+                            , std::chrono::seconds::rep injection_ts
+                            , util::Ed25519PrivateKey sk)
+    : http_response::Reader(std::move(in))
+    , _impl(std::make_unique<Impl>( std::move(rqh)
+                                  , std::move(injection_id)
+                                  , std::move(injection_ts)
+                                  , std::move(sk)))
+{
+}
+
+SigningReader::~SigningReader()
+{
+}
+
+optional_part
+SigningReader::async_read_part(Cancel cancel, asio::yield_context yield)
+{
+    sys::error_code ec;
+    optional_part part;
+
+    if (!_impl->pending_parts.empty()) {
+        part = std::move(_impl->pending_parts.front());
+        _impl->pending_parts.pop();
+    }
+
+    while (!part) {
+        part = http_response::Reader::async_read_part(cancel, yield[ec]);
+        assert(!_impl->is_done || (_impl->is_done && !part));
+        return_or_throw_on_error(yield, cancel, ec, boost::none);
+        if (!part) {  // no more input, but stuff may still need to be sent
+            part = _impl->process_end(cancel, yield[ec]);
+            return_or_throw_on_error(yield, cancel, ec, boost::none);
+            break;
+        }
+
+        part = util::apply(std::move(*part), [&](auto&& p) {
+            return _impl->process_part(std::move(p), cancel, yield[ec]);
+        });
+        return_or_throw_on_error(yield, cancel, ec, boost::none);
+    };
+
+    return part;
+}
+
+bool
+SigningReader::is_done() const
+{
+    return _impl->is_done;
+}
+
+// end SigningReader
+
 static bool
 has_comma_in_quotes(const boost::string_view& s) {
     // A comma is between quotes if
@@ -632,5 +802,272 @@ HttpSignature::verify( const http::response_header<>& rsh
 
     return {true, std::move(extra)};
 }
+
+// begin VerifyingReader
+
+struct VerifyingReader::Impl {
+    const util::Ed25519PublicKey pk;
+
+    Impl(util::Ed25519PublicKey pk)
+        : pk(std::move(pk))
+    {
+    }
+
+    ouinet::http_response::Head head;  // keep for later use
+    std::string uri;  // for warnings, should use `Yield::log` instead
+    std::string injection_id;
+    boost::optional<HttpBlockSigs> bs_params;
+    std::unique_ptr<util::quantized_buffer> qbuf;
+
+    optional_part
+    process_part(http_response::Head inh, Cancel, asio::yield_context y)
+    {
+        // Verify head signature.
+        head = cache::http_injection_verify(std::move(inh), pk);
+        if (head.cbegin() == head.cend()) {
+            LOG_WARN("Failed to verify HTTP head signatures");
+            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
+        }
+        uri = head[http_::response_uri_hdr].to_string();
+        // Check that the response is chunked.
+        if (!http_response::Head(head).chunked()) {
+            LOG_WARN("Verification of non-chunked HTTP responses is not supported; uri=", uri);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
+        }
+        // Get and validate HTTP block signature parameters.
+        auto bsh = head[http_::response_block_signatures_hdr];
+        if (bsh.empty()) {
+            LOG_WARN("Missing parameters for HTTP data block signatures; uri=", uri);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
+        }
+        bs_params = cache::HttpBlockSigs::parse(bsh);
+        if (!bs_params) {
+            LOG_WARN("Malformed parameters for HTTP data block signatures; uri=", uri);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
+        }
+        if (bs_params->size > http_::response_data_block_max) {
+            LOG_WARN("Size of signed HTTP data blocks is too large: ", bs_params->size, "; uri=", uri);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
+        }
+        // The injection id is also needed to verify block signatures.
+        injection_id = util::http_injection_id(head).to_string();
+        if (injection_id.empty()) {
+            LOG_WARN("Missing injection identifier in HTTP head; uri=", uri);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
+        }
+        qbuf = std::make_unique<util::quantized_buffer>(bs_params->size);
+        return http_response::Part(head);  // do not move
+    }
+
+    size_t block_offset = 0;
+    util::SHA512 block_hash;
+    opt_sig_array_t prev_block_sig;
+    opt_block_digest_t block_dig, prev_block_dig;
+    // Simplest implementation: one output chunk per data block.
+    // If a whole data block has been processed,
+    // return its chunk header and push the block as its chunk body.
+    std::queue<http_response::Part> pending_parts;
+
+    optional_part
+    process_part(http_response::ChunkHdr inch, Cancel cancel, asio::yield_context y)
+    {
+        if (inch.size > bs_params->size) {
+            LOG_WARN( "Chunk size exceeds expected data block size: "
+                    , inch.size, " > ", bs_params->size, "; uri=", uri);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
+        }
+
+        // Have we buffered a whole data block?
+        // An empty data block is fine if this is the last chunk header
+        // (a chunk for it will not be produced, though).
+        auto block_buf =
+            (inch.size > 0) ? qbuf->get() : qbuf->get_rest();  // send rest if no more chunks
+        if (block_buf.size() == 0 && inch.size > 0)
+            return boost::none;
+
+        // Verify the whole data block.
+        auto block_sig = block_sig_from_exts(inch.exts);
+        if (!block_sig) {
+            LOG_WARN("Missing signature for data block with offset ", block_offset, "; uri=", uri);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
+        }
+        // Complete hash for the data block; note that HASH[0]=SHA2-512(BLOCK[0])
+        block_hash.update(block_buf);
+        auto block_digest = block_hash.close();
+        auto bsig_str = block_sig_str(injection_id, block_digest);
+        if (!bs_params->pk.verify(bsig_str, *block_sig)) {
+            LOG_WARN("Failed to verify data block with offset ", block_offset, "; uri=", uri);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
+        }
+
+        // Keep data block signature for next chunk header.
+        auto prev_prev_block_sig = std::move(prev_block_sig);
+        prev_block_sig = std::move(block_sig);
+        // Prepare hash for next data block: HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])
+        block_hash = {}; block_hash.update(block_digest);
+        block_offset += block_buf.size();
+        // Chain hash is to be sent along the signature of the following data block,
+        // so that it may convey the missing information for computing the signing string
+        // if the receiver does not have the previous data blocks (e.g. for range requests).
+        // (Bk0) (Sig0 Bk1) (Sig1 Hash0 Bk2) ... (SigN-1 HashN-2 BkN) (SigN HashN-1)
+        auto prev_prev_block_dig = std::move(prev_block_dig);
+        prev_block_dig = std::move(block_dig);
+        block_dig = std::move(block_digest);
+
+        if (block_buf.size() == 0)
+            return boost::none;  // empty data block
+
+        // Chunk header for data block (with previous extensions),
+        // keep data block as chunk body.
+        http_response::ChunkBody cb(util::bytes::to_vector<uint8_t>(block_buf), 0);
+        pending_parts.push(std::move(cb));
+
+        http_response::ChunkHdr ch( block_buf.size()
+                                  , block_chunk_ext(prev_prev_block_sig, prev_prev_block_dig));
+        return http_response::Part(std::move(ch));
+    }
+
+    size_t body_length = 0;
+    util::SHA256 body_hash;
+
+    optional_part
+    process_part(std::vector<uint8_t> ind, Cancel, asio::yield_context y)
+    {
+        body_length += ind.size();
+        body_hash.update(ind);
+        try {
+            qbuf->put(asio::buffer(ind));
+        } catch (const std::length_error&) {
+            LOG_ERROR("Chunk data overflows data block boundary; uri=", uri);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
+        }
+
+        // Data is returned when processing chunk headers.
+        return boost::none;
+    }
+
+    // If we process trailers, we may have a chance to
+    // detect and signal a body not matching its signed length or digest
+    // before completing its transfer,
+    // so that the receiving end can see that something bad is going on.
+    optional_part
+    process_part(http_response::Trailer intr, Cancel, asio::yield_context y)
+    {
+        if (intr.cbegin() == intr.cend())
+            return http_response::Part(std::move(intr));  // no headers in trailer
+
+        // Only expected trailer headers are received here, just extend initial head.
+        bool sigs_in_trailer = false;
+        for (const auto& h : intr) {
+            auto hn = h.name_string();
+            head.insert(h.name(), hn, h.value());
+            if (boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx))
+                sigs_in_trailer = true;
+        }
+        if (sigs_in_trailer) {
+            head = cache::http_injection_verify(std::move(head), pk);
+            if (head.cbegin() == head.cend())  // bad signature in trailer
+                return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
+        }
+
+        pending_parts.push(std::move(intr));
+
+        http_response::ChunkHdr ch(0, block_chunk_ext(prev_block_sig, prev_block_dig));
+        return http_response::Part(std::move(ch));
+    }
+
+    bool is_done = false;
+
+    void
+    check_body(sys::error_code& ec)
+    {
+        if (is_done) return;  // avoid re-checking body indefinitely
+        is_done = true;
+
+        // Check body length.
+        auto h_body_length_h = head[http_::response_data_size_hdr];
+        auto h_body_length = parse::number<size_t>(h_body_length_h);
+        if (!h_body_length) {
+            LOG_WARN("Missing signed length; uri=", uri);
+            ec = sys::errc::make_error_code(sys::errc::bad_message);
+            return;
+        }
+        if (*h_body_length != body_length) {
+            LOG_WARN( "Body length mismatch: ", *h_body_length, "!=", body_length
+                    , "; uri=", uri);
+            ec = sys::errc::make_error_code(sys::errc::bad_message);
+            return;
+        }
+        LOG_DEBUG("Body matches signed length: ", body_length, "; uri=", uri);
+
+        // Get body digest value.
+        auto b_digest = http_digest(body_hash);
+        auto b_digest_s = split_string_pair(b_digest, '=');
+
+        // Get digest values in head and compare (if algorithm matches).
+        auto h_digests = head.equal_range(http::field::digest);
+        for (auto hit = h_digests.first; hit != h_digests.second; hit++) {
+            auto h_digest_s = split_string_pair(hit->value(), '=');
+            if (boost::algorithm::iequals(b_digest_s.first, h_digest_s.first)) {
+                if (b_digest_s.second != h_digest_s.second) {
+                    LOG_WARN( "Body digest mismatch: ", hit->value(), "!=", b_digest
+                            , "; uri=", uri);
+                    ec = sys::errc::make_error_code(sys::errc::bad_message);
+                    return;
+                }
+                LOG_DEBUG("Body matches signed digest: ", b_digest, "; uri=", uri);
+            }
+        }
+    }
+};
+
+VerifyingReader::VerifyingReader( GenericStream in
+                                , util::Ed25519PublicKey pk)
+    : http_response::Reader(std::move(in))
+    , _impl(std::make_unique<Impl>(std::move(pk)))
+{
+}
+
+VerifyingReader::~VerifyingReader()
+{
+}
+
+optional_part
+VerifyingReader::async_read_part(Cancel cancel, asio::yield_context yield)
+{
+    sys::error_code ec;
+    optional_part part;
+
+    if (!_impl->pending_parts.empty()) {
+        part = std::move(_impl->pending_parts.front());
+        _impl->pending_parts.pop();
+    }
+
+    while (!part) {
+        part = http_response::Reader::async_read_part(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, boost::none);
+        if (!part) break;
+
+        part = util::apply(std::move(*part), [&](auto&& p) {
+            return _impl->process_part(std::move(p), cancel, yield[ec]);
+        });
+        return_or_throw_on_error(yield, cancel, ec, boost::none);
+    }
+
+    if (http_response::Reader::is_done()) {
+        // Check full body hash and length.
+        _impl->check_body(ec);
+        return_or_throw_on_error(yield, cancel, ec, boost::none);
+    }
+    return part;
+}
+
+bool
+VerifyingReader::is_done() const
+{
+    return _impl->is_done;
+}
+
+// end VerifyingReader
 
 }} // namespaces

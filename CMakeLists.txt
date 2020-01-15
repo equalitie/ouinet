@@ -93,6 +93,7 @@ file(GLOB client_sources
     "./src/cache_control.cpp"
     "./src/request_routing.cpp"
     "./src/ouiservice.cpp"
+    "./src/response_part.cpp"
     "./src/ssl/ca_certificate.cpp"
     "./src/ssl/dummy_certificate.cpp"
 #    "./src/ouiservice/lampshade.cpp"
@@ -119,7 +120,6 @@ file(GLOB client_sources
     "./src/util/hash.cpp"
     "./src/util.cpp"
     "./src/http_util.cpp"
-    "./src/http_forward.cpp"
     ${VERSION_CPP}
 )
 
@@ -154,6 +154,7 @@ if (WITH_INJECTOR)
         "./src/injector.cpp"
         "./src/connect_to_host.cpp"
         "./src/ouiservice.cpp"
+        "./src/response_part.cpp"
 #        "./src/ouiservice/lampshade.cpp"
         "./src/ouiservice/pt-obfs2.cpp"
         "./src/ouiservice/pt-obfs3.cpp"
@@ -178,7 +179,6 @@ if (WITH_INJECTOR)
         "./src/util/hash.cpp"
         "./src/util.cpp"
         "./src/http_util.cpp"
-        "./src/http_forward.cpp"
     )
 
     add_executable(injector ${injector_sources})

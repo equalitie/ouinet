@@ -7,15 +7,11 @@
 #include <boost/beast/http/dynamic_body.hpp>
 #include <boost/beast/http/message.hpp>
 #include <boost/regex.hpp>
-#include <boost/system/error_code.hpp>
 
 #include "../constants.h"
-#include "../http_util.h"
-#include "../logger.h"
-#include "../session.h"
+#include "../response_reader.h"
 #include "../util/crypto.h"
 #include "../util/hash.h"
-#include "../util/quantized_buffer.h"
 
 #include "../namespaces.h"
 
@@ -54,20 +50,6 @@ namespace ouinet { namespace cache {
 
 // Ouinet-specific declarations for injection using HTTP signatures
 // ----------------------------------------------------------------
-
-namespace http_sign_detail {
-using sig_array_t = util::Ed25519PublicKey::sig_array_t;
-using block_digest_t = util::SHA512::digest_type;
-using opt_sig_array_t = boost::optional<sig_array_t>;
-using opt_block_digest_t = boost::optional<block_digest_t>;
-
-opt_sig_array_t block_sig_from_exts(boost::string_view);
-std::string block_sig_str(boost::string_view, const block_digest_t&);
-std::string block_chunk_ext( boost::string_view, const block_digest_t&
-                           , const util::Ed25519PrivateKey&);
-std::string block_chunk_ext(const opt_sig_array_t&, const opt_block_digest_t&);
-bool check_body(const http::response_header<>&, size_t, util::SHA256&);
-}
 
 // Get an extended version of the given response head
 // with an additional signature header and
@@ -176,260 +158,53 @@ struct HttpBlockSigs {
     boost::optional<HttpBlockSigs> parse(boost::string_view);
 };
 
-// Flush a response from session `in` to stream `out`
-// while signing with the provided private key.
-template<class SinkStream>
-inline
-void
-session_flush_signed( Session& in, SinkStream& out
-                    , const http::request_header<>& rqh
-                    , const std::string& injection_id
-                    , std::chrono::seconds::rep injection_ts
-                    , const ouinet::util::Ed25519PrivateKey& sk
-                    , Cancel& cancel, asio::yield_context yield)
-{
-    auto httpsig_key_id = http_key_id_for_injection(sk.public_key());  // TODO: cache this
+// Allows reading parts of a response from stream `in`
+// while signing with the private key `sk`.
+class SigningReader : public ouinet::http_response::Reader {
+public:
+    SigningReader( GenericStream in
+                 , http::request_header<> rqh
+                 , std::string injection_id
+                 , std::chrono::seconds::rep injection_ts
+                 , ouinet::util::Ed25519PrivateKey sk);
+    ~SigningReader() override;
 
-    bool do_inject = false;
-    http::response_header<> outh;
-    auto hproc = [&] (auto inh, auto&, auto) {
-        auto inh_orig = inh;
-        sys::error_code ec_;
-        inh = util::to_cache_response(move(inh), ec_);
-        if (ec_) return inh_orig;  // will not inject, just proxy
+    boost::optional<ouinet::http_response::Part>
+    async_read_part(Cancel, asio::yield_context) override;
 
-        do_inject = true;
-        inh = cache::http_injection_head( rqh, move(inh)
-                                        , injection_id, injection_ts
-                                        , sk, httpsig_key_id);
-        // We will use the trailer to send the body digest and head signature.
-        assert(http::response<http::empty_body>(inh).chunked());
+    bool
+    is_done() const override;
 
-        outh = inh;
-        return inh;
-    };
+private:
+    struct Impl;
+    std::unique_ptr<Impl> _impl;
+};
 
-    auto xproc = [] (auto, auto&, auto) {
-        // Origin chunk extensions are ignored and dropped
-        // since we have no way to sign them.
-    };
-
-    size_t body_length = 0;
-    size_t block_offset = 0;
-    util::SHA256 body_hash;
-    util::SHA512 block_hash;  // for first block
-    // Simplest implementation: one output chunk per data block.
-    util::quantized_buffer qbuf(http_::response_data_block);
-    ProcDataFunc<asio::const_buffer> dproc = [&] (auto inbuf, auto&, auto) {
-        // Just count transferred data and feed the hash.
-        body_length += inbuf.size();
-        if (do_inject) body_hash.update(inbuf);
-        qbuf.put(inbuf);
-        ProcDataFunc<asio::const_buffer>::result_type ret{
-            (inbuf.size() > 0) ? qbuf.get() : qbuf.get_rest(), {}
-        };  // send rest if no more input
-        if (do_inject && ret.first.size() > 0) {  // if injecting and sending data
-            if (block_offset > 0) {  // add chunk extension for previous block
-                auto block_digest = block_hash.close();
-                ret.second = http_sign_detail::block_chunk_ext(injection_id, block_digest, sk);
-                // Prepare chunk extension for next block: HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])
-                block_hash = {};
-                block_hash.update(block_digest);
-            }  // else HASH[0]=SHA2-512(BLOCK[0])
-            block_hash.update(ret.first);
-            block_offset += ret.first.size();
-        }
-        return ret;  // pass data on, drop origin extensions
-    };
-
-    ProcTrailFunc tproc = [&] (auto intr, auto&, auto) {
-        if (do_inject) {
-            intr = util::to_cache_trailer(move(intr));
-            intr = cache::http_injection_trailer( outh, move(intr)
-                                                , body_length, body_hash.close()
-                                                , sk
-                                                , httpsig_key_id);
-        }
-        ProcTrailFunc::result_type ret{move(intr), {}};
-        if (do_inject) {
-            auto block_digest = block_hash.close();
-            ret.second = http_sign_detail::block_chunk_ext(injection_id, block_digest, sk);
-        }
-        return ret;  // pass trailer on, drop origin extensions
-    };
-
-    sys::error_code ec;
-    in.flush_response( out
-                     , std::move(hproc), std::move(xproc), std::move(dproc), std::move(tproc)
-                     , cancel, yield[ec]);
-    return or_throw(yield, ec);
-}
-
-// Flush a response from session `in` to stream `out`
-// while verifying signatures by the provided public key.
+// Allows reading parts of a response from stream `in`
+// while verifying signatures from the public key `pk`.
 //
-// Fail with error `boost::system::errc::no_message`
-// if the response head failed to be verified or was not acceptable
-// (in which case no data should have been sent to `out`);
-// fail with error `boost::system::errc::bad_message`
-// if verification fails later on
-// (in which case data may have already been sent).
+// The read operation fails with error `boost::system::errc::no_message`
+// if the response head failed to be verified or was not acceptable;
+// or with error `boost::system::errc::bad_message`
+// if verification fails later on.
 //
-// The resulting output contains all the information and formatting needed
+// The resulting output preserves all the information and formatting needed
 // to be verified again.
-template<class SinkStream>
-inline
-void
-session_flush_verified( Session& in, SinkStream& out
-                      , const ouinet::util::Ed25519PublicKey& pk
-                      , Cancel& cancel, asio::yield_context yield)
-{
-    http::response_header<> head;  // keep for refs and later use
-    boost::string_view uri;  // for warnings, should use `Yield::log` instead
-    boost::string_view injection_id;
-    boost::optional<HttpBlockSigs> bs_params;
-    std::unique_ptr<util::quantized_buffer> qbuf;
-    auto hproc = [&] (auto inh, auto&, auto y) {
-        // Verify head signature.
-        head = cache::http_injection_verify(move(inh), pk);
-        if (head.cbegin() == head.cend()) {
-            LOG_WARN("Failed to verify HTTP head signatures");
-            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), head);
-        }
-        uri = head[http_::response_uri_hdr];
-        // Get and validate HTTP block signature parameters.
-        auto bsh = head[http_::response_block_signatures_hdr];
-        if (bsh.empty()) {
-            LOG_WARN("Missing parameters for HTTP data block signatures; uri=", uri);
-            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), head);
-        }
-        bs_params = cache::HttpBlockSigs::parse(bsh);
-        if (!bs_params) {
-            LOG_WARN("Malformed parameters for HTTP data block signatures; uri=", uri);
-            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), head);
-        }
-        if (bs_params->size > http_::response_data_block_max) {
-            LOG_WARN("Size of signed HTTP data blocks is too large: ", bs_params->size, "; uri=", uri);
-            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), head);
-        }
-        // The injection id is also needed to verify block signatures.
-        injection_id = util::http_injection_id(head);
-        if (injection_id.empty()) {
-            LOG_WARN("Missing injection identifier in HTTP head; uri=", uri);
-            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), head);
-        }
-        qbuf = std::make_unique<util::quantized_buffer>(bs_params->size);
-        return head;
-    };
+class VerifyingReader : public ouinet::http_response::Reader {
+public:
+    VerifyingReader(GenericStream in, ouinet::util::Ed25519PublicKey pk);
+    ~VerifyingReader() override;
 
-    http_sign_detail::opt_sig_array_t inbsig, outbsig;
-    auto xproc = [&inbsig, &uri] (auto inx_, auto&, auto) {
-        auto inbsig_ = http_sign_detail::block_sig_from_exts(inx_);
-        if (!inbsig_) return;
+    boost::optional<ouinet::http_response::Part>
+    async_read_part(Cancel, asio::yield_context) override;
 
-        // Capture and keep the latest block signature only.
-        if (inbsig)
-            LOG_WARN("Dropping data block signature; uri=", uri);
-        inbsig = std::move(inbsig_);
-    };
+    bool
+    is_done() const override;
 
-    size_t body_length = 0;
-    size_t block_offset = 0;
-    util::SHA256 body_hash;
-    util::SHA512 block_hash;
-    std::vector<char> lastd_;
-    asio::mutable_buffer lastd;
-    http_sign_detail::opt_block_digest_t inbdig, outbdig;
-    // Simplest implementation: one output chunk per data block.
-    ProcDataFunc<asio::const_buffer> dproc = [&] (auto ind, auto&, auto y) {
-        // Data block is sent when data following it is received
-        // (so process the last data buffer now).
-        body_length += lastd.size();
-        body_hash.update(lastd);
-        qbuf->put(lastd);
-        ProcDataFunc<asio::const_buffer>::result_type ret{
-            (ind.size() > 0) ? qbuf->get() : qbuf->get_rest(), {}
-        };  // send rest if no more input
-        if (ret.first.size() > 0) {  // send last extensions, keep current for next
-            // Verify signature of data block to be sent (fail if missing).
-            if (!inbsig) {
-                LOG_WARN("Missing signature for data block with offset ", block_offset, "; uri=", uri);
-                return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), ret);
-            }
-            // Complete hash for this block; note that HASH[0]=SHA2-512(BLOCK[0])
-            block_hash.update(ret.first);
-            auto block_digest = block_hash.close();
-            auto bsig_str = http_sign_detail::block_sig_str(injection_id, block_digest);
-            if (!bs_params->pk.verify(bsig_str, *inbsig)) {
-                LOG_WARN("Failed to verify data block with offset ", block_offset, "; uri=", uri);
-                return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), ret);
-            }
-
-            ret.second = http_sign_detail::block_chunk_ext(outbsig, outbdig);
-            outbsig = std::move(inbsig);
-            inbsig = {};
-            // Prepare hash for next block: HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])
-            block_hash = {}; block_hash.update(block_digest);
-            block_offset += ret.first.size();
-            // Chain hash is to be sent along the signature of the following block,
-            // so that it may convey the missing information for computing the signing string
-            // if the receiver does not have the previous blocks (e.g. for range requests).
-            // (Bk0) (Sig0 Bk1) (Sig1 Hash0 Bk2) ... (SigN-1 HashN-2 BkN) (SigN HashN-1)
-            outbdig = std::move(inbdig);
-            inbdig = std::move(block_digest);
-        }
-
-        // Save copy of current input data to last data buffer.
-        if (ind.size() > lastd_.size())  // extend storage if needed
-            lastd_.resize(ind.size());
-        lastd = asio::buffer(lastd_.data(), ind.size());
-        asio::buffer_copy(lastd, ind);
-
-        return ret;  // pass data on
-    };
-
-    // If we process trailers, we may have a chance to
-    // detect and signal a body not matching its signed length or digest
-    // before completing its transfer,
-    // so that the receiving end can see that something bad is going on.
-    bool check_body_after = true;
-    ProcTrailFunc tproc = [&] (auto intr, auto&, auto y) {
-        ProcTrailFunc::result_type ret{
-            std::move(intr), http_sign_detail::block_chunk_ext(outbsig, outbdig)};  // pass trailer on
-
-        if (ret.first.cbegin() == ret.first.cend())
-            return ret;  // no headers in trailer
-
-        // Only expected trailer headers are received here, just extend initial head.
-        bool sigs_in_trailer = false;
-        for (const auto& h : ret.first) {
-            auto hn = h.name_string();
-            head.insert(h.name(), hn, h.value());
-            if (boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx))
-                sigs_in_trailer = true;
-        }
-        if (sigs_in_trailer) {
-            head = cache::http_injection_verify(std::move(head), pk);
-            if (head.cbegin() == head.cend())  // bad signature in trailer
-                return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), ret);
-        }
-
-        check_body_after = false;
-        if (!http_sign_detail::check_body(head, body_length, body_hash))
-            return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), ret);
-
-        return ret;
-    };
-
-    sys::error_code ec;
-    in.flush_response( out
-                     , std::move(hproc), std::move(xproc), std::move(dproc), std::move(tproc)
-                     , cancel, yield[ec]);
-    if (!ec && check_body_after)
-        if (!http_sign_detail::check_body(head, body_length, body_hash))
-            ec = sys::errc::make_error_code(sys::errc::bad_message);
-    return or_throw(yield, ec);
-}
+private:
+    struct Impl;
+    std::unique_ptr<Impl> _impl;
+};
 
 
 // Body digest computation as per RFC 3230 and RFC 5843

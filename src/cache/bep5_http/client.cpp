@@ -289,24 +289,18 @@ struct Client::Impl {
                 }
 
                 auto session = load_from_connection(key, opt_con->first, cancel, yield[ec]);
-                auto hdr = session.response_header();
+                auto& hdr = session.response_header();
 
                 if (dbg) {
-                    if (hdr) {
-                        yield.log(*dbg, " Bep5Http: fetch done,",
-                            " ec:", ec.message(), " result:", hdr->result());
-                    } else {
-                        yield.log(*dbg, " Bep5Http: fetch done,",
-                            " ec:", ec.message(), " result: <n/a>");
-                    }
+                    yield.log(*dbg, " Bep5Http: fetch done,",
+                        " ec:", ec.message(), " result:", hdr.result());
                 }
 
                 assert(!cancel || ec == err::operation_aborted);
-                assert(ec || hdr);
 
                 if (cancel) return or_throw<Session>(yield, err::operation_aborted);
 
-                if (ec || hdr->result() == http::status::not_found) {
+                if (ec || hdr.result() == http::status::not_found) {
                     continue;
                 }
 
@@ -347,36 +341,13 @@ struct Client::Impl {
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw<Session>(yield, ec);
 
-        auto src_sink = util::connected_pair(ex, yield[ec]);
-
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<Session>(yield, ec);
-
-        asio::spawn(ex, [ pk = cache_pk
-                        , key = key
-                        , sink = move(src_sink.second)
-                        , con  = move(con)] (auto yield) mutable {
-            Session s(move(con));
-            sys::error_code ec;
-            Cancel cancel;
-
-            cache::session_flush_verified(s, sink, pk, cancel, yield[ec]);
-
-            if ( ec.value() == sys::errc::no_message
-               || ec.value() == sys::errc::bad_message)
-                LOG_WARN( "Failed to verify response against HTTP signatures; url="
-                        , key);
-        });
-
-        Session session(move(src_sink.first));
-        auto hdr_p = session.read_response_header(cancel, yield[ec]);
+        Session::reader_uptr vfy_reader = make_unique<cache::VerifyingReader>(move(con), cache_pk);
+        auto session = Session::create(move(vfy_reader), cancel, yield[ec]);
 
         assert(!cancel || ec == asio::error::operation_aborted);
-        assert(hdr_p || ec);
-        if (cancel)
-            ec = asio::error::operation_aborted;
-        else if ( !ec
-                && !util::http_proto_version_check_trusted(*hdr_p, newest_proto_seen))
+
+        if ( !ec
+            && !util::http_proto_version_check_trusted(session.response_header(), newest_proto_seen))
             // The client expects an injection belonging to a supported protocol version,
             // otherwise we just discard this copy.
             ec = asio::error::not_found;
@@ -476,12 +447,7 @@ struct Client::Impl {
         if (!dk) return or_throw(yield, asio::error::invalid_argument);
         auto path = path_from_key(key);
         auto file = util::atomic_file::make(ex, path, ec);
-        // TODO: Do not verify, just handle storage format.
-        // Verification is not needed here at all
-        // (injectors are trusted and responses from other clients are verified when fetched),
-        // it is just done to get a storage output that respects all signatures
-        // so that we can resend the stored response as is when requested by another client.
-        if (!ec) cache::session_flush_verified(s, *file, cache_pk, cancel, yield[ec]);
+        if (!ec) s.flush_response(*file, cancel, yield[ec]);
         if (!ec) file->commit(ec);
         if (ec) return or_throw(yield, ec);
         LOG_DEBUG( "Bep5Http cache: Flushed to file;"
