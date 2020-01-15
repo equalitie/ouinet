@@ -396,6 +396,8 @@ class MainlineDht {
 
     void set_endpoints(const std::set<udp::endpoint>&);
     void set_endpoint(asio_utp::udp_multiplexer);
+    udp::endpoint set_endpoint(asio_utp::udp_multiplexer, asio::yield_context);
+
 
     std::set<udp::endpoint> local_endpoints() const {
         std::set<udp::endpoint> ret;

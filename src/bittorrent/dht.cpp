@@ -2500,6 +2500,41 @@ void MainlineDht::set_endpoint(asio_utp::udp_multiplexer m)
     });
 }
 
+asio::ip::udp::endpoint
+MainlineDht::set_endpoint( asio_utp::udp_multiplexer m
+                         , asio::yield_context yield)
+{
+    auto local_ep = m.local_endpoint();
+
+    {
+        auto it = _nodes.find(m.local_endpoint());
+        if (it != _nodes.end()) {
+            assert(0);
+            _nodes.erase(it);
+        }
+    }
+
+    auto node = make_unique<dht::DhtNode>(_exec, _storage_dir);
+
+    auto cc = _cancel.connect([&] { node = nullptr; });
+
+    sys::error_code ec;
+    node->start(move(m), yield[ec]);
+
+    assert(!cc || ec == asio::error::operation_aborted);
+    if (cc) ec = asio::error::operation_aborted;
+    if (ec) return or_throw<asio::ip::udp::endpoint>(yield, ec);
+
+    auto wan_ep = node->wan_endpoint();
+
+    assert(!_nodes.count(local_ep));
+    assert(node);
+
+    _nodes[local_ep] = std::move(node);
+
+    return wan_ep;
+}
+
 std::set<udp::endpoint> MainlineDht::tracker_announce(
     NodeID infohash,
     boost::optional<int> port,
