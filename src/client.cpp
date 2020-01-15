@@ -140,20 +140,27 @@ public:
         return *_udp_multiplexer;
     }
 
-    std::shared_ptr<bt::MainlineDht> bittorrent_dht()
+    std::shared_ptr<bt::MainlineDht> bittorrent_dht(asio::yield_context yield)
     {
         if (_bt_dht) return _bt_dht;
 
-        _bt_dht = make_shared<bt::MainlineDht>( _ctx.get_executor()
-                                              , _config.repo_root() / "dht");
+        auto bt_dht = make_shared<bt::MainlineDht>( _ctx.get_executor()
+                                                  , _config.repo_root() / "dht");
 
-        sys::error_code ec;
+        auto& mpl = common_udp_multiplexer();
+
         asio_utp::udp_multiplexer m(_ctx);
-        m.bind(common_udp_multiplexer(), ec);
-        assert(!ec);
+        sys::error_code ec;
 
-        _bt_dht->set_endpoint(move(m));
+        m.bind(mpl, ec);
+        if (ec) return or_throw(yield, ec, _bt_dht);
 
+        auto ext_ep = bt_dht->set_endpoint(move(m), yield[ec]);
+        if (ec) return or_throw(yield, ec, _bt_dht);
+
+        setup_upnp(ext_ep.port(), mpl.local_endpoint());
+
+        _bt_dht = move(bt_dht);
         return _bt_dht;
     }
 
@@ -232,30 +239,35 @@ private:
 
     void serve_utp_request(GenericStream, Yield);
 
-    void setup_upnp(const std::set<asio::ip::udp::endpoint>& eps) {
-        auto ex = _ctx.get_executor();
-
-        for (auto ep : eps) {
-            if (!ep.address().is_v4()) continue;
-            auto& p = _upnps[ep];
-            if (p) continue;
-            p = make_unique<UPnPUpdater>(ex, ep.port());
+    void setup_upnp(uint16_t ext_port, asio::ip::udp::endpoint local_ep) {
+        if (!local_ep.address().is_v4()) {
+            LOG_WARN("Not setting up UPnP redirection because endpoint is not ipv4");
+            return;
         }
+
+        auto& p = _upnps[local_ep];
+
+        if (p) {
+            LOG_WARN("UPnP redirection for ", local_ep, " is already set");
+            return;
+        }
+
+        p = make_unique<UPnPUpdater>(_ctx.get_executor(), ext_port, local_ep.port());
     }
 
-    void idempotent_start_accepting_on_utp() {
+    void idempotent_start_accepting_on_utp(asio::yield_context yield) {
         if (_multi_utp_server) return;
         assert(!_shutdown_signal);
 
-        auto dht = bittorrent_dht();
+        sys::error_code ec;
+        auto dht = bittorrent_dht(yield[ec]);
+        if (ec) return or_throw(yield, ec);
 
         auto exec = _ctx.get_executor();
         auto local_eps = dht->local_endpoints();
 
         _multi_utp_server
             = make_unique<ouiservice::MultiUtpServer>(exec, local_eps, nullptr);
-
-        setup_upnp(local_eps);
 
         asio::spawn(_ctx, [&, c = _shutdown_signal] (asio::yield_context yield) mutable {
             auto slot = c.connect([&] () mutable { _multi_utp_server = nullptr; });
@@ -1471,8 +1483,14 @@ void Client::State::setup_cache()
 
             sys::error_code ec;
 
+            auto dht = bittorrent_dht(yield[ec]);
+            if (ec) {
+                LOG_ERROR("Failed to initialize BT DHT ", ec.message());
+                return;
+            }
+
             _bep5_http_cache
-                = cache::bep5_http::Client::build( bittorrent_dht()
+                = cache::bep5_http::Client::build( dht
                                                  , *_config.cache_http_pub_key()
                                                  , _config.repo_root()/"bep5_http"
                                                  , logger.get_threshold()
@@ -1483,7 +1501,11 @@ void Client::State::setup_cache()
                          , ec.message());
             }
 
-            idempotent_start_accepting_on_utp();
+            idempotent_start_accepting_on_utp(yield[ec]);
+
+            if (ec) {
+                LOG_ERROR("Failed to start accepting on uTP ", ec.message());
+            }
         });
     }
 }
@@ -1711,15 +1733,25 @@ void Client::State::setup_injector(asio::yield_context yield)
         client = maybe_wrap_tls(move(utp_client));
     } else if (injector_ep->type == Endpoint::Bep5Endpoint) {
 
+        sys::error_code ec;
+        auto dht = bittorrent_dht(yield[ec]);
+        if (ec) {
+            LOG_ERROR("Failed to set up Bep5Client at setting up BT DHT ", ec.message());
+        }
+
         _bep5_client = make_shared<ouiservice::Bep5Client>
-            ( bittorrent_dht()
+            ( dht
             , injector_ep->endpoint_string
             , injector_helpers_swarm_name
             , &inj_ctx);
 
         client = make_unique<ouiservice::WeakOuiServiceClient>(_bep5_client);
 
-        idempotent_start_accepting_on_utp();
+        idempotent_start_accepting_on_utp(yield[ec]);
+
+        if (ec) {
+            LOG_ERROR("Failed to start accepting on uTP ", ec.message());
+        }
 /*
     } else if (injector_ep->type == Endpoint::LampshadeEndpoint) {
         auto lampshade_client = make_unique<ouiservice::LampshadeOuiServiceClient>(_ctx, injector_ep->endpoint_string);
