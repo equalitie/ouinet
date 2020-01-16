@@ -7,7 +7,7 @@ namespace ouinet {
 
 class Session {
 public:
-    using reader_uptr = std::unique_ptr<http_response::Reader>;
+    using reader_uptr = std::unique_ptr<http_response::AbstractReader>;
 
 public:
     Session() = default;
@@ -21,12 +21,15 @@ public:
     // Construct the session and read response head
     static Session create(GenericStream, Cancel, asio::yield_context);
     static Session create(reader_uptr&&, Cancel, asio::yield_context);
+    static Session create_from_reader(reader_uptr&&, Cancel, asio::yield_context);
 
           http_response::Head& response_header()       { return _head; }
     const http_response::Head& response_header() const { return _head; }
 
     template<class SinkStream>
     void flush_response(SinkStream&, Cancel&, asio::yield_context);
+    template<class Handler>
+    void flush_response(Cancel&, asio::yield_context, Handler&& h);
 
     bool is_open() const {
         return _reader->is_open();
@@ -57,7 +60,7 @@ Session Session::create(GenericStream con, Cancel cancel, asio::yield_context yi
 {
     assert(!cancel);
 
-    auto reader = std::make_unique<http_response::Reader>(std::move(con));
+    reader_uptr reader = std::make_unique<http_response::Reader>(std::move(con));
 
     return Session::create(std::move(reader), cancel, yield);
 }
@@ -65,6 +68,13 @@ Session Session::create(GenericStream con, Cancel cancel, asio::yield_context yi
 inline
 Session Session::create( reader_uptr&& reader
                        , Cancel cancel, asio::yield_context yield)
+{
+    return create_from_reader(std::move(reader), cancel, yield);
+}
+
+inline
+Session Session::create_from_reader( reader_uptr&& reader
+                                   , Cancel cancel, asio::yield_context yield)
 {
     assert(!cancel);
 
@@ -109,6 +119,28 @@ Session::flush_response(SinkStream& sink,
         return_or_throw_on_error(yield, cancel, ec);
         if (!opt_part) break;
         opt_part->async_write(sink, cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec);
+    }
+}
+
+template<class Handler>
+inline
+void
+Session::flush_response(Cancel& cancel,
+                        asio::yield_context yield,
+                        Handler&& h)
+{
+    sys::error_code ec;
+
+    h(http_response::Part{std::move(_head)}, cancel, yield[ec]);
+    return_or_throw_on_error(yield, cancel, ec);
+
+    while (true) {
+        auto opt_part = _reader->async_read_part(cancel, yield[ec]);
+        assert(ec != http::error::end_of_stream);
+        return_or_throw_on_error(yield, cancel, ec);
+        if (!opt_part) break;
+        h(std::move(*opt_part), cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec);
     }
 }

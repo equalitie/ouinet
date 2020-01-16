@@ -34,6 +34,7 @@
 #include "defer.h"
 #include "default_timeout.h"
 #include "constants.h"
+#include "util/async_queue_reader.h"
 #include "session.h"
 #include "create_udp_multiplexer.h"
 #include "ssl/ca_certificate.h"
@@ -65,7 +66,6 @@
 #include "util/lru_cache.h"
 #include "util/scheduler.h"
 #include "util/connected_pair.h"
-#include "stream/fork.h"
 #include "upnp.h"
 
 #include "logger.h"
@@ -971,13 +971,11 @@ public:
                         break;
                     }
 
-                    using Fork = stream::Fork<GenericStream>;
+                    auto exec = ctx.get_executor();
 
-                    tcp::socket source(ctx), sink(ctx);
-                    tie(source, sink) = util::connected_pair(ctx.get_executor(), yield);
+                    using http_response::Part;
 
-                    Fork fork(move(source));
-                    Fork::Tine src1(fork), src2(fork);
+                    util::AsyncQueue<boost::optional<Part>> q1(exec), q2(exec);
 
                     WaitCondition wc(ctx);
 
@@ -987,7 +985,8 @@ public:
                     ] (asio::yield_context yield_) {
                       auto y = yield.detach(yield_);
                       sys::error_code ec;
-                      Session s1 = Session::create(move(src1), cancel, y[ec]);
+                      auto r = std::make_unique<AsyncQueueReader>(q1);
+                      Session s1 = Session::create_from_reader(std::move(r), cancel, y[ec]);
                       if (!ec) store(rq, s1, cancel, y[ec]);
                     });
 
@@ -996,17 +995,23 @@ public:
                         lock = wc.lock()
                     ] (asio::yield_context yield_) {
                         sys::error_code ec;
-                        Session s2 = Session::create(move(src2), cancel, yield_[ec]);
+                        auto r = std::make_unique<AsyncQueueReader>(q2);
+                        Session s2 = Session::create_from_reader(std::move(r), cancel, yield_[ec]);
                         if (!ec) s2.flush_response(con, cancel, yield_[ec]);
                     });
 
-                    s.flush_response(sink, cancel, yield[ec]);
+                    s.flush_response(cancel, yield[ec],
+                        [&] ( Part&& part
+                            , Cancel& cancel
+                            , asio::yield_context yield)
+                        {
+                            q1.push_back(part);
+                            q2.push_back(std::move(part));
+                        });
 
-                    // Abort store and forward tasks on error.
-                    if (ec) {
-                        sink.close();
-                        fork.close();
-                    }
+                    q1.push_back(boost::none);
+                    q2.push_back(boost::none);
+
                     wc.wait(yield);
 
                     bool keep_alive = !ec && rq.keep_alive() && s.keep_alive();

@@ -11,7 +11,16 @@
 
 namespace ouinet { namespace http_response {
 
-class Reader {
+class AbstractReader {
+public:
+    virtual boost::optional<Part> async_read_part(Cancel, asio::yield_context) = 0;
+    virtual bool is_done() const = 0;
+    virtual bool is_open() const = 0;
+    virtual void close()   = 0;
+    virtual ~AbstractReader() = default;
+};
+
+class Reader : public AbstractReader {
 private:
     static const size_t http_forward_block = 16384;
     using string_view = boost::string_view;
@@ -30,12 +39,12 @@ public:
     //
     // Head >> Body* >> boost::none*
     //
-    virtual boost::optional<Part> async_read_part(Cancel, asio::yield_context);
-    virtual bool is_done() const { return _is_done; }
+    boost::optional<Part> async_read_part(Cancel, asio::yield_context) override;
+    bool is_done() const override { return _is_done; }
 
     // This leaves the reader in an undefined state,
     // do not use afterwards.
-    virtual GenericStream release_stream();
+    GenericStream release_stream();
 
     void restart()
     {
@@ -48,8 +57,8 @@ public:
         setup_parser();
     }
 
-    bool is_open() const { return _in.is_open(); }
-    void close()         { return _in.close(); }
+    bool is_open() const override { return _in.is_open(); }
+    void close()         override { return _in.close(); }
 
 private:
     http::fields filter_trailer_fields(const http::fields& hdr)
