@@ -7,6 +7,7 @@ namespace ouinet { namespace bittorrent {
 
 inline bool is_martian(const asio::ip::udp::endpoint& ep) {
     if (ep.port() == 0) return true;
+    if (ep.port() == 1) return true;
     auto addr = ep.address();
 
     if (addr.is_v4()) {
