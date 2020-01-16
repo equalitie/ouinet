@@ -66,7 +66,6 @@
 #include "util/lru_cache.h"
 #include "util/scheduler.h"
 #include "util/connected_pair.h"
-#include "stream/fork.h"
 #include "upnp.h"
 
 #include "logger.h"
