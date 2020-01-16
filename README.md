@@ -249,7 +249,7 @@ You will need around 3 GiB of disk space.
 You may use the `Dockerfile` as included in Ouinet's source code, or you
 can just [download it][Dockerfile].  Then build the image by running:
 
-    $ sudo docker build -t equalitie/ouinet:latest .
+    $ sudo docker build -t equalitie/ouinet:latest - < Dockerfile
 
 That command will build a default recommended version, which you can override
 with `--build-arg OUINET_VERSION=<VERSION>`.
