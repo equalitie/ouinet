@@ -7,7 +7,7 @@ namespace ouinet {
 
 class Session {
 public:
-    using reader_uptr = std::unique_ptr<http_response::Reader>;
+    using reader_uptr = std::unique_ptr<http_response::AbstractReader>;
 
 public:
     Session() = default;
@@ -57,7 +57,7 @@ Session Session::create(GenericStream con, Cancel cancel, asio::yield_context yi
 {
     assert(!cancel);
 
-    auto reader = std::make_unique<http_response::Reader>(std::move(con));
+    reader_uptr reader = std::make_unique<http_response::Reader>(std::move(con));
 
     return Session::create(std::move(reader), cancel, yield);
 }
