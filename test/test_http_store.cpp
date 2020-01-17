@@ -4,7 +4,14 @@
 #include <array>
 #include <string>
 
+#include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/read.hpp>
+#include <boost/asio/spawn.hpp>
+#include <boost/asio/write.hpp>
+
 #include <cache/http_sign.h>
+#include <response_part.h>
+#include <util/connected_pair.h>
 
 #include <namespaces.h>
 
@@ -101,5 +108,81 @@ static const array<string, 3> rs_block_sig{
     "c+ZJUJI/kc81q8sLMhwe813Zdc+VPa4DejdVkO5ZhdIPPojbZnRt8OMyFMEiQtHYHXrZIK2+pKj2AO03j70TBA==",
     "m6sz1NpU/8iF6KNN6drY+Yk361GiW0lfa0aaX5TH0GGW/L5GsHyg8ozA0ejm29a+aTjp/qIoI1VrEVj1XG/gDA==",
 };
+
+static const array<string, 4> rs_chunk_ext{
+    "",
+    ";ouisig=\"" + rs_block_sig[0] + "\"",
+    ";ouisig=\"" + rs_block_sig[1] + "\"",
+    ";ouisig=\"" + rs_block_sig[2] + "\"",
+};
+
+template<class F>
+static void run_spawned(asio::io_context& ctx, F&& f) {
+    asio::spawn(ctx, [&ctx, f = forward<F>(f)] (auto yield) {
+            try {
+                f(yield);
+            }
+            catch (const std::exception& e) {
+                BOOST_ERROR(string("Test ended with exception: ") + e.what());
+            }
+        });
+    ctx.run();
+}
+
+BOOST_AUTO_TEST_CASE(test_write_response) {
+    asio::io_context ctx;
+    run_spawned(ctx, [&] (auto yield) {
+        WaitCondition wc(ctx);
+
+        asio::ip::tcp::socket
+            signed_w(ctx), signed_r(ctx);
+        tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
+
+        // Send signed response.
+        asio::spawn(ctx, [&signed_w, lock = wc.lock()] (auto y) {
+            // Head (raw).
+            asio::async_write( signed_w
+                             , asio::const_buffer(rs_head.data(), rs_head.size())
+                             , y);
+
+            // Chunk headers and bodies (one chunk per block).
+            unsigned bi;
+            for (bi = 0; bi < rs_block_data.size(); ++bi) {
+                auto const& cb = rs_block_data[bi];
+                auto ch = http_response::ChunkHdr(cb.size(), rs_chunk_ext[bi]);
+                ch.async_write(signed_w, y);
+                asio::async_write( signed_w
+                                 , asio::const_buffer(cb.data(), cb.size())
+                                 , y);
+            }
+
+            // Last chunk and trailer (raw).
+            auto chZ = http_response::ChunkHdr(0, rs_chunk_ext[bi]);
+            chZ.async_write(signed_w, y);
+            asio::async_write( signed_w
+                             , asio::const_buffer(rs_trailer.data(), rs_trailer.size())
+                             , y);
+
+            signed_w.close();
+        });
+
+        // TODO: store response
+
+        // Black hole.
+        asio::spawn(ctx, [&signed_r, lock = wc.lock()] (auto y) {
+            char d[2048];
+            asio::mutable_buffer b(d, sizeof(d));
+
+            sys::error_code e;
+            while (!e) asio::async_read(signed_r, b, y[e]);
+            BOOST_REQUIRE(e == asio::error::eof || !e);
+            signed_r.close();
+        });
+
+        wc.wait(yield);
+
+        // TODO: check stored data
+    });
+}
 
 BOOST_AUTO_TEST_SUITE_END()
