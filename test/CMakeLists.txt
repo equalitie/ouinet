@@ -121,3 +121,9 @@ add_executable(test-http-sign
     "../src/util/hash.cpp"
 )
 target_link_libraries(test-http-sign lib::gcrypt lib::uri)
+
+######################################################################
+add_executable(test-http-store
+    "test_http_store.cpp"
+    "../src/cache/http_store.cpp"
+)
