@@ -91,8 +91,8 @@ private:
 
     void mapping_enabled() {
         if (!_mapping_is_active) {
-            LOG_INFO("UPnP mapping enabled EXT port:", _external_port
-                    , " INT port:", _internal_port);
+            LOG_INFO("UPnP mapping enabled UDP EXT_PORT:", _external_port
+                    , " INT_PORT:", _internal_port);
         }
         _mapping_is_active = true;
     }
