@@ -133,6 +133,9 @@ static void run_spawned(asio::io_context& ctx, F&& f) {
 }
 
 BOOST_AUTO_TEST_CASE(test_write_response) {
+    // This test knows about the internals of this particular format.
+    BOOST_CHECK_EQUAL(cache::http_store_version, 1);
+
     auto tmpdir = fs::unique_path();
     auto rmdir = defer([&tmpdir] {
         sys::error_code ec;
