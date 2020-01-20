@@ -74,10 +74,8 @@ add_subdirectory(./modules/asio-utp)
 add_library(lib::asio_utp ALIAS asio_utp)
 
 ###########################################################
-set(CPP_UPNP_WITH_TESTS    OFF CACHE BOOL "")
-set(CPP_UPNP_WITH_EXAMPLES OFF CACHE BOOL "")
-add_subdirectory(./modules/cpp-upnp)
-add_library(lib::cpp_upnp ALIAS cpp_upnp)
+set(CPPUPnP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/modules/cpp-upnp)
+find_package(CPPUPnP REQUIRED)
 ###########################################################
 
 add_subdirectory(./src/ouiservice/i2p)
@@ -137,7 +135,7 @@ target_link_libraries(client
         Boost::asio_ssl
         Boost::iostreams
         lib::asio_utp
-        lib::cpp_upnp
+        cpp_upnp
         lib::gcrypt
         lib::json
         lib::uri
