@@ -133,6 +133,13 @@ static void run_spawned(asio::io_context& ctx, F&& f) {
     ctx.run();
 }
 
+static const string rs_head_complete =
+    ( _rs_head_origin
+    + _rs_head_injection
+    + _rs_head_digest
+    + _rs_head_sig1
+    + "\r\n");
+
 BOOST_AUTO_TEST_CASE(test_write_response) {
     // This test knows about the internals of this particular format.
     BOOST_CHECK_EQUAL(cache::http_store_version, 1);
@@ -188,16 +195,35 @@ BOOST_AUTO_TEST_CASE(test_write_response) {
         });
 
         wc.wait(yield);
-    });
 
-    // TODO: actually check stored data
-    sys::error_code ec;
-    auto headf = util::file_io::open_readonly(ctx.get_executor(), tmpdir / "head", ec);
-    BOOST_CHECK_EQUAL(ec.message(), "Success");
-    auto bodyf = util::file_io::open_readonly(ctx.get_executor(), tmpdir / "body", ec);
-    BOOST_CHECK_EQUAL(ec.message(), "Success");
-    auto sigsf = util::file_io::open_readonly(ctx.get_executor(), tmpdir / "sigs", ec);
-    BOOST_CHECK_EQUAL(ec.message(), "Success");
+        auto read_file = [&] (auto fname, auto c, auto y) -> string {
+            sys::error_code e;
+            auto f = util::file_io::open_readonly(ctx.get_executor(), tmpdir / fname, e);
+            if (e) return or_throw(y, e, "");
+
+            size_t fsz = util::file_io::file_size(f, e);
+            if (e) return or_throw(y, e, "");
+
+            std::string fdata(fsz, '\0');
+            util::file_io::read(f, asio::buffer(fdata), c, y[e]);
+            return_or_throw_on_error(y, c, e, "");
+
+            return fdata;
+        };
+
+        Cancel cancel;
+        sys::error_code ec;
+
+        auto head = read_file("head", cancel, yield[ec]);
+        BOOST_CHECK_EQUAL(ec.message(), "Success");
+        BOOST_CHECK_EQUAL(head, rs_head_complete);
+
+        // TODO: actually check stored data
+        auto body = read_file("body", cancel, yield[ec]);
+        BOOST_CHECK_EQUAL(ec.message(), "Success");
+        auto sigs = read_file("sigs", cancel, yield[ec]);
+        BOOST_CHECK_EQUAL(ec.message(), "Success");
+    });
 }
 
 BOOST_AUTO_TEST_SUITE_END()
