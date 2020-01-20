@@ -5,11 +5,13 @@
 #include <string>
 
 #include <boost/asio/ip/tcp.hpp>
-#include <boost/asio/read.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/write.hpp>
+#include <boost/filesystem.hpp>
 
 #include <cache/http_sign.h>
+#include <cache/http_store.h>
+#include <defer.h>
 #include <response_part.h>
 #include <util/bytes.h>
 #include <util/connected_pair.h>
@@ -131,6 +133,13 @@ static void run_spawned(asio::io_context& ctx, F&& f) {
 }
 
 BOOST_AUTO_TEST_CASE(test_write_response) {
+    auto tmpdir = fs::unique_path();
+    auto rmdir = defer([&tmpdir] {
+        sys::error_code ec;
+        fs::remove_all(tmpdir, ec);
+    });
+    fs::create_directory(tmpdir);
+
     asio::io_context ctx;
     run_spawned(ctx, [&] (auto yield) {
         WaitCondition wc(ctx);
@@ -166,17 +175,12 @@ BOOST_AUTO_TEST_CASE(test_write_response) {
             signed_w.close();
         });
 
-        // TODO: store response
-
-        // Black hole.
-        asio::spawn(ctx, [&signed_r, lock = wc.lock()] (auto y) {
-            char d[2048];
-            asio::mutable_buffer b(d, sizeof(d));
-
-            sys::error_code e;
-            while (!e) asio::async_read(signed_r, b, y[e]);
-            BOOST_REQUIRE(e == asio::error::eof || !e);
-            signed_r.close();
+        // Store response.
+        asio::spawn(ctx, [ signed_r = std::move(signed_r), &tmpdir
+                         , lock = wc.lock()] (auto y) mutable {
+            Cancel c;
+            http_response::Reader signed_rr(std::move(signed_r));
+            cache::http_store(signed_rr, tmpdir, c, y);
         });
 
         wc.wait(yield);
