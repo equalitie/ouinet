@@ -14,6 +14,7 @@
 #include <defer.h>
 #include <response_part.h>
 #include <util/bytes.h>
+#include <util/file_io.h>
 #include <util/connected_pair.h>
 
 #include <namespaces.h>
@@ -180,16 +181,23 @@ BOOST_AUTO_TEST_CASE(test_write_response) {
 
         // Store response.
         asio::spawn(ctx, [ signed_r = std::move(signed_r), &tmpdir
-                         , lock = wc.lock()] (auto y) mutable {
+                         , &ctx, lock = wc.lock()] (auto y) mutable {
             Cancel c;
             http_response::Reader signed_rr(std::move(signed_r));
-            cache::http_store(signed_rr, tmpdir, c, y);
+            cache::http_store(signed_rr, tmpdir, ctx.get_executor(), c, y);
         });
 
         wc.wait(yield);
-
-        // TODO: check stored data
     });
+
+    // TODO: actually check stored data
+    sys::error_code ec;
+    auto headf = util::file_io::open_readonly(ctx.get_executor(), tmpdir / "head", ec);
+    BOOST_CHECK_EQUAL(ec.message(), "Success");
+    auto bodyf = util::file_io::open_readonly(ctx.get_executor(), tmpdir / "body", ec);
+    BOOST_CHECK_EQUAL(ec.message(), "Success");
+    auto sigsf = util::file_io::open_readonly(ctx.get_executor(), tmpdir / "sigs", ec);
+    BOOST_CHECK_EQUAL(ec.message(), "Success");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

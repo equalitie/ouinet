@@ -1,5 +1,6 @@
 #pragma once
 
+#include <boost/asio/executor.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/filesystem/path.hpp>
 
@@ -21,6 +22,6 @@ static const unsigned http_store_version = 1;
 // The directory must already exist and be writable.
 // Trying to overwrite existing files will cause an error.
 void http_store( http_response::AbstractReader&, const fs::path&
-               , Cancel, asio::yield_context);
+               , const asio::executor&, Cancel, asio::yield_context);
 
 }} // namespaces
