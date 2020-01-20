@@ -3,7 +3,7 @@
 namespace ouinet { namespace cache {
 
 void
-http_store( Session&, const fs::path&
+http_store( http_response::AbstractReader&, const fs::path&
           , Cancel, asio::yield_context)
 {
     // TODO: implement
