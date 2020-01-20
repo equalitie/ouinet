@@ -11,6 +11,7 @@
 
 #include <cache/http_sign.h>
 #include <response_part.h>
+#include <util/bytes.h>
 #include <util/connected_pair.h>
 
 #include <namespaces.h>
@@ -148,12 +149,11 @@ BOOST_AUTO_TEST_CASE(test_write_response) {
             // Chunk headers and bodies (one chunk per block).
             unsigned bi;
             for (bi = 0; bi < rs_block_data.size(); ++bi) {
-                auto const& cb = rs_block_data[bi];
-                auto ch = http_response::ChunkHdr(cb.size(), rs_chunk_ext[bi]);
+                auto cbd = util::bytes::to_vector<uint8_t>(rs_block_data[bi]);
+                auto ch = http_response::ChunkHdr(cbd.size(), rs_chunk_ext[bi]);
                 ch.async_write(signed_w, y);
-                asio::async_write( signed_w
-                                 , asio::const_buffer(cb.data(), cb.size())
-                                 , y);
+                auto cb = http_response::ChunkBody(std::move(cbd), 0);
+                cb.async_write(signed_w, y);
             }
 
             // Last chunk and trailer (raw).
