@@ -99,7 +99,8 @@ public:
             head.insert(th.name(), th.name_string(), th.value());
 
         sys::error_code ec;
-        util::file_io::truncate(*headf, 0, ec);
+        util::file_io::fseek(*headf, 0, ec);
+        if (!ec) util::file_io::truncate(*headf, 0, ec);
         if (!ec) head.async_write(*headf, cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec);
     }
