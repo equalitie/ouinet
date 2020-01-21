@@ -120,6 +120,84 @@ http_injection_trailer( const http::response_header<>& rsh
     return rst;
 }
 
+static
+void
+insert_trailer(const http::fields::value_type& th, http::response_header<>& head)
+{
+    auto thn = th.name_string();
+    auto thv = th.value();
+    if (!boost::regex_match(thn.begin(), thn.end(), http_::response_signature_hdr_rx)) {
+        head.insert(th.name(), thn, thv);
+        return;
+    }
+
+    // Signature, look for redundant signatures in head.
+    // It is redundant if it has the same `keyId` and not-longer `headers`
+    // (simplified heuristic). <- TODO: check for strict subset of headers
+    static const std::string keyid_rx_("\bkeyId=\"[^\"]*\"");
+    static const boost::regex keyid_rx(keyid_rx_);
+    boost::cmatch thk_match;
+    boost::regex_match(thv.begin(), thv.end(), thk_match, keyid_rx);
+    assert(!thk_match.empty());
+    auto thk = thk_match[0];
+
+    static const std::string headers_rx_("\bheaders=\"[^\"]*\"");
+    static const boost::regex headers_rx(headers_rx_);
+    boost::cmatch thh_match;
+    boost::regex_match(thv.begin(), thv.end(), thh_match, headers_rx);
+    assert(!thh_match.empty());
+    auto thh = thh_match[0];
+
+    bool insert = true;
+    for (auto hit = head.begin(); hit != head.end();) {
+        auto hn = hit->name_string();
+        auto hv = hit->value();
+        if (!boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx)) {
+            ++hit;
+            continue;
+        }
+
+        boost::cmatch hk_match;
+        boost::regex_match(hv.begin(), hv.end(), hk_match, keyid_rx);
+        assert(!hk_match.empty());
+        auto hk = hk_match[0];
+
+        if (thk != hk) {  // sig from different key
+            ++hit;
+            continue;
+        }
+
+        boost::cmatch hh_match;
+        boost::regex_match(hv.begin(), hv.end(), hh_match, headers_rx);
+        assert(!hh_match.empty());
+        auto hh = hh_match[0];
+
+        if (hh.length() > thh.length()) {  // inserted signature is redundant
+            insert = false;  // do not insert
+            ++hit;
+            continue;  // there may be other redundant signatures
+        }
+
+        hit = head.erase(hit);  // found redundant signature, remove
+    }
+
+    if (insert)
+        head.insert(th.name(), thn, thv);
+}
+
+http::response_header<>
+http_injection_merge( http::response_header<> rsh
+                    , const http::fields& rst)
+{
+    rsh = without_framing(std::move(rsh));
+
+    // Extend the head with trailer headers.
+    for (const auto& th : rst)
+        insert_trailer(th, rsh);
+
+    return rsh;
+}
+
 http::response_header<>
 http_injection_verify( http::response_header<> rsh
                      , const util::Ed25519PublicKey& pk)
