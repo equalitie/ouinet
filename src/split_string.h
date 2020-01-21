@@ -1,5 +1,7 @@
 #pragma once
 
+#include <iterator>
+
 #include <boost/beast/core/string.hpp>
 #include "namespaces.h"
 
@@ -26,10 +28,13 @@ class SplitString {
 public:
     using value_type = string_view;
 
-    struct const_iterator {
+    struct const_iterator : public std::iterator<std::input_iterator_tag, string_view> {
         string_view body;
         string_view rest;
         char separator;
+
+        const_iterator(string_view body, string_view rest, char separator)
+            : body(body), rest(rest), separator(separator) {}
 
         string_view operator*() const;
         const_iterator& operator++(); // prefix
