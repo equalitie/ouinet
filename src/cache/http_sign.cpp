@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <map>
 #include <queue>
+#include <set>
 #include <sstream>
 #include <tuple>
 #include <utility>
@@ -120,6 +121,30 @@ http_injection_trailer( const http::response_header<>& rsh
     return rst;
 }
 
+static inline
+std::set<SplitString::value_type>
+sig_headers_set(const boost::string_view& headers)
+{
+    auto hs = SplitString(headers, ' ');
+    return {hs.begin(), hs.end()};
+}
+
+template<class SortedSet>
+static
+bool
+is_strict_subset_of(const SortedSet& sub, const SortedSet& super)
+{
+    if (sub.size() >= super.size())
+        return false;
+
+    typename SortedSet::const_iterator subit, superit;
+    for (subit = sub.begin(), superit = super.begin(); subit != sub.end(); ++subit, ++superit)
+        if (*subit != *superit)
+            return false;
+
+    return true;
+}
+
 static
 void
 insert_trailer(const http::fields::value_type& th, http::response_header<>& head)
@@ -132,10 +157,11 @@ insert_trailer(const http::fields::value_type& th, http::response_header<>& head
     }
 
     // Signature, look for redundant signatures in head.
-    // It is redundant if it has the same `keyId` and not-longer `headers`
-    // (simplified heuristic). <- TODO: check for strict subset of headers
+    // It is redundant if it has the same `keyId` and not a superset of `headers`
+    // (simplified heuristic). <- TODO: check for signature time stamp too
     auto thsig = HttpSignature::parse(thv);
     assert(thsig);
+    auto ths_hdrs = sig_headers_set(thsig->headers);
 
     bool insert = true;
     for (auto hit = head.begin(); hit != head.end();) {
@@ -154,7 +180,8 @@ insert_trailer(const http::fields::value_type& th, http::response_header<>& head
             continue;
         }
 
-        if (hsig->headers.size() > thsig->headers.size()) {  // inserted signature is redundant
+        auto hs_hdrs = sig_headers_set(hsig->headers);
+        if (is_strict_subset_of(ths_hdrs, hs_hdrs)) {  // inserted signature is redundant
             insert = false;  // do not insert
             ++hit;
             continue;  // there may be other redundant signatures
