@@ -2,6 +2,7 @@
 #include <boost/test/included/unit_test.hpp>
 
 #include <array>
+#include <sstream>
 #include <string>
 
 #include <boost/asio/ip/tcp.hpp>
@@ -145,6 +146,16 @@ static const string rs_body_complete =
     + rs_block_data[1]
     + rs_block_data[2]);
 
+static string rs_sigs_complete() {
+    stringstream ss;
+    ss << hex;
+    for (size_t b = 0; b < rs_block_data.size(); ++b)
+        ss << (b * http_::response_data_block)
+           << ' ' << rs_block_sig[b] << ' ' << rs_block_hash[b]
+           << endl;
+    return ss.str();
+}
+
 BOOST_AUTO_TEST_CASE(test_write_response) {
     // This test knows about the internals of this particular format.
     BOOST_CHECK_EQUAL(cache::http_store_version, 1);
@@ -227,9 +238,9 @@ BOOST_AUTO_TEST_CASE(test_write_response) {
         BOOST_CHECK_EQUAL(ec.message(), "Success");
         BOOST_CHECK_EQUAL(body, rs_body_complete);
 
-        // TODO: actually check stored data
         auto sigs = read_file("sigs", cancel, yield[ec]);
         BOOST_CHECK_EQUAL(ec.message(), "Success");
+        BOOST_CHECK_EQUAL(sigs, rs_sigs_complete());
     });
 }
 
