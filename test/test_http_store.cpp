@@ -102,9 +102,9 @@ static const array<string, 3> rs_block_data{
 };
 
 static const array<string, 3> rs_block_hash{
+    "",
     "aERfr5o+kpvR4ZH7xC0mBJ4QjqPUELDzjmzt14WmntxH2p3EQmATZODXMPoFiXaZL6KNI50Ve4WJf/x3ma4ieA==",
     "slwciqMQBddB71VWqpba+MpP9tBiyTE/XFmO5I1oiVJy3iFniKRkksbP78hCEWOM6tH31TGEFWP1loa4pqrLww==",
-    "vyUR6T034qN7qDZO5vUILMP9FsJYPys1KIELlGDFCSqSFI7ZowrT3U9ffwsQAZSCLJvKQhT+GhtO0aM2jNnm5A==",
 };
 
 static const array<string, 3> rs_block_sig{
