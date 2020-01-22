@@ -140,6 +140,11 @@ static const string rs_head_complete =
     + _rs_head_sig1
     + "\r\n");
 
+static const string rs_body_complete =
+    ( rs_block_data[0]
+    + rs_block_data[1]
+    + rs_block_data[2]);
+
 BOOST_AUTO_TEST_CASE(test_write_response) {
     // This test knows about the internals of this particular format.
     BOOST_CHECK_EQUAL(cache::http_store_version, 1);
@@ -218,9 +223,11 @@ BOOST_AUTO_TEST_CASE(test_write_response) {
         BOOST_CHECK_EQUAL(ec.message(), "Success");
         BOOST_CHECK_EQUAL(head, rs_head_complete);
 
-        // TODO: actually check stored data
         auto body = read_file("body", cancel, yield[ec]);
         BOOST_CHECK_EQUAL(ec.message(), "Success");
+        BOOST_CHECK_EQUAL(body, rs_body_complete);
+
+        // TODO: actually check stored data
         auto sigs = read_file("sigs", cancel, yield[ec]);
         BOOST_CHECK_EQUAL(ec.message(), "Success");
     });

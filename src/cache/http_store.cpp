@@ -1,5 +1,6 @@
 #include "http_store.h"
 
+#include <boost/asio/buffer.hpp>
 #include <boost/beast/http/empty_body.hpp>
 #include <boost/optional.hpp>
 
@@ -64,15 +65,16 @@ public:
     }
 
     void
-    async_write_part(std::vector<uint8_t>, Cancel cancel, asio::yield_context yield)
+    async_write_part(std::vector<uint8_t> b, Cancel cancel, asio::yield_context yield)
     {
-        if (bodyf) return;
+        if (!bodyf) {
+            sys::error_code ec;
+            auto bf = create_file(body_fname, cancel, ec);
+            return_or_throw_on_error(yield, cancel, ec);
+            bodyf = std::move(bf);
+        }
 
-        sys::error_code ec;
-        auto bf = create_file(body_fname, cancel, ec);
-        return_or_throw_on_error(yield, cancel, ec);
-        bodyf = std::move(bf);
-        // TODO: actually store
+        util::file_io::write(*bodyf, asio::buffer(b), cancel, yield);
     }
 
     void
