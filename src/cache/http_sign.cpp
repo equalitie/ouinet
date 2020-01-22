@@ -129,20 +129,15 @@ sig_headers_set(const boost::string_view& headers)
     return {hs.begin(), hs.end()};
 }
 
-template<class SortedSet>
+template<class Set>
 static
 bool
-is_strict_subset_of(const SortedSet& sub, const SortedSet& super)
+has_extra_items(const Set& s1, const Set& s2)
 {
-    if (sub.size() >= super.size())
-        return false;
-
-    typename SortedSet::const_iterator subit, superit;
-    for (subit = sub.begin(), superit = super.begin(); subit != sub.end(); ++subit, ++superit)
-        if (*subit != *superit)
-            return false;
-
-    return true;
+    for (const auto& s1item : s1)
+        if (s2.find(s1item) == s2.end())
+            return true;
+    return false;
 }
 
 static
@@ -160,6 +155,12 @@ insert_trailer(const http::fields::value_type& th, http::response_header<>& head
     auto thsig = HttpSignature::parse(thv);
     assert(thsig);
     auto ths_hdrs = sig_headers_set(thsig->headers);
+    auto ths_ts = parse::number<time_t>(thsig->created);
+    if (!ths_ts) {
+        LOG_WARN( "Dropping new signature with empty creation time stamp; keyId="
+                , thsig->keyId);
+        return;
+    }
 
     bool insert = true;
     for (auto hit = head.begin(); hit != head.end();) {
@@ -179,13 +180,22 @@ insert_trailer(const http::fields::value_type& th, http::response_header<>& head
         }
 
         auto hs_hdrs = sig_headers_set(hsig->headers);
-        if (is_strict_subset_of(ths_hdrs, hs_hdrs)) {  // inserted signature is redundant
-            insert = false;  // do not insert
-            ++hit;
-            continue;  // there may be other redundant signatures
+        auto hs_ts = parse::number<time_t>(hsig->created);
+        if (!hs_ts) {
+            LOG_WARN( "Dropping existing signature with empty creation time stamp; keyId="
+                    , hsig->keyId);
+            hs_ts = 0;  // make it redundant
         }
 
-        hit = head.erase(hit);  // found redundant signature, remove
+        // Is inserted signature redundant?
+        insert = insert && (*ths_ts > *hs_ts || has_extra_items(ths_hdrs, hs_hdrs));
+        // Is existing signature redundant?
+        bool keep = *hs_ts > *ths_ts || has_extra_items(hs_hdrs, ths_hdrs);
+
+        if (keep)
+            ++hit;
+        else
+            hit = head.erase(hit);
     }
 
     if (insert)

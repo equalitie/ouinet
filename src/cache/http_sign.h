@@ -126,11 +126,12 @@ http_injection_trailer( const http::response_header<>& rsh
 }
 
 // Merge the response head `rsh` and response trailer `rst` into a single head,
-// removing redundant signatures.
+// removing signatures redundant with those in the trailer.
 //
-// A signature is considered redundant if
-// there is another signature from the same `keyId` and `algorithm`
-// for the same or a larger set of `headers`.
+// Signature B is considered redundant regarding signature A
+// if A has the same `keyId` and `algorithm`,
+// the same or a newer `created` time stamp,
+// and the same or a larger set of `headers`.
 // If all these values are equal, the later signature in the head or trailer
 // is considered redundant.
 //
