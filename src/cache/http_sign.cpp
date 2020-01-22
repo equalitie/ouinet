@@ -157,8 +157,6 @@ insert_trailer(const http::fields::value_type& th, http::response_header<>& head
     }
 
     // Signature, look for redundant signatures in head.
-    // It is redundant if it has the same `keyId` and not a superset of `headers`
-    // (simplified heuristic). <- TODO: check for signature time stamp too
     auto thsig = HttpSignature::parse(thv);
     assert(thsig);
     auto ths_hdrs = sig_headers_set(thsig->headers);
@@ -175,7 +173,7 @@ insert_trailer(const http::fields::value_type& th, http::response_header<>& head
         auto hsig = HttpSignature::parse(hv);
         assert(hsig);
 
-        if (thsig->keyId != hsig->keyId) {  // sig from different key
+        if ((thsig->keyId != hsig->keyId) || (thsig->algorithm != hsig->algorithm)) {
             ++hit;
             continue;
         }

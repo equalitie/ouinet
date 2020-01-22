@@ -127,6 +127,13 @@ http_injection_trailer( const http::response_header<>& rsh
 
 // Merge the response head `rsh` and response trailer `rst` into a single head,
 // removing redundant signatures.
+//
+// A signature is considered redundant if
+// there is another signature from the same `keyId` and `algorithm`
+// for the same or a larger set of `headers`.
+// If all these values are equal, the later signature in the head or trailer
+// is considered redundant.
+//
 // Please note that framing headers are also removed,
 // so if you want to reuse the header in a response,
 // you must either add a `Content-Length` or a `Transfer-Encoding: chunked` header.
