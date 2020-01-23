@@ -4,10 +4,13 @@
 #include <boost/beast/http/empty_body.hpp>
 #include <boost/optional.hpp>
 
+#include "../logger.h"
 #include "../or_throw.h"
 #include "../util/file_io.h"
 #include "../util/variant.h"
 #include "http_sign.h"
+
+#define _WARN(...) LOG_WARN("HTTP store: ", __VA_ARGS__)
 
 namespace ouinet { namespace cache {
 
@@ -24,8 +27,11 @@ private:
     const fs::path& dirp;
     const asio::executor& ex;
 
+    std::string uri;  // for warnings, should use `Yield::log` instead
     http_response::Head head;  // for merging in the trailer later on
     boost::optional<asio::posix::stream_descriptor> headf, bodyf, sigsf;
+
+    size_t block_size;
 
     inline
     asio::posix::stream_descriptor
@@ -41,6 +47,23 @@ public:
     async_write_part(http_response::Head h, Cancel cancel, asio::yield_context yield)
     {
         assert(!headf);
+
+        uri = h[http_::response_uri_hdr].to_string();
+        if (uri.empty()) {
+            _WARN("Missing URI in signed HTTP head");
+            return or_throw(yield, asio::error::invalid_argument);
+        }
+        auto bsh = h[http_::response_block_signatures_hdr];
+        if (bsh.empty()) {
+            _WARN("Missing parameters for HTTP data block signatures; uri=", uri);
+            return or_throw(yield, asio::error::invalid_argument);
+        }
+        auto bs_params = cache::HttpBlockSigs::parse(bsh);
+        if (!bs_params) {
+            _WARN("Malformed parameters for HTTP data block signatures; uri=", uri);
+            return or_throw(yield, asio::error::invalid_argument);
+        }
+        block_size = bs_params->size;
 
         // Dump the head without framing headers.
         head = http_injection_merge(std::move(h), {});
