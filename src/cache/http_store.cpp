@@ -48,19 +48,20 @@ public:
     {
         assert(!headf);
 
+        // Get block size for future alignment checks.
         uri = h[http_::response_uri_hdr].to_string();
         if (uri.empty()) {
-            _WARN("Missing URI in signed HTTP head");
+            _WARN("Missing URI in signed head");
             return or_throw(yield, asio::error::invalid_argument);
         }
         auto bsh = h[http_::response_block_signatures_hdr];
         if (bsh.empty()) {
-            _WARN("Missing parameters for HTTP data block signatures; uri=", uri);
+            _WARN("Missing parameters for data block signatures; uri=", uri);
             return or_throw(yield, asio::error::invalid_argument);
         }
         auto bs_params = cache::HttpBlockSigs::parse(bsh);
         if (!bs_params) {
-            _WARN("Malformed parameters for HTTP data block signatures; uri=", uri);
+            _WARN("Malformed parameters for data block signatures; uri=", uri);
             return or_throw(yield, asio::error::invalid_argument);
         }
         block_size = bs_params->size;
