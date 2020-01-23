@@ -1,4 +1,5 @@
 #define BOOST_TEST_MODULE http_store
+#include <boost/test/data/test_case.hpp>
 #include <boost/test/included/unit_test.hpp>
 
 #include <array>
@@ -134,6 +135,16 @@ static void run_spawned(asio::io_context& ctx, F&& f) {
     ctx.run();
 }
 
+static const string rs_head_incomplete =
+    ( _rs_head_origin
+    + _rs_head_injection
+    + _rs_head_sig0
+    + "\r\n");
+
+static const string rs_body_incomplete =
+    ( rs_block_data[0]
+    + rs_block_data[1]);
+
 static const string rs_head_complete =
     ( _rs_head_origin
     + _rs_head_injection
@@ -146,17 +157,21 @@ static const string rs_body_complete =
     + rs_block_data[1]
     + rs_block_data[2]);
 
-static string rs_sigs_complete() {
+static string rs_sigs(bool complete) {
     stringstream ss;
     ss << hex;
-    for (size_t b = 0; b < rs_block_data.size(); ++b)
+    // Last signature missing when incomplete.
+    auto last_b = complete ? rs_block_data.size() : rs_block_data.size() - 1;
+    for (size_t b = 0; b < last_b; ++b)
         ss << (b * http_::response_data_block)
            << ' ' << rs_block_sig[b] << ' ' << rs_block_hash[b]
            << endl;
     return ss.str();
 }
 
-BOOST_AUTO_TEST_CASE(test_write_response) {
+static const bool true_false[] = {true, false};
+
+BOOST_DATA_TEST_CASE(test_write_response, boost::unit_test::data::make(true_false), complete) {
     // This test knows about the internals of this particular format.
     BOOST_CHECK_EQUAL(cache::http_store_version, 1);
 
@@ -176,7 +191,7 @@ BOOST_AUTO_TEST_CASE(test_write_response) {
         tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
 
         // Send signed response.
-        asio::spawn(ctx, [&signed_w, lock = wc.lock()] (auto y) {
+        asio::spawn(ctx, [&signed_w, complete, lock = wc.lock()] (auto y) {
             // Head (raw).
             asio::async_write( signed_w
                              , asio::const_buffer(rs_head.data(), rs_head.size())
@@ -188,8 +203,16 @@ BOOST_AUTO_TEST_CASE(test_write_response) {
                 auto cbd = util::bytes::to_vector<uint8_t>(rs_block_data[bi]);
                 auto ch = http_response::ChunkHdr(cbd.size(), rs_chunk_ext[bi]);
                 ch.async_write(signed_w, y);
+                // For the incomplete test, produce the chunk header of last block
+                // but not its body; the last block signature should be missing.
+                if (!complete && bi == rs_block_data.size() - 1) break;
                 auto cb = http_response::ChunkBody(std::move(cbd), 0);
                 cb.async_write(signed_w, y);
+            }
+
+            if (!complete) {  // no last chunk nor trailer
+                signed_w.close();
+                return;
             }
 
             // Last chunk and trailer (raw).
@@ -203,11 +226,13 @@ BOOST_AUTO_TEST_CASE(test_write_response) {
         });
 
         // Store response.
-        asio::spawn(ctx, [ signed_r = std::move(signed_r), &tmpdir
+        asio::spawn(ctx, [ signed_r = std::move(signed_r), &tmpdir, complete
                          , &ctx, lock = wc.lock()] (auto y) mutable {
             Cancel c;
+            sys::error_code e;
             http_response::Reader signed_rr(std::move(signed_r));
-            cache::http_store(signed_rr, tmpdir, ctx.get_executor(), c, y);
+            cache::http_store(signed_rr, tmpdir, ctx.get_executor(), c, y[e]);
+            BOOST_CHECK(!complete || !e);
         });
 
         wc.wait(yield);
@@ -232,15 +257,15 @@ BOOST_AUTO_TEST_CASE(test_write_response) {
 
         auto head = read_file("head", cancel, yield[ec]);
         BOOST_CHECK_EQUAL(ec.message(), "Success");
-        BOOST_CHECK_EQUAL(head, rs_head_complete);
+        BOOST_CHECK_EQUAL(head, complete ? rs_head_complete :  rs_head_incomplete);
 
         auto body = read_file("body", cancel, yield[ec]);
         BOOST_CHECK_EQUAL(ec.message(), "Success");
-        BOOST_CHECK_EQUAL(body, rs_body_complete);
+        BOOST_CHECK_EQUAL(body, complete ? rs_body_complete : rs_body_incomplete);
 
         auto sigs = read_file("sigs", cancel, yield[ec]);
         BOOST_CHECK_EQUAL(ec.message(), "Success");
-        BOOST_CHECK_EQUAL(sigs, rs_sigs_complete());
+        BOOST_CHECK_EQUAL(sigs, rs_sigs(complete));
     });
 }
 
