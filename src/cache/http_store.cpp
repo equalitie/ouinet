@@ -2,10 +2,12 @@
 
 #include <boost/asio/buffer.hpp>
 #include <boost/beast/http/empty_body.hpp>
+#include <boost/format.hpp>
 #include <boost/optional.hpp>
 
 #include "../logger.h"
 #include "../or_throw.h"
+#include "../util.h"
 #include "../util/file_io.h"
 #include "../util/variant.h"
 #include "http_sign.h"
@@ -17,6 +19,22 @@ namespace ouinet { namespace cache {
 static const fs::path head_fname = "head";
 static const fs::path body_fname = "body";
 static const fs::path sigs_fname = "sigs";
+
+static
+boost::string_view
+block_sig_from_exts(boost::string_view xs)
+{
+    // Simplified chunk extension parsing
+    // since this should have already been validated upstream.
+    static const std::string sigpfx = ";" + http_::response_block_signature_ext + "=\"";
+    auto sigext = xs.find(sigpfx);
+    if (sigext == std::string::npos) return {};  // no such extension
+    auto sigstart = sigext + sigpfx.size();
+    assert(sigstart < xs.size());
+    auto sigend = xs.find('"', sigstart);
+    assert(sigend != std::string::npos);
+    return xs.substr(sigstart, sigend - sigstart);
+}
 
 class SplittedWriter {
 public:
@@ -32,6 +50,10 @@ private:
     boost::optional<asio::posix::stream_descriptor> headf, bodyf, sigsf;
 
     size_t block_size;
+    size_t byte_count = 0;
+    unsigned block_count = 0;
+    util::SHA512 block_hash;
+    boost::optional<util::SHA512::digest_type> prev_block_digest;
 
     inline
     asio::posix::stream_descriptor
@@ -77,15 +99,42 @@ public:
     }
 
     void
-    async_write_part(http_response::ChunkHdr, Cancel cancel, asio::yield_context yield)
+    async_write_part(http_response::ChunkHdr ch, Cancel cancel, asio::yield_context yield)
     {
-        if (sigsf) return;
+        if (!sigsf) {
+            sys::error_code ec;
+            auto sf = create_file(sigs_fname, cancel, ec);
+            return_or_throw_on_error(yield, cancel, ec);
+            sigsf = std::move(sf);
+        }
 
-        sys::error_code ec;
-        auto sf = create_file(sigs_fname, cancel, ec);
-        return_or_throw_on_error(yield, cancel, ec);
-        sigsf = std::move(sf);
-        // TODO: actually store
+        // Only act when a chunk header with a signature is received;
+        // upstream verification or the injector should have placed
+        // them at the right chunk headers.
+        auto bsig = block_sig_from_exts(ch.exts);
+        if (bsig.empty()) return;
+
+        // Check that signature is properly aligned with end of block
+        // (except for the last block, which may be shorter).
+        auto offset = block_count * block_size;
+        block_count++;
+        if (ch.size > 0 && byte_count != block_count * block_size) {
+            _WARN("Block signature is not aligned to block boundary; uri=", uri);
+            return or_throw(yield, asio::error::invalid_argument);
+        }
+
+        // Encode the chained hash for the previous block.
+        std::string pbdig = prev_block_digest
+            ? util::base64_encode(*prev_block_digest)
+            : "";
+        // Prepare hash for next data block: HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])
+        prev_block_digest = block_hash.close();
+        block_hash = {}; block_hash.update(*prev_block_digest);
+
+        // Build line with `OFFSET[i] SIGNATURE[i] HASH[i-1]`.
+        static const std::string lfmt_ = "%x %s %s\n";
+        auto line = (boost::format(lfmt_) % offset % bsig % pbdig).str();
+        util::file_io::write(*sigsf, asio::buffer(line), cancel, yield);
     }
 
     void
@@ -98,6 +147,8 @@ public:
             bodyf = std::move(bf);
         }
 
+        byte_count += b.size();
+        block_hash.update(b);
         util::file_io::write(*bodyf, asio::buffer(b), cancel, yield);
     }
 
