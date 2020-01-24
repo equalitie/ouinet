@@ -1,6 +1,7 @@
 #define BOOST_TEST_MODULE http_sign
 #include <boost/test/included/unit_test.hpp>
 
+#include <array>
 #include <sstream>
 #include <string>
 
@@ -108,7 +109,6 @@ static const array<string, 3> rs_block_hash_cx{
     "",  // no previous block to hash
     ";ouihash=\"aERfr5o+kpvR4ZH7xC0mBJ4QjqPUELDzjmzt14WmntxH2p3EQmATZODXMPoFiXaZL6KNI50Ve4WJf/x3ma4ieA==\"",
     ";ouihash=\"slwciqMQBddB71VWqpba+MpP9tBiyTE/XFmO5I1oiVJy3iFniKRkksbP78hCEWOM6tH31TGEFWP1loa4pqrLww==\"",
-    //";ouihash=\"vyUR6T034qN7qDZO5vUILMP9FsJYPys1KIELlGDFCSqSFI7ZowrT3U9ffwsQAZSCLJvKQhT+GhtO0aM2jNnm5A==\"",  // never actually sent
 };
 
 static const array<string, 3> rs_block_sig_cx{
@@ -323,7 +323,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
 
         // Test signed output.
         asio::spawn(ctx, [ signed_r = std::move(signed_r), &tested_w
-                         , &ctx, lock = wc.lock()](auto y) mutable {
+                         , lock = wc.lock()](auto y) mutable {
             int xidx = 0;
             Cancel cancel;
             sys::error_code e;
