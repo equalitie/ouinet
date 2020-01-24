@@ -207,6 +207,7 @@ private:
 
     void listen_tcp( asio::yield_context
                    , tcp::endpoint
+                   , const char* service
                    , function<void(GenericStream, asio::yield_context)>);
 
     void setup_injector(asio::yield_context);
@@ -1509,6 +1510,7 @@ void Client::State::setup_cache()
 void Client::State::listen_tcp
         ( asio::yield_context yield
         , tcp::endpoint local_endpoint
+        , const char* service
         , function<void(GenericStream, asio::yield_context)> handler)
 {
     sys::error_code ec;
@@ -1518,7 +1520,7 @@ void Client::State::listen_tcp
 
     acceptor.open(local_endpoint.protocol(), ec);
     if (ec) {
-        LOG_ERROR("Failed to open tcp acceptor: ", ec.message());
+        LOG_ERROR("Failed to open tcp acceptor for service \"",service,"\": ", ec.message());
         return;
     }
 
@@ -1527,14 +1529,16 @@ void Client::State::listen_tcp
     // Bind to the server address
     acceptor.bind(local_endpoint, ec);
     if (ec) {
-        LOG_ERROR("Failed to bind tcp acceptor: ", ec.message());
+        LOG_ERROR("Failed to bind tcp acceptor for service \"", service,"\": "
+                 , ec.message());
         return;
     }
 
     // Start listening for connections
     acceptor.listen(asio::socket_base::max_connections, ec);
     if (ec) {
-        LOG_ERROR("Failed to 'listen' on tcp acceptor: ", ec.message());
+        LOG_ERROR("Failed to 'listen' to service \"", service, "\""
+                  " on tcp acceptor: ", ec.message());
         return;
     }
 
@@ -1542,8 +1546,7 @@ void Client::State::listen_tcp
         acceptor.close();
     });
 
-    LOG_DEBUG("Successfully listening on TCP Port");
-    LOG_INFO("Client accepting on ", acceptor.local_endpoint());
+    LOG_INFO("Client accepting to ", service, " on TCP:", acceptor.local_endpoint());
 
     WaitCondition wait_condition(_ctx);
 
@@ -1555,7 +1558,7 @@ void Client::State::listen_tcp
         if(ec) {
             if (ec == asio::error::operation_aborted) break;
 
-            LOG_WARN("Accept failed on tcp acceptor: ", ec.message());
+            LOG_WARN("Accept failed on tcp acceptor service \"",service,"\": ", ec.message());
 
             if (!async_sleep(_ctx, chrono::seconds(1), _shutdown_signal, yield)) {
                 break;
@@ -1632,6 +1635,7 @@ void Client::State::start()
 
               listen_tcp( yield[ec]
                         , _config.local_endpoint()
+                        , "browser requests"
                         , [this, self]
                           (GenericStream c, asio::yield_context yield) {
                       serve_request(move(c), yield);
@@ -1655,6 +1659,7 @@ void Client::State::start()
 
                   listen_tcp( yield[ec]
                             , ep
+                            , "frontend"
                             , [this, self]
                               (GenericStream c, asio::yield_context yield_) {
                         Yield yield(_ctx, yield_, "Frontend");
