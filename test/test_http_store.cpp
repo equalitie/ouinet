@@ -269,4 +269,13 @@ BOOST_DATA_TEST_CASE(test_write_response, boost::unit_test::data::make(true_fals
     });
 }
 
+BOOST_AUTO_TEST_CASE(test_read_response_missing) {
+    auto tmpdir = fs::unique_path();
+    asio::io_context ctx;
+    sys::error_code ec;
+    auto store_rr = cache::http_store_reader_v1(tmpdir, ctx.get_executor(), ec);
+    BOOST_CHECK(!store_rr);
+    BOOST_CHECK_EQUAL(ec, sys::errc::no_such_file_or_directory);
+}
+
 BOOST_AUTO_TEST_SUITE_END()

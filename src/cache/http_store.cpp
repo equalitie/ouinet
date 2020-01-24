@@ -190,4 +190,14 @@ http_store( http_response::AbstractReader& reader, const fs::path& dirp
     }
 }
 
+std::unique_ptr<http_response::AbstractReader>
+http_store_reader_v1(fs::path dirp, const asio::executor& ex, sys::error_code& ec)
+{
+    auto headf = util::file_io::open_readonly(ex, dirp / head_fname, ec);
+    if (ec) return nullptr;
+
+    // TODO: implement
+    return nullptr;
+}
+
 }} // namespaces
