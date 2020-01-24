@@ -1,7 +1,9 @@
 #include "http_store.h"
 
 #include <boost/asio/buffer.hpp>
+#include <boost/beast/core/static_buffer.hpp>
 #include <boost/beast/http/empty_body.hpp>
+#include <boost/beast/http/read.hpp>
 #include <boost/format.hpp>
 #include <boost/optional.hpp>
 
@@ -190,14 +192,108 @@ http_store( http_response::AbstractReader& reader, const fs::path& dirp
     }
 }
 
+class HttpStore1Reader : public http_response::AbstractReader {
+private:
+    static const size_t http_forward_block = 16384;
+
+    http_response::Head
+    get_head(Cancel cancel, asio::yield_context yield)
+    {
+        assert(headf.is_open());
+
+        // Put in heap to avoid exceeding coroutine stack limit.
+        auto buffer = std::make_unique<beast::static_buffer<http_forward_block>>();
+        auto parser = std::make_unique<http::response_parser<http::empty_body>>();
+
+        sys::error_code ec;
+        http::async_read_header(headf, *buffer, *parser, yield[ec]);
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec) return or_throw<http_response::Head>(yield, ec);
+
+        if (!parser->is_header_done()) {
+            _WARN("Failed to parse stored response head");
+            return or_throw<http_response::Head>(yield, sys::errc::make_error_code(sys::errc::no_message));
+        }
+
+        auto head = parser->release().base();
+        uri = head[http_::response_uri_hdr].to_string();
+        if (uri.empty()) {
+            _WARN("Missing URI in stored head");
+            return or_throw<http_response::Head>(yield, sys::errc::make_error_code(sys::errc::no_message));
+        }
+
+        // The stored head should not have framing headers,
+        // check and enable chunked transfer encoding.
+        if (!( head[http::field::content_length].empty()
+             && head[http::field::transfer_encoding].empty()
+             && head[http::field::trailer].empty())) {
+            _WARN("Found framing headers in stored head, cleaning; uri=", uri);
+            head = http_injection_merge(std::move(head), {});
+        }
+        head.set(http::field::transfer_encoding, "chunked");
+        return head;
+    }
+
+public:
+    HttpStore1Reader( fs::path dirp
+                    , asio::posix::stream_descriptor headf
+                    , const asio::executor& ex)
+        : dirp(std::move(dirp)), headf(std::move(headf)), ex(ex) {}
+
+    ~HttpStore1Reader() override {};
+
+    boost::optional<ouinet::http_response::Part>
+    async_read_part(Cancel cancel, asio::yield_context yield) override
+    {
+        if (!_is_open || _is_done) return boost::none;
+
+        sys::error_code ec;
+        auto head = get_head(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, boost::none);
+
+        _is_done = true;  // TODO: implement rest
+        close();
+
+        return http_response::Part(std::move(head));
+    }
+
+    bool
+    is_done() const override
+    {
+        return _is_done;
+    }
+
+    bool
+    is_open() const override
+    {
+        return _is_open;
+    }
+
+    void
+    close() override
+    {
+        _is_open = false;
+        headf.close();
+    }
+
+private:
+    const fs::path dirp;
+    asio::posix::stream_descriptor headf;
+    const asio::executor& ex;
+
+    bool _is_done = false;
+    bool _is_open = true;
+
+    std::string uri;  // for warnings
+};
+
 std::unique_ptr<http_response::AbstractReader>
 http_store_reader_v1(fs::path dirp, const asio::executor& ex, sys::error_code& ec)
 {
     auto headf = util::file_io::open_readonly(ex, dirp / head_fname, ec);
     if (ec) return nullptr;
 
-    // TODO: implement
-    return nullptr;
+    return std::make_unique<HttpStore1Reader>(std::move(dirp), std::move(headf), ex);
 }
 
 }} // namespaces
