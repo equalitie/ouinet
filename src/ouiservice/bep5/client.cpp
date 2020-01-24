@@ -477,15 +477,16 @@ GenericStream Bep5Client::connect( asio::yield_context yield
 
     uint32_t i = 0;
 
+    auto exec = get_executor();
+
     for (auto peer : get_peers(target)) {
         auto j = i++;
 
         const uint32_t k = 10;
         uint32_t delay_ms = (j <= k) ? 0 : ((j-k) * 100);
 
-        asio::spawn(get_executor(),
+        asio::spawn(exec,
         [ =
-        , ex = get_executor()
         , &spawn_cancel
         , &ret_con
         , &ret_ep
@@ -494,7 +495,7 @@ GenericStream Bep5Client::connect( asio::yield_context yield
             sys::error_code ec;
 
             if (delay_ms) {
-                async_sleep(ex, chrono::milliseconds(delay_ms), spawn_cancel, yield);
+                async_sleep(exec, chrono::milliseconds(delay_ms), spawn_cancel, y);
                 if (spawn_cancel) return;
             }
 
