@@ -14,7 +14,9 @@
 #include "../util/variant.h"
 #include "http_sign.h"
 
-#define _WARN(...) LOG_WARN("HTTP store: ", __VA_ARGS__)
+#define _LOGPFX "HTTP store: "
+#define _WARN(...) LOG_WARN(_LOGPFX, __VA_ARGS__)
+#define _ERROR(...) LOG_ERROR(_LOGPFX, __VA_ARGS__)
 
 namespace ouinet { namespace cache {
 
@@ -75,17 +77,17 @@ public:
         // Get block size for future alignment checks.
         uri = h[http_::response_uri_hdr].to_string();
         if (uri.empty()) {
-            _WARN("Missing URI in signed head");
+            _ERROR("Missing URI in signed head");
             return or_throw(yield, asio::error::invalid_argument);
         }
         auto bsh = h[http_::response_block_signatures_hdr];
         if (bsh.empty()) {
-            _WARN("Missing parameters for data block signatures; uri=", uri);
+            _ERROR("Missing parameters for data block signatures; uri=", uri);
             return or_throw(yield, asio::error::invalid_argument);
         }
         auto bs_params = cache::HttpBlockSigs::parse(bsh);
         if (!bs_params) {
-            _WARN("Malformed parameters for data block signatures; uri=", uri);
+            _ERROR("Malformed parameters for data block signatures; uri=", uri);
             return or_throw(yield, asio::error::invalid_argument);
         }
         block_size = bs_params->size;
@@ -121,7 +123,7 @@ public:
         auto offset = block_count * block_size;
         block_count++;
         if (ch.size > 0 && byte_count != block_count * block_size) {
-            _WARN("Block signature is not aligned to block boundary; uri=", uri);
+            _ERROR("Block signature is not aligned to block boundary; uri=", uri);
             return or_throw(yield, asio::error::invalid_argument);
         }
 
@@ -211,14 +213,14 @@ private:
         if (ec) return or_throw<http_response::Head>(yield, ec);
 
         if (!parser->is_header_done()) {
-            _WARN("Failed to parse stored response head");
+            _ERROR("Failed to parse stored response head");
             return or_throw<http_response::Head>(yield, sys::errc::make_error_code(sys::errc::no_message));
         }
 
         auto head = parser->release().base();
         uri = head[http_::response_uri_hdr].to_string();
         if (uri.empty()) {
-            _WARN("Missing URI in stored head");
+            _ERROR("Missing URI in stored head");
             return or_throw<http_response::Head>(yield, sys::errc::make_error_code(sys::errc::no_message));
         }
 
