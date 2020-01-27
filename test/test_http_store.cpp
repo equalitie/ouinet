@@ -23,6 +23,13 @@
 
 #include <namespaces.h>
 
+// For checks to be able to report errors.
+namespace ouinet { namespace http_response {
+    std::ostream& operator<<(std::ostream& os, const ChunkHdr& hdr) {
+        return os << "ChunkHdr(" << hdr.size << ", \"" << hdr.exts << "\")";
+    }
+}} // namespace ouinet::http_response
+
 BOOST_AUTO_TEST_SUITE(ouinet_http_store)
 
 using namespace std;
@@ -296,6 +303,13 @@ static const string rrs_head_complete =
     + "Transfer-Encoding: chunked\r\n"
     + "\r\n");
 
+static const array<string, 4> rrs_chunk_ext{
+    "",
+    ";ouisig=\"" + rs_block_sig[0] + "\"",
+    ";ouisig=\"" + rs_block_sig[1] + "\";ouihash=\"" + rs_block_hash[1] + "\"",
+    ";ouisig=\"" + rs_block_sig[2] + "\";ouihash=\"" + rs_block_hash[2] + "\"",
+};
+
 BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false), complete) {
     // This test knows about the internals of this particular format.
     BOOST_CHECK_EQUAL(cache::http_store_version, 1);
@@ -387,12 +401,36 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
             sys::error_code e;
             http_response::Reader loaded_rr(std::move(loaded_r));
 
+            // Head.
             auto part = loaded_rr.async_read_part(c, y[e]);
             BOOST_CHECK_EQUAL(e.message(), "Success");
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_head());
             BOOST_REQUIRE_EQUAL( util::str(*(part->as_head()))
                                , complete ? rrs_head_complete : rrs_head_incomplete);
+
+            // Chunk headers and bodies (one chunk per block).
+            unsigned bi;
+            for (bi = 0; bi < rs_block_data.size(); ++bi) {
+                part = loaded_rr.async_read_part(c, y[e]);
+                BOOST_CHECK_EQUAL(e.message(), "Success");
+                BOOST_REQUIRE(part);
+                BOOST_REQUIRE(part->is_chunk_hdr());
+                BOOST_REQUIRE_EQUAL( *(part->as_chunk_hdr())
+                                   , http_response::ChunkHdr( rs_block_data[bi].size()
+                                                            , rrs_chunk_ext[bi]));
+
+                // For the incomplete test, the last block signature should be missing,
+                // so we will not get its data.
+                if (!complete && bi == rs_block_data.size() -1) break;
+                part = loaded_rr.async_read_part(c, y[e]);
+                BOOST_CHECK_EQUAL(e.message(), "Success");
+                BOOST_REQUIRE(part);
+                BOOST_REQUIRE(part->is_chunk_body());
+                std::vector<uint8_t>& bd = *(part->as_chunk_body());
+                BOOST_REQUIRE_EQUAL( util::bytes::to_string(bd)
+                                   , rs_block_data[bi]);
+            }
 
             // TODO: check rest of parts
         });
