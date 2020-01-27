@@ -257,8 +257,8 @@ private:
 public:
     HttpStore1Reader( fs::path dirp
                     , asio::posix::stream_descriptor headf
-                    , const asio::executor& ex)
-        : dirp(std::move(dirp)), headf(std::move(headf)), ex(ex) {}
+                    , asio::executor ex)
+        : dirp(std::move(dirp)), headf(std::move(headf)), ex(std::move(ex)) {}
 
     ~HttpStore1Reader() override {};
 
@@ -299,7 +299,7 @@ public:
 private:
     const fs::path dirp;
     asio::posix::stream_descriptor headf;
-    const asio::executor& ex;
+    asio::executor ex;
 
     bool _is_done = false;
     bool _is_open = true;
@@ -310,12 +310,12 @@ private:
 };
 
 std::unique_ptr<http_response::AbstractReader>
-http_store_reader_v1(fs::path dirp, const asio::executor& ex, sys::error_code& ec)
+http_store_reader_v1(fs::path dirp, asio::executor ex, sys::error_code& ec)
 {
     auto headf = util::file_io::open_readonly(ex, dirp / head_fname, ec);
     if (ec) return nullptr;
 
-    return std::make_unique<HttpStore1Reader>(std::move(dirp), std::move(headf), ex);
+    return std::make_unique<HttpStore1Reader>(std::move(dirp), std::move(headf), std::move(ex));
 }
 
 }} // namespaces

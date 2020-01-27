@@ -44,7 +44,7 @@ void http_store( http_response::AbstractReader&, const fs::path&
 // Return a new reader for a response stored in v1 format
 // under the given directory.
 //
-// Both the path and the reference to the executor are kept by the reader.
+// Both the path and the executor are kept by the reader.
 //
 // At least the file belonging to the response head must be readable,
 // otherwise the call will report an error and not return a reader.
@@ -53,7 +53,7 @@ void http_store( http_response::AbstractReader&, const fs::path&
 // The response will be provided using chunked transfer encoding,
 // with all the metadata needed to verify and further share it.
 std::unique_ptr<http_response::AbstractReader>
-http_store_reader_v1( fs::path, const asio::executor&
+http_store_reader_v1( fs::path, asio::executor
                     , sys::error_code&);
 
 }} // namespaces
