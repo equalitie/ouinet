@@ -9,6 +9,7 @@
 
 #include "../logger.h"
 #include "../or_throw.h"
+#include "../parse/number.h"
 #include "../util.h"
 #include "../util/file_io.h"
 #include "../util/variant.h"
@@ -199,7 +200,7 @@ private:
     static const size_t http_forward_block = 16384;
 
     http_response::Head
-    get_head(Cancel cancel, asio::yield_context yield)
+    parse_head(Cancel cancel, asio::yield_context yield)
     {
         assert(headf.is_open());
 
@@ -223,6 +224,23 @@ private:
             _ERROR("Missing URI in stored head");
             return or_throw<http_response::Head>(yield, sys::errc::make_error_code(sys::errc::no_message));
         }
+        auto bsh = head[http_::response_block_signatures_hdr];
+        if (bsh.empty()) {
+            _ERROR("Missing stored parameters for data block signatures; uri=", uri);
+            return or_throw<http_response::Head>(yield, sys::errc::make_error_code(sys::errc::no_message));
+        }
+        auto bs_params = cache::HttpBlockSigs::parse(bsh);
+        if (!bs_params) {
+            _ERROR("Malformed stored parameters for data block signatures; uri=", uri);
+            return or_throw<http_response::Head>(yield, sys::errc::make_error_code(sys::errc::no_message));
+        }
+        block_size = bs_params->size;
+        auto data_size_hdr = head[http_::response_data_size_hdr];
+        auto data_size_opt = parse::number<size_t>(data_size_hdr);
+        if (!data_size_opt)
+            _WARN("Loading incomplete stored response; uri=", uri);
+        else
+            data_size = *data_size_opt;
 
         // The stored head should not have framing headers,
         // check and enable chunked transfer encoding.
@@ -250,7 +268,7 @@ public:
         if (!_is_open || _is_done) return boost::none;
 
         sys::error_code ec;
-        auto head = get_head(cancel, yield[ec]);
+        auto head = parse_head(cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec, boost::none);
 
         _is_done = true;  // TODO: implement rest
@@ -287,6 +305,8 @@ private:
     bool _is_open = true;
 
     std::string uri;  // for warnings
+    boost::optional<size_t> data_size;
+    boost::optional<size_t> block_size;
 };
 
 std::unique_ptr<http_response::AbstractReader>
