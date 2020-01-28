@@ -21,10 +21,12 @@
 
 namespace ouinet { namespace cache {
 
+// File names for response components.
 static const fs::path head_fname = "head";
 static const fs::path body_fname = "body";
 static const fs::path sigs_fname = "sigs";
 
+// Block signature and hash handling.
 static
 boost::string_view
 block_sig_from_exts(boost::string_view xs)
@@ -40,6 +42,20 @@ block_sig_from_exts(boost::string_view xs)
     assert(sigend != std::string::npos);
     return xs.substr(sigstart, sigend - sigstart);
 }
+
+// A signatures file entry with `OFFSET[i] SIGNATURE[i] HASH[i-1]`.
+struct SigEntry {
+    size_t offset;
+    boost::string_view signature;
+    boost::string_view prev_digest;
+
+    static constexpr auto line_format = "%x %s %s\n";
+
+    std::string str() const
+    {
+        return (boost::format(line_format) % offset % signature % prev_digest).str();
+    }
+};
 
 class SplittedWriter {
 public:
@@ -113,15 +129,17 @@ public:
             sigsf = std::move(sf);
         }
 
+        SigEntry e;
+
         // Only act when a chunk header with a signature is received;
         // upstream verification or the injector should have placed
         // them at the right chunk headers.
-        auto bsig = block_sig_from_exts(ch.exts);
-        if (bsig.empty()) return;
+        e.signature = block_sig_from_exts(ch.exts);
+        if (e.signature.empty()) return;
 
         // Check that signature is properly aligned with end of block
         // (except for the last block, which may be shorter).
-        auto offset = block_count * block_size;
+        e.offset = block_count * block_size;
         block_count++;
         if (ch.size > 0 && byte_count != block_count * block_size) {
             _ERROR("Block signature is not aligned to block boundary; uri=", uri);
@@ -129,17 +147,17 @@ public:
         }
 
         // Encode the chained hash for the previous block.
-        std::string pbdig = prev_block_digest
-            ? util::base64_encode(*prev_block_digest)
-            : "";
+        std::string pbdig;
+        if (prev_block_digest) {
+            pbdig = util::base64_encode(*prev_block_digest);
+            e.prev_digest = pbdig;
+        }
+
         // Prepare hash for next data block: HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])
         prev_block_digest = block_hash.close();
         block_hash = {}; block_hash.update(*prev_block_digest);
 
-        // Build line with `OFFSET[i] SIGNATURE[i] HASH[i-1]`.
-        static const std::string lfmt_ = "%x %s %s\n";
-        auto line = (boost::format(lfmt_) % offset % bsig % pbdig).str();
-        util::file_io::write(*sigsf, asio::buffer(line), cancel, yield);
+        util::file_io::write(*sigsf, asio::buffer(e.str()), cancel, yield);
     }
 
     void
