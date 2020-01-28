@@ -7,6 +7,7 @@
 #include <boost/format.hpp>
 #include <boost/optional.hpp>
 
+#include "../defer.h"
 #include "../logger.h"
 #include "../or_throw.h"
 #include "../parse/number.h"
@@ -235,6 +236,7 @@ private:
     parse_head(Cancel cancel, asio::yield_context yield)
     {
         assert(headf.is_open());
+        auto close_headf = defer([&headf = headf] { headf.close(); });  // no longer needed
 
         // Put in heap to avoid exceeding coroutine stack limit.
         auto buffer = std::make_unique<beast::static_buffer<http_forward_block>>();
