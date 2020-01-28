@@ -49,10 +49,9 @@ struct SigEntry {
     boost::string_view signature;
     boost::string_view prev_digest;
 
-    static constexpr auto line_format = "%x %s %s\n";
-
     std::string str() const
     {
+        static const auto line_format = "%x %s %s\n";
         return (boost::format(line_format) % offset % signature % prev_digest).str();
     }
 };
