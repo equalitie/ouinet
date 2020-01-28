@@ -54,6 +54,21 @@ struct SigEntry {
         static const auto line_format = "%x %s %s\n";
         return (boost::format(line_format) % offset % signature % prev_digest).str();
     }
+
+    std::string chunk_exts() const
+    {
+        std::stringstream exts;
+
+        static const auto fmt_sx = ";" + http_::response_block_signature_ext + "=\"%s\"";
+        if (!signature.empty())
+            exts << (boost::format(fmt_sx) % signature);
+
+        static const auto fmt_hx = ";" + http_::response_block_chain_hash_ext + "=\"%s\"";
+        if (!prev_digest.empty())
+            exts << (boost::format(fmt_hx) % prev_digest);
+
+        return exts.str();
+    }
 };
 
 class SplittedWriter {
@@ -271,6 +286,47 @@ private:
         return head;
     }
 
+    boost::optional<SigEntry>
+    get_sig_entry(Cancel cancel, asio::yield_context yield)
+    {
+        assert(_is_head_done);
+        return boost::none;  // TODO: implement
+    }
+
+    http_response::ChunkBody
+    get_chunk_body(Cancel cancel, asio::yield_context yield)
+    {
+        return {{}, 0};  // TODO: implement
+    }
+
+    boost::optional<http_response::Part>
+    get_chunk_part(Cancel cancel, asio::yield_context yield)
+    {
+        if (next_chunk_body) {
+            // We just sent a chunk header, body comes next.
+            auto part = std::move(next_chunk_body);
+            next_chunk_body = boost::none;
+            return part;
+        }
+
+        sys::error_code ec;
+
+        // Get block signature and previous hash,
+        // and only then its data (which may be empty).
+        auto sig_entry = get_sig_entry(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, boost::none);
+        if (!sig_entry) return boost::none;
+        auto chunk_body = get_chunk_body(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, boost::none);
+        // TODO: validate offset and size
+
+        http_response::ChunkHdr ch(chunk_body.size(), next_chunk_exts);
+        next_chunk_exts = sig_entry->chunk_exts();
+        if (chunk_body.size() > 0)
+            next_chunk_body = std::move(chunk_body);
+        return http_response::Part(std::move(ch));
+    }
+
 public:
     HttpStore1Reader( fs::path dirp
                     , asio::posix::stream_descriptor headf
@@ -285,13 +341,26 @@ public:
         if (!_is_open || _is_done) return boost::none;
 
         sys::error_code ec;
-        auto head = parse_head(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, boost::none);
 
-        _is_done = true;  // TODO: implement rest
+        if (!_is_head_done) {
+            auto head = parse_head(cancel, yield[ec]);
+            return_or_throw_on_error(yield, cancel, ec, boost::none);
+            _is_head_done = true;
+            return http_response::Part(std::move(head));
+        }
+
+        if (!_is_body_done) {
+            auto chunk_part = get_chunk_part(cancel, yield[ec]);
+            return_or_throw_on_error(yield, cancel, ec, boost::none);
+            if (!chunk_part) return boost::none;
+            if (auto ch = chunk_part->as_chunk_hdr())
+                _is_body_done = (ch->size == 0);  // last chunk
+            return chunk_part;
+        }
+
+        _is_done = true;
         close();
-
-        return http_response::Part(std::move(head));
+        return http_response::Part(http_response::Trailer());
     }
 
     bool
@@ -318,12 +387,17 @@ private:
     asio::posix::stream_descriptor headf;
     asio::executor ex;
 
+    bool _is_head_done = false;
+    bool _is_body_done = false;
     bool _is_done = false;
     bool _is_open = true;
 
     std::string uri;  // for warnings
     boost::optional<size_t> data_size;
     boost::optional<size_t> block_size;
+
+    std::string next_chunk_exts;
+    boost::optional<http_response::Part> next_chunk_body;
 };
 
 std::unique_ptr<http_response::AbstractReader>
