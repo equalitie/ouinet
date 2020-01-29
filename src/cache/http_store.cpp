@@ -1,6 +1,7 @@
 #include "http_store.h"
 
 #include <boost/asio/buffer.hpp>
+#include <boost/asio/read.hpp>
 #include <boost/asio/read_until.hpp>
 #include <boost/beast/core/static_buffer.hpp>
 #include <boost/beast/http/empty_body.hpp>
@@ -354,7 +355,27 @@ private:
     http_response::ChunkBody
     get_chunk_body(Cancel cancel, asio::yield_context yield)
     {
-        return {{}, 0};  // TODO: implement
+        assert(_is_head_done);
+        sys::error_code ec;
+        http_response::ChunkBody empty_cb{{}, 0};
+
+        if (!bodyf) {
+            bodyf = util::file_io::open_readonly(ex, dirp / body_fname, ec);
+            if (ec == sys::errc::no_such_file_or_directory)
+                return empty_cb;
+            return_or_throw_on_error(yield, cancel, ec, std::move(empty_cb));
+
+            assert(block_size);
+            body_buffer.resize(*block_size);
+        }
+
+        auto len = asio::async_read(*bodyf, asio::buffer(body_buffer), yield[ec]);
+        if (cancel) ec == asio::error::operation_aborted;
+        if (ec == asio::error::eof) ec = {};
+        return_or_throw_on_error(yield, cancel, ec, empty_cb);
+
+        assert(len <= body_buffer.size());
+        return {std::vector<uint8_t>(body_buffer.cbegin(), body_buffer.cbegin() + len), 0};
     }
 
     boost::optional<http_response::Part>
@@ -439,6 +460,7 @@ public:
         _is_open = false;
         headf.close();
         if (sigsf) sigsf->close();
+        if (bodyf) bodyf->close();
     }
 
 private:
@@ -457,6 +479,9 @@ private:
 
     boost::optional<asio::posix::stream_descriptor> sigsf;
     SigEntry::parse_buffer sigs_buffer;
+
+    boost::optional<asio::posix::stream_descriptor> bodyf;
+    std::vector<uint8_t> body_buffer;
 
     std::string next_chunk_exts;
     boost::optional<http_response::Part> next_chunk_body;
