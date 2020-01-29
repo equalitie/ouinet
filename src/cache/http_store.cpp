@@ -47,8 +47,8 @@ block_sig_from_exts(boost::string_view xs)
 // A signatures file entry with `OFFSET[i] SIGNATURE[i] HASH[i-1]`.
 struct SigEntry {
     size_t offset;
-    boost::string_view signature;
-    boost::string_view prev_digest;
+    std::string signature;
+    std::string prev_digest;
 
     std::string str() const
     {
@@ -149,7 +149,7 @@ public:
         // Only act when a chunk header with a signature is received;
         // upstream verification or the injector should have placed
         // them at the right chunk headers.
-        e.signature = block_sig_from_exts(ch.exts);
+        e.signature = block_sig_from_exts(ch.exts).to_string();
         if (e.signature.empty()) return;
 
         // Check that signature is properly aligned with end of block
@@ -162,11 +162,8 @@ public:
         }
 
         // Encode the chained hash for the previous block.
-        std::string pbdig;
-        if (prev_block_digest) {
-            pbdig = util::base64_encode(*prev_block_digest);
-            e.prev_digest = pbdig;
-        }
+        if (prev_block_digest)
+            e.prev_digest = util::base64_encode(*prev_block_digest);
 
         // Prepare hash for next data block: HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])
         prev_block_digest = block_hash.close();
