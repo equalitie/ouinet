@@ -116,8 +116,9 @@ struct SigEntry {
         auto offset_s = m[1].str();
         boost::string_view offset_sv(offset_s);
         auto offset = parse::number<size_t>(offset_sv); assert(offset);
+        SigEntry entry{*offset, m[2].str(), m[3].str()};
         buf.erase(0, line_len);  // consume used input
-        return SigEntry{*offset, m[2].str(), m[3].str()};
+        return entry;
     }
 };
 
