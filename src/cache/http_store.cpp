@@ -1,11 +1,13 @@
 #include "http_store.h"
 
 #include <boost/asio/buffer.hpp>
+#include <boost/asio/read_until.hpp>
 #include <boost/beast/core/static_buffer.hpp>
 #include <boost/beast/http/empty_body.hpp>
 #include <boost/beast/http/read.hpp>
 #include <boost/format.hpp>
 #include <boost/optional.hpp>
+#include <boost/regex.hpp>
 
 #include "../defer.h"
 #include "../logger.h"
@@ -50,6 +52,8 @@ struct SigEntry {
     std::string signature;
     std::string prev_digest;
 
+    using parse_buffer = std::string;
+
     std::string str() const
     {
         static const auto line_format = "%x %s %s\n";
@@ -69,6 +73,51 @@ struct SigEntry {
             exts << (boost::format(fmt_hx) % prev_digest);
 
         return exts.str();
+    }
+
+    static
+    parse_buffer create_parse_buffer()
+    {
+        // We may use a flat buffer or something like that,
+        // but this will suffice for the moment.
+        return {};
+    }
+
+    template<class Stream>
+    static
+    boost::optional<SigEntry>
+    parse(Stream& in, parse_buffer& buf, Cancel cancel, asio::yield_context yield)
+    {
+        sys::error_code ec;
+        auto line_len = asio::async_read_until(in, asio::dynamic_buffer(buf), '\n', yield[ec]);
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec == asio::error::eof) ec = {};
+        return_or_throw_on_error(yield, cancel, ec, boost::none);
+
+        if (line_len == 0) return boost::none;
+        assert(line_len <= buf.size());
+        if (buf[line_len - 1] != '\n') {
+            _ERROR("Truncated signature line");
+            return or_throw(yield, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
+        }
+        boost::string_view line(buf);
+        line.remove_suffix(buf.size() - line_len + 1);  // leave newline out
+
+        static const boost::regex line_regex(
+            "([0-9a-f]+)"  // LOWER_HEX(OFFSET[i])
+            " ([A-Za-z0-9+/]+=*)"  // BASE64(SIG[i])
+            " ([A-Za-z0-9+/]+=*)?"  // BASE64(HASH([i-1]))
+        );
+        boost::cmatch m;
+        if (!boost::regex_match(line.begin(), line.end(), m, line_regex)) {
+            _ERROR("Malformed signature line");
+            return or_throw(yield, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
+        }
+        auto offset_s = m[1].str();
+        boost::string_view offset_sv(offset_s);
+        auto offset = parse::number<size_t>(offset_sv); assert(offset);
+        buf.erase(0, line_len);  // consume used input
+        return SigEntry{*offset, m[2].str(), m[3].str()};
     }
 };
 
@@ -289,7 +338,16 @@ private:
     get_sig_entry(Cancel cancel, asio::yield_context yield)
     {
         assert(_is_head_done);
-        return boost::none;  // TODO: implement
+        if (!sigsf) {
+            sys::error_code ec;
+            sigsf = util::file_io::open_readonly(ex, dirp / sigs_fname, ec);
+            if (ec == sys::errc::no_such_file_or_directory)
+                return boost::none;
+            return_or_throw_on_error(yield, cancel, ec, boost::none);
+
+            sigs_buffer = SigEntry::create_parse_buffer();
+        }
+        return SigEntry::parse(*sigsf, sigs_buffer, cancel, yield);
     }
 
     http_response::ChunkBody
@@ -379,6 +437,7 @@ public:
     {
         _is_open = false;
         headf.close();
+        if (sigsf) sigsf->close();
     }
 
 private:
@@ -394,6 +453,9 @@ private:
     std::string uri;  // for warnings
     boost::optional<size_t> data_size;
     boost::optional<size_t> block_size;
+
+    boost::optional<asio::posix::stream_descriptor> sigsf;
+    SigEntry::parse_buffer sigs_buffer;
 
     std::string next_chunk_exts;
     boost::optional<http_response::Part> next_chunk_body;
