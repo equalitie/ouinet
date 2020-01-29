@@ -423,11 +423,16 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
                 // For the incomplete test, the last block signature should be missing,
                 // so we will not get its data.
                 if (!complete && bi == rs_block_data.size() -1) break;
-                part = loaded_rr.async_read_part(c, y[e]);
-                BOOST_CHECK_EQUAL(e.message(), "Success");
-                BOOST_REQUIRE(part);
-                BOOST_REQUIRE(part->is_chunk_body());
-                std::vector<uint8_t>& bd = *(part->as_chunk_body());
+                std::vector<uint8_t> bd;  // accumulate data here
+                for (bool done = false; !done; ) {
+                    part = loaded_rr.async_read_part(c, y[e]);
+                    BOOST_CHECK_EQUAL(e.message(), "Success");
+                    BOOST_REQUIRE(part);
+                    BOOST_REQUIRE(part->is_chunk_body());
+                    auto& d = *(part->as_chunk_body());
+                    bd.insert(bd.end(), d.cbegin(), d.cend());
+                    done = (d.remain == 0);
+                }
                 BOOST_REQUIRE_EQUAL( util::bytes::to_string(bd)
                                    , rs_block_data[bi]);
             }
