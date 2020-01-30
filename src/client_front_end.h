@@ -8,6 +8,7 @@
 //#include <ostream>
 #include "namespaces.h"
 #include "ssl/ca_certificate.h"
+#include "util/reachability.h"
 #include "util/yield.h"
 #include "logger.h"
 
@@ -66,6 +67,7 @@ public:
                   , const CACertificate&
                   , boost::optional<uint32_t> udp_port
                   , const UPnPs&
+                  , const util::UdpServerReachabilityAnalysis*
                   , Yield yield);
 
     Task notify_task(const std::string& task_name)
@@ -102,6 +104,7 @@ private:
     void handle_status( ClientConfig&
                       , boost::optional<uint32_t> udp_port
                       , const UPnPs&
+                      , const util::UdpServerReachabilityAnalysis*
                       , const Request&
                       , Response&
                       , std::stringstream&);

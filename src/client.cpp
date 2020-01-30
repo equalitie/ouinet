@@ -66,6 +66,7 @@
 #include "util/lru_cache.h"
 #include "util/scheduler.h"
 #include "util/connected_pair.h"
+#include "util/reachability.h"
 #include "upnp.h"
 
 #include "logger.h"
@@ -136,6 +137,9 @@ public:
         _udp_multiplexer
             = create_udp_multiplexer( _ctx
                                     , _config.repo_root() / "last_used_udp_port");
+
+        _udp_reachability
+            = make_unique<util::UdpServerReachabilityAnalysis>(get_executor(), *_udp_multiplexer);
 
         return *_udp_multiplexer;
     }
@@ -325,6 +329,7 @@ private:
 
     boost::optional<asio::ip::udp::endpoint> _local_utp_endpoint;
     boost::optional<asio_utp::udp_multiplexer> _udp_multiplexer;
+    unique_ptr<util::UdpServerReachabilityAnalysis> _udp_reachability;
     shared_ptr<bt::MainlineDht> _bt_dht;
 
     unique_ptr<ouiservice::MultiUtpServer> _multi_utp_server;
@@ -511,6 +516,7 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
                            , *_ca_certificate
                            , udp_port
                            , _upnps
+                           , _udp_reachability.get()
                            , yield.tag("serve_frontend"));
 }
 

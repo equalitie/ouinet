@@ -276,6 +276,7 @@ local_endpoint(Proto proto, uint16_t port) {
 void ClientFrontEnd::handle_status( ClientConfig& config
                                   , boost::optional<uint32_t> udp_port
                                   , const UPnPs& upnps
+                                  , const util::UdpServerReachabilityAnalysis* reachability
                                   , const Request& req, Response& res, stringstream& ss)
 {
     res.set(http::field::content_type, "application/json");
@@ -315,6 +316,17 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         response["is_upnp_active"] = "disabled";
     }
 
+    if (reachability) {
+        auto judgement = reachability->judgement();
+        if (judgement == util::UdpServerReachabilityAnalysis::Reachability::Unreachable) {
+            response["udp_world_reachable"] = "unreachable";
+        } else if (judgement == util::UdpServerReachabilityAnalysis::Reachability::ConfirmedReachable) {
+            response["udp_world_reachable"] = "reachable";
+        } else if (judgement == util::UdpServerReachabilityAnalysis::Reachability::UnconfirmedReachable) {
+            response["udp_world_reachable"] = "unconfirmed";
+        }
+    }
+
     ss << response;
 }
 
@@ -324,6 +336,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
                               , const CACertificate& ca
                               , boost::optional<uint32_t> udp_port
                               , const UPnPs& upnps
+                              , const util::UdpServerReachabilityAnalysis* reachability
                               , Yield yield)
 {
     Response res{http::status::ok, req.version()};
@@ -340,7 +353,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
     if (path == "/ca.pem") {
         handle_ca_pem(req, res, ss, ca);
     } else if (path == "/api/status") {
-        handle_status(config, udp_port, upnps, req, res, ss);
+        handle_status(config, udp_port, upnps, reachability, req, res, ss);
     } else {
         handle_portal(config, req, res, ss, bep5_cache);
     }
