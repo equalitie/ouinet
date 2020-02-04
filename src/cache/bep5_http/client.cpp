@@ -580,6 +580,7 @@ struct Client::Impl {
 
     void stop() {
         lifetime_cancel();
+        local_peer_discovery.stop();
     }
 
     unsigned get_newest_proto_version() const {

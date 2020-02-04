@@ -267,7 +267,11 @@ LocalPeerDiscovery::LocalPeerDiscovery( const asio::executor& ex
     _impl = make_unique<Impl>(_ex, id, advertised_eps, _lifetime_cancel);
 }
 
+void LocalPeerDiscovery::stop() {
+    _lifetime_cancel();
+}
+
 LocalPeerDiscovery::~LocalPeerDiscovery() {
     if (_impl) _impl->say_bye();
-    _lifetime_cancel();
+    stop();
 }

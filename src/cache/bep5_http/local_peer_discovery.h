@@ -20,6 +20,8 @@ public:
 
     ~LocalPeerDiscovery();
 
+    void stop();
+
 private:
     asio::executor _ex;
     std::unique_ptr<Impl> _impl;
