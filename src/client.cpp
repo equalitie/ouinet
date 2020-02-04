@@ -118,6 +118,7 @@ public:
 
     void stop() {
         _bep5_http_cache = nullptr;
+        _upnps.clear();
         _shutdown_signal();
         if (_injector) _injector->stop();
         if (_bt_dht) {
@@ -154,6 +155,8 @@ public:
 
         m.bind(mpl, ec);
         if (ec) return or_throw(yield, ec, _bt_dht);
+
+        auto cc = _shutdown_signal.connect([&] { bt_dht.reset(); });
 
         auto ext_ep = bt_dht->set_endpoint(move(m), yield[ec]);
         if (ec) return or_throw(yield, ec, _bt_dht);
@@ -241,6 +244,8 @@ private:
     void serve_utp_request(GenericStream, Yield);
 
     void setup_upnp(uint16_t ext_port, asio::ip::udp::endpoint local_ep) {
+        if (_shutdown_signal) return;
+
         if (!local_ep.address().is_v4()) {
             LOG_WARN("Not setting up UPnP redirection because endpoint is not ipv4");
             return;
@@ -259,6 +264,7 @@ private:
     void idempotent_start_accepting_on_utp(asio::yield_context yield) {
         if (_multi_utp_server) return;
         assert(!_shutdown_signal);
+        if (_shutdown_signal) return or_throw(yield, asio::error::operation_aborted);
 
         sys::error_code ec;
         auto dht = bittorrent_dht(yield[ec]);
@@ -1485,6 +1491,8 @@ void Client::State::setup_cache()
                 return;
             }
 
+            assert(!_shutdown_signal || ec == asio::error::operation_aborted);
+
             _bep5_http_cache
                 = cache::bep5_http::Client::build( dht
                                                  , *_config.cache_http_pub_key()
@@ -1492,9 +1500,11 @@ void Client::State::setup_cache()
                                                  , logger.get_threshold()
                                                  , yield[ec]);
 
+            if (cancel) ec = asio::error::operation_aborted;
             if (ec) {
                 LOG_ERROR("Failed to initialize cache::bep5_http::Client: "
                          , ec.message());
+                return;
             }
 
             idempotent_start_accepting_on_utp(yield[ec]);
