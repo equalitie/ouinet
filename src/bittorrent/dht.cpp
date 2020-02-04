@@ -1945,10 +1945,13 @@ void dht::DhtNode::send_ping(NodeContact contact)
     // that we need to spawn an unlimited number of coroutines.  Perhaps it
     // would be better if functions using this send_ping function would only
     // spawn a limited number of coroutines and use only that.
-    TRACK_SPAWN(_exec, ([this, contact] (asio::yield_context yield) {
+    TRACK_SPAWN(_exec, ([
+        this,
+        contact,
+        cancel = _cancel
+    ] (asio::yield_context yield) mutable {
         sys::error_code ec;
-        Signal<void()> cancel_signal;
-        send_ping(contact, cancel_signal, yield[ec]);
+        send_ping(contact, cancel, yield[ec]);
     }));
 }
 
