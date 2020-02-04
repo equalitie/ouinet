@@ -1488,7 +1488,9 @@ void Client::State::setup_cache()
 
             auto dht = bittorrent_dht(yield[ec]);
             if (ec) {
-                LOG_ERROR("Failed to initialize BT DHT ", ec.message());
+                if (ec != asio::error::operation_aborted) {
+                    LOG_ERROR("Failed to initialize BT DHT ", ec.message());
+                }
                 return;
             }
 
@@ -1503,8 +1505,10 @@ void Client::State::setup_cache()
 
             if (cancel) ec = asio::error::operation_aborted;
             if (ec) {
-                LOG_ERROR("Failed to initialize cache::bep5_http::Client: "
-                         , ec.message());
+                if (ec != asio::error::operation_aborted) {
+                    LOG_ERROR("Failed to initialize cache::bep5_http::Client: "
+                             , ec.message());
+                }
                 return;
             }
 
