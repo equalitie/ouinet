@@ -6,6 +6,7 @@
 #include "util/condition_variable.h"
 #include "util/success_condition.h"
 #include "util/str.h"
+#include "util/coro_tracker.h"
 #include "async_sleep.h"
 
 using namespace std;
@@ -32,10 +33,11 @@ void OuiServiceServer::start_listen(asio::yield_context yield)
     SuccessCondition success_condition(_ex);
 
     for (auto& implementation : _implementations) {
-        asio::spawn(_ex, [ this
-                         , implementation = implementation.get()
-                         , lock = success_condition.lock()
-                         ] (asio::yield_context yield) mutable {
+        TRACK_SPAWN(_ex, ([
+            this,
+            implementation = implementation.get(),
+            lock = success_condition.lock()
+        ] (asio::yield_context yield) mutable {
             sys::error_code ec;
 
             auto slot_connection = _stop_listen.connect([implementation] () {
@@ -70,7 +72,7 @@ void OuiServiceServer::start_listen(asio::yield_context yield)
                 _connection_queue.push_back(std::move(connection));
                 _connection_available.notify();
             }
-        });
+        }));
     }
 
     bool success = success_condition.wait_for_success(yield);

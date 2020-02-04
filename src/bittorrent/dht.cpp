@@ -223,7 +223,7 @@ void dht::DhtNode::start(asio_utp::udp_multiplexer m, asio::yield_context yield)
     _node_id = NodeID::zero();
     _next_transaction_id = 1;
 
-    asio::spawn(_exec, [this] (asio::yield_context yield) {
+    TRACK_SPAWN(_exec, [this] (asio::yield_context yield) {
         receive_loop(yield);
     });
 
@@ -302,10 +302,11 @@ void dht::DhtNode::store_contacts() const
 
     auto contacts = _routing_table->dump_contacts();
 
-    asio::spawn(_exec, [ exec  = _exec
-                       , path  = move(path)
-                       , contacts = move(contacts)
-                       ] (asio::yield_context yield) mutable {
+    TRACK_SPAWN_AFTER_STOP(_exec, ([
+        exec = _exec,
+        path = move(path),
+        contacts = move(contacts)
+    ] (asio::yield_context yield) mutable {
         Cancel cancel;
         sys::error_code ec;
         sys::error_code ignored_ec;
@@ -342,7 +343,7 @@ void dht::DhtNode::store_contacts() const
         }
 
         util::file_io::write(file, asio::buffer(data), cancel, yield[ec]);
-    });
+    }));
 }
 
 void dht::DhtNode::stop()
@@ -390,7 +391,7 @@ std::set<udp::endpoint> dht::DhtNode::tracker_announce(
     auto cancelled = cancel.connect([]{});
     WaitCondition wc(_exec);
     for (auto& i : responsible_nodes) {
-        asio::spawn(_exec, [&, i, lock = wc.lock()] (asio::yield_context yield) {
+        TRACK_SPAWN(_exec, ([&, i, lock = wc.lock()] (asio::yield_context yield) {
             sys::error_code ec;
             send_write_query(
                 i.second.node_endpoint,
@@ -409,7 +410,7 @@ std::set<udp::endpoint> dht::DhtNode::tracker_announce(
             if (!ec) {
                 success = true;
             }
-        });
+        }));
     }
     wc.wait(yield);
 
@@ -551,7 +552,7 @@ NodeID dht::DhtNode::data_put_immutable(
     auto cancelled = cancel.connect([]{});
     WaitCondition wc(_exec);
     for (auto& i : responsible_nodes) {
-        asio::spawn(_exec, [&, lock = wc.lock()] (asio::yield_context yield) {
+        TRACK_SPAWN(_exec, ([&, lock = wc.lock()] (asio::yield_context yield) {
             sys::error_code ec;
             send_write_query(
                 i.second.node_endpoint,
@@ -568,7 +569,7 @@ NodeID dht::DhtNode::data_put_immutable(
             if (!ec) {
                 success = true;
             }
-        });
+        }));
     }
     wc.wait(yield);
 
@@ -1701,11 +1702,11 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
 
             size_t k = 0;
             for (const auto bs : bootstraps) {
-                asio::spawn(_exec
-                           , [ &
-                             , lock = wc.lock()
-                             , bs = bs
-                             ] (asio::yield_context yield) {
+                TRACK_SPAWN(_exec , ([
+                    &,
+                    lock = wc.lock(),
+                    bs = bs
+                ] (asio::yield_context yield) {
                     sys::error_code ec;
 
                     LOG_DEBUG("Trying bootstrap node ", bs);
@@ -1725,7 +1726,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
                         node_endpoints = move(stats.nodes);
                         done_cancel();
                     }
-                });
+                }));
 
                 // Try enough nodes quickly in parallel. Then try the rest with
                 // 300ms delays.
@@ -1944,12 +1945,11 @@ void dht::DhtNode::send_ping(NodeContact contact)
     // that we need to spawn an unlimited number of coroutines.  Perhaps it
     // would be better if functions using this send_ping function would only
     // spawn a limited number of coroutines and use only that.
-    asio::spawn(_exec, [this, contact] (asio::yield_context yield) {
+    TRACK_SPAWN(_exec, ([this, contact] (asio::yield_context yield) {
         sys::error_code ec;
         Signal<void()> cancel_signal;
-
         send_ping(contact, cancel_signal, yield[ec]);
-    });
+    }));
 }
 
 /*
@@ -2260,13 +2260,13 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data2(
     // through nodes without BEP 44 support slows things down quite a lot.
     WatchDog wd(_exec, _stats->max_reply_wait_time("get"), [&] () mutable {
         if (local_cancel) return;
-        asio::spawn(_exec, [&, lock = wc.lock()] ( asio::yield_context yield) {
+        TRACK_SPAWN(_exec, ([&, lock = wc.lock()] ( asio::yield_context yield) {
             if (dbg) cerr << dbg << "query_find_node2 start " << node << "\n";
             sys::error_code ec;
             query_find_node2(key, node, closer_nodes, dms, &dbg, local_cancel, yield[ec]);
             if (dbg) cerr << dbg << "query_find_node2 end " << node << "\n";
             local_cancel();
-        });
+        }));
     });
 
     assert(!cancel_signal);
@@ -2492,14 +2492,14 @@ void MainlineDht::set_endpoint(asio_utp::udp_multiplexer m)
 
     _nodes[m.local_endpoint()] = make_unique<dht::DhtNode>(_exec, _storage_dir);
 
-    asio::spawn(_exec, [&, m = move(m)] (asio::yield_context yield) mutable {
+    TRACK_SPAWN(_exec, ([&, m = move(m)] (asio::yield_context yield) mutable {
         auto ep = m.local_endpoint();
         auto con = _cancel.connect([&] { _nodes.erase(ep); });
 
         sys::error_code ec;
         _nodes[ep]->start(move(m), yield[ec]);
         assert(!con || ec == asio::error::operation_aborted);
-    });
+    }));
 }
 
 asio::ip::udp::endpoint
@@ -2549,14 +2549,19 @@ std::set<udp::endpoint> MainlineDht::tracker_announce(
 
     WaitCondition wc(_exec);
     for (auto& i : _nodes) {
-        asio::spawn(_exec, [&, ep = i.first, p = i.second.get(), lock = wc.lock()] (asio::yield_context yield) {
+        TRACK_SPAWN(_exec, ([
+            &,
+            ep = i.first,
+            p = i.second.get(),
+            lock = wc.lock()
+        ] (asio::yield_context yield) {
             sys::error_code ec;
             std::set<udp::endpoint> peers = i.second->tracker_announce(infohash, port, cancel, yield[ec]);
             assert(!cancel || ec == asio::error::operation_aborted);
             if (cancel) ec = asio::error::operation_aborted;
             if (ec) { return; }
             output.insert(peers.begin(), peers.end());
-        });
+        }));
     }
 
     wc.wait(yield);
@@ -2583,10 +2588,11 @@ void MainlineDht::mutable_put(
     WaitCondition wait_all(_exec);
 
     for (auto& i : _nodes) {
-        asio::spawn(_exec, [ &
-                          , lock = condition.lock()
-                          , lock_all = wait_all.lock()
-                          ] (asio::yield_context yield) {
+        TRACK_SPAWN(_exec, ([
+            &,
+            lock = condition.lock(),
+            lock_all = wait_all.lock()
+        ] (asio::yield_context yield) {
             if (!i.second->ready()) {
                 return;
             }
@@ -2597,7 +2603,7 @@ void MainlineDht::mutable_put(
             if (ec) return;
 
             lock.release(true);
-        });
+        }));
     }
 
     auto cancelled = cancel.connect([&] {
@@ -2632,7 +2638,7 @@ std::set<udp::endpoint> MainlineDht::tracker_get_peers(NodeID infohash, Cancel& 
     SuccessCondition success_condition(_exec);
     WaitCondition completed_condition(_exec);
     for (auto& i : _nodes) {
-        asio::spawn(_exec, [
+        TRACK_SPAWN(_exec, ([
             &,
             success = success_condition.lock(),
             complete = completed_condition.lock()
@@ -2649,7 +2655,7 @@ std::set<udp::endpoint> MainlineDht::tracker_get_peers(NodeID infohash, Cancel& 
             if (peers.size()) {
                 success.release(true);
             }
-        });
+        }));
     }
 
     auto cancelled = cancel_signal.connect([&] {
@@ -2686,7 +2692,7 @@ boost::optional<BencodedValue> MainlineDht::immutable_get(
     SuccessCondition success_condition(_exec);
     WaitCondition completed_condition(_exec);
     for (auto& i : _nodes) {
-        asio::spawn(_exec, [
+        TRACK_SPAWN(_exec, ([
             &,
             success = success_condition.lock(),
             complete = completed_condition.lock()
@@ -2702,7 +2708,7 @@ boost::optional<BencodedValue> MainlineDht::immutable_get(
                 output = data;
                 success.release(true);
             }
-        });
+        }));
     }
     auto cancelled = cancel_signal.connect([&] {
         success_condition.cancel();
@@ -2742,7 +2748,7 @@ boost::optional<MutableDataItem> MainlineDht::mutable_get(
     WaitCondition completed_condition(_exec);
 
     for (auto& i : _nodes) {
-        asio::spawn(_exec, [
+        TRACK_SPAWN(_exec, ([
             &,
             success = success_condition.lock(),
             complete = completed_condition.lock()
@@ -2763,7 +2769,7 @@ boost::optional<MutableDataItem> MainlineDht::mutable_get(
                 output = data;
                 success.release(true);
             }
-        });
+        }));
     }
     auto cancelled = cancel_signal.connect([&] {
         success_condition.cancel();

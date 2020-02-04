@@ -2,6 +2,7 @@
 #include <boost/asio/ip/multicast.hpp>
 #include "local_peer_discovery.h"
 #include "../../util/random.h"
+#include "../../util/coro_tracker.h"
 #include "../../parse/number.h"
 #include "../../parse/endpoint.h"
 #include "../../logger.h"
@@ -95,7 +96,7 @@ struct LocalPeerDiscovery::Impl {
     }
 
     void broadcast_search_query(Cancel& cancel) {
-        asio::spawn(_ex, [&, cancel = cancel] (asio::yield_context yield) {
+        TRACK_SPAWN(_ex, ([&, cancel = cancel] (asio::yield_context yield) {
             sys::error_code ec;
             udp::endpoint ep = multicast_ep;
             _socket.async_send_to( asio::buffer(query_message())
@@ -105,15 +106,15 @@ struct LocalPeerDiscovery::Impl {
                 LOG_ERROR("LocalPeerDiscovery: Failed to broadcast search query "
                         , "(ec:", ec.message(), " ep:", ep, ")");
             }
-        });
+        }));
     }
 
     void start_listening_to_broadcast(Cancel& cancel) {
-        asio::spawn(_ex, [&, cancel = cancel] (asio::yield_context yield) mutable {
+        TRACK_SPAWN(_ex, ([&, cancel = cancel] (asio::yield_context yield) mutable {
             sys::error_code ec;
             if (cancel) return;
             listen_to_broadcast(cancel, yield[ec]);
-        });
+        }));
     }
 
     void listen_to_broadcast(Cancel& cancel, asio::yield_context yield) {

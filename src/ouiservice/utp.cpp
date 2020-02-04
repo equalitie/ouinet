@@ -3,6 +3,7 @@
 #include "../parse/endpoint.h"
 #include "../logger.h"
 #include "../util/watch_dog.h"
+#include "../util/coro_tracker.h"
 
 namespace ouinet {
 namespace ouiservice {
@@ -30,7 +31,7 @@ UtpOuiServiceServer::UtpOuiServiceServer( const asio::executor& ex
 
 void UtpOuiServiceServer::start_listen(asio::yield_context yield)
 {
-    asio::spawn(_ex, [&] (asio::yield_context yield) {
+    TRACK_SPAWN(_ex, [&] (asio::yield_context yield) {
         Cancel cancel(_cancel);
 
         while (!cancel) {

@@ -9,6 +9,7 @@
 #include "../../logger.h"
 #include "../../util/hash.h"
 #include "../../ssl/util.h"
+#include "../../util/coro_tracker.h"
 
 using namespace std;
 using namespace ouinet;
@@ -79,12 +80,11 @@ public:
     }
 
     void start() {
-        asio::spawn(_dht->get_executor()
-                   , [&] (asio::yield_context yield) {
-                         Cancel cancel(_lifetime_cancel);
-                         sys::error_code ec;
-                         loop(cancel, yield[ec]);
-                     });
+        TRACK_SPAWN(_dht->get_executor(), [&] (asio::yield_context yield) {
+            Cancel cancel(_lifetime_cancel);
+            sys::error_code ec;
+            loop(cancel, yield[ec]);
+        });
     }
 
     const Peers& peers() const { return _peers; }
@@ -212,8 +212,8 @@ public:
         , _random_generator(std::random_device()())
         , _helper_announcer(new bt::Bep5ManualAnnouncer(util::sha1_digest(helper_swarm_name), dht))
     {
-        asio::spawn(_injector_swarm->get_executor(),
-                [=] (asio::yield_context yield) {
+        TRACK_SPAWN(_injector_swarm->get_executor(),
+                    [=] (asio::yield_context yield) {
             sys::error_code ec;
             loop(yield[ec]);
         });
@@ -277,7 +277,7 @@ private:
         Cancel success_cancel(cancel);
 
         for (auto inj : injectors) {
-            asio::spawn(ex, [&, inj, lock = wc.lock()]
+            TRACK_SPAWN(ex, ([&, inj, lock = wc.lock()]
                     (asio::yield_context yield) {
                 Cancel c(cancel);
                 auto sc = success_cancel.connect([&] { c(); });
@@ -287,7 +287,7 @@ private:
                 if (ping_one_injector(inj, c, yield[ec])) {
                     success_cancel();
                 }
-            });
+            }));
         }
 
         sys::error_code ec;
@@ -485,12 +485,12 @@ GenericStream Bep5Client::connect( asio::yield_context yield
         const uint32_t k = 10;
         uint32_t delay_ms = (j <= k) ? 0 : ((j-k) * 100);
 
-        asio::spawn(exec,
-        [ =
-        , &spawn_cancel
-        , &ret_con
-        , &ret_ep
-        , lock = wc.lock()
+        TRACK_SPAWN(exec, ([
+            =,
+            &spawn_cancel,
+            &ret_con,
+            &ret_ep,
+            lock = wc.lock()
         ] (asio::yield_context y) mutable {
             sys::error_code ec;
 
@@ -505,7 +505,7 @@ GenericStream Bep5Client::connect( asio::yield_context yield
             ret_con = move(con);
             ret_ep  = peer.endpoint;
             spawn_cancel();
-        });
+        }));
     }
 
     wc.wait(cancel, yield[ec]);

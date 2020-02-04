@@ -4,6 +4,7 @@
 #include <util/signal.h>
 #include <async_sleep.h>
 #include <defer.h>
+#include "util/coro_tracker.h"
 
 namespace ouinet {
 
@@ -15,10 +16,13 @@ public:
         : _external_port(external_port)
         , _internal_port(internal_port)
     {
-        asio::spawn(exec, [this, exec, c = _lifetime_cancel
+        TRACK_SPAWN(exec, ([
+            this,
+            exec,
+            c = _lifetime_cancel
         ] (asio::yield_context yield) mutable {
             loop(exec, c, yield);
-        });
+        }));
     }
 
     ~UPnPUpdater() {

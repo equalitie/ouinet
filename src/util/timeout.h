@@ -1,6 +1,7 @@
 #pragma once
 
 #include "signal.h"
+#include "../util/coro_tracker.h"
 
 namespace ouinet { namespace util {
 
@@ -29,6 +30,7 @@ public:
             });
 
         asio::spawn(ex, [s = _state, duration] (asio::yield_context yield) {
+                TRACK_COROUTINE();
                 if (s->finished) return;
 
                 sys::error_code ec;

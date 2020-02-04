@@ -4,6 +4,7 @@
 #include "../../logger.h"
 #include "../../async_sleep.h"
 #include "../../bittorrent/node_id.h"
+#include "../../util/coro_tracker.h"
 #include <boost/utility/string_view.hpp>
 
 using namespace std;
@@ -179,7 +180,7 @@ struct Announcer::Loop {
 
     void start()
     {
-        asio::spawn(dht->get_executor(), [&] (asio::yield_context yield) {
+        TRACK_SPAWN(dht->get_executor(), [&] (asio::yield_context yield) {
             Cancel cancel(_cancel);
             sys::error_code ec;
             loop(cancel, yield[ec]);

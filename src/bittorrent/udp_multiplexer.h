@@ -9,6 +9,7 @@
 #include "../util/condition_variable.h"
 #include "../async_sleep.h"
 #include "rate_counter.h"
+#include "../util/coro_tracker.h"
 
 namespace ouinet { namespace bittorrent {
 
@@ -118,7 +119,7 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s):
     });
 #endif
 
-    asio::spawn(get_executor(), [this] (asio::yield_context yield) {
+    TRACK_SPAWN(get_executor(), [this] (asio::yield_context yield) {
         Cancel cancel(_terminate_signal);
 
         auto terminated = cancel.connect([&] {
@@ -160,7 +161,7 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s):
         }
     });
 
-    asio::spawn(get_executor(), [this] (asio::yield_context yield) {
+    TRACK_SPAWN(get_executor(), [this] (asio::yield_context yield) {
         auto terminated = _terminate_signal.connect([]{});
 
         std::vector<uint8_t> buf;
