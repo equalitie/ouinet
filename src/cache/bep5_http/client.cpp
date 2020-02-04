@@ -10,7 +10,6 @@
 #include "../../util/wait_condition.h"
 #include "../../util/set_io.h"
 #include "../../util/async_generator.h"
-#include "../../util/connected_pair.h"
 #include "../../util/lru_cache.h"
 #include "../../util/coro_tracker.h"
 #include "../../bittorrent/dht.h"

@@ -65,7 +65,6 @@
 #include "util/crypto.h"
 #include "util/lru_cache.h"
 #include "util/scheduler.h"
-#include "util/connected_pair.h"
 #include "upnp.h"
 #include "util/coro_tracker.h"
 
