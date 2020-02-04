@@ -339,7 +339,7 @@ class DhtNode {
         DebugCtx&,
         const NodeID& target,
         Evaluate&&,
-        Cancel&,
+        Cancel,
         asio::yield_context
     );
 
@@ -417,7 +417,7 @@ class MainlineDht {
     std::set<udp::endpoint> tracker_announce(
         NodeID infohash,
         boost::optional<int> port,
-        Cancel&,
+        Cancel,
         asio::yield_context
     );
 

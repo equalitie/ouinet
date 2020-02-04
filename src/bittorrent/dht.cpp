@@ -1813,9 +1813,11 @@ void dht::DhtNode::collect(
     DebugCtx& dbg,
     const NodeID& target_id,
     Evaluate&& evaluate,
-    Cancel& cancel_signal,
+    Cancel cancel_signal,
     asio::yield_context yield
 ) {
+    auto canceled = _cancel.connect([&] { cancel_signal(); });
+
     if (!_routing_table) {
         // We're not yet bootstrapped.
         return or_throw(yield, asio::error::try_again);
@@ -2538,43 +2540,36 @@ MainlineDht::set_endpoint( asio_utp::udp_multiplexer m
 std::set<udp::endpoint> MainlineDht::tracker_announce(
     NodeID infohash,
     boost::optional<int> port,
-    Cancel& cancel_signal,
+    Cancel cancel,
     asio::yield_context yield
 ) {
+    auto cc = _cancel.connect([&] { cancel(); });
+
     std::set<udp::endpoint> output;
 
-    SuccessCondition condition(_exec);
+    WaitCondition wc(_exec);
     for (auto& i : _nodes) {
-        asio::spawn(_exec, [&, ep = i.first, p = i.second.get(), lock = condition.lock()] (asio::yield_context yield) {
+        asio::spawn(_exec, [&, ep = i.first, p = i.second.get(), lock = wc.lock()] (asio::yield_context yield) {
             sys::error_code ec;
-            Signal<void()> cancel_dummy;
-            std::set<udp::endpoint> peers = i.second->tracker_announce(infohash, port, cancel_dummy, yield[ec]);
-
+            std::set<udp::endpoint> peers = i.second->tracker_announce(infohash, port, cancel, yield[ec]);
+            assert(!cancel || ec == asio::error::operation_aborted);
+            if (cancel) ec = asio::error::operation_aborted;
             if (ec) { return; }
-
             output.insert(peers.begin(), peers.end());
-
-            lock.release(true);
         });
     }
 
-    auto cancelled = cancel_signal.connect([&] {
-        condition.cancel();
-    });
+    wc.wait(yield);
 
-    auto terminated = _cancel.connect([&] {
-        condition.cancel();
-    });
+    sys::error_code ec;
 
-    if (!condition.wait_for_success(yield)) {
-        if (condition.cancelled()) {
-            return or_throw<std::set<udp::endpoint>>(yield, asio::error::operation_aborted, std::move(output));
-        } else {
-            return or_throw<std::set<udp::endpoint>>(yield, asio::error::network_unreachable);
-        }
+    if (cancel) {
+        ec = asio::error::operation_aborted;
+    } else if (output.empty()) {
+        ec = asio::error::network_unreachable;
     }
 
-    return output;
+    return or_throw<std::set<udp::endpoint>>(yield, ec, move(output));
 }
 
 void MainlineDht::mutable_put(
