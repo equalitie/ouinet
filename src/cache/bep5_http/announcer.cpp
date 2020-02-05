@@ -160,6 +160,9 @@ struct Announcer::Loop {
 
         while (!cancel) {
             if (entries.empty()) {
+                // XXX: Temporary handler tracking as this coroutine sometimes
+                // fails to exit.
+                TRACK_HANDLER();
                 sys::error_code ec;
                 entries.async_wait_for_push(cancel, yield[ec]);
                 if (cancel) ec = asio::error::operation_aborted;
@@ -192,6 +195,9 @@ struct Announcer::Loop {
         LogLevel ll = _log_level;
 
         {
+            // XXX: Temporary handler tracking as this coroutine sometimes
+            // fails to exit.
+            TRACK_HANDLER();
             sys::error_code ec;
             dht->wait_all_ready(cancel, yield[ec]);
         }
@@ -207,6 +213,9 @@ struct Announcer::Loop {
             // Try inserting three times before moving to the next entry
             bool success = false;
             for (int i = 0; i != 3; ++i) {
+                // XXX: Temporary handler tracking as this coroutine sometimes
+                // fails to exit.
+                TRACK_HANDLER();
                 announce(ei->first, cancel, yield[ec]);
                 if (cancel) return;
                 if (!ec) { success = true; break; }
