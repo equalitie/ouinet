@@ -117,7 +117,7 @@ file(GLOB client_sources
     "./src/util/temp_file.cpp"
     "./src/util/hash.cpp"
     "./src/util.cpp"
-    "./src/util/coro_tracker.cpp"
+    "./src/util/handler_tracker.cpp"
     "./src/http_util.cpp"
     ${VERSION_CPP}
 )
