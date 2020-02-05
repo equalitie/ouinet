@@ -391,17 +391,23 @@ private:
         sys::error_code ec;
 
         // Get block signature and previous hash,
-        // and only then its data (which may be empty).
+        // and then its data (which may be empty).
         auto sig_entry = get_sig_entry(cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec, boost::none);
-        if (!sig_entry) return boost::none;
+        // Even if there is no new signature entry,
+        // if the signature of the previous block was read
+        // it may still be worth sending it in this chunk header
+        // (to allow the receiving end to process it).
+        // Otherwise it is not worth sending anything.
+        if (!sig_entry && next_chunk_exts.empty())
+            return boost::none;
         auto chunk_body = get_chunk_body(cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec, boost::none);
         // TODO: validate offset and size
 
         http_response::ChunkHdr ch(chunk_body.size(), next_chunk_exts);
-        next_chunk_exts = sig_entry->chunk_exts();
-        if (chunk_body.size() > 0)
+        next_chunk_exts = sig_entry ? sig_entry->chunk_exts() : "";
+        if (sig_entry && chunk_body.size() > 0)
             next_chunk_body = std::move(chunk_body);
         return http_response::Part(std::move(ch));
     }
