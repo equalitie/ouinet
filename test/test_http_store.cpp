@@ -422,7 +422,11 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
 
                 // For the incomplete test, the last block signature should be missing,
                 // so we will not get its data.
-                if (!complete && bi == rs_block_data.size() -1) break;
+                if (!complete && bi == rs_block_data.size() - 1) {
+                    part = loaded_rr.async_read_part(c, y[e]);
+                    BOOST_REQUIRE(!part);
+                    break;
+                }
                 std::vector<uint8_t> bd;  // accumulate data here
                 for (bool done = false; !done; ) {
                     part = loaded_rr.async_read_part(c, y[e]);
