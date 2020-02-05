@@ -28,6 +28,10 @@ namespace ouinet { namespace http_response {
     std::ostream& operator<<(std::ostream& os, const ChunkHdr& hdr) {
         return os << "ChunkHdr(" << hdr.size << ", \"" << hdr.exts << "\")";
     }
+
+    std::ostream& operator<<(std::ostream& os, const Trailer& trailer) {
+        return os << static_cast<Trailer::Base>(trailer);
+    }
 }} // namespace ouinet::http_response
 
 BOOST_AUTO_TEST_SUITE(ouinet_http_store)
@@ -310,6 +314,10 @@ static const array<string, 4> rrs_chunk_ext{
     ";ouisig=\"" + rs_block_sig[2] + "\";ouihash=\"" + rs_block_hash[2] + "\"",
 };
 
+// Trailers are merged into the initial head,
+// so the loaded trailer is always empty.
+static const http_response::Trailer rrs_trailer{};
+
 BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false), complete) {
     // This test knows about the internals of this particular format.
     BOOST_CHECK_EQUAL(cache::http_store_version, 1);
@@ -441,7 +449,23 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
                                    , rs_block_data[bi]);
             }
 
-            // TODO: check rest of parts
+            if (!complete) return;
+
+            // Last chunk header.
+            part = loaded_rr.async_read_part(c, y[e]);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            BOOST_REQUIRE(part);
+            BOOST_REQUIRE(part->is_chunk_hdr());
+            BOOST_REQUIRE_EQUAL( *(part->as_chunk_hdr())
+                               , http_response::ChunkHdr( 0
+                                                        , rrs_chunk_ext[bi]));
+
+            // Trailer.
+            part = loaded_rr.async_read_part(c, y[e]);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            BOOST_REQUIRE(part);
+            BOOST_REQUIRE(part->is_trailer());
+            BOOST_CHECK_EQUAL(*(part->as_trailer()), rrs_trailer);
         });
 
         wc.wait(yield);

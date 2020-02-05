@@ -129,6 +129,7 @@ add_executable(test-http-store
     "../src/cache/http_store.cpp"
     "../src/http_util.cpp"
     "../src/logger.cpp"
+    "../src/response_part.cpp"
     "../src/util.cpp"
     "../src/util/crypto.cpp"
     "../src/util/file_io.cpp"
