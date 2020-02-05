@@ -128,6 +128,8 @@ struct LocalPeerDiscovery::Impl {
                 _socket.close(ec);
             });
 
+        auto cc = cancel.connect([&] { _socket.close(); });
+
         while (true) {
             sys::error_code ec;
 
