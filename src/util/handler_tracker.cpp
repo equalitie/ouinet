@@ -82,7 +82,9 @@ struct HandlerTracker::GlobalState {
             lock_guard guard(mutex);
             _keep_going = false;
         }
-        thread.join();
+        if (thread.get_id() != std::thread::id()) {
+            thread.join();
+        }
     }
 };
 
