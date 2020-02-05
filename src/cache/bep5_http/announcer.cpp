@@ -4,6 +4,7 @@
 #include "../../logger.h"
 #include "../../async_sleep.h"
 #include "../../bittorrent/node_id.h"
+#include "../../util/handler_tracker.h"
 #include <boost/utility/string_view.hpp>
 
 using namespace std;
@@ -14,6 +15,16 @@ using namespace chrono_literals;
 
 namespace bt = bittorrent;
 using Clock = chrono::steady_clock;
+
+struct LogLevel {
+    LogLevel(log_level_t ll)
+        : _ll(make_shared<log_level_t>(ll))
+    {}
+
+    bool debug() const { return *_ll <= DEBUG; }
+
+    std::shared_ptr<log_level_t> _ll;
+};
 
 //--------------------------------------------------------------------
 // Entry
@@ -48,11 +59,9 @@ struct Announcer::Loop {
     Entries entries;
     Cancel _cancel;
     Cancel _timer_cancel;
-    log_level_t log_level = INFO;
+    LogLevel _log_level;
 
-    void set_log_level(log_level_t l) { log_level = l; }
-
-    bool log_debug() const { return log_level <= DEBUG; }
+    void set_log_level(log_level_t l) { *_log_level._ll = l; }
 
     static Clock::duration success_reannounce_period() { return 20min; }
     static Clock::duration failure_reannounce_period() { return 5min;  }
@@ -61,7 +70,7 @@ struct Announcer::Loop {
         : ex(dht->get_executor())
         , dht(move(dht))
         , entries(ex)
-        , log_level(log_level)
+        , _log_level(log_level)
     { }
 
     bool already_has(const Key& key) const {
@@ -151,6 +160,9 @@ struct Announcer::Loop {
 
         while (!cancel) {
             if (entries.empty()) {
+                // XXX: Temporary handler tracking as this coroutine sometimes
+                // fails to exit.
+                TRACK_HANDLER();
                 sys::error_code ec;
                 entries.async_wait_for_push(cancel, yield[ec]);
                 if (cancel) ec = asio::error::operation_aborted;
@@ -171,7 +183,7 @@ struct Announcer::Loop {
 
     void start()
     {
-        asio::spawn(dht->get_executor(), [&] (asio::yield_context yield) {
+        TRACK_SPAWN(dht->get_executor(), [&] (asio::yield_context yield) {
             Cancel cancel(_cancel);
             sys::error_code ec;
             loop(cancel, yield[ec]);
@@ -180,7 +192,12 @@ struct Announcer::Loop {
 
     void loop(Cancel& cancel, asio::yield_context yield)
     {
+        LogLevel ll = _log_level;
+
         {
+            // XXX: Temporary handler tracking as this coroutine sometimes
+            // fails to exit.
+            TRACK_HANDLER();
             sys::error_code ec;
             dht->wait_all_ready(cancel, yield[ec]);
         }
@@ -196,7 +213,11 @@ struct Announcer::Loop {
             // Try inserting three times before moving to the next entry
             bool success = false;
             for (int i = 0; i != 3; ++i) {
+                // XXX: Temporary handler tracking as this coroutine sometimes
+                // fails to exit.
+                TRACK_HANDLER();
                 announce(ei->first, cancel, yield[ec]);
+                if (cancel) return;
                 if (!ec) { success = true; break; }
                 async_sleep(ex, chrono::seconds(1+i), cancel, yield[ec]);
                 if (cancel) return;
@@ -214,7 +235,7 @@ struct Announcer::Loop {
             entries.erase(ei);
             entries.push_back(move(e));
 
-            if (log_debug()) { print_entries(); }
+            if (ll.debug()) { print_entries(); }
         }
 
         return or_throw(yield, asio::error::operation_aborted);
@@ -222,14 +243,16 @@ struct Announcer::Loop {
 
     void announce(Entry& e, Cancel& cancel, asio::yield_context yield)
     {
-        if (log_debug()) {
+        auto ll = _log_level;
+
+        if (ll.debug()) {
             cerr << "Announcing " << e.key << "\n";
         }
 
         sys::error_code ec;
         dht->tracker_announce(e.infohash, boost::none, cancel, yield[ec]);
 
-        if (log_debug()) {
+        if (ll.debug()) {
             cerr << "Announcing ended " << e.key << " ec:" << ec.message() << "\n";
         }
 

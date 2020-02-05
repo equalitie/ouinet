@@ -2,9 +2,8 @@
 
 #include <boost/asio/ip/tcp.hpp>
 
-#include "wait_condition.h"
-
-#include "../namespaces.h"
+#include "../src/util/wait_condition.h"
+#include "../src/namespaces.h"
 
 namespace ouinet { namespace util {
 

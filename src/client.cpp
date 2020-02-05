@@ -65,8 +65,8 @@
 #include "util/crypto.h"
 #include "util/lru_cache.h"
 #include "util/scheduler.h"
-#include "util/connected_pair.h"
 #include "upnp.h"
+#include "util/handler_tracker.h"
 
 #include "logger.h"
 
@@ -118,6 +118,7 @@ public:
 
     void stop() {
         _bep5_http_cache = nullptr;
+        _upnps.clear();
         _shutdown_signal();
         if (_injector) _injector->stop();
         if (_bt_dht) {
@@ -154,6 +155,8 @@ public:
 
         m.bind(mpl, ec);
         if (ec) return or_throw(yield, ec, _bt_dht);
+
+        auto cc = _shutdown_signal.connect([&] { bt_dht.reset(); });
 
         auto ext_ep = bt_dht->set_endpoint(move(m), yield[ec]);
         if (ec) return or_throw(yield, ec, _bt_dht);
@@ -241,6 +244,8 @@ private:
     void serve_utp_request(GenericStream, Yield);
 
     void setup_upnp(uint16_t ext_port, asio::ip::udp::endpoint local_ep) {
+        if (_shutdown_signal) return;
+
         if (!local_ep.address().is_v4()) {
             LOG_WARN("Not setting up UPnP redirection because endpoint is not ipv4");
             return;
@@ -259,6 +264,7 @@ private:
     void idempotent_start_accepting_on_utp(asio::yield_context yield) {
         if (_multi_utp_server) return;
         assert(!_shutdown_signal);
+        if (_shutdown_signal) return or_throw(yield, asio::error::operation_aborted);
 
         sys::error_code ec;
         auto dht = bittorrent_dht(yield[ec]);
@@ -270,7 +276,7 @@ private:
         _multi_utp_server
             = make_unique<ouiservice::MultiUtpServer>(exec, local_eps, nullptr);
 
-        asio::spawn(_ctx, [&, c = _shutdown_signal] (asio::yield_context yield) mutable {
+        TRACK_SPAWN(_ctx, ([&, c = _shutdown_signal] (asio::yield_context yield) mutable {
             auto slot = c.connect([&] () mutable { _multi_utp_server = nullptr; });
 
             sys::error_code ec;
@@ -291,13 +297,13 @@ private:
                     async_sleep(_ctx, 200ms, c, yield);
                     continue;
                 }
-                asio::spawn(_ctx, [&, con = move(con)]
-                                  (asio::yield_context yield) mutable {
+                TRACK_SPAWN(_ctx, ([&, con = move(con)]
+                                   (asio::yield_context yield) mutable {
                     Yield y(_ctx, yield, "uTPAccept");
                     serve_utp_request(move(con), y[ec]);
-                });
+                }));
             }
-        });
+        }));
     }
 
 private:
@@ -980,18 +986,18 @@ public:
 
                     WaitCondition wc(ctx);
 
-                    asio::spawn(ctx, [
+                    TRACK_SPAWN(ctx, ([
                         &,
                         lock = wc.lock()
                     ] (asio::yield_context yield_) {
-                      auto y = yield.detach(yield_);
-                      sys::error_code ec;
-                      auto r = std::make_unique<AsyncQueueReader>(q1);
-                      Session s1 = Session::create_from_reader(std::move(r), cancel, y[ec]);
-                      if (!ec) store(rq, s1, cancel, y[ec]);
-                    });
+                        auto y = yield.detach(yield_);
+                        sys::error_code ec;
+                        auto r = std::make_unique<AsyncQueueReader>(q1);
+                        Session s1 = Session::create_from_reader(std::move(r), cancel, y[ec]);
+                        if (!ec) store(rq, s1, cancel, y[ec]);
+                    }));
 
-                    asio::spawn(ctx, [
+                    TRACK_SPAWN(ctx, ([
                         &,
                         lock = wc.lock()
                     ] (asio::yield_context yield_) {
@@ -999,7 +1005,7 @@ public:
                         auto r = std::make_unique<AsyncQueueReader>(q2);
                         Session s2 = Session::create_from_reader(std::move(r), cancel, yield_[ec]);
                         if (!ec) s2.flush_response(con, cancel, yield_[ec]);
-                    });
+                    }));
 
                     s.flush_response(cancel, yield[ec],
                         [&] ( Part&& part
@@ -1471,9 +1477,10 @@ void Client::State::setup_cache()
     if (_config.cache_type() == ClientConfig::CacheType::Bep5Http) {
         Cancel cancel = _shutdown_signal;
 
-        asio::spawn(_ctx, [ this
-                          , cancel = move(cancel)
-                          ] (asio::yield_context yield) {
+        TRACK_SPAWN(_ctx, ([
+            this,
+            cancel = move(cancel)
+        ] (asio::yield_context yield) {
             if (cancel) return;
             LOG_DEBUG("HTTP signing public key (Ed25519): ", _config.cache_http_pub_key());
 
@@ -1481,9 +1488,13 @@ void Client::State::setup_cache()
 
             auto dht = bittorrent_dht(yield[ec]);
             if (ec) {
-                LOG_ERROR("Failed to initialize BT DHT ", ec.message());
+                if (ec != asio::error::operation_aborted) {
+                    LOG_ERROR("Failed to initialize BT DHT ", ec.message());
+                }
                 return;
             }
+
+            assert(!_shutdown_signal || ec == asio::error::operation_aborted);
 
             _bep5_http_cache
                 = cache::bep5_http::Client::build( dht
@@ -1492,9 +1503,13 @@ void Client::State::setup_cache()
                                                  , logger.get_threshold()
                                                  , yield[ec]);
 
+            if (cancel) ec = asio::error::operation_aborted;
             if (ec) {
-                LOG_ERROR("Failed to initialize cache::bep5_http::Client: "
-                         , ec.message());
+                if (ec != asio::error::operation_aborted) {
+                    LOG_ERROR("Failed to initialize cache::bep5_http::Client: "
+                             , ec.message());
+                }
+                return;
             }
 
             idempotent_start_accepting_on_utp(yield[ec]);
@@ -1502,7 +1517,7 @@ void Client::State::setup_cache()
             if (ec) {
                 LOG_ERROR("Failed to start accepting on uTP ", ec.message());
             }
-        });
+        }));
     }
 }
 
@@ -1578,16 +1593,16 @@ void Client::State::listen_tcp
             boost::coroutines::attributes attribs;
             attribs.size *= 2;
 
-            asio::spawn( _ctx
-                       , [ this
-                         , self = shared_from_this()
-                         , c = move(connection)
-                         , handler
-                         , lock = wait_condition.lock()
-                         ](asio::yield_context yield) mutable {
-                             if (was_stopped()) return;
-                             handler(move(c), yield);
-                         }, attribs);
+            TRACK_SPAWN( _ctx, ([
+                this,
+                self = shared_from_this(),
+                c = move(connection),
+                handler,
+                lock = wait_condition.lock()
+            ](asio::yield_context yield) mutable {
+                if (was_stopped()) return;
+                handler(move(c), yield);
+            }), attribs);
         }
     }
 
@@ -1615,68 +1630,67 @@ void Client::State::start()
         }
     }
 
-    asio::spawn
-        ( _ctx
-        , [this, self = shared_from_this()]
-          (asio::yield_context yield) {
-              if (was_stopped()) return;
+    TRACK_SPAWN(_ctx, ([
+        this,
+        self = shared_from_this()
+    ] (asio::yield_context yield) {
+        if (was_stopped()) return;
 
-              sys::error_code ec;
+        sys::error_code ec;
 
-              setup_injector(yield[ec]);
+        setup_injector(yield[ec]);
 
-              if (was_stopped()) return;
+        if (was_stopped()) return;
 
-              if (ec) {
-                  LOG_ERROR("Failed to setup injector: ", ec.message());
-              }
+        if (ec) {
+            LOG_ERROR("Failed to setup injector: ", ec.message());
+        }
 
-              setup_cache();
+        setup_cache();
 
-              listen_tcp( yield[ec]
-                        , _config.local_endpoint()
-                        , "browser requests"
-                        , [this, self]
-                          (GenericStream c, asio::yield_context yield) {
-                      serve_request(move(c), yield);
-                  });
-          });
+        listen_tcp( yield[ec]
+                  , _config.local_endpoint()
+                  , "browser requests"
+                  , [this, self]
+                    (GenericStream c, asio::yield_context yield) {
+                serve_request(move(c), yield);
+            });
+    }));
 
     if (_config.front_end_endpoint() != tcp::endpoint()) {
-        asio::spawn
-            ( _ctx
-            , [this, self = shared_from_this()]
-              (asio::yield_context yield) {
+        TRACK_SPAWN( _ctx, ([
+            this,
+            self = shared_from_this()
+        ] (asio::yield_context yield) {
+            if (was_stopped()) return;
 
-                  if (was_stopped()) return;
+            sys::error_code ec;
 
+            auto ep = _config.front_end_endpoint();
+            if (ep == tcp::endpoint()) return;
+
+            LOG_INFO("Serving front end on ", ep);
+
+            listen_tcp( yield[ec]
+                      , ep
+                      , "frontend"
+                      , [this, self]
+                        (GenericStream c, asio::yield_context yield_) {
+                  Yield yield(_ctx, yield_, "Frontend");
                   sys::error_code ec;
+                  Request rq;
+                  beast::flat_buffer buffer;
+                  http::async_read(c, buffer, rq, yield[ec]);
 
-                  auto ep = _config.front_end_endpoint();
-                  if (ep == tcp::endpoint()) return;
+                  if (ec) return;
 
-                  LOG_INFO("Serving front end on ", ep);
+                  auto rs = fetch_fresh_from_front_end(rq, yield[ec]);
 
-                  listen_tcp( yield[ec]
-                            , ep
-                            , "frontend"
-                            , [this, self]
-                              (GenericStream c, asio::yield_context yield_) {
-                        Yield yield(_ctx, yield_, "Frontend");
-                        sys::error_code ec;
-                        Request rq;
-                        beast::flat_buffer buffer;
-                        http::async_read(c, buffer, rq, yield[ec]);
+                  if (ec) return;
 
-                        if (ec) return;
-
-                        auto rs = fetch_fresh_from_front_end(rq, yield[ec]);
-
-                        if (ec) return;
-
-                        http::async_write(c, rs, yield[ec]);
-                  });
-              });
+                  http::async_write(c, rs, yield[ec]);
+            });
+        }));
     }
 }
 
@@ -1817,7 +1831,7 @@ void Client::State::set_injector(string injector_ep_str)
 
     _config.set_injector_endpoint(*injector_ep);
 
-    asio::spawn(_ctx, [self = shared_from_this(), injector_ep_str] (auto yield) {
+    TRACK_SPAWN(_ctx, ([self = shared_from_this(), injector_ep_str] (auto yield) {
             if (self->was_stopped()) return;
             sys::error_code ec;
             self->setup_injector(yield[ec]);
@@ -1825,7 +1839,7 @@ void Client::State::set_injector(string injector_ep_str)
             if (ec == asio::error::invalid_argument) {
                 LOG_ERROR("Failed to parse endpoint \"", injector_ep_str, "\"");
             }
-        });
+        }));
 }
 
 //------------------------------------------------------------------------------
@@ -1920,6 +1934,8 @@ int main(int argc, char* argv[])
 
     signals.async_wait([&client, &signals, &force_exit]
                        (const sys::error_code& ec, int signal_number) {
+            LOG_INFO("GOT SIGNAL ", signal_number);
+            HandlerTracker::stopped();
             client.stop();
             signals.clear();
             force_exit = make_unique<ForceExitOnSignal>();
@@ -1933,6 +1949,8 @@ int main(int argc, char* argv[])
     }
 
     ctx.run();
+
+    LOG_INFO("Exiting gracefuly");
 
     return EXIT_SUCCESS;
 }

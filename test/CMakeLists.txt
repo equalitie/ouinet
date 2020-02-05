@@ -14,6 +14,7 @@ add_executable(test-cache
     "test_cache_control.cpp"
     "../src/cache_control.cpp"
     "../src/http_util.cpp"
+    "../src/util/handler_tracker.cpp"
     "../src/logger.cpp"
 )
 target_link_libraries(test-cache lib::uri)
@@ -58,6 +59,7 @@ file(GLOB bt_cpp_files
     "../src/logger.cpp"
     "../src/util.cpp"
     "../src/util/file_io.cpp"
+    "../src/util/handler_tracker.cpp"
 )
 
 add_executable(test-bittorrent "test_bittorrent.cpp" ${bt_cpp_files})
@@ -76,10 +78,19 @@ add_executable(bt-bep5 "bt-bep5.cpp" ${bt_cpp_files})
 target_link_libraries(bt-bep5 lib::asio_utp lib::gcrypt)
 
 ######################################################################
-add_executable(test-watch-dog "test_watch_dog.cpp")
+add_executable(test-watch-dog
+    "test_watch_dog.cpp"
+    "../src/util/handler_tracker.cpp"
+    "../src/logger.cpp"
+)
 
 ######################################################################
-add_executable(test-util "test-util.cpp")
+add_executable(test-util
+    "test-util.cpp"
+    "../src/util/handler_tracker.cpp"
+    "../src/logger.cpp"
+)
+
 set_target_properties(test-util PROPERTIES COMPILE_FLAGS "-fsanitize=address")
 target_link_libraries(test-util asan)
 
@@ -96,6 +107,7 @@ add_executable(oui-server
     "../src/endpoint.cpp"
     "../src/ouiservice.cpp"
     "../src/ouiservice/tcp.cpp"
+    "../src/util/handler_tracker.cpp"
 )
 
 ######################################################################
@@ -105,6 +117,7 @@ add_executable(oui-client
     "../src/endpoint.cpp"
     "../src/ouiservice.cpp"
     "../src/ouiservice/tcp.cpp"
+    "../src/util/handler_tracker.cpp"
 )
 
 ######################################################################

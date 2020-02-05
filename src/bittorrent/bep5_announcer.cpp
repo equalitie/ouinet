@@ -1,6 +1,7 @@
 #include "bep5_announcer.h"
 #include "../async_sleep.h"
 #include "../logger.h"
+#include "../util/handler_tracker.h"
 #include <random>
 #include <iostream>
 
@@ -47,10 +48,11 @@ struct detail::Bep5AnnouncerImpl
         if (auto dht = dht_w.lock()) {
             auto exec = dht->get_executor();
 
-            asio::spawn( exec
-                       , [&, self, exec] (asio::yield_context yield) mutable {
-                             loop(exec, yield);
-                         });
+            TRACK_SPAWN(exec, ([
+                &, self, exec
+            ] (asio::yield_context yield) mutable {
+                loop(exec, yield);
+            }));
         }
     }
 

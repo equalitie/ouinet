@@ -117,6 +117,7 @@ file(GLOB client_sources
     "./src/util/temp_file.cpp"
     "./src/util/hash.cpp"
     "./src/util.cpp"
+    "./src/util/handler_tracker.cpp"
     "./src/http_util.cpp"
     ${VERSION_CPP}
 )
@@ -175,6 +176,7 @@ if (WITH_INJECTOR)
         "./src/util/file_io.cpp"
         "./src/util/temp_file.cpp"
         "./src/util/hash.cpp"
+        "./src/util/handler_tracker.cpp"
         "./src/util.cpp"
         "./src/http_util.cpp"
     )

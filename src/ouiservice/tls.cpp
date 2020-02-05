@@ -2,6 +2,7 @@
 #include "../or_throw.h"
 #include "../ssl/util.h"
 #include "../util/watch_dog.h"
+#include "../util/handler_tracker.h"
 #include "../async_sleep.h"
 #include <iostream>
 
@@ -16,7 +17,7 @@ void TlsOuiServiceServer::start_listen(asio::yield_context yield) /* override */
 
     _base->start_listen(yield);
 
-    asio::spawn(_ex, [&] (asio::yield_context yield) {
+    TRACK_SPAWN(_ex, ([&] (asio::yield_context yield) {
             using namespace chrono_literals;
 
             Cancel cancel(_cancel);
@@ -39,7 +40,7 @@ void TlsOuiServiceServer::start_listen(asio::yield_context yield) /* override */
 
                 // Spawn a new coroutine to avoid blocking accept of the next
                 // socket.
-                asio::spawn(_ex, [ tls_con = move(tls_con)
+                TRACK_SPAWN(_ex, ([ tls_con = move(tls_con)
                                   , cancel = move(cancel)
                                   , &q = _accept_queue
                                   , ex = _ex
@@ -66,9 +67,9 @@ void TlsOuiServiceServer::start_listen(asio::yield_context yield) /* override */
                     q.async_push( GenericStream(move(tls_con), move(shutter))
                                 , cancel
                                 , yield[ec]);
-                });
+                }));
             }
-        });
+        }));
 };
 
 void TlsOuiServiceServer::stop_listen() /* override */

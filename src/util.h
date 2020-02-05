@@ -14,6 +14,7 @@
 #include "namespaces.h"
 #include "util/signal.h"
 #include "util/condition_variable.h"
+#include "util/handler_tracker.h"
 #include "or_throw.h"
 
 namespace ouinet { namespace util {
@@ -94,7 +95,7 @@ auto tcp_async_resolve( const std::string& host
 
     bool* finished_p = nullptr;
 
-    asio::spawn(exec, [&] (asio::yield_context yield) {
+    TRACK_SPAWN(exec, ([&] (asio::yield_context yield) {
         bool finished = false;
         finished_p = &finished;
 
@@ -110,7 +111,7 @@ auto tcp_async_resolve( const std::string& host
         ec = ec_;
         finished_p = nullptr;
         cv.notify();
-    });
+    }));
 
     cv.wait(yield);
 

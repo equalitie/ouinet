@@ -10,8 +10,8 @@
 #include "../../util/wait_condition.h"
 #include "../../util/set_io.h"
 #include "../../util/async_generator.h"
-#include "../../util/connected_pair.h"
 #include "../../util/lru_cache.h"
+#include "../../util/handler_tracker.h"
 #include "../../bittorrent/dht.h"
 #include "../../bittorrent/is_martian.h"
 #include "../../ouiservice/utp.h"
@@ -391,6 +391,7 @@ struct Client::Impl {
                 if (our_endpoints.count(ep)) continue;
 
                 asio::spawn(ex, [&, ep, lock = wc.lock()] (auto y) {
+                    TRACK_HANDLER();
                     sys::error_code ec;
                     if (dbg) {
                         std::cerr << *dbg << " Bep5Http: connecting to: " << ep << "\n";
@@ -579,6 +580,7 @@ struct Client::Impl {
 
     void stop() {
         lifetime_cancel();
+        local_peer_discovery.stop();
     }
 
     unsigned get_newest_proto_version() const {

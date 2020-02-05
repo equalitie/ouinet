@@ -15,7 +15,6 @@
 
 #include <util.h>
 #include <util/bytes.h>
-#include <util/connected_pair.h>
 #include <util/crypto.h>
 #include <util/wait_condition.h>
 #include <util/yield.h>
@@ -24,6 +23,7 @@
 #include <session.h>
 
 #include <namespaces.h>
+#include "connected_pair.h"
 
 BOOST_AUTO_TEST_SUITE(ouinet_http_sign)
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../defer.h"
+#include "../util/handler_tracker.h"
 
 namespace ouinet {
 
@@ -96,6 +97,7 @@ public:
 
         asio::spawn(ex, [self_ = this, ex, d, on_timeout = std::move(on_timeout)]
                          (asio::yield_context yield) mutable {
+            TRACK_HANDLER();
             State state(self_, Clock::now() + d, ex);
             self_->state = &state;
 
