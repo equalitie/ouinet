@@ -33,17 +33,21 @@ private:
 
 #define OUINET_DETAIL_HANDLER_TRACKER_STRINGIFY_(x) #x
 #define OUINET_DETAIL_HANDLER_TRACKER_STRINGIFY(x) OUINET_DETAIL_HANDLER_TRACKER_STRINGIFY_(x)
-#define TRACK_HANDLER(...) \
-    HandlerTracker handler_tracker_instance(__FILE__ ":" OUINET_DETAIL_HANDLER_TRACKER_STRINGIFY(__LINE__) __VA_OPT__(,) __VA_ARGS__)
+
+#define TRACK_HANDLER_AFTER_STOP() \
+    HandlerTracker handler_tracker_instance(__FILE__ ":" OUINET_DETAIL_HANDLER_TRACKER_STRINGIFY(__LINE__), true)
+
+#define TRACK_HANDLER() \
+    HandlerTracker handler_tracker_instance(__FILE__ ":" OUINET_DETAIL_HANDLER_TRACKER_STRINGIFY(__LINE__), false)
 
 #define TRACK_SPAWN(exec, body, ...)\
     asio::spawn(exec, [b = body] (asio::yield_context yield) mutable {\
         TRACK_HANDLER();\
         b(yield);\
-    } __VA_OPT__(,) __VA_ARGS__)
+    }, ##__VA_ARGS__)
 
 #define TRACK_SPAWN_AFTER_STOP(exec, body, ...)\
     asio::spawn(exec, [b = body] (asio::yield_context yield) mutable {\
-        TRACK_HANDLER(true);\
+        TRACK_HANDLER_AFTER_STOP();\
         b(yield);\
-    } __VA_OPT__(,) __VA_ARGS__)
+    }, ##__VA_ARGS__)
