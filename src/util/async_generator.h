@@ -60,7 +60,7 @@ public:
                         , shutdown_cancel = _shutdown_cancel
                         , lock = _wc.lock()
                         ] (Yield yield) mutable {
-            TRACK_COROUTINE();
+            TRACK_HANDLER();
             sys::error_code ec;
             gen(self->_queue, shutdown_cancel, yield[ec]);
 

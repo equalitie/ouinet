@@ -1935,7 +1935,7 @@ int main(int argc, char* argv[])
     signals.async_wait([&client, &signals, &force_exit]
                        (const sys::error_code& ec, int signal_number) {
             LOG_INFO("GOT SIGNAL ", signal_number);
-            CoroTracker::stopped();
+            HandlerTracker::stopped();
             client.stop();
             signals.clear();
             force_exit = make_unique<ForceExitOnSignal>();

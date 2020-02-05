@@ -15,7 +15,7 @@ enum State : unsigned {
     done = 2
 };
 
-struct CoroTracker::GlobalState {
+struct HandlerTracker::GlobalState {
     std::mutex mutex;
     std::thread thread;
     State state = running;
@@ -36,9 +36,9 @@ struct CoroTracker::GlobalState {
                 return;
             }
 
-            LOG_DEBUG("CoroTracker: Waiting for tracked coroutines to finish:");
+            LOG_DEBUG("HandlerTracker: Waiting for tracked coroutines to finish:");
             for (auto& e : list) {
-                LOG_DEBUG("CoroTracker:    ", e.self->name());
+                LOG_DEBUG("HandlerTracker:    ", e.self->name());
             }
         }
 
@@ -63,12 +63,12 @@ struct CoroTracker::GlobalState {
             {
                 lock_guard guard(mutex);
                 if (list.empty()) {
-                    LOG_INFO("CoroTracker: Done waiting for tracked coroutines");
+                    LOG_INFO("HandlerTracker: Done waiting for tracked coroutines");
                 } else {
-                    LOG_WARN("CoroTracker: Done waiting for tracked coroutines, "
+                    LOG_WARN("HandlerTracker: Done waiting for tracked coroutines, "
                              "but some coroutines are still running:");
                     for (auto& e : list) {
-                        LOG_WARN("CoroTracker:    ", e.self->name());
+                        LOG_WARN("HandlerTracker:    ", e.self->name());
                     }
                 }
 
@@ -86,7 +86,7 @@ struct CoroTracker::GlobalState {
     }
 };
 
-CoroTracker::CoroTracker(const char* name, bool after_stop)
+HandlerTracker::HandlerTracker(const char* name, bool after_stop)
     : _name(name)
 {
     auto& g = global_state();
@@ -96,37 +96,37 @@ CoroTracker::CoroTracker(const char* name, bool after_stop)
 
     if (g.state >= State::stopped) {
         if (!after_stop) {
-            LOG_WARN("CoroTracker: new coro started in stopped process");
-            LOG_WARN("CoroTracker:    ", name);
+            LOG_WARN("HandlerTracker: new coro started in stopped process");
+            LOG_WARN("HandlerTracker:    ", name);
         } else {
-            LOG_DEBUG("CoroTracker: new coroutine started: ", name);
+            LOG_DEBUG("HandlerTracker: new coroutine started: ", name);
         }
     }
 
     g.list.push_back(_entry);
 }
 
-CoroTracker::~CoroTracker() {
+HandlerTracker::~HandlerTracker() {
     auto& g = global_state();
     lock_guard guard(g.mutex);
 
     if (g.state >= State::stopped) {
         if (g.state == State::stopped) {
-            LOG_DEBUG("CoroTracker: stopped ", _name);
+            LOG_DEBUG("HandlerTracker: stopped ", _name);
         } else {
-            LOG_INFO("CoroTracker: stopped ", _name);
+            LOG_INFO("HandlerTracker: stopped ", _name);
         }
     }
 }
 
 /* static */
-void CoroTracker::stopped()
+void HandlerTracker::stopped()
 {
     global_state().stop();
 }
 
 /* static */
-CoroTracker::GlobalState& CoroTracker::global_state() {
+HandlerTracker::GlobalState& HandlerTracker::global_state() {
     static GlobalState s;
     return s;
 }

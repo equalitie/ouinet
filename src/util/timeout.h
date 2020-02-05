@@ -30,7 +30,7 @@ public:
             });
 
         asio::spawn(ex, [s = _state, duration] (asio::yield_context yield) {
-                TRACK_COROUTINE();
+                TRACK_HANDLER();
                 if (s->finished) return;
 
                 sys::error_code ec;

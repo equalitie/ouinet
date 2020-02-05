@@ -391,7 +391,7 @@ struct Client::Impl {
                 if (our_endpoints.count(ep)) continue;
 
                 asio::spawn(ex, [&, ep, lock = wc.lock()] (auto y) {
-                    TRACK_COROUTINE();
+                    TRACK_HANDLER();
                     sys::error_code ec;
                     if (dbg) {
                         std::cerr << *dbg << " Bep5Http: connecting to: " << ep << "\n";

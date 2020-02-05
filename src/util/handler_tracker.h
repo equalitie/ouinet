@@ -4,10 +4,10 @@
 
 namespace ouinet {
 
-class CoroTracker final {
+class HandlerTracker final {
 private:
     using Hook = boost::intrusive::list_base_hook<boost::intrusive::link_mode<boost::intrusive::auto_unlink>>;
-    struct Entry : Hook { CoroTracker* self; };
+    struct Entry : Hook { HandlerTracker* self; };
     using List = boost::intrusive::list<Entry, boost::intrusive::constant_time_size<false>>;
 
     struct GlobalState;
@@ -15,11 +15,11 @@ private:
 public:
     static void stopped();
 
-    CoroTracker(const char* name, bool after_stop = false);
+    HandlerTracker(const char* name, bool after_stop = false);
 
     const char* name() const { return _name; }
 
-    ~CoroTracker();
+    ~HandlerTracker();
 
 private:
     static GlobalState& global_state();
@@ -31,19 +31,19 @@ private:
 
 } // ouinet namespace
 
-#define OUINET_DETAIL_CORO_TRACKER_STRINGIFY_(x) #x
-#define OUINET_DETAIL_CORO_TRACKER_STRINGIFY(x) OUINET_DETAIL_CORO_TRACKER_STRINGIFY_(x)
-#define TRACK_COROUTINE(...) \
-    CoroTracker coro_tracker_instance(__FILE__ ":" OUINET_DETAIL_CORO_TRACKER_STRINGIFY(__LINE__) __VA_OPT__(,) __VA_ARGS__)
+#define OUINET_DETAIL_HANDLER_TRACKER_STRINGIFY_(x) #x
+#define OUINET_DETAIL_HANDLER_TRACKER_STRINGIFY(x) OUINET_DETAIL_HANDLER_TRACKER_STRINGIFY_(x)
+#define TRACK_HANDLER(...) \
+    HandlerTracker handler_tracker_instance(__FILE__ ":" OUINET_DETAIL_HANDLER_TRACKER_STRINGIFY(__LINE__) __VA_OPT__(,) __VA_ARGS__)
 
 #define TRACK_SPAWN(exec, body, ...)\
     asio::spawn(exec, [b = body] (asio::yield_context yield) mutable {\
-        TRACK_COROUTINE();\
+        TRACK_HANDLER();\
         b(yield);\
     } __VA_OPT__(,) __VA_ARGS__)
 
 #define TRACK_SPAWN_AFTER_STOP(exec, body, ...)\
     asio::spawn(exec, [b = body] (asio::yield_context yield) mutable {\
-        TRACK_COROUTINE(true);\
+        TRACK_HANDLER(true);\
         b(yield);\
     } __VA_OPT__(,) __VA_ARGS__)
