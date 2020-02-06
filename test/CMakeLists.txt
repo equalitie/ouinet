@@ -136,3 +136,12 @@ add_executable(test-http-store
     "../src/util/hash.cpp"
 )
 target_link_libraries(test-http-store lib::gcrypt lib::uri)
+
+######################################################################
+add_executable(test-atomic-temp
+    "test_atomic_temp.cpp"
+    "../src/util/atomic_file.cpp"
+    "../src/util/file_io.cpp"
+    "../src/util/temp_dir.cpp"
+    "../src/util/temp_file.cpp"
+)
