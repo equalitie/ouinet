@@ -76,6 +76,8 @@ inline ConnectionTracker::~ConnectionTracker()
         boost::optional<std::pair<Key, Value>> pair = first_entry_by_value();
         if (pair) {
             remove(pair->first);
+        } else {
+            break;
         }
     }
 }
@@ -166,8 +168,20 @@ void UdpServerReachabilityAnalysis::State::cleanup_connections(std::chrono::stea
 
 
 
-UdpServerReachabilityAnalysis::UdpServerReachabilityAnalysis(const asio::executor& executor, const asio_utp::udp_multiplexer& udp_socket)
+UdpServerReachabilityAnalysis::UdpServerReachabilityAnalysis()
+{}
+
+UdpServerReachabilityAnalysis::~UdpServerReachabilityAnalysis()
 {
+    stop();
+}
+
+void UdpServerReachabilityAnalysis::start(const asio::executor& executor, const asio_utp::udp_multiplexer& udp_socket)
+{
+    if (_state) {
+        stop();
+    }
+
     _state = std::make_shared<State>();
     sys::error_code ec_ignored;
     _state->multiplexer.bind(udp_socket, ec_ignored);
@@ -288,23 +302,28 @@ UdpServerReachabilityAnalysis::UdpServerReachabilityAnalysis(const asio::executo
     });
 }
 
-UdpServerReachabilityAnalysis::~UdpServerReachabilityAnalysis()
+void UdpServerReachabilityAnalysis::stop()
 {
-    assert(_state);
+    if (_state) {
+        /*
+         * Clear out signal
+         */
+        Signal<void()> empty_on_judgement_change;
+        _state->on_judgement_change = std::move(empty_on_judgement_change);
 
-    /*
-     * Clear out signal
-     */
-    Signal<void()> empty_on_judgement_change;
-    _state->on_judgement_change = std::move(empty_on_judgement_change);
+        _state->on_destroy();
 
-    _state->on_destroy();
+        _state.reset();
+    }
 }
 
 UdpServerReachabilityAnalysis::Reachability UdpServerReachabilityAnalysis::judgement() const
 {
-    assert(_state);
-    return _state->judgement;
+    if (_state) {
+        return _state->judgement;
+    } else {
+        return Reachability::Unreachable;
+    }
 }
 
 Signal<void()>& UdpServerReachabilityAnalysis::on_judgement_change()

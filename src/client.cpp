@@ -125,6 +125,10 @@ public:
             _bt_dht->stop();
             _bt_dht = nullptr;
         }
+        if (_udp_reachability) {
+            _udp_reachability->stop();
+            _udp_reachability = nullptr;
+        }
     }
 
     void setup_cache();
@@ -139,7 +143,8 @@ public:
                                     , _config.repo_root() / "last_used_udp_port");
 
         _udp_reachability
-            = make_unique<util::UdpServerReachabilityAnalysis>(get_executor(), *_udp_multiplexer);
+            = make_unique<util::UdpServerReachabilityAnalysis>();
+        _udp_reachability->start(get_executor(), *_udp_multiplexer);
 
         return *_udp_multiplexer;
     }

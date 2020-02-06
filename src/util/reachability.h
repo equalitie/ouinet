@@ -64,8 +64,11 @@ public:
     static constexpr long confirmedReachabilityExpiracyTime = 2 * 60 * 60 * 1000;
 
 public:
-    UdpServerReachabilityAnalysis(const asio::executor& executor, const asio_utp::udp_multiplexer& udp_socket);
+    UdpServerReachabilityAnalysis();
     ~UdpServerReachabilityAnalysis();
+
+    void start(const asio::executor& executor, const asio_utp::udp_multiplexer& udp_socket);
+    void stop();
 
     Reachability judgement() const;
 
