@@ -47,6 +47,19 @@ block_sig_from_exts(boost::string_view xs)
     return xs.substr(sigstart, sigend - sigstart);
 }
 
+static
+std::size_t
+parse_data_block_offset(const std::string& s)  // `^[0-9a-f]*$`
+{
+    std::size_t offset = 0;
+    for (auto& c : s) {
+        assert(('0' <= c && c <= '9') || ('a' <= c && c <= 'f'));
+        offset <<= 4;
+        offset += ('0' <= c && c <= '9') ? c - '0' : c - 'a';
+    }
+    return offset;
+}
+
 // A signatures file entry with `OFFSET[i] SIGNATURE[i] HASH[i-1]`.
 struct SigEntry {
     std::size_t offset;
@@ -114,10 +127,8 @@ struct SigEntry {
             _ERROR("Malformed signature line");
             return or_throw(yield, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
         }
-        auto offset_s = m[1].str();
-        boost::string_view offset_sv(offset_s);
-        auto offset = parse::number<std::size_t>(offset_sv); assert(offset);  // FIXME: hex!
-        SigEntry entry{*offset, m[2].str(), m[3].str()};
+        auto offset = parse_data_block_offset(m[1].str());
+        SigEntry entry{offset, m[2].str(), m[3].str()};
         buf.erase(0, line_len);  // consume used input
         return entry;
     }
@@ -403,7 +414,12 @@ private:
             return boost::none;
         auto chunk_body = get_chunk_body(cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec, boost::none);
-        // TODO: validate offset and size
+        // Validate block offset and size.
+        if (sig_entry && sig_entry->offset != block_offset) {
+            _ERROR("Data block offset mismatch: ", sig_entry->offset, " != ", block_offset);
+            return or_throw(yield, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
+        }
+        block_offset += chunk_body.size();
 
         http_response::ChunkHdr ch(chunk_body.size(), next_chunk_exts);
         next_chunk_exts = sig_entry ? sig_entry->chunk_exts() : "";
@@ -480,6 +496,7 @@ private:
     bool _is_open = true;
 
     std::string uri;  // for warnings
+    std::size_t block_offset = 0;
     boost::optional<std::size_t> data_size;
     boost::optional<std::size_t> block_size;
 
