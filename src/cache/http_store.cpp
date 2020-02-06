@@ -49,7 +49,7 @@ block_sig_from_exts(boost::string_view xs)
 
 // A signatures file entry with `OFFSET[i] SIGNATURE[i] HASH[i-1]`.
 struct SigEntry {
-    size_t offset;
+    std::size_t offset;
     std::string signature;
     std::string prev_digest;
 
@@ -116,7 +116,7 @@ struct SigEntry {
         }
         auto offset_s = m[1].str();
         boost::string_view offset_sv(offset_s);
-        auto offset = parse::number<size_t>(offset_sv); assert(offset);  // FIXME: hex!
+        auto offset = parse::number<std::size_t>(offset_sv); assert(offset);  // FIXME: hex!
         SigEntry entry{*offset, m[2].str(), m[3].str()};
         buf.erase(0, line_len);  // consume used input
         return entry;
@@ -136,8 +136,8 @@ private:
     http_response::Head head;  // for merging in the trailer later on
     boost::optional<asio::posix::stream_descriptor> headf, bodyf, sigsf;
 
-    size_t block_size;
-    size_t byte_count = 0;
+    std::size_t block_size;
+    std::size_t byte_count = 0;
     unsigned block_count = 0;
     util::SHA512 block_hash;
     boost::optional<util::SHA512::digest_type> prev_block_digest;
@@ -278,7 +278,7 @@ http_store( http_response::AbstractReader& reader, const fs::path& dirp
 
 class HttpStore1Reader : public http_response::AbstractReader {
 private:
-    static const size_t http_forward_block = 16384;
+    static const std::size_t http_forward_block = 16384;
 
     http_response::Head
     parse_head(Cancel cancel, asio::yield_context yield)
@@ -318,7 +318,7 @@ private:
         }
         block_size = bs_params->size;
         auto data_size_hdr = head[http_::response_data_size_hdr];
-        auto data_size_opt = parse::number<size_t>(data_size_hdr);
+        auto data_size_opt = parse::number<std::size_t>(data_size_hdr);
         if (!data_size_opt)
             _WARN("Loading incomplete stored response; uri=", uri);
         else
@@ -480,8 +480,8 @@ private:
     bool _is_open = true;
 
     std::string uri;  // for warnings
-    boost::optional<size_t> data_size;
-    boost::optional<size_t> block_size;
+    boost::optional<std::size_t> data_size;
+    boost::optional<std::size_t> block_size;
 
     boost::optional<asio::posix::stream_descriptor> sigsf;
     SigEntry::parse_buffer sigs_buffer;
