@@ -4,6 +4,7 @@
 
 #include <boost/filesystem.hpp>
 
+#include <util/atomic_dir.h>
 #include <util/file_io.h>
 #include <util/temp_dir.h>
 
@@ -70,6 +71,39 @@ BOOST_DATA_TEST_CASE(test_temp_dir, boost::unit_test::data::make(true_false), ke
 }
 
 BOOST_DATA_TEST_CASE(test_atomic_dir, boost::unit_test::data::make(true_false), commit) {
+    asio::io_context ctx;
+
+    fs::path ad_temp_path, ad_path = fs::unique_path();
+    {
+        sys::error_code ec;
+
+        auto ad = util::atomic_dir::make(ad_path, ec);
+        BOOST_REQUIRE_EQUAL(ec.message(), "Success");
+
+        BOOST_CHECK_EQUAL(ad->path(), ad_path);
+        BOOST_REQUIRE(!fs::exists(ad_path));
+
+        ad_temp_path = ad->temp_path();
+        BOOST_CHECK(ad_temp_path != ad_path);
+        BOOST_REQUIRE(fs::exists(ad_temp_path));
+        BOOST_REQUIRE(fs::is_directory(ad_temp_path));
+
+        populate_directory(ad_temp_path, ctx.get_executor(), ec);
+        BOOST_REQUIRE_EQUAL(ec.message(), "Success");
+
+        if (commit) {
+            ad->commit(ec);
+            BOOST_REQUIRE_EQUAL(ec.message(), "Success");
+        }
+    }
+
+    if (!commit) {
+        BOOST_CHECK(!fs::exists(ad_path));
+        BOOST_CHECK(!fs::exists(ad_temp_path));
+        return;
+    }
+
+    check_directory(ad_path);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
