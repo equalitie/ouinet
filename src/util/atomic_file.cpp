@@ -20,6 +20,7 @@ atomic_file::make( const asio::executor& ex
 {
     auto temp_file = temp_file::make(ex, path.parent_path(), temp_model, ec);
     if (ec) return boost::none;
+    temp_file->keep_on_close(false);
     return atomic_file(std::move(*temp_file), std::move(path));
 }
 

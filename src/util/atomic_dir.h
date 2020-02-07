@@ -55,9 +55,7 @@ private:
     atomic_dir(temp_dir&& file, fs::path path)
         : _temp_dir(std::move(file))
         , _path(std::move(path))
-    {
-        _temp_dir.keep_on_close(false);
-    }
+    {}
 
 private:
     temp_dir _temp_dir;

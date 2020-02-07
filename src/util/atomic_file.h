@@ -75,9 +75,7 @@ private:
     atomic_file(temp_file&& file, fs::path path)
         : _temp_file(std::move(file))
         , _path(std::move(path))
-    {
-        _temp_file.keep_on_close(false);
-    }
+    {}
 
 private:
     temp_file _temp_file;

@@ -19,6 +19,7 @@ atomic_dir::make( fs::path path
 {
     auto temp_dir = temp_dir::make(path.parent_path(), temp_model, ec);
     if (ec) return boost::none;
+    temp_dir->keep_on_close(false);
     return atomic_dir(std::move(*temp_dir), std::move(path));
 }
 
