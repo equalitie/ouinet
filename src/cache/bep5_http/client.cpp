@@ -3,6 +3,7 @@
 #include "dht_lookup.h"
 #include "local_peer_discovery.h"
 #include "../http_sign.h"
+#include "../http_store.h"
 #include "../../http_util.h"
 #include "../../util/atomic_file.h"
 #include "../../util/bytes.h"
@@ -106,7 +107,7 @@ struct Client::Impl {
 
         auto path = path_from_key(*key);
 
-        auto file = util::file_io::open_readonly(ex, path, ec);
+        auto rr = cache::http_store_reader_v0(path, ex, ec);
 
         if (ec) {
             if (!cancel && log_debug()) {
@@ -120,7 +121,8 @@ struct Client::Impl {
             cerr << "Bep5HTTP: Serving " << *key << "\n";
         }
 
-        flush_from_to(file, sink, cancel, yield[ec]);
+        auto s = Session::create(move(rr), cancel, yield[ec]);
+        if (!ec) s.flush_response(sink, cancel, yield[ec]);
 
         return or_throw(yield, ec);
     }
@@ -457,17 +459,6 @@ struct Client::Impl {
     }
 
     template<class Stream>
-    void write_header(
-            const http::response_header<>& hdr,
-            Stream& sink,
-            asio::yield_context yield)
-    {
-        http::response<http::empty_body> msg{hdr};
-        http::response_serializer<http::empty_body> s(msg);
-        http::async_write_header(sink, s, yield);
-    }
-
-    template<class Stream>
     http::response_header<>
     read_response_header(Stream& stream, asio::yield_context yield)
     {
@@ -547,34 +538,6 @@ struct Client::Impl {
     fs::path path_from_infohash(const bt::NodeID& infohash)
     {
         return data_dir()/infohash.to_hex();
-    }
-
-    template<class Source, class Sink>
-    size_t flush_from_to( Source& source
-                        , Sink& sink
-                        , Cancel& cancel
-                        , asio::yield_context yield)
-    {
-        sys::error_code ec;
-        std::array<uint8_t, 1 << 14> data;
-
-        size_t s = 0;
-
-        for (;;) {
-            size_t length = source.async_read_some(asio::buffer(data), yield[ec]);
-            if (ec || cancel) break;
-
-            asio::async_write(sink, asio::buffer(data, length), yield[ec]);
-            if (ec || cancel) break;
-
-            s += length;
-        }
-
-        if (ec == asio::error::eof) {
-            ec = sys::error_code();
-        }
-
-        return or_throw(yield, ec, s);
     }
 
     void stop() {

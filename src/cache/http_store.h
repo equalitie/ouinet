@@ -41,6 +41,12 @@ static const unsigned http_store_version = 1;
 void http_store( http_response::AbstractReader&, const fs::path&
                , const asio::executor&, Cancel, asio::yield_context);
 
+// Return a new reader for a response stored in v0 format
+// in the given file.
+std::unique_ptr<http_response::AbstractReader>
+http_store_reader_v0( const fs::path&, asio::executor
+                    , sys::error_code&);
+
 // Return a new reader for a response stored in v1 format
 // under the given directory.
 //

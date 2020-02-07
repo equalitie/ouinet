@@ -287,6 +287,14 @@ http_store( http_response::AbstractReader& reader, const fs::path& dirp
     }
 }
 
+std::unique_ptr<http_response::AbstractReader>
+http_store_reader_v0(const fs::path& path, asio::executor ex, sys::error_code& ec)
+{
+    auto file = util::file_io::open_readonly(ex, path, ec);
+    if (ec) return nullptr;
+    return std::make_unique<http_response::Reader>(std::move(file));
+}
+
 class HttpStore1Reader : public http_response::AbstractReader {
 private:
     static const std::size_t http_forward_block = 16384;
