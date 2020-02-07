@@ -30,16 +30,16 @@ namespace ouinet { namespace cache {
 //     `HASH[i]=HASH(HASH[i-1] DATA[i])`.
 static const unsigned http_store_version = 1;
 
-// Save the HTTP response coming from the given reader into the given directory,
-// following the storage format in `http_store_version`.
+// Save the HTTP response coming from the given reader in v1 format
+// into the given directory.
 //
 // The response is assumed to have valid HTTP signatures,
 // otherwise storage will fail.
 //
 // The directory must already exist and be writable.
 // Trying to overwrite existing files will cause an error.
-void http_store( http_response::AbstractReader&, const fs::path&
-               , const asio::executor&, Cancel, asio::yield_context);
+void http_store_v1( http_response::AbstractReader&, const fs::path&
+                  , const asio::executor&, Cancel, asio::yield_context);
 
 // Return a new reader for a response stored in v0 format
 // in the given file.

@@ -268,8 +268,8 @@ public:
 };
 
 void
-http_store( http_response::AbstractReader& reader, const fs::path& dirp
-          , const asio::executor& ex, Cancel cancel, asio::yield_context yield)
+http_store_v1( http_response::AbstractReader& reader, const fs::path& dirp
+             , const asio::executor& ex, Cancel cancel, asio::yield_context yield)
 {
     SplittedWriter writer(dirp, ex);
 

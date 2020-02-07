@@ -244,7 +244,7 @@ BOOST_DATA_TEST_CASE(test_write_response, boost::unit_test::data::make(true_fals
             Cancel c;
             sys::error_code e;
             http_response::Reader signed_rr(std::move(signed_r));
-            cache::http_store(signed_rr, tmpdir, ctx.get_executor(), c, y[e]);
+            cache::http_store_v1(signed_rr, tmpdir, ctx.get_executor(), c, y[e]);
             BOOST_CHECK(!complete || !e);
         });
 
@@ -377,7 +377,7 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
             Cancel c;
             sys::error_code e;
             http_response::Reader signed_rr(std::move(signed_r));
-            cache::http_store(signed_rr, tmpdir, ctx.get_executor(), c, y[e]);
+            cache::http_store_v1(signed_rr, tmpdir, ctx.get_executor(), c, y[e]);
             BOOST_CHECK(!complete || !e);
         });
 
