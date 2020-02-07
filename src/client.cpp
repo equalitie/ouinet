@@ -820,11 +820,9 @@ public:
     }
 
     void store( const Request& rq
-              , Session& s
+              , http_response::AbstractReader& rr
               , Cancel& cancel, Yield yield)
     {
-        namespace err = asio::error;
-
         // No need to filter request or response headers
         // since we are not storing them here
         // (they can be found at the descriptor).
@@ -838,18 +836,12 @@ public:
         // TODO: The above ^
 
         auto cache = client_state.get_cache();
-
-        if (!cache) {
-            return or_throw(yield, err::operation_not_supported);
-        }
-
-        sys::error_code ec;
-
-        if (!CacheControl::ok_to_cache(rq, s.response_header())) return;
+        if (!cache)
+            return or_throw(yield, asio::error::operation_not_supported);
 
         auto key = key_from_http_req(rq);
         assert(key);
-        cache->store(move(*key), s, cancel, yield);
+        cache->store(move(*key), rr, cancel, yield);
     }
 
     // Closes `con` when it can no longer be used.
@@ -979,16 +971,16 @@ public:
 
                     WaitCondition wc(ctx);
 
-                    asio::spawn(ctx, [
-                        &,
-                        lock = wc.lock()
-                    ] (asio::yield_context yield_) {
-                      auto y = yield.detach(yield_);
-                      sys::error_code ec;
-                      auto r = std::make_unique<AsyncQueueReader>(q1);
-                      Session s1 = Session::create_from_reader(std::move(r), cancel, y[ec]);
-                      if (!ec) store(rq, s1, cancel, y[ec]);
-                    });
+                    if (CacheControl::ok_to_cache(rq, rsh))
+                        asio::spawn(ctx, [
+                            &,
+                            lock = wc.lock()
+                        ] (asio::yield_context yield_) {
+                            auto y = yield.detach(yield_);
+                            sys::error_code ec;
+                            AsyncQueueReader rr(q1);
+                            if (!ec) store(rq, rr, cancel, y[ec]);
+                        });
 
                     asio::spawn(ctx, [
                         &,

@@ -438,7 +438,7 @@ struct Client::Impl {
     }
 
     void store( const std::string& key
-              , Session& s
+              , http_response::AbstractReader& r
               , Cancel cancel
               , asio::yield_context yield)
     {
@@ -448,7 +448,7 @@ struct Client::Impl {
         if (!dk) return or_throw(yield, asio::error::invalid_argument);
         auto path = path_from_key(key);
         auto file = util::atomic_file::make(ex, path, ec);
-        if (!ec) s.flush_response(*file, cancel, yield[ec]);
+        if (!ec) cache::http_store_v0(r, file->lowest_layer(), cancel, yield[ec]);
         if (!ec) file->commit(ec);
         if (ec) return or_throw(yield, ec);
         LOG_DEBUG( "Bep5Http cache: Flushed to file;"
@@ -592,11 +592,11 @@ Session Client::load(const std::string& key, Cancel cancel, Yield yield)
 }
 
 void Client::store( const std::string& key
-                  , Session& s
+                  , http_response::AbstractReader& r
                   , Cancel cancel
                   , asio::yield_context yield)
 {
-    _impl->store(key, s, cancel, yield);
+    _impl->store(key, r, cancel, yield);
 }
 
 void Client::serve_local( const http::request<http::empty_body>& req
