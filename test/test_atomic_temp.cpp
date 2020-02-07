@@ -4,6 +4,7 @@
 
 #include <boost/filesystem.hpp>
 
+#include <defer.h>
 #include <util/atomic_dir.h>
 #include <util/file_io.h>
 #include <util/temp_dir.h>
@@ -44,6 +45,9 @@ BOOST_DATA_TEST_CASE(test_temp_dir, boost::unit_test::data::make(true_false), ke
     asio::io_context ctx;
 
     fs::path td_path;
+    auto remove_td = defer([&] {
+        if (fs::exists(td_path)) fs::remove_all(td_path);
+    });
     {
         sys::error_code ec;
 
@@ -74,6 +78,10 @@ BOOST_DATA_TEST_CASE(test_atomic_dir, boost::unit_test::data::make(true_false), 
     asio::io_context ctx;
 
     fs::path ad_temp_path, ad_path = fs::unique_path();
+    auto remove_td = defer([&] {
+        if (fs::exists(ad_path)) fs::remove_all(ad_path);
+        if (fs::exists(ad_temp_path)) fs::remove_all(ad_temp_path);
+    });
     {
         sys::error_code ec;
 
