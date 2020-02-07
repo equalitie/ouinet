@@ -9,6 +9,8 @@
 
 #include "../namespaces.h"
 
+#include "detail/http_store.h"
+
 namespace ouinet { namespace cache {
 
 // This format splits individual HTTP responses into the following files:
@@ -29,6 +31,15 @@ namespace ouinet { namespace cache {
 //     Where `BASE64(HASH[-1])` and `HASH[-1]` are the empty string and
 //     `HASH[i]=HASH(HASH[i-1] DATA[i])`.
 static const unsigned http_store_version = 1;
+
+// Save the HTTP response coming from the given reader in v0 format
+// into the given open stream.
+template<class Stream>
+void http_store_v0( http_response::AbstractReader& reader, Stream& outf
+                  , Cancel cancel, asio::yield_context yield)
+{
+    detail::http_store_v0(reader, outf, cancel, yield);
+}
 
 // Save the HTTP response coming from the given reader in v1 format
 // into the given directory.
