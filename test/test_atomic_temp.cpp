@@ -69,4 +69,7 @@ BOOST_DATA_TEST_CASE(test_temp_dir, boost::unit_test::data::make(true_false), ke
     check_directory(td_path);
 }
 
+BOOST_DATA_TEST_CASE(test_atomic_dir, boost::unit_test::data::make(true_false), commit) {
+}
+
 BOOST_AUTO_TEST_SUITE_END()
