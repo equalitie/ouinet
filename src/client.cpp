@@ -971,7 +971,8 @@ public:
 
                     WaitCondition wc(ctx);
 
-                    if (CacheControl::ok_to_cache(rq, rsh))
+                    bool do_cache = CacheControl::ok_to_cache(rq, rsh);
+                    if (do_cache)
                         asio::spawn(ctx, [
                             &,
                             lock = wc.lock()
@@ -997,11 +998,11 @@ public:
                             , Cancel& cancel
                             , asio::yield_context yield)
                         {
-                            q1.push_back(part);
+                            if (do_cache) q1.push_back(part);
                             q2.push_back(std::move(part));
                         });
 
-                    q1.push_back(boost::none);
+                    if (do_cache) q1.push_back(boost::none);
                     q2.push_back(boost::none);
 
                     wc.wait(yield);
