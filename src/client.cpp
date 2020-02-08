@@ -971,7 +971,7 @@ public:
 
                     WaitCondition wc(ctx);
 
-                    bool do_cache = CacheControl::ok_to_cache(rq, rsh);
+                    bool do_cache = client_state.get_cache() && CacheControl::ok_to_cache(rq, rsh);
                     if (do_cache)
                         asio::spawn(ctx, [
                             &,
