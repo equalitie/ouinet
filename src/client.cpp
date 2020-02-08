@@ -967,7 +967,7 @@ public:
 
                     using http_response::Part;
 
-                    util::AsyncQueue<boost::optional<Part>> q1(exec), q2(exec);
+                    util::AsyncQueue<boost::optional<Part>> qst(exec), qag(exec); // to storage, agent
 
                     WaitCondition wc(ctx);
 
@@ -979,7 +979,7 @@ public:
                         ] (asio::yield_context yield_) {
                             auto y = yield.detach(yield_);
                             sys::error_code ec;
-                            AsyncQueueReader rr(q1);
+                            AsyncQueueReader rr(qst);
                             if (!ec) store(rq, rr, cancel, y[ec]);
                         });
 
@@ -988,9 +988,9 @@ public:
                         lock = wc.lock()
                     ] (asio::yield_context yield_) {
                         sys::error_code ec;
-                        auto r = std::make_unique<AsyncQueueReader>(q2);
-                        Session s2 = Session::create_from_reader(std::move(r), cancel, yield_[ec]);
-                        if (!ec) s2.flush_response(con, cancel, yield_[ec]);
+                        auto rr = std::make_unique<AsyncQueueReader>(qag);
+                        Session sag = Session::create_from_reader(std::move(rr), cancel, yield_[ec]);
+                        if (!ec) sag.flush_response(con, cancel, yield_[ec]);
                     });
 
                     s.flush_response(cancel, yield[ec],
@@ -998,12 +998,12 @@ public:
                             , Cancel& cancel
                             , asio::yield_context yield)
                         {
-                            if (do_cache) q1.push_back(part);
-                            q2.push_back(std::move(part));
+                            if (do_cache) qst.push_back(part);
+                            qag.push_back(std::move(part));
                         });
 
-                    if (do_cache) q1.push_back(boost::none);
-                    q2.push_back(boost::none);
+                    if (do_cache) qst.push_back(boost::none);
+                    qag.push_back(boost::none);
 
                     wc.wait(yield);
 
