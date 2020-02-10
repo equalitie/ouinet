@@ -15,11 +15,15 @@
 #include "../or_throw.h"
 #include "../parse/number.h"
 #include "../util.h"
+#include "../util/atomic_file.h"
+#include "../util/bytes.h"
 #include "../util/file_io.h"
+#include "../util/hash.h"
 #include "../util/variant.h"
 #include "http_sign.h"
 
 #define _LOGPFX "HTTP store: "
+#define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
 #define _WARN(...) LOG_WARN(_LOGPFX, __VA_ARGS__)
 #define _ERROR(...) LOG_ERROR(_LOGPFX, __VA_ARGS__)
 
@@ -533,6 +537,14 @@ HttpStoreV0::~HttpStoreV0()
 {
 }
 
+static
+fs::path
+v0_path_from_key(const fs::path& dir, const std::string& key)
+{
+    auto key_digest = util::sha1_digest(key);
+    return dir / util::bytes::to_hex(key_digest);
+}
+
 void
 HttpStoreV0::keep_if(keep_func, asio::yield_context)
 {
@@ -540,10 +552,17 @@ HttpStoreV0::keep_if(keep_func, asio::yield_context)
 }
 
 void
-HttpStoreV0::store( const std::string& key, http_response::AbstractReader&
-                  , Cancel, asio::yield_context)
+HttpStoreV0::store( const std::string& key, http_response::AbstractReader& r
+                  , Cancel cancel, asio::yield_context yield)
 {
-    // TODO: implement
+    sys::error_code ec;
+
+    auto kpath = v0_path_from_key(path, key);
+    auto file = util::atomic_file::make(executor, kpath, ec);
+    if (!ec) http_store_v0(r, *file, cancel, yield[ec]);
+    if (!ec) file->commit(ec);
+    _DEBUG("Flushed to file; key=", key, " path=", kpath);
+    return or_throw(yield, ec);
 }
 
 std::unique_ptr<http_response::AbstractReader>

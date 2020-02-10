@@ -5,8 +5,6 @@
 #include "../http_sign.h"
 #include "../http_store.h"
 #include "../../http_util.h"
-#include "../../util/atomic_file.h"
-#include "../../util/bytes.h"
 #include "../../util/wait_condition.h"
 #include "../../util/set_io.h"
 #include "../../util/async_generator.h"
@@ -444,18 +442,12 @@ struct Client::Impl {
               , Cancel cancel
               , asio::yield_context yield)
     {
-        sys::error_code ec;
-
         auto dk = dht_key(key);
         if (!dk) return or_throw(yield, asio::error::invalid_argument);
-        auto path = path_from_key(key);
-        auto file = util::atomic_file::make(ex, path, ec);
-        if (!ec) cache::http_store_v0(r, file->lowest_layer(), cancel, yield[ec]);
-        if (!ec) file->commit(ec);
+
+        sys::error_code ec;
+        http_store->store(key, r, cancel, yield[ec]);
         if (ec) return or_throw(yield, ec);
-        LOG_DEBUG( "Bep5Http cache: Flushed to file;"
-                 , " key=", key
-                 , " path=", path);
 
         announcer.add(*dk);
     }

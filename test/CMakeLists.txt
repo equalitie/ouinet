@@ -131,9 +131,11 @@ add_executable(test-http-store
     "../src/logger.cpp"
     "../src/response_part.cpp"
     "../src/util.cpp"
+    "../src/util/atomic_file.cpp"
     "../src/util/crypto.cpp"
     "../src/util/file_io.cpp"
     "../src/util/hash.cpp"
+    "../src/util/temp_file.cpp"
 )
 target_link_libraries(test-http-store lib::gcrypt lib::uri)
 
