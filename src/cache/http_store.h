@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 #include <boost/asio/executor.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/filesystem/path.hpp>
@@ -31,6 +33,8 @@ namespace ouinet { namespace cache {
 //     Where `BASE64(HASH[-1])` and `HASH[-1]` are the empty string and
 //     `HASH[i]=HASH(HASH[i-1] DATA[i])`.
 static const unsigned http_store_version = 1;
+
+//// Low-level functions for HTTP response storage:
 
 // Save the HTTP response coming from the given reader in v0 format
 // into the given open stream.
@@ -72,5 +76,32 @@ http_store_reader_v0( const fs::path&, asio::executor
 std::unique_ptr<http_response::AbstractReader>
 http_store_reader_v1( fs::path, asio::executor
                     , sys::error_code&);
+
+//// High-level classes for HTTP response storage
+
+class AbstractHttpStore {
+public:
+    using keep_func = std::function<
+        bool(http_response::AbstractReader&, asio::yield_context)>;
+
+public:
+    virtual ~AbstractHttpStore() = default;
+
+    // Iterate over stored responses
+    // and keep those for which invoking the `keep_func` returns true.
+    virtual
+    void
+    keep_if(keep_func, asio::yield_context) = 0;
+
+    virtual
+    void
+    store( const std::string& key, http_response::AbstractReader&
+         , Cancel, asio::yield_context) = 0;
+
+    virtual
+    std::unique_ptr<http_response::AbstractReader>
+    reader( const std::string& key
+          , sys::error_code&) = 0;  // not const, e.g. LRU cache
+};
 
 }} // namespaces
