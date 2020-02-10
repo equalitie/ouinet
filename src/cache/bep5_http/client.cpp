@@ -7,7 +7,6 @@
 #include "../../http_util.h"
 #include "../../util/atomic_file.h"
 #include "../../util/bytes.h"
-#include "../../util/file_io.h"
 #include "../../util/wait_condition.h"
 #include "../../util/set_io.h"
 #include "../../util/async_generator.h"
@@ -458,21 +457,19 @@ struct Client::Impl {
         announcer.add(*dk);
     }
 
-    template<class Stream>
     http::response_header<>
-    read_response_header(Stream& stream, asio::yield_context yield)
+    read_response_header( http_response::AbstractReader& reader
+                        , asio::yield_context yield)
     {
         Cancel lc(lifetime_cancel);
 
         sys::error_code ec;
-        beast::flat_buffer buffer;
-        http::response_parser<http::empty_body> parser;
-        http::async_read_header(stream, buffer, parser, yield[ec]);
-
-        if (lc) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<http::response_header<>>(yield, ec);
-
-        return parser.release();
+        auto part = reader.async_read_part(lc, yield[ec]);
+        if (!ec && !part)
+            ec = sys::errc::make_error_code(sys::errc::no_message);
+        return_or_throw_on_error(yield, lc, ec, http::response_header<>());
+        auto head = part->as_head(); assert(head);
+        return *head;
     }
 
     void announce_stored_data(asio::yield_context yield)
@@ -481,7 +478,7 @@ struct Client::Impl {
             if (!fs::is_regular_file(p)) continue;
             sys::error_code ec;
 
-            auto f = util::file_io::open_readonly(ex, p, ec);
+            auto rr = cache::http_store_reader_v0(p, ex, ec);
             if (ec == asio::error::operation_aborted) return;
             if (ec) {
                 LOG_WARN("Bep5HTTP: Failed to open cached file ", p
@@ -489,7 +486,7 @@ struct Client::Impl {
                 try_remove(p); continue;
             }
 
-            auto hdr = read_response_header(f, yield[ec]);
+            auto hdr = read_response_header(*rr, yield[ec]);
             if (ec == asio::error::operation_aborted) return;
             if (ec) {
                 LOG_WARN("Bep5HTTP: Failed read cached file ", p
