@@ -819,31 +819,6 @@ public:
         return or_throw(yield, ec, move(r));
     }
 
-    void store( const Request& rq
-              , http_response::AbstractReader& rr
-              , Cancel& cancel, Yield yield)
-    {
-        // No need to filter request or response headers
-        // since we are not storing them here
-        // (they can be found at the descriptor).
-        // Otherwise we should pass them through
-        // `util::to_cache_request` and `util::to_cache_response` (respectively).
-
-        // Nonetheless, chunked transfer encoding may still have been used,
-        // and we need to undo it since the data referenced by the descriptor
-        // is the plain one.
-
-        // TODO: The above ^
-
-        auto cache = client_state.get_cache();
-        if (!cache)
-            return or_throw(yield, asio::error::operation_not_supported);
-
-        auto key = key_from_http_req(rq);
-        assert(key);
-        cache->store(move(*key), rr, cancel, yield);
-    }
-
     // Closes `con` when it can no longer be used.
     // If an error is reported and it is still open,
     // a response may still be sent to it.
@@ -971,16 +946,18 @@ public:
 
                     WaitCondition wc(ctx);
 
-                    bool do_cache = client_state.get_cache() && CacheControl::ok_to_cache(rq, rsh);
+                    auto cache = client_state.get_cache();
+                    bool do_cache = cache && CacheControl::ok_to_cache(rq, rsh);
                     if (do_cache)
                         asio::spawn(ctx, [
-                            &,
+                            &, cache = std::move(cache),
                             lock = wc.lock()
                         ] (asio::yield_context yield_) {
-                            auto y = yield.detach(yield_);
-                            sys::error_code ec;
+                            auto key = key_from_http_req(rq); assert(key);
                             AsyncQueueReader rr(qst);
-                            if (!ec) store(rq, rr, cancel, y[ec]);
+                            sys::error_code ec;
+                            auto y = yield.detach(yield_);
+                            cache->store(*key, rr, cancel, y[ec]);
                         });
 
                     asio::spawn(ctx, [
