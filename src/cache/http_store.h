@@ -104,4 +104,31 @@ public:
           , sys::error_code&) = 0;  // not const, e.g. LRU cache
 };
 
+// This uses format v0 to store each response
+// in a file named `LOWER_HEX(SHA1(KEY))`
+// under the given directory.
+class HttpStoreV0 : public AbstractHttpStore {
+public:
+    HttpStoreV0(fs::path, asio::executor ex)
+        : path(std::move(path)), executor(ex)
+    {}
+
+    ~HttpStoreV0() override;
+
+    void
+    keep_if(keep_func, asio::yield_context) override;
+
+    void
+    store( const std::string& key, http_response::AbstractReader&
+         , Cancel, asio::yield_context) override;
+
+    std::unique_ptr<http_response::AbstractReader>
+    reader( const std::string& key
+          , sys::error_code&) override;
+
+private:
+    fs::path path;
+    asio::executor executor;
+};
+
 }} // namespaces

@@ -38,6 +38,7 @@ struct Client::Impl {
     shared_ptr<bt::MainlineDht> dht;
     util::Ed25519PublicKey cache_pk;
     fs::path cache_dir;
+    unique_ptr<cache::AbstractHttpStore> http_store;
     Cancel lifetime_cancel;
     Announcer announcer;
     map<string, udp::endpoint> peer_cache;
@@ -53,11 +54,13 @@ struct Client::Impl {
     Impl( shared_ptr<bt::MainlineDht> dht_
         , util::Ed25519PublicKey& cache_pk
         , fs::path cache_dir
+        , unique_ptr<cache::AbstractHttpStore> http_store
         , log_level_t log_level)
         : ex(dht_->get_executor())
         , dht(move(dht_))
         , cache_pk(cache_pk)
         , cache_dir(move(cache_dir))
+        , http_store(move(http_store))
         , announcer(dht, log_level)
         , dht_lookups(256)
         , log_level(log_level)
@@ -566,11 +569,16 @@ Client::build( shared_ptr<bt::MainlineDht> dht
 
     sys::error_code ec;
 
-    fs::create_directories(cache_dir/"data", ec);
-
+    auto store_dir = cache_dir / "data"/*"-v0"*/;
+    fs::create_directories(store_dir, ec);
     if (ec) return or_throw<ClientPtr>(yield, ec);
+    auto http_store = make_unique<cache::HttpStoreV0>(
+        move(store_dir), dht->get_executor());
 
-    unique_ptr<Impl> impl(new Impl(move(dht), cache_pk, move(cache_dir), log_level));
+    unique_ptr<Impl> impl(new Impl( move(dht)
+                                  , cache_pk, move(cache_dir)
+                                  , move(http_store)
+                                  , log_level));
 
     impl->announce_stored_data(yield[ec]);
 

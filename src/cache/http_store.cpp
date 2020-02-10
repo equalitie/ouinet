@@ -527,4 +527,33 @@ http_store_reader_v1(fs::path dirp, asio::executor ex, sys::error_code& ec)
     return std::make_unique<HttpStore1Reader>(std::move(dirp), std::move(headf), std::move(ex));
 }
 
+// begin HttpStoreV0
+
+HttpStoreV0::~HttpStoreV0()
+{
+}
+
+void
+HttpStoreV0::keep_if(keep_func, asio::yield_context)
+{
+    // TODO: implement
+}
+
+void
+HttpStoreV0::store( const std::string& key, http_response::AbstractReader&
+                  , Cancel, asio::yield_context)
+{
+    // TODO: implement
+}
+
+std::unique_ptr<http_response::AbstractReader>
+HttpStoreV0::reader( const std::string& key
+                   , sys::error_code&)
+{
+    // TODO: implement
+    return nullptr;
+}
+
+// end HttpStoreV0
+
 }} // namespaces
