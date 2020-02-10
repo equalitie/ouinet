@@ -567,10 +567,10 @@ HttpStoreV0::store( const std::string& key, http_response::AbstractReader& r
 
 std::unique_ptr<http_response::AbstractReader>
 HttpStoreV0::reader( const std::string& key
-                   , sys::error_code&)
+                   , sys::error_code& ec)
 {
-    // TODO: implement
-    return nullptr;
+    auto kpath = v0_path_from_key(path, key);
+    return http_store_reader_v0(kpath, executor, ec);
 }
 
 // end HttpStoreV0

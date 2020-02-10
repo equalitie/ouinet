@@ -105,10 +105,7 @@ struct Client::Impl {
             return handle_bad_request(sink, req, yield[ec]);
         }
 
-        auto path = path_from_key(*key);
-
-        auto rr = cache::http_store_reader_v0(path, ex, ec);
-
+        auto rr = http_store->reader(*key, ec);
         if (ec) {
             if (!cancel && log_debug()) {
                 cerr << "Bep5HTTP: Not Serving " << *key
