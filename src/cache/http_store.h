@@ -116,8 +116,8 @@ public:
 // under the given directory.
 class HttpStoreV0 : public AbstractHttpStore {
 public:
-    HttpStoreV0(fs::path, asio::executor ex)
-        : path(std::move(path)), executor(ex)
+    HttpStoreV0(fs::path p, asio::executor ex)
+        : path(std::move(p)), executor(ex)
     {}
 
     ~HttpStoreV0() override;
