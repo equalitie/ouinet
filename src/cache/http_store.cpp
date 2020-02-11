@@ -29,6 +29,9 @@
 
 namespace ouinet { namespace cache {
 
+// Lowercase hexadecimal representation of a SHA1 digest.
+static const boost::regex v0_file_name_rx("^[0-9a-f]{40}$");
+
 // File names for response components.
 static const fs::path head_fname = "head";
 static const fs::path body_fname = "body";
@@ -583,11 +586,17 @@ HttpStoreV0::for_each(keep_func keep, asio::yield_context yield)
             continue;
         }
 
-        if (name_matches_model(p.path().filename(), util::default_temp_model)) {
+        auto p_name = p.path().filename();
+        if (name_matches_model(p_name, util::default_temp_model)) {
             _DEBUG("Found temporary file: ", p);
             v0_try_remove(p); continue;
         }
-        // TODO: skip if unknown
+
+        auto& p_name_s = p_name.native();
+        if (!boost::regex_match(p_name_s.begin(), p_name_s.end(), v0_file_name_rx)) {
+            _WARN("Found unknown file: ", p);
+            continue;
+        }
 
         sys::error_code ec;
 
