@@ -82,7 +82,8 @@ http_store_reader_v1( fs::path, asio::executor
 class AbstractHttpStore {
 public:
     using keep_func = std::function<
-        bool(http_response::AbstractReader&, asio::yield_context)>;
+        bool( std::unique_ptr<http_response::AbstractReader>
+            , asio::yield_context)>;
 
 public:
     virtual ~AbstractHttpStore() = default;
