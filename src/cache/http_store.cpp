@@ -578,7 +578,11 @@ void
 HttpStoreV0::for_each(keep_func keep, asio::yield_context yield)
 {
     for (auto& p : fs::directory_iterator(path)) {
-        if (!fs::is_regular_file(p)) continue;
+        if (!fs::is_regular_file(p)) {
+            _WARN("Found non-regular file: ", p);
+            continue;
+        }
+
         if (name_matches_model(p.path().filename(), util::default_temp_model)) {
             _DEBUG("Found temporary file: ", p);
             v0_try_remove(p); continue;
