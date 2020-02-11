@@ -519,16 +519,6 @@ struct Client::Impl {
         return cache_dir/"data";
     }
 
-    fs::path path_from_key(const std::string& key)
-    {
-        return path_from_infohash(util::sha1_digest(key));
-    }
-
-    fs::path path_from_infohash(const bt::NodeID& infohash)
-    {
-        return data_dir()/infohash.to_hex();
-    }
-
     void stop() {
         lifetime_cancel();
     }
