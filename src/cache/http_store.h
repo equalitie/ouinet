@@ -34,6 +34,8 @@ namespace ouinet { namespace cache {
 //     `HASH[i]=HASH(HASH[i-1] DATA[i])`.
 static const unsigned http_store_version = 1;
 
+using reader_uptr = std::unique_ptr<http_response::AbstractReader>;
+
 //// Low-level functions for HTTP response storage:
 
 // Save the HTTP response coming from the given reader in v0 format
@@ -58,7 +60,7 @@ void http_store_v1( http_response::AbstractReader&, const fs::path&
 
 // Return a new reader for a response stored in v0 format
 // in the given file.
-std::unique_ptr<http_response::AbstractReader>
+reader_uptr
 http_store_reader_v0( const fs::path&, asio::executor
                     , sys::error_code&);
 
@@ -73,7 +75,7 @@ http_store_reader_v0( const fs::path&, asio::executor
 //
 // The response will be provided using chunked transfer encoding,
 // with all the metadata needed to verify and further share it.
-std::unique_ptr<http_response::AbstractReader>
+reader_uptr
 http_store_reader_v1( fs::path, asio::executor
                     , sys::error_code&);
 
@@ -82,8 +84,7 @@ http_store_reader_v1( fs::path, asio::executor
 class AbstractHttpStore {
 public:
     using keep_func = std::function<
-        bool( std::unique_ptr<http_response::AbstractReader>
-            , asio::yield_context)>;
+        bool(reader_uptr, asio::yield_context)>;
 
 public:
     virtual ~AbstractHttpStore() = default;
@@ -100,7 +101,7 @@ public:
          , Cancel, asio::yield_context) = 0;
 
     virtual
-    std::unique_ptr<http_response::AbstractReader>
+    reader_uptr
     reader( const std::string& key
           , sys::error_code&) = 0;  // not const, e.g. LRU cache
 };
@@ -123,7 +124,7 @@ public:
     store( const std::string& key, http_response::AbstractReader&
          , Cancel, asio::yield_context) override;
 
-    std::unique_ptr<http_response::AbstractReader>
+    reader_uptr
     reader( const std::string& key
           , sys::error_code&) override;
 

@@ -291,7 +291,7 @@ http_store_v1( http_response::AbstractReader& reader, const fs::path& dirp
     }
 }
 
-std::unique_ptr<http_response::AbstractReader>
+reader_uptr
 http_store_reader_v0(const fs::path& path, asio::executor ex, sys::error_code& ec)
 {
     auto file = util::file_io::open_readonly(ex, path, ec);
@@ -522,7 +522,7 @@ private:
     boost::optional<http_response::Part> next_chunk_body;
 };
 
-std::unique_ptr<http_response::AbstractReader>
+reader_uptr
 http_store_reader_v1(fs::path dirp, asio::executor ex, sys::error_code& ec)
 {
     auto headf = util::file_io::open_readonly(ex, dirp / head_fname, ec);
@@ -565,7 +565,7 @@ HttpStoreV0::store( const std::string& key, http_response::AbstractReader& r
     return or_throw(yield, ec);
 }
 
-std::unique_ptr<http_response::AbstractReader>
+reader_uptr
 HttpStoreV0::reader( const std::string& key
                    , sys::error_code& ec)
 {
