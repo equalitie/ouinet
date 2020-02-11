@@ -556,12 +556,33 @@ v0_try_remove(const fs::path& path)
                  , path, " ec:", ec.message());
 }
 
+// For instance, "tmp.1234-abcd" matches "tmp.%%%%-%%%%".
+static
+bool
+name_matches_model(const fs::path& name, const fs::path& model)
+{
+    if (name.size() != model.size())
+        return false;
+
+    auto& name_s = name.native();
+    auto& model_s = model.native();
+    for (size_t i = 0; i < model.size(); ++i)
+        // This is simplified, actually "%" becomes lowercase hex.
+        if (model_s[i] != '%' && (model_s[i] != name_s[i]))
+            return false;
+
+    return true;
+}
+
 void
 HttpStoreV0::for_each(keep_func keep, asio::yield_context yield)
 {
     for (auto& p : fs::directory_iterator(path)) {
         if (!fs::is_regular_file(p)) continue;
-        // TODO: remove if temporary
+        if (name_matches_model(p.path().filename(), util::default_temp_model)) {
+            _DEBUG("Found temporary file: ", p);
+            v0_try_remove(p); continue;
+        }
         // TODO: skip if unknown
 
         sys::error_code ec;
