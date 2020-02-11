@@ -467,7 +467,7 @@ struct Client::Impl {
     void announce_stored_data(asio::yield_context y)
     {
         sys::error_code e;
-        http_store->keep_if([&] (auto rr, auto yield) {
+        http_store->for_each([&] (auto rr, auto yield) {
             sys::error_code ec;
 
             auto hdr = read_response_header(*rr, yield[ec]);

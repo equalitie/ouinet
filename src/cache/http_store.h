@@ -89,11 +89,16 @@ public:
 public:
     virtual ~AbstractHttpStore() = default;
 
-    // Iterate over stored responses
-    // and keep those for which invoking the `keep_func` returns true.
+    // Iterate over stored responses.
+    //
+    // `keep_func` gets an open reader for the response;
+    // the response is removed if `keep_func` returns false
+    // (and there is no error).
+    //
+    // Other maintenance may be performed too.
     virtual
     void
-    keep_if(keep_func, asio::yield_context) = 0;
+    for_each(keep_func, asio::yield_context) = 0;
 
     virtual
     void
@@ -118,7 +123,7 @@ public:
     ~HttpStoreV0() override;
 
     void
-    keep_if(keep_func, asio::yield_context) override;
+    for_each(keep_func, asio::yield_context) override;
 
     void
     store( const std::string& key, http_response::AbstractReader&

@@ -557,7 +557,7 @@ v0_try_remove(const fs::path& path)
 }
 
 void
-HttpStoreV0::keep_if(keep_func keep, asio::yield_context yield)
+HttpStoreV0::for_each(keep_func keep, asio::yield_context yield)
 {
     for (auto& p : fs::directory_iterator(path)) {
         if (!fs::is_regular_file(p)) continue;
