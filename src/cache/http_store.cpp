@@ -545,10 +545,45 @@ v0_path_from_key(const fs::path& dir, const std::string& key)
     return dir / util::bytes::to_hex(key_digest);
 }
 
+static
 void
-HttpStoreV0::keep_if(keep_func, asio::yield_context)
+v0_try_remove(const fs::path& path)
 {
-    // TODO: implement
+    _DEBUG("Removing cached response: ", path);
+    sys::error_code ec;
+    fs::remove(path, ec);
+    if (ec) _WARN( "Failed to remove cached response: "
+                 , path, " ec:", ec.message());
+}
+
+void
+HttpStoreV0::keep_if(keep_func keep, asio::yield_context yield)
+{
+    for (auto& p : fs::directory_iterator(path)) {
+        if (!fs::is_regular_file(p)) continue;
+        // TODO: remove if temporary
+        // TODO: skip if unknown
+
+        sys::error_code ec;
+
+        auto rr = http_store_reader_v0(p, executor, ec);
+        if (ec == asio::error::operation_aborted) return;
+        if (ec) {
+            _WARN("Failed to open cached response: ", p, " ec:", ec.message());
+            v0_try_remove(p); continue;
+        }
+        assert(rr);
+
+        auto keep_entry = keep(std::move(rr), yield[ec]);
+        if (ec == asio::error::operation_aborted) return;
+        if (ec) {
+            _WARN("Failed to check cached response: ", p, " ec:", ec.message());
+            v0_try_remove(p); continue;
+        }
+
+        if (!keep_entry)
+            v0_try_remove(p);
+    }
 }
 
 void

@@ -464,59 +464,37 @@ struct Client::Impl {
         return *head;
     }
 
-    void announce_stored_data(asio::yield_context yield)
+    void announce_stored_data(asio::yield_context y)
     {
-        for (auto& p : fs::directory_iterator(data_dir())) {
-            if (!fs::is_regular_file(p)) continue;
+        sys::error_code e;
+        http_store->keep_if([&] (auto rr, auto yield) {
             sys::error_code ec;
 
-            auto rr = cache::http_store_reader_v0(p, ex, ec);
-            if (ec == asio::error::operation_aborted) return;
-            if (ec) {
-                LOG_WARN("Bep5HTTP: Failed to open cached file ", p
-                        , " ec:", ec.message());
-                try_remove(p); continue;
-            }
-
             auto hdr = read_response_header(*rr, yield[ec]);
-            if (ec == asio::error::operation_aborted) return;
-            if (ec) {
-                LOG_WARN("Bep5HTTP: Failed read cached file ", p
-                        , " ec:", ec.message());
-                try_remove(p); continue;
-            }
+            if (ec) return or_throw<bool>(yield, ec);
 
             if (hdr[http_::protocol_version_hdr] != http_::protocol_version_hdr_current) {
-                LOG_WARN("Bep5HTTP: Cached file ", p
-                        , " contains an invalid ", http_::protocol_version_hdr
-                        , " header field (removing the file)");
-                try_remove(p); continue;
+                LOG_WARN( "Bep5HTTP: Cached response contains an invalid "
+                        , http_::protocol_version_hdr
+                        , " header field; removing");
+                return false;
             }
 
             auto key = hdr[http_::response_uri_hdr];
 
             if (key.empty()) {
-                LOG_WARN("Bep5HTTP: Cached file ", p
-                        , " does not contain ", http_::response_uri_hdr
-                        , " header field (removing the file)");
-                try_remove(p); continue;
+                LOG_WARN( "Bep5HTTP: Cached response does not contain a "
+                        , http_::response_uri_hdr
+                        , " header field; removing");
+                return false;
             }
 
             if (auto opt_k = dht_key(key.to_string())) {
                 announcer.add(*opt_k);
             }
-        }
-    }
 
-    static void try_remove(const fs::path& path)
-    {
-        sys::error_code ec_ignored;
-        fs::remove(path, ec_ignored);
-    }
-
-    fs::path data_dir() const
-    {
-        return cache_dir/"data";
+            return true;
+        }, y[e]);
     }
 
     void stop() {
