@@ -21,6 +21,11 @@ using reader_uptr = std::unique_ptr<http_response::AbstractReader>;
 
 // Save the HTTP response coming from the given reader in v0 format
 // into the given open stream.
+//
+// ----
+//
+// The v0 format is just a raw dump of the whole HTTP response
+// (head, body and trailer) as it comes from the sender.
 template<class Stream>
 void http_store_v0( http_response::AbstractReader& reader, Stream& outf
                   , Cancel cancel, asio::yield_context yield)
