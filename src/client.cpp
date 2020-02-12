@@ -1767,7 +1767,10 @@ void Client::State::setup_injector(asio::yield_context yield)
         sys::error_code ec;
         auto dht = bittorrent_dht(yield[ec]);
         if (ec) {
-            LOG_ERROR("Failed to set up Bep5Client at setting up BT DHT ", ec.message());
+            if (ec != asio::error::operation_aborted) {
+                LOG_ERROR("Failed to set up Bep5Client at setting up BT DHT ", ec.message());
+            }
+            return or_throw(yield, ec);
         }
 
         _bep5_client = make_shared<ouiservice::Bep5Client>
