@@ -185,9 +185,6 @@ static string rs_sigs(bool complete) {
 static const bool true_false[] = {true, false};
 
 BOOST_DATA_TEST_CASE(test_write_response, boost::unit_test::data::make(true_false), complete) {
-    // This test knows about the internals of this particular format.
-    BOOST_CHECK_EQUAL(cache::http_store_version, 1);
-
     auto tmpdir = fs::unique_path();
     auto rmdir = defer([&tmpdir] {
         sys::error_code ec;
@@ -319,9 +316,6 @@ static const array<string, 4> rrs_chunk_ext{
 static const http_response::Trailer rrs_trailer{};
 
 BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false), complete) {
-    // This test knows about the internals of this particular format.
-    BOOST_CHECK_EQUAL(cache::http_store_version, 1);
-
     auto tmpdir = fs::unique_path();
     auto rmdir = defer([&tmpdir] {
         sys::error_code ec;
