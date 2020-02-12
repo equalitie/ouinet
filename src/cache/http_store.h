@@ -145,4 +145,32 @@ private:
     asio::executor executor;
 };
 
+// This uses format v1 to store each response
+// in a directory named `DIGEST[:2]/DIGEST[2:]`
+// (where `DIGEST = LOWER_HEX(SHA1(KEY))`)
+// under the given directory.
+class HttpStoreV1 : public AbstractHttpStore {
+public:
+    HttpStoreV1(fs::path p, asio::executor ex)
+        : path(std::move(p)), executor(ex)
+    {}
+
+    ~HttpStoreV1() override;
+
+    void
+    for_each(keep_func, asio::yield_context) override;
+
+    void
+    store( const std::string& key, http_response::AbstractReader&
+         , Cancel, asio::yield_context) override;
+
+    reader_uptr
+    reader( const std::string& key
+          , sys::error_code&) override;
+
+private:
+    fs::path path;
+    asio::executor executor;
+};
+
 }} // namespaces

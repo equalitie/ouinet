@@ -644,4 +644,33 @@ HttpStoreV0::reader( const std::string& key
 
 // end HttpStoreV0
 
+// begin HttpStoreV0
+
+HttpStoreV1::~HttpStoreV1()
+{
+}
+
+void
+HttpStoreV1::for_each(keep_func keep, asio::yield_context yield)
+{
+    // TODO: implement
+}
+
+void
+HttpStoreV1::store( const std::string& key, http_response::AbstractReader& r
+                  , Cancel cancel, asio::yield_context yield)
+{
+    // TODO: implement
+}
+
+reader_uptr
+HttpStoreV1::reader( const std::string& key
+                   , sys::error_code& ec)
+{
+    // TODO: implement
+    return nullptr;
+}
+
+// end HttpStoreV0
+
 }} // namespaces
