@@ -650,6 +650,17 @@ HttpStoreV1::~HttpStoreV1()
 {
 }
 
+static
+fs::path
+v1_path_from_key(fs::path dir, const std::string& key)
+{
+    auto key_digest = util::sha1_digest(key);
+    auto hex_digest = util::bytes::to_hex(key_digest);
+    boost::string_view hd0(hex_digest); hd0.remove_suffix(hex_digest.size() - 2);
+    boost::string_view hd1(hex_digest); hd1.remove_prefix(2);
+    return dir.append(hd0.begin(), hd0.end()).append(hd1.begin(), hd1.end());
+}
+
 void
 HttpStoreV1::for_each(keep_func keep, asio::yield_context yield)
 {
@@ -667,8 +678,8 @@ reader_uptr
 HttpStoreV1::reader( const std::string& key
                    , sys::error_code& ec)
 {
-    // TODO: implement
-    return nullptr;
+    auto kpath = v1_path_from_key(path, key);
+    return http_store_reader_v1(kpath, executor, ec);
 }
 
 // end HttpStoreV0
