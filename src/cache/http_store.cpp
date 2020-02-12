@@ -631,7 +631,9 @@ HttpStoreV0::store( const std::string& key, http_response::AbstractReader& r
     auto file = util::atomic_file::make(executor, kpath, ec);
     if (!ec) http_store_v0(r, *file, cancel, yield[ec]);
     if (!ec) file->commit(ec);
-    _DEBUG("Flushed to file; key=", key, " path=", kpath);
+    if (!ec) _DEBUG("Stored to file; key=", key, " path=", kpath);
+    else _ERROR( "Failed to store response; key=", key, " path=", kpath
+               , " ec:", ec.message());
     return or_throw(yield, ec);
 }
 
@@ -688,7 +690,9 @@ HttpStoreV1::store( const std::string& key, http_response::AbstractReader& r
     // A new version of the response may still slip in here,
     // but it may be ok since it will probably be recent enough.
     if (!ec) dir->commit(ec);
-    _DEBUG("Flushed to directory; key=", key, " path=", kpath);
+    if (!ec) _DEBUG("Stored to directory; key=", key, " path=", kpath);
+    else _ERROR( "Failed to store response; key=", key, " path=", kpath
+               , " ec:", ec.message());
     return or_throw(yield, ec);
 }
 
