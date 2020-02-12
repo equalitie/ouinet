@@ -526,10 +526,10 @@ Client::build( shared_ptr<bt::MainlineDht> dht
 
     sys::error_code ec;
 
-    auto store_dir = cache_dir / "data"/*"-v0"*/;
+    auto store_dir = cache_dir / "data-v1";
     fs::create_directories(store_dir, ec);
     if (ec) return or_throw<ClientPtr>(yield, ec);
-    auto http_store = make_unique<cache::HttpStoreV0>(
+    auto http_store = make_unique<cache::HttpStoreV1>(
         move(store_dir), dht->get_executor());
 
     unique_ptr<Impl> impl(new Impl( move(dht)
