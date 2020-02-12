@@ -33,6 +33,11 @@ namespace ouinet { namespace cache {
 // Lowercase hexadecimal representation of a SHA1 digest.
 static const boost::regex v0_file_name_rx("^[0-9a-f]{40}$");
 
+// Lowercase hexadecimal representation of a SHA1 digest,
+// split in two.
+static const boost::regex v1_parent_name_rx("^[0-9a-f]{2}$");
+static const boost::regex v1_dir_name_rx("^[0-9a-f]{38}$");
+
 // File names for response components.
 static const fs::path head_fname = "head";
 static const fs::path body_fname = "body";
@@ -664,10 +669,72 @@ v1_path_from_key(fs::path dir, const std::string& key)
     return dir.append(hd0.begin(), hd0.end()).append(hd1.begin(), hd1.end());
 }
 
+static
+void
+v1_try_remove(const fs::path& path)
+{
+    _DEBUG("Removing cached response: ", path);
+    sys::error_code ec;
+    fs::remove_all(path, ec);
+    if (ec) _WARN( "Failed to remove cached response: "
+                 , path, " ec:", ec.message());
+    // The parent directory may be left empty.
+}
+
 void
 HttpStoreV1::for_each(keep_func keep, asio::yield_context yield)
 {
-    // TODO: implement
+    for (auto& pp : fs::directory_iterator(path)) {  // iterate over `DIGEST[:2]` dirs
+        if (!fs::is_directory(pp)) {
+            _WARN("Found non-directory: ", pp);
+            continue;
+        }
+
+        auto& pp_name_s = pp.path().native();
+        if (!boost::regex_match(pp_name_s.begin(), pp_name_s.end(), v1_parent_name_rx)) {
+            _WARN("Found unknown directory: ", pp);
+            continue;
+        }
+
+        for (auto& p : fs::directory_iterator(pp)) {  // iterate over `DIGEST[2:]` dirs
+            if (!fs::is_directory(p)) {
+                _WARN("Found non-directory: ", p);
+                continue;
+            }
+
+            auto p_name = p.path().filename();
+            if (name_matches_model(p_name, util::default_temp_model)) {
+                _DEBUG("Found temporary directory: ", p);
+                v1_try_remove(p); continue;
+            }
+
+            auto& p_name_s = p_name.native();
+            if (!boost::regex_match(p_name_s.begin(), p_name_s.end(), v1_dir_name_rx)) {
+                _WARN("Found unknown directory: ", p);
+                continue;
+            }
+
+            sys::error_code ec;
+
+            auto rr = http_store_reader_v1(p, executor, ec);
+            if (ec == asio::error::operation_aborted) return;
+            if (ec) {
+               _WARN("Failed to open cached response: ", p, " ec:", ec.message());
+               v1_try_remove(p); continue;
+            }
+            assert(rr);
+
+            auto keep_entry = keep(std::move(rr), yield[ec]);
+            if (ec == asio::error::operation_aborted) return;
+            if (ec) {
+                _WARN("Failed to check cached response: ", p, " ec:", ec.message());
+                v1_try_remove(p); continue;
+            }
+
+            if (!keep_entry)
+                v1_try_remove(p);
+        }
+    }
 }
 
 void
