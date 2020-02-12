@@ -15,6 +15,7 @@
 #include "../or_throw.h"
 #include "../parse/number.h"
 #include "../util.h"
+#include "../util/atomic_dir.h"
 #include "../util/atomic_file.h"
 #include "../util/bytes.h"
 #include "../util/file_io.h"
@@ -671,7 +672,24 @@ void
 HttpStoreV1::store( const std::string& key, http_response::AbstractReader& r
                   , Cancel cancel, asio::yield_context yield)
 {
-    // TODO: implement
+    sys::error_code ec;
+
+    auto kpath = v1_path_from_key(path, key);
+
+    auto kpath_parent = kpath.parent_path();
+    fs::create_directory(kpath_parent, ec);
+    if (ec) return or_throw(yield, ec);
+
+    // Replacing a directory is not an atomic operation,
+    // so try to remove the existing entry before committing.
+    auto dir = util::atomic_dir::make(kpath, ec);
+    if (!ec) http_store_v1(r, dir->temp_path(), executor, cancel, yield[ec]);
+    if (!ec && fs::exists(kpath)) fs::remove_all(kpath, ec);
+    // A new version of the response may still slip in here,
+    // but it may be ok since it will probably be recent enough.
+    if (!ec) dir->commit(ec);
+    _DEBUG("Flushed to directory; key=", key, " path=", kpath);
+    return or_throw(yield, ec);
 }
 
 reader_uptr
@@ -682,6 +700,6 @@ HttpStoreV1::reader( const std::string& key
     return http_store_reader_v1(kpath, executor, ec);
 }
 
-// end HttpStoreV0
+// end HttpStoreV1
 
 }} // namespaces
