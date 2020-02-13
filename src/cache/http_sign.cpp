@@ -1048,9 +1048,6 @@ struct VerifyingReader::Impl {
     optional_part
     process_part(http_response::Trailer intr, Cancel, asio::yield_context y)
     {
-        if (intr.cbegin() == intr.cend())
-            return http_response::Part(std::move(intr));  // no headers in trailer
-
         // Only expected trailer headers are received here, just extend initial head.
         bool sigs_in_trailer = false;
         for (const auto& h : intr) {
