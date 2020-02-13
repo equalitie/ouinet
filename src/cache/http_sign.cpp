@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <map>
 #include <queue>
+#include <set>
 #include <sstream>
 #include <tuple>
 #include <utility>
@@ -118,6 +119,100 @@ http_injection_trailer( const http::response_header<>& rsh
 
     rst.set(final_signature_hdr, http_signature(to_sign, sk, key_id, ts));
     return rst;
+}
+
+static inline
+std::set<SplitString::value_type>
+sig_headers_set(const boost::string_view& headers)
+{
+    auto hs = SplitString(headers, ' ');
+    return {hs.begin(), hs.end()};
+}
+
+template<class Set>
+static
+bool
+has_extra_items(const Set& s1, const Set& s2)
+{
+    for (const auto& s1item : s1)
+        if (s2.find(s1item) == s2.end())
+            return true;
+    return false;
+}
+
+static
+void
+insert_trailer(const http::fields::value_type& th, http::response_header<>& head)
+{
+    auto thn = th.name_string();
+    auto thv = th.value();
+    if (!boost::regex_match(thn.begin(), thn.end(), http_::response_signature_hdr_rx)) {
+        head.insert(th.name(), thn, thv);
+        return;
+    }
+
+    // Signature, look for redundant signatures in head.
+    auto thsig = HttpSignature::parse(thv);
+    assert(thsig);
+    auto ths_hdrs = sig_headers_set(thsig->headers);
+    auto ths_ts = parse::number<time_t>(thsig->created);
+    if (!ths_ts) {
+        LOG_WARN( "Dropping new signature with empty creation time stamp; keyId="
+                , thsig->keyId);
+        return;
+    }
+
+    bool insert = true;
+    for (auto hit = head.begin(); hit != head.end();) {
+        auto hn = hit->name_string();
+        auto hv = hit->value();
+        if (!boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx)) {
+            ++hit;
+            continue;
+        }
+
+        auto hsig = HttpSignature::parse(hv);
+        assert(hsig);
+
+        if ((thsig->keyId != hsig->keyId) || (thsig->algorithm != hsig->algorithm)) {
+            ++hit;
+            continue;
+        }
+
+        auto hs_hdrs = sig_headers_set(hsig->headers);
+        auto hs_ts = parse::number<time_t>(hsig->created);
+        if (!hs_ts) {
+            LOG_WARN( "Dropping existing signature with empty creation time stamp; keyId="
+                    , hsig->keyId);
+            hs_ts = 0;  // make it redundant
+        }
+
+        // Is inserted signature redundant?
+        insert = insert && (*ths_ts > *hs_ts || has_extra_items(ths_hdrs, hs_hdrs));
+        // Is existing signature redundant?
+        bool keep = *hs_ts > *ths_ts || has_extra_items(hs_hdrs, ths_hdrs);
+
+        if (keep)
+            ++hit;
+        else
+            hit = head.erase(hit);
+    }
+
+    if (insert)
+        head.insert(th.name(), thn, thv);
+}
+
+http::response_header<>
+http_injection_merge( http::response_header<> rsh
+                    , const http::fields& rst)
+{
+    rsh = without_framing(std::move(rsh));
+
+    // Extend the head with trailer headers.
+    for (const auto& th : rst)
+        insert_trailer(th, rsh);
+
+    return rsh;
 }
 
 http::response_header<>
@@ -953,9 +1048,6 @@ struct VerifyingReader::Impl {
     optional_part
     process_part(http_response::Trailer intr, Cancel, asio::yield_context y)
     {
-        if (intr.cbegin() == intr.cend())
-            return http_response::Part(std::move(intr));  // no headers in trailer
-
         // Only expected trailer headers are received here, just extend initial head.
         bool sigs_in_trailer = false;
         for (const auto& h : intr) {

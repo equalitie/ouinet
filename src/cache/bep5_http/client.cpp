@@ -3,10 +3,8 @@
 #include "dht_lookup.h"
 #include "local_peer_discovery.h"
 #include "../http_sign.h"
+#include "../http_store.h"
 #include "../../http_util.h"
-#include "../../util/atomic_file.h"
-#include "../../util/bytes.h"
-#include "../../util/file_io.h"
 #include "../../util/wait_condition.h"
 #include "../../util/set_io.h"
 #include "../../util/async_generator.h"
@@ -38,6 +36,7 @@ struct Client::Impl {
     shared_ptr<bt::MainlineDht> dht;
     util::Ed25519PublicKey cache_pk;
     fs::path cache_dir;
+    unique_ptr<cache::AbstractHttpStore> http_store;
     Cancel lifetime_cancel;
     Announcer announcer;
     map<string, udp::endpoint> peer_cache;
@@ -53,11 +52,13 @@ struct Client::Impl {
     Impl( shared_ptr<bt::MainlineDht> dht_
         , util::Ed25519PublicKey& cache_pk
         , fs::path cache_dir
+        , unique_ptr<cache::AbstractHttpStore> http_store
         , log_level_t log_level)
         : ex(dht_->get_executor())
         , dht(move(dht_))
         , cache_pk(cache_pk)
         , cache_dir(move(cache_dir))
+        , http_store(move(http_store))
         , announcer(dht, log_level)
         , dht_lookups(256)
         , log_level(log_level)
@@ -104,10 +105,7 @@ struct Client::Impl {
             return handle_bad_request(sink, req, yield[ec]);
         }
 
-        auto path = path_from_key(*key);
-
-        auto file = util::file_io::open_readonly(ex, path, ec);
-
+        auto rr = http_store->reader(*key, ec);
         if (ec) {
             if (!cancel && log_debug()) {
                 cerr << "Bep5HTTP: Not Serving " << *key
@@ -120,7 +118,8 @@ struct Client::Impl {
             cerr << "Bep5HTTP: Serving " << *key << "\n";
         }
 
-        flush_from_to(file, sink, cancel, yield[ec]);
+        auto s = Session::create(move(rr), cancel, yield[ec]);
+        if (!ec) s.flush_response(sink, cancel, yield[ec]);
 
         return or_throw(yield, ec);
     }
@@ -437,145 +436,66 @@ struct Client::Impl {
     }
 
     void store( const std::string& key
-              , Session& s
+              , http_response::AbstractReader& r
               , Cancel cancel
               , asio::yield_context yield)
     {
-        sys::error_code ec;
-
         auto dk = dht_key(key);
         if (!dk) return or_throw(yield, asio::error::invalid_argument);
-        auto path = path_from_key(key);
-        auto file = util::atomic_file::make(ex, path, ec);
-        if (!ec) s.flush_response(*file, cancel, yield[ec]);
-        if (!ec) file->commit(ec);
+
+        sys::error_code ec;
+        http_store->store(key, r, cancel, yield[ec]);
         if (ec) return or_throw(yield, ec);
-        LOG_DEBUG( "Bep5Http cache: Flushed to file;"
-                 , " key=", key
-                 , " path=", path);
 
         announcer.add(*dk);
     }
 
-    template<class Stream>
-    void write_header(
-            const http::response_header<>& hdr,
-            Stream& sink,
-            asio::yield_context yield)
-    {
-        http::response<http::empty_body> msg{hdr};
-        http::response_serializer<http::empty_body> s(msg);
-        http::async_write_header(sink, s, yield);
-    }
-
-    template<class Stream>
     http::response_header<>
-    read_response_header(Stream& stream, asio::yield_context yield)
+    read_response_header( http_response::AbstractReader& reader
+                        , asio::yield_context yield)
     {
         Cancel lc(lifetime_cancel);
 
         sys::error_code ec;
-        beast::flat_buffer buffer;
-        http::response_parser<http::empty_body> parser;
-        http::async_read_header(stream, buffer, parser, yield[ec]);
-
-        if (lc) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<http::response_header<>>(yield, ec);
-
-        return parser.release();
+        auto part = reader.async_read_part(lc, yield[ec]);
+        if (!ec && !part)
+            ec = sys::errc::make_error_code(sys::errc::no_message);
+        return_or_throw_on_error(yield, lc, ec, http::response_header<>());
+        auto head = part->as_head(); assert(head);
+        return *head;
     }
 
-    void announce_stored_data(asio::yield_context yield)
+    void announce_stored_data(asio::yield_context y)
     {
-        for (auto& p : fs::directory_iterator(data_dir())) {
-            if (!fs::is_regular_file(p)) continue;
+        sys::error_code e;
+        http_store->for_each([&] (auto rr, auto yield) {
             sys::error_code ec;
 
-            auto f = util::file_io::open_readonly(ex, p, ec);
-            if (ec == asio::error::operation_aborted) return;
-            if (ec) {
-                LOG_WARN("Bep5HTTP: Failed to open cached file ", p
-                        , " ec:", ec.message());
-                try_remove(p); continue;
-            }
-
-            auto hdr = read_response_header(f, yield[ec]);
-            if (ec == asio::error::operation_aborted) return;
-            if (ec) {
-                LOG_WARN("Bep5HTTP: Failed read cached file ", p
-                        , " ec:", ec.message());
-                try_remove(p); continue;
-            }
+            auto hdr = read_response_header(*rr, yield[ec]);
+            if (ec) return or_throw<bool>(yield, ec);
 
             if (hdr[http_::protocol_version_hdr] != http_::protocol_version_hdr_current) {
-                LOG_WARN("Bep5HTTP: Cached file ", p
-                        , " contains an invalid ", http_::protocol_version_hdr
-                        , " header field (removing the file)");
-                try_remove(p); continue;
+                LOG_WARN( "Bep5HTTP: Cached response contains an invalid "
+                        , http_::protocol_version_hdr
+                        , " header field; removing");
+                return false;
             }
 
             auto key = hdr[http_::response_uri_hdr];
 
             if (key.empty()) {
-                LOG_WARN("Bep5HTTP: Cached file ", p
-                        , " does not contain ", http_::response_uri_hdr
-                        , " header field (removing the file)");
-                try_remove(p); continue;
+                LOG_WARN( "Bep5HTTP: Cached response does not contain a "
+                        , http_::response_uri_hdr
+                        , " header field; removing");
+                return false;
             }
 
             if (auto opt_k = dht_key(key.to_string())) {
                 announcer.add(*opt_k);
             }
-        }
-    }
 
-    static void try_remove(const fs::path& path)
-    {
-        sys::error_code ec_ignored;
-        fs::remove(path, ec_ignored);
-    }
-
-    fs::path data_dir() const
-    {
-        return cache_dir/"data";
-    }
-
-    fs::path path_from_key(const std::string& key)
-    {
-        return path_from_infohash(util::sha1_digest(key));
-    }
-
-    fs::path path_from_infohash(const bt::NodeID& infohash)
-    {
-        return data_dir()/infohash.to_hex();
-    }
-
-    template<class Source, class Sink>
-    size_t flush_from_to( Source& source
-                        , Sink& sink
-                        , Cancel& cancel
-                        , asio::yield_context yield)
-    {
-        sys::error_code ec;
-        std::array<uint8_t, 1 << 14> data;
-
-        size_t s = 0;
-
-        for (;;) {
-            size_t length = source.async_read_some(asio::buffer(data), yield[ec]);
-            if (ec || cancel) break;
-
-            asio::async_write(sink, asio::buffer(data, length), yield[ec]);
-            if (ec || cancel) break;
-
-            s += length;
-        }
-
-        if (ec == asio::error::eof) {
-            ec = sys::error_code();
-        }
-
-        return or_throw(yield, ec, s);
+            return true;
+        }, y[e]);
     }
 
     void stop() {
@@ -608,11 +528,25 @@ Client::build( shared_ptr<bt::MainlineDht> dht
 
     sys::error_code ec;
 
-    fs::create_directories(cache_dir/"data", ec);
+    auto old_store_dir = cache_dir / "data";  // v0 store
+    if (is_directory(old_store_dir)) {
+        LOG_INFO("Removing obsolete HTTP store...");
+        fs::remove_all(old_store_dir, ec);
+        if (ec) LOG_ERROR("Removing obsolete HTTP store: failed; ec:", ec.message());
+        else LOG_INFO("Removing obsolete HTTP store: done");
+        ec = {};
+    }
 
+    auto store_dir = cache_dir / "data-v1";
+    fs::create_directories(store_dir, ec);
     if (ec) return or_throw<ClientPtr>(yield, ec);
+    auto http_store = make_unique<cache::HttpStoreV1>(
+        move(store_dir), dht->get_executor());
 
-    unique_ptr<Impl> impl(new Impl(move(dht), cache_pk, move(cache_dir), log_level));
+    unique_ptr<Impl> impl(new Impl( move(dht)
+                                  , cache_pk, move(cache_dir)
+                                  , move(http_store)
+                                  , log_level));
 
     impl->announce_stored_data(yield[ec]);
 
@@ -631,11 +565,11 @@ Session Client::load(const std::string& key, Cancel cancel, Yield yield)
 }
 
 void Client::store( const std::string& key
-                  , Session& s
+                  , http_response::AbstractReader& r
                   , Cancel cancel
                   , asio::yield_context yield)
 {
-    _impl->store(key, s, cancel, yield);
+    _impl->store(key, r, cancel, yield);
 }
 
 void Client::serve_local( const http::request<http::empty_body>& req

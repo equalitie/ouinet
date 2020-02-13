@@ -9,10 +9,35 @@
 
 namespace ouinet { namespace util {
 
+static const fs::path default_temp_model{"tmp.%%%%-%%%%-%%%%-%%%%"};
+
 class temp_file {
-    friend boost::optional<temp_file>
-    mktemp( const asio::executor&, sys::error_code&
-          , const fs::path&, const fs::path&);
+public:
+    // Create a temporary file named after the given `temp_model` under `dir`
+    // and open it for reading and writing.
+    // Use its `lowest_layer()` to perform I/O.
+    // If `keep_on_close(false)`, remove the file on close.
+    static
+    boost::optional<temp_file>
+    make( const asio::executor&
+        , const fs::path& dir
+        , const fs::path& model
+        , sys::error_code&);
+
+    static
+    boost::optional<temp_file>
+    make( const asio::executor& ex
+        , const fs::path& dir
+        , sys::error_code& ec) {
+        return make(ex, dir, default_temp_model, ec);
+    }
+
+    static
+    boost::optional<temp_file>
+    make( const asio::executor& ex
+        , sys::error_code& ec) {
+        return make(ex, ".", default_temp_model, ec);
+    }
 
 public:
     using lowest_layer_type = asio::posix::stream_descriptor;
@@ -62,14 +87,5 @@ private:
     fs::path _path;
     bool _keep_on_close = true;
 };
-
-// Create a temporary file named after the given `temp_model` under `dir`
-// and open it for reading and writing.
-// Use its `lowest_layer()` to perform I/O.
-// If `keep_on_close(false)`, remove the file on close.
-boost::optional<temp_file>
-mktemp( const asio::executor&, sys::error_code&
-      , const fs::path& dir="."
-      , const fs::path& model="tmp.%%%%-%%%%-%%%%-%%%%");
 
 }} // namespaces

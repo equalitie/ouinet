@@ -24,9 +24,11 @@ public:
                                      , sys::error_code&);
 
     static
-    boost::optional<atomic_file> make( const asio::executor&
-                                     , fs::path
-                                     , sys::error_code&);
+    boost::optional<atomic_file> make( const asio::executor& ex
+                                     , fs::path path
+                                     , sys::error_code& ec) {
+        return make(ex, std::move(path), default_temp_model, ec);
+    }
 
 public:
     using lowest_layer_type = temp_file::lowest_layer_type;
@@ -73,9 +75,7 @@ private:
     atomic_file(temp_file&& file, fs::path path)
         : _temp_file(std::move(file))
         , _path(std::move(path))
-    {
-        _temp_file.keep_on_close(false);
-    }
+    {}
 
 private:
     temp_file _temp_file;

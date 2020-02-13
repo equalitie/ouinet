@@ -837,39 +837,6 @@ public:
         return or_throw(yield, ec, move(r));
     }
 
-    void store( const Request& rq
-              , Session& s
-              , Cancel& cancel, Yield yield)
-    {
-        namespace err = asio::error;
-
-        // No need to filter request or response headers
-        // since we are not storing them here
-        // (they can be found at the descriptor).
-        // Otherwise we should pass them through
-        // `util::to_cache_request` and `util::to_cache_response` (respectively).
-
-        // Nonetheless, chunked transfer encoding may still have been used,
-        // and we need to undo it since the data referenced by the descriptor
-        // is the plain one.
-
-        // TODO: The above ^
-
-        auto cache = client_state.get_cache();
-
-        if (!cache) {
-            return or_throw(yield, err::operation_not_supported);
-        }
-
-        sys::error_code ec;
-
-        if (!CacheControl::ok_to_cache(rq, s.response_header())) return;
-
-        auto key = key_from_http_req(rq);
-        assert(key);
-        cache->store(move(*key), s, cancel, yield);
-    }
-
     // Closes `con` when it can no longer be used.
     // If an error is reported and it is still open,
     // a response may still be sent to it.
@@ -993,29 +960,32 @@ public:
 
                     using http_response::Part;
 
-                    util::AsyncQueue<boost::optional<Part>> q1(exec), q2(exec);
+                    util::AsyncQueue<boost::optional<Part>> qst(exec), qag(exec); // to storage, agent
 
                     WaitCondition wc(ctx);
 
-                    TRACK_SPAWN(ctx, ([
-                        &,
-                        lock = wc.lock()
-                    ] (asio::yield_context yield_) {
-                        auto y = yield.detach(yield_);
-                        sys::error_code ec;
-                        auto r = std::make_unique<AsyncQueueReader>(q1);
-                        Session s1 = Session::create_from_reader(std::move(r), cancel, y[ec]);
-                        if (!ec) store(rq, s1, cancel, y[ec]);
-                    }));
+                    auto cache = client_state.get_cache();
+                    bool do_cache = cache && CacheControl::ok_to_cache(rq, rsh);
+                    if (do_cache)
+                        TRACK_SPAWN(ctx, ([
+                            &, cache = std::move(cache),
+                            lock = wc.lock()
+                        ] (asio::yield_context yield_) {
+                            auto key = key_from_http_req(rq); assert(key);
+                            AsyncQueueReader rr(qst);
+                            sys::error_code ec;
+                            auto y = yield.detach(yield_);
+                            cache->store(*key, rr, cancel, y[ec]);
+                        }));
 
                     TRACK_SPAWN(ctx, ([
                         &,
                         lock = wc.lock()
                     ] (asio::yield_context yield_) {
                         sys::error_code ec;
-                        auto r = std::make_unique<AsyncQueueReader>(q2);
-                        Session s2 = Session::create_from_reader(std::move(r), cancel, yield_[ec]);
-                        if (!ec) s2.flush_response(con, cancel, yield_[ec]);
+                        auto rr = std::make_unique<AsyncQueueReader>(qag);
+                        Session sag = Session::create_from_reader(std::move(rr), cancel, yield_[ec]);
+                        if (!ec) sag.flush_response(con, cancel, yield_[ec]);
                     }));
 
                     s.flush_response(cancel, yield[ec],
@@ -1023,12 +993,12 @@ public:
                             , Cancel& cancel
                             , asio::yield_context yield)
                         {
-                            q1.push_back(part);
-                            q2.push_back(std::move(part));
+                            if (do_cache) qst.push_back(part);
+                            qag.push_back(std::move(part));
                         });
 
-                    q1.push_back(boost::none);
-                    q2.push_back(boost::none);
+                    if (do_cache) qst.push_back(boost::none);
+                    qag.push_back(boost::none);
 
                     wc.wait(yield);
 

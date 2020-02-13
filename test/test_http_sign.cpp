@@ -1,6 +1,7 @@
 #define BOOST_TEST_MODULE http_sign
 #include <boost/test/included/unit_test.hpp>
 
+#include <array>
 #include <sstream>
 #include <string>
 
@@ -42,10 +43,15 @@ static const char rs_block_fill_char = 'x';
 static const size_t rs_block_fill = ( http_::response_data_block
                                     - rs_block0_head.size()
                                     - rs_block0_tail.size());
+static const array<string, 3> rs_block_data{
+    rs_block0_head + string(rs_block_fill, rs_block_fill_char) + rs_block0_tail,
+    rs_block1_head + string(rs_block_fill, rs_block_fill_char) + rs_block1_tail,
+    rs_block2,
+};
 static const string rs_body =
-  ( rs_block0_head + string(rs_block_fill, rs_block_fill_char) + rs_block0_tail
-  + rs_block1_head + string(rs_block_fill, rs_block_fill_char) + rs_block1_tail
-  + rs_block2);
+  ( rs_block_data[0]
+  + rs_block_data[1]
+  + rs_block_data[2]);
 static const string rs_body_b64digest = "E4RswXyAONCaILm5T/ZezbHI87EKvKIdxURKxiVHwKE=";
 static const string rs_head_s = (
     "HTTP/1.1 200 OK\r\n"
@@ -108,13 +114,19 @@ static const array<string, 3> rs_block_hash_cx{
     "",  // no previous block to hash
     ";ouihash=\"aERfr5o+kpvR4ZH7xC0mBJ4QjqPUELDzjmzt14WmntxH2p3EQmATZODXMPoFiXaZL6KNI50Ve4WJf/x3ma4ieA==\"",
     ";ouihash=\"slwciqMQBddB71VWqpba+MpP9tBiyTE/XFmO5I1oiVJy3iFniKRkksbP78hCEWOM6tH31TGEFWP1loa4pqrLww==\"",
-    //";ouihash=\"vyUR6T034qN7qDZO5vUILMP9FsJYPys1KIELlGDFCSqSFI7ZowrT3U9ffwsQAZSCLJvKQhT+GhtO0aM2jNnm5A==\"",  // never actually sent
 };
 
 static const array<string, 3> rs_block_sig_cx{
     ";ouisig=\"AwiYuUjLYh/jZz9d0/ev6dpoWqjU/sUWUmGL36/D9tI30oaqFgQGgcbVCyBtl0a7x4saCmxRHC4JW7cYEPWwCw==\"",
     ";ouisig=\"c+ZJUJI/kc81q8sLMhwe813Zdc+VPa4DejdVkO5ZhdIPPojbZnRt8OMyFMEiQtHYHXrZIK2+pKj2AO03j70TBA==\"",
     ";ouisig=\"m6sz1NpU/8iF6KNN6drY+Yk361GiW0lfa0aaX5TH0GGW/L5GsHyg8ozA0ejm29a+aTjp/qIoI1VrEVj1XG/gDA==\"",
+};
+
+static const array<string, 4> rs_chunk_ext{
+    "",
+    rs_block_sig_cx[0],
+    rs_block_sig_cx[1],
+    rs_block_sig_cx[2],
 };
 
 template<class F>
@@ -323,7 +335,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
 
         // Test signed output.
         asio::spawn(ctx, [ signed_r = std::move(signed_r), &tested_w
-                         , &ctx, lock = wc.lock()](auto y) mutable {
+                         , lock = wc.lock()](auto y) mutable {
             int xidx = 0;
             Cancel cancel;
             sys::error_code e;
@@ -549,6 +561,107 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
             BOOST_REQUIRE(!e);
             forged_rs.flush_response(tested_w, cancel, y[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::bad_message);
+            tested_w.close();
+        });
+
+        // Black hole.
+        asio::spawn(ctx, [&tested_r, lock = wc.lock()] (auto y) {
+            char d[2048];
+            asio::mutable_buffer b(d, sizeof(d));
+
+            sys::error_code e;
+            while (!e) asio::async_read(tested_r, b, y[e]);
+            BOOST_REQUIRE(e == asio::error::eof || !e);
+            tested_r.close();
+        });
+
+        wc.wait(yield);
+    });
+}
+
+// Send the signed response with all signature headers at the initial head
+// (i.e. no trailers).
+BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
+    asio::io_context ctx;
+    run_spawned(ctx, [&] (auto yield) {
+        WaitCondition wc(ctx);
+
+        asio::ip::tcp::socket
+            signed_w(ctx), signed_r(ctx),
+            hashed_w(ctx), hashed_r(ctx),
+            tested_w(ctx), tested_r(ctx);
+        tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
+        tie(hashed_w, hashed_r) = util::connected_pair(ctx, yield);
+        tie(tested_w, tested_r) = util::connected_pair(ctx, yield);
+
+        // Send signed response.
+        asio::spawn(ctx, [&signed_w, lock = wc.lock()] (auto y) {
+            // Head (raw).  With trailers as normal headers.
+            auto trh_start = rs_head_signed_s.find("Trailer:");
+            BOOST_REQUIRE(trh_start != string::npos);
+            auto trh_end = rs_head_signed_s.find("\r\n", trh_start);
+            BOOST_REQUIRE(trh_start != string::npos);
+            auto rs_head = rs_head_signed_s;
+            rs_head.erase(trh_start, trh_end - trh_start + 2);  // remove "Trailer: ...\r\n"
+            asio::async_write( signed_w
+                             , asio::const_buffer(rs_head.data(), rs_head.size())
+                             , y);
+
+            // Chunk headers and bodies (one chunk per block).
+            unsigned bi;
+            for (bi = 0; bi < rs_block_data.size(); ++bi) {
+                auto cbd = util::bytes::to_vector<uint8_t>(rs_block_data[bi]);
+                auto ch = http_response::ChunkHdr(cbd.size(), rs_chunk_ext[bi]);
+                ch.async_write(signed_w, y);
+                auto cb = http_response::ChunkBody(std::move(cbd), 0);
+                cb.async_write(signed_w, y);
+            }
+
+            // Last chunk and trailer (raw).
+            auto chZ = http_response::ChunkHdr(0, rs_chunk_ext[bi]);
+            chZ.async_write(signed_w, y);
+            http_response::Trailer tr;  // empty, everything was in head
+            tr.async_write(signed_w, y);
+
+            signed_w.close();
+        });
+
+        // Verify signed output.
+        asio::spawn(ctx, [ signed_r = std::move(signed_r), &hashed_w
+                         , lock = wc.lock()](auto y) mutable {
+            Cancel cancel;
+            sys::error_code e;
+            auto pk = get_public_key();
+            Session::reader_uptr signed_rvr = make_unique<cache::VerifyingReader>
+                (move(signed_r), pk);
+            auto signed_rs = Session::create(move(signed_rvr), cancel, y[e]);
+            BOOST_REQUIRE(!e);
+            signed_rs.flush_response(hashed_w, cancel, y[e]);
+            BOOST_REQUIRE(!e);
+            hashed_w.close();
+        });
+
+        // Check generation of chained hashes.
+        asio::spawn(ctx, [ hashed_r = std::move(hashed_r), &tested_w
+                         , &ctx, lock = wc.lock()](auto y) mutable {
+            int xidx = 0;
+            Cancel cancel;
+            sys::error_code e;
+            http_response::Reader rr(std::move(hashed_r));
+            while (true) {
+                auto opt_part = rr.async_read_part(cancel, y[e]);
+                BOOST_REQUIRE(!e);
+                if (!opt_part) break;
+                if (auto ch = opt_part->as_chunk_hdr()) {
+                    if (!ch->exts.empty()) {
+                        BOOST_REQUIRE(xidx < rs_block_hash_cx.size());
+                        BOOST_CHECK(ch->exts.find(rs_block_hash_cx[xidx++]) != string::npos);
+                    }
+                }
+                opt_part->async_write(tested_w, cancel, y[e]);
+                BOOST_REQUIRE(!e);
+            }
+            BOOST_CHECK_EQUAL(xidx, rs_block_hash_cx.size());
             tested_w.close();
         });
 

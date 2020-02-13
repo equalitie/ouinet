@@ -134,3 +134,32 @@ add_executable(test-http-sign
     "../src/util/hash.cpp"
 )
 target_link_libraries(test-http-sign lib::gcrypt lib::uri)
+
+######################################################################
+add_executable(test-http-store
+    "test_http_store.cpp"
+    "../src/cache/http_sign.cpp"
+    "../src/cache/http_store.cpp"
+    "../src/http_util.cpp"
+    "../src/logger.cpp"
+    "../src/response_part.cpp"
+    "../src/util.cpp"
+    "../src/util/atomic_dir.cpp"
+    "../src/util/atomic_file.cpp"
+    "../src/util/crypto.cpp"
+    "../src/util/file_io.cpp"
+    "../src/util/hash.cpp"
+    "../src/util/temp_dir.cpp"
+    "../src/util/temp_file.cpp"
+)
+target_link_libraries(test-http-store lib::gcrypt lib::uri)
+
+######################################################################
+add_executable(test-atomic-temp
+    "test_atomic_temp.cpp"
+    "../src/util/atomic_dir.cpp"
+    "../src/util/atomic_file.cpp"
+    "../src/util/file_io.cpp"
+    "../src/util/temp_dir.cpp"
+    "../src/util/temp_file.cpp"
+)

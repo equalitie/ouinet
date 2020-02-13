@@ -14,8 +14,9 @@ void temp_file::close() {
 }
 
 boost::optional<temp_file>
-mktemp( const asio::executor& ex, sys::error_code& ec
-      , const fs::path& dir, const fs::path& model)
+temp_file::make( const asio::executor& ex
+               , const fs::path& dir, const fs::path& model
+               , sys::error_code& ec)
 {
     auto path = dir / fs::unique_path(model, ec);
     if (ec) return boost::none;
@@ -23,7 +24,7 @@ mktemp( const asio::executor& ex, sys::error_code& ec
     auto file = file_io::open_or_create(ex, path, ec);
     if (ec) return boost::none;
 
-    return temp_file(std::move(file), path);
+    return temp_file(std::move(file), std::move(path));
 }
 
 }} // namespaces
