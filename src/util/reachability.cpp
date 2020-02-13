@@ -185,7 +185,7 @@ void UdpServerReachabilityAnalysis::start(const asio::executor& executor, const 
     _state = std::make_shared<State>();
     sys::error_code ec_ignored;
     _state->multiplexer.bind(udp_socket, ec_ignored);
-    _state->judgement = Reachability::Unreachable;
+    _state->judgement = Reachability::Undecided;
     _state->startup_uncertaincy_expiracy = std::chrono::steady_clock::now() + std::chrono::seconds(long(lingeringConnectionTrackingTime));
 
     /*
@@ -271,7 +271,7 @@ void UdpServerReachabilityAnalysis::start(const asio::executor& executor, const 
 
         while (running) {
             sys::error_code ec;
-            if (state->judgement == Reachability::Unreachable) {
+            if (state->judgement == Reachability::Undecided) {
                 reachable_condition.wait(yield[ec]);
             } else {
                 long expiracy_time;
@@ -281,7 +281,7 @@ void UdpServerReachabilityAnalysis::start(const asio::executor& executor, const 
                     next_judgement = Reachability::UnconfirmedReachable;
                 } else if (state->judgement == Reachability::UnconfirmedReachable) {
                     expiracy_time = unconfirmedReachabilityExpiracyTime;
-                    next_judgement = Reachability::Unreachable;
+                    next_judgement = Reachability::Undecided;
                 } else {
                     assert(false);
                 }
@@ -323,7 +323,7 @@ UdpServerReachabilityAnalysis::Reachability UdpServerReachabilityAnalysis::judge
     if (_state) {
         return _state->judgement;
     } else {
-        return Reachability::Unreachable;
+        return Reachability::Undecided;
     }
 }
 

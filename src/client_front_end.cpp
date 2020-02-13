@@ -318,12 +318,12 @@ void ClientFrontEnd::handle_status( ClientConfig& config
 
     if (reachability) {
         auto judgement = reachability->judgement();
-        if (judgement == util::UdpServerReachabilityAnalysis::Reachability::Unreachable) {
-            response["udp_world_reachable"] = "unreachable";
+        if (judgement == util::UdpServerReachabilityAnalysis::Reachability::Undecided) {
+            response["udp_world_reachable"] = "undecided";
         } else if (judgement == util::UdpServerReachabilityAnalysis::Reachability::ConfirmedReachable) {
             response["udp_world_reachable"] = "reachable";
         } else if (judgement == util::UdpServerReachabilityAnalysis::Reachability::UnconfirmedReachable) {
-            response["udp_world_reachable"] = "unconfirmed";
+            response["udp_world_reachable"] = "likely reachable";
         }
     }
 

@@ -19,7 +19,7 @@ class UdpServerReachabilityAnalysis {
 public:
     /*
      * Judgement of reachability so far:
-     * - Unreachable means that we have seen no indication of being reachable,
+     * - Undecided means that we have seen no indication of being reachable,
      *   *so far*.
      * - ConfirmedReachable means a high-confidence judgement of being
      *   reachable.
@@ -27,7 +27,7 @@ public:
      *   reachable. This will normally be either upgraded or downgraded soon.
      */
     enum class Reachability {
-        Unreachable,
+        Undecided,
         ConfirmedReachable,
         UnconfirmedReachable
     };
@@ -52,7 +52,7 @@ public:
     /*
      * If no unsolicited traffic arrives for this long while reachability
      * is still unconfirmed, conclude that it was a fluke and downgrade
-     * to Unreachable.
+     * to Undecided.
      */
     static constexpr long unconfirmedReachabilityExpiracyTime = 3 * lingeringConnectionTrackingTime;
 
