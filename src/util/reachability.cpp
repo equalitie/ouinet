@@ -224,6 +224,7 @@ void UdpServerReachabilityAnalysis::start(const asio::executor& executor, const 
                         (state->startup_uncertaincy_expiracy < now) ?
                         Reachability::ConfirmedReachable :
                         Reachability::UnconfirmedReachable;
+
                     if (state->judgement != next_judgement) {
                         state->judgement = next_judgement;
                         state->on_judgement_change();

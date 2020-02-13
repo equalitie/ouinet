@@ -37,7 +37,7 @@ public:
      * any firewall connection tracking entries have expired. Incoming data
      * after this period is considered unsolicited.
      */
-    static constexpr long connectionTrackingExpiracyTime = 60 * 60 * 1000;
+    static constexpr long connectionTrackingExpiracyTime = 60 * 60;
 
     /*
      * Period after startup during which connection tracking entries from
@@ -47,7 +47,7 @@ public:
      * This period may be shorter than connectionTrackingExpiracyTime. Traffic
      * in this gap will set the judgement to UnconfirmedReachable.
      */
-    static constexpr long lingeringConnectionTrackingTime = 10 * 60 * 1000;
+    static constexpr long lingeringConnectionTrackingTime = 10 * 60;
 
     /*
      * If no unsolicited traffic arrives for this long while reachability
@@ -61,7 +61,7 @@ public:
      * is already confirmed, conclude that something has likely changed in
      * networking conditions, and downgrade to UnconfirmedReachable.
      */
-    static constexpr long confirmedReachabilityExpiracyTime = 2 * 60 * 60 * 1000;
+    static constexpr long confirmedReachabilityExpiracyTime = 2 * 60 * 60;
 
 public:
     UdpServerReachabilityAnalysis();
