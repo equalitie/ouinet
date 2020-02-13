@@ -175,6 +175,7 @@ struct Announcer::Loop {
 
             if (d == 0s) { return i; }
 
+            auto cc = cancel.connect([&] { _timer_cancel(); });
             async_sleep(ex, d, _timer_cancel, yield);
         }
 
