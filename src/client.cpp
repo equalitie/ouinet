@@ -1383,7 +1383,9 @@ void Client::State::serve_request( GenericStream&& con
           || ec == asio::ssl::error::stream_truncated) break;
 
         if (ec) {
-            LOG_WARN("Failed to read request: ", ec.message());
+            if (ec != asio::error::operation_aborted) {
+                LOG_WARN("Failed to read request: ", ec.message());
+            }
             return;
         }
 
