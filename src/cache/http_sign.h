@@ -223,6 +223,33 @@ private:
     std::unique_ptr<Impl> _impl;
 };
 
+// Filters out headers not included in the set of signed headers.
+//
+// The input is assumed to already have correct signatures,
+// they are not verified again.
+//
+// Use this reader to clean a signed response from
+// headers added after its verification
+// (e.g. used for internal purposes).
+class FilterSignedReader : public ouinet::http_response::AbstractReader {
+public:
+    using reader_uptr = std::unique_ptr<ouinet::http_response::AbstractReader>;
+
+public:
+    FilterSignedReader(reader_uptr);
+    ~FilterSignedReader() override;
+
+    boost::optional<ouinet::http_response::Part>
+    async_read_part(Cancel, asio::yield_context) override;
+
+    bool is_done() const override;
+    bool is_open() const override;
+    void close() override;
+
+private:
+    reader_uptr _reader;
+};
+
 
 // Body digest computation as per RFC 3230 and RFC 5843
 // ----------------------------------------------------

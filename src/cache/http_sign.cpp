@@ -1162,4 +1162,51 @@ VerifyingReader::is_done() const
 
 // end VerifyingReader
 
+// begin FilterSignedReader
+
+FilterSignedReader::FilterSignedReader(reader_uptr r)
+    : _reader(std::move(r))
+{
+}
+
+FilterSignedReader::~FilterSignedReader()
+{
+}
+
+bool
+FilterSignedReader::is_done() const
+{
+    return _reader->is_done();
+}
+
+bool
+FilterSignedReader::is_open() const
+{
+    return _reader->is_open();
+}
+
+void
+FilterSignedReader::close()
+{
+    _reader->close();
+}
+
+boost::optional<http_response::Part>
+FilterSignedReader::async_read_part(Cancel cancel, asio::yield_context yield)
+{
+    sys::error_code ec;
+    auto part = _reader->async_read_part(cancel, yield[ec]);
+    return_or_throw_on_error(yield, cancel, ec, boost::none);
+    if (!part) return boost::none;  // no part
+    auto headp = part->as_head();
+    if (!headp) return part;  // not a head, use as is
+
+    // Process head, remove unsigned headers.
+    // TODO: implement
+    return part;
+}
+
+
+// end FilterSignedReader
+
 }} // namespaces
