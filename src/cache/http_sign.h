@@ -223,7 +223,8 @@ private:
     std::unique_ptr<Impl> _impl;
 };
 
-// Filters out headers not included in the set of signed headers.
+// Filters out headers not included in the set of signed headers
+// (with the exception of signatures themselves).
 //
 // The input is assumed to already have correct signatures,
 // they are not verified again.
