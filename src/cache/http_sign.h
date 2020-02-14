@@ -2,8 +2,10 @@
 
 #include <chrono>
 #include <ctime>
+#include <set>
 #include <string>
 
+#include <boost/algorithm/string/case_conv.hpp>
 #include <boost/beast/http/dynamic_body.hpp>
 #include <boost/beast/http/message.hpp>
 #include <boost/regex.hpp>
@@ -221,6 +223,40 @@ public:
 private:
     struct Impl;
     std::unique_ptr<Impl> _impl;
+};
+
+// Filters out headers not included in the set of signed headers
+// (with the exception of signatures themselves).
+// Headers in the `extra` set are also kept.
+//
+// The input is assumed to already have correct signatures,
+// they are not verified again.
+//
+// Use this reader to clean a signed response from
+// headers added after its verification
+// (e.g. used for internal purposes).
+class KeepSignedReader : public ouinet::http_response::AbstractReader {
+public:
+    KeepSignedReader( ouinet::http_response::AbstractReader& r
+                    , std::set<std::string> extra = {})
+        : _reader(r)
+    {
+        for (const auto& hn : extra)  // store lower-case copies
+            _extra_headers.emplace(boost::algorithm::to_lower_copy(hn));
+    }
+
+    ~KeepSignedReader() override {}
+
+    boost::optional<ouinet::http_response::Part>
+    async_read_part(Cancel, asio::yield_context) override;
+
+    bool is_done() const override { return _reader.is_done(); }
+    bool is_open() const override { return _reader.is_open(); }
+    void close() override { _reader.close(); }
+
+private:
+    ouinet::http_response::AbstractReader& _reader;
+    std::set<std::string> _extra_headers;
 };
 
 

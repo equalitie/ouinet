@@ -3,13 +3,11 @@
 #include <algorithm>
 #include <map>
 #include <queue>
-#include <set>
 #include <sstream>
 #include <tuple>
 #include <utility>
 #include <vector>
 
-#include <boost/algorithm/string/case_conv.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/beast/http/empty_body.hpp>
 #include <boost/beast/http/field.hpp>
@@ -1161,5 +1159,46 @@ VerifyingReader::is_done() const
 }
 
 // end VerifyingReader
+
+// begin KeepSignedReader
+
+boost::optional<http_response::Part>
+KeepSignedReader::async_read_part(Cancel cancel, asio::yield_context yield)
+{
+    sys::error_code ec;
+    auto part = _reader.async_read_part(cancel, yield[ec]);
+    return_or_throw_on_error(yield, cancel, ec, boost::none);
+    if (!part) return boost::none;  // no part
+    auto headp = part->as_head();
+    if (!headp) return part;  // not a head, use as is
+
+    // Process head, remove unsigned headers.
+    std::set<boost::string_view> keep_headers;
+    for (const auto& hn : _extra_headers) {  // keep explicit extras
+        keep_headers.emplace(hn);
+    }
+    for (const auto& h : *headp) {  // get set of signed headers
+        auto hn = h.name_string();
+        if (!boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx))
+            continue;  // not a signature header
+        auto hsig = HttpSignature::parse(h.value());
+        assert(hsig);  // no invalid signatures should have been passed
+        for (const auto& sh : SplitString(hsig->headers, ' '))
+            keep_headers.emplace(sh);
+    }
+    for (auto hit = headp->begin(); hit != headp->end();) {  // remove unsigned (except sigs)
+        auto hn = hit->name_string().to_string();
+        boost::algorithm::to_lower(hn);  // signed headers are lower-case
+        if ( !boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx)
+           && keep_headers.find(hn) == keep_headers.end()) {
+            LOG_DEBUG("Filtering out unsigned header: ", hn);
+            hit = headp->erase(hit);
+        } else ++hit;
+    }
+
+    return http_response::Part{*headp};
+}
+
+// end KeepSignedReader
 
 }} // namespaces
