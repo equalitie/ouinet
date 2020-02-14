@@ -233,10 +233,8 @@ private:
 // (e.g. used for internal purposes).
 class FilterSignedReader : public ouinet::http_response::AbstractReader {
 public:
-    using reader_uptr = std::unique_ptr<ouinet::http_response::AbstractReader>;
-
-public:
-    FilterSignedReader(reader_uptr);
+    FilterSignedReader(ouinet::http_response::AbstractReader& r)
+        : _reader(r) {}
     ~FilterSignedReader() override;
 
     boost::optional<ouinet::http_response::Part>
@@ -247,7 +245,7 @@ public:
     void close() override;
 
 private:
-    reader_uptr _reader;
+    ouinet::http_response::AbstractReader& _reader;
 };
 
 
