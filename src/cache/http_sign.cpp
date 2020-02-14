@@ -1175,10 +1175,28 @@ FilterSignedReader::async_read_part(Cancel cancel, asio::yield_context yield)
     if (!headp) return part;  // not a head, use as is
 
     // Process head, remove unsigned headers.
-    // TODO: implement
-    return part;
-}
+    std::set<boost::string_view> signed_headers;
+    for (const auto& h : *headp) {  // get set of signed headers
+        auto hn = h.name_string();
+        if (!boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx))
+            continue;  // not a signature header
+        auto hsig = HttpSignature::parse(h.value());
+        assert(hsig);  // no invalid signatures should have been passed
+        for (const auto& sh : SplitString(hsig->headers, ' '))
+            signed_headers.emplace(sh);
+    }
+    for (auto hit = headp->begin(); hit != headp->end();) {  // remove unsigned (except sigs)
+        auto hn = hit->name_string().to_string();
+        boost::algorithm::to_lower(hn);  // signed headers are lower-case
+        if ( !boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx)
+           && signed_headers.find(hn) == signed_headers.end()) {
+            LOG_DEBUG("Filtering out unsigned header: ", hn);
+            hit = headp->erase(hit);
+        } else ++hit;
+    }
 
+    return http_response::Part{*headp};
+}
 
 // end FilterSignedReader
 
