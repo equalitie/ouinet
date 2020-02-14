@@ -3,13 +3,11 @@
 #include <algorithm>
 #include <map>
 #include <queue>
-#include <set>
 #include <sstream>
 #include <tuple>
 #include <utility>
 #include <vector>
 
-#include <boost/algorithm/string/case_conv.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/beast/http/empty_body.hpp>
 #include <boost/beast/http/field.hpp>
@@ -1175,7 +1173,10 @@ KeepSignedReader::async_read_part(Cancel cancel, asio::yield_context yield)
     if (!headp) return part;  // not a head, use as is
 
     // Process head, remove unsigned headers.
-    std::set<boost::string_view> signed_headers;
+    std::set<boost::string_view> keep_headers;
+    for (const auto& hn : _extra_headers) {  // keep explicit extras
+        keep_headers.emplace(hn);
+    }
     for (const auto& h : *headp) {  // get set of signed headers
         auto hn = h.name_string();
         if (!boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx))
@@ -1183,13 +1184,13 @@ KeepSignedReader::async_read_part(Cancel cancel, asio::yield_context yield)
         auto hsig = HttpSignature::parse(h.value());
         assert(hsig);  // no invalid signatures should have been passed
         for (const auto& sh : SplitString(hsig->headers, ' '))
-            signed_headers.emplace(sh);
+            keep_headers.emplace(sh);
     }
     for (auto hit = headp->begin(); hit != headp->end();) {  // remove unsigned (except sigs)
         auto hn = hit->name_string().to_string();
         boost::algorithm::to_lower(hn);  // signed headers are lower-case
         if ( !boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx)
-           && signed_headers.find(hn) == signed_headers.end()) {
+           && keep_headers.find(hn) == keep_headers.end()) {
             LOG_DEBUG("Filtering out unsigned header: ", hn);
             hit = headp->erase(hit);
         } else ++hit;
