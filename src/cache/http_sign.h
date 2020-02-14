@@ -231,10 +231,10 @@ private:
 // Use this reader to clean a signed response from
 // headers added after its verification
 // (e.g. used for internal purposes).
-class FilterSignedReader : public ouinet::http_response::AbstractReader {
+class KeepSignedReader : public ouinet::http_response::AbstractReader {
 public:
-    FilterSignedReader(ouinet::http_response::AbstractReader& r) : _reader(r) {}
-    ~FilterSignedReader() override {}
+    KeepSignedReader(ouinet::http_response::AbstractReader& r) : _reader(r) {}
+    ~KeepSignedReader() override {}
 
     boost::optional<ouinet::http_response::Part>
     async_read_part(Cancel, asio::yield_context) override;

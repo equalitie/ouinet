@@ -1162,10 +1162,10 @@ VerifyingReader::is_done() const
 
 // end VerifyingReader
 
-// begin FilterSignedReader
+// begin KeepSignedReader
 
 boost::optional<http_response::Part>
-FilterSignedReader::async_read_part(Cancel cancel, asio::yield_context yield)
+KeepSignedReader::async_read_part(Cancel cancel, asio::yield_context yield)
 {
     sys::error_code ec;
     auto part = _reader.async_read_part(cancel, yield[ec]);
@@ -1198,6 +1198,6 @@ FilterSignedReader::async_read_part(Cancel cancel, asio::yield_context yield)
     return http_response::Part{*headp};
 }
 
-// end FilterSignedReader
+// end KeepSignedReader
 
 }} // namespaces

@@ -444,7 +444,8 @@ struct Client::Impl {
         if (!dk) return or_throw(yield, asio::error::invalid_argument);
 
         sys::error_code ec;
-        http_store->store(key, r, cancel, yield[ec]);
+        cache::KeepSignedReader fr(r);
+        http_store->store(key, fr, cancel, yield[ec]);
         if (ec) return or_throw(yield, ec);
 
         announcer.add(*dk);
