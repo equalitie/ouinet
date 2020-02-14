@@ -470,6 +470,8 @@ Client::State::fetch_stored( const Request& request
                 : boost::posix_time::not_a_date_time);
 
     maybe_add_proto_version_warning(hdr);
+    hdr.set( http_::response_source_hdr  // for agent
+           , http_::response_source_hdr_dist_cache);
     return CacheEntry{date, move(s)};
 }
 
@@ -521,14 +523,18 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
         udp_port = _udp_multiplexer->local_endpoint().port();
     }
 
-    return _front_end.serve( _config
-                           , rq
-                           , _bep5_http_cache.get()
-                           , *_ca_certificate
-                           , udp_port
-                           , _upnps
-                           , _udp_reachability.get()
-                           , yield.tag("serve_frontend"));
+    auto res = _front_end.serve( _config
+                               , rq
+                               , _bep5_http_cache.get()
+                               , *_ca_certificate
+                               , udp_port
+                               , _upnps
+                               , _udp_reachability.get()
+                               , yield.tag("serve_frontend"));
+
+    res.set( http_::response_source_hdr  // for agent
+           , http_::response_source_hdr_front_end);
+    return res;
 }
 
 //------------------------------------------------------------------------------
@@ -574,7 +580,9 @@ Session Client::State::fetch_fresh_from_origin(const Request& rq, Yield yield)
     // Prevent others from inserting ouinet headers.
     util::remove_ouinet_fields_ref(ret.response_header());
 
-    return or_throw(yield, ec, move(ret));
+    ret.response_header().set( http_::response_source_hdr  // for agent
+                             , http_::response_source_hdr_origin);
+    return ret;
 }
 
 //------------------------------------------------------------------------------
@@ -666,6 +674,8 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     // Prevent others from inserting ouinet headers.
     util::remove_ouinet_fields_ref(session.response_header());
 
+    session.response_header().set( http_::response_source_hdr  // for agent
+                                 , http_::response_source_hdr_proxy);
     return session;
 }
 //------------------------------------------------------------------------------
@@ -767,11 +777,16 @@ Session Client::State::fetch_fresh_through_simple_proxy
 
     if (can_inject) {
         maybe_add_proto_version_warning(hdr);
+
+        session.response_header().set( http_::response_source_hdr  // for agent
+                                     , http_::response_source_hdr_injector);
     } else {
         // Prevent others from inserting ouinet headers.
         util::remove_ouinet_fields_ref(hdr);
-    }
 
+        session.response_header().set( http_::response_source_hdr  // for agent
+                                     , http_::response_source_hdr_proxy);
+    }
     return session;
 }
 

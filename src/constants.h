@@ -78,6 +78,20 @@ static const std::string response_descriptor_hdr = header_prefix + "Descriptor";
 // Also, this is added with a link to descriptor storage.
 static const std::string response_descriptor_link_hdr = header_prefix + "Descriptor-Link";
 
+
+// Other headers (e.g. agent-only):
+
+// This indicates what mechanism is the source of this response.
+// It can be used by the agent to style its representation.
+static const std::string response_source_hdr = header_prefix + "Source";
+// Values for the header above.
+static const std::string response_source_hdr_front_end = "front-end";
+static const std::string response_source_hdr_origin = "origin";
+static const std::string response_source_hdr_proxy = "proxy";
+static const std::string response_source_hdr_injector = "injector";
+static const std::string response_source_hdr_dist_cache = "dist-cache";
+static const std::string response_source_hdr_local_cache = "local-cache";
+
 } // http_ namespace
 
 static const std::string injector_helpers_swarm_name = "ouinet-injector-helpers";
