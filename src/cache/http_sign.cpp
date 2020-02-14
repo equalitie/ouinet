@@ -1164,28 +1164,6 @@ VerifyingReader::is_done() const
 
 // begin FilterSignedReader
 
-FilterSignedReader::~FilterSignedReader()
-{
-}
-
-bool
-FilterSignedReader::is_done() const
-{
-    return _reader.is_done();
-}
-
-bool
-FilterSignedReader::is_open() const
-{
-    return _reader.is_open();
-}
-
-void
-FilterSignedReader::close()
-{
-    _reader.close();
-}
-
 boost::optional<http_response::Part>
 FilterSignedReader::async_read_part(Cancel cancel, asio::yield_context yield)
 {

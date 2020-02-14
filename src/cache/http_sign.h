@@ -233,16 +233,15 @@ private:
 // (e.g. used for internal purposes).
 class FilterSignedReader : public ouinet::http_response::AbstractReader {
 public:
-    FilterSignedReader(ouinet::http_response::AbstractReader& r)
-        : _reader(r) {}
-    ~FilterSignedReader() override;
+    FilterSignedReader(ouinet::http_response::AbstractReader& r) : _reader(r) {}
+    ~FilterSignedReader() override {}
 
     boost::optional<ouinet::http_response::Part>
     async_read_part(Cancel, asio::yield_context) override;
 
-    bool is_done() const override;
-    bool is_open() const override;
-    void close() override;
+    bool is_done() const override { return _reader.is_done(); }
+    bool is_open() const override { return _reader.is_open(); }
+    void close() override { _reader.close(); }
 
 private:
     ouinet::http_response::AbstractReader& _reader;
