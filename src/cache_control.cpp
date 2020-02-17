@@ -397,6 +397,7 @@ CacheControl::do_fetch(
         }
 
         LOG_DEBUG(yield.tag(), ": Response was served from injector: cached response is modified");
+        cache_ec = err::operation_aborted;  // discard cached, use from injector
         return response;
     }
 
