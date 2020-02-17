@@ -204,9 +204,12 @@ struct Client::Impl {
             if (dbg) yield.log(*dbg, " Bep5Http: loading from local cache ec:", ec.message());
             // TODO: Check its age, store it if it's too old but keep trying
             // other peers.
-            if (!ec) return rs;
+            if (!ec) {
+                rs.response_header().set( http_::response_source_hdr  // for agent
+                                        , http_::response_source_hdr_local_cache);
+                return rs;
+            }
         }
-        // TODO: Avoid storing in the client again!
 
         namespace err = asio::error;
 
