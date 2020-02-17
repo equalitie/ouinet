@@ -321,6 +321,8 @@ struct Client::Impl {
                 // TODO: Check its age, store it if it's too old but keep trying
                 // other peers.
                 peer_cache[host] = opt_con->second;
+                hdr.set( http_::response_source_hdr  // for agent
+                       , http_::response_source_hdr_dist_cache);
                 return session;
             }
         }

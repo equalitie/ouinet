@@ -470,9 +470,7 @@ Client::State::fetch_stored( const Request& request
                 : boost::posix_time::not_a_date_time);
 
     maybe_add_proto_version_warning(hdr);
-    if (hdr[http_::response_source_hdr].empty())  // maybe added by cache already
-        hdr.set( http_::response_source_hdr  // for agent
-               , http_::response_source_hdr_dist_cache);
+    assert(!hdr[http_::response_source_hdr].empty());  // for agent, set by cache
     return CacheEntry{date, move(s)};
 }
 
