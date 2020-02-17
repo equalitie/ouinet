@@ -981,7 +981,10 @@ public:
                     WaitCondition wc(ctx);
 
                     auto cache = client_state.get_cache();
-                    bool do_cache = cache && CacheControl::ok_to_cache(rq, rsh);
+                    bool do_cache =
+                        ( cache
+                        && rsh[http_::response_source_hdr] != http_::response_source_hdr_local_cache
+                        && CacheControl::ok_to_cache(rq, rsh));
                     if (do_cache)
                         TRACK_SPAWN(ctx, ([
                             &, cache = std::move(cache),
