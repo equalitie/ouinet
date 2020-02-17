@@ -196,6 +196,18 @@ struct Client::Impl {
             dbg = debug_next_load_nr++;
         }
 
+        sys::error_code ec;
+        auto rr = http_store->reader(key, ec);
+        if (dbg) yield.log(*dbg, " Bep5Http: trying local cache ec:", ec.message());
+        if (rr) {
+            auto rs = Session::create(move(rr), cancel, yield[ec]);
+            if (dbg) yield.log(*dbg, " Bep5Http: loading from local cache ec:", ec.message());
+            // TODO: Check its age, store it if it's too old but keep trying
+            // other peers.
+            if (!ec) return rs;
+        }
+        // TODO: Avoid storing in the client again!
+
         namespace err = asio::error;
 
         auto opt_host = get_host(key);
