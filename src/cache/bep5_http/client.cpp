@@ -199,9 +199,11 @@ struct Client::Impl {
         sys::error_code ec;
         auto rr = http_store->reader(key, ec);
         if (dbg) yield.log(*dbg, " Bep5Http: trying local cache ec:", ec.message());
+        assert(rr || ec);
         if (rr) {
             auto rs = Session::create(move(rr), cancel, yield[ec]);
             if (dbg) yield.log(*dbg, " Bep5Http: loading from local cache ec:", ec.message());
+            assert(!cancel || ec == asio::error::operation_aborted);
             // TODO: Check its age, store it if it's too old but keep trying
             // other peers.
             if (!ec) {
@@ -210,6 +212,8 @@ struct Client::Impl {
                 return rs;
             }
         }
+        if (cancel) return or_throw<Session>(yield, asio::error::operation_aborted);
+        // Try distributed cache on other errors.
 
         namespace err = asio::error;
 
