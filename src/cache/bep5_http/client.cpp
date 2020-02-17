@@ -196,26 +196,22 @@ struct Client::Impl {
             dbg = debug_next_load_nr++;
         }
 
-        sys::error_code ec;
-        auto rr = http_store->reader(key, ec);
-        if (dbg) yield.log(*dbg, " Bep5Http: trying local cache ec:", ec.message());
-        assert(rr || ec);
-        if (rr) {
-            auto rs = Session::create(move(rr), cancel, yield[ec]);
-            if (dbg) yield.log(*dbg, " Bep5Http: loading from local cache ec:", ec.message());
-            assert(!cancel || ec == asio::error::operation_aborted);
-            // TODO: Check its age, store it if it's too old but keep trying
-            // other peers.
+        namespace err = asio::error;
+
+        {
+            sys::error_code ec;
+            auto rs = load_from_local(key, cancel, yield[ec]);
+            if (dbg) yield.log(*dbg, " Bep5Http: looking up local cache ec:", ec.message());
+            if (ec == err::operation_aborted) return or_throw<Session>(yield, ec);
             if (!ec) {
+                // TODO: Check its age, store it if it's too old but keep trying
+                // other peers.
                 rs.response_header().set( http_::response_source_hdr  // for agent
                                         , http_::response_source_hdr_local_cache);
                 return rs;
             }
+            // Try distributed cache on other errors.
         }
-        if (cancel) return or_throw<Session>(yield, asio::error::operation_aborted);
-        // Try distributed cache on other errors.
-
-        namespace err = asio::error;
 
         auto opt_host = get_host(key);
 
@@ -338,6 +334,18 @@ struct Client::Impl {
 
         if (cancel) return or_throw<Session>(yield, asio::error::operation_aborted);
         return or_throw<Session>(yield, err::not_found);
+    }
+
+    Session load_from_local( const std::string& key
+                           , Cancel cancel
+                           , Yield yield)
+    {
+        sys::error_code ec;
+        auto rr = http_store->reader(key, ec);
+        if (ec) return or_throw<Session>(yield, ec);
+        auto rs = Session::create(move(rr), cancel, yield[ec]);
+        assert(!cancel || ec == asio::error::operation_aborted);
+        return or_throw(yield, ec, move(rs));
     }
 
     template<class Con>
