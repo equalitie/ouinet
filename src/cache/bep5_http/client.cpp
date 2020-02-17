@@ -203,13 +203,9 @@ struct Client::Impl {
             auto rs = load_from_local(key, cancel, yield[ec]);
             if (dbg) yield.log(*dbg, " Bep5Http: looking up local cache ec:", ec.message());
             if (ec == err::operation_aborted) return or_throw<Session>(yield, ec);
-            if (!ec) {
-                // TODO: Check its age, store it if it's too old but keep trying
-                // other peers.
-                rs.response_header().set( http_::response_source_hdr  // for agent
-                                        , http_::response_source_hdr_local_cache);
-                return rs;
-            }
+            // TODO: Check its age, store it if it's too old but keep trying
+            // other peers.
+            if (!ec) return rs;
             // Try distributed cache on other errors.
         }
 
@@ -321,8 +317,6 @@ struct Client::Impl {
                 // TODO: Check its age, store it if it's too old but keep trying
                 // other peers.
                 peer_cache[host] = opt_con->second;
-                hdr.set( http_::response_source_hdr  // for agent
-                       , http_::response_source_hdr_dist_cache);
                 return session;
             }
         }
@@ -345,6 +339,8 @@ struct Client::Impl {
         if (ec) return or_throw<Session>(yield, ec);
         auto rs = Session::create(move(rr), cancel, yield[ec]);
         assert(!cancel || ec == asio::error::operation_aborted);
+        if (!ec) rs.response_header().set( http_::response_source_hdr  // for agent
+                                         , http_::response_source_hdr_local_cache);
         return or_throw(yield, ec, move(rs));
     }
 
@@ -379,6 +375,8 @@ struct Client::Impl {
             // otherwise we just discard this copy.
             ec = asio::error::not_found;
 
+        if (!ec) session.response_header().set( http_::response_source_hdr  // for agent
+                                              , http_::response_source_hdr_dist_cache);
         return or_throw(yield, ec, move(session));
     }
 
