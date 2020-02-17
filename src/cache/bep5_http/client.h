@@ -30,6 +30,7 @@ public:
          , log_level_t
          , asio::yield_context);
 
+    // This may add a response source header.
     Session load(const std::string& key, Cancel, Yield);
 
     void store( const std::string& key

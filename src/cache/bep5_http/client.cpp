@@ -198,6 +198,17 @@ struct Client::Impl {
 
         namespace err = asio::error;
 
+        {
+            sys::error_code ec;
+            auto rs = load_from_local(key, cancel, yield[ec]);
+            if (dbg) yield.log(*dbg, " Bep5Http: looking up local cache ec:", ec.message());
+            if (ec == err::operation_aborted) return or_throw<Session>(yield, ec);
+            // TODO: Check its age, store it if it's too old but keep trying
+            // other peers.
+            if (!ec) return rs;
+            // Try distributed cache on other errors.
+        }
+
         auto opt_host = get_host(key);
 
         if (!opt_host) {
@@ -319,6 +330,20 @@ struct Client::Impl {
         return or_throw<Session>(yield, err::not_found);
     }
 
+    Session load_from_local( const std::string& key
+                           , Cancel cancel
+                           , Yield yield)
+    {
+        sys::error_code ec;
+        auto rr = http_store->reader(key, ec);
+        if (ec) return or_throw<Session>(yield, ec);
+        auto rs = Session::create(move(rr), cancel, yield[ec]);
+        assert(!cancel || ec == asio::error::operation_aborted);
+        if (!ec) rs.response_header().set( http_::response_source_hdr  // for agent
+                                         , http_::response_source_hdr_local_cache);
+        return or_throw(yield, ec, move(rs));
+    }
+
     template<class Con>
     Session load_from_connection( const string& key
                                 , Con& con
@@ -350,6 +375,8 @@ struct Client::Impl {
             // otherwise we just discard this copy.
             ec = asio::error::not_found;
 
+        if (!ec) session.response_header().set( http_::response_source_hdr  // for agent
+                                              , http_::response_source_hdr_dist_cache);
         return or_throw(yield, ec, move(session));
     }
 
