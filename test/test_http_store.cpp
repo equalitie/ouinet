@@ -471,4 +471,169 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
     });
 }
 
+// About the blocks in the requested data range:
+//
+//     We have: [ 64K ][ 64K ][ 4B ]
+//     We want:          [32K][2B]
+//     We get:         [ 64K ][ 4B ]
+//
+static const string _rs_status_partial =
+    "HTTP/1.1 206 Partial Content\r\n";
+static const string _rs_fields_partial = (
+    "Content-Range: bytes 65536-131075/131076\r\n"
+    "X-Ouinet-HTTP-Status: 200\r\n"
+);
+static const string rrs_head_partial =
+    ( _rs_status_partial
+    + _rs_fields_origin
+    + _rs_fields_partial
+    + _rs_head_injection
+    + _rs_head_digest
+    + _rs_head_sig1
+    + "Transfer-Encoding: chunked\r\n"
+    + "\r\n");
+
+static const array<string, 4> rrs_chunk_ext_partial{
+    "",  // not received
+    "",
+    ";ouisig=\"" + rs_block_sig[1] + "\";ouihash=\"" + rs_block_hash[1] + "\"",
+    ";ouisig=\"" + rs_block_sig[2] + "\";ouihash=\"" + rs_block_hash[2] + "\"",
+};
+
+BOOST_AUTO_TEST_CASE(test_read_response_partial) {
+    auto tmpdir = fs::unique_path();
+    auto rmdir = defer([&tmpdir] {
+        sys::error_code ec;
+        fs::remove_all(tmpdir, ec);
+    });
+    fs::create_directory(tmpdir);
+
+    asio::io_context ctx;
+    run_spawned(ctx, [&] (auto yield) {
+        WaitCondition wc(ctx);
+
+        asio::ip::tcp::socket
+            signed_w(ctx), signed_r(ctx);
+        tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
+
+        // Send signed response.
+        asio::spawn(ctx, [&signed_w, lock = wc.lock()] (auto y) {
+            // Head (raw).
+            asio::async_write( signed_w
+                             , asio::const_buffer(rs_head.data(), rs_head.size())
+                             , y);
+
+            // Chunk headers and bodies (one chunk per block).
+            unsigned bi;
+            for (bi = 0; bi < rs_block_data.size(); ++bi) {
+                auto cbd = util::bytes::to_vector<uint8_t>(rs_block_data[bi]);
+                auto ch = http_response::ChunkHdr(cbd.size(), rs_chunk_ext[bi]);
+                ch.async_write(signed_w, y);
+                auto cb = http_response::ChunkBody(std::move(cbd), 0);
+                cb.async_write(signed_w, y);
+            }
+
+            // Last chunk and trailer (raw).
+            auto chZ = http_response::ChunkHdr(0, rs_chunk_ext[bi]);
+            chZ.async_write(signed_w, y);
+            asio::async_write( signed_w
+                             , asio::const_buffer(rs_trailer.data(), rs_trailer.size())
+                             , y);
+
+            signed_w.close();
+        });
+
+        // Store response.
+        asio::spawn(ctx, [ signed_r = std::move(signed_r), &tmpdir
+                         , &ctx, lock = wc.lock()] (auto y) mutable {
+            Cancel c;
+            sys::error_code e;
+            http_response::Reader signed_rr(std::move(signed_r));
+            cache::http_store_v1(signed_rr, tmpdir, ctx.get_executor(), c, y);
+        });
+
+        wc.wait(yield);
+
+        asio::ip::tcp::socket
+            loaded_w(ctx), loaded_r(ctx);
+        tie(loaded_w, loaded_r) = util::connected_pair(ctx, yield);
+
+        // Load response.
+        asio::spawn(ctx, [ &loaded_w, &tmpdir
+                         , &ctx, lock = wc.lock()] (auto y) {
+            Cancel c;
+            sys::error_code e;
+            // TODO: Pass range specification in.
+            auto store_rr = cache::http_store_reader_v1(tmpdir, ctx.get_executor(), e);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            BOOST_REQUIRE(store_rr);
+            auto store_s = Session::create(std::move(store_rr), c, y[e]);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            store_s.flush_response(loaded_w, c, y[e]);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            loaded_w.close();
+        });
+
+        // Check parts of the loaded response.
+        asio::spawn(ctx, [ loaded_r = std::move(loaded_r)
+                         , lock = wc.lock()] (auto y) mutable {
+            Cancel c;
+            sys::error_code e;
+            http_response::Reader loaded_rr(std::move(loaded_r));
+
+            // Head.
+            auto part = loaded_rr.async_read_part(c, y[e]);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            BOOST_REQUIRE(part);
+            BOOST_REQUIRE(part->is_head());
+            BOOST_REQUIRE_EQUAL( util::str(*(part->as_head()))
+                               , rrs_head_partial);
+
+            // Chunk headers and bodies (one chunk per block).
+            // We start on the second block because of the partial range.
+            unsigned bi;
+            for (bi = 1; bi < rs_block_data.size(); ++bi) {
+                part = loaded_rr.async_read_part(c, y[e]);
+                BOOST_CHECK_EQUAL(e.message(), "Success");
+                BOOST_REQUIRE(part);
+                BOOST_REQUIRE(part->is_chunk_hdr());
+                BOOST_REQUIRE_EQUAL( *(part->as_chunk_hdr())
+                                   , http_response::ChunkHdr( rs_block_data[bi].size()
+                                                            , rrs_chunk_ext_partial[bi]));
+
+                std::vector<uint8_t> bd;  // accumulate data here
+                for (bool done = false; !done; ) {
+                    part = loaded_rr.async_read_part(c, y[e]);
+                    BOOST_CHECK_EQUAL(e.message(), "Success");
+                    BOOST_REQUIRE(part);
+                    BOOST_REQUIRE(part->is_chunk_body());
+                    auto& d = *(part->as_chunk_body());
+                    bd.insert(bd.end(), d.cbegin(), d.cend());
+                    done = (d.remain == 0);
+                }
+                BOOST_REQUIRE_EQUAL( util::bytes::to_string(bd)
+                                   , rs_block_data[bi]);
+            }
+
+            // Last chunk header.
+            part = loaded_rr.async_read_part(c, y[e]);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            BOOST_REQUIRE(part);
+            BOOST_REQUIRE(part->is_chunk_hdr());
+            BOOST_REQUIRE_EQUAL( *(part->as_chunk_hdr())
+                               , http_response::ChunkHdr( 0
+                                                        , rrs_chunk_ext_partial[bi]));
+
+            // Trailer.
+            part = loaded_rr.async_read_part(c, y[e]);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            BOOST_REQUIRE(part);
+            BOOST_REQUIRE(part->is_trailer());
+            BOOST_CHECK_EQUAL(*(part->as_trailer()), rrs_trailer);
+        });
+
+        wc.wait(yield);
+    });
+}
+
 BOOST_AUTO_TEST_SUITE_END()
