@@ -41,14 +41,19 @@ using namespace ouinet;
 
 // This signed response used below comes from `test-http-sign`.
 
-static const string _rs_head_origin = (
-    "HTTP/1.1 200 OK\r\n"
+static const string _rs_status_origin =
+    "HTTP/1.1 200 OK\r\n";
+static const string _rs_fields_origin = (
     "Date: Mon, 15 Jan 2018 20:31:50 GMT\r\n"
     "Server: Apache1\r\n"
     "Server: Apache2\r\n"
     "Content-Type: text/html\r\n"
     "Content-Disposition: inline; filename=\"foo.html\"\r\n"
 );
+
+static const string _rs_head_origin =
+    ( _rs_status_origin
+    + _rs_fields_origin);
 
 static const string _rs_head_injection = (
     "X-Ouinet-Version: 3\r\n"
