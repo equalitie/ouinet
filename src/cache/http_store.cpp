@@ -372,7 +372,7 @@ private:
     get_sig_entry(Cancel cancel, asio::yield_context yield)
     {
         assert(_is_head_done);
-        if (!sigsf) {
+        if (!sigsf.is_open()) {
             sys::error_code ec;
             sigsf = util::file_io::open_readonly(ex, dirp / sigs_fname, ec);
             if (ec == sys::errc::no_such_file_or_directory)
@@ -381,7 +381,7 @@ private:
 
             sigs_buffer = SigEntry::create_parse_buffer();
         }
-        return SigEntry::parse(*sigsf, sigs_buffer, cancel, yield);
+        return SigEntry::parse(sigsf, sigs_buffer, cancel, yield);
     }
 
     http_response::ChunkBody
@@ -391,7 +391,7 @@ private:
         sys::error_code ec;
         http_response::ChunkBody empty_cb{{}, 0};
 
-        if (!bodyf) {
+        if (!bodyf.is_open()) {
             bodyf = util::file_io::open_readonly(ex, dirp / body_fname, ec);
             if (ec == sys::errc::no_such_file_or_directory)
                 return empty_cb;
@@ -401,7 +401,7 @@ private:
             body_buffer.resize(*block_size);
         }
 
-        auto len = asio::async_read(*bodyf, asio::buffer(body_buffer), yield[ec]);
+        auto len = asio::async_read(bodyf, asio::buffer(body_buffer), yield[ec]);
         if (cancel) ec == asio::error::operation_aborted;
         if (ec == asio::error::eof) ec = {};
         return_or_throw_on_error(yield, cancel, ec, empty_cb);
@@ -452,8 +452,9 @@ private:
 public:
     HttpStore1Reader( fs::path dirp
                     , asio::posix::stream_descriptor headf
-                    , asio::executor ex)
-        : dirp(std::move(dirp)), headf(std::move(headf)), ex(std::move(ex)) {}
+                    , asio::executor ex_)
+        : dirp(std::move(dirp)), headf(std::move(headf)), ex(std::move(ex_))
+        , sigsf(ex), bodyf(ex) {}
 
     ~HttpStore1Reader() override {};
 
@@ -502,8 +503,8 @@ public:
     {
         _is_open = false;
         headf.close();
-        if (sigsf) sigsf->close();
-        if (bodyf) bodyf->close();
+        sigsf.close();
+        bodyf.close();
     }
 
 private:
@@ -521,10 +522,10 @@ private:
     boost::optional<std::size_t> data_size;
     boost::optional<std::size_t> block_size;
 
-    boost::optional<asio::posix::stream_descriptor> sigsf;
+    asio::posix::stream_descriptor sigsf;
     SigEntry::parse_buffer sigs_buffer;
 
-    boost::optional<asio::posix::stream_descriptor> bodyf;
+    asio::posix::stream_descriptor bodyf;
     std::vector<uint8_t> body_buffer;
 
     std::string next_chunk_exts;
