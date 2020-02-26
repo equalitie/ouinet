@@ -639,4 +639,68 @@ BOOST_AUTO_TEST_CASE(test_read_response_partial) {
     });
 }
 
+BOOST_AUTO_TEST_CASE(test_read_response_partial_off) {
+    auto tmpdir = fs::unique_path();
+    auto rmdir = defer([&tmpdir] {
+        sys::error_code ec;
+        fs::remove_all(tmpdir, ec);
+    });
+    fs::create_directory(tmpdir);
+
+    asio::io_context ctx;
+    run_spawned(ctx, [&] (auto yield) {
+        WaitCondition wc(ctx);
+
+        asio::ip::tcp::socket
+            signed_w(ctx), signed_r(ctx);
+        tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
+
+        // Send signed response.
+        asio::spawn(ctx, [&signed_w, lock = wc.lock()] (auto y) {
+            // Head (raw).
+            asio::async_write( signed_w
+                             , asio::const_buffer(rs_head.data(), rs_head.size())
+                             , y);
+
+            // Chunk headers and bodies (one chunk per block).
+            unsigned bi;
+            for (bi = 0; bi < rs_block_data.size(); ++bi) {
+                auto cbd = util::bytes::to_vector<uint8_t>(rs_block_data[bi]);
+                auto ch = http_response::ChunkHdr(cbd.size(), rs_chunk_ext[bi]);
+                ch.async_write(signed_w, y);
+                auto cb = http_response::ChunkBody(std::move(cbd), 0);
+                cb.async_write(signed_w, y);
+            }
+
+            // Last chunk and trailer (raw).
+            auto chZ = http_response::ChunkHdr(0, rs_chunk_ext[bi]);
+            chZ.async_write(signed_w, y);
+            asio::async_write( signed_w
+                             , asio::const_buffer(rs_trailer.data(), rs_trailer.size())
+                             , y);
+
+            signed_w.close();
+        });
+
+        // Store response.
+        asio::spawn(ctx, [ signed_r = std::move(signed_r), &tmpdir
+                         , &ctx, lock = wc.lock()] (auto y) mutable {
+            Cancel c;
+            sys::error_code e;
+            http_response::Reader signed_rr(std::move(signed_r));
+            cache::http_store_v1(signed_rr, tmpdir, ctx.get_executor(), c, y);
+        });
+
+        wc.wait(yield);
+
+        sys::error_code e;
+        auto store_rr = cache::http_store_reader_v1
+            ( tmpdir, ctx.get_executor()
+            , 0, 42'000'000  // off limits
+            , e);
+        BOOST_CHECK_EQUAL(e, sys::errc::invalid_seek);
+        BOOST_CHECK(!store_rr);
+    });
+}
+
 BOOST_AUTO_TEST_SUITE_END()

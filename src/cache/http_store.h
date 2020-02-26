@@ -89,7 +89,7 @@ http_store_reader_v1( fs::path, asio::executor
 // Same as above, but allow specifying a contiguous range of data to read
 // instead of the whole response.
 //
-// The partial response will have the status `206 Partial Content`,
+// The partial response will have the HTTP status `206 Partial Content`,
 // with the original HTTP status code in the `X-Ouinet-HTTP-Status` header
 // and a `Content-Range` header.
 //
@@ -99,7 +99,8 @@ http_store_reader_v1( fs::path, asio::executor
 // Please note that these differ from RFC7233#2.1 "first-last" notation.
 //
 // If the range would cover data which is not stored,
-// a `416 Range Not Satisfiable` error is reported.
+// a `boost::system::errc::invalid_seek` error is reported
+// (which may be interpreted as HTTP status `416 Range Not Satisfiable`).
 reader_uptr
 http_store_reader_v1( fs::path, asio::executor
                     , std::size_t pos, std::size_t len
