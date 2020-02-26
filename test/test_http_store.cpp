@@ -563,8 +563,11 @@ BOOST_AUTO_TEST_CASE(test_read_response_partial) {
                          , &ctx, lock = wc.lock()] (auto y) {
             Cancel c;
             sys::error_code e;
-            // TODO: Pass range specification in.
-            auto store_rr = cache::http_store_reader_v1(tmpdir, ctx.get_executor(), e);
+            auto store_rr = cache::http_store_reader_v1
+                ( tmpdir, ctx.get_executor()
+                , rs_block_data[0].size() + rs_block_data[1].size() / 2  // pos
+                , rs_block_data[1].size() / 2 + rs_block_data[2].size() / 2  // len
+                , e);
             BOOST_CHECK_EQUAL(e.message(), "Success");
             BOOST_REQUIRE(store_rr);
             auto store_s = Session::create(std::move(store_rr), c, y[e]);

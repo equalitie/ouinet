@@ -86,6 +86,25 @@ reader_uptr
 http_store_reader_v1( fs::path, asio::executor
                     , sys::error_code&);
 
+// Same as above, but allow specifying a contiguous range of data to read
+// instead of the whole response.
+//
+// The partial response will have the status `206 Partial Content`,
+// with the original HTTP status code in the `X-Ouinet-HTTP-Status` header
+// and a `Content-Range` header.
+//
+// `pos` must be strictly less than total data size,
+// and `len` must be at least 1.
+// `pos + len` must not be greater than total data size.
+// Please note that these differ from RFC7233#2.1 "first-last" notation.
+//
+// If the range would cover data which is not stored,
+// a `416 Range Not Satisfiable` error is reported.
+reader_uptr
+http_store_reader_v1( fs::path, asio::executor
+                    , std::size_t pos, std::size_t len
+                    , sys::error_code&);
+
 //// High-level classes for HTTP response storage
 
 class AbstractHttpStore {
