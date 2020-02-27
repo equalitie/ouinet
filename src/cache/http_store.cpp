@@ -372,15 +372,10 @@ private:
     get_sig_entry(Cancel cancel, asio::yield_context yield)
     {
         assert(_is_head_done);
-        if (!sigsf.is_open()) {
-            sys::error_code ec;
-            sigsf = util::file_io::open_readonly(ex, dirp / sigs_fname, ec);
-            if (ec == sys::errc::no_such_file_or_directory)
-                return boost::none;
-            return_or_throw_on_error(yield, cancel, ec, boost::none);
+        if (!sigsf.is_open()) return boost::none;
 
+        if (sigs_buffer.size() == 0)
             sigs_buffer = SigEntry::create_parse_buffer();
-        }
         return SigEntry::parse(sigsf, sigs_buffer, cancel, yield);
     }
 
@@ -388,19 +383,16 @@ private:
     get_chunk_body(Cancel cancel, asio::yield_context yield)
     {
         assert(_is_head_done);
-        sys::error_code ec;
         http_response::ChunkBody empty_cb{{}, 0};
 
-        if (!bodyf.is_open()) {
-            bodyf = util::file_io::open_readonly(ex, dirp / body_fname, ec);
-            if (ec == sys::errc::no_such_file_or_directory)
-                return empty_cb;
-            return_or_throw_on_error(yield, cancel, ec, std::move(empty_cb));
+        if (!bodyf.is_open()) return empty_cb;
 
+        if (body_buffer.size() == 0) {
             assert(block_size);
             body_buffer.resize(*block_size);
         }
 
+        sys::error_code ec;
         auto len = asio::async_read(bodyf, asio::buffer(body_buffer), yield[ec]);
         if (cancel) ec == asio::error::operation_aborted;
         if (ec == asio::error::eof) ec = {};
@@ -450,11 +442,12 @@ private:
     }
 
 public:
-    HttpStore1Reader( fs::path dirp
-                    , asio::posix::stream_descriptor headf
-                    , asio::executor ex_)
-        : dirp(std::move(dirp)), headf(std::move(headf)), ex(std::move(ex_))
-        , sigsf(ex), bodyf(ex) {}
+    HttpStore1Reader( asio::posix::stream_descriptor headf
+                    , asio::posix::stream_descriptor sigsf
+                    , asio::posix::stream_descriptor bodyf)
+        : headf(std::move(headf))
+        , sigsf(std::move(sigsf))
+        , bodyf(std::move(bodyf)) {}
 
     ~HttpStore1Reader() override {};
 
@@ -508,9 +501,9 @@ public:
     }
 
 private:
-    const fs::path dirp;
     asio::posix::stream_descriptor headf;
-    asio::executor ex;
+    asio::posix::stream_descriptor sigsf;
+    asio::posix::stream_descriptor bodyf;
 
     bool _is_head_done = false;
     bool _is_body_done = false;
@@ -522,10 +515,8 @@ private:
     boost::optional<std::size_t> data_size;
     boost::optional<std::size_t> block_size;
 
-    asio::posix::stream_descriptor sigsf;
     SigEntry::parse_buffer sigs_buffer;
 
-    asio::posix::stream_descriptor bodyf;
     std::vector<uint8_t> body_buffer;
 
     std::string next_chunk_exts;
@@ -547,7 +538,14 @@ http_store_reader_v1(fs::path dirp, asio::executor ex, sys::error_code& ec)
     auto headf = util::file_io::open_readonly(ex, dirp / head_fname, ec);
     if (ec) return nullptr;
 
-    return std::make_unique<HttpStore1Reader>(std::move(dirp), std::move(headf), std::move(ex));
+    auto sigsf = util::file_io::open_readonly(ex, dirp / sigs_fname, ec);
+    if (ec && ec != sys::errc::no_such_file_or_directory) return nullptr;
+
+    auto bodyf = util::file_io::open_readonly(ex, dirp / body_fname, ec);
+    if (ec && ec != sys::errc::no_such_file_or_directory) return nullptr;
+
+    return std::make_unique<HttpStore1Reader>
+        (std::move(headf), std::move(sigsf), std::move(bodyf));
 }
 
 // begin HttpStoreV0
