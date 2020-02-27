@@ -74,8 +74,6 @@ http_store_reader_v0( const fs::path&, asio::executor
 // Return a new reader for a response stored in v1 format
 // under the given directory.
 //
-// Both the path and the executor are kept by the reader.
-//
 // At least the file belonging to the response head must be readable,
 // otherwise the call will report an error and not return a reader.
 // If other pieces are missing, the reader may fail further down the road.
@@ -83,7 +81,7 @@ http_store_reader_v0( const fs::path&, asio::executor
 // The response will be provided using chunked transfer encoding,
 // with all the metadata needed to verify and further share it.
 reader_uptr
-http_store_reader_v1( fs::path, asio::executor
+http_store_reader_v1( const fs::path&, asio::executor
                     , sys::error_code&);
 
 // Same as above, but allow specifying a contiguous range of data to read
@@ -102,7 +100,7 @@ http_store_reader_v1( fs::path, asio::executor
 // a `boost::system::errc::invalid_seek` error is reported
 // (which may be interpreted as HTTP status `416 Range Not Satisfiable`).
 reader_uptr
-http_store_reader_v1( fs::path, asio::executor
+http_store_reader_v1( const fs::path&, asio::executor
                     , std::size_t pos, std::size_t len
                     , sys::error_code&);
 

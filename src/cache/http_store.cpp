@@ -376,6 +376,7 @@ private:
 
         if (sigs_buffer.size() == 0)
             sigs_buffer = SigEntry::create_parse_buffer();
+
         return SigEntry::parse(sigsf, sigs_buffer, cancel, yield);
     }
 
@@ -524,16 +525,17 @@ private:
 };
 
 reader_uptr
-http_store_reader_v1( fs::path dirp, asio::executor ex
+http_store_reader_v1( const fs::path& dirp, asio::executor ex
                     , std::size_t pos, std::size_t len
                     , sys::error_code& ec)
 {
     // TODO: Pass range specification in.
-    return http_store_reader_v1(std::move(dirp), std::move(ex), ec);
+    return http_store_reader_v1(dirp, std::move(ex), ec);
 }
 
 reader_uptr
-http_store_reader_v1(fs::path dirp, asio::executor ex, sys::error_code& ec)
+http_store_reader_v1( const fs::path& dirp, asio::executor ex
+                    , sys::error_code& ec)
 {
     auto headf = util::file_io::open_readonly(ex, dirp / head_fname, ec);
     if (ec) return nullptr;
