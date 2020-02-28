@@ -20,6 +20,7 @@
 #include "../util/bytes.h"
 #include "../util/file_io.h"
 #include "../util/hash.h"
+#include "../util/str.h"
 #include "../util/variant.h"
 #include "http_sign.h"
 
@@ -359,12 +360,29 @@ private:
         // Create a partial content response if a range was specified.
         if (range_begin) {
             assert(range_end);
-            // TODO: align ranges to data blocks
+
             auto orig_status = head.result_int();
             head.reason("");
             head.result(http::status::partial_content);
             head.set(http_::response_original_http_status, orig_status);
-            // TODO: set other fields
+
+            // Align ranges to data blocks.
+            assert(block_size);
+            auto bs = *block_size;
+            range_begin = bs * (*range_begin / bs);  // align down
+            range_end = bs * (*range_end / bs + 1);  // align up
+            // Clip range end to actual file size.
+            auto ds = util::file_io::file_size(bodyf, ec);
+            if (ec) return or_throw<http_response::Head>(yield, ec);
+            if (*range_end > ds) range_end = ds;
+
+            // Report resulting range.
+            auto first = *range_begin;
+            auto last = *range_end - 1;
+            head.set( http::field::content_range
+                    , data_size
+                      ? util::str("bytes ", first, '-' , last, '/', *data_size)
+                      : util::str("bytes ", first, '-' , last, "/*"));
         }
 
         // The stored head should not have framing headers,
