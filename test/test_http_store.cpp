@@ -563,7 +563,7 @@ BOOST_AUTO_TEST_CASE(test_read_response_partial) {
                          , &ctx, lock = wc.lock()] (auto y) {
             Cancel c;
             sys::error_code e;
-            auto store_rr = cache::http_store_reader_v1
+            auto store_rr = cache::http_store_range_reader_v1
                 ( tmpdir, ctx.get_executor()
                 , rs_block_data[0].size() + rs_block_data[1].size() / 2  // pos
                 , rs_block_data[1].size() / 2 + rs_block_data[2].size() / 2  // len
@@ -694,7 +694,7 @@ BOOST_AUTO_TEST_CASE(test_read_response_partial_off) {
         wc.wait(yield);
 
         sys::error_code e;
-        auto store_rr = cache::http_store_reader_v1
+        auto store_rr = cache::http_store_range_reader_v1
             ( tmpdir, ctx.get_executor()
             , 0, 42'000'000  // off limits
             , e);

@@ -573,9 +573,9 @@ http_store_reader_v1( const fs::path& dirp, asio::executor ex
 }
 
 reader_uptr
-http_store_reader_v1( const fs::path& dirp, asio::executor ex
-                    , std::size_t pos, std::size_t len
-                    , sys::error_code& ec)
+http_store_range_reader_v1( const fs::path& dirp, asio::executor ex
+                          , std::size_t pos, std::size_t len
+                          , sys::error_code& ec)
 {
     return _http_store_reader_v1(dirp, std::move(ex), pos, len, ec);
 }

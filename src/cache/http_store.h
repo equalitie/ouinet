@@ -100,9 +100,9 @@ http_store_reader_v1( const fs::path&, asio::executor
 // a `boost::system::errc::invalid_seek` error is reported
 // (which may be interpreted as HTTP status `416 Range Not Satisfiable`).
 reader_uptr
-http_store_reader_v1( const fs::path&, asio::executor
-                    , std::size_t pos, std::size_t len
-                    , sys::error_code&);
+http_store_range_reader_v1( const fs::path&, asio::executor
+                          , std::size_t pos, std::size_t len
+                          , sys::error_code&);
 
 //// High-level classes for HTTP response storage
 
