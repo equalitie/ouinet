@@ -549,13 +549,27 @@ _http_store_reader_v1( const fs::path& dirp, asio::executor ex
 
     boost::optional<std::size_t> range_start, range_end;
     if (range_first) {
+        // Check and convert range.
         assert(range_last);
-        if (!bodyf.is_open()) {
-            // No range is legal with no data.
+        if (*range_first > *range_last) {
+            _WARN("Inverted range boundaries: ", *range_first, " > ", *range_last);
             ec = sys::errc::make_error_code(sys::errc::invalid_seek);
             return nullptr;
         }
-        // TODO check range
+        if (!bodyf.is_open()) {
+            _WARN("Range requested for response with no stored data");
+            ec = sys::errc::make_error_code(sys::errc::invalid_seek);
+            return nullptr;
+        }
+        auto body_size = util::file_io::file_size(bodyf, ec);
+        if (ec) return nullptr;
+        if ( *range_first >= body_size
+           || *range_last >= body_size) {
+            _WARN( "Requested range goes beyond stored data: "
+                 , *range_first, "-", *range_last, "/", body_size);
+            ec = sys::errc::make_error_code(sys::errc::invalid_seek);
+            return nullptr;
+        }
         range_start = *range_first;
         range_end = *range_last + 1;
     }
