@@ -480,16 +480,16 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
 static const string _rs_status_partial =
     "HTTP/1.1 206 Partial Content\r\n";
 static const string _rs_fields_partial = (
-    "Content-Range: bytes 65536-131075/131076\r\n"
     "X-Ouinet-HTTP-Status: 200\r\n"
+    "Content-Range: bytes 65536-131075/131076\r\n"
 );
 static const string rrs_head_partial =
     ( _rs_status_partial
     + _rs_fields_origin
-    + _rs_fields_partial
     + _rs_head_injection
     + _rs_head_digest
     + _rs_head_sig1
+    + _rs_fields_partial
     + "Transfer-Encoding: chunked\r\n"
     + "\r\n");
 
