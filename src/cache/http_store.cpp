@@ -359,8 +359,11 @@ private:
         // Create a partial content response if a range was specified.
         if (range_begin) {
             assert(range_end);
+            // TODO: align ranges to data blocks
+            auto orig_status = head.result_int();
             head.reason("");
             head.result(http::status::partial_content);
+            head.set(http_::response_original_http_status, orig_status);
             // TODO: set other fields
         }
 

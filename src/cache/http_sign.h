@@ -28,6 +28,13 @@ namespace ouinet { namespace http_ {
     // without breaking on transfer encoding changes.
     static const std::string response_data_size_hdr = header_prefix + "Data-Size";
 
+    // This contains the originally signed HTTP status code
+    // if a signed response was transformed in
+    // a partial response or a head response.
+    // If present, this header replaces the actual response status
+    // for verification purposes.
+    static const std::string response_original_http_status = header_prefix + "HTTP-Status";
+
     // This contains common parameters for block signatures.
     static const std::string response_block_signatures_hdr = header_prefix + "BSigs";
 
