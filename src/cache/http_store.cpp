@@ -534,8 +534,8 @@ private:
 static
 reader_uptr
 _http_store_reader_v1( const fs::path& dirp, asio::executor ex
-                     , boost::optional<std::size_t> pos
-                     , boost::optional<std::size_t> len
+                     , boost::optional<std::size_t> range_first
+                     , boost::optional<std::size_t> range_last
                      , sys::error_code& ec)
 {
     auto headf = util::file_io::open_readonly(ex, dirp / head_fname, ec);
@@ -548,16 +548,16 @@ _http_store_reader_v1( const fs::path& dirp, asio::executor ex
     if (ec && ec != sys::errc::no_such_file_or_directory) return nullptr;
 
     boost::optional<std::size_t> range_start, range_end;
-    if (pos) {
-        assert(len);
+    if (range_first) {
+        assert(range_last);
         if (!bodyf.is_open()) {
             // No range is legal with no data.
             ec = sys::errc::make_error_code(sys::errc::invalid_seek);
             return nullptr;
         }
         // TODO check range
-        range_start = *pos;
-        range_end = *pos + *len;
+        range_start = *range_first;
+        range_end = *range_last + 1;
     }
 
     return std::make_unique<HttpStore1Reader>
@@ -574,10 +574,10 @@ http_store_reader_v1( const fs::path& dirp, asio::executor ex
 
 reader_uptr
 http_store_range_reader_v1( const fs::path& dirp, asio::executor ex
-                          , std::size_t pos, std::size_t len
+                          , std::size_t first, std::size_t last
                           , sys::error_code& ec)
 {
-    return _http_store_reader_v1(dirp, std::move(ex), pos, len, ec);
+    return _http_store_reader_v1(dirp, std::move(ex), first, last, ec);
 }
 
 // begin HttpStoreV0

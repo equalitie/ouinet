@@ -91,17 +91,17 @@ http_store_reader_v1( const fs::path&, asio::executor
 // with the original HTTP status code in the `X-Ouinet-HTTP-Status` header
 // and a `Content-Range` header.
 //
-// `pos` must be strictly less than total data size,
-// and `len` must be at least 1.
-// `pos + len` must not be greater than total data size.
-// Please note that these differ from RFC7233#2.1 "first-last" notation.
+// `first` and `last` follow RFC7233#2.1 notation:
+// `first` must be strictly less than total data size;
+// `last` must be at least `first` and strictly less than total data size.
+// Open ranges ("N-" and "-N") are not supported.
 //
 // If the range would cover data which is not stored,
 // a `boost::system::errc::invalid_seek` error is reported
 // (which may be interpreted as HTTP status `416 Range Not Satisfiable`).
 reader_uptr
 http_store_range_reader_v1( const fs::path&, asio::executor
-                          , std::size_t pos, std::size_t len
+                          , std::size_t first, std::size_t last
                           , sys::error_code&);
 
 //// High-level classes for HTTP response storage
