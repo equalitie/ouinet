@@ -356,6 +356,14 @@ private:
         else
             data_size = *data_size_opt;
 
+        // Create a partial content response if a range was specified.
+        if (range_begin) {
+            assert(range_end);
+            head.reason("");
+            head.result(http::status::partial_content);
+            // TODO: set other fields
+        }
+
         // The stored head should not have framing headers,
         // check and enable chunked transfer encoding.
         if (!( head[http::field::content_length].empty()
