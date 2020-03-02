@@ -551,13 +551,16 @@ BOOST_AUTO_TEST_CASE(test_read_response_partial) {
             loaded_w(ctx), loaded_r(ctx);
         tie(loaded_w, loaded_r) = util::connected_pair(ctx, yield);
 
-        // Load response.
+        // Load partial response:
+        // request from middle first block to middle last block.
+        unsigned first_block = 1, last_block = 2;
         asio::spawn(ctx, [ &loaded_w, &tmpdir
+                         , first_block, last_block
                          , &ctx, lock = wc.lock()] (auto y) {
             Cancel c;
             sys::error_code e;
-            size_t first = rs_block_data[0].size() + rs_block_data[1].size() / 2;
-            size_t last = first + rs_block_data[1].size() / 2 + rs_block_data[2].size() / 2 - 1;
+            size_t first = (first_block * http_::response_data_block) + rs_block_data[first_block].size() / 2;
+            size_t last = (last_block * http_::response_data_block) + rs_block_data[last_block].size() / 2 - 1;
             auto store_rr = cache::http_store_range_reader_v1
                 (tmpdir, ctx.get_executor(), first, last, e);
             BOOST_CHECK_EQUAL(e.message(), "Success");
@@ -571,6 +574,7 @@ BOOST_AUTO_TEST_CASE(test_read_response_partial) {
 
         // Check parts of the loaded response.
         asio::spawn(ctx, [ loaded_r = std::move(loaded_r)
+                         , first_block, last_block
                          , lock = wc.lock()] (auto y) mutable {
             Cancel c;
             sys::error_code e;
@@ -585,10 +589,10 @@ BOOST_AUTO_TEST_CASE(test_read_response_partial) {
                                , rrs_head_partial);
 
             // Chunk headers and bodies (one chunk per block).
-            // We start on the second block because of the partial range.
+            // We start on the first block of the partial range.
             bool first_chunk = true;
             unsigned bi;
-            for (bi = 1; bi < rs_block_data.size(); ++bi, first_chunk=false) {
+            for (bi = first_block; bi < rs_block_data.size(); ++bi, first_chunk=false) {
                 part = loaded_rr.async_read_part(c, y[e]);
                 BOOST_CHECK_EQUAL(e.message(), "Success");
                 BOOST_REQUIRE(part);
