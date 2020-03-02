@@ -493,13 +493,6 @@ static const string rrs_head_partial =
     + "Transfer-Encoding: chunked\r\n"
     + "\r\n");
 
-static const array<string, 4> rrs_chunk_ext_partial{
-    "",  // not received
-    "",
-    ";ouisig=\"" + rs_block_sig[1] + "\";ouihash=\"" + rs_block_hash[1] + "\"",
-    ";ouisig=\"" + rs_block_sig[2] + "\";ouihash=\"" + rs_block_hash[2] + "\"",
-};
-
 BOOST_AUTO_TEST_CASE(test_read_response_partial) {
     auto tmpdir = fs::unique_path();
     auto rmdir = defer([&tmpdir] {
@@ -593,15 +586,16 @@ BOOST_AUTO_TEST_CASE(test_read_response_partial) {
 
             // Chunk headers and bodies (one chunk per block).
             // We start on the second block because of the partial range.
+            bool first_chunk = true;
             unsigned bi;
-            for (bi = 1; bi < rs_block_data.size(); ++bi) {
+            for (bi = 1; bi < rs_block_data.size(); ++bi, first_chunk=false) {
                 part = loaded_rr.async_read_part(c, y[e]);
                 BOOST_CHECK_EQUAL(e.message(), "Success");
                 BOOST_REQUIRE(part);
                 BOOST_REQUIRE(part->is_chunk_hdr());
                 BOOST_REQUIRE_EQUAL( *(part->as_chunk_hdr())
                                    , http_response::ChunkHdr( rs_block_data[bi].size()
-                                                            , rrs_chunk_ext_partial[bi]));
+                                                            , first_chunk ? "" : rrs_chunk_ext[bi]));
 
                 std::vector<uint8_t> bd;  // accumulate data here
                 for (bool done = false; !done; ) {
@@ -624,7 +618,7 @@ BOOST_AUTO_TEST_CASE(test_read_response_partial) {
             BOOST_REQUIRE(part->is_chunk_hdr());
             BOOST_REQUIRE_EQUAL( *(part->as_chunk_hdr())
                                , http_response::ChunkHdr( 0
-                                                        , rrs_chunk_ext_partial[bi]));
+                                                        , rrs_chunk_ext[bi]));
 
             // Trailer.
             part = loaded_rr.async_read_part(c, y[e]);
