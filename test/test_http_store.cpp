@@ -34,6 +34,17 @@ namespace ouinet { namespace http_response {
     }
 }} // namespace ouinet::http_response
 
+using first_last = std::pair<unsigned, unsigned>;
+// <https://stackoverflow.com/a/33965517>
+namespace boost { namespace test_tools { namespace tt_detail {
+    template<>
+    struct print_log_value<first_last> {
+        void operator()(std::ostream& os, const first_last& p) {
+            os << "{" << p.first << ", " << p.second << "}";
+        }
+    };
+}}} // namespace boost::test_tools::tt_detail
+
 BOOST_AUTO_TEST_SUITE(ouinet_http_store)
 
 using namespace std;
@@ -493,7 +504,16 @@ static string rrs_head_partial(unsigned first_block, unsigned last_block) {
         , "\r\n");
 }
 
-BOOST_AUTO_TEST_CASE(test_read_response_partial) {
+static const first_last block_ranges[] = {
+    {0, 0},  // just first block
+    {0, 1},  // two first blocks
+    {0, 2},  // all blocks
+    {1, 2},  // two last blocks
+    {2, 2},  // just last block
+};
+
+BOOST_DATA_TEST_CASE( test_read_response_partial
+                    , boost::unit_test::data::make(block_ranges), firstb_lastb) {
     auto tmpdir = fs::unique_path();
     auto rmdir = defer([&tmpdir] {
         sys::error_code ec;
@@ -553,7 +573,8 @@ BOOST_AUTO_TEST_CASE(test_read_response_partial) {
 
         // Load partial response:
         // request from middle first block to middle last block.
-        unsigned first_block = 1, last_block = 2;
+        unsigned first_block, last_block;
+        tie(first_block, last_block) = firstb_lastb;
         asio::spawn(ctx, [ &loaded_w, &tmpdir
                          , first_block, last_block
                          , &ctx, lock = wc.lock()] (auto y) {
