@@ -397,6 +397,28 @@ private:
         return head;
     }
 
+    void
+    seek_to_range_begin(Cancel cancel, asio::yield_context yield)
+    {
+        assert(_is_head_done);
+        if (!range_begin) return;
+        assert(bodyf.is_open());
+        assert(block_size);
+
+        sys::error_code ec;
+
+        // Move body file pointer to start of range.
+        block_offset = *range_begin;
+        util::file_io::fseek(bodyf, block_offset, ec);
+        if (ec) return or_throw(yield, ec);
+
+        // Consume signatures before the first block.
+        for (unsigned b = 0; b < (block_offset / *block_size); ++b) {
+            get_sig_entry(cancel, yield[ec]);
+            return_or_throw_on_error(yield, cancel, ec);
+        }
+    }
+
     boost::optional<SigEntry>
     get_sig_entry(Cancel cancel, asio::yield_context yield)
     {
@@ -497,6 +519,8 @@ public:
             auto head = parse_head(cancel, yield[ec]);
             return_or_throw_on_error(yield, cancel, ec, boost::none);
             _is_head_done = true;
+            seek_to_range_begin(cancel, yield[ec]);
+            return_or_throw_on_error(yield, cancel, ec, boost::none);
             return http_response::Part(std::move(head));
         }
 
