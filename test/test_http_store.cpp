@@ -592,7 +592,7 @@ BOOST_AUTO_TEST_CASE(test_read_response_partial) {
             // We start on the first block of the partial range.
             bool first_chunk = true;
             unsigned bi;
-            for (bi = first_block; bi < rs_block_data.size(); ++bi, first_chunk=false) {
+            for (bi = first_block; bi <= last_block; ++bi, first_chunk=false) {
                 part = loaded_rr.async_read_part(c, y[e]);
                 BOOST_CHECK_EQUAL(e.message(), "Success");
                 BOOST_REQUIRE(part);
