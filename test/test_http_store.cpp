@@ -477,21 +477,21 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
 //     We want:          [32K][2B]
 //     We get:         [ 64K ][ 4B ]
 //
-static const string _rs_status_partial =
-    "HTTP/1.1 206 Partial Content\r\n";
-static const string _rs_fields_partial = (
-    "X-Ouinet-HTTP-Status: 200\r\n"
-    "Content-Range: bytes 65536-131075/131076\r\n"
-);
-static const string rrs_head_partial =
-    ( _rs_status_partial
-    + _rs_fields_origin
-    + _rs_head_injection
-    + _rs_head_digest
-    + _rs_head_sig1
-    + _rs_fields_partial
-    + "Transfer-Encoding: chunked\r\n"
-    + "\r\n");
+static string rrs_head_partial(unsigned first_block, unsigned last_block) {
+    size_t first = first_block * http_::response_data_block;
+    size_t last = ( (last_block * http_::response_data_block)
+                  + rs_block_data[last_block].size() - 1);
+    return util::str
+        ( "HTTP/1.1 206 Partial Content\r\n"
+        , _rs_fields_origin
+        , _rs_head_injection
+        , _rs_head_digest
+        , _rs_head_sig1
+        , "X-Ouinet-HTTP-Status: 200\r\n"
+        , "Content-Range: bytes ", first, '-', last, "/131076\r\n"
+        , "Transfer-Encoding: chunked\r\n"
+        , "\r\n");
+}
 
 BOOST_AUTO_TEST_CASE(test_read_response_partial) {
     auto tmpdir = fs::unique_path();
@@ -586,7 +586,7 @@ BOOST_AUTO_TEST_CASE(test_read_response_partial) {
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_head());
             BOOST_REQUIRE_EQUAL( util::str(*(part->as_head()))
-                               , rrs_head_partial);
+                               , rrs_head_partial(first_block, last_block));
 
             // Chunk headers and bodies (one chunk per block).
             // We start on the first block of the partial range.
