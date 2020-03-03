@@ -508,7 +508,7 @@ GenericStream Bep5Client::connect( asio::yield_context yield
         }));
     }
 
-    wc.wait(cancel, yield[ec]);
+    wc.wait(yield[ec]);
 
     if (cancel) {
         ec = asio::error::operation_aborted;
