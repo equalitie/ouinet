@@ -486,6 +486,14 @@ private:
         }
         block_offset += chunk_body.size();
 
+        if (range_end && block_offset >= *range_end) {
+            // Hit range end, stop getting more blocks:
+            // the next read data block will be empty,
+            // thus generating a "last chunk" below.
+            sigsf.close();
+            bodyf.close();
+        }
+
         http_response::ChunkHdr ch(chunk_body.size(), next_chunk_exts);
         next_chunk_exts = sig_entry ? sig_entry->chunk_exts() : "";
         if (sig_entry && chunk_body.size() > 0)
