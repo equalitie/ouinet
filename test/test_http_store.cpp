@@ -573,6 +573,9 @@ BOOST_DATA_TEST_CASE( test_read_response_partial
 
         // Load partial response:
         // request from middle first block to middle last block.
+        // Use first byte *after* middle last block
+        // to avoid using an inverted range
+        // when first and last blocks match.
         unsigned first_block, last_block;
         tie(first_block, last_block) = firstb_lastb;
         asio::spawn(ctx, [ &loaded_w, &tmpdir
@@ -581,7 +584,7 @@ BOOST_DATA_TEST_CASE( test_read_response_partial
             Cancel c;
             sys::error_code e;
             size_t first = (first_block * http_::response_data_block) + rs_block_data[first_block].size() / 2;
-            size_t last = (last_block * http_::response_data_block) + rs_block_data[last_block].size() / 2 - 1;
+            size_t last = (last_block * http_::response_data_block) + rs_block_data[last_block].size() / 2;
             auto store_rr = cache::http_store_range_reader_v1
                 (tmpdir, ctx.get_executor(), first, last, e);
             BOOST_CHECK_EQUAL(e.message(), "Success");
