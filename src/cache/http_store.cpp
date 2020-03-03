@@ -690,7 +690,7 @@ HttpStoreV1::for_each(keep_func keep, asio::yield_context yield)
             continue;
         }
 
-        auto& pp_name_s = pp.path().filename().native();
+        auto pp_name_s = pp.path().filename().native();
         if (!boost::regex_match(pp_name_s.begin(), pp_name_s.end(), v1_parent_name_rx)) {
             _WARN("Found unknown directory: ", pp);
             continue;
