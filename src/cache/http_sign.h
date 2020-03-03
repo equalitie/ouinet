@@ -8,6 +8,7 @@
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/beast/http/dynamic_body.hpp>
 #include <boost/beast/http/message.hpp>
+#include <boost/beast/http/status.hpp>
 #include <boost/regex.hpp>
 
 #include "../constants.h"
@@ -209,6 +210,16 @@ private:
 // Allows reading parts of a response from stream `in`
 // while verifying signatures from the public key `pk`.
 //
+// By default,
+// responses with a signed `(response-status)` are only considered valid
+// when they have the same HTTP status used for creating their signatures.
+// If a set of HTTP `statuses` is provided,
+// responses derived from the originally signed response
+// but having one of the given statuses are accepted too,
+// as long as the original status code appears as `X-Ouinet-HTTP-Status`.
+// This can be used to verify partial responses or responses to a `HEAD` request
+// based on a signed full response to a `GET` request.
+//
 // The read operation fails with error `boost::system::errc::no_message`
 // if the response head failed to be verified or was not acceptable;
 // or with error `boost::system::errc::bad_message`
@@ -218,7 +229,11 @@ private:
 // to be verified again.
 class VerifyingReader : public ouinet::http_response::Reader {
 public:
-    VerifyingReader(GenericStream in, ouinet::util::Ed25519PublicKey pk);
+    using status_set = std::set<http::status>;
+
+public:
+    VerifyingReader( GenericStream in, ouinet::util::Ed25519PublicKey pk
+                   , status_set statuses = {});
     ~VerifyingReader() override;
 
     boost::optional<ouinet::http_response::Part>

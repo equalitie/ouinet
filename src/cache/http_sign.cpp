@@ -1111,8 +1111,10 @@ struct VerifyingReader::Impl {
     }
 };
 
+// TODO: Do something with statuses.
 VerifyingReader::VerifyingReader( GenericStream in
-                                , util::Ed25519PublicKey pk)
+                                , util::Ed25519PublicKey pk
+                                , status_set statuses)
     : http_response::Reader(std::move(in))
     , _impl(std::make_unique<Impl>(std::move(pk)))
 {
