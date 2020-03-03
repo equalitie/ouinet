@@ -90,6 +90,33 @@ static bool log_transactions() {
 }
 
 //------------------------------------------------------------------------------
+struct UserAgentMetaData {
+    boost::optional<bool> is_private;
+    boost::optional<std::string> dht_group;
+
+    static UserAgentMetaData extract(Request& rq) {
+        UserAgentMetaData ret;
+
+        {
+            auto i = rq.find("X-DHT-Group");
+            if (i != rq.end()) {
+                ret.dht_group = i->value().to_string();
+                rq.erase(i);
+            }
+        }
+        {
+            auto i = rq.find("X-Is-Private");
+            if (i != rq.end()) {
+                ret.is_private = boost::iequals(i->value(), "True");
+                rq.erase(i);
+            }
+        }
+
+        return ret;
+    }
+};
+
+//------------------------------------------------------------------------------
 class Client::State : public enable_shared_from_this<Client::State> {
     friend class Client;
 
@@ -1449,6 +1476,8 @@ void Client::State::serve_request( GenericStream&& con
         }
 
         request_config = route_choose_config(req, matches, default_request_config);
+
+        auto meta = UserAgentMetaData::extract(req);
 
         bool keep_alive
             = cache_control.fetch(con, req, yield[ec].tag("cache_control.fetch"));
