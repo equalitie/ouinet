@@ -217,7 +217,7 @@ private:
 // responses derived from the originally signed response
 // but having one of the given statuses are accepted too,
 // as long as the original status code appears as `X-Ouinet-HTTP-Status`.
-// This can be used to verify partial responses or responses to a `HEAD` request
+// This can be used to verify partial or "not modified" responses
 // based on a signed full response to a `GET` request.
 //
 // The read operation fails with error `boost::system::errc::no_message`
