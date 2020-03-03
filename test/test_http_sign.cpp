@@ -72,33 +72,45 @@ static const string inj_b64pk = "DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=";
 // the example will need to be updated,
 // but the signature should stay the same.
 // If comparing the whole head becomes too tricky, just check `X-Ouinet-Sig0`.
-static const string rs_head_signed_s = (
-    "HTTP/1.1 200 OK\r\n"
+static const string _rs_status_origin =
+    "HTTP/1.1 200 OK\r\n";
+
+static const string _rs_fields_origin = (
     "Date: Mon, 15 Jan 2018 20:31:50 GMT\r\n"
     "Server: Apache1\r\n"
     "Server: Apache2\r\n"
     "Content-Type: text/html\r\n"
     "Content-Disposition: inline; filename=\"foo.html\"\r\n"
+);
 
+static const string _rs_head_injection = (
     "X-Ouinet-Version: 3\r\n"
     "X-Ouinet-URI: https://example.com/foo\r\n"
     "X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310\r\n"
     "X-Ouinet-BSigs: keyId=\"ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=\","
     "algorithm=\"hs2019\",size=65536\r\n"
+);
 
+static const string _rs_head_sig0 = (
     "X-Ouinet-Sig0: keyId=\"ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=\","
     "algorithm=\"hs2019\",created=1516048310,"
     "headers=\"(response-status) (created) "
     "date server content-type content-disposition "
     "x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-bsigs\","
     "signature=\"tnVAAW/8FJs2PRgtUEwUYzMxBBlZpd7Lx3iucAt9q5hYXuY5ci9T7nEn7UxyKMGA1ZvnDMDBbs40dO1OQUkdCA==\"\r\n"
+);
 
+static const string _rs_head_framing = (
     "Transfer-Encoding: chunked\r\n"
     "Trailer: X-Ouinet-Data-Size, Digest, X-Ouinet-Sig1\r\n"
+);
 
+static const string _rs_head_digest = (
     "X-Ouinet-Data-Size: 131076\r\n"
     "Digest: SHA-256=E4RswXyAONCaILm5T/ZezbHI87EKvKIdxURKxiVHwKE=\r\n"
+);
 
+static const string _rs_head_sig1 = (
     "X-Ouinet-Sig1: keyId=\"ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=\","
     "algorithm=\"hs2019\",created=1516048311,"
     "headers=\"(response-status) (created) "
@@ -107,8 +119,17 @@ static const string rs_head_signed_s = (
     "x-ouinet-data-size "
     "digest\","
     "signature=\"h/PmOlFvScNzDAUvV7tLNjoA0A39OL67/9wbfrzqEY7j47IYVe1ipXuhhCfTnPeCyXBKiMlc4BP+nf0VmYzoAw==\"\r\n"
-    "\r\n"
 );
+
+static const string rs_head_signed_s =
+    ( _rs_status_origin
+    + _rs_fields_origin
+    + _rs_head_injection
+    + _rs_head_sig0
+    + _rs_head_framing
+    + _rs_head_digest
+    + _rs_head_sig1
+    + "\r\n");
 
 static const array<string, 3> rs_block_hash_cx{
     "",  // no previous block to hash
