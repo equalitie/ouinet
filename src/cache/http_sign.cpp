@@ -900,21 +900,62 @@ HttpSignature::verify( const http::response_header<>& rsh
 
 struct VerifyingReader::Impl {
     const util::Ed25519PublicKey pk;
+    const status_set statuses;
 
-    Impl(util::Ed25519PublicKey pk)
+    Impl(util::Ed25519PublicKey pk, status_set statuses)
         : pk(std::move(pk))
+        , statuses(std::move(statuses))
     {
     }
 
-    ouinet::http_response::Head head;  // keep for later use
+    ouinet::http_response::Head head;  // verified head; keep for later use
     std::string uri;  // for warnings, should use `Yield::log` instead
     std::string injection_id;
     boost::optional<HttpBlockSigs> bs_params;
     std::unique_ptr<util::quantized_buffer> qbuf;
 
+    boost::optional<http::status>
+    get_original_status(const http_response::Head& inh)
+    {
+        if (statuses.empty()) return boost::none;
+
+        if (statuses.find(inh.result()) == statuses.end()) {
+            LOG_WARN("Not replacing unaccepted HTTP status with original: ", inh.result());
+            return boost::none;
+        }
+
+        auto orig_status_sv = inh[http_::response_original_http_status];
+        if (orig_status_sv.empty()) return boost::none;  // no original status
+
+        auto orig_status_uo = parse::number<unsigned>(orig_status_sv);
+        if (!orig_status_uo) {
+            LOG_WARN("Ignoring malformed value of original HTTP status");
+            return boost::none;
+        }
+
+        auto orig_status = http::int_to_status(*orig_status_uo);
+        if (orig_status == http::status::unknown) {
+            LOG_WARN("Ignoring unknown value of original HTTP status: ", *orig_status_uo);
+            return boost::none;
+        }
+
+        return orig_status;
+    }
+
     optional_part
     process_part(http_response::Head inh, Cancel, asio::yield_context y)
     {
+        // Restore original status if necessary.
+        auto resp_status = inh.result();
+        auto orig_status_o = get_original_status(inh);
+        if (orig_status_o) {
+            LOG_DEBUG( "Replacing HTTP status with original for verification: "
+                     , resp_status, " -> ", *orig_status_o);
+            inh.reason("");
+            inh.result(*orig_status_o);
+            inh.erase(http_::response_original_http_status);
+            // TODO: Save `Content-Range` if `206 Partial Content`.
+        }
         // Verify head signature.
         head = cache::http_injection_verify(std::move(inh), pk);
         if (head.cbegin() == head.cend()) {
@@ -949,7 +990,15 @@ struct VerifyingReader::Impl {
             return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
         }
         qbuf = std::make_unique<util::quantized_buffer>(bs_params->size);
-        return http_response::Part(head);  // do not move
+
+        // Return head with the status we got at the beginning.
+        auto out_head = head;
+        if (orig_status_o) {
+            inh.reason("");
+            inh.result(resp_status);
+            inh.set(http_::response_original_http_status, *orig_status_o);
+        }
+        return http_response::Part(std::move(out_head));
     }
 
     size_t block_offset = 0;
@@ -1111,12 +1160,11 @@ struct VerifyingReader::Impl {
     }
 };
 
-// TODO: Do something with statuses.
 VerifyingReader::VerifyingReader( GenericStream in
                                 , util::Ed25519PublicKey pk
                                 , status_set statuses)
     : http_response::Reader(std::move(in))
-    , _impl(std::make_unique<Impl>(std::move(pk)))
+    , _impl(std::make_unique<Impl>(std::move(pk), std::move(statuses)))
 {
 }
 
