@@ -948,13 +948,21 @@ struct VerifyingReader::Impl {
         // Restore original status if necessary.
         auto resp_status = inh.result();
         auto orig_status_o = get_original_status(inh);
+        std::string resp_range;
         if (orig_status_o) {
             LOG_DEBUG( "Replacing HTTP status with original for verification: "
                      , resp_status, " -> ", *orig_status_o);
             inh.reason("");
             inh.result(*orig_status_o);
             inh.erase(http_::response_original_http_status);
-            // TODO: Save `Content-Range` if `206 Partial Content`.
+            // Save `Content-Range` if `206 Partial Content`.
+            if (resp_status == http::status::partial_content) {
+                auto rrit = inh.find(http::field::content_range);
+                if (rrit != inh.end()) {
+                    resp_range = rrit->value().to_string();
+                    inh.erase(rrit);
+                }
+            }
         }
         // Verify head signature.
         head = cache::http_injection_verify(std::move(inh), pk);
@@ -997,6 +1005,9 @@ struct VerifyingReader::Impl {
             out_head.reason("");
             out_head.result(resp_status);
             out_head.set(http_::response_original_http_status, *orig_status_o);
+            // Restore `Content-Range` if `206 Partial Content`.
+            if (resp_status == http::status::partial_content && !resp_range.empty())
+                out_head.set(http::field::content_range, resp_range);
         }
         return http_response::Part(std::move(out_head));
     }
