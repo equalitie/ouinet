@@ -994,9 +994,9 @@ struct VerifyingReader::Impl {
         // Return head with the status we got at the beginning.
         auto out_head = head;
         if (orig_status_o) {
-            inh.reason("");
-            inh.result(resp_status);
-            inh.set(http_::response_original_http_status, *orig_status_o);
+            out_head.reason("");
+            out_head.result(resp_status);
+            out_head.set(http_::response_original_http_status, *orig_status_o);
         }
         return http_response::Part(std::move(out_head));
     }
