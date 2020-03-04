@@ -997,6 +997,20 @@ struct VerifyingReader::Impl {
             LOG_WARN("Missing injection identifier in HTTP head; uri=", uri);
             return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
         }
+        // Parse range in partial responses (since it may not be signed).
+        if (!resp_range.empty()) {
+            auto br = util::HttpByteRange::parse(resp_range);
+            if (!br) {
+                LOG_WARN("Malformed byte range in HTTP head; uri=", uri);
+                return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
+            }
+            auto dszh = head[http_::response_data_size_hdr];
+            if (!br->matches_length(dszh)) {
+                LOG_WARN( "Invalid byte range in HTTP head: "
+                        , *br, " (/", dszh, "); uri=", uri);
+                return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
+            }
+        }
         qbuf = std::make_unique<util::quantized_buffer>(bs_params->size);
 
         // Return head with the status we got at the beginning.
