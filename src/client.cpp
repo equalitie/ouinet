@@ -414,7 +414,16 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
 
     http::request<http::empty_body> req;
     beast::flat_buffer buffer;
-    http::async_read(con, buffer, req, yield[ec]);
+
+    {
+        WatchDog watch_dog(_ctx , chrono::seconds(5) , [&] { con.close(); });
+
+        http::async_read(con, buffer, req, yield[ec].tag("read"));
+
+        if (!watch_dog.is_running()) {
+            return or_throw(yield, asio::error::timed_out);
+        }
+    }
 
     if (ec || cancel) return;
 
