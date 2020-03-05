@@ -735,6 +735,14 @@ static string rs_head_partial(unsigned first_block, unsigned last_block) {
         , "\r\n");
 }
 
+// Actually only the first chunk extension with a signature may need the hash.
+static const array<string, 4> rs_chunk_ext_partial{
+    "",
+    rs_block_sig_cx[0] + rs_block_hash_cx[0],
+    rs_block_sig_cx[1] + rs_block_hash_cx[1],
+    rs_block_sig_cx[2] + rs_block_hash_cx[2],
+};
+
 static const first_last block_ranges[] = {
     {0, 0},  // just first block
     {0, 1},  // two first blocks
@@ -775,14 +783,14 @@ BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
             for (bi = first_block; bi <= last_block; ++bi, first_chunk=false) {
                 auto cbd = util::bytes::to_vector<uint8_t>(rs_block_data[bi]);
                 auto ch = http_response::ChunkHdr( cbd.size()
-                                                 , first_chunk ? "" : rs_chunk_ext[bi]);
+                                                 , first_chunk ? "" : rs_chunk_ext_partial[bi]);
                 ch.async_write(signed_w, y);
                 auto cb = http_response::ChunkBody(std::move(cbd), 0);
                 cb.async_write(signed_w, y);
             }
 
             // Last chunk and empty trailer.
-            auto chZ = http_response::ChunkHdr(0, rs_chunk_ext[bi]);
+            auto chZ = http_response::ChunkHdr(0, rs_chunk_ext_partial[bi]);
             chZ.async_write(signed_w, y);
             auto tr = http_response::Trailer();
             tr.async_write(signed_w, y);
