@@ -307,10 +307,10 @@ array_size(const std::array<T, N>&) noexcept
     return N;
 }
 
-// TODO: refactor with `block_sig_from_exts`
+template<class ArrayT>
 static
-opt_block_digest_t
-block_dig_from_exts(boost::string_view xs)
+boost::optional<ArrayT>
+block_arrattr_from_exts(boost::string_view xs, const std::string& ext_name)
 {
     if (xs.empty()) return {};  // no extensions
 
@@ -320,46 +320,34 @@ block_dig_from_exts(boost::string_view xs)
     assert(!ec);  // this should have been validated upstream, fail hard otherwise
 
     auto xit = std::find_if( xp.begin(), xp.end()
-                           , [](const auto& x) {
-                                 return x.first == http_::response_block_chain_hash_ext;
+                           , [&ext_name](const auto& x) {
+                                 return x.first == ext_name;
                              });
-    if (xit == xp.end()) return {};  // no digest
+    if (xit == xp.end()) return {};  // no such extension
 
-    block_digest_t dig;
-    auto decoded_dig = util::base64_decode(xit->second);
-    if (decoded_dig.size() != array_size(dig)) {
-        LOG_WARN("Malformed data block chain hash");
+    ArrayT arr;
+    auto decoded_arr = util::base64_decode(xit->second);
+    if (decoded_arr.size() != array_size(arr)) {
+        LOG_WARN("Malformed chunk extension for data block: ", ext_name);
         return {};  // invalid Base64, invalid length
     }
 
-    dig = util::bytes::to_array<uint8_t, array_size(dig)>(decoded_dig);
-    return dig;
+    arr = util::bytes::to_array<uint8_t, array_size(arr)>(decoded_arr);
+    return arr;
+}
+
+static
+opt_block_digest_t
+block_dig_from_exts(boost::string_view xs)
+{
+    return block_arrattr_from_exts<block_digest_t>(xs, http_::response_block_chain_hash_ext);
 }
 
 static
 opt_sig_array_t
 block_sig_from_exts(boost::string_view xs)
 {
-    if (xs.empty()) return {};  // no extensions
-
-    sys::error_code ec;
-    http::chunk_extensions xp;
-    xp.parse(xs, ec);
-    assert(!ec);  // this should have been validated upstream, fail hard otherwise
-
-    auto xit = std::find_if( xp.begin(), xp.end()
-                           , [](const auto& x) {
-                                 return x.first == http_::response_block_signature_ext;
-                             });
-    if (xit == xp.end()) return {};  // no signature
-
-    auto decoded_sig = util::base64_decode(xit->second);
-    if (decoded_sig.size() != util::Ed25519PublicKey::sig_size) {
-        LOG_WARN("Malformed data block signature");
-        return {};  // invalid Base64, invalid length
-    }
-
-    return util::bytes::to_array<uint8_t, util::Ed25519PublicKey::sig_size>(decoded_sig);
+    return block_arrattr_from_exts<sig_array_t>(xs, http_::response_block_signature_ext);
 }
 
 static
