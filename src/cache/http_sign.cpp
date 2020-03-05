@@ -1173,6 +1173,8 @@ struct VerifyingReader::Impl {
         LOG_DEBUG("Body matches signed or range length: ", exp_body_length, "; uri=", uri);
 
         // Get body digest value.
+        if (range_begin && (*range_begin > 0 || *range_end < *h_body_length))
+            return;  // partial body, cannot check digest
         auto b_digest = http_digest(body_hash);
         auto b_digest_s = split_string_pair(b_digest, '=');
 
