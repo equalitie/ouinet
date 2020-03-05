@@ -772,7 +772,7 @@ BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
             // We start on the first block of the partial range.
             bool first_chunk = true;
             unsigned bi;
-            for (bi = first_block; bi < last_block; ++bi, first_chunk=false) {
+            for (bi = first_block; bi <= last_block; ++bi, first_chunk=false) {
                 auto cbd = util::bytes::to_vector<uint8_t>(rs_block_data[bi]);
                 auto ch = http_response::ChunkHdr( cbd.size()
                                                  , first_chunk ? "" : rs_chunk_ext[bi]);
