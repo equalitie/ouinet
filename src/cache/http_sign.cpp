@@ -299,6 +299,43 @@ http_decode_key_id(boost::string_view key_id)
     return util::Ed25519PublicKey(std::move(pk_array));
 }
 
+template<typename T, size_t N>
+constexpr
+size_t
+array_size(const std::array<T, N>&) noexcept
+{
+    return N;
+}
+
+// TODO: refactor with `block_sig_from_exts`
+static
+opt_block_digest_t
+block_dig_from_exts(boost::string_view xs)
+{
+    if (xs.empty()) return {};  // no extensions
+
+    sys::error_code ec;
+    http::chunk_extensions xp;
+    xp.parse(xs, ec);
+    assert(!ec);  // this should have been validated upstream, fail hard otherwise
+
+    auto xit = std::find_if( xp.begin(), xp.end()
+                           , [](const auto& x) {
+                                 return x.first == http_::response_block_chain_hash_ext;
+                             });
+    if (xit == xp.end()) return {};  // no digest
+
+    block_digest_t dig;
+    auto decoded_dig = util::base64_decode(xit->second);
+    if (decoded_dig.size() != array_size(dig)) {
+        LOG_WARN("Malformed data block chain hash");
+        return {};  // invalid Base64, invalid length
+    }
+
+    dig = util::bytes::to_array<uint8_t, array_size(dig)>(decoded_dig);
+    return dig;
+}
+
 static
 opt_sig_array_t
 block_sig_from_exts(boost::string_view xs)
@@ -1062,6 +1099,18 @@ struct VerifyingReader::Impl {
         if (!block_sig) {
             LOG_WARN("Missing signature for data block with offset ", block_offset, "; uri=", uri);
             return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
+        }
+        // We lack the chain hash of the previous data blocks,
+        // it should have been included along this block's signature.
+        if (range_begin && block_offset > 0 && block_offset == *range_begin) {
+            assert(!prev_block_dig);
+            prev_block_dig = block_dig_from_exts(inch.exts);
+            if (!prev_block_dig) {
+                LOG_WARN( "Missing chain hash for data block with offset "
+                        , block_offset - bs_params->size, "; uri=", uri);
+                return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
+            }
+            block_hash.update(*prev_block_dig);
         }
         // Complete hash for the data block; note that HASH[0]=SHA2-512(BLOCK[0])
         block_hash.update(block_buf);
