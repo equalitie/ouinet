@@ -11,6 +11,7 @@
 #include <boost/regex.hpp>
 
 #include "../defer.h"
+#include "../http_util.h"
 #include "../logger.h"
 #include "../or_throw.h"
 #include "../parse/number.h"
@@ -377,12 +378,8 @@ private:
             if (*range_end > ds) range_end = ds;
 
             // Report resulting range.
-            auto first = *range_begin;
-            auto last = *range_end - 1;
             head.set( http::field::content_range
-                    , data_size
-                      ? util::str("bytes ", first, '-' , last, '/', *data_size)
-                      : util::str("bytes ", first, '-' , last, "/*"));
+                    , util::HttpByteRange{*range_begin, *range_end - 1, data_size});
         }
 
         // The stored head should not have framing headers,
@@ -627,7 +624,7 @@ _http_store_reader_v1( const fs::path& dirp, asio::executor ex
         if ( *range_first >= body_size
            || *range_last >= body_size) {
             _WARN( "Requested range goes beyond stored data: "
-                 , *range_first, "-", *range_last, "/", body_size);
+                 , util::HttpByteRange{*range_first, *range_last, body_size});
             ec = sys::errc::make_error_code(sys::errc::invalid_seek);
             return nullptr;
         }
