@@ -912,6 +912,8 @@ struct VerifyingReader::Impl {
     std::string uri;  // for warnings, should use `Yield::log` instead
     std::string injection_id;
     boost::optional<HttpBlockSigs> bs_params;
+    boost::optional<size_t> range_begin, range_end;
+    size_t block_offset = 0;
     std::unique_ptr<util::quantized_buffer> qbuf;
 
     boost::optional<http::status>
@@ -1010,6 +1012,8 @@ struct VerifyingReader::Impl {
                         , *br, " (/", dszh, "); uri=", uri);
                 return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
             }
+            range_begin = block_offset = br->first;
+            range_end = br->last + 1;
         }
         qbuf = std::make_unique<util::quantized_buffer>(bs_params->size);
 
@@ -1026,7 +1030,6 @@ struct VerifyingReader::Impl {
         return http_response::Part(std::move(out_head));
     }
 
-    size_t block_offset = 0;
     util::SHA512 block_hash;
     opt_sig_array_t prev_block_sig;
     opt_block_digest_t block_dig, prev_block_dig;
