@@ -95,6 +95,15 @@ public:
     void start(const asio::executor& ex, Duration d, OnTimeout on_timeout) {
         stop();
 
+        // This is defined in boost/libs/coroutine/src/{posix,windows}/stack_traits.cpp
+        // It seems to be defined to an arbitrary number 8*1024. I.e. it
+        // doesn't seem to be derived from sizes of some internal structures of
+        // the coroutine library.
+        size_t min_coro_size = boost::coroutines::stack_traits::minimum_size();
+
+        boost::coroutines::attributes attribs;
+        attribs.size = min_coro_size;
+
         asio::spawn(ex, [self_ = this, ex, d, on_timeout = std::move(on_timeout)]
                          (asio::yield_context yield) mutable {
             TRACK_HANDLER();
@@ -118,7 +127,7 @@ public:
             }
 
             on_timeout();
-        });
+        }, attribs);
     }
 
     Clock::duration stop()
