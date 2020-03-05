@@ -1047,10 +1047,12 @@ struct VerifyingReader::Impl {
         // Have we buffered a whole data block?
         // An empty data block is fine if this is the last chunk header
         // (a chunk for it will not be produced, though).
-        auto block_buf =
-            (inch.size > 0) ? qbuf->get() : qbuf->get_rest();  // send rest if no more chunks
-        if (block_buf.size() == 0 && inch.size > 0)
-            return boost::none;
+        auto block_buf = qbuf->get();
+        if (block_buf.size() == 0)
+            if (inch.size == 0)
+                block_buf = qbuf->get_rest();  // send rest if no more chunks
+            else
+                return boost::none;
 
         // Verify the whole data block.
         auto block_sig = block_sig_from_exts(inch.exts);
