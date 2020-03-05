@@ -1161,13 +1161,16 @@ struct VerifyingReader::Impl {
             ec = sys::errc::make_error_code(sys::errc::bad_message);
             return;
         }
-        if (*h_body_length != body_length) {
-            LOG_WARN( "Body length mismatch: ", *h_body_length, "!=", body_length
+        auto exp_body_length = ( range_begin
+                               ? *range_end - *range_begin
+                               : *h_body_length);
+        if (exp_body_length != body_length) {
+            LOG_WARN( "Body length mismatch: ", body_length, "!=", exp_body_length
                     , "; uri=", uri);
             ec = sys::errc::make_error_code(sys::errc::bad_message);
             return;
         }
-        LOG_DEBUG("Body matches signed length: ", body_length, "; uri=", uri);
+        LOG_DEBUG("Body matches signed or range length: ", exp_body_length, "; uri=", uri);
 
         // Get body digest value.
         auto b_digest = http_digest(body_hash);
