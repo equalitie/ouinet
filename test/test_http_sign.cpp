@@ -1,4 +1,5 @@
 #define BOOST_TEST_MODULE http_sign
+#include <boost/test/data/test_case.hpp>
 #include <boost/test/included/unit_test.hpp>
 
 #include <array>
@@ -25,6 +26,17 @@
 
 #include <namespaces.h>
 #include "connected_pair.h"
+
+using first_last = std::pair<unsigned, unsigned>;
+// <https://stackoverflow.com/a/33965517>
+namespace boost { namespace test_tools { namespace tt_detail {
+    template<>
+    struct print_log_value<first_last> {
+        void operator()(std::ostream& os, const first_last& p) {
+            os << "{" << p.first << ", " << p.second << "}";
+        }
+    };
+}}} // namespace boost::test_tools::tt_detail
 
 BOOST_AUTO_TEST_SUITE(ouinet_http_sign)
 
@@ -72,33 +84,45 @@ static const string inj_b64pk = "DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=";
 // the example will need to be updated,
 // but the signature should stay the same.
 // If comparing the whole head becomes too tricky, just check `X-Ouinet-Sig0`.
-static const string rs_head_signed_s = (
-    "HTTP/1.1 200 OK\r\n"
+static const string _rs_status_origin =
+    "HTTP/1.1 200 OK\r\n";
+
+static const string _rs_fields_origin = (
     "Date: Mon, 15 Jan 2018 20:31:50 GMT\r\n"
     "Server: Apache1\r\n"
     "Server: Apache2\r\n"
     "Content-Type: text/html\r\n"
     "Content-Disposition: inline; filename=\"foo.html\"\r\n"
+);
 
+static const string _rs_head_injection = (
     "X-Ouinet-Version: 3\r\n"
     "X-Ouinet-URI: https://example.com/foo\r\n"
     "X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310\r\n"
     "X-Ouinet-BSigs: keyId=\"ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=\","
     "algorithm=\"hs2019\",size=65536\r\n"
+);
 
+static const string _rs_head_sig0 = (
     "X-Ouinet-Sig0: keyId=\"ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=\","
     "algorithm=\"hs2019\",created=1516048310,"
     "headers=\"(response-status) (created) "
     "date server content-type content-disposition "
     "x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-bsigs\","
     "signature=\"tnVAAW/8FJs2PRgtUEwUYzMxBBlZpd7Lx3iucAt9q5hYXuY5ci9T7nEn7UxyKMGA1ZvnDMDBbs40dO1OQUkdCA==\"\r\n"
+);
 
+static const string _rs_head_framing = (
     "Transfer-Encoding: chunked\r\n"
     "Trailer: X-Ouinet-Data-Size, Digest, X-Ouinet-Sig1\r\n"
+);
 
+static const string _rs_head_digest = (
     "X-Ouinet-Data-Size: 131076\r\n"
     "Digest: SHA-256=E4RswXyAONCaILm5T/ZezbHI87EKvKIdxURKxiVHwKE=\r\n"
+);
 
+static const string _rs_head_sig1 = (
     "X-Ouinet-Sig1: keyId=\"ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=\","
     "algorithm=\"hs2019\",created=1516048311,"
     "headers=\"(response-status) (created) "
@@ -107,8 +131,17 @@ static const string rs_head_signed_s = (
     "x-ouinet-data-size "
     "digest\","
     "signature=\"h/PmOlFvScNzDAUvV7tLNjoA0A39OL67/9wbfrzqEY7j47IYVe1ipXuhhCfTnPeCyXBKiMlc4BP+nf0VmYzoAw==\"\r\n"
-    "\r\n"
 );
+
+static const string rs_head_signed_s =
+    ( _rs_status_origin
+    + _rs_fields_origin
+    + _rs_head_injection
+    + _rs_head_sig0
+    + _rs_head_framing
+    + _rs_head_digest
+    + _rs_head_sig1
+    + "\r\n");
 
 static const array<string, 3> rs_block_hash_cx{
     "",  // no previous block to hash
@@ -662,6 +695,122 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
                 BOOST_REQUIRE(!e);
             }
             BOOST_CHECK_EQUAL(xidx, rs_block_hash_cx.size());
+            tested_w.close();
+        });
+
+        // Black hole.
+        asio::spawn(ctx, [&tested_r, lock = wc.lock()] (auto y) {
+            char d[2048];
+            asio::mutable_buffer b(d, sizeof(d));
+
+            sys::error_code e;
+            while (!e) asio::async_read(tested_r, b, y[e]);
+            BOOST_REQUIRE(e == asio::error::eof || !e);
+            tested_r.close();
+        });
+
+        wc.wait(yield);
+    });
+}
+
+// About the blocks in the requested data range:
+//
+//     We have: [ 64K ][ 64K ][ 4B ]
+//     We want:          [32K][2B]
+//     We get:         [ 64K ][ 4B ]
+//
+static string rs_head_partial(unsigned first_block, unsigned last_block) {
+    size_t first = first_block * http_::response_data_block;
+    size_t last = ( (last_block * http_::response_data_block)
+                  + rs_block_data[last_block].size() - 1);
+    return util::str
+        ( "HTTP/1.1 206 Partial Content\r\n"
+        , _rs_fields_origin
+        , _rs_head_injection
+        , _rs_head_digest
+        , _rs_head_sig1
+        , "X-Ouinet-HTTP-Status: 200\r\n"
+        , "Content-Range: bytes ", first, '-', last, "/131076\r\n"
+        , "Transfer-Encoding: chunked\r\n"
+        , "\r\n");
+}
+
+// Actually only the first chunk extension with a signature may need the hash.
+static const array<string, 4> rs_chunk_ext_partial{
+    "",
+    rs_block_sig_cx[0] + rs_block_hash_cx[0],
+    rs_block_sig_cx[1] + rs_block_hash_cx[1],
+    rs_block_sig_cx[2] + rs_block_hash_cx[2],
+};
+
+static const first_last block_ranges[] = {
+    {0, 0},  // just first block
+    {0, 1},  // two first blocks
+    {0, 2},  // all blocks
+    {1, 2},  // two last blocks
+    {2, 2},  // just last block
+};
+
+BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
+                    , boost::unit_test::data::make(block_ranges), firstb_lastb) {
+    asio::io_context ctx;
+    run_spawned(ctx, [&] (auto yield) {
+        WaitCondition wc(ctx);
+
+        asio::ip::tcp::socket
+            signed_w(ctx), signed_r(ctx),
+            tested_w(ctx), tested_r(ctx);
+        tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
+        tie(tested_w, tested_r) = util::connected_pair(ctx, yield);
+
+        unsigned first_block, last_block;
+        tie(first_block, last_block) = firstb_lastb;
+
+        // Send partial response.
+        asio::spawn(ctx, [ &signed_w
+                         , first_block, last_block
+                         , lock = wc.lock()] (auto y) {
+            // Head (raw).
+            auto rsp_head = rs_head_partial(first_block, last_block);
+            asio::async_write( signed_w
+                             , asio::const_buffer(rsp_head.data(), rsp_head.size())
+                             , y);
+
+            // Chunk headers and bodies (one chunk per block).
+            // We start on the first block of the partial range.
+            bool first_chunk = true;
+            unsigned bi;
+            for (bi = first_block; bi <= last_block; ++bi, first_chunk=false) {
+                auto cbd = util::bytes::to_vector<uint8_t>(rs_block_data[bi]);
+                auto ch = http_response::ChunkHdr( cbd.size()
+                                                 , first_chunk ? "" : rs_chunk_ext_partial[bi]);
+                ch.async_write(signed_w, y);
+                auto cb = http_response::ChunkBody(std::move(cbd), 0);
+                cb.async_write(signed_w, y);
+            }
+
+            // Last chunk and empty trailer.
+            auto chZ = http_response::ChunkHdr(0, rs_chunk_ext_partial[bi]);
+            chZ.async_write(signed_w, y);
+            auto tr = http_response::Trailer();
+            tr.async_write(signed_w, y);
+
+            signed_w.close();
+        });
+
+        // Test the loaded response.
+        asio::spawn(ctx, [ signed_r = std::move(signed_r), &tested_w
+                         , lock = wc.lock()] (auto y) mutable {
+            Cancel cancel;
+            sys::error_code e;
+            auto pk = get_public_key();
+            Session::reader_uptr signed_rvr = make_unique<cache::VerifyingReader>
+                ( move(signed_r), pk
+                , cache::VerifyingReader::status_set{http::status::partial_content});
+            auto signed_rs = Session::create(move(signed_rvr), cancel, y[e]);
+            BOOST_REQUIRE_EQUAL(e.message(), "Success");
+            signed_rs.flush_response(tested_w, cancel, y[e]);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
             tested_w.close();
         });
 

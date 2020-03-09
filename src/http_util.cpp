@@ -1,6 +1,7 @@
 #include "http_util.h"
 
 #include <boost/asio/error.hpp>
+#include <boost/regex.hpp>
 #include <network/uri.hpp>
 
 #include "logger.h"
@@ -49,6 +50,56 @@ ouinet::util::get_host_port(const http::request<http::string_body>& req)
         host = host.substr(1, host.length() - 2);
 
     return make_pair(host, port);
+}
+
+boost::optional<ouinet::util::HttpByteRange>
+ouinet::util::HttpByteRange::parse(boost::string_view s)
+{
+    static const boost::regex range_rx("^bytes ([0-9]+)-([0-9]+)/([0-9]+|\\*)$");
+    boost::cmatch m;
+    if (!boost::regex_match(s.begin(), s.end(), m, range_rx))
+        return boost::none;
+
+    // Get values, check for overflows.
+    s.remove_prefix(m.position(1));
+    auto first = parse::number<size_t>(s);
+    if (!first) return boost::none;
+    s.remove_prefix(1);  // '-'
+    auto last = parse::number<size_t>(s);
+    if (!last) return boost::none;
+    s.remove_prefix(1);  // '/'
+    auto length = parse::number<size_t>(s);
+    if (m[3] != "*" && !length) return boost::none;
+
+    if ( (*last < *first)
+       || (length && *last >= *length))
+        return boost::none;  // off-limits
+
+    return ouinet::util::HttpByteRange{*first, *last, std::move(length)};
+}
+
+bool
+ouinet::util::HttpByteRange::matches_length(size_t s) const {
+    if (!length) return false;  // it should have a value
+    if (*length != s) return false;  // values do not match
+    return true;
+}
+
+bool
+ouinet::util::HttpByteRange::matches_length(boost::string_view ls) const {
+    auto s = parse::number<size_t>(ls);
+    if (s) return matches_length(*s);
+    if (length) return false;  // length should be "*"
+    return true;  // length is "*"
+}
+
+std::ostream&
+ouinet::util::operator<<( std::ostream& os
+                        , const ouinet::util::HttpByteRange& br)
+{
+    os << "bytes " << br.first << '-' << br.last << '/';
+    if (br.length) return os << *(br.length);
+    return os << '*';
 }
 
 #ifdef __SANITIZE_ADDRESS__

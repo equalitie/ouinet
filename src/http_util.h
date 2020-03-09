@@ -30,6 +30,27 @@ std::pair<std::string, std::string>
 get_host_port(const http::request<http::string_body>&);
 
 ///////////////////////////////////////////////////////////////////////////////
+// Helps parsing and printing contents of `Content-Range` headers.
+struct HttpByteRange {
+    size_t first;
+    size_t last;
+    boost::optional<size_t> length;
+
+    static
+    boost::optional<HttpByteRange>
+    parse(boost::string_view);
+
+    bool
+    matches_length(size_t) const;
+
+    bool
+    matches_length(boost::string_view) const;
+};
+
+std::ostream&
+operator<<(std::ostream&, const HttpByteRange&);
+
+///////////////////////////////////////////////////////////////////////////////
 // Returns ptime() if parsing fails.
 boost::posix_time::ptime parse_date(beast::string_view);
 std::string format_date(boost::posix_time::ptime);

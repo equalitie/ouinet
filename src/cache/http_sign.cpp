@@ -299,9 +299,18 @@ http_decode_key_id(boost::string_view key_id)
     return util::Ed25519PublicKey(std::move(pk_array));
 }
 
+template<typename T, size_t N>
+constexpr
+size_t
+array_size(const std::array<T, N>&) noexcept
+{
+    return N;
+}
+
+template<class ArrayT>
 static
-opt_sig_array_t
-block_sig_from_exts(boost::string_view xs)
+boost::optional<ArrayT>
+block_arrattr_from_exts(boost::string_view xs, const std::string& ext_name)
 {
     if (xs.empty()) return {};  // no extensions
 
@@ -311,18 +320,34 @@ block_sig_from_exts(boost::string_view xs)
     assert(!ec);  // this should have been validated upstream, fail hard otherwise
 
     auto xit = std::find_if( xp.begin(), xp.end()
-                           , [](const auto& x) {
-                                 return x.first == http_::response_block_signature_ext;
+                           , [&ext_name](const auto& x) {
+                                 return x.first == ext_name;
                              });
-    if (xit == xp.end()) return {};  // no signature
+    if (xit == xp.end()) return {};  // no such extension
 
-    auto decoded_sig = util::base64_decode(xit->second);
-    if (decoded_sig.size() != util::Ed25519PublicKey::sig_size) {
-        LOG_WARN("Malformed data block signature");
+    ArrayT arr;
+    auto decoded_arr = util::base64_decode(xit->second);
+    if (decoded_arr.size() != array_size(arr)) {
+        LOG_WARN("Malformed chunk extension for data block: ", ext_name);
         return {};  // invalid Base64, invalid length
     }
 
-    return util::bytes::to_array<uint8_t, util::Ed25519PublicKey::sig_size>(decoded_sig);
+    arr = util::bytes::to_array<uint8_t, array_size(arr)>(decoded_arr);
+    return arr;
+}
+
+static
+opt_block_digest_t
+block_dig_from_exts(boost::string_view xs)
+{
+    return block_arrattr_from_exts<block_digest_t>(xs, http_::response_block_chain_hash_ext);
+}
+
+static
+opt_sig_array_t
+block_sig_from_exts(boost::string_view xs)
+{
+    return block_arrattr_from_exts<sig_array_t>(xs, http_::response_block_signature_ext);
 }
 
 static
@@ -900,21 +925,72 @@ HttpSignature::verify( const http::response_header<>& rsh
 
 struct VerifyingReader::Impl {
     const util::Ed25519PublicKey pk;
+    const status_set statuses;
 
-    Impl(util::Ed25519PublicKey pk)
+    Impl(util::Ed25519PublicKey pk, status_set statuses)
         : pk(std::move(pk))
+        , statuses(std::move(statuses))
     {
     }
 
-    ouinet::http_response::Head head;  // keep for later use
+    ouinet::http_response::Head head;  // verified head; keep for later use
     std::string uri;  // for warnings, should use `Yield::log` instead
     std::string injection_id;
     boost::optional<HttpBlockSigs> bs_params;
+    boost::optional<size_t> range_begin, range_end;
+    size_t block_offset = 0;
     std::unique_ptr<util::quantized_buffer> qbuf;
+
+    boost::optional<http::status>
+    get_original_status(const http_response::Head& inh)
+    {
+        if (statuses.empty()) return boost::none;
+
+        if (statuses.find(inh.result()) == statuses.end()) {
+            LOG_WARN("Not replacing unaccepted HTTP status with original: ", inh.result());
+            return boost::none;
+        }
+
+        auto orig_status_sv = inh[http_::response_original_http_status];
+        if (orig_status_sv.empty()) return boost::none;  // no original status
+
+        auto orig_status_uo = parse::number<unsigned>(orig_status_sv);
+        if (!orig_status_uo) {
+            LOG_WARN("Ignoring malformed value of original HTTP status");
+            return boost::none;
+        }
+
+        auto orig_status = http::int_to_status(*orig_status_uo);
+        if (orig_status == http::status::unknown) {
+            LOG_WARN("Ignoring unknown value of original HTTP status: ", *orig_status_uo);
+            return boost::none;
+        }
+
+        return orig_status;
+    }
 
     optional_part
     process_part(http_response::Head inh, Cancel, asio::yield_context y)
     {
+        // Restore original status if necessary.
+        auto resp_status = inh.result();
+        auto orig_status_o = get_original_status(inh);
+        std::string resp_range;
+        if (orig_status_o) {
+            LOG_DEBUG( "Replacing HTTP status with original for verification: "
+                     , resp_status, " -> ", *orig_status_o);
+            inh.reason("");
+            inh.result(*orig_status_o);
+            inh.erase(http_::response_original_http_status);
+            // Save `Content-Range` if `206 Partial Content`.
+            if (resp_status == http::status::partial_content) {
+                auto rrit = inh.find(http::field::content_range);
+                if (rrit != inh.end()) {
+                    resp_range = rrit->value().to_string();
+                    inh.erase(rrit);
+                }
+            }
+        }
         // Verify head signature.
         head = cache::http_injection_verify(std::move(inh), pk);
         if (head.cbegin() == head.cend()) {
@@ -948,11 +1024,37 @@ struct VerifyingReader::Impl {
             LOG_WARN("Missing injection identifier in HTTP head; uri=", uri);
             return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
         }
+        // Parse range in partial responses (since it may not be signed).
+        if (!resp_range.empty()) {
+            auto br = util::HttpByteRange::parse(resp_range);
+            if (!br) {
+                LOG_WARN("Malformed byte range in HTTP head; uri=", uri);
+                return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
+            }
+            auto dszh = head[http_::response_data_size_hdr];
+            if (!br->matches_length(dszh)) {
+                LOG_WARN( "Invalid byte range in HTTP head: "
+                        , *br, " (/", dszh, "); uri=", uri);
+                return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
+            }
+            range_begin = block_offset = br->first;
+            range_end = br->last + 1;
+        }
         qbuf = std::make_unique<util::quantized_buffer>(bs_params->size);
-        return http_response::Part(head);  // do not move
+
+        // Return head with the status we got at the beginning.
+        auto out_head = head;
+        if (orig_status_o) {
+            out_head.reason("");
+            out_head.result(resp_status);
+            out_head.set(http_::response_original_http_status, *orig_status_o);
+            // Restore `Content-Range` if `206 Partial Content`.
+            if (resp_status == http::status::partial_content && !resp_range.empty())
+                out_head.set(http::field::content_range, resp_range);
+        }
+        return http_response::Part(std::move(out_head));
     }
 
-    size_t block_offset = 0;
     util::SHA512 block_hash;
     opt_sig_array_t prev_block_sig;
     opt_block_digest_t block_dig, prev_block_dig;
@@ -973,16 +1075,30 @@ struct VerifyingReader::Impl {
         // Have we buffered a whole data block?
         // An empty data block is fine if this is the last chunk header
         // (a chunk for it will not be produced, though).
-        auto block_buf =
-            (inch.size > 0) ? qbuf->get() : qbuf->get_rest();  // send rest if no more chunks
-        if (block_buf.size() == 0 && inch.size > 0)
-            return boost::none;
+        auto block_buf = qbuf->get();
+        if (block_buf.size() == 0)
+            if (inch.size == 0)
+                block_buf = qbuf->get_rest();  // send rest if no more chunks
+            else
+                return boost::none;
 
         // Verify the whole data block.
         auto block_sig = block_sig_from_exts(inch.exts);
         if (!block_sig) {
             LOG_WARN("Missing signature for data block with offset ", block_offset, "; uri=", uri);
             return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
+        }
+        // We lack the chain hash of the previous data blocks,
+        // it should have been included along this block's signature.
+        if (range_begin && block_offset > 0 && block_offset == *range_begin) {
+            assert(!prev_block_dig);
+            prev_block_dig = block_dig_from_exts(inch.exts);
+            if (!prev_block_dig) {
+                LOG_WARN( "Missing chain hash for data block with offset "
+                        , block_offset - bs_params->size, "; uri=", uri);
+                return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
+            }
+            block_hash.update(*prev_block_dig);
         }
         // Complete hash for the data block; note that HASH[0]=SHA2-512(BLOCK[0])
         block_hash.update(block_buf);
@@ -1082,15 +1198,20 @@ struct VerifyingReader::Impl {
             ec = sys::errc::make_error_code(sys::errc::bad_message);
             return;
         }
-        if (*h_body_length != body_length) {
-            LOG_WARN( "Body length mismatch: ", *h_body_length, "!=", body_length
+        auto exp_body_length = ( range_begin
+                               ? *range_end - *range_begin
+                               : *h_body_length);
+        if (exp_body_length != body_length) {
+            LOG_WARN( "Body length mismatch: ", body_length, "!=", exp_body_length
                     , "; uri=", uri);
             ec = sys::errc::make_error_code(sys::errc::bad_message);
             return;
         }
-        LOG_DEBUG("Body matches signed length: ", body_length, "; uri=", uri);
+        LOG_DEBUG("Body matches signed or range length: ", exp_body_length, "; uri=", uri);
 
         // Get body digest value.
+        if (range_begin && (*range_begin > 0 || *range_end < *h_body_length))
+            return;  // partial body, cannot check digest
         auto b_digest = http_digest(body_hash);
         auto b_digest_s = split_string_pair(b_digest, '=');
 
@@ -1112,9 +1233,10 @@ struct VerifyingReader::Impl {
 };
 
 VerifyingReader::VerifyingReader( GenericStream in
-                                , util::Ed25519PublicKey pk)
+                                , util::Ed25519PublicKey pk
+                                , status_set statuses)
     : http_response::Reader(std::move(in))
-    , _impl(std::make_unique<Impl>(std::move(pk)))
+    , _impl(std::make_unique<Impl>(std::move(pk), std::move(statuses)))
 {
 }
 
