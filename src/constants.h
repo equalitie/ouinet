@@ -32,8 +32,9 @@ static const std::string protocol_version_hdr_v0 = "0";
 static const std::string protocol_version_hdr_v1 = "1";
 static const std::string protocol_version_hdr_v2 = "2";
 static const std::string protocol_version_hdr_v3 = "3";
-static const std::string protocol_version_hdr_current = protocol_version_hdr_v3;
-static const unsigned protocol_version_current = 3;
+static const std::string protocol_version_hdr_v4 = "4";
+static const std::string protocol_version_hdr_current = protocol_version_hdr_v4;
+static const unsigned protocol_version_current = 4;
 
 // The presence of this HTTP request header
 // indicates that an error happened processing the request,
