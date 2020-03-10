@@ -80,7 +80,7 @@ static const string _rs_head_sig0 = (
     "headers=\"(response-status) (created) "
     "date server content-type content-disposition "
     "x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-bsigs\","
-    "signature=\"LEmRkc1fx4wrvuBSwpIFE67M73XZ4NSVcsRrz5m3vujXffOh2XbJ3PDm0Lz+dZc2f5/PdSJoHqhaDeLIsCHuCQ==\"\r\n"
+    "signature=\"UvcvmTPLGnmG3Bk2xdIBZ2Mw5V6enCXqyS3jReRev/o7ZvtKrSujnyHUEpHQ3pM+axfjw1vAznE4+mhMXTVdAg==\"\r\n"
 );
 
 static const string _rs_head_framing = (

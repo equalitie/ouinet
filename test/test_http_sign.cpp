@@ -109,7 +109,7 @@ static const string _rs_head_sig0 = (
     "headers=\"(response-status) (created) "
     "date server content-type content-disposition "
     "x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-bsigs\","
-    "signature=\"LEmRkc1fx4wrvuBSwpIFE67M73XZ4NSVcsRrz5m3vujXffOh2XbJ3PDm0Lz+dZc2f5/PdSJoHqhaDeLIsCHuCQ==\"\r\n"
+    "signature=\"UvcvmTPLGnmG3Bk2xdIBZ2Mw5V6enCXqyS3jReRev/o7ZvtKrSujnyHUEpHQ3pM+axfjw1vAznE4+mhMXTVdAg==\"\r\n"
 );
 
 static const string _rs_head_framing = (
@@ -222,7 +222,7 @@ BOOST_AUTO_TEST_CASE(test_http_sign) {
 
     const auto sk = get_private_key();
     const auto key_id = cache::http_key_id_for_injection(sk.public_key());
-    BOOST_REQUIRE(key_id == ("ed25519=" + inj_b64pk));
+    BOOST_REQUIRE_EQUAL(key_id, ("ed25519=" + inj_b64pk));
 
     rs_head = cache::http_injection_head(req_h, std::move(rs_head), inj_id, inj_ts, sk, key_id);
 
@@ -236,7 +236,7 @@ BOOST_AUTO_TEST_CASE(test_http_sign) {
 
     std::stringstream rs_head_ss;
     rs_head_ss << rs_head;
-    BOOST_REQUIRE(rs_head_ss.str() == rs_head_signed_s);
+    BOOST_REQUIRE_EQUAL(rs_head_ss.str(), rs_head_signed_s);
 
 }
 
