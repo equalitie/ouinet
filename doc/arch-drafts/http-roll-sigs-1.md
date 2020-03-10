@@ -110,6 +110,8 @@ If a client sends an HTTP range request to another client, the later aligns it t
 
 [RFC7233#4.1]: https://tools.ietf.org/html/rfc7233#section-4.1
 
+Also note that partial responses mush have a `206 Partial Content` status, which would break signature verification.  To avoid this issue, the original response status code (usually `200`) is saved to the `X-Ouinet-HTTP-Status` header, and head verification should automatically replace the `206` status (if so allowed) with the saved one (only for verification purposes).
+
 HTTP range requests from client to injector may not be supported since the injector would need to download all data from the beginning to compute an initial `ouihash`.  This could be abused to make the injector use resources by asking for the last block of a big file.  At any rate, in such an injection, `Digest:` and `X-Ouinet-Data-Size:` may be missing in the final response head, if the injector did not have access to the whole body data.  Also, the (aligned) `Content-Range:` header would never be signed to allow later sharing of different subranges, which can be validated independently anyway.
 
 ## Issues
