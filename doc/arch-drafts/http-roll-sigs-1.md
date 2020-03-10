@@ -35,7 +35,7 @@ When the injector gets an injection request from the client, it gets the respons
 
 This signature is provided so that the partial response (head an body) can still be useful if the connection is interrupted later on.
 
-The injector then sends data blocks of the size specified above (the last one may be smaller), each of them followed by a **data block signature** bound to its own data, previous blocks' data, and injection.  The client need not check the signatures but it can save them to provide them to other clients in case the connection to the injector is interrupted.
+The injector then sends data blocks of the size specified above (the last one may be smaller), each of them followed by a **data block signature** bound to its injection, offset, previous blocks' data, and its own data.  The client need not check the signatures but it can save them to provide them to other clients in case the connection to the injector is interrupted.
 
 When all data blocks have been sent to the client, the injector sends additional headers to build the **final response head** including:
 
@@ -54,7 +54,7 @@ Please note that neither the partial signature nor framing headers (`Transfer-En
 
 ```
 HTTP/1.1 200 OK
-X-Ouinet-Version: 3
+X-Ouinet-Version: 4
 X-Ouinet-URI: https://example.com/foo
 X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
 Date: Mon, 15 Jan 2018 20:31:50 GMT
@@ -70,11 +70,11 @@ Trailer: Digest, X-Ouinet-Data-Size, X-Ouinet-Sig1
 
 80000
 0123456789...
-80000;ouisig=BASE64(BSIG(d607…e58d NUL HASH[0]=SHA2-512(BLOCK[0])))
+80000;ouisig=BASE64(BSIG(d607…e58d NUL 0 NUL HASH[0]=SHA2-512(BLOCK[0])))
 0123456789...
-4;ouisig=BASE64(BSIG(d607…e58d NUL HASH[1]=SHA2-512(HASH[0] BLOCK[1])))
+4;ouisig=BASE64(BSIG(d607…e58d NUL 1048576 NUL HASH[1]=SHA2-512(HASH[0] BLOCK[1])))
 abcd
-0;ouisig=BASE64(BSIG(d607…e58d NUL HASH[2]=SHA2-512(HASH[1] BLOCK[2])))
+0;ouisig=BASE64(BSIG(d607…e58d NUL 2097152 NUL HASH[2]=SHA2-512(HASH[1] BLOCK[2])))
 Digest: SHA-256=BASE64(SHA2-256(FULL_BODY))
 X-Ouinet-Data-Size: 1048580
 X-Ouinet-Sig1: keyId="ed25519=????",algorithm="hs2019",created=1516048311,
@@ -84,11 +84,15 @@ X-Ouinet-Sig1: keyId="ed25519=????",algorithm="hs2019",created=1516048311,
 
 The signature for a given block comes in a chunk extension in the chunk right after the block's end (for the last block, in the final chunk); if the signature was placed at the beginning of the block, the injector would need to buffer the whole block in memory before sending the corresponding chunks.
 
-The signature string for each block covers the following values (separated by a null character):
+The signature string for each block covers the following values (separated by null characters):
 
   - The injection identifier (string).
 
     This helps avoid replay attacks where the attacker sends correctly signed but different blocks from a different injection (for the same or a different URI).
+
+  - The offset (decimal, no padding).
+
+    This helps detecting an attacker which replies to a range request with a range of the expected length, with correctly signed and ordered blocks, that however starts at the wrong offset.
 
   - A **chain hash** (binary) computed from the chain hash of the previous block and the data of the block itself: for the i-th block, `HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])`, with `HASH[0]=SHA2-512(BLOCK[0])`.
 
@@ -106,11 +110,13 @@ If a client got to get and save a full response from the injector, it may send t
 
 ## Range requests
 
-If a client sends an HTTP range request to another client, the later aligns it to block boundaries (this is acceptable according to [RFC7233#4.1][] — "a client cannot rely on receiving the same ranges that it requested").  The `Range:` header in the response is not part of the partial nor final signatures.  If the range does not start at the beginning of the data, the first block `i` is accompanied with a `ouihash=BASE64(HASH[i-1])` chunk extension to enable checking its `ouisig`.  Please note that to ease serving range requests, a client storing a response may cache all chain hashes along their blocks, so as to avoid having to compute the `ouihash` of the first block in the range.
+If a client sends an HTTP range request to another client, the later aligns it to block boundaries (this is acceptable according to [RFC7233#4.1][] — "a client cannot rely on receiving the same ranges that it requested").  The `Content-Range:` header in the response is not part of the partial nor final signatures.  If the range does not start at the beginning of the data, the first block `i` is accompanied with a `ouihash=BASE64(HASH[i-1])` chunk extension to enable checking its `ouisig`.  Please note that to ease serving range requests, a client storing a response may cache all chain hashes along their blocks, so as to avoid having to compute the `ouihash` of the first block in the range.
 
 [RFC7233#4.1]: https://tools.ietf.org/html/rfc7233#section-4.1
 
-HTTP range requests from client to injector may not be supported since the injector would need to download all data from the beginning to compute an initial `ouihash`.  This could be abused to make the injector use resources by asking for the last block of a big file.  At any rate, in such an injection, `Digest:` and `X-Ouinet-Data-Size:` may be missing in the final response head, if the injector did not have access to the whole body data.  Also, the (aligned) `Range` header would never be signed to allow later sharing of different subranges, which can be validated independently anyway.
+Also note that partial responses mush have a `206 Partial Content` status, which would break signature verification.  To avoid this issue, the original response status code (usually `200`) is saved to the `X-Ouinet-HTTP-Status` header, and head verification should automatically replace the `206` status (if so allowed) with the saved one (only for verification purposes).
+
+HTTP range requests from client to injector may not be supported since the injector would need to download all data from the beginning to compute an initial `ouihash`.  This could be abused to make the injector use resources by asking for the last block of a big file.  At any rate, in such an injection, `Digest:` and `X-Ouinet-Data-Size:` may be missing in the final response head, if the injector did not have access to the whole body data.  Also, the (aligned) `Content-Range:` header would never be signed to allow later sharing of different subranges, which can be validated independently anyway.
 
 ## Issues
 

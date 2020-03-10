@@ -61,9 +61,9 @@ http_injection_head( const http::request_header<>& rqh
 {
     using namespace ouinet::http_;
     // TODO: This should be a `static_assert`.
-    assert(protocol_version_hdr_current == protocol_version_hdr_v3);
+    assert(protocol_version_hdr_current == protocol_version_hdr_v4);
 
-    rsh.set(protocol_version_hdr, protocol_version_hdr_v3);
+    rsh.set(protocol_version_hdr, protocol_version_hdr_v4);
     rsh.set(response_uri_hdr, rqh.target());
     rsh.set(response_injection_hdr
            , boost::format("id=%s,ts=%d") % injection_id % injection_ts);
@@ -353,11 +353,13 @@ block_sig_from_exts(boost::string_view xs)
 static
 std::string
 block_sig_str( boost::string_view injection_id
+             , size_t block_offset
              , const block_digest_t& block_digest)
 {
-    static const auto fmt_ = "%s%c%s";
+    static const auto fmt_ = "%s%c%d%c%s";
     return ( boost::format(fmt_)
            % injection_id % '\0'
+           % block_offset % '\0'
            % util::bytes::to_string_view(block_digest)).str();
 }
 
@@ -386,10 +388,11 @@ block_chunk_ext( const opt_sig_array_t& sig
 static
 std::string
 block_chunk_ext( boost::string_view injection_id
+               , size_t offset
                , const block_digest_t& digest
                , const util::Ed25519PrivateKey& sk)
 {
-    auto sig_str = block_sig_str(injection_id, digest);
+    auto sig_str = block_sig_str(injection_id, offset, digest);
     return block_chunk_ext(sk.sign(sig_str));
 }
 
@@ -642,6 +645,7 @@ struct SigningReader::Impl {
 
     size_t body_length = 0;
     size_t block_offset = 0;
+    size_t block_size_last = 0;
     util::SHA256 body_hash;
     util::SHA512 block_hash;  // for first block
     // Simplest implementation: one output chunk per data block.
@@ -670,13 +674,15 @@ struct SigningReader::Impl {
         if (do_inject) {  // if injecting and sending data
             if (block_offset > 0) {  // add chunk extension for previous block
                 auto block_digest = block_hash.close();
-                ch.exts = block_chunk_ext(injection_id, block_digest, sk);
+                ch.exts = block_chunk_ext( injection_id
+                                         , block_offset - block_size_last
+                                         , block_digest, sk);
                 // Prepare chunk extension for next block: HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])
                 block_hash = {};
                 block_hash.update(block_digest);
             }  // else HASH[0]=SHA2-512(BLOCK[0])
             block_hash.update(block_buf);
-            block_offset += block_buf.size();
+            block_offset += (block_size_last = block_buf.size());
         }
         return http_response::Part(std::move(ch));  // pass data on, drop origin extensions
     }
@@ -710,7 +716,9 @@ struct SigningReader::Impl {
 
         auto block_digest = block_hash.close();
         auto last_ch = http_response::ChunkHdr(
-            0, block_chunk_ext(injection_id, block_digest, sk));
+            0, block_chunk_ext( injection_id
+                              , block_offset - block_size_last
+                              , block_digest, sk));
         auto trailer = cache::http_injection_trailer( outh, std::move(trailer_in)
                                                     , body_length, body_hash.close()
                                                     , sk
@@ -1103,7 +1111,7 @@ struct VerifyingReader::Impl {
         // Complete hash for the data block; note that HASH[0]=SHA2-512(BLOCK[0])
         block_hash.update(block_buf);
         auto block_digest = block_hash.close();
-        auto bsig_str = block_sig_str(injection_id, block_digest);
+        auto bsig_str = block_sig_str(injection_id, block_offset, block_digest);
         if (!bs_params->pk.verify(bsig_str, *block_sig)) {
             LOG_WARN("Failed to verify data block with offset ", block_offset, "; uri=", uri);
             return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
