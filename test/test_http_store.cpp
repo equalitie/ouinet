@@ -661,8 +661,8 @@ BOOST_DATA_TEST_CASE(test_response_head, boost::unit_test::data::make(true_false
             BOOST_CHECK_EQUAL(e.message(), "Success");
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_head());
-            BOOST_REQUIRE_EQUAL( util::str(*(part->as_head()))
-                               , complete ? rrsh_head_complete : rrsh_head_incomplete);
+            BOOST_CHECK_EQUAL( util::str(*(part->as_head()))
+                             , complete ? rrsh_head_complete : rrsh_head_incomplete);
 
             // Nothing else.
             part = loaded_rr.async_read_part(c, y[e]);
