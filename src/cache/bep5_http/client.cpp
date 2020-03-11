@@ -2,6 +2,7 @@
 #include "announcer.h"
 #include "dht_lookup.h"
 #include "local_peer_discovery.h"
+#include "../dht_groups.h"
 #include "../http_sign.h"
 #include "../http_store.h"
 #include "../../http_util.h"
@@ -44,6 +45,7 @@ struct Client::Impl {
     log_level_t log_level = INFO;
     LocalPeerDiscovery local_peer_discovery;
     uint32_t debug_next_load_nr = 0;
+    std::unique_ptr<DhtGroups> _dht_groups;
 
 
     bool log_debug() const { return log_level <= DEBUG; }
@@ -64,12 +66,6 @@ struct Client::Impl {
         , log_level(log_level)
         , local_peer_discovery(ex, dht->local_endpoints())
     {}
-
-    // "http(s)://www.foo.org/bar/baz" -> "www.foo.org"
-    boost::optional<string> dht_key(const string& s)
-    {
-        return get_host(s);
-    }
 
     void serve_local( const http::request<http::empty_body>& req
                     , GenericStream& sink
@@ -149,31 +145,6 @@ struct Client::Impl {
                                 , http_::response_error_hdr_retrieval_failed, yield);
     }
 
-    boost::optional<string> get_host(const string& uri_s)
-    {
-#if 0
-        // This code sometime throws an exception.
-        network::uri uri(uri_s);
-        return uri.host().to_string();
-#else
-        beast::string_view s(uri_s);
-
-        if (s.starts_with("http://")) {
-            s.remove_prefix(7);
-        } else if (s.starts_with("https://")) {
-            s.remove_prefix(8);
-        }
-
-        auto p = s.find('/');
-
-        if (p == s.npos) return boost::none;
-
-        s = s.substr(0, p);
-
-        return s.to_string();
-#endif
-    }
-
     std::set<udp::endpoint> dht_get_peers( bt::NodeID infohash
                                          , Cancel& cancel
                                          , Yield yield)
@@ -188,7 +159,10 @@ struct Client::Impl {
         return (*lookup)->get(cancel, yield);
     }
 
-    Session load(const std::string& key, Cancel cancel, Yield yield)
+    Session load( const std::string& key
+                , const std::string& dht_group
+                , Cancel cancel
+                , Yield yield)
     {
         boost::optional<decltype(debug_next_load_nr)> dbg;
 
@@ -209,14 +183,6 @@ struct Client::Impl {
             // Try distributed cache on other errors.
         }
 
-        auto opt_host = get_host(key);
-
-        if (!opt_host) {
-            return or_throw<Session>(yield, err::invalid_argument);
-        }
-
-        auto& host = *opt_host;
-
         auto canceled = lifetime_cancel.connect([&] { cancel(); });
 
         boost::optional<udp::endpoint> tried;
@@ -236,7 +202,7 @@ struct Client::Impl {
                 if (eps.empty()) continue;
             }
             else if (do_try == last_known) {
-                auto peer_i = peer_cache.find(host);
+                auto peer_i = peer_cache.find(dht_group);
                 if (peer_i == peer_cache.end()) continue;
                 auto ep = peer_i->second;
                 if (dbg) {
@@ -246,13 +212,13 @@ struct Client::Impl {
                 tried = ep;
             }
             else if (do_try == dht_peers) {
-                bt::NodeID infohash = util::sha1_digest(host);
+                bt::NodeID infohash = util::sha1_digest(dht_group);
 
                 if (dbg) {
                     yield.log(*dbg, " Bep5Http: DHT lookup:");
-                    yield.log(*dbg, "     key:     ", key);
-                    yield.log(*dbg, "     dht_key: ", host);
-                    yield.log(*dbg, "     infohash:", infohash);
+                    yield.log(*dbg, "     key:       ", key);
+                    yield.log(*dbg, "     dht_group: ", dht_group);
+                    yield.log(*dbg, "     infohash:  ", infohash);
                 }
 
                 eps = dht_get_peers(infohash, cancel, yield[ec]);
@@ -316,7 +282,7 @@ struct Client::Impl {
                 // We found the entry
                 // TODO: Check its age, store it if it's too old but keep trying
                 // other peers.
-                peer_cache[host] = opt_con->second;
+                peer_cache[dht_group] = opt_con->second;
                 return session;
             }
         }
@@ -463,19 +429,20 @@ struct Client::Impl {
     }
 
     void store( const std::string& key
+              , const std::string& dht_group
               , http_response::AbstractReader& r
               , Cancel cancel
               , asio::yield_context yield)
     {
-        auto dk = dht_key(key);
-        if (!dk) return or_throw(yield, asio::error::invalid_argument);
-
         sys::error_code ec;
         cache::KeepSignedReader fr(r);
         http_store->store(key, fr, cancel, yield[ec]);
         if (ec) return or_throw(yield, ec);
 
-        announcer.add(*dk);
+        _dht_groups->add(dht_group, key, cancel, yield[ec]);
+        if (ec) return or_throw(yield, ec);
+
+        announcer.add(dht_group);
     }
 
     http::response_header<>
@@ -495,7 +462,14 @@ struct Client::Impl {
 
     void announce_stored_data(asio::yield_context y)
     {
+        Cancel cancel(lifetime_cancel);
+
         sys::error_code e;
+        _dht_groups = DhtGroups::load(cache_dir/"dht_groups", ex, cancel, y[e]);
+
+        if (cancel) e = asio::error::operation_aborted;
+        if (e) return or_throw(y, e);
+
         http_store->for_each([&] (auto rr, auto yield) {
             sys::error_code ec;
 
@@ -515,15 +489,17 @@ struct Client::Impl {
                 LOG_WARN( "Bep5HTTP: Cached response does not contain a "
                         , http_::response_uri_hdr
                         , " header field; removing");
+                _dht_groups->remove(key.to_string());
                 return false;
             }
 
-            if (auto opt_k = dht_key(key.to_string())) {
-                announcer.add(*opt_k);
-            }
 
             return true;
         }, y[e]);
+
+        for (auto dht_group : _dht_groups->groups()) {
+            announcer.add(dht_group);
+        }
     }
 
     void stop() {
@@ -587,17 +563,18 @@ Client::Client(unique_ptr<Impl> impl)
     : _impl(move(impl))
 {}
 
-Session Client::load(const std::string& key, Cancel cancel, Yield yield)
+Session Client::load(const std::string& key, const std::string& dht_group, Cancel cancel, Yield yield)
 {
-    return _impl->load(key, cancel, yield);
+    return _impl->load(key, dht_group, cancel, yield);
 }
 
 void Client::store( const std::string& key
+                  , const std::string& dht_group
                   , http_response::AbstractReader& r
                   , Cancel cancel
                   , asio::yield_context yield)
 {
-    _impl->store(key, r, cancel, yield);
+    _impl->store(key, dht_group, r, cancel, yield);
 }
 
 void Client::serve_local( const http::request<http::empty_body>& req

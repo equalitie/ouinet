@@ -31,9 +31,13 @@ public:
          , asio::yield_context);
 
     // This may add a response source header.
-    Session load(const std::string& key, Cancel, Yield);
+    Session load( const std::string& key
+                , const std::string& dht_group
+                , Cancel
+                , Yield);
 
     void store( const std::string& key
+              , const std::string& dht_group
               , http_response::AbstractReader&
               , Cancel
               , asio::yield_context);

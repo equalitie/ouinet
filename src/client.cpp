@@ -90,6 +90,33 @@ static bool log_transactions() {
 }
 
 //------------------------------------------------------------------------------
+struct UserAgentMetaData {
+    boost::optional<bool> is_private;
+    boost::optional<std::string> dht_group;
+
+    static UserAgentMetaData extract(Request& rq) {
+        UserAgentMetaData ret;
+
+        {
+            auto i = rq.find("X-DHT-Group");
+            if (i != rq.end()) {
+                ret.dht_group = i->value().to_string();
+                rq.erase(i);
+            }
+        }
+        {
+            auto i = rq.find("X-Is-Private");
+            if (i != rq.end()) {
+                ret.is_private = boost::iequals(i->value(), "True");
+                rq.erase(i);
+            }
+        }
+
+        return ret;
+    }
+};
+
+//------------------------------------------------------------------------------
 class Client::State : public enable_shared_from_this<Client::State> {
     friend class Client;
 
@@ -189,6 +216,7 @@ private:
     CacheEntry
     fetch_stored( const Request& request
                 , request_route::Config& request_config
+                , const std::string& dht_group
                 , Cancel& cancel
                 , Yield yield);
 
@@ -387,7 +415,16 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
 
     http::request<http::empty_body> req;
     beast::flat_buffer buffer;
-    http::async_read(con, buffer, req, yield[ec]);
+
+    {
+        WatchDog watch_dog(_ctx , chrono::seconds(5) , [&] { con.close(); });
+
+        http::async_read(con, buffer, req, yield[ec].tag("read"));
+
+        if (!watch_dog.is_running()) {
+            return or_throw(yield, asio::error::timed_out);
+        }
+    }
 
     if (ec || cancel) return;
 
@@ -422,18 +459,19 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
     // No ``res.prepare_payload()`` since no payload is allowed for CONNECT:
     // <https://tools.ietf.org/html/rfc7231#section-6.3.1>.
 
-    http::async_write(con, res, yield[ec]);
+    http::async_write(con, res, yield[ec].tag("write"));
 
     if (cancel) ec = asio::error::operation_aborted;
     if (ec) return;
 
-    full_duplex(move(con), move(inj), yield[ec]);
+    full_duplex(move(con), move(inj), yield[ec].tag("full_duplex"));
 }
 
 //------------------------------------------------------------------------------
 CacheEntry
 Client::State::fetch_stored( const Request& request
                            , request_route::Config& request_config
+                           , const std::string& dht_group
                            , Cancel& cancel
                            , Yield yield)
 {
@@ -453,7 +491,7 @@ Client::State::fetch_stored( const Request& request
 
     auto key = key_from_http_req(request);
     assert(key);
-    auto s = c->load(move(*key), cancel, yield[ec]);
+    auto s = c->load(move(*key), dht_group, cancel, yield[ec]);
     return_or_throw_on_error(yield, cancel, ec, CacheEntry{});
 
     auto& hdr = s.response_header();
@@ -569,7 +607,10 @@ Session Client::State::fetch_fresh_from_origin(const Request& rq, Yield yield)
     auto rq_ = util::req_form_from_absolute_to_origin(rq);
 
     // Send request
-    http::async_write(con, rq_, yield[ec].tag("origin-request"));
+    {
+        auto con_close = cancel.connect([&] { con.close(); });
+        http::async_write(con, rq_, yield[ec].tag("send-origin-request"));
+    }
 
     if (ec) return or_throw<Session>(yield, ec);
 
@@ -802,8 +843,8 @@ public:
             return fetch_fresh(rq, cancel, yield);
         };
 
-        cc.fetch_stored = [&] (const Request& rq, Cancel& cancel, Yield yield) {
-            return fetch_stored(rq, cancel, yield);
+        cc.fetch_stored = [&] (const Request& rq, const std::string& dht_group, Cancel& cancel, Yield yield) {
+            return fetch_stored(rq, dht_group, cancel, yield);
         };
 
         cc.max_cached_age(client_state._config.max_cached_age());
@@ -833,7 +874,7 @@ public:
     }
 
     CacheEntry
-    fetch_stored(const Request& request, Cancel& cancel, Yield yield) {
+    fetch_stored(const Request& request, const std::string& dht_group, Cancel& cancel, Yield yield) {
         if (log_transactions()) {
             yield.log("Fetching from cache");
         }
@@ -841,6 +882,7 @@ public:
         sys::error_code ec;
         auto r = client_state.fetch_stored( request
                                           , request_config
+                                          , dht_group
                                           , cancel
                                           , yield[ec]);
 
@@ -856,7 +898,10 @@ public:
     // a response may still be sent to it.
     // The return value indicates whether the connection
     // should be kept alive afterwards.
-    bool fetch(GenericStream& con, const Request& rq, Yield yield)
+    bool fetch( GenericStream& con
+              , const Request& rq
+              , const UserAgentMetaData& meta
+              , Yield yield)
     {
         namespace err = asio::error;
         using request_route::fresh_channel;
@@ -943,7 +988,7 @@ public:
                     sys::error_code fresh_ec;
                     sys::error_code cache_ec;
 
-                    auto s = cc.fetch(rq, fresh_ec, cache_ec, cancel, yield[ec]);
+                    auto s = cc.fetch(rq, meta.dht_group, fresh_ec, cache_ec, cancel, yield[ec]);
 
                     if (log_transactions()) {
                         yield.log("cc.fetch ec:", ec.message(),
@@ -979,11 +1024,14 @@ public:
                     WaitCondition wc(ctx);
 
                     auto cache = client_state.get_cache();
+
                     bool do_cache =
                         ( cache
                         && rsh[http_::response_source_hdr] != http_::response_source_hdr_local_cache
-                        && CacheControl::ok_to_cache(rq, rsh));
-                    if (do_cache)
+                        && CacheControl::ok_to_cache(rq, rsh)
+                        && meta.dht_group);
+
+                    if (do_cache) {
                         TRACK_SPAWN(ctx, ([
                             &, cache = std::move(cache),
                             lock = wc.lock()
@@ -992,8 +1040,9 @@ public:
                             AsyncQueueReader rr(qst);
                             sys::error_code ec;
                             auto y = yield.detach(yield_);
-                            cache->store(*key, rr, cancel, y[ec]);
+                            cache->store(*key, *meta.dht_group, rr, cancel, y[ec]);
                         }));
+                    }
 
                     TRACK_SPAWN(ctx, ([
                         &,
@@ -1450,8 +1499,10 @@ void Client::State::serve_request( GenericStream&& con
 
         request_config = route_choose_config(req, matches, default_request_config);
 
+        auto meta = UserAgentMetaData::extract(req);
+
         bool keep_alive
-            = cache_control.fetch(con, req, yield[ec].tag("cache_control.fetch"));
+            = cache_control.fetch(con, req, meta, yield[ec].tag("cache_control.fetch"));
 
         if (ec) {
             if (log_transactions()) {
