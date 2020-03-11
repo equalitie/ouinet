@@ -229,14 +229,14 @@ BOOST_DATA_TEST_CASE(test_write_response, boost::unit_test::data::make(true_fals
                 auto cbd = util::bytes::to_vector<uint8_t>(rs_block_data[bi]);
                 auto ch = http_response::ChunkHdr(cbd.size(), rs_chunk_ext[bi]);
                 ch.async_write(signed_w, y);
-                // For the incomplete test, produce the chunk header of last block
-                // but not its body; the last block signature should be missing.
-                if (!complete && bi == rs_block_data.size() - 1) break;
                 auto cb = http_response::ChunkBody(std::move(cbd), 0);
                 cb.async_write(signed_w, y);
             }
 
             if (!complete) {  // no last chunk nor trailer
+                // Last block signature should be missing
+                // and its data should not be sent when reading
+                // even if available on disk.
                 signed_w.close();
                 return;
             }
@@ -287,7 +287,7 @@ BOOST_DATA_TEST_CASE(test_write_response, boost::unit_test::data::make(true_fals
 
         auto body = read_file("body", cancel, yield[ec]);
         BOOST_CHECK_EQUAL(ec.message(), "Success");
-        BOOST_CHECK_EQUAL(body, complete ? rs_body_complete : rs_body_incomplete);
+        BOOST_CHECK_EQUAL(body, rs_body_complete);
 
         auto sigs = read_file("sigs", cancel, yield[ec]);
         BOOST_CHECK_EQUAL(ec.message(), "Success");
@@ -366,7 +366,8 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
 
             if (!complete) {  // no last chunk nor trailer
                 // Last block signature should be missing
-                // and its data should not be sent even if available on disk.
+                // and its data should not be sent when reading
+                // even if available on disk.
                 signed_w.close();
                 return;
             }
