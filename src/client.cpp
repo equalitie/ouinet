@@ -98,14 +98,14 @@ struct UserAgentMetaData {
         UserAgentMetaData ret;
 
         {
-            auto i = rq.find("X-DHT-Group");
+            auto i = rq.find("X-Ouinet-Group");
             if (i != rq.end()) {
                 ret.dht_group = i->value().to_string();
                 rq.erase(i);
             }
         }
         {
-            auto i = rq.find("X-Is-Private");
+            auto i = rq.find("X-Ouinet-Private");
             if (i != rq.end()) {
                 ret.is_private = boost::iequals(i->value(), "True");
                 rq.erase(i);
@@ -1296,7 +1296,7 @@ void Client::State::serve_request( GenericStream&& con
     auto method_getter([](const Request& r) {return r.method_string();});
     auto host_getter([](const Request& r) {return r["Host"];});
     auto x_oui_dest_getter([](const Request& r) {return r["X-Oui-Destination"];});
-    auto x_private_getter([](const Request& r) {return r["X-Is-Private"];});
+    auto x_private_getter([](const Request& r) {return r["X-Ouinet-Private"];});
     auto target_getter([](const Request& r) {return r.target();});
 
     auto local_rx = util::str("https?://[^:/]+\\.", _config.local_domain(), "(:[0-9]+)?/.*");
