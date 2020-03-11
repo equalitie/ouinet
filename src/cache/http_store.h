@@ -104,6 +104,16 @@ http_store_range_reader_v1( const fs::path&, asio::executor
                           , std::size_t first, std::size_t last
                           , sys::error_code&);
 
+// Same as above, but return a reader that only yields the response head,
+// as if an HTTP `HEAD` request was performed.
+//
+// The head will contain an `X-Ouinet-Avail-Data` header
+// showing the available stored data in the same format as
+// the `Content-Range` header (see RFC7233#4.2).
+reader_uptr
+http_store_head_reader_v1( const fs::path&, asio::executor
+                         , sys::error_code&);
+
 //// High-level classes for HTTP response storage
 
 class AbstractHttpStore {

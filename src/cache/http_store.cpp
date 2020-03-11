@@ -652,6 +652,14 @@ http_store_range_reader_v1( const fs::path& dirp, asio::executor ex
     return _http_store_reader_v1(dirp, std::move(ex), first, last, ec);
 }
 
+reader_uptr
+http_store_head_reader_v1( const fs::path& dirp, asio::executor ex
+                         , sys::error_code& ec)
+{
+    // TODO: implement
+    return http_store_reader_v1(dirp, std::move(ex), ec);
+}
+
 // begin HttpStoreV0
 
 HttpStoreV0::~HttpStoreV0()
