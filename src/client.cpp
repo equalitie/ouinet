@@ -607,7 +607,10 @@ Session Client::State::fetch_fresh_from_origin(const Request& rq, Yield yield)
     auto rq_ = util::req_form_from_absolute_to_origin(rq);
 
     // Send request
-    http::async_write(con, rq_, yield[ec].tag("origin-request"));
+    {
+        auto con_close = cancel.connect([&] { con.close(); });
+        http::async_write(con, rq_, yield[ec].tag("send-origin-request"));
+    }
 
     if (ec) return or_throw<Session>(yield, ec);
 
