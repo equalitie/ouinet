@@ -145,31 +145,6 @@ struct Client::Impl {
                                 , http_::response_error_hdr_retrieval_failed, yield);
     }
 
-    boost::optional<string> get_host(const string& uri_s)
-    {
-#if 0
-        // This code sometime throws an exception.
-        network::uri uri(uri_s);
-        return uri.host().to_string();
-#else
-        beast::string_view s(uri_s);
-
-        if (s.starts_with("http://")) {
-            s.remove_prefix(7);
-        } else if (s.starts_with("https://")) {
-            s.remove_prefix(8);
-        }
-
-        auto p = s.find('/');
-
-        if (p == s.npos) return boost::none;
-
-        s = s.substr(0, p);
-
-        return s.to_string();
-#endif
-    }
-
     std::set<udp::endpoint> dht_get_peers( bt::NodeID infohash
                                          , Cancel& cancel
                                          , Yield yield)
