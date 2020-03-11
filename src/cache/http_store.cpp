@@ -652,12 +652,69 @@ http_store_range_reader_v1( const fs::path& dirp, asio::executor ex
     return _http_store_reader_v1(dirp, std::move(ex), first, last, ec);
 }
 
+class HttpStore1HeadReader : public http_response::AbstractReader {
+public:
+    HttpStore1HeadReader( reader_uptr reader
+                        , asio::posix::stream_descriptor sigsf)
+        : reader(std::move(reader))
+        , sigsf(std::move(sigsf))
+    {}
+
+    ~HttpStore1HeadReader() override {};
+
+    boost::optional<ouinet::http_response::Part>
+    async_read_part(Cancel cancel, asio::yield_context yield) override
+    {
+        if (!_is_open || _is_done) return boost::none;
+
+        sys::error_code ec;
+        auto head = reader->async_read_part(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, boost::none);
+        // TODO: check head, get last useable byte, add header
+        _is_done = true;
+        close();
+        return head;
+    }
+
+    bool
+    is_done() const override
+    {
+        return _is_done;
+    }
+
+    bool
+    is_open() const override
+    {
+        return _is_open;
+    }
+
+    void
+    close() override
+    {
+        _is_open = false;
+        reader->close();
+    }
+
+private:
+    reader_uptr reader;
+    asio::posix::stream_descriptor sigsf;
+
+    bool _is_done = false;
+    bool _is_open = true;
+};
+
 reader_uptr
 http_store_head_reader_v1( const fs::path& dirp, asio::executor ex
                          , sys::error_code& ec)
 {
-    // TODO: implement
-    return http_store_reader_v1(dirp, std::move(ex), ec);
+    auto sigsf = util::file_io::open_readonly(ex, dirp / sigs_fname, ec);
+    if (ec && ec != sys::errc::no_such_file_or_directory) return nullptr;
+
+    auto reader = http_store_reader_v1(dirp, std::move(ex), ec);
+    if (ec) return nullptr;
+
+    return std::make_unique<HttpStore1HeadReader>
+        (std::move(reader), std::move(sigsf));
 }
 
 // begin HttpStoreV0
