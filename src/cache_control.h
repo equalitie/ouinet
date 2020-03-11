@@ -17,10 +17,11 @@ private:
     struct FetchState;
 
 public:
+    using DhtGroup = std::string;
     using Request  = http::request<http::string_body>;
     using Response = http::response<http::dynamic_body>;
 
-    using FetchStored = std::function<CacheEntry(const Request&, Cancel&, Yield)>;
+    using FetchStored = std::function<CacheEntry(const Request&, const DhtGroup&, Cancel&, Yield)>;
     using FetchFresh  = std::function<Session(const Request&, Cancel&, Yield)>;
 
 public:
@@ -35,6 +36,7 @@ public:
     {}
 
     Session fetch(const Request&,
+                  const boost::optional<DhtGroup>&,
                   sys::error_code& fresh_ec,
                   sys::error_code& cache_ec,
                   Cancel&,
@@ -62,16 +64,20 @@ public:
     bool is_expired(const CacheEntry&);
 
 private:
-    // TODO: Add cancellation support
     Session do_fetch(
             const Request&,
+            const boost::optional<DhtGroup>&,
             sys::error_code& fresh_ec,
             sys::error_code& cache_ec,
             Cancel&,
             Yield);
 
     Session do_fetch_fresh(FetchState&, const Request&, Yield);
-    CacheEntry do_fetch_stored(FetchState&, const Request&, bool& is_fresh, Yield);
+    CacheEntry do_fetch_stored( FetchState&
+                              , const Request&
+                              , const boost::optional<DhtGroup>&
+                              , bool& is_fresh
+                              , Yield);
 
     //bool is_stale( const boost::posix_time::ptime& time_stamp
     //             , const Response&) const;

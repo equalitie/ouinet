@@ -172,6 +172,7 @@ Session add_stale_warning(Session response)
 
 Session
 CacheControl::fetch(const Request& request,
+                    const boost::optional<DhtGroup>& dht_group,
                     sys::error_code& fresh_ec,
                     sys::error_code& cache_ec,
                     Cancel& cancel,
@@ -181,6 +182,7 @@ CacheControl::fetch(const Request& request,
 
     auto response = do_fetch(
             request,
+            dht_group,
             fresh_ec,
             cache_ec,
             cancel,
@@ -232,6 +234,7 @@ struct CacheControl::FetchState {
 Session
 CacheControl::do_fetch(
         const Request& request,
+        const boost::optional<DhtGroup>& dht_group,
         sys::error_code& fresh_ec,
         sys::error_code& cache_ec,
         Cancel& cancel,
@@ -289,7 +292,7 @@ CacheControl::do_fetch(
         }
 
         bool is_fresh = false;
-        auto cache_entry = do_fetch_stored(fetch_state, request, is_fresh, yield[cache_ec]);
+        auto cache_entry = do_fetch_stored(fetch_state, request, dht_group, is_fresh, yield[cache_ec]);
         if (!cache_ec) {
             if (is_fresh) {
                 LOG_DEBUG(yield.tag(), ": Revalidation failed, cached entry is fresh");
@@ -310,7 +313,7 @@ CacheControl::do_fetch(
     }
 
     bool is_fresh = false;
-    auto cache_entry = do_fetch_stored(fetch_state, request, is_fresh, yield[cache_ec]);
+    auto cache_entry = do_fetch_stored(fetch_state, request, dht_group, is_fresh, yield[cache_ec]);
 
     if (cache_ec == err::operation_aborted) {
         fresh_ec = err::operation_aborted;
@@ -467,11 +470,12 @@ CacheControl::do_fetch_fresh(FetchState& fs, const Request& rq, Yield yield)
 CacheEntry
 CacheControl::do_fetch_stored(FetchState& fs,
                               const Request& rq,
+                              const boost::optional<DhtGroup>& dht_group,
                               bool& is_fresh,
                               Yield yield)
 {
     is_fresh = false;
-    if (!fetch_stored) {
+    if (!fetch_stored || !dht_group) {
         return or_throw<CacheEntry>(yield, asio::error::operation_not_supported);
     }
 
@@ -485,7 +489,7 @@ CacheControl::do_fetch_stored(FetchState& fs,
         fs.fetch_stored = AsyncJob<CacheEntry>(_ex);
         fs.fetch_stored->start(
                 [&] (Cancel& cancel, asio::yield_context yield_) mutable {
-                    return fetch_stored(rq, cancel, yield.detach(yield_));
+                    return fetch_stored(rq, *dht_group, cancel, yield.detach(yield_));
                 });
     }
 
