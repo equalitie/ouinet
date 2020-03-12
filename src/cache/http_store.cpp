@@ -664,16 +664,39 @@ http_store_range_reader_v1( const fs::path& dirp, asio::executor ex
 
 class HttpStore1HeadReader : public http_response::AbstractReader {
 private:
+    inline
+    std::string
+    unsatisfied_range(const boost::optional<std::size_t>& dsz)
+    {
+        return dsz ? util::str("bytes */", *dsz) : "*/*";
+    }
+
     std::string
     get_avail_data_range(Cancel cancel, asio::yield_context yield)
     {
-        return "bytes */*";  // TODO: get last useable byte
+        // See RFC7233#42 for the syntax.
+        // TODO: get complete data size
+        boost::optional<std::size_t> data_size;
+
+        if (!sigsf.is_open() || !bodyf.is_open())
+            return unsatisfied_range(data_size);;
+
+        sys::error_code ec;
+        auto bsize = util::file_io::file_size(bodyf, ec);
+        if (ec) return or_throw(yield, ec, "");
+        if (bsize == 0)
+            return unsatisfied_range(data_size);;
+
+        // TODO: check that there are signatres for the data
+        return util::str(util::HttpByteRange{0, bsize - 1, std::move(data_size)});
     }
 
 public:
     HttpStore1HeadReader( reader_uptr reader
+                        , asio::posix::stream_descriptor bodyf
                         , asio::posix::stream_descriptor sigsf)
         : reader(std::move(reader))
+        , bodyf(std::move(bodyf))
         , sigsf(std::move(sigsf))
     {}
 
@@ -718,11 +741,13 @@ public:
     {
         _is_open = false;
         reader->close();
+        bodyf.close();
         sigsf.close();
     }
 
 private:
     reader_uptr reader;
+    asio::posix::stream_descriptor bodyf;
     asio::posix::stream_descriptor sigsf;
 
     bool _is_done = false;
@@ -733,6 +758,9 @@ reader_uptr
 http_store_head_reader_v1( const fs::path& dirp, asio::executor ex
                          , sys::error_code& ec)
 {
+    auto bodyf = util::file_io::open_readonly(ex, dirp / body_fname, ec);
+    if (ec && ec != sys::errc::no_such_file_or_directory) return nullptr;
+
     auto sigsf = util::file_io::open_readonly(ex, dirp / sigs_fname, ec);
     if (ec && ec != sys::errc::no_such_file_or_directory) return nullptr;
 
@@ -740,7 +768,7 @@ http_store_head_reader_v1( const fs::path& dirp, asio::executor ex
     if (ec) return nullptr;
 
     return std::make_unique<HttpStore1HeadReader>
-        (std::move(reader), std::move(sigsf));
+        (std::move(reader), std::move(bodyf), std::move(sigsf));
 }
 
 // begin HttpStoreV0
