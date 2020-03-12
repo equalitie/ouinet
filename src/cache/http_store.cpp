@@ -708,6 +708,7 @@ public:
     {
         _is_open = false;
         reader->close();
+        sigsf.close();
     }
 
 private:
