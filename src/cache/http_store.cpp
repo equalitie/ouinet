@@ -426,6 +426,7 @@ private:
         }
     }
 
+protected:
     boost::optional<SigEntry>
     get_sig_entry(Cancel cancel, asio::yield_context yield)
     {
@@ -438,6 +439,7 @@ private:
         return SigEntry::parse(sigsf, sigs_buffer, cancel, yield);
     }
 
+private:
     http_response::ChunkBody
     get_chunk_body(Cancel cancel, asio::yield_context yield)
     {
@@ -677,6 +679,21 @@ private:
         return data_size ? util::str("bytes */", *data_size) : "*/*";
     }
 
+    boost::optional<std::size_t>
+    get_last_sig_offset(Cancel cancel, asio::yield_context yield)
+    {
+        // TODO: seek to avoid parsing the whole file
+        boost::optional<std::size_t> off;
+        while (true) {
+            sys::error_code ec;
+            auto se = get_sig_entry(cancel, yield[ec]);
+            return_or_throw_on_error(yield, cancel, ec, boost::none);
+            if (!se) break;
+            off = se->offset;
+        }
+        return off;
+    }
+
     std::string
     get_avail_data_range(Cancel cancel, asio::yield_context yield)
     {
@@ -689,8 +706,16 @@ private:
         if (bsize == 0)
             return unsatisfied_range();;
 
-        // TODO: check that there are signatres for the data
-        return util::str(util::HttpByteRange{0, bsize - 1, data_size});
+        // Get the last byte for which we have a block signature.
+        auto lsoff = get_last_sig_offset(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, "");
+        if (!lsoff)
+            return unsatisfied_range();;
+        // TODO: if `data_size`, check that last block is whole
+        assert(block_size);
+        auto end = std::min(bsize, *lsoff + *block_size);
+
+        return util::str(util::HttpByteRange{0, end - 1, data_size});
     }
 
 public:
