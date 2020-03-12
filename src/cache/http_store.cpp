@@ -672,11 +672,14 @@ private:
     }
 
     std::string
-    get_avail_data_range(Cancel cancel, asio::yield_context yield)
+    get_avail_data_range( const http_response::Head& head
+                        , Cancel cancel, asio::yield_context yield)
     {
         // See RFC7233#42 for the syntax.
-        // TODO: get complete data size
-        boost::optional<std::size_t> data_size;
+
+        // Get complete data size.
+        auto data_size_sv = head[http_::response_data_size_hdr];
+        auto data_size = parse::number<std::size_t>(data_size_sv);
 
         if (!sigsf.is_open() || !bodyf.is_open())
             return unsatisfied_range(data_size);;
@@ -716,7 +719,7 @@ public:
         // According to RFC7231#4.3.2, payload header fields MAY be omitted.
         auto head = without_framing(std::move(*head_p));
         // Add a header with the available data range.
-        auto drange = get_avail_data_range(cancel, yield[ec]);
+        auto drange = get_avail_data_range(head, cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec, boost::none);
         head.set(response_available_data, drange);
         _is_done = true;
