@@ -45,6 +45,16 @@ static const fs::path head_fname = "head";
 static const fs::path body_fname = "body";
 static const fs::path sigs_fname = "sigs";
 
+static
+http_response::Head
+without_framing(http_response::Head rsh)
+{
+    rsh.chunked(false);
+    rsh.erase(http::field::content_length);
+    rsh.erase(http::field::trailer);
+    return rsh;
+}
+
 // Block signature and hash handling.
 static
 boost::string_view
@@ -668,12 +678,17 @@ public:
         if (!_is_open || _is_done) return boost::none;
 
         sys::error_code ec;
-        auto head = reader->async_read_part(cancel, yield[ec]);
+        auto part_o = reader->async_read_part(cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec, boost::none);
-        // TODO: check head, get last useable byte, add header
+        assert(part_o);
+        auto head_p = part_o->as_head();
+        assert(head_p);
+        // According to RFC7231#4.3.2, payload header fields MAY be omitted.
+        auto head = without_framing(std::move(*head_p));
+        // TODO: get last useable byte, add header
         _is_done = true;
         close();
-        return head;
+        return http_response::Part(std::move(head));
     }
 
     bool
