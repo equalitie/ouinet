@@ -574,22 +574,24 @@ public:
         bodyf.close();
     }
 
-private:
+protected:
     asio::posix::stream_descriptor headf;
     asio::posix::stream_descriptor sigsf;
     asio::posix::stream_descriptor bodyf;
 
     boost::optional<std::size_t> range_begin, range_end;
 
+    std::string uri;  // for warnings
+    boost::optional<std::size_t> data_size;
+    boost::optional<std::size_t> block_size;
+
+private:
     bool _is_head_done = false;
     bool _is_body_done = false;
     bool _is_done = false;
     bool _is_open = true;
 
-    std::string uri;  // for warnings
     std::size_t block_offset = 0;
-    boost::optional<std::size_t> data_size;
-    boost::optional<std::size_t> block_size;
 
     SigEntry::parse_buffer sigs_buffer;
 
@@ -599,6 +601,7 @@ private:
     boost::optional<http_response::Part> next_chunk_body;
 };
 
+template<class V1Reader>
 static
 reader_uptr
 _http_store_reader_v1( const fs::path& dirp, asio::executor ex
@@ -642,7 +645,7 @@ _http_store_reader_v1( const fs::path& dirp, asio::executor ex
         range_end = *range_last + 1;
     }
 
-    return std::make_unique<HttpStore1Reader>
+    return std::make_unique<V1Reader>
         ( std::move(headf), std::move(sigsf), std::move(bodyf)
         , std::move(range_begin), std::move(range_end));
 }
@@ -651,7 +654,8 @@ reader_uptr
 http_store_reader_v1( const fs::path& dirp, asio::executor ex
                     , sys::error_code& ec)
 {
-    return _http_store_reader_v1(dirp, std::move(ex), {}, {}, ec);
+    return _http_store_reader_v1<HttpStore1Reader>
+        (dirp, std::move(ex), {}, {}, ec);
 }
 
 reader_uptr
@@ -659,48 +663,44 @@ http_store_range_reader_v1( const fs::path& dirp, asio::executor ex
                           , std::size_t first, std::size_t last
                           , sys::error_code& ec)
 {
-    return _http_store_reader_v1(dirp, std::move(ex), first, last, ec);
+    return _http_store_reader_v1<HttpStore1Reader>
+        (dirp, std::move(ex), first, last, ec);
 }
 
-class HttpStore1HeadReader : public http_response::AbstractReader {
+class HttpStore1HeadReader : public HttpStore1Reader {
 private:
     inline
     std::string
-    unsatisfied_range(const boost::optional<std::size_t>& dsz)
+    unsatisfied_range()
     {
-        return dsz ? util::str("bytes */", *dsz) : "*/*";
+        // See RFC7233#4.2 for the syntax.
+        return data_size ? util::str("bytes */", *data_size) : "*/*";
     }
 
     std::string
-    get_avail_data_range( const http_response::Head& head
-                        , Cancel cancel, asio::yield_context yield)
+    get_avail_data_range(Cancel cancel, asio::yield_context yield)
     {
-        // See RFC7233#42 for the syntax.
-
-        // Get complete data size.
-        auto data_size_sv = head[http_::response_data_size_hdr];
-        auto data_size = parse::number<std::size_t>(data_size_sv);
-
         if (!sigsf.is_open() || !bodyf.is_open())
-            return unsatisfied_range(data_size);;
+            return unsatisfied_range();;
 
         sys::error_code ec;
         auto bsize = util::file_io::file_size(bodyf, ec);
         if (ec) return or_throw(yield, ec, "");
         if (bsize == 0)
-            return unsatisfied_range(data_size);;
+            return unsatisfied_range();;
 
         // TODO: check that there are signatres for the data
-        return util::str(util::HttpByteRange{0, bsize - 1, std::move(data_size)});
+        return util::str(util::HttpByteRange{0, bsize - 1, data_size});
     }
 
 public:
-    HttpStore1HeadReader( reader_uptr reader
+    HttpStore1HeadReader( asio::posix::stream_descriptor headf
+                        , asio::posix::stream_descriptor sigsf
                         , asio::posix::stream_descriptor bodyf
-                        , asio::posix::stream_descriptor sigsf)
-        : reader(std::move(reader))
-        , bodyf(std::move(bodyf))
-        , sigsf(std::move(sigsf))
+                        , boost::optional<std::size_t> range_begin
+                        , boost::optional<std::size_t> range_end)
+        : HttpStore1Reader( std::move(headf), std::move(sigsf), std::move(bodyf)
+                          , std::move(range_begin), std::move(range_end))
     {}
 
     ~HttpStore1HeadReader() override {};
@@ -708,10 +708,10 @@ public:
     boost::optional<ouinet::http_response::Part>
     async_read_part(Cancel cancel, asio::yield_context yield) override
     {
-        if (!_is_open || _is_done) return boost::none;
+        if (!is_open() || _is_done) return boost::none;
 
         sys::error_code ec;
-        auto part_o = reader->async_read_part(cancel, yield[ec]);
+        auto part_o = HttpStore1Reader::async_read_part(cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec, boost::none);
         assert(part_o);
         auto head_p = part_o->as_head();
@@ -719,7 +719,7 @@ public:
         // According to RFC7231#4.3.2, payload header fields MAY be omitted.
         auto head = without_framing(std::move(*head_p));
         // Add a header with the available data range.
-        auto drange = get_avail_data_range(head, cancel, yield[ec]);
+        auto drange = get_avail_data_range(cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec, boost::none);
         head.set(response_available_data, drange);
         _is_done = true;
@@ -733,45 +733,16 @@ public:
         return _is_done;
     }
 
-    bool
-    is_open() const override
-    {
-        return _is_open;
-    }
-
-    void
-    close() override
-    {
-        _is_open = false;
-        reader->close();
-        bodyf.close();
-        sigsf.close();
-    }
-
 private:
-    reader_uptr reader;
-    asio::posix::stream_descriptor bodyf;
-    asio::posix::stream_descriptor sigsf;
-
     bool _is_done = false;
-    bool _is_open = true;
 };
 
 reader_uptr
 http_store_head_reader_v1( const fs::path& dirp, asio::executor ex
                          , sys::error_code& ec)
 {
-    auto bodyf = util::file_io::open_readonly(ex, dirp / body_fname, ec);
-    if (ec && ec != sys::errc::no_such_file_or_directory) return nullptr;
-
-    auto sigsf = util::file_io::open_readonly(ex, dirp / sigs_fname, ec);
-    if (ec && ec != sys::errc::no_such_file_or_directory) return nullptr;
-
-    auto reader = http_store_reader_v1(dirp, std::move(ex), ec);
-    if (ec) return nullptr;
-
-    return std::make_unique<HttpStore1HeadReader>
-        (std::move(reader), std::move(bodyf), std::move(sigsf));
+    return _http_store_reader_v1<HttpStore1HeadReader>
+        (dirp, std::move(ex), {}, {}, ec);
 }
 
 // begin HttpStoreV0
