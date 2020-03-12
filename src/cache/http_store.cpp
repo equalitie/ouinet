@@ -663,6 +663,13 @@ http_store_range_reader_v1( const fs::path& dirp, asio::executor ex
 }
 
 class HttpStore1HeadReader : public http_response::AbstractReader {
+private:
+    std::string
+    get_avail_data_range(Cancel cancel, asio::yield_context yield)
+    {
+        return "bytes */*";  // TODO: get last useable byte
+    }
+
 public:
     HttpStore1HeadReader( reader_uptr reader
                         , asio::posix::stream_descriptor sigsf)
@@ -685,7 +692,10 @@ public:
         assert(head_p);
         // According to RFC7231#4.3.2, payload header fields MAY be omitted.
         auto head = without_framing(std::move(*head_p));
-        // TODO: get last useable byte, add header
+        // Add a header with the available data range.
+        auto drange = get_avail_data_range(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, boost::none);
+        head.set(response_available_data, drange);
         _is_done = true;
         close();
         return http_response::Part(std::move(head));

@@ -6,6 +6,7 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/filesystem/path.hpp>
 
+#include "../constants.h"
 #include "../response_reader.h"
 #include "../util/signal.h"
 
@@ -14,6 +15,14 @@
 #include "detail/http_store.h"
 
 namespace ouinet { namespace cache {
+
+// When a client gets a `HEAD` request for a URL,
+// this response header indicates the data range that it can send back
+// (either for a full or range request).
+//
+// The format is the same one used in `Content-Range` headers
+// (RFC7233#4.2).
+static const std::string response_available_data = http_::header_prefix + "Avail-Data";
 
 using reader_uptr = std::unique_ptr<http_response::AbstractReader>;
 
