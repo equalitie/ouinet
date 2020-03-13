@@ -237,17 +237,23 @@ void UdpServerReachabilityAnalysis::start(const asio::executor& executor, const 
     /*
      * Track outgoing datagrams in ConnectionTracker.
      */
-    _state->on_send_to_connection = _state->multiplexer.on_send_to([state = _state.get()] (
+    std::weak_ptr<State> weak_state = _state;
+    _state->on_send_to_connection = _state->multiplexer.on_send_to([weak_state = std::move(weak_state)] (
         const std::vector<boost::asio::const_buffer>& buffer,
         size_t length,
         const asio_utp::udp_multiplexer::endpoint_type& endpoint,
         sys::error_code ec
     ) {
-        if (!ec) {
-            std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
-            state->cleanup_connections(now);
-            state->connections.insert(endpoint, now + std::chrono::seconds(long(connectionTrackingExpiracyTime)));
-        }
+        if (ec) return;
+
+        auto state = weak_state.lock();
+        assert(state);
+
+        if (!state) return;
+
+        std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+        state->cleanup_connections(now);
+        state->connections.insert(endpoint, now + std::chrono::seconds(long(connectionTrackingExpiracyTime)));
     });
 
     /*
