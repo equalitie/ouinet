@@ -229,6 +229,10 @@ void Logger::log(log_level_t level, const std::string& msg, boost::string_view f
 
     if (log_file && log_file->is_open()) {
         *log_file << Printer(level, false, ts, msg, function_name) << "\n";
+
+        if (log_file->tellp() > LOG_FILE_MAX_SIZE) {
+            log_file->seekp(0);
+        }
     }
 }
 
