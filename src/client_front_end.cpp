@@ -12,6 +12,7 @@
 #include <boost/asio/ip/address.hpp>
 #include <boost/optional/optional_io.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include <boost/filesystem.hpp>
 #include <boost/format.hpp>
 #include <boost/regex.hpp>
 #include <network/uri.hpp>
@@ -142,6 +143,24 @@ void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, stringstr
     ss << ca.pem_certificate();
 }
 
+static void enable_log_to_file(const std::string& path) {
+    logger.log_to_file(path);
+}
+
+static void disable_log_to_file() {
+    logger.log_to_file("");
+}
+
+static void load_log_file(stringstream& out_ss) {
+    std::fstream* logfile = logger.get_log_file();
+    if (logfile == nullptr) return;
+    logfile->flush();
+    logfile->seekg(0);
+    std::copy( istreambuf_iterator<char>(*logfile)
+             , istreambuf_iterator<char>()
+             , ostreambuf_iterator<char>(out_ss));
+}
+
 void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , const Request& req, Response& res, stringstream& ss
                                   , cache::bep5_http::Client* bep5_cache)
@@ -192,6 +211,17 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         }
         else if (target.find("?distributed_cache=disable") != string::npos) {
             config.is_cache_access_enabled(false);
+        }
+        else if (target.find("?logfile=enable") != string::npos) {
+            enable_log_to_file((config.repo_root()/"log.txt").string());
+        }
+        else if (target.find("?logfile=disable") != string::npos) {
+            disable_log_to_file();
+        }
+        else if (target.find("?logfile=get") != string::npos) {
+            load_log_file(ss);
+            res.set(http::field::content_type, "text/plain");
+            return;
         }
 
         // Redirect back to the portal.
@@ -288,7 +318,8 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         {"injector_access", config.is_injector_access_enabled()},
         {"distributed_cache", config.is_cache_access_enabled()},
         {"ouinet_version", Version::VERSION_NAME},
-        {"ouinet_build_id", Version::BUILD_ID}
+        {"ouinet_build_id", Version::BUILD_ID},
+        {"logfile", logger.get_log_file() != nullptr}
     };
 
     if (udp_port) {
