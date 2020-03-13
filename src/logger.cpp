@@ -21,16 +21,18 @@
 #include <string>
 #include <iostream>
 #include <fstream>
+#include <iomanip> // std::setprecision
 
+#include <boost/system/error_code.hpp>
+#include <boost/filesystem.hpp>
 #include "namespaces.h"
 #include "logger.h"
 
+static const long LOG_FILE_MAX_SIZE = 15 * 1024 * 1024;
 
 const std::string log_level_announce[] =       {"SILLY"        , "DEBUG"     , "VERBOSE"   , "INFO"      , "WARN"        , "ERROR"      , "ABORT"};
 const std::string log_level_color_prefix[] =   {"\033[1;35;47m", "\033[1;32m", "\033[1;37m", "\033[1;34m", "\033[90;103m", "\033[31;40m", "\033[1;31;40m"};
-#ifndef __ANDROID__
 const bool log_level_colored_msg[] =           {true           , false       , false       , false       , true        , true          , true};
-#endif // ifndef __ANDROID__
 
 log_level_t default_log_level() {
     return INFO;
@@ -38,51 +40,97 @@ log_level_t default_log_level() {
 
 Logger logger(default_log_level());
 
-void Logger::initiate_textual_conversions()
-{
+/************************* Time Functions **************************/
+
+static
+int timeval_subtract(struct timeval *x, struct timeval *y, struct timeval *result) {
+    /* Perform the carry for the later subtraction by updating y. */
+    if (x->tv_usec < y->tv_usec) {
+      int nsec = (y->tv_usec - x->tv_usec) / 1000000 + 1;
+      y->tv_usec -= 1000000 * nsec;
+      y->tv_sec += nsec;
+    }
+    if (x->tv_usec - y->tv_usec > 1000000) {
+      int nsec = (x->tv_usec - y->tv_usec) / 1000000;
+      y->tv_usec += 1000000 * nsec;
+      y->tv_sec -= nsec;
+    }
+
+    /* Compute the time remaining to wait.
+       tv_usec is certainly positive. */
+    result->tv_sec = x->tv_sec - y->tv_sec;
+    result->tv_usec = x->tv_usec - y->tv_usec;
+
+    /* Return 1 if result is negative. */
+    return x->tv_sec < y->tv_sec;
 }
+
+struct timeval log_ts_base;
+
+/** Get a timestamp, as a floating-point number of seconds. */
+static double log_get_timestamp()
+{
+    struct timeval now, delta;
+    gettimeofday(&now, 0);
+    timeval_subtract(&now, &log_ts_base, &delta);
+    return delta.tv_sec + double(delta.tv_usec) / 1e6;
+}
+
+/*********************** Time Functions END ************************/
 
 // Standard constructor
 // Threshold adopts a default level of DEBUG if an invalid threshold is provided.
 Logger::Logger(log_level_t threshold)
 {
-    initiate_textual_conversions();
-
     if (threshold < SILLY || threshold > ERROR) {
         this->threshold = default_log_level();
     } else {
         this->threshold = threshold;
     }
     log_to_stderr = true;
-    log_to_file = false;
     log_filename = "";
-
     log_ts_base = {0, 0};
-    //gettimeofday(&log_ts_base, 0);
-
 }
 
-// Standard destructor
-Logger::~Logger()
+void Logger::log_to_file(std::string fname)
 {
-    if (log_file.is_open()) {
-        log_file.close();
+    using std::ios;
+
+    if (fname.empty()) {
+        if (!log_filename.empty()) {
+            ouinet::sys::error_code ignored_ec;
+            ouinet::fs::remove(log_filename, ignored_ec);
+        }
+        log_file = boost::none;
+        return;
     }
-}
 
-// Configure the logger to log to stderr and/or to a file.
-void Logger::config(bool log_stderr, bool log_to_file, std::string fname)
-{
-    log_to_stderr = log_stderr;
-    this->log_to_file = log_to_file;
-    if (log_to_file) {
+    if (log_filename != fname || !log_file) {
         log_filename = fname;
-        log_file.open(log_filename, std::ios::out | std::ios::app);
-    } else {
-        if (log_file.is_open()) {
-            log_file.close();
+
+        log_file = std::fstream();
+
+        if (ouinet::fs::exists(log_filename)) {
+            log_file->open(log_filename, ios::in | ios::out | ios::ate);
+        } else {
+            // `trunc` causes the file to be created
+            log_file->open(log_filename, ios::in | ios::out | ios::trunc);
+        }
+
+        if (!log_file->is_open()) {
+            std::cerr << "Failed to open log file " << fname  << "\n";
+            log_filename = "";
+            log_file = boost::none;
+        } else {
+            static const char* start_s = "\nOUINET START\n";
+            *log_file << start_s;
         }
     }
+}
+
+std::fstream* Logger::get_log_file() {
+    if (!log_file) return nullptr;
+    return &*log_file;
 }
 
 // Update the logger's threshold.
@@ -99,79 +147,124 @@ bool Logger::would_log(log_level_t level) const
     return get_threshold() <= level;
 }
 
+namespace {
+    struct Printer {
+        using string_view = boost::string_view;
+
+        log_level_t level;
+        bool with_color;
+        boost::optional<double> ts;
+        string_view msg;
+        string_view fun;
+
+        Printer(log_level_t level, bool with_color, boost::optional<double> ts, string_view msg, string_view fun)
+            : level(level)
+            , with_color(with_color)
+            , ts(ts)
+            , msg(msg)
+            , fun(fun)
+        {}
+
+        friend std::ostream& operator<<(std::ostream& os, const Printer& p) {
+            static const char* color_end = "\033[0m";
+
+            if (p.ts) {
+                // Prevent scientific notation
+                os << std::fixed << std::showpoint << std::setprecision(4);
+                os << *p.ts << ": ";
+            }
+
+            if (p.with_color) {
+                os << log_level_color_prefix[p.level];
+            }
+
+            os << "[" << log_level_announce[p.level];
+
+            if (log_level_colored_msg[p.level] || !p.with_color) {
+                os << "] ";
+            } else {
+                os << "]" << color_end << " ";
+            }
+
+            if (!p.fun.empty()) {
+                os << p.fun << ": ";
+            }
+
+            os << p.msg;
+
+            if (p.with_color && log_level_colored_msg[p.level]) {
+                os << color_end;
+            }
+
+            return os;
+        }
+    };
+}
+
 // Standard log function. Prints nice colors for each level.
-void Logger::log(log_level_t level, std::string msg, std::string function_name)
+void Logger::log(log_level_t level, const std::string& msg, boost::string_view function_name)
 {
     if (level < SILLY || level > ABORT || level < threshold) {
         return;
     }
 
-    msg = (function_name.empty()) ? msg : function_name + ": " + msg;
-
-    std::string message_prefix = "[" + log_level_announce[level];
-#ifndef __ANDROID__
-    message_prefix = log_level_color_prefix[level] + message_prefix + "]";
-    if (log_level_colored_msg[level])
-      message_prefix += " ";
-    else
-      message_prefix += "\033[0m ";
+#ifdef __ANDROID__
+    const bool android = true;
 #else
-    message_prefix = message_prefix + "] ";
-#endif // ifndef __ANDROID__
-
-    msg =  message_prefix + msg;
-#ifndef __ANDROID__
-    if (log_level_colored_msg[level])
-      msg += "\033[0m";
+    const bool android = false;
 #endif
 
-    //time stamp
-    if (_stamp_with_time) {
-      msg = std::to_string(log_get_timestamp()) + ": " + msg;
-    }
+    bool with_color = !android;
+
+    boost::optional<double> ts;
+
+    if (_stamp_with_time || log_file) ts = log_get_timestamp();
 
     if (log_to_stderr) {
-        std::cerr << msg << std::endl;
-        //std::cerr.flush();
+        if (_stamp_with_time)
+            std::cerr << Printer(level, with_color, ts, msg, function_name) << "\n";
+        else
+            std::cerr << Printer(level, with_color, boost::none, msg, function_name) << "\n";
     }
-    if (log_to_file && log_file.is_open()) {
-        log_file << msg << std::endl;
+
+    if (log_file && log_file->is_open()) {
+        *log_file << Printer(level, false, ts, msg, function_name) << "\n";
     }
 }
 
 // Convenience methods
 
-void Logger::silly(std::string msg, std::string function_name)
+void Logger::silly(const std::string& msg, boost::string_view function_name)
 {
     log(SILLY, msg, function_name);
 }
 
-void Logger::debug(std::string msg, std::string function_name)
+void Logger::debug(const std::string& msg, boost::string_view function_name)
 {
     log(DEBUG, msg, function_name);
 }
 
-void Logger::verbose(std::string msg, std::string function_name)
+void Logger::verbose(const std::string& msg, boost::string_view function_name)
 {
     log(VERBOSE, msg, function_name);
 }
 
-void Logger::info(std::string msg, std::string function_name)
+void Logger::info(const std::string& msg, boost::string_view function_name)
 {
     log(INFO, msg, function_name);
 }
 
-void Logger::warn(std::string msg, std::string function_name)
+void Logger::warn(const std::string& msg, boost::string_view function_name)
 {
     log(WARN, msg, function_name);
 }
 
-void Logger::error(std::string msg, std::string function_name)
+void Logger::error(const std::string& msg, boost::string_view function_name)
 {
     log(ERROR, msg, function_name);
 }
 
-void Logger::abort(std::string msg, std::string function_name)
+void Logger::abort(const std::string& msg, boost::string_view function_name)
 {
     log(ABORT, msg, function_name);
     exit(1);
@@ -181,15 +274,5 @@ void Logger::assert_or_die(bool expr, std::string failure_message, std::string f
 {
     if (!expr)
         abort(failure_message, function_name);
-}
-
-/** Get a timestamp, as a floating-point number of seconds. */
-double
-Logger::log_get_timestamp()
-{
-  struct timeval now, delta;
-  gettimeofday(&now, 0);
-  timeval_subtract(&now, &log_ts_base, &delta);
-  return delta.tv_sec + double(delta.tv_usec) / 1e6;
 }
 
