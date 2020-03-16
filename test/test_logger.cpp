@@ -15,10 +15,7 @@ using namespace ouinet;
 
 BOOST_AUTO_TEST_CASE(test_generate_node_id)
 {    
-    const std::string log_file = "testlog.txt";
-
     Logger log(SILLY);                // All logs with level >= SILLY will display
-    log.config(true, true, log_file); // Log to stdout and file testlog.txt
 
     // Do some logging
     // You can call log with a level manually
@@ -45,17 +42,6 @@ BOOST_AUTO_TEST_CASE(test_generate_node_id)
     LOG_VERBOSE("This should make it out from the default logger with the macro");
     LOG_WARN("This should make it out with from the default logger the macro");
     LOG_DEBUG("This should not make it out from the default logger with the macro");
-
-    // Stop writing to a file.
-    log.config(true, false, "");
-    log.info("This should not make it to the file.");
-
-    // Stop outputting logs at all.
-    log.config(false, false, "");
-    log.error("This should not make it out");
-
-    // Do not leave the log file lying around
-    remove(log_file.c_str());
 }
 
 BOOST_AUTO_TEST_SUITE_END()

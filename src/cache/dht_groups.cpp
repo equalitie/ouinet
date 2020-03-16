@@ -8,8 +8,9 @@ using namespace ouinet;
 
 #define _LOGPFX "DHT Groups: "
 #define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
-#define _WARN(...) LOG_WARN(_LOGPFX, __VA_ARGS__)
+#define _WARN(...)  LOG_WARN(_LOGPFX, __VA_ARGS__)
 #define _ERROR(...) LOG_ERROR(_LOGPFX, __VA_ARGS__)
+#define _INFO(...)  LOG_INFO(_LOGPFX, __VA_ARGS__)
 
 using asio::yield_context;
 namespace file_io = util::file_io;
@@ -187,7 +188,7 @@ void DhtGroups::add( const GroupName& group_name
                    , Cancel& cancel
                    , yield_context yield)
 {
-    _WARN("Adding: ", group_name, " -> ", item_name);
+    _INFO("Adding: ", group_name, " -> ", item_name);
     fs::path group_p = group_path(group_name);
 
     if (fs::exists(group_p)) {

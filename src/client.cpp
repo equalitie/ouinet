@@ -86,7 +86,8 @@ static const fs::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
 static const fs::path OUINET_CA_DH_FILE = "ssl-ca-dh.pem";
 
 static bool log_transactions() {
-    return logger.get_threshold() <= DEBUG;
+    return logger.get_threshold() <= DEBUG
+        || logger.get_log_file() != nullptr;
 }
 
 //------------------------------------------------------------------------------
@@ -840,11 +841,11 @@ public:
         , cc(client_state.get_executor(), OUINET_CLIENT_SERVER_STRING)
     {
         cc.fetch_fresh = [&] (const Request& rq, Cancel& cancel, Yield yield) {
-            return fetch_fresh(rq, cancel, yield);
+            return fetch_fresh(rq, cancel, yield.tag("fresh"));
         };
 
         cc.fetch_stored = [&] (const Request& rq, const std::string& dht_group, Cancel& cancel, Yield yield) {
-            return fetch_stored(rq, dht_group, cancel, yield);
+            return fetch_stored(rq, dht_group, cancel, yield.tag("cache"));
         };
 
         cc.max_cached_age(client_state._config.max_cached_age());
@@ -853,8 +854,17 @@ public:
     Session fetch_fresh(const Request& request, Cancel& cancel, Yield yield) {
         namespace err = asio::error;
 
-        if (!client_state._config.is_injector_access_enabled())
+        if (log_transactions()) {
+            yield.log("start");
+        }
+
+        if (!client_state._config.is_injector_access_enabled()) {
+            if (log_transactions()) {
+                yield.log("disabled");
+            }
+
             return or_throw<Session>(yield, err::operation_not_supported);
+        }
 
         sys::error_code ec;
         auto s = client_state.fetch_fresh_through_simple_proxy( request
@@ -864,9 +874,9 @@ public:
 
         if (log_transactions()) {
             if (!ec) {
-                yield.log("Fetched fresh success, status: ", s.response_header().result());
+                yield.log("finish: ", ec.message(), ", status: ", s.response_header().result());
             } else {
-                yield.log("Fetched fresh error: ", ec.message());
+                yield.log("finish: ", ec.message());
             }
         }
 
@@ -876,7 +886,7 @@ public:
     CacheEntry
     fetch_stored(const Request& request, const std::string& dht_group, Cancel& cancel, Yield yield) {
         if (log_transactions()) {
-            yield.log("Fetching from cache");
+            yield.log("start");
         }
 
         sys::error_code ec;
@@ -886,8 +896,8 @@ public:
                                           , cancel
                                           , yield[ec]);
 
-        if (ec && log_transactions()) {
-            yield.log("Fetched from cache error: ", ec.message());
+        if (log_transactions()) {
+            yield.log("finish: ", ec.message(), " canceled: ", bool(cancel));
         }
 
         return or_throw(yield, ec, move(r));
@@ -937,6 +947,12 @@ public:
                 case fresh_channel::origin: {
                     auto rq_ = rq;
 
+                    auto y = yield.tag("origin");
+
+                    if (log_transactions()) {
+                        y.log("start");
+                    }
+
                     if (r == fresh_channel::secure_origin
                             && rq_.target().starts_with("http://")) {
                         auto target = rq_.target().to_string();
@@ -944,21 +960,38 @@ public:
                         rq_.target(move(target));
                     }
 
-                    auto session = client_state.fetch_fresh_from_origin(rq_, yield[ec]);
+                    auto session = client_state.fetch_fresh_from_origin(rq_, y[ec]);
+
+                    if (log_transactions()) {
+                        y.log("fetch: ", ec.message());
+                    }
 
                     if (ec) break;
 
-                    session.flush_response(con, cancel, yield[ec]);
+                    session.flush_response(con, cancel, y[ec]);
+
+                    if (log_transactions()) {
+                        y.log("flush: ", ec.message());
+                    }
 
                     bool keep_alive = !ec && rq_.keep_alive() && session.keep_alive();
                     if (!keep_alive) {
                         session.close();
                         con.close();
                     }
-                    return or_throw(yield, ec, keep_alive);
+                    return or_throw(y, ec, keep_alive);
                 }
                 case fresh_channel::proxy: {
+                    auto y = yield.tag("proxy");
+
+                    if (log_transactions()) {
+                        y.log("start");
+                    }
+
                     if (!client_state._config.is_proxy_access_enabled()) {
+                        if (log_transactions()) {
+                            y.log("disabled");
+                        }
                         continue;
                     }
 
@@ -966,16 +999,24 @@ public:
 
                     if (rq.target().starts_with("https://")) {
                         session = client_state.fetch_fresh_through_connect_proxy
-                                (rq, cancel, yield[ec]);
+                                (rq, cancel, y[ec]);
                     }
                     else {
                         session = client_state.fetch_fresh_through_simple_proxy
-                                (rq, false, cancel, yield[ec]);
+                                (rq, false, cancel, y[ec]);
+                    }
+
+                    if (log_transactions()) {
+                        y.log("Proxy fetch: ", ec.message());
                     }
 
                     if (ec) break;
 
-                    session.flush_response(con, cancel, yield[ec]);
+                    session.flush_response(con, cancel, y[ec]);
+
+                    if (log_transactions()) {
+                        y.log("flush: ", ec.message());
+                    }
 
                     bool keep_alive = !ec && rq.keep_alive() && session.keep_alive();
                     if (!keep_alive) {
@@ -985,15 +1026,21 @@ public:
                     return or_throw(yield, ec, keep_alive);
                 }
                 case fresh_channel::injector: {
+                    auto y = yield.tag("injector");
+
                     sys::error_code fresh_ec;
                     sys::error_code cache_ec;
 
-                    auto s = cc.fetch(rq, meta.dht_group, fresh_ec, cache_ec, cancel, yield[ec]);
+                    if (log_transactions()) {
+                        y.log("start");
+                    }
+
+                    auto s = cc.fetch(rq, meta.dht_group, fresh_ec, cache_ec, cancel, y[ec]);
 
                     if (log_transactions()) {
-                        yield.log("cc.fetch ec:", ec.message(),
-                                " fresh_ec:", fresh_ec.message(),
-                                " cache_ec:", cache_ec.message());
+                        y.log("cc.fetch ec:", ec.message(),
+                              " fresh_ec:", fresh_ec.message(),
+                              " cache_ec:", cache_ec.message());
                     }
 
                     if (ec) break;
@@ -1001,8 +1048,8 @@ public:
                     auto& rsh = s.response_header();
 
                     if (log_transactions()) {
-                        yield.log("Response header:");
-                        yield.log(rsh);
+                        y.log("Response header:");
+                        y.log(rsh);
                     }
 
                     assert(!fresh_ec || !cache_ec); // At least one success
@@ -1010,7 +1057,9 @@ public:
 
                     auto injector_error = rsh[http_::response_error_hdr];
                     if (!injector_error.empty()) {
-                        yield.log("Error from injector: ", injector_error);
+                        if (log_transactions()) {
+                            y.log("Error from injector: ", injector_error);
+                        }
                         ec = asio::error::invalid_argument;
                         break;
                     }
@@ -1039,8 +1088,8 @@ public:
                             auto key = key_from_http_req(rq); assert(key);
                             AsyncQueueReader rr(qst);
                             sys::error_code ec;
-                            auto y = yield.detach(yield_);
-                            cache->store(*key, *meta.dht_group, rr, cancel, y[ec]);
+                            auto y_ = y.detach(yield_);
+                            cache->store(*key, *meta.dht_group, rr, cancel, y_[ec]);
                         }));
                     }
 
@@ -1073,6 +1122,11 @@ public:
                         s.close();
                         con.close();
                     }
+
+                    if (log_transactions()) {
+                        y.log("finish: ", ec.message());
+                    }
+
                     return or_throw(yield, ec, keep_alive);
                 }
             }
@@ -1502,7 +1556,7 @@ void Client::State::serve_request( GenericStream&& con
         auto meta = UserAgentMetaData::extract(req);
 
         bool keep_alive
-            = cache_control.fetch(con, req, meta, yield[ec].tag("cache_control.fetch"));
+            = cache_control.fetch(con, req, meta, yield[ec].tag("fetch"));
 
         if (ec) {
             if (log_transactions()) {

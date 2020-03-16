@@ -3,6 +3,7 @@
 #include <sstream>
 #include "../namespaces.h"
 #include "../util/str.h"
+#include "../logger.h"
 #include <boost/intrusive/list.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/steady_timer.hpp>
@@ -215,10 +216,9 @@ void Yield::start_timing()
             if (!ts->self) return;
 
             auto notify = [&](Clock::duration d) {
-                std::cerr << ts->self->tag()
-                          << " is still working after "
-                          << Yield::duration_secs(d) << " seconds"
-                          << std::endl;
+                LOG_WARN(ts->self->tag()
+                        , " is still working after "
+                        , Yield::duration_secs(d), " seconds");
             };
 
             boost::optional<Clock::duration> first_duration
@@ -257,7 +257,7 @@ void Yield::log(boost::string_view str)
     while (str.size()) {
         auto endl = str.find('\n');
 
-        std::cerr << tag() << " " << str.substr(0, endl) << std::endl;
+        LOG_INFO(tag(), " ", str.substr(0, endl));
 
         if (endl == std::string::npos) {
             break;
