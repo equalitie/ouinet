@@ -676,7 +676,7 @@ private:
     unsatisfied_range()
     {
         // See RFC7233#4.2 for the syntax.
-        return data_size ? util::str("bytes */", *data_size) : "*/*";
+        return data_size ? util::str("bytes */", *data_size) : "bytes */*";
     }
 
     boost::optional<std::size_t>
