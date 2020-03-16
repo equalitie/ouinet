@@ -897,6 +897,51 @@ public:
         cc.max_cached_age(client_state._config.max_cached_age());
     }
 
+    bool origin_job_func( bool force_secure
+                        , Request rq
+                        , GenericStream& con
+                        , Cancel& cancel, Yield yield) {
+        if (cancel) {
+            LOG_ERROR("origin_job_func received an already triggered cancel");
+            return or_throw(yield, asio::error::operation_aborted, false);
+        }
+
+        using request_route::fresh_channel;
+
+        if (log_transactions()) {
+            yield.log("start");
+        }
+
+        if (force_secure && rq.target().starts_with("http://")) {
+            auto target = rq.target().to_string();
+            target.insert(4, "s"); // http:// -> https://
+            rq.target(move(target));
+        }
+
+        sys::error_code ec;
+        auto session = client_state.fetch_fresh_from_origin(rq, yield[ec]);
+
+        if (log_transactions()) {
+            yield.log("fetch: ", ec.message());
+        }
+
+        if (ec) return or_throw(yield, ec, false);
+
+        session.flush_response(con, cancel, yield[ec]);
+
+        if (log_transactions()) {
+            yield.log("flush: ", ec.message());
+        }
+
+        bool keep_alive = !ec && rq.keep_alive() && session.keep_alive();
+        if (!keep_alive) {
+            session.close();
+            con.close();
+        }
+
+        return or_throw(yield, ec, keep_alive);
+    }
+
     // Closes `con` when it can no longer be used.
     // If an error is reported and it is still open,
     // a response may still be sent to it.
@@ -939,41 +984,12 @@ public:
                 }
                 case fresh_channel::secure_origin:
                 case fresh_channel::origin: {
-                    auto rq_ = rq;
-
-                    auto y = yield.tag("origin");
-
-                    if (log_transactions()) {
-                        y.log("start");
+                    bool force_secure = (r == fresh_channel::secure_origin);
+                    bool keep_alive = origin_job_func(force_secure, rq, con, cancel, yield.tag("origin")[ec]);
+                    if (!ec) {
+                        return keep_alive;
                     }
-
-                    if (r == fresh_channel::secure_origin
-                            && rq_.target().starts_with("http://")) {
-                        auto target = rq_.target().to_string();
-                        target.insert(4, "s"); // http:// -> https://
-                        rq_.target(move(target));
-                    }
-
-                    auto session = client_state.fetch_fresh_from_origin(rq_, y[ec]);
-
-                    if (log_transactions()) {
-                        y.log("fetch: ", ec.message());
-                    }
-
-                    if (ec) break;
-
-                    session.flush_response(con, cancel, y[ec]);
-
-                    if (log_transactions()) {
-                        y.log("flush: ", ec.message());
-                    }
-
-                    bool keep_alive = !ec && rq_.keep_alive() && session.keep_alive();
-                    if (!keep_alive) {
-                        session.close();
-                        con.close();
-                    }
-                    return or_throw(y, ec, keep_alive);
+                    break;
                 }
                 case fresh_channel::proxy: {
                     auto y = yield.tag("proxy");
