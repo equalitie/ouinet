@@ -616,9 +616,11 @@ _http_store_reader_v1( const fs::path& dirp, asio::executor ex
 
     auto sigsf = util::file_io::open_readonly(ex, dirp / sigs_fname, ec);
     if (ec && ec != sys::errc::no_such_file_or_directory) return nullptr;
+    ec = {};
 
     auto bodyf = util::file_io::open_readonly(ex, dirp / body_fname, ec);
     if (ec && ec != sys::errc::no_such_file_or_directory) return nullptr;
+    ec = {};
 
     boost::optional<std::size_t> range_begin, range_end;
     if (range_first) {
