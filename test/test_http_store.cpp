@@ -164,6 +164,91 @@ static void run_spawned(asio::io_context& ctx, F&& f) {
     ctx.run();
 }
 
+void store_response( const fs::path& tmpdir, bool complete
+                   , asio::io_context& ctx, asio::yield_context yield) {
+    asio::ip::tcp::socket
+        signed_w(ctx), signed_r(ctx);
+    tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
+
+    WaitCondition wc(ctx);
+
+    // Send signed response.
+    asio::spawn(ctx, [&signed_w, complete, lock = wc.lock()] (auto y) {
+        // Head (raw).
+        asio::async_write( signed_w
+                         , asio::const_buffer(rs_head.data(), rs_head.size())
+                         , y);
+
+        // Chunk headers and bodies (one chunk per block).
+        unsigned bi;
+        for (bi = 0; bi < rs_block_data.size(); ++bi) {
+            auto cbd = util::bytes::to_vector<uint8_t>(rs_block_data[bi]);
+            auto ch = http_response::ChunkHdr(cbd.size(), rs_chunk_ext[bi]);
+            ch.async_write(signed_w, y);
+            auto cb = http_response::ChunkBody(std::move(cbd), 0);
+            cb.async_write(signed_w, y);
+        }
+
+        if (!complete) {  // no last chunk nor trailer
+            // Last block signature should be missing
+            // and its data should not be sent when reading
+            // even if available on disk.
+            signed_w.close();
+            return;
+        }
+
+        // Last chunk and trailer (raw).
+        auto chZ = http_response::ChunkHdr(0, rs_chunk_ext[bi]);
+        chZ.async_write(signed_w, y);
+        asio::async_write( signed_w
+                         , asio::const_buffer(rs_trailer.data(), rs_trailer.size())
+                         , y);
+
+        signed_w.close();
+    });
+
+    // Store response.
+    asio::spawn(ctx, [ signed_r = std::move(signed_r), &tmpdir, complete
+                     , &ctx, lock = wc.lock()] (auto y) mutable {
+        Cancel c;
+        sys::error_code e;
+        http_response::Reader signed_rr(std::move(signed_r));
+        cache::http_store_v1(signed_rr, tmpdir, ctx.get_executor(), c, y[e]);
+        BOOST_CHECK(!complete || !e);
+    });
+
+    wc.wait(yield);
+}
+
+void store_response_head( const fs::path& tmpdir, const string& head_s
+                        , asio::io_context& ctx, asio::yield_context yield) {
+    asio::ip::tcp::socket
+        signed_w(ctx), signed_r(ctx);
+    tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
+
+    WaitCondition wc(ctx);
+
+    // Send signed response.
+    asio::spawn(ctx, [&signed_w, &head_s, lock = wc.lock()] (auto y) {
+        // Head (raw).
+        asio::async_write( signed_w
+                         , asio::const_buffer(head_s.data(), head_s.size())
+                         , y);
+        signed_w.close();
+    });
+
+    // Store response.
+    asio::spawn(ctx, [ signed_r = std::move(signed_r), &tmpdir
+                     , &ctx, lock = wc.lock()] (auto y) mutable {
+        Cancel c;
+        sys::error_code e;
+        http_response::Reader signed_rr(std::move(signed_r));
+        cache::http_store_v1(signed_rr, tmpdir, ctx.get_executor(), c, y[e]);
+    });
+
+    wc.wait(yield);
+}
+
 static const string rs_head_incomplete =
     ( _rs_head_origin
     + _rs_head_injection
@@ -210,58 +295,7 @@ BOOST_DATA_TEST_CASE(test_write_response, boost::unit_test::data::make(true_fals
 
     asio::io_context ctx;
     run_spawned(ctx, [&] (auto yield) {
-        WaitCondition wc(ctx);
-
-        asio::ip::tcp::socket
-            signed_w(ctx), signed_r(ctx);
-        tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
-
-        // Send signed response.
-        asio::spawn(ctx, [&signed_w, complete, lock = wc.lock()] (auto y) {
-            // Head (raw).
-            asio::async_write( signed_w
-                             , asio::const_buffer(rs_head.data(), rs_head.size())
-                             , y);
-
-            // Chunk headers and bodies (one chunk per block).
-            unsigned bi;
-            for (bi = 0; bi < rs_block_data.size(); ++bi) {
-                auto cbd = util::bytes::to_vector<uint8_t>(rs_block_data[bi]);
-                auto ch = http_response::ChunkHdr(cbd.size(), rs_chunk_ext[bi]);
-                ch.async_write(signed_w, y);
-                // For the incomplete test, produce the chunk header of last block
-                // but not its body; the last block signature should be missing.
-                if (!complete && bi == rs_block_data.size() - 1) break;
-                auto cb = http_response::ChunkBody(std::move(cbd), 0);
-                cb.async_write(signed_w, y);
-            }
-
-            if (!complete) {  // no last chunk nor trailer
-                signed_w.close();
-                return;
-            }
-
-            // Last chunk and trailer (raw).
-            auto chZ = http_response::ChunkHdr(0, rs_chunk_ext[bi]);
-            chZ.async_write(signed_w, y);
-            asio::async_write( signed_w
-                             , asio::const_buffer(rs_trailer.data(), rs_trailer.size())
-                             , y);
-
-            signed_w.close();
-        });
-
-        // Store response.
-        asio::spawn(ctx, [ signed_r = std::move(signed_r), &tmpdir, complete
-                         , &ctx, lock = wc.lock()] (auto y) mutable {
-            Cancel c;
-            sys::error_code e;
-            http_response::Reader signed_rr(std::move(signed_r));
-            cache::http_store_v1(signed_rr, tmpdir, ctx.get_executor(), c, y[e]);
-            BOOST_CHECK(!complete || !e);
-        });
-
-        wc.wait(yield);
+        store_response(tmpdir, complete, ctx, yield);
 
         auto read_file = [&] (auto fname, auto c, auto y) -> string {
             sys::error_code e;
@@ -287,7 +321,7 @@ BOOST_DATA_TEST_CASE(test_write_response, boost::unit_test::data::make(true_fals
 
         auto body = read_file("body", cancel, yield[ec]);
         BOOST_CHECK_EQUAL(ec.message(), "Success");
-        BOOST_CHECK_EQUAL(body, complete ? rs_body_complete : rs_body_incomplete);
+        BOOST_CHECK_EQUAL(body, rs_body_complete);
 
         auto sigs = read_file("sigs", cancel, yield[ec]);
         BOOST_CHECK_EQUAL(ec.message(), "Success");
@@ -341,61 +375,13 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
 
     asio::io_context ctx;
     run_spawned(ctx, [&] (auto yield) {
-        WaitCondition wc(ctx);
-
-        asio::ip::tcp::socket
-            signed_w(ctx), signed_r(ctx);
-        tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
-
-        // Send signed response.
-        asio::spawn(ctx, [&signed_w, complete, lock = wc.lock()] (auto y) {
-            // Head (raw).
-            asio::async_write( signed_w
-                             , asio::const_buffer(rs_head.data(), rs_head.size())
-                             , y);
-
-            // Chunk headers and bodies (one chunk per block).
-            unsigned bi;
-            for (bi = 0; bi < rs_block_data.size(); ++bi) {
-                auto cbd = util::bytes::to_vector<uint8_t>(rs_block_data[bi]);
-                auto ch = http_response::ChunkHdr(cbd.size(), rs_chunk_ext[bi]);
-                ch.async_write(signed_w, y);
-                auto cb = http_response::ChunkBody(std::move(cbd), 0);
-                cb.async_write(signed_w, y);
-            }
-
-            if (!complete) {  // no last chunk nor trailer
-                // Last block signature should be missing
-                // and its data should not be sent even if available on disk.
-                signed_w.close();
-                return;
-            }
-
-            // Last chunk and trailer (raw).
-            auto chZ = http_response::ChunkHdr(0, rs_chunk_ext[bi]);
-            chZ.async_write(signed_w, y);
-            asio::async_write( signed_w
-                             , asio::const_buffer(rs_trailer.data(), rs_trailer.size())
-                             , y);
-
-            signed_w.close();
-        });
-
-        // Store response.
-        asio::spawn(ctx, [ signed_r = std::move(signed_r), &tmpdir, complete
-                         , &ctx, lock = wc.lock()] (auto y) mutable {
-            Cancel c;
-            sys::error_code e;
-            http_response::Reader signed_rr(std::move(signed_r));
-            cache::http_store_v1(signed_rr, tmpdir, ctx.get_executor(), c, y[e]);
-            BOOST_CHECK(!complete || !e);
-        });
-
-        wc.wait(yield);
+        store_response(tmpdir, complete, ctx, yield);
 
         asio::ip::tcp::socket
             loaded_w(ctx), loaded_r(ctx);
         tie(loaded_w, loaded_r) = util::connected_pair(ctx, yield);
+
+        WaitCondition wc(ctx);
 
         // Load response.
         asio::spawn(ctx, [ &loaded_w, &tmpdir, complete
@@ -523,53 +509,13 @@ BOOST_DATA_TEST_CASE( test_read_response_partial
 
     asio::io_context ctx;
     run_spawned(ctx, [&] (auto yield) {
-        WaitCondition wc(ctx);
-
-        asio::ip::tcp::socket
-            signed_w(ctx), signed_r(ctx);
-        tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
-
-        // Send signed response.
-        asio::spawn(ctx, [&signed_w, lock = wc.lock()] (auto y) {
-            // Head (raw).
-            asio::async_write( signed_w
-                             , asio::const_buffer(rs_head.data(), rs_head.size())
-                             , y);
-
-            // Chunk headers and bodies (one chunk per block).
-            unsigned bi;
-            for (bi = 0; bi < rs_block_data.size(); ++bi) {
-                auto cbd = util::bytes::to_vector<uint8_t>(rs_block_data[bi]);
-                auto ch = http_response::ChunkHdr(cbd.size(), rs_chunk_ext[bi]);
-                ch.async_write(signed_w, y);
-                auto cb = http_response::ChunkBody(std::move(cbd), 0);
-                cb.async_write(signed_w, y);
-            }
-
-            // Last chunk and trailer (raw).
-            auto chZ = http_response::ChunkHdr(0, rs_chunk_ext[bi]);
-            chZ.async_write(signed_w, y);
-            asio::async_write( signed_w
-                             , asio::const_buffer(rs_trailer.data(), rs_trailer.size())
-                             , y);
-
-            signed_w.close();
-        });
-
-        // Store response.
-        asio::spawn(ctx, [ signed_r = std::move(signed_r), &tmpdir
-                         , &ctx, lock = wc.lock()] (auto y) mutable {
-            Cancel c;
-            sys::error_code e;
-            http_response::Reader signed_rr(std::move(signed_r));
-            cache::http_store_v1(signed_rr, tmpdir, ctx.get_executor(), c, y);
-        });
-
-        wc.wait(yield);
+        store_response(tmpdir, true, ctx, yield);
 
         asio::ip::tcp::socket
             loaded_w(ctx), loaded_r(ctx);
         tie(loaded_w, loaded_r) = util::connected_pair(ctx, yield);
+
+        WaitCondition wc(ctx);
 
         // Load partial response:
         // request from middle first block to middle last block.
@@ -670,49 +616,7 @@ BOOST_AUTO_TEST_CASE(test_read_response_partial_off) {
 
     asio::io_context ctx;
     run_spawned(ctx, [&] (auto yield) {
-        WaitCondition wc(ctx);
-
-        asio::ip::tcp::socket
-            signed_w(ctx), signed_r(ctx);
-        tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
-
-        // Send signed response.
-        asio::spawn(ctx, [&signed_w, lock = wc.lock()] (auto y) {
-            // Head (raw).
-            asio::async_write( signed_w
-                             , asio::const_buffer(rs_head.data(), rs_head.size())
-                             , y);
-
-            // Chunk headers and bodies (one chunk per block).
-            unsigned bi;
-            for (bi = 0; bi < rs_block_data.size(); ++bi) {
-                auto cbd = util::bytes::to_vector<uint8_t>(rs_block_data[bi]);
-                auto ch = http_response::ChunkHdr(cbd.size(), rs_chunk_ext[bi]);
-                ch.async_write(signed_w, y);
-                auto cb = http_response::ChunkBody(std::move(cbd), 0);
-                cb.async_write(signed_w, y);
-            }
-
-            // Last chunk and trailer (raw).
-            auto chZ = http_response::ChunkHdr(0, rs_chunk_ext[bi]);
-            chZ.async_write(signed_w, y);
-            asio::async_write( signed_w
-                             , asio::const_buffer(rs_trailer.data(), rs_trailer.size())
-                             , y);
-
-            signed_w.close();
-        });
-
-        // Store response.
-        asio::spawn(ctx, [ signed_r = std::move(signed_r), &tmpdir
-                         , &ctx, lock = wc.lock()] (auto y) mutable {
-            Cancel c;
-            sys::error_code e;
-            http_response::Reader signed_rr(std::move(signed_r));
-            cache::http_store_v1(signed_rr, tmpdir, ctx.get_executor(), c, y);
-        });
-
-        wc.wait(yield);
+        store_response(tmpdir, true, ctx, yield);
 
         sys::error_code e;
         auto store_rr = cache::http_store_range_reader_v1
@@ -721,6 +625,176 @@ BOOST_AUTO_TEST_CASE(test_read_response_partial_off) {
             , e);
         BOOST_CHECK_EQUAL(e, sys::errc::invalid_seek);
         BOOST_CHECK(!store_rr);
+    });
+}
+
+
+static const string rrsh_head_incomplete =
+    ( _rs_head_origin
+    + _rs_head_injection
+    + _rs_head_sig0
+    + "X-Ouinet-Avail-Data: bytes 0-131071/*\r\n"
+    + "\r\n");
+
+static const string rrsh_head_complete =
+    ( _rs_head_origin
+    + _rs_head_injection
+    + _rs_head_digest
+    + _rs_head_sig1
+    + "X-Ouinet-Avail-Data: bytes 0-131075/131076\r\n"
+    + "\r\n");
+
+// TODO: Test partial block after last sig; partial block before last sig.
+BOOST_DATA_TEST_CASE(test_response_head, boost::unit_test::data::make(true_false), complete) {
+    auto tmpdir = fs::unique_path();
+    auto rmdir = defer([&tmpdir] {
+        sys::error_code ec;
+        fs::remove_all(tmpdir, ec);
+    });
+    fs::create_directory(tmpdir);
+
+    asio::io_context ctx;
+    run_spawned(ctx, [&] (auto yield) {
+        store_response(tmpdir, complete, ctx, yield);
+
+        asio::ip::tcp::socket
+            loaded_w(ctx), loaded_r(ctx);
+        tie(loaded_w, loaded_r) = util::connected_pair(ctx, yield);
+
+        WaitCondition wc(ctx);
+
+        // Load head response.
+        asio::spawn(ctx, [ &loaded_w, &tmpdir
+                         , &ctx, lock = wc.lock()] (auto y) {
+            Cancel c;
+            sys::error_code e;
+            auto store_rr = cache::http_store_head_reader_v1
+                (tmpdir, ctx.get_executor(), e);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            BOOST_REQUIRE(store_rr);
+            auto store_s = Session::create(std::move(store_rr), c, y[e]);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            store_s.flush_response(loaded_w, c, y[e]);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            loaded_w.close();
+        });
+
+        // Check parts of the loaded response.
+        asio::spawn(ctx, [ loaded_r = std::move(loaded_r), complete
+                         , lock = wc.lock()] (auto y) mutable {
+            Cancel c;
+            sys::error_code e;
+            http_response::Reader loaded_rr(std::move(loaded_r));
+
+            // Head.
+            auto part = loaded_rr.async_read_part(c, y[e]);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            BOOST_REQUIRE(part);
+            BOOST_REQUIRE(part->is_head());
+            BOOST_CHECK_EQUAL( util::str(*(part->as_head()))
+                             , complete ? rrsh_head_complete : rrsh_head_incomplete);
+
+            // Nothing else.
+            part = loaded_rr.async_read_part(c, y[e]);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            BOOST_CHECK(!part);
+            BOOST_CHECK(loaded_rr.is_done());
+        });
+
+        wc.wait(yield);
+    });
+}
+
+
+static const string _rs_head_incomplete_nb =
+    ( _rs_head_origin
+    + _rs_head_injection
+    + _rs_head_sig0);
+
+static const string irs_head_incomplete_nb =
+    ( _rs_head_incomplete_nb
+    + "\r\n");
+
+static const string ors_head_incomplete_nb =
+    ( _rs_head_incomplete_nb
+    + "X-Ouinet-Avail-Data: bytes */*\r\n"
+    + "\r\n");
+
+static const string _rs_head_complete_nb =
+    ( _rs_head_origin
+    + _rs_head_injection
+    + _rs_head_digest
+    + _rs_head_sig1);
+
+static const string irs_head_complete_nb =
+    ( _rs_head_complete_nb
+    + "\r\n");
+
+static const string ors_head_complete_nb =
+    ( _rs_head_complete_nb
+    + "X-Ouinet-Avail-Data: bytes */131076\r\n"
+    + "\r\n");
+
+BOOST_DATA_TEST_CASE( test_response_head_no_body
+                    , boost::unit_test::data::make(true_false), complete) {
+    auto tmpdir = fs::unique_path();
+    auto rmdir = defer([&tmpdir] {
+        sys::error_code ec;
+        fs::remove_all(tmpdir, ec);
+    });
+    fs::create_directory(tmpdir);
+
+    asio::io_context ctx;
+    run_spawned(ctx, [&] (auto yield) {
+        store_response_head
+            ( tmpdir, complete ? irs_head_complete_nb : irs_head_incomplete_nb
+            , ctx, yield);
+
+        asio::ip::tcp::socket
+            loaded_w(ctx), loaded_r(ctx);
+        tie(loaded_w, loaded_r) = util::connected_pair(ctx, yield);
+
+        WaitCondition wc(ctx);
+
+        // Load head response.
+        asio::spawn(ctx, [ &loaded_w, &tmpdir
+                         , &ctx, lock = wc.lock()] (auto y) {
+            Cancel c;
+            sys::error_code e;
+            auto store_rr = cache::http_store_head_reader_v1
+                (tmpdir, ctx.get_executor(), e);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            BOOST_REQUIRE(store_rr);
+            auto store_s = Session::create(std::move(store_rr), c, y[e]);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            store_s.flush_response(loaded_w, c, y[e]);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            loaded_w.close();
+        });
+
+        // Check parts of the loaded response.
+        asio::spawn(ctx, [ loaded_r = std::move(loaded_r), complete
+                         , lock = wc.lock()] (auto y) mutable {
+            Cancel c;
+            sys::error_code e;
+            http_response::Reader loaded_rr(std::move(loaded_r));
+
+            // Head.
+            auto part = loaded_rr.async_read_part(c, y[e]);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            BOOST_REQUIRE(part);
+            BOOST_REQUIRE(part->is_head());
+            BOOST_CHECK_EQUAL( util::str(*(part->as_head()))
+                             , complete ? ors_head_complete_nb : ors_head_incomplete_nb);
+
+            // Nothing else.
+            part = loaded_rr.async_read_part(c, y[e]);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            BOOST_CHECK(!part);
+            BOOST_CHECK(loaded_rr.is_done());
+        });
+
+        wc.wait(yield);
     });
 }
 
