@@ -220,6 +220,35 @@ void store_response( const fs::path& tmpdir, bool complete
     wc.wait(yield);
 }
 
+void store_response_head( const fs::path& tmpdir, const string& head_s
+                        , asio::io_context& ctx, asio::yield_context yield) {
+    asio::ip::tcp::socket
+        signed_w(ctx), signed_r(ctx);
+    tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
+
+    WaitCondition wc(ctx);
+
+    // Send signed response.
+    asio::spawn(ctx, [&signed_w, &head_s, lock = wc.lock()] (auto y) {
+        // Head (raw).
+        asio::async_write( signed_w
+                         , asio::const_buffer(head_s.data(), head_s.size())
+                         , y);
+        signed_w.close();
+    });
+
+    // Store response.
+    asio::spawn(ctx, [ signed_r = std::move(signed_r), &tmpdir
+                     , &ctx, lock = wc.lock()] (auto y) mutable {
+        Cancel c;
+        sys::error_code e;
+        http_response::Reader signed_rr(std::move(signed_r));
+        cache::http_store_v1(signed_rr, tmpdir, ctx.get_executor(), c, y[e]);
+    });
+
+    wc.wait(yield);
+}
+
 static const string rs_head_incomplete =
     ( _rs_head_origin
     + _rs_head_injection
@@ -664,6 +693,99 @@ BOOST_DATA_TEST_CASE(test_response_head, boost::unit_test::data::make(true_false
             BOOST_REQUIRE(part->is_head());
             BOOST_CHECK_EQUAL( util::str(*(part->as_head()))
                              , complete ? rrsh_head_complete : rrsh_head_incomplete);
+
+            // Nothing else.
+            part = loaded_rr.async_read_part(c, y[e]);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            BOOST_CHECK(!part);
+            BOOST_CHECK(loaded_rr.is_done());
+        });
+
+        wc.wait(yield);
+    });
+}
+
+
+static const string _rs_head_incomplete_nb =
+    ( _rs_head_origin
+    + _rs_head_injection
+    + _rs_head_sig0);
+
+static const string irs_head_incomplete_nb =
+    ( _rs_head_incomplete_nb
+    + "\r\n");
+
+static const string ors_head_incomplete_nb =
+    ( _rs_head_incomplete_nb
+    + "X-Ouinet-Avail-Data: bytes */*\r\n"
+    + "\r\n");
+
+static const string _rs_head_complete_nb =
+    ( _rs_head_origin
+    + _rs_head_injection
+    + _rs_head_digest
+    + _rs_head_sig1);
+
+static const string irs_head_complete_nb =
+    ( _rs_head_complete_nb
+    + "\r\n");
+
+static const string ors_head_complete_nb =
+    ( _rs_head_complete_nb
+    + "X-Ouinet-Avail-Data: bytes */131076\r\n"
+    + "\r\n");
+
+BOOST_DATA_TEST_CASE( test_response_head_no_body
+                    , boost::unit_test::data::make(true_false), complete) {
+    auto tmpdir = fs::unique_path();
+    auto rmdir = defer([&tmpdir] {
+        sys::error_code ec;
+        fs::remove_all(tmpdir, ec);
+    });
+    fs::create_directory(tmpdir);
+
+    asio::io_context ctx;
+    run_spawned(ctx, [&] (auto yield) {
+        store_response_head
+            ( tmpdir, complete ? irs_head_complete_nb : irs_head_incomplete_nb
+            , ctx, yield);
+
+        asio::ip::tcp::socket
+            loaded_w(ctx), loaded_r(ctx);
+        tie(loaded_w, loaded_r) = util::connected_pair(ctx, yield);
+
+        WaitCondition wc(ctx);
+
+        // Load head response.
+        asio::spawn(ctx, [ &loaded_w, &tmpdir
+                         , &ctx, lock = wc.lock()] (auto y) {
+            Cancel c;
+            sys::error_code e;
+            auto store_rr = cache::http_store_head_reader_v1
+                (tmpdir, ctx.get_executor(), e);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            BOOST_REQUIRE(store_rr);
+            auto store_s = Session::create(std::move(store_rr), c, y[e]);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            store_s.flush_response(loaded_w, c, y[e]);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            loaded_w.close();
+        });
+
+        // Check parts of the loaded response.
+        asio::spawn(ctx, [ loaded_r = std::move(loaded_r), complete
+                         , lock = wc.lock()] (auto y) mutable {
+            Cancel c;
+            sys::error_code e;
+            http_response::Reader loaded_rr(std::move(loaded_r));
+
+            // Head.
+            auto part = loaded_rr.async_read_part(c, y[e]);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            BOOST_REQUIRE(part);
+            BOOST_REQUIRE(part->is_head());
+            BOOST_CHECK_EQUAL( util::str(*(part->as_head()))
+                             , complete ? ors_head_complete_nb : ors_head_incomplete_nb);
 
             // Nothing else.
             part = loaded_rr.async_read_part(c, y[e]);
