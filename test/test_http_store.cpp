@@ -615,6 +615,7 @@ static const string rrsh_head_complete =
     + "X-Ouinet-Avail-Data: bytes 0-131075/131076\r\n"
     + "\r\n");
 
+// TODO: Test partial block after last sig; partial block before last sig.
 BOOST_DATA_TEST_CASE(test_response_head, boost::unit_test::data::make(true_false), complete) {
     auto tmpdir = fs::unique_path();
     auto rmdir = defer([&tmpdir] {
