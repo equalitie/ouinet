@@ -711,9 +711,10 @@ private:
         return_or_throw_on_error(yield, cancel, ec, "");
         if (!lsoff)
             return unsatisfied_range();;
-        // TODO: if `data_size`, check that last block is whole
         assert(block_size);
-        auto end = std::min(bsize, *lsoff + *block_size);
+        auto end = bsize > *lsoff
+            ? *lsoff + std::min(bsize - *lsoff, *block_size)
+            : (bsize / *block_size) * *block_size;
 
         return util::str(util::HttpByteRange{0, end - 1, data_size});
     }
