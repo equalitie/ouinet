@@ -118,6 +118,61 @@ Also note that partial responses mush have a `206 Partial Content` status, which
 
 HTTP range requests from client to injector may not be supported since the injector would need to download all data from the beginning to compute an initial `ouihash`.  This could be abused to make the injector use resources by asking for the last block of a big file.  At any rate, in such an injection, `Digest:` and `X-Ouinet-Data-Size:` may be missing in the final response head, if the injector did not have access to the whole body data.  Also, the (aligned) `Content-Range:` header would never be signed to allow later sharing of different subranges, which can be validated independently anyway.
 
+## HEAD requests
+
+If a client sends an HTTP `HEAD` request to another client, the later includes in its response an `X-Ouinet-Avail-Range:` header showing the available stored data (in the same format as the `Content-Range:` header described in [RFC7233#4.2][]). Data is considered to be available from a client if (i) it is actually stored in the client's local storage, and (ii) data block signatures covering it are stored as well.
+
+[RFC7233#4.2]: https://tools.ietf.org/html/rfc7233#section-4.2
+
+For example, a client having completely stored the response shown above may reply with a head like the following one:
+
+```
+HTTP/1.1 200 OK
+X-Ouinet-Version: 4
+X-Ouinet-URI: https://example.com/foo
+X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
+Date: Mon, 15 Jan 2018 20:31:50 GMT
+Server: Apache
+Content-Type: text/html
+Content-Disposition: inline; filename="foo.html"
+X-Ouinet-BSigs: keyId="ed25519=????",algorithm="hs2019",size=1048576
+X-Ouinet-Data-Size: 1048580
+X-Ouinet-Sig1: keyId="ed25519=????",algorithm="hs2019",created=1516048311,
+  headers="(response-status) (created) x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-http-status date server content-type content-disposition x-ouinet-bsigs digest x-ouinet-data-size",
+  signature="BASE64(...)"
+X-Ouinet-Avail-Range: bytes 0-1048579/1048580
+```
+
+A client having received the head of such response from another client, but only its first two data blocks may include the following header instead:
+
+```
+X-Ouinet-Avail-Range: bytes 0-131071/1048580
+```
+
+In contrast, a client having received only a partial response from the injector (hence with an unknown total size) including only the first two data blocks may reply with:
+
+```
+HTTP/1.1 200 OK
+X-Ouinet-Version: 4
+X-Ouinet-URI: https://example.com/foo
+X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
+Date: Mon, 15 Jan 2018 20:31:50 GMT
+Server: Apache
+Content-Type: text/html
+Content-Disposition: inline; filename="foo.html"
+X-Ouinet-BSigs: keyId="ed25519=????",algorithm="hs2019",size=1048576
+X-Ouinet-Sig0: keyId="ed25519=????",algorithm="hs2019",created=1516048310,
+  headers="(response-status) (created) x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-http-status date server content-type content-disposition x-ouinet-bsigs",
+  signature="BASE64(...)"
+X-Ouinet-Avail-Range: bytes 0-131071/*
+```
+
+If the client did not save any data blocks from the injector, the following header would be used instead (note that this deviates slightly from `Content-Range:` format):
+
+```
+X-Ouinet-Avail-Range: bytes */*
+```
+
 ## Issues
 
   - Choose an adequate data block size (can use different ones according to `Content-Length:` from the origin).
