@@ -215,11 +215,11 @@ private:
     // Ouinet-specific internal HTTP headers as expected by upper layers.
 
     CacheEntry
-    fetch_stored( const Request& request
-                , request_route::Config& request_config
-                , const std::string& dht_group
-                , Cancel& cancel
-                , Yield yield);
+    fetch_stored_in_dcache( const Request& request
+                          , request_route::Config& request_config
+                          , const std::string& dht_group
+                          , Cancel& cancel
+                          , Yield yield);
 
     Response fetch_fresh_from_front_end(const Request&, Yield);
     Session fetch_fresh_from_origin(const Request&, Yield);
@@ -470,11 +470,11 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
 
 //------------------------------------------------------------------------------
 CacheEntry
-Client::State::fetch_stored( const Request& request
-                           , request_route::Config& request_config
-                           , const std::string& dht_group
-                           , Cancel& cancel
-                           , Yield yield)
+Client::State::fetch_stored_in_dcache( const Request& request
+                                     , request_route::Config& request_config
+                                     , const std::string& dht_group
+                                     , Cancel& cancel
+                                     , Yield yield)
 {
     auto c = get_cache();
 
@@ -840,67 +840,61 @@ public:
         , request_config(request_config)
         , cc(client_state.get_executor(), OUINET_CLIENT_SERVER_STRING)
     {
+        //------------------------------------------------------------
         cc.fetch_fresh = [&] (const Request& rq, Cancel& cancel, Yield yield) {
-            return fetch_fresh(rq, cancel, yield.tag("fresh"));
-        };
+            namespace err = asio::error;
 
-        cc.fetch_stored = [&] (const Request& rq, const std::string& dht_group, Cancel& cancel, Yield yield) {
-            return fetch_stored(rq, dht_group, cancel, yield.tag("cache"));
-        };
-
-        cc.max_cached_age(client_state._config.max_cached_age());
-    }
-
-    Session fetch_fresh(const Request& request, Cancel& cancel, Yield yield) {
-        namespace err = asio::error;
-
-        if (log_transactions()) {
-            yield.log("start");
-        }
-
-        if (!client_state._config.is_injector_access_enabled()) {
             if (log_transactions()) {
-                yield.log("disabled");
+                yield.log("start");
             }
 
-            return or_throw<Session>(yield, err::operation_not_supported);
-        }
+            if (!client_state._config.is_injector_access_enabled()) {
+                if (log_transactions()) {
+                    yield.log("disabled");
+                }
 
-        sys::error_code ec;
-        auto s = client_state.fetch_fresh_through_simple_proxy( request
-                                                              , true
-                                                              , cancel
-                                                              , yield[ec]);
-
-        if (log_transactions()) {
-            if (!ec) {
-                yield.log("finish: ", ec.message(), ", status: ", s.response_header().result());
-            } else {
-                yield.log("finish: ", ec.message());
+                return or_throw<Session>(yield, err::operation_not_supported);
             }
-        }
 
-        return or_throw(yield, ec, move(s));
-    }
+            sys::error_code ec;
+            auto s = client_state.fetch_fresh_through_simple_proxy( rq
+                                                                  , true
+                                                                  , cancel
+                                                                  , yield[ec]);
 
-    CacheEntry
-    fetch_stored(const Request& request, const std::string& dht_group, Cancel& cancel, Yield yield) {
-        if (log_transactions()) {
-            yield.log("start");
-        }
+            if (log_transactions()) {
+                if (!ec) {
+                    yield.log("finish: ", ec.message(), ", status: ", s.response_header().result());
+                } else {
+                    yield.log("finish: ", ec.message());
+                }
+            }
 
-        sys::error_code ec;
-        auto r = client_state.fetch_stored( request
-                                          , request_config
-                                          , dht_group
-                                          , cancel
-                                          , yield[ec]);
+            return or_throw(yield, ec, move(s));
+        };
 
-        if (log_transactions()) {
-            yield.log("finish: ", ec.message(), " canceled: ", bool(cancel));
-        }
+        //------------------------------------------------------------
+        cc.fetch_stored = [&] (const Request& rq, const std::string& dht_group, Cancel& cancel, Yield yield) {
+            if (log_transactions()) {
+                yield.log("start");
+            }
 
-        return or_throw(yield, ec, move(r));
+            sys::error_code ec;
+            auto r = client_state.fetch_stored_in_dcache( rq
+                                                        , request_config
+                                                        , dht_group
+                                                        , cancel
+                                                        , yield[ec]);
+
+            if (log_transactions()) {
+                yield.log("finish: ", ec.message(), " canceled: ", bool(cancel));
+            }
+
+            return or_throw(yield, ec, move(r));
+        };
+
+        //------------------------------------------------------------
+        cc.max_cached_age(client_state._config.max_cached_age());
     }
 
     // Closes `con` when it can no longer be used.
