@@ -242,8 +242,11 @@ public:
     bool
     is_done() const override;
 
-private:
+protected:
     struct Impl;
+    VerifyingReader(GenericStream, std::unique_ptr<Impl>);
+
+private:
     std::unique_ptr<Impl> _impl;
 };
 
