@@ -204,6 +204,9 @@ public:
         return _bt_dht;
     }
 
+    http::response<http::string_body>
+    retrieval_failure_response(const Request&);
+
 private:
     GenericStream ssl_mitm_handshake( GenericStream&&
                                     , const Request&
@@ -270,7 +273,6 @@ private:
                                        , beast::string_view connect_host_port
                                        , Request&
                                        , Yield);
-    void handle_retrieval_failure(GenericStream&, const Request&, Yield);
 
     GenericStream connect_to_origin(const Request&, Cancel&, Yield);
 
@@ -831,6 +833,91 @@ Session Client::State::fetch_fresh_through_simple_proxy
     return session;
 }
 
+class Transaction {
+public:
+    Transaction(GenericStream& ua_con, const Request& rq, UserAgentMetaData meta)
+        : _ua_con(ua_con)
+        , _request(rq)
+        , _meta(std::move(meta))
+    {}
+
+    void write_to_user_agent(Session& session, Cancel& cancel, asio::yield_context yield)
+    {
+        namespace err = asio::error;
+
+        if (cancel) {
+            assert(!cancel);
+            LOG_ERROR(__FILE__, ":", __LINE__, " Cancel already called");
+            return or_throw(yield, err::operation_aborted);
+        }
+
+        if (_response_head) {
+            return or_throw(yield, err::already_started);
+        }
+
+        sys::error_code ec;
+
+        _response_head = session.response_header();
+        session.flush_response(_ua_con, cancel, yield[ec]);
+
+        bool keep_alive = !ec && _request.keep_alive() && session.keep_alive();
+
+        if (!keep_alive) {
+            session.close();
+            _ua_con.close();
+        }
+
+        return or_throw(yield, ec);
+    }
+
+    template<class BodyType>
+    void write_to_user_agent(const http::response<BodyType>& rs, Cancel& cancel, asio::yield_context yield)
+    {
+        namespace err = asio::error;
+
+        if (cancel) {
+            assert(!cancel);
+            LOG_ERROR(__FILE__, ":", __LINE__, " Cancel already called");
+            return or_throw(yield, err::operation_aborted);
+        }
+
+        if (_response_head) {
+            return or_throw(yield, err::already_started);
+        }
+
+        sys::error_code ec;
+
+        _response_head = rs;
+        http::async_write(_ua_con, rs, yield[ec]);
+
+        bool keep_alive = !ec && _request.keep_alive() && rs.keep_alive();
+
+        if (!keep_alive) _ua_con.close();
+
+        return or_throw(yield, ec);
+    }
+
+    const Request& request() const { return _request; }
+
+    const boost::optional<http::response_header<>>& response_head() const {
+        return _response_head;
+    }
+
+    bool user_agent_was_written_to() {
+        return bool(_response_head);
+    }
+
+    const UserAgentMetaData& meta() const { return _meta; }
+private:
+    /*
+     * Connection to the user agent
+     */
+    GenericStream& _ua_con;
+    const Request& _request;
+    boost::optional<http::response_header<>> _response_head;
+    UserAgentMetaData _meta;
+};
+
 //------------------------------------------------------------------------------
 class Client::ClientCacheControl {
 public:
@@ -897,13 +984,12 @@ public:
         cc.max_cached_age(client_state._config.max_cached_age());
     }
 
-    bool origin_job_func( bool force_secure
-                        , Request rq
-                        , GenericStream& con
+    void origin_job_func( bool force_secure
+                        , Transaction& tnx
                         , Cancel& cancel, Yield yield) {
         if (cancel) {
             LOG_ERROR("origin_job_func received an already triggered cancel");
-            return or_throw(yield, asio::error::operation_aborted, false);
+            return or_throw(yield, asio::error::operation_aborted);
         }
 
         using request_route::fresh_channel;
@@ -911,6 +997,8 @@ public:
         if (log_transactions()) {
             yield.log("start");
         }
+
+        auto rq = tnx.request();
 
         if (force_secure && rq.target().starts_with("http://")) {
             auto target = rq.target().to_string();
@@ -925,21 +1013,160 @@ public:
             yield.log("fetch: ", ec.message());
         }
 
-        if (ec) return or_throw(yield, ec, false);
+        if (ec) return or_throw(yield, ec);
 
-        session.flush_response(con, cancel, yield[ec]);
+        tnx.write_to_user_agent(session, cancel, yield[ec]);
 
         if (log_transactions()) {
             yield.log("flush: ", ec.message());
         }
 
-        bool keep_alive = !ec && rq.keep_alive() && session.keep_alive();
-        if (!keep_alive) {
-            session.close();
-            con.close();
+        return or_throw(yield, ec);
+    }
+
+    void proxy_job_func(Transaction& tnx, Cancel& cancel, Yield yield) {
+        if (log_transactions()) {
+            yield.log("start");
         }
 
-        return or_throw(yield, ec, keep_alive);
+        if (!client_state._config.is_proxy_access_enabled()) {
+            if (log_transactions()) {
+                yield.log("disabled");
+            }
+            return or_throw(yield, asio::error::operation_not_supported);
+        }
+
+        Session session;
+
+        sys::error_code ec;
+        const auto& rq = tnx.request();
+
+        if (rq.target().starts_with("https://")) {
+            session = client_state.fetch_fresh_through_connect_proxy
+                    (rq, cancel, yield[ec]);
+        }
+        else {
+            session = client_state.fetch_fresh_through_simple_proxy
+                    (rq, false, cancel, yield[ec]);
+        }
+
+        if (log_transactions()) {
+            yield.log("Proxy fetch: ", ec.message());
+        }
+
+        if (ec) return or_throw(yield, ec);
+
+        tnx.write_to_user_agent(session, cancel, yield[ec]);
+
+        if (log_transactions()) {
+            yield.log("flush: ", ec.message());
+        }
+
+        return or_throw(yield, ec);
+    }
+
+    void injector_job_func(Transaction& tnx, Cancel& cancel, Yield yield) {
+        namespace err = asio::error;
+
+        sys::error_code ec;
+        sys::error_code fresh_ec;
+        sys::error_code cache_ec;
+
+        if (log_transactions()) {
+            yield.log("start");
+        }
+
+        const auto& rq   = tnx.request();
+        const auto& meta = tnx.meta();
+
+        auto session = cc.fetch(rq, meta.dht_group, fresh_ec, cache_ec, cancel, yield[ec]);
+
+        if (log_transactions()) {
+            yield.log("cc.fetch ec:", ec.message(),
+                     " fresh_ec:", fresh_ec.message(),
+                     " cache_ec:", cache_ec.message());
+        }
+
+        if (ec) return or_throw(yield, ec);
+
+        auto& rsh = session.response_header();
+
+        if (log_transactions()) {
+            yield.log("Response header:");
+            yield.log(rsh);
+        }
+
+        assert(!fresh_ec || !cache_ec); // At least one success
+        assert( fresh_ec ||  cache_ec); // One needs to fail
+
+        auto injector_error = rsh[http_::response_error_hdr];
+        if (!injector_error.empty()) {
+            if (log_transactions()) {
+                yield.log("Error from injector: ", injector_error);
+            }
+            return or_throw(yield, err::invalid_argument);
+        }
+
+        auto& ctx = client_state.get_io_context();
+        auto exec = ctx.get_executor();
+
+        using http_response::Part;
+
+        util::AsyncQueue<boost::optional<Part>> qst(exec), qag(exec); // to storage, agent
+
+        WaitCondition wc(ctx);
+
+        auto cache = client_state.get_cache();
+
+        bool do_cache =
+            ( cache
+            && rsh[http_::response_source_hdr] != http_::response_source_hdr_local_cache
+            && CacheControl::ok_to_cache(rq, rsh)
+            && meta.dht_group);
+
+        if (do_cache) {
+            TRACK_SPAWN(ctx, ([
+                &, cache = std::move(cache),
+                lock = wc.lock()
+            ] (asio::yield_context yield_) {
+                auto key = key_from_http_req(rq); assert(key);
+                AsyncQueueReader rr(qst);
+                sys::error_code ec;
+                auto y_ = yield.detach(yield_);
+                cache->store(*key, *meta.dht_group, rr, cancel, y_[ec]);
+            }));
+        }
+
+        TRACK_SPAWN(ctx, ([
+            &,
+            lock = wc.lock()
+        ] (asio::yield_context yield_) {
+            sys::error_code ec;
+            auto rr = std::make_unique<AsyncQueueReader>(qag);
+            Session sag = Session::create_from_reader(std::move(rr), cancel, yield_[ec]);
+            if (ec) return;
+            tnx.write_to_user_agent(sag, cancel, yield_[ec]);
+        }));
+
+        session.flush_response(cancel, yield[ec],
+            [&] ( Part&& part
+                , Cancel& cancel
+                , asio::yield_context yield)
+            {
+                if (do_cache) qst.push_back(part);
+                qag.push_back(std::move(part));
+            });
+
+        if (do_cache) qst.push_back(boost::none);
+        qag.push_back(boost::none);
+
+        wc.wait(yield);
+
+        if (log_transactions()) {
+            yield.log("finish: ", ec.message());
+        }
+
+        return or_throw(yield, ec);
     }
 
     // Closes `con` when it can no longer be used.
@@ -947,206 +1174,70 @@ public:
     // a response may still be sent to it.
     // The return value indicates whether the connection
     // should be kept alive afterwards.
-    bool fetch( GenericStream& con
-              , const Request& rq
-              , const UserAgentMetaData& meta
-              , Yield yield)
+    void fetch(Transaction& tnx, Yield yield)
     {
+        Cancel main_cancel(client_state._shutdown_signal);
+
         namespace err = asio::error;
         using request_route::fresh_channel;
 
         sys::error_code last_error = err::operation_not_supported;
 
         while (!request_config.fresh_channels.empty()) {
-            if (client_state._shutdown_signal)
-                return or_throw(yield, err::operation_aborted, false);
+            if (main_cancel)
+                return or_throw(yield, err::operation_aborted);
 
             auto r = request_config.fresh_channels.front();
             request_config.fresh_channels.pop();
 
-            Cancel cancel(client_state._shutdown_signal);
+            Cancel cancel(main_cancel);
 
-            auto& ctx = client_state.get_io_context();
-
-            WatchDog wd(ctx, chrono::minutes(3), [&] { cancel(); });
+            WatchDog wd( client_state.get_io_context()
+                       , chrono::minutes(3), [&] { cancel(); });
 
             sys::error_code ec;
 
             switch (r) {
                 case fresh_channel::_front_end: {
-                    Response res = client_state.fetch_fresh_from_front_end(rq, yield);
-                    res.keep_alive(rq.keep_alive());
-                    http::async_write(con, res, asio::yield_context(yield)[ec]);
-
-                    bool keep_alive = !ec && rq.keep_alive();
-                    if (!keep_alive) con.close();
-                    return or_throw(yield, ec, keep_alive);
+                    Response res = client_state.fetch_fresh_from_front_end(tnx.request(), yield);
+                    res.keep_alive(tnx.request().keep_alive());
+                    tnx.write_to_user_agent(res, cancel, yield[ec]);
+                    break;
                 }
-                case fresh_channel::secure_origin:
+                case fresh_channel::secure_origin: {
+                    origin_job_func(true, tnx, cancel, yield.tag("secure_origin")[ec]);
+                    break;
+                }
                 case fresh_channel::origin: {
-                    bool force_secure = (r == fresh_channel::secure_origin);
-                    bool keep_alive = origin_job_func(force_secure, rq, con, cancel, yield.tag("origin")[ec]);
-                    if (!ec) {
-                        return keep_alive;
-                    }
+                    origin_job_func(false, tnx, cancel, yield.tag("origin")[ec]);
                     break;
                 }
                 case fresh_channel::proxy: {
-                    auto y = yield.tag("proxy");
-
-                    if (log_transactions()) {
-                        y.log("start");
-                    }
-
-                    if (!client_state._config.is_proxy_access_enabled()) {
-                        if (log_transactions()) {
-                            y.log("disabled");
-                        }
-                        continue;
-                    }
-
-                    Session session;
-
-                    if (rq.target().starts_with("https://")) {
-                        session = client_state.fetch_fresh_through_connect_proxy
-                                (rq, cancel, y[ec]);
-                    }
-                    else {
-                        session = client_state.fetch_fresh_through_simple_proxy
-                                (rq, false, cancel, y[ec]);
-                    }
-
-                    if (log_transactions()) {
-                        y.log("Proxy fetch: ", ec.message());
-                    }
-
-                    if (ec) break;
-
-                    session.flush_response(con, cancel, y[ec]);
-
-                    if (log_transactions()) {
-                        y.log("flush: ", ec.message());
-                    }
-
-                    bool keep_alive = !ec && rq.keep_alive() && session.keep_alive();
-                    if (!keep_alive) {
-                        session.close();
-                        con.close();
-                    }
-                    return or_throw(yield, ec, keep_alive);
+                    proxy_job_func(tnx, cancel, yield.tag("proxy")[ec]);
+                    break;
                 }
                 case fresh_channel::injector: {
-                    auto y = yield.tag("injector");
-
-                    sys::error_code fresh_ec;
-                    sys::error_code cache_ec;
-
-                    if (log_transactions()) {
-                        y.log("start");
-                    }
-
-                    auto s = cc.fetch(rq, meta.dht_group, fresh_ec, cache_ec, cancel, y[ec]);
-
-                    if (log_transactions()) {
-                        y.log("cc.fetch ec:", ec.message(),
-                              " fresh_ec:", fresh_ec.message(),
-                              " cache_ec:", cache_ec.message());
-                    }
-
-                    if (ec) break;
-
-                    auto& rsh = s.response_header();
-
-                    if (log_transactions()) {
-                        y.log("Response header:");
-                        y.log(rsh);
-                    }
-
-                    assert(!fresh_ec || !cache_ec); // At least one success
-                    assert( fresh_ec ||  cache_ec); // One needs to fail
-
-                    auto injector_error = rsh[http_::response_error_hdr];
-                    if (!injector_error.empty()) {
-                        if (log_transactions()) {
-                            y.log("Error from injector: ", injector_error);
-                        }
-                        ec = asio::error::invalid_argument;
-                        break;
-                    }
-
-                    auto exec = ctx.get_executor();
-
-                    using http_response::Part;
-
-                    util::AsyncQueue<boost::optional<Part>> qst(exec), qag(exec); // to storage, agent
-
-                    WaitCondition wc(ctx);
-
-                    auto cache = client_state.get_cache();
-
-                    bool do_cache =
-                        ( cache
-                        && rsh[http_::response_source_hdr] != http_::response_source_hdr_local_cache
-                        && CacheControl::ok_to_cache(rq, rsh)
-                        && meta.dht_group);
-
-                    if (do_cache) {
-                        TRACK_SPAWN(ctx, ([
-                            &, cache = std::move(cache),
-                            lock = wc.lock()
-                        ] (asio::yield_context yield_) {
-                            auto key = key_from_http_req(rq); assert(key);
-                            AsyncQueueReader rr(qst);
-                            sys::error_code ec;
-                            auto y_ = y.detach(yield_);
-                            cache->store(*key, *meta.dht_group, rr, cancel, y_[ec]);
-                        }));
-                    }
-
-                    TRACK_SPAWN(ctx, ([
-                        &,
-                        lock = wc.lock()
-                    ] (asio::yield_context yield_) {
-                        sys::error_code ec;
-                        auto rr = std::make_unique<AsyncQueueReader>(qag);
-                        Session sag = Session::create_from_reader(std::move(rr), cancel, yield_[ec]);
-                        if (!ec) sag.flush_response(con, cancel, yield_[ec]);
-                    }));
-
-                    s.flush_response(cancel, yield[ec],
-                        [&] ( Part&& part
-                            , Cancel& cancel
-                            , asio::yield_context yield)
-                        {
-                            if (do_cache) qst.push_back(part);
-                            qag.push_back(std::move(part));
-                        });
-
-                    if (do_cache) qst.push_back(boost::none);
-                    qag.push_back(boost::none);
-
-                    wc.wait(yield);
-
-                    bool keep_alive = !ec && rq.keep_alive() && s.keep_alive();
-                    if (!keep_alive) {
-                        s.close();
-                        con.close();
-                    }
-
-                    if (log_transactions()) {
-                        y.log("finish: ", ec.message());
-                    }
-
-                    return or_throw(yield, ec, keep_alive);
+                    injector_job_func(tnx, cancel, yield.tag("injector")[ec]);
+                    break;
                 }
             }
 
+            if (main_cancel) return or_throw(yield, err::operation_aborted);
+
             if (cancel) ec = err::timed_out;
-            last_error = ec;
+
+            if (ec) {
+                if (tnx.user_agent_was_written_to()) return or_throw(yield, ec);
+                // User agent hasn't been written to, thus we can try other
+                // routes (if any).
+                last_error = ec;
+            } else {
+                return;
+            }
         }
 
         assert(last_error);
-        return or_throw(yield, last_error, rq.keep_alive());
+        return or_throw(yield, last_error);
     }
 
 private:
@@ -1278,23 +1369,23 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
 }
 
 //------------------------------------------------------------------------------
-void Client::State::handle_retrieval_failure( GenericStream& con
-                                            , const Request& req
-                                            , Yield yield)
+http::response<http::string_body>
+Client::State::retrieval_failure_response(const Request& req)
 {
     auto res = util::http_client_error
         ( req, http::status::bad_gateway, http_::response_error_hdr_retrieval_failed
         , "Failed to retrieve the resource "
           "(after attempting all configured mechanisms)");
     maybe_add_proto_version_warning(res);
-    auto yield_ = yield.tag("handle_retrieval_failure");
-    return handle_http_error(con, res, yield_);
+    return res;
 }
 
 //------------------------------------------------------------------------------
 void Client::State::serve_request( GenericStream&& con
                                  , asio::yield_context yield_)
 {
+    Cancel cancel(_shutdown_signal);
+
     LOG_DEBUG("Request received ");
 
     namespace rr = request_route;
@@ -1564,23 +1655,24 @@ void Client::State::serve_request( GenericStream&& con
         request_config = route_choose_config(req, matches, default_request_config);
 
         auto meta = UserAgentMetaData::extract(req);
+        Transaction tnx(con, req, std::move(meta));
 
-        bool keep_alive
-            = cache_control.fetch(con, req, meta, yield[ec].tag("fetch"));
+        cache_control.fetch(tnx, yield[ec].tag("fetch"));
 
         if (ec) {
             if (log_transactions()) {
                 yield.log("error writing back response: ", ec.message());
             }
-            if (con.is_open()) {
+
+            if (!tnx.user_agent_was_written_to() && !cancel && con.is_open()) {
                 sys::error_code ec_;
-                handle_retrieval_failure(con, req, yield[ec_]);
-                if (ec_) keep_alive = false;
+                tnx.write_to_user_agent(retrieval_failure_response(req), cancel, yield[ec_]);
             }
+
+            if (con.is_open() && !req.keep_alive()) con.close();
         }
 
-        if (!keep_alive) {
-            con.close();
+        if (!con.is_open()) {
             break;
         }
     }
