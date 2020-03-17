@@ -829,4 +829,90 @@ BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
     });
 }
 
+// An example of a response where we want to use an unsigned header:
+// the response from a client to a `HEAD` request from another client.
+static const string _rs_head_nb =
+    ( _rs_status_origin
+    + _rs_fields_origin
+    + _rs_head_injection
+    + _rs_head_digest
+    + _rs_head_sig1);
+
+static const string irs_head_nb =
+    ( _rs_head_nb
+    + "X-Foo-Bar: baz\r\n"
+    + "X-Ouinet-Avail-Data: bytes */131076\r\n"
+    + "\r\n");
+
+static const string ors_head_nb =
+    ( _rs_head_nb
+    + "X-Ouinet-Avail-Data: bytes */131076\r\n"
+    + "\r\n");
+
+// Using a `KeepSignedReader` to save such header may be overkill
+// (a plain reader would suffice),
+// but it is a good way of testing the class with a real example.
+BOOST_AUTO_TEST_CASE(test_keep_verify_head) {
+    asio::io_context ctx;
+    run_spawned(ctx, [&] (auto yield) {
+        WaitCondition wc(ctx);
+
+        asio::ip::tcp::socket
+            signed_w(ctx), signed_r(ctx),
+            filtered_w(ctx), filtered_r(ctx);
+        tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
+        tie(filtered_w, filtered_r) = util::connected_pair(ctx, yield);
+
+        // Send response.
+        asio::spawn(ctx, [ &signed_w
+                         , lock = wc.lock()] (auto y) {
+            // Head (raw).
+            asio::async_write( signed_w
+                             , asio::const_buffer(irs_head_nb.data(), irs_head_nb.size())
+                             , y);
+            signed_w.close();
+        });
+
+        // Filter out nor signed nor explicitly kept headers.
+        asio::spawn(ctx, [ signed_r = std::move(signed_r), &filtered_w
+                         , lock = wc.lock()] (auto y) mutable {
+            Cancel cancel;
+            sys::error_code e;
+            http_response::Reader signed_rr(move(signed_r));
+            Session::reader_uptr signed_rkr = make_unique<cache::KeepSignedReader>
+                (signed_rr, set<string>{"X-Ouinet-Avail-Data"});
+
+            auto signed_rs = Session::create(move(signed_rkr), cancel, y[e]);
+            BOOST_REQUIRE_EQUAL(e.message(), "Success");
+            signed_rs.flush_response(filtered_w, cancel, y[e]);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            filtered_w.close();
+        });
+
+        // Test received response.
+        asio::spawn(ctx, [ filtered_r = std::move(filtered_r)
+                         , lock = wc.lock()] (auto y) mutable {
+            Cancel c;
+            sys::error_code e;
+            http_response::Reader filtered_rr(move(filtered_r));
+
+            // Head.
+            auto part = filtered_rr.async_read_part(c, y[e]);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            BOOST_REQUIRE(part);
+            BOOST_REQUIRE(part->is_head());
+            BOOST_CHECK_EQUAL( util::str(*(part->as_head()))
+                             , ors_head_nb);
+
+            // Nothing else.
+            part = filtered_rr.async_read_part(c, y[e]);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            BOOST_CHECK(!part);
+            BOOST_CHECK(filtered_rr.is_done());
+        });
+
+        wc.wait(yield);
+    });
+}
+
 BOOST_AUTO_TEST_SUITE_END()
