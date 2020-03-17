@@ -574,6 +574,9 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
 
     res.set( http_::response_source_hdr  // for agent
            , http_::response_source_hdr_front_end);
+
+    res.keep_alive(rq.keep_alive());
+
     return res;
 }
 
@@ -988,8 +991,6 @@ public:
             return or_throw(yield, asio::error::operation_aborted);
         }
 
-        using request_route::fresh_channel;
-
         if (log_transactions()) {
             yield.log("start");
         }
@@ -1183,7 +1184,7 @@ public:
             if (main_cancel)
                 return or_throw(yield, err::operation_aborted);
 
-            auto r = request_config.fresh_channels.front();
+            auto route = request_config.fresh_channels.front();
             request_config.fresh_channels.pop();
 
             Cancel cancel(main_cancel);
@@ -1193,10 +1194,9 @@ public:
 
             sys::error_code ec;
 
-            switch (r) {
+            switch (route) {
                 case fresh_channel::_front_end: {
                     Response res = client_state.fetch_fresh_from_front_end(tnx.request(), yield);
-                    res.keep_alive(tnx.request().keep_alive());
                     tnx.write_to_user_agent(res, cancel, yield[ec]);
                     break;
                 }
