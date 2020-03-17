@@ -1315,8 +1315,15 @@ HeadVerifyingReader::~HeadVerifyingReader()
 boost::optional<http_response::Part>
 HeadVerifyingReader::async_read_part(Cancel cancel, asio::yield_context yield)
 {
-    // TODO: implement
-    return VerifyingReader::async_read_part(cancel, yield);
+    if (_is_done) return boost::none;
+
+    sys::error_code ec;
+    auto part_o = VerifyingReader::async_read_part(cancel, yield[ec]);
+    return_or_throw_on_error(yield, cancel, ec, boost::none);
+    assert(part_o);
+    assert(part_o->is_head());
+    _is_done = true;
+    return part_o;
 }
 
 bool
