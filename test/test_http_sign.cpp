@@ -915,4 +915,55 @@ BOOST_AUTO_TEST_CASE(test_keep_verify_head) {
     });
 }
 
+BOOST_AUTO_TEST_CASE(test_http_flush_verified_head) {
+    asio::io_context ctx;
+    run_spawned(ctx, [&] (auto yield) {
+        WaitCondition wc(ctx);
+
+        asio::ip::tcp::socket
+            signed_w(ctx), signed_r(ctx),
+            tested_w(ctx), tested_r(ctx);
+        tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
+        tie(tested_w, tested_r) = util::connected_pair(ctx, yield);
+
+        // Send response.
+        asio::spawn(ctx, [ &signed_w
+                         , lock = wc.lock()] (auto y) {
+            // Head (raw).
+            asio::async_write( signed_w
+                             , asio::const_buffer(irs_head_nb.data(), irs_head_nb.size())
+                             , y);
+            signed_w.close();
+        });
+
+        // Verify signed output.
+        asio::spawn(ctx, [ signed_r = std::move(signed_r), &tested_w
+                         , lock = wc.lock()](auto y) mutable {
+            Cancel cancel;
+            sys::error_code e;
+            auto pk = get_public_key();
+            Session::reader_uptr signed_rvr = make_unique<cache::HeadVerifyingReader>
+                (move(signed_r), pk);
+            auto signed_rs = Session::create(move(signed_rvr), cancel, y[e]);
+            BOOST_REQUIRE(!e);
+            signed_rs.flush_response(tested_w, cancel, y[e]);
+            BOOST_REQUIRE(!e);
+            tested_w.close();
+        });
+
+        // Black hole.
+        asio::spawn(ctx, [&tested_r, lock = wc.lock()] (auto y) {
+            char d[2048];
+            asio::mutable_buffer b(d, sizeof(d));
+
+            sys::error_code e;
+            while (!e) asio::async_read(tested_r, b, y[e]);
+            BOOST_REQUIRE(e == asio::error::eof || !e);
+            tested_r.close();
+        });
+
+        wc.wait(yield);
+    });
+}
+
 BOOST_AUTO_TEST_SUITE_END()
