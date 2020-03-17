@@ -851,13 +851,13 @@ public:
             return or_throw(yield, err::operation_aborted);
         }
 
-        if (_response_head) {
+        if (_ua_was_written_to) {
             return or_throw(yield, err::already_started);
         }
 
         sys::error_code ec;
 
-        _response_head = session.response_header();
+        _ua_was_written_to = true;
         session.flush_response(_ua_con, cancel, yield[ec]);
 
         bool keep_alive = !ec && _request.keep_alive() && session.keep_alive();
@@ -881,13 +881,13 @@ public:
             return or_throw(yield, err::operation_aborted);
         }
 
-        if (_response_head) {
+        if (_ua_was_written_to) {
             return or_throw(yield, err::already_started);
         }
 
         sys::error_code ec;
 
-        _response_head = rs;
+        _ua_was_written_to = true;
         http::async_write(_ua_con, rs, yield[ec]);
 
         bool keep_alive = !ec && _request.keep_alive() && rs.keep_alive();
@@ -899,12 +899,8 @@ public:
 
     const Request& request() const { return _request; }
 
-    const boost::optional<http::response_header<>>& response_head() const {
-        return _response_head;
-    }
-
     bool user_agent_was_written_to() {
-        return bool(_response_head);
+        return _ua_was_written_to;
     }
 
     const UserAgentMetaData& meta() const { return _meta; }
@@ -914,7 +910,7 @@ private:
      */
     GenericStream& _ua_con;
     const Request& _request;
-    boost::optional<http::response_header<>> _response_head;
+    bool _ua_was_written_to = false;
     UserAgentMetaData _meta;
 };
 
