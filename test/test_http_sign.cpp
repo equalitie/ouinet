@@ -859,9 +859,11 @@ BOOST_AUTO_TEST_CASE(test_keep_verify_head) {
 
         asio::ip::tcp::socket
             signed_w(ctx), signed_r(ctx),
-            filtered_w(ctx), filtered_r(ctx);
+            filtered_w(ctx), filtered_r(ctx),
+            tested_w(ctx), tested_r(ctx);
         tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
         tie(filtered_w, filtered_r) = util::connected_pair(ctx, yield);
+        tie(tested_w, tested_r) = util::connected_pair(ctx, yield);
 
         // Send response.
         asio::spawn(ctx, [ &signed_w
@@ -879,74 +881,40 @@ BOOST_AUTO_TEST_CASE(test_keep_verify_head) {
             Cancel cancel;
             sys::error_code e;
             http_response::Reader signed_rr(move(signed_r));
-            Session::reader_uptr signed_rkr = make_unique<cache::KeepSignedReader>
-                (signed_rr, set<string>{"X-Ouinet-Avail-Data"});
-
-            auto signed_rs = Session::create(move(signed_rkr), cancel, y[e]);
-            BOOST_REQUIRE_EQUAL(e.message(), "Success");
-            signed_rs.flush_response(filtered_w, cancel, y[e]);
-            BOOST_CHECK_EQUAL(e.message(), "Success");
-            filtered_w.close();
-        });
-
-        // Test received response.
-        asio::spawn(ctx, [ filtered_r = std::move(filtered_r)
-                         , lock = wc.lock()] (auto y) mutable {
-            Cancel c;
-            sys::error_code e;
-            http_response::Reader filtered_rr(move(filtered_r));
+            cache::KeepSignedReader signed_rkr( signed_rr
+                                              , set<string>{"X-Ouinet-Avail-Data"});
 
             // Head.
-            auto part = filtered_rr.async_read_part(c, y[e]);
+            auto part = signed_rkr.async_read_part(cancel, y[e]);
             BOOST_CHECK_EQUAL(e.message(), "Success");
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_head());
-            BOOST_CHECK_EQUAL( util::str(*(part->as_head()))
-                             , ors_head_nb);
+            // Real code would use and maybe pop out `X-Ouinet-Avail-Data` here.
+            auto head = std::move(*(part->as_head()));
+            BOOST_CHECK_EQUAL(util::str(head), ors_head_nb);
+            head.erase("X-Ouinet-Avail-Data");  // avoid verification warnings
+            head.async_write(filtered_w, cancel, y[e]);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
 
             // Nothing else.
-            part = filtered_rr.async_read_part(c, y[e]);
+            part = signed_rkr.async_read_part(cancel, y[e]);
             BOOST_CHECK_EQUAL(e.message(), "Success");
             BOOST_CHECK(!part);
-            BOOST_CHECK(filtered_rr.is_done());
+
+            filtered_w.close();
         });
 
-        wc.wait(yield);
-    });
-}
-
-BOOST_AUTO_TEST_CASE(test_http_flush_verified_head) {
-    asio::io_context ctx;
-    run_spawned(ctx, [&] (auto yield) {
-        WaitCondition wc(ctx);
-
-        asio::ip::tcp::socket
-            signed_w(ctx), signed_r(ctx),
-            tested_w(ctx), tested_r(ctx);
-        tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
-        tie(tested_w, tested_r) = util::connected_pair(ctx, yield);
-
-        // Send response.
-        asio::spawn(ctx, [ &signed_w
-                         , lock = wc.lock()] (auto y) {
-            // Head (raw).
-            asio::async_write( signed_w
-                             , asio::const_buffer(irs_head_nb.data(), irs_head_nb.size())
-                             , y);
-            signed_w.close();
-        });
-
-        // Verify signed output.
-        asio::spawn(ctx, [ signed_r = std::move(signed_r), &tested_w
+        // Verify filtered output.
+        asio::spawn(ctx, [ filtered_r = std::move(filtered_r), &tested_w
                          , lock = wc.lock()](auto y) mutable {
             Cancel cancel;
             sys::error_code e;
             auto pk = get_public_key();
-            Session::reader_uptr signed_rvr = make_unique<cache::HeadVerifyingReader>
-                (move(signed_r), pk);
-            auto signed_rs = Session::create(move(signed_rvr), cancel, y[e]);
+            Session::reader_uptr filtered_rvr = make_unique<cache::HeadVerifyingReader>
+                (move(filtered_r), pk);
+            auto filtered_rs = Session::create(move(filtered_rvr), cancel, y[e]);
             BOOST_REQUIRE(!e);
-            signed_rs.flush_response(tested_w, cancel, y[e]);
+            filtered_rs.flush_response(tested_w, cancel, y[e]);
             BOOST_REQUIRE(!e);
             tested_w.close();
         });
