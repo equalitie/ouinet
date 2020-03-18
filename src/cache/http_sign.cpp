@@ -932,11 +932,13 @@ HttpSignature::verify( const http::response_header<>& rsh
 // begin VerifyingReader
 
 struct VerifyingReader::Impl {
+    bool check_framing;
     const util::Ed25519PublicKey pk;
     const status_set statuses;
 
-    Impl(util::Ed25519PublicKey pk, status_set statuses)
-        : pk(std::move(pk))
+    Impl(bool check_framing, util::Ed25519PublicKey pk, status_set statuses)
+        : check_framing(check_framing)
+        , pk(std::move(pk))
         , statuses(std::move(statuses))
     {
     }
@@ -1007,7 +1009,7 @@ struct VerifyingReader::Impl {
         }
         uri = head[http_::response_uri_hdr].to_string();
         // Check that the response is chunked.
-        if (!http_response::Head(head).chunked()) {
+        if (check_framing && !http_response::Head(head).chunked()) {
             LOG_WARN("Verification of non-chunked HTTP responses is not supported; uri=", uri);
             return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
         }
@@ -1244,7 +1246,14 @@ VerifyingReader::VerifyingReader( GenericStream in
                                 , util::Ed25519PublicKey pk
                                 , status_set statuses)
     : http_response::Reader(std::move(in))
-    , _impl(std::make_unique<Impl>(std::move(pk), std::move(statuses)))
+    , _impl(std::make_unique<Impl>(true, std::move(pk), std::move(statuses)))
+{
+}
+
+VerifyingReader::VerifyingReader( GenericStream in
+                                , std::unique_ptr<Impl> impl)
+    : http_response::Reader(std::move(in))
+    , _impl(std::move(impl))
 {
 }
 
@@ -1289,6 +1298,41 @@ VerifyingReader::is_done() const
 }
 
 // end VerifyingReader
+
+// begin HeadVerifyingReader
+
+HeadVerifyingReader::HeadVerifyingReader( GenericStream in, util::Ed25519PublicKey pk
+                                        , status_set statuses)
+    : VerifyingReader( std::move(in)
+                     , std::make_unique<Impl>(false, std::move(pk), std::move(statuses)))
+{
+}
+
+HeadVerifyingReader::~HeadVerifyingReader()
+{
+}
+
+boost::optional<http_response::Part>
+HeadVerifyingReader::async_read_part(Cancel cancel, asio::yield_context yield)
+{
+    if (_is_done) return boost::none;
+
+    sys::error_code ec;
+    auto part_o = VerifyingReader::async_read_part(cancel, yield[ec]);
+    return_or_throw_on_error(yield, cancel, ec, boost::none);
+    assert(part_o);
+    assert(part_o->is_head());
+    _is_done = true;
+    return part_o;
+}
+
+bool
+HeadVerifyingReader::is_done() const
+{
+    return _is_done;
+}
+
+// end HeadVerifyingReader
 
 // begin KeepSignedReader
 

@@ -242,9 +242,32 @@ public:
     bool
     is_done() const override;
 
-private:
+protected:
     struct Impl;
+    VerifyingReader(GenericStream, std::unique_ptr<Impl>);
+
+private:
     std::unique_ptr<Impl> _impl;
+};
+
+// Similar to `VerifyingReader`, but it only expects a response head.
+//
+// Use this to verify responses to a `HEAD` request
+// (since a plain `VerifyingReader` would fail because of the lack of a body).
+class HeadVerifyingReader : public VerifyingReader {
+public:
+    HeadVerifyingReader( GenericStream in, ouinet::util::Ed25519PublicKey pk
+                       , status_set statuses = {});
+    ~HeadVerifyingReader() override;
+
+    boost::optional<ouinet::http_response::Part>
+    async_read_part(Cancel, asio::yield_context) override;
+
+    bool
+    is_done() const override;
+
+private:
+    bool _is_done = false;
 };
 
 // Filters out headers not included in the set of signed headers
