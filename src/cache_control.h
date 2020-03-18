@@ -10,6 +10,9 @@
 
 namespace ouinet {
 
+static const boost::posix_time::time_duration default_max_cached_age
+    = boost::posix_time::hours(7 * 24);  // one week
+
 class GenericStream;
 
 class CacheControl {
@@ -94,7 +97,7 @@ private:
     bool _parallel_fetch_enabled = true;
 
     boost::posix_time::time_duration _max_cached_age
-        = boost::posix_time::hours(7*24);  // one week
+        = default_max_cached_age;
 };
 
 } // ouinet namespace
