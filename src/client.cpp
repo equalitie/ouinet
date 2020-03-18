@@ -24,7 +24,6 @@
 #include "util.h"
 #include "async_sleep.h"
 #include "endpoint.h"
-#include "cache_control.h"
 #include "or_throw.h"
 #include "request_routing.h"
 #include "full_duplex_forward.h"

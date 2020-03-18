@@ -5,6 +5,7 @@
 #include <boost/filesystem.hpp>
 
 #include "namespaces.h"
+#include "cache_control.h"
 #include "util.h"
 #include "parse/endpoint.h"
 #include "util/crypto.h"
@@ -186,7 +187,7 @@ private:
     asio::ip::tcp::endpoint _front_end_endpoint;
 
     boost::posix_time::time_duration _max_cached_age
-        = boost::posix_time::hours(7*24);  // one week
+        = default_max_cached_age;
     bool _autoseed_updated = false;
 
     std::string _client_credentials;
