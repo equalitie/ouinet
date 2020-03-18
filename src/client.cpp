@@ -1604,6 +1604,7 @@ void Client::State::setup_cache()
                 = cache::bep5_http::Client::build( dht
                                                  , *_config.cache_http_pub_key()
                                                  , _config.repo_root()/"bep5_http"
+                                                 , _config.max_cached_age()
                                                  , logger.get_threshold()
                                                  , yield[ec]);
 

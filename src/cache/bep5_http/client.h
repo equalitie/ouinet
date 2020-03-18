@@ -5,6 +5,7 @@
 #include "../../util/crypto.h"
 #include "../../util/yield.h"
 #include "../cache_entry.h"
+#include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/filesystem.hpp>
 
 namespace ouinet {
@@ -27,6 +28,7 @@ public:
     build( std::shared_ptr<bittorrent::MainlineDht>
          , util::Ed25519PublicKey cache_pk
          , fs::path cache_dir
+         , boost::posix_time::time_duration max_cached_age
          , log_level_t
          , asio::yield_context);
 

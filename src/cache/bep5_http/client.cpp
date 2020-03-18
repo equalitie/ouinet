@@ -38,6 +38,7 @@ struct Client::Impl {
     util::Ed25519PublicKey cache_pk;
     fs::path cache_dir;
     unique_ptr<cache::AbstractHttpStore> http_store;
+    boost::posix_time::time_duration max_cached_age;
     Cancel lifetime_cancel;
     Announcer announcer;
     map<string, udp::endpoint> peer_cache;
@@ -55,12 +56,14 @@ struct Client::Impl {
         , util::Ed25519PublicKey& cache_pk
         , fs::path cache_dir
         , unique_ptr<cache::AbstractHttpStore> http_store
+        , boost::posix_time::time_duration max_cached_age
         , log_level_t log_level)
         : ex(dht_->get_executor())
         , dht(move(dht_))
         , cache_pk(cache_pk)
         , cache_dir(move(cache_dir))
         , http_store(move(http_store))
+        , max_cached_age(max_cached_age)
         , announcer(dht, log_level)
         , dht_lookups(256)
         , log_level(log_level)
@@ -525,6 +528,7 @@ std::unique_ptr<Client>
 Client::build( shared_ptr<bt::MainlineDht> dht
              , util::Ed25519PublicKey cache_pk
              , fs::path cache_dir
+             , boost::posix_time::time_duration max_cached_age
              , log_level_t log_level
              , asio::yield_context yield)
 {
@@ -549,7 +553,7 @@ Client::build( shared_ptr<bt::MainlineDht> dht
 
     unique_ptr<Impl> impl(new Impl( move(dht)
                                   , cache_pk, move(cache_dir)
-                                  , move(http_store)
+                                  , move(http_store), max_cached_age
                                   , log_level));
 
     impl->announce_stored_data(yield[ec]);
