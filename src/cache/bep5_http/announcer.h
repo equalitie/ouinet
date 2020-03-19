@@ -17,6 +17,7 @@ public:
     Announcer(std::shared_ptr<bittorrent::MainlineDht>, log_level_t);
 
     void add(Key key);
+    void remove(const Key&);
 
     ~Announcer();
 

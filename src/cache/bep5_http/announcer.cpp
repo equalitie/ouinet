@@ -97,6 +97,17 @@ struct Announcer::Loop {
         _timer_cancel = Cancel();
     }
 
+    void remove(const Key& key) {
+        Entries::iterator i = entries.begin();
+
+        for (; i != entries.end(); ++i)
+            if (i->first.key == key) break;  // found
+        if (i == entries.end()) return;  // not found
+
+        entries.erase(i);
+        // No new entries, so no `_timer_cancel` reset.
+    }
+
     Clock::duration next_update_after(const Entry& e) const
     {
         if (e.successful_update == Clock::time_point()
@@ -275,6 +286,10 @@ Announcer::Announcer( std::shared_ptr<bittorrent::MainlineDht> dht
 void Announcer::add(Key key)
 {
     _loop->add(move(key));
+}
+
+void Announcer::remove(const Key& key) {
+    _loop->remove(key);
 }
 
 void Announcer::set_log_level(log_level_t l)
