@@ -38,7 +38,6 @@ struct Client::Impl {
     asio::executor ex;
     shared_ptr<bt::MainlineDht> dht;
     util::Ed25519PublicKey cache_pk;
-    string cache_key_id;  // to check store entries
     fs::path cache_dir;
     unique_ptr<cache::AbstractHttpStore> http_store;
     boost::posix_time::time_duration max_cached_age;
@@ -64,7 +63,6 @@ struct Client::Impl {
         : ex(dht_->get_executor())
         , dht(move(dht_))
         , cache_pk(cache_pk)
-        , cache_key_id(cache::http_key_id_for_injection(cache_pk))
         , cache_dir(move(cache_dir))
         , http_store(move(http_store))
         , max_cached_age(max_cached_age)
@@ -467,27 +465,22 @@ struct Client::Impl {
         return *head;
     }
 
+    // Return maximum if not available.
     boost::posix_time::time_duration
     cache_entry_age(const http::response_header<>& head)
     {
-        using secs = std::chrono::seconds;
-        auto now = secs(std::time(nullptr));  // as in `cache::http_signature`
-        auto min_age = secs::max();
-        for (auto& h : head) {
-            auto hn = h.name_string();
-            if (!boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx))
-                continue;  // not a signature header
-            auto sig_o = cache::HttpSignature::parse(h.value());
-            if (!sig_o) continue;  // malformed signature value
-            if (sig_o->keyId != cache_key_id) continue;  // unknown key
-            auto ts_o = parse::number<secs::rep>(sig_o->created);
-            if (!ts_o) continue;  // malformed creation time stamp
-            auto age = now - secs(*ts_o);
-            if (age < min_age)
-                min_age = age;
-        }
+        using ssecs = std::chrono::seconds;
+        using bsecs = boost::posix_time::seconds;
 
-        return boost::posix_time::seconds(min_age.count());
+        static auto max_age = bsecs(ssecs::max().count());
+
+        auto ts_sv = util::http_injection_ts(head);
+        if (ts_sv.empty()) return max_age;  // missing header or field
+        auto ts_o = parse::number<ssecs::rep>(ts_sv);
+        if (!ts_o) return max_age;  // malformed creation time stamp
+        auto now = ssecs(std::time(nullptr));  // as done by injector
+        auto age = now - ssecs(*ts_o);
+        return bsecs(age.count());
     }
 
     // Return whether the entry should be kept in storage.
