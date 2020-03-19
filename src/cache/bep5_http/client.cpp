@@ -6,6 +6,7 @@
 #include "../http_sign.h"
 #include "../http_store.h"
 #include "../../http_util.h"
+#include "../../parse/number.h"
 #include "../../util/wait_condition.h"
 #include "../../util/set_io.h"
 #include "../../util/async_generator.h"
@@ -18,6 +19,8 @@
 #include "../../async_sleep.h"
 #include "../../constants.h"
 #include "../../session.h"
+#include <ctime>
+#include <limits>
 #include <map>
 
 using namespace std;
@@ -36,6 +39,7 @@ struct Client::Impl {
     asio::executor ex;
     shared_ptr<bt::MainlineDht> dht;
     util::Ed25519PublicKey cache_pk;
+    string cache_key_id;  // to check store entries
     fs::path cache_dir;
     unique_ptr<cache::AbstractHttpStore> http_store;
     boost::posix_time::time_duration max_cached_age;
@@ -61,6 +65,7 @@ struct Client::Impl {
         : ex(dht_->get_executor())
         , dht(move(dht_))
         , cache_pk(cache_pk)
+        , cache_key_id(cache::http_key_id_for_injection(cache_pk))
         , cache_dir(move(cache_dir))
         , http_store(move(http_store))
         , max_cached_age(max_cached_age)
@@ -463,6 +468,27 @@ struct Client::Impl {
         return *head;
     }
 
+    boost::posix_time::time_duration
+    cache_entry_age(const http::response_header<>& head)
+    {
+        std::time_t min_age = std::numeric_limits<std::time_t>::max();
+        for (auto& h : head) {
+            auto hn = h.name_string();
+            if (!boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx))
+                continue;  // not a signature header
+            auto sig_o = cache::HttpSignature::parse(h.value());
+            if (!sig_o) continue;  // malformed signature value
+            if (sig_o->keyId != cache_key_id) continue;  // unknown key
+            auto ts_o = parse::number<std::time_t>(sig_o->created);
+            if (!ts_o) continue;  // malformed creation time stamp
+            auto age = std::time(nullptr) - *ts_o;
+            if (age < min_age)
+                min_age = age;
+        }
+
+        return boost::posix_time::seconds(min_age);
+    }
+
     // Return whether the entry should be kept in storage.
     bool keep_cache_entry(cache::reader_uptr rr, asio::yield_context yield)
     {
@@ -483,11 +509,19 @@ struct Client::Impl {
         }
 
         auto key = hdr[http_::response_uri_hdr];
-
         if (key.empty()) {
             LOG_WARN( "Bep5HTTP: Cached response does not contain a "
                     , http_::response_uri_hdr
                     , " header field; removing");
+            return false;
+        }
+
+        auto age = cache_entry_age(hdr);
+        if (age > max_cached_age) {
+            LOG_DEBUG( "Bep5HTTP: Cached response is too old; removing: "
+                     , age, " > ", max_cached_age
+                     , "; uri=", key );
+            _dht_groups->remove(key.to_string());
             return false;
         }
 
