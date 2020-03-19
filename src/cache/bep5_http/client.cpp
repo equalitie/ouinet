@@ -515,7 +515,8 @@ struct Client::Impl {
             LOG_DEBUG( "Bep5HTTP: Cached response is too old; removing: "
                      , age, " > ", max_cached_age
                      , "; uri=", key );
-            _dht_groups->remove(key.to_string());
+            auto empty_groups = _dht_groups->remove(key.to_string());
+            for (const auto& eg : empty_groups) announcer.remove(eg);
             return false;
         }
 
