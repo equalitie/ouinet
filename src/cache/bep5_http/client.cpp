@@ -488,7 +488,6 @@ struct Client::Impl {
             LOG_WARN( "Bep5HTTP: Cached response does not contain a "
                     , http_::response_uri_hdr
                     , " header field; removing");
-            _dht_groups->remove(key.to_string());
             return false;
         }
 
