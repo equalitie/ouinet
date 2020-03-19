@@ -20,7 +20,6 @@
 #include "../../constants.h"
 #include "../../session.h"
 #include <ctime>
-#include <limits>
 #include <map>
 
 using namespace std;
@@ -471,7 +470,9 @@ struct Client::Impl {
     boost::posix_time::time_duration
     cache_entry_age(const http::response_header<>& head)
     {
-        std::time_t min_age = std::numeric_limits<std::time_t>::max();
+        using secs = std::chrono::seconds;
+        auto now = secs(std::time(nullptr));  // as in `cache::http_signature`
+        auto min_age = secs::max();
         for (auto& h : head) {
             auto hn = h.name_string();
             if (!boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx))
@@ -479,14 +480,14 @@ struct Client::Impl {
             auto sig_o = cache::HttpSignature::parse(h.value());
             if (!sig_o) continue;  // malformed signature value
             if (sig_o->keyId != cache_key_id) continue;  // unknown key
-            auto ts_o = parse::number<std::time_t>(sig_o->created);
+            auto ts_o = parse::number<secs::rep>(sig_o->created);
             if (!ts_o) continue;  // malformed creation time stamp
-            auto age = std::time(nullptr) - *ts_o;
+            auto age = now - secs(*ts_o);
             if (age < min_age)
                 min_age = age;
         }
 
-        return boost::posix_time::seconds(min_age);
+        return boost::posix_time::seconds(min_age.count());
     }
 
     // Return whether the entry should be kept in storage.
