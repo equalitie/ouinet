@@ -3,7 +3,7 @@
 #include <functional>
 #include <utility>
 #include <vector>
-#include <queue>
+#include <deque>
 
 #include <boost/asio/error.hpp>
 #include <boost/beast/core/string.hpp>
@@ -46,7 +46,7 @@ struct Config {
     // When the cache control decides that a fresh response is needed,
     // attempt those channels in order until one succeeds.
     // If it was the Injector channel, the response may get cached.
-    std::queue<fresh_channel> fresh_channels;
+    std::deque<fresh_channel> fresh_channels;
 };
 } // request_route namespace
 

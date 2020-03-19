@@ -219,7 +219,7 @@ private:
 
     CacheEntry
     fetch_stored_in_dcache( const Request& request
-                          , request_route::Config& request_config
+                          , const request_route::Config& request_config
                           , const std::string& dht_group
                           , Cancel& cancel
                           , Yield yield);
@@ -473,7 +473,7 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
 //------------------------------------------------------------------------------
 CacheEntry
 Client::State::fetch_stored_in_dcache( const Request& request
-                                     , request_route::Config& request_config
+                                     , const request_route::Config& request_config
                                      , const std::string& dht_group
                                      , Cancel& cancel
                                      , Yield yield)
@@ -921,7 +921,7 @@ private:
 class Client::ClientCacheControl {
 public:
     ClientCacheControl( Client::State& client_state
-                      , request_route::Config& request_config)
+                      , const request_route::Config& request_config)
         : client_state(client_state)
         , request_config(request_config)
         , cc(client_state.get_executor(), OUINET_CLIENT_SERVER_STRING)
@@ -1180,12 +1180,9 @@ public:
 
         sys::error_code last_error = err::operation_not_supported;
 
-        while (!request_config.fresh_channels.empty()) {
+        for (auto route : request_config.fresh_channels) {
             if (main_cancel)
                 return or_throw(yield, err::operation_aborted);
-
-            auto route = request_config.fresh_channels.front();
-            request_config.fresh_channels.pop();
 
             Cancel cancel(main_cancel);
 
@@ -1238,7 +1235,7 @@ public:
 
 private:
     Client::State& client_state;
-    request_route::Config& request_config;
+    const request_route::Config& request_config;
     CacheControl cc;
 };
 
@@ -1376,6 +1373,27 @@ Client::State::retrieval_failure_response(const Request& req)
     return res;
 }
 
+static
+request_route::Config
+secure_first_request_route(request_route::Config c) {
+    namespace rr = request_route;
+
+    bool replaced = false;
+
+    for (auto& channel : c.fresh_channels) {
+        if (channel == rr::fresh_channel::origin) {
+            channel = rr::fresh_channel::secure_origin;
+            replaced = true;
+        }
+    }
+
+    if (replaced) {
+        c.fresh_channels.push_back(rr::fresh_channel::origin);
+    }
+
+    return c;
+}
+
 //------------------------------------------------------------------------------
 void Client::State::serve_request( GenericStream&& con
                                  , asio::yield_context yield_)
@@ -1413,23 +1431,15 @@ void Client::State::serve_request( GenericStream&& con
     // the cache can be disabled.
     const rr::Config default_request_config
         { true
-        , queue<fresh_channel>({ fresh_channel::origin
+        , deque<fresh_channel>({ fresh_channel::origin
                                , fresh_channel::injector
                                , fresh_channel::proxy})};
-
-    // For use with non-tls (http://) sites
-    const rr::Config secure_first_config
-        { true
-        , queue<fresh_channel>({ fresh_channel::secure_origin
-                               , fresh_channel::injector
-                               , fresh_channel::proxy
-                               , fresh_channel::origin})};
 
     // This is the matching configuration for the one above,
     // but for uncacheable requests.
     const rr::Config nocache_request_config
         { false
-        , queue<fresh_channel>({ fresh_channel::origin
+        , deque<fresh_channel>({ fresh_channel::origin
                                , fresh_channel::proxy})};
 
     // The currently effective request router configuration.
@@ -1452,19 +1462,78 @@ void Client::State::serve_request( GenericStream&& con
 
     auto local_rx = util::str("https?://[^:/]+\\.", _config.local_domain(), "(:[0-9]+)?/.*");
 
+#ifdef _NDEBUG // release
+    const rr::Config unrequested{false, deque<fresh_channel>({fresh_channel::origin})};
+#else // debug
+    // Don't request these in debug mode as they bring a lot of noise into the log
+    const rr::Config unrequested{false, deque<fresh_channel>()};
+#endif
+
     const vector<Match> matches({
+        // Disable cache and always go to origin for this site.
+        //Match( reqexpr::from_regex(target_getter, "https?://ident\\.me/.*")
+        //     , {false, deque<fresh_channel>({fresh_channel::origin})} ),
+
+        // Disable cache and always go to origin for these google sites.
+        Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?google\\.com/complete/.*")
+             , unrequested ),
+        Match( reqexpr::from_regex(target_getter, "https://safebrowsing\\.googleapis\\.com/.*")
+             , unrequested ),
+        Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?google-analytics\\.com/.*")
+             , unrequested ),
+
+        // Disable cache and always go to origin for these mozilla sites.
+        Match( reqexpr::from_regex(target_getter, "https?://content-signature\\.cdn\\.mozilla\\.net/.*")
+             , unrequested ),
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*services\\.mozilla\\.com/.*")
+             , unrequested ),
+        Match( reqexpr::from_regex(target_getter, "https?://services\\.addons\\.mozilla\\.org/.*")
+             , unrequested ),
+        Match( reqexpr::from_regex(target_getter, "https?://versioncheck-bg\\.addons\\.mozilla\\.org/.*")
+             , unrequested ),
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*cdn\\.mozilla\\.net/.*")
+             , unrequested ),
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*telemetry\\.mozilla\\.net/.*")
+             , unrequested ),
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*telemetry\\.mozilla\\.org/.*")
+             , unrequested ),
+        Match( reqexpr::from_regex(target_getter, "https?://detectportal\\.firefox\\.com/.*")
+             , unrequested ),
+
+        // Ads
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*googlesyndication\\.com/.*")
+             , unrequested ),
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*googletagservices\\.com/.*")
+             , unrequested ),
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*moatads\\.com/.*")
+             , unrequested ),
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*amazon-adsystem\\.com/.*")
+             , unrequested ),
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*adsafeprotected\\.com/.*")
+             , unrequested ),
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*ads-twitter\\.com/.*")
+             , unrequested ),
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*doubleclick\\.net/.*")
+             , unrequested ),
+
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*summerhamster\\.com/.*")
+             , unrequested ),
+
+        Match( reqexpr::from_regex(target_getter, "https?://ping.chartbeat.net/.*")
+             , unrequested ),
+
         // Handle requests to <http://localhost/> internally.
         Match( reqexpr::from_regex(host_getter, "localhost")
-             , {false, queue<fresh_channel>({fresh_channel::_front_end})} ),
+             , {false, deque<fresh_channel>({fresh_channel::_front_end})} ),
 
         Match( reqexpr::from_regex(x_oui_dest_getter, "OuiClient")
-             , {false, queue<fresh_channel>({fresh_channel::_front_end})} ),
+             , {false, deque<fresh_channel>({fresh_channel::_front_end})} ),
 
         // Access to sites under the local TLD are always accessible
         // with good connectivity, so always use the Origin channel
         // and never cache them.
         Match( reqexpr::from_regex(target_getter, local_rx)
-             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
+             , {false, deque<fresh_channel>({fresh_channel::origin})} ),
 
         // NOTE: The matching of HTTP methods below can be simplified,
         // leaving expanded for readability.
@@ -1487,65 +1556,15 @@ void Client::State::serve_request( GenericStream&& con
         Match( reqexpr::from_regex(x_private_getter, "True")
              , nocache_request_config),
 
-        // Disable cache and always go to origin for this site.
-        //Match( reqexpr::from_regex(target_getter, "https?://ident\\.me/.*")
-        //     , {false, queue<fresh_channel>({fresh_channel::origin})} ),
-
-        // Disable cache and always go to origin for these google sites.
-        Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?google\\.com/complete/.*")
-             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
-        Match( reqexpr::from_regex(target_getter, "https://safebrowsing\\.googleapis\\.com/.*")
-             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
-        Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?google-analytics\\.com/.*")
-             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
-
-        // Disable cache and always go to origin for these mozilla sites.
-        Match( reqexpr::from_regex(target_getter, "https?://content-signature\\.cdn\\.mozilla\\.net/.*")
-             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*services\\.mozilla\\.com/.*")
-             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
-        Match( reqexpr::from_regex(target_getter, "https?://services\\.addons\\.mozilla\\.org/.*")
-             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
-        Match( reqexpr::from_regex(target_getter, "https?://versioncheck-bg\\.addons\\.mozilla\\.org/.*")
-             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*cdn\\.mozilla\\.net/.*")
-             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
-        Match( reqexpr::from_regex(target_getter, "https?://detectportal\\.firefox\\.com/.*")
-             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
-
-        // Ads
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*googlesyndication\\.com/.*")
-             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*googletagservices\\.com/.*")
-             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*moatads\\.com/.*")
-             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*amazon-adsystem\\.com/.*")
-             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*adsafeprotected\\.com/.*")
-             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*ads-twitter\\.com/.*")
-             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*doubleclick\\.net/.*")
-             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
-
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*summerhamster\\.com/.*")
-             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
-
-        Match( reqexpr::from_regex(target_getter, "https?://ping.chartbeat.net/.*")
-             , {false, queue<fresh_channel>({fresh_channel::origin})} ),
-
         // Disable cache and always go to proxy for this site.
         //Match( reqexpr::from_regex(target_getter, "https?://ifconfig\\.co/.*")
-        //     , {false, queue<fresh_channel>({fresh_channel::proxy})} ),
+        //     , {false, deque<fresh_channel>({fresh_channel::proxy})} ),
         // Force cache and default channels for this site.
         //Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example\\.com/.*")
-        //     , {true, queue<fresh_channel>()} ),
+        //     , {true, deque<fresh_channel>()} ),
         // Force cache and particular channels for this site.
         //Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example\\.net/.*")
-        //     , {true, queue<fresh_channel>({fresh_channel::injector})} ),
-
-        Match(reqexpr::from_regex(target_getter, "http://.*"), secure_first_config)
+        //     , {true, deque<fresh_channel>({fresh_channel::injector})} ),
     });
 
     auto connection_id = _next_connection_id++;
@@ -1648,7 +1667,13 @@ void Client::State::serve_request( GenericStream&& con
             }
         }
 
-        request_config = route_choose_config(req, matches, default_request_config);
+        request_config = secure_first_request_route(
+                route_choose_config(req, matches, default_request_config));
+
+        if (request_config.fresh_channels.empty()) {
+            con.close();
+            return;
+        }
 
         auto meta = UserAgentMetaData::extract(req);
         Transaction tnx(con, req, std::move(meta));
