@@ -463,6 +463,34 @@ struct Client::Impl {
         return *head;
     }
 
+    // Return whether the entry should be kept in storage.
+    bool keep_cache_entry(cache::reader_uptr rr, asio::yield_context yield)
+    {
+        sys::error_code ec;
+
+        auto hdr = read_response_header(*rr, yield[ec]);
+        if (ec) return or_throw<bool>(yield, ec);
+
+        if (hdr[http_::protocol_version_hdr] != http_::protocol_version_hdr_current) {
+            LOG_WARN( "Bep5HTTP: Cached response contains an invalid "
+                    , http_::protocol_version_hdr
+                    , " header field; removing");
+            return false;
+        }
+
+        auto key = hdr[http_::response_uri_hdr];
+
+        if (key.empty()) {
+            LOG_WARN( "Bep5HTTP: Cached response does not contain a "
+                    , http_::response_uri_hdr
+                    , " header field; removing");
+            _dht_groups->remove(key.to_string());
+            return false;
+        }
+
+        return true;
+    }
+
     void announce_stored_data(asio::yield_context y)
     {
         Cancel cancel(lifetime_cancel);
@@ -474,30 +502,7 @@ struct Client::Impl {
         if (e) return or_throw(y, e);
 
         http_store->for_each([&] (auto rr, auto yield) {
-            sys::error_code ec;
-
-            auto hdr = read_response_header(*rr, yield[ec]);
-            if (ec) return or_throw<bool>(yield, ec);
-
-            if (hdr[http_::protocol_version_hdr] != http_::protocol_version_hdr_current) {
-                LOG_WARN( "Bep5HTTP: Cached response contains an invalid "
-                        , http_::protocol_version_hdr
-                        , " header field; removing");
-                return false;
-            }
-
-            auto key = hdr[http_::response_uri_hdr];
-
-            if (key.empty()) {
-                LOG_WARN( "Bep5HTTP: Cached response does not contain a "
-                        , http_::response_uri_hdr
-                        , " header field; removing");
-                _dht_groups->remove(key.to_string());
-                return false;
-            }
-
-
-            return true;
+            return keep_cache_entry(std::move(rr), yield);
         }, y[e]);
 
         for (auto dht_group : _dht_groups->groups()) {
