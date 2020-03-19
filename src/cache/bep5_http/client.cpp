@@ -466,6 +466,10 @@ struct Client::Impl {
     // Return whether the entry should be kept in storage.
     bool keep_cache_entry(cache::reader_uptr rr, asio::yield_context yield)
     {
+        // This should be available to
+        // allow removing keys of entries to be evicted.
+        assert(_dht_groups);
+
         sys::error_code ec;
 
         auto hdr = read_response_header(*rr, yield[ec]);
