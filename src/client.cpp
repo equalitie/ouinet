@@ -1388,7 +1388,7 @@ public:
             }
 
             if (!result.ec) {
-                final_ec = {}; // success
+                final_ec = sys::error_code{}; // success
                 for (auto& job : jobs.running()) {
                     job.stop(yield);
                 }
