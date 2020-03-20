@@ -36,6 +36,8 @@ struct Entry {
     Clock::time_point successful_update;
     Clock::time_point failed_update;
 
+    bool to_remove = false;
+
     Entry() = default;
 
     Entry(Announcer::Key key)
@@ -104,7 +106,8 @@ struct Announcer::Loop {
             if (i->first.key == key) break;  // found
         if (i == entries.end()) return;  // not found
 
-        entries.erase(i);
+        // The actual removal is not done here but in the main loop.
+        i->first.to_remove = true;
         // No new entries, so no `_timer_cancel` reset.
     }
 
@@ -222,6 +225,12 @@ struct Announcer::Loop {
             assert(!ec);
             ec = {};
 
+            if (ei->first.to_remove) {
+                // Marked for removal, drop the entry and get another one.
+                entries.erase(ei);
+                continue;
+            }
+
             // Try inserting three times before moving to the next entry
             bool success = false;
             for (int i = 0; i != 3; ++i) {
@@ -245,7 +254,7 @@ struct Announcer::Loop {
 
             Entry e = move(ei->first);
             entries.erase(ei);
-            entries.push_back(move(e));
+            if (!e.to_remove) entries.push_back(move(e));
 
             if (ll.debug()) { print_entries(); }
         }
