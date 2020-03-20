@@ -1173,29 +1173,30 @@ public:
 
 
     struct Jobs {
-        // XXX: Currently `AsyncJob` isn't specialized for `void`, so using
-        // `Nothing` as a temporary hack.
-        struct Nothing {};
+        enum class Type {
+            secure_origin,
+            origin,
+            proxy,
+            injector_or_dcache
+        };
 
-        using Retval = Nothing;
+        // XXX: Currently `AsyncJob` isn't specialized for `void`, so using
+        // boost::none_t as a temporary hack.
+        using Retval = boost::none_t;
         using Job = AsyncJob<Retval>;
 
         Jobs(asio::executor exec)
             : secure_origin(exec)
             , origin(exec)
             , proxy(exec)
-            , injector(exec)
-            , all({ &secure_origin
-                  , &origin
-                  , &proxy
-                  , &injector })
-        {
-        }
+            , injector_or_dcache(exec)
+            , all({&secure_origin, &origin, &proxy, &injector_or_dcache})
+        {}
 
         Job secure_origin;
         Job origin;
         Job proxy;
-        Job injector;
+        Job injector_or_dcache;
 
         // All jobs, even those that never started.
         // Unfortunately C++14 is not letting me have array of references.
@@ -1210,13 +1211,40 @@ public:
         }
 
         const char* which_job_str(const Job* ptr) const {
-            if (ptr == &secure_origin) return "secure_origin";
-            if (ptr == &origin) return "origin";
-            if (ptr == &proxy) return "proxy";
-            if (ptr == &injector) return "injector";
-            return "unknown";
+            auto type = job_to_type(ptr);
+            if (!type) return "unknown";
+            switch (*type) {
+                case Type::secure_origin:      return "secure_origin";
+                case Type::origin:             return "origin";
+                case Type::proxy:              return "proxy";
+                case Type::injector_or_dcache: return "injector_or_dcache";
+            }
+            assert(0);
+            return "xxx";
         };
+
+        boost::optional<Type> job_to_type(const Job* ptr) const {
+            if (ptr == &secure_origin)      return Type::secure_origin;
+            if (ptr == &origin)             return Type::origin;
+            if (ptr == &proxy)              return Type::proxy;
+            if (ptr == &injector_or_dcache) return Type::injector_or_dcache;
+            return boost::none;
+        }
     };
+
+    bool is_access_enabled(Jobs::Type job_type) const {
+        using Type = Jobs::Type;
+        auto& cfg = client_state._config;
+
+        switch (job_type) {
+            case Type::secure_origin: return cfg.is_origin_access_enabled();
+            case Type::origin:        return cfg.is_origin_access_enabled();
+            case Type::proxy:         return cfg.is_proxy_access_enabled();
+            case Type::injector_or_dcache:
+                return cfg.is_injector_access_enabled()
+                    || cfg.is_cache_access_enabled();
+        }
+    }
 
     // Closes `con` when it can no longer be used.
     // If an error is reported and it is still open,
@@ -1265,10 +1293,10 @@ public:
                 }
 
                 async_sleep(exec, n * chrono::seconds(3), c, y);
-                if (c) return or_throw<Jobs::Retval>(y_, err::operation_aborted);
+                if (c) return or_throw(y_, err::operation_aborted, boost::none);
                 sys::error_code ec;
                 func(c, y[ec]);
-                return or_throw<Jobs::Retval>(y, ec);
+                return or_throw(y, ec, boost::none);
             });
         };
 
@@ -1298,8 +1326,8 @@ public:
                             { proxy_job_func(tnx, c, y); });
                     break;
                 }
-                case fresh_channel::injector: {
-                    start_job(route.index(), jobs.injector, "injector",
+                case fresh_channel::injector_or_dcache: {
+                    start_job(route.index(), jobs.injector_or_dcache, "injector_or_dcache",
                             [&] (auto& c, auto y)
                             { injector_job_func(tnx, c, y); });
                     break;
@@ -1562,7 +1590,7 @@ void Client::State::serve_request( GenericStream&& con
     const rr::Config default_request_config
         { true
         , deque<fresh_channel>({ fresh_channel::origin
-                               , fresh_channel::injector
+                               , fresh_channel::injector_or_dcache
                                , fresh_channel::proxy})};
 
     // This is the matching configuration for the one above,
