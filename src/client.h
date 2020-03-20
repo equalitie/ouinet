@@ -2,9 +2,28 @@
 
 #include <boost/filesystem.hpp>
 
+#include "constants.h"
+
 #include "namespaces.h"
 
 namespace ouinet {
+
+namespace http_ {
+
+// This indicates to the client that the agent considers
+// this request and its associated response to be part of a group
+// whose identifier is the value of this header.
+// This may be used by the client to affect its processing,
+// e.g. announcement or storage.
+static const std::string request_group_hdr = header_prefix + "Group";
+
+// The presence of this HTTP request header with the true value below
+// instructs the client to avoid request mechanisms that
+// would reveal the request or the associated response to other users.
+static const std::string request_private_hdr = header_prefix + "Private";
+static const std::string request_private_true = "true";
+
+}
 
 class ClientConfig;
 

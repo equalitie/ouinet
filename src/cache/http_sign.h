@@ -8,6 +8,7 @@
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/beast/http/dynamic_body.hpp>
 #include <boost/beast/http/message.hpp>
+#include <boost/beast/http/status.hpp>
 #include <boost/regex.hpp>
 
 #include "../constants.h"
@@ -27,6 +28,13 @@ namespace ouinet { namespace http_ {
     // This allows signing the size of body data
     // without breaking on transfer encoding changes.
     static const std::string response_data_size_hdr = header_prefix + "Data-Size";
+
+    // This contains the originally signed HTTP status code
+    // if a signed response was transformed in
+    // a partial response or a head response.
+    // If present, this header replaces the actual response status
+    // for verification purposes.
+    static const std::string response_original_http_status = header_prefix + "HTTP-Status";
 
     // This contains common parameters for block signatures.
     static const std::string response_block_signatures_hdr = header_prefix + "BSigs";
@@ -202,6 +210,16 @@ private:
 // Allows reading parts of a response from stream `in`
 // while verifying signatures from the public key `pk`.
 //
+// By default,
+// responses with a signed `(response-status)` are only considered valid
+// when they have the same HTTP status used for creating their signatures.
+// If a set of HTTP `statuses` is provided,
+// responses derived from the originally signed response
+// but having one of the given statuses are accepted too,
+// as long as the original status code appears as `X-Ouinet-HTTP-Status`.
+// This can be used to verify partial or "not modified" responses
+// based on a signed full response to a `GET` request.
+//
 // The read operation fails with error `boost::system::errc::no_message`
 // if the response head failed to be verified or was not acceptable;
 // or with error `boost::system::errc::bad_message`
@@ -211,7 +229,11 @@ private:
 // to be verified again.
 class VerifyingReader : public ouinet::http_response::Reader {
 public:
-    VerifyingReader(GenericStream in, ouinet::util::Ed25519PublicKey pk);
+    using status_set = std::set<http::status>;
+
+public:
+    VerifyingReader( GenericStream in, ouinet::util::Ed25519PublicKey pk
+                   , status_set statuses = {});
     ~VerifyingReader() override;
 
     boost::optional<ouinet::http_response::Part>
@@ -220,9 +242,32 @@ public:
     bool
     is_done() const override;
 
-private:
+protected:
     struct Impl;
+    VerifyingReader(GenericStream, std::unique_ptr<Impl>);
+
+private:
     std::unique_ptr<Impl> _impl;
+};
+
+// Similar to `VerifyingReader`, but it only expects a response head.
+//
+// Use this to verify responses to a `HEAD` request
+// (since a plain `VerifyingReader` would fail because of the lack of a body).
+class HeadVerifyingReader : public VerifyingReader {
+public:
+    HeadVerifyingReader( GenericStream in, ouinet::util::Ed25519PublicKey pk
+                       , status_set statuses = {});
+    ~HeadVerifyingReader() override;
+
+    boost::optional<ouinet::http_response::Part>
+    async_read_part(Cancel, asio::yield_context) override;
+
+    bool
+    is_done() const override;
+
+private:
+    bool _is_done = false;
 };
 
 // Filters out headers not included in the set of signed headers

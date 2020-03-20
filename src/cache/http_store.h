@@ -6,6 +6,7 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/filesystem/path.hpp>
 
+#include "../constants.h"
 #include "../response_reader.h"
 #include "../util/signal.h"
 
@@ -14,6 +15,14 @@
 #include "detail/http_store.h"
 
 namespace ouinet { namespace cache {
+
+// When a client gets a `HEAD` request for a URL,
+// this response header indicates the data range that it can send back
+// (either for a full or range request).
+//
+// The format is the same one used in `Content-Range` headers
+// (RFC7233#4.2).
+static const std::string response_available_data = http_::header_prefix + "Avail-Data";
 
 using reader_uptr = std::unique_ptr<http_response::AbstractReader>;
 
@@ -74,8 +83,6 @@ http_store_reader_v0( const fs::path&, asio::executor
 // Return a new reader for a response stored in v1 format
 // under the given directory.
 //
-// Both the path and the executor are kept by the reader.
-//
 // At least the file belonging to the response head must be readable,
 // otherwise the call will report an error and not return a reader.
 // If other pieces are missing, the reader may fail further down the road.
@@ -83,8 +90,38 @@ http_store_reader_v0( const fs::path&, asio::executor
 // The response will be provided using chunked transfer encoding,
 // with all the metadata needed to verify and further share it.
 reader_uptr
-http_store_reader_v1( fs::path, asio::executor
+http_store_reader_v1( const fs::path&, asio::executor
                     , sys::error_code&);
+
+// Same as above, but allow specifying a contiguous range of data to read
+// instead of the whole response.
+//
+// The partial response will have the HTTP status `206 Partial Content`,
+// with the original HTTP status code in the `X-Ouinet-HTTP-Status` header
+// and a `Content-Range` header.
+//
+// `first` and `last` follow RFC7233#2.1 notation:
+// `first` must be strictly less than total data size;
+// `last` must be at least `first` and strictly less than total data size.
+// Open ranges ("N-" and "-N") are not supported.
+//
+// If the range would cover data which is not stored,
+// a `boost::system::errc::invalid_seek` error is reported
+// (which may be interpreted as HTTP status `416 Range Not Satisfiable`).
+reader_uptr
+http_store_range_reader_v1( const fs::path&, asio::executor
+                          , std::size_t first, std::size_t last
+                          , sys::error_code&);
+
+// Same as above, but return a reader that only yields the response head,
+// as if an HTTP `HEAD` request was performed.
+//
+// The head will contain an `X-Ouinet-Avail-Data` header
+// showing the available stored data in the same format as
+// the `Content-Range` header (see RFC7233#4.2).
+reader_uptr
+http_store_head_reader_v1( const fs::path&, asio::executor
+                         , sys::error_code&);
 
 //// High-level classes for HTTP response storage
 

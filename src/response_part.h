@@ -43,6 +43,10 @@ struct Head : public http::response_header<> {
         return Base::get_chunked_impl();
     }
 
+    void chunked(bool value) {
+        Base::set_chunked_impl(value);
+    }
+
     bool keep_alive() const {
         return Base::get_keep_alive_impl(Base::version());
     }
