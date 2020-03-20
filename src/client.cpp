@@ -1202,7 +1202,7 @@ public:
         // Unfortunately C++14 is not letting me have array of references.
         const std::array<Job*, 4> all;
 
-        auto running_jobs() {
+        auto running() const {
             static const auto is_running
                 = [] (auto& v) { return v.is_running(); };
 
@@ -1210,10 +1210,14 @@ public:
                        | boost::adaptors::filtered(is_running);
         }
 
-        const char* which_job_str(const Job* ptr) const {
+        const char* as_string(const Job* ptr) const {
             auto type = job_to_type(ptr);
             if (!type) return "unknown";
-            switch (*type) {
+            return as_string(*type);
+        }
+
+        static const char* as_string(Type type) {
+            switch (type) {
                 case Type::secure_origin:      return "secure_origin";
                 case Type::origin:             return "origin";
                 case Type::proxy:              return "proxy";
@@ -1230,6 +1234,11 @@ public:
             if (ptr == &injector_or_dcache) return Type::injector_or_dcache;
             return boost::none;
         }
+
+        size_t count_running() const {
+            auto jobs = running();
+            return std::distance(jobs.begin(), jobs.end());
+        }
     };
 
     bool is_access_enabled(Jobs::Type job_type) const {
@@ -1244,6 +1253,9 @@ public:
                 return cfg.is_injector_access_enabled()
                     || cfg.is_cache_access_enabled();
         }
+
+        assert(0);
+        return false;
     }
 
     // Closes `con` when it can no longer be used.
@@ -1268,21 +1280,27 @@ public:
 
         Jobs jobs(exec);
 
-        auto count = [] (auto range) {
-            return std::distance(range.begin(), range.end());
-        };
-
         auto cancel_con = cancel.connect([&] {
-            for (auto& job : jobs.running_jobs()) job.cancel();
+            for (auto& job : jobs.running()) job.cancel();
         });
 
-        auto start_job = [&] (size_t n, Job& job, const char* name_tag, auto func) {
+        auto start_job = [&] (Job& job, Jobs::Type job_type, auto func) {
+            const char* name_tag = Jobs::as_string(job_type);
+
+            if (!is_access_enabled(job_type)) {
+                if (log_transactions()) {
+                    yield.log("/", name_tag, " access disabled");
+                }
+                return;
+            }
+
             job.start([
                 &yield,
-                n,
+                n = jobs.count_running(),
                 name_tag,
                 func = std::move(func),
-                exec
+                exec,
+                job_type
             ] (Cancel& c, asio::yield_context y_) {
                 auto y = yield.detach(y_).tag(name_tag);
 
@@ -1300,8 +1318,8 @@ public:
             });
         };
 
-        for (auto route : request_config.fresh_channels | adapt::indexed(0)) {
-            switch (route.value()) {
+        for (auto route : request_config.fresh_channels) {
+            switch (route) {
                 case fresh_channel::_front_end: {
                     Response res = client_state.fetch_fresh_from_front_end(tnx.request(), yield);
                     sys::error_code ec;
@@ -1309,25 +1327,25 @@ public:
                     break;
                 }
                 case fresh_channel::secure_origin: {
-                    start_job(route.index(), jobs.secure_origin, "secure_origin",
+                    start_job(jobs.secure_origin, Jobs::Type::secure_origin,
                             [&] (auto& c, auto y)
                             { origin_job_func(true, tnx, c, y); });
                     break;
                 }
                 case fresh_channel::origin: {
-                    start_job(route.index(), jobs.origin, "origin",
+                    start_job(jobs.origin, Jobs::Type::origin,
                             [&] (auto& c, auto y)
                             { origin_job_func(false, tnx, c, y); });
                     break;
                 }
                 case fresh_channel::proxy: {
-                    start_job(route.index(), jobs.proxy, "proxy",
+                    start_job(jobs.proxy, Jobs::Type::proxy,
                             [&] (auto& c, auto y)
                             { proxy_job_func(tnx, c, y); });
                     break;
                 }
                 case fresh_channel::injector_or_dcache: {
-                    start_job(route.index(), jobs.injector_or_dcache, "injector_or_dcache",
+                    start_job(jobs.injector_or_dcache, Jobs::Type::injector_or_dcache,
                             [&] (auto& c, auto y)
                             { injector_job_func(tnx, c, y); });
                     break;
@@ -1337,12 +1355,12 @@ public:
 
         boost::optional<sys::error_code> final_ec;
 
-        for (size_t job_count; (job_count = count(jobs.running_jobs())) != 0;) {
+        for (size_t job_count; (job_count = jobs.count_running()) != 0;) {
             ConditionVariable cv(exec);
             std::array<OptJobCon, jobs.all.size()> cons;
             Job* which = nullptr;
 
-            for (const auto& job : jobs.running_jobs() | adapt::indexed(0)) {
+            for (const auto& job : jobs.running() | adapt::indexed(0)) {
                 auto i = job.index();
                 auto v = &job.value();
                 cons[i] = v->on_finish_sig([&cv, &which, v] {
@@ -1358,7 +1376,7 @@ public:
             cv.wait(yield);
 
             if (log_transactions()) {
-                yield.log("got result from job: ", jobs.which_job_str(which));
+                yield.log("got result from job: ", jobs.as_string(which));
             }
 
             if (!which) continue; // XXX
@@ -1371,7 +1389,7 @@ public:
 
             if (!result.ec) {
                 final_ec = {}; // success
-                for (auto& job : jobs.running_jobs()) {
+                for (auto& job : jobs.running()) {
                     job.stop(yield);
                 }
                 break;
