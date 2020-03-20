@@ -1171,9 +1171,52 @@ public:
         return or_throw(yield, ec);
     }
 
-    // XXX: Currently `AsyncJob` isn't specialized for `void`, so using
-    // `Nothing` as a temporary hack.
-    struct Nothing {};
+
+    struct Jobs {
+        // XXX: Currently `AsyncJob` isn't specialized for `void`, so using
+        // `Nothing` as a temporary hack.
+        struct Nothing {};
+
+        using Retval = Nothing;
+        using Job = AsyncJob<Retval>;
+
+        Jobs(asio::executor exec)
+            : secure_origin(exec)
+            , origin(exec)
+            , proxy(exec)
+            , injector(exec)
+            , all({ &secure_origin
+                  , &origin
+                  , &proxy
+                  , &injector })
+        {
+        }
+
+        Job secure_origin;
+        Job origin;
+        Job proxy;
+        Job injector;
+
+        // All jobs, even those that never started.
+        // Unfortunately C++14 is not letting me have array of references.
+        const std::array<Job*, 4> all;
+
+        auto running_jobs() {
+            static const auto is_running
+                = [] (auto& v) { return v.is_running(); };
+
+            return all | boost::adaptors::indirected
+                       | boost::adaptors::filtered(is_running);
+        }
+
+        const char* which_job_str(const Job* ptr) const {
+            if (ptr == &secure_origin) return "secure_origin";
+            if (ptr == &origin) return "origin";
+            if (ptr == &proxy) return "proxy";
+            if (ptr == &injector) return "injector";
+            return "unknown";
+        };
+    };
 
     // Closes `con` when it can no longer be used.
     // If an error is reported and it is still open,
@@ -1189,41 +1232,20 @@ public:
 
         using request_route::fresh_channel;
 
-        using Job = AsyncJob<Nothing>;
+        using Job = Jobs::Job;
         using JobCon = Job::Connection;
         using OptJobCon = boost::optional<JobCon>;
 
         auto exec = client_state.get_io_context().get_executor();
 
-        Job secure_origin_job(exec);
-        Job origin_job(exec);
-        Job proxy_job(exec);
-        Job injector_job(exec);
-
-        // Unfortunately C++14 is not letting me have array of references
-        std::array<Job*, 4> jobs { &secure_origin_job
-                                 , &origin_job
-                                 , &proxy_job
-                                 , &injector_job };
-
-        auto is_running  = [] (auto& v) { return v.is_running(); };
-        auto was_started = [] (auto& v) { return v.was_started(); };
-
-        auto started_jobs = [&] {
-            return jobs | adapt::indirected
-                        | adapt::filtered(was_started);
-        };
-
-        auto running_jobs = [&] {
-            return started_jobs() | adapt::filtered(is_running);
-        };
+        Jobs jobs(exec);
 
         auto count = [] (auto range) {
             return std::distance(range.begin(), range.end());
         };
 
         auto cancel_con = cancel.connect([&] {
-            for (auto& job : running_jobs()) job.cancel();
+            for (auto& job : jobs.running_jobs()) job.cancel();
         });
 
         auto start_job = [&] (size_t n, Job& job, const char* name_tag, auto func) {
@@ -1243,10 +1265,10 @@ public:
                 }
 
                 async_sleep(exec, n * chrono::seconds(3), c, y);
-                if (c) return or_throw<Nothing>(y_, err::operation_aborted);
+                if (c) return or_throw<Jobs::Retval>(y_, err::operation_aborted);
                 sys::error_code ec;
                 func(c, y[ec]);
-                return or_throw<Nothing>(y, ec);
+                return or_throw<Jobs::Retval>(y, ec);
             });
         };
 
@@ -1259,25 +1281,25 @@ public:
                     break;
                 }
                 case fresh_channel::secure_origin: {
-                    start_job(route.index(), secure_origin_job, "secure_origin",
+                    start_job(route.index(), jobs.secure_origin, "secure_origin",
                             [&] (auto& c, auto y)
                             { origin_job_func(true, tnx, c, y); });
                     break;
                 }
                 case fresh_channel::origin: {
-                    start_job(route.index(), origin_job, "origin",
+                    start_job(route.index(), jobs.origin, "origin",
                             [&] (auto& c, auto y)
                             { origin_job_func(false, tnx, c, y); });
                     break;
                 }
                 case fresh_channel::proxy: {
-                    start_job(route.index(), proxy_job, "proxy",
+                    start_job(route.index(), jobs.proxy, "proxy",
                             [&] (auto& c, auto y)
                             { proxy_job_func(tnx, c, y); });
                     break;
                 }
                 case fresh_channel::injector: {
-                    start_job(route.index(), injector_job, "injector",
+                    start_job(route.index(), jobs.injector, "injector",
                             [&] (auto& c, auto y)
                             { injector_job_func(tnx, c, y); });
                     break;
@@ -1285,24 +1307,16 @@ public:
             }
         }
 
-        auto which_job_str = [&](Job* ptr) {
-            if (ptr == &secure_origin_job) return "secure_origin";
-            if (ptr == &origin_job) return "origin";
-            if (ptr == &proxy_job) return "proxy";
-            if (ptr == &injector_job) return "injector";
-            return "unknown";
-        };
-
         boost::optional<sys::error_code> final_ec;
 
-        for (size_t job_count; (job_count = count(running_jobs())) != 0;) {
+        for (size_t job_count; (job_count = count(jobs.running_jobs())) != 0;) {
             ConditionVariable cv(exec);
-            std::array<OptJobCon, jobs.size()> cons;
+            std::array<OptJobCon, jobs.all.size()> cons;
             Job* which = nullptr;
 
-            for (auto job : jobs | adapt::indexed(0)) {
+            for (const auto& job : jobs.running_jobs() | adapt::indexed(0)) {
                 auto i = job.index();
-                auto v = job.value();
+                auto v = &job.value();
                 cons[i] = v->on_finish_sig([&cv, &which, v] {
                     if (!which) which = v;
                     cv.notify();
@@ -1316,7 +1330,7 @@ public:
             cv.wait(yield);
 
             if (log_transactions()) {
-                yield.log("got result from job: ", which_job_str(which));
+                yield.log("got result from job: ", jobs.which_job_str(which));
             }
 
             if (!which) continue; // XXX
@@ -1329,7 +1343,7 @@ public:
 
             if (!result.ec) {
                 final_ec = {}; // success
-                for (auto& job : running_jobs()) {
+                for (auto& job : jobs.running_jobs()) {
                     job.stop(yield);
                 }
                 break;
