@@ -30,6 +30,48 @@ using udp = asio::ip::udp;
 namespace fs = boost::filesystem;
 namespace bt = bittorrent;
 
+struct GarbageCollector {
+    cache::AbstractHttpStore& http_store;  // for looping over entries
+    cache::AbstractHttpStore::keep_func keep;  // caller-provided checks
+
+    asio::executor _executor;
+    Cancel _cancel;
+
+    GarbageCollector( cache::AbstractHttpStore& http_store
+                    , cache::AbstractHttpStore::keep_func keep
+                    , asio::executor ex)
+        : http_store(http_store)
+        , keep(move(keep))
+        , _executor(ex)
+    {}
+
+    ~GarbageCollector() { _cancel(); }
+
+    void start()
+    {
+        asio::spawn(_executor, [&] (asio::yield_context yield) {
+            TRACK_HANDLER();
+            Cancel cancel(_cancel);
+
+            LOG_DEBUG("Bep5HTTP: Garbage collector started");
+            while (!cancel) {
+                sys::error_code ec;
+                async_sleep(_executor, chrono::minutes(7), cancel, yield[ec]);
+                if (cancel || ec) break;
+
+                LOG_DEBUG("Bep5HTTP: Begin garbage collection round");
+                http_store.for_each([&] (auto rr, auto y) {
+                    return keep(std::move(rr), y);
+                }, yield[ec]);
+                if (ec) LOG_WARN( "Bep5HTTP: Garbage collection round failed: "
+                                , ec.message());
+                LOG_DEBUG("Bep5HTTP: End garbage collection round");
+            }
+            LOG_DEBUG("Bep5HTTP: Garbage collector stopped");
+        });
+    }
+};
+
 struct Client::Impl {
     // The newest protocol version number seen in a trusted exchange
     // (i.e. from injector-signed cached content).
@@ -43,6 +85,7 @@ struct Client::Impl {
     boost::posix_time::time_duration max_cached_age;
     Cancel lifetime_cancel;
     Announcer announcer;
+    GarbageCollector gc;
     map<string, udp::endpoint> peer_cache;
     util::LruCache<bt::NodeID, unique_ptr<DhtLookup>> dht_lookups;
     log_level_t log_level = INFO;
@@ -57,16 +100,19 @@ struct Client::Impl {
     Impl( shared_ptr<bt::MainlineDht> dht_
         , util::Ed25519PublicKey& cache_pk
         , fs::path cache_dir
-        , unique_ptr<cache::AbstractHttpStore> http_store
+        , unique_ptr<cache::AbstractHttpStore> http_store_
         , boost::posix_time::time_duration max_cached_age
         , log_level_t log_level)
         : ex(dht_->get_executor())
         , dht(move(dht_))
         , cache_pk(cache_pk)
         , cache_dir(move(cache_dir))
-        , http_store(move(http_store))
+        , http_store(move(http_store_))
         , max_cached_age(max_cached_age)
         , announcer(dht, log_level)
+        , gc(*http_store, [&] (auto rr, auto y) {
+              return keep_cache_entry(move(rr), y);
+          }, ex)
         , dht_lookups(256)
         , log_level(log_level)
         , local_peer_discovery(ex, dht->local_endpoints())
@@ -600,8 +646,8 @@ Client::build( shared_ptr<bt::MainlineDht> dht
                                   , log_level));
 
     impl->announce_stored_data(yield[ec]);
-
     if (ec) return or_throw<ClientPtr>(yield, ec);
+    impl->gc.start();
 
     return unique_ptr<Client>(new Client(move(impl)));
 }
