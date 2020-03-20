@@ -10,6 +10,10 @@
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/ssl/stream.hpp>
 #include <boost/optional/optional_io.hpp>
+#include <boost/range/adaptor/indirected.hpp>
+#include <boost/range/adaptor/filtered.hpp>
+#include <boost/range/adaptor/transformed.hpp>
+#include <boost/range/adaptor/indexed.hpp>
 #include <iostream>
 #include <cstdlib>  // for atexit()
 
@@ -66,6 +70,7 @@
 #include "util/lru_cache.h"
 #include "util/scheduler.h"
 #include "util/reachability.h"
+#include "util/async_job.h"
 #include "upnp.h"
 #include "util/handler_tracker.h"
 
@@ -1166,71 +1171,182 @@ public:
         return or_throw(yield, ec);
     }
 
+    // XXX: Currently `AsyncJob` isn't specialized for `void`, so using
+    // `Nothing` as a temporary hack.
+    struct Nothing {};
+
     // Closes `con` when it can no longer be used.
     // If an error is reported and it is still open,
     // a response may still be sent to it.
     // The return value indicates whether the connection
     // should be kept alive afterwards.
-    void fetch(Transaction& tnx, Yield yield)
+    void mixed_fetch(Transaction& tnx, Yield yield)
     {
-        Cancel main_cancel(client_state._shutdown_signal);
+        Cancel cancel(client_state._shutdown_signal);
 
         namespace err = asio::error;
+        namespace adapt = boost::adaptors;
+
         using request_route::fresh_channel;
 
-        sys::error_code last_error = err::operation_not_supported;
+        using Job = AsyncJob<Nothing>;
+        using JobCon = Job::Connection;
+        using OptJobCon = boost::optional<JobCon>;
 
-        for (auto route : request_config.fresh_channels) {
-            if (main_cancel)
-                return or_throw(yield, err::operation_aborted);
+        auto exec = client_state.get_io_context().get_executor();
 
-            Cancel cancel(main_cancel);
+        Job secure_origin_job(exec);
+        Job origin_job(exec);
+        Job proxy_job(exec);
+        Job injector_job(exec);
 
-            WatchDog wd( client_state.get_io_context()
-                       , chrono::minutes(3), [&] { cancel(); });
+        // Unfortunately C++14 is not letting me have array of references
+        std::array<Job*, 4> jobs { &secure_origin_job
+                                 , &origin_job
+                                 , &proxy_job
+                                 , &injector_job };
 
-            sys::error_code ec;
+        auto is_running  = [] (auto& v) { return v.is_running(); };
+        auto was_started = [] (auto& v) { return v.was_started(); };
 
-            switch (route) {
+        auto started_jobs = [&] {
+            return jobs | adapt::indirected
+                        | adapt::filtered(was_started);
+        };
+
+        auto running_jobs = [&] {
+            return started_jobs() | adapt::filtered(is_running);
+        };
+
+        auto count = [] (auto range) {
+            return std::distance(range.begin(), range.end());
+        };
+
+        auto cancel_con = cancel.connect([&] {
+            for (auto& job : running_jobs()) job.cancel();
+        });
+
+        auto start_job = [&] (size_t n, Job& job, const char* name_tag, auto func) {
+            job.start([
+                &yield,
+                n,
+                name_tag,
+                func = std::move(func),
+                exec
+            ] (Cancel& c, asio::yield_context y_) {
+                auto y = yield.detach(y_).tag(name_tag);
+
+                auto timeout = n * chrono::seconds(3);
+
+                if (log_transactions()) {
+                    y.log("Starting job with timeout ", timeout.count(), "s");
+                }
+
+                async_sleep(exec, n * chrono::seconds(3), c, y);
+                if (c) return or_throw<Nothing>(y_, err::operation_aborted);
+                sys::error_code ec;
+                func(c, y[ec]);
+                return or_throw<Nothing>(y, ec);
+            });
+        };
+
+        for (auto route : request_config.fresh_channels | adapt::indexed(0)) {
+            switch (route.value()) {
                 case fresh_channel::_front_end: {
                     Response res = client_state.fetch_fresh_from_front_end(tnx.request(), yield);
+                    sys::error_code ec;
                     tnx.write_to_user_agent(res, cancel, yield[ec]);
                     break;
                 }
                 case fresh_channel::secure_origin: {
-                    origin_job_func(true, tnx, cancel, yield.tag("secure_origin")[ec]);
+                    start_job(route.index(), secure_origin_job, "secure_origin",
+                            [&] (auto& c, auto y)
+                            { origin_job_func(true, tnx, c, y); });
                     break;
                 }
                 case fresh_channel::origin: {
-                    origin_job_func(false, tnx, cancel, yield.tag("origin")[ec]);
+                    start_job(route.index(), origin_job, "origin",
+                            [&] (auto& c, auto y)
+                            { origin_job_func(false, tnx, c, y); });
                     break;
                 }
                 case fresh_channel::proxy: {
-                    proxy_job_func(tnx, cancel, yield.tag("proxy")[ec]);
+                    start_job(route.index(), proxy_job, "proxy",
+                            [&] (auto& c, auto y)
+                            { proxy_job_func(tnx, c, y); });
                     break;
                 }
                 case fresh_channel::injector: {
-                    injector_job_func(tnx, cancel, yield.tag("injector")[ec]);
+                    start_job(route.index(), injector_job, "injector",
+                            [&] (auto& c, auto y)
+                            { injector_job_func(tnx, c, y); });
                     break;
                 }
             }
+        }
 
-            if (main_cancel) return or_throw(yield, err::operation_aborted);
+        auto which_job_str = [&](Job* ptr) {
+            if (ptr == &secure_origin_job) return "secure_origin";
+            if (ptr == &origin_job) return "origin";
+            if (ptr == &proxy_job) return "proxy";
+            if (ptr == &injector_job) return "injector";
+            return "unknown";
+        };
 
-            if (cancel) ec = err::timed_out;
+        boost::optional<sys::error_code> final_ec;
 
-            if (ec) {
-                if (tnx.user_agent_was_written_to()) return or_throw(yield, ec);
-                // User agent hasn't been written to, thus we can try other
-                // routes (if any).
-                last_error = ec;
-            } else {
-                return;
+        for (size_t job_count; (job_count = count(running_jobs())) != 0;) {
+            ConditionVariable cv(exec);
+            std::array<OptJobCon, jobs.size()> cons;
+            Job* which = nullptr;
+
+            for (auto job : jobs | adapt::indexed(0)) {
+                auto i = job.index();
+                auto v = job.value();
+                cons[i] = v->on_finish_sig([&cv, &which, v] {
+                    if (!which) which = v;
+                    cv.notify();
+                });
+            }
+
+            if (log_transactions()) {
+                yield.log("waiting for ", job_count, " running jobs");
+            }
+
+            cv.wait(yield);
+
+            if (log_transactions()) {
+                yield.log("got result from job: ", which_job_str(which));
+            }
+
+            if (!which) continue; // XXX
+
+            auto&& result = which->result();
+
+            if (log_transactions()) {
+                yield.log("result: ", result.ec.message());
+            }
+
+            if (!result.ec) {
+                final_ec = {}; // success
+                for (auto& job : running_jobs()) {
+                    job.stop(yield);
+                }
+                break;
+            } else if (!final_ec) {
+                final_ec = result.ec;
             }
         }
 
-        assert(last_error);
-        return or_throw(yield, last_error);
+        if (!final_ec /* not set */) {
+            final_ec = err::no_protocol_option;
+        }
+
+        if (log_transactions()) {
+            yield.log("done (final_ec:", final_ec->message(), ")");
+        }
+
+        return or_throw(yield, *final_ec);
     }
 
 private:
@@ -1604,9 +1720,6 @@ void Client::State::serve_request( GenericStream&& con
         if (log_transactions()) {
             yield.log("=== New request ===");
             yield.log(req.base());
-            auto on_exit = defer([&] {
-                yield.log("Done");
-            });
         }
 
         auto target = req.target();
@@ -1671,6 +1784,7 @@ void Client::State::serve_request( GenericStream&& con
                 route_choose_config(req, matches, default_request_config));
 
         if (request_config.fresh_channels.empty()) {
+            if (log_transactions()) yield.log("Abort due to no route");
             con.close();
             return;
         }
@@ -1678,7 +1792,7 @@ void Client::State::serve_request( GenericStream&& con
         auto meta = UserAgentMetaData::extract(req);
         Transaction tnx(con, req, std::move(meta));
 
-        cache_control.fetch(tnx, yield[ec].tag("fetch"));
+        cache_control.mixed_fetch(tnx, yield[ec].tag("mixed_fetch"));
 
         if (ec) {
             if (log_transactions()) {
