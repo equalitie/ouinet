@@ -1,5 +1,8 @@
 #include "http_store.h"
 
+#include <array>
+#include <ctime>
+
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/read.hpp>
 #include <boost/asio/read_until.hpp>
@@ -31,6 +34,13 @@
 #define _ERROR(...) LOG_ERROR(_LOGPFX, __VA_ARGS__)
 
 namespace ouinet { namespace cache {
+
+// An entry modified less than this time ago
+// is considered recently updated.
+//
+// Mainly useful to detect temporary entries that
+// are no longer being written to.
+static const std::time_t recently_updated_secs = 10 * 60;  // 10 minutes ago
 
 // Lowercase hexadecimal representation of a SHA1 digest.
 static const boost::regex v0_file_name_rx("^[0-9a-f]{40}$");
@@ -816,6 +826,18 @@ name_matches_model(const fs::path& name, const fs::path& model)
     return true;
 }
 
+static
+bool
+v0_recently_updated(const fs::path& path)
+{
+    auto now = std::time(nullptr);
+
+    sys::error_code ec;
+    auto ts = fs::last_write_time(path, ec);
+    if (ec) return false;
+    return (now - ts <= recently_updated_secs);
+}
+
 void
 HttpStoreV0::for_each(keep_func keep, asio::yield_context yield)
 {
@@ -827,8 +849,13 @@ HttpStoreV0::for_each(keep_func keep, asio::yield_context yield)
 
         auto p_name = p.path().filename();
         if (name_matches_model(p_name, util::default_temp_model)) {
-            _DEBUG("Found temporary file: ", p);
-            v0_try_remove(p); continue;
+            if (v0_recently_updated(p)) {
+                _DEBUG("Found recent temporary file: ", p);
+            } else {
+                _DEBUG("Found old temporary file: ", p);
+                v0_try_remove(p);
+            }
+            continue;
         }
 
         auto& p_name_s = p_name.native();
@@ -914,6 +941,29 @@ v1_try_remove(const fs::path& path)
     // The parent directory may be left empty.
 }
 
+static
+bool
+v1_recently_updated(const fs::path& path)
+{
+    auto now = std::time(nullptr);
+
+    std::array<fs::path, 4> paths
+        { path
+        , path / head_fname
+        , path / body_fname
+        , path / sigs_fname};
+
+    for (const auto& p : paths) {
+        sys::error_code ec;
+        auto ts = fs::last_write_time(p, ec);
+        if (ec) continue;
+        if (now - ts <= recently_updated_secs)
+            return true;
+    }
+
+    return false;
+}
+
 void
 HttpStoreV1::for_each(keep_func keep, asio::yield_context yield)
 {
@@ -937,8 +987,13 @@ HttpStoreV1::for_each(keep_func keep, asio::yield_context yield)
 
             auto p_name = p.path().filename();
             if (name_matches_model(p_name, util::default_temp_model)) {
-                _DEBUG("Found temporary directory: ", p);
-                v1_try_remove(p); continue;
+               if (v1_recently_updated(p)) {
+                   _DEBUG("Found recent temporary directory: ", p);
+               } else {
+                   _DEBUG("Found old temporary directory: ", p);
+                   v1_try_remove(p);
+               }
+               continue;
             }
 
             auto& p_name_s = p_name.native();
