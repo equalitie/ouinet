@@ -61,7 +61,10 @@ struct GarbageCollector {
 
                 LOG_DEBUG("Bep5HTTP: Begin garbage collection round");
                 http_store.for_each([&] (auto rr, auto y) {
-                    return keep(std::move(rr), y);
+                    sys::error_code e;
+                    auto k = keep(std::move(rr), y[e]);
+                    if (cancel) ec = asio::error::operation_aborted;
+                    return or_throw(y, e, k);
                 }, yield[ec]);
                 if (ec) LOG_WARN( "Bep5HTTP: Garbage collection round failed: "
                                 , ec.message());
