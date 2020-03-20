@@ -588,10 +588,6 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
 //------------------------------------------------------------------------------
 Session Client::State::fetch_fresh_from_origin(const Request& rq, Yield yield)
 {
-    if (!_config.is_origin_access_enabled()) {
-        return or_throw<Session>(yield, asio::error::operation_not_supported);
-    }
-
     Cancel cancel;
 
     WatchDog watch_dog(_ctx
@@ -1035,13 +1031,6 @@ public:
             yield.log("start");
         }
 
-        if (!client_state._config.is_proxy_access_enabled()) {
-            if (log_transactions()) {
-                yield.log("disabled");
-            }
-            return or_throw(yield, asio::error::operation_not_supported);
-        }
-
         Session session;
 
         sys::error_code ec;
@@ -1272,7 +1261,6 @@ public:
         Cancel cancel(client_state._shutdown_signal);
 
         namespace err = asio::error;
-        namespace adapt = boost::adaptors;
 
         using request_route::fresh_channel;
 
@@ -1364,7 +1352,7 @@ public:
             std::array<OptJobCon, jobs.all.size()> cons;
             Job* which = nullptr;
 
-            for (const auto& job : jobs.running() | adapt::indexed(0)) {
+            for (const auto& job : jobs.running() | boost::adaptors::indexed(0)) {
                 auto i = job.index();
                 auto v = &job.value();
                 cons[i] = v->on_finish_sig([&cv, &which, v] {
