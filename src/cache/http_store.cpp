@@ -51,9 +51,9 @@ static const boost::regex v1_parent_name_rx("^[0-9a-f]{2}$");
 static const boost::regex v1_dir_name_rx("^[0-9a-f]{38}$");
 
 // File names for response components.
-static const fs::path head_fname = "head";
-static const fs::path body_fname = "body";
-static const fs::path sigs_fname = "sigs";
+static const fs::path v1_head_fname = "head";
+static const fs::path v1_body_fname = "body";
+static const fs::path v1_sigs_fname = "sigs";
 
 static
 http_response::Head
@@ -225,7 +225,7 @@ public:
         head = http_injection_merge(std::move(h), {});
 
         sys::error_code ec;
-        auto hf = create_file(head_fname, cancel, ec);
+        auto hf = create_file(v1_head_fname, cancel, ec);
         return_or_throw_on_error(yield, cancel, ec);
         headf = std::move(hf);
         head.async_write(*headf, cancel, yield);
@@ -236,7 +236,7 @@ public:
     {
         if (!sigsf) {
             sys::error_code ec;
-            auto sf = create_file(sigs_fname, cancel, ec);
+            auto sf = create_file(v1_sigs_fname, cancel, ec);
             return_or_throw_on_error(yield, cancel, ec);
             sigsf = std::move(sf);
         }
@@ -274,7 +274,7 @@ public:
     {
         if (!bodyf) {
             sys::error_code ec;
-            auto bf = create_file(body_fname, cancel, ec);
+            auto bf = create_file(v1_body_fname, cancel, ec);
             return_or_throw_on_error(yield, cancel, ec);
             bodyf = std::move(bf);
         }
@@ -621,14 +621,14 @@ _http_store_reader_v1( const fs::path& dirp, asio::executor ex
                      , boost::optional<std::size_t> range_last
                      , sys::error_code& ec)
 {
-    auto headf = util::file_io::open_readonly(ex, dirp / head_fname, ec);
+    auto headf = util::file_io::open_readonly(ex, dirp / v1_head_fname, ec);
     if (ec) return nullptr;
 
-    auto sigsf = util::file_io::open_readonly(ex, dirp / sigs_fname, ec);
+    auto sigsf = util::file_io::open_readonly(ex, dirp / v1_sigs_fname, ec);
     if (ec && ec != sys::errc::no_such_file_or_directory) return nullptr;
     ec = {};
 
-    auto bodyf = util::file_io::open_readonly(ex, dirp / body_fname, ec);
+    auto bodyf = util::file_io::open_readonly(ex, dirp / v1_body_fname, ec);
     if (ec && ec != sys::errc::no_such_file_or_directory) return nullptr;
     ec = {};
 
@@ -949,9 +949,9 @@ v1_recently_updated(const fs::path& path)
 
     std::array<fs::path, 4> paths
         { path
-        , path / head_fname
-        , path / body_fname
-        , path / sigs_fname};
+        , path / v1_head_fname
+        , path / v1_body_fname
+        , path / v1_sigs_fname};
 
     for (const auto& p : paths) {
         sys::error_code ec;
