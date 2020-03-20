@@ -932,7 +932,9 @@ public:
         , cc(client_state.get_executor(), OUINET_CLIENT_SERVER_STRING)
     {
         //------------------------------------------------------------
-        cc.fetch_fresh = [&] (const Request& rq, Cancel& cancel, Yield yield) {
+        cc.fetch_fresh = [&] (const Request& rq, Cancel& cancel, Yield yield_) {
+            auto yield = yield_.tag("injector");
+
             namespace err = asio::error;
 
             if (log_transactions()) {
@@ -965,7 +967,9 @@ public:
         };
 
         //------------------------------------------------------------
-        cc.fetch_stored = [&] (const Request& rq, const std::string& dht_group, Cancel& cancel, Yield yield) {
+        cc.fetch_stored = [&] (const Request& rq, const std::string& dht_group, Cancel& cancel, Yield yield_) {
+            auto yield = yield_.tag("cache");
+
             if (log_transactions()) {
                 yield.log("start");
             }
@@ -1289,7 +1293,7 @@ public:
 
             if (!is_access_enabled(job_type)) {
                 if (log_transactions()) {
-                    yield.log("/", name_tag, " access disabled");
+                    yield.log(name_tag, " access disabled");
                 }
                 return;
             }
