@@ -483,6 +483,13 @@ struct Client::Impl {
         return bsecs(age.count());
     }
 
+    inline
+    void unpublish_cache_entry(const std::string& key)
+    {
+        auto empty_groups = _dht_groups->remove(key);
+        for (const auto& eg : empty_groups) announcer.remove(eg);
+    }
+
     // Return whether the entry should be kept in storage.
     bool keep_cache_entry(cache::reader_uptr rr, asio::yield_context yield)
     {
@@ -515,8 +522,7 @@ struct Client::Impl {
             LOG_DEBUG( "Bep5HTTP: Cached response is too old; removing: "
                      , age, " > ", max_cached_age
                      , "; uri=", key );
-            auto empty_groups = _dht_groups->remove(key.to_string());
-            for (const auto& eg : empty_groups) announcer.remove(eg);
+            unpublish_cache_entry(key.to_string());
             return false;
         }
 
