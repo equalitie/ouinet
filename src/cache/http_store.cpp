@@ -910,6 +910,12 @@ HttpStoreV0::reader( const std::string& key
     return http_store_reader_v0(kpath, executor, ec);
 }
 
+std::size_t
+HttpStoreV0::size() const
+{
+    return 0;  // TODO: implement
+}
+
 // end HttpStoreV0
 
 // begin HttpStoreV0
@@ -1057,6 +1063,12 @@ HttpStoreV1::reader( const std::string& key
 {
     auto kpath = v1_path_from_key(path, key);
     return http_store_reader_v1(kpath, executor, ec);
+}
+
+std::size_t
+HttpStoreV1::size() const
+{
+    return 0;  // TODO: implement
 }
 
 // end HttpStoreV1

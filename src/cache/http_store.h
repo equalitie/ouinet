@@ -153,6 +153,10 @@ public:
     reader_uptr
     reader( const std::string& key
           , sys::error_code&) = 0;  // not const, e.g. LRU cache
+
+    virtual
+    std::size_t
+    size() const = 0;
 };
 
 // This uses format v0 to store each response
@@ -176,6 +180,9 @@ public:
     reader_uptr
     reader( const std::string& key
           , sys::error_code&) override;
+
+    std::size_t
+    size() const override;
 
 private:
     fs::path path;
@@ -204,6 +211,9 @@ public:
     reader_uptr
     reader( const std::string& key
           , sys::error_code&) override;
+
+    std::size_t
+    size() const override;
 
 private:
     fs::path path;

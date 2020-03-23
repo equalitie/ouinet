@@ -49,6 +49,8 @@ public:
                     , Cancel&
                     , asio::yield_context);
 
+    std::size_t local_store_size() const;
+
     // Get the newest protocol version that has been seen in the network
     // (e.g. to warn about potential upgrades).
     unsigned get_newest_proto_version() const;
