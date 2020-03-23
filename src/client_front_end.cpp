@@ -26,10 +26,18 @@ using json = nlohmann::json;
 using Request = ClientFrontEnd::Request;
 using Response = ClientFrontEnd::Response;
 
+static string time_as_string(const boost::posix_time::ptime& t) {
+    return boost::posix_time::to_iso_extended_string(t);
+}
+
+static string past_as_string(const boost::posix_time::time_duration& d) {
+    auto past_ts = boost::posix_time::microsec_clock::universal_time() - d;
+    return time_as_string(past_ts);
+}
+
 static string now_as_string() {
-    namespace pt = boost::posix_time;
-    auto entry_ts = pt::microsec_clock::universal_time();
-    return pt::to_iso_extended_string(entry_ts);
+    auto entry_ts = boost::posix_time::microsec_clock::universal_time();
+    return time_as_string(entry_ts);
 }
 
 struct ToggleInput {
@@ -280,6 +288,9 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
     if (bep5_cache) {
         ss << *_bep5_log_level_input;
+        auto max_age = config.max_cached_age();
+        boost::format fmt("Max age of cached entry: %d seconds (i.e. not before %s)");
+        ss << (fmt % max_age.total_seconds() % past_as_string(max_age)) << "<br>\n";
     }
 
     ss << "    </body>\n"
@@ -317,6 +328,7 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         {"proxy_access", config.is_proxy_access_enabled()},
         {"injector_access", config.is_injector_access_enabled()},
         {"distributed_cache", config.is_cache_access_enabled()},
+        {"max_cached_age", config.max_cached_age().total_seconds()},
         {"ouinet_version", Version::VERSION_NAME},
         {"ouinet_build_id", Version::BUILD_ID},
         {"logfile", logger.get_log_file() != nullptr}
