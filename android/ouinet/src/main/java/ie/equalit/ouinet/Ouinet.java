@@ -66,7 +66,6 @@ public class Ouinet {
         //args.add("--disable-proxy-access");
         //args.add("--disable-injector-access");
 
-        maybeAdd(args, "--injector-ep",            config.getInjectorEndpoint());
         maybeAdd(args, "--injector-credentials",   config.getInjectorCredentials());
         maybeAdd(args, "--cache-http-public-key",  config.getCacheHttpPubKey());
         maybeAdd(args, "--tls-ca-cert-store-path", config.getTlsCaCertStorePath());
