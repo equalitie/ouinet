@@ -455,7 +455,7 @@ private:
 
         sys::error_code ec;
         auto len = asio::async_read(bodyf, asio::buffer(body_buffer), yield[ec]);
-        if (cancel) ec == asio::error::operation_aborted;
+        if (cancel) ec = asio::error::operation_aborted;
         if (ec == asio::error::eof) ec = {};
         return_or_throw_on_error(yield, cancel, ec, empty_cb);
 
