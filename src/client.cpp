@@ -2161,10 +2161,17 @@ void Client::State::setup_injector(asio::yield_context yield)
             return or_throw(yield, ec);
         }
 
+        boost::optional<string> bridge_swarm_name = _config.bep5_bridge_swarm_name();
+
+        if (!bridge_swarm_name) {
+            LOG_ERROR("Bridge swarm name has not been computed");
+            return or_throw(yield, asio::error::operation_not_supported);
+        }
+
         _bep5_client = make_shared<ouiservice::Bep5Client>
             ( dht
             , injector_ep->endpoint_string
-            , injector_bridges_swarm_name
+            , *bridge_swarm_name
             , &inj_ctx);
 
         client = make_unique<ouiservice::WeakOuiServiceClient>(_bep5_client);

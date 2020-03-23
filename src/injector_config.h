@@ -5,6 +5,7 @@
 #include "logger.h"
 #include "util/crypto.h"
 #include "parse/endpoint.h"
+#include "bep5_swarms.h"
 
 namespace ouinet {
 
@@ -300,10 +301,8 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
     // https://redmine.equalit.ie/issues/14920#note-1
     _bep5_injector_swarm_name
-        = "ed25519:"
-        + util::bytes::to_hex(_ed25519_private_key.public_key().serialize())
-        + "/v" + util::str(http_::protocol_version_current)
-        + "/injectors";
+        = bep5::compute_injector_swarm_name( _ed25519_private_key.public_key()
+                                           , http_::protocol_version_current);
 }
 
 inline void InjectorConfig::setup_ed25519_private_key(const std::string& hex)

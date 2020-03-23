@@ -12,8 +12,7 @@
 #include "endpoint.h"
 #include "logger.h"
 #include "constants.h"
-#include "util/str.h"
-#include "util/bytes.h"
+#include "bep5_swarms.h"
 
 namespace ouinet {
 
@@ -57,6 +56,12 @@ public:
 
     bool autoseed_updated() const {
         return _autoseed_updated;
+    }
+
+    boost::optional<std::string> bep5_bridge_swarm_name() {
+        if (!_cache_http_pubkey) return boost::none;
+        return bep5::compute_bridge_swarm_name( *_cache_http_pubkey
+                                              , http_::protocol_version_current);
     }
 
     boost::optional<std::string>
@@ -357,9 +362,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
             }
             _injector_ep = Endpoint{
                 Endpoint::Bep5Endpoint,
-                "ed25519:" + util::bytes::to_hex(_cache_http_pubkey->serialize())
-                + "/v" + util::str(http_::protocol_version_current)
-                + "/" + "injectors"
+                bep5::compute_injector_swarm_name(*_cache_http_pubkey, http_::protocol_version_current)
             };
         }
         else if (type_str == "none" || type_str == "") {
