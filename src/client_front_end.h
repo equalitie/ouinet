@@ -107,7 +107,8 @@ private:
                       , const util::UdpServerReachabilityAnalysis*
                       , const Request&
                       , Response&
-                      , std::stringstream&);
+                      , std::stringstream&
+                      , cache::bep5_http::Client*);
 };
 
 } // ouinet namespace

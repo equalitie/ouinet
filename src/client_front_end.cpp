@@ -318,7 +318,8 @@ void ClientFrontEnd::handle_status( ClientConfig& config
                                   , boost::optional<uint32_t> udp_port
                                   , const UPnPs& upnps
                                   , const util::UdpServerReachabilityAnalysis* reachability
-                                  , const Request& req, Response& res, stringstream& ss)
+                                  , const Request& req, Response& res, stringstream& ss
+                                  , cache::bep5_http::Client* bep5_cache)
 {
     res.set(http::field::content_type, "application/json");
 
@@ -370,6 +371,9 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         }
     }
 
+    if (bep5_cache)
+        response["local_cache_size"] = bep5_cache->local_store_size();
+
     ss << response;
 }
 
@@ -396,7 +400,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
     if (path == "/ca.pem") {
         handle_ca_pem(req, res, ss, ca);
     } else if (path == "/api/status") {
-        handle_status(config, udp_port, upnps, reachability, req, res, ss);
+        handle_status(config, udp_port, upnps, reachability, req, res, ss, bep5_cache);
     } else {
         handle_portal(config, req, res, ss, bep5_cache);
     }
