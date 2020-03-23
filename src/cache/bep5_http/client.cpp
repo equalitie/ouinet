@@ -18,6 +18,7 @@
 #include "../../async_sleep.h"
 #include "../../constants.h"
 #include "../../session.h"
+#include "../../bep5_swarms.h"
 #include <map>
 
 using namespace std;
@@ -66,6 +67,13 @@ struct Client::Impl {
         , log_level(log_level)
         , local_peer_discovery(ex, dht->local_endpoints())
     {}
+
+    std::string compute_swarm_name(boost::string_view dht_group) const {
+        return bep5::compute_uri_swarm_name(
+                cache_pk,
+                http_::protocol_version_current,
+                dht_group);
+    }
 
     void serve_local( const http::request<http::empty_body>& req
                     , GenericStream& sink
@@ -212,13 +220,15 @@ struct Client::Impl {
                 tried = ep;
             }
             else if (do_try == dht_peers) {
-                bt::NodeID infohash = util::sha1_digest(dht_group);
+                auto swarm_name = compute_swarm_name(dht_group);
+                bt::NodeID infohash = util::sha1_digest(swarm_name);
 
                 if (dbg) {
                     yield.log(*dbg, " Bep5Http: DHT lookup:");
-                    yield.log(*dbg, "     key:       ", key);
-                    yield.log(*dbg, "     dht_group: ", dht_group);
-                    yield.log(*dbg, "     infohash:  ", infohash);
+                    yield.log(*dbg, "     key:        ", key);
+                    yield.log(*dbg, "     dht_group:  ", dht_group);
+                    yield.log(*dbg, "     swarm_name: ", swarm_name);
+                    yield.log(*dbg, "     infohash:   ", infohash);
                 }
 
                 eps = dht_get_peers(infohash, cancel, yield[ec]);
@@ -442,7 +452,7 @@ struct Client::Impl {
         _dht_groups->add(dht_group, key, cancel, yield[ec]);
         if (ec) return or_throw(yield, ec);
 
-        announcer.add(dht_group);
+        announcer.add(compute_swarm_name(dht_group));
     }
 
     http::response_header<>
@@ -498,7 +508,7 @@ struct Client::Impl {
         }, y[e]);
 
         for (auto dht_group : _dht_groups->groups()) {
-            announcer.add(dht_group);
+            announcer.add(compute_swarm_name(dht_group));
         }
     }
 
