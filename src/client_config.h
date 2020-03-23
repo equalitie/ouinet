@@ -11,6 +11,8 @@
 #include "increase_open_file_limit.h"
 #include "endpoint.h"
 #include "logger.h"
+#include "constants.h"
+#include "bep5_swarms.h"
 
 namespace ouinet {
 
@@ -54,6 +56,12 @@ public:
 
     bool autoseed_updated() const {
         return _autoseed_updated;
+    }
+
+    boost::optional<std::string> bep5_bridge_swarm_name() {
+        if (!_cache_http_pubkey) return boost::none;
+        return bep5::compute_bridge_swarm_name( *_cache_http_pubkey
+                                              , http_::protocol_version_current);
     }
 
     boost::optional<std::string>
@@ -306,26 +314,6 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         }
     }
 
-    if (vm.count("injector-credentials")) {
-        auto cred = vm["injector-credentials"].as<string>();
-
-        if (!cred.empty()
-          && cred.find(':') == string::npos) {
-            throw std::runtime_error(util::str(
-                "The '--injector-credentials' argument expects a string "
-                "in the format <username>:<password>. But the provided "
-                "string \"", cred, "\" is missing a colon."));
-        }
-
-        if (!_injector_ep) {
-            throw std::runtime_error(util::str(
-                "The '--injector-credentials' argument must be used with "
-                "'--injector-ep'"));
-        }
-
-        set_credentials(*_injector_ep, cred);
-    }
-
     if (vm.count("client-credentials")) {
         auto cred = vm["client-credentials"].as<string>();
 
@@ -358,8 +346,24 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         auto type_str = vm["cache-type"].as<string>();
 
         if (type_str == "bep5-http") {
+            // https://redmine.equalit.ie/issues/14920#note-1
             _cache_type = CacheType::Bep5Http;
+
             LOG_DEBUG("Using bep5-http cache");
+
+            if (_injector_ep) {
+                throw std::runtime_error(
+                    util::str("Using --cache-type=bep5-http for which injector endpoint is"
+                        " derived implicitly. But it is already set to ", *_injector_ep));
+            }
+            if (!_cache_http_pubkey) {
+                throw std::runtime_error(
+                    "--cache-type=bep5-http must be used with --cache-http-public-key");
+            }
+            _injector_ep = Endpoint{
+                Endpoint::Bep5Endpoint,
+                bep5::compute_injector_swarm_name(*_cache_http_pubkey, http_::protocol_version_current)
+            };
         }
         else if (type_str == "none" || type_str == "") {
             _cache_type = CacheType::None;
@@ -369,6 +373,26 @@ ClientConfig::ClientConfig(int argc, char* argv[])
                     util::str("Unknown cache-type \"", type_str, "\""));
         }
 
+    }
+
+    if (vm.count("injector-credentials")) {
+        auto cred = vm["injector-credentials"].as<string>();
+
+        if (!cred.empty()
+          && cred.find(':') == string::npos) {
+            throw std::runtime_error(util::str(
+                "The '--injector-credentials' argument expects a string "
+                "in the format <username>:<password>. But the provided "
+                "string \"", cred, "\" is missing a colon."));
+        }
+
+        if (!_injector_ep) {
+            throw std::runtime_error(util::str(
+                "The '--injector-credentials' argument must be used with "
+                "'--injector-ep'"));
+        }
+
+        set_credentials(*_injector_ep, cred);
     }
 
     if (_cache_type == CacheType::None) {
@@ -384,8 +408,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         auto local_domain = vm["local-domain"].as<string>();
         if (!boost::regex_match(local_domain, tld_rx)) {
             throw std::runtime_error("Invalid TLD for --local-domain");
-        }
-        _local_domain = boost::algorithm::to_lower_copy(local_domain);
+        } _local_domain = boost::algorithm::to_lower_copy(local_domain);
     }
 }
 

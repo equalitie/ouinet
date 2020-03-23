@@ -5,6 +5,7 @@
 #include "logger.h"
 #include "util/crypto.h"
 #include "parse/endpoint.h"
+#include "bep5_swarms.h"
 
 namespace ouinet {
 
@@ -31,7 +32,7 @@ public:
     bool listen_on_i2p() const
     { return _listen_on_i2p; }
 
-    boost::optional<std::string> bep5_injector_swarm_name() const
+    std::string bep5_injector_swarm_name() const
     {
         return _bep5_injector_swarm_name;
     }
@@ -101,7 +102,7 @@ private:
     boost::optional<asio::ip::tcp::endpoint> _obfs2_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _obfs3_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _obfs4_endpoint;
-    boost::optional<std::string> _bep5_injector_swarm_name;
+    std::string _bep5_injector_swarm_name;
     boost::filesystem::path OUINET_CONF_FILE = "ouinet-injector.conf";
     std::string _credentials;
     util::Ed25519PrivateKey _ed25519_private_key;
@@ -142,7 +143,6 @@ InjectorConfig::options_description()
          "Whether we should be listening on I2P (true/false)")
         // It always announces the TLS uTP endpoint since
         // a TLS certificate is always generated.
-        ("announce-in-bep5-swarm", po::value<string>(), "Listen on uTP/TLS and announce the WAN endpoint in a BEP5 swarm using the given name")
         ("credentials", po::value<string>()
          , "<username>:<password> authentication pair. "
            "If unused, this injector shall behave as an open proxy.")
@@ -285,10 +285,6 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         _obfs4_endpoint = *parse::endpoint<asio::ip::tcp>(vm["listen-on-obfs4"].as<string>());
     }
 
-    if (vm.count("announce-in-bep5-swarm")) {
-        _bep5_injector_swarm_name = vm["announce-in-bep5-swarm"].as<string>();
-    }
-
     if (vm.count("cache-local-capacity")) {
         _cache_local_capacity = vm["cache-local-capacity"].as<unsigned int>();
     }
@@ -303,6 +299,10 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
                              ? vm["ed25519-private-key"].as<string>()
                              : string());
 
+    // https://redmine.equalit.ie/issues/14920#note-1
+    _bep5_injector_swarm_name
+        = bep5::compute_injector_swarm_name( _ed25519_private_key.public_key()
+                                           , http_::protocol_version_current);
 }
 
 inline void InjectorConfig::setup_ed25519_private_key(const std::string& hex)
