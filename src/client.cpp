@@ -2159,7 +2159,7 @@ void Client::State::setup_injector(asio::yield_context yield)
         _bep5_client = make_shared<ouiservice::Bep5Client>
             ( dht
             , injector_ep->endpoint_string
-            , injector_helpers_swarm_name
+            , injector_bridges_swarm_name
             , &inj_ctx);
 
         client = make_unique<ouiservice::WeakOuiServiceClient>(_bep5_client);

@@ -95,7 +95,7 @@ static const std::string response_source_hdr_local_cache = "local-cache";
 
 } // http_ namespace
 
-static const std::string injector_helpers_swarm_name = "ouinet-injector-helpers";
+static const std::string injector_bridges_swarm_name = "ceno-ouinet-v4-bridges";
 
 static const uint16_t default_udp_port = 28729;
 
