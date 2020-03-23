@@ -373,9 +373,9 @@ void ClientFrontEnd::handle_status( ClientConfig& config
 
     if (bep5_cache) {
         sys::error_code ec;
-        auto sz = bep5_cache->local_store_size(ec);
+        auto sz = bep5_cache->local_size(ec);
         if (ec) {
-            LOG_ERROR( "Front-end: Failed to get local cache store size ec:"
+            LOG_ERROR( "Front-end: Failed to get local cache size ec:"
                      , ec.message());
         } else {
             response["local_cache_size"] = sz;
