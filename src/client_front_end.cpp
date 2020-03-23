@@ -319,7 +319,8 @@ void ClientFrontEnd::handle_status( ClientConfig& config
                                   , const UPnPs& upnps
                                   , const util::UdpServerReachabilityAnalysis* reachability
                                   , const Request& req, Response& res, stringstream& ss
-                                  , cache::bep5_http::Client* bep5_cache)
+                                  , cache::bep5_http::Client* bep5_cache
+                                  , Yield yield)
 {
     res.set(http::field::content_type, "application/json");
 
@@ -372,8 +373,9 @@ void ClientFrontEnd::handle_status( ClientConfig& config
     }
 
     if (bep5_cache) {
+        Cancel cancel;
         sys::error_code ec;
-        auto sz = bep5_cache->local_size(ec);
+        auto sz = bep5_cache->local_size(cancel, yield[ec]);
         if (ec) {
             LOG_ERROR( "Front-end: Failed to get local cache size ec:"
                      , ec.message());
@@ -408,7 +410,10 @@ Response ClientFrontEnd::serve( ClientConfig& config
     if (path == "/ca.pem") {
         handle_ca_pem(req, res, ss, ca);
     } else if (path == "/api/status") {
-        handle_status(config, udp_port, upnps, reachability, req, res, ss, bep5_cache);
+        sys::error_code e;
+        handle_status( config, udp_port, upnps, reachability
+                     , req, res, ss, bep5_cache
+                     , yield[e]);
     } else {
         handle_portal(config, req, res, ss, bep5_cache);
     }

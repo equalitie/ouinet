@@ -59,6 +59,7 @@ static
 std::size_t
 recursive_dir_size(const fs::path& path, sys::error_code& ec)
 {
+    // TODO: make asynchronous?
     fs::recursive_directory_iterator dit(path, fs::symlink_option::no_recurse, ec);
     if (ec) return 0;
 
@@ -933,9 +934,13 @@ HttpStoreV0::reader( const std::string& key
 }
 
 std::size_t
-HttpStoreV0::size(sys::error_code& ec) const
+HttpStoreV0::size( Cancel cancel
+                 , asio::yield_context yield) const
 {
-    return recursive_dir_size(path, ec);
+    sys::error_code ec;
+    auto sz = recursive_dir_size(path, ec);
+    if (cancel) ec = asio::error::operation_aborted;
+    return or_throw(yield, ec, sz);
 }
 
 // end HttpStoreV0
@@ -1088,9 +1093,13 @@ HttpStoreV1::reader( const std::string& key
 }
 
 std::size_t
-HttpStoreV1::size(sys::error_code& ec) const
+HttpStoreV1::size( Cancel cancel
+                 , asio::yield_context yield) const
 {
-    return recursive_dir_size(path, ec);
+    sys::error_code ec;
+    auto sz = recursive_dir_size(path, ec);
+    if (cancel) ec = asio::error::operation_aborted;
+    return or_throw(yield, ec, sz);
 }
 
 // end HttpStoreV1

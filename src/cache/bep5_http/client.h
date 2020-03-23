@@ -49,7 +49,8 @@ public:
                     , Cancel&
                     , asio::yield_context);
 
-    std::size_t local_size(sys::error_code&) const;
+    std::size_t local_size( Cancel
+                          , asio::yield_context) const;
 
     // Get the newest protocol version that has been seen in the network
     // (e.g. to warn about potential upgrades).

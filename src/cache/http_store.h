@@ -157,7 +157,7 @@ public:
     // An approximate size of the store on disk, in bytes.
     virtual
     std::size_t
-    size(sys::error_code&) const = 0;
+    size(Cancel, asio::yield_context) const = 0;
 };
 
 // This uses format v0 to store each response
@@ -183,7 +183,7 @@ public:
           , sys::error_code&) override;
 
     std::size_t
-    size(sys::error_code&) const override;
+    size(Cancel, asio::yield_context) const override;
 
 private:
     fs::path path;
@@ -214,7 +214,7 @@ public:
           , sys::error_code&) override;
 
     std::size_t
-    size(sys::error_code&) const override;
+    size(Cancel, asio::yield_context) const override;
 
 private:
     fs::path path;

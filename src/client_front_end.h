@@ -108,7 +108,8 @@ private:
                       , const Request&
                       , Response&
                       , std::stringstream&
-                      , cache::bep5_http::Client*);
+                      , cache::bep5_http::Client*
+                      , Yield);
 };
 
 } // ouinet namespace
