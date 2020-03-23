@@ -171,7 +171,8 @@ static void load_log_file(stringstream& out_ss) {
 
 void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , const Request& req, Response& res, stringstream& ss
-                                  , cache::bep5_http::Client* bep5_cache)
+                                  , cache::bep5_http::Client* bep5_cache
+                                  , Yield yield)
 {
     res.set(http::field::content_type, "text/html");
 
@@ -230,6 +231,11 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
             load_log_file(ss);
             res.set(http::field::content_type, "text/plain");
             return;
+        }
+        else if (target.find("?purge_cache=") != string::npos && bep5_cache) {
+            Cancel cancel;
+            sys::error_code ec;
+            bep5_cache->local_purge(cancel, yield[ec]);
         }
 
         // Redirect back to the portal.
@@ -291,6 +297,13 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         auto max_age = config.max_cached_age();
         boost::format fmt("Max age of cached entry: %d seconds (i.e. not before %s)");
         ss << (fmt % max_age.total_seconds() % past_as_string(max_age)) << "<br>\n";
+        ss <<
+            "<form method=\"get\">\n"
+            "Remove all content cached locally: "
+            "<input type=\"submit\" "
+                          "name=\"purge_cache\" "
+                          "value=\"Purge cache\"/>\n"
+            "</form>\n";
     }
 
     ss << "    </body>\n"
@@ -415,7 +428,8 @@ Response ClientFrontEnd::serve( ClientConfig& config
                      , req, res, ss, bep5_cache
                      , yield[e]);
     } else {
-        handle_portal(config, req, res, ss, bep5_cache);
+        sys::error_code e;
+        handle_portal(config, req, res, ss, bep5_cache, yield[e]);
     }
 
     Response::body_type::reader reader(res, res.body());

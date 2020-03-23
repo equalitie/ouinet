@@ -180,6 +180,13 @@ struct Client::Impl {
         return http_store->size(cancel, yield);
     }
 
+    void local_purge( Cancel cancel
+                    , asio::yield_context yield)
+    {
+        LOG_DEBUG("Bep5HTTP: Purging local cache");
+        // TODO: implement
+    }
+
     void handle_http_error( GenericStream& con
                           , const http::request<http::empty_body>& req
                           , http::status status
@@ -691,6 +698,12 @@ std::size_t Client::local_size( Cancel cancel
                               , asio::yield_context yield) const
 {
     return _impl->local_size(cancel, yield);
+}
+
+void Client::local_purge( Cancel cancel
+                        , asio::yield_context yield)
+{
+    _impl->local_purge(cancel, yield);
 }
 
 unsigned Client::get_newest_proto_version() const
