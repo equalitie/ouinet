@@ -354,7 +354,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
             if (_injector_ep) {
                 throw std::runtime_error(
                     util::str("Using --cache-type=bep5-http for which injector endpoint is"
-                        " derived implicitly. But it is already set to ", _injector_ep));
+                        " derived implicitly. But it is already set to ", *_injector_ep));
             }
             if (!_cache_http_pubkey) {
                 throw std::runtime_error(
