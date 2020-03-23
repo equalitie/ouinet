@@ -56,6 +56,28 @@ static const fs::path v1_body_fname = "body";
 static const fs::path v1_sigs_fname = "sigs";
 
 static
+std::size_t
+recursive_dir_size(const fs::path& path, sys::error_code& ec)
+{
+    fs::recursive_directory_iterator dit(path, fs::symlink_option::no_recurse, ec);
+    if (ec) return 0;
+
+    // TODO: take directories themselves into account
+    // TODO: take block sizes into account
+    std::size_t total = 0;
+    for (; dit != fs::recursive_directory_iterator(); ++dit) {
+        auto p = dit->path();
+        auto is_file = fs::is_regular_file(p, ec);
+        if (ec) return 0;
+        if (!is_file) continue;
+        auto file_size = fs::file_size(p, ec);
+        if (ec) return 0;
+        total += file_size;
+    }
+    return total;
+}
+
+static
 http_response::Head
 without_framing(http_response::Head rsh)
 {
@@ -913,7 +935,7 @@ HttpStoreV0::reader( const std::string& key
 std::size_t
 HttpStoreV0::size(sys::error_code& ec) const
 {
-    return 0;  // TODO: implement
+    return recursive_dir_size(path, ec);
 }
 
 // end HttpStoreV0
@@ -1068,7 +1090,7 @@ HttpStoreV1::reader( const std::string& key
 std::size_t
 HttpStoreV1::size(sys::error_code& ec) const
 {
-    return 0;  // TODO: implement
+    return recursive_dir_size(path, ec);
 }
 
 // end HttpStoreV1
