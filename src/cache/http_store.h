@@ -156,7 +156,7 @@ public:
 
     virtual
     std::size_t
-    size() const = 0;
+    size(sys::error_code&) const = 0;
 };
 
 // This uses format v0 to store each response
@@ -182,7 +182,7 @@ public:
           , sys::error_code&) override;
 
     std::size_t
-    size() const override;
+    size(sys::error_code&) const override;
 
 private:
     fs::path path;
@@ -213,7 +213,7 @@ public:
           , sys::error_code&) override;
 
     std::size_t
-    size() const override;
+    size(sys::error_code&) const override;
 
 private:
     fs::path path;

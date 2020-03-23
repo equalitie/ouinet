@@ -911,7 +911,7 @@ HttpStoreV0::reader( const std::string& key
 }
 
 std::size_t
-HttpStoreV0::size() const
+HttpStoreV0::size(sys::error_code& ec) const
 {
     return 0;  // TODO: implement
 }
@@ -1066,7 +1066,7 @@ HttpStoreV1::reader( const std::string& key
 }
 
 std::size_t
-HttpStoreV1::size() const
+HttpStoreV1::size(sys::error_code& ec) const
 {
     return 0;  // TODO: implement
 }

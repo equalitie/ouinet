@@ -174,9 +174,9 @@ struct Client::Impl {
         return or_throw(yield, ec);
     }
 
-    std::size_t local_store_size() const
+    std::size_t local_store_size(sys::error_code& ec) const
     {
-        return http_store->size();
+        return http_store->size(ec);
     }
 
     void handle_http_error( GenericStream& con
@@ -686,9 +686,9 @@ void Client::serve_local( const http::request<http::empty_body>& req
     _impl->serve_local(req, sink, cancel, yield);
 }
 
-std::size_t Client::local_store_size() const
+std::size_t Client::local_store_size(sys::error_code& ec) const
 {
-    return _impl->local_store_size();
+    return _impl->local_store_size(ec);
 }
 
 unsigned Client::get_newest_proto_version() const
