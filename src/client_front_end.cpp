@@ -294,16 +294,17 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
     if (bep5_cache) {
         ss << *_bep5_log_level_input;
+
         auto max_age = config.max_cached_age();
-        boost::format fmt("Max age of cached entry: %d seconds (i.e. not before %s)");
-        ss << (fmt % max_age.total_seconds() % past_as_string(max_age)) << "<br>\n";
-        ss <<
-            "<form method=\"get\">\n"
-            "Remove all content cached locally: "
-            "<input type=\"submit\" "
-                          "name=\"purge_cache\" "
-                          "value=\"Purge cache\"/>\n"
-            "</form>\n";
+        boost::format fmt("Content cached locally if newer than %d seconds"
+                          " (i.e. not older than %s).");
+
+        ss << (fmt % max_age.total_seconds() % past_as_string(max_age))
+           << "<form method=\"get\">\n"
+           << "<input type=\"submit\" "
+                            "name=\"purge_cache\" "
+                            "value=\"Purge cache now\"/>\n"
+              "</form>\n";
     }
 
     ss << "    </body>\n"
