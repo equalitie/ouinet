@@ -154,6 +154,7 @@ public:
     reader( const std::string& key
           , sys::error_code&) = 0;  // not const, e.g. LRU cache
 
+    // An approximate size of the store on disk, in bytes.
     virtual
     std::size_t
     size(sys::error_code&) const = 0;
