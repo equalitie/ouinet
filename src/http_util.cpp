@@ -148,6 +148,9 @@ ouinet::util::parse_date(beast::string_view s)
 {
     namespace bt = boost::posix_time;
 
+    // Trim quotes from the beginning
+    while (s.starts_with('"') || s.starts_with(' ')) s.remove_prefix(1);
+
     // The date parsing code below internally throws and catches exceptions.
     // This confuses the address sanitizer when combined with Boost.Coroutine
     // and causes the app exit with false positive log from Asan.
@@ -158,9 +161,6 @@ ouinet::util::parse_date(beast::string_view s)
         return *t;
     }
 #   endif
-
-    // Trim quotes from the beginning
-    while (s.starts_with('"')) s.remove_prefix(1);
 
     static const auto format = [](const char* fmt) {
         using std::locale;

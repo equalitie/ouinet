@@ -1,6 +1,7 @@
 #pragma once
 
 #include <boost/intrusive/list.hpp>
+#include <logger.h>
 
 namespace ouinet {
 
@@ -33,21 +34,33 @@ private:
 
 #define OUINET_DETAIL_HANDLER_TRACKER_STRINGIFY_(x) #x
 #define OUINET_DETAIL_HANDLER_TRACKER_STRINGIFY(x) OUINET_DETAIL_HANDLER_TRACKER_STRINGIFY_(x)
+#define OUINET_DETAIL_HANDLER_TRACKER_LOCATION_STRING() \
+    __FILE__ ":" OUINET_DETAIL_HANDLER_TRACKER_STRINGIFY(__LINE__)
 
 #define TRACK_HANDLER_AFTER_STOP() \
-    HandlerTracker handler_tracker_instance(__FILE__ ":" OUINET_DETAIL_HANDLER_TRACKER_STRINGIFY(__LINE__), true)
+    HandlerTracker handler_tracker_instance(OUINET_DETAIL_HANDLER_TRACKER_LOCATION_STRING(), true)
 
 #define TRACK_HANDLER() \
-    HandlerTracker handler_tracker_instance(__FILE__ ":" OUINET_DETAIL_HANDLER_TRACKER_STRINGIFY(__LINE__), false)
+    HandlerTracker handler_tracker_instance(OUINET_DETAIL_HANDLER_TRACKER_LOCATION_STRING(), false)
 
 #define TRACK_SPAWN(exec, body, ...)\
     asio::spawn(exec, [b = body] (asio::yield_context yield) mutable {\
         TRACK_HANDLER();\
-        b(yield);\
+        try {\
+            b(yield);\
+        } catch (const std::exception& e) {\
+            LOG_ERROR("Uncaught exception from coroutine " \
+                      OUINET_DETAIL_HANDLER_TRACKER_LOCATION_STRING() ": ", e.what()); \
+        }\
     }, ##__VA_ARGS__)
 
 #define TRACK_SPAWN_AFTER_STOP(exec, body, ...)\
     asio::spawn(exec, [b = body] (asio::yield_context yield) mutable {\
         TRACK_HANDLER_AFTER_STOP();\
-        b(yield);\
+        try {\
+            b(yield);\
+        } catch (const std::exception& e) {\
+            LOG_ERROR("Uncaught exception from coroutine " \
+                      OUINET_DETAIL_HANDLER_TRACKER_LOCATION_STRING() ": ", e.what()); \
+        }\
     }, ##__VA_ARGS__)

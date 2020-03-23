@@ -457,9 +457,7 @@ CacheControl::do_fetch_fresh(FetchState& fs, const Request& rq, Yield yield)
         fs.fetch_fresh = make_fetch_fresh_job(rq, yield);
     }
 
-    ConditionVariable cv(_ex);
-    fs.fetch_fresh->on_finish([&cv] { cv.notify(); });
-    cv.wait(yield);
+    fs.fetch_fresh->wait_for_finish(yield);
 
     auto result = move(fs.fetch_fresh->result());
     auto rs = move(result.retval);
@@ -497,21 +495,42 @@ CacheControl::do_fetch_stored(FetchState& fs,
     Which which = none;
     ConditionVariable cv(_ex);
 
-    if (fs.fetch_fresh) {
-        fs.fetch_fresh ->on_finish([&] {
-                which = fresh;
-                fs.fetch_stored->on_finish(nullptr);
-                cv.notify();
-            });
-    }
+    boost::optional<AsyncJob<Session>::Connection>    fetch_fresh_con;
+    boost::optional<AsyncJob<CacheEntry>::Connection> fetch_stored_con;
 
-    fs.fetch_stored->on_finish([&] {
-            which = stored;
-            if (fs.fetch_fresh) fs.fetch_fresh->on_finish(nullptr);
+    if (fs.fetch_fresh) {
+        assert(fs.fetch_fresh->was_started());
+
+        fetch_fresh_con = fs.fetch_fresh->on_finish_sig([&] {
+            which = fresh;
+            fetch_stored_con = boost::none;
             cv.notify();
         });
 
-    cv.wait(yield);
+        if (!fetch_fresh_con) {
+            assert(fs.fetch_fresh->has_result());
+            if (!fs.fetch_fresh->result().ec) {
+                which = fresh;
+            }
+        }
+    }
+
+    if (which == none) {
+        assert(fs.fetch_stored->was_started());
+
+        fetch_stored_con = fs.fetch_stored->on_finish_sig([&] {
+            which = stored;
+            fetch_fresh_con = boost::none;
+            cv.notify();
+        });
+
+        if (!fetch_stored_con) {
+            assert(fs.fetch_stored->has_result());
+            which = stored;
+        }
+
+        cv.wait(yield);
+    }
 
     if (which == fresh) {
         auto& r = fs.fetch_fresh->result();
@@ -524,9 +543,7 @@ CacheControl::do_fetch_stored(FetchState& fs,
         }
 
         // fetch_fresh errored, wait for the stored version
-        ConditionVariable cv(_ex);
-        fs.fetch_stored->on_finish([&] { cv.notify(); });
-        cv.wait(yield);
+        fs.fetch_stored->wait_for_finish(yield);
 
         auto& r2 = fs.fetch_stored->result();
         return or_throw(yield, r2.ec, move(r2.retval));
