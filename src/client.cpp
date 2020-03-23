@@ -1310,6 +1310,11 @@ public:
             });
         };
 
+        // TODO: When the secure_origin is enabled and it always times out, it
+        // will induce an unnecessary delay to the other routes. We need a
+        // mechanism which will "realize" that other origin requests are
+        // already timing out and that injector, proxy and dcache routes don't
+        // need to wait for it.
         for (auto route : request_config.fresh_channels) {
             switch (route) {
                 case fresh_channel::_front_end: {
