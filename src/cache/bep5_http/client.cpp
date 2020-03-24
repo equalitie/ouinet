@@ -617,6 +617,7 @@ struct Client::Impl {
         http_store->for_each([&] (auto rr, auto yield) {
             return keep_cache_entry(std::move(rr), yield);
         }, y[e]);
+        if (e) return or_throw(y, e);
 
         for (auto dht_group : _dht_groups->groups()) {
             announcer.add(dht_group);
