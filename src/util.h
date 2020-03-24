@@ -174,6 +174,7 @@ template<class In>
 std::string base32up_encode(const In& in) {  // unpadded!
     return detail::base32up_encode(reinterpret_cast<const char*>(in.data()), in.size());
 }
+std::string base32_decode(const boost::string_view);
 
 template<class In>
 std::string base64_encode(const In& in) {

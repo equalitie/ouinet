@@ -6,6 +6,7 @@
 
 #include "namespaces.h"
 #include "util.h"
+#include "util/bytes.h"
 #include "parse/endpoint.h"
 #include "util/crypto.h"
 #include "increase_open_file_limit.h"
@@ -135,7 +136,8 @@ public:
             , "Type of d-cache {none, bep5-http}")
            ("cache-http-public-key"
             , po::value<string>()
-            , "Public key for HTTP signatures in the BEP5/HTTP cache (hex-encoded)")
+            , "Public key for HTTP signatures in the BEP5/HTTP cache "
+              "(hex-encoded or Base32-encoded)")
            ("max-cached-age"
             , po::value<int>()->default_value(_max_cached_age.total_seconds())
             , "Discard cached content older than this many seconds "
@@ -331,7 +333,16 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         if (vm.count(opt)) {
             string value = vm[opt].as<string>();
 
-            pk = util::Ed25519PublicKey::from_hex(value);
+            using PubKey = util::Ed25519PublicKey;
+            pk = PubKey::from_hex(value);
+
+            if (!pk) {  // attempt decoding from Base32
+                auto pk_s = util::base32_decode(value);
+                if (pk_s.size() == PubKey::key_size) {
+                    auto pk_a = util::bytes::to_array<uint8_t, PubKey::key_size>(pk_s);
+                    pk = PubKey(std::move(pk_a));
+                }
+            }
 
             if (!pk) {
                 throw std::runtime_error(
