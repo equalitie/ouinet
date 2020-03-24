@@ -1227,6 +1227,17 @@ public:
             return boost::none;
         }
 
+        Job* job_from_type(Type type) {
+            switch (type) {
+                case Type::secure_origin:      return &secure_origin;
+                case Type::origin:             return &origin;
+                case Type::proxy:              return &proxy;
+                case Type::injector_or_dcache: return &injector_or_dcache;
+            }
+            assert(0);
+            return nullptr;
+        }
+
         size_t count_running() const {
             auto jobs = running();
             return std::distance(jobs.begin(), jobs.end());
@@ -1275,8 +1286,12 @@ public:
             for (auto& job : jobs.running()) job.cancel();
         });
 
-        auto start_job = [&] (Job& job, Jobs::Type job_type, auto func) {
+        auto start_job = [&] (Jobs::Type job_type, auto func) {
             const char* name_tag = Jobs::as_string(job_type);
+
+            Job* job = jobs.job_from_type(job_type);
+
+            assert(job); if (!job) return;
 
             if (!is_access_enabled(job_type)) {
                 if (log_transactions()) {
@@ -1285,7 +1300,7 @@ public:
                 return;
             }
 
-            job.start([
+            job->start([
                 &yield,
                 n = jobs.count_running(),
                 name_tag,
@@ -1323,25 +1338,25 @@ public:
                     break;
                 }
                 case fresh_channel::secure_origin: {
-                    start_job(jobs.secure_origin, Jobs::Type::secure_origin,
+                    start_job(Jobs::Type::secure_origin,
                             [&] (auto& c, auto y)
                             { origin_job_func(true, tnx, c, y); });
                     break;
                 }
                 case fresh_channel::origin: {
-                    start_job(jobs.origin, Jobs::Type::origin,
+                    start_job(Jobs::Type::origin,
                             [&] (auto& c, auto y)
                             { origin_job_func(false, tnx, c, y); });
                     break;
                 }
                 case fresh_channel::proxy: {
-                    start_job(jobs.proxy, Jobs::Type::proxy,
+                    start_job(Jobs::Type::proxy,
                             [&] (auto& c, auto y)
                             { proxy_job_func(tnx, c, y); });
                     break;
                 }
                 case fresh_channel::injector_or_dcache: {
-                    start_job(jobs.injector_or_dcache, Jobs::Type::injector_or_dcache,
+                    start_job(Jobs::Type::injector_or_dcache,
                             [&] (auto& c, auto y)
                             { injector_job_func(tnx, c, y); });
                     break;
