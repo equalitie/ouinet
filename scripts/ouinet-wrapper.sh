@@ -84,12 +84,6 @@ if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
         sed -i -E "s/^#?(listen-on-utp-tls\s*=\s*0\.0\.0\.0:)[0-9]+(.*)/\1${INJECTOR_UTP_TLS_PORT}\2/" "$CONF"
     fi
 
-    # Generate a random injector BEP5 swarm name.
-    if [ "$PROG" = injector ]; then
-        swarm=$(dd if=/dev/urandom bs=1024 count=1 status=none | sha256sum | cut -f1 -d' ')
-        sed -i -E "s/^(announce-in-bep5-swarm\s*=\s*).*/\1$swarm/" "$CONF"
-    fi
-
     # Generate a random password for injector credentials.
     if [ "$PROG" = injector ]; then
         password=$(dd if=/dev/urandom bs=1024 count=1 status=none | md5sum | cut -f1 -d' ')
@@ -136,8 +130,8 @@ if grep -qE '^\s*disable-cache\s*=\b' "$CONF" && ! has_help_arg "$@"; then
 fi
 
 # Comment out some obsolete configuration parameters.
-if grep -qE '^\s*(cache-index|index-ipns-id)\s*=' "$CONF" && ! has_help_arg "$@"; then
-    sed -i -E 's/^(\s*)(cache-index|index-ipns-id)(\s*=.*)/##\1\2\3  # obsolete/' "$CONF"
+if grep -qE '^\s*(cache-index|index-ipns-id|announce-in-bep5-swarm)\s*=' "$CONF" && ! has_help_arg "$@"; then
+    sed -i -E 's/^(\s*)(cache-index|index-ipns-id|announce-in-bep5-swarm)(\s*=.*)/##\1\2\3  # obsolete/' "$CONF"
 fi
 
 # Update TCP/TLS endpoint file name.
