@@ -6,6 +6,7 @@
 
 #include "namespaces.h"
 #include "util.h"
+#include "util/bytes.h"
 #include "parse/endpoint.h"
 #include "util/crypto.h"
 #include "increase_open_file_limit.h"
@@ -119,9 +120,9 @@ public:
            ("injector-ep"
             , po::value<string>()
             , "Injector's endpoint as <TYPE>:<EP>, "
-              "where <TYPE> can be \"tcp\", \"utp\", \"bep5\", \"obfs2\", \"obfs3\", \"obfs4\", \"lampshade\" or \"i2p\", "
+              "where <TYPE> can be \"tcp\", \"utp\", \"obfs2\", \"obfs3\", \"obfs4\", \"lampshade\" or \"i2p\", "
               "and <EP> depends on the type of endpoint: "
-              "<IP>:<PORT> for TCP and uTP, <STRING> for BEP5, <IP>:<PORT>[,<OPTION>=<VALUE>...] for OBFS and Lampshade, "
+              "<IP>:<PORT> for TCP and uTP, <IP>:<PORT>[,<OPTION>=<VALUE>...] for OBFS and Lampshade, "
               "<B32_PUBKEY>.b32.i2p or <B64_PUBKEY> for I2P")
            ("client-credentials", po::value<string>()
             , "<username>:<password> authentication pair for the client")
@@ -135,7 +136,8 @@ public:
             , "Type of d-cache {none, bep5-http}")
            ("cache-http-public-key"
             , po::value<string>()
-            , "Public key for HTTP signatures in the BEP5/HTTP cache (hex-encoded)")
+            , "Public key for HTTP signatures in the BEP5/HTTP cache "
+              "(hex-encoded or Base32-encoded)")
            ("max-cached-age"
             , po::value<int>()->default_value(_max_cached_age.total_seconds())
             , "Discard cached content older than this many seconds "
@@ -331,7 +333,16 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         if (vm.count(opt)) {
             string value = vm[opt].as<string>();
 
-            pk = util::Ed25519PublicKey::from_hex(value);
+            using PubKey = util::Ed25519PublicKey;
+            pk = PubKey::from_hex(value);
+
+            if (!pk) {  // attempt decoding from Base32
+                auto pk_s = util::base32_decode(value);
+                if (pk_s.size() == PubKey::key_size) {
+                    auto pk_a = util::bytes::to_array<uint8_t, PubKey::key_size>(pk_s);
+                    pk = PubKey(std::move(pk_a));
+                }
+            }
 
             if (!pk) {
                 throw std::runtime_error(
@@ -351,19 +362,23 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
             LOG_DEBUG("Using bep5-http cache");
 
-            if (_injector_ep) {
-                throw std::runtime_error(
-                    util::str("Using --cache-type=bep5-http for which injector endpoint is"
-                        " derived implicitly. But it is already set to ", *_injector_ep));
-            }
             if (!_cache_http_pubkey) {
                 throw std::runtime_error(
                     "--cache-type=bep5-http must be used with --cache-http-public-key");
             }
-            _injector_ep = Endpoint{
-                Endpoint::Bep5Endpoint,
-                bep5::compute_injector_swarm_name(*_cache_http_pubkey, http_::protocol_version_current)
-            };
+
+            if (_injector_ep && _injector_ep->type == Endpoint::Bep5Endpoint) {
+                throw std::runtime_error(
+                    util::str("A BEP5 injector endpoint is derived implicitly"
+                        " when using --cache-type=bep5-http,"
+                        " but it is already set to ", *_injector_ep));
+            }
+            if (!_injector_ep) {
+                _injector_ep = Endpoint{
+                    Endpoint::Bep5Endpoint,
+                    bep5::compute_injector_swarm_name(*_cache_http_pubkey, http_::protocol_version_current)
+                };
+            }
         }
         else if (type_str == "none" || type_str == "") {
             _cache_type = CacheType::None;

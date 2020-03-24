@@ -163,11 +163,19 @@ std::string format_ep(const asio::ip::tcp::endpoint& ep) {
 
 ///////////////////////////////////////////////////////////////////////////////
 namespace detail {
+std::string base32up_encode(const char*, size_t);
 std::string base64_encode(const char*, size_t);
 }
 
 std::string zlib_compress(const boost::string_view&);
 std::string zlib_decompress(const boost::string_view&, sys::error_code&);
+
+template<class In>
+std::string base32up_encode(const In& in) {  // unpadded!
+    return detail::base32up_encode(reinterpret_cast<const char*>(in.data()), in.size());
+}
+std::string base32_decode(const boost::string_view);
+
 template<class In>
 std::string base64_encode(const In& in) {
     return detail::base64_encode(reinterpret_cast<const char*>(in.data()), in.size());

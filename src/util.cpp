@@ -9,6 +9,8 @@
 #include <boost/archive/iterators/binary_from_base64.hpp>
 #include <boost/archive/iterators/transform_width.hpp>
 
+#include "util/iterators/base32_from_binary.hpp"
+#include "util/iterators/binary_from_base32.hpp"
 
 using namespace std;
 
@@ -39,6 +41,30 @@ string ouinet::util::zlib_compress(const boost::string_view& in) {
 // TODO: Catch and report decompression errors.
 string ouinet::util::zlib_decompress(const boost::string_view& in, sys::error_code& ec) {
     return zlib_filter<boost::iostreams::zlib_decompressor>(in);
+}
+
+// Based on <https://stackoverflow.com/a/28471421> by user "ltc"
+// and <https://stackoverflow.com/a/10973348> by user "PiQuer".
+string ouinet::util::detail::base32up_encode(const char* data, size_t size) {
+    using namespace boost::archive::iterators;
+    using It = base32_from_binary<transform_width<const char*, 5, 8>>;
+    It begin = data;
+    It end   = data + size;
+    string out(begin, end);  // encode to base32
+    return out;  // do not add padding
+}
+
+string ouinet::util::base32_decode(const boost::string_view in) {
+    using namespace boost::archive::iterators;
+    using It = transform_width<binary_from_base32<const char*>, 8, 5>;
+    It begin = in.data();
+    It end   = in.data() + in.size();
+    string out(begin, end);  // decode from base32
+    size_t npad = count(in.begin(), in.end(), '=');
+    if (npad > 6) npad = 6;
+    static const size_t padding_bytes[7] = {0, 1, 1, 2, 3, 3, 4};
+    npad = padding_bytes[npad];
+    return out.erase((npad > out.size()) ? 0 : out.size() - npad);  // remove padding
 }
 
 // Based on <https://stackoverflow.com/a/28471421> by user "ltc"
