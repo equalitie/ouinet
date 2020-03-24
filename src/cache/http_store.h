@@ -142,7 +142,7 @@ public:
     // Other maintenance may be performed too.
     virtual
     void
-    for_each(keep_func, asio::yield_context) = 0;
+    for_each(keep_func, Cancel, asio::yield_context) = 0;
 
     virtual
     void
@@ -172,7 +172,7 @@ public:
     ~HttpStoreV0() override;
 
     void
-    for_each(keep_func, asio::yield_context) override;
+    for_each(keep_func, Cancel, asio::yield_context) override;
 
     void
     store( const std::string& key, http_response::AbstractReader&
@@ -203,7 +203,7 @@ public:
     ~HttpStoreV1() override;
 
     void
-    for_each(keep_func, asio::yield_context) override;
+    for_each(keep_func, Cancel, asio::yield_context) override;
 
     void
     store( const std::string& key, http_response::AbstractReader&

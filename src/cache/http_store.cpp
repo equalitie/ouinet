@@ -862,7 +862,8 @@ v0_recently_updated(const fs::path& path)
 }
 
 void
-HttpStoreV0::for_each(keep_func keep, asio::yield_context yield)
+HttpStoreV0::for_each( keep_func keep
+                     , Cancel cancel, asio::yield_context yield)
 {
     for (auto& p : fs::directory_iterator(path)) {
         if (!fs::is_regular_file(p)) {
@@ -897,7 +898,8 @@ HttpStoreV0::for_each(keep_func keep, asio::yield_context yield)
         assert(rr);
 
         auto keep_entry = keep(std::move(rr), yield[ec]);
-        if (ec == asio::error::operation_aborted) return;
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec == asio::error::operation_aborted) return or_throw(yield, ec);
         if (ec) {
             _WARN("Failed to check cached response: ", p, " ec:", ec.message());
             v0_try_remove(p); continue;
@@ -998,7 +1000,8 @@ v1_recently_updated(const fs::path& path)
 }
 
 void
-HttpStoreV1::for_each(keep_func keep, asio::yield_context yield)
+HttpStoreV1::for_each( keep_func keep
+                     , Cancel cancel, asio::yield_context yield)
 {
     for (auto& pp : fs::directory_iterator(path)) {  // iterate over `DIGEST[:2]` dirs
         if (!fs::is_directory(pp)) {
@@ -1045,7 +1048,8 @@ HttpStoreV1::for_each(keep_func keep, asio::yield_context yield)
             assert(rr);
 
             auto keep_entry = keep(std::move(rr), yield[ec]);
-            if (ec == asio::error::operation_aborted) return;
+            if (cancel) ec = asio::error::operation_aborted;
+            if (ec == asio::error::operation_aborted) return or_throw(yield, ec);
             if (ec) {
                 _WARN("Failed to check cached response: ", p, " ec:", ec.message());
                 v1_try_remove(p); continue;

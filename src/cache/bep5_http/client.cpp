@@ -65,7 +65,7 @@ struct GarbageCollector {
                     auto k = keep(std::move(rr), y[e]);
                     if (cancel) ec = asio::error::operation_aborted;
                     return or_throw(y, e, k);
-                }, yield[ec]);
+                }, cancel, yield[ec]);
                 if (ec) LOG_WARN( "Bep5HTTP: Garbage collection round failed: "
                                 , ec.message());
                 LOG_DEBUG("Bep5HTTP: End garbage collection round");
@@ -189,8 +189,7 @@ struct Client::Impl {
         sys::error_code ec;
         http_store->for_each([&] (auto, auto) {
             return false;  // remove all entries
-        }, yield[ec]);
-        if (cancel) ec = asio::error::operation_aborted;
+        }, cancel, yield[ec]);
         if (ec) {
             LOG_ERROR("Bep5HTTP: Purging local cache: failed"
                       " ec:", ec.message());
@@ -616,7 +615,7 @@ struct Client::Impl {
 
         http_store->for_each([&] (auto rr, auto yield) {
             return keep_cache_entry(std::move(rr), yield);
-        }, y[e]);
+        }, cancel, y[e]);
         if (e) return or_throw(y, e);
 
         for (auto dht_group : _dht_groups->groups()) {
