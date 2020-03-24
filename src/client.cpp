@@ -1178,12 +1178,15 @@ public:
         using Job = AsyncJob<Retval>;
 
         Jobs(asio::executor exec)
-            : secure_origin(exec)
+            : exec(exec)
+            , secure_origin(exec)
             , origin(exec)
             , proxy(exec)
             , injector_or_dcache(exec)
             , all({&secure_origin, &origin, &proxy, &injector_or_dcache})
         {}
+
+        asio::executor exec;
 
         Job secure_origin;
         Job origin;
@@ -1241,6 +1244,18 @@ public:
         size_t count_running() const {
             auto jobs = running();
             return std::distance(jobs.begin(), jobs.end());
+        }
+
+        void sleep_before_job(Type job_type, Cancel& cancel, Yield& yield) {
+            size_t n = count_running();
+
+            auto timeout = n * std::chrono::seconds(3);
+
+            if (log_transactions()) {
+                yield.log("Starting job with timeout ", timeout.count(), "s");
+            }
+
+            async_sleep(exec, n * chrono::seconds(3), cancel, yield);
         }
     };
 
@@ -1302,7 +1317,7 @@ public:
 
             job->start([
                 &yield,
-                n = jobs.count_running(),
+                &jobs,
                 name_tag,
                 func = std::move(func),
                 exec,
@@ -1310,13 +1325,8 @@ public:
             ] (Cancel& c, asio::yield_context y_) {
                 auto y = yield.detach(y_).tag(name_tag);
 
-                auto timeout = n * chrono::seconds(3);
+                jobs.sleep_before_job(job_type, c, y);
 
-                if (log_transactions()) {
-                    y.log("Starting job with timeout ", timeout.count(), "s");
-                }
-
-                async_sleep(exec, n * chrono::seconds(3), c, y);
                 if (c) return or_throw(y_, err::operation_aborted, boost::none);
                 sys::error_code ec;
                 func(c, y[ec]);
