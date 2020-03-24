@@ -890,7 +890,6 @@ HttpStoreV0::for_each(keep_func keep, asio::yield_context yield)
         sys::error_code ec;
 
         auto rr = http_store_reader_v0(p, executor, ec);
-        if (ec == asio::error::operation_aborted) return;
         if (ec) {
             _WARN("Failed to open cached response: ", p, " ec:", ec.message());
             v0_try_remove(p); continue;
@@ -1039,7 +1038,6 @@ HttpStoreV1::for_each(keep_func keep, asio::yield_context yield)
             sys::error_code ec;
 
             auto rr = http_store_reader_v1(p, executor, ec);
-            if (ec == asio::error::operation_aborted) return;
             if (ec) {
                _WARN("Failed to open cached response: ", p, " ec:", ec.message());
                v1_try_remove(p); continue;
