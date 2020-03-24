@@ -268,6 +268,12 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     ss << "<br>\n";
     ss << "Now: " << now_as_string()  << "<br>\n";
     ss << "Injector endpoint: " << config.injector_endpoint() << "<br>\n";
+    auto inj_pubkey = config.cache_http_pub_key();
+    if (inj_pubkey) {
+        auto inj_pubkey_s = inj_pubkey->serialize();
+        ss << "Injector pubkey (hex): " << util::bytes::to_hex(inj_pubkey_s) << "<br>\n";
+        ss << "Injector pubkey (Base32): " << util::base32up_encode(inj_pubkey_s) << "<br>\n";
+    }
 
     if (_show_pending_tasks) {
         ss << "        <h2>Pending tasks " << _pending_tasks.size() << "</h2>\n";
