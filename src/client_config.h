@@ -119,9 +119,9 @@ public:
            ("injector-ep"
             , po::value<string>()
             , "Injector's endpoint as <TYPE>:<EP>, "
-              "where <TYPE> can be \"tcp\", \"utp\", \"bep5\", \"obfs2\", \"obfs3\", \"obfs4\", \"lampshade\" or \"i2p\", "
+              "where <TYPE> can be \"tcp\", \"utp\", \"obfs2\", \"obfs3\", \"obfs4\", \"lampshade\" or \"i2p\", "
               "and <EP> depends on the type of endpoint: "
-              "<IP>:<PORT> for TCP and uTP, <STRING> for BEP5, <IP>:<PORT>[,<OPTION>=<VALUE>...] for OBFS and Lampshade, "
+              "<IP>:<PORT> for TCP and uTP, <IP>:<PORT>[,<OPTION>=<VALUE>...] for OBFS and Lampshade, "
               "<B32_PUBKEY>.b32.i2p or <B64_PUBKEY> for I2P")
            ("client-credentials", po::value<string>()
             , "<username>:<password> authentication pair for the client")
@@ -351,19 +351,23 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
             LOG_DEBUG("Using bep5-http cache");
 
-            if (_injector_ep) {
-                throw std::runtime_error(
-                    util::str("Using --cache-type=bep5-http for which injector endpoint is"
-                        " derived implicitly. But it is already set to ", *_injector_ep));
-            }
             if (!_cache_http_pubkey) {
                 throw std::runtime_error(
                     "--cache-type=bep5-http must be used with --cache-http-public-key");
             }
-            _injector_ep = Endpoint{
-                Endpoint::Bep5Endpoint,
-                bep5::compute_injector_swarm_name(*_cache_http_pubkey, http_::protocol_version_current)
-            };
+
+            if (_injector_ep && _injector_ep->type == Endpoint::Bep5Endpoint) {
+                throw std::runtime_error(
+                    util::str("A BEP5 injector endpoint is derived implicitly"
+                        " when using --cache-type=bep5-http,"
+                        " but it is already set to ", *_injector_ep));
+            }
+            if (!_injector_ep) {
+                _injector_ep = Endpoint{
+                    Endpoint::Bep5Endpoint,
+                    bep5::compute_injector_swarm_name(*_cache_http_pubkey, http_::protocol_version_current)
+                };
+            }
         }
         else if (type_str == "none" || type_str == "") {
             _cache_type = CacheType::None;
