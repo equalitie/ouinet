@@ -9,6 +9,7 @@
 #include <boost/archive/iterators/binary_from_base64.hpp>
 #include <boost/archive/iterators/transform_width.hpp>
 
+#include "util/iterators/base32_from_binary.hpp"
 
 using namespace std;
 
@@ -39,6 +40,17 @@ string ouinet::util::zlib_compress(const boost::string_view& in) {
 // TODO: Catch and report decompression errors.
 string ouinet::util::zlib_decompress(const boost::string_view& in, sys::error_code& ec) {
     return zlib_filter<boost::iostreams::zlib_decompressor>(in);
+}
+
+// Based on <https://stackoverflow.com/a/28471421> by user "ltc"
+// and <https://stackoverflow.com/a/10973348> by user "PiQuer".
+string ouinet::util::detail::base32up_encode(const char* data, size_t size) {
+    using namespace boost::archive::iterators;
+    using It = base32_from_binary<transform_width<const char*, 5, 8>>;
+    It begin = data;
+    It end   = data + size;
+    string out(begin, end);  // encode to base32
+    return out;  // do not add padding
 }
 
 // Based on <https://stackoverflow.com/a/28471421> by user "ltc"
