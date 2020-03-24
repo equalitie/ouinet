@@ -59,16 +59,16 @@ struct GarbageCollector {
                 async_sleep(_executor, chrono::minutes(7), cancel, yield[ec]);
                 if (cancel || ec) break;
 
-                LOG_DEBUG("Bep5HTTP: Begin garbage collection round");
+                LOG_DEBUG("Bep5HTTP: Collecting garbage...");
                 http_store.for_each([&] (auto rr, auto y) {
                     sys::error_code e;
                     auto k = keep(std::move(rr), y[e]);
                     if (cancel) ec = asio::error::operation_aborted;
                     return or_throw(y, e, k);
                 }, cancel, yield[ec]);
-                if (ec) LOG_WARN( "Bep5HTTP: Garbage collection round failed: "
-                                , ec.message());
-                LOG_DEBUG("Bep5HTTP: End garbage collection round");
+                if (ec) LOG_WARN("Bep5HTTP: Collecting garbage: failed"
+                                 " ec:", ec.message());
+                LOG_DEBUG("Bep5HTTP: Collecting garbage: done");
             }
             LOG_DEBUG("Bep5HTTP: Garbage collector stopped");
         });
