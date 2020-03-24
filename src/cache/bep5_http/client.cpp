@@ -183,8 +183,21 @@ struct Client::Impl {
     void local_purge( Cancel cancel
                     , asio::yield_context yield)
     {
-        LOG_DEBUG("Bep5HTTP: Purging local cache");
-        // TODO: implement
+        // TODO: avoid overlapping with garbage collector
+        LOG_DEBUG("Bep5HTTP: Purging local cache...");
+
+        sys::error_code ec;
+        http_store->for_each([&] (auto, auto) {
+            return false;  // remove all entries
+        }, yield[ec]);
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec) {
+            LOG_ERROR("Bep5HTTP: Purging local cache: failed"
+                      " ec:", ec.message());
+            return or_throw(yield, ec);
+        }
+
+        LOG_DEBUG("Bep5HTTP: Purging local cache: done");
     }
 
     void handle_http_error( GenericStream& con
