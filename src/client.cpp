@@ -1591,13 +1591,9 @@ void Client::State::serve_request( GenericStream&& con
     //    for good overall speed and responsiveness
     //  - if not available, the injector is used to
     //    get the content and cache it for future accesses
-    //  - otherwise the content is fetched via the proxy
     //
     // So enabling the Injector channel will result in caching content
-    // when access to the origin is not possible,
-    // while disabling the Injector channel will resort to the proxy
-    // when access to the origin is not possible,
-    // but it will keep the browsing private and not cache anything.
+    // when access to the origin is not possible.
     //
     // To also avoid getting content from the cache
     // (so that browsing looks like using a normal non-caching proxy)
@@ -1605,8 +1601,7 @@ void Client::State::serve_request( GenericStream&& con
     const rr::Config default_request_config
         { true
         , deque<fresh_channel>({ fresh_channel::origin
-                               , fresh_channel::injector_or_dcache
-                               , fresh_channel::proxy})};
+                               , fresh_channel::injector_or_dcache})};
 
     // This is the matching configuration for the one above,
     // but for uncacheable requests.
