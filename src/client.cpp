@@ -486,8 +486,7 @@ Client::State::fetch_stored_in_dcache( const Request& request
     auto c = get_cache();
 
     const bool cache_is_disabled
-        = !request_config.enable_stored
-       || !c
+        = !c
        || !_config.is_cache_access_enabled();
 
     if (cache_is_disabled) {
@@ -1599,15 +1598,13 @@ void Client::State::serve_request( GenericStream&& con
     // (so that browsing looks like using a normal non-caching proxy)
     // the cache can be disabled.
     const rr::Config default_request_config
-        { true
-        , deque<fresh_channel>({ fresh_channel::origin
+        { deque<fresh_channel>({ fresh_channel::origin
                                , fresh_channel::injector_or_dcache})};
 
     // This is the matching configuration for the one above,
     // but for uncacheable requests.
     const rr::Config nocache_request_config
-        { false
-        , deque<fresh_channel>({ fresh_channel::origin
+        { deque<fresh_channel>({ fresh_channel::origin
                                , fresh_channel::proxy})};
 
     // The currently effective request router configuration.
@@ -1631,16 +1628,16 @@ void Client::State::serve_request( GenericStream&& con
     auto local_rx = util::str("https?://[^:/]+\\.", _config.local_domain(), "(:[0-9]+)?/.*");
 
 #ifdef _NDEBUG // release
-    const rr::Config unrequested{false, deque<fresh_channel>({fresh_channel::origin})};
+    const rr::Config unrequested{deque<fresh_channel>({fresh_channel::origin})};
 #else // debug
     // Don't request these in debug mode as they bring a lot of noise into the log
-    const rr::Config unrequested{false, deque<fresh_channel>()};
+    const rr::Config unrequested{deque<fresh_channel>()};
 #endif
 
     const vector<Match> matches({
         // Disable cache and always go to origin for this site.
         //Match( reqexpr::from_regex(target_getter, "https?://ident\\.me/.*")
-        //     , {false, deque<fresh_channel>({fresh_channel::origin})} ),
+        //     , {deque<fresh_channel>({fresh_channel::origin})} ),
 
         // Disable cache and always go to origin for these google sites.
         Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?google\\.com/complete/.*")
@@ -1692,16 +1689,16 @@ void Client::State::serve_request( GenericStream&& con
 
         // Handle requests to <http://localhost/> internally.
         Match( reqexpr::from_regex(host_getter, "localhost")
-             , {false, deque<fresh_channel>({fresh_channel::_front_end})} ),
+             , {deque<fresh_channel>({fresh_channel::_front_end})} ),
 
         Match( reqexpr::from_regex(x_oui_dest_getter, "OuiClient")
-             , {false, deque<fresh_channel>({fresh_channel::_front_end})} ),
+             , {deque<fresh_channel>({fresh_channel::_front_end})} ),
 
         // Access to sites under the local TLD are always accessible
         // with good connectivity, so always use the Origin channel
         // and never cache them.
         Match( reqexpr::from_regex(target_getter, local_rx)
-             , {false, deque<fresh_channel>({fresh_channel::origin})} ),
+             , {deque<fresh_channel>({fresh_channel::origin})} ),
 
         // NOTE: The matching of HTTP methods below can be simplified,
         // leaving expanded for readability.
@@ -1726,13 +1723,13 @@ void Client::State::serve_request( GenericStream&& con
 
         // Disable cache and always go to proxy for this site.
         //Match( reqexpr::from_regex(target_getter, "https?://ifconfig\\.co/.*")
-        //     , {false, deque<fresh_channel>({fresh_channel::proxy})} ),
+        //     , {deque<fresh_channel>({fresh_channel::proxy})} ),
         // Force cache and default channels for this site.
         //Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example\\.com/.*")
-        //     , {true, deque<fresh_channel>()} ),
+        //     , {deque<fresh_channel>()} ),
         // Force cache and particular channels for this site.
         //Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example\\.net/.*")
-        //     , {true, deque<fresh_channel>({fresh_channel::injector})} ),
+        //     , {deque<fresh_channel>({fresh_channel::injector})} ),
     });
 
     auto connection_id = _next_connection_id++;

@@ -40,9 +40,6 @@ enum class fresh_channel {
 // considered when serving calls from the cache control to
 // fetch fresh or cached content, or to cache it.
 struct Config {
-    // When the cache control decides that the request may be so fullfilled,
-    // enable looking up a cached response.
-    bool enable_stored = true;
     // When the cache control decides that a fresh response is needed,
     // attempt those channels in order until one succeeds.
     // If it was the Injector channel, the response may get cached.
