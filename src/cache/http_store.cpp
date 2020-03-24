@@ -937,6 +937,7 @@ std::size_t
 HttpStoreV0::size( Cancel cancel
                  , asio::yield_context yield) const
 {
+    // Do not use `for_each` since it can alter the store.
     sys::error_code ec;
     auto sz = recursive_dir_size(path, ec);
     if (cancel) ec = asio::error::operation_aborted;
@@ -1096,6 +1097,7 @@ std::size_t
 HttpStoreV1::size( Cancel cancel
                  , asio::yield_context yield) const
 {
+    // Do not use `for_each` since it can alter the store.
     sys::error_code ec;
     auto sz = recursive_dir_size(path, ec);
     if (cancel) ec = asio::error::operation_aborted;
