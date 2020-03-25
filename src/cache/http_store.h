@@ -142,7 +142,7 @@ public:
     // Other maintenance may be performed too.
     virtual
     void
-    for_each(keep_func, asio::yield_context) = 0;
+    for_each(keep_func, Cancel, asio::yield_context) = 0;
 
     virtual
     void
@@ -153,6 +153,11 @@ public:
     reader_uptr
     reader( const std::string& key
           , sys::error_code&) = 0;  // not const, e.g. LRU cache
+
+    // An approximate size of the store on disk, in bytes.
+    virtual
+    std::size_t
+    size(Cancel, asio::yield_context) const = 0;
 };
 
 // This uses format v0 to store each response
@@ -167,7 +172,7 @@ public:
     ~HttpStoreV0() override;
 
     void
-    for_each(keep_func, asio::yield_context) override;
+    for_each(keep_func, Cancel, asio::yield_context) override;
 
     void
     store( const std::string& key, http_response::AbstractReader&
@@ -176,6 +181,9 @@ public:
     reader_uptr
     reader( const std::string& key
           , sys::error_code&) override;
+
+    std::size_t
+    size(Cancel, asio::yield_context) const override;
 
 private:
     fs::path path;
@@ -195,7 +203,7 @@ public:
     ~HttpStoreV1() override;
 
     void
-    for_each(keep_func, asio::yield_context) override;
+    for_each(keep_func, Cancel, asio::yield_context) override;
 
     void
     store( const std::string& key, http_response::AbstractReader&
@@ -204,6 +212,9 @@ public:
     reader_uptr
     reader( const std::string& key
           , sys::error_code&) override;
+
+    std::size_t
+    size(Cancel, asio::yield_context) const override;
 
 private:
     fs::path path;

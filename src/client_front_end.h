@@ -99,7 +99,8 @@ private:
                       , const Request&
                       , Response&
                       , std::stringstream&
-                      , cache::bep5_http::Client*);
+                      , cache::bep5_http::Client*
+                      , Yield);
 
     void handle_status( ClientConfig&
                       , boost::optional<uint32_t> udp_port
@@ -107,7 +108,9 @@ private:
                       , const util::UdpServerReachabilityAnalysis*
                       , const Request&
                       , Response&
-                      , std::stringstream&);
+                      , std::stringstream&
+                      , cache::bep5_http::Client*
+                      , Yield);
 };
 
 } // ouinet namespace

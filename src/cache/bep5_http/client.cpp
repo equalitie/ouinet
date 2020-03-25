@@ -6,6 +6,7 @@
 #include "../http_sign.h"
 #include "../http_store.h"
 #include "../../http_util.h"
+#include "../../parse/number.h"
 #include "../../util/wait_condition.h"
 #include "../../util/set_io.h"
 #include "../../util/async_generator.h"
@@ -19,6 +20,7 @@
 #include "../../constants.h"
 #include "../../session.h"
 #include "../../bep5_swarms.h"
+#include <ctime>
 #include <map>
 
 using namespace std;
@@ -28,6 +30,51 @@ using udp = asio::ip::udp;
 
 namespace fs = boost::filesystem;
 namespace bt = bittorrent;
+
+struct GarbageCollector {
+    cache::AbstractHttpStore& http_store;  // for looping over entries
+    cache::AbstractHttpStore::keep_func keep;  // caller-provided checks
+
+    asio::executor _executor;
+    Cancel _cancel;
+
+    GarbageCollector( cache::AbstractHttpStore& http_store
+                    , cache::AbstractHttpStore::keep_func keep
+                    , asio::executor ex)
+        : http_store(http_store)
+        , keep(move(keep))
+        , _executor(ex)
+    {}
+
+    ~GarbageCollector() { _cancel(); }
+
+    void start()
+    {
+        asio::spawn(_executor, [&] (asio::yield_context yield) {
+            TRACK_HANDLER();
+            Cancel cancel(_cancel);
+
+            LOG_DEBUG("Bep5HTTP: Garbage collector started");
+            while (!cancel) {
+                sys::error_code ec;
+                async_sleep(_executor, chrono::minutes(7), cancel, yield[ec]);
+                if (cancel || ec) break;
+
+                LOG_DEBUG("Bep5HTTP: Collecting garbage...");
+                http_store.for_each([&] (auto rr, auto y) {
+                    sys::error_code e;
+                    auto k = keep(std::move(rr), y[e]);
+                    if (cancel) ec = asio::error::operation_aborted;
+                    return or_throw(y, e, k);
+                }, cancel, yield[ec]);
+                if (ec) LOG_WARN("Bep5HTTP: Collecting garbage: failed"
+                                 " ec:", ec.message());
+                LOG_DEBUG("Bep5HTTP: Collecting garbage: done");
+            }
+            LOG_DEBUG("Bep5HTTP: Garbage collector stopped");
+        });
+    }
+};
 
 struct Client::Impl {
     // The newest protocol version number seen in a trusted exchange
@@ -40,8 +87,10 @@ struct Client::Impl {
     util::Ed25519PublicKey cache_pk;
     fs::path cache_dir;
     unique_ptr<cache::AbstractHttpStore> http_store;
+    boost::posix_time::time_duration max_cached_age;
     Cancel lifetime_cancel;
     Announcer announcer;
+    GarbageCollector gc;
     map<string, udp::endpoint> peer_cache;
     util::LruCache<bt::NodeID, unique_ptr<DhtLookup>> dht_lookups;
     log_level_t log_level = INFO;
@@ -56,7 +105,8 @@ struct Client::Impl {
     Impl( shared_ptr<bt::MainlineDht> dht_
         , util::Ed25519PublicKey& cache_pk
         , fs::path cache_dir
-        , unique_ptr<cache::AbstractHttpStore> http_store
+        , unique_ptr<cache::AbstractHttpStore> http_store_
+        , boost::posix_time::time_duration max_cached_age
         , log_level_t log_level)
         : ex(dht_->get_executor())
         , dht(move(dht_))
@@ -64,8 +114,12 @@ struct Client::Impl {
               (cache_pk, http_::protocol_version_current))
         , cache_pk(cache_pk)
         , cache_dir(move(cache_dir))
-        , http_store(move(http_store))
+        , http_store(move(http_store_))
+        , max_cached_age(max_cached_age)
         , announcer(dht, log_level)
+        , gc(*http_store, [&] (auto rr, auto y) {
+              return keep_cache_entry(move(rr), y);
+          }, ex)
         , dht_lookups(256)
         , log_level(log_level)
         , local_peer_discovery(ex, dht->local_endpoints())
@@ -128,6 +182,31 @@ struct Client::Impl {
         if (!ec) s.flush_response(sink, cancel, yield[ec]);
 
         return or_throw(yield, ec);
+    }
+
+    std::size_t local_size( Cancel cancel
+                          , asio::yield_context yield) const
+    {
+        return http_store->size(cancel, yield);
+    }
+
+    void local_purge( Cancel cancel
+                    , asio::yield_context yield)
+    {
+        // TODO: avoid overlapping with garbage collector
+        LOG_DEBUG("Bep5HTTP: Purging local cache...");
+
+        sys::error_code ec;
+        http_store->for_each([&] (auto, auto) {
+            return false;  // remove all entries
+        }, cancel, yield[ec]);
+        if (ec) {
+            LOG_ERROR("Bep5HTTP: Purging local cache: failed"
+                      " ec:", ec.message());
+            return or_throw(yield, ec);
+        }
+
+        LOG_DEBUG("Bep5HTTP: Purging local cache: done");
     }
 
     void handle_http_error( GenericStream& con
@@ -472,6 +551,70 @@ struct Client::Impl {
         return *head;
     }
 
+    // Return maximum if not available.
+    boost::posix_time::time_duration
+    cache_entry_age(const http::response_header<>& head)
+    {
+        using ssecs = std::chrono::seconds;
+        using bsecs = boost::posix_time::seconds;
+
+        static auto max_age = bsecs(ssecs::max().count());
+
+        auto ts_sv = util::http_injection_ts(head);
+        if (ts_sv.empty()) return max_age;  // missing header or field
+        auto ts_o = parse::number<ssecs::rep>(ts_sv);
+        if (!ts_o) return max_age;  // malformed creation time stamp
+        auto now = ssecs(std::time(nullptr));  // as done by injector
+        auto age = now - ssecs(*ts_o);
+        return bsecs(age.count());
+    }
+
+    inline
+    void unpublish_cache_entry(const std::string& key)
+    {
+        auto empty_groups = _dht_groups->remove(key);
+        for (const auto& eg : empty_groups) announcer.remove(eg);
+    }
+
+    // Return whether the entry should be kept in storage.
+    bool keep_cache_entry(cache::reader_uptr rr, asio::yield_context yield)
+    {
+        // This should be available to
+        // allow removing keys of entries to be evicted.
+        assert(_dht_groups);
+
+        sys::error_code ec;
+
+        auto hdr = read_response_header(*rr, yield[ec]);
+        if (ec) return or_throw<bool>(yield, ec);
+
+        if (hdr[http_::protocol_version_hdr] != http_::protocol_version_hdr_current) {
+            LOG_WARN( "Bep5HTTP: Cached response contains an invalid "
+                    , http_::protocol_version_hdr
+                    , " header field; removing");
+            return false;
+        }
+
+        auto key = hdr[http_::response_uri_hdr];
+        if (key.empty()) {
+            LOG_WARN( "Bep5HTTP: Cached response does not contain a "
+                    , http_::response_uri_hdr
+                    , " header field; removing");
+            return false;
+        }
+
+        auto age = cache_entry_age(hdr);
+        if (age > max_cached_age) {
+            LOG_DEBUG( "Bep5HTTP: Cached response is too old; removing: "
+                     , age, " > ", max_cached_age
+                     , "; uri=", key );
+            unpublish_cache_entry(key.to_string());
+            return false;
+        }
+
+        return true;
+    }
+
     void announce_stored_data(asio::yield_context y)
     {
         Cancel cancel(lifetime_cancel);
@@ -483,31 +626,9 @@ struct Client::Impl {
         if (e) return or_throw(y, e);
 
         http_store->for_each([&] (auto rr, auto yield) {
-            sys::error_code ec;
-
-            auto hdr = read_response_header(*rr, yield[ec]);
-            if (ec) return or_throw<bool>(yield, ec);
-
-            if (hdr[http_::protocol_version_hdr] != http_::protocol_version_hdr_current) {
-                LOG_WARN( "Bep5HTTP: Cached response contains an invalid "
-                        , http_::protocol_version_hdr
-                        , " header field; removing");
-                return false;
-            }
-
-            auto key = hdr[http_::response_uri_hdr];
-
-            if (key.empty()) {
-                LOG_WARN( "Bep5HTTP: Cached response does not contain a "
-                        , http_::response_uri_hdr
-                        , " header field; removing");
-                _dht_groups->remove(key.to_string());
-                return false;
-            }
-
-
-            return true;
-        }, y[e]);
+            return keep_cache_entry(std::move(rr), yield);
+        }, cancel, y[e]);
+        if (e) return or_throw(y, e);
 
         for (auto dht_group : _dht_groups->groups()) {
             announcer.add(compute_swarm_name(dht_group));
@@ -537,6 +658,7 @@ std::unique_ptr<Client>
 Client::build( shared_ptr<bt::MainlineDht> dht
              , util::Ed25519PublicKey cache_pk
              , fs::path cache_dir
+             , boost::posix_time::time_duration max_cached_age
              , log_level_t log_level
              , asio::yield_context yield)
 {
@@ -561,12 +683,12 @@ Client::build( shared_ptr<bt::MainlineDht> dht
 
     unique_ptr<Impl> impl(new Impl( move(dht)
                                   , cache_pk, move(cache_dir)
-                                  , move(http_store)
+                                  , move(http_store), max_cached_age
                                   , log_level));
 
     impl->announce_stored_data(yield[ec]);
-
     if (ec) return or_throw<ClientPtr>(yield, ec);
+    impl->gc.start();
 
     return unique_ptr<Client>(new Client(move(impl)));
 }
@@ -595,6 +717,18 @@ void Client::serve_local( const http::request<http::empty_body>& req
                         , asio::yield_context yield)
 {
     _impl->serve_local(req, sink, cancel, yield);
+}
+
+std::size_t Client::local_size( Cancel cancel
+                              , asio::yield_context yield) const
+{
+    return _impl->local_size(cancel, yield);
+}
+
+void Client::local_purge( Cancel cancel
+                        , asio::yield_context yield)
+{
+    _impl->local_purge(cancel, yield);
 }
 
 unsigned Client::get_newest_proto_version() const

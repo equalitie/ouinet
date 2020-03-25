@@ -1,5 +1,8 @@
 #include "http_store.h"
 
+#include <array>
+#include <ctime>
+
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/read.hpp>
 #include <boost/asio/read_until.hpp>
@@ -32,6 +35,13 @@
 
 namespace ouinet { namespace cache {
 
+// An entry modified less than this time ago
+// is considered recently updated.
+//
+// Mainly useful to detect temporary entries that
+// are no longer being written to.
+static const std::time_t recently_updated_secs = 10 * 60;  // 10 minutes ago
+
 // Lowercase hexadecimal representation of a SHA1 digest.
 static const boost::regex v0_file_name_rx("^[0-9a-f]{40}$");
 
@@ -41,9 +51,32 @@ static const boost::regex v1_parent_name_rx("^[0-9a-f]{2}$");
 static const boost::regex v1_dir_name_rx("^[0-9a-f]{38}$");
 
 // File names for response components.
-static const fs::path head_fname = "head";
-static const fs::path body_fname = "body";
-static const fs::path sigs_fname = "sigs";
+static const fs::path v1_head_fname = "head";
+static const fs::path v1_body_fname = "body";
+static const fs::path v1_sigs_fname = "sigs";
+
+static
+std::size_t
+recursive_dir_size(const fs::path& path, sys::error_code& ec)
+{
+    // TODO: make asynchronous?
+    fs::recursive_directory_iterator dit(path, fs::symlink_option::no_recurse, ec);
+    if (ec) return 0;
+
+    // TODO: take directories themselves into account
+    // TODO: take block sizes into account
+    std::size_t total = 0;
+    for (; dit != fs::recursive_directory_iterator(); ++dit) {
+        auto p = dit->path();
+        auto is_file = fs::is_regular_file(p, ec);
+        if (ec) return 0;
+        if (!is_file) continue;
+        auto file_size = fs::file_size(p, ec);
+        if (ec) return 0;
+        total += file_size;
+    }
+    return total;
+}
 
 static
 http_response::Head
@@ -215,7 +248,7 @@ public:
         head = http_injection_merge(std::move(h), {});
 
         sys::error_code ec;
-        auto hf = create_file(head_fname, cancel, ec);
+        auto hf = create_file(v1_head_fname, cancel, ec);
         return_or_throw_on_error(yield, cancel, ec);
         headf = std::move(hf);
         head.async_write(*headf, cancel, yield);
@@ -226,7 +259,7 @@ public:
     {
         if (!sigsf) {
             sys::error_code ec;
-            auto sf = create_file(sigs_fname, cancel, ec);
+            auto sf = create_file(v1_sigs_fname, cancel, ec);
             return_or_throw_on_error(yield, cancel, ec);
             sigsf = std::move(sf);
         }
@@ -264,7 +297,7 @@ public:
     {
         if (!bodyf) {
             sys::error_code ec;
-            auto bf = create_file(body_fname, cancel, ec);
+            auto bf = create_file(v1_body_fname, cancel, ec);
             return_or_throw_on_error(yield, cancel, ec);
             bodyf = std::move(bf);
         }
@@ -611,14 +644,14 @@ _http_store_reader_v1( const fs::path& dirp, asio::executor ex
                      , boost::optional<std::size_t> range_last
                      , sys::error_code& ec)
 {
-    auto headf = util::file_io::open_readonly(ex, dirp / head_fname, ec);
+    auto headf = util::file_io::open_readonly(ex, dirp / v1_head_fname, ec);
     if (ec) return nullptr;
 
-    auto sigsf = util::file_io::open_readonly(ex, dirp / sigs_fname, ec);
+    auto sigsf = util::file_io::open_readonly(ex, dirp / v1_sigs_fname, ec);
     if (ec && ec != sys::errc::no_such_file_or_directory) return nullptr;
     ec = {};
 
-    auto bodyf = util::file_io::open_readonly(ex, dirp / body_fname, ec);
+    auto bodyf = util::file_io::open_readonly(ex, dirp / v1_body_fname, ec);
     if (ec && ec != sys::errc::no_such_file_or_directory) return nullptr;
     ec = {};
 
@@ -816,8 +849,21 @@ name_matches_model(const fs::path& name, const fs::path& model)
     return true;
 }
 
+static
+bool
+v0_recently_updated(const fs::path& path)
+{
+    auto now = std::time(nullptr);
+
+    sys::error_code ec;
+    auto ts = fs::last_write_time(path, ec);
+    if (ec) return false;
+    return (now - ts <= recently_updated_secs);
+}
+
 void
-HttpStoreV0::for_each(keep_func keep, asio::yield_context yield)
+HttpStoreV0::for_each( keep_func keep
+                     , Cancel cancel, asio::yield_context yield)
 {
     for (auto& p : fs::directory_iterator(path)) {
         if (!fs::is_regular_file(p)) {
@@ -827,8 +873,13 @@ HttpStoreV0::for_each(keep_func keep, asio::yield_context yield)
 
         auto p_name = p.path().filename();
         if (name_matches_model(p_name, util::default_temp_model)) {
-            _DEBUG("Found temporary file: ", p);
-            v0_try_remove(p); continue;
+            if (v0_recently_updated(p)) {
+                _DEBUG("Found recent temporary file: ", p);
+            } else {
+                _DEBUG("Found old temporary file: ", p);
+                v0_try_remove(p);
+            }
+            continue;
         }
 
         auto& p_name_s = p_name.native();
@@ -840,7 +891,6 @@ HttpStoreV0::for_each(keep_func keep, asio::yield_context yield)
         sys::error_code ec;
 
         auto rr = http_store_reader_v0(p, executor, ec);
-        if (ec == asio::error::operation_aborted) return;
         if (ec) {
             _WARN("Failed to open cached response: ", p, " ec:", ec.message());
             v0_try_remove(p); continue;
@@ -848,7 +898,8 @@ HttpStoreV0::for_each(keep_func keep, asio::yield_context yield)
         assert(rr);
 
         auto keep_entry = keep(std::move(rr), yield[ec]);
-        if (ec == asio::error::operation_aborted) return;
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec == asio::error::operation_aborted) return or_throw(yield, ec);
         if (ec) {
             _WARN("Failed to check cached response: ", p, " ec:", ec.message());
             v0_try_remove(p); continue;
@@ -883,6 +934,17 @@ HttpStoreV0::reader( const std::string& key
     return http_store_reader_v0(kpath, executor, ec);
 }
 
+std::size_t
+HttpStoreV0::size( Cancel cancel
+                 , asio::yield_context yield) const
+{
+    // Do not use `for_each` since it can alter the store.
+    sys::error_code ec;
+    auto sz = recursive_dir_size(path, ec);
+    if (cancel) ec = asio::error::operation_aborted;
+    return or_throw(yield, ec, sz);
+}
+
 // end HttpStoreV0
 
 // begin HttpStoreV0
@@ -914,8 +976,32 @@ v1_try_remove(const fs::path& path)
     // The parent directory may be left empty.
 }
 
+static
+bool
+v1_recently_updated(const fs::path& path)
+{
+    auto now = std::time(nullptr);
+
+    std::array<fs::path, 4> paths
+        { path
+        , path / v1_head_fname
+        , path / v1_body_fname
+        , path / v1_sigs_fname};
+
+    for (const auto& p : paths) {
+        sys::error_code ec;
+        auto ts = fs::last_write_time(p, ec);
+        if (ec) continue;
+        if (now - ts <= recently_updated_secs)
+            return true;
+    }
+
+    return false;
+}
+
 void
-HttpStoreV1::for_each(keep_func keep, asio::yield_context yield)
+HttpStoreV1::for_each( keep_func keep
+                     , Cancel cancel, asio::yield_context yield)
 {
     for (auto& pp : fs::directory_iterator(path)) {  // iterate over `DIGEST[:2]` dirs
         if (!fs::is_directory(pp)) {
@@ -937,8 +1023,13 @@ HttpStoreV1::for_each(keep_func keep, asio::yield_context yield)
 
             auto p_name = p.path().filename();
             if (name_matches_model(p_name, util::default_temp_model)) {
-                _DEBUG("Found temporary directory: ", p);
-                v1_try_remove(p); continue;
+               if (v1_recently_updated(p)) {
+                   _DEBUG("Found recent temporary directory: ", p);
+               } else {
+                   _DEBUG("Found old temporary directory: ", p);
+                   v1_try_remove(p);
+               }
+               continue;
             }
 
             auto& p_name_s = p_name.native();
@@ -950,7 +1041,6 @@ HttpStoreV1::for_each(keep_func keep, asio::yield_context yield)
             sys::error_code ec;
 
             auto rr = http_store_reader_v1(p, executor, ec);
-            if (ec == asio::error::operation_aborted) return;
             if (ec) {
                _WARN("Failed to open cached response: ", p, " ec:", ec.message());
                v1_try_remove(p); continue;
@@ -958,7 +1048,8 @@ HttpStoreV1::for_each(keep_func keep, asio::yield_context yield)
             assert(rr);
 
             auto keep_entry = keep(std::move(rr), yield[ec]);
-            if (ec == asio::error::operation_aborted) return;
+            if (cancel) ec = asio::error::operation_aborted;
+            if (ec == asio::error::operation_aborted) return or_throw(yield, ec);
             if (ec) {
                 _WARN("Failed to check cached response: ", p, " ec:", ec.message());
                 v1_try_remove(p); continue;
@@ -1002,6 +1093,17 @@ HttpStoreV1::reader( const std::string& key
 {
     auto kpath = v1_path_from_key(path, key);
     return http_store_reader_v1(kpath, executor, ec);
+}
+
+std::size_t
+HttpStoreV1::size( Cancel cancel
+                 , asio::yield_context yield) const
+{
+    // Do not use `for_each` since it can alter the store.
+    sys::error_code ec;
+    auto sz = recursive_dir_size(path, ec);
+    if (cancel) ec = asio::error::operation_aborted;
+    return or_throw(yield, ec, sz);
 }
 
 // end HttpStoreV1

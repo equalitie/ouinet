@@ -26,10 +26,18 @@ using json = nlohmann::json;
 using Request = ClientFrontEnd::Request;
 using Response = ClientFrontEnd::Response;
 
+static string time_as_string(const boost::posix_time::ptime& t) {
+    return boost::posix_time::to_iso_extended_string(t);
+}
+
+static string past_as_string(const boost::posix_time::time_duration& d) {
+    auto past_ts = boost::posix_time::microsec_clock::universal_time() - d;
+    return time_as_string(past_ts);
+}
+
 static string now_as_string() {
-    namespace pt = boost::posix_time;
-    auto entry_ts = pt::microsec_clock::universal_time();
-    return pt::to_iso_extended_string(entry_ts);
+    auto entry_ts = boost::posix_time::microsec_clock::universal_time();
+    return time_as_string(entry_ts);
 }
 
 struct ToggleInput {
@@ -163,7 +171,8 @@ static void load_log_file(stringstream& out_ss) {
 
 void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , const Request& req, Response& res, stringstream& ss
-                                  , cache::bep5_http::Client* bep5_cache)
+                                  , cache::bep5_http::Client* bep5_cache
+                                  , Yield yield)
 {
     res.set(http::field::content_type, "text/html");
 
@@ -222,6 +231,11 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
             load_log_file(ss);
             res.set(http::field::content_type, "text/plain");
             return;
+        }
+        else if (target.find("?purge_cache=") != string::npos && bep5_cache) {
+            Cancel cancel;
+            sys::error_code ec;
+            bep5_cache->local_purge(cancel, yield[ec]);
         }
 
         // Redirect back to the portal.
@@ -286,6 +300,25 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
     if (bep5_cache) {
         ss << *_bep5_log_level_input;
+
+        auto max_age = config.max_cached_age();
+        ss << ( boost::format("Content cached locally if newer than %d seconds"
+                              " (i.e. not older than %s).<br>\n")
+              % max_age.total_seconds() % past_as_string(max_age));
+
+        Cancel cancel;
+        sys::error_code ec;
+        auto local_size = bep5_cache->local_size(cancel, yield[ec]);
+        ss << "Approximate size of content cached locally: ";
+        if (ec) ss << "(unknown)";
+        else ss << (boost::format("%.02f MiB") % (local_size / 1048576.));
+        ss << "<br>\n";
+
+        ss << "<form method=\"get\">\n"
+              "<input type=\"submit\" "
+                            "name=\"purge_cache\" "
+                            "value=\"Purge cache now\"/>\n"
+              "</form>\n";
     }
 
     ss << "    </body>\n"
@@ -313,7 +346,9 @@ void ClientFrontEnd::handle_status( ClientConfig& config
                                   , boost::optional<uint32_t> udp_port
                                   , const UPnPs& upnps
                                   , const util::UdpServerReachabilityAnalysis* reachability
-                                  , const Request& req, Response& res, stringstream& ss)
+                                  , const Request& req, Response& res, stringstream& ss
+                                  , cache::bep5_http::Client* bep5_cache
+                                  , Yield yield)
 {
     res.set(http::field::content_type, "application/json");
 
@@ -323,6 +358,7 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         {"proxy_access", config.is_proxy_access_enabled()},
         {"injector_access", config.is_injector_access_enabled()},
         {"distributed_cache", config.is_cache_access_enabled()},
+        {"max_cached_age", config.max_cached_age().total_seconds()},
         {"ouinet_version", Version::VERSION_NAME},
         {"ouinet_build_id", Version::BUILD_ID},
         {"logfile", logger.get_log_file() != nullptr}
@@ -364,6 +400,18 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         }
     }
 
+    if (bep5_cache) {
+        Cancel cancel;
+        sys::error_code ec;
+        auto sz = bep5_cache->local_size(cancel, yield[ec]);
+        if (ec) {
+            LOG_ERROR( "Front-end: Failed to get local cache size ec:"
+                     , ec.message());
+        } else {
+            response["local_cache_size"] = sz;
+        }
+    }
+
     ss << response;
 }
 
@@ -390,9 +438,13 @@ Response ClientFrontEnd::serve( ClientConfig& config
     if (path == "/ca.pem") {
         handle_ca_pem(req, res, ss, ca);
     } else if (path == "/api/status") {
-        handle_status(config, udp_port, upnps, reachability, req, res, ss);
+        sys::error_code e;
+        handle_status( config, udp_port, upnps, reachability
+                     , req, res, ss, bep5_cache
+                     , yield[e]);
     } else {
-        handle_portal(config, req, res, ss, bep5_cache);
+        sys::error_code e;
+        handle_portal(config, req, res, ss, bep5_cache, yield[e]);
     }
 
     Response::body_type::reader reader(res, res.body());

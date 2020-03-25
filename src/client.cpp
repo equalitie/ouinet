@@ -28,7 +28,6 @@
 #include "util.h"
 #include "async_sleep.h"
 #include "endpoint.h"
-#include "cache_control.h"
 #include "or_throw.h"
 #include "request_routing.h"
 #include "full_duplex_forward.h"
@@ -1916,6 +1915,7 @@ void Client::State::setup_cache()
                 = cache::bep5_http::Client::build( dht
                                                  , *_config.cache_http_pub_key()
                                                  , _config.repo_root()/"bep5_http"
+                                                 , _config.max_cached_age()
                                                  , logger.get_threshold()
                                                  , yield[ec]);
 
