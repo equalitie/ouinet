@@ -36,6 +36,7 @@ struct Client::Impl {
 
     asio::executor ex;
     shared_ptr<bt::MainlineDht> dht;
+    string uri_swarm_prefix;
     util::Ed25519PublicKey cache_pk;
     fs::path cache_dir;
     unique_ptr<cache::AbstractHttpStore> http_store;
@@ -59,6 +60,8 @@ struct Client::Impl {
         , log_level_t log_level)
         : ex(dht_->get_executor())
         , dht(move(dht_))
+        , uri_swarm_prefix(bep5::compute_uri_swarm_prefix
+              (cache_pk, http_::protocol_version_current))
         , cache_pk(cache_pk)
         , cache_dir(move(cache_dir))
         , http_store(move(http_store))
@@ -70,8 +73,7 @@ struct Client::Impl {
 
     std::string compute_swarm_name(boost::string_view dht_group) const {
         return bep5::compute_uri_swarm_name(
-                cache_pk,
-                http_::protocol_version_current,
+                uri_swarm_prefix,
                 dht_group);
     }
 

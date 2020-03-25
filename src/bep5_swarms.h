@@ -38,9 +38,13 @@ std::string compute_injector_swarm_name( const ouinet::util::Ed25519PublicKey&
 std::string compute_bridge_swarm_name( const ouinet::util::Ed25519PublicKey&
                                      , unsigned protocol_version);
 
-std::string compute_uri_swarm_name( const ouinet::util::Ed25519PublicKey&
-                                  , unsigned protocol_version
-                                  , boost::string_view key);
+// Reuse the resulting prefix with `compute_uri_swarm_name` below.
+std::string compute_uri_swarm_prefix( const ouinet::util::Ed25519PublicKey&
+                                    , unsigned protocol_version);
+
+// Reuse the prefix resulting from `compute_uri_swarm_prefix` above.
+std::string compute_uri_swarm_name( boost::string_view prefix
+                                  , boost::string_view uri);
 
 }} // namespaces
 

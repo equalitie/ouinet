@@ -19,12 +19,17 @@ std::string compute_bridge_swarm_name(const ouinet::util::Ed25519PublicKey& pubk
         , "/bridges");
 }
 
-std::string compute_uri_swarm_name(const ouinet::util::Ed25519PublicKey& pubkey, unsigned protocol_version, boost::string_view key)
+std::string compute_uri_swarm_prefix(const ouinet::util::Ed25519PublicKey& pubkey, unsigned protocol_version)
 {
     return util::str
         ( "ed25519:", util::base32up_encode(pubkey.serialize())
         , "/v", protocol_version
-        , "/uri/", key);
+        , "/uri/");
+}
+
+std::string compute_uri_swarm_name(boost::string_view prefix, boost::string_view uri)
+{
+    return util::str(prefix, uri);
 }
 
 }} // namespaces
