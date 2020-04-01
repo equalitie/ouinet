@@ -1865,14 +1865,16 @@ void Client::State::serve_request( GenericStream&& con
         request_config = secure_first_request_route(
                 route_choose_config(req, matches, default_request_config));
 
-        if (request_config.fresh_channels.empty()) {
-            if (log_transactions()) yield.log("Abort due to no route");
-            con.close();
-            return;
-        }
-
         auto meta = UserAgentMetaData::extract(req);
         Transaction tnx(con, req, std::move(meta));
+
+        if (request_config.fresh_channels.empty()) {
+            if (log_transactions()) yield.log("Abort due to no route");
+            sys::error_code ec;
+            tnx.write_to_user_agent(retrieval_failure_response(req), cancel, yield[ec]);
+            if (ec || cancel) return;
+            continue;
+        }
 
         cache_control.mixed_fetch(tnx, yield[ec].tag("mixed_fetch"));
 
