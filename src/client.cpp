@@ -229,7 +229,7 @@ private:
                           , Yield yield);
 
     Response fetch_fresh_from_front_end(const Request&, Yield);
-    Session fetch_fresh_from_origin(const Request&, Yield);
+    Session fetch_fresh_from_origin(const Request&, Cancel, Yield);
 
     Session fetch_fresh_through_connect_proxy(const Request&, Cancel&, Yield);
 
@@ -534,11 +534,11 @@ Client::State::connect_to_origin( const Request& rq
                                          , cancel
                                          , yield[ec]);
 
-    if (ec) return or_throw<GenericStream>(yield, ec);
+    return_or_throw_on_error(yield, cancel, ec, GenericStream());
 
     auto sock = connect_to_host(lookup, _ctx.get_executor(), cancel, yield[ec]);
 
-    if (ec) return or_throw<GenericStream>(yield, ec);
+    return_or_throw_on_error(yield, cancel, ec, GenericStream());
 
     GenericStream stream;
 
@@ -549,7 +549,7 @@ Client::State::connect_to_origin( const Request& rq
                                             , cancel
                                             , yield[ec]);
 
-        if (ec) return or_throw(yield, ec, move(stream));
+        return_or_throw_on_error(yield, cancel, ec, GenericStream());
     }
     else {
         stream = move(sock);
@@ -584,10 +584,8 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
 }
 
 //------------------------------------------------------------------------------
-Session Client::State::fetch_fresh_from_origin(const Request& rq, Yield yield)
+Session Client::State::fetch_fresh_from_origin(const Request& rq, Cancel cancel, Yield yield)
 {
-    Cancel cancel;
-
     WatchDog watch_dog(_ctx
                       , default_timeout::fetch_http()
                       , [&] { cancel(); });
@@ -601,7 +599,13 @@ Session Client::State::fetch_fresh_from_origin(const Request& rq, Yield yield)
     } else {
         auto stream = connect_to_origin(rq, cancel, yield[ec]);
 
-        if (!ec && cancel) ec = asio::error::timed_out;
+        if (cancel) {
+            assert(ec == asio::error::operation_aborted);
+            ec = watch_dog.is_running()
+               ? ec = asio::error::operation_aborted
+               : ec = asio::error::timed_out;
+        }
+
         if (ec) return or_throw<Session>(yield, ec);
 
         con = _origin_pools.wrap(rq, std::move(stream));
@@ -617,6 +621,10 @@ Session Client::State::fetch_fresh_from_origin(const Request& rq, Yield yield)
         http::async_write(con, rq_, yield[ec].tag("send-origin-request"));
     }
 
+    if (cancel) {
+        ec = watch_dog.is_running() ? ec = asio::error::operation_aborted
+                                    : ec = asio::error::timed_out;
+    }
     if (ec) return or_throw<Session>(yield, ec);
 
     auto ret = Session::create(std::move(con), cancel, yield[ec]);
@@ -1007,13 +1015,13 @@ public:
         }
 
         sys::error_code ec;
-        auto session = client_state.fetch_fresh_from_origin(rq, yield[ec]);
+        auto session = client_state.fetch_fresh_from_origin(rq, cancel, yield[ec]);
 
         if (log_transactions()) {
             yield.log("fetch: ", ec.message());
         }
 
-        if (ec) return or_throw(yield, ec);
+        return_or_throw_on_error(yield, cancel, ec);
 
         tnx.write_to_user_agent(session, cancel, yield[ec]);
 
@@ -1047,7 +1055,7 @@ public:
             yield.log("Proxy fetch: ", ec.message());
         }
 
-        if (ec) return or_throw(yield, ec);
+        return_or_throw_on_error(yield, cancel, ec);
 
         tnx.write_to_user_agent(session, cancel, yield[ec]);
 
@@ -1137,6 +1145,7 @@ public:
             sys::error_code ec;
             auto rr = std::make_unique<AsyncQueueReader>(qag);
             Session sag = Session::create_from_reader(std::move(rr), cancel, yield_[ec]);
+            if (cancel) return;
             if (ec) return;
             tnx.write_to_user_agent(sag, cancel, yield_[ec]);
         }));

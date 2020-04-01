@@ -117,6 +117,7 @@ auto tcp_async_resolve( const std::string& host
 
     if (finished_p) *finished_p = true;
 
+    if (cancel) ec = asio::error::operation_aborted;
     return or_throw(yield, ec, std::move(results));
 }
 
