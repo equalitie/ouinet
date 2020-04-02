@@ -1,7 +1,7 @@
 include(ExternalProject)
 
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
-    set(OPENSSL_VERSION "1.1.1c")
+    set(OPENSSL_VERSION "1.1.1f")
 
     get_filename_component(COMPILER_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
 
@@ -37,7 +37,7 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
 
     externalproject_add(built_openssl
         URL "https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz"
-        URL_MD5 15e21da6efe8aa0e0768ffd8cd37a5f6
+        URL_HASH SHA256=186c6bfe6ecfba7a5b48c47f8a1673d0f3b0e5ba2e25602dd23b629975da3f35
         PREFIX "${CMAKE_CURRENT_BINARY_DIR}/openssl"
         CONFIGURE_COMMAND
                cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
