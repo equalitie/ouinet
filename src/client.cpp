@@ -1263,7 +1263,22 @@ public:
                 yield.log("Starting job with timeout ", timeout.count(), "s");
             }
 
-            async_sleep(exec, n * chrono::seconds(3), cancel, yield);
+            if (job_type == Type::injector_or_dcache || job_type == Type::proxy) {
+                // If origin is running, give it some time, but stop sleeping
+                // if origin fetch exits early.
+                if (!secure_origin.is_running()) return;
+
+                Cancel c(cancel);
+                boost::optional<Job::Connection> jc;
+
+                if (secure_origin.is_running()) {
+                    jc = secure_origin.on_finish_sig([&c] { c(); });
+                }
+
+                async_sleep(exec, n * chrono::seconds(3), c, yield);
+            } else {
+                async_sleep(exec, n * chrono::seconds(3), cancel, yield);
+            }
         }
     };
 
