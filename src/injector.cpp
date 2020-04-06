@@ -301,21 +301,21 @@ public:
         // Pop out Ouinet internal HTTP headers.
         rq = util::to_cache_request(move(rq));
 
-        auto orig_con = get_connection(rq, cancel, yield[ec]);
+        auto orig_con = get_connection(rq, cancel, yield.tag("connect")[ec]);
         return_or_throw_on_error(yield, cancel, ec);
 
         // Send HTTP request to origin.
         auto orig_rq = util::to_origin_request(rq);
-        util::http_request(orig_con, orig_rq, cancel, yield[ec]);
+        util::http_request(orig_con, orig_rq, cancel, yield.tag("request")[ec]);
         if (ec) yield.log("Failed to send request: ", ec.message());
         return_or_throw_on_error(yield, cancel, ec);
 
         Session::reader_uptr sig_reader = make_unique<cache::SigningReader>
             (move(orig_con), rq, insert_id, insert_ts, config.cache_private_key());
-        auto orig_sess = Session::create(move(sig_reader), cancel, yield[ec]);
+        auto orig_sess = Session::create(move(sig_reader), cancel, yield.tag("read-hdr")[ec]);
         return_or_throw_on_error(yield, cancel, ec);
 
-        orig_sess.flush_response(con, cancel, yield[ec]);
+        orig_sess.flush_response(con, cancel, yield.tag("flush")[ec]);
         if (ec) yield.log("Injection failed: ", ec.message());
         return_or_throw_on_error(yield, cancel, ec);
         yield.log("Injection end");  // TODO: report whether inject or just fwd
