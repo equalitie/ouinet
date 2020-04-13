@@ -227,11 +227,6 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         else if (target.find("?logfile=disable") != string::npos) {
             disable_log_to_file();
         }
-        else if (target.find("?logfile=get") != string::npos) {
-            load_log_file(ss);
-            res.set(http::field::content_type, "text/plain");
-            return;
-        }
         else if (target.find("?purge_cache=") != string::npos && bep5_cache) {
             Cancel cancel;
             sys::error_code ec;
@@ -437,6 +432,9 @@ Response ClientFrontEnd::serve( ClientConfig& config
 
     if (path == "/ca.pem") {
         handle_ca_pem(req, res, ss, ca);
+    } else if (path == "/logfile.txt") {
+        res.set(http::field::content_type, "text/plain");
+        load_log_file(ss);
     } else if (path == "/api/status") {
         sys::error_code e;
         handle_status( config, udp_port, upnps, reachability
