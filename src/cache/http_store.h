@@ -12,8 +12,6 @@
 
 #include "../namespaces.h"
 
-#include "detail/http_store.h"
-
 namespace ouinet { namespace cache {
 
 // When a client gets a `HEAD` request for a URL,
@@ -26,24 +24,8 @@ static const std::string response_available_data = http_::header_prefix + "Avail
 
 using reader_uptr = std::unique_ptr<http_response::AbstractReader>;
 
-//// Low-level functions for HTTP response storage:
-
-// Save the HTTP response coming from the given reader in v0 format
-// into the given open stream.
-//
-// ----
-//
-// The v0 format is just a raw dump of the whole HTTP response
-// (head, body and trailer) as it comes from the sender.
-template<class Stream>
-void http_store_v0( http_response::AbstractReader& reader, Stream& outf
-                  , Cancel cancel, asio::yield_context yield)
-{
-    detail::http_store_v0(reader, outf, cancel, yield);
-}
-
-// Save the HTTP response coming from the given reader in v1 format
-// into the given directory.
+// Save the HTTP response coming from the given reader into the given
+// directory.
 //
 // The response is assumed to have valid HTTP signatures,
 // otherwise storage will fail.
@@ -53,7 +35,7 @@ void http_store_v0( http_response::AbstractReader& reader, Stream& outf
 //
 // ----
 //
-// The v1 format splits individual HTTP responses into the following files:
+// The format splits individual HTTP responses into the following files:
 //
 //   - `head`: It contains the raw head of the response (terminated by CRLF,
 //     with headers also CRLF-terminated), but devoid of framing headers
@@ -71,17 +53,10 @@ void http_store_v0( http_response::AbstractReader& reader, Stream& outf
 //     Where `BASE64(HASH[-1])` and `HASH[-1]` are the empty string and
 //     `HASH[i]=HASH(HASH[i-1] DATA[i])`.
 //
-void http_store_v1( http_response::AbstractReader&, const fs::path&
-                  , const asio::executor&, Cancel, asio::yield_context);
+void http_store( http_response::AbstractReader&, const fs::path&
+               , const asio::executor&, Cancel, asio::yield_context);
 
-// Return a new reader for a response stored in v0 format
-// in the given file.
-reader_uptr
-http_store_reader_v0( const fs::path&, asio::executor
-                    , sys::error_code&);
-
-// Return a new reader for a response stored in v1 format
-// under the given directory.
+// Return a new reader for a response under the given directory.
 //
 // At least the file belonging to the response head must be readable,
 // otherwise the call will report an error and not return a reader.
@@ -90,8 +65,7 @@ http_store_reader_v0( const fs::path&, asio::executor
 // The response will be provided using chunked transfer encoding,
 // with all the metadata needed to verify and further share it.
 reader_uptr
-http_store_reader_v1( const fs::path&, asio::executor
-                    , sys::error_code&);
+http_store_reader( const fs::path&, asio::executor, sys::error_code&);
 
 // Same as above, but allow specifying a contiguous range of data to read
 // instead of the whole response.
@@ -109,9 +83,9 @@ http_store_reader_v1( const fs::path&, asio::executor
 // a `boost::system::errc::invalid_seek` error is reported
 // (which may be interpreted as HTTP status `416 Range Not Satisfiable`).
 reader_uptr
-http_store_range_reader_v1( const fs::path&, asio::executor
-                          , std::size_t first, std::size_t last
-                          , sys::error_code&);
+http_store_range_reader( const fs::path&, asio::executor
+                       , std::size_t first, std::size_t last
+                       , sys::error_code&);
 
 // Same as above, but return a reader that only yields the response head,
 // as if an HTTP `HEAD` request was performed.
@@ -120,8 +94,8 @@ http_store_range_reader_v1( const fs::path&, asio::executor
 // showing the available stored data in the same format as
 // the `Content-Range` header (see RFC7233#4.2).
 reader_uptr
-http_store_head_reader_v1( const fs::path&, asio::executor
-                         , sys::error_code&);
+http_store_head_reader( const fs::path&, asio::executor
+                      , sys::error_code&);
 
 //// High-level classes for HTTP response storage
 
@@ -160,47 +134,15 @@ public:
     size(Cancel, asio::yield_context) const = 0;
 };
 
-// This uses format v0 to store each response
-// in a file named `LOWER_HEX(SHA1(KEY))`
-// under the given directory.
-class HttpStoreV0 : public AbstractHttpStore {
+// Store each response in a directory named `DIGEST[:2]/DIGEST[2:]` (where
+// `DIGEST = LOWER_HEX(SHA1(KEY))`) under the given directory.
+class HttpStore : public AbstractHttpStore {
 public:
-    HttpStoreV0(fs::path p, asio::executor ex)
+    HttpStore(fs::path p, asio::executor ex)
         : path(std::move(p)), executor(ex)
     {}
 
-    ~HttpStoreV0() override;
-
-    void
-    for_each(keep_func, Cancel, asio::yield_context) override;
-
-    void
-    store( const std::string& key, http_response::AbstractReader&
-         , Cancel, asio::yield_context) override;
-
-    reader_uptr
-    reader( const std::string& key
-          , sys::error_code&) override;
-
-    std::size_t
-    size(Cancel, asio::yield_context) const override;
-
-private:
-    fs::path path;
-    asio::executor executor;
-};
-
-// This uses format v1 to store each response
-// in a directory named `DIGEST[:2]/DIGEST[2:]`
-// (where `DIGEST = LOWER_HEX(SHA1(KEY))`)
-// under the given directory.
-class HttpStoreV1 : public AbstractHttpStore {
-public:
-    HttpStoreV1(fs::path p, asio::executor ex)
-        : path(std::move(p)), executor(ex)
-    {}
-
-    ~HttpStoreV1() override;
+    ~HttpStore() override;
 
     void
     for_each(keep_func, Cancel, asio::yield_context) override;

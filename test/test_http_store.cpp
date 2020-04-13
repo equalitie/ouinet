@@ -213,7 +213,7 @@ void store_response( const fs::path& tmpdir, bool complete
         Cancel c;
         sys::error_code e;
         http_response::Reader signed_rr(std::move(signed_r));
-        cache::http_store_v1(signed_rr, tmpdir, ctx.get_executor(), c, y[e]);
+        cache::http_store(signed_rr, tmpdir, ctx.get_executor(), c, y[e]);
         BOOST_CHECK(!complete || !e);
     });
 
@@ -243,7 +243,7 @@ void store_response_head( const fs::path& tmpdir, const string& head_s
         Cancel c;
         sys::error_code e;
         http_response::Reader signed_rr(std::move(signed_r));
-        cache::http_store_v1(signed_rr, tmpdir, ctx.get_executor(), c, y[e]);
+        cache::http_store(signed_rr, tmpdir, ctx.get_executor(), c, y[e]);
     });
 
     wc.wait(yield);
@@ -333,7 +333,7 @@ BOOST_AUTO_TEST_CASE(test_read_response_missing) {
     auto tmpdir = fs::unique_path();
     asio::io_context ctx;
     sys::error_code ec;
-    auto store_rr = cache::http_store_reader_v1(tmpdir, ctx.get_executor(), ec);
+    auto store_rr = cache::http_store_reader(tmpdir, ctx.get_executor(), ec);
     BOOST_CHECK(!store_rr);
     BOOST_CHECK_EQUAL(ec, sys::errc::no_such_file_or_directory);
 }
@@ -388,7 +388,7 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
                          , &ctx, lock = wc.lock()] (auto y) {
             Cancel c;
             sys::error_code e;
-            auto store_rr = cache::http_store_reader_v1(tmpdir, ctx.get_executor(), e);
+            auto store_rr = cache::http_store_reader(tmpdir, ctx.get_executor(), e);
             BOOST_CHECK_EQUAL(e.message(), "Success");
             BOOST_REQUIRE(store_rr);
             auto store_s = Session::create(std::move(store_rr), c, y[e]);
@@ -531,7 +531,7 @@ BOOST_DATA_TEST_CASE( test_read_response_partial
             sys::error_code e;
             size_t first = (first_block * http_::response_data_block) + rs_block_data[first_block].size() / 2;
             size_t last = (last_block * http_::response_data_block) + rs_block_data[last_block].size() / 2;
-            auto store_rr = cache::http_store_range_reader_v1
+            auto store_rr = cache::http_store_range_reader
                 (tmpdir, ctx.get_executor(), first, last, e);
             BOOST_CHECK_EQUAL(e.message(), "Success");
             BOOST_REQUIRE(store_rr);
@@ -619,7 +619,7 @@ BOOST_AUTO_TEST_CASE(test_read_response_partial_off) {
         store_response(tmpdir, true, ctx, yield);
 
         sys::error_code e;
-        auto store_rr = cache::http_store_range_reader_v1
+        auto store_rr = cache::http_store_range_reader
             ( tmpdir, ctx.get_executor()
             , 0, 42'000'000  // off limits
             , e);
@@ -668,7 +668,7 @@ BOOST_DATA_TEST_CASE(test_response_head, boost::unit_test::data::make(true_false
                          , &ctx, lock = wc.lock()] (auto y) {
             Cancel c;
             sys::error_code e;
-            auto store_rr = cache::http_store_head_reader_v1
+            auto store_rr = cache::http_store_head_reader
                 (tmpdir, ctx.get_executor(), e);
             BOOST_CHECK_EQUAL(e.message(), "Success");
             BOOST_REQUIRE(store_rr);
@@ -761,7 +761,7 @@ BOOST_DATA_TEST_CASE( test_response_head_no_body
                          , &ctx, lock = wc.lock()] (auto y) {
             Cancel c;
             sys::error_code e;
-            auto store_rr = cache::http_store_head_reader_v1
+            auto store_rr = cache::http_store_head_reader
                 (tmpdir, ctx.get_executor(), e);
             BOOST_CHECK_EQUAL(e.message(), "Success");
             BOOST_REQUIRE(store_rr);

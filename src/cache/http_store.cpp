@@ -47,13 +47,13 @@ static const boost::regex v0_file_name_rx("^[0-9a-f]{40}$");
 
 // Lowercase hexadecimal representation of a SHA1 digest,
 // split in two.
-static const boost::regex v1_parent_name_rx("^[0-9a-f]{2}$");
-static const boost::regex v1_dir_name_rx("^[0-9a-f]{38}$");
+static const boost::regex parent_name_rx("^[0-9a-f]{2}$");
+static const boost::regex dir_name_rx("^[0-9a-f]{38}$");
 
 // File names for response components.
-static const fs::path v1_head_fname = "head";
-static const fs::path v1_body_fname = "body";
-static const fs::path v1_sigs_fname = "sigs";
+static const fs::path head_fname = "head";
+static const fs::path body_fname = "body";
+static const fs::path sigs_fname = "sigs";
 
 static
 std::size_t
@@ -248,7 +248,7 @@ public:
         head = http_injection_merge(std::move(h), {});
 
         sys::error_code ec;
-        auto hf = create_file(v1_head_fname, cancel, ec);
+        auto hf = create_file(head_fname, cancel, ec);
         return_or_throw_on_error(yield, cancel, ec);
         headf = std::move(hf);
         head.async_write(*headf, cancel, yield);
@@ -259,7 +259,7 @@ public:
     {
         if (!sigsf) {
             sys::error_code ec;
-            auto sf = create_file(v1_sigs_fname, cancel, ec);
+            auto sf = create_file(sigs_fname, cancel, ec);
             return_or_throw_on_error(yield, cancel, ec);
             sigsf = std::move(sf);
         }
@@ -297,7 +297,7 @@ public:
     {
         if (!bodyf) {
             sys::error_code ec;
-            auto bf = create_file(v1_body_fname, cancel, ec);
+            auto bf = create_file(body_fname, cancel, ec);
             return_or_throw_on_error(yield, cancel, ec);
             bodyf = std::move(bf);
         }
@@ -326,8 +326,8 @@ public:
 };
 
 void
-http_store_v1( http_response::AbstractReader& reader, const fs::path& dirp
-             , const asio::executor& ex, Cancel cancel, asio::yield_context yield)
+http_store( http_response::AbstractReader& reader, const fs::path& dirp
+          , const asio::executor& ex, Cancel cancel, asio::yield_context yield)
 {
     SplittedWriter writer(dirp, ex);
 
@@ -345,15 +345,7 @@ http_store_v1( http_response::AbstractReader& reader, const fs::path& dirp
     }
 }
 
-reader_uptr
-http_store_reader_v0(const fs::path& path, asio::executor ex, sys::error_code& ec)
-{
-    auto file = util::file_io::open_readonly(ex, path, ec);
-    if (ec) return nullptr;
-    return std::make_unique<http_response::Reader>(std::move(file));
-}
-
-class HttpStore1Reader : public http_response::AbstractReader {
+class HttpStoreReader : public http_response::AbstractReader {
 private:
     static const std::size_t http_forward_block = 16384;
 
@@ -544,11 +536,11 @@ private:
     }
 
 public:
-    HttpStore1Reader( asio::posix::stream_descriptor headf
-                    , asio::posix::stream_descriptor sigsf
-                    , asio::posix::stream_descriptor bodyf
-                    , boost::optional<std::size_t> range_begin
-                    , boost::optional<std::size_t> range_end)
+    HttpStoreReader( asio::posix::stream_descriptor headf
+                   , asio::posix::stream_descriptor sigsf
+                   , asio::posix::stream_descriptor bodyf
+                   , boost::optional<std::size_t> range_begin
+                   , boost::optional<std::size_t> range_end)
         : headf(std::move(headf))
         , sigsf(std::move(sigsf))
         , bodyf(std::move(bodyf))
@@ -556,7 +548,7 @@ public:
         , range_end(std::move(range_end))
     {}
 
-    ~HttpStore1Reader() override {};
+    ~HttpStoreReader() override {};
 
     boost::optional<ouinet::http_response::Part>
     async_read_part(Cancel cancel, asio::yield_context yield) override
@@ -639,19 +631,19 @@ private:
 template<class V1Reader>
 static
 reader_uptr
-_http_store_reader_v1( const fs::path& dirp, asio::executor ex
-                     , boost::optional<std::size_t> range_first
-                     , boost::optional<std::size_t> range_last
-                     , sys::error_code& ec)
+_http_store_reader( const fs::path& dirp, asio::executor ex
+                  , boost::optional<std::size_t> range_first
+                  , boost::optional<std::size_t> range_last
+                  , sys::error_code& ec)
 {
-    auto headf = util::file_io::open_readonly(ex, dirp / v1_head_fname, ec);
+    auto headf = util::file_io::open_readonly(ex, dirp / head_fname, ec);
     if (ec) return nullptr;
 
-    auto sigsf = util::file_io::open_readonly(ex, dirp / v1_sigs_fname, ec);
+    auto sigsf = util::file_io::open_readonly(ex, dirp / sigs_fname, ec);
     if (ec && ec != sys::errc::no_such_file_or_directory) return nullptr;
     ec = {};
 
-    auto bodyf = util::file_io::open_readonly(ex, dirp / v1_body_fname, ec);
+    auto bodyf = util::file_io::open_readonly(ex, dirp / body_fname, ec);
     if (ec && ec != sys::errc::no_such_file_or_directory) return nullptr;
     ec = {};
 
@@ -688,23 +680,23 @@ _http_store_reader_v1( const fs::path& dirp, asio::executor ex
 }
 
 reader_uptr
-http_store_reader_v1( const fs::path& dirp, asio::executor ex
-                    , sys::error_code& ec)
+http_store_reader( const fs::path& dirp, asio::executor ex
+                 , sys::error_code& ec)
 {
-    return _http_store_reader_v1<HttpStore1Reader>
+    return _http_store_reader<HttpStoreReader>
         (dirp, std::move(ex), {}, {}, ec);
 }
 
 reader_uptr
-http_store_range_reader_v1( const fs::path& dirp, asio::executor ex
-                          , std::size_t first, std::size_t last
-                          , sys::error_code& ec)
+http_store_range_reader( const fs::path& dirp, asio::executor ex
+                       , std::size_t first, std::size_t last
+                       , sys::error_code& ec)
 {
-    return _http_store_reader_v1<HttpStore1Reader>
+    return _http_store_reader<HttpStoreReader>
         (dirp, std::move(ex), first, last, ec);
 }
 
-class HttpStore1HeadReader : public HttpStore1Reader {
+class HttpStoreHeadReader : public HttpStoreReader {
 private:
     inline
     std::string
@@ -761,16 +753,16 @@ private:
     }
 
 public:
-    HttpStore1HeadReader( asio::posix::stream_descriptor headf
-                        , asio::posix::stream_descriptor sigsf
-                        , asio::posix::stream_descriptor bodyf
-                        , boost::optional<std::size_t> range_begin
-                        , boost::optional<std::size_t> range_end)
-        : HttpStore1Reader( std::move(headf), std::move(sigsf), std::move(bodyf)
-                          , std::move(range_begin), std::move(range_end))
+    HttpStoreHeadReader( asio::posix::stream_descriptor headf
+                       , asio::posix::stream_descriptor sigsf
+                       , asio::posix::stream_descriptor bodyf
+                       , boost::optional<std::size_t> range_begin
+                       , boost::optional<std::size_t> range_end)
+        : HttpStoreReader( std::move(headf), std::move(sigsf), std::move(bodyf)
+                         , std::move(range_begin), std::move(range_end))
     {}
 
-    ~HttpStore1HeadReader() override {};
+    ~HttpStoreHeadReader() override {};
 
     boost::optional<ouinet::http_response::Part>
     async_read_part(Cancel cancel, asio::yield_context yield) override
@@ -778,7 +770,7 @@ public:
         if (!is_open() || _is_done) return boost::none;
 
         sys::error_code ec;
-        auto part_o = HttpStore1Reader::async_read_part(cancel, yield[ec]);
+        auto part_o = HttpStoreReader::async_read_part(cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec, boost::none);
         assert(part_o);
         auto head_p = part_o->as_head();
@@ -805,36 +797,61 @@ private:
 };
 
 reader_uptr
-http_store_head_reader_v1( const fs::path& dirp, asio::executor ex
-                         , sys::error_code& ec)
+http_store_head_reader( const fs::path& dirp, asio::executor ex
+                      , sys::error_code& ec)
 {
-    return _http_store_reader_v1<HttpStore1HeadReader>
+    return _http_store_reader<HttpStoreHeadReader>
         (dirp, std::move(ex), {}, {}, ec);
 }
 
-// begin HttpStoreV0
-
-HttpStoreV0::~HttpStoreV0()
+HttpStore::~HttpStore()
 {
 }
 
 static
 fs::path
-v0_path_from_key(const fs::path& dir, const std::string& key)
+path_from_key(fs::path dir, const std::string& key)
 {
     auto key_digest = util::sha1_digest(key);
-    return dir / util::bytes::to_hex(key_digest);
+    auto hex_digest = util::bytes::to_hex(key_digest);
+    boost::string_view hd0(hex_digest); hd0.remove_suffix(hex_digest.size() - 2);
+    boost::string_view hd1(hex_digest); hd1.remove_prefix(2);
+    return dir.append(hd0.begin(), hd0.end()).append(hd1.begin(), hd1.end());
 }
 
 static
 void
-v0_try_remove(const fs::path& path)
+try_remove(const fs::path& path)
 {
     _DEBUG("Removing cached response: ", path);
     sys::error_code ec;
-    fs::remove(path, ec);
+    fs::remove_all(path, ec);
     if (ec) _WARN( "Failed to remove cached response: "
                  , path, " ec:", ec.message());
+    // The parent directory may be left empty.
+}
+
+static
+bool
+recently_updated(const fs::path& path)
+{
+    auto now = std::time(nullptr);
+
+    std::array<fs::path, 4> paths
+        { path
+        , path / head_fname
+        , path / body_fname
+        , path / sigs_fname};
+
+    for (const auto& p : paths) {
+        sys::error_code ec;
+        auto ts = fs::last_write_time(p, ec);
+        if (ec) continue;
+        if (now - ts <= recently_updated_secs)
+            return true;
+    }
+
+    return false;
 }
 
 // For instance, "tmp.1234-abcd" matches "tmp.%%%%-%%%%".
@@ -855,158 +872,8 @@ name_matches_model(const fs::path& name, const fs::path& model)
     return true;
 }
 
-static
-bool
-v0_recently_updated(const fs::path& path)
-{
-    auto now = std::time(nullptr);
-
-    sys::error_code ec;
-    auto ts = fs::last_write_time(path, ec);
-    if (ec) return false;
-    return (now - ts <= recently_updated_secs);
-}
-
 void
-HttpStoreV0::for_each( keep_func keep
-                     , Cancel cancel, asio::yield_context yield)
-{
-    for (auto& p : fs::directory_iterator(path)) {
-        if (!fs::is_regular_file(p)) {
-            _WARN("Found non-regular file: ", p);
-            continue;
-        }
-
-        auto p_name = p.path().filename();
-        if (name_matches_model(p_name, util::default_temp_model)) {
-            if (v0_recently_updated(p)) {
-                _DEBUG("Found recent temporary file: ", p);
-            } else {
-                _DEBUG("Found old temporary file: ", p);
-                v0_try_remove(p);
-            }
-            continue;
-        }
-
-        auto& p_name_s = p_name.native();
-        if (!boost::regex_match(p_name_s.begin(), p_name_s.end(), v0_file_name_rx)) {
-            _WARN("Found unknown file: ", p);
-            continue;
-        }
-
-        sys::error_code ec;
-
-        auto rr = http_store_reader_v0(p, executor, ec);
-        if (ec) {
-            _WARN("Failed to open cached response: ", p, " ec:", ec.message());
-            v0_try_remove(p); continue;
-        }
-        assert(rr);
-
-        auto keep_entry = keep(std::move(rr), yield[ec]);
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec == asio::error::operation_aborted) return or_throw(yield, ec);
-        if (ec) {
-            _WARN("Failed to check cached response: ", p, " ec:", ec.message());
-            v0_try_remove(p); continue;
-        }
-
-        if (!keep_entry)
-            v0_try_remove(p);
-    }
-}
-
-void
-HttpStoreV0::store( const std::string& key, http_response::AbstractReader& r
-                  , Cancel cancel, asio::yield_context yield)
-{
-    sys::error_code ec;
-
-    auto kpath = v0_path_from_key(path, key);
-    auto file = util::atomic_file::make(executor, kpath, ec);
-    if (!ec) http_store_v0(r, *file, cancel, yield[ec]);
-    if (!ec) file->commit(ec);
-    if (!ec) _DEBUG("Stored to file; key=", key, " path=", kpath);
-    else _ERROR( "Failed to store response; key=", key, " path=", kpath
-               , " ec:", ec.message());
-    return or_throw(yield, ec);
-}
-
-reader_uptr
-HttpStoreV0::reader( const std::string& key
-                   , sys::error_code& ec)
-{
-    auto kpath = v0_path_from_key(path, key);
-    return http_store_reader_v0(kpath, executor, ec);
-}
-
-std::size_t
-HttpStoreV0::size( Cancel cancel
-                 , asio::yield_context yield) const
-{
-    // Do not use `for_each` since it can alter the store.
-    sys::error_code ec;
-    auto sz = recursive_dir_size(path, ec);
-    if (cancel) ec = asio::error::operation_aborted;
-    return or_throw(yield, ec, sz);
-}
-
-// end HttpStoreV0
-
-// begin HttpStoreV0
-
-HttpStoreV1::~HttpStoreV1()
-{
-}
-
-static
-fs::path
-v1_path_from_key(fs::path dir, const std::string& key)
-{
-    auto key_digest = util::sha1_digest(key);
-    auto hex_digest = util::bytes::to_hex(key_digest);
-    boost::string_view hd0(hex_digest); hd0.remove_suffix(hex_digest.size() - 2);
-    boost::string_view hd1(hex_digest); hd1.remove_prefix(2);
-    return dir.append(hd0.begin(), hd0.end()).append(hd1.begin(), hd1.end());
-}
-
-static
-void
-v1_try_remove(const fs::path& path)
-{
-    _DEBUG("Removing cached response: ", path);
-    sys::error_code ec;
-    fs::remove_all(path, ec);
-    if (ec) _WARN( "Failed to remove cached response: "
-                 , path, " ec:", ec.message());
-    // The parent directory may be left empty.
-}
-
-static
-bool
-v1_recently_updated(const fs::path& path)
-{
-    auto now = std::time(nullptr);
-
-    std::array<fs::path, 4> paths
-        { path
-        , path / v1_head_fname
-        , path / v1_body_fname
-        , path / v1_sigs_fname};
-
-    for (const auto& p : paths) {
-        sys::error_code ec;
-        auto ts = fs::last_write_time(p, ec);
-        if (ec) continue;
-        if (now - ts <= recently_updated_secs)
-            return true;
-    }
-
-    return false;
-}
-
-void
-HttpStoreV1::for_each( keep_func keep
+HttpStore::for_each( keep_func keep
                      , Cancel cancel, asio::yield_context yield)
 {
     for (auto& pp : fs::directory_iterator(path)) {  // iterate over `DIGEST[:2]` dirs
@@ -1016,7 +883,7 @@ HttpStoreV1::for_each( keep_func keep
         }
 
         auto pp_name_s = pp.path().filename().native();
-        if (!boost::regex_match(pp_name_s.begin(), pp_name_s.end(), v1_parent_name_rx)) {
+        if (!boost::regex_match(pp_name_s.begin(), pp_name_s.end(), parent_name_rx)) {
             _WARN("Found unknown directory: ", pp);
             continue;
         }
@@ -1029,27 +896,27 @@ HttpStoreV1::for_each( keep_func keep
 
             auto p_name = p.path().filename();
             if (name_matches_model(p_name, util::default_temp_model)) {
-               if (v1_recently_updated(p)) {
+               if (recently_updated(p)) {
                    _DEBUG("Found recent temporary directory: ", p);
                } else {
                    _DEBUG("Found old temporary directory: ", p);
-                   v1_try_remove(p);
+                   try_remove(p);
                }
                continue;
             }
 
             auto& p_name_s = p_name.native();
-            if (!boost::regex_match(p_name_s.begin(), p_name_s.end(), v1_dir_name_rx)) {
+            if (!boost::regex_match(p_name_s.begin(), p_name_s.end(), dir_name_rx)) {
                 _WARN("Found unknown directory: ", p);
                 continue;
             }
 
             sys::error_code ec;
 
-            auto rr = http_store_reader_v1(p, executor, ec);
+            auto rr = http_store_reader(p, executor, ec);
             if (ec) {
                _WARN("Failed to open cached response: ", p, " ec:", ec.message());
-               v1_try_remove(p); continue;
+               try_remove(p); continue;
             }
             assert(rr);
 
@@ -1058,22 +925,22 @@ HttpStoreV1::for_each( keep_func keep
             if (ec == asio::error::operation_aborted) return or_throw(yield, ec);
             if (ec) {
                 _WARN("Failed to check cached response: ", p, " ec:", ec.message());
-                v1_try_remove(p); continue;
+                try_remove(p); continue;
             }
 
             if (!keep_entry)
-                v1_try_remove(p);
+                try_remove(p);
         }
     }
 }
 
 void
-HttpStoreV1::store( const std::string& key, http_response::AbstractReader& r
-                  , Cancel cancel, asio::yield_context yield)
+HttpStore::store( const std::string& key, http_response::AbstractReader& r
+                , Cancel cancel, asio::yield_context yield)
 {
     sys::error_code ec;
 
-    auto kpath = v1_path_from_key(path, key);
+    auto kpath = path_from_key(path, key);
 
     auto kpath_parent = kpath.parent_path();
     fs::create_directory(kpath_parent, ec);
@@ -1082,7 +949,7 @@ HttpStoreV1::store( const std::string& key, http_response::AbstractReader& r
     // Replacing a directory is not an atomic operation,
     // so try to remove the existing entry before committing.
     auto dir = util::atomic_dir::make(kpath, ec);
-    if (!ec) http_store_v1(r, dir->temp_path(), executor, cancel, yield[ec]);
+    if (!ec) http_store(r, dir->temp_path(), executor, cancel, yield[ec]);
     if (!ec && fs::exists(kpath)) fs::remove_all(kpath, ec);
     // A new version of the response may still slip in here,
     // but it may be ok since it will probably be recent enough.
@@ -1094,16 +961,16 @@ HttpStoreV1::store( const std::string& key, http_response::AbstractReader& r
 }
 
 reader_uptr
-HttpStoreV1::reader( const std::string& key
-                   , sys::error_code& ec)
+HttpStore::reader( const std::string& key
+                 , sys::error_code& ec)
 {
-    auto kpath = v1_path_from_key(path, key);
-    return http_store_reader_v1(kpath, executor, ec);
+    auto kpath = path_from_key(path, key);
+    return http_store_reader(kpath, executor, ec);
 }
 
 std::size_t
-HttpStoreV1::size( Cancel cancel
-                 , asio::yield_context yield) const
+HttpStore::size( Cancel cancel
+               , asio::yield_context yield) const
 {
     // Do not use `for_each` since it can alter the store.
     sys::error_code ec;
@@ -1111,7 +978,5 @@ HttpStoreV1::size( Cancel cancel
     if (cancel) ec = asio::error::operation_aborted;
     return or_throw(yield, ec, sz);
 }
-
-// end HttpStoreV1
 
 }} // namespaces
