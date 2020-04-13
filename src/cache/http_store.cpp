@@ -345,6 +345,10 @@ http_store( http_response::AbstractReader& reader, const fs::path& dirp
     }
 }
 
+struct Range {
+    std::size_t begin, end;
+};
+
 class HttpStoreReader : public http_response::AbstractReader {
 private:
     static const std::size_t http_forward_block = 16384;
@@ -394,9 +398,7 @@ private:
             data_size = *data_size_opt;
 
         // Create a partial content response if a range was specified.
-        if (range_begin) {
-            assert(range_end);
-
+        if (range) {
             auto orig_status = head.result_int();
             head.reason("");
             head.result(http::status::partial_content);
@@ -405,16 +407,16 @@ private:
             // Align ranges to data blocks.
             assert(block_size);
             auto bs = *block_size;
-            range_begin = bs * (*range_begin / bs);  // align down
-            range_end = bs * (*range_end / bs + 1);  // align up
+            range->begin = bs * (range->begin / bs);  // align down
+            range->end = bs * (range->end / bs + 1);  // align up
             // Clip range end to actual file size.
             auto ds = util::file_io::file_size(bodyf, ec);
             if (ec) return or_throw<http_response::Head>(yield, ec);
-            if (*range_end > ds) range_end = ds;
+            if (range->end > ds) range->end = ds;
 
             // Report resulting range.
             head.set( http::field::content_range
-                    , util::HttpByteRange{*range_begin, *range_end - 1, data_size});
+                    , util::HttpByteRange{range->begin, range->end - 1, data_size});
         }
 
         // The stored head should not have framing headers,
@@ -433,14 +435,14 @@ private:
     seek_to_range_begin(Cancel cancel, asio::yield_context yield)
     {
         assert(_is_head_done);
-        if (!range_begin) return;
+        if (!range) return;
         assert(bodyf.is_open());
         assert(block_size);
 
         sys::error_code ec;
 
         // Move body file pointer to start of range.
-        block_offset = *range_begin;
+        block_offset = range->begin;
         util::file_io::fseek(bodyf, block_offset, ec);
         if (ec) return or_throw(yield, ec);
 
@@ -520,7 +522,7 @@ private:
         }
         block_offset += chunk_body.size();
 
-        if (range_end && block_offset >= *range_end) {
+        if (range && block_offset >= range->end) {
             // Hit range end, stop getting more blocks:
             // the next read data block will be empty,
             // thus generating a "last chunk" below.
@@ -539,13 +541,11 @@ public:
     HttpStoreReader( asio::posix::stream_descriptor headf
                    , asio::posix::stream_descriptor sigsf
                    , asio::posix::stream_descriptor bodyf
-                   , boost::optional<std::size_t> range_begin
-                   , boost::optional<std::size_t> range_end)
+                   , boost::optional<Range> range)
         : headf(std::move(headf))
         , sigsf(std::move(sigsf))
         , bodyf(std::move(bodyf))
-        , range_begin(std::move(range_begin))
-        , range_end(std::move(range_end))
+        , range(range)
     {}
 
     ~HttpStoreReader() override {};
@@ -606,7 +606,7 @@ protected:
     asio::posix::stream_descriptor sigsf;
     asio::posix::stream_descriptor bodyf;
 
-    boost::optional<std::size_t> range_begin, range_end;
+    boost::optional<Range> range;
 
     std::string uri;  // for warnings
     boost::optional<std::size_t> data_size;
@@ -628,7 +628,7 @@ private:
     boost::optional<http_response::Part> next_chunk_body;
 };
 
-template<class V1Reader>
+template<class Reader>
 static
 reader_uptr
 _http_store_reader( const fs::path& dirp, asio::executor ex
@@ -647,7 +647,8 @@ _http_store_reader( const fs::path& dirp, asio::executor ex
     if (ec && ec != sys::errc::no_such_file_or_directory) return nullptr;
     ec = {};
 
-    boost::optional<std::size_t> range_begin, range_end;
+    boost::optional<Range> range;
+
     if (range_first) {
         // Check and convert range.
         assert(range_last);
@@ -670,13 +671,11 @@ _http_store_reader( const fs::path& dirp, asio::executor ex
             ec = sys::errc::make_error_code(sys::errc::invalid_seek);
             return nullptr;
         }
-        range_begin = *range_first;
-        range_end = *range_last + 1;
+        range = Range{*range_first, *range_last + 1};
     }
 
-    return std::make_unique<V1Reader>
-        ( std::move(headf), std::move(sigsf), std::move(bodyf)
-        , std::move(range_begin), std::move(range_end));
+    return std::make_unique<Reader>
+        (std::move(headf), std::move(sigsf), std::move(bodyf), range);
 }
 
 reader_uptr
@@ -756,10 +755,8 @@ public:
     HttpStoreHeadReader( asio::posix::stream_descriptor headf
                        , asio::posix::stream_descriptor sigsf
                        , asio::posix::stream_descriptor bodyf
-                       , boost::optional<std::size_t> range_begin
-                       , boost::optional<std::size_t> range_end)
-        : HttpStoreReader( std::move(headf), std::move(sigsf), std::move(bodyf)
-                         , std::move(range_begin), std::move(range_end))
+                       , boost::optional<Range> range)
+        : HttpStoreReader(std::move(headf), std::move(sigsf), std::move(bodyf), range)
     {}
 
     ~HttpStoreHeadReader() override {};

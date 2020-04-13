@@ -34,6 +34,7 @@ get_host_port(const http::request<http::string_body>&);
 struct HttpByteRange {
     size_t first;
     size_t last;
+    // Total size of the document (if known)
     boost::optional<size_t> length;
 
     static
