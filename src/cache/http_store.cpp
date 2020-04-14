@@ -718,6 +718,12 @@ private:
     get_last_sig_offset(Cancel cancel, asio::yield_context yield)
     {
         // TODO: seek to avoid parsing the whole file
+
+        // TODO: This would be easier if lines had a fixed size,
+        // e.g. by padding the offset to the length of `max(size_t)`.
+        // A way to cut the overhead would be to use `max(size_t/block_length)`,
+        // with a different fixed line length for each stored entry,
+        // but if overhead is an issue, a binary format should be used instead.
         boost::optional<std::size_t> off;
         while (true) {
             sys::error_code ec;
