@@ -42,9 +42,6 @@ namespace ouinet { namespace cache {
 // are no longer being written to.
 static const std::time_t recently_updated_secs = 10 * 60;  // 10 minutes ago
 
-// Lowercase hexadecimal representation of a SHA1 digest.
-static const boost::regex v0_file_name_rx("^[0-9a-f]{40}$");
-
 // Lowercase hexadecimal representation of a SHA1 digest,
 // split in two.
 static const boost::regex parent_name_rx("^[0-9a-f]{2}$");
