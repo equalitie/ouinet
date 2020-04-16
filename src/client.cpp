@@ -1739,6 +1739,9 @@ void Client::State::serve_request( GenericStream&& con
         Match( reqexpr::from_regex(host_getter, "localhost")
              , {deque<fresh_channel>({fresh_channel::_front_end})} ),
 
+        Match( reqexpr::from_regex(host_getter, util::str(_config.front_end_endpoint()))
+             , {deque<fresh_channel>({fresh_channel::_front_end})} ),
+
         Match( reqexpr::from_regex(x_oui_dest_getter, "OuiClient")
              , {deque<fresh_channel>({fresh_channel::_front_end})} ),
 

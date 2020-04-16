@@ -109,7 +109,7 @@ public:
            // Client options
            ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen")
            ("front-end-ep"
-            , po::value<string>()
+            , po::value<string>()->default_value("127.0.0.137:8081")
             , "Front-end's endpoint (in <IP>:<PORT> format)")
            ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
             , "Path to the CA certificate store file")
@@ -306,14 +306,16 @@ ClientConfig::ClientConfig(int argc, char* argv[])
     if (vm.count("front-end-ep")) {
         auto ep_str = vm["front-end-ep"].as<string>();
 
-        if (!ep_str.empty()) {
-            sys::error_code ec;
-            _front_end_endpoint = parse::endpoint<asio::ip::tcp>(ep_str, ec);
+        if (ep_str.empty()) {
+            throw std::runtime_error("--front-end-ep must not be empty");
+        }
 
-            if (ec) {
-                throw std::runtime_error( "Failed to parse endpoint \""
-                        + ep_str + "\"");
-            }
+        sys::error_code ec;
+        _front_end_endpoint = parse::endpoint<asio::ip::tcp>(ep_str, ec);
+
+        if (ec) {
+            throw std::runtime_error( "Failed to parse endpoint \""
+                    + ep_str + "\"");
         }
     }
 
