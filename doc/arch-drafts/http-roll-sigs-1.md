@@ -39,8 +39,10 @@ The injector then sends data blocks of the size specified above (the last one ma
 
 When all data blocks have been sent to the client, the injector sends additional headers to build the **final response head** including:
 
-  - Content digests for the whole body.  SHA2-256 is used as a compromise between security and digest size.
+  - Content digests for the whole body (as in [RFC3230][]).  SHA2-256 is used as a compromise between security and digest size.  This digest allows other tools to easily verify body data without needing to implement data block signature verification.
   - The final content length.
+
+[RFC3230]: https://tools.ietf.org/html/rfc3230
 
 HTTP chunked transfer encoding is used to enable providing a first set of headers, then a signature (as a chunk extension) after each sent block, then a final set of headers as a trailer.
 
