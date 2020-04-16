@@ -68,9 +68,9 @@ X-Ouinet-Sig0: keyId="ed25519=????",algorithm="hs2019",created=1516048310,
 Transfer-Encoding: chunked
 Trailer: Digest, X-Ouinet-Data-Size, X-Ouinet-Sig1
 
-80000
+100000
 0123456789...
-80000;ouisig=BASE64(BSIG(d607…e58d NUL 0 NUL HASH[0]=SHA2-512(BLOCK[0])))
+100000;ouisig=BASE64(BSIG(d607…e58d NUL 0 NUL HASH[0]=SHA2-512(BLOCK[0])))
 0123456789...
 4;ouisig=BASE64(BSIG(d607…e58d NUL 1048576 NUL HASH[1]=SHA2-512(HASH[0] BLOCK[1])))
 abcd
