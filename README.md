@@ -169,21 +169,6 @@ And restart the environment:
 Then you can configure your browser to use `localhost` port 8081 to contact
 the HTTP proxy.
 
-### Vagrant instance on AWS
-
-The source tree also contains `Vagrantfile.aws`, which you can use to deploy
-the Vagrant environment to Amazon Web Services (AWS):
-
-    $ vagrant plugin install vagrant-aws
-    $ vagrant plugin install vagrant-sshfs
-
-    $ export AWS_ACCESS_KEY_ID='YOUR_ACCESS_ID'
-    $ export AWS_SECRET_ACCESS_KEY='your secret token'
-
-    $ VAGRANT_VAGRANTFILE=Vagrantfile.aws vagrant up
-    $ vagrant sshfs --mount linux
-    $ vagrant ssh
-
 ## Docker development environment
 
 We provide a *bootstrap* Docker image which is automatically updated with each
