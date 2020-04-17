@@ -1516,11 +1516,9 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
     }
 }
 
-enum class IPVersion { v4, v6 };
-
 asio::ip::udp::endpoint resolve(
     const asio::executor& exec,
-    IPVersion ipv,
+    asio::ip::udp ipv,
     const std::string& addr,
     const std::string& port,
     Cancel& cancel_signal,
@@ -1546,9 +1544,9 @@ asio::ip::udp::endpoint resolve(
     while (it != udp::resolver::iterator()) {
         auto ep = it->endpoint();
 
-        if (ep.address().is_v4() && ipv == IPVersion::v4) {
+        if (ep.address().is_v4() && ipv == udp::v4()) {
             return ep;
-        } else if (ep.address().is_v6() && ipv == IPVersion::v6) {
+        } else if (ep.address().is_v6() && ipv == udp::v6()) {
             return ep;
         }
 
@@ -1578,7 +1576,7 @@ dht::DhtNode::bootstrap_single( Address bootstrap_address
         [&] (std::string addr) {
             auto ep = resolve(
                 _exec,
-                _multiplexer->is_v4() ? IPVersion::v4 : IPVersion::v6,
+                _multiplexer->is_v4() ? udp::v4() : udp::v6(),
                 addr,
                 "6881",
                 cancel,

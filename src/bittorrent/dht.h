@@ -32,6 +32,7 @@ class UdpMultiplexer;
 
 asio::ip::udp::endpoint resolve(
     const asio::executor&,
+    asio::ip::udp ipv,
     const std::string& addr,
     const std::string& port,
     Signal<void()>& cancel_signal,

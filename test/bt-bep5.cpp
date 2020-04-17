@@ -124,6 +124,7 @@ int main(int argc, const char** argv)
         Cancel cancel;
 
         auto ep = resolve( ctx.get_executor()
+                         , udp::v4()
                          , "router.bittorrent.com"
                          , "6881"
                          , cancel
