@@ -285,9 +285,9 @@ from templates included in Ouinet's source code and it will be missing some
 important parameters, so you may want to stop it (see above) and use the
 **shell container** (see below) to edit `client/ouinet-client.conf`:
 
-  - Add configuration options for the injector endpoint `injector-ep` (only
-    for testing) and its access credentials `injector-credentials`.
-  - If the injector endpoint uses TLS, set `injector-tls-cert-file` to
+  - If using a local test injector, set its endpoint in option `injector-ep`.
+  - Set the injector's credentials in option `injector-credentials`.
+  - Unless using a local test injector, set option `injector-tls-cert-file` to
     `/var/opt/ouinet/client/ssl-inj-cert.pem` and copy the injector's TLS
     certificate to that file.
   - Set the public key used by the injector for HTTP signatures in option
@@ -407,20 +407,19 @@ point it to the repository created above:
     ...
 
 Note down the `<CACHE_PUB_KEY>` string in the above output since clients will
-need it as the *distributed cache index*.  You may also find that value in the
-`ed25519-public-key` file in the injector repository.
+need it as the *public key for HTTP signatures*.  You may also find that value
+in the `ed25519-public-key` file in the injector repository.
 
 When you are done testing the Ouinet injector, you may shut it down by hitting
 Ctrl+C.
 
 ### Running a test client
 
-To perform some tests using a Ouinet client and an existing injector, you
-first need to know the *injector endpoint* (only for testing) and
-*credentials* (if needed), its *TLS certificate*, and its *public key*.  These
-use to be respectively an IP address and port (or an I2P peer identity), a
-`<USER>:<PASSWORD>` string, a path to a PEM file, and an Ed25519 public key
-(hexadecimal or Base32).
+To perform some tests using a Ouinet client and an existing test injector, you
+first need to know the *injector endpoint* and *credentials*, its *TLS
+certificate*, and its *public key for HTTP signatures*.  These use to be
+respectively a `tcp:<IP>:<PORT>` string, a `<USER>:<PASSWORD>` string, a path
+to a PEM file, and an Ed25519 public key (hexadecimal or Base32).
 
 You need to configure the Ouinet client to use the aforementioned parameters.
 If you have a local build, create a copy of the `repos/client` repository
