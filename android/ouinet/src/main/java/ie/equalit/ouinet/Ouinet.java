@@ -22,11 +22,11 @@ public class Ouinet {
         System.loadLibrary("client");
         System.loadLibrary("native-lib");
 
-        System.setProperty("http.proxyHost", "127.0.0.137");
-        System.setProperty("http.proxyPort", "8080");
+        System.setProperty("http.proxyHost", "127.0.0.1");
+        System.setProperty("http.proxyPort", "8077");
 
-        System.setProperty("https.proxyHost", "127.0.0.137");
-        System.setProperty("https.proxyPort", "8080");
+        System.setProperty("https.proxyHost", "127.0.0.1");
+        System.setProperty("https.proxyPort", "8077");
     }
 
     private static final String TAG = "OuinetJava";
@@ -58,8 +58,11 @@ public class Ouinet {
         List<String> args = new ArrayList<>();
         args.add("ouinet-client"); // App name
         args.add("--repo=" + config.getOuinetDirectory());
-        args.add("--listen-on-tcp=127.0.0.137:8080");
-        args.add("--front-end-ep=127.0.0.137:8081");
+
+        // If default client endpoints clash with other ports,
+        // uncomment these and change `http(s).proxyPort` above to match.
+        //args.add("--listen-on-tcp=127.0.0.1:8177");
+        //args.add("--front-end-ep=127.0.0.1:8178");
 
         // Useful for debugging
         //args.add("--disable-origin-access");
