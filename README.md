@@ -528,7 +528,7 @@ unreachable.
 ## Android library and demo client
 
 Ouinet can also be built as an Android Archive library (AAR) to use in your
-Android apps.  
+Android apps.
 
 ### Build requirements
 
@@ -680,7 +680,7 @@ cache):
                 .setInjectorTlsCert(<INJECTOR_TLS_CERT>)
                 .setTlsCaCertStorePath(<TLS_CA_CERT_STORE_PATH>)
                 .build()
-    
+
     ouinet = new Ouinet(this, config);
     ouinet.start();
 
