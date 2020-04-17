@@ -498,10 +498,11 @@ configuration tools:
       - *Origin*: The client contacts the origin server directly via HTTP(S).
       - *Proxy*: The client contacts the origin server through an HTTP proxy
         (currently the configured injector).
-      - *Injector*: The client asks the injector to fetch the content from the
-        origin server and inject it into the distributed cache.
-      - *Cache*: The client attempts to retrieve the content from the
-        distributed cache.
+      - *Injector*: The client asks the injector to fetch and sign the content
+        from the origin server, then it starts seeding the signed content to
+        the distributed cache.
+      - *Distributed Cache*: The client attempts to retrieve the content from
+        the distributed cache.
 
     Content retrieved via the Origin and Proxy mechanisms is considered
     *private and not seeded* to the distributed cache.  Content retrieved via
@@ -512,9 +513,9 @@ configuration tools:
     hard-wired, customizable in the future) *request router configuration*.
     For instance, if one points the browser to a web page which it is not yet
     in the distributed cache, then the client shall forward the request to the
-    injector.  On success, the injector will (A) send the content back to the
-    client and (B) seed the content to the cache.  The client will also seed
-    the content (along with parts of the cache index).
+    injector.  On success, (A) the injector will fetch, sign and send the
+    content back to the client and (B) the client will seed the content to the
+    cache.
 
   - Other information about the cache index is shown next.
 
