@@ -107,7 +107,9 @@ public:
            ("debug", "Enable debugging messages")
 
            // Client options
-           ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen")
+           ("listen-on-tcp"
+            , po::value<string>()->default_value("127.0.0.1:8077")
+            , "HTTP proxy endpoint (in <IP>:<PORT> format)")
            ("front-end-ep"
             , po::value<string>()->default_value("127.0.0.137:8081")
             , "Front-end's endpoint (in <IP>:<PORT> format)")
