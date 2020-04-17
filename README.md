@@ -15,13 +15,12 @@ The typical Ouinet *client* node setup consists of a web browser or other
 application using a special HTTP proxy or API provided by a dedicated program
 or library on the local machine.  When the client gets a request for content,
 it attempts to retrieve the resource using several mechanisms.  It tries to
-fetch the page from a *distributed cache* (like [IPFS][]) by looking up the
-content in a *distributed cache index* (like the [BitTorrent][] DHT), and if
-not available, it contacts a trusted *injector* server over a peer-to-peer
-routing system (like [I2P][]) and asks it to fetch the page and store it in
-the distributed cache.
+fetch the page from a *distributed cache* by looking up the content in a
+*distributed cache index* (like the [BitTorrent][] DHT), and if not available,
+it contacts a trusted *injector* server over a peer-to-peer routing system
+(like [I2P][]) and asks it to fetch the page and store it in the distributed
+cache.
 
-[IPFS]: https://ipfs.io/ "InterPlanetary File System"
 [BitTorrent]: https://www.bittorrent.org/
 [I2P]: https://geti2p.net/ "Invisible Internet Project"
 
@@ -170,21 +169,6 @@ And restart the environment:
 Then you can configure your browser to use `localhost` port 8081 to contact
 the HTTP proxy.
 
-### Vagrant instance on AWS
-
-The source tree also contains `Vagrantfile.aws`, which you can use to deploy
-the Vagrant environment to Amazon Web Services (AWS):
-
-    $ vagrant plugin install vagrant-aws
-    $ vagrant plugin install vagrant-sshfs
-
-    $ export AWS_ACCESS_KEY_ID='YOUR_ACCESS_ID'
-    $ export AWS_SECRET_ACCESS_KEY='your secret token'
-
-    $ VAGRANT_VAGRANTFILE=Vagrantfile.aws vagrant up
-    $ vagrant sshfs --mount linux
-    $ vagrant ssh
-
 ## Docker development environment
 
 We provide a *bootstrap* Docker image which is automatically updated with each
@@ -301,13 +285,15 @@ from templates included in Ouinet's source code and it will be missing some
 important parameters, so you may want to stop it (see above) and use the
 **shell container** (see below) to edit `client/ouinet-client.conf`:
 
-  - Add configuration options for the injector endpoint `injector-ep` and its
-    access credentials `injector-credentials`.
-  - If the injector endpoint uses TLS, set `injector-tls-cert-file` to
+  - If using a local test injector, set its endpoint in option `injector-ep`.
+  - Set the injector's credentials in option `injector-credentials`.
+  - Unless using a local test injector, set option `injector-tls-cert-file` to
     `/var/opt/ouinet/client/ssl-inj-cert.pem` and copy the injector's TLS
     certificate to that file.
-  - Set the BEP44 public key of the cache index in option
-    `index-bep44-public-key`.
+  - Set the public key used by the injector for HTTP signatures in option
+    `cache-http-public-key`.
+  - To enable the distributed cache, set option `cache-type`.  The only value
+    currently supported is `bep5-http`.
 
 After you have set up your client's configuration, you can **restart it**.
 The client's HTTP proxy endpoint should be available to the host at
@@ -366,10 +352,11 @@ populate its default environment file:
 
 After an injector has finished starting, you may want to use the shell
 container to inspect and note down the contents of `injector/endpoint-*`
-(injector endpoints) and `injector/cache-*` (cache index keys) to be used by
-clients.  The injector will also generate a `tls-cert.pem` file which you
-should distribute to clients for TLS access.  Other configuration information
-like credentials can be found in `injector/ouinet-injector.conf`.
+(injector endpoints) and `injector/ed25519-public-key` (public key for HTTP
+signatures) to be used by clients.  The injector will also generate a
+`tls-cert.pem`  file which you should distribute to clients for TLS access.
+Other configuration information like credentials can be found in
+`injector/ouinet-injector.conf`.
 
 To start the injector in headless mode, you can run:
 
@@ -380,31 +367,6 @@ You will need to use `sudo docker-compose stop` to stop the container.
 To be able to follow its logs, you can run:
 
     $ sudo docker-compose logs --tail=100 -ft
-
-If you ever need to reset and empty the injector's cache index for some reason
-(e.g. testing) while keeping injector IDs and credentials, you may:
-
- 1. Fetch a Go IPFS binary and copy it to the data volume:
-
-        $ wget "https://dist.ipfs.io/go-ipfs/v0.4.14/go-ipfs_v0.4.14_linux-amd64.tar.gz"
-        $ tar -xf go-ipfs_v0.4.14_linux-amd64.tar.gz
-        $ sudo docker cp go-ipfs/ipfs SHELL_CONTAINER:/var/opt/ouinet
-
- 2. Stop the injector.
- 3. Run a temporary Debian container with access to the data volume:
-
-        $ sudo docker run --rm -it -v ouinet-injector_data:/mnt debian
-
- 4. In the container, run:
-
-        # cd /mnt
-        # rm -f injector/ipfs/ipfs_cache_index.*
-        # alias ipfs='./ipfs -Lc injector/ipfs'
-        # ipfs pin ls --type recursive | cut -d' ' -f1 | xargs ipfs pin rm
-        # ipfs repo gc
-        # exit
-
- 5. Start the injector.
 
 ## Testing (desktop)
 
@@ -441,26 +403,24 @@ Finally start the injector.  For the local build you will need to explicitly
 point it to the repository created above:
 
     $ <BUILD DIR>/injector --repo /path/to/injector-repo
-    Swarm listening on /ip4/127.0.0.1/tcp/4001
-    Swarm listening on /ip4/192.168.0.136/tcp/4001
-    Swarm listening on /ip6/::1/tcp/4001
-    BEP44 Index: <BEP44 IDX>
+    ...
+    [INFO] HTTP signing public key (Ed25519): <CACHE_PUB_KEY>
     ...
 
-Note down the `<BEP44 IDX>` string in the above output since clients will need
-it as the *distributed cache index*.  You may also find that value in the
-`cache-*` files in the injector repository.
+Note down the `<CACHE_PUB_KEY>` string in the above output since clients will
+need it as the *public key for HTTP signatures*.  You may also find that value
+in the `ed25519-public-key` file in the injector repository.
 
 When you are done testing the Ouinet injector, you may shut it down by hitting
 Ctrl+C.
 
 ### Running a test client
 
-To perform some tests using a Ouinet client and an existing injector, you
-first need to know the *injector endpoint* and *credentials* (if needed), and
-a *distributed cache index*.  These use to be respectively an IP address and
-port (for testing, otherwise an I2P peer identity), a `<USER>:<PASSWORD>`
-string, and a BEP44 public key.
+To perform some tests using a Ouinet client and an existing test injector, you
+first need to know the *injector endpoint* and *credentials*, its *TLS
+certificate*, and its *public key for HTTP signatures*.  These use to be
+respectively a `tcp:<IP>:<PORT>` string, a `<USER>:<PASSWORD>` string, a path
+to a PEM file, and an Ed25519 public key (hexadecimal or Base32).
 
 You need to configure the Ouinet client to use the aforementioned parameters.
 If you have a local build, create a copy of the `repos/client` repository
@@ -473,12 +433,13 @@ that it creates a default configuration for you.
 
 Now edit `ouinet-client.conf` in the client repository (for Docker, use the
 shell container to edit `client/ouinet-client.conf`) and add options for the
-injector endpoint and credentials and the distributed cache name.  Remember to
+injector endpoint (if testing), credentials and public key.  Remember to
 replace the values with your own:
 
     injector-ep = tcp:127.0.0.1:7070
     injector-credentials = injector_user:injector_password
-    index-bep44-public-key = 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
+    cache-http-public-key = 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
+    cache-type = bep5-http
 
 All the steps above only need to be done once.
 
@@ -529,7 +490,7 @@ configuration tools:
 
   - Several buttons near the top of the page look something like this:
 
-        Injector proxy: enabled [ disable ]
+        Injector access: enabled [ disable ]
 
     They allow you to enable or disable different *request mechanisms* to
     retrieve content:
@@ -537,10 +498,11 @@ configuration tools:
       - *Origin*: The client contacts the origin server directly via HTTP(S).
       - *Proxy*: The client contacts the origin server through an HTTP proxy
         (currently the configured injector).
-      - *Injector*: The client asks the injector to fetch the content from the
-        origin server and inject it into the distributed cache.
-      - *Cache*: The client attempts to retrieve the content from the
-        distributed cache.
+      - *Injector*: The client asks the injector to fetch and sign the content
+        from the origin server, then it starts seeding the signed content to
+        the distributed cache.
+      - *Distributed Cache*: The client attempts to retrieve the content from
+        the distributed cache.
 
     Content retrieved via the Origin and Proxy mechanisms is considered
     *private and not seeded* to the distributed cache.  Content retrieved via
@@ -551,11 +513,22 @@ configuration tools:
     hard-wired, customizable in the future) *request router configuration*.
     For instance, if one points the browser to a web page which it is not yet
     in the distributed cache, then the client shall forward the request to the
-    injector.  On success, the injector will (A) send the content back to the
-    client and (B) seed the content to the cache.  The client will also seed
-    the content (along with parts of the cache index).
+    injector.  On success, (A) the injector will fetch, sign and send the
+    content back to the client and (B) the client will seed the content to the
+    cache.
 
   - Other information about the cache index is shown next.
+
+**Note:** For a response to be injected, its request currently needs to carry
+an `X-Ouinet-Group` header.  The [CENO Extension][] takes care of that
+whenever browsing in normal mode, and it does not when browsing in private
+mode.  Unfortunately, the Extension is not yet packaged independently and the
+only way to use it is to clone its repository locally and load it every time
+you start the browser; to do that, open Firefox's *Add-ons* window, then click
+on the gears icon, then *Debug Add-ons*, then *Load Temporary Add-on…* and
+choose the `manifest.json` file in the Extension's source tree.
+
+[CENO Extension]: https://github.com/censorship-no/ceno-ext-settings/
 
 After visiting a page with the Origin mechanism disabled and Injector
 mechanism enabled, and waiting for a short while, you should be able to
@@ -567,7 +540,7 @@ unreachable.
 ## Android library and demo client
 
 Ouinet can also be built as an Android Archive library (AAR) to use in your
-Android apps.  
+Android apps.
 
 ### Build requirements
 
@@ -709,21 +682,18 @@ Then add a private member to your `MainActivity` class:
 
     private Ouinet ouinet;
 
-And in its `OnCreate` method initiate the Ouinet object (using the B-tree
-cache index):
+And in its `OnCreate` method initiate the Ouinet object (using the BEP5/HTTP
+cache):
 
     Config config = new Config.ConfigBuilder(this)
-                .setIndexBep44PubKey(<BEP_44_KEY>))
-                .setIndexIpnsId(<INDEX_IPNS_ID>)
-                .setInjectorEndpoint(<INJECTOR_ENDPOINT>))
+                .setCacheType("bep5-http")
+                .setCacheHttpPubKey(<CACHE_PUB_KEY>)
                 .setInjectorCredentials(<INJECTOR_USERNAME>:<INJECTOR_PASSWORD>)
                 .setInjectorTlsCert(<INJECTOR_TLS_CERT>)
                 .setTlsCaCertStorePath(<TLS_CA_CERT_STORE_PATH>)
                 .build()
-    
+
     ouinet = new Ouinet(this, config);
     ouinet.start();
 
-Where `<INJECTOR ENDPOINT>` may be an I2P peer identity or an `<IP>:<PORT>`
-pair.  From now on all of the app's HTTP communication will be handled by
-Ouinet.
+From now on all of the app's HTTP communication will be handled by Ouinet.
