@@ -94,14 +94,21 @@ void start_client_thread(const vector<string>& args, const vector<string>& extra
                 g_client = make_unique<ouinet::Client>(g_ios, move(cfg));
                 g_client->start();
             }
-            catch (std::exception& e) {
+            catch (const std::exception& e) {
                 debug("Failed to start Ouinet client:");
                 debug("%s", e.what());
                 g_client.reset();
                 return;
             }
 
-            g_ios.run();
+            try {
+                g_ios.run();
+            }
+            catch (const std::exception& e) {
+                debug("Exception thrown from ouinet");
+                debug("%s", e.what());
+            }
+
             debug("Ouinet's main loop stopped.");
             g_client.reset();
         });
