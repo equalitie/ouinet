@@ -160,14 +160,14 @@ For instance, if you want to run a Ouinet client (with its default
 configuration) in Vagrant and use it as a proxy in a browser on your computer,
 you may uncomment the following line in `Vagrantfile`:
 
-    #vm.vm.network "forwarded_port", guest: 8080, host: 8081, guest_ip: "127.0.0.1"
+    #vm.vm.network "forwarded_port", guest: 8077, host: 8077, guest_ip: "127.0.0.1"
 
 And restart the environment:
 
     $ vagrant halt
     $ vagrant up
 
-Then you can configure your browser to use `localhost` port 8081 to contact
+Then you can configure your browser to use `localhost` port 8077 to contact
 the HTTP proxy.
 
 ### Vagrant instance on AWS
@@ -311,7 +311,7 @@ important parameters, so you may want to stop it (see above) and use the
 
 After you have set up your client's configuration, you can **restart it**.
 The client's HTTP proxy endpoint should be available to the host at
-`127.0.0.1` port 8077.
+`localhost` port 8077.
 
 If you get a "connection refused" error when using the client's proxy, your
 Docker setup may not support host networking.  To enable port forwarding,
@@ -487,7 +487,7 @@ point it to the repository created above:
 
     $ <BUIDL DIR>/client --repo /path/to/client-repo
 
-The client opens a web proxy on local port 8080 by default (see option
+The client opens a web proxy on local port 8077 by default (see option
 `listen-on-tcp` in its configuration file).  When you access the web using
 this proxy (see the following section), your requests will go through your
 local Ouinet client, which will attempt several mechanisms supported by Ouinet
@@ -501,15 +501,15 @@ Ctrl+C.
 Once your local Ouinet client is running (see above), if you have Firefox
 installed, you can create a new profile (stored under the `ff-profile`
 directory in the example below) which uses the Ouinet client as an HTTP proxy
-(listening on `localhost:8080` here) by executing the following commands on
+(listening on `localhost:8077` here) by executing the following commands on
 another shell:
 
     mkdir -p ff-profile
-    env http_proxy='http://localhost:8080/' firefox --no-remote --profile ff-profile
+    env http_proxy='http://localhost:8077/' firefox --no-remote --profile ff-profile
 
 Otherwise you may manually [modify your browser's settings][Firefox proxy] to:
 
-  - Make the client (listening on port `localhost:8080` here) its HTTP proxy
+  - Make the client (listening on port `localhost:8077` here) its HTTP proxy
   - Make sure that `localhost` is not listed in the *No Proxy for* field
   - Check *Use this proxy for all protocols* (mostly for HTTPS)
 
