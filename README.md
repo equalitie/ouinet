@@ -670,13 +670,12 @@ Then add a private member to your `MainActivity` class:
 
     private Ouinet ouinet;
 
-And in its `OnCreate` method initiate the Ouinet object (using the B-tree
-cache index):
+And in its `OnCreate` method initiate the Ouinet object (using the BEP5/HTTP
+cache):
 
     Config config = new Config.ConfigBuilder(this)
-                .setIndexBep44PubKey(<BEP_44_KEY>))
-                .setIndexIpnsId(<INDEX_IPNS_ID>)
-                .setInjectorEndpoint(<INJECTOR_ENDPOINT>))
+                .setCacheType("bep5-http")
+                .setCacheHttpPubKey(<CACHE_PUB_KEY>)
                 .setInjectorCredentials(<INJECTOR_USERNAME>:<INJECTOR_PASSWORD>)
                 .setInjectorTlsCert(<INJECTOR_TLS_CERT>)
                 .setTlsCaCertStorePath(<TLS_CA_CERT_STORE_PATH>)
@@ -685,6 +684,4 @@ cache index):
     ouinet = new Ouinet(this, config);
     ouinet.start();
 
-Where `<INJECTOR ENDPOINT>` may be an I2P peer identity or an `<IP>:<PORT>`
-pair.  From now on all of the app's HTTP communication will be handled by
-Ouinet.
+From now on all of the app's HTTP communication will be handled by Ouinet.
