@@ -352,10 +352,11 @@ populate its default environment file:
 
 After an injector has finished starting, you may want to use the shell
 container to inspect and note down the contents of `injector/endpoint-*`
-(injector endpoints) and `injector/cache-*` (cache index keys) to be used by
-clients.  The injector will also generate a `tls-cert.pem` file which you
-should distribute to clients for TLS access.  Other configuration information
-like credentials can be found in `injector/ouinet-injector.conf`.
+(injector endpoints) and `injector/ed25519-public-key` (public key for HTTP
+signatures) to be used by clients.  The injector will also generate a
+`tls-cert.pem`  file which you should distribute to clients for TLS access.
+Other configuration information like credentials can be found in
+`injector/ouinet-injector.conf`.
 
 To start the injector in headless mode, you can run:
 
