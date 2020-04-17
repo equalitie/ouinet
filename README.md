@@ -285,13 +285,15 @@ from templates included in Ouinet's source code and it will be missing some
 important parameters, so you may want to stop it (see above) and use the
 **shell container** (see below) to edit `client/ouinet-client.conf`:
 
-  - Add configuration options for the injector endpoint `injector-ep` and its
-    access credentials `injector-credentials`.
+  - Add configuration options for the injector endpoint `injector-ep` (only
+    for testing) and its access credentials `injector-credentials`.
   - If the injector endpoint uses TLS, set `injector-tls-cert-file` to
     `/var/opt/ouinet/client/ssl-inj-cert.pem` and copy the injector's TLS
     certificate to that file.
-  - Set the BEP44 public key of the cache index in option
-    `index-bep44-public-key`.
+  - Set the public key used by the injector for HTTP signatures in option
+    `cache-http-public-key`.
+  - To enable the distributed cache, set option `cache-type`.  The only value
+    currently supported is `bep5-http`.
 
 After you have set up your client's configuration, you can **restart it**.
 The client's HTTP proxy endpoint should be available to the host at
@@ -400,15 +402,13 @@ Finally start the injector.  For the local build you will need to explicitly
 point it to the repository created above:
 
     $ <BUILD DIR>/injector --repo /path/to/injector-repo
-    Swarm listening on /ip4/127.0.0.1/tcp/4001
-    Swarm listening on /ip4/192.168.0.136/tcp/4001
-    Swarm listening on /ip6/::1/tcp/4001
-    BEP44 Index: <BEP44 IDX>
+    ...
+    [INFO] HTTP signing public key (Ed25519): <CACHE_PUB_KEY>
     ...
 
-Note down the `<BEP44 IDX>` string in the above output since clients will need
-it as the *distributed cache index*.  You may also find that value in the
-`cache-*` files in the injector repository.
+Note down the `<CACHE_PUB_KEY>` string in the above output since clients will
+need it as the *distributed cache index*.  You may also find that value in the
+`ed25519-public-key` file in the injector repository.
 
 When you are done testing the Ouinet injector, you may shut it down by hitting
 Ctrl+C.
@@ -416,10 +416,11 @@ Ctrl+C.
 ### Running a test client
 
 To perform some tests using a Ouinet client and an existing injector, you
-first need to know the *injector endpoint* and *credentials* (if needed), and
-a *distributed cache index*.  These use to be respectively an IP address and
-port (for testing, otherwise an I2P peer identity), a `<USER>:<PASSWORD>`
-string, and a BEP44 public key.
+first need to know the *injector endpoint* (only for testing) and
+*credentials* (if needed), its *TLS certificate*, and its *public key*.  These
+use to be respectively an IP address and port (or an I2P peer identity), a
+`<USER>:<PASSWORD>` string, a path to a PEM file, and an Ed25519 public key
+(hexadecimal or Base32).
 
 You need to configure the Ouinet client to use the aforementioned parameters.
 If you have a local build, create a copy of the `repos/client` repository
@@ -432,12 +433,13 @@ that it creates a default configuration for you.
 
 Now edit `ouinet-client.conf` in the client repository (for Docker, use the
 shell container to edit `client/ouinet-client.conf`) and add options for the
-injector endpoint and credentials and the distributed cache name.  Remember to
+injector endpoint (if testing), credentials and public key.  Remember to
 replace the values with your own:
 
     injector-ep = tcp:127.0.0.1:7070
     injector-credentials = injector_user:injector_password
-    index-bep44-public-key = 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
+    cache-http-public-key = 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
+    cache-type = bep5-http
 
 All the steps above only need to be done once.
 
