@@ -15,13 +15,12 @@ The typical Ouinet *client* node setup consists of a web browser or other
 application using a special HTTP proxy or API provided by a dedicated program
 or library on the local machine.  When the client gets a request for content,
 it attempts to retrieve the resource using several mechanisms.  It tries to
-fetch the page from a *distributed cache* (like [IPFS][]) by looking up the
-content in a *distributed cache index* (like the [BitTorrent][] DHT), and if
-not available, it contacts a trusted *injector* server over a peer-to-peer
-routing system (like [I2P][]) and asks it to fetch the page and store it in
-the distributed cache.
+fetch the page from a *distributed cache* by looking up the content in a
+*distributed cache index* (like the [BitTorrent][] DHT), and if not available,
+it contacts a trusted *injector* server over a peer-to-peer routing system
+(like [I2P][]) and asks it to fetch the page and store it in the distributed
+cache.
 
-[IPFS]: https://ipfs.io/ "InterPlanetary File System"
 [BitTorrent]: https://www.bittorrent.org/
 [I2P]: https://geti2p.net/ "Invisible Internet Project"
 
@@ -380,31 +379,6 @@ You will need to use `sudo docker-compose stop` to stop the container.
 To be able to follow its logs, you can run:
 
     $ sudo docker-compose logs --tail=100 -ft
-
-If you ever need to reset and empty the injector's cache index for some reason
-(e.g. testing) while keeping injector IDs and credentials, you may:
-
- 1. Fetch a Go IPFS binary and copy it to the data volume:
-
-        $ wget "https://dist.ipfs.io/go-ipfs/v0.4.14/go-ipfs_v0.4.14_linux-amd64.tar.gz"
-        $ tar -xf go-ipfs_v0.4.14_linux-amd64.tar.gz
-        $ sudo docker cp go-ipfs/ipfs SHELL_CONTAINER:/var/opt/ouinet
-
- 2. Stop the injector.
- 3. Run a temporary Debian container with access to the data volume:
-
-        $ sudo docker run --rm -it -v ouinet-injector_data:/mnt debian
-
- 4. In the container, run:
-
-        # cd /mnt
-        # rm -f injector/ipfs/ipfs_cache_index.*
-        # alias ipfs='./ipfs -Lc injector/ipfs'
-        # ipfs pin ls --type recursive | cut -d' ' -f1 | xargs ipfs pin rm
-        # ipfs repo gc
-        # exit
-
- 5. Start the injector.
 
 ## Testing (desktop)
 
