@@ -488,7 +488,7 @@ configuration tools:
 
   - Several buttons near the top of the page look something like this:
 
-        Injector proxy: enabled [ disable ]
+        Injector access: enabled [ disable ]
 
     They allow you to enable or disable different *request mechanisms* to
     retrieve content:
