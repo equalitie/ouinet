@@ -519,6 +519,17 @@ configuration tools:
 
   - Other information about the cache index is shown next.
 
+**Note:** For a response to be injected, its request currently needs to carry
+an `X-Ouinet-Group` header.  The [CENO Extension][] takes care of that
+whenever browsing in normal mode, and it does not when browsing in private
+mode.  Unfortunately, the Extension is not yet packaged independently and the
+only way to use it is to clone its repository locally and load it every time
+you start the browser; to do that, open Firefox's *Add-ons* window, then click
+on the gears icon, then *Debug Add-ons*, then *Load Temporary Add-on…* and
+choose the `manifest.json` file in the Extension's source tree.
+
+[CENO Extension]: https://github.com/censorship-no/ceno-ext-settings/
+
 After visiting a page with the Origin mechanism disabled and Injector
 mechanism enabled, and waiting for a short while, you should be able to
 disable all request mechanisms except for the Cache, clear the browser's
