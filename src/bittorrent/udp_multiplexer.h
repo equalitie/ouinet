@@ -56,6 +56,9 @@ public:
 
     ~UdpMultiplexer();
 
+    bool is_v4() const { return _socket.local_endpoint().address().is_v4(); }
+    bool is_v6() const { return _socket.local_endpoint().address().is_v6(); }
+
 private:
     void maintain_max_rate_bytes_per_sec( float current_rate
                                         , float max_rate

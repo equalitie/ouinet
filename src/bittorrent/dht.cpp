@@ -1516,9 +1516,11 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
     }
 }
 
+enum class IPVersion { v4, v6 };
 
 asio::ip::udp::endpoint resolve(
     const asio::executor& exec,
+    IPVersion ipv,
     const std::string& addr,
     const std::string& port,
     Cancel& cancel_signal,
@@ -1541,8 +1543,16 @@ asio::ip::udp::endpoint resolve(
         return or_throw<udp::endpoint>(yield, ec);
     }
 
-    if (it != udp::resolver::iterator()) {
-        return it->endpoint();
+    while (it != udp::resolver::iterator()) {
+        auto ep = it->endpoint();
+
+        if (ep.address().is_v4() && ipv == IPVersion::v4) {
+            return ep;
+        } else if (ep.address().is_v6() && ipv == IPVersion::v6) {
+            return ep;
+        }
+
+        ++it;
     }
 
     return or_throw<udp::endpoint>(yield, asio::error::not_found);
@@ -1568,6 +1578,7 @@ dht::DhtNode::bootstrap_single( Address bootstrap_address
         [&] (std::string addr) {
             auto ep = resolve(
                 _exec,
+                _multiplexer->is_v4() ? IPVersion::v4 : IPVersion::v6,
                 addr,
                 "6881",
                 cancel,
@@ -1760,7 +1771,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
 
             // We could not bootstrap off any of the known nodes, wait a bit
             // and try again.
-            !async_sleep(_exec, seconds(10), cancel, yield);
+            async_sleep(_exec, seconds(10), cancel, yield);
         }
     }
 
@@ -2347,17 +2358,14 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data3(
     );
 
     if (dbg) cerr << dbg << "send_query_await_reply get end " << node << " " << ec.message() << "\n";
-    sys::error_code ec_;
 
     if (cancel_signal) ec = asio::error::operation_aborted;
 
     if (ec || get_reply["y"] != "r") {
-        //wc.wait(yield[ec_]);
         return boost::none;
     }
 
     local_cancel();
-    //wc.wait(yield[ec_]);
 
     std::vector<NodeContact> closer_nodes_v;
 
