@@ -45,11 +45,13 @@ services:
     #network_mode: bridge
     #ports:
     #  - "127.0.0.1:8077:8077"  # client HTTP proxy
+    #  - "127.0.0.1:8078:8078"  # client front-end
     #
-    # Also run the command below in the shell container
-    # to modify ``listen-on-*`` options to use ``0.0.0.0``:
+    # Then edit `client/ouinet-client.conf` in the shell container
+    # so that the following options appear:
     #
-    #     sed -E 's/(^listen-on-\S+\s*=\s*)127.0.0.1(:.*)/\10.0.0.0\2/' */ouinet-*.conf
+    #     listen-on-tcp = 0.0.0.0:8077
+    #     front-end-ep = 0.0.0.0:8078
     #
     command: ["${OUINET_ROLE:-client}"]
     # The service will be restarted (also on reboot)

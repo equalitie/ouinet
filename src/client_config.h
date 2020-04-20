@@ -107,9 +107,11 @@ public:
            ("debug", "Enable debugging messages")
 
            // Client options
-           ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen")
+           ("listen-on-tcp"
+            , po::value<string>()->default_value("127.0.0.1:8077")
+            , "HTTP proxy endpoint (in <IP>:<PORT> format)")
            ("front-end-ep"
-            , po::value<string>()->default_value("127.0.0.137:8081")
+            , po::value<string>()->default_value("127.0.0.1:8078")
             , "Front-end's endpoint (in <IP>:<PORT> format)")
            ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
             , "Path to the CA certificate store file")
