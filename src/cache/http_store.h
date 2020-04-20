@@ -99,64 +99,32 @@ http_store_head_reader( const fs::path&, asio::executor
 
 //// High-level classes for HTTP response storage
 
-class AbstractHttpStore {
+// Store each response in a directory named `DIGEST[:2]/DIGEST[2:]` (where
+// `DIGEST = LOWER_HEX(SHA1(KEY))`) under the given directory.
+class HttpStore {
 public:
     using keep_func = std::function<
         bool(reader_uptr, asio::yield_context)>;
 
 public:
-    virtual ~AbstractHttpStore() = default;
-
-    // Iterate over stored responses.
-    //
-    // `keep_func` gets an open reader for the response;
-    // the response is removed if `keep_func` returns false
-    // (and there is no error).
-    //
-    // Other maintenance may be performed too.
-    virtual
-    void
-    for_each(keep_func, Cancel, asio::yield_context) = 0;
-
-    virtual
-    void
-    store( const std::string& key, http_response::AbstractReader&
-         , Cancel, asio::yield_context) = 0;
-
-    virtual
-    reader_uptr
-    reader( const std::string& key
-          , sys::error_code&) = 0;  // not const, e.g. LRU cache
-
-    // An approximate size of the store on disk, in bytes.
-    virtual
-    std::size_t
-    size(Cancel, asio::yield_context) const = 0;
-};
-
-// Store each response in a directory named `DIGEST[:2]/DIGEST[2:]` (where
-// `DIGEST = LOWER_HEX(SHA1(KEY))`) under the given directory.
-class HttpStore : public AbstractHttpStore {
-public:
     HttpStore(fs::path p, asio::executor ex)
         : path(std::move(p)), executor(ex)
     {}
 
-    ~HttpStore() override;
+    ~HttpStore();
 
     void
-    for_each(keep_func, Cancel, asio::yield_context) override;
+    for_each(keep_func, Cancel, asio::yield_context);
 
     void
     store( const std::string& key, http_response::AbstractReader&
-         , Cancel, asio::yield_context) override;
+         , Cancel, asio::yield_context);
 
     reader_uptr
-    reader( const std::string& key
-          , sys::error_code&) override;
+    reader(const std::string& key, sys::error_code&);
 
     std::size_t
-    size(Cancel, asio::yield_context) const override;
+    size(Cancel, asio::yield_context) const;
 
 private:
     fs::path path;

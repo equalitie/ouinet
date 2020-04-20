@@ -32,14 +32,14 @@ namespace fs = boost::filesystem;
 namespace bt = bittorrent;
 
 struct GarbageCollector {
-    cache::AbstractHttpStore& http_store;  // for looping over entries
-    cache::AbstractHttpStore::keep_func keep;  // caller-provided checks
+    cache::HttpStore& http_store;  // for looping over entries
+    cache::HttpStore::keep_func keep;  // caller-provided checks
 
     asio::executor _executor;
     Cancel _cancel;
 
-    GarbageCollector( cache::AbstractHttpStore& http_store
-                    , cache::AbstractHttpStore::keep_func keep
+    GarbageCollector( cache::HttpStore& http_store
+                    , cache::HttpStore::keep_func keep
                     , asio::executor ex)
         : http_store(http_store)
         , keep(move(keep))
@@ -86,7 +86,7 @@ struct Client::Impl {
     string uri_swarm_prefix;
     util::Ed25519PublicKey cache_pk;
     fs::path cache_dir;
-    unique_ptr<cache::AbstractHttpStore> http_store;
+    unique_ptr<cache::HttpStore> http_store;
     boost::posix_time::time_duration max_cached_age;
     Cancel lifetime_cancel;
     Announcer announcer;
@@ -105,7 +105,7 @@ struct Client::Impl {
     Impl( shared_ptr<bt::MainlineDht> dht_
         , util::Ed25519PublicKey& cache_pk
         , fs::path cache_dir
-        , unique_ptr<cache::AbstractHttpStore> http_store_
+        , unique_ptr<cache::HttpStore> http_store_
         , boost::posix_time::time_duration max_cached_age
         , log_level_t log_level)
         : ex(dht_->get_executor())
