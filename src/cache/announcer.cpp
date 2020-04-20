@@ -9,7 +9,7 @@
 
 using namespace std;
 using namespace ouinet;
-using namespace ouinet::cache::bep5_http;
+using namespace ouinet::cache;
 
 using namespace chrono_literals;
 

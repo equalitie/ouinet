@@ -5,7 +5,7 @@
 #include "../../logger.h"
 #include <memory>
 
-namespace ouinet { namespace cache { namespace bep5_http {
+namespace ouinet { namespace cache {
 
 class Announcer {
 private:
@@ -27,4 +27,4 @@ private:
     std::unique_ptr<Loop> _loop;
 };
 
-}}} // namespaces
+}} // namespaces

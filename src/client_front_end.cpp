@@ -7,7 +7,7 @@
 #include "version.h"
 #include "upnp.h"
 
-#include "cache/bep5_http/client.h"
+#include "cache/client.h"
 
 #include <boost/asio/ip/address.hpp>
 #include <boost/optional/optional_io.hpp>
@@ -139,7 +139,7 @@ static ostream& operator<<(ostream& os, const ClientFrontEnd::Task& task) {
 
 ClientFrontEnd::ClientFrontEnd()
     : _log_level_input(new Input<log_level_t>("Log level", "loglevel", { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT }, logger.get_threshold()))
-    , _bep5_log_level_input(new Input<log_level_t>("Bep5Http log level", "bep5_loglevel", { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT }, INFO))
+    , _cache_log_level_input(new Input<log_level_t>("Bep5Http log level", "bep5_loglevel", { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT }, INFO))
 {}
 
 void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, stringstream& ss
@@ -171,7 +171,7 @@ static void load_log_file(stringstream& out_ss) {
 
 void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , const Request& req, Response& res, stringstream& ss
-                                  , cache::bep5_http::Client* bep5_cache
+                                  , cache::Client* cache_client
                                   , Yield yield)
 {
     res.set(http::field::content_type, "text/html");
@@ -182,10 +182,10 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         logger.set_threshold(_log_level_input->current_value);
     }
 
-    if (bep5_cache) {
-        _bep5_log_level_input->current_value = bep5_cache->get_log_level();
-        if (_bep5_log_level_input->update(target)) {
-            bep5_cache->set_log_level(_bep5_log_level_input->current_value);
+    if (cache_client) {
+        _cache_log_level_input->current_value = cache_client->get_log_level();
+        if (_cache_log_level_input->update(target)) {
+            cache_client->set_log_level(_cache_log_level_input->current_value);
         }
     }
 
@@ -227,10 +227,10 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         else if (target.find("?logfile=disable") != string::npos) {
             disable_log_to_file();
         }
-        else if (target.find("?purge_cache=") != string::npos && bep5_cache) {
+        else if (target.find("?purge_cache=") != string::npos && cache_client) {
             Cancel cancel;
             sys::error_code ec;
-            bep5_cache->local_purge(cancel, yield[ec]);
+            cache_client->local_purge(cancel, yield[ec]);
         }
 
         // Redirect back to the portal.
@@ -293,8 +293,8 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         ss << "        </ul>\n";
     }
 
-    if (bep5_cache) {
-        ss << *_bep5_log_level_input;
+    if (cache_client) {
+        ss << *_cache_log_level_input;
 
         auto max_age = config.max_cached_age();
         ss << ( boost::format("Content cached locally if newer than %d seconds"
@@ -303,7 +303,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
         Cancel cancel;
         sys::error_code ec;
-        auto local_size = bep5_cache->local_size(cancel, yield[ec]);
+        auto local_size = cache_client->local_size(cancel, yield[ec]);
         ss << "Approximate size of content cached locally: ";
         if (ec) ss << "(unknown)";
         else ss << (boost::format("%.02f MiB") % (local_size / 1048576.));
@@ -342,7 +342,7 @@ void ClientFrontEnd::handle_status( ClientConfig& config
                                   , const UPnPs& upnps
                                   , const util::UdpServerReachabilityAnalysis* reachability
                                   , const Request& req, Response& res, stringstream& ss
-                                  , cache::bep5_http::Client* bep5_cache
+                                  , cache::Client* cache_client
                                   , Yield yield)
 {
     res.set(http::field::content_type, "application/json");
@@ -395,10 +395,10 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         }
     }
 
-    if (bep5_cache) {
+    if (cache_client) {
         Cancel cancel;
         sys::error_code ec;
-        auto sz = bep5_cache->local_size(cancel, yield[ec]);
+        auto sz = cache_client->local_size(cancel, yield[ec]);
         if (ec) {
             LOG_ERROR( "Front-end: Failed to get local cache size ec:"
                      , ec.message());
@@ -412,7 +412,7 @@ void ClientFrontEnd::handle_status( ClientConfig& config
 
 Response ClientFrontEnd::serve( ClientConfig& config
                               , const Request& req
-                              , cache::bep5_http::Client* bep5_cache
+                              , cache::Client* cache_client
                               , const CACertificate& ca
                               , boost::optional<uint32_t> udp_port
                               , const UPnPs& upnps
@@ -438,11 +438,11 @@ Response ClientFrontEnd::serve( ClientConfig& config
     } else if (path == "/api/status") {
         sys::error_code e;
         handle_status( config, udp_port, upnps, reachability
-                     , req, res, ss, bep5_cache
+                     , req, res, ss, cache_client
                      , yield[e]);
     } else {
         sys::error_code e;
-        handle_portal(config, req, res, ss, bep5_cache, yield[e]);
+        handle_portal(config, req, res, ss, cache_client, yield[e]);
     }
 
     Response::body_type::reader reader(res, res.body());

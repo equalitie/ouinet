@@ -12,9 +12,9 @@
 #include "util/yield.h"
 #include "logger.h"
 
-namespace ouinet { namespace cache { namespace bep5_http {
+namespace ouinet { namespace cache {
     class Client;
-} } }
+} }
 
 namespace ouinet {
 
@@ -63,7 +63,7 @@ public:
 public:
     Response serve( ClientConfig&
                   , const http::request<http::string_body>&
-                  , cache::bep5_http::Client*
+                  , cache::Client*
                   , const CACertificate&
                   , boost::optional<uint32_t> udp_port
                   , const UPnPs&
@@ -85,7 +85,7 @@ private:
     bool _show_pending_tasks = false;
 
     std::unique_ptr<Input<log_level_t>> _log_level_input;
-    std::unique_ptr<Input<log_level_t>> _bep5_log_level_input;
+    std::unique_ptr<Input<log_level_t>> _cache_log_level_input;
 
     boost::intrusive::list
         < Task
@@ -99,7 +99,7 @@ private:
                       , const Request&
                       , Response&
                       , std::stringstream&
-                      , cache::bep5_http::Client*
+                      , cache::Client*
                       , Yield);
 
     void handle_status( ClientConfig&
@@ -109,7 +109,7 @@ private:
                       , const Request&
                       , Response&
                       , std::stringstream&
-                      , cache::bep5_http::Client*
+                      , cache::Client*
                       , Yield);
 };
 

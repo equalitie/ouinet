@@ -4,7 +4,7 @@
 #include "../../response_reader.h"
 #include "../../util/crypto.h"
 #include "../../util/yield.h"
-#include "../cache_entry.h"
+#include "cache_entry.h"
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/filesystem.hpp>
 
@@ -17,7 +17,6 @@ namespace bittorrent {
 class Session;
 
 namespace cache {
-namespace bep5_http {
 
 class Client {
 private:
@@ -71,4 +70,4 @@ private:
     std::unique_ptr<Impl> _impl;
 };
 
-}}} // namespaces
+}} // namespaces

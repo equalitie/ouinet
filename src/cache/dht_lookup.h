@@ -15,7 +15,7 @@ namespace std {
     };
 }
 
-namespace ouinet { namespace cache { namespace bep5_http {
+namespace ouinet { namespace cache {
 
 class DhtLookup {
 private:
@@ -148,4 +148,4 @@ private:
 };
 
 
-}}} // namespaces
+}} // namespaces

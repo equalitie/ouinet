@@ -2,30 +2,30 @@
 #include "announcer.h"
 #include "dht_lookup.h"
 #include "local_peer_discovery.h"
-#include "../dht_groups.h"
-#include "../http_sign.h"
-#include "../http_store.h"
-#include "../../http_util.h"
-#include "../../parse/number.h"
-#include "../../util/wait_condition.h"
-#include "../../util/set_io.h"
-#include "../../util/async_generator.h"
-#include "../../util/lru_cache.h"
-#include "../../util/handler_tracker.h"
-#include "../../bittorrent/dht.h"
-#include "../../bittorrent/is_martian.h"
-#include "../../ouiservice/utp.h"
-#include "../../logger.h"
-#include "../../async_sleep.h"
-#include "../../constants.h"
-#include "../../session.h"
-#include "../../bep5_swarms.h"
+#include "dht_groups.h"
+#include "http_sign.h"
+#include "http_store.h"
+#include "../http_util.h"
+#include "../parse/number.h"
+#include "../util/wait_condition.h"
+#include "../util/set_io.h"
+#include "../util/async_generator.h"
+#include "../util/lru_cache.h"
+#include "../util/handler_tracker.h"
+#include "../bittorrent/dht.h"
+#include "../bittorrent/is_martian.h"
+#include "../ouiservice/utp.h"
+#include "../logger.h"
+#include "../async_sleep.h"
+#include "../constants.h"
+#include "../session.h"
+#include "../bep5_swarms.h"
 #include <ctime>
 #include <map>
 
 using namespace std;
 using namespace ouinet;
-using namespace cache::bep5_http;
+using namespace ouinet::cache;
 using udp = asio::ip::udp;
 
 namespace fs = boost::filesystem;

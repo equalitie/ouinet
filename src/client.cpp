@@ -17,7 +17,7 @@
 #include <iostream>
 #include <cstdlib>  // for atexit()
 
-#include "cache/bep5_http/client.h"
+#include "cache/client.h"
 
 #include "namespaces.h"
 #include "origin_pools.h"
@@ -150,7 +150,7 @@ public:
     void start();
 
     void stop() {
-        _bep5_http_cache = nullptr;
+        _cache = nullptr;
         _upnps.clear();
         _shutdown_signal();
         if (_injector) _injector->stop();
@@ -283,7 +283,7 @@ private:
     unique_ptr<OuiServiceImplementationClient>
     maybe_wrap_tls(unique_ptr<OuiServiceImplementationClient>);
 
-    cache::bep5_http::Client* get_cache() const { return _bep5_http_cache.get(); }
+    cache::Client* get_cache() const { return _cache.get(); }
 
     void serve_utp_request(GenericStream, Yield);
 
@@ -360,7 +360,7 @@ private:
     std::unique_ptr<CACertificate> _ca_certificate;
     util::LruCache<string, string> _ssl_certificate_cache;
     std::unique_ptr<OuiServiceClient> _injector;
-    std::unique_ptr<cache::bep5_http::Client> _bep5_http_cache;
+    std::unique_ptr<cache::Client> _cache;
 
     ClientFrontEnd _front_end;
     Signal<void()> _shutdown_signal;
@@ -415,7 +415,7 @@ void handle_bad_request( GenericStream& con
 void
 Client::State::serve_utp_request(GenericStream con, Yield yield)
 {
-    assert(_bep5_http_cache);
+    assert(_cache);
     Cancel cancel = _shutdown_signal;
 
     sys::error_code ec;
@@ -436,7 +436,7 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
     if (ec || cancel) return;
 
     if (req.method() != http::verb::connect) {
-        _bep5_http_cache->serve_local(req, con, cancel, yield[ec]);
+        _cache->serve_local(req, con, cancel, yield[ec]);
         return;
     }
 
@@ -568,7 +568,7 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
 
     auto res = _front_end.serve( _config
                                , rq
-                               , _bep5_http_cache.get()
+                               , _cache.get()
                                , *_ca_certificate
                                , udp_port
                                , _upnps
@@ -1940,18 +1940,18 @@ void Client::State::setup_cache()
 
             assert(!_shutdown_signal || ec == asio::error::operation_aborted);
 
-            _bep5_http_cache
-                = cache::bep5_http::Client::build( dht
-                                                 , *_config.cache_http_pub_key()
-                                                 , _config.repo_root()/"bep5_http"
-                                                 , _config.max_cached_age()
-                                                 , logger.get_threshold()
-                                                 , yield[ec]);
+            _cache
+                = cache::Client::build( dht
+                                      , *_config.cache_http_pub_key()
+                                      , _config.repo_root()/"bep5_http"
+                                      , _config.max_cached_age()
+                                      , logger.get_threshold()
+                                      , yield[ec]);
 
             if (cancel) ec = asio::error::operation_aborted;
             if (ec) {
                 if (ec != asio::error::operation_aborted) {
-                    LOG_ERROR("Failed to initialize cache::bep5_http::Client: "
+                    LOG_ERROR("Failed to initialize cache::Client: "
                              , ec.message());
                 }
                 return;
