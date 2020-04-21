@@ -58,35 +58,6 @@ namespace ouinet { namespace http_ {
 
 namespace ouinet { namespace cache {
 
-// Ouinet-specific declarations for injection using HTTP signatures
-// ----------------------------------------------------------------
-
-// Get an extended version of the given response head
-// with an additional signature header and
-// other headers required to support that signature and
-// a future one for the full message head (as part of the trailer).
-//
-// Example:
-//
-//     ...
-//     X-Ouinet-Version: 2
-//     X-Ouinet-URI: https://example.com/foo
-//     X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
-//     X-Ouinet-BSigs: keyId="...",algorithm="hs2019",size=65536
-//     X-Ouinet-Sig0: keyId="...",algorithm="hs2019",created=1516048310,
-//       headers="(response-status) (created) ... x-ouinet-injection",
-//       signature="..."
-//     Transfer-Encoding: chunked
-//     Trailer: X-Ouinet-Data-Size, Digest, X-Ouinet-Sig1
-//
-http::response_header<>
-http_injection_head( const http::request_header<>& rqh
-                   , http::response_header<> rsh
-                   , const std::string& injection_id
-                   , std::chrono::seconds::rep injection_ts
-                   , const ouinet::util::Ed25519PrivateKey&
-                   , const std::string& key_id);
-
 // Get an extended version of the given response trailer
 // with added headers completing the signature of the message.
 //
@@ -151,19 +122,6 @@ http_injection_trailer( const http::response_header<>& rsh
 http::response_header<>
 http_injection_merge( http::response_header<> rsh
                     , const http::fields& rst);
-
-// Verify that the given response head contains
-// good signatures for it from the given public key.
-// Return a head which only contains headers covered by at least one such signature,
-// plus good signatures themselves and signatures for unknown keys.
-// Bad signatures are dropped to avoid propagating them along good signatures.
-// Framing headers are preserved.
-//
-// If no good signatures exist, or any other error happens,
-// return an empty head.
-http::response_header<>
-http_injection_verify( http::response_header<>
-                     , const ouinet::util::Ed25519PublicKey&);
 
 // Get a `keyId` encoding the given public key itself.
 std::string

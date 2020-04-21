@@ -94,6 +94,10 @@ public:
         return digest_impl(hash, std::forward<Args>(args)...);
     }
 
+    static constexpr size_t size() {
+        return DIGEST_LENGTH;
+    }
+
 private:
     template<class Hash>
     static

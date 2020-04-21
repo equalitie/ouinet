@@ -1,4 +1,5 @@
 #include "http_sign.h"
+#include "signed_head.h"
 
 #include <algorithm>
 #include <map>
@@ -27,70 +28,12 @@
 
 namespace ouinet { namespace cache {
 
-static const auto initial_signature_hdr = http_::response_signature_hdr_pfx + "0";
-static const auto final_signature_hdr = http_::response_signature_hdr_pfx + "1";
-
-// The only signature algorithm supported by this implementation.
-static const std::string sig_alg_hs2019("hs2019");
-
 static const std::string key_id_pfx("ed25519=");
 
 using sig_array_t = util::Ed25519PublicKey::sig_array_t;
 using block_digest_t = util::SHA512::digest_type;
 using opt_sig_array_t = boost::optional<sig_array_t>;
 using opt_block_digest_t = boost::optional<block_digest_t>;
-
-static
-http::response_header<>
-without_framing(const http::response_header<>& rsh)
-{
-    http::response<http::empty_body> rs(rsh);
-    rs.chunked(false);  // easier with a whole response
-    rs.erase(http::field::content_length);  // 0 anyway because of empty body
-    rs.erase(http::field::trailer);
-    return rs.base();
-}
-
-http::response_header<>
-http_injection_head( const http::request_header<>& rqh
-                   , http::response_header<> rsh
-                   , const std::string& injection_id
-                   , std::chrono::seconds::rep injection_ts
-                   , const util::Ed25519PrivateKey& sk
-                   , const std::string& key_id)
-{
-    using namespace ouinet::http_;
-    // TODO: This should be a `static_assert`.
-    assert(protocol_version_hdr_current == protocol_version_hdr_v4);
-
-    rsh.set(protocol_version_hdr, protocol_version_hdr_v4);
-    rsh.set(response_uri_hdr, rqh.target());
-    rsh.set(response_injection_hdr
-           , boost::format("id=%s,ts=%d") % injection_id % injection_ts);
-    static const auto fmt_ = "keyId=\"%s\""
-                             ",algorithm=\"" + sig_alg_hs2019 + "\""
-                             ",size=%d";
-    rsh.set( response_block_signatures_hdr
-           , boost::format(fmt_) % key_id % response_data_block);
-
-    // Create a signature of the initial head.
-    auto to_sign = without_framing(rsh);
-    rsh.set(initial_signature_hdr, http_signature(to_sign, sk, key_id, injection_ts));
-
-    // Enabling chunking is easier with a whole respone,
-    // and we do not care about content length anyway.
-    http::response<http::empty_body> rs(std::move(rsh));
-    rs.chunked(true);
-    static const std::string trfmt_ = ( "%s%s"
-                                      + response_data_size_hdr + ", Digest, "
-                                      + final_signature_hdr);
-    auto trfmt = boost::format(trfmt_);
-    auto trhdr = rs[http::field::trailer];
-    rs.set( http::field::trailer
-          , (trfmt % trhdr % (trhdr.empty() ? "" : ", ")).str() );
-
-    return rs.base();
-}
 
 http::fields
 http_injection_trailer( const http::response_header<>& rsh
@@ -110,12 +53,12 @@ http_injection_trailer( const http::response_header<>& rsh
     // initial head, minus chunking (and related headers) and its signature,
     // plus trailer headers.
     // Use `...-Data-Size` internal header instead on `Content-Length`.
-    auto to_sign = without_framing(rsh);
-    to_sign.erase(initial_signature_hdr);
+    auto to_sign = SignedHead::without_framing(rsh);
+    to_sign.erase(SignedHead::initial_signature_hdr());
     for (auto& hdr : rst)
         to_sign.set(hdr.name_string(), hdr.value());
 
-    rst.set(final_signature_hdr, http_signature(to_sign, sk, key_id, ts));
+    rst.set(SignedHead::final_signature_hdr(), http_signature(to_sign, sk, key_id, ts));
     return rst;
 }
 
@@ -204,82 +147,12 @@ http::response_header<>
 http_injection_merge( http::response_header<> rsh
                     , const http::fields& rst)
 {
-    rsh = without_framing(std::move(rsh));
+    rsh = SignedHead::without_framing(std::move(rsh));
 
     // Extend the head with trailer headers.
     for (const auto& th : rst)
         insert_trailer(th, rsh);
 
-    return rsh;
-}
-
-http::response_header<>
-http_injection_verify( http::response_header<> rsh
-                     , const util::Ed25519PublicKey& pk)
-{
-    // Put together the head to be verified:
-    // given head, minus chunking (and related headers), and signatures themselves.
-    // Collect signatures found in the meanwhile.
-    http::response_header<> to_verify, sig_headers;
-    to_verify = without_framing(rsh);
-    for (auto hit = rsh.begin(); hit != rsh.end();) {
-        auto hn = hit->name_string();
-        if (boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx)) {
-            sig_headers.insert(hit->name(), hn, hit->value());
-            to_verify.erase(hn);
-            hit = rsh.erase(hit);  // will re-add at the end, minus bad signatures
-        } else hit++;
-    }
-
-    auto keyId = http_key_id_for_injection(pk);  // TODO: cache this
-    bool sig_ok = false;
-    http::fields extra = rsh;  // all extra for the moment
-
-    // Go over signature headers: parse, select, verify.
-    int sig_idx = 0;
-    auto keep_signature = [&] (const auto& sig) {
-        rsh.insert(http_::response_signature_hdr_pfx + std::to_string(sig_idx++), sig);
-    };
-    for (auto& hdr : sig_headers) {
-        auto hn = hdr.name_string();
-        auto hv = hdr.value();
-        auto sig = HttpSignature::parse(hv);
-        if (!sig) {
-            LOG_WARN("Malformed HTTP signature in header: ", hn);
-            continue;  // drop signature
-        }
-        if (sig->keyId != keyId) {
-            LOG_DEBUG("Unknown key for HTTP signature in header: ", hn);
-            keep_signature(hv);
-            continue;
-        }
-        if (!(sig->algorithm.empty()) && sig->algorithm != sig_alg_hs2019) {
-            LOG_WARN( "Unsupported algorithm \"", sig->algorithm
-                    , "\" for HTTP signature in header: ", hn);
-            continue;  // drop signature
-        }
-        auto ret = sig->verify(to_verify, pk);
-        if (!ret.first) {
-            LOG_WARN("Head does not match HTTP signature in header: ", hn);
-            continue;  // drop signature
-        }
-        LOG_DEBUG("Head matches HTTP signature: ", hn);
-        sig_ok = true;
-        keep_signature(hv);
-        for (auto ehit = extra.begin(); ehit != extra.end();)  // note extra headers
-            if (ret.second.find(ehit->name_string()) == ret.second.end())
-                ehit = extra.erase(ehit);  // no longer an extra header
-            else
-                ehit++;  // still an extra header
-    }
-
-    if (!sig_ok)
-        return {};
-
-    for (auto& eh : extra) {
-        LOG_WARN("Dropping header not in HTTP signatures: ", eh.name_string());
-        rsh.erase(eh.name_string());
-    }
     return rsh;
 }
 
@@ -568,7 +441,7 @@ http_signature( const http::response_header<>& rsh
               , std::chrono::seconds::rep ts)
 {
     static const auto fmt_ = "keyId=\"%s\""
-                             ",algorithm=\"" + sig_alg_hs2019 + "\""
+                             ",algorithm=\"" + SignedHead::sig_alg_hs2019() + "\""
                              ",created=%d"
                              ",headers=\"%s\""
                              ",signature=\"%s\"";
@@ -623,9 +496,9 @@ struct SigningReader::Impl {
         if (ec_) return http_response::Part(std::move(inh_orig));  // will not inject, just proxy
 
         _do_inject = true;
-        inh = cache::http_injection_head( _rqh, std::move(inh)
-                                        , _injection_id, _injection_ts
-                                        , _sk, _httpsig_key_id);
+        inh = cache::SignedHead( _rqh, std::move(inh)
+                               , _injection_id, _injection_ts
+                               , _sk, _httpsig_key_id);
         // We will use the trailer to send the body digest and head signature.
         assert(http::response<http::empty_body>(inh).chunked());
 
@@ -839,7 +712,7 @@ HttpBlockSigs::parse(boost::string_view bsigs)
         LOG_WARN("Missing or invalid key identifier in block signatures HTTP header");
         return {};
     }
-    if (hbs.algorithm != sig_alg_hs2019) {
+    if (hbs.algorithm != SignedHead::sig_alg_hs2019()) {
         LOG_WARN("Missing or invalid algorithm in block signatures HTTP header");
         return {};
     }
@@ -897,7 +770,7 @@ HttpSignature::verify( const http::response_header<>& rsh
 {
     // The key may imply an algorithm,
     // but an explicit algorithm should not conflict with the key.
-    assert(algorithm.empty() || algorithm == sig_alg_hs2019);
+    assert(algorithm.empty() || algorithm == SignedHead::sig_alg_hs2019());
 
     auto vfy_head = verification_head(rsh, *this);
     if (!vfy_head)  // e.g. because of missing headers
@@ -1001,12 +874,13 @@ struct VerifyingReader::Impl {
                 }
             }
         }
-        // Verify head signature.
-        _head = cache::http_injection_verify(std::move(inh), _pk);
-        if (_head.cbegin() == _head.cend()) {
+        // Verify head signature
+        auto head_o = cache::SignedHead::verify(std::move(inh), _pk);
+        if (!head_o) {
             LOG_WARN("Failed to verify HTTP head signatures");
             return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
         }
+        _head = std::move(*head_o);
         _uri = _head[http_::response_uri_hdr].to_string();
         // Check that the response is chunked.
         if (_check_framing && !http_response::Head(_head).chunked()) {
@@ -1181,9 +1055,10 @@ struct VerifyingReader::Impl {
                 sigs_in_trailer = true;
         }
         if (sigs_in_trailer) {
-            _head = cache::http_injection_verify(std::move(_head), _pk);
-            if (_head.cbegin() == _head.cend())  // bad signature in trailer
+            auto head_o = cache::SignedHead::verify(std::move(_head), _pk);
+            if (!head_o)  // bad signature in trailer
                 return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
+            _head = std::move(*head_o);
         }
 
         _pending_parts.push(std::move(intr));
