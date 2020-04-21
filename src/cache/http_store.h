@@ -6,6 +6,7 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/filesystem/path.hpp>
 
+#include "hash_list.h"
 #include "../constants.h"
 #include "../response_reader.h"
 #include "../util/signal.h"
@@ -125,6 +126,9 @@ public:
 
     std::size_t
     size(Cancel, asio::yield_context) const;
+
+    HashList
+    load_hash_list(const std::string& key, Cancel, asio::yield_context) const;
 
 private:
     fs::path path;

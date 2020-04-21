@@ -23,7 +23,6 @@
 #include "../util/atomic_file.h"
 #include "../util/bytes.h"
 #include "../util/file_io.h"
-#include "../util/hash.h"
 #include "../util/str.h"
 #include "../util/variant.h"
 #include "http_sign.h"
@@ -142,14 +141,6 @@ struct SigEntry {
             exts << (boost::format(fmt_hx) % prev_digest);
 
         return exts.str();
-    }
-
-    static
-    parse_buffer create_parse_buffer()
-    {
-        // We may use a flat buffer or something like that,
-        // but this will suffice for the moment.
-        return {};
     }
 
     template<class Stream>
@@ -456,9 +447,6 @@ protected:
     {
         assert(_is_head_done);
         if (!sigsf.is_open()) return boost::none;
-
-        if (sigs_buffer.size() == 0)
-            sigs_buffer = SigEntry::create_parse_buffer();
 
         return SigEntry::parse(sigsf, sigs_buffer, cancel, yield);
     }
@@ -971,6 +959,77 @@ HttpStore::size( Cancel cancel
     auto sz = recursive_dir_size(path, ec);
     if (cancel) ec = asio::error::operation_aborted;
     return or_throw(yield, ec, sz);
+}
+
+HashList
+HttpStore::load_hash_list( const std::string& key
+                         , Cancel cancel
+                         , asio::yield_context yield) const
+{
+    auto dir = path_from_key(path, key);
+
+    sys::error_code ec;
+
+    auto headf = util::file_io::open_readonly(executor, dir / head_fname, ec);
+    if (ec) return or_throw<HashList>(yield, ec);
+
+    auto sigsf = util::file_io::open_readonly(executor, dir / sigs_fname, ec);
+    if (ec) return or_throw<HashList>(yield, ec);
+
+    auto bodyf = util::file_io::open_readonly(executor, dir / body_fname, ec);
+    if (ec) return or_throw<HashList>(yield, ec);
+
+    HashList hl;
+
+    boost::optional<SigEntry> last_sig_entry;
+    std::string sig_buffer;
+
+    while(true) {
+        auto opt_sig_entry = SigEntry::parse(sigsf, sig_buffer, cancel, yield[ec]);
+
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec) return or_throw<HashList>(yield, ec);
+
+        if (!opt_sig_entry) break;
+
+        last_sig_entry = opt_sig_entry;
+
+        if (!opt_sig_entry->prev_digest.empty()) {
+            hl.hashes.push_back(opt_sig_entry->prev_digest);
+        }
+    }
+
+    if (!last_sig_entry) return or_throw<HashList>(yield, asio::error::bad_descriptor);
+
+    util::file_io::fseek(bodyf, last_sig_entry->offset, ec);
+    if (ec) return or_throw<HashList>(yield, ec);
+
+    auto decoded_prev_digest = util::base64_decode(last_sig_entry->prev_digest);
+
+    if (decoded_prev_digest.size() != util::SHA512::size())
+        return or_throw<HashList>(yield, asio::error::bad_descriptor);
+
+    size_t size = util::file_io::file_remaining_size(bodyf, ec);
+    if (ec) return or_throw<HashList>(yield, ec);
+
+    if (size > http_::response_data_block_max) {
+        return or_throw<HashList>(yield, asio::error::no_data);
+    }
+
+    std::vector<uint8_t> last_block_buffer(size);
+
+    auto len = asio::async_read(bodyf, asio::buffer(last_block_buffer), yield[ec]);
+    assert(size == len);
+
+    util::SHA512 last_block_hash;
+    last_block_hash.update(decoded_prev_digest);
+    last_block_hash.update(last_block_buffer);
+
+    hl.hashes.push_back(util::base64_encode(last_block_hash.close()));
+
+    hl.signature = last_sig_entry->signature;
+
+    return hl;
 }
 
 }} // namespaces
