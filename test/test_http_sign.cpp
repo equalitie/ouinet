@@ -222,10 +222,10 @@ BOOST_AUTO_TEST_CASE(test_http_sign) {
     auto req_h = get_request_header();
 
     const auto sk = get_private_key();
-    const auto key_id = cache::http_key_id_for_injection(sk.public_key());
+    const auto key_id = cache::SignedHead::encode_key_id(sk.public_key());
     BOOST_REQUIRE_EQUAL(key_id, ("ed25519=" + inj_b64pk));
 
-    rs_head = cache::SignedHead::sign_response(req_h, std::move(rs_head), inj_id, inj_ts, sk, key_id);
+    rs_head = cache::SignedHead::sign_response(req_h, std::move(rs_head), inj_id, inj_ts, sk);
 
     http::fields trailer;
     trailer = cache::http_injection_trailer( rs_head, std::move(trailer)
@@ -274,7 +274,7 @@ BOOST_AUTO_TEST_CASE(test_http_verify) {
     auto rs_head_signed = parser.get().base();
 
     const auto pk = get_public_key();
-    const auto key_id = cache::http_key_id_for_injection(pk);
+    const auto key_id = cache::SignedHead::encode_key_id(pk);
     BOOST_REQUIRE(key_id == ("ed25519=" + inj_b64pk));
 
     // Add an unexpected header.
@@ -381,7 +381,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
                 if (auto inh = opt_part->as_head()) {
                     auto hbsh = (*inh)[http_::response_block_signatures_hdr];
                     BOOST_REQUIRE(!hbsh.empty());
-                    auto hbs = cache::HttpBlockSigs::parse(hbsh);
+                    auto hbs = cache::SignedHead::BlockSigs::parse(hbsh);
                     BOOST_REQUIRE(hbs);
                     // Test data block signatures are split according to this size.
                     BOOST_CHECK_EQUAL(hbs->size, 65536);

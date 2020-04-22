@@ -127,22 +127,6 @@ http_injection_merge( http::response_header<> rsh
 std::string
 http_key_id_for_injection(const ouinet::util::Ed25519PublicKey&);
 
-// Decode the given `keyId` into a public key.
-boost::optional<util::Ed25519PublicKey>
-http_decode_key_id(boost::string_view key_id);
-
-// A simple container for a parsed block signatures HTTP header.
-// Only the `hs2019` algorithm with an explicit key is supported,
-// so the ready-to-use key is left in `pk`.
-struct HttpBlockSigs {
-    util::Ed25519PublicKey pk;
-    boost::string_view algorithm;  // always "hs2019"
-    size_t size;
-
-    static
-    boost::optional<HttpBlockSigs> parse(boost::string_view);
-};
-
 // Allows reading parts of a response from stream `in`
 // while signing with the private key `sk`.
 class SigningReader : public ouinet::http_response::Reader {

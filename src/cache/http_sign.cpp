@@ -28,8 +28,6 @@
 
 namespace ouinet { namespace cache {
 
-static const std::string key_id_pfx("ed25519=");
-
 using sig_array_t = util::Ed25519PublicKey::sig_array_t;
 using block_digest_t = util::SHA512::digest_type;
 using opt_sig_array_t = boost::optional<sig_array_t>;
@@ -154,22 +152,6 @@ http_injection_merge( http::response_header<> rsh
         insert_trailer(th, rsh);
 
     return rsh;
-}
-
-std::string
-http_key_id_for_injection(const util::Ed25519PublicKey& pk)
-{
-    return key_id_pfx + util::base64_encode(pk.serialize());
-}
-
-boost::optional<util::Ed25519PublicKey>
-http_decode_key_id(boost::string_view key_id)
-{
-    if (!key_id.starts_with(key_id_pfx)) return {};
-    auto decoded_pk = util::base64_decode(key_id.substr(key_id_pfx.size()));
-    if (decoded_pk.size() != util::Ed25519PublicKey::key_size) return {};
-    auto pk_array = util::bytes::to_array<uint8_t, util::Ed25519PrivateKey::key_size>(decoded_pk);
-    return util::Ed25519PublicKey(std::move(pk_array));
 }
 
 template<typename T, size_t N>
@@ -469,8 +451,7 @@ struct SigningReader::Impl {
     const std::string _injection_id;
     const std::chrono::seconds::rep _injection_ts;
     const util::Ed25519PrivateKey _sk;
-
-    std::string _httpsig_key_id;
+    const std::string _httpsig_key_id;
 
     Impl( http::request_header<> rqh
         , std::string injection_id
@@ -480,8 +461,8 @@ struct SigningReader::Impl {
         , _injection_id(std::move(injection_id))
         , _injection_ts(std::move(injection_ts))
         , _sk(std::move(sk))
+        , _httpsig_key_id(SignedHead::encode_key_id(_sk.public_key()))
     {
-        _httpsig_key_id = http_key_id_for_injection(_sk.public_key());  // TODO: cache this
     }
 
     bool _do_inject = false;
@@ -498,7 +479,7 @@ struct SigningReader::Impl {
         _do_inject = true;
         inh = cache::SignedHead( _rqh, std::move(inh)
                                , _injection_id, _injection_ts
-                               , _sk, _httpsig_key_id);
+                               , _sk);
         // We will use the trailer to send the body digest and head signature.
         assert(http::response<http::empty_body>(inh).chunked());
 
@@ -656,78 +637,11 @@ SigningReader::is_done() const
 
 // end SigningReader
 
-static bool
-has_comma_in_quotes(const boost::string_view& s) {
-    // A comma is between quotes if
-    // the number of quotes before it is odd.
-    int quotes_seen = 0;
-    for (auto c : s) {
-        if (c == '"') {
-            quotes_seen++;
-            continue;
-        }
-        if ((c == ',') && (quotes_seen % 2 != 0))
-            return true;
-    }
-    return false;
-}
-
-boost::optional<HttpBlockSigs>
-HttpBlockSigs::parse(boost::string_view bsigs)
-{
-    // TODO: proper support for quoted strings
-    if (has_comma_in_quotes(bsigs)) {
-        LOG_WARN("Commas in quoted arguments of block signatures HTTP header are not yet supported");
-        return {};
-    }
-
-    HttpBlockSigs hbs;
-    bool valid_pk = false;
-    for (boost::string_view item : SplitString(bsigs, ',')) {
-        beast::string_view key, value;
-        std::tie(key, value) = split_string_pair(item, '=');
-        // Unquoted values:
-        if (key == "size") {
-            auto sz = parse::number<size_t>(value);
-            hbs.size = sz ? *sz : 0; continue;
-        }
-        // Quoted values:
-        if (value.size() < 2 || value[0] != '"' || value[value.size() - 1] != '"') {
-            LOG_WARN("Invalid quoting in block signatures HTTP header");
-            return {};
-        }
-        value.remove_prefix(1);
-        value.remove_suffix(1);
-        if (key == "keyId") {
-            auto pk = http_decode_key_id(value);
-            if (!pk) continue;
-            hbs.pk = *pk;
-            valid_pk = true;
-            continue;
-        }
-        if (key == "algorithm") {hbs.algorithm = value; continue;}
-        return {};
-    }
-    if (!valid_pk) {
-        LOG_WARN("Missing or invalid key identifier in block signatures HTTP header");
-        return {};
-    }
-    if (hbs.algorithm != SignedHead::sig_alg_hs2019()) {
-        LOG_WARN("Missing or invalid algorithm in block signatures HTTP header");
-        return {};
-    }
-    if (hbs.size == 0) {
-        LOG_WARN("Missing or invalid size in block signatures HTTP header");
-        return {};
-    }
-    return hbs;
-}
-
 boost::optional<HttpSignature>
 HttpSignature::parse(boost::string_view sig)
 {
     // TODO: proper support for quoted strings
-    if (has_comma_in_quotes(sig)) {
+    if (SignedHead::has_comma_in_quotes(sig)) {
         LOG_WARN("Commas in quoted arguments of HTTP signatures are not yet supported");
         return {};
     }
@@ -816,10 +730,8 @@ struct VerifyingReader::Impl {
     {
     }
 
-    ouinet::http_response::Head _head;  // verified head; keep for later use
-    std::string _uri;  // for warnings, should use `Yield::log` instead
-    std::string _injection_id;
-    boost::optional<HttpBlockSigs> _bs_params;
+    //ouinet::http_response::Head _head;  // verified head; keep for later use
+    SignedHead _head;  // verified head; keep for later use
     boost::optional<size_t> _range_begin, _range_end;
     size_t _block_offset = 0;
     std::unique_ptr<util::quantized_buffer> _qbuf;
@@ -874,57 +786,39 @@ struct VerifyingReader::Impl {
                 }
             }
         }
+
         // Verify head signature
-        auto head_o = cache::SignedHead::verify(std::move(inh), _pk);
+        auto head_o = cache::SignedHead::verify_and_create(std::move(inh), _pk);
+
         if (!head_o) {
             LOG_WARN("Failed to verify HTTP head signatures");
             return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
         }
+
         _head = std::move(*head_o);
-        _uri = _head[http_::response_uri_hdr].to_string();
+
         // Check that the response is chunked.
-        if (_check_framing && !http_response::Head(_head).chunked()) {
-            LOG_WARN("Verification of non-chunked HTTP responses is not supported; uri=", _uri);
-            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
-        }
-        // Get and validate HTTP block signature parameters.
-        auto bsh = _head[http_::response_block_signatures_hdr];
-        if (bsh.empty()) {
-            LOG_WARN("Missing parameters for HTTP data block signatures; uri=", _uri);
-            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
-        }
-        _bs_params = cache::HttpBlockSigs::parse(bsh);
-        if (!_bs_params) {
-            LOG_WARN("Malformed parameters for HTTP data block signatures; uri=", _uri);
-            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
-        }
-        if (_bs_params->size > http_::response_data_block_max) {
-            LOG_WARN("Size of signed HTTP data blocks is too large: ", _bs_params->size, "; uri=", _uri);
-            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
-        }
-        // The injection id is also needed to verify block signatures.
-        _injection_id = util::http_injection_id(_head).to_string();
-        if (_injection_id.empty()) {
-            LOG_WARN("Missing injection identifier in HTTP head; uri=", _uri);
+        if (_check_framing && !_head.chunked()) {
+            LOG_WARN("Verification of non-chunked HTTP responses is not supported; uri=", _head.uri());
             return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
         }
         // Parse range in partial responses (since it may not be signed).
         if (!resp_range.empty()) {
             auto br = util::HttpByteRange::parse(resp_range);
             if (!br) {
-                LOG_WARN("Malformed byte range in HTTP head; uri=", _uri);
+                LOG_WARN("Malformed byte range in HTTP head; uri=", _head.uri());
                 return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
             }
             auto dszh = _head[http_::response_data_size_hdr];
             if (!br->matches_length(dszh)) {
                 LOG_WARN( "Invalid byte range in HTTP head: "
-                        , *br, " (/", dszh, "); uri=", _uri);
+                        , *br, " (/", dszh, "); uri=", _head.uri());
                 return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
             }
             _range_begin = _block_offset = br->first;
             _range_end = br->last + 1;
         }
-        _qbuf = std::make_unique<util::quantized_buffer>(_bs_params->size);
+        _qbuf = std::make_unique<util::quantized_buffer>(_head.block_size());
 
         // Return head with the status we got at the beginning.
         auto out_head = _head;
@@ -950,9 +844,9 @@ struct VerifyingReader::Impl {
     optional_part
     process_part(http_response::ChunkHdr inch, Cancel cancel, asio::yield_context y)
     {
-        if (inch.size > _bs_params->size) {
+        if (inch.size > _head.block_size()) {
             LOG_WARN( "Chunk size exceeds expected data block size: "
-                    , inch.size, " > ", _bs_params->size, "; uri=", _uri);
+                    , inch.size, " > ", _head.block_size(), "; uri=", _head.uri());
             return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
         }
 
@@ -969,7 +863,7 @@ struct VerifyingReader::Impl {
         // Verify the whole data block.
         auto block_sig = block_sig_from_exts(inch.exts);
         if (!block_sig) {
-            LOG_WARN("Missing signature for data block with offset ", _block_offset, "; uri=", _uri);
+            LOG_WARN("Missing signature for data block with offset ", _block_offset, "; uri=", _head.uri());
             return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
         }
         // We lack the chain hash of the previous data blocks,
@@ -979,7 +873,7 @@ struct VerifyingReader::Impl {
             _prev_block_dig = block_dig_from_exts(inch.exts);
             if (!_prev_block_dig) {
                 LOG_WARN( "Missing chain hash for data block with offset "
-                        , _block_offset - _bs_params->size, "; uri=", _uri);
+                        , _block_offset - _head.block_size(), "; uri=", _head.uri());
                 return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
             }
             _block_hash.update(*_prev_block_dig);
@@ -987,9 +881,9 @@ struct VerifyingReader::Impl {
         // Complete hash for the data block; note that HASH[0]=SHA2-512(BLOCK[0])
         _block_hash.update(block_buf);
         auto block_digest = _block_hash.close();
-        auto bsig_str = block_sig_str(_injection_id, _block_offset, block_digest);
-        if (!_bs_params->pk.verify(bsig_str, *block_sig)) {
-            LOG_WARN("Failed to verify data block with offset ", _block_offset, "; uri=", _uri);
+        auto bsig_str = block_sig_str(_head.injection_id(), _block_offset, block_digest);
+        if (!_head.public_key().verify(bsig_str, *block_sig)) {
+            LOG_WARN("Failed to verify data block with offset ", _block_offset, "; uri=", _head.uri());
             return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
         }
 
@@ -1031,7 +925,7 @@ struct VerifyingReader::Impl {
         try {
             _qbuf->put(asio::buffer(ind));
         } catch (const std::length_error&) {
-            LOG_ERROR("Chunk data overflows data block boundary; uri=", _uri);
+            LOG_ERROR("Chunk data overflows data block boundary; uri=", _head.uri());
             return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
         }
 
@@ -1055,7 +949,7 @@ struct VerifyingReader::Impl {
                 sigs_in_trailer = true;
         }
         if (sigs_in_trailer) {
-            auto head_o = cache::SignedHead::verify(std::move(_head), _pk);
+            auto head_o = cache::SignedHead::verify_and_create(std::move(_head), _pk);
             if (!head_o)  // bad signature in trailer
                 return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
             _head = std::move(*head_o);
@@ -1079,7 +973,7 @@ struct VerifyingReader::Impl {
         auto h_body_length_h = _head[http_::response_data_size_hdr];
         auto h_body_length = parse::number<size_t>(h_body_length_h);
         if (!h_body_length) {
-            LOG_WARN("Missing signed length; uri=", _uri);
+            LOG_WARN("Missing signed length; uri=", _head.uri());
             ec = sys::errc::make_error_code(sys::errc::bad_message);
             return;
         }
@@ -1088,11 +982,11 @@ struct VerifyingReader::Impl {
                                : *h_body_length);
         if (exp_body_length != _body_length) {
             LOG_WARN( "Body length mismatch: ", _body_length, "!=", exp_body_length
-                    , "; uri=", _uri);
+                    , "; uri=", _head.uri());
             ec = sys::errc::make_error_code(sys::errc::bad_message);
             return;
         }
-        LOG_DEBUG("Body matches signed or range length: ", exp_body_length, "; uri=", _uri);
+        LOG_DEBUG("Body matches signed or range length: ", exp_body_length, "; uri=", _head.uri());
 
         // Get body digest value.
         if (_range_begin && (*_range_begin > 0 || *_range_end < *h_body_length))
@@ -1107,11 +1001,11 @@ struct VerifyingReader::Impl {
             if (boost::algorithm::iequals(b_digest_s.first, h_digest_s.first)) {
                 if (b_digest_s.second != h_digest_s.second) {
                     LOG_WARN( "Body digest mismatch: ", hit->value(), "!=", b_digest
-                            , "; uri=", _uri);
+                            , "; uri=", _head.uri());
                     ec = sys::errc::make_error_code(sys::errc::bad_message);
                     return;
                 }
-                LOG_DEBUG("Body matches signed digest: ", b_digest, "; uri=", _uri);
+                LOG_DEBUG("Body matches signed digest: ", b_digest, "; uri=", _head.uri());
             }
         }
     }

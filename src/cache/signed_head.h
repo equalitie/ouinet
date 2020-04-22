@@ -1,6 +1,10 @@
 #pragma once
 
 #include "../logger.h"
+#include "../split_string.h"
+#include "../parse/number.h"
+#include "../http_util.h"
+#include "../util/bytes.h"
 
 namespace ouinet { namespace cache {
 
@@ -9,6 +13,18 @@ private:
     using Base = http_response::Head;
 
 public:
+    // A simple container for a parsed block signatures HTTP header.
+    // Only the `hs2019` algorithm with an explicit key is supported,
+    // so the ready-to-use key is left in `pk`.
+    struct BlockSigs {
+        util::Ed25519PublicKey pk;
+        boost::string_view algorithm;  // always "hs2019"
+        size_t size;
+    
+        static
+        boost::optional<BlockSigs> parse(boost::string_view);
+    };
+
     // The only signature algorithm supported by this implementation.
     static const std::string& sig_alg_hs2019() {
         static std::string ret = "hs2019";
@@ -25,23 +41,46 @@ public:
         return ret;
     }
 
+    static const std::string& key_id_pfx() {
+        static std::string ret = "ed25519=";
+        return ret;
+    }
+
 public:
+    SignedHead() {}
+
     SignedHead( const http::request_header<>& rqh
               , http::response_header<> rsh
               , const std::string& injection_id
               , std::chrono::seconds::rep injection_ts
-              , const util::Ed25519PrivateKey& sk
-              , const std::string& key_id)
+              , const util::Ed25519PrivateKey& sk)
         : Base(sign_response( rqh
                             , std::move(rsh)
                             , injection_id
                             , injection_ts
-                            , sk
-                            , key_id))
+                            , sk))
+        , _injection_id(injection_id)
+        , _uri(rqh.target())
+        , _bs_params{ sk.public_key()
+                    , sig_alg_hs2019()
+                    , http_::response_data_block}
     {}
 
+private:
+    SignedHead( http::response_header<> signed_rsh
+              , std::string injection_id
+              , std::string uri
+              , SignedHead::BlockSigs bs_params)
+        : Base(std::move(signed_rsh))
+        , _injection_id(std::move(injection_id))
+        , _uri(std::move(uri))
+        , _bs_params(std::move(bs_params))
+    {}
+
+public:
     static
-    boost::optional<SignedHead> verify_and_create();
+    boost::optional<SignedHead>
+    verify_and_create(http::response_header<>, const util::Ed25519PublicKey&);
 
     // Ouinet-specific declarations for injection using HTTP signatures
     // ----------------------------------------------------------------
@@ -70,8 +109,7 @@ public:
                  , http::response_header<> rsh
                  , const std::string& injection_id
                  , std::chrono::seconds::rep injection_ts
-                 , const util::Ed25519PrivateKey& sk
-                 , const std::string& key_id);
+                 , const util::Ed25519PrivateKey& sk);
 
     static
     http::response_header<>
@@ -96,6 +134,41 @@ public:
     static
     boost::optional<http::response_header<>>
     verify(http::response_header<>, const ouinet::util::Ed25519PublicKey&);
+
+    static
+    bool
+    has_comma_in_quotes(const boost::string_view& s);
+
+    const std::string& injection_id() const { return _injection_id; }
+    const std::string& uri()          const { return _uri; }
+    size_t block_size()               const { return _bs_params.size; }
+
+    const util::Ed25519PublicKey& public_key() const { return _bs_params.pk; }
+
+    static std::string encode_key_id(const util::Ed25519PublicKey& pk) {
+        return key_id_pfx() + util::base64_encode(pk.serialize());
+    }
+
+    std::string encode_key_id() const {
+        return encode_key_id(public_key());
+    }
+
+private:
+    static
+    boost::optional<util::Ed25519PublicKey>
+    decode_key_id(boost::string_view key_id)
+    {
+        if (!key_id.starts_with(key_id_pfx())) return {};
+        auto decoded_pk = util::base64_decode(key_id.substr(key_id_pfx().size()));
+        if (decoded_pk.size() != util::Ed25519PublicKey::key_size) return {};
+        auto pk_array = util::bytes::to_array<uint8_t, util::Ed25519PrivateKey::key_size>(decoded_pk);
+        return util::Ed25519PublicKey(std::move(pk_array));
+    }
+
+private:
+    std::string _injection_id;
+    std::string _uri;
+    SignedHead::BlockSigs _bs_params;
 };
 
 inline
@@ -104,10 +177,13 @@ SignedHead::sign_response( const http::request_header<>& rqh
                          , http::response_header<> rsh
                          , const std::string& injection_id
                          , std::chrono::seconds::rep injection_ts
-                         , const util::Ed25519PrivateKey& sk
-                         , const std::string& key_id)
+                         , const util::Ed25519PrivateKey& sk)
 {
     using namespace ouinet::http_;
+
+    auto pk = sk.public_key();
+    auto key_id = encode_key_id(pk);
+
     // TODO: This should be a `static_assert`.
     assert(protocol_version_hdr_current == protocol_version_hdr_v4);
 
@@ -158,7 +234,7 @@ SignedHead::verify(http::response_header<> rsh, const util::Ed25519PublicKey& pk
         } else hit++;
     }
 
-    auto keyId = http_key_id_for_injection(pk);  // TODO: cache this
+    auto keyId = encode_key_id(pk);  // TODO: cache this
     bool sig_ok = false;
     http::fields extra = rsh;  // all extra for the moment
 
@@ -208,6 +284,113 @@ SignedHead::verify(http::response_header<> rsh, const util::Ed25519PublicKey& pk
         rsh.erase(eh.name_string());
     }
     return rsh;
+}
+
+inline
+boost::optional<SignedHead>
+SignedHead::verify_and_create(http::response_header<> rsh, const util::Ed25519PublicKey& pk)
+{
+    auto rsh_o = verify(std::move(rsh), pk);
+    if (!rsh_o) return boost::none;
+    auto vrsh = std::move(*rsh_o);
+
+    auto uri = vrsh[http_::response_uri_hdr].to_string();
+    // Get and validate HTTP block signature parameters.
+    auto bsh = vrsh[http_::response_block_signatures_hdr];
+    if (bsh.empty()) {
+        LOG_WARN("Missing parameters for HTTP data block signatures; uri=", uri);
+        return boost::none;
+    }
+    auto bs_params = cache::SignedHead::BlockSigs::parse(bsh);
+    if (!bs_params) {
+        LOG_WARN("Malformed parameters for HTTP data block signatures; uri=", uri);
+        return boost::none;
+    }
+    if (bs_params->size > http_::response_data_block_max) {
+        LOG_WARN("Size of signed HTTP data blocks is too large: ", bs_params->size, "; uri=", uri);
+        return boost::none;
+    }
+    // The injection id is also needed to verify block signatures.
+    std::string injection_id = util::http_injection_id(vrsh).to_string();
+
+    if (injection_id.empty()) {
+        LOG_WARN("Missing injection identifier in HTTP head; uri=", uri);
+        return boost::none;
+    }
+
+    return SignedHead( std::move(vrsh)
+                     , std::move(injection_id)
+                     , std::move(uri)
+                     , std::move(*bs_params));
+}
+
+inline
+boost::optional<SignedHead::BlockSigs>
+SignedHead::BlockSigs::parse(boost::string_view bsigs)
+{
+    // TODO: proper support for quoted strings
+    if (has_comma_in_quotes(bsigs)) {
+        LOG_WARN("Commas in quoted arguments of block signatures HTTP header are not yet supported");
+        return {};
+    }
+
+    BlockSigs hbs;
+    bool valid_pk = false;
+    for (boost::string_view item : SplitString(bsigs, ',')) {
+        beast::string_view key, value;
+        std::tie(key, value) = split_string_pair(item, '=');
+        // Unquoted values:
+        if (key == "size") {
+            auto sz = parse::number<size_t>(value);
+            hbs.size = sz ? *sz : 0; continue;
+        }
+        // Quoted values:
+        if (value.size() < 2 || value[0] != '"' || value[value.size() - 1] != '"') {
+            LOG_WARN("Invalid quoting in block signatures HTTP header");
+            return {};
+        }
+        value.remove_prefix(1);
+        value.remove_suffix(1);
+        if (key == "keyId") {
+            auto pk = decode_key_id(value);
+            if (!pk) continue;
+            hbs.pk = *pk;
+            valid_pk = true;
+            continue;
+        }
+        if (key == "algorithm") {hbs.algorithm = value; continue;}
+        return {};
+    }
+    if (!valid_pk) {
+        LOG_WARN("Missing or invalid key identifier in block signatures HTTP header");
+        return {};
+    }
+    if (hbs.algorithm != SignedHead::sig_alg_hs2019()) {
+        LOG_WARN("Missing or invalid algorithm in block signatures HTTP header");
+        return {};
+    }
+    if (hbs.size == 0) {
+        LOG_WARN("Missing or invalid size in block signatures HTTP header");
+        return {};
+    }
+    return hbs;
+}
+
+inline
+bool
+SignedHead::has_comma_in_quotes(const boost::string_view& s) {
+    // A comma is between quotes if
+    // the number of quotes before it is odd.
+    int quotes_seen = 0;
+    for (auto c : s) {
+        if (c == '"') {
+            quotes_seen++;
+            continue;
+        }
+        if ((c == ',') && (quotes_seen % 2 != 0))
+            return true;
+    }
+    return false;
 }
 
 }} // namespace

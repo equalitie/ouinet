@@ -26,6 +26,7 @@
 #include "../util/str.h"
 #include "../util/variant.h"
 #include "http_sign.h"
+#include "signed_head.h"
 
 #define _LOGPFX "HTTP store: "
 #define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
@@ -225,7 +226,7 @@ public:
             _ERROR("Missing parameters for data block signatures; uri=", uri);
             return or_throw(yield, asio::error::invalid_argument);
         }
-        auto bs_params = cache::HttpBlockSigs::parse(bsh);
+        auto bs_params = cache::SignedHead::BlockSigs::parse(bsh);
         if (!bs_params) {
             _ERROR("Malformed parameters for data block signatures; uri=", uri);
             return or_throw(yield, asio::error::invalid_argument);
@@ -372,7 +373,7 @@ private:
             _ERROR("Missing stored parameters for data block signatures; uri=", uri);
             return or_throw<http_response::Head>(yield, sys::errc::make_error_code(sys::errc::no_message));
         }
-        auto bs_params = cache::HttpBlockSigs::parse(bsh);
+        auto bs_params = cache::SignedHead::BlockSigs::parse(bsh);
         if (!bs_params) {
             _ERROR("Malformed stored parameters for data block signatures; uri=", uri);
             return or_throw<http_response::Head>(yield, sys::errc::make_error_code(sys::errc::no_message));
