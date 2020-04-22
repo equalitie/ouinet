@@ -1,5 +1,6 @@
 #pragma once
 
+#include "http_sign.h"
 #include "../logger.h"
 #include "../split_string.h"
 #include "../parse/number.h"
@@ -81,6 +82,10 @@ public:
     static
     boost::optional<SignedHead>
     verify_and_create(http::response_header<>, const util::Ed25519PublicKey&);
+
+    static
+    boost::optional<SignedHead>
+    create_from_trusted_source(http::response_header<>);
 
     // Ouinet-specific declarations for injection using HTTP signatures
     // ----------------------------------------------------------------
@@ -292,11 +297,16 @@ SignedHead::verify_and_create(http::response_header<> rsh, const util::Ed25519Pu
 {
     auto rsh_o = verify(std::move(rsh), pk);
     if (!rsh_o) return boost::none;
-    auto vrsh = std::move(*rsh_o);
+    return create_from_trusted_source(std::move(*rsh_o));
+}
 
-    auto uri = vrsh[http_::response_uri_hdr].to_string();
+inline
+boost::optional<SignedHead>
+SignedHead::create_from_trusted_source(http::response_header<> rsh)
+{
+    auto uri = rsh[http_::response_uri_hdr].to_string();
     // Get and validate HTTP block signature parameters.
-    auto bsh = vrsh[http_::response_block_signatures_hdr];
+    auto bsh = rsh[http_::response_block_signatures_hdr];
     if (bsh.empty()) {
         LOG_WARN("Missing parameters for HTTP data block signatures; uri=", uri);
         return boost::none;
@@ -311,14 +321,14 @@ SignedHead::verify_and_create(http::response_header<> rsh, const util::Ed25519Pu
         return boost::none;
     }
     // The injection id is also needed to verify block signatures.
-    std::string injection_id = util::http_injection_id(vrsh).to_string();
+    std::string injection_id = util::http_injection_id(rsh).to_string();
 
     if (injection_id.empty()) {
         LOG_WARN("Missing injection identifier in HTTP head; uri=", uri);
         return boost::none;
     }
 
-    return SignedHead( std::move(vrsh)
+    return SignedHead( std::move(rsh)
                      , std::move(injection_id)
                      , std::move(uri)
                      , std::move(*bs_params));
