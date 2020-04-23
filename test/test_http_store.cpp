@@ -51,6 +51,9 @@ using namespace std;
 using namespace ouinet;
 
 // This signed response used below comes from `test-http-sign`.
+// TODO: Have signatures and hashes computed at runtime to
+// avoid having to manually update this data every time there are
+// signing protocol changes.
 
 static const string _rs_status_origin =
     "HTTP/1.1 200 OK\r\n";
