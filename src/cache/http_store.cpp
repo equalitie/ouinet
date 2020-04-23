@@ -115,7 +115,7 @@ parse_data_block_offset(const std::string& s)  // `^[0-9a-f]*$`
     return offset;
 }
 
-// A signatures file entry with `OFFSET[i] SIGNATURE[i] HASH[i-1]`.
+// A signatures file entry with `OFFSET[i] SIGNATURE[i] CHASH[i-1]`.
 struct SigEntry {
     std::size_t offset;
     std::string signature;
@@ -167,7 +167,7 @@ struct SigEntry {
         static const boost::regex line_regex(
             "([0-9a-f]{16})"  // PAD016_LHEX(OFFSET[i])
             " ([A-Za-z0-9+/]+=*)"  // BASE64(SIG[i])
-            " ([A-Za-z0-9+/]+=*)?"  // BASE64(HASH([i-1]))
+            " ([A-Za-z0-9+/]+=*)?"  // BASE64(CHASH([i-1]))
         );
         boost::cmatch m;
         if (!boost::regex_match(line.begin(), line.end(), m, line_regex)) {
@@ -274,7 +274,7 @@ public:
         if (prev_block_digest)
             e.prev_digest = util::base64_encode(*prev_block_digest);
 
-        // Prepare hash for next data block: HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])
+        // Prepare hash for next data block: CHASH[i]=SHA2-512(CHASH[i-1] BLOCK[i])
         prev_block_digest = block_hash.close();
         block_hash = {}; block_hash.update(*prev_block_digest);
 
