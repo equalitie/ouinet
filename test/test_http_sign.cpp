@@ -97,7 +97,7 @@ static const string _rs_fields_origin = (
 );
 
 static const string _rs_head_injection = (
-    "X-Ouinet-Version: 4\r\n"
+    "X-Ouinet-Version: 5\r\n"
     "X-Ouinet-URI: https://example.com/foo\r\n"
     "X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310\r\n"
     "X-Ouinet-BSigs: keyId=\"ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=\","
@@ -110,7 +110,7 @@ static const string _rs_head_sig0 = (
     "headers=\"(response-status) (created) "
     "date server content-type content-disposition "
     "x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-bsigs\","
-    "signature=\"UvcvmTPLGnmG3Bk2xdIBZ2Mw5V6enCXqyS3jReRev/o7ZvtKrSujnyHUEpHQ3pM+axfjw1vAznE4+mhMXTVdAg==\"\r\n"
+    "signature=\"qs/iL8KDytc22DqSBwhkEf/RoguMcQKcorrwviQx9Ck0SBf0A4Hby+dMpHDk9mjNYYnLCw4G9vPN637hG3lkAQ==\"\r\n"
 );
 
 static const string _rs_head_framing = (
@@ -131,7 +131,7 @@ static const string _rs_head_sig1 = (
     "x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-bsigs "
     "x-ouinet-data-size "
     "digest\","
-    "signature=\"nDUm3W0OCeygFTdVoH/6mEKt9S7xIL/EESCEFKNGxJy5zepJQjW38p3QUqycvZuc058vEuRa/CRLDdhc/KW7Ag==\"\r\n"
+    "signature=\"4+POBKdNljxUKHKD+NCP34aS6j0QhI4EWmqiN3aopoWtDiMwgmeiR1hO44QhWFwWdNmNkVJs+LVuEUN892mFDg==\"\r\n"
 );
 
 static const string rs_head_signed_s =
@@ -146,14 +146,14 @@ static const string rs_head_signed_s =
 
 static const array<string, 3> rs_block_hash_cx{
     "",  // no previous block to hash
-    ";ouihash=\"aERfr5o+kpvR4ZH7xC0mBJ4QjqPUELDzjmzt14WmntxH2p3EQmATZODXMPoFiXaZL6KNI50Ve4WJf/x3ma4ieA==\"",
-    ";ouihash=\"slwciqMQBddB71VWqpba+MpP9tBiyTE/XFmO5I1oiVJy3iFniKRkksbP78hCEWOM6tH31TGEFWP1loa4pqrLww==\"",
+    ";ouihash=\"4c0RNY1zc7KD7WqcgnEnGv2BJPLDLZ8ie8/kxtwBLoN2LJNnzUMFzXZoYy1NnddokpIxEm3dL+gJ7dr0xViVOg==\"",
+    ";ouihash=\"bmsnk/0dfFU9MnSe7RwGfZruUjmhffJYMXviAt2oSDBMMJOrwFsJFkCoIkdsKXej59QR8jLUuPAF7y3Y0apiTQ==\"",
 };
 
 static const array<string, 3> rs_block_sig_cx{
-    ";ouisig=\"6gCnxL3lVHMAMSzhx+XJ1ZBt+JC/++m5hlak1adZMlUH0hnm2S3ZnbwjPQGMm9hDB45SqnybuQ9Bjo+PgnfnCw==\"",
-    ";ouisig=\"647D/5afXUjP8jBWyfDQX2QTtLdshyawchxKm3eqhyJPC98DLcFbyC8ir8yciYgtPyN3yl7q88AwoMb7qURsBw==\"",
-    ";ouisig=\"PAgvnzE20ypASNvxPbd/iBleipxmjJMD5cGxv0CbUjI/lsRlTdfNWDAXsb0V4a40ExkWqZc9Pe++2ZhQwRNMAQ==\"",
+    ";ouisig=\"r2OtBbBVBXT2b8Ch/eFfQt1eDoG8eMs/JQxnjzNPquF80WcUNwQQktsu0mF0+bwc3akKdYdBDeORNLhRjrxVBA==\"",
+    ";ouisig=\"JZlln7qCNUpkc+VAzUy1ty8HwTIb9lrWXDGX9EgsNWzpHTs+Fxgfabqx7eClphZXNVNKgn75LirH9pxo1ZnoAg==\"",
+    ";ouisig=\"mN5ckFgTf+dDj0gpG4/6pPTPEGklaywsLY0rK4o+nKtLFUG9l0pUecMQcxQu/TPHnCJOGzcU++rcqxI4bjrfBg==\"",
 };
 
 static const array<string, 4> rs_chunk_ext{
