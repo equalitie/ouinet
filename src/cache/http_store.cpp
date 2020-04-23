@@ -344,7 +344,7 @@ private:
 
     template<class IStream>
     static
-    http_response::Head read_header(IStream& is, Cancel& cancel, asio::yield_context yield) {
+    SignedHead read_signed_head(IStream& is, Cancel& cancel, asio::yield_context yield) {
         assert(is.is_open());
 
         auto on_cancel = cancel.connect([&] { is.close(); });
@@ -356,20 +356,26 @@ private:
         sys::error_code ec;
         http::async_read_header(is, *buffer, *parser, yield[ec]);
         if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<http_response::Head>(yield, ec);
+        if (ec) return or_throw<SignedHead>(yield, ec);
 
         if (!parser->is_header_done()) {
-            return or_throw<http_response::Head>(yield, sys::errc::make_error_code(sys::errc::no_message));
+            return or_throw<SignedHead>(yield, sys::errc::make_error_code(sys::errc::no_message));
         }
 
-        return parser->release().base();
+        auto head_o = SignedHead::create_from_trusted_source(parser->release().base());
+
+        if (!head_o) {
+            return or_throw<SignedHead>(yield, sys::errc::make_error_code(sys::errc::no_message));
+        }
+
+        return std::move(*head_o);
     }
 
     http_response::Head
     parse_head(Cancel cancel, asio::yield_context yield)
     {
         sys::error_code ec;
-        auto raw_head = read_header(headf, cancel, yield[ec]);
+        auto head = read_signed_head(headf, cancel, yield[ec]);
 
         if (ec) {
             if (ec != asio::error::operation_aborted) {
@@ -377,13 +383,6 @@ private:
             }
             return or_throw<http_response::Head>(yield, ec);
         }
-
-        auto head_o = SignedHead::create_from_trusted_source(std::move(raw_head));
-        if (!head_o) {
-            return or_throw<http_response::Head>(yield, sys::errc::make_error_code(sys::errc::no_message));
-        }
-
-        auto& head = *head_o;
 
         block_size = head.block_size();
         auto data_size_hdr = head[http_::response_data_size_hdr];
@@ -973,21 +972,20 @@ HttpStore::size( Cancel cancel
 }
 
 HashList
-HttpStore::load_hash_list( const std::string& key
-                         , Cancel cancel
-                         , asio::yield_context yield) const
+http_store_load_hash_list( const fs::path& dir
+                         , asio::executor exec
+                         , Cancel& cancel
+                         , asio::yield_context yield)
 {
-    auto dir = path_from_key(path, key);
-
     sys::error_code ec;
 
-    auto headf = util::file_io::open_readonly(executor, dir / head_fname, ec);
+    auto headf = util::file_io::open_readonly(exec, dir / head_fname, ec);
     if (ec) return or_throw<HashList>(yield, ec);
 
-    auto sigsf = util::file_io::open_readonly(executor, dir / sigs_fname, ec);
+    auto sigsf = util::file_io::open_readonly(exec, dir / sigs_fname, ec);
     if (ec) return or_throw<HashList>(yield, ec);
 
-    auto bodyf = util::file_io::open_readonly(executor, dir / body_fname, ec);
+    auto bodyf = util::file_io::open_readonly(exec, dir / body_fname, ec);
     if (ec) return or_throw<HashList>(yield, ec);
 
     HashList hl;
@@ -1041,6 +1039,15 @@ HttpStore::load_hash_list( const std::string& key
     hl.signature = last_sig_entry->signature;
 
     return hl;
+}
+
+HashList
+HttpStore::load_hash_list( const std::string& key
+                         , Cancel cancel
+                         , asio::yield_context yield) const
+{
+    auto dir = path_from_key(path, key);
+    return http_store_load_hash_list(dir, executor, cancel, yield);
 }
 
 }} // namespaces
