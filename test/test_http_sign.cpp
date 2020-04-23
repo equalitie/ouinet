@@ -144,10 +144,12 @@ static const string rs_head_signed_s =
     + _rs_head_sig1
     + "\r\n");
 
+// As they appear in chunk extensions following a data block.
 static const array<string, 3> rs_block_hash_cx{
     "",  // no previous block to hash
-    ";ouihash=\"4c0RNY1zc7KD7WqcgnEnGv2BJPLDLZ8ie8/kxtwBLoN2LJNnzUMFzXZoYy1NnddokpIxEm3dL+gJ7dr0xViVOg==\"",
-    ";ouihash=\"bmsnk/0dfFU9MnSe7RwGfZruUjmhffJYMXviAt2oSDBMMJOrwFsJFkCoIkdsKXej59QR8jLUuPAF7y3Y0apiTQ==\"",
+    ";ouihash=\"4c0RNY1zc7KD7WqcgnEnGv2BJPLDLZ8ie8/kxtwBLoN2LJNnzUMFzXZoYy1NnddokpIxEm3dL+gJ7dr0xViVOg==\"",  // chash[0]
+    ";ouihash=\"bmsnk/0dfFU9MnSe7RwGfZruUjmhffJYMXviAt2oSDBMMJOrwFsJFkCoIkdsKXej59QR8jLUuPAF7y3Y0apiTQ==\"",  // chash[1]
+    //";ouihash=\"xU5ll5e/S4nn3T7iGoP5N30QQ5QfPh4YGFCQASn5pATjb4U+qLhqBpkeQnuUk/I3oC0JSHIYmVHH16quqh9bXA==\"",  // chash[2], not sent
 };
 
 static const array<string, 3> rs_block_sig_cx{
