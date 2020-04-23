@@ -125,7 +125,7 @@ struct SigEntry {
 
     std::string str() const
     {
-        static const auto line_format = "%x %s %s\n";
+        static const auto line_format = "%016x %s %s\n";
         return (boost::format(line_format) % offset % signature % prev_digest).str();
     }
 
@@ -165,7 +165,7 @@ struct SigEntry {
         line.remove_suffix(buf.size() - line_len + 1);  // leave newline out
 
         static const boost::regex line_regex(
-            "([0-9a-f]+)"  // LOWER_HEX(OFFSET[i])
+            "([0-9a-f]{16})"  // PAD016_LHEX(OFFSET[i])
             " ([A-Za-z0-9+/]+=*)"  // BASE64(SIG[i])
             " ([A-Za-z0-9+/]+=*)?"  // BASE64(HASH([i-1]))
         );
