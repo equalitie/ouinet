@@ -132,6 +132,12 @@ static const array<string, 3> rs_block_data{
     _rs_block2,
 };
 
+static const array<string, 3> rs_block_dhash{
+    "aERfr5o+kpvR4ZH7xC0mBJ4QjqPUELDzjmzt14WmntxH2p3EQmATZODXMPoFiXaZL6KNI50Ve4WJf/x3ma4ieA==",
+    "lfLy+XIYvDfWbg0+hDnfPZ2G548iBKNalciKnSzEDPLiqmxRng2oOAcpKwY5NicofgpuYrMGII2JwOS7XFPJNA==",
+    "2AIvIGCtbv0perc9zFNVybIUBUsNF3ahNqZp0mp9OxT3OqDQ6/8Z7jMzaPAWS2QZqW2knj5IF1Pn6Wtxa9zLbw==",
+};
+
 static const array<string, 3> rs_block_chash{
     "",
     "4c0RNY1zc7KD7WqcgnEnGv2BJPLDLZ8ie8/kxtwBLoN2LJNnzUMFzXZoYy1NnddokpIxEm3dL+gJ7dr0xViVOg==",
@@ -278,7 +284,7 @@ static string rs_sigs(bool complete) {
     auto last_b = complete ? rs_block_data.size() : rs_block_data.size() - 1;
     for (size_t b = 0; b < last_b; ++b)
         ss << (b * http_::response_data_block)
-           << ' ' << rs_block_sig[b] << ' ' << rs_block_chash[b]
+           << ' ' << rs_block_sig[b] << ' ' << rs_block_dhash[b] << ' ' << rs_block_chash[b]
            << endl;
     return ss.str();
 }
