@@ -96,7 +96,7 @@ The signature string for each block covers the following values (separated by nu
 
     This helps detecting an attacker which replies to a range request with a range of the expected length, with correctly signed and ordered blocks, that however starts at the wrong offset.
 
-  - A **chain hash** (binary) computed from the chain hash of the previous block and the data hash of the block itself: for the i-th block, `CHASH[i]=SHA2-512(CHASH[i-1] SHA2-512(BLOCK[i]))`, with `CHASH[0]=SHA2-512(SHA2-512(BLOCK[0]))`.
+  - A **chain hash** (binary) computed from the chain hash of the previous block and the **data hash** of the block itself: for the i-th block, `DHASH[i]=SHA2-512(BLOCK[i])` and `CHASH[i]=SHA2-512(CHASH[i-1] DHASH[i])`, with `CHASH[0]=SHA2-512(DHASH[0])`.
 
     Signing the hash instead of block data itself spares the signer from keeping the whole block in memory for producing the signature (the hash algorithm can be fed as data comes in from the origin).
 
