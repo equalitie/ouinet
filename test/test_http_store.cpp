@@ -281,7 +281,7 @@ static const string rs_body_complete =
 
 static string rs_sigs(bool complete) {
     stringstream ss;
-    ss << hex;
+    ss << hex << setfill('0') << setw(16);  // 16 is length of hex 2^64-1
     // Last signature missing when incomplete.
     auto last_b = complete ? rs_block_data.size() : rs_block_data.size() - 1;
     for (size_t b = 0; b < last_b; ++b)
