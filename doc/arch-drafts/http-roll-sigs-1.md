@@ -56,7 +56,7 @@ Please note that neither the initial signature nor framing headers (`Transfer-En
 
 ```
 HTTP/1.1 200 OK
-X-Ouinet-Version: 4
+X-Ouinet-Version: 5
 X-Ouinet-URI: https://example.com/foo
 X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
 Date: Mon, 15 Jan 2018 20:31:50 GMT
@@ -72,11 +72,11 @@ Trailer: Digest, X-Ouinet-Data-Size, X-Ouinet-Sig1
 
 100000
 0123456789...
-100000;ouisig=BASE64(BSIG(d607…e58d NUL 0 NUL HASH[0]=SHA2-512(BLOCK[0])))
+100000;ouisig=BASE64(BSIG(d607…e58d NUL 0 NUL HASH[0]=SHA2-512(SHA2-512(BLOCK[0]))))
 0123456789...
-4;ouisig=BASE64(BSIG(d607…e58d NUL 1048576 NUL HASH[1]=SHA2-512(HASH[0] BLOCK[1])))
+4;ouisig=BASE64(BSIG(d607…e58d NUL 1048576 NUL HASH[1]=SHA2-512(HASH[0] SHA2-512(BLOCK[1]))))
 abcd
-0;ouisig=BASE64(BSIG(d607…e58d NUL 2097152 NUL HASH[2]=SHA2-512(HASH[1] BLOCK[2])))
+0;ouisig=BASE64(BSIG(d607…e58d NUL 2097152 NUL HASH[2]=SHA2-512(HASH[1] SHA2-512(BLOCK[2]))))
 Digest: SHA-256=BASE64(SHA2-256(COMPLETE_BODY))
 X-Ouinet-Data-Size: 1048580
 X-Ouinet-Sig1: keyId="ed25519=????",algorithm="hs2019",created=1516048311,
@@ -96,7 +96,7 @@ The signature string for each block covers the following values (separated by nu
 
     This helps detecting an attacker which replies to a range request with a range of the expected length, with correctly signed and ordered blocks, that however starts at the wrong offset.
 
-  - A **chain hash** (binary) computed from the chain hash of the previous block and the data of the block itself: for the i-th block, `HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])`, with `HASH[0]=SHA2-512(BLOCK[0])`.
+  - A **chain hash** (binary) computed from the chain hash of the previous block and the data hash of the block itself: for the i-th block, `HASH[i]=SHA2-512(HASH[i-1] SHA2-512(BLOCK[i]))`, with `HASH[0]=SHA2-512(SHA2-512(BLOCK[0]))`.
 
     Signing the hash instead of block data itself spares the signer from keeping the whole block in memory for producing the signature (the hash algorithm can be fed as data comes in from the origin).
 
