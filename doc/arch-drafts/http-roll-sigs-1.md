@@ -100,6 +100,8 @@ The signature string for each block covers the following values (separated by nu
 
     Signing the hash instead of block data itself spares the signer from keeping the whole block in memory for producing the signature (the hash algorithm can be fed as data comes in from the origin).
 
+    Using the data block hash instead of its data allows to independently verify the signatures without needing to be in possession of the data itself, just the hashes.
+
     Keeping the injection identifier out of the hash allows to compare the hashes at particular blocks of different injections (if transmitted independently) to ascertain that their data is the same up to that block.
 
     The chaining precludes the attacker from reordering correctly signed blocks for this injection.  SHA2-512 is used as a compromise between security and speed on 64-bit platforms; although the hash is longer than the slower SHA2-256, it will be seldom transmitted (e.g. for range requests as indicated below).
