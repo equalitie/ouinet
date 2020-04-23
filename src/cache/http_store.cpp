@@ -342,43 +342,50 @@ class HttpStoreReader : public http_response::AbstractReader {
 private:
     static const std::size_t http_forward_block = 16384;
 
-    http_response::Head
-    parse_head(Cancel cancel, asio::yield_context yield)
-    {
-        assert(headf.is_open());
-        auto close_headf = defer([&headf = headf] { headf.close(); });  // no longer needed
+    template<class IStream>
+    static
+    http_response::Head read_header(IStream& is, Cancel& cancel, asio::yield_context yield) {
+        assert(is.is_open());
+
+        auto on_cancel = cancel.connect([&] { is.close(); });
 
         // Put in heap to avoid exceeding coroutine stack limit.
         auto buffer = std::make_unique<beast::static_buffer<http_forward_block>>();
         auto parser = std::make_unique<http::response_parser<http::empty_body>>();
 
         sys::error_code ec;
-        http::async_read_header(headf, *buffer, *parser, yield[ec]);
+        http::async_read_header(is, *buffer, *parser, yield[ec]);
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw<http_response::Head>(yield, ec);
 
         if (!parser->is_header_done()) {
-            _ERROR("Failed to parse stored response head");
             return or_throw<http_response::Head>(yield, sys::errc::make_error_code(sys::errc::no_message));
         }
 
-        auto head = parser->release().base();
-        uri = head[http_::response_uri_hdr].to_string();
-        if (uri.empty()) {
-            _ERROR("Missing URI in stored head");
+        return parser->release().base();
+    }
+
+    http_response::Head
+    parse_head(Cancel cancel, asio::yield_context yield)
+    {
+        sys::error_code ec;
+        auto raw_head = read_header(headf, cancel, yield[ec]);
+
+        if (ec) {
+            if (ec != asio::error::operation_aborted) {
+                _ERROR("Failed to parse stored response head");
+            }
+            return or_throw<http_response::Head>(yield, ec);
+        }
+
+        auto head_o = SignedHead::create_from_trusted_source(std::move(raw_head));
+        if (!head_o) {
             return or_throw<http_response::Head>(yield, sys::errc::make_error_code(sys::errc::no_message));
         }
-        auto bsh = head[http_::response_block_signatures_hdr];
-        if (bsh.empty()) {
-            _ERROR("Missing stored parameters for data block signatures; uri=", uri);
-            return or_throw<http_response::Head>(yield, sys::errc::make_error_code(sys::errc::no_message));
-        }
-        auto bs_params = cache::SignedHead::BlockSigs::parse(bsh);
-        if (!bs_params) {
-            _ERROR("Malformed stored parameters for data block signatures; uri=", uri);
-            return or_throw<http_response::Head>(yield, sys::errc::make_error_code(sys::errc::no_message));
-        }
-        block_size = bs_params->size;
+
+        auto& head = *head_o;
+
+        block_size = head.block_size();
         auto data_size_hdr = head[http_::response_data_size_hdr];
         auto data_size_opt = parse::number<std::size_t>(data_size_hdr);
         if (!data_size_opt)
@@ -414,8 +421,11 @@ private:
              && head[http::field::transfer_encoding].empty()
              && head[http::field::trailer].empty())) {
             _WARN("Found framing headers in stored head, cleaning; uri=", uri);
-            head = http_injection_merge(std::move(head), {});
+            auto retval = http_injection_merge(std::move(head), {});
+            retval.set(http::field::transfer_encoding, "chunked");
+            return retval;
         }
+
         head.set(http::field::transfer_encoding, "chunked");
         return head;
     }
