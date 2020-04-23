@@ -132,7 +132,7 @@ static const array<string, 3> rs_block_data{
     _rs_block2,
 };
 
-static const array<string, 3> rs_block_hash{
+static const array<string, 3> rs_block_chash{
     "",
     "4c0RNY1zc7KD7WqcgnEnGv2BJPLDLZ8ie8/kxtwBLoN2LJNnzUMFzXZoYy1NnddokpIxEm3dL+gJ7dr0xViVOg==",
     "bmsnk/0dfFU9MnSe7RwGfZruUjmhffJYMXviAt2oSDBMMJOrwFsJFkCoIkdsKXej59QR8jLUuPAF7y3Y0apiTQ==",
@@ -278,7 +278,7 @@ static string rs_sigs(bool complete) {
     auto last_b = complete ? rs_block_data.size() : rs_block_data.size() - 1;
     for (size_t b = 0; b < last_b; ++b)
         ss << (b * http_::response_data_block)
-           << ' ' << rs_block_sig[b] << ' ' << rs_block_hash[b]
+           << ' ' << rs_block_sig[b] << ' ' << rs_block_chash[b]
            << endl;
     return ss.str();
 }
@@ -357,8 +357,8 @@ static const string rrs_head_complete =
 static const array<string, 4> rrs_chunk_ext{
     "",
     ";ouisig=\"" + rs_block_sig[0] + "\"",
-    ";ouisig=\"" + rs_block_sig[1] + "\";ouihash=\"" + rs_block_hash[1] + "\"",
-    ";ouisig=\"" + rs_block_sig[2] + "\";ouihash=\"" + rs_block_hash[2] + "\"",
+    ";ouisig=\"" + rs_block_sig[1] + "\";ouihash=\"" + rs_block_chash[1] + "\"",
+    ";ouisig=\"" + rs_block_sig[2] + "\";ouihash=\"" + rs_block_chash[2] + "\"",
 };
 
 // Trailers are merged into the initial head,
