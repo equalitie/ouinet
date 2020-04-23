@@ -531,11 +531,11 @@ struct SigningReader::Impl {
                 ch.exts = block_chunk_ext( _injection_id
                                          , _block_offset - _block_size_last
                                          , block_digest, _sk);
-                // Prepare chunk extension for next block: HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])
+                // Prepare chunk extension for next block: CHASH[i]=SHA2-512(CHASH[i-1] DHASH[i])
                 _block_hash = {};
                 _block_hash.update(block_digest);
-            }  // else HASH[0]=SHA2-512(BLOCK[0])
-            _block_hash.update(block_buf);
+            }  // else CHASH[0]=SHA2-512(DHASH[0])
+            _block_hash.update(util::sha512_digest(block_buf));
             _block_offset += (_block_size_last = block_buf.size());
         }
         return http_response::Part(std::move(ch));  // pass data on, drop origin extensions
