@@ -125,8 +125,10 @@ struct SigEntry {
 
     std::string str() const
     {
+        static const auto pad_digest = util::base64_encode(util::SHA512::digest_type{});
         static const auto line_format = "%016x %s %s\n";
-        return (boost::format(line_format) % offset % signature % prev_digest).str();
+        return ( boost::format(line_format) % offset % signature
+               % (prev_digest.empty() ? pad_digest : prev_digest)).str();
     }
 
     std::string chunk_exts() const
@@ -164,10 +166,11 @@ struct SigEntry {
         boost::string_view line(buf);
         line.remove_suffix(buf.size() - line_len + 1);  // leave newline out
 
+        static const auto pad_digest = util::base64_encode(util::SHA512::digest_type{});
         static const boost::regex line_regex(
             "([0-9a-f]{16})"  // PAD016_LHEX(OFFSET[i])
             " ([A-Za-z0-9+/]+=*)"  // BASE64(SIG[i])
-            " ([A-Za-z0-9+/]+=*)?"  // BASE64(CHASH([i-1]))
+            " ([A-Za-z0-9+/]+=*)"  // BASE64(CHASH([i-1]))
         );
         boost::cmatch m;
         if (!boost::regex_match(line.begin(), line.end(), m, line_regex)) {
@@ -175,7 +178,7 @@ struct SigEntry {
             return or_throw(yield, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
         }
         auto offset = parse_data_block_offset(m[1].str());
-        SigEntry entry{offset, m[2].str(), m[3].str()};
+        SigEntry entry{offset, m[2].str(), (m[3] == pad_digest ? "" : m[3].str())};
         buf.erase(0, line_len);  // consume used input
         return entry;
     }
