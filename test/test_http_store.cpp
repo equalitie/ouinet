@@ -51,6 +51,9 @@ using namespace std;
 using namespace ouinet;
 
 // This signed response used below comes from `test-http-sign`.
+// TODO: Have signatures and hashes computed at runtime to
+// avoid having to manually update this data every time there are
+// signing protocol changes.
 
 static const string _rs_status_origin =
     "HTTP/1.1 200 OK\r\n";
@@ -67,7 +70,7 @@ static const string _rs_head_origin =
     + _rs_fields_origin);
 
 static const string _rs_head_injection = (
-    "X-Ouinet-Version: 4\r\n"
+    "X-Ouinet-Version: 5\r\n"
     "X-Ouinet-URI: https://example.com/foo\r\n"
     "X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310\r\n"
     "X-Ouinet-BSigs: keyId=\"ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=\","
@@ -80,7 +83,7 @@ static const string _rs_head_sig0 = (
     "headers=\"(response-status) (created) "
     "date server content-type content-disposition "
     "x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-bsigs\","
-    "signature=\"UvcvmTPLGnmG3Bk2xdIBZ2Mw5V6enCXqyS3jReRev/o7ZvtKrSujnyHUEpHQ3pM+axfjw1vAznE4+mhMXTVdAg==\"\r\n"
+    "signature=\"qs/iL8KDytc22DqSBwhkEf/RoguMcQKcorrwviQx9Ck0SBf0A4Hby+dMpHDk9mjNYYnLCw4G9vPN637hG3lkAQ==\"\r\n"
 );
 
 static const string _rs_head_framing = (
@@ -108,7 +111,7 @@ static const string _rs_head_sig1 = (
     "x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-bsigs "
     "x-ouinet-data-size "
     "digest\","
-    "signature=\"nDUm3W0OCeygFTdVoH/6mEKt9S7xIL/EESCEFKNGxJy5zepJQjW38p3QUqycvZuc058vEuRa/CRLDdhc/KW7Ag==\"\r\n"
+    "signature=\"4+POBKdNljxUKHKD+NCP34aS6j0QhI4EWmqiN3aopoWtDiMwgmeiR1hO44QhWFwWdNmNkVJs+LVuEUN892mFDg==\"\r\n"
 );
 
 static const string rs_trailer =
@@ -132,16 +135,24 @@ static const array<string, 3> rs_block_data{
     _rs_block2,
 };
 
-static const array<string, 3> rs_block_hash{
-    "",
+static const array<string, 3> rs_block_dhash{
     "aERfr5o+kpvR4ZH7xC0mBJ4QjqPUELDzjmzt14WmntxH2p3EQmATZODXMPoFiXaZL6KNI50Ve4WJf/x3ma4ieA==",
-    "slwciqMQBddB71VWqpba+MpP9tBiyTE/XFmO5I1oiVJy3iFniKRkksbP78hCEWOM6tH31TGEFWP1loa4pqrLww==",
+    "lfLy+XIYvDfWbg0+hDnfPZ2G548iBKNalciKnSzEDPLiqmxRng2oOAcpKwY5NicofgpuYrMGII2JwOS7XFPJNA==",
+    "2AIvIGCtbv0perc9zFNVybIUBUsNF3ahNqZp0mp9OxT3OqDQ6/8Z7jMzaPAWS2QZqW2knj5IF1Pn6Wtxa9zLbw==",
+};
+
+// As they appear in signature files.
+static const array<string, 3> rs_block_chash{
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",  // chash[-1], just padding
+    "4c0RNY1zc7KD7WqcgnEnGv2BJPLDLZ8ie8/kxtwBLoN2LJNnzUMFzXZoYy1NnddokpIxEm3dL+gJ7dr0xViVOg==",  // chash[0]
+    "bmsnk/0dfFU9MnSe7RwGfZruUjmhffJYMXviAt2oSDBMMJOrwFsJFkCoIkdsKXej59QR8jLUuPAF7y3Y0apiTQ==",  // chash[1]
+    //"xU5ll5e/S4nn3T7iGoP5N30QQ5QfPh4YGFCQASn5pATjb4U+qLhqBpkeQnuUk/I3oC0JSHIYmVHH16quqh9bXA==",  // chash[2], not stored
 };
 
 static const array<string, 3> rs_block_sig{
-    "6gCnxL3lVHMAMSzhx+XJ1ZBt+JC/++m5hlak1adZMlUH0hnm2S3ZnbwjPQGMm9hDB45SqnybuQ9Bjo+PgnfnCw==",
-    "647D/5afXUjP8jBWyfDQX2QTtLdshyawchxKm3eqhyJPC98DLcFbyC8ir8yciYgtPyN3yl7q88AwoMb7qURsBw==",
-    "PAgvnzE20ypASNvxPbd/iBleipxmjJMD5cGxv0CbUjI/lsRlTdfNWDAXsb0V4a40ExkWqZc9Pe++2ZhQwRNMAQ==",
+    "r2OtBbBVBXT2b8Ch/eFfQt1eDoG8eMs/JQxnjzNPquF80WcUNwQQktsu0mF0+bwc3akKdYdBDeORNLhRjrxVBA==",
+    "JZlln7qCNUpkc+VAzUy1ty8HwTIb9lrWXDGX9EgsNWzpHTs+Fxgfabqx7eClphZXNVNKgn75LirH9pxo1ZnoAg==",
+    "mN5ckFgTf+dDj0gpG4/6pPTPEGklaywsLY0rK4o+nKtLFUG9l0pUecMQcxQu/TPHnCJOGzcU++rcqxI4bjrfBg==",
 };
 
 static const array<string, 4> rs_chunk_ext{
@@ -273,12 +284,12 @@ static const string rs_body_complete =
 
 static string rs_sigs(bool complete) {
     stringstream ss;
-    ss << hex;
+    ss << hex << setfill('0') << setw(16);  // 16 is length of hex 2^64-1
     // Last signature missing when incomplete.
     auto last_b = complete ? rs_block_data.size() : rs_block_data.size() - 1;
     for (size_t b = 0; b < last_b; ++b)
         ss << (b * http_::response_data_block)
-           << ' ' << rs_block_sig[b] << ' ' << rs_block_hash[b]
+           << ' ' << rs_block_sig[b] << ' ' << rs_block_dhash[b] << ' ' << rs_block_chash[b]
            << endl;
     return ss.str();
 }
@@ -357,8 +368,8 @@ static const string rrs_head_complete =
 static const array<string, 4> rrs_chunk_ext{
     "",
     ";ouisig=\"" + rs_block_sig[0] + "\"",
-    ";ouisig=\"" + rs_block_sig[1] + "\";ouihash=\"" + rs_block_hash[1] + "\"",
-    ";ouisig=\"" + rs_block_sig[2] + "\";ouihash=\"" + rs_block_hash[2] + "\"",
+    ";ouisig=\"" + rs_block_sig[1] + "\";ouihash=\"" + rs_block_chash[1] + "\"",
+    ";ouisig=\"" + rs_block_sig[2] + "\";ouihash=\"" + rs_block_chash[2] + "\"",
 };
 
 // Trailers are merged into the initial head,

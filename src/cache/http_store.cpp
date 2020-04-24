@@ -115,18 +115,21 @@ parse_data_block_offset(const std::string& s)  // `^[0-9a-f]*$`
     return offset;
 }
 
-// A signatures file entry with `OFFSET[i] SIGNATURE[i] HASH[i-1]`.
+// A signatures file entry with `OFFSET[i] SIGNATURE[i] CHASH[i-1]`.
 struct SigEntry {
     std::size_t offset;
     std::string signature;
+    std::string data_digest;
     std::string prev_digest;
 
     using parse_buffer = std::string;
 
     std::string str() const
     {
-        static const auto line_format = "%x %s %s\n";
-        return (boost::format(line_format) % offset % signature % prev_digest).str();
+        static const auto pad_digest = util::base64_encode(util::SHA512::digest_type{});
+        static const auto line_format = "%016x %s %s %s\n";
+        return ( boost::format(line_format) % offset % signature % data_digest
+               % (prev_digest.empty() ? pad_digest : prev_digest)).str();
     }
 
     std::string chunk_exts() const
@@ -164,10 +167,12 @@ struct SigEntry {
         boost::string_view line(buf);
         line.remove_suffix(buf.size() - line_len + 1);  // leave newline out
 
-        static const boost::regex line_regex(
-            "([0-9a-f]+)"  // LOWER_HEX(OFFSET[i])
-            " ([A-Za-z0-9+/]+=*)"  // BASE64(SIG[i])
-            " ([A-Za-z0-9+/]+=*)?"  // BASE64(HASH([i-1]))
+        static const auto pad_digest = util::base64_encode(util::SHA512::digest_type{});
+        static const boost::regex line_regex(  // Ensure lines are fixed size!
+            "([0-9a-f]{16})"  // PAD016_LHEX(OFFSET[i])
+            " ([A-Za-z0-9+/=]{88})"  // BASE64(SIG[i]) (88 = size(BASE64(Ed25519-SIG)))
+            " ([A-Za-z0-9+/=]{88})"  // BASE64(DHASH[i]) (88 = size(BASE64(SHA2-512)))
+            " ([A-Za-z0-9+/=]{88})"  // BASE64(CHASH([i-1])) (88 = size(BASE64(SHA2-512)))
         );
         boost::cmatch m;
         if (!boost::regex_match(line.begin(), line.end(), m, line_regex)) {
@@ -175,7 +180,8 @@ struct SigEntry {
             return or_throw(yield, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
         }
         auto offset = parse_data_block_offset(m[1].str());
-        SigEntry entry{offset, m[2].str(), m[3].str()};
+        SigEntry entry{ offset, m[2].str(), m[3].str()
+                      , (m[4] == pad_digest ? "" : m[4].str())};
         buf.erase(0, line_len);  // consume used input
         return entry;
     }
@@ -270,11 +276,13 @@ public:
             return or_throw(yield, asio::error::invalid_argument);
         }
 
+        // TODO: compute and set `e.data_digest`
+
         // Encode the chained hash for the previous block.
         if (prev_block_digest)
             e.prev_digest = util::base64_encode(*prev_block_digest);
 
-        // Prepare hash for next data block: HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])
+        // Prepare hash for next data block: CHASH[i]=SHA2-512(CHASH[i-1] BLOCK[i])
         prev_block_digest = block_hash.close();
         block_hash = {}; block_hash.update(*prev_block_digest);
 

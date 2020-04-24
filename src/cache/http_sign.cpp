@@ -531,11 +531,11 @@ struct SigningReader::Impl {
                 ch.exts = block_chunk_ext( _injection_id
                                          , _block_offset - _block_size_last
                                          , block_digest, _sk);
-                // Prepare chunk extension for next block: HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])
+                // Prepare chunk extension for next block: CHASH[i]=SHA2-512(CHASH[i-1] DHASH[i])
                 _block_hash = {};
                 _block_hash.update(block_digest);
-            }  // else HASH[0]=SHA2-512(BLOCK[0])
-            _block_hash.update(block_buf);
+            }  // else CHASH[0]=SHA2-512(DHASH[0])
+            _block_hash.update(util::sha512_digest(block_buf));
             _block_offset += (_block_size_last = block_buf.size());
         }
         return http_response::Part(std::move(ch));  // pass data on, drop origin extensions
@@ -878,8 +878,8 @@ struct VerifyingReader::Impl {
             }
             _block_hash.update(*_prev_block_dig);
         }
-        // Complete hash for the data block; note that HASH[0]=SHA2-512(BLOCK[0])
-        _block_hash.update(block_buf);
+        // Complete hash for the data block; note that CHASH[0]=SHA2-512(DHASH[0])
+        _block_hash.update(util::sha512_digest(block_buf));
         auto block_digest = _block_hash.close();
         auto bsig_str = block_sig_str(_head.injection_id(), _block_offset, block_digest);
         if (!_head.public_key().verify(bsig_str, *block_sig)) {
@@ -890,7 +890,7 @@ struct VerifyingReader::Impl {
         // Keep data block signature for next chunk header.
         auto prev_prev_block_sig = std::move(_prev_block_sig);
         _prev_block_sig = std::move(block_sig);
-        // Prepare hash for next data block: HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])
+        // Prepare hash for next data block: CHASH[i]=SHA2-512(CHASH[i-1] DHASH[i])
         _block_hash = {}; _block_hash.update(block_digest);
         _block_offset += block_buf.size();
         // Chain hash is to be sent along the signature of the following data block,

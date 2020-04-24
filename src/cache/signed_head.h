@@ -98,7 +98,7 @@ public:
     // Example:
     //
     //     ...
-    //     X-Ouinet-Version: 2
+    //     X-Ouinet-Version: 5
     //     X-Ouinet-URI: https://example.com/foo
     //     X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
     //     X-Ouinet-BSigs: keyId="...",algorithm="hs2019",size=65536
@@ -190,9 +190,9 @@ SignedHead::sign_response( const http::request_header<>& rqh
     auto key_id = encode_key_id(pk);
 
     // TODO: This should be a `static_assert`.
-    assert(protocol_version_hdr_current == protocol_version_hdr_v4);
+    assert(protocol_version_hdr_current == protocol_version_hdr_v5);
 
-    rsh.set(protocol_version_hdr, protocol_version_hdr_v4);
+    rsh.set(protocol_version_hdr, protocol_version_hdr_v5);
     rsh.set(response_uri_hdr, rqh.target());
     rsh.set(response_injection_hdr
            , boost::format("id=%s,ts=%d") % injection_id % injection_ts);
