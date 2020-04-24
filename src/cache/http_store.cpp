@@ -277,15 +277,22 @@ public:
             return or_throw(yield, asio::error::invalid_argument);
         }
 
-        // TODO: compute and set `e.data_digest`
+        auto block_digest = block_hash.close();
+        block_hash = {};
+
+        e.data_digest = util::base64_encode(block_digest);
 
         // Encode the chained hash for the previous block.
         if (prev_block_digest)
             e.prev_digest = util::base64_encode(*prev_block_digest);
 
         // Prepare hash for next data block: CHASH[i]=SHA2-512(CHASH[i-1] BLOCK[i])
-        prev_block_digest = block_hash.close();
-        block_hash = {}; block_hash.update(*prev_block_digest);
+        util::SHA512 chain_hash;
+
+        if (prev_block_digest) chain_hash.update(*prev_block_digest);
+        chain_hash.update(block_digest);
+
+        prev_block_digest = chain_hash.close();
 
         util::file_io::write(*sigsf, asio::buffer(e.str()), cancel, yield);
     }
@@ -1041,7 +1048,7 @@ http_store_load_hash_list( const fs::path& dir
 
     util::SHA512 last_block_hash;
     last_block_hash.update(decoded_prev_digest);
-    last_block_hash.update(last_block_buffer);
+    last_block_hash.update(util::SHA512::digest(last_block_buffer));
 
     hl.hashes.push_back(util::base64_encode(last_block_hash.close()));
 
