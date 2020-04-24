@@ -135,19 +135,30 @@ static const array<string, 3> rs_block_data{
     _rs_block2,
 };
 
+static const array<util::SHA512::digest_type, 3> rs_block_dhash_raw{
+    util::SHA512::digest(rs_block_data[0]),
+    util::SHA512::digest(rs_block_data[1]),
+    util::SHA512::digest(rs_block_data[2])
+};
+
 static const array<string, 3> rs_block_dhash{
-    "aERfr5o+kpvR4ZH7xC0mBJ4QjqPUELDzjmzt14WmntxH2p3EQmATZODXMPoFiXaZL6KNI50Ve4WJf/x3ma4ieA==",
-    "lfLy+XIYvDfWbg0+hDnfPZ2G548iBKNalciKnSzEDPLiqmxRng2oOAcpKwY5NicofgpuYrMGII2JwOS7XFPJNA==",
-    "2AIvIGCtbv0perc9zFNVybIUBUsNF3ahNqZp0mp9OxT3OqDQ6/8Z7jMzaPAWS2QZqW2knj5IF1Pn6Wtxa9zLbw==",
+    util::base64_encode(rs_block_dhash_raw[0]),
+    util::base64_encode(rs_block_dhash_raw[1]),
+    util::base64_encode(rs_block_dhash_raw[2])
 };
 
 // As they appear in signature files.
-static const array<string, 3> rs_block_chash{
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",  // chash[-1], just padding
-    "4c0RNY1zc7KD7WqcgnEnGv2BJPLDLZ8ie8/kxtwBLoN2LJNnzUMFzXZoYy1NnddokpIxEm3dL+gJ7dr0xViVOg==",  // chash[0]
-    "bmsnk/0dfFU9MnSe7RwGfZruUjmhffJYMXviAt2oSDBMMJOrwFsJFkCoIkdsKXej59QR8jLUuPAF7y3Y0apiTQ==",  // chash[1]
-    //"xU5ll5e/S4nn3T7iGoP5N30QQ5QfPh4YGFCQASn5pATjb4U+qLhqBpkeQnuUk/I3oC0JSHIYmVHH16quqh9bXA==",  // chash[2], not stored
-};
+static util::SHA512::digest_type rs_block_chash_raw(size_t i) {
+    using SHA = util::SHA512;
+
+    if (i == 0) return SHA::zero_digest();
+    if (i == 1) return SHA::digest(SHA::digest(rs_block_data[i-1]));
+    return SHA::digest(rs_block_chash_raw(i-1), SHA::digest(rs_block_data[i-1]));
+}
+
+static string rs_block_chash(size_t i) {
+    return util::base64_encode(rs_block_chash_raw(i));
+}
 
 static const array<string, 3> rs_block_sig{
     "r2OtBbBVBXT2b8Ch/eFfQt1eDoG8eMs/JQxnjzNPquF80WcUNwQQktsu0mF0+bwc3akKdYdBDeORNLhRjrxVBA==",
@@ -368,8 +379,8 @@ static const string rrs_head_complete =
 static const array<string, 4> rrs_chunk_ext{
     "",
     ";ouisig=\"" + rs_block_sig[0] + "\"",
-    ";ouisig=\"" + rs_block_sig[1] + "\";ouihash=\"" + rs_block_chash[1] + "\"",
-    ";ouisig=\"" + rs_block_sig[2] + "\";ouihash=\"" + rs_block_chash[2] + "\"",
+    ";ouisig=\"" + rs_block_sig[1] + "\";ouihash=\"" + rs_block_chash(1) + "\"",
+    ";ouisig=\"" + rs_block_sig[2] + "\";ouihash=\"" + rs_block_chash(2) + "\"",
 };
 
 // Trailers are merged into the initial head,
