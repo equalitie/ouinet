@@ -167,10 +167,10 @@ struct SigEntry {
         line.remove_suffix(buf.size() - line_len + 1);  // leave newline out
 
         static const auto pad_digest = util::base64_encode(util::SHA512::digest_type{});
-        static const boost::regex line_regex(
+        static const boost::regex line_regex(  // Ensure lines are fixed size!
             "([0-9a-f]{16})"  // PAD016_LHEX(OFFSET[i])
-            " ([A-Za-z0-9+/]+=*)"  // BASE64(SIG[i])
-            " ([A-Za-z0-9+/]+=*)"  // BASE64(CHASH([i-1]))
+            " ([A-Za-z0-9+/=]{88})"  // BASE64(SIG[i]) (88 = size(BASE64(Ed25519-SIG)))
+            " ([A-Za-z0-9+/=]{88})"  // BASE64(CHASH([i-1])) (88 = size(BASE64(SHA2-512)))
         );
         boost::cmatch m;
         if (!boost::regex_match(line.begin(), line.end(), m, line_regex)) {
