@@ -126,7 +126,8 @@ struct SigEntry {
 
     std::string str() const
     {
-        static const auto pad_digest = util::base64_encode(util::SHA512::digest_type{});
+        static const auto pad_digest = util::base64_encode(util::SHA512::zero_digest());
+        auto z = util::SHA512::zero_digest();
         static const auto line_format = "%016x %s %s %s\n";
         return ( boost::format(line_format) % offset % signature % data_digest
                % (prev_digest.empty() ? pad_digest : prev_digest)).str();
@@ -167,7 +168,7 @@ struct SigEntry {
         boost::string_view line(buf);
         line.remove_suffix(buf.size() - line_len + 1);  // leave newline out
 
-        static const auto pad_digest = util::base64_encode(util::SHA512::digest_type{});
+        static const auto pad_digest = util::base64_encode(util::SHA512::zero_digest());
         static const boost::regex line_regex(  // Ensure lines are fixed size!
             "([0-9a-f]{16})"  // PAD016_LHEX(OFFSET[i])
             " ([A-Za-z0-9+/=]{88})"  // BASE64(SIG[i]) (88 = size(BASE64(Ed25519-SIG)))
