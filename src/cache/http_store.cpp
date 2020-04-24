@@ -119,6 +119,7 @@ parse_data_block_offset(const std::string& s)  // `^[0-9a-f]*$`
 struct SigEntry {
     std::size_t offset;
     std::string signature;
+    std::string data_digest;
     std::string prev_digest;
 
     using parse_buffer = std::string;
@@ -126,8 +127,8 @@ struct SigEntry {
     std::string str() const
     {
         static const auto pad_digest = util::base64_encode(util::SHA512::digest_type{});
-        static const auto line_format = "%016x %s %s\n";
-        return ( boost::format(line_format) % offset % signature
+        static const auto line_format = "%016x %s %s %s\n";
+        return ( boost::format(line_format) % offset % signature % data_digest
                % (prev_digest.empty() ? pad_digest : prev_digest)).str();
     }
 
@@ -170,6 +171,7 @@ struct SigEntry {
         static const boost::regex line_regex(  // Ensure lines are fixed size!
             "([0-9a-f]{16})"  // PAD016_LHEX(OFFSET[i])
             " ([A-Za-z0-9+/=]{88})"  // BASE64(SIG[i]) (88 = size(BASE64(Ed25519-SIG)))
+            " ([A-Za-z0-9+/=]{88})"  // BASE64(DHASH[i]) (88 = size(BASE64(SHA2-512)))
             " ([A-Za-z0-9+/=]{88})"  // BASE64(CHASH([i-1])) (88 = size(BASE64(SHA2-512)))
         );
         boost::cmatch m;
@@ -178,7 +180,8 @@ struct SigEntry {
             return or_throw(yield, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
         }
         auto offset = parse_data_block_offset(m[1].str());
-        SigEntry entry{offset, m[2].str(), (m[3] == pad_digest ? "" : m[3].str())};
+        SigEntry entry{ offset, m[2].str(), m[3].str()
+                      , (m[4] == pad_digest ? "" : m[4].str())};
         buf.erase(0, line_len);  // consume used input
         return entry;
     }
@@ -272,6 +275,8 @@ public:
             _ERROR("Block signature is not aligned to block boundary; uri=", uri);
             return or_throw(yield, asio::error::invalid_argument);
         }
+
+        // TODO: compute and set `e.data_digest`
 
         // Encode the chained hash for the previous block.
         if (prev_block_digest)
