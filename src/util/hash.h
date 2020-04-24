@@ -46,6 +46,16 @@ public:
 
     Hash() : impl(hash_detail::new_hash_impl(ALGORITHM)) {};
 
+    static digest_type zero_digest() {
+        static bool filled = false;
+        static digest_type ret;
+        if (!filled) {
+            filled = true;
+            ret.fill(0);
+        }
+        return ret;
+    }
+
     inline void update(boost::string_view sv)
     {
         update(sv.data(), sv.size());
