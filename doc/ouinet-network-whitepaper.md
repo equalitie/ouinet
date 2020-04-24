@@ -89,6 +89,180 @@ The ouinet client does need to verify that a cache entry received from the distr
 
 # Distributed Cache
 
+## Introduction
+
+The ouinet network uses a *distributed cache* as one of the methods of getting web content to users that try to access that content. If a web resource is fetched from the authoritative origin webserver on behalf of a user, in many cases the fetched resource can be used to satisfy future requests by different users trying to access the same content. If a user's device holds a copy of such suitable content, the ouinet client can use peer-to-peer communication to transmit copies of this content to other users interested in the content; and conversely, if a user wants to access a certain web resource, the ouinet client can use peer-to-peer communication to request a copy of the resource from a peer. In situations where user access to the centralized ouinet injector infrastructure is unavailable, this technique provides a limited but useful alternative form of access to web content. If access to the injector infrastructure is unreliable or limited, the distributed cache can be used to satisfy resource requests wherever possible, allowing the ouinet client to utilize the injectors only for those requests for which no alternative is available, reducing the load on the unreliable injectors and improving performance.
+
+The caching of web resources is a standard functionality in the HTTP protocol. The HTTP protocol provides faculties by which an origin server can provide detailed instructions describing which resources are eligible for caching, which ones are not, the duration during which a resource can be cached, and requirements and limitations when caching the resource. HTTP clients implementing this system can satisfy HTTP requests by substituting an HTTP response stored in the cache, subject to the restrictions declared by the origin server, saving on network traffic and improving performance. HTTP client software such as web browsers commonly implement a cache for this purpose, which typically plays a major part in the performance characteristics of such software. The HTTP standard also describes caching HTTP proxies, which act as an performance-improving intermediary to a group of users by using a shared cache for all of them.
+
+The ouinet distributed cache is a variant implementation of such an HTTP cache, in which each ouinet user has access to the combined cached resources of all ouinet users worldwide. Each ouinet client stores cached copies of resources they have recently accessed in the storage of their own device, and will use peer-to-peer communications to transfer these cached resources to other ouinet clients that request access to them. From the viewpoint of a particular ouinet user, the combined caches held by each ouinet user worldwide function as a distributed filesystem containing more cached content than any one user device can realistically store.
+
+Traditional HTTP caches are used in such a way that only a single party writes to, and reads from, the cache. The ouinet distributed cache, on the other hand, forms a distributed filesystem that many different users can store resources in, and fetch resources from. This architectural difference comes with a number of complications that the ouinet system needs to account for. With large numbers of people being able to participate in the distributed cache, the ouinet software cannot assume that all these participants are necessarily trustworthy. When the ouinet client requests a cached resource from some other ouinet user using the peer-to-peer system, or sends some other ouinet user a copy of a cached resource for their benefit, the ouinet client must account for the possibility that their peer may have malicious intent. To accommodate this concern, the ouinet distributed cache uses several systems to make it possible to cooperate on resource caching with untrusted peers.
+
+When an HTTP client wishes to respond to an HTTP request by substituting a cached response, it needs to ensure that the stored cached response is in fact a legitimate response sent by the responsible origin server to the associated request. In a traditional HTTP cache operated by a single party, this is a trivial requirement, for the cache software will only store a cached response after receiving it from the responsible origin server, which means the cache storage serves as a trusted repository of cached content. In the ouinet distributed cache, on the other hand, cached resources may be supplied by untrusted peers, and there is no obvious way in which the receiving party can verify that this response is a legitimate one; a malicious peer could easily create a forged response, add it to its local cache storage, and send it to its peers. This behavior is a threat that the ouinet client needs to be able to guard against.
+
+To avoid this problem, the ouinet system makes use of trusted injector servers, charged with the authority of creating resource cache entries whose legitimacy can be verified by ouinet clients. When these injector servers fetch an HTTP resource on behalf of a user, they determine if the resulting response is eligible for caching; if it is, they will then create a cryptographic signature covering the response, which enables the peer-to-peer distribution of the cached resource in the distributed cache. By verifying this signature, clients can confirm that a cached resource has been deemed legitimate by a trusted injector server.
+
+A different security concern when using an HTTP cache shared between large numbers of people lies in the confidentiality of privacy-sensitive data communicated using web resources. Some HTTP responses contain private information intended only for the recipient, and nobody else; to avoid compromising confidentiality, responses with this characteristic must not be shared using the distributed cache. The ouinet system therefore needs to be able to recognize confidential responses, and mark them as ineligible for caching.
+
+The HTTP protocol contains functionality by which origin servers can specify resources that are ineligible for caching, or ineligible for public caching, on the grounds of confidentiality, which in theory should imply that recognizing confidential responses should be a simple matter. Unfortunately, origin servers in practice do not always adhere to this protocol very accurately. It is reasonably common for origin servers to serve confidential resources while failing to mark them as such, in which case it is critical that the ouinet system is able to recognize the confidentiality of the resource by some other means. Much more common still is the reverse situation, in which a non-confidential resource is marked as ineligible for caching on confidentiality grounds by the origin server, typically for commercial reasons. If the ouinet system were to accept these judgements uncritically, the amount of resources eligible for caching would be sharply limited, reducing the utility of the distributed cache considerably. To avoid both problems, the ouinet system uses a heuristic analysis to recognize cases where the origin-supplied cache-eligibility judgement is misleading.
+
+The remainder of this section describes the details of the operation of the ouinet distributed cache system. It details the exact data stored in the cache, and its interpretation; the system used for signing and verification of cached resources; and finally, it describes the methods and protocols by which different actors in the ouinet network may exchange cached resources with each other.
+
+
+## Cache structure
+
+The ouinet distributed cache conceptually consists of a repository of cached web resources. Each such cached resource takes the form of a record referred to as a *cache entry*. A cache entry represents a single HTTP response suitable for using as a cached reply, along with assorted metadata that makes it possible to verify the legitimacy of the cached response, check the response for expiracy or being superceded, and assess its usability. Cache entries are created by the ouinet injector servers, transmitted from injector servers to ouinet clients, stored on client devices, and shared between different clients using peer-to-peer systems.
+
+A cache entry is a data structure consisting of the resource URI, the HTTP response headers, the HTTP response body, additional metadata added by the ouinet injector, and a cryptographic signature asserting the legitimacy of the cache entry.
+
+Clients that participate in the distributed cache store a collection of such cache entries on their device's local storage, and can get access to many more cache entries using the peer-to-peer network. When satisfying an HTTP request, they can search the distributed cache for any cache entries with an URI matching the one in the HTTP request, checking them for validity, and substituting the cached resource as an HTTP response.
+
+### Cache entry construction
+
+Cache entries are created by the ouinet injector servers. Injector servers can create a cache entry by requesting an HTTP resource on behalf of a user, checking the response for cache eligibility, adding necessary metadata, and signing the resulting package.
+
+Cache entries are identified by their resource URI; when a ouinet client seeks to resolve an HTTP request from the distributed cache, it can use any cache entry whose resource URI matches the URI in the HTTP request. For this behavior to work as expected without causing problems, the injector servers should avoid sending multiple HTTP requests for a particular resource URI that are interpreted by the responsible origin server as having different request semantics; this can happen, for example, if the origin server chooses to vary its response based on the user's user agent settings, which are communicated as part of the HTTP request using HTTP headers. In this scenario, the distributed cache would likely end up storing multiple semantically different responses for this resource. The ouinet client would not be able to distinguish between the competing cache entries, on account of them using the same resource URI, causing confusion and unpredictable behavior.
+
+To avoid this problem, the injector servers will not create cache entries based on HTTP responses received after forwarding arbitrary HTTP requests. Instead, when attemping to create a cache entry, the injector servers will only use a single predictable HTTP request for each resource URI, which is allowed to vary only on a carefully selected list of characteristics known not to affect the request semantics. For similar reasons, when creating a cache entry, the injector servers will remove all metadata from the HTTP response whose semantics are likely to change with different requests for the same resource. Together, these two procedures are referred to as *resource canonicalization*.
+
+Separately from the above, the distributed cache mechanism also needs to check whether a particular HTTP response is eligible for storing in the cache at all. Many HTTP resources should not be stored in any cache, because their content changes frequently and unpredictably, or because their content is personalized specifically for the user requesting the resource; this eligibility is typically specified in HTTP response headers. In addition, clients sometimes wish to send an HTTP request without the limitations enforced by the resource canonicalization system; in such cases, the resource can neither be retrieved from the distributed cache, nor stored in it.
+
+The process for constructing a cache entry and storing it in the distributed cache is a procedure that incorporates all these systems. It consists of the following steps:
+
+* The ouinet client wishes to perform an HTTP request.
+* The ouinet client checks whether the request is eligible for caching. If it is not, the distributed cache subsystem is not used.
+* The ouinet client contacts an injector server, and asks it to create a cache entry corresponding to the HTTP request.
+* The injector server canonicalizes the HTTP request.
+* The injector server sends the canonicalized request to the responsible origin server, and awaits a response.
+* The injector server canonicalizes the HTTP response.
+* The injector server adds metadata to the HTTP response in the form of additional HTTP headers, describing the characteristics of the cache entry.
+* The injector server creates a cryptographic signature for the cache entry.
+* The injector server sends the modified HTTP response to the client, along with the signature.
+* The ouinet client checks whether the response is eligible for caching. If it is, it stores the combination of the HTTP response and the signature to the distributed cache.
+* The ouinet client resolves the HTTP request, whether or not it was also stored in the distributed cache.
+
+The exact communication between the ouinet client and the injector server, as well as the details of the cryptographic signatures used in cache entry construction, are described in later sections. Other details are described below.
+
+#### Resource canonicalization
+
+When sending an HTTP request to an origin server for the purpose of creating a cache entry, the ouinet injector creates a minimal canonical HTTP request based on the resource URI as well as a small number of request headers derived from the HTTP request sent by the ouinet client. The *canonical request* also contains neutral generic values for certain headers that many origin servers expect to be present.
+
+This canonical HTTP request takes the form of a HTTP/1.1 request, with a request target and `Host:` header derived from the resource URI in the standard way. The canonical request also contains the following headers:
+
+* `Accept: */*`
+* `Accept-Encoding: `
+* `DNT: 1`
+* `Upgrade-Insecure-Requests: 1`
+* `User-Agent: Mozilla/5.0 (Windows NT 6.1; rv:60.0) Gecko/20100101 Firefox/60.0`
+* `Origin:` whatever value is present in the client request, if any, or absent otherwise
+* `From:` whatever value is present in the client request, if any, or absent otherwise
+
+This canonical request is sent to the origin server, and the accompanying response used to create a cache entry.
+
+After receiving a reply to this canonical request from the origin server, the injector server removes from the response all HTTP headers that are likely to describe details of the individual request that was performed, rather than the resource that was requested. It also removes headers that describe characteristics that do not apply to a cached version of the resource. This modified form of the HTTP response is then known as the *canonical response*.
+
+The canonical response is created by removing from the origin response all headers, except for those that are explicitly allowed. The canonical response contains the following headers, insofar as they are present in the origin response:
+
+* `Server`
+* `Retry-After`
+* `Content-Length`
+* `Content-Type`
+* `Content-Encoding`
+* `Content-Language`
+* `Digest`
+* `Transfer-Encoding`
+* `Accept-Ranges`
+* `ETag`
+* `Age`
+* `Date`
+* `Expires`
+* `Via`
+* `Vary`
+* `Location`
+* `Cache-Control`
+* `Warning`
+* `Last-Modified`
+* `Access-Control-Allow-Origin`
+* `Access-Control-Allow-Credentials`
+* `Access-Control-Allow-Methods`
+* `Access-Control-Allow-Headers`
+* `Access-Control-Max-Age`
+* `Access-Control-Expose-Headers`
+
+All headers in the origin response that are not on this list are removed from the canonical response.
+
+#### Added metadata
+
+When a ouinet injector has created a canonical response for a newly constructed cache entry, it then adds a series of headers that describe the properties of the cache entry itself. These headers aid a ouinet client receiving the cache entry to interpret the cache entry correctly. These headers are stored in the cache entry as part of the HTTP response headers.
+
+The ouinet injector adds the following headers to the cache entry:
+
+* `X-Ouinet-Version`: This describes the version of the ouinet distributed cache storage format. This document describes the distributed cache storage format version **4**.
+* `X-Ouinet-URI`: Contains the URI of the resource described by this cache entry.
+* `X-Ouinet-Injection`: This describes a unique ID assigned to this cache entry, allowing a receiver to refer unambiguously to this specific cache entry, as well as the time at which the cache entry was created. Encoded as `X-Ouinet-Injection: id=<string>,ts=<timestamp>`, where <string> is a string containing only alphanumeric characters, dashes, and understores; and <timestamp> is an integer value, representing a timestamp expressed as the number of seconds since 1970-01-01 00:00:00 UTC.
+
+The ouinet injector furthermore adds headers related to the cryptographic signature used to verify the legitimacy of the cache entry. This is described in more detail in the [Signatures](#signatures) section.
+
+#### Cache eligibility
+
+The distributed cache system makes a determination, for each resource request, whether that resource is eligible for caching. This process takes place in two parts. When the client is preparing to send an HTTP request, it first determines whether the request is one that can, in principle, be cached; if this is not the case, the ouinet client does not use the distributed cache system at all when satisfying this request. If the request is eligible for caching, the request can be sent to an injector server, which ---all going well--- will reply with a cache entry that can be stored in the distributed cache. The client then makes a second determination whether the response is also eligible for caching. If it is not, the resource request is completed successfully, but the cache entry is not stored.
+
+The ouinet client currently considers a HTTP request to be eligible for caching if it uses the GET HTTP access method, and moreover the resource URI is not on a configurable blacklist of resources that are never eligible. This is certainly an overestimate for general browsing; for one example, there are many web resources that can only be accessed after authenticating using HTTP authentication, or only after authenticating using some cookie-based authentication scheme. This scheme therefore relies on careful configuration of the resource blacklist for it to work well in practice. Improving this heuristic remains a fertile area for future improvement.
+
+To determine whether an HTTP response is eligible for storing in the distributed cache, ouinet uses a variant of the procedure described in [RFC 7234, section 3](https://tools.ietf.org/html/rfc7234#section-3). This RFC describes a procedure determining whether an HTTP response is allowed to be stored in a cache, based on the characteristics of the cache, expiracy information communicated in the response headers, and the `Cache-Control` header. The ouinet distributed cache follows this procedure as written, with two major exceptions:
+
+* The ouinet distributed cache will only store HTTP responses with an status code of 200 (OK), 301 (Moved Permanently), 302 (Found), or 307 (Temporary Redirect). The ouinet project does not wish to store error status pages in the distributed cache.
+* If the HTTP response contains the `Cache-Control: private` clause, the ouinet client will use a heuristic analysis to verify that this clause is warranted.
+
+Many origin servers will declare a `Cache-Control: private` clause on resources that are not really private in reality, but which the origin server wishes to personalize in a non-confidential way for each request. For such resources, the ouinet client ideally wishes to store the cache entry as if the `Cache-Control: private` clause was absent, but avoid satisfying requests for this resource using the distributed cache unless no other methods for accessing the resource are available. To determine whether the `Cache-Control: private` clause is used with good reason, ouinet uses the following procedure:
+
+* If the HTTP request uses an HTTP method other than GET, the `Cache-Control: private` clause is warranted.
+* If the resource URI contains a query string (that is, if it contains a question mark character), the `Cache-Control: private` clause is warranted.
+* If the HTTP request contains any header fields that might contain confidential information, the `Cache-Control: private` clause is warranted.
+* If neither of the above applies, the `Cache-Control: private` is unwarranted, and the cache entry is eligible for storage in the distributed cache.
+
+For the purposes of this procedure, the following HTTP response headers are considered to never contain confidential information:
+
+* `Host`
+* `User-Agent`
+* `Cache-Control`
+* `Accept`
+* `Accept-Language`
+* `Accept-Encoding`
+* `From`
+* `Origin`
+* `Keep-Alive`
+* `Connection`
+* `Referer`
+* `Proxy-Connection`
+* `X-Requested-With`
+* `Upgrade-Insecure-Requests`
+* `DNT`
+
+Any headers not on this list are considered to potentially contain confidential information. If any header not on this list is present in the HTTP request, the `Cache-Control: private` clause is considered to be warranted.
+
+### Validity checking
+
+When a ouinet client wishes to use a cache entry stored in the distributed cache to satisfy a resource request, it must first verify that the cache entry has not expired, is unusable for some other reason, or needs revalidation from the origin server. To make this determination, the ouinet client largely follows the procedure described in [RFC 7234, section 4](https://tools.ietf.org/html/rfc7234#section-4). It deviates from this procedure on two important points, however.
+
+The procedure described in this RFC allows a client to use a cache entry that is expired, in certain cases where the client is unable to connect to the responsible origin server to request an up-to-date resource. However, this behavior is bound to strict conditions, and the great majority of origin servers specify `Cache-Control` clauses that disallow this behavior, making this mechanism of sharply limited practical value.
+
+Because the ouinet project aims to provide some limited form of access to web resources even in cases where no access to the responsible origin server can be arranged, the ouinet client is willing to use expired cache entries in cases where the procedure described in the RFC specifically disallows this behavior. When the ouinet client cannot establish contact to the responsible origin server in any way ---either directly, or by using an injector server as an intermediary--- and when all cache entries for the resource the client has access to are expired, the client will use this cache entry to satisfy the resource request, despite any `Cache-Control` clauses that would disallow this. This ensures that the ouinet client will provide some limited access to the resource, if this is at all possible.
+
+For similar reasons, the ouinet client is willing to use cache entries that have the `Cache-Control: private` clause set, if no other options are available. As described in the previous section, cache entries with this clause set should only be used by the client as an option of last resort. The ouinet client treats such cache entries equivalently to cache entries that have expired.
+
+### Signatures
+
+
+## Distribution
+
+### Injector-to-client cache entry exchange
+
+### Peer-to-peer cache entry exchange
+
+### Out of band cache entry exchange
+
 
 
 # Injector Servers
