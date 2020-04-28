@@ -3820,7 +3820,7 @@
        id="rect622-1" />
     <g
        id="g2581"
-       transform="matrix(0.14111111,0,0,0.14111111,164.71194,238.33306)">
+       transform="matrix(0.14111111,0,0,0.14111111,164.7825,249.02222)">
       <title
          id="title2559">1f600</title>
       <circle
@@ -3879,7 +3879,7 @@
     </g>
     <g
        id="g2581-5"
-       transform="matrix(0.14111111,0,0,0.14111111,178.08222,244.43611)">
+       transform="matrix(0.14111111,0,0,0.14111111,180.58694,240.97889)">
       <title
          id="title2559-9">1f600</title>
       <circle
@@ -3997,7 +3997,7 @@
     </g>
     <path
        style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.26458332px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
-       d="m 172.37661,237.73333 -0.9298,1.51033"
+       d="m 175.91736,237.73333 -4.98395,11.89982"
        id="path2676"
        inkscape:connector-type="polyline"
        inkscape:connector-curvature="0"
@@ -4005,7 +4005,7 @@
        inkscape:connection-end="#g2581" />
     <path
        style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.26458332px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
-       d="m 182.92607,237.73333 -0.20446,6.98689"
+       d="m 184.60525,237.73333 0.22658,3.5365"
        id="path2678"
        inkscape:connector-type="polyline"
        inkscape:connector-curvature="0"
@@ -4019,5 +4019,50 @@
        inkscape:connector-curvature="0"
        inkscape:connection-start="#rect2516"
        inkscape:connection-end="#g2581-9" />
+    <path
+       style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.26458332px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+       d="m 171.81682,256.94024 3.40941,4.6056"
+       id="path3289"
+       inkscape:connector-type="polyline"
+       inkscape:connector-curvature="0"
+       inkscape:connection-start="#g2581"
+       inkscape:connection-end="#rect4510" />
+    <path
+       style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.26458332px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+       d="m 184.84584,249.71997 -0.71831,11.82587"
+       id="path3291"
+       inkscape:connector-type="polyline"
+       inkscape:connector-curvature="0"
+       inkscape:connection-start="#g2581-5"
+       inkscape:connection-end="#rect4510" />
+    <path
+       style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.26458332px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+       d="m 198.85206,247.27912 -8.6567,14.26672"
+       id="path3293"
+       inkscape:connector-type="polyline"
+       inkscape:connector-curvature="0"
+       inkscape:connection-start="#g2581-9"
+       inkscape:connection-end="#rect4510" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:4.23333311px;line-height:5.82083321px;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-feature-settings:normal;text-align:center;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:middle;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.26458332px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+       x="206.73677"
+       y="252.58771"
+       id="text306000-7-0-3-3-3-6-2"><tspan
+         sodipodi:role="line"
+         x="206.73677"
+         y="252.58771"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:4.23333311px;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-feature-settings:normal;text-align:center;writing-mode:lr-tb;text-anchor:middle;stroke-width:0.26458332px"
+         id="tspan14139-0">Other</tspan><tspan
+         sodipodi:role="line"
+         x="206.73677"
+         y="258.40854"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:4.23333311px;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-feature-settings:normal;text-align:center;writing-mode:lr-tb;text-anchor:middle;stroke-width:0.26458332px"
+         id="tspan3318">Ouinet</tspan><tspan
+         sodipodi:role="line"
+         x="206.73677"
+         y="264.22937"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:4.23333311px;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-feature-settings:normal;text-align:center;writing-mode:lr-tb;text-anchor:middle;stroke-width:0.26458332px"
+         id="tspan3320">clients</tspan></text>
   </g>
 </svg>
