@@ -2963,7 +2963,7 @@
          sodipodi:role="line"
          id="tspan678"
          x="2.2944336"
-         y="207.25426">Ouinet-powered client</tspan></text>
+         y="207.25426">Ouinet client</tspan></text>
   </g>
   <g
      inkscape:groupmode="layer"
@@ -2996,7 +2996,7 @@
          sodipodi:role="line"
          id="tspan698"
          x="53.86483"
-         y="-288.48575">Ouinet-powered services</tspan></text>
+         y="-288.48575">Ouinet services</tspan></text>
   </g>
   <g
      inkscape:label="Flow"
@@ -3678,12 +3678,12 @@
          y="158.43021"
          x="189.42789"
          sodipodi:role="line"
-         id="tspan2420">Oui</tspan><tspan
+         id="tspan2420">Ouinet</tspan><tspan
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:sans-serif;-inkscape-font-specification:sans-serif;stroke-width:0.26458332px"
          y="164.25104"
          x="189.42789"
          sodipodi:role="line"
-         id="tspan2422">services</tspan></text>
+         id="tspan2422">transports</tspan></text>
     <path
        style="display:inline;opacity:1;vector-effect:none;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke:#000000;stroke-width:0.79374999;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;marker-start:url(#marker4033-3);marker-end:url(#marker4163)"
        d="m 123.92686,215.7311 46.00127,-41.91813"
