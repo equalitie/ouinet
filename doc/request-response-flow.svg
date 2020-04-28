@@ -2971,10 +2971,10 @@
        transform="translate(0,-87.000001)"
        style="color:#000000;display:inline;overflow:visible;visibility:visible;opacity:0.25;vector-effect:none;fill:url(#linearGradient1954);fill-opacity:1;fill-rule:nonzero;stroke:none;stroke-width:0.26458332;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;marker:none;enable-background:accumulate"
        id="rect1946"
-       width="42.333332"
-       height="105.83333"
+       width="42.333344"
+       height="148.16667"
        x="142.875"
-       y="191.16667" />
+       y="148.83333" />
     <rect
        transform="translate(0,-87.000001)"
        style="color:#000000;display:inline;overflow:visible;visibility:visible;opacity:0.25;vector-effect:none;fill:#ffff00;fill-opacity:1;fill-rule:nonzero;stroke:none;stroke-width:0.26458332;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;marker:none;enable-background:accumulate"
@@ -3010,10 +3010,10 @@
     <rect
        style="color:#000000;display:inline;overflow:visible;visibility:visible;opacity:0.1;vector-effect:none;fill:url(#linearGradient3088);fill-opacity:1;fill-rule:nonzero;stroke:none;stroke-width:0.26458332;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;marker:none;enable-background:accumulate"
        id="rect3080"
-       width="31.75"
-       height="105.83333"
+       width="31.74999"
+       height="148.16664"
        x="-216.95833"
-       y="104.16666"
+       y="61.833332"
        transform="scale(-1,1)" />
     <text
        xml:space="preserve"
