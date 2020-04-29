@@ -14,7 +14,7 @@ option(WITH_INJECTOR "Compile injector" ON)
 #       because trowing (and catching) exceptions inside a coroutine confuses
 #       ASan. More info:
 #       https://github.com/boostorg/coroutine/issues/30#issuecomment-325574878
-option(WITH_ASAN "Build with Address sanitizer" ON)
+option(WITH_ASAN "Build with Address sanitizer" OFF)
 
 
 ################################################################################
