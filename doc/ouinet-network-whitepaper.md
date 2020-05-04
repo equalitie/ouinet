@@ -6,7 +6,7 @@ The ouinet network contains a collection of specialized public proxy servers, kn
 
 In addition, ouinet uses a peer-to-peer distributed content cache system that can store and distribute cached copies of web resources. Users and contributors of ouinet can connect to this network to share copies of web content they recently accessed with other users, especially when those other users are not able to reliably reach an injector server. The content cache can be used only for those web resources that are eligible for caching, and as such cannot fully replace access to the injector servers. Nonetheless, the distributed content cache system can lighten the load on the injector server system during network conditions in which access to the injector servers is a sparse resource, and it can serve as a limited fallback in cases where the injector servers cannot be reached at all.
 
-The ouinet project consists of two primary pieces of software. The *client library* contains all the logic necessary to fetch web resources using the multiple ouinet techniques for doing so, as well as optionally participating in the distributed cache. It is structured as a library, and can function as a base for end-user applications that access the web. The *injector daemon* implements the injector server software, which are hosted by the ouinet network operator. This document describes the workings of both of these systems, as well as the networks underlying their operation.
+The ouinet project consists of two primary pieces of software. The *client library* contains all the logic necessary to fetch web resources using the multiple ouinet techniques for doing so, as well as optionally participating in the distributed cache. It is structured as a library, and can function as a base for end-user applications that access the web. The *injector daemon* implements the injector server software, which is hosted by the ouinet network operator. This document describes the workings of both of these systems, as well as the networks underlying their operation.
 
 
 
@@ -21,7 +21,7 @@ The ouinet network relies on the cooperation of a few different parties with dif
 
 ## The injector servers
 
-The main backing infrastructure of the ouinet network consists of a set of *injector servers*. A ouinet injector server is a variant of an open proxy server, that users can connect to in order to gain access to web resources they cannot access via more direct means. Injector servers also have other responsibilities, described in more detail in the [next section](#injector-server-connection) and [beyond](#injector-servers).
+The main backing infrastructure of the ouinet network consists of a set of *injector servers*. A ouinet injector server is a variant of an open proxy server, that users can connect to in order to gain access to web resources they cannot access via more direct means. Injector servers also have other responsibilities, described in more detail in the [Distributed Cache](#distributed-cache) section.
 
 Injector servers form a trusted part of the ouinet network. In their role as an intermediary between a user and their communication to much of the internet, they are in a position where a malicious implementation could do serious harm to user security. To keep track of the impact of this trusted position, injector servers are identified by a cryptographic identity that is used to authenticate the injector server when connecting to it, as well as certifying data published by the injector server.
 
@@ -44,7 +44,7 @@ To remedy this, users with access to well-connected devices can contribute to th
 
 ## End-user applications
 
-The ouinet project proper does not contain any end-user applications that make use of the ouinet client library; the client library is designed as a building block for others to build upon, rather than as a tool that is useful for end users directly. But of course, the ouinet project requires very much on the existence, quality, and useful application of such external projects.
+The ouinet project proper does not contain any end-user applications that make use of the ouinet client library; the client library is designed as a building block for others to build upon, rather than as a tool that is useful for end users directly. But of course, the ouinet project relies very much on the existence, quality, and useful application of such external projects.
 
 
 
@@ -52,7 +52,7 @@ The ouinet project proper does not contain any end-user applications that make u
 
 The ouinet client library uses three distinct methods for getting access to a web resource. It can establish a connection through an injector server, through one of a variety of methods; it can fetch a resource from the distributed cache, if the resource is eligible for caching; or it can make a direct connection to the authoritative webserver serving the resource, and avoid any ouinet-specific complications.
 
-These access methods have different strengths and weaknesses, and will work well in different situations. In the worst case, the ouinet client will try all of these methods, with different configurations, until it succeeds in fetching the resource. Trying different methods exhaustively is quite inefficient, however, both in terms of request latency and in bandwidth usage. Thus, where possible, the ouinet client will try to estimate which method is likely to work well for different resources and conditions, and minimize inefficiency by trying likely options first. This process is described in detail in the section on [Content Dispatch](#content-dispatch).
+These access methods have different strengths and weaknesses, and will work well in different situations. In the worst case, the ouinet client will try all of these methods, with different configurations, until it succeeds in fetching the resource. Trying different methods exhaustively is quite inefficient, however, both in terms of request latency and in bandwidth usage. Thus, where possible, the ouinet client will try to estimate which method is likely to work well for different resources and conditions, and minimize inefficiency by trying likely options first.
 
 
 ## Direct origin access
@@ -198,7 +198,7 @@ The ouinet injector adds the following headers to the cache entry:
 
 * `X-Ouinet-Version`: This describes the version of the ouinet distributed cache storage format. This document describes the distributed cache storage format version **4**.
 * `X-Ouinet-URI`: Contains the URI of the resource described by this cache entry.
-* `X-Ouinet-Injection`: This describes a unique ID assigned to this cache entry, allowing a receiver to refer unambiguously to this specific cache entry, as well as the time at which the cache entry was created. Encoded as `X-Ouinet-Injection: id=<string>,ts=<timestamp>`, where `<string>` is a string containing only alphanumeric characters, dashes, and understores; and `<timestamp>` is an integer value, representing a timestamp expressed as the number of seconds since 1970-01-01 00:00:00 UTC.
+* `X-Ouinet-Injection`: This describes a unique ID assigned to this cache entry, allowing a receiver to refer unambiguously to this specific cache entry, as well as the time at which the cache entry was created. Encoded as `X-Ouinet-Injection: id=<string>,ts=<timestamp>`, where `<string>` is a string containing only alphanumeric characters, dashes, and underscores; and `<timestamp>` is an integer value, representing a timestamp expressed as the number of seconds since 1970-01-01 00:00:00 UTC.
 
 The ouinet injector furthermore adds headers related to the cryptographic signature used to verify the legitimacy of the cache entry. This is described in more detail in the [Signatures](#signatures) section.
 
@@ -220,7 +220,7 @@ Many origin servers will declare a `Cache-Control: private` clause on resources 
 * If the HTTP request contains any header fields that might contain confidential information, the `Cache-Control: private` clause is warranted.
 * If neither of the above applies, the `Cache-Control: private` is unwarranted, and the cache entry is eligible for storage in the distributed cache.
 
-For the purposes of this procedure, the following HTTP response headers are considered to never contain confidential information:
+For the purposes of this procedure, the following HTTP request headers are considered to never contain confidential information:
 
 * `Host`
 * `User-Agent`
@@ -252,7 +252,7 @@ For similar reasons, the ouinet client is willing to use cache entries that have
 
 ### Signatures
 
-When an injector server creates a cache entry for distribution, it also creates a cryptographic signature of this cache entry using a private key specific to the injector server, or group of injector servers to which the injector server belongs. By verifying this signature, recipients of the cache entry can confirm that the cache entry was created and retrieved from an origin server by an injector server, which hold a trusted position in the ouinet network. This is important particularly when retrieving the cache entry via peer-to-peer communication with another client, as the presence of the signature makes it impossible for a malicious client to forge a cache entry.
+When an injector server creates a cache entry for distribution, it also creates a cryptographic signature of this cache entry using a private key specific to the injector server, or group of injector servers to which the injector server belongs. By verifying this signature, recipients of the cache entry can confirm that the cache entry was created and retrieved from an origin server by one of the injector servers, which hold a trusted position in the ouinet network. This is important particularly when retrieving the cache entry via peer-to-peer communication with another client, as the presence of the signature makes it impossible for a malicious client to forge a cache entry.
 
 The cache entry signature is computed as a signature over the cache entry as created by the injector server, consisting of the response content, the canonicalized response headers, and the added metadata described in the [Cache entry construction](#cache-entry-construction) section. A ouinet client receiving a copy of a cache entry from another client using the peer-to-peer cache system, or from some external source, should verify this signature before using the cache entry to satisfy requests, and reject the cache entry if the signature is invalid. If a ouinet client receives a cache entry directly from a ouinet injector server, it may choose to skip this verification, as long as the client has previously confirmed the identity of the injector server to which it is connected.
 
@@ -264,7 +264,7 @@ To mitigate this limitation, the distributed cache can make use of an alternativ
 
 To compute a signature for a complete cache entry, the ouinet distributed cache uses a version of the format specified in the [Signing HTTP Messages](https://datatracker.ietf.org/doc/html/draft-cavage-http-signatures-12) draft. This protocol specifies a way of computing signatures on HTTP messages that are robust to the transformations that frequently happen to HTTP messages in transit. This robustness makes it possible to send a signed HTTP message as part of an HTTP session, performing transit-related manipulations such as the addition of a `Connection: keep-alive` header where necessary, without causing the signature to become invalid.
 
-Signed HTTP Messages signatures consist of a signature over a selected subset of the headers in an HTTP message; the distributed cache uses this system by including all headers in the signature that are part of the cache entry, as constructed per the process described in the [Cache entry construction](#cache-entry-construction) section. By design, these headers do not include any headers that might vary with different ways in which a cache entry might be communicated between peers, such as the `Connection`, `Transfer-Encoding`, and `Content-Length` headers.
+Signing HTTP Messages signatures consist of a signature over a selected subset of the headers in an HTTP message; the distributed cache uses this system by including all headers in the signature that are part of the cache entry, as constructed per the process described in the [Cache entry construction](#cache-entry-construction) section. By design, these headers do not include any headers that might vary with different ways in which a cache entry might be communicated between peers, such as the `Connection`, `Transfer-Encoding`, and `Content-Length` headers.
 
 The signature used by the distributed cache must cover certain information that is not stored in HTTP headers in the strictest sense. Most obviously, this includes the body of the HTTP response. To ensure that the body is covered by the cache entry signature, the injector server adds a `Digest` header to the cache entry, containing a cryptographic hash of the response body. This `Digest` header is then included in the headers covered by the signature.
 
@@ -314,15 +314,15 @@ The descriptions in this section, as well as the signature format described in t
 The current version of the ouinet distributed cache uses the following implementations for these primitives:
 
 * The cryptographic hash of the complete response body stored in the `Digest` header uses **SHA-256**.
-* The cryptographic hash used to construct stream signatures use **SHA-512**.
+* The cryptographic hash used to construct stream signatures uses **SHA-512**.
 * The cryptographic signature used to compute `block-signature(i)` uses **Ed25519**.
-* The Signed HTTP Responses signature uses the **hs2019** signature scheme using the **SHA-512** hash function and **Ed25519** signature scheme.
+* The Signing HTTP Messages signature uses the **hs2019** signature scheme using the **SHA-512** hash function and **Ed25519** signature scheme.
 
 A cache entry signed using implementations of these primitives different from the choices above is likely to be rejected by the current implementation of the ouinet client. Each of these choices is likely to change in some future version of the ouinet project.
 
 #### Examples
 
-An injector server using ED25519 private key `KEY` might construct the following as-yet unsigned cache entry:
+An injector server using Ed25519 private key `KEY` might construct the following as-yet unsigned cache entry:
 
 ```
 HTTP/1.1 200 OK
@@ -348,7 +348,7 @@ The injector server would create the following complete cache entry signature:
 keyId="ed25519=<key>",algorithm="hs2019",created=1584748800, headers="(response-status) (created) x-ouinet-version x-ouinet-uri x-ouinet-injection date content-type digest x-ouinet-data-size",signature="<signature-base64>"
 ```
 
-In this signature, `<key>` stands for the public key associated with the `KEY` private key, and `<signature-base64>` is the base64 encoding of the ED25519 signature of the following string:
+In this signature, `<key>` stands for the public key associated with the `KEY` private key, and `<signature-base64>` is the base64 encoding of the Ed25519 signature of the following string:
 
 ```
 (response-status): 200
@@ -381,7 +381,7 @@ The injector server might choose not to create a signature stream for this cache
 * `data-size`: 12
 * `full-signature`: The complete cache entry signature described above
 
-In the computation of `header-signature` in the above, `<key>` stands for the public key associated with the `KEY` private key, and `<header-signature-base64>` is the base64 encoding of the ED25519 signature of the following string:
+In the computation of `header-signature` in the above, `<key>` stands for the public key associated with the `KEY` private key, and `<header-signature-base64>` is the base64 encoding of the Ed25519 signature of the following string:
 
 ```
 (response-status): 200
@@ -406,13 +406,13 @@ Both requests sent by a client to an injector, and the peer-to-peer exchange of 
 
 ### Injector-to-client cache entry exchange
 
-The ouinet client can send a request to an injector server for the injector to fetch a web resource, and construct a cache entry based on the response that the requesting client can then use and share in the distributed cache. An injector server serve this request by performing an HTTP request, verify that the response is eligible for caching, construct a cache entry, sign it, and send the signed cache entry back to the requesting client.
+The ouinet client can send a request to an injector server for the injector to fetch a web resource, and construct a cache entry based on the response that the requesting client can then use and share in the distributed cache. An injector server serves this request by performing an HTTP request, verifying that the response is eligible for caching, constructing a cache entry, signing it, and sending the signed cache entry back to the requesting client.
 
-To perform this procedure, a ouinet client first establishes a connection to an injector server. The ouinet system supports a variety of ways in which a client can establish a connection with an injector server; the different ways in which this connection can be established are described in the [Injector Servers](#injector-servers) section. These connections all make use of the TLS protocol, by which the client can verify that is connected to a legitimate injector server using a secure channel.
+To perform this procedure, a ouinet client first establishes a connection to an injector server. The ouinet system supports a variety of ways in which a client can establish a connection with an injector server; the different ways in which this connection can be established are described in the [Injector Servers](#injector-servers) section. These connections all make use of the TLS protocol, by which the client can verify that it is connected to a legitimate injector server using a secure channel.
 
-Once the ouinet client has established a connection to an injector server, the client can send a request for the injector to create a cache entry. This request is sent as a standard HTTP request, along with an additional HTTP header signifying the intent to create a cache entry. This header distinguishes a cache-entry-creation request from other functionality offered by injector servers, as described in the [Injector Servers](#injector-servers) section.
+Once the ouinet client has established a connection to an injector server, the client can send a request for the injector to create a cache entry. This request is sent as a standard HTTP proxy request, along with an additional HTTP header signifying the intent to create a cache entry. This header distinguishes a cache-entry-creation request from other functionality offered by injector servers, as described in the [Injector Servers](#injector-servers) section.
 
-When the injector server has performed the requested HTTP transaction and created a cache entry, it can then send the cache entry to the requesting client as a standard HTTP response. Because cache entries have the form of a HTTP response object combined with some assorted metadata, the injector server can simply send the cache entry as an HTTP response, and add the metadata in the form of additional HTTP headers.
+When the injector server has performed the requested HTTP transaction and created a cache entry, it can then send the cache entry to the requesting client as a standard HTTP response. Because cache entries have the form of an HTTP response object combined with some assorted metadata, the injector server can simply send the cache entry as an HTTP response, and add the metadata in the form of additional HTTP headers.
 
 To transport a cache entry as an HTTP response, the injector server may need to add some additional headers that are not part of the cache entry as such, but which are instead used to coordinate the transport process, such as the `Content-Length`, `Transfer-Encoding`, and `Connection: close` headers. Because the cache entry signature specifies exactly which headers are part of the cache entry proper, the receiving client knows exactly which headers are part of the cache control object, and which can be discarded after completion of the HTTP transaction.
 
@@ -437,13 +437,13 @@ When transmitting a cache entry using a signature stream, the injector server ad
 * An `X-Ouinet-Sig1` trailer containing the `full-signature`;
 * A series of `ouisig=<signature>` chunk extensions, containing the different `block-signature(i)` values. These chunk extensions all use `ouisig` as a name, and are sent in increasing order; that is, the `i`th `ouisig` chunk extension contains `block-signature(i)`. `<signature>` is encoded as the base64 encoding of the block signature.
 
-A client receiving a cache entry containing a signature stream can recognize this response type by the presence of the `X-Ouinet-Sig0` header, and handle it accordingly. A client that wishes not to implement streaming for this particular resource can choose to ignore the metadata specific to signature streams, and make use only of the `Digest`, `X-Ouinet-Data-Size`, and `X-Ouinet-Sig1` headers, and treat the response as if it were signed only using a complete cache entry signature instead.
+A client receiving a cache entry containing a signature stream can recognize this response type by the presence of the `X-Ouinet-BSigs` header, and handle it accordingly. A client that wishes not to implement streaming for this particular resource can choose to ignore the metadata specific to signature streams, and make use only of the `Digest`, `X-Ouinet-Data-Size`, and `X-Ouinet-Sig1` headers, and treat the response as if it were signed only using a complete cache entry signature instead.
 
 #### Complete cache entry signatures
 
 A cache entry that is signed only with a complete cache entry signature only contains the `Digest`, `X-Ouinet-Data-Size`, and `full-signature` signature fields that need to be communicated to the client by the injector server. The ouinet injector communicates this using a simplified form of the signature streams format, in which only the `Digest`, `X-Ouinet-Data-Size`, and `X-Ouinet-Sig1` headers are present. Each of those headers may take the form of either a header or a trailer.
 
-A client receiving such a cache entry can recognize this response type by the presence of the `X-Ouinet-Sig1` header, combined with the absence of the `X-Ouinet-Sig0` header. This combination indicates that the cache entry can only be verified in its complete form, and streaming verification is not possible.
+A client receiving such a cache entry can recognize this response type by the presence of the `X-Ouinet-Sig1` header, combined with the absence of the `X-Ouinet-BSigs` header. This combination indicates that the cache entry can only be verified in its complete form, and streaming verification is not possible.
 
 #### Error responses
 
@@ -527,7 +527,7 @@ A ouinet client willing to share its cache entries with others can serve HTTP re
 
 By this mechanism, ouinet clients can fetch cache entries from other ouinet clients that store a copy of the cache entry in their local storage. For this to function as a distributed cache, however, it is not sufficient for a ouinet client to be able to fetch resources from other clients that store it; a client attempting to gain access to a web resource also needs some way to determine *which* users hold such cache entries, as well as details on how to establish a connection to these clients. Only with such a mechanism can a ouinet client obtain access to a web resource by acquiring a list of other clients that hold a cached copy of the resource, connect to one such client, and fetch a copy of a cache entry describing that resource.
 
-The ouinet distributed cache uses a distributed hash table to store this index information in a distributed way. Using this distributed hash table, clients that store a particular cache entry and are willing to share this cache entry with others can announce this fact in the global distributed hashtable. Clients that wish to access a certain resource using the distributed cache can query the distributed hash table for a list of clients that share it, and then proceed to connect to one or several of such clients in an attempt to fetch the cache entry for their own use.
+The ouinet distributed cache uses a distributed hash table to store this index information in a distributed way. Using this distributed hash table, clients that store a particular cache entry and are willing to share this cache entry with others can announce this fact in the global distributed hash table. Clients that wish to access a certain resource using the distributed cache can query the distributed hash table for a list of clients that share it, and then proceed to connect to one or several of such clients in an attempt to fetch the cache entry for their own use.
 
 #### Peer-to-peer connections
 
@@ -539,7 +539,7 @@ The uTP protocol is rarely blocked by network operators, due to its association 
 
 When a client wishing to fetch a cache entry has established a peer-to-peer connection to a client that has such a cache entry in storage, it can then start sending HTTP requests over this connection. The sharing client can respond to these requests by serving a stored cache entry as a response, or it can respond with an error message if it does not store such a cache entry.
 
-A cache entry HTTP request sent over a peer-to-peer connection between two ouinet clients must have the form of a GET or HEAD request, and use a request URI specified in absolute form; that is, the HTTP request must use a full URI on the first line of the HTTP request, which includes a protocol specification and a hostname. Any `Host` headers present in the HTTP request are ignored. The HTTP request must include a `X-Ouinet-Version` header, describing the version of the ouinet protocol in use; any other headers in the HTTP request that are not described in this section are ignored by the sharing ouinet client.
+A cache entry HTTP request sent over a peer-to-peer connection between two ouinet clients must have the form of a GET or HEAD request, and use a request URI specified in absolute form; that is, the HTTP request must use a full URI on the first line of the HTTP request, which includes a protocol specification and a hostname. Any `Host` headers present in the HTTP request are ignored. The HTTP request must include an `X-Ouinet-Version` header, describing the version of the ouinet protocol in use; any other headers in the HTTP request that are not described in this section are ignored by the sharing ouinet client.
 
 When a ouinet client sharing cache entries over a peer-to-peer connection receives such a request, it can reply with one of the three response types specified in the [Injector-to-client cache entry exchange](#injector-to-client-cache-entry-exchange) section. If the client stores a cache entry for the requested URI, and that cache entry is signed using a signature stream, the client can send a signature stream response. If the client stores a cache entry for the requested URI which only contains a complete cache entry signature, the client can send a complete cache entry signature response. If the client does not store any cache entries for the requested URI, it must reply with an HTTP reply using the `404 Not Found` status code.
 
@@ -575,7 +575,7 @@ Range: bytes=6-11
 If the receiving client contains a cache entry for this resource signed using a signature stream, it might send the following reply:
 
 ```
-HTTP/1.1 200 OK
+HTTP/1.1 206 Partial Content
 X-Ouinet-Version: 4
 X-Ouinet-URI: https://example.com/hello
 X-Ouinet-Injection: id=qwertyuiop-12345,ts=1584748800
@@ -588,6 +588,7 @@ X-Ouinet-Data-Size: 12
 X-Ouinet-Sig1: keyId="ed25519=<key>",algorithm="hs2019",created=1584748800, headers="(response-status) (created) x-ouinet-version x-ouinet-uri x-ouinet-injection date content-type digest x-ouinet-data-size",signature="<full-signature-base64>"
 Transfer-Encoding: chunked
 Content-Range: bytes 5-11/12
+X-Ouinet-HTTP-Status: 200
 
 5;ouihash=NhX4DJ0pPtdAJof5SyLVjlKbjMeRb4+sf933+9WvTPd309eVp6AKFr9+fz+5Vh7puq5IDan+ehh2nnGIawPzFQ==
  worl
@@ -603,7 +604,9 @@ When a ouinet client stores a cache entry for a particular resource and is willi
 
 The ouinet distributed cache uses the BitTorrent distributed hash table as a structure for communicating this information. The BitTorrent distributed hash table is a distributed structure traditionally used by the BitTorrent system to store information on which users share pieces of which BitTorrent files; the ouinet distributed cache uses it in a similar fashion, and uses it to store which ouinet clients are sharing which cache entries.
 
-When a ouinet client stores a particular cache entry on its device storage, and is willing to share it with others using a peer-to-peer connection, it sends an announcement message to the BitTorrent distributed hash table containing the IP address and port by which other clients can establish a peer-to-peer connection with the client. This announcement message is addressed to the distributed hash table location consisting of the SHA1 hash of the URI of the resource contained in the cache entry. Clients wishing to fetch a cache entry for a particular URI can send a request to the BitTorrent distributed hash table, addressed to the distributed hash table location consisting of that same SHA1 hash, requesting a list of IP addresses and port numbers of clients that have sent such an announcement message. After receiving such a list from the distributed hash table, the client can then establish a peer-to-peer connection to one of the IP addresses listed in the reply, and start requesting cache entries.
+When a ouinet client stores a particular cache entry on its device storage, and is willing to share it with others using a peer-to-peer connection, it sends an announcement message to the BitTorrent distributed hash table containing the IP address and port by which other clients can establish a peer-to-peer connection with the client. This announcement message is addressed to the distributed hash table location consisting of a hash of the URI of the resource contained in the cache entry. Clients wishing to fetch a cache entry for a particular URI can send a request to the BitTorrent distributed hash table, addressed to the distributed hash table location consisting of that same hash, requesting a list of IP addresses and port numbers of clients that have sent such an announcement message. After receiving such a list from the distributed hash table, the client can then establish a peer-to-peer connection to one of the IP addresses listed in the reply, and start requesting cache entries.
+
+The list of ouinet clients that are sharing a particular cache entry using the peer-to-peer system is stored at a distributed hash table location that is based on the URI of the resource contained in the cache entry, as well as the injector server that created the cache entry. This location is computed as the SHA1 hash of the string `ed25519:<public-key>/v<protocol-version>/uri/<uri>`, where `<public-key>` is the public key of the injector server used to sign the cache entry, encoded using lower-case unpadded base32; `<protocol-version>` is the version of the ouinet protocol; and `<uri>` is the URI of the resource contained in the cache entry.
 
 #### Resource groups
 
@@ -611,7 +614,9 @@ In some applications of the ouinet distributed cache, clients frequently store s
 
 In such cases, the clients holding these cache entries will have to send and periodically repeat announcements to the distributed hash table for dozens, if not hundreds, of separate resources. This maintenance traffic required to participate in the distributed hash table can be a nontrivial drain on resources. What is more, this usage of the distributed hash table is unnecessarily inefficient, for the distributed hash table will store very nearly identical lists of ouinet clients for each of those dozens or hundreds of resources.
 
-To avoid this inefficiency, the user application making use of the ouinet client library can instruct the client library to combine the registrations in the distributed hash table for all these related cache entries into a single registration. To do so, the user application would specify a *resource group* for this collection of resources; if such a resource group is specified, the ouinet client will not send an announcement to the distributed hash table for each stored cache entry in the resource group, but will instead send a single announcement to the distributed hash table location consisting of the SHA1 hash of the resource group description. Clients wishing to access resources in this resource group would need to configure the same resource group on their devices, and send a request for connectivity information to the distributed hash table addressed to the hash of the resource group instead. As an example, a web browser application using the ouinet client library might configure a resource group for each web page, containing the web page itself as well as all resources referenced from that web page.
+To avoid this inefficiency, the user application making use of the ouinet client library can instruct the client library to combine the registrations in the distributed hash table for all these related cache entries into a single registration. To do so, the user application would specify a *resource group* for this collection of resources; if such a resource group is specified, the ouinet client will not send an announcement to the distributed hash table for each stored cache entry in the resource group, but will instead send a single announcement to the distributed hash table location consisting of a hash of the resource group description. Clients wishing to access resources in this resource group would need to configure the same resource group on their devices, and send a request for connectivity information to the distributed hash table addressed to the hash of the resource group instead. As an example, a web browser application using the ouinet client library might configure a resource group for each web page, containing the web page itself as well as all resources referenced from that web page.
+
+If registrations for a group of cache entries are announced to the distributed hash table using a resource group, announcements and client requests for those resources are addressed to a location in the distributed hash table that is based on the resource group, rather than on the URI of the individual resources. This location is computed as the SHA1 hash of the string `ed25519:<public-key>/v<protocol-version>/uri/<resource-group>`, where `<public-key>` is the public key of the injector server used to sign the cache entries, encoded using lower-case unpadded base32; `<protocol-version>` is the version of the ouinet protocol; and `<resource-group>` is the resource group bytestring specified by the application.
 
 The ouinet client can only fetch resources collected into a resource group if clients storing cache entries in the resource group can be relied on to store cache entries for *all* resources in the resource group, the majority of the time. If a substantial number of clients store only a limited subset of the resources collected in the resource group, a client trying to fetch such a resource stands a good chance of accidentally connecting to a client that does store some cache entry in the resource group, but not the entry the client is interested in. Therefore, the ouinet client does not attempt to identify resource groups automatically, and instead relies on a user application to configure resource groups, if applicable.
 
@@ -644,17 +649,17 @@ As one of the mechanisms by which a connection to an injector server can be esta
 
 The IP addresses on which the injector servers can be reached through the uTP protocol are not published using the DNS system, because DNS communications are very frequently blocked by network operators. Instead, the ouinet network stores the IP addresses and uTP port numbers of the injector servers in the BitTorrent distributed hash table. Active injector servers announce their IP address and port number to the BitTorrent distributed hash table addressed to a configured distributed hash table location, and ouinet clients request a list of such injector servers from the distributed hash table in the same way.
 
-The location in the distributed hash table used to store the list of active injector servers can be configured by each organization operating a collection of injector servers, and need to be configured in ouinet clients wishing to use these injector servers. For injector servers operated by the ouinet project, the distributed hash table location derived from the public key of the injector servers is used. This location is computed as the SHA1 hash of the string `ed25519:<public-key>/v<protocol-version>/injectors`, where `<public-key>` is the public key of the injector server used to sign cache entries for the distributed cache, encoded using base32; and `<protocol-version>` is the version of the ouinet protocol.
+The location in the distributed hash table used to store the list of active injector servers is configured differently for each organization operating a collection of injector servers, and needs to be configured the same way in ouinet clients wishing to use these injector servers. This location is derived from the public key of the configured injector servers, and computed as the SHA1 hash of the string `ed25519:<public-key>/v<protocol-version>/injectors`, where `<public-key>` is the public key of the injector server used to sign cache entries for the distributed cache, encoded using lower-case unpadded base32; and `<protocol-version>` is the version of the ouinet protocol.
 
 ### Peer-to-peer tunnels
 
-When a client establishes a connection to an injector server and verifies that the injector server it is connected to is genuine, it may then choose to function as an intermediary, allowing less fortunate clients to reach through the injector server through them. A client functioning as an intermediary in this way is referred to as a *bridge node*.
+When a client establishes a connection to an injector server and verifies that the injector server it is connected to is genuine, it may then choose to function as an intermediary, allowing less fortunate clients to reach the injector server through them. A client functioning as an intermediary in this way is referred to as a *bridge node*.
 
-If a client chooses to function as a bridge node, it will accept connections using the uTP protocol, and announce its address details to the BitTorrent distributed hash table. Whenever the client accepts a connection in this way, it will create a connection to an injection server through one of the methods described in this chapter, and forward all traffic received over the incoming connection to the connection with the injector server, and vice versa. This lets the client function as an intermediary between an injector server, and a different client that is unable to connect to the injector servers directly.
+If a client chooses to function as a bridge node, it will accept connections using the uTP protocol, and announce its address details to the BitTorrent distributed hash table. Whenever the client accepts a connection in this way, it will create a connection to an injector server through one of the methods described in this chapter, and forward all traffic received over the incoming connection to the connection with the injector server, and vice versa. This lets the client function as an intermediary between an injector server, and a different client that is unable to connect to the injector servers directly.
 
 A client wishing to function as a bridge node should start announcing its participation as soon as it has established a verified connection to an authentic injector server, while using a connection that does not itself rely on a bridge node. Likewise, the client should avoid making a connection to an injector server on behalf of another client if that connection itself makes use of a bridge node, for such a connection with multiple intermediaries would be unnecessarily inefficient.
 
-Like the distributed hash table location used to store the list of active injector servers, the location used to store the list of bridge nodes is something that varies based on the configuration of the ouinet client. This location is computed as the SHA1 hash of the string `ed25519:<public-key>/v<protocol-version>/bridges`, where `<public-key>` is the public key of the injector server used to sign cache entries for the distributed cache, encoded using base32; and `<protocol-version>` is the version of the ouinet protocol.
+Like the distributed hash table location used to store the list of active injector servers, the location used to store the list of bridge nodes is something that varies based on the configuration of the ouinet client. This location is computed as the SHA1 hash of the string `ed25519:<public-key>/v<protocol-version>/bridges`, where `<public-key>` is the public key of the injector server used to sign cache entries for the distributed cache, encoded using lower-case unpadded base32; and `<protocol-version>` is the version of the ouinet protocol.
 
 ### Other connection methods
 
@@ -675,7 +680,7 @@ The ouinet client can request this behavior by sending an HTTP request that incl
 
 ### Cache-ineligible proxy requests
 
-If a ouinet client wishes to perform a request that is not eligible for caching, such as a POST request or a GET request that contains confidential information, it can request the injector to just forward such a request to the origin server, in the same manner as a standard proxy server. Do request this, the client can send any HTTP request that does not include an `X-Ouinet-Version` header. The injector server will respond with a standard HTTP request that does not include any extensions specific to the ouinet project.
+If a ouinet client wishes to perform a request that is not eligible for caching, such as a POST request or a GET request that contains confidential information, it can request the injector to just forward such a request to the origin server, in the same manner as a standard proxy server. To request this, the client can send any HTTP request that does not include an `X-Ouinet-Version` header. The injector server will respond with a standard HTTP request that does not include any extensions specific to the ouinet project.
 
 ### TLS tunnels
 
@@ -687,7 +692,7 @@ To this end, if the ouinet client wishes to request an HTTPS resource, it may se
 
 # Client Library
 
-The ouinet client library is a software library that implements the ouinet client, as described in this document. The ouinet client library is structured as an HTTP proxy server that application software can connect to, and which can perform HTTP requests sent to the proxy server send to it by the application software using the mechanisms of the ouinet project. Applications using the ouinet client library can invoke a library operation to start this proxy server in the background, and then configure usage of this proxy server for HTTP requests performed by the application.
+The ouinet client library is a software library that implements the ouinet client, as described in this document. The ouinet client library is structured as an HTTP proxy server that application software can connect to, and which can perform HTTP requests sent to it by the application software using the mechanisms of the ouinet project. Applications using the ouinet client library can invoke a library operation to start this proxy server in the background, and then configure usage of this proxy server for HTTP requests performed by the application.
 
 When the ouinet client library gets initialized, it will attempt to establish a connection to one of the configured injector servers, using any of the mechanisms described in the [Injector server connections](#injector-server-connections) section. Depending on the configuration, it may also begin participating in the ouinet distributed cache, operating as a bridge node, or both.
 
@@ -695,7 +700,7 @@ Once the ouinet client library proxy server is operational, it will start accept
 
 When an application functioning as an HTTP client is configured to use an HTTP proxy server, it will generally not send HTTPS requests to this proxy server, to avoid a breach of confidentiality. Instead, such applications will usually send a CONNECT request to the proxy server instead, establishing a tunneled connection to the origin server that the proxy server cannot eavesdrop on or manipulate. While this is generally a sensible decision when applied to most proxy servers, this behavior would make it impossible for the ouinet client to perform any of the ouinet functionality to HTTPS requests.
 
-In order to be able to apply the ouinet mechanisms to HTTPS requests despite this complication, the ouinet client proxy terminates all TLS sessions that would otherwise be tunneled through the client proxy. This functionality makes the ouinet client library behave as a type of man-in-the-middle, which applications will typically rightly reject as a security breach. If an application wishes to use the ouinet library to perform HTTPS requests, it must therefore configure the TLS certificate used by the ouinet client proxy as being authorized for this purpose.
+In order to be able to apply the ouinet mechanisms to HTTPS requests despite this complication, the ouinet client proxy terminates all TLS sessions that would otherwise be tunneled through the client proxy. This functionality makes the ouinet client library behave as a type of man-in-the-middle, which applications will typically rightly reject as a security breach. If an application wishes to use the ouinet library to perform HTTPS requests, it must therefore configure the TLS certificate used by the ouinet client proxy as being authorized for this purpose. The ouinet client library generates such a certificate, private to the specific device running the ouinet client, when starting the client proxy; this certificate functions as a certificate authority for connections made to the ouinet client proxy, and should be configured as such in the application.
 
 When an end-user application sends an HTTP request to the ouinet client proxy, it can include certain configuration options to adjust the behavior of the ouinet client; in particular, it can include instructions as to how the ouinet client should and should not attempt to resolve individual HTTP requests. These configuration settings are included in the form of additional HTTP headers specifically to the ouinet project. Likewise, the ouinet client can communicate additional details regarding resources it has fetched for the benefit of the application; these details, too, are communicated in the form of additional HTTP headers included with the HTTP response. The exact list of such headers used in the communications between the end-user application and the ouinet client proxy are described below.
 
