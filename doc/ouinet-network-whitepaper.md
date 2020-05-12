@@ -53,7 +53,7 @@
 
 # Overview
 
-The Ouinet network is a collection of software tools and support infrastructure that provide access to web resources when access to the unrestricted internet is unreliable or unavailable. Ouinet provides a variety of different mechanisms through which web content can be accessed, and aims to provide a way to access requested content, even when using a limited internet connection on which access to these resources would normally be impossible. By using different content access mechanisms as network conditions require, Ouinet can provide the best web access the situation allows, degrading gracefully when faced with increasing degrees of network disruption.
+The Ouinet network is a collection of software tools and support infrastructure that provide access to web resources when access to the unrestricted internet is unreliable or unavailable, tailored for scenarios of limited internet connectivity and selective network traffic filtering. Ouinet provides a variety of different mechanisms through which web content can be accessed, and aims to provide a way to access requested content, even when using a limited internet connection on which access to these resources would normally be impossible. By using different content access mechanisms as network conditions require, Ouinet can provide the best web access the situation allows, degrading gracefully when faced with increasing degrees of network disruption.
 
 The Ouinet network contains a collection of specialized public proxy servers, known as *injector servers*, combined with a variety of means by which a user can construct a direct or indirect connection to those injector servers. Together these form one way in which a user can access web resources they cannot reach directly.
 
