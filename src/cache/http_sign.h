@@ -260,6 +260,21 @@ http_digest(ouinet::util::SHA256&);
 std::string
 http_digest(const http::response<http::dynamic_body>&);
 
+namespace Block {
+    using Signature = util::Ed25519PublicKey::sig_array_t;
+    using Digest    = util::SHA512::digest_type;
+
+    Signature sign( boost::string_view injection_id
+                  , size_t offset
+                  , const Digest& chained_digest
+                  , const util::Ed25519PrivateKey&);
+
+    bool verify( boost::string_view injection_id
+               , size_t offset
+               , const Digest& chained_digest
+               , const Signature& signature
+               , const util::Ed25519PublicKey&);
+};
 
 // Generic HTTP signatures
 // -----------------------

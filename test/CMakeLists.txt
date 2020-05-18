@@ -140,6 +140,7 @@ add_executable(test-http-store
     "test_http_store.cpp"
     "../src/cache/http_sign.cpp"
     "../src/cache/http_store.cpp"
+    "../src/cache/hash_list.cpp"
     "../src/http_util.cpp"
     "../src/logger.cpp"
     "../src/response_part.cpp"

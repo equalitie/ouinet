@@ -820,4 +820,25 @@ BOOST_DATA_TEST_CASE( test_response_head_no_body
     });
 }
 
+BOOST_DATA_TEST_CASE(test_hash_list, boost::unit_test::data::make(true_false), complete) {
+    auto tmpdir = fs::unique_path();
+    auto rmdir = defer([&tmpdir] {
+        sys::error_code ec;
+        fs::remove_all(tmpdir, ec);
+    });
+
+    fs::create_directory(tmpdir);
+
+    asio::io_context ctx;
+    auto exec = ctx.get_executor();
+    Cancel cancel;
+
+    run_spawned(ctx, [&] (auto yield) {
+        store_response(tmpdir, complete, ctx, yield);
+        cache::HashList hl = cache::http_store_load_hash_list(tmpdir, exec, cancel, yield);
+        BOOST_REQUIRE(hl.verify());
+    });
+}
+
+
 BOOST_AUTO_TEST_SUITE_END()

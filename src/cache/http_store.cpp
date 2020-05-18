@@ -127,7 +127,6 @@ struct SigEntry {
     std::string str() const
     {
         static const auto pad_digest = util::base64_encode(util::SHA512::zero_digest());
-        auto z = util::SHA512::zero_digest();
         static const auto line_format = "%016x %s %s %s\n";
         return ( boost::format(line_format) % offset % signature % data_digest
                % (prev_digest.empty() ? pad_digest : prev_digest)).str();
@@ -358,6 +357,7 @@ class HttpStoreReader : public http_response::AbstractReader {
 private:
     static const std::size_t http_forward_block = 16384;
 
+public:
     template<class IStream>
     static
     SignedHead read_signed_head(IStream& is, Cancel& cancel, asio::yield_context yield) {
@@ -387,6 +387,7 @@ private:
         return std::move(*head_o);
     }
 
+public:
     http_response::Head
     parse_head(Cancel cancel, asio::yield_context yield)
     {
@@ -993,6 +994,9 @@ http_store_load_hash_list( const fs::path& dir
                          , Cancel& cancel
                          , asio::yield_context yield)
 {
+    using Sha = util::SHA512;
+    using Digest = Sha::digest_type;
+
     sys::error_code ec;
 
     auto headf = util::file_io::open_readonly(exec, dir / head_fname, ec);
@@ -1006,8 +1010,19 @@ http_store_load_hash_list( const fs::path& dir
 
     HashList hl;
 
+    hl.signed_head = HttpStoreReader::read_signed_head(headf, cancel, yield[ec]);
+
+    if (cancel) ec = asio::error::operation_aborted;
+    if (ec) return or_throw<HashList>(yield, ec);
+
     boost::optional<SigEntry> last_sig_entry;
     std::string sig_buffer;
+
+    static const auto decode = [](const std::string& s) -> boost::optional<Digest> {
+        std::string d = util::base64_decode(s);
+        if (d.size() != Sha::size()) return boost::none;
+        return util::bytes::to_array<uint8_t, Sha::size()>(d);
+    };
 
     while(true) {
         auto opt_sig_entry = SigEntry::parse(sigsf, sig_buffer, cancel, yield[ec]);
@@ -1019,40 +1034,23 @@ http_store_load_hash_list( const fs::path& dir
 
         last_sig_entry = opt_sig_entry;
 
-        if (!opt_sig_entry->prev_digest.empty()) {
-            hl.hashes.push_back(opt_sig_entry->prev_digest);
-        }
+        auto d = decode(opt_sig_entry->data_digest);
+        if (!d) return or_throw<HashList>(yield, asio::error::bad_descriptor);
+
+        hl.block_hashes.push_back(*d);
     }
 
     if (!last_sig_entry) return or_throw<HashList>(yield, asio::error::bad_descriptor);
 
-    util::file_io::fseek(bodyf, last_sig_entry->offset, ec);
-    if (ec) return or_throw<HashList>(yield, ec);
+    auto c = decode(last_sig_entry->prev_digest);
+    if (!c) return or_throw<HashList>(yield, asio::error::bad_descriptor);
 
-    auto decoded_prev_digest = util::base64_decode(last_sig_entry->prev_digest);
-
-    if (decoded_prev_digest.size() != util::SHA512::size())
+    std::string sig = util::base64_decode(last_sig_entry->signature);
+    if (sig.size() != util::Ed25519PublicKey::sig_size) {
         return or_throw<HashList>(yield, asio::error::bad_descriptor);
-
-    size_t size = util::file_io::file_remaining_size(bodyf, ec);
-    if (ec) return or_throw<HashList>(yield, ec);
-
-    if (size > http_::response_data_block_max) {
-        return or_throw<HashList>(yield, asio::error::no_data);
     }
 
-    std::vector<uint8_t> last_block_buffer(size);
-
-    auto len = asio::async_read(bodyf, asio::buffer(last_block_buffer), yield[ec]);
-    assert(size == len);
-
-    util::SHA512 last_block_hash;
-    last_block_hash.update(decoded_prev_digest);
-    last_block_hash.update(util::SHA512::digest(last_block_buffer));
-
-    hl.hashes.push_back(util::base64_encode(last_block_hash.close()));
-
-    hl.signature = last_sig_entry->signature;
+    hl.signature = util::bytes::to_array<uint8_t, util::Ed25519PublicKey::sig_size>(sig);
 
     return hl;
 }

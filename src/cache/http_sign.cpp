@@ -240,6 +240,24 @@ block_chunk_ext( const opt_sig_array_t& sig
     return exts.str();
 }
 
+Block::Signature Block::sign( boost::string_view injection_id
+                            , size_t offset
+                            , const Digest& chained_digest
+                            , const util::Ed25519PrivateKey& sk)
+{
+    return sk.sign(block_sig_str(injection_id, offset, chained_digest));
+}
+
+bool Block::verify( boost::string_view injection_id
+                  , size_t offset
+                  , const Digest& chained_digest
+                  , const Block::Signature& signature
+                  , const util::Ed25519PublicKey& pk)
+{
+    auto str = block_sig_str(injection_id, offset, chained_digest);
+    return pk.verify(str, signature);
+}
+
 static
 std::string
 block_chunk_ext( boost::string_view injection_id
