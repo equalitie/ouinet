@@ -483,10 +483,15 @@ configuration tools:
 
   - To be able to browse HTTPS sites, you must first install the
     *client-specific CA certificate* linked from the top of the front-end page
-    and authorize it to identify web sites.  The Ouinet client acts as a *man
-    in the middle* to enable it to process HTTPS requests, but it (or a
-    trusted injector when appropriate) still performs all standard certificate
-    validations.  This CA certificate is unique to your device.
+    and authorize it to identify web sites.  Depending on your browser
+    version, you may need to save it to disk first, then import it from
+    *Preferences / Privacy & Security / Certificates / View Certificates…*
+    into the *Authorities* list.
+
+    The Ouinet client acts as a *man in the middle* to enable it to process
+    HTTPS requests, but it (or a trusted injector when appropriate) still
+    performs all standard certificate validations.  This CA certificate is
+    unique to your device.
 
   - Several buttons near the top of the page look something like this:
 
