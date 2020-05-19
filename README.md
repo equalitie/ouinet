@@ -526,7 +526,9 @@ mode.  Unfortunately, the Extension is not yet packaged independently and the
 only way to use it is to clone its repository locally and load it every time
 you start the browser; to do that, open Firefox's *Add-ons* window, then click
 on the gears icon, then *Debug Add-ons*, then *Load Temporary Add-on…* and
-choose the `manifest.json` file in the Extension's source tree.
+choose the `manifest.json` file in the Extension's source tree.  Back to the
+*Add-ons* page, remember clicking on *CENO Extension* and allowing *Run in
+Private Windows* under *Details*.
 
 [CENO Extension]: https://github.com/censorship-no/ceno-ext-settings/
 
