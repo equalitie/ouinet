@@ -35,6 +35,19 @@ enum class fresh_channel {
     _front_end,         // handle the request internally
 };
 
+inline
+std::ostream& operator<<(std::ostream& os, fresh_channel ch) {
+    switch (ch) {
+        case fresh_channel::secure_origin:      os << "secure_origin";      break;
+        case fresh_channel::origin:             os << "origin";             break;
+        case fresh_channel::proxy:              os << "proxy";              break;
+        case fresh_channel::injector_or_dcache: os << "injector_or_dcache"; break;
+        case fresh_channel::_front_end:         os << "_front_end";         break;
+        default:                                os << "???";                break;
+    }
+    return os;
+}
+
 // A request router configuration will be
 // chosen by the client when receiving a request and
 // considered when serving calls from the cache control to
