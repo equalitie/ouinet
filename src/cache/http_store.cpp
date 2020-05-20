@@ -527,6 +527,10 @@ private:
             bodyf.close();
         }
 
+        if (chunk_body.size() == 0 && next_chunk_exts.empty() && sig_entry)
+            // Empty body, generate last chunk header with the signature we just read.
+            return http_response::Part(http_response::ChunkHdr(0, sig_entry->chunk_exts()));
+
         http_response::ChunkHdr ch(chunk_body.size(), next_chunk_exts);
         next_chunk_exts = sig_entry ? sig_entry->chunk_exts() : "";
         if (sig_entry && chunk_body.size() > 0)
