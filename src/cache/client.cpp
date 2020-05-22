@@ -197,7 +197,16 @@ struct Client::Impl {
         LOG_DEBUG("Bep5HTTP: Purging local cache...");
 
         sys::error_code ec;
-        http_store->for_each([&] (auto, auto) {
+        http_store->for_each([&] (auto rr, auto y) {
+            // TODO: Implement specific purge operations
+            // for DHT groups and announcer
+            // to avoid having to parse all stored heads.
+            sys::error_code e;
+            auto hdr = read_response_header(*rr, yield[e]);
+            if (e) return false;
+            auto key = hdr[http_::response_uri_hdr];
+            if (key.empty()) return false;
+            unpublish_cache_entry(key.to_string());
             return false;  // remove all entries
         }, cancel, yield[ec]);
         if (ec) {
