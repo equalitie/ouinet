@@ -341,9 +341,9 @@ struct Client::Impl {
             if (cancel) ec = err::operation_aborted;
             if (ec) return or_throw<Session>(yield, ec);
 
-            auto gen = make_connection_generator(eps, dbg);
+            auto gen = make_connection_generator(eps, key, dbg);
 
-            while (auto opt_con = gen->async_get_value(cancel, yield[ec])) {
+            while (auto opt_res = gen->async_get_value(cancel, yield[ec])) {
                 assert(!cancel || ec == err::operation_aborted);
                 if (cancel) ec = err::operation_aborted;
                 if (ec == err::operation_aborted) return or_throw<Session>(yield, ec);
@@ -351,10 +351,10 @@ struct Client::Impl {
 
                 if (dbg) {
                     yield.log(*dbg, " Bep5Http: Connect to clients done, ec:", ec.message(),
-                        " chosen ep:", opt_con->second, "; fetching...");
+                        " chosen ep:", opt_res->second, "; fetching...");
                 }
 
-                auto session = load_from_connection(key, opt_con->first, cancel, yield[ec]);
+                auto session = std::move(opt_res->first);
                 auto& hdr = session.response_header();
 
                 if (dbg) {
@@ -373,7 +373,7 @@ struct Client::Impl {
                 // We found the entry
                 // TODO: Check its age, store it if it's too old but keep trying
                 // other peers.
-                peer_cache[dht_group] = opt_con->second;
+                peer_cache[dht_group] = opt_res->second;
                 return session;
             }
         }
@@ -405,7 +405,7 @@ struct Client::Impl {
     Session load_from_connection( const string& key
                                 , Con& con
                                 , Cancel cancel
-                                , Yield yield)
+                                , asio::yield_context yield)
     {
         auto uri = uri_from_key(key);
         http::request<http::string_body> rq{http::verb::get, uri, 11 /* version */};
@@ -456,10 +456,10 @@ struct Client::Impl {
         return GenericStream(move(s));
     }
 
-    unique_ptr<util::AsyncGenerator<pair<GenericStream, udp::endpoint>>>
-    make_connection_generator(set<udp::endpoint> eps, boost::optional<uint32_t> dbg)
+    unique_ptr<util::AsyncGenerator<pair<Session, udp::endpoint>>>
+    make_connection_generator(set<udp::endpoint> eps, const std::string& key, boost::optional<uint32_t> dbg)
     {
-        using Ret = util::AsyncGenerator<pair<GenericStream, udp::endpoint>>;
+        using Ret = util::AsyncGenerator<pair<Session, udp::endpoint>>;
 
         return make_unique<Ret>(ex,
         [&, lc = lifetime_cancel, eps = move(eps), dbg]
@@ -485,7 +485,15 @@ struct Client::Impl {
                             << " ec:" << ec.message() << " c:" << bool(c) << "\n";
                     }
                     if (ec || c) return;
-                    q.push_back(make_pair(move(s), ep));
+
+                    auto session = load_from_connection(key, s, c, y[ec]);
+                    if (dbg) {
+                        std::cerr << *dbg << " Bep5Http: done fetching header: " << ep << ": "
+                            << " ec:" << ec.message() << " c:" << bool(c) << "\n";
+                    }
+                    if (ec || c) return;
+
+                    q.push_back(make_pair(move(session), ep));
                 });
             }
 
