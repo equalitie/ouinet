@@ -138,12 +138,19 @@ std::unique_ptr<DhtGroups> DhtGroups::load( fs::path root_dir
         }
     }
 
-    for (auto j = fs::directory_iterator(root_dir); j != fs::directory_iterator();) {
-        auto i = j; ++j;
+    // Note: be careful when refactoring this code, as it seems copying of
+    // directory_iterator will create an entangled copy!. I.e. this code will fail:
+    //
+    // for (auto j = fs::directory_iterator(root_dir); j != fs::directory_iterator();) {
+    //     fs::directory_iterator i = j; ++j;
+    //     assert(i != j); // O_o
+    // }
+    for (auto i = fs::directory_iterator(root_dir); i != fs::directory_iterator();) {
         sys::error_code ec;
 
         if (!fs::is_directory(*i)) {
             _ERROR("Non directory found in '", root_dir, "': '", *i, "'");
+            ++i;
             continue;
         }
 
@@ -151,11 +158,14 @@ std::unique_ptr<DhtGroups> DhtGroups::load( fs::path root_dir
 
         if (cancel) return or_throw<Ret>(yield, asio::error::operation_aborted);
         if (ec || group.second.empty()) {
-            try_remove(*i);
+            auto d = *i;
+            ++i;
+            try_remove(d);
             continue;
         }
 
         groups.insert(std::move(group));
+        ++i;
     }
 
     return std::unique_ptr<DhtGroups>(new DhtGroups(ex, std::move(root_dir), std::move(groups)));
