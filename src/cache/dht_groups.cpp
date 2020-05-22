@@ -201,6 +201,7 @@ void DhtGroups::add( const GroupName& group_name
     _INFO("Adding: ", group_name, " -> ", item_name);
     fs::path group_p = group_path(group_name);
 
+    // Create the storage representation of the item in the group.
     if (fs::exists(group_p)) {
         if (!fs::is_directory(group_p)) {
             return or_throw(yield, make_error_code(sys::errc::not_a_directory));
@@ -268,6 +269,14 @@ void DhtGroups::add( const GroupName& group_name
         if (fs::is_empty(items_p)) try_remove(group_p);
         return or_throw(yield, ec);
     }
+
+    // Add the item to the group in memory.
+    const auto& group_it = _groups.find(group_name);
+    if (group_it == _groups.end()) {
+        _groups[group_name] = {item_name};  // new group
+        return;
+    }
+    group_it->second.emplace(item_name);  // add item to existing group
 }
 
 std::set<DhtGroups::GroupName> DhtGroups::remove(const ItemName& item_name)
