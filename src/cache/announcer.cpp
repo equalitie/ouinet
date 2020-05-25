@@ -21,7 +21,10 @@ struct LogLevel {
         : _ll(make_shared<log_level_t>(ll))
     {}
 
-    bool debug() const { return *_ll <= DEBUG; }
+    bool debug() const {
+        return (*_ll <= DEBUG)
+            || (logger.get_log_file() != nullptr);
+    }
 
     std::shared_ptr<log_level_t> _ll;
 };
@@ -83,7 +86,17 @@ struct Announcer::Loop {
     }
 
     void add(Key key) {
-        if (already_has(key)) return;
+        bool already_has_key = already_has(key);
+
+        if (_log_level.debug()) {
+            if (already_has_key) {
+                std::cerr << "Announcer: adding " << key << " (already exists)\n";
+            } else {
+                std::cerr << "Announcer: adding " << key << "\n";
+            }
+        }
+
+        if (already_has_key) return;
 
         // To preserve the order in which entries are added and updated we put
         // this new entry _after_ all entries that have not yet been updated.
@@ -157,10 +170,10 @@ struct Announcer::Loop {
             cerr << " ago";
         };
 
-        cerr << "BEP5 HTTP announcer entries:" << "\n";
+        cerr << "Announcer: entries:" << "\n";
         for (auto& ep : entries) {
             auto& e = ep.first;
-            cerr << "  " << e.infohash << " | successful_update:";
+            cerr << "Announcer:  " << e.infohash << " | successful_update:";
             print(e.successful_update);
             cerr << " | failed_update:";
             print(e.failed_update);
@@ -170,6 +183,8 @@ struct Announcer::Loop {
 
     Entries::iterator pick_entry(Cancel& cancel, asio::yield_context yield)
     {
+        LogLevel ll = _log_level;
+
         auto end = entries.end();
 
         while (!cancel) {
@@ -178,16 +193,27 @@ struct Announcer::Loop {
                 // fails to exit.
                 TRACK_HANDLER();
                 sys::error_code ec;
+                if (ll.debug()) {
+                    std::cerr << "Announcer: no entries to update, waiting...\n";
+                }
                 entries.async_wait_for_push(cancel, yield[ec]);
                 if (cancel) ec = asio::error::operation_aborted;
                 if (ec) return or_throw(yield, ec, end);
             }
 
+            assert(!entries.empty());
+
             auto i = entries.begin();
 
             auto d = next_update_after(i->first);
 
-            if (d == 0s) { return i; }
+            if (ll.debug()) {
+                std::cerr << "Announcer: found entry to update. It'll be updated in "
+                          << chrono::duration_cast<chrono::seconds>(d).count()
+                          << " seconds; " << i->first.key << "\n";
+            }
+
+            if (d == 0s) return i;
 
             auto cc = cancel.connect([&] { _timer_cancel(); });
             async_sleep(ex, d, _timer_cancel, yield);
@@ -214,11 +240,20 @@ struct Announcer::Loop {
             // fails to exit.
             TRACK_HANDLER();
             sys::error_code ec;
+            if (ll.debug()) cerr << "Announcer: waiting for DHT\n";
             dht->wait_all_ready(cancel, yield[ec]);
         }
 
+        auto on_exit = defer([&] {
+            if (ll.debug()) {
+                if (ll.debug()) cerr << "Announcer: exiting the loop "
+                                        "(cancel:" << (cancel ? "true":"false") << "\n";
+            }
+        });
+
         while (!cancel) {
             sys::error_code ec;
+            if (ll.debug()) cerr << "Announcer: picking entry to update\n";
             auto ei = pick_entry(cancel, yield[ec]);
 
             if (cancel) return;
@@ -267,14 +302,14 @@ struct Announcer::Loop {
         auto ll = _log_level;
 
         if (ll.debug()) {
-            cerr << "Announcing " << e.key << "\n";
+            cerr << "Announcer: Announcing " << e.key << "\n";
         }
 
         sys::error_code ec;
         dht->tracker_announce(e.infohash, boost::none, cancel, yield[ec]);
 
         if (ll.debug()) {
-            cerr << "Announcing ended " << e.key << " ec:" << ec.message() << "\n";
+            cerr << "Announcer: Announcing ended " << e.key << " ec:" << ec.message() << "\n";
         }
 
         return or_throw(yield, ec);

@@ -440,6 +440,10 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
         return;
     }
 
+    if (log_transactions()) {
+        yield.log("Client: Received uTP/CONNECT request");
+    }
+
     // Connect to the injector and tunnel the transaction through it
 
     if (!_bep5_client) {

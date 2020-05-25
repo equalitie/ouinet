@@ -46,7 +46,7 @@ public:
     void serve_local( const http::request<http::empty_body>&
                     , GenericStream& sink
                     , Cancel&
-                    , asio::yield_context);
+                    , Yield);
 
     std::size_t local_size( Cancel
                           , asio::yield_context) const;

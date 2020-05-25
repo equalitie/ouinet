@@ -99,8 +99,8 @@ struct Client::Impl {
     std::unique_ptr<DhtGroups> _dht_groups;
 
 
-    bool log_debug() const { return log_level <= DEBUG; }
-    bool log_info()  const { return log_level <= INFO; }
+    bool log_debug() const { return log_level <= DEBUG || logger.get_log_file(); }
+    bool log_info()  const { return log_level <= INFO  || logger.get_log_file(); }
 
     Impl( shared_ptr<bt::MainlineDht> dht_
         , util::Ed25519PublicKey& cache_pk
@@ -134,8 +134,10 @@ struct Client::Impl {
     void serve_local( const http::request<http::empty_body>& req
                     , GenericStream& sink
                     , Cancel& cancel
-                    , asio::yield_context yield)
+                    , Yield& yield)
     {
+        bool do_log = log_debug();
+
         sys::error_code ec;
 
         // Usually we would
@@ -151,31 +153,34 @@ struct Client::Impl {
         auto req_proto = req[http_::protocol_version_hdr];
         if (!boost::regex_match( req_proto.begin(), req_proto.end()
                                , http_::protocol_version_rx)) {
-            if (log_debug()) {
-                cerr << "Bep5HTTP: Not a Ouinet request\n";
+            if (do_log) {
+                yield.log("Bep5HTTP: Not a Ouinet request\n", req);
             }
             return handle_bad_request(sink, req, yield[ec]);
         }
 
         auto key = key_from_http_req(req);
         if (!key) {
-            if (log_debug()) {
-                cerr << "Bep5HTTP: Cannot derive key from request\n";
+            if (do_log) {
+                yield.log("Bep5HTTP: Cannot derive key from request\n", req);
             }
             return handle_bad_request(sink, req, yield[ec]);
         }
 
+        if (do_log) {
+            yield.log("Bep5HTTP: Received request for ", *key);
+        }
+
         auto rr = http_store->reader(*key, ec);
         if (ec) {
-            if (!cancel && log_debug()) {
-                cerr << "Bep5HTTP: Not Serving " << *key
-                     << " ec:" << ec.message() << "\n";
+            if (!cancel && do_log) {
+                yield.log("Bep5HTTP: Not Serving ", *key, " ec:", ec.message());
             }
             return handle_not_found(sink, req, yield[ec]);
         }
 
-        if (log_debug()) {
-            cerr << "Bep5HTTP: Serving " << *key << "\n";
+        if (do_log) {
+            yield.log("Bep5HTTP: Serving ", *key);
         }
 
         auto s = Session::create(move(rr), cancel, yield[ec]);
@@ -731,7 +736,7 @@ void Client::store( const std::string& key
 void Client::serve_local( const http::request<http::empty_body>& req
                         , GenericStream& sink
                         , Cancel& cancel
-                        , asio::yield_context yield)
+                        , Yield yield)
 {
     _impl->serve_local(req, sink, cancel, yield);
 }
