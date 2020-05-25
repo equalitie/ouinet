@@ -595,7 +595,7 @@ struct Client::Impl {
     void unpublish_cache_entry(const std::string& key)
     {
         auto empty_groups = _dht_groups->remove(key);
-        for (const auto& eg : empty_groups) announcer.remove(eg);
+        for (const auto& eg : empty_groups) announcer.remove(compute_swarm_name(eg));
     }
 
     // Return whether the entry should be kept in storage.
