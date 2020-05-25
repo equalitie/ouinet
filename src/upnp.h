@@ -21,7 +21,16 @@ public:
             exec,
             c = _lifetime_cancel
         ] (asio::yield_context yield) mutable {
-            loop(exec, c, yield);
+            while (!c) {
+                try {
+                    loop(exec, c, yield);
+                } catch (const std::exception& e) {
+                    if (!c) {
+                        LOG_WARN("UPnP Loop has thrown an exception, will restart in 5s");
+                    }
+                }
+                async_sleep(exec, std::chrono::seconds(5), c, yield);
+            }
         }));
     }
 
