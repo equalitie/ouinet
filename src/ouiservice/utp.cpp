@@ -4,6 +4,7 @@
 #include "../logger.h"
 #include "../util/watch_dog.h"
 #include "../util/handler_tracker.h"
+#include "../async_sleep.h"
 
 namespace ouinet {
 namespace ouiservice {
@@ -31,8 +32,12 @@ UtpOuiServiceServer::UtpOuiServiceServer( const asio::executor& ex
 
 void UtpOuiServiceServer::start_listen(asio::yield_context yield)
 {
+    using namespace std::chrono_literals;
+
     TRACK_SPAWN(_ex, [&] (asio::yield_context yield) {
         Cancel cancel(_cancel);
+
+        auto local_ep = _udp_multiplexer->local_endpoint();
 
         while (!cancel) {
             sys::error_code ec;
@@ -40,11 +45,16 @@ void UtpOuiServiceServer::start_listen(asio::yield_context yield)
 
             auto cancel_con = cancel.connect([&] { s.close(); });
 
-            s.bind(_udp_multiplexer->local_endpoint(), ec);
+            s.bind(local_ep, ec);
             assert(!ec);
             s.async_accept(yield[ec]);
             if (cancel) return;
-            assert(!ec);
+            if (ec) {
+                assert(ec != asio::error::operation_aborted);
+                LOG_ERROR("UtpOuiServiceServer: failed to accept, will retry in 5s");
+                async_sleep(_ex, 5s, cancel, yield[ec]);
+                continue;
+            }
             _accept_queue.async_push(move(s), ec, cancel, yield[ec]);
         }
     });
