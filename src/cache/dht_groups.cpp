@@ -82,17 +82,15 @@ DhtGroups::load_group( const fs::path dir
 
     Group::second_type items;
 
-    for (auto j = fs::directory_iterator(items_dir); j != fs::directory_iterator();) {
-        auto i = j; ++j;
-
-        std::string name = read_file(*i, ex, cancel, yield[ec]);
+    for (auto f : fs::directory_iterator(items_dir)) {
+        std::string name = read_file(f, ex, cancel, yield[ec]);
 
         if (cancel) {
             return or_throw<Group>(yield, asio::error::operation_aborted);
         }
 
         if (ec) {
-            try_remove(*i);
+            try_remove(f);
             continue;
         }
 
@@ -138,34 +136,23 @@ std::unique_ptr<DhtGroups> DhtGroups::load( fs::path root_dir
         }
     }
 
-    // Note: be careful when refactoring this code, as it seems copying of
-    // directory_iterator will create an entangled copy!. I.e. this code will fail:
-    //
-    // for (auto j = fs::directory_iterator(root_dir); j != fs::directory_iterator();) {
-    //     fs::directory_iterator i = j; ++j;
-    //     assert(i != j); // O_o
-    // }
-    for (auto i = fs::directory_iterator(root_dir); i != fs::directory_iterator();) {
+    for (auto f : fs::directory_iterator(root_dir)) {
         sys::error_code ec;
 
-        if (!fs::is_directory(*i)) {
-            _ERROR("Non directory found in '", root_dir, "': '", *i, "'");
-            ++i;
+        if (!fs::is_directory(f)) {
+            _ERROR("Non directory found in '", root_dir, "': '", f, "'");
             continue;
         }
 
-        auto group = load_group(*i, ex, cancel, yield[ec]);
+        auto group = load_group(f, ex, cancel, yield[ec]);
 
         if (cancel) return or_throw<Ret>(yield, asio::error::operation_aborted);
         if (ec || group.second.empty()) {
-            auto d = *i;
-            ++i;
-            try_remove(d);
+            try_remove(f);
             continue;
         }
 
         groups.insert(std::move(group));
-        ++i;
     }
 
     return std::unique_ptr<DhtGroups>(new DhtGroups(ex, std::move(root_dir), std::move(groups)));
