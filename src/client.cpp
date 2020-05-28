@@ -341,8 +341,9 @@ private:
                     async_sleep(_ctx, 200ms, c, yield);
                     continue;
                 }
-                TRACK_SPAWN(_ctx, ([&, con = move(con)]
+                TRACK_SPAWN(_ctx, ([this, con = move(con)]
                                    (asio::yield_context yield) mutable {
+                    sys::error_code ec;
                     Yield y(_ctx, yield, "uTPAccept");
                     serve_utp_request(move(con), y[ec]);
                 }));
