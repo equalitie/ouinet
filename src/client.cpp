@@ -1262,12 +1262,6 @@ public:
         void sleep_before_job(Type job_type, Cancel& cancel, Yield& yield) {
             size_t n = count_running();
 
-            auto timeout = n * std::chrono::seconds(3);
-
-            if (log_transactions()) {
-                yield.log("Starting job with timeout ", timeout.count(), "s");
-            }
-
             if (job_type == Type::injector_or_dcache || job_type == Type::proxy) {
                 // If origin is running, give it some time, but stop sleeping
                 // if origin fetch exits early.
