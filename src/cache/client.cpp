@@ -344,8 +344,6 @@ struct Client::Impl {
             return or_throw_(ec, std::move(session));
         }
 
-        if (dbg) yield.log("Bep5Http: done cancel:", bool(cancel));
-
         if (cancel) return or_throw_(asio::error::operation_aborted);
         return or_throw_(err::not_found);
     }
@@ -371,8 +369,13 @@ struct Client::Impl {
     {
         sys::error_code ec;
 
-        auto con = this->connect(ep, cancel, yield[ec]);
+        Cancel timeout_cancel(cancel);
 
+        WatchDog wd(ex, chrono::seconds(30), [&] { timeout_cancel(); });
+
+        auto con = this->connect(ep, timeout_cancel, yield[ec]);
+
+        if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw<Session>(yield, ec);
 
@@ -383,17 +386,20 @@ struct Client::Impl {
         rq.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
         rq.set(http::field::user_agent, "Ouinet.Bep5.Client");
 
-        auto cancelled2 = cancel.connect([&] { con.close(); });
+        auto timeout_cancel_con = timeout_cancel.connect([&] { con.close(); });
 
         http::async_write(con, rq, yield[ec]);
 
+        if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw<Session>(yield, ec);
 
         Session::reader_uptr vfy_reader = make_unique<cache::VerifyingReader>(move(con), cache_pk);
-        auto session = Session::create(move(vfy_reader), cancel, yield[ec]);
+        auto session = Session::create(move(vfy_reader), timeout_cancel, yield[ec]);
 
-        assert(!cancel || ec == asio::error::operation_aborted);
+        if (timeout_cancel) ec = asio::error::timed_out;
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec) return or_throw<Session>(yield, ec);
 
         if ( !ec
             && !util::http_proto_version_check_trusted(session.response_header(), newest_proto_seen))
@@ -416,12 +422,10 @@ struct Client::Impl {
         asio_utp::socket s(ex);
         s.bind(*opt_m, ec);
         if (ec) return or_throw<GenericStream>(yield, ec);
-        auto c = cancel.connect([&] { s.close(); });
-        bool timed_out = false;
-        WatchDog wd(ex, chrono::seconds(30), [&] { timed_out = true; cancel(); });
+        auto cancel_con = cancel.connect([&] { s.close(); });
         s.async_connect(ep, yield[ec]);
-        if (timed_out) return or_throw<GenericStream>(yield, asio::error::timed_out);
-        if (ec || cancel) return or_throw<GenericStream>(yield, ec);
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec) return or_throw<GenericStream>(yield, ec);
         return GenericStream(move(s));
     }
 
@@ -464,13 +468,13 @@ struct Client::Impl {
                     sys::error_code ec;
 
                     if (dbg) {
-                        logger.log("Bep5Http: connecting to: ", ep);
+                        logger.log("Bep5Http: fetching from: ", ep);
                     }
 
                     auto session = load_from_connection(key, ep, c, y[ec]);
 
                     if (dbg) {
-                        logger.log("Bep5Http: done fetching header: ", ep, " "
+                        logger.log("Bep5Http: done fetching: ", ep, " "
                             , " ec:", ec.message(), " c:", bool(c));
                     }
 
