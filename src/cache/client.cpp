@@ -371,7 +371,7 @@ struct Client::Impl {
 
         Cancel timeout_cancel(cancel);
 
-        WatchDog wd(ex, chrono::seconds(30), [&] { timeout_cancel(); });
+        WatchDog wd(ex, chrono::seconds(10), [&] { timeout_cancel(); });
 
         auto con = this->connect(ep, timeout_cancel, yield[ec]);
 
