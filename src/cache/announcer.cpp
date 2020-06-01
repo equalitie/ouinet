@@ -78,19 +78,21 @@ struct Announcer::Loop {
         , _log_level(log_level)
     { }
 
-    bool already_has(const Key& key) const {
-        for (auto& e : entries) {
-            if (e.first.key == key) return true;
+    Entries::iterator find_entry_by_key(const Key& key) {
+        for (auto i = entries.begin(); i != entries.end(); ++i) {
+            if (i->first.key == key) return i;
         }
-        return false;
+        return entries.end();
     }
 
     void add(Key key) {
-        bool already_has_key = already_has(key);
+        auto entry_i = find_entry_by_key(key);
+        bool already_has_key = (entry_i != entries.end());
 
         if (_log_level.debug()) {
             if (already_has_key) {
                 std::cerr << "Announcer: adding " << key << " (already exists)\n";
+                entry_i->first.to_remove = false;
             } else {
                 std::cerr << "Announcer: adding " << key << "\n";
             }
@@ -119,6 +121,9 @@ struct Announcer::Loop {
             if (i->first.key == key) break;  // found
         if (i == entries.end()) return;  // not found
 
+        if (_log_level.debug()) {
+            std::cerr << "Announcer: marking " << key << " for removal\n";
+        }
         // The actual removal is not done here but in the main loop.
         i->first.to_remove = true;
         // No new entries, so no `_timer_cancel` reset.

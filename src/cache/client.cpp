@@ -439,6 +439,9 @@ struct Client::Impl {
 
         set<udp::endpoint> eps = local_peer_discovery.found_peers();
 
+        if (dbg) {
+            logger.log("Bep5Http: local peers:", eps);
+        }
         {
             auto peer_i = peer_cache.find(dht_group);
 
