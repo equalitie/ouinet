@@ -529,7 +529,9 @@ CacheControl::do_fetch_stored(FetchState& fs,
             which = stored;
         }
 
-        cv.wait(yield);
+        if (!fs.fetch_stored->has_result()) {
+            cv.wait(yield);
+        }
     }
 
     if (which == fresh) {
