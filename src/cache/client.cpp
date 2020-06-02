@@ -182,8 +182,8 @@ struct Client::Impl {
             yield.log("Bep5HTTP: Serving ", *key);
         }
 
-        auto s = Session::create(move(rr), cancel, yield[ec]);
-        if (!ec) s.flush_response(sink, cancel, yield[ec]);
+        auto s = Session::create(move(rr), cancel, yield[ec].tag("read_header"));
+        if (!ec) s.flush_response(sink, cancel, yield[ec].tag("flush"));
 
         return or_throw(yield, ec);
     }

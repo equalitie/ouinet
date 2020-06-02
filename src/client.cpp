@@ -437,7 +437,7 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
     if (ec || cancel) return;
 
     if (req.method() != http::verb::connect) {
-        _cache->serve_local(req, con, cancel, yield[ec]);
+        _cache->serve_local(req, con, cancel, yield[ec].tag("serve_local"));
         return;
     }
 
