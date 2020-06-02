@@ -81,25 +81,25 @@ struct Client::Impl {
     // (i.e. from injector-signed cached content).
     unsigned newest_proto_seen = http_::protocol_version_current;
 
-    asio::executor ex;
-    shared_ptr<bt::MainlineDht> dht;
-    string uri_swarm_prefix;
-    util::Ed25519PublicKey cache_pk;
-    fs::path cache_dir;
-    unique_ptr<cache::HttpStore> http_store;
-    boost::posix_time::time_duration max_cached_age;
-    Cancel lifetime_cancel;
-    Announcer announcer;
-    GarbageCollector gc;
-    map<string, udp::endpoint> peer_cache;
-    util::LruCache<bt::NodeID, unique_ptr<DhtLookup>> dht_lookups;
-    log_level_t log_level = INFO;
-    LocalPeerDiscovery local_peer_discovery;
+    asio::executor _ex;
+    shared_ptr<bt::MainlineDht> _dht;
+    string _uri_swarm_prefix;
+    util::Ed25519PublicKey _cache_pk;
+    fs::path _cache_dir;
+    unique_ptr<cache::HttpStore> _http_store;
+    boost::posix_time::time_duration _max_cached_age;
+    Cancel _lifetime_cancel;
+    Announcer _announcer;
+    GarbageCollector _gc;
+    map<string, udp::endpoint> _peer_cache;
+    util::LruCache<bt::NodeID, unique_ptr<DhtLookup>> _dht_lookups;
+    log_level_t _log_level = INFO;
+    LocalPeerDiscovery _local_peer_discovery;
     std::unique_ptr<DhtGroups> _dht_groups;
 
 
-    bool log_debug() const { return log_level <= DEBUG || logger.get_log_file(); }
-    bool log_info()  const { return log_level <= INFO  || logger.get_log_file(); }
+    bool log_debug() const { return _log_level <= DEBUG || logger.get_log_file(); }
+    bool log_info()  const { return _log_level <= INFO  || logger.get_log_file(); }
 
     Impl( shared_ptr<bt::MainlineDht> dht_
         , util::Ed25519PublicKey& cache_pk
@@ -107,26 +107,26 @@ struct Client::Impl {
         , unique_ptr<cache::HttpStore> http_store_
         , boost::posix_time::time_duration max_cached_age
         , log_level_t log_level)
-        : ex(dht_->get_executor())
-        , dht(move(dht_))
-        , uri_swarm_prefix(bep5::compute_uri_swarm_prefix
+        : _ex(dht_->get_executor())
+        , _dht(move(dht_))
+        , _uri_swarm_prefix(bep5::compute_uri_swarm_prefix
               (cache_pk, http_::protocol_version_current))
-        , cache_pk(cache_pk)
-        , cache_dir(move(cache_dir))
-        , http_store(move(http_store_))
-        , max_cached_age(max_cached_age)
-        , announcer(dht, log_level)
-        , gc(*http_store, [&] (auto rr, auto y) {
+        , _cache_pk(cache_pk)
+        , _cache_dir(move(cache_dir))
+        , _http_store(move(http_store_))
+        , _max_cached_age(max_cached_age)
+        , _announcer(_dht, log_level)
+        , _gc(*_http_store, [&] (auto rr, auto y) {
               return keep_cache_entry(move(rr), y);
-          }, ex)
-        , dht_lookups(256)
-        , log_level(log_level)
-        , local_peer_discovery(ex, dht->local_endpoints())
+          }, _ex)
+        , _dht_lookups(256)
+        , _log_level(log_level)
+        , _local_peer_discovery(_ex, _dht->local_endpoints())
     {}
 
     std::string compute_swarm_name(boost::string_view dht_group) const {
         return bep5::compute_uri_swarm_name(
-                uri_swarm_prefix,
+                _uri_swarm_prefix,
                 dht_group);
     }
 
@@ -170,7 +170,7 @@ struct Client::Impl {
             yield.log("Bep5HTTP: Received request for ", *key);
         }
 
-        auto rr = http_store->reader(*key, ec);
+        auto rr = _http_store->reader(*key, ec);
         if (ec) {
             if (!cancel && do_log) {
                 yield.log("Bep5HTTP: Not Serving ", *key, " ec:", ec.message());
@@ -191,7 +191,7 @@ struct Client::Impl {
     std::size_t local_size( Cancel cancel
                           , asio::yield_context yield) const
     {
-        return http_store->size(cancel, yield);
+        return _http_store->size(cancel, yield);
     }
 
     void local_purge( Cancel cancel
@@ -201,7 +201,7 @@ struct Client::Impl {
         LOG_DEBUG("Bep5HTTP: Purging local cache...");
 
         sys::error_code ec;
-        http_store->for_each([&] (auto rr, auto y) {
+        _http_store->for_each([&] (auto rr, auto y) {
             // TODO: Implement specific purge operations
             // for DHT groups and announcer
             // to avoid having to parse all stored heads.
@@ -251,11 +251,11 @@ struct Client::Impl {
                                          , Cancel& cancel
                                          , asio::yield_context yield)
     {
-        auto* lookup = dht_lookups.get(infohash);
+        auto* lookup = _dht_lookups.get(infohash);
 
         if (!lookup) {
-            lookup = dht_lookups.put( infohash
-                                    , make_unique<DhtLookup>(dht, infohash));
+            lookup = _dht_lookups.put( infohash
+                                     , make_unique<DhtLookup>(_dht, infohash));
         }
 
         return (*lookup)->get(cancel, yield);
@@ -340,7 +340,7 @@ struct Client::Impl {
             // We found the entry
             // TODO: Check its age, store it if it's too old but keep trying
             // other peers.
-            peer_cache[dht_group] = opt_res->second;
+            _peer_cache[dht_group] = opt_res->second;
             return or_throw_(ec, std::move(session));
         }
 
@@ -353,7 +353,7 @@ struct Client::Impl {
                            , Yield yield)
     {
         sys::error_code ec;
-        auto rr = http_store->reader(key, ec);
+        auto rr = _http_store->reader(key, ec);
         if (ec) return or_throw<Session>(yield, ec);
         auto rs = Session::create(move(rr), cancel, yield[ec]);
         assert(!cancel || ec == asio::error::operation_aborted);
@@ -371,7 +371,7 @@ struct Client::Impl {
 
         Cancel timeout_cancel(cancel);
 
-        WatchDog wd(ex, chrono::seconds(10), [&] { timeout_cancel(); });
+        WatchDog wd(_ex, chrono::seconds(10), [&] { timeout_cancel(); });
 
         auto con = this->connect(ep, timeout_cancel, yield[ec]);
 
@@ -394,7 +394,7 @@ struct Client::Impl {
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw<Session>(yield, ec);
 
-        Session::reader_uptr vfy_reader = make_unique<cache::VerifyingReader>(move(con), cache_pk);
+        Session::reader_uptr vfy_reader = make_unique<cache::VerifyingReader>(move(con), _cache_pk);
         auto session = Session::create(move(vfy_reader), timeout_cancel, yield[ec]);
 
         if (timeout_cancel) ec = asio::error::timed_out;
@@ -419,7 +419,7 @@ struct Client::Impl {
         sys::error_code ec;
         auto opt_m = choose_multiplexer_for(ep);
         assert(opt_m);
-        asio_utp::socket s(ex);
+        asio_utp::socket s(_ex);
         s.bind(*opt_m, ec);
         if (ec) return or_throw<GenericStream>(yield, ec);
         auto cancel_con = cancel.connect([&] { s.close(); });
@@ -437,15 +437,15 @@ struct Client::Impl {
     {
         using Ret = util::AsyncGenerator<pair<Session, udp::endpoint>>;
 
-        set<udp::endpoint> eps = local_peer_discovery.found_peers();
+        set<udp::endpoint> eps = _local_peer_discovery.found_peers();
 
         if (dbg) {
             logger.log("Bep5Http: local peers:", eps);
         }
         {
-            auto peer_i = peer_cache.find(dht_group);
+            auto peer_i = _peer_cache.find(dht_group);
 
-            if (peer_i != peer_cache.end()) {
+            if (peer_i != _peer_cache.end()) {
                 auto ep = peer_i->second;
                 if (dbg) {
                     logger.log("Bep5Http: using cached endpoint:", ep);
@@ -454,19 +454,19 @@ struct Client::Impl {
             }
         }
 
-        return make_unique<Ret>(ex,
-        [&, lc = lifetime_cancel, eps = move(eps), dbg]
+        return make_unique<Ret>(_ex,
+        [&, lc = _lifetime_cancel, eps = move(eps), dbg]
         (auto& q, auto c, auto y) mutable {
             auto cn = lc.connect([&] { c(); });
 
-            WaitCondition wc(ex);
-            set<udp::endpoint> our_endpoints = dht->wan_endpoints();
+            WaitCondition wc(_ex);
+            set<udp::endpoint> our_endpoints = _dht->wan_endpoints();
 
             auto fetch = [this, &logger, &wc, &c, &key, &q, &our_endpoints, dbg] (udp::endpoint ep) {
                 if (bt::is_martian(ep)) return;
                 if (our_endpoints.count(ep)) return;
 
-                asio::spawn(ex, [this, &logger, &q, &c, &key, ep, lock = wc.lock(), dbg] (auto y) {
+                asio::spawn(_ex, [this, &logger, &q, &c, &key, ep, lock = wc.lock(), dbg] (auto y) {
                     TRACK_HANDLER();
                     sys::error_code ec;
 
@@ -534,11 +534,11 @@ struct Client::Impl {
     boost::optional<asio_utp::udp_multiplexer>
     choose_multiplexer_for(const udp::endpoint& ep)
     {
-        auto eps = dht->local_endpoints();
+        auto eps = _dht->local_endpoints();
 
         for (auto& e : eps) {
             if (same_ipv(ep, e)) {
-                asio_utp::udp_multiplexer m(ex);
+                asio_utp::udp_multiplexer m(_ex);
                 sys::error_code ec;
                 m.bind(e, ec);
                 assert(!ec);
@@ -557,20 +557,20 @@ struct Client::Impl {
     {
         sys::error_code ec;
         cache::KeepSignedReader fr(r);
-        http_store->store(key, fr, cancel, yield[ec]);
+        _http_store->store(key, fr, cancel, yield[ec]);
         if (ec) return or_throw(yield, ec);
 
         _dht_groups->add(dht_group, key, cancel, yield[ec]);
         if (ec) return or_throw(yield, ec);
 
-        announcer.add(compute_swarm_name(dht_group));
+        _announcer.add(compute_swarm_name(dht_group));
     }
 
     http::response_header<>
     read_response_header( http_response::AbstractReader& reader
                         , asio::yield_context yield)
     {
-        Cancel lc(lifetime_cancel);
+        Cancel lc(_lifetime_cancel);
 
         sys::error_code ec;
         auto part = reader.async_read_part(lc, yield[ec]);
@@ -603,7 +603,7 @@ struct Client::Impl {
     void unpublish_cache_entry(const std::string& key)
     {
         auto empty_groups = _dht_groups->remove(key);
-        for (const auto& eg : empty_groups) announcer.remove(compute_swarm_name(eg));
+        for (const auto& eg : empty_groups) _announcer.remove(compute_swarm_name(eg));
     }
 
     // Return whether the entry should be kept in storage.
@@ -634,9 +634,9 @@ struct Client::Impl {
         }
 
         auto age = cache_entry_age(hdr);
-        if (age > max_cached_age) {
+        if (age > _max_cached_age) {
             LOG_DEBUG( "Bep5HTTP: Cached response is too old; removing: "
-                     , age, " > ", max_cached_age
+                     , age, " > ", _max_cached_age
                      , "; uri=", key );
             unpublish_cache_entry(key.to_string());
             return false;
@@ -647,27 +647,27 @@ struct Client::Impl {
 
     void announce_stored_data(asio::yield_context y)
     {
-        Cancel cancel(lifetime_cancel);
+        Cancel cancel(_lifetime_cancel);
 
         sys::error_code e;
-        _dht_groups = DhtGroups::load(cache_dir/"dht_groups", ex, cancel, y[e]);
+        _dht_groups = DhtGroups::load(_cache_dir/"dht_groups", _ex, cancel, y[e]);
 
         if (cancel) e = asio::error::operation_aborted;
         if (e) return or_throw(y, e);
 
-        http_store->for_each([&] (auto rr, auto yield) {
+        _http_store->for_each([&] (auto rr, auto yield) {
             return keep_cache_entry(std::move(rr), yield);
         }, cancel, y[e]);
         if (e) return or_throw(y, e);
 
         for (auto dht_group : _dht_groups->groups()) {
-            announcer.add(compute_swarm_name(dht_group));
+            _announcer.add(compute_swarm_name(dht_group));
         }
     }
 
     void stop() {
-        lifetime_cancel();
-        local_peer_discovery.stop();
+        _lifetime_cancel();
+        _local_peer_discovery.stop();
     }
 
     unsigned get_newest_proto_version() const {
@@ -676,11 +676,11 @@ struct Client::Impl {
 
     void set_log_level(log_level_t l) {
         cerr << "Setting Bep5Http Cache log level to " << l << "\n";
-        log_level = l;
-        announcer.set_log_level(l);
+        _log_level = l;
+        _announcer.set_log_level(l);
     }
 
-    log_level_t get_log_level() const { return log_level; }
+    log_level_t get_log_level() const { return _log_level; }
 };
 
 /* static */
@@ -718,7 +718,7 @@ Client::build( shared_ptr<bt::MainlineDht> dht
 
     impl->announce_stored_data(yield[ec]);
     if (ec) return or_throw<ClientPtr>(yield, ec);
-    impl->gc.start();
+    impl->_gc.start();
 
     return unique_ptr<Client>(new Client(move(impl)));
 }
