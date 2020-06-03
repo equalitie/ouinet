@@ -273,7 +273,7 @@ struct Client::Impl {
 
         bool dbg;
 
-        if (true || log_debug()) dbg = true;
+        if (log_debug()) dbg = true;
 
         unique_ptr<util::AsyncGenerator<pair<Session, udp::endpoint>>> gen;
 
