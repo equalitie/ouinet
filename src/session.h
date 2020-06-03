@@ -5,7 +5,7 @@
 
 namespace ouinet {
 
-class Session {
+class Session : public http_response::AbstractReader {
 public:
     using reader_uptr = std::unique_ptr<http_response::AbstractReader>;
 
@@ -26,22 +26,31 @@ public:
           http_response::Head& response_header()       { return _head; }
     const http_response::Head& response_header() const { return _head; }
 
+    boost::optional<http_response::Part>
+    async_read_part(Cancel, asio::yield_context) override;
+
     template<class SinkStream>
     void flush_response(SinkStream&, Cancel&, asio::yield_context);
     template<class Handler>
     void flush_response(Cancel&, asio::yield_context, Handler&& h);
 
-    bool is_open() const {
+    bool is_open() const override {
         return _reader->is_open();
     }
 
-    void close() {
+    void close() override {
         if (!_reader) return;
         if (_reader->is_open()) _reader->close();
     }
 
     bool keep_alive() const {
         return _head.keep_alive();
+    }
+
+    bool is_done() const override {
+        if (!_head_was_read) return false;
+        if (!_reader) return true;
+        return _reader->is_done();
     }
 
 private:
@@ -53,6 +62,7 @@ private:
 private:
     http_response::Head _head;
     reader_uptr _reader;
+    bool _head_was_read = false;
 };
 
 inline
@@ -101,6 +111,17 @@ Session Session::create_from_reader( reader_uptr&& reader
     return Session{std::move(*head), std::move(reader)};
 }
 
+inline
+boost::optional<http_response::Part>
+Session::async_read_part(Cancel cancel, asio::yield_context yield)
+{
+    if (!_head_was_read) {
+        _head_was_read = true;
+        return {{_head}};
+    }
+    return _reader->async_read_part(cancel, yield);
+}
+
 template<class SinkStream>
 inline
 void
@@ -108,8 +129,10 @@ Session::flush_response(SinkStream& sink,
                         Cancel& cancel,
                         asio::yield_context yield)
 {
+    assert(!_head_was_read);
     sys::error_code ec;
 
+    _head_was_read = true;
     _head.async_write(sink, cancel, yield[ec]);
     return_or_throw_on_error(yield, cancel, ec);
 
@@ -130,8 +153,11 @@ Session::flush_response(Cancel& cancel,
                         asio::yield_context yield,
                         Handler&& h)
 {
+    assert(!_head_was_read);
+
     sys::error_code ec;
 
+    _head_was_read = true;
     h(http_response::Part{std::move(_head)}, cancel, yield[ec]);
     return_or_throw_on_error(yield, cancel, ec);
 
