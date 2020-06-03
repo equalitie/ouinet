@@ -56,6 +56,7 @@
 #include "util/file_posix_with_offset.h"
 
 #include "logger.h"
+#include "log_context.h"
 #include "defer.h"
 #include "http_util.h"
 
@@ -86,7 +87,8 @@ static
 void handle_bad_request( GenericStream& con
                        , const Request& req
                        , string message
-                       , Yield yield)
+                       , log_context log
+                       , asio::yield_context yield)
 {
     http::response<http::string_body> res{http::status::bad_request, req.version()};
 
@@ -96,8 +98,8 @@ void handle_bad_request( GenericStream& con
     res.body() = message;
     res.prepare_payload();
 
-    yield.log("=== Sending back response ===");
-    yield.log(res);
+    log.info("=== Sending back response ===");
+    log.info(res);
 
     sys::error_code ec;
     http::async_write(con, res, yield[ec]);
@@ -113,7 +115,7 @@ TcpLookup
 resolve_target( const Request& req
               , asio::executor exec
               , Cancel& cancel
-              , Yield yield)
+              , asio::yield_context yield)
 {
     TcpLookup lookup;
     sys::error_code ec;
@@ -154,7 +156,8 @@ static
 void handle_connect_request( GenericStream client_c
                            , const Request& req
                            , Cancel& cancel
-                           , Yield yield)
+                           , log_context log
+                           , asio::yield_context yield)
 {
     sys::error_code ec;
 
@@ -178,10 +181,7 @@ void handle_connect_request( GenericStream client_c
         else
             err = "Unknown resolver error: " + ec.message();
 
-        handle_bad_request( client_c, req, err
-                          , yield[ec].tag("handle_bad_request"));
-
-        return;
+        return handle_bad_request( client_c, req, err, log, yield[ec]);
     }
 
     assert(!lookup.empty());
@@ -195,7 +195,7 @@ void handle_connect_request( GenericStream client_c
         auto ep = util::format_ep(lookup.begin()->endpoint());
         return handle_bad_request( client_c, req
                                  , "Illegal CONNECT target: " + ep
-                                 , yield[ec]);
+                                 , log, yield[ec]);
     }
 
     auto origin_c = connect_to_host( lookup, exec
@@ -205,7 +205,7 @@ void handle_connect_request( GenericStream client_c
     if (ec) {
         return handle_bad_request( client_c, req
                                  , "Failed to connect to origin: " + ec.message()
-                                 , yield[ec]);
+                                 , log, yield[ec]);
     }
 
     auto disconnect_origin_slot = cancel.connect([&origin_c] {
@@ -221,7 +221,7 @@ void handle_connect_request( GenericStream client_c
     http::async_write(client_c, res, yield[ec]);
 
     if (ec) {
-        yield.log("Failed sending CONNECT response: ", ec.message());
+        log.info("Failed sending CONNECT response: ", ec.message());
         return;
     }
 
@@ -235,7 +235,8 @@ struct InjectorCacheControl {
 public:
     GenericStream connect( const Request& rq
                          , Cancel& cancel
-                         , Yield yield)
+                         , log_context log
+                         , asio::yield_context yield)
     {
         // Parse the URL to tell HTTP/HTTPS, host, port.
         util::url_match url;
@@ -292,33 +293,31 @@ public:
     void inject_fresh( GenericStream& con
                      , Request rq
                      , Cancel& cancel
-                     , Yield yield)
+                     , log_context log
+                     , asio::yield_context yield)
     {
-        yield.log("Injection begin");
-
         sys::error_code ec;
 
         // Pop out Ouinet internal HTTP headers.
         rq = util::to_cache_request(move(rq));
 
-        auto orig_con = get_connection(rq, cancel, yield.tag("connect")[ec]);
+        auto orig_con = get_connection(rq, cancel, log.tag("connect"), yield[ec]);
         return_or_throw_on_error(yield, cancel, ec);
 
         // Send HTTP request to origin.
         auto orig_rq = util::to_origin_request(rq);
-        util::http_request(orig_con, orig_rq, cancel, yield.tag("request")[ec]);
-        if (ec) yield.log("Failed to send request: ", ec.message());
+        util::http_request(orig_con, orig_rq, cancel, yield[ec]);
+        if (ec) log.info("Failed to send request: ", ec.message());
         return_or_throw_on_error(yield, cancel, ec);
 
         Session::reader_uptr sig_reader = make_unique<cache::SigningReader>
             (move(orig_con), rq, insert_id, insert_ts, config.cache_private_key());
-        auto orig_sess = Session::create(move(sig_reader), cancel, yield.tag("read-hdr")[ec]);
+        auto orig_sess = Session::create(move(sig_reader), cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec);
 
-        orig_sess.flush_response(con, cancel, yield.tag("flush")[ec]);
-        if (ec) yield.log("Injection failed: ", ec.message());
+        orig_sess.flush_response(con, cancel, yield[ec]);
+        if (ec) log.info("Injection failed: ", ec.message());
         return_or_throw_on_error(yield, cancel, ec);
-        yield.log("Injection end");  // TODO: report whether inject or just fwd
 
         auto rsh = http::response<http::empty_body>(orig_sess.response_header());
         keep_connection(rq, rsh, move(orig_sess));
@@ -327,17 +326,22 @@ public:
     bool fetch( GenericStream& con
               , const Request& rq
               , Cancel cancel
-              , Yield yield)
+              , log_context log
+              , asio::yield_context yield)
     {
         sys::error_code ec;
         bool keep_alive = rq.keep_alive();
-        inject_fresh(con, rq, cancel, yield[ec]);
+        inject_fresh(con, rq, cancel, log, yield[ec]);
         // TODO: keep_alive should consider response as well
         return or_throw(yield, ec, keep_alive);
     }
 
 public:
-    Connection get_connection(const Request& rq_, Cancel& cancel, Yield yield) {
+    Connection get_connection(const Request& rq_
+                             , Cancel& cancel
+                             , log_context log
+                             , asio::yield_context yield)
+    {
         Connection connection;
         sys::error_code ec;
 
@@ -345,7 +349,7 @@ public:
         if (maybe_connection) {
             connection = std::move(*maybe_connection);
         } else {
-            auto stream = connect(rq_, cancel, yield[ec].tag("connect"));
+            auto stream = connect(rq_, cancel, log.tag("connect"), yield[ec]);
 
             if (ec) return or_throw<Connection>(yield, ec);
 
@@ -387,7 +391,10 @@ bool is_request_to_this(const Request& rq) {
 }
 
 //------------------------------------------------------------------------------
-void handle_request_to_this(Request& rq, GenericStream& con, Yield yield)
+void handle_request_to_this( Request& rq
+                           , GenericStream& con
+                           , log_context log
+                           , asio::yield_context yield)
 {
     if (rq.target() == "/api/ok") {
         http::response<http::empty_body> rs{http::status::ok, rq.version()};
@@ -401,18 +408,18 @@ void handle_request_to_this(Request& rq, GenericStream& con, Yield yield)
         return;
     }
 
-    handle_bad_request(con, rq, "Unknown injector request", yield);
+    handle_bad_request(con, rq, "Unknown injector request", log, yield);
 }
 
 //------------------------------------------------------------------------------
 static
 void serve( InjectorConfig& config
-          , uint64_t connection_id
           , GenericStream con
           , asio::ssl::context& ssl_ctx
           , OriginPools& origin_pools
           , uuid_generator& genuuid
           , Cancel& cancel
+          , log_context log
           , asio::yield_context yield_)
 {
     auto close_connection_slot = cancel.connect([&con] {
@@ -434,14 +441,14 @@ void serve( InjectorConfig& config
 
         if (ec) break;
 
-        Yield yield(con.get_executor(), yield_, util::str('C', connection_id));
+        Yield yield(con.get_executor(), yield_, util::str('C'));
 
-        yield.log("=== New request ===");
-        yield.log(req.base());
-        auto on_exit = defer([&] { yield.log("Done"); });
+        log_context request_log = log.track("Request " + std::to_string(log.make_id()));
+        request_log.info("=== New request ===");
+        request_log.info(req.base());
 
         if (is_request_to_this(req)) {
-            handle_request_to_this(req, con, yield[ec]);
+            handle_request_to_this(req, con, request_log, yield[ec]);
             if (ec || !req.keep_alive()) break;
             continue;
         }
@@ -451,10 +458,14 @@ void serve( InjectorConfig& config
         }
 
         if (req.method() == http::verb::connect) {
+            request_log.info("Received CONNECT request");
+            // Kill the request log watchdog
+            request_log = log_context();
             return handle_connect_request( move(con)
                                          , req
                                          , cancel
-                                         , yield.tag("handle_connect"));
+                                         , log.tag("handle_connect")
+                                         , yield);
         }
 
         auto version_hdr_i = req.find(http_::protocol_version_hdr);
@@ -472,7 +483,7 @@ void serve( InjectorConfig& config
             // but the client should be using a CONNECT request instead!
             using RespFromH = http::response<http::empty_body>;
             RespFromH res;
-            auto orig_con = cc.get_connection(req, cancel, yield[ec]);
+            auto orig_con = cc.get_connection(req, cancel, request_log, yield[ec]);
             size_t forwarded = 0;
             if (!ec) {
                 auto orig_req = util::to_origin_request(req);
@@ -486,8 +497,8 @@ void serve( InjectorConfig& config
                     if (auto inh = opt_part->as_head()) {
                         // Prevent others from inserting ouinet specific header fields.
                         auto outh = util::remove_ouinet_fields(move(*inh));
-                        yield.log("=== Sending back proxy response ===");
-                        yield.log(outh);
+                        request_log.info("=== Sending back proxy response ===");
+                        request_log.info(outh);
                         res = RespFromH(outh);
                         opt_part = move(outh);
                     } else if (auto b = opt_part->as_body()) {
@@ -502,10 +513,10 @@ void serve( InjectorConfig& config
             if (ec) {
                 handle_bad_request( con, req
                                   , "Failed to retrieve content from origin: " + ec.message()
-                                  , yield[ec].tag("handle_bad_request"));
+                                  , request_log, yield[ec]);
                 continue;
             }
-            yield.log("Forwarded data bytes: ", forwarded);
+            request_log.info("Forwarded data bytes: ", forwarded);
             keep_alive = cc.keep_connection(req, res, move(orig_con));
         }
         else {
@@ -522,7 +533,8 @@ void serve( InjectorConfig& config
                 keep_alive = cc.fetch( con
                                      , req2
                                      , cancel
-                                     , yield[ec].tag("cache_control.fetch"));
+                                     , request_log.tag("cache_control.fetch")
+                                     , yield[ec]);
             }
         }
 
@@ -538,6 +550,7 @@ static
 void listen( InjectorConfig& config
            , OuiServiceServer& proxy_server
            , Cancel& cancel
+           , log_context log
            , asio::yield_context yield)
 {
     uuid_generator genuuid;
@@ -556,8 +569,6 @@ void listen( InjectorConfig& config
     }
 
     WaitCondition shutdown_connections(exec);
-
-    uint64_t next_connection_id = 0;
 
     OriginPools origin_pools;
 
@@ -578,8 +589,6 @@ void listen( InjectorConfig& config
             continue;
         }
 
-        uint64_t connection_id = next_connection_id++;
-
         // Increase the size of the coroutine stack (we do same in client).
         // Some interesing info:
         // https://lists.ceph.io/hyperkitty/list/dev@ceph.io/thread/6LBFZIFUPTJQ3SNTLVKSQMVITJWVWTZ6/
@@ -593,16 +602,16 @@ void listen( InjectorConfig& config
             &config,
             &genuuid,
             &origin_pools,
-            connection_id,
+            log,
             lock = shutdown_connections.lock()
         ] (boost::asio::yield_context yield) mutable {
             serve( config
-                 , connection_id
                  , std::move(connection)
                  , ssl_ctx
                  , origin_pools
                  , genuuid
                  , cancel
+                 , log.track("Connection " + std::to_string(log.make_id()), boost::none)
                  , yield);
         }, attribs);
     }
@@ -628,6 +637,13 @@ int main(int argc, const char* argv[])
         return EXIT_SUCCESS;
     }
 
+    // The io_context is required for all I/O
+    asio::io_context ioc;
+    asio::executor ex = ioc.get_executor();
+
+    log_context log(ex, &logger);
+    log.log_time(true);
+
     if (config.open_file_limit()) {
         increase_open_file_limit(*config.open_file_limit());
     }
@@ -638,10 +654,6 @@ int main(int argc, const char* argv[])
         , config.repo_root() / OUINET_TLS_CERT_FILE
         , config.repo_root() / OUINET_TLS_KEY_FILE
         , config.repo_root() / OUINET_TLS_DH_FILE );
-
-    // The io_context is required for all I/O
-    asio::io_context ioc;
-    asio::executor ex = ioc.get_executor();
 
     shared_ptr<bt::MainlineDht> bt_dht_ptr;
 
@@ -797,10 +809,11 @@ int main(int argc, const char* argv[])
         &ex,
         &proxy_server,
         &config,
-        &cancel
+        &cancel,
+        log
     ] (asio::yield_context yield) {
         sys::error_code ec;
-        listen(config, proxy_server, cancel, yield[ec]);
+        listen(config, proxy_server, cancel, log, yield[ec]);
     });
 
     asio::signal_set signals(ex, SIGINT, SIGTERM);
