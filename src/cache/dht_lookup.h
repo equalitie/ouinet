@@ -3,6 +3,8 @@
 #include <functional>
 #include <set>
 #include "../../util/async_job.h"
+#include "../../util/hash.h"
+#include "../../bittorrent/dht.h"
 
 namespace std {
     template<> struct hash<ouinet::bittorrent::NodeID> {
@@ -49,8 +51,9 @@ private:
 public:
     DhtLookup(DhtLookup&&) = delete;
 
-    DhtLookup(std::weak_ptr<bittorrent::MainlineDht> dht_w, NodeID infohash)
-        : infohash(infohash)
+    DhtLookup(std::weak_ptr<bittorrent::MainlineDht> dht_w, std::string swarm_name)
+        : swarm_name(std::move(swarm_name))
+        , infohash(util::sha1_digest(this->swarm_name))
         , exec(dht_w.lock()->get_executor())
         , dht_w(dht_w)
         , cv(exec)
@@ -138,6 +141,7 @@ private:
     }
 
 private:
+    std::string swarm_name;
     NodeID infohash;
     asio::executor exec;
     std::weak_ptr<bittorrent::MainlineDht> dht_w;

@@ -9,7 +9,6 @@
 #include "../parse/number.h"
 #include "../util/wait_condition.h"
 #include "../util/set_io.h"
-#include "../util/async_generator.h"
 #include "../util/lru_cache.h"
 #include "../util/handler_tracker.h"
 #include "../bittorrent/dht.h"
@@ -20,6 +19,7 @@
 #include "../constants.h"
 #include "../session.h"
 #include "../bep5_swarms.h"
+#include "multi_peer_reader.h"
 #include <ctime>
 #include <map>
 
@@ -79,7 +79,7 @@ struct GarbageCollector {
 struct Client::Impl {
     // The newest protocol version number seen in a trusted exchange
     // (i.e. from injector-signed cached content).
-    unsigned newest_proto_seen = http_::protocol_version_current;
+    std::shared_ptr<unsigned> _newest_proto_seen;
 
     asio::executor _ex;
     shared_ptr<bt::MainlineDht> _dht;
@@ -92,7 +92,7 @@ struct Client::Impl {
     Announcer _announcer;
     GarbageCollector _gc;
     map<string, udp::endpoint> _peer_cache;
-    util::LruCache<bt::NodeID, unique_ptr<DhtLookup>> _dht_lookups;
+    util::LruCache<std::string, shared_ptr<DhtLookup>> _dht_lookups;
     log_level_t _log_level = INFO;
     LocalPeerDiscovery _local_peer_discovery;
     std::unique_ptr<DhtGroups> _dht_groups;
@@ -107,7 +107,8 @@ struct Client::Impl {
         , unique_ptr<cache::HttpStore> http_store_
         , boost::posix_time::time_duration max_cached_age
         , log_level_t log_level)
-        : _ex(dht_->get_executor())
+        : _newest_proto_seen(std::make_shared<unsigned>(http_::protocol_version_current))
+        , _ex(dht_->get_executor())
         , _dht(move(dht_))
         , _uri_swarm_prefix(bep5::compute_uri_swarm_prefix
               (cache_pk, http_::protocol_version_current))
@@ -247,18 +248,16 @@ struct Client::Impl {
                                 , http_::response_error_hdr_retrieval_failed, yield);
     }
 
-    std::set<udp::endpoint> dht_get_peers( bt::NodeID infohash
-                                         , Cancel& cancel
-                                         , asio::yield_context yield)
+    shared_ptr<DhtLookup> dht_lookup(std::string swarm_name)
     {
-        auto* lookup = _dht_lookups.get(infohash);
+        auto* lookup = _dht_lookups.get(swarm_name);
 
         if (!lookup) {
-            lookup = _dht_lookups.put( infohash
-                                     , make_unique<DhtLookup>(_dht, infohash));
+            lookup = _dht_lookups.put( swarm_name
+                                     , make_shared<DhtLookup>(_dht, swarm_name));
         }
 
-        return (*lookup)->get(cancel, yield);
+        return *lookup;
     }
 
     Session load( const std::string& key
@@ -268,84 +267,36 @@ struct Client::Impl {
     {
         Yield yield = yield_.tag("load");
 
-        using Clock = std::chrono::steady_clock;
-        auto start = Clock::now();
-
         bool dbg;
 
         if (log_debug()) dbg = true;
 
-        unique_ptr<util::AsyncGenerator<pair<Session, udp::endpoint>>> gen;
-
-        auto or_throw_ = [&] (sys::error_code ec, Session session = {}) {
-            if (gen) gen->async_shut_down(yield);
-            if (dbg && ec != asio::error::operation_aborted) {
-                using namespace std::chrono;
-                auto now = Clock::now();
-                yield.log("Bep5Http: Done. ec: ", ec.message()
-                         , " took:", duration_cast<seconds>(now - start).count()
-                         , "s");
-            }
-            return or_throw<Session>(yield, ec, std::move(session));
-        };
-
         namespace err = asio::error;
 
+        sys::error_code ec;
+
         {
-            sys::error_code ec;
             auto rs = load_from_local(key, cancel, yield[ec]);
             if (dbg) yield.log("Bep5Http: looking up local cache ec:", ec.message());
-            if (ec == err::operation_aborted) return or_throw_(ec);
+            if (ec == err::operation_aborted) return or_throw<Session>(yield, ec);
             // TODO: Check its age, store it if it's too old but keep trying
             // other peers.
             if (!ec) return rs;
             // Try distributed cache on other errors.
         }
 
-        gen = make_connection_generator(key, dht_group, dbg, yield);
+        auto reader = std::make_unique<MultiPeerReader>
+            ( _ex
+            , _cache_pk
+            , _local_peer_discovery.found_peers()
+            , key
+            , _dht
+            , dht_group
+            , dht_lookup(compute_swarm_name(dht_group))
+            , _newest_proto_seen
+            , yield.tag() + "/multi_peer_reader");
 
-        sys::error_code ec;
-
-        while (auto opt_res = gen->async_get_value(cancel, yield[ec])) {
-            assert(!cancel || ec == err::operation_aborted);
-            if (cancel) ec = err::operation_aborted;
-            if (ec == err::operation_aborted) {
-                return or_throw_(ec);
-            }
-            if (ec) continue;
-
-            if (dbg) {
-                yield.log("Bep5Http: Connect to clients done, ec:", ec.message(),
-                    " chosen ep:", opt_res->second, "; fetching...");
-            }
-
-            auto session = std::move(opt_res->first);
-            auto& hdr = session.response_header();
-
-            if (dbg) {
-                yield.log("Bep5Http: fetch done,",
-                    " ec:", ec.message(), " result:", hdr.result());
-            }
-
-            assert(!cancel || ec == err::operation_aborted);
-
-            if (cancel) {
-                return or_throw_(err::operation_aborted);
-            }
-
-            if (ec || hdr.result() == http::status::not_found) {
-                continue;
-            }
-
-            // We found the entry
-            // TODO: Check its age, store it if it's too old but keep trying
-            // other peers.
-            _peer_cache[dht_group] = opt_res->second;
-            return or_throw_(ec, std::move(session));
-        }
-
-        if (cancel) return or_throw_(asio::error::operation_aborted);
-        return or_throw_(err::not_found);
+        return Session::create(std::move(reader), cancel, yield[ec]);
     }
 
     Session load_from_local( const std::string& key
@@ -360,193 +311,6 @@ struct Client::Impl {
         if (!ec) rs.response_header().set( http_::response_source_hdr  // for agent
                                          , http_::response_source_hdr_local_cache);
         return or_throw(yield, ec, move(rs));
-    }
-
-    Session load_from_connection( const string& key
-                                , udp::endpoint ep
-                                , Cancel cancel
-                                , asio::yield_context yield)
-    {
-        sys::error_code ec;
-
-        Cancel timeout_cancel(cancel);
-
-        WatchDog wd(_ex, chrono::seconds(10), [&] { timeout_cancel(); });
-
-        auto con = this->connect(ep, timeout_cancel, yield[ec]);
-
-        if (timeout_cancel) ec = asio::error::timed_out;
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<Session>(yield, ec);
-
-        auto uri = uri_from_key(key);
-
-        http::request<http::string_body> rq{http::verb::get, uri, 11 /* version */};
-        rq.set(http::field::host, "dummy_host");
-        rq.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
-        rq.set(http::field::user_agent, "Ouinet.Bep5.Client");
-
-        auto timeout_cancel_con = timeout_cancel.connect([&] { con.close(); });
-
-        http::async_write(con, rq, yield[ec]);
-
-        if (timeout_cancel) ec = asio::error::timed_out;
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<Session>(yield, ec);
-
-        Session::reader_uptr vfy_reader = make_unique<cache::VerifyingReader>(move(con), _cache_pk);
-        auto session = Session::create(move(vfy_reader), timeout_cancel, yield[ec]);
-
-        if (timeout_cancel) ec = asio::error::timed_out;
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<Session>(yield, ec);
-
-        if ( !ec
-            && !util::http_proto_version_check_trusted(session.response_header(), newest_proto_seen))
-            // The client expects an injection belonging to a supported protocol version,
-            // otherwise we just discard this copy.
-            ec = asio::error::not_found;
-
-        if (!ec) session.response_header().set( http_::response_source_hdr  // for agent
-                                              , http_::response_source_hdr_dist_cache);
-        return or_throw(yield, ec, move(session));
-    }
-
-    GenericStream connect( udp::endpoint ep
-                         , Cancel cancel
-                         , asio::yield_context yield)
-    {
-        sys::error_code ec;
-        auto opt_m = choose_multiplexer_for(ep);
-        assert(opt_m);
-        asio_utp::socket s(_ex);
-        s.bind(*opt_m, ec);
-        if (ec) return or_throw<GenericStream>(yield, ec);
-        auto cancel_con = cancel.connect([&] { s.close(); });
-        s.async_connect(ep, yield[ec]);
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<GenericStream>(yield, ec);
-        return GenericStream(move(s));
-    }
-
-    unique_ptr<util::AsyncGenerator<pair<Session, udp::endpoint>>>
-    make_connection_generator( const std::string& key
-                             , const std::string& dht_group
-                             , bool dbg
-                             , Yield& logger /* only used for logging */)
-    {
-        using Ret = util::AsyncGenerator<pair<Session, udp::endpoint>>;
-
-        set<udp::endpoint> eps = _local_peer_discovery.found_peers();
-
-        if (dbg) {
-            logger.log("Bep5Http: local peers:", eps);
-        }
-        {
-            auto peer_i = _peer_cache.find(dht_group);
-
-            if (peer_i != _peer_cache.end()) {
-                auto ep = peer_i->second;
-                if (dbg) {
-                    logger.log("Bep5Http: using cached endpoint:", ep);
-                }
-                eps.insert(ep);
-            }
-        }
-
-        return make_unique<Ret>(_ex,
-        [&, lc = _lifetime_cancel, eps = move(eps), dbg]
-        (auto& q, auto c, auto y) mutable {
-            auto cn = lc.connect([&] { c(); });
-
-            WaitCondition wc(_ex);
-            set<udp::endpoint> our_endpoints = _dht->wan_endpoints();
-
-            auto fetch = [this, &logger, &wc, &c, &key, &q, &our_endpoints, dbg] (udp::endpoint ep) {
-                if (bt::is_martian(ep)) return;
-                if (our_endpoints.count(ep)) return;
-
-                asio::spawn(_ex, [this, &logger, &q, &c, &key, ep, lock = wc.lock(), dbg] (auto y) {
-                    TRACK_HANDLER();
-                    sys::error_code ec;
-
-                    if (dbg) {
-                        logger.log("Bep5Http: fetching from: ", ep);
-                    }
-
-                    auto session = load_from_connection(key, ep, c, y[ec]);
-
-                    if (dbg) {
-                        logger.log("Bep5Http: done fetching: ", ep, " "
-                            , " ec:", ec.message(), " c:", bool(c));
-                    }
-
-                    if (ec || c) return;
-
-                    q.push_back(make_pair(move(session), ep));
-                });
-            };
-
-            for (auto& ep : eps) {
-                fetch(ep);
-            }
-
-            auto swarm_name = compute_swarm_name(dht_group);
-            bt::NodeID infohash = util::sha1_digest(swarm_name);
-
-            if (dbg) {
-                logger.log("Bep5Http: DHT lookup:");
-                logger.log("Bep5Http:    key:        ", key);
-                logger.log("Bep5Http:    dht_group:  ", dht_group);
-                logger.log("Bep5Http:    swarm_name: ", swarm_name);
-                logger.log("Bep5Http:    infohash:   ", infohash);
-            }
-
-            sys::error_code ec;
-            auto dht_eps = dht_get_peers(infohash, c, y[ec]);
-
-            if (c) ec = asio::error::operation_aborted;
-
-            if (dbg) {
-                logger.log("Bep5Http: DHT BEP5 lookup result ec:", ec.message(),
-                          " eps:", eps);
-            }
-
-            if (!ec) {
-                for (auto ep : dht_eps) {
-                    if (eps.count(ep)) continue;
-                    fetch(ep);
-                }
-            }
-
-            ec = {};
-            wc.wait(y[ec]);
-
-            if (c) return or_throw(y, asio::error::operation_aborted);
-        });
-    }
-
-    static bool same_ipv(const udp::endpoint& ep1, const udp::endpoint& ep2)
-    {
-        return ep1.address().is_v4() == ep2.address().is_v4();
-    }
-
-    boost::optional<asio_utp::udp_multiplexer>
-    choose_multiplexer_for(const udp::endpoint& ep)
-    {
-        auto eps = _dht->local_endpoints();
-
-        for (auto& e : eps) {
-            if (same_ipv(ep, e)) {
-                asio_utp::udp_multiplexer m(_ex);
-                sys::error_code ec;
-                m.bind(e, ec);
-                assert(!ec);
-                return m;
-            }
-        }
-
-        return boost::none;
     }
 
     void store( const std::string& key
@@ -671,7 +435,7 @@ struct Client::Impl {
     }
 
     unsigned get_newest_proto_version() const {
-        return newest_proto_seen;
+        return *_newest_proto_seen;
     }
 
     void set_log_level(log_level_t l) {
