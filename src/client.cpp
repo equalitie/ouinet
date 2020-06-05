@@ -451,16 +451,20 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
         return handle_bad_request(con, req, "No known injectors", yield[ec]);
     }
 
-    auto inj = _bep5_client->connect( yield[ec].tag("connect_to_injector")
+    auto inj = [&] () {
+        auto y = yield[ec].tag("connect_to_injector");
+        return _bep5_client->connect( y
                                     , cancel
                                     , false
                                     , ouiservice::Bep5Client::injectors);
+    }();
 
     if (cancel) ec = asio::error::operation_aborted;
     if (ec == asio::error::operation_aborted) return;
     if (ec) {
         ec = {};
-        return handle_bad_request(con, req, "Failed to connect to injector", yield[ec]);
+        auto y = yield[ec].tag("handle_bad_request");
+        return handle_bad_request(con, req, "Failed to connect to injector", y);
     }
 
     // Send the client an OK message indicating that the tunnel
@@ -471,12 +475,18 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
     // No ``res.prepare_payload()`` since no payload is allowed for CONNECT:
     // <https://tools.ietf.org/html/rfc7231#section-6.3.1>.
 
-    http::async_write(con, res, yield[ec].tag("write"));
+    {
+        auto y = yield[ec].tag("write");
+        http::async_write(con, res, y);
+    }
 
     if (cancel) ec = asio::error::operation_aborted;
     if (ec) return;
 
-    full_duplex(move(con), move(inj), yield[ec].tag("full_duplex"));
+    {
+        auto y = yield[ec].tag("full_duplex");
+        full_duplex(move(con), move(inj), y);
+    }
 }
 
 //------------------------------------------------------------------------------
