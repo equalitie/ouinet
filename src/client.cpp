@@ -1159,7 +1159,7 @@ public:
         ] (asio::yield_context yield_) {
             sys::error_code ec;
             auto rr = std::make_unique<AsyncQueueReader>(qag);
-            Session sag = Session::create_from_reader(std::move(rr), cancel, yield_[ec]);
+            Session sag = Session::create(std::move(rr), cancel, yield_[ec]);
             if (cancel) return;
             if (ec) return;
             tnx.write_to_user_agent(sag, cancel, yield_[ec]);

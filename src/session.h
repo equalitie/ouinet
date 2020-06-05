@@ -20,8 +20,9 @@ public:
 
     // Construct the session and read response head
     static Session create(GenericStream, Cancel, asio::yield_context);
-    static Session create(reader_uptr&&, Cancel, asio::yield_context);
-    static Session create_from_reader(reader_uptr&&, Cancel, asio::yield_context);
+
+    template<class Reader>
+    static Session create(std::unique_ptr<Reader>&&, Cancel, asio::yield_context);
 
           http_response::Head& response_header()       { return _head; }
     const http_response::Head& response_header() const { return _head; }
@@ -75,16 +76,10 @@ Session Session::create(GenericStream con, Cancel cancel, asio::yield_context yi
     return Session::create(std::move(reader), cancel, yield);
 }
 
+template<class Reader>
 inline
-Session Session::create( reader_uptr&& reader
+Session Session::create( std::unique_ptr<Reader>&& reader
                        , Cancel cancel, asio::yield_context yield)
-{
-    return create_from_reader(std::move(reader), cancel, yield);
-}
-
-inline
-Session Session::create_from_reader( reader_uptr&& reader
-                                   , Cancel cancel, asio::yield_context yield)
 {
     assert(!cancel);
 
