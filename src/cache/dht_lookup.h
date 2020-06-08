@@ -52,11 +52,11 @@ public:
     DhtLookup(DhtLookup&&) = delete;
 
     DhtLookup(std::weak_ptr<bittorrent::MainlineDht> dht_w, std::string swarm_name)
-        : swarm_name(std::move(swarm_name))
-        , infohash(util::sha1_digest(this->swarm_name))
-        , exec(dht_w.lock()->get_executor())
-        , dht_w(dht_w)
-        , cv(exec)
+        : _swarm_name(std::move(swarm_name))
+        , _infohash(util::sha1_digest(_swarm_name))
+        , _exec(dht_w.lock()->get_executor())
+        , _dht_w(dht_w)
+        , _cv(_exec)
     { }
 
     Ret get(Cancel c, asio::yield_context y) {
@@ -64,54 +64,54 @@ public:
         // * Use previously returned result if it's not older than 5mins
         // * Otherwise wait for the running job to finish
 
-        auto cancel_con = lifetime_cancel.connect([&] { c(); });
+        auto cancel_con = _lifetime_cancel.connect([&] { c(); });
 
-        if (!job) {
-            job = make_job();
+        if (!_job) {
+            _job = make_job();
         }
 
-        if (last_result.is_fresh()) {
-            return last_result.value;
+        if (_last_result.is_fresh()) {
+            return _last_result.value;
         }
 
 #ifndef NDEBUG
-        WatchDog wd(exec, timeout() + std::chrono::seconds(5), [&] {
+        WatchDog wd(_exec, timeout() + std::chrono::seconds(5), [&] {
                 LOG_ERROR("DHT BEP5 DhtLookup::get failed to time out");
             });
 #endif
 
         sys::error_code ec;
-        cv.wait(c, y[ec]);
+        _cv.wait(c, y[ec]);
 
         return_or_throw_on_error(y, c, ec, Ret{});
 
         // (ec == operation_aborted) implies (c == true)
-        assert(last_result.ec != asio::error::operation_aborted || c);
+        assert(_last_result.ec != asio::error::operation_aborted || c);
 
-        return or_throw(y, last_result.ec, last_result.value);
+        return or_throw(y, _last_result.ec, _last_result.value);
     }
 
-    ~DhtLookup() { lifetime_cancel(); }
+    ~DhtLookup() { _lifetime_cancel(); }
 
 private:
 
     std::unique_ptr<Job> make_job() {
-        auto job = std::make_unique<Job>(exec);
+        auto job = std::make_unique<Job>(_exec);
 
         job->start([ self = this
-                   , dht_w = dht_w
-                   , infohash = infohash
-                   , lc = std::make_shared<Cancel>(lifetime_cancel)
+                   , dht_w = _dht_w
+                   , infohash = _infohash
+                   , lc = std::make_shared<Cancel>(_lifetime_cancel)
                    ] (Cancel c, asio::yield_context y) mutable {
             auto cancel_con = lc->connect([&] { c(); });
 
             auto on_exit = defer([&] {
                     if (*lc) return;
-                    self->cv.notify();
-                    self->job = nullptr;
+                    self->_cv.notify();
+                    self->_job = nullptr;
                 });
 
-            WatchDog wd(self->exec, timeout(), [&] {
+            WatchDog wd(self->_exec, timeout(), [&] {
                     LOG_WARN("DHT BEP5 lookup ", infohash, " timed out");
                     c();
                 });
@@ -129,9 +129,9 @@ private:
             auto eps = dht->tracker_get_peers(infohash, c, y[ec]);
 
             if (!c && !ec) {
-                self->last_result.ec    = ec;
-                self->last_result.value = move(eps);
-                self->last_result.time  = Clock::now();
+                self->_last_result.ec    = ec;
+                self->_last_result.value = move(eps);
+                self->_last_result.time  = Clock::now();
             }
 
             return or_throw(y, ec, boost::none);
@@ -141,14 +141,14 @@ private:
     }
 
 private:
-    std::string swarm_name;
-    NodeID infohash;
-    asio::executor exec;
-    std::weak_ptr<bittorrent::MainlineDht> dht_w;
-    std::unique_ptr<Job> job;
-    ConditionVariable cv;
-    Result last_result;
-    Cancel lifetime_cancel;
+    std::string _swarm_name;
+    NodeID _infohash;
+    asio::executor _exec;
+    std::weak_ptr<bittorrent::MainlineDht> _dht_w;
+    std::unique_ptr<Job> _job;
+    ConditionVariable _cv;
+    Result _last_result;
+    Cancel _lifetime_cancel;
 };
 
 
