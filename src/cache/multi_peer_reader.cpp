@@ -172,14 +172,12 @@ MultiPeerReader::make_connection_generator( asio::executor exec
             fetch(ep);
         }
 
-        //bt::NodeID infohash = util::sha1_digest(swarm_name);
-
         if (!dbg_tag.empty()) {
             LOG_INFO(dbg_tag, " DHT lookup:");
             LOG_INFO(dbg_tag, "    key:        ", key);
             LOG_INFO(dbg_tag, "    dht_group:  ", dht_group);
-            //LOG_INFO(dbg_tag, "    swarm_name: ", swarm_name);
-            //LOG_INFO(dbg_tag, "    infohash:   ", infohash);
+            LOG_INFO(dbg_tag, "    swarm_name: ", dht_lookup->swarm_name());
+            LOG_INFO(dbg_tag, "    infohash:   ", dht_lookup->infohash());
         }
 
         sys::error_code ec;

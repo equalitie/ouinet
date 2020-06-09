@@ -93,6 +93,14 @@ public:
 
     ~DhtLookup() { _lifetime_cancel(); }
 
+    NodeID infohash() const {
+        return _infohash;
+    }
+
+    const std::string& swarm_name() const {
+        return _swarm_name;
+    }
+
 private:
 
     std::unique_ptr<Job> make_job() {

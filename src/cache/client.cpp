@@ -54,24 +54,24 @@ struct GarbageCollector {
             TRACK_HANDLER();
             Cancel cancel(_cancel);
 
-            LOG_DEBUG("Bep5HTTP: Garbage collector started");
+            LOG_DEBUG("cache/client: Garbage collector started");
             while (!cancel) {
                 sys::error_code ec;
                 async_sleep(_executor, chrono::minutes(7), cancel, yield[ec]);
                 if (cancel || ec) break;
 
-                LOG_DEBUG("Bep5HTTP: Collecting garbage...");
+                LOG_DEBUG("cache/client: Collecting garbage...");
                 http_store.for_each([&] (auto rr, auto y) {
                     sys::error_code e;
                     auto k = keep(std::move(rr), y[e]);
                     if (cancel) ec = asio::error::operation_aborted;
                     return or_throw(y, e, k);
                 }, cancel, yield[ec]);
-                if (ec) LOG_WARN("Bep5HTTP: Collecting garbage: failed"
+                if (ec) LOG_WARN("cache/client: Collecting garbage: failed"
                                  " ec:", ec.message());
-                LOG_DEBUG("Bep5HTTP: Collecting garbage: done");
+                LOG_DEBUG("cache/client: Collecting garbage: done");
             }
-            LOG_DEBUG("Bep5HTTP: Garbage collector stopped");
+            LOG_DEBUG("cache/client: Garbage collector stopped");
         });
     }
 };
@@ -154,7 +154,7 @@ struct Client::Impl {
         if (!boost::regex_match( req_proto.begin(), req_proto.end()
                                , http_::protocol_version_rx)) {
             if (do_log) {
-                yield.log("Bep5HTTP: Not a Ouinet request\n", req);
+                yield.log("cache/client: Not a Ouinet request\n", req);
             }
             return handle_bad_request(sink, req, yield[ec]);
         }
@@ -162,25 +162,25 @@ struct Client::Impl {
         auto key = key_from_http_req(req);
         if (!key) {
             if (do_log) {
-                yield.log("Bep5HTTP: Cannot derive key from request\n", req);
+                yield.log("cache/client: Cannot derive key from request\n", req);
             }
             return handle_bad_request(sink, req, yield[ec]);
         }
 
         if (do_log) {
-            yield.log("Bep5HTTP: Received request for ", *key);
+            yield.log("cache/client: Received request for ", *key);
         }
 
         auto rr = _http_store->reader(*key, ec);
         if (ec) {
             if (!cancel && do_log) {
-                yield.log("Bep5HTTP: Not Serving ", *key, " ec:", ec.message());
+                yield.log("cache/client: Not Serving ", *key, " ec:", ec.message());
             }
             return handle_not_found(sink, req, yield[ec]);
         }
 
         if (do_log) {
-            yield.log("Bep5HTTP: Serving ", *key);
+            yield.log("cache/client: Serving ", *key);
         }
 
         auto s = Session::create(move(rr), cancel, yield[ec].tag("read_header"));
@@ -199,7 +199,7 @@ struct Client::Impl {
                     , asio::yield_context yield)
     {
         // TODO: avoid overlapping with garbage collector
-        LOG_DEBUG("Bep5HTTP: Purging local cache...");
+        LOG_DEBUG("cache/client: Purging local cache...");
 
         sys::error_code ec;
         _http_store->for_each([&] (auto rr, auto y) {
@@ -215,12 +215,12 @@ struct Client::Impl {
             return false;  // remove all entries
         }, cancel, yield[ec]);
         if (ec) {
-            LOG_ERROR("Bep5HTTP: Purging local cache: failed"
+            LOG_ERROR("cache/client: Purging local cache: failed"
                       " ec:", ec.message());
             return or_throw(yield, ec);
         }
 
-        LOG_DEBUG("Bep5HTTP: Purging local cache: done");
+        LOG_DEBUG("cache/client: Purging local cache: done");
     }
 
     void handle_http_error( GenericStream& con
@@ -265,7 +265,7 @@ struct Client::Impl {
                 , Cancel cancel
                 , Yield yield_)
     {
-        Yield yield = yield_.tag("load");
+        Yield yield = yield_.tag("cache/client/load");
 
         bool dbg;
 
@@ -277,13 +277,16 @@ struct Client::Impl {
 
         {
             auto rs = load_from_local(key, cancel, yield[ec]);
-            if (dbg) yield.log("Bep5Http: looking up local cache ec:", ec.message());
+            if (dbg) yield.log("looking up local cache ec:", ec.message());
             if (ec == err::operation_aborted) return or_throw<Session>(yield, ec);
             // TODO: Check its age, store it if it's too old but keep trying
             // other peers.
             if (!ec) return rs;
             // Try distributed cache on other errors.
         }
+
+        string debug_tag;
+        if (dbg) { debug_tag = yield.tag() + "/multi_peer_reader"; };
 
         auto reader = std::make_unique<MultiPeerReader>
             ( _ex
@@ -294,7 +297,7 @@ struct Client::Impl {
             , dht_group
             , dht_lookup(compute_swarm_name(dht_group))
             , _newest_proto_seen
-            , yield.tag() + "/multi_peer_reader");
+            , debug_tag);
 
         return Session::create(std::move(reader), cancel, yield[ec]);
     }
@@ -383,7 +386,7 @@ struct Client::Impl {
         if (ec) return or_throw<bool>(yield, ec);
 
         if (hdr[http_::protocol_version_hdr] != http_::protocol_version_hdr_current) {
-            LOG_WARN( "Bep5HTTP: Cached response contains an invalid "
+            LOG_WARN( "cache/client: Cached response contains an invalid "
                     , http_::protocol_version_hdr
                     , " header field; removing");
             return false;
@@ -391,7 +394,7 @@ struct Client::Impl {
 
         auto key = hdr[http_::response_uri_hdr];
         if (key.empty()) {
-            LOG_WARN( "Bep5HTTP: Cached response does not contain a "
+            LOG_WARN( "cache/client: Cached response does not contain a "
                     , http_::response_uri_hdr
                     , " header field; removing");
             return false;
@@ -399,7 +402,7 @@ struct Client::Impl {
 
         auto age = cache_entry_age(hdr);
         if (age > _max_cached_age) {
-            LOG_DEBUG( "Bep5HTTP: Cached response is too old; removing: "
+            LOG_DEBUG( "cache/client: Cached response is too old; removing: "
                      , age, " > ", _max_cached_age
                      , "; uri=", key );
             unpublish_cache_entry(key.to_string());
@@ -439,7 +442,7 @@ struct Client::Impl {
     }
 
     void set_log_level(log_level_t l) {
-        cerr << "Setting Bep5Http Cache log level to " << l << "\n";
+        cerr << "Setting cache/client Cache log level to " << l << "\n";
         _log_level = l;
         _announcer.set_log_level(l);
     }
