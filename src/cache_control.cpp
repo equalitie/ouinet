@@ -18,8 +18,6 @@ using namespace std;
 using namespace ouinet;
 
 using Request = CacheControl::Request;
-using Response = CacheControl::Response;
-using Request = CacheControl::Request;
 
 namespace posix_time = boost::posix_time;
 

@@ -283,6 +283,7 @@ struct Client::Impl {
             // other peers.
             if (!ec) return rs;
             // Try distributed cache on other errors.
+            ec = {};
         }
 
         string debug_tag;
@@ -299,7 +300,7 @@ struct Client::Impl {
             , _newest_proto_seen
             , debug_tag);
 
-        return Session::create(std::move(reader), cancel, yield[ec]);
+        return Session::create(std::move(reader), cancel, yield[ec].tag("create_session"""));
     }
 
     Session load_from_local( const std::string& key

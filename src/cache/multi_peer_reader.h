@@ -12,7 +12,9 @@
 namespace ouinet { namespace cache {
 
 class MultiPeerReader : public http_response::AbstractReader {
+private:
     class Peer;
+    class Peers;
 
     struct Connection {
         asio::ip::udp::endpoint endpoint;
@@ -38,9 +40,7 @@ public:
     bool is_open() const override;
     void close() override;
 
-    ~MultiPeerReader() {
-        _lifetime_cancel();
-    }
+    ~MultiPeerReader();
 
 private:
     static
@@ -55,18 +55,12 @@ private:
                              , std::shared_ptr<unsigned> newest_proto_seen
                              , const std::string& dbg_tag);
 private:
-    asio::executor _exec;
-    std::shared_ptr<bittorrent::MainlineDht> _dht;
-    std::set<asio::ip::udp::endpoint> _local_peers;
-    std::string _key;
-    std::string _dht_group;
-    std::shared_ptr<DhtLookup> _dht_lookup;
-    std::shared_ptr<unsigned> _newest_proto_seen;
     Cancel _lifetime_cancel;
 
     bool _closed = false;
-    std::unique_ptr<ConnectionGenerator> _connection_generator;
-    boost::optional<Connection> _chosen_connection;
+    std::unique_ptr<Peers> _peers;
+    Peer* _chosen_peer = nullptr;
+    std::string _dbg_tag;
 };
 
 }}
