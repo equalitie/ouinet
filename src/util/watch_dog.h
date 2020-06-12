@@ -1,10 +1,149 @@
 #pragma once
 
+#include <boost/asio/coroutine.hpp>
 #include "../defer.h"
 #include "../util/handler_tracker.h"
+#include "../namespaces.h"
 
 namespace ouinet {
 
+#include <boost/asio/yield.hpp>
+
+template<class OnTimeout>
+class NewWatchDog {
+private:
+    using Clock = std::chrono::steady_clock;
+
+    struct Coro : boost::asio::coroutine {
+        NewWatchDog* _wd;
+
+        Coro(const Coro& o) : asio::coroutine(o), _wd(o._wd) {
+            if (_wd) _wd->_coro = this;
+        }
+
+        Coro(NewWatchDog* wd) : _wd(wd) {
+            _wd->_coro = this;
+        }
+
+        void operator()(sys::error_code ec = sys::error_code()) {
+            if (!_wd) return;
+            auto now = Clock::now();
+
+            reenter (this) {
+                while (now < _wd->_deadline) {
+                    _wd->_timer->expires_after(_wd->_deadline - now);
+                    yield _wd->_timer->async_wait(*this);
+                }
+                auto h = std::move(_wd->_on_timeout);
+                // Tell watch dog we're done
+                _wd->_coro = nullptr;
+                h();
+            }
+        }
+    };
+
+public:
+    NewWatchDog() : _coro(nullptr) {}
+
+    NewWatchDog(NewWatchDog&& o)
+        : _timer(std::move(o._timer))
+        , _deadline(std::move(o._deadline))
+        , _on_timeout(std::move(o._on_timeout))
+        , _coro(o._coro)
+    {
+        o._coro = nullptr;
+        if (_coro) _coro->_wd = this;
+    }
+
+    NewWatchDog& operator=(NewWatchDog&& o)
+    {
+        _timer = std::move(o._timer);
+        _deadline = std::move(o._deadline);
+        _on_timeout = std::move(o._on_timeout);
+        _coro = o._coro;
+
+        o._coro = nullptr;
+
+        if (_coro) _coro->_wd = this;
+
+        return *this;
+    }
+
+    template<class Duration>
+    NewWatchDog(const asio::executor& ex, Duration d, OnTimeout&& on_timeout)
+        : _timer(asio::steady_timer(ex))
+        , _deadline(Clock::now() + d)
+        , _on_timeout(std::move(on_timeout))
+        , _coro(nullptr)
+    {
+        Coro coro(this);
+        coro();
+    }
+
+    ~NewWatchDog() {
+        // Tell coro we're done
+        if (_coro) {
+            _coro->_wd = nullptr;
+            sys::error_code ec;
+            _timer->cancel(ec);
+        }
+    }
+
+    bool is_running() const {
+        return bool(_coro);
+    }
+
+    template<class Duration>
+    void expires_after(Duration d)
+    {
+        assert(_coro);
+        if (!_coro) return; // already expired
+
+        auto old_deadline = _deadline;
+        _deadline = Clock::now() + d;
+
+        if (_deadline < old_deadline) {
+            sys::error_code ec;
+            _timer->cancel(ec);
+        }
+    }
+
+    Clock::duration time_to_finish() const
+    {
+        if (!_coro) return Clock::duration(0);
+        auto now = Clock::now();
+        if (now < _deadline) return _deadline - now;
+        return Clock::duration(0);
+    }
+
+private:
+    boost::optional<asio::steady_timer> _timer;
+    Clock::time_point  _deadline;
+    OnTimeout _on_timeout;
+    Coro* _coro;
+};
+
+#include <boost/asio/unyield.hpp>
+
+template<class Duration, class OnTimeout>
+inline
+NewWatchDog<OnTimeout>
+watch_dog(const asio::executor& ex, Duration d, OnTimeout&& on_timeout)
+{
+    return NewWatchDog<OnTimeout>(ex, d, std::move(on_timeout));
+}
+
+template<class Duration, class OnTimeout>
+inline
+NewWatchDog<OnTimeout>
+watch_dog(asio::io_context& ctx, Duration d, OnTimeout&& on_timeout)
+{
+    return NewWatchDog<OnTimeout>(ctx.get_executor(), d, std::move(on_timeout));
+}
+
+// Legacy, should eventually be replaced with the above. Problem with this one is
+// that it spawn a stackful coroutines which does memory allocation of non trivial
+// size. That is problem given that WatchDog is meant to be used quite often.
 class WatchDog {
 private:
     using Clock = std::chrono::steady_clock;
