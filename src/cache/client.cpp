@@ -317,7 +317,14 @@ struct Client::Impl {
             , _newest_proto_seen
             , debug_tag);
 
-        return Session::create(std::move(reader), cancel, yield[ec].tag("create_session"""));
+        auto s = Session::create(std::move(reader), cancel, yield[ec].tag("create_session"));
+
+        if (!ec) {
+            s.response_header().set( http_::response_source_hdr  // for agent
+                                   , http_::response_source_hdr_dist_cache);
+        }
+
+        return or_throw<Session>(yield, ec, move(s));
     }
 
     Session load_from_local( const std::string& key

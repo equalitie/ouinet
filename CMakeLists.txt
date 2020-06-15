@@ -89,6 +89,7 @@ file(GLOB client_sources
     "./src/client_front_end.cpp"
     "./src/endpoint.cpp"
     "./src/cache_control.cpp"
+    "./src/signed_head.cpp"
     "./src/request_routing.cpp"
     "./src/ouiservice.cpp"
     "./src/response_part.cpp"

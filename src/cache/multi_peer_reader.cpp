@@ -13,6 +13,7 @@
 #include "../util/yield.h"
 #include "../util/set_io.h"
 #include "../util/condition_variable.h"
+#include "../signed_head.h"
 
 using namespace std;
 using namespace ouinet;
@@ -65,69 +66,121 @@ GenericStream connect( asio::executor exec
     return GenericStream(move(s));
 }
 
-static
-Session load_from_connection( asio::executor exec
-                            , const util::Ed25519PublicKey& cache_pk
-                            , const string& key
-                            , udp::endpoint ep
-                            , bt::MainlineDht& dht
-                            , std::shared_ptr<unsigned> newest_proto_seen
-                            , Cancel cancel
-                            , asio::yield_context yield)
-{
-    sys::error_code ec;
-
-    Cancel timeout_cancel(cancel);
-
-    WatchDog wd(exec, chrono::seconds(10), [&] { timeout_cancel(); });
-
-    auto con = connect(exec, ep, dht, timeout_cancel, yield[ec]);
-
-    if (timeout_cancel) ec = asio::error::timed_out;
-    if (cancel) ec = asio::error::operation_aborted;
-    if (ec) return or_throw<Session>(yield, ec);
-
-    auto uri = uri_from_key(key);
-
-    http::request<http::string_body> rq{http::verb::get, uri, 11 /* version */};
-    rq.set(http::field::host, "dummy_host");
-    rq.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
-    rq.set(http::field::user_agent, "Ouinet.Bep5.Client");
-
-    auto timeout_cancel_con = timeout_cancel.connect([&] { con.close(); });
-
-    http::async_write(con, rq, yield[ec]);
-
-    if (timeout_cancel) ec = asio::error::timed_out;
-    if (cancel) ec = asio::error::operation_aborted;
-    if (ec) return or_throw<Session>(yield, ec);
-
-    Session::reader_uptr vfy_reader = make_unique<cache::VerifyingReader>(move(con), cache_pk);
-    auto session = Session::create(move(vfy_reader), timeout_cancel, yield[ec]);
-
-    if (timeout_cancel) ec = asio::error::timed_out;
-    if (cancel) ec = asio::error::operation_aborted;
-    if (ec) return or_throw<Session>(yield, ec);
-
-    if ( !ec
-        && !util::http_proto_version_check_trusted(session.response_header(), *newest_proto_seen))
-        // The client expects an injection belonging to a supported protocol version,
-        // otherwise we just discard this copy.
-        ec = asio::error::not_found;
-
-    if (!ec) session.response_header().set( http_::response_source_hdr  // for agent
-                                          , http_::response_source_hdr_dist_cache);
-    return or_throw(yield, ec, move(session));
-}
-
 class MultiPeerReader::Peer {
 public:
     util::intrusive::list_hook _candidate_hook;
     util::intrusive::list_hook _failure_hook;
     util::intrusive::list_hook _good_peer_hook;
 
-    Session session;
+    asio::executor _exec;
+    string _key;
+    const util::Ed25519PublicKey _cache_pk;
+    SignedHead _head;
+    boost::optional<GenericStream> _connection;
+    unique_ptr<VerifyingReader> _reader;
+    unsigned _id;
+
+    Peer(asio::executor exec, const string& key, util::Ed25519PublicKey cache_pk) :
+        _exec(exec),
+        _key(key),
+        _cache_pk(cache_pk)
+    {
+        static unsigned next_id = 0;
+        _id = next_id++;
+    }
+
+    void setup_reader(Cancel c, asio::yield_context y) {
+        assert(_reader || _connection);
+
+        sys::error_code ec;
+
+        if (_reader) return;
+
+        bool timed_out = false;
+
+        auto cc = c.connect([&] { if (_connection) _connection->close(); });
+
+        auto wd = watch_dog(_exec, chrono::seconds(10), [&] {
+                timed_out = true;
+                c();
+            });
+
+        http::async_write(*_connection, request(http::verb::get, _key), y[ec]);
+
+        if (c) ec = asio::error::operation_aborted;
+        if (timed_out) ec = asio::error::timed_out;
+        if (ec) return or_throw(y, ec);
+
+        _reader = make_unique<cache::VerifyingReader>(move(*_connection), _cache_pk);
+        _connection = boost::none;
+    }
+
+    http::request<http::string_body> request(http::verb verb, const string& key)
+    {
+        auto uri = uri_from_key(_key);
+        http::request<http::string_body> rq{verb, uri, 11 /* version */};
+        rq.set(http::field::host, "dummy_host");
+        rq.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
+        rq.set(http::field::user_agent, "Ouinet.Bep5.Client");
+        return rq;
+    }
+
+    void init(
+            udp::endpoint ep,
+            bt::MainlineDht& dht,
+            std::shared_ptr<unsigned> newest_proto_seen,
+            Cancel cancel,
+            asio::yield_context yield)
+    {
+        sys::error_code ec;
+
+        Cancel timeout_cancel(cancel);
+
+        auto wd = watch_dog(_exec, chrono::seconds(10), [&] { timeout_cancel(); });
+
+        auto con = connect(_exec, ep, dht, timeout_cancel, yield[ec]);
+
+        if (timeout_cancel) ec = asio::error::timed_out;
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec) return or_throw(yield, ec);
+
+        auto timeout_cancel_con = timeout_cancel.connect([&] { con.close(); });
+
+        http::async_write(con, request(http::verb::head, _key), yield[ec]);
+
+        if (timeout_cancel) ec = asio::error::timed_out;
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec) return or_throw(yield, ec);
+
+        cache::HeadVerifyingReader head_reader(move(con), _cache_pk);
+
+        auto opt_part = head_reader.async_read_part(timeout_cancel, yield[ec]);
+
+        //Session::reader_uptr vfy_reader = make_unique<cache::VerifyingReader>(move(con), cache_pk);
+        //auto session = Session::create(move(vfy_reader), timeout_cancel, yield[ec]);
+
+        if (timeout_cancel) ec = asio::error::timed_out;
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec) return or_throw(yield, ec);
+
+        if (!opt_part || !opt_part->is_head()) {
+            ec = sys::errc::make_error_code(sys::errc::bad_message);
+            return or_throw(yield, ec);
+        }
+
+        _head = SignedHead::parse(move(*opt_part->as_head()), ec);
+
+        if (ec) return or_throw(yield, ec);
+
+        if (!util::http_proto_version_check_trusted(_head, *newest_proto_seen))
+            // The client expects an injection belonging to a supported protocol version,
+            // otherwise we just discard this copy.
+            return or_throw(yield, asio::error::not_found);
+
+        _connection = head_reader.release_stream();
+    }
 };
+
 
 class MultiPeerReader::Peers {
 public:
@@ -194,7 +247,7 @@ public:
 
         if (!ip.second) return; // Already inserted
 
-        ip.first->second = make_unique<Peer>();
+        ip.first->second = make_unique<Peer>(_exec, _key, _cache_pk);
         Peer* p = ip.first->second.get();
 
         _candidate_peers.push_back(*p);
@@ -207,7 +260,7 @@ public:
                 LOG_INFO(dbg_tag, " fetching from: ", ep);
             }
 
-            auto session = load_from_connection(_exec, _cache_pk, _key, ep, *_dht, _newest_proto_seen, c, y[ec]);
+            p->init(ep, *_dht, _newest_proto_seen, c, y[ec]);
 
             if (!dbg_tag.empty()) {
                 LOG_INFO(dbg_tag, " done fetching: ", ep, " "
@@ -216,7 +269,6 @@ public:
 
             if (c) return;
 
-            p->session = move(session);
             p->_candidate_hook.unlink();
 
             if (!ec) {
@@ -314,30 +366,39 @@ MultiPeerReader::async_read_part(Cancel cancel, asio::yield_context yield)
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw<Ret>(yield, ec);
         assert(_chosen_peer);
+
+        _chosen_peer->setup_reader(cancel, yield[ec]);
+        assert(!cancel || ec == asio::error::operation_aborted);
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec) return or_throw<Ret>(yield, ec);
     }
 
-    return _chosen_peer->session.async_read_part(cancel, yield);
+    auto ret =_chosen_peer->_reader->async_read_part(cancel, yield);
+    return or_throw<Ret>(yield, ec, std::move(ret));
 }
 
 bool MultiPeerReader::is_done() const
 {
     if (_closed) return true;
     if (!_chosen_peer) return false;
-    return _chosen_peer->session.is_done();
+    if (!_chosen_peer->_reader) return false;
+    return _chosen_peer->_reader->is_done();
 }
 
 bool MultiPeerReader::is_open() const
 {
     if (_closed) return false;
     if (!_chosen_peer) return true;
-    return _chosen_peer->session.is_open();
+    if (!_chosen_peer->_reader) return false;
+    return _chosen_peer->_reader->is_open();
 }
 
 void MultiPeerReader::close()
 {
     _closed = true;
     if (!_chosen_peer) return;
-    _chosen_peer->session.close();
+    if (!_chosen_peer->_reader) return;
+    _chosen_peer->_reader->close();
 }
 
 MultiPeerReader::~MultiPeerReader() {
