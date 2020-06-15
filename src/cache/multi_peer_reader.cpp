@@ -13,7 +13,7 @@
 #include "../util/yield.h"
 #include "../util/set_io.h"
 #include "../util/condition_variable.h"
-#include "../signed_head.h"
+#include "signed_head.h"
 
 using namespace std;
 using namespace ouinet;
@@ -168,9 +168,21 @@ public:
             return or_throw(yield, ec);
         }
 
-        _head = SignedHead::parse(move(*opt_part->as_head()), ec);
+        auto raw_head = move(*opt_part->as_head());
 
-        if (ec) return or_throw(yield, ec);
+        if (raw_head.result() == http::status::not_found) {
+            return or_throw(yield, asio::error::not_found);
+        }
+
+        // XXX: We're verifying twice now
+        auto head_o = SignedHead::verify_and_create(move(raw_head), _cache_pk);
+
+        if (!head_o) {
+            ec = sys::errc::make_error_code(sys::errc::bad_message);
+            return or_throw(yield, ec);
+        }
+
+        _head = move(*head_o);
 
         if (!util::http_proto_version_check_trusted(_head, *newest_proto_seen))
             // The client expects an injection belonging to a supported protocol version,

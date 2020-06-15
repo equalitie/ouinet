@@ -61,6 +61,7 @@ public:
                             , injection_ts
                             , sk))
         , _injection_id(injection_id)
+        , _injection_ts(injection_ts)
         , _uri(rqh.target())
         , _bs_params{ sk.public_key()
                     , sig_alg_hs2019()
@@ -70,10 +71,12 @@ public:
 private:
     SignedHead( http::response_header<> signed_rsh
               , std::string injection_id
+              , std::chrono::seconds::rep injection_ts
               , std::string uri
               , SignedHead::BlockSigs bs_params)
         : Base(std::move(signed_rsh))
         , _injection_id(std::move(injection_id))
+        , _injection_ts(injection_ts)
         , _uri(std::move(uri))
         , _bs_params(std::move(bs_params))
     {}
@@ -172,6 +175,7 @@ private:
 
 private:
     std::string _injection_id;
+    std::chrono::seconds::rep _injection_ts;
     std::string _uri;
     SignedHead::BlockSigs _bs_params;
 };
@@ -328,8 +332,17 @@ SignedHead::create_from_trusted_source(http::response_header<> rsh)
         return boost::none;
     }
 
+    auto tsh = util::http_injection_ts(rsh);
+    auto injection_ts = parse::number<time_t>(tsh);
+
+    if (!injection_ts) {
+        LOG_WARN("Failed to parse injection time stamp \"", tsh, "\"");
+        return boost::none;
+    }
+
     return SignedHead( std::move(rsh)
                      , std::move(injection_id)
+                     , *injection_ts
                      , std::move(uri)
                      , std::move(*bs_params));
 }
