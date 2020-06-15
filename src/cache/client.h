@@ -43,7 +43,8 @@ public:
               , Cancel
               , asio::yield_context);
 
-    void serve_local( const http::request<http::empty_body>&
+    // Returns true if both request and response had keep-alive == true
+    bool serve_local( const http::request<http::empty_body>&
                     , GenericStream& sink
                     , Cancel&
                     , Yield);

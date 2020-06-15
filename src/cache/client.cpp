@@ -131,7 +131,7 @@ struct Client::Impl {
                 dht_group);
     }
 
-    void serve_local( const http::request<http::empty_body>& req
+    bool serve_local( const http::request<http::empty_body>& req
                     , GenericStream& sink
                     , Cancel& cancel
                     , Yield& yield)
@@ -156,7 +156,8 @@ struct Client::Impl {
             if (do_log) {
                 yield.log("cache/client: Not a Ouinet request\n", req);
             }
-            return handle_bad_request(sink, req, yield[ec]);
+            handle_bad_request(sink, req, yield[ec]);
+            return or_throw(yield, ec, req.keep_alive());
         }
 
         auto key = key_from_http_req(req);
@@ -164,7 +165,8 @@ struct Client::Impl {
             if (do_log) {
                 yield.log("cache/client: Cannot derive key from request\n", req);
             }
-            return handle_bad_request(sink, req, yield[ec]);
+            handle_bad_request(sink, req, yield[ec]);
+            return or_throw(yield, ec, req.keep_alive());
         }
 
         if (do_log) {
@@ -176,7 +178,8 @@ struct Client::Impl {
             if (!cancel && do_log) {
                 yield.log("cache/client: Not Serving ", *key, " ec:", ec.message());
             }
-            return handle_not_found(sink, req, yield[ec]);
+            handle_not_found(sink, req, yield[ec]);
+            return or_throw(yield, ec, req.keep_alive());
         }
 
         if (do_log) {
@@ -184,9 +187,19 @@ struct Client::Impl {
         }
 
         auto s = Session::create(move(rr), cancel, yield[ec].tag("read_header"));
-        if (!ec) s.flush_response(sink, cancel, yield[ec].tag("flush"));
+        if (ec) return or_throw(yield, ec, false);
 
-        return or_throw(yield, ec);
+        bool keep_alive = req.keep_alive() && s.response_header().keep_alive();
+
+        auto& head = s.response_header();
+
+        if (req.method() == http::verb::head) {
+            head.async_write(sink, cancel, yield[ec].tag("write-head"));
+        } else {
+            s.flush_response(sink, cancel, yield[ec].tag("flush"));
+        }
+
+        return or_throw(yield, ec, keep_alive);
     }
 
     std::size_t local_size( Cancel cancel
@@ -274,6 +287,10 @@ struct Client::Impl {
         namespace err = asio::error;
 
         sys::error_code ec;
+
+        if (dbg) {
+            yield.log("Requesting from the cache: ", key);
+        }
 
         {
             auto rs = load_from_local(key, cancel, yield[ec]);
@@ -509,12 +526,12 @@ void Client::store( const std::string& key
     _impl->store(key, dht_group, r, cancel, yield);
 }
 
-void Client::serve_local( const http::request<http::empty_body>& req
+bool Client::serve_local( const http::request<http::empty_body>& req
                         , GenericStream& sink
                         , Cancel& cancel
                         , Yield yield)
 {
-    _impl->serve_local(req, sink, cancel, yield);
+    return _impl->serve_local(req, sink, cancel, yield);
 }
 
 std::size_t Client::local_size( Cancel cancel
