@@ -586,6 +586,12 @@ struct SigningReader::Impl {
             return http_response::Part(http_response::ChunkHdr());
         }
 
+        if (_block_offset == 0) {
+            // When there is no body, the block hash still needs to be hash(hash(""))
+            // and not just hash("")
+            _block_hash.update(util::sha512_digest(""));
+        }
+
         auto block_digest = _block_hash.close();
         auto last_ch = http_response::ChunkHdr(
             0, block_chunk_ext( _injection_id
