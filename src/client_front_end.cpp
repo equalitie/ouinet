@@ -287,10 +287,9 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
     ss << "<br>\n";
     ss << "Now: " << now_as_string()  << "<br>\n";
-    auto doh_base = config.origin_doh_base();
-    if (!doh_base.empty()) {
+    if (auto doh_base = config.origin_doh_base()) {
         ss << "Origin <abbr title=\"DNS over HTTPS\">DoH</abbr> base URL:"
-           << " <samp>" << as_safe_html(std::move(doh_base)) << "</samp><br>\n";
+           << " <samp>" << as_safe_html(*doh_base) << "</samp><br>\n";
     }
     ss << "Injector endpoint: " << config.injector_endpoint() << "<br>\n";
     auto inj_pubkey = config.cache_http_pub_key();
