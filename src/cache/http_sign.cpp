@@ -1092,41 +1092,6 @@ VerifyingReader::is_done() const
 
 // end VerifyingReader
 
-// begin HeadVerifyingReader
-
-HeadVerifyingReader::HeadVerifyingReader( GenericStream in, util::Ed25519PublicKey pk
-                                        , status_set statuses)
-    : VerifyingReader( std::move(in)
-                     , std::make_unique<Impl>(false, std::move(pk), std::move(statuses)))
-{
-}
-
-HeadVerifyingReader::~HeadVerifyingReader()
-{
-}
-
-boost::optional<http_response::Part>
-HeadVerifyingReader::async_read_part(Cancel cancel, asio::yield_context yield)
-{
-    if (_is_done) return boost::none;
-
-    sys::error_code ec;
-    auto part_o = VerifyingReader::async_read_part(cancel, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec, boost::none);
-    assert(part_o);
-    assert(part_o->is_head());
-    _is_done = true;
-    return part_o;
-}
-
-bool
-HeadVerifyingReader::is_done() const
-{
-    return _is_done;
-}
-
-// end HeadVerifyingReader
-
 // begin KeepSignedReader
 
 boost::optional<http_response::Part>
