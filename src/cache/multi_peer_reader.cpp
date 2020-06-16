@@ -152,7 +152,7 @@ public:
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw(yield, ec);
 
-        cache::HeadVerifyingReader head_reader(move(con), _cache_pk);
+        http_response::Reader head_reader(move(con));
 
         auto opt_part = head_reader.async_read_part(timeout_cancel, yield[ec]);
 
@@ -174,7 +174,6 @@ public:
             return or_throw(yield, asio::error::not_found);
         }
 
-        // XXX: We're verifying twice now
         auto head_o = SignedHead::verify_and_create(move(raw_head), _cache_pk);
 
         if (!head_o) {
