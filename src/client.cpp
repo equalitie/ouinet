@@ -121,6 +121,15 @@ struct UserAgentMetaData {
 
         return ret;
     }
+
+    // Apply the metadata to the given request.
+    template<class Req>
+    void apply_to(Req& rq) const {
+        if (is_private)
+            rq.set(http_::request_private_hdr, http_::request_private_true);
+        if (dht_group)
+            rq.set(http_::request_group_hdr, *dht_group);
+    }
 };
 
 //------------------------------------------------------------------------------
@@ -560,10 +569,7 @@ Client::State::resolve_tcp( const std::string& host
         auto doh_rq = doh::build_request(host, *doh_base_o);
         // Ensure that DoH request is done with the same browsing mode
         // as the content request that triggered it.
-        if (meta.is_private)
-            doh_rq.set(http_::request_private_hdr, http_::request_private_true);
-        if (meta.dht_group)
-            doh_rq.set(http_::request_group_hdr, *(meta.dht_group));
+        meta.apply_to(doh_rq);
 
         doh::Response doh_rs; // TODO: perform request
         yield.log("DoH name resolution not implemented");
