@@ -84,7 +84,7 @@ namespace bt = ouinet::bittorrent;
 using tcp      = asio::ip::tcp;
 using Request  = http::request<http::string_body>;
 using Response = http::response<http::dynamic_body>;
-using TCPLookup = tcp::resolver::results_type;
+using TcpLookup = tcp::resolver::results_type;
 
 static const fs::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
 static const fs::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
@@ -282,7 +282,7 @@ private:
                                        , Yield);
 
     // Resolve host and port strings.
-    TCPLookup resolve_tcp( const std::string&, const std::string&
+    TcpLookup resolve_tcp( const std::string&, const std::string&
                          , const UserAgentMetaData&
                          , Cancel&, Yield);
 
@@ -544,7 +544,7 @@ Client::State::fetch_stored_in_dcache( const Request& request
 }
 
 //------------------------------------------------------------------------------
-TCPLookup
+TcpLookup
 Client::State::resolve_tcp( const std::string& host
                           , const std::string& port
                           , const UserAgentMetaData& meta
