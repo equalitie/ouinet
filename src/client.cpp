@@ -21,6 +21,7 @@
 
 #include "namespaces.h"
 #include "origin_pools.h"
+#include "doh.h"
 #include "http_util.h"
 #include "fetch_http_page.h"
 #include "client_front_end.h"
@@ -554,12 +555,25 @@ Client::State::resolve_tcp( const std::string& host
     sys::error_code ec;
 
     auto doh_base_o = _config.origin_doh_base();
-    if (doh_base_o)  // TODO
-        yield.log("DoH name resolution not implemented, using DNS instead");
-    auto lookup = util::tcp_async_resolve( host, port
-                                         , _ctx.get_executor()
-                                         , cancel
-                                         , yield[ec]);
+    TcpLookup lookup;
+    if (doh_base_o){
+        auto doh_rq = doh::build_request(host, *doh_base_o);
+        // Ensure that DoH request is done with the same browsing mode
+        // as the content request that triggered it.
+        if (meta.is_private)
+            doh_rq.set(http_::request_private_hdr, http_::request_private_true);
+        if (meta.dht_group)
+            doh_rq.set(http_::request_group_hdr, *(meta.dht_group));
+
+        doh::Response doh_rs; // TODO: perform request
+        yield.log("DoH name resolution not implemented");
+
+        if (!ec) lookup = doh::parse_response(doh_rs, port, ec);
+    } else lookup = util::tcp_async_resolve( host, port
+                                           , _ctx.get_executor()
+                                           , cancel
+                                           , yield[ec]);
+
     if (log_transactions())
         yield.log( doh_base_o
                  ? "DoH name resolution: "
