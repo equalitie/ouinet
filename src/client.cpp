@@ -280,7 +280,9 @@ private:
                                        , Request&
                                        , Yield);
 
-    GenericStream connect_to_origin(const Request&, Cancel&, Yield);
+    GenericStream connect_to_origin( const Request&
+                                   , const UserAgentMetaData&
+                                   , Cancel&, Yield);
 
     unique_ptr<OuiServiceImplementationClient>
     maybe_wrap_tls(unique_ptr<OuiServiceImplementationClient>);
@@ -538,6 +540,7 @@ Client::State::fetch_stored_in_dcache( const Request& request
 //------------------------------------------------------------------------------
 GenericStream
 Client::State::connect_to_origin( const Request& rq
+                                , const UserAgentMetaData& meta
                                 , Cancel& cancel
                                 , Yield yield)
 {
@@ -616,7 +619,7 @@ Session Client::State::fetch_fresh_from_origin( const Request& rq
     if (maybe_con) {
         con = std::move(*maybe_con);
     } else {
-        auto stream = connect_to_origin(rq, cancel, yield[ec]);
+        auto stream = connect_to_origin(rq, meta, cancel, yield[ec]);
 
         if (cancel) {
             assert(ec == asio::error::operation_aborted);
@@ -1573,7 +1576,8 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
     // TODO: Reuse existing connections to origin and injectors.  Currently
     // this is hard because those are stored not as streams but as
     // ConnectionPool::Connection.
-    auto origin = connect_to_origin(rq, cancel, yield[ec]);
+    auto meta = UserAgentMetaData::extract(rq);
+    auto origin = connect_to_origin(rq, meta, cancel, yield[ec]);
 
     if (ec) return or_throw(yield, ec, true);
 
