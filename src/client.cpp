@@ -549,10 +549,17 @@ Client::State::connect_to_origin( const Request& rq
 
     sys::error_code ec;
 
+    auto doh_base_o = _config.origin_doh_base();
+    if (doh_base_o)  // TODO
+        yield.log("DoH name resolution not implemented, using DNS instead");
     auto lookup = util::tcp_async_resolve( host, port
                                          , _ctx.get_executor()
                                          , cancel
                                          , yield[ec]);
+    if (log_transactions())
+        yield.log( doh_base_o
+                 ? "DoH name resolution: "
+                 : "DNS name resolution: ", host, " ec:", ec.message());
 
     return_or_throw_on_error(yield, cancel, ec, GenericStream());
 
