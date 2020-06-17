@@ -229,7 +229,9 @@ private:
                           , Yield yield);
 
     Response fetch_fresh_from_front_end(const Request&, Yield);
-    Session fetch_fresh_from_origin(const Request&, Cancel, Yield);
+    Session fetch_fresh_from_origin( const Request&
+                                   , const UserAgentMetaData&
+                                   , Cancel, Yield);
 
     Session fetch_fresh_through_connect_proxy(const Request&, Cancel&, Yield);
 
@@ -599,7 +601,9 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
 }
 
 //------------------------------------------------------------------------------
-Session Client::State::fetch_fresh_from_origin(const Request& rq, Cancel cancel, Yield yield)
+Session Client::State::fetch_fresh_from_origin( const Request& rq
+                                              , const UserAgentMetaData& meta
+                                              , Cancel cancel, Yield yield)
 {
     WatchDog watch_dog(_ctx
                       , default_timeout::fetch_http()
@@ -1030,7 +1034,7 @@ public:
         }
 
         sys::error_code ec;
-        auto session = client_state.fetch_fresh_from_origin(rq, cancel, yield[ec]);
+        auto session = client_state.fetch_fresh_from_origin(rq, tnx.meta(), cancel, yield[ec]);
 
         if (log_transactions()) {
             yield.log("fetch: ", ec.message());
