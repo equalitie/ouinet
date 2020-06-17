@@ -84,6 +84,7 @@ namespace bt = ouinet::bittorrent;
 using tcp      = asio::ip::tcp;
 using Request  = http::request<http::string_body>;
 using Response = http::response<http::dynamic_body>;
+using TCPLookup = tcp::resolver::results_type;
 
 static const fs::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
 static const fs::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
@@ -279,6 +280,11 @@ private:
                                        , beast::string_view connect_host_port
                                        , Request&
                                        , Yield);
+
+    // Resolve host and port strings.
+    TCPLookup resolve_tcp( const std::string&, const std::string&
+                         , const UserAgentMetaData&
+                         , Cancel&, Yield);
 
     GenericStream connect_to_origin( const Request&
                                    , const UserAgentMetaData&
@@ -538,15 +544,13 @@ Client::State::fetch_stored_in_dcache( const Request& request
 }
 
 //------------------------------------------------------------------------------
-GenericStream
-Client::State::connect_to_origin( const Request& rq
-                                , const UserAgentMetaData& meta
-                                , Cancel& cancel
-                                , Yield yield)
+TCPLookup
+Client::State::resolve_tcp( const std::string& host
+                          , const std::string& port
+                          , const UserAgentMetaData& meta
+                          , Cancel& cancel
+                          , Yield yield)
 {
-    std::string host, port;
-    std::tie(host, port) = util::get_host_port(rq);
-
     sys::error_code ec;
 
     auto doh_base_o = _config.origin_doh_base();
@@ -560,6 +564,22 @@ Client::State::connect_to_origin( const Request& rq
         yield.log( doh_base_o
                  ? "DoH name resolution: "
                  : "DNS name resolution: ", host, " ec:", ec.message());
+    return or_throw(yield, ec, lookup);
+}
+
+GenericStream
+Client::State::connect_to_origin( const Request& rq
+                                , const UserAgentMetaData& meta
+                                , Cancel& cancel
+                                , Yield yield)
+{
+    std::string host, port;
+    std::tie(host, port) = util::get_host_port(rq);
+
+    sys::error_code ec;
+
+    auto lookup = resolve_tcp( host, port, meta
+                             , cancel, yield[ec].tag("resolve_tcp"));
 
     return_or_throw_on_error(yield, cancel, ec, GenericStream());
 
