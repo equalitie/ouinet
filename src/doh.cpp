@@ -3,7 +3,8 @@
 
 namespace ouinet { namespace doh {
 
-boost::optional<Endpoint> endpoint_from_base(const std::string& base)
+boost::optional<Endpoint>
+endpoint_from_base(const std::string& base)
 {
     util::url_match um;
     if (!util::match_http_url(base, um) || !um.fragment.empty())
@@ -11,16 +12,18 @@ boost::optional<Endpoint> endpoint_from_base(const std::string& base)
     return base;
 }
 
-Request build_request( const std::string& name
-                     , const Endpoint& ep)
+Request
+build_request( const std::string& name
+             , const Endpoint& ep)
 {
     // TODO: implement
     return Request{};
 }
 
-TcpLookup parse_response( const Response& rs
-                        , const std::string& port
-                        , sys::error_code& ec)
+TcpLookup
+parse_response( const Response& rs
+              , const std::string& port
+              , sys::error_code& ec)
 {
     // TODO: implement
     ec = asio::error::operation_not_supported;
