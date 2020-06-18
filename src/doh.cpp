@@ -20,8 +20,49 @@ static
 std::string
 dns_query(const std::string& name)
 {
+    // The hardwired values here are taken from a capture of
+    // Firefox DoH traffic.
+    static const std::string dq_prefix = (
+        // DNS message header
+        "\x00\x00"  // ID set to 0 as per RFC8484#4.1
+        "\x01\x00"  // query of type QUERY, recursive
+        "\x00\x01"  // 1 question record
+        "\x00\x00"  // 0 answer records
+        "\x00\x00"  // 0 name server records
+        "\x00\x01"  // 1 additional record (EDNS)
+    );
+    static const std::string dq_suffix = (
+        // DNS question
+        // (queried name comes here)
+        "\x00\x01"  // A (IPv4) type  // TODO: IPv6? (28)
+        "\x00\x01"  // IN (Internet) class
+        // EDNS (RFC6891#6.1.2)
+        // All stuff from here on seems to explicitly tell the server that
+        // no source address bits are relevant for choosing
+        // between different possible answers.
+        // TODO: Consider dropping options entirely to minimize query string
+        // and thus increase chances of sharing resulting DoH URL with others
+        // (set additional records to 0 above if so).
+        "\x00"      // root domain
+        "\x00\x29"  // OPT (41)
+        "\x10\x00"  // 4K payload size
+        "\x00"      // unextended RCODE (RFC6891#6.1.3)
+        "\x00"      // EDNS version 0 (RFC6891#6.1.3)
+        "\x00\x00"  // DNSSEC not ok, zeros (RFC6891#6.1.4)
+        "\x00\x08"  // RDATA length
+        // EDNS RDATA
+        // Actual EDNS option: client subnet (RFC7871#6)
+        "\x00\x08"  // option code 8 (client subnet)
+        "\x00\x04"  // option length
+        "\x00\x01"  // family 1 (IPv4)  // TODO: IPv6? (2)
+        "\x00"      // source prefix length
+        "\x00"      // scope prefix-length, zero in queries
+    );
+
     // TODO: implement
-    return "TEST";
+    std::string name_as_labels = "\x07example\x03com\x00";
+
+    return dq_prefix + name_as_labels + dq_suffix;
 }
 
 Request
