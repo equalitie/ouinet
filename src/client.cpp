@@ -125,7 +125,7 @@ struct UserAgentMetaData {
     // Apply the metadata to the given request.
     template<class Req>
     void apply_to(Req& rq) const {
-        if (is_private)
+        if (is_private && *is_private)
             rq.set(http_::request_private_hdr, http_::request_private_true);
         if (dht_group)
             rq.set(http_::request_group_hdr, *dht_group);
