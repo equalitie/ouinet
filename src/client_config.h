@@ -6,6 +6,7 @@
 
 #include "namespaces.h"
 #include "cache_control.h"
+#include "doh.h"
 #include "util.h"
 #include "util/bytes.h"
 #include "parse/endpoint.h"
@@ -186,8 +187,8 @@ public:
 
     std::string local_domain() const { return _local_domain; }
 
-    boost::optional<std::string> origin_doh_base() const {
-        return _origin_doh_base;
+    boost::optional<std::string> origin_doh_endpoint() const {
+        return _origin_doh_endpoint;
     }
 
 private:
@@ -215,7 +216,7 @@ private:
     boost::optional<util::Ed25519PublicKey> _cache_http_pubkey;
     CacheType _cache_type = CacheType::None;
     std::string _local_domain;
-    boost::optional<std::string> _origin_doh_base;
+    boost::optional<doh::Endpoint> _origin_doh_endpoint;
 };
 
 inline
@@ -441,11 +442,9 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
     if (vm.count("origin-doh-base")) {
         auto doh_base = vm["origin-doh-base"].as<string>();
-        util::url_match um;
-        if (!util::match_http_url(doh_base, um) || !um.fragment.empty()) {
+        _origin_doh_endpoint = doh::endpoint_from_base(doh_base);
+        if (!_origin_doh_endpoint)
             throw std::runtime_error("Invalid URL for --origin-doh-base");
-        }
-        _origin_doh_base = std::move(doh_base);
     }
 }
 

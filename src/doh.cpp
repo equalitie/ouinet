@@ -1,9 +1,18 @@
 #include "doh.h"
+#include "util.h"
 
 namespace ouinet { namespace doh {
 
+boost::optional<Endpoint> endpoint_from_base(const std::string& base)
+{
+    util::url_match um;
+    if (!util::match_http_url(base, um) || !um.fragment.empty())
+        return boost::none;
+    return base;
+}
+
 Request build_request( const std::string& name
-                     , const std::string& base)
+                     , const Endpoint& ep)
 {
     // TODO: implement
     return Request{};

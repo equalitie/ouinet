@@ -287,9 +287,9 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
     ss << "<br>\n";
     ss << "Now: " << now_as_string()  << "<br>\n";
-    if (auto doh_base = config.origin_doh_base()) {
-        ss << "Origin <abbr title=\"DNS over HTTPS\">DoH</abbr> base URL:"
-           << " <samp>" << as_safe_html(*doh_base) << "</samp><br>\n";
+    if (auto doh_ep = config.origin_doh_endpoint()) {
+        ss << "Origin <abbr title=\"DNS over HTTPS\">DoH</abbr> endpoint URL:"
+           << " <samp>" << as_safe_html(*doh_ep) << "</samp><br>\n";
     }
     ss << "Injector endpoint: " << config.injector_endpoint() << "<br>\n";
     auto inj_pubkey = config.cache_http_pub_key();

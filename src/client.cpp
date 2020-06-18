@@ -563,10 +563,10 @@ Client::State::resolve_tcp( const std::string& host
 {
     sys::error_code ec;
 
-    auto doh_base_o = _config.origin_doh_base();
+    auto doh_ep_o = _config.origin_doh_endpoint();
     TcpLookup lookup;
-    if (doh_base_o){
-        auto doh_rq = doh::build_request(host, *doh_base_o);
+    if (doh_ep_o){
+        auto doh_rq = doh::build_request(host, *doh_ep_o);
         // Ensure that DoH request is done with the same browsing mode
         // as the content request that triggered it.
         meta.apply_to(doh_rq);
@@ -581,7 +581,7 @@ Client::State::resolve_tcp( const std::string& host
                                            , yield[ec]);
 
     if (log_transactions())
-        yield.log( doh_base_o
+        yield.log( doh_ep_o
                  ? "DoH name resolution: "
                  : "DNS name resolution: ", host, " ec:", ec.message());
     return or_throw(yield, ec, lookup);
