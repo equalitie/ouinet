@@ -20,7 +20,6 @@
 
 #include "namespaces.h"
 #include "util.h"
-#include "fetch_http_page.h"
 #include "connect_to_host.h"
 #include "default_timeout.h"
 #include "generic_stream.h"

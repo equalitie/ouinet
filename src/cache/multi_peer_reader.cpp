@@ -78,15 +78,12 @@ public:
     SignedHead _head;
     boost::optional<GenericStream> _connection;
     unique_ptr<VerifyingReader> _reader;
-    unsigned _id;
 
     Peer(asio::executor exec, const string& key, util::Ed25519PublicKey cache_pk) :
         _exec(exec),
         _key(key),
         _cache_pk(cache_pk)
     {
-        static unsigned next_id = 0;
-        _id = next_id++;
     }
 
     void setup_reader(Cancel c, asio::yield_context y) {
@@ -155,9 +152,6 @@ public:
         http_response::Reader head_reader(move(con));
 
         auto opt_part = head_reader.async_read_part(timeout_cancel, yield[ec]);
-
-        //Session::reader_uptr vfy_reader = make_unique<cache::VerifyingReader>(move(con), cache_pk);
-        //auto session = Session::create(move(vfy_reader), timeout_cancel, yield[ec]);
 
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
