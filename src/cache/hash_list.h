@@ -12,10 +12,16 @@ struct HashList {
     using PubKey = util::Ed25519PublicKey;
 
     SignedHead          signed_head;
-    std::vector<Digest> block_hashes;
     PubKey::sig_array_t signature;
+    std::vector<Digest> block_hashes;
 
     bool verify() const;
+
+    static HashList load(
+            http_response::AbstractReader&,
+            const PubKey&,
+            Cancel&,
+            asio::yield_context);
 };
 
 }}
