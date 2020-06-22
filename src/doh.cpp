@@ -23,9 +23,13 @@ static
 std::string
 dns_query(const std::string& name)
 {
+    // Use string literals to avoid cutting on first NUL
+    // (from <https://stackoverflow.com/a/164274>).
+    using namespace std::literals::string_literals;
+
     // The hardwired values here are taken from a capture of
     // Firefox DoH traffic.
-    static const std::string dq_prefix = (
+    static const std::string dq_prefix{
         // DNS message header
         "\x00\x00"  // ID set to 0 as per RFC8484#4.1
         "\x01\x00"  // query of type QUERY, recursive
@@ -33,8 +37,9 @@ dns_query(const std::string& name)
         "\x00\x00"  // 0 answer records
         "\x00\x00"  // 0 name server records
         "\x00\x01"  // 1 additional record (EDNS)
-    );
-    static const std::string dq_suffix = (
+        ""s
+    };
+    static const std::string dq_suffix = {
         // DNS question
         // (queried name comes here)
         "\x00\x01"  // A (IPv4) type  // TODO: IPv6? (28)
@@ -60,7 +65,8 @@ dns_query(const std::string& name)
         "\x00\x01"  // family 1 (IPv4)  // TODO: IPv6? (2)
         "\x00"      // source prefix length
         "\x00"      // scope prefix-length, zero in queries
-    );
+        ""s
+    };
 
     std::stringstream dq;
 
