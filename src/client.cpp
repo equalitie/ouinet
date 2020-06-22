@@ -298,6 +298,10 @@ private:
     TcpLookup resolve_tcp( const std::string&, const std::string&
                          , const UserAgentMetaData&
                          , Cancel&, Yield);
+    TcpLookup resolve_tcp_doh( const std::string&, const std::string&
+                             , const UserAgentMetaData&
+                             , const doh::Endpoint&
+                             , Cancel&, Yield);
 
     GenericStream connect_to_origin( const Request&
                                    , const UserAgentMetaData&
@@ -579,6 +583,31 @@ slurp_response( Session& session, size_t max_body_size
 }
 
 TcpLookup
+Client::State::resolve_tcp_doh( const std::string& host
+                              , const std::string& port
+                              , const UserAgentMetaData& meta
+                              , const doh::Endpoint& ep
+                              , Cancel& cancel
+                              , Yield yield)
+{
+    auto rq_o = doh::build_request(host, ep);
+    if (!rq_o) return or_throw<TcpLookup>(yield, asio::error::invalid_argument);
+    // Ensure that DoH request is done with the same browsing mode
+    // as the content request that triggered it.
+    meta.apply_to(*rq_o);
+
+    sys::error_code ec;
+    auto s = fetch_via_self(*rq_o, cancel, yield[ec].tag("doh_fetch"));
+    return_or_throw_on_error(yield, cancel, ec, TcpLookup());
+
+    auto rs = slurp_response<doh::Response::body_type>
+        (s, doh::payload_size, cancel, yield[ec].tag("doh_slurp"));
+    return_or_throw_on_error(yield, cancel, ec, TcpLookup());
+
+    return doh::parse_response(rs, port, ec);
+}
+
+TcpLookup
 Client::State::resolve_tcp( const std::string& host
                           , const std::string& port
                           , const UserAgentMetaData& meta
@@ -588,24 +617,12 @@ Client::State::resolve_tcp( const std::string& host
     sys::error_code ec;
 
     auto doh_ep_o = _config.origin_doh_endpoint();
-    TcpLookup lookup;
-    if (doh_ep_o){
-        auto doh_rq_o = doh::build_request(host, *doh_ep_o);
-        if (!doh_rq_o) ec = asio::error::invalid_argument;
-        // Ensure that DoH request is done with the same browsing mode
-        // as the content request that triggered it.
-        if (!ec) meta.apply_to(*doh_rq_o);
-
-        Session doh_s;
-        doh::Response doh_rs;
-        if (!ec) doh_s = fetch_via_self(*doh_rq_o, cancel, yield[ec].tag("doh_fetch"));
-        if (!ec) doh_rs = slurp_response<doh::Response::body_type>
-            (doh_s, doh::payload_size, cancel, yield[ec].tag("doh_slurp"));
-        if (!ec) lookup = doh::parse_response(doh_rs, port, ec);
-    } else lookup = util::tcp_async_resolve( host, port
-                                           , _ctx.get_executor()
-                                           , cancel
-                                           , yield[ec]);
+    auto lookup = doh_ep_o
+        ? resolve_tcp_doh(host, port, meta, *doh_ep_o, cancel, yield[ec])
+        : util::tcp_async_resolve( host, port
+                                 , _ctx.get_executor()
+                                 , cancel
+                                 , yield[ec]);
 
     if (log_transactions())
         yield.log( doh_ep_o
