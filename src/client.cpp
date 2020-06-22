@@ -239,6 +239,9 @@ private:
                           , Cancel& cancel
                           , Yield yield);
 
+    template<class Rq>
+    Session fetch_via_self(const Rq&, Cancel, Yield);
+
     Response fetch_fresh_from_front_end(const Request&, Yield);
     Session fetch_fresh_from_origin( const Request&
                                    , const UserAgentMetaData&
@@ -554,6 +557,27 @@ Client::State::fetch_stored_in_dcache( const Request& request
 }
 
 //------------------------------------------------------------------------------
+template<class Rq>
+Session
+Client::State::fetch_via_self( const Rq& rq
+                             , Cancel cancel, Yield yield)
+{
+    // TODO: implement
+    return or_throw<Session>(yield, asio::error::operation_not_supported);
+;
+}
+
+template<class RsBody>
+static
+http::response<RsBody>
+slurp_response( Session& session, size_t max_body_size
+              , Cancel cancel, asio::yield_context yield)
+{
+    // TODO: implement
+    return or_throw<http::response<RsBody>>(yield, asio::error::operation_not_supported);
+;
+}
+
 TcpLookup
 Client::State::resolve_tcp( const std::string& host
                           , const std::string& port
@@ -568,14 +592,15 @@ Client::State::resolve_tcp( const std::string& host
     if (doh_ep_o){
         auto doh_rq_o = doh::build_request(host, *doh_ep_o);
         if (!doh_rq_o) ec = asio::error::invalid_argument;
-
         // Ensure that DoH request is done with the same browsing mode
         // as the content request that triggered it.
         if (!ec) meta.apply_to(*doh_rq_o);
 
-        doh::Response doh_rs; // TODO: perform request
-        yield.log("DoH name resolution not implemented");
-
+        Session doh_s;
+        doh::Response doh_rs;
+        if (!ec) doh_s = fetch_via_self(*doh_rq_o, cancel, yield[ec].tag("doh_fetch"));
+        if (!ec) doh_rs = slurp_response<doh::Response::body_type>
+            (doh_s, doh::payload_size, cancel, yield[ec].tag("doh_slurp"));
         if (!ec) lookup = doh::parse_response(doh_rs, port, ec);
     } else lookup = util::tcp_async_resolve( host, port
                                            , _ctx.get_executor()
