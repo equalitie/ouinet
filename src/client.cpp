@@ -240,7 +240,7 @@ private:
                           , Yield yield);
 
     template<class Rq>
-    Session fetch_via_self(const Rq&, Cancel, Yield);
+    Session fetch_via_self(Rq, Cancel, Yield);
 
     Response fetch_fresh_from_front_end(const Request&, Yield);
     Session fetch_fresh_from_origin( const Request&
@@ -563,10 +563,10 @@ Client::State::fetch_stored_in_dcache( const Request& request
 //------------------------------------------------------------------------------
 template<class Rq>
 Session
-Client::State::fetch_via_self( const Rq& rq
+Client::State::fetch_via_self( Rq rq
                              , Cancel cancel, Yield yield)
 {
-    // TODO: implement
+    // TODO: implement, remember to add client authentication if configured
     return or_throw<Session>(yield, asio::error::operation_not_supported);
 ;
 }
@@ -597,7 +597,7 @@ Client::State::resolve_tcp_doh( const std::string& host
     meta.apply_to(*rq_o);
 
     sys::error_code ec;
-    auto s = fetch_via_self(*rq_o, cancel, yield[ec].tag("doh_fetch"));
+    auto s = fetch_via_self(move(*rq_o), cancel, yield[ec].tag("doh_fetch"));
     return_or_throw_on_error(yield, cancel, ec, TcpLookup());
 
     auto rs = slurp_response<doh::Response::body_type>
