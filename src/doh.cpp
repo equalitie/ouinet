@@ -1,7 +1,10 @@
 #include "doh.h"
 
+#include <sstream>
+
 #include <boost/utility/string_view.hpp>
 
+#include "split_string.h"
 #include "util.h"
 
 namespace ouinet { namespace doh {
@@ -59,10 +62,20 @@ dns_query(const std::string& name)
         "\x00"      // scope prefix-length, zero in queries
     );
 
-    // TODO: implement
-    std::string name_as_labels = "\x07example\x03com\x00";
+    std::stringstream dq;
 
-    return dq_prefix + name_as_labels + dq_suffix;
+    dq << dq_prefix;
+
+    // Turn "example.com" into "\x07example\x03com\x00" as per RC1035#3.1.
+    // TODO: check name.size() < 254
+    for (auto l : SplitString(name, '.'))
+        // TODO: check 0 < l.size() < 64
+        dq << static_cast<uint8_t>(l.size()) << l;
+    dq << '\0';
+
+    dq << dq_suffix;
+
+    return dq.str();
 }
 
 Request
