@@ -240,7 +240,8 @@ private:
                           , Yield yield);
 
     template<class Rq>
-    Session fetch_via_self(Rq, Cancel, Yield);
+    Session fetch_via_self( Rq, const UserAgentMetaData&
+                          , Cancel, Yield);
 
     Response fetch_fresh_from_front_end(const Request&, Yield);
     Session fetch_fresh_from_origin( const Request&
@@ -563,9 +564,11 @@ Client::State::fetch_stored_in_dcache( const Request& request
 //------------------------------------------------------------------------------
 template<class Rq>
 Session
-Client::State::fetch_via_self( Rq rq
+Client::State::fetch_via_self( Rq rq, const UserAgentMetaData& meta
                              , Cancel cancel, Yield yield)
 {
+    meta.apply_to(rq);
+
     // TODO: implement, remember to add client authentication if configured
     return or_throw<Session>(yield, asio::error::operation_not_supported);
 ;
@@ -592,12 +595,13 @@ Client::State::resolve_tcp_doh( const std::string& host
 {
     auto rq_o = doh::build_request(host, ep);
     if (!rq_o) return or_throw<TcpLookup>(yield, asio::error::invalid_argument);
-    // Ensure that DoH request is done with the same browsing mode
-    // as the content request that triggered it.
-    meta.apply_to(*rq_o);
 
     sys::error_code ec;
-    auto s = fetch_via_self(move(*rq_o), cancel, yield[ec].tag("doh_fetch"));
+    // By passing user agent metadata as is,
+    // we ensure that the DoH request is done with the same browsing mode
+    // as the content request that triggered it,
+    // and is announced under the same group.
+    auto s = fetch_via_self(move(*rq_o), meta, cancel, yield[ec].tag("doh_fetch"));
     return_or_throw_on_error(yield, cancel, ec, TcpLookup());
 
     auto rs = slurp_response<doh::Response::body_type>
