@@ -16,6 +16,10 @@
 
 namespace ouinet { namespace doh {
 
+// The maximum payload size expected in responses, as per RFC6891#6.2.3.
+// It can be used as an upper boundary for the body size of `Response` below.
+static const size_t payload_size = 4096;
+
 // DoH requests implemented here always use the GET method
 // with an empty body.
 using Request = http::request<http::empty_body>;

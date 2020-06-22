@@ -53,7 +53,7 @@ dns_query(const std::string& name)
         // (set additional records to 0 above if so).
         "\x00"      // root domain
         "\x00\x29"  // OPT (41)
-        "\x10\x00"  // 4K payload size
+        "\x10\x00"  // 4K payload size, i.e. the value of `payload_size`
         "\x00"      // unextended RCODE (RFC6891#6.1.3)
         "\x00"      // EDNS version 0 (RFC6891#6.1.3)
         "\x00\x00"  // DNSSEC not ok, zeros (RFC6891#6.1.4)
