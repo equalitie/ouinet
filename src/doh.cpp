@@ -20,7 +20,7 @@ endpoint_from_base(const std::string& base)
 }
 
 static
-std::string
+boost::optional<std::string>
 dns_query(const std::string& name)
 {
     // Use string literals to avoid cutting on first NUL
@@ -68,15 +68,20 @@ dns_query(const std::string& name)
         ""s
     };
 
+    // 1 (1st label len byte) + len(name) + 1 (root label len byte) <= 255
+    // as per RFC1035#3.1.
+    if (name.size() > 253) return boost::none;
+
     std::stringstream dq;
 
     dq << dq_prefix;
 
     // Turn "example.com" into "\x07example\x03com\x00" as per RC1035#3.1.
-    // TODO: check name.size() < 254
-    for (auto l : SplitString(name, '.'))
-        // TODO: check 0 < l.size() < 64
-        dq << static_cast<uint8_t>(l.size()) << l;
+    for (auto l : SplitString(name, '.')) {
+        uint8_t llen = l.size();
+        if (llen < 1 || llen > 63) return boost::none;  // RFC1035#3.1
+        dq << llen << l;
+    }
     dq << '\0';
 
     dq << dq_suffix;
@@ -84,12 +89,15 @@ dns_query(const std::string& name)
     return dq.str();
 }
 
-Request
+boost::optional<Request>
 build_request( const std::string& name
              , const Endpoint& ep)
 {
+    auto dq_o = dns_query(name);
+    if (!dq_o) return boost::none;
+
     // DoH uses unpadded base64url as defined in RFC4648#5 (RFC8484#6).
-    auto dq_b64 = util::base64_encode(dns_query(name));
+    auto dq_b64 = util::base64_encode(*dq_o);
     for (auto& c : dq_b64) {
         if (c == '+') c = '-';
         else if (c == '/') c = '_';

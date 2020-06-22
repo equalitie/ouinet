@@ -566,10 +566,12 @@ Client::State::resolve_tcp( const std::string& host
     auto doh_ep_o = _config.origin_doh_endpoint();
     TcpLookup lookup;
     if (doh_ep_o){
-        auto doh_rq = doh::build_request(host, *doh_ep_o);
+        auto doh_rq_o = doh::build_request(host, *doh_ep_o);
+        if (!doh_rq_o) ec = asio::error::invalid_argument;
+
         // Ensure that DoH request is done with the same browsing mode
         // as the content request that triggered it.
-        meta.apply_to(doh_rq);
+        if (!ec) meta.apply_to(*doh_rq_o);
 
         doh::Response doh_rs; // TODO: perform request
         yield.log("DoH name resolution not implemented");

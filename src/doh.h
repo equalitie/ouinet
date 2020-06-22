@@ -32,8 +32,12 @@ using Endpoint = std::string;
 // Return none if the base URL is invalid.
 boost::optional<Endpoint> endpoint_from_base(const std::string&);
 
-Request build_request( const std::string& name
-                     , const Endpoint&);
+// Return a DoH request for the given `name`
+// to be sent to the given DoH `endpoint`.
+//
+// Return none if the name is invalid.
+boost::optional<Request> build_request( const std::string& name
+                                      , const Endpoint&);
 
 TcpLookup parse_response( const Response&
                         , const std::string& port
