@@ -565,7 +565,7 @@ Client::State::fetch_stored_in_dcache( const Request& request
 //------------------------------------------------------------------------------
 template<class Rq>
 Session
-Client::State::fetch_via_self( Rq rq, const UserAgentMetaData& meta
+Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
                              , Cancel& cancel, Yield yield)
 {
     sys::error_code ec;
@@ -606,12 +606,11 @@ Client::State::fetch_via_self( Rq rq, const UserAgentMetaData& meta
 
     // Build the actual request to send to self.
     if (!_config.client_credentials().empty())
-        rq = authorize(rq, _config.client_credentials());
-    meta.apply_to(rq);
+        request = authorize(request, _config.client_credentials());
+    meta.apply_to(request);
 
     // TODO: implement
     return or_throw<Session>(yield, asio::error::operation_not_supported);
-;
 }
 
 template<class RsBody>
