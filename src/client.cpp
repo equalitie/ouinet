@@ -567,9 +567,11 @@ Session
 Client::State::fetch_via_self( Rq rq, const UserAgentMetaData& meta
                              , Cancel cancel, Yield yield)
 {
+    if (!_config.client_credentials().empty())
+        rq = authorize(rq, _config.client_credentials());
     meta.apply_to(rq);
 
-    // TODO: implement, remember to add client authentication if configured
+    // TODO: implement
     return or_throw<Session>(yield, asio::error::operation_not_supported);
 ;
 }
