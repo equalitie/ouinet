@@ -296,9 +296,8 @@ private:
                                        , Yield);
 
     // Resolve host and port strings.
-    TcpLookup resolve_tcp( const std::string&, const std::string&
-                         , const UserAgentMetaData&
-                         , Cancel&, Yield);
+    TcpLookup resolve_tcp_dns( const std::string&, const std::string&
+                             , Cancel&, Yield);
     TcpLookup resolve_tcp_doh( const std::string&, const std::string&
                              , const UserAgentMetaData&
                              , const doh::Endpoint&
@@ -667,27 +666,15 @@ Client::State::resolve_tcp_doh( const std::string& host
 }
 
 TcpLookup
-Client::State::resolve_tcp( const std::string& host
-                          , const std::string& port
-                          , const UserAgentMetaData& meta
-                          , Cancel& cancel
-                          , Yield yield)
+Client::State::resolve_tcp_dns( const std::string& host
+                              , const std::string& port
+                              , Cancel& cancel
+                              , Yield yield)
 {
-    sys::error_code ec;
-
-    auto doh_ep_o = _config.origin_doh_endpoint();
-    auto lookup = doh_ep_o
-        ? resolve_tcp_doh(host, port, meta, *doh_ep_o, cancel, yield[ec])
-        : util::tcp_async_resolve( host, port
-                                 , _ctx.get_executor()
-                                 , cancel
-                                 , yield[ec]);
-
-    if (log_transactions())
-        yield.log( doh_ep_o
-                 ? "DoH name resolution: "
-                 : "DNS name resolution: ", host, " ec:", ec.message());
-    return or_throw(yield, ec, lookup);
+    return util::tcp_async_resolve( host, port
+                                  , _ctx.get_executor()
+                                  , cancel
+                                  , yield);
 }
 
 GenericStream
@@ -701,9 +688,15 @@ Client::State::connect_to_origin( const Request& rq
 
     sys::error_code ec;
 
-    auto lookup = resolve_tcp( host, port, meta
-                             , cancel, yield[ec].tag("resolve_tcp"));
-
+    // Resolve using DoH if configured and not resolving the resolver's address itself.
+    auto doh_ep_o = _config.origin_doh_endpoint();
+    bool do_doh = doh_ep_o && !rq.target().starts_with(*doh_ep_o);
+    auto lookup = do_doh
+        ? resolve_tcp_doh(host, port, meta, *doh_ep_o, cancel, yield[ec].tag("resolve_doh"))
+        : resolve_tcp_dns(host, port, cancel, yield[ec].tag("resolve_dns"));
+    if (log_transactions())
+        yield.log( do_doh ? "DoH name resolution: " : "DNS name resolution: "
+                 , host, " ec:", ec.message());
     return_or_throw_on_error(yield, cancel, ec, GenericStream());
 
     auto sock = connect_to_host(lookup, _ctx.get_executor(), cancel, yield[ec]);
