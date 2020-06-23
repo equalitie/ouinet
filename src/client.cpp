@@ -628,15 +628,48 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
     return Session::create(move(con), cancel, yield);
 }
 
+// Read the whole session and return an in-memory response
+// if it does not exceed `max_body_size`,
+// otherwise fail with `boost::asio::error::message_size`.
 template<class RsBody>
 static
 http::response<RsBody>
 slurp_response( Session& session, size_t max_body_size
               , Cancel cancel, asio::yield_context yield)
 {
-    // TODO: implement
-    return or_throw<http::response<RsBody>>(yield, asio::error::operation_not_supported);
-;
+    sys::error_code ec;
+    http::response<RsBody> rs;
+
+    auto part = session.async_read_part(cancel, yield[ec]);
+    assert(!ec && part && part->is_head());  // as with all sessions
+    rs.base() = *(part->as_head());
+
+    typename RsBody::reader rsr(rs, rs.body());
+    size_t body_size = 0;
+    while (true) {
+        part = session.async_read_part(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, move(rs));
+
+        assert(part);
+        if (part->is_trailer()) break;  // end of response
+        if (!part->is_body() && !part->is_chunk_body()) continue;
+
+        const http_response::Body::Base* data;
+        if (auto b = part->as_body()) data = b;
+        else if (auto cb = part->as_chunk_body()) data = cb;
+        assert(data);
+
+        body_size += data->size();
+        if (body_size > max_body_size) continue;  // ignore extra data
+        rsr.put(asio::buffer(*data), ec);
+        if (ec) return or_throw(yield, ec, move(rs));
+    }
+
+    if (body_size > max_body_size)
+        ec = asio::error::message_size;
+
+    if (!ec) rs.prepare_payload();
+    return or_throw(yield, ec, move(rs));
 }
 
 TcpLookup
