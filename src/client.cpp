@@ -607,6 +607,7 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
     // Build the actual request to send to self.
     if (!_config.client_credentials().empty())
         request = authorize(request, _config.client_credentials());
+    request.keep_alive(true);
     meta.apply_to(request);
 
     // TODO: implement
