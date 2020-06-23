@@ -241,7 +241,7 @@ private:
 
     template<class Rq>
     Session fetch_via_self( Rq, const UserAgentMetaData&
-                          , Cancel, Yield);
+                          , Cancel&, Yield);
 
     Response fetch_fresh_from_front_end(const Request&, Yield);
     Session fetch_fresh_from_origin( const Request&
@@ -397,6 +397,7 @@ private:
     // For debugging
     uint64_t _next_connection_id = 0;
     ConnectionPool<Endpoint> _injector_connections;
+    ConnectionPool<bool> _self_connections;  // stored value is unused
     OriginPools _origin_pools;
 
     asio::ssl::context ssl_ctx;
@@ -565,8 +566,45 @@ Client::State::fetch_stored_in_dcache( const Request& request
 template<class Rq>
 Session
 Client::State::fetch_via_self( Rq rq, const UserAgentMetaData& meta
-                             , Cancel cancel, Yield yield)
+                             , Cancel& cancel, Yield yield)
 {
+    sys::error_code ec;
+
+    // Connect to the client proxy port.
+    // TODO: Maybe refactor with `fetch_fresh_through_simple_proxy`.
+    ConnectionPool<bool>::Connection con;
+    if (_self_connections.empty()) {
+        if (log_transactions()) {
+            yield.log("Connecting to self");
+        }
+
+        // TODO: Keep lookup object or allow connecting to endpoint.
+        auto epl = TcpLookup::create(_config.local_endpoint(), "dummy", "dummy");
+        auto c = connect_to_host(epl, _ctx.get_executor(), cancel, yield[ec]);
+
+        assert(!cancel || ec == asio::error::operation_aborted);
+
+        if (ec) {
+            if (log_transactions()) {
+                yield.log("Failed to connect to self ec:", ec.message());
+            }
+            return or_throw<Session>(yield, ec);
+        }
+
+        con = _self_connections.wrap(std::move(c));
+    } else {
+        if (log_transactions()) {
+            yield.log("Reusing existing self connection");
+        }
+
+        con = _self_connections.pop_front();
+    }
+
+    auto cancel_slot = cancel.connect([&] {
+        con.close();
+    });
+
+    // Build the actual request to send to self.
     if (!_config.client_credentials().empty())
         rq = authorize(rq, _config.client_credentials());
     meta.apply_to(rq);
@@ -860,6 +898,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
     sys::error_code ec;
 
     // Connect to the injector.
+    // TODO: Maybe refactor with `fetch_via_self`.
     ConnectionPool<Endpoint>::Connection con;
     if (_injector_connections.empty()) {
         if (log_transactions()) {
