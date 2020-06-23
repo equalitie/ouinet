@@ -655,11 +655,11 @@ Client::State::resolve_tcp_doh( const std::string& host
     // we ensure that the DoH request is done with the same browsing mode
     // as the content request that triggered it,
     // and is announced under the same group.
-    auto s = fetch_via_self(move(*rq_o), meta, cancel, yield[ec].tag("doh_fetch"));
+    auto s = fetch_via_self(move(*rq_o), meta, cancel, yield[ec].tag("fetch"));
     return_or_throw_on_error(yield, cancel, ec, TcpLookup());
 
     auto rs = slurp_response<doh::Response::body_type>
-        (s, doh::payload_size, cancel, yield[ec].tag("doh_slurp"));
+        (s, doh::payload_size, cancel, yield[ec].tag("slurp"));
     return_or_throw_on_error(yield, cancel, ec, TcpLookup());
 
     return doh::parse_response(rs, port, ec);
