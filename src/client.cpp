@@ -610,8 +610,23 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
     request.keep_alive(true);
     meta.apply_to(request);
 
-    // TODO: implement
-    return or_throw<Session>(yield, asio::error::operation_not_supported);
+    if (log_transactions()) {
+        yield.log("Sending a request to self");
+    }
+    // Send request
+    http::async_write(con, request, yield[ec].tag("self-request"));
+
+    if (!ec && cancel_slot) {
+        ec = asio::error::operation_aborted;
+    }
+
+    if (ec && log_transactions()) {
+        yield.log("Failed to send request to self");
+    }
+
+    if (ec) return or_throw<Session>(yield, ec);
+
+    return Session::create(move(con), cancel, yield);
 }
 
 template<class RsBody>
