@@ -628,54 +628,6 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
     return Session::create(move(con), cancel, yield);
 }
 
-// Read the whole session and return an in-memory response
-// if it does not exceed `max_body_size`,
-// otherwise fail with `boost::asio::error::message_size`.
-template<class RsBody>
-static
-http::response<RsBody>
-slurp_response( http_response::AbstractReader& reader, size_t max_body_size
-              , Cancel cancel, asio::yield_context yield)
-{
-    sys::error_code ec;
-    http::response<RsBody> rs;
-
-    auto part = reader.async_read_part(cancel, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec, std::move(rs));
-
-    if (!part) ec = asio::error::broken_pipe;
-    else if (!part->is_head()) ec = asio::error::invalid_argument;
-    if (ec) return or_throw(yield, ec, std::move(rs));
-    rs.base() = *(part->as_head());
-
-    typename RsBody::reader rsr(rs, rs.body());
-    size_t body_size = 0;
-    while (true) {
-        part = reader.async_read_part(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, std::move(rs));
-
-        if (!part) break;  // end of transfer
-        if (part->is_trailer()) break;  // end of response
-        if (!part->is_body() && !part->is_chunk_body()) continue;
-
-        const http_response::Body::Base* data;
-        if (auto b = part->as_body()) data = b;
-        else if (auto cb = part->as_chunk_body()) data = cb;
-        assert(data);
-
-        body_size += data->size();
-        if (body_size > max_body_size) continue;  // ignore extra data
-        rsr.put(asio::buffer(*data), ec);
-        if (ec) return or_throw(yield, ec, std::move(rs));
-    }
-
-    if (body_size > max_body_size)
-        ec = asio::error::message_size;
-
-    if (!ec) rs.prepare_payload();
-    return or_throw(yield, ec, std::move(rs));
-}
-
 TcpLookup
 Client::State::resolve_tcp_doh( const std::string& host
                               , const std::string& port
@@ -695,7 +647,7 @@ Client::State::resolve_tcp_doh( const std::string& host
     auto s = fetch_via_self(move(*rq_o), meta, cancel, yield[ec].tag("fetch"));
     return_or_throw_on_error(yield, cancel, ec, TcpLookup());
 
-    auto rs = slurp_response<doh::Response::body_type>
+    auto rs = http_response::slurp_response<doh::Response::body_type>
         (s, doh::payload_size, cancel, yield[ec].tag("slurp"));
     return_or_throw_on_error(yield, cancel, ec, TcpLookup());
 
