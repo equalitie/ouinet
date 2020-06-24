@@ -650,7 +650,7 @@ slurp_response( Session& session, size_t max_body_size
         part = session.async_read_part(cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec, move(rs));
 
-        assert(part);
+        if (!part) break;  // end of transfer
         if (part->is_trailer()) break;  // end of response
         if (!part->is_body() && !part->is_chunk_body()) continue;
 
