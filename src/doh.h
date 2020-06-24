@@ -43,7 +43,12 @@ boost::optional<Endpoint> endpoint_from_base(const std::string&);
 boost::optional<Request> build_request( const std::string& name
                                       , const Endpoint&);
 
+// Return a lookup result with the answers for the given host
+// in the given response.
+//
+// Irrelevant answers in the response are discarded.
 TcpLookup parse_response( const Response&
+                        , const std::string& host
                         , const std::string& port
                         , sys::error_code&);
 

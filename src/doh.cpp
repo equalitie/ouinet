@@ -134,6 +134,7 @@ public:
 
 TcpLookup
 parse_response( const Response& rs
+              , const std::string& host
               , const std::string& port
               , sys::error_code& ec)
 {
