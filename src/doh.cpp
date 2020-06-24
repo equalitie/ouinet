@@ -1,6 +1,7 @@
 #include "doh.h"
 
 #include <sstream>
+#include <vector>
 
 #include <boost/utility/string_view.hpp>
 #include <dnsparser.h>
@@ -119,8 +120,15 @@ build_request( const std::string& name
     return rq;
 }
 
+using EndpointVector = std::vector<TcpLookup::endpoint_type>;
+
+// Appends endpoints to the given vector on answers for the given host.
 class Listener : public DnsParserListener {
 public:
+    Listener(const std::string& host, EndpointVector& epv)
+        : _host(host), _epv(epv)
+    {}
+
     // TODO: implement
 
     void onDnsRec(in_addr addr, std::string name, std::string) override
@@ -130,6 +138,10 @@ public:
     void onDnsRec(in6_addr addr, std::string name, std::string) override
     {
     }
+
+private:
+    const std::string& _host;
+    EndpointVector& _epv;
 };
 
 TcpLookup
@@ -138,8 +150,8 @@ parse_response( const Response& rs
               , const std::string& port
               , sys::error_code& ec)
 {
-    // TODO: implement
-    Listener dnsl;
+    EndpointVector epv;
+    Listener dnsl(host, epv);
     std::unique_ptr<DnsParser> dnsp(DnsParserNew(&dnsl, false, true));  // no paths, no CNAMEs
 
     // TODO: implement
