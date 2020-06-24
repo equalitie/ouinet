@@ -3,6 +3,8 @@
 #include <sstream>
 #include <vector>
 
+#include <boost/beast/http/field.hpp>
+#include <boost/beast/http/status.hpp>
 #include <boost/utility/string_view.hpp>
 #include <dnsparser.h>
 
@@ -150,6 +152,12 @@ parse_response( const Response& rs
               , const std::string& port
               , sys::error_code& ec)
 {
+    if ( rs.result() != http::status::ok
+       || rs[http::field::content_type] != "application/dns-message") {  // RFC8484#5.1
+        ec = asio::error::invalid_argument;
+        return {};
+    }
+
     EndpointVector epv;
     Listener dnsl(host, epv);
     std::unique_ptr<DnsParser> dnsp(DnsParserNew(&dnsl, false, true));  // no paths, no CNAMEs
