@@ -634,13 +634,13 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
 template<class RsBody>
 static
 http::response<RsBody>
-slurp_response( Session& session, size_t max_body_size
+slurp_response( http_response::AbstractReader& reader, size_t max_body_size
               , Cancel cancel, asio::yield_context yield)
 {
     sys::error_code ec;
     http::response<RsBody> rs;
 
-    auto part = session.async_read_part(cancel, yield[ec]);
+    auto part = reader.async_read_part(cancel, yield[ec]);
     return_or_throw_on_error(yield, cancel, ec, move(rs));
 
     if (!part) ec = asio::error::broken_pipe;
@@ -651,7 +651,7 @@ slurp_response( Session& session, size_t max_body_size
     typename RsBody::reader rsr(rs, rs.body());
     size_t body_size = 0;
     while (true) {
-        part = session.async_read_part(cancel, yield[ec]);
+        part = reader.async_read_part(cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec, move(rs));
 
         if (!part) break;  // end of transfer
