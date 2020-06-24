@@ -647,6 +647,7 @@ Client::State::resolve_tcp_doh( const std::string& host
     auto s = fetch_via_self(move(*rq_o), meta, cancel, yield[ec].tag("fetch"));
     return_or_throw_on_error(yield, cancel, ec, TcpLookup());
 
+    // TODO: Handle redirects.
     auto rs = http_response::slurp_response<doh::Response::body_type>
         (s, doh::payload_size, cancel, yield[ec].tag("slurp"));
     return_or_throw_on_error(yield, cancel, ec, TcpLookup());
