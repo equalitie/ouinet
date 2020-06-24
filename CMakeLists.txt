@@ -141,6 +141,7 @@ target_link_libraries(client
         Boost::iostreams
         lib::asio_utp
         cpp_upnp
+        lib::zdnsparser
         lib::gcrypt
         lib::json
         lib::uri
