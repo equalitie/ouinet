@@ -3,6 +3,7 @@
 #include <sstream>
 
 #include <boost/utility/string_view.hpp>
+#include <dnsparser.h>
 
 #include "split_string.h"
 #include "util.h"
@@ -118,11 +119,28 @@ build_request( const std::string& name
     return rq;
 }
 
+class Listener : public DnsParserListener {
+public:
+    // TODO: implement
+
+    void onDnsRec(in_addr addr, std::string name, std::string) override
+    {
+    }
+
+    void onDnsRec(in6_addr addr, std::string name, std::string) override
+    {
+    }
+};
+
 TcpLookup
 parse_response( const Response& rs
               , const std::string& port
               , sys::error_code& ec)
 {
+    // TODO: implement
+    Listener dnsl;
+    std::unique_ptr<DnsParser> dnsp(DnsParserNew(&dnsl, false, true));  // no paths, no CNAMEs
+
     // TODO: implement
     ec = asio::error::operation_not_supported;
     return TcpLookup{};
