@@ -641,18 +641,18 @@ slurp_response( http_response::AbstractReader& reader, size_t max_body_size
     http::response<RsBody> rs;
 
     auto part = reader.async_read_part(cancel, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec, move(rs));
+    return_or_throw_on_error(yield, cancel, ec, std::move(rs));
 
     if (!part) ec = asio::error::broken_pipe;
     else if (!part->is_head()) ec = asio::error::invalid_argument;
-    if (ec) return or_throw(yield, ec, move(rs));
+    if (ec) return or_throw(yield, ec, std::move(rs));
     rs.base() = *(part->as_head());
 
     typename RsBody::reader rsr(rs, rs.body());
     size_t body_size = 0;
     while (true) {
         part = reader.async_read_part(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, move(rs));
+        return_or_throw_on_error(yield, cancel, ec, std::move(rs));
 
         if (!part) break;  // end of transfer
         if (part->is_trailer()) break;  // end of response
@@ -666,14 +666,14 @@ slurp_response( http_response::AbstractReader& reader, size_t max_body_size
         body_size += data->size();
         if (body_size > max_body_size) continue;  // ignore extra data
         rsr.put(asio::buffer(*data), ec);
-        if (ec) return or_throw(yield, ec, move(rs));
+        if (ec) return or_throw(yield, ec, std::move(rs));
     }
 
     if (body_size > max_body_size)
         ec = asio::error::message_size;
 
     if (!ec) rs.prepare_payload();
-    return or_throw(yield, ec, move(rs));
+    return or_throw(yield, ec, std::move(rs));
 }
 
 TcpLookup
