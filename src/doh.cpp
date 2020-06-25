@@ -131,8 +131,9 @@ using EndpointVector = std::vector<TcpLookup::endpoint_type>;
 // Appends endpoints to the given vector on answers for the given host.
 class Listener : public DnsParserListener {
 public:
-    Listener(const std::string& host, EndpointVector& epv)
-        : _host(host), _epv(epv)
+    Listener( const std::string& host, unsigned short port
+            , EndpointVector& epv)
+        : _host(host), _port(port), _epv(epv)
     {}
 
     // TODO: implement
@@ -147,6 +148,7 @@ public:
 
 private:
     const std::string& _host;
+    unsigned short _port;
     EndpointVector& _epv;
 };
 
@@ -164,7 +166,7 @@ parse_response( const Response& rs
 
     EndpointVector epv;
     try {
-        Listener dnsl(host, epv);
+        Listener dnsl(host, port, epv);
         std::unique_ptr<DnsParser> dnsp(DnsParserNew(&dnsl, false, true));  // no paths, no CNAMEs
         assert(dnsp);
         auto body = rs.body();  // yeah, who needs const? :(
