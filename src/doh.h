@@ -47,6 +47,10 @@ boost::optional<Request> build_request( const std::string& name
 // in the given response.
 //
 // Irrelevant answers in the response are discarded.
+//
+// TODO: Passing the port in and getting a lookup
+// makes for a weird interface,
+// we may drop the port and just return a list of IP addresses.
 TcpLookup parse_response( const Response&
                         , const std::string& host
                         , unsigned short port
