@@ -6,6 +6,7 @@ set(ZDNSPARSER_FILENAME
 
 set(PATCHES
     ${CMAKE_CURRENT_LIST_DIR}/zdnsparser/disable-tests.patch
+    ${CMAKE_CURRENT_LIST_DIR}/zdnsparser/virtual-destructors.patch
 )
 
 set(PATCH_COMMAND
