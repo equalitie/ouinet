@@ -1,5 +1,6 @@
 #include "doh.h"
 
+#include <cstring>
 #include <sstream>
 #include <vector>
 
@@ -136,14 +137,19 @@ public:
         : _host(host), _port(port), _epv(epv)
     {}
 
-    // TODO: implement
-
     void onDnsRec(in_addr addr, std::string name, std::string) override
     {
+        if (name != _host) return;  // unrelated answer, ignore
+        _epv.push_back({asio::ip::make_address_v4(addr.s_addr), _port});
     }
 
     void onDnsRec(in6_addr addr, std::string name, std::string) override
     {
+        if (name != _host) return;  // unrelated answer, ignore
+        asio::ip::address_v6::bytes_type addrb;
+        static_assert(addrb.size() == sizeof(addr.s6_addr));
+        std::memcpy(addrb.data(), addr.s6_addr, addrb.size());
+        _epv.push_back({asio::ip::make_address_v6(addrb), _port});
     }
 
 private:
