@@ -656,7 +656,8 @@ Client::State::resolve_tcp_doh( const std::string& host
         (s, doh::payload_size, cancel, yield[ec].tag("slurp"));
     return_or_throw_on_error(yield, cancel, ec, TcpLookup());
 
-    return doh::parse_response(rs, host, *portn_o, ec);
+    auto lookup = doh::parse_response(rs, host, *portn_o, ec);
+    return or_throw(yield, ec, move(lookup));
 }
 
 TcpLookup
