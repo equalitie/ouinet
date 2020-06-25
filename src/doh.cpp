@@ -13,6 +13,8 @@
 
 namespace ouinet { namespace doh {
 
+static const std::string doh_content_type = "application/dns-message";
+
 boost::optional<Endpoint>
 endpoint_from_base(const std::string& base)
 {
@@ -120,7 +122,7 @@ build_request( const std::string& name
     // RFC8484#4.1
     Request rq{http::verb::get, target, 11 /* HTTP/1.1 */};
     rq.set(http::field::host, ep_host);
-    rq.set(http::field::accept, "application/dns-message");
+    rq.set(http::field::accept, doh_content_type);
     return rq;
 }
 
@@ -155,7 +157,7 @@ parse_response( const Response& rs
               , sys::error_code& ec)
 {
     if ( rs.result() != http::status::ok
-       || rs[http::field::content_type] != "application/dns-message") {  // RFC8484#5.1
+       || rs[http::field::content_type] != doh_content_type) {  // RFC8484#5.1
         ec = asio::error::invalid_argument;
         return {};
     }
