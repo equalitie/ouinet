@@ -636,6 +636,10 @@ Client::State::resolve_tcp_doh( const std::string& host
                               , Cancel& cancel
                               , Yield yield)
 {
+    boost::string_view portsv(port);
+    auto portn_o = parse::number<unsigned short>(portsv);
+    if (!portn_o) return or_throw<TcpLookup>(yield, asio::error::invalid_argument);
+
     auto rq_o = doh::build_request(host, ep);
     if (!rq_o) return or_throw<TcpLookup>(yield, asio::error::invalid_argument);
 
@@ -652,7 +656,7 @@ Client::State::resolve_tcp_doh( const std::string& host
         (s, doh::payload_size, cancel, yield[ec].tag("slurp"));
     return_or_throw_on_error(yield, cancel, ec, TcpLookup());
 
-    return doh::parse_response(rs, host, port, ec);
+    return doh::parse_response(rs, host, *portn_o, ec);
 }
 
 TcpLookup

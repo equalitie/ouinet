@@ -49,7 +49,7 @@ boost::optional<Request> build_request( const std::string& name
 // Irrelevant answers in the response are discarded.
 TcpLookup parse_response( const Response&
                         , const std::string& host
-                        , const std::string& port
+                        , unsigned short port
                         , sys::error_code&);
 
 }} // ouinet::doh namespace

@@ -153,7 +153,7 @@ private:
 TcpLookup
 parse_response( const Response& rs
               , const std::string& host
-              , const std::string& port
+              , unsigned short port
               , sys::error_code& ec)
 {
     if ( rs.result() != http::status::ok
@@ -178,7 +178,9 @@ parse_response( const Response& rs
     if (!ec && epv.empty()) ec = asio::error::host_not_found_try_again;
 
     if (ec) return {};
-    return TcpLookup::create(epv.begin(), epv.end(), host, port);
+
+    auto port_s = std::to_string(port);
+    return TcpLookup::create(epv.begin(), epv.end(), host, port_s);
 }
 
 }} // ouinet::doh namespace
