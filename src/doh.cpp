@@ -163,12 +163,22 @@ parse_response( const Response& rs
     }
 
     EndpointVector epv;
-    Listener dnsl(host, epv);
-    std::unique_ptr<DnsParser> dnsp(DnsParserNew(&dnsl, false, true));  // no paths, no CNAMEs
+    try {
+        Listener dnsl(host, epv);
+        std::unique_ptr<DnsParser> dnsp(DnsParserNew(&dnsl, false, true));  // no paths, no CNAMEs
+        assert(dnsp);
+        auto body = rs.body();  // yeah, who needs const? :(
+        if (dnsp->parse(body.data(), body.size()) == -1)
+            ec = asio::error::invalid_argument;
+    } catch (const std::exception&) {
+        ec = asio::error::no_memory;
+    }
 
-    // TODO: implement
-    ec = asio::error::operation_not_supported;
-    return TcpLookup{};
+    // Assume that the DoH server is not authoritative.
+    if (!ec && epv.empty()) ec = asio::error::host_not_found_try_again;
+
+    if (ec) return {};
+    return TcpLookup::create(epv.begin(), epv.end(), host, port);
 }
 
 }} // ouinet::doh namespace
