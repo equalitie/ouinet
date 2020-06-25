@@ -117,8 +117,10 @@ build_request( const std::string& name
     ep_host.remove_suffix(ep.size() - ep_hend);
     ep_host.remove_prefix(ep_hstart);
 
+    // RFC8484#4.1
     Request rq{http::verb::get, target, 11 /* HTTP/1.1 */};
     rq.set(http::field::host, ep_host);
+    rq.set(http::field::accept, "application/dns-message");
     return rq;
 }
 
