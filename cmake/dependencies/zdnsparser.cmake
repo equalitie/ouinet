@@ -4,10 +4,16 @@ set(ZDNSPARSER_FILENAME
     "${CMAKE_CURRENT_BINARY_DIR}/zdnsparser/src/zdnsparser-build/lib/${CMAKE_STATIC_LIBRARY_PREFIX}zdnsparser${CMAKE_STATIC_LIBRARY_SUFFIX}"
 )
 
-# Tests depend on libpcap, disable them.
-set(PATCH_COMMAND
-    sed -i "/^add_subdirectory(test)/d" ${CMAKE_CURRENT_BINARY_DIR}/zdnsparser/src/zdnsparser/CMakeLists.txt
+set(PATCHES
+    ${CMAKE_CURRENT_LIST_DIR}/zdnsparser/disable-tests.patch
 )
+
+set(PATCH_COMMAND
+    cd ${CMAKE_CURRENT_BINARY_DIR}/zdnsparser/src/zdnsparser
+)
+foreach (patch ${PATCHES})
+    set(PATCH_COMMAND ${PATCH_COMMAND} && patch -p1 -i ${patch})
+endforeach()
 
 externalproject_add(zdnsparser
     GIT_REPOSITORY https://github.com/packetzero/dnsparser
