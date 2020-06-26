@@ -140,7 +140,7 @@ public:
     void onDnsRec(in_addr addr, std::string name, std::string) override
     {
         if (name != _host) return;  // unrelated answer, ignore
-        _epv.push_back({asio::ip::make_address_v4(addr.s_addr), _port});
+        _epv.push_back({asio::ip::make_address_v4(::ntohl(addr.s_addr)), _port});
     }
 
     void onDnsRec(in6_addr addr, std::string name, std::string) override
