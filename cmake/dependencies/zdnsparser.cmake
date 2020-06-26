@@ -17,8 +17,14 @@ foreach (patch ${PATCHES})
 endforeach()
 
 externalproject_add(zdnsparser
-    GIT_REPOSITORY https://github.com/packetzero/dnsparser
-    GIT_TAG 5ad991cd40dde95a3289e56fd7f65543f1967c67
+    # This is the official repo for zdnsparser,
+    # but please see <https://github.com/packetzero/dnsparser/pull/3>.
+    # Some DoH servers use the mentioned answer format.
+    #GIT_REPOSITORY https://github.com/packetzero/dnsparser
+    #GIT_TAG 5ad991cd40dde95a3289e56fd7f65543f1967c67
+    # In the meanwhile, this branch fixes the issue.
+    GIT_REPOSITORY https://github.com/connectiblutz/dnsparser
+    GIT_TAG 7dea48af30306cf00f7cc70b91d5ab1022313d46
     PATCH_COMMAND "${PATCH_COMMAND}"
     UPDATE_COMMAND ""
     INSTALL_COMMAND ""
