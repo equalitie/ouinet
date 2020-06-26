@@ -14,6 +14,7 @@
 #include <boost/range/adaptor/filtered.hpp>
 #include <boost/range/adaptor/transformed.hpp>
 #include <boost/range/adaptor/indexed.hpp>
+#include <boost/regex.hpp>
 #include <iostream>
 #include <cstdlib>  // for atexit()
 
@@ -88,6 +89,9 @@ using Response = http::response<http::dynamic_body>;
 static const fs::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
 static const fs::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
 static const fs::path OUINET_CA_DH_FILE = "ssl-ca-dh.pem";
+
+// Flags for normal, case-insensitive regular expression.
+static const auto rx_icase = boost::regex::normal | boost::regex::icase;
 
 static bool log_transactions() {
     return logger.get_threshold() <= DEBUG
@@ -1778,7 +1782,8 @@ void Client::State::serve_request( GenericStream&& con
         Match( reqexpr::from_regex(method_getter, "HEAD")
              , nocache_request_config),
 
-        Match( reqexpr::from_regex(x_private_getter, "True")
+        Match( reqexpr::from_regex( x_private_getter
+                                  , boost::regex(http_::request_private_true, rx_icase))
              , nocache_request_config),
 
         // Disable cache and always go to proxy for this site.

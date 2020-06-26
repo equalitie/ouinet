@@ -21,7 +21,7 @@ static const std::string request_group_hdr = header_prefix + "Group";
 // instructs the client to avoid request mechanisms that
 // would reveal the request or the associated response to other users.
 static const std::string request_private_hdr = header_prefix + "Private";
-static const std::string request_private_true = "true";
+static const std::string request_private_true = "true";  // case insensitive
 
 }
 
