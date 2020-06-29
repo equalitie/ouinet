@@ -175,8 +175,12 @@ parse_response( const Response& rs
         Listener dnsl(host, port, epv);
         std::unique_ptr<DnsParser> dnsp(DnsParserNew(&dnsl, false, true));  // no paths, no CNAMEs
         assert(dnsp);
-        auto body = rs.body();  // yeah, who needs const? :(
-        if (dnsp->parse(body.data(), body.size()) == -1)
+        // The DNS parser not specifying pointer-to-const arguments
+        // forces us to copy the body, plus C++17 support in some versions of GCC
+        // does not implement the non-const `std::string::data()`.
+        //if (dnsp->parse(rs.body().data(), rs.body().size()) == -1)
+        auto body = rs.body();
+        if (dnsp->parse(&body.front(), body.size()) == -1)
             ec = asio::error::invalid_argument;
     } catch (const std::exception&) {
         ec = asio::error::no_memory;
