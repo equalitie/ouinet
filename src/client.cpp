@@ -619,7 +619,7 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
     // Send request
     http::async_write(con, request, yield[ec].tag("self-request"));
 
-    if (!ec && cancel_slot) {
+    if (cancel_slot) {
         ec = asio::error::operation_aborted;
     }
 
