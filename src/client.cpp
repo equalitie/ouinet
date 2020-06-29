@@ -709,6 +709,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
                         , default_timeout::fetch_http()
                         , cancel
                         , yield[ec].tag("connreq"));
+    return_or_throw_on_error(yield, cancel, ec, Session());
 
     if (connres.result() != http::status::ok) {
         // This error code is quite fake, so log the error too.
