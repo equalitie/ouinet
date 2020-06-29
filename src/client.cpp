@@ -956,7 +956,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
     // Send request
     http::async_write(con, request, yield[ec].tag("inj-request"));
 
-    if (!ec && cancel_slot) {
+    if (cancel_slot) {
         ec = asio::error::operation_aborted;
     }
 
