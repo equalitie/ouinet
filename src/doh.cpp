@@ -43,7 +43,15 @@ dns_query(const std::string& name)
         "\x00\x01"  // 1 question record
         "\x00\x00"  // 0 answer records
         "\x00\x00"  // 0 name server records
+
+#ifdef FIREFOX_DOH
+        // Firefox appends an EDNS RR.
         "\x00\x01"  // 1 additional record (EDNS)
+#else
+        // We keep the query minimal to increase the chances of sharing.
+        "\x00\x00"  // 0 additional records
+#endif
+
         ""s
     };
     static const std::string dq_suffix = {
@@ -51,13 +59,12 @@ dns_query(const std::string& name)
         // (queried name comes here)
         "\x00\x01"  // A (IPv4) type  // TODO: IPv6? (28)
         "\x00\x01"  // IN (Internet) class
+
+#ifdef FIREFOX_DOH
         // EDNS (RFC6891#6.1.2)
         // All stuff from here on seems to explicitly tell the server that
         // no source address bits are relevant for choosing
         // between different possible answers.
-        // TODO: Consider dropping options entirely to minimize query string
-        // and thus increase chances of sharing resulting DoH URL with others
-        // (set additional records to 0 above if so).
         "\x00"      // root domain
         "\x00\x29"  // OPT (41)
         "\x10\x00"  // 4K payload size, i.e. the value of `payload_size`
@@ -72,6 +79,8 @@ dns_query(const std::string& name)
         "\x00\x01"  // family 1 (IPv4)  // TODO: IPv6? (2)
         "\x00"      // source prefix length
         "\x00"      // scope prefix-length, zero in queries
+#endif
+
         ""s
     };
 
