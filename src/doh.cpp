@@ -9,6 +9,7 @@
 #include <boost/utility/string_view.hpp>
 #include <dnsparser.h>
 
+#include "logger.h"
 #include "split_string.h"
 #include "util.h"
 
@@ -149,7 +150,9 @@ public:
     void onDnsRec(in_addr addr, std::string name, std::string) override
     {
         if (name != _host) return;  // unrelated answer, ignore
-        _epv.push_back({asio::ip::make_address_v4(::ntohl(addr.s_addr)), _port});
+        auto ip4addr = asio::ip::make_address_v4(::ntohl(addr.s_addr));
+        LOG_DEBUG("DoH: ", name, " -> ", ip4addr);
+        _epv.push_back({std::move(ip4addr), _port});
     }
 
     void onDnsRec(in6_addr addr, std::string name, std::string) override
@@ -158,7 +161,9 @@ public:
         asio::ip::address_v6::bytes_type addrb;
         static_assert(addrb.size() == sizeof(addr.s6_addr));
         std::memcpy(addrb.data(), addr.s6_addr, addrb.size());
-        _epv.push_back({asio::ip::make_address_v6(addrb), _port});
+        auto ip6addr = asio::ip::make_address_v6(addrb);
+        LOG_DEBUG("DoH: ", name, " -> ", ip6addr);
+        _epv.push_back({std::move(ip6addr), _port});
     }
 
 private:
