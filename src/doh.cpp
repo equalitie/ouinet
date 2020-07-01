@@ -23,6 +23,8 @@ endpoint_from_base(const std::string& base)
     util::url_match um;
     if (!util::match_http_url(base, um) || !um.fragment.empty())
         return boost::none;
+    if (um.query.find("dns=") == 0 || um.query.find("&dns=") != std::string::npos)
+        return boost::none;
     um.query += um.query.empty() ? "dns=" : "&dns=";
     return um.reassemble();
 }
