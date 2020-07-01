@@ -80,9 +80,11 @@ auto with_timeout( const asio::executor& ex
 
     auto ret = f(timeout.abort_signal(), yield[ec]);
 
-    if (ec == asio::error::operation_aborted && timeout.timed_out()) {
+    if (!abort_signal && ec == asio::error::operation_aborted && timeout.timed_out()) {
         ec = asio::error::timed_out;
     }
+    // If `abort_signal` itself was triggered,
+    // keep the error from `f` (probably `asio::error::operation_aborted`).
 
     return or_throw(yield, ec, std::move(ret));
 }
