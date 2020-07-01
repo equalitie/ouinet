@@ -705,7 +705,7 @@ Client::State::connect_to_origin( const Request& rq
         : resolve_tcp_dns(host, port, cancel, yield[ec].tag("resolve_dns"));
     if (log_transactions())
         yield.log( do_doh ? "DoH name resolution: " : "DNS name resolution: "
-                 , host, " ec:", ec.message());
+                 , host, " naddrs=", lookup.size(), " ec:", ec.message());
     return_or_throw_on_error(yield, cancel, ec, GenericStream());
 
     auto sock = connect_to_host(lookup, _ctx.get_executor(), cancel, yield[ec]);
