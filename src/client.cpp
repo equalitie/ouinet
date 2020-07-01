@@ -644,6 +644,18 @@ Client::State::resolve_tcp_doh( const std::string& host
     auto portn_o = parse::number<unsigned short>(portsv);
     if (!portn_o) return or_throw<TcpLookup>(yield, asio::error::invalid_argument);
 
+    // Build and return lookup if `host` is already a network address.
+    {
+        sys::error_code e;
+        auto addr = asio::ip::make_address_v4(host, e);
+        if (!e) return TcpLookup::create(TcpLookup::endpoint_type{move(addr), *portn_o}, host, port);
+    }
+    {
+        sys::error_code e;
+        auto addr = asio::ip::make_address_v6(host, e);
+        if (!e) return TcpLookup::create(TcpLookup::endpoint_type{move(addr), *portn_o}, host, port);
+    }
+
     auto rq_o = doh::build_request(host, ep);
     if (!rq_o) return or_throw<TcpLookup>(yield, asio::error::invalid_argument);
 
