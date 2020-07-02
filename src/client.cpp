@@ -686,7 +686,7 @@ Client::State::resolve_tcp_doh( const std::string& host
         if (!e) return TcpLookup::create(TcpLookup::endpoint_type{move(addr), *portn_o}, host, port);
     }
 
-    auto rq_o = doh::build_request(host, ep);
+    auto rq_o = doh::build_request_ipv4(host, ep);  // TODO: IPv6
     if (!rq_o) return or_throw<TcpLookup>(yield, asio::error::invalid_argument);
 
     sys::error_code ec;

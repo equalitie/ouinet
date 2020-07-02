@@ -109,8 +109,8 @@ dns_query(const std::string& name)
 }
 
 boost::optional<Request>
-build_request( const std::string& name
-             , const Endpoint& ep)
+build_request_ipv4( const std::string& name
+                  , const Endpoint& ep)
 {
     auto dq_o = dns_query(name);
     if (!dq_o) return boost::none;

@@ -37,12 +37,12 @@ using Endpoint = std::string;
 // Return none if the base URL is invalid.
 boost::optional<Endpoint> endpoint_from_base(const std::string&);
 
-// Return a DoH request for the given `name`
+// Return a DoH request for IPv4 (type A) addresses of the given `name`,
 // to be sent to the given DoH `endpoint`.
 //
 // Return none if the name is invalid.
-boost::optional<Request> build_request( const std::string& name
-                                      , const Endpoint&);
+boost::optional<Request> build_request_ipv4( const std::string& name
+                                           , const Endpoint&);
 
 // Return the addresses in the answers for the given host
 // in the given response.
