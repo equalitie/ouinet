@@ -732,14 +732,23 @@ Client::State::resolve_tcp_doh( const std::string& host
     }));
 
     wc.wait(yield.tag("wait"));
-    // TODO: Consider IPv6 answers too.
-    if (ec4) return or_throw<TcpLookup>(yield, ec4);
 
-    sys::error_code ec;
-    auto answers = doh::parse_response(rs4, host, ec);
-    if (ec) return or_throw<TcpLookup>(yield, ec);
+    if (log_transactions())
+        yield.log("DoH query ip4_ec:", ec4.message(), " ip6_ec:", ec6.message());
+    if (ec4 && ec6) return or_throw<TcpLookup>(yield, ec4 /* arbitrary */);
 
-    AddrsAsEndpoints eps{answers, *portn_o};
+    doh::Answers answers4, answers6;
+    if (!ec4) answers4 = doh::parse_response(rs4, host, ec4);
+    if (!ec6) answers6 = doh::parse_response(rs6, host, ec6);
+
+    if (log_transactions())
+        yield.log("DoH parse ip4_ec:", ec4.message(), " ip6_ec:", ec6.message());
+    if (ec4 && ec6) return or_throw<TcpLookup>(yield, ec4 /* arbitrary */);
+
+    answers4.insert( answers4.end()
+                   , std::make_move_iterator(answers6.begin())
+                   , std::make_move_iterator(answers6.end()));
+    AddrsAsEndpoints eps{answers4, *portn_o};
     return TcpLookup::create(eps.begin(), eps.end(), host, port);
 }
 
