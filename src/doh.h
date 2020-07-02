@@ -44,6 +44,10 @@ boost::optional<Endpoint> endpoint_from_base(const std::string&);
 boost::optional<Request> build_request_ipv4( const std::string& name
                                            , const Endpoint&);
 
+// Same as above, for IPv6 (type AAAA) addresses.
+boost::optional<Request> build_request_ipv6( const std::string& name
+                                           , const Endpoint&);
+
 // Return the addresses in the answers for the given host
 // in the given response.
 //

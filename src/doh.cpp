@@ -123,10 +123,11 @@ dns_query(const std::string& name, bool ipv6)
 }
 
 boost::optional<Request>
-build_request_ipv4( const std::string& name
-                  , const Endpoint& ep)
+build_request( const std::string& name
+             , const Endpoint& ep
+             , bool ipv6)
 {
-    auto dq_o = dns_query(name, false);
+    auto dq_o = dns_query(name, ipv6);
     if (!dq_o) return boost::none;
 
     // DoH uses unpadded base64url as defined in RFC4648#5 (RFC8484#6).
@@ -217,6 +218,20 @@ parse_response( const Response& rs
 
     if (ec) return {};
     return answers;
+}
+
+boost::optional<Request>
+build_request_ipv4( const std::string& name
+                  , const Endpoint& ep)
+{
+    return build_request(name, ep, false);
+}
+
+boost::optional<Request>
+build_request_ipv6( const std::string& name
+                  , const Endpoint& ep)
+{
+    return build_request(name, ep, true);
 }
 
 }} // ouinet::doh namespace
