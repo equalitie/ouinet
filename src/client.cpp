@@ -633,11 +633,11 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
     return Session::create(move(con), cancel, yield);
 }
 
-// Transforms addresses to TCP endpoints with the given port.
-template<class Addrs>
+// Transforms addresses to endpoints with the given port.
+template<class Addrs, class Endpoint>
 class AddrsAsEndpoints {
 public:
-    using value_type = TcpLookup::endpoint_type;
+    using value_type = Endpoint;
     using addrs_iterator = typename Addrs::const_iterator;
 
     AddrsAsEndpoints(const Addrs& addrs, unsigned short port)
@@ -735,7 +735,7 @@ Client::State::resolve_tcp_doh( const std::string& host
     answers4.insert( answers4.end()
                    , std::make_move_iterator(answers6.begin())
                    , std::make_move_iterator(answers6.end()));
-    AddrsAsEndpoints<doh::Answers> eps{answers4, *portn_o};
+    AddrsAsEndpoints<doh::Answers, TcpLookup::endpoint_type> eps{answers4, *portn_o};
     return TcpLookup::create(eps.begin(), eps.end(), host, port);
 }
 
