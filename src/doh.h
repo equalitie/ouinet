@@ -5,8 +5,9 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
-#include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/ip/address.hpp>
 #include <boost/beast/http/message.hpp>
 #include <boost/beast/http/empty_body.hpp>
 #include <boost/beast/http/string_body.hpp>
@@ -26,7 +27,7 @@ using Request = http::request<http::empty_body>;
 
 using Response = http::response<http::string_body>;
 
-using TcpLookup = asio::ip::tcp::resolver::results_type;
+using Answers = std::vector<asio::ip::address>;
 
 using Endpoint = std::string;
 
@@ -43,17 +44,12 @@ boost::optional<Endpoint> endpoint_from_base(const std::string&);
 boost::optional<Request> build_request( const std::string& name
                                       , const Endpoint&);
 
-// Return a lookup result with the answers for the given host
+// Return the addresses in the answers for the given host
 // in the given response.
 //
 // Irrelevant answers in the response are discarded.
-//
-// TODO: Passing the port in and getting a lookup
-// makes for a weird interface,
-// we may drop the port and just return a list of IP addresses.
-TcpLookup parse_response( const Response&
-                        , const std::string& host
-                        , unsigned short port
-                        , sys::error_code&);
+Answers parse_response( const Response&
+                      , const std::string& host
+                      , sys::error_code&);
 
 }} // ouinet::doh namespace

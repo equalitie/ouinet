@@ -139,14 +139,12 @@ build_request( const std::string& name
     return rq;
 }
 
-using EndpointVector = std::vector<TcpLookup::endpoint_type>;
-
-// Appends endpoints to the given vector on answers for the given host.
+// Appends addresses to the given vector on answers for the given host.
 class Listener : public DnsParserListener {
 public:
-    Listener( const std::string& host, unsigned short port
-            , EndpointVector& epv)
-        : _host(host), _port(port), _epv(epv)
+    Listener( const std::string& host
+            , Answers& answers)
+        : _host(host), _answers(answers)
     {}
 
     void onDnsRec(in_addr addr, std::string name, std::string) override
@@ -154,7 +152,7 @@ public:
         if (name != _host) return;  // unrelated answer, ignore
         auto ip4addr = asio::ip::make_address_v4(::ntohl(addr.s_addr));
         LOG_DEBUG("DoH: ", name, " -> ", ip4addr);
-        _epv.push_back({std::move(ip4addr), _port});
+        _answers.push_back(std::move(ip4addr));
     }
 
     void onDnsRec(in6_addr addr, std::string name, std::string) override
@@ -165,19 +163,17 @@ public:
         std::memcpy(addrb.data(), addr.s6_addr, addrb.size());
         auto ip6addr = asio::ip::make_address_v6(addrb);
         LOG_DEBUG("DoH: ", name, " -> ", ip6addr);
-        _epv.push_back({std::move(ip6addr), _port});
+        _answers.push_back(std::move(ip6addr));
     }
 
 private:
     const std::string& _host;
-    unsigned short _port;
-    EndpointVector& _epv;
+    Answers& _answers;
 };
 
-TcpLookup
+Answers
 parse_response( const Response& rs
               , const std::string& host
-              , unsigned short port
               , sys::error_code& ec)
 {
     if ( rs.result() != http::status::ok
@@ -186,9 +182,9 @@ parse_response( const Response& rs
         return {};
     }
 
-    EndpointVector epv;
+    Answers answers;
     try {
-        Listener dnsl(host, port, epv);
+        Listener dnsl(host, answers);
         std::unique_ptr<DnsParser> dnsp(DnsParserNew(&dnsl, false, true));  // no paths, no CNAMEs
         assert(dnsp);
         // The DNS parser not specifying pointer-to-const arguments
@@ -203,12 +199,10 @@ parse_response( const Response& rs
     }
 
     // Assume that the DoH server is not authoritative.
-    if (!ec && epv.empty()) ec = asio::error::host_not_found_try_again;
+    if (!ec && answers.empty()) ec = asio::error::host_not_found_try_again;
 
     if (ec) return {};
-
-    auto port_s = std::to_string(port);
-    return TcpLookup::create(epv.begin(), epv.end(), host, port_s);
+    return answers;
 }
 
 }} // ouinet::doh namespace

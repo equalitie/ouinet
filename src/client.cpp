@@ -15,6 +15,7 @@
 #include <boost/range/adaptor/transformed.hpp>
 #include <boost/range/adaptor/indexed.hpp>
 #include <boost/regex.hpp>
+#include <iterator>
 #include <iostream>
 #include <cstdlib>  // for atexit()
 
@@ -632,6 +633,40 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
     return Session::create(move(con), cancel, yield);
 }
 
+// Transforms addresses to TCP endpoints with the given port.
+template<class Addrs>
+class AddrsAsEndpoints {
+public:
+    using value_type = TcpLookup::endpoint_type;
+    using addrs_iterator = typename Addrs::const_iterator;
+
+    AddrsAsEndpoints(const Addrs& addrs, unsigned short port)
+        : _addrs(addrs), _port(port)
+    {}
+
+    class const_iterator : public std::iterator<std::input_iterator_tag, value_type> {
+    public:
+        const_iterator(const addrs_iterator& it, unsigned short port)
+            : _it(it), _port(port)
+        {}
+
+        value_type operator*() const { return {*_it, _port}; }
+        const_iterator& operator++() { ++_it; return *this; }
+        bool operator==(const_iterator other) const { return _it == other._it; }
+        bool operator!=(const_iterator other) const { return _it != other._it; }
+    private:
+        addrs_iterator _it;
+        unsigned short _port;
+    };
+
+    const_iterator begin() const { return {_addrs.begin(), _port}; };
+    const_iterator end() const { return {_addrs.end(), _port}; };
+
+private:
+    const Addrs& _addrs;
+    unsigned short _port;
+};
+
 TcpLookup
 Client::State::resolve_tcp_doh( const std::string& host
                               , const std::string& port
@@ -667,8 +702,11 @@ Client::State::resolve_tcp_doh( const std::string& host
         (s, doh::payload_size, cancel, yield[ec].tag("slurp"));
     return_or_throw_on_error(yield, cancel, ec, TcpLookup());
 
-    auto lookup = doh::parse_response(rs, host, *portn_o, ec);
-    return or_throw(yield, ec, move(lookup));
+    auto answers = doh::parse_response(rs, host, ec);
+    if (ec) return or_throw<TcpLookup>(yield, ec);
+
+    AddrsAsEndpoints eps{answers, *portn_o};
+    return TcpLookup::create(eps.begin(), eps.end(), host, port);
 }
 
 TcpLookup
