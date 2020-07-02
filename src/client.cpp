@@ -735,7 +735,7 @@ Client::State::resolve_tcp_doh( const std::string& host
     answers4.insert( answers4.end()
                    , std::make_move_iterator(answers6.begin())
                    , std::make_move_iterator(answers6.end()));
-    AddrsAsEndpoints eps{answers4, *portn_o};
+    AddrsAsEndpoints<doh::Answers> eps{answers4, *portn_o};
     return TcpLookup::create(eps.begin(), eps.end(), host, port);
 }
 
