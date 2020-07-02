@@ -686,23 +686,57 @@ Client::State::resolve_tcp_doh( const std::string& host
         if (!e) return TcpLookup::create(TcpLookup::endpoint_type{move(addr), *portn_o}, host, port);
     }
 
-    auto rq_o = doh::build_request_ipv4(host, ep);  // TODO: IPv6
-    if (!rq_o) return or_throw<TcpLookup>(yield, asio::error::invalid_argument);
+    // TODO: When to disable queries for IPv4 or IPv6 addresses?
+    auto rq4_o = doh::build_request_ipv4(host, ep);
+    auto rq6_o = doh::build_request_ipv6(host, ep);
+    if (!rq4_o || !rq6_o) return or_throw<TcpLookup>(yield, asio::error::invalid_argument);
 
-    sys::error_code ec;
+    sys::error_code ec4, ec6;
+    doh::Response rs4, rs6;
+
+    WaitCondition wc(_ctx);
+
     // By passing user agent metadata as is,
     // we ensure that the DoH request is done with the same browsing mode
     // as the content request that triggered it,
     // and is announced under the same group.
-    auto s = fetch_via_self(move(*rq_o), meta, cancel, yield[ec].tag("fetch"));
-    return_or_throw_on_error(yield, cancel, ec, TcpLookup());
-
     // TODO: Handle redirects.
-    auto rs = http_response::slurp_response<doh::Response::body_type>
-        (s, doh::payload_size, cancel, yield[ec].tag("slurp"));
-    return_or_throw_on_error(yield, cancel, ec, TcpLookup());
+    TRACK_SPAWN(_ctx, ([
+        this,
+        rq = move(*rq4_o), &meta, &ec4, &rs4,
+        &cancel, &yield, lock = wc.lock()
+    ] (asio::yield_context y_) {
+        sys::error_code ec;
+        auto y = yield.detach(y_);
+        auto s = fetch_via_self(move(rq), meta, cancel, y[ec].tag("fetch4"));
+        if (ec) { ec4 = ec; return; }
 
-    auto answers = doh::parse_response(rs, host, ec);
+        rs4 = http_response::slurp_response<doh::Response::body_type>
+            (s, doh::payload_size, cancel, y[ec].tag("slurp4"));
+        if (ec) { ec4 = ec; return; }
+    }));
+
+    TRACK_SPAWN(_ctx, ([
+        this,
+        rq = move(*rq6_o), &meta, &ec6, &rs6,
+        &cancel, &yield, lock = wc.lock()
+    ] (asio::yield_context y_) {
+        sys::error_code ec;
+        auto y = yield.detach(y_);
+        auto s = fetch_via_self(move(rq), meta, cancel, y[ec].tag("fetch6"));
+        if (ec) { ec6 = ec; return; }
+
+        rs6 = http_response::slurp_response<doh::Response::body_type>
+            (s, doh::payload_size, cancel, y[ec].tag("slurp6"));
+        if (ec) { ec6 = ec; return; }
+    }));
+
+    wc.wait(yield.tag("wait"));
+    // TODO: Consider IPv6 answers too.
+    if (ec4) return or_throw<TcpLookup>(yield, ec4);
+
+    sys::error_code ec;
+    auto answers = doh::parse_response(rs4, host, ec);
     if (ec) return or_throw<TcpLookup>(yield, ec);
 
     AddrsAsEndpoints eps{answers, *portn_o};
