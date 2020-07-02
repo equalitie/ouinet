@@ -6,6 +6,9 @@
 
 #include <boost/beast/http/field.hpp>
 #include <boost/beast/http/status.hpp>
+#ifdef FIREFOX_DOH
+#include <boost/format.hpp>
+#endif
 #include <boost/utility/string_view.hpp>
 #include <dnsparser.h>
 
@@ -31,7 +34,7 @@ endpoint_from_base(const std::string& base)
 
 static
 boost::optional<std::string>
-dns_query(const std::string& name)
+dns_query(const std::string& name, bool ipv6)
 {
     // Use string literals to avoid cutting on first NUL
     // (from <https://stackoverflow.com/a/164274>).
@@ -57,13 +60,21 @@ dns_query(const std::string& name)
 
         ""s
     };
-    static const std::string dq_suffix = {
-        // DNS question
-        // (queried name comes here)
-        "\x00\x01"  // A (IPv4) type  // TODO: IPv6? (28)
+    // DNS question
+    // (queried name comes here)
+    static const std::string dq_suffix4 = {
+        "\x00\x01"  // A (IPv4) type
         "\x00\x01"  // IN (Internet) class
+        ""s
+    };
+    static const std::string dq_suffix6 = {
+        "\x00\x1c"  // AAAA (IPv6) type
+        "\x00\x01"  // IN (Internet) class
+        ""s
+    };
 
 #ifdef FIREFOX_DOH
+    static const std::string dq_suffix_edns_fmt = {
         // EDNS (RFC6891#6.1.2)
         // All stuff from here on seems to explicitly tell the server that
         // no source address bits are relevant for choosing
@@ -79,13 +90,12 @@ dns_query(const std::string& name)
         // Actual EDNS option: client subnet (RFC7871#6)
         "\x00\x08"  // option code 8 (client subnet)
         "\x00\x04"  // option length
-        "\x00\x01"  // family 1 (IPv4)  // TODO: IPv6? (2)
+        "\x00%c"    // family: 1=IPv4, 2=IPv6
         "\x00"      // source prefix length
         "\x00"      // scope prefix-length, zero in queries
-#endif
-
         ""s
     };
+#endif
 
     // 1 (1st label len byte) + len(name) + 1 (root label len byte) <= 255
     // as per RFC1035#3.1.
@@ -103,7 +113,11 @@ dns_query(const std::string& name)
     }
     dq << '\0';
 
-    dq << dq_suffix;
+    dq << (ipv6 ? dq_suffix6 : dq_suffix4);
+#ifdef FIREFOX_DOH
+    static const char af_inet4 = 0x01, af_inet6 = 0x02;
+    dq << (boost::format(dq_suffix_edns_fmt) % (ipv6 ? af_inet6 : af_inet4));
+#endif
 
     return dq.str();
 }
@@ -112,7 +126,7 @@ boost::optional<Request>
 build_request_ipv4( const std::string& name
                   , const Endpoint& ep)
 {
-    auto dq_o = dns_query(name);
+    auto dq_o = dns_query(name, false);
     if (!dq_o) return boost::none;
 
     // DoH uses unpadded base64url as defined in RFC4648#5 (RFC8484#6).
