@@ -701,35 +701,22 @@ Client::State::resolve_tcp_doh( const std::string& host
     // as the content request that triggered it,
     // and is announced under the same group.
     // TODO: Handle redirects.
-    TRACK_SPAWN(_ctx, ([
-        this,
-        rq = move(*rq4_o), &meta, &ec4, &rs4,
-        &cancel, &yield, lock = wc.lock()
-    ] (asio::yield_context y_) {
-        sys::error_code ec;
-        auto y = yield.detach(y_);
-        auto s = fetch_via_self(move(rq), meta, cancel, y[ec].tag("fetch4"));
-        if (ec) { ec4 = ec; return; }
-
-        rs4 = http_response::slurp_response<doh::Response::body_type>
-            (s, doh::payload_size, cancel, y[ec].tag("slurp4"));
-        if (ec) { ec4 = ec; return; }
+#define SPAWN_QUERY(VER) \
+    TRACK_SPAWN(_ctx, ([ \
+        this, \
+        rq = move(*rq##VER##_o), &meta, &ec##VER, &rs##VER, \
+        &cancel, &yield, lock = wc.lock() \
+    ] (asio::yield_context y_) { \
+        sys::error_code ec; \
+        auto y = yield.detach(y_); \
+        auto s = fetch_via_self(move(rq), meta, cancel, y[ec].tag("fetch##VER")); \
+        if (ec) { ec##VER = ec; return; } \
+        rs##VER = http_response::slurp_response<doh::Response::body_type> \
+            (s, doh::payload_size, cancel, y[ec].tag("slurp##VER")); \
+        if (ec) { ec##VER = ec; return; } \
     }));
-
-    TRACK_SPAWN(_ctx, ([
-        this,
-        rq = move(*rq6_o), &meta, &ec6, &rs6,
-        &cancel, &yield, lock = wc.lock()
-    ] (asio::yield_context y_) {
-        sys::error_code ec;
-        auto y = yield.detach(y_);
-        auto s = fetch_via_self(move(rq), meta, cancel, y[ec].tag("fetch6"));
-        if (ec) { ec6 = ec; return; }
-
-        rs6 = http_response::slurp_response<doh::Response::body_type>
-            (s, doh::payload_size, cancel, y[ec].tag("slurp6"));
-        if (ec) { ec6 = ec; return; }
-    }));
+    SPAWN_QUERY(4);
+    SPAWN_QUERY(6);
 
     wc.wait(yield.tag("wait"));
 
