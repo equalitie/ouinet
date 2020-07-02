@@ -645,14 +645,11 @@ Client::State::resolve_tcp_doh( const std::string& host
     if (!portn_o) return or_throw<TcpLookup>(yield, asio::error::invalid_argument);
 
     // Build and return lookup if `host` is already a network address.
-#define RETURN_IF_ADDR_V(IP_VERSION) \
-    { \
-        sys::error_code e; \
-        auto addr = asio::ip::make_address_v##IP_VERSION(host, e); \
-        if (!e) return TcpLookup::create(TcpLookup::endpoint_type{move(addr), *portn_o}, host, port); \
+    {
+        sys::error_code e;
+        auto addr = asio::ip::make_address(host, e);
+        if (!e) return TcpLookup::create(TcpLookup::endpoint_type{move(addr), *portn_o}, host, port);
     }
-    RETURN_IF_ADDR_V(4);
-    RETURN_IF_ADDR_V(6);
 
     auto rq_o = doh::build_request(host, ep);
     if (!rq_o) return or_throw<TcpLookup>(yield, asio::error::invalid_argument);
