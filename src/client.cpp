@@ -652,8 +652,8 @@ public:
 
         value_type operator*() const { return {*_it, _port}; }
         const_iterator& operator++() { ++_it; return *this; }
-        bool operator==(const_iterator other) const { return _it == other._it; }
-        bool operator!=(const_iterator other) const { return _it != other._it; }
+        bool operator==(const const_iterator& other) const { return _it == other._it; }
+        bool operator!=(const const_iterator& other) const { return _it != other._it; }
     private:
         addrs_iterator _it;
         unsigned short _port;
