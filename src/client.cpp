@@ -675,6 +675,8 @@ Client::State::resolve_tcp_doh( const std::string& host
                               , Cancel& cancel
                               , Yield yield)
 {
+    using TcpEndpoint = typename TcpLookup::endpoint_type;
+
     boost::string_view portsv(port);
     auto portn_o = parse::number<unsigned short>(portsv);
     if (!portn_o) return or_throw<TcpLookup>(yield, asio::error::invalid_argument);
@@ -683,7 +685,7 @@ Client::State::resolve_tcp_doh( const std::string& host
     {
         sys::error_code e;
         auto addr = asio::ip::make_address(host, e);
-        if (!e) return TcpLookup::create(TcpLookup::endpoint_type{move(addr), *portn_o}, host, port);
+        if (!e) return TcpLookup::create(TcpEndpoint{move(addr), *portn_o}, host, port);
     }
 
     // TODO: When to disable queries for IPv4 or IPv6 addresses?
@@ -735,7 +737,7 @@ Client::State::resolve_tcp_doh( const std::string& host
     answers4.insert( answers4.end()
                    , std::make_move_iterator(answers6.begin())
                    , std::make_move_iterator(answers6.end()));
-    AddrsAsEndpoints<doh::Answers, TcpLookup::endpoint_type> eps{answers4, *portn_o};
+    AddrsAsEndpoints<doh::Answers, TcpEndpoint> eps{answers4, *portn_o};
     return TcpLookup::create(eps.begin(), eps.end(), host, port);
 }
 
