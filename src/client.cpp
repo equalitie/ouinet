@@ -1902,19 +1902,19 @@ gen_routing_matches( const ClientConfig& config
     namespace rr = request_route;
     using rr::fresh_channel;
 
-    auto method_getter([](const Request& r) {return r.method_string();});
-    auto host_getter([](const Request& r) {return r["Host"];});
-    auto x_oui_dest_getter([](const Request& r) {return r["X-Oui-Destination"];});
-    auto x_private_getter([](const Request& r) {return r[http_::request_private_hdr];});
-    auto target_getter([](const Request& r) {return r.target();});
+    static auto method_getter([](const Request& r) {return r.method_string();});
+    static auto host_getter([](const Request& r) {return r["Host"];});
+    static auto x_oui_dest_getter([](const Request& r) {return r["X-Oui-Destination"];});
+    static auto x_private_getter([](const Request& r) {return r[http_::request_private_hdr];});
+    static auto target_getter([](const Request& r) {return r.target();});
 
     auto local_rx = util::str("https?://[^:/]+\\.", config.local_domain(), "(:[0-9]+)?/.*");
 
 #ifdef _NDEBUG // release
-    const rr::Config unrequested{deque<fresh_channel>({fresh_channel::origin})};
+    static const rr::Config unrequested{deque<fresh_channel>({fresh_channel::origin})};
 #else // debug
     // Don't request these in debug mode as they bring a lot of noise into the log
-    const rr::Config unrequested{deque<fresh_channel>()};
+    static const rr::Config unrequested{deque<fresh_channel>()};
 #endif
 
     const vector<Match> matches({
