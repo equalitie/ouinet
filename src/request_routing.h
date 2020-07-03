@@ -72,7 +72,7 @@ using field_getter = std::function<beast::string_view (const http::request<http:
 class reqex {
     friend reqex true_();
     friend reqex false_();
-    friend reqex from_regex(const field_getter&, const boost::regex&);
+    friend reqex from_regex(field_getter, boost::regex);
     friend reqex operator!(const reqex&);
     friend reqex operator&&(const reqex&, const reqex&);
     friend reqex operator||(const reqex&, const reqex&);
@@ -95,8 +95,8 @@ reqex true_();
 // Never matches, regardless of request content.
 reqex false_();
 // Only matches when the extracted field matches the given (anchored) regular expression.
-reqex from_regex(const field_getter&, const boost::regex&);
-reqex from_regex(const field_getter&, const std::string&);
+reqex from_regex(field_getter, boost::regex);
+reqex from_regex(field_getter, const std::string&);
 
 // Negates the matching of the given expression.
 reqex operator!(const reqex&);

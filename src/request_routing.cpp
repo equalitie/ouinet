@@ -27,8 +27,8 @@ class RegexReqExpr : public ReqExpr {  // can match a request field against a re
         const boost::regex regexp;
 
     public:
-        RegexReqExpr(const field_getter& gf, const boost::regex& rx)
-            : get_field(gf), regexp(rx) { };
+        RegexReqExpr(field_getter gf, boost::regex rx)
+            : get_field(std::move(gf)), regexp(std::move(rx)) { };
 
         bool match(const http::request<http::string_body>& req) const override {
             return boost::regex_match(get_field(req).to_string(), regexp);
@@ -110,15 +110,15 @@ false_()
 }
 
 reqex
-from_regex(const field_getter& gf, const boost::regex& rx)
+from_regex(field_getter gf, boost::regex rx)
 {
-    return reqex(std::make_shared<RegexReqExpr>(gf, rx));
+    return reqex(std::make_shared<RegexReqExpr>(std::move(gf), std::move(rx)));
 }
 
 reqex
-from_regex(const field_getter& gf, const std::string& rx)
+from_regex(field_getter gf, const std::string& rx)
 {
-    return from_regex(gf, boost::regex(rx));
+    return from_regex(std::move(gf), boost::regex(rx));
 }
 
 reqex
