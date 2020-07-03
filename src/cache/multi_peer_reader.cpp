@@ -3,6 +3,7 @@
 #include "multi_peer_reader.h"
 #include "cache_entry.h"
 #include "http_sign.h"
+#include "hash_list.h"
 #include "../http_util.h"
 #include "../session.h"
 #include "../util/watch_dog.h"
@@ -143,46 +144,28 @@ public:
 
         auto timeout_cancel_con = timeout_cancel.connect([&] { con.close(); });
 
-        http::async_write(con, request(http::verb::head, _key), yield[ec]);
+        http::async_write(con, request(http::verb::propfind, _key), yield[ec]);
 
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw(yield, ec);
 
-        http_response::Reader head_reader(move(con));
+        http_response::Reader reader(move(con));
 
-        auto opt_part = head_reader.async_read_part(timeout_cancel, yield[ec]);
+        auto hash_list = HashList::load(reader, _cache_pk, timeout_cancel, yield[ec]);
 
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw(yield, ec);
 
-        if (!opt_part || !opt_part->is_head()) {
-            ec = sys::errc::make_error_code(sys::errc::bad_message);
-            return or_throw(yield, ec);
-        }
-
-        auto raw_head = move(*opt_part->as_head());
-
-        if (raw_head.result() == http::status::not_found) {
-            return or_throw(yield, asio::error::not_found);
-        }
-
-        auto head_o = SignedHead::verify_and_create(move(raw_head), _cache_pk);
-
-        if (!head_o) {
-            ec = sys::errc::make_error_code(sys::errc::bad_message);
-            return or_throw(yield, ec);
-        }
-
-        _head = move(*head_o);
+        _head = hash_list.signed_head;
 
         if (!util::http_proto_version_check_trusted(_head, *newest_proto_seen))
             // The client expects an injection belonging to a supported protocol version,
             // otherwise we just discard this copy.
             return or_throw(yield, asio::error::not_found);
 
-        _connection = head_reader.release_stream();
+        _connection = reader.release_stream();
     }
 };
 

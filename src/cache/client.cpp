@@ -173,6 +173,27 @@ struct Client::Impl {
             yield.log("cache/client: Received request for ", *key);
         }
 
+        if (req.method() == http::verb::propfind) {
+            if (do_log) {
+                yield.log("cache/client: Serving propfind for ", *key);
+            }
+            auto hl = _http_store->load_hash_list(*key, cancel, yield[ec]);
+            if (do_log) {
+                yield.log("cache/client: load ec:\"", ec.message(), "\"");
+            }
+            if (ec) {
+                ec = {};
+                handle_not_found(sink, req, yield[ec]);
+                return or_throw(yield, ec, bool(!ec));
+            }
+            return_or_throw_on_error(yield, cancel, ec, false);
+            hl.write(sink, cancel, yield[ec].tag("write-propfind"));
+            if (do_log) {
+                yield.log("cache/client: write ec:\"", ec.message(), "\"");
+            }
+            return or_throw(yield, ec, bool(!ec));
+        }
+
         auto rr = _http_store->reader(*key, ec);
         if (ec) {
             if (!cancel && do_log) {
