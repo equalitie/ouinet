@@ -124,12 +124,16 @@ struct SigEntry {
 
     using parse_buffer = std::string;
 
+    static const std::string& pad_digest() {
+        static const auto pad_digest = util::base64_encode(util::SHA512::zero_digest());
+        return pad_digest;
+    }
+
     std::string str() const
     {
-        static const auto pad_digest = util::base64_encode(util::SHA512::zero_digest());
         static const auto line_format = "%016x %s %s %s\n";
         return ( boost::format(line_format) % offset % signature % data_digest
-               % (prev_digest.empty() ? pad_digest : prev_digest)).str();
+               % (prev_digest.empty() ? pad_digest() : prev_digest)).str();
     }
 
     std::string chunk_exts() const
@@ -167,7 +171,6 @@ struct SigEntry {
         boost::string_view line(buf);
         line.remove_suffix(buf.size() - line_len + 1);  // leave newline out
 
-        static const auto pad_digest = util::base64_encode(util::SHA512::zero_digest());
         static const boost::regex line_regex(  // Ensure lines are fixed size!
             "([0-9a-f]{16})"  // PAD016_LHEX(OFFSET[i])
             " ([A-Za-z0-9+/=]{88})"  // BASE64(SIG[i]) (88 = size(BASE64(Ed25519-SIG)))
@@ -181,7 +184,7 @@ struct SigEntry {
         }
         auto offset = parse_data_block_offset(m[1].str());
         SigEntry entry{ offset, m[2].str(), m[3].str()
-                      , (m[4] == pad_digest ? "" : m[4].str())};
+                      , (m[4] == pad_digest() ? "" : m[4].str())};
         buf.erase(0, line_len);  // consume used input
         return entry;
     }
@@ -1009,9 +1012,6 @@ http_store_load_hash_list( const fs::path& dir
     auto sigsf = util::file_io::open_readonly(exec, dir / sigs_fname, ec);
     if (ec) return or_throw<HashList>(yield, ec);
 
-    auto bodyf = util::file_io::open_readonly(exec, dir / body_fname, ec);
-    if (ec) return or_throw<HashList>(yield, ec);
-
     HashList hl;
 
     hl.signed_head = HttpStoreReader::read_signed_head(headf, cancel, yield[ec]);
@@ -1045,6 +1045,10 @@ http_store_load_hash_list( const fs::path& dir
     }
 
     if (!last_sig_entry) return or_throw<HashList>(yield, asio::error::bad_descriptor);
+
+    if (last_sig_entry->prev_digest.empty()) {
+        last_sig_entry->prev_digest = SigEntry::pad_digest();
+    }
 
     auto c = decode(last_sig_entry->prev_digest);
     if (!c) return or_throw<HashList>(yield, asio::error::bad_descriptor);
