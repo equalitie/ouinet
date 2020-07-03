@@ -22,6 +22,8 @@ namespace detail {
     template<class P, class S>
     void async_write_c(const P* p, S& s, Cancel& c, asio::yield_context y)
     {
+        assert(!c);
+        if (c) return or_throw(y, asio::error::operation_aborted);
         auto cancelled = c.connect([&] { s.close(); });
         sys::error_code ec;
         p->async_write(s, y[ec]);
@@ -106,9 +108,16 @@ struct ChunkHdr {
             asio::async_write(s, http::chunk_header{size, exts}, yield);
         }
         else {  // `http::chunk_last` carries a trailer itself, do not use
-            static const auto hdrf = "0%s\r\n";
-            auto hdr = (boost::format(hdrf) % exts).str();
-            asio::async_write(s, asio::buffer(hdr), yield);
+            // NOTE: asio::buffer("0") creates a buffer of size 2, so we need
+            // to be explicit about the size to not include the trailing \0
+
+            std::array<asio::const_buffer, 3> bufs = {
+                asio::buffer("0", 1),
+                asio::buffer(exts),
+                asio::buffer("\r\n", 2) };
+
+            assert(bufs[1].size() == exts.size());
+            asio::async_write(s, bufs, yield);
         }
     }
 
