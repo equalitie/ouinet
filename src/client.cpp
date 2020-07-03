@@ -88,6 +88,7 @@ using tcp      = asio::ip::tcp;
 using Request  = http::request<http::string_body>;
 using Response = http::response<http::dynamic_body>;
 using TcpLookup = tcp::resolver::results_type;
+using Match    = pair<const ouinet::reqexpr::reqex, const request_route::Config>;
 
 static const fs::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
 static const fs::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
@@ -138,6 +139,11 @@ struct UserAgentMetaData {
 };
 
 //------------------------------------------------------------------------------
+static vector<Match>
+gen_routing_matches( const ClientConfig&
+                   , const request_route::Config& default_
+                   , const request_route::Config& nocache);
+
 class Client::State : public enable_shared_from_this<Client::State> {
     friend class Client;
 
@@ -161,6 +167,32 @@ public:
         // would be accepted if presented by an injector.
         //inj_ctx.set_default_verify_paths();
         inj_ctx.set_verify_mode(asio::ssl::verify_peer);
+
+        // Looking up the cache when needed is allowed, while for fetching fresh
+        // content:
+        //
+        //  - the origin is first contacted directly,
+        //    for good overall speed and responsiveness
+        //  - if not available, the injector is used to
+        //    get the content and cache it for future accesses
+        //
+        // So enabling the Injector channel will result in caching content
+        // when access to the origin is not possible.
+        //
+        // To also avoid getting content from the cache
+        // (so that browsing looks like using a normal non-caching proxy)
+        // the cache can be disabled.
+        using request_route::fresh_channel;
+        _default_request_config =
+            { deque<fresh_channel>({ fresh_channel::origin
+                                   , fresh_channel::injector_or_dcache})};
+        _nocache_request_config =
+            { deque<fresh_channel>({ fresh_channel::origin
+                                   , fresh_channel::proxy})};
+
+        _request_matches = gen_routing_matches( _config
+                                              , _default_request_config
+                                              , _nocache_request_config);
     }
 
     void start();
@@ -397,6 +429,14 @@ private:
 
     ClientFrontEnd _front_end;
     Signal<void()> _shutdown_signal;
+
+    // This request router configuration will be used for requests by default.
+    request_route::Config _default_request_config;
+    // This is the matching configuration for the one above,
+    // but for uncacheable requests.
+    request_route::Config _nocache_request_config;
+    // Expressions to test the request against and configurations to be used.
+    vector<Match> _request_matches;
 
     // For debugging
     uint64_t _next_connection_id = 0;
@@ -1853,57 +1893,14 @@ secure_first_request_route(request_route::Config c) {
 }
 
 //------------------------------------------------------------------------------
-void Client::State::serve_request( GenericStream&& con
-                                 , asio::yield_context yield_)
+static
+vector<Match>
+gen_routing_matches( const ClientConfig& config
+                   , const request_route::Config& default_request_config
+                   , const request_route::Config& nocache_request_config)
 {
-    Cancel cancel(_shutdown_signal);
-
-    LOG_DEBUG("Request received ");
-
     namespace rr = request_route;
     using rr::fresh_channel;
-
-    auto close_con_slot = _shutdown_signal.connect([&con] {
-        con.close();
-    });
-
-    // This request router configuration will be used for requests by default.
-    //
-    // Looking up the cache when needed is allowed, while for fetching fresh
-    // content:
-    //
-    //  - the origin is first contacted directly,
-    //    for good overall speed and responsiveness
-    //  - if not available, the injector is used to
-    //    get the content and cache it for future accesses
-    //
-    // So enabling the Injector channel will result in caching content
-    // when access to the origin is not possible.
-    //
-    // To also avoid getting content from the cache
-    // (so that browsing looks like using a normal non-caching proxy)
-    // the cache can be disabled.
-    const rr::Config default_request_config
-        { deque<fresh_channel>({ fresh_channel::origin
-                               , fresh_channel::injector_or_dcache})};
-
-    // This is the matching configuration for the one above,
-    // but for uncacheable requests.
-    const rr::Config nocache_request_config
-        { deque<fresh_channel>({ fresh_channel::origin
-                               , fresh_channel::proxy})};
-
-    // The currently effective request router configuration.
-    rr::Config request_config;
-
-    Client::ClientCacheControl cache_control(*this, request_config);
-
-    sys::error_code ec;
-    beast::flat_buffer buffer;
-
-    // Expressions to test the request against and configurations to be used.
-    // TODO: Create once and reuse.
-    using Match = pair<const ouinet::reqexpr::reqex, const rr::Config>;
 
     auto method_getter([](const Request& r) {return r.method_string();});
     auto host_getter([](const Request& r) {return r["Host"];});
@@ -1911,7 +1908,7 @@ void Client::State::serve_request( GenericStream&& con
     auto x_private_getter([](const Request& r) {return r[http_::request_private_hdr];});
     auto target_getter([](const Request& r) {return r.target();});
 
-    auto local_rx = util::str("https?://[^:/]+\\.", _config.local_domain(), "(:[0-9]+)?/.*");
+    auto local_rx = util::str("https?://[^:/]+\\.", config.local_domain(), "(:[0-9]+)?/.*");
 
 #ifdef _NDEBUG // release
     const rr::Config unrequested{deque<fresh_channel>({fresh_channel::origin})};
@@ -1977,7 +1974,7 @@ void Client::State::serve_request( GenericStream&& con
         Match( reqexpr::from_regex(host_getter, "localhost")
              , {deque<fresh_channel>({fresh_channel::_front_end})} ),
 
-        Match( reqexpr::from_regex(host_getter, util::str(_config.front_end_endpoint()))
+        Match( reqexpr::from_regex(host_getter, util::str(config.front_end_endpoint()))
              , {deque<fresh_channel>({fresh_channel::_front_end})} ),
 
         Match( reqexpr::from_regex(x_oui_dest_getter, "OuiClient")
@@ -2021,6 +2018,26 @@ void Client::State::serve_request( GenericStream&& con
         //Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example\\.net/.*")
         //     , {deque<fresh_channel>({fresh_channel::injector})} ),
     });
+    return matches;
+}
+
+void Client::State::serve_request( GenericStream&& con
+                                 , asio::yield_context yield_)
+{
+    Cancel cancel(_shutdown_signal);
+
+    LOG_DEBUG("Request received ");
+
+    auto close_con_slot = _shutdown_signal.connect([&con] {
+        con.close();
+    });
+
+    // The currently effective request router configuration.
+    request_route::Config request_config;
+    Client::ClientCacheControl cache_control(*this, request_config);
+
+    sys::error_code ec;
+    beast::flat_buffer buffer;
 
     auto connection_id = _next_connection_id++;
 
@@ -2120,7 +2137,7 @@ void Client::State::serve_request( GenericStream&& con
         }
 
         request_config = secure_first_request_route(
-                route_choose_config(req, matches, default_request_config));
+                route_choose_config(req, _request_matches, _default_request_config));
 
         auto meta = UserAgentMetaData::extract(req);
         Transaction tnx(con, req, std::move(meta));
