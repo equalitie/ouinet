@@ -2,6 +2,7 @@
 include(${CMAKE_CURRENT_LIST_DIR}/dependencies/openssl.cmake)
 
 include(${CMAKE_CURRENT_LIST_DIR}/dependencies/boost.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/dependencies/zdnsparser.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/dependencies/gcrypt.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/dependencies/golang.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/dependencies/json.cmake)

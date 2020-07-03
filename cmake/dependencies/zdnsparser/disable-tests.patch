@@ -1,0 +1,10 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 1fa1462..6e9e8d8 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -24,5 +24,4 @@ include(cmake/cxx_flag_overrides.cmake)
+ # subdirs
+ 
+ add_subdirectory(src)
+-add_subdirectory(test)
+ 

@@ -15,6 +15,7 @@
 #include <boost/range/adaptor/transformed.hpp>
 #include <boost/range/adaptor/indexed.hpp>
 #include <boost/regex.hpp>
+#include <iterator>
 #include <iostream>
 #include <cstdlib>  // for atexit()
 
@@ -22,6 +23,7 @@
 
 #include "namespaces.h"
 #include "origin_pools.h"
+#include "doh.h"
 #include "http_util.h"
 #include "fetch_http_page.h"
 #include "client_front_end.h"
@@ -85,6 +87,7 @@ namespace bt = ouinet::bittorrent;
 using tcp      = asio::ip::tcp;
 using Request  = http::request<http::string_body>;
 using Response = http::response<http::dynamic_body>;
+using TcpLookup = tcp::resolver::results_type;
 
 static const fs::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
 static const fs::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
@@ -122,6 +125,15 @@ struct UserAgentMetaData {
         }
 
         return ret;
+    }
+
+    // Apply the metadata to the given request.
+    template<class Req>
+    void apply_to(Req& rq) const {
+        if (is_private && *is_private)
+            rq.set(http_::request_private_hdr, http_::request_private_true);
+        if (dht_group)
+            rq.set(http_::request_group_hdr, *dht_group);
     }
 };
 
@@ -232,8 +244,14 @@ private:
                           , Cancel& cancel
                           , Yield yield);
 
+    template<class Rq>
+    Session fetch_via_self( Rq, const UserAgentMetaData&
+                          , Cancel&, Yield);
+
     Response fetch_fresh_from_front_end(const Request&, Yield);
-    Session fetch_fresh_from_origin(const Request&, Cancel, Yield);
+    Session fetch_fresh_from_origin( const Request&
+                                   , const UserAgentMetaData&
+                                   , Cancel, Yield);
 
     Session fetch_fresh_through_connect_proxy(const Request&, Cancel&, Yield);
 
@@ -282,7 +300,17 @@ private:
                                        , Request&
                                        , Yield);
 
-    GenericStream connect_to_origin(const Request&, Cancel&, Yield);
+    // Resolve host and port strings.
+    TcpLookup resolve_tcp_dns( const std::string&, const std::string&
+                             , Cancel&, Yield);
+    TcpLookup resolve_tcp_doh( const std::string&, const std::string&
+                             , const UserAgentMetaData&
+                             , const doh::Endpoint&
+                             , Cancel&, Yield);
+
+    GenericStream connect_to_origin( const Request&
+                                   , const UserAgentMetaData&
+                                   , Cancel&, Yield);
 
     unique_ptr<OuiServiceImplementationClient>
     maybe_wrap_tls(unique_ptr<OuiServiceImplementationClient>);
@@ -373,6 +401,7 @@ private:
     // For debugging
     uint64_t _next_connection_id = 0;
     ConnectionPool<Endpoint> _injector_connections;
+    ConnectionPool<bool> _self_connections;  // stored value is unused
     OriginPools _origin_pools;
 
     asio::ssl::context ssl_ctx;
@@ -538,8 +567,195 @@ Client::State::fetch_stored_in_dcache( const Request& request
 }
 
 //------------------------------------------------------------------------------
+template<class Rq>
+Session
+Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
+                             , Cancel& cancel, Yield yield)
+{
+    sys::error_code ec;
+
+    // Connect to the client proxy port.
+    // TODO: Maybe refactor with `fetch_fresh_through_simple_proxy`.
+    ConnectionPool<bool>::Connection con;
+    if (_self_connections.empty()) {
+        if (log_transactions()) {
+            yield.log("Connecting to self");
+        }
+
+        // TODO: Keep lookup object or allow connecting to endpoint.
+        auto epl = TcpLookup::create(_config.local_endpoint(), "dummy", "dummy");
+        auto c = connect_to_host(epl, _ctx.get_executor(), cancel, yield[ec]);
+
+        assert(!cancel || ec == asio::error::operation_aborted);
+
+        if (ec) {
+            if (log_transactions()) {
+                yield.log("Failed to connect to self ec:", ec.message());
+            }
+            return or_throw<Session>(yield, ec);
+        }
+
+        con = _self_connections.wrap(std::move(c));
+    } else {
+        if (log_transactions()) {
+            yield.log("Reusing existing self connection");
+        }
+
+        con = _self_connections.pop_front();
+    }
+
+    auto cancel_slot = cancel.connect([&] {
+        con.close();
+    });
+
+    // Build the actual request to send to self.
+    if (!_config.client_credentials().empty())
+        request = authorize(request, _config.client_credentials());
+    request.keep_alive(true);
+    meta.apply_to(request);
+
+    if (log_transactions()) {
+        yield.log("Sending a request to self");
+    }
+    // Send request
+    http::async_write(con, request, yield[ec].tag("self-request"));
+
+    if (cancel_slot) {
+        ec = asio::error::operation_aborted;
+    }
+
+    if (ec && log_transactions()) {
+        yield.log("Failed to send request to self");
+    }
+
+    if (ec) return or_throw<Session>(yield, ec);
+
+    return Session::create(move(con), cancel, yield);
+}
+
+// Transforms addresses to endpoints with the given port.
+template<class Addrs, class Endpoint>
+class AddrsAsEndpoints {
+public:
+    using value_type = Endpoint;
+    using addrs_iterator = typename Addrs::const_iterator;
+
+    AddrsAsEndpoints(const Addrs& addrs, unsigned short port)
+        : _addrs(addrs), _port(port)
+    {}
+
+    class const_iterator : public std::iterator<std::input_iterator_tag, value_type> {
+    public:
+        const_iterator(const addrs_iterator& it, unsigned short port)
+            : _it(it), _port(port)
+        {}
+
+        value_type operator*() const { return {*_it, _port}; }
+        const_iterator& operator++() { ++_it; return *this; }
+        bool operator==(const const_iterator& other) const { return _it == other._it; }
+        bool operator!=(const const_iterator& other) const { return _it != other._it; }
+    private:
+        addrs_iterator _it;
+        unsigned short _port;
+    };
+
+    const_iterator begin() const { return {_addrs.begin(), _port}; };
+    const_iterator end() const { return {_addrs.end(), _port}; };
+
+private:
+    const Addrs& _addrs;
+    unsigned short _port;
+};
+
+TcpLookup
+Client::State::resolve_tcp_doh( const std::string& host
+                              , const std::string& port
+                              , const UserAgentMetaData& meta
+                              , const doh::Endpoint& ep
+                              , Cancel& cancel
+                              , Yield yield)
+{
+    using TcpEndpoint = typename TcpLookup::endpoint_type;
+
+    boost::string_view portsv(port);
+    auto portn_o = parse::number<unsigned short>(portsv);
+    if (!portn_o) return or_throw<TcpLookup>(yield, asio::error::invalid_argument);
+
+    // Build and return lookup if `host` is already a network address.
+    {
+        sys::error_code e;
+        auto addr = asio::ip::make_address(host, e);
+        if (!e) return TcpLookup::create(TcpEndpoint{move(addr), *portn_o}, host, port);
+    }
+
+    // TODO: When to disable queries for IPv4 or IPv6 addresses?
+    auto rq4_o = doh::build_request_ipv4(host, ep);
+    auto rq6_o = doh::build_request_ipv6(host, ep);
+    if (!rq4_o || !rq6_o) return or_throw<TcpLookup>(yield, asio::error::invalid_argument);
+
+    sys::error_code ec4, ec6;
+    doh::Response rs4, rs6;
+
+    WaitCondition wc(_ctx);
+
+    // By passing user agent metadata as is,
+    // we ensure that the DoH request is done with the same browsing mode
+    // as the content request that triggered it,
+    // and is announced under the same group.
+    // TODO: Handle redirects.
+#define SPAWN_QUERY(VER) \
+    TRACK_SPAWN(_ctx, ([ \
+        this, \
+        rq = move(*rq##VER##_o), &meta, &ec##VER, &rs##VER, \
+        &cancel, &yield, lock = wc.lock() \
+    ] (asio::yield_context y_) { \
+        sys::error_code ec; \
+        auto y = yield.detach(y_); \
+        auto s = fetch_via_self(move(rq), meta, cancel, y[ec].tag("fetch##VER")); \
+        if (ec) { ec##VER = ec; return; } \
+        rs##VER = http_response::slurp_response<doh::Response::body_type> \
+            (s, doh::payload_size, cancel, y[ec].tag("slurp##VER")); \
+        if (ec) { ec##VER = ec; return; } \
+    }));
+    SPAWN_QUERY(4);
+    SPAWN_QUERY(6);
+
+    wc.wait(yield.tag("wait"));
+
+    if (log_transactions())
+        yield.log("DoH query ip4_ec:", ec4.message(), " ip6_ec:", ec6.message());
+    if (ec4 && ec6) return or_throw<TcpLookup>(yield, ec4 /* arbitrary */);
+
+    doh::Answers answers4, answers6;
+    if (!ec4) answers4 = doh::parse_response(rs4, host, ec4);
+    if (!ec6) answers6 = doh::parse_response(rs6, host, ec6);
+
+    if (log_transactions())
+        yield.log("DoH parse ip4_ec:", ec4.message(), " ip6_ec:", ec6.message());
+    if (ec4 && ec6) return or_throw<TcpLookup>(yield, ec4 /* arbitrary */);
+
+    answers4.insert( answers4.end()
+                   , std::make_move_iterator(answers6.begin())
+                   , std::make_move_iterator(answers6.end()));
+    AddrsAsEndpoints<doh::Answers, TcpEndpoint> eps{answers4, *portn_o};
+    return TcpLookup::create(eps.begin(), eps.end(), host, port);
+}
+
+TcpLookup
+Client::State::resolve_tcp_dns( const std::string& host
+                              , const std::string& port
+                              , Cancel& cancel
+                              , Yield yield)
+{
+    return util::tcp_async_resolve( host, port
+                                  , _ctx.get_executor()
+                                  , cancel
+                                  , yield);
+}
+
 GenericStream
 Client::State::connect_to_origin( const Request& rq
+                                , const UserAgentMetaData& meta
                                 , Cancel& cancel
                                 , Yield yield)
 {
@@ -548,11 +764,15 @@ Client::State::connect_to_origin( const Request& rq
 
     sys::error_code ec;
 
-    auto lookup = util::tcp_async_resolve( host, port
-                                         , _ctx.get_executor()
-                                         , cancel
-                                         , yield[ec]);
-
+    // Resolve using DoH if configured and not resolving the resolver's address itself.
+    auto doh_ep_o = _config.origin_doh_endpoint();
+    bool do_doh = doh_ep_o && !rq.target().starts_with(*doh_ep_o);
+    auto lookup = do_doh
+        ? resolve_tcp_doh(host, port, meta, *doh_ep_o, cancel, yield[ec].tag("resolve_doh"))
+        : resolve_tcp_dns(host, port, cancel, yield[ec].tag("resolve_dns"));
+    if (log_transactions())
+        yield.log( do_doh ? "DoH name resolution: " : "DNS name resolution: "
+                 , host, " naddrs=", lookup.size(), " ec:", ec.message());
     return_or_throw_on_error(yield, cancel, ec, GenericStream());
 
     auto sock = connect_to_host(lookup, _ctx.get_executor(), cancel, yield[ec]);
@@ -603,7 +823,9 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
 }
 
 //------------------------------------------------------------------------------
-Session Client::State::fetch_fresh_from_origin(const Request& rq, Cancel cancel, Yield yield)
+Session Client::State::fetch_fresh_from_origin( const Request& rq
+                                              , const UserAgentMetaData& meta
+                                              , Cancel cancel, Yield yield)
 {
     WatchDog watch_dog(_ctx
                       , default_timeout::fetch_http()
@@ -616,7 +838,7 @@ Session Client::State::fetch_fresh_from_origin(const Request& rq, Cancel cancel,
     if (maybe_con) {
         con = std::move(*maybe_con);
     } else {
-        auto stream = connect_to_origin(rq, cancel, yield[ec]);
+        auto stream = connect_to_origin(rq, meta, cancel, yield[ec]);
 
         if (cancel) {
             assert(ec == asio::error::operation_aborted);
@@ -761,6 +983,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
     sys::error_code ec;
 
     // Connect to the injector.
+    // TODO: Maybe refactor with `fetch_via_self`.
     ConnectionPool<Endpoint>::Connection con;
     if (_injector_connections.empty()) {
         if (log_transactions()) {
@@ -1035,7 +1258,7 @@ public:
         }
 
         sys::error_code ec;
-        auto session = client_state.fetch_fresh_from_origin(rq, cancel, yield[ec]);
+        auto session = client_state.fetch_fresh_from_origin(rq, tnx.meta(), cancel, yield[ec]);
 
         if (log_transactions()) {
             yield.log("fetch: ", ec.message());
@@ -1574,7 +1797,8 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
     // TODO: Reuse existing connections to origin and injectors.  Currently
     // this is hard because those are stored not as streams but as
     // ConnectionPool::Connection.
-    auto origin = connect_to_origin(rq, cancel, yield[ec]);
+    auto meta = UserAgentMetaData::extract(rq);
+    auto origin = connect_to_origin(rq, meta, cancel, yield[ec]);
 
     if (ec) return or_throw(yield, ec, true);
 

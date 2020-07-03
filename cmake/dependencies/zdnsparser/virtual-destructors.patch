@@ -1,0 +1,22 @@
+diff --git a/include/dnsparser.h b/include/dnsparser.h
+index 4d81ea3..5dfaa6c 100644
+--- a/include/dnsparser.h
++++ b/include/dnsparser.h
+@@ -18,6 +18,8 @@
+ class DnsParserListener
+ {
+ public:
++  virtual ~DnsParserListener() = default;
++
+   /**
+    * @param addr Binary IPV4 or IPV6 address in network order.
+    * @param name Domain name requested.
+@@ -30,6 +32,8 @@ public:
+ class DnsParser
+ {
+ public:
++  virtual ~DnsParser() = default;
++
+   /**
+    * parse
+    * When response records are discovered, DnsParserListener.onDnsRec()
