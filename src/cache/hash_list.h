@@ -18,10 +18,12 @@ struct HashList {
     bool verify() const;
 
     static HashList load(
-            http_response::AbstractReader&,
+            http_response::Reader&,
             const PubKey&,
             Cancel&,
             asio::yield_context);
+
+    void write(GenericStream&, Cancel&, asio::yield_context) const;
 };
 
 }}

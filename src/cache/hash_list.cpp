@@ -10,7 +10,8 @@ using namespace ouinet::cache;
 
 static const size_t MAX_LINE_SIZE_BYTES = 512;
 
-static const char* MAGIC = "OUINET_HASH_LIST_V1";
+static const std::string MAGIC = "OUINET_HASH_LIST_V1";
+static const char* ORIGINAL_STATUS = "X-Ouinet-Original-Status";
 
 using Digest = util::SHA512::digest_type;
 
@@ -101,7 +102,7 @@ struct Parser {
 
 /* static */
 HashList HashList::load(
-        http_response::AbstractReader& r,
+        http_response::Reader& r,
         const PubKey& pk,
         Cancel& c,
         asio::yield_context y)
@@ -127,7 +128,23 @@ HashList HashList::load(
 
     if (!part->is_head()) return or_throw<HashList>(y, bad_msg);
 
-    auto head_o = SignedHead::verify_and_create(move(*part->as_head()), pk);
+    auto raw_head = move(*part->as_head());
+
+    if (raw_head.result() == http::status::not_found) {
+        return or_throw<HashList>(y, asio::error::not_found);
+    }
+
+    auto orig_status_sv = raw_head[ORIGINAL_STATUS];
+    auto orig_status = parse::number<unsigned>(orig_status_sv);
+    raw_head.erase(ORIGINAL_STATUS);
+
+    if (!orig_status) {
+        return or_throw<HashList>(y, bad_msg);
+    }
+
+    raw_head.result(*orig_status);
+
+    auto head_o = SignedHead::verify_and_create(move(raw_head), pk);
 
     if (!head_o) return or_throw<HashList>(y, bad_msg);
 
@@ -151,19 +168,22 @@ HashList HashList::load(
             continue;
         }
 
-        bool progress = false;
-
         while (true) {
+            bool progress = false;
+
             if (!magic_checked) {
                 auto magic_line = parser.read_line();
                 if (magic_line) {
                     if (*magic_line != MAGIC)
                         return or_throw<HashList>(y, bad_msg);
+                    magic_checked = true;
                     progress = true;
                 }
             } else if (!signature) {
                 signature = parser.read_signature();
-                if (signature) progress = true;
+                if (signature) {
+                    progress = true;
+                }
             } else {
                 auto hash = parser.read_hash();
                 if (hash) {
@@ -176,6 +196,7 @@ HashList HashList::load(
                     _WARN("Line too long");
                     return or_throw<HashList>(y, bad_msg);
                 }
+                break;
             }
         }
     }
@@ -189,4 +210,49 @@ HashList HashList::load(
     }
 
     return hs;
+}
+
+void HashList::write(GenericStream& con, Cancel& c, asio::yield_context y) const
+{
+    using namespace chrono_literals;
+
+    assert(verify());
+    assert(!c);
+    if (c) return or_throw(y, asio::error::operation_aborted);
+
+    sys::error_code ec;
+
+    auto h = signed_head;
+
+    size_t content_length =
+        MAGIC.size() + strlen("\n") + PubKey::sig_size +
+        block_hashes.size() * util::SHA512::size();
+
+    h.set(ORIGINAL_STATUS, util::str(h.result_int()));
+    h.result(http::status::ok);
+    h.set(http::field::content_length, content_length);
+
+    std::vector<asio::const_buffer> bufs;
+    bufs.reserve(3 + block_hashes.size());
+
+    bufs.push_back(asio::buffer(MAGIC));
+    bufs.push_back(asio::buffer("\n", 1));
+    bufs.push_back(asio::buffer(signature));
+
+    for (auto& h : block_hashes) {
+        bufs.push_back(asio::buffer(h));
+    }
+
+    auto wd = watch_dog(con.get_executor(),
+            5s + 100ms * block_hashes.size(),
+            [&] { con.close(); });
+
+    h.async_write(con, c, y[ec]);
+    if (!c && !wd.is_running()) ec = asio::error::timed_out;
+    return_or_throw_on_error(y, c, ec);
+
+    asio::async_write(con, bufs, y[ec]);
+
+    if (!c && !wd.is_running()) ec = asio::error::timed_out;
+    return_or_throw_on_error(y, c, ec);
 }
