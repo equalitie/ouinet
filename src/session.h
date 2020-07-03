@@ -153,7 +153,7 @@ Session::flush_response(Cancel& cancel,
     sys::error_code ec;
 
     _head_was_read = true;
-    h(http_response::Part{std::move(_head)}, cancel, yield[ec]);
+    h(http_response::Part{_head}, cancel, yield[ec]);
     return_or_throw_on_error(yield, cancel, ec);
 
     while (true) {
