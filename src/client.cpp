@@ -417,6 +417,11 @@ void
 Client::State::serve_utp_request(GenericStream con, Yield yield)
 {
     assert(_cache);
+    if (!_cache) {
+        LOG_WARN("Received uTP request, but cache is not initialized");
+        return;
+    }
+
     Cancel cancel = _shutdown_signal;
 
     sys::error_code ec;
@@ -1099,12 +1104,15 @@ public:
     void injector_job_func(Transaction& tnx, Cancel& cancel, Yield yield) {
         namespace err = asio::error;
 
+        bool do_log = log_transactions();
+
         sys::error_code ec;
         sys::error_code fresh_ec;
         sys::error_code cache_ec;
 
-        if (log_transactions()) {
+        if (do_log) {
             yield.log("start");
+            yield.log(tnx.request());
         }
 
         const auto& rq   = tnx.request();
@@ -1112,7 +1120,7 @@ public:
 
         auto session = cc.fetch(rq, meta.dht_group, fresh_ec, cache_ec, cancel, yield[ec]);
 
-        if (log_transactions()) {
+        if (do_log) {
             yield.log("cc.fetch ec:", ec.message(),
                      " fresh_ec:", fresh_ec.message(),
                      " cache_ec:", cache_ec.message());
@@ -1122,7 +1130,7 @@ public:
 
         auto& rsh = session.response_header();
 
-        if (log_transactions()) {
+        if (do_log) {
             yield.log("Response header:");
             yield.log(rsh);
         }
@@ -1132,7 +1140,7 @@ public:
 
         auto injector_error = rsh[http_::response_error_hdr];
         if (!injector_error.empty()) {
-            if (log_transactions()) {
+            if (do_log) {
                 yield.log("Error from injector: ", injector_error);
             }
             return or_throw(yield, err::invalid_argument);
@@ -1194,7 +1202,7 @@ public:
 
         wc.wait(yield);
 
-        if (log_transactions()) {
+        if (do_log) {
             yield.log("finish: ", ec.message());
         }
 
