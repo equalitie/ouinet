@@ -51,6 +51,16 @@ struct HttpResponseByteRange {
 std::ostream&
 operator<<(std::ostream&, const HttpResponseByteRange&);
 
+struct HttpRequestByteRange {
+    size_t first;
+    size_t last;
+
+    // Returns boost::none on parse error
+    static
+    boost::optional<std::vector<HttpRequestByteRange>>
+    parse(boost::string_view);
+};
+
 ///////////////////////////////////////////////////////////////////////////////
 // Returns ptime() if parsing fails.
 boost::posix_time::ptime parse_date(beast::string_view);

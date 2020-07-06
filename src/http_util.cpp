@@ -102,6 +102,46 @@ ouinet::util::operator<<( std::ostream& os
     return os << '*';
 }
 
+boost::optional<std::vector<ouinet::util::HttpRequestByteRange>>
+ouinet::util::HttpRequestByteRange::parse(boost::string_view s)
+{
+    using Ranges = std::vector<ouinet::util::HttpRequestByteRange>;
+
+    static auto trim_ws = [](boost::string_view& s) {
+        while (!s.empty() && s[0] == ' ') s.remove_prefix(1);
+    };
+
+    static auto consume = [](boost::string_view& s, boost::string_view what) -> bool {
+        if (!s.starts_with(what)) return false;
+        s.remove_prefix(what.size());
+        return true;
+    };
+
+    trim_ws(s);
+    if (!consume(s, "bytes")) return boost::none;
+    trim_ws(s);
+    if (!consume(s, "=")) return boost::none;
+    trim_ws(s);
+
+    Ranges ranges;
+
+    while (true) {
+        auto first = parse::number<size_t>(s);
+        if (!first) return boost::none;
+        trim_ws(s);
+        if (!consume(s, "-")) return boost::none;
+        trim_ws(s);
+        auto last = parse::number<size_t>(s);
+        if (!last) return boost::none;
+        ranges.push_back({*first, *last});
+        trim_ws(s);
+        if (!consume(s, ",")) break;
+        trim_ws(s);
+    }
+
+    return ranges;
+}
+
 #ifdef __SANITIZE_ADDRESS__
 static
 boost::optional<posix_time::ptime>
