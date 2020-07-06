@@ -76,9 +76,9 @@ public:
     asio::executor _exec;
     string _key;
     const util::Ed25519PublicKey _cache_pk;
-    SignedHead _head;
     boost::optional<GenericStream> _connection;
     unique_ptr<VerifyingReader> _reader;
+    HashList _hash_list;
 
     Peer(asio::executor exec, const string& key, util::Ed25519PublicKey cache_pk) :
         _exec(exec),
@@ -158,13 +158,12 @@ public:
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw(yield, ec);
 
-        _head = hash_list.signed_head;
-
-        if (!util::http_proto_version_check_trusted(_head, *newest_proto_seen))
+        if (!util::http_proto_version_check_trusted(hash_list.signed_head, *newest_proto_seen))
             // The client expects an injection belonging to a supported protocol version,
             // otherwise we just discard this copy.
             return or_throw(yield, asio::error::not_found);
 
+        _hash_list = move(hash_list);
         _connection = reader.release_stream();
     }
 };
@@ -252,7 +251,7 @@ public:
 
             if (!dbg_tag.empty()) {
                 LOG_INFO(dbg_tag, " done fetching: ", ep, " "
-                    , " ec:", ec.message(), " c:", bool(c));
+                        , " ec:", ec.message(), " c:", bool(c));
             }
 
             if (c) return;
@@ -361,7 +360,15 @@ MultiPeerReader::async_read_part(Cancel cancel, asio::yield_context yield)
         if (ec) return or_throw<Ret>(yield, ec);
     }
 
-    auto ret =_chosen_peer->_reader->async_read_part(cancel, yield);
+    auto ret =_chosen_peer->_reader->async_read_part(cancel, yield[ec]);
+
+    if (ec) return or_throw<Ret>(yield, ec, std::move(ret));
+
+    if (!_head_sent) {
+        _head_sent = true;
+        return http_response::Part{_chosen_peer->_hash_list.signed_head};
+    }
+
     return or_throw<Ret>(yield, ec, std::move(ret));
 }
 
