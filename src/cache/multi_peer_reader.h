@@ -16,13 +16,6 @@ private:
     class Peer;
     class Peers;
 
-    struct Connection {
-        asio::ip::udp::endpoint endpoint;
-        Session session;
-    };
-
-    using ConnectionGenerator = util::AsyncGenerator<Connection>;
-
 public:
     MultiPeerReader( asio::executor ex
                    , util::Ed25519PublicKey cache_pk
@@ -42,18 +35,6 @@ public:
 
     ~MultiPeerReader();
 
-private:
-    static
-    std::unique_ptr<ConnectionGenerator>
-    make_connection_generator( asio::executor exec
-                             , std::set<asio::ip::udp::endpoint> local_peers
-                             , util::Ed25519PublicKey cache_pk
-                             , const std::string& key
-                             , const std::string& dht_group
-                             , std::shared_ptr<bittorrent::MainlineDht> dht
-                             , std::shared_ptr<DhtLookup> dht_lookup
-                             , std::shared_ptr<unsigned> newest_proto_seen
-                             , const std::string& dbg_tag);
 private:
     Cancel _lifetime_cancel;
 
