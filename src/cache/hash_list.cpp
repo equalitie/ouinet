@@ -148,6 +148,9 @@ HashList HashList::load(
 
     if (!head_o) return or_throw<HashList>(y, bad_msg);
 
+    head_o->erase(http::field::content_length);
+    head_o->set(http::field::transfer_encoding, "chunked");
+
     Parser parser;
 
     bool magic_checked = false;
