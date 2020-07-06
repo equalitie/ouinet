@@ -423,7 +423,9 @@ public:
             assert(block_size);
             auto bs = *block_size;
             range->begin = bs * (range->begin / bs);  // align down
-            range->end = bs * (range->end / bs + 1);  // align up
+            range->end = range->end > 0  // align up
+                       ? bs * ((range->end - 1) / bs + 1)
+                       : 0;
             // Clip range end to actual file size.
             auto ds = util::file_io::file_size(bodyf, ec);
             if (ec) return or_throw<http_response::Head>(yield, ec);
@@ -655,6 +657,9 @@ _http_store_reader( const fs::path& dirp, asio::executor ex
                   , boost::optional<std::size_t> range_last
                   , sys::error_code& ec)
 {
+    // XXX: This should be ensured with types
+    assert((!range_first && !range_last) || (range_first && range_last));
+
     auto headf = util::file_io::open_readonly(ex, dirp / head_fname, ec);
     if (ec) return nullptr;
 
