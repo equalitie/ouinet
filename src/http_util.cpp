@@ -52,8 +52,8 @@ ouinet::util::get_host_port(const http::request<http::string_body>& req)
     return make_pair(host, port);
 }
 
-boost::optional<ouinet::util::HttpByteRange>
-ouinet::util::HttpByteRange::parse(boost::string_view s)
+boost::optional<ouinet::util::HttpResponseByteRange>
+ouinet::util::HttpResponseByteRange::parse(boost::string_view s)
 {
     static const boost::regex range_rx("^bytes ([0-9]+)-([0-9]+)/([0-9]+|\\*)$");
     boost::cmatch m;
@@ -75,18 +75,18 @@ ouinet::util::HttpByteRange::parse(boost::string_view s)
        || (length && *last >= *length))
         return boost::none;  // off-limits
 
-    return ouinet::util::HttpByteRange{*first, *last, std::move(length)};
+    return ouinet::util::HttpResponseByteRange{*first, *last, std::move(length)};
 }
 
 bool
-ouinet::util::HttpByteRange::matches_length(size_t s) const {
+ouinet::util::HttpResponseByteRange::matches_length(size_t s) const {
     if (!length) return false;  // it should have a value
     if (*length != s) return false;  // values do not match
     return true;
 }
 
 bool
-ouinet::util::HttpByteRange::matches_length(boost::string_view ls) const {
+ouinet::util::HttpResponseByteRange::matches_length(boost::string_view ls) const {
     auto s = parse::number<size_t>(ls);
     if (s) return matches_length(*s);
     if (length) return false;  // length should be "*"
@@ -95,7 +95,7 @@ ouinet::util::HttpByteRange::matches_length(boost::string_view ls) const {
 
 std::ostream&
 ouinet::util::operator<<( std::ostream& os
-                        , const ouinet::util::HttpByteRange& br)
+                        , const ouinet::util::HttpResponseByteRange& br)
 {
     os << "bytes " << br.first << '-' << br.last << '/';
     if (br.length) return os << *(br.length);

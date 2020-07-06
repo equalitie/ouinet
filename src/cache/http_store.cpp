@@ -431,7 +431,7 @@ public:
 
             // Report resulting range.
             head.set( http::field::content_range
-                    , util::HttpByteRange{range->begin, range->end - 1, data_size});
+                    , util::HttpResponseByteRange{range->begin, range->end - 1, data_size});
         }
 
         // The stored head should not have framing headers,
@@ -686,7 +686,7 @@ _http_store_reader( const fs::path& dirp, asio::executor ex
         if ( *range_first >= body_size
            || *range_last >= body_size) {
             _WARN( "Requested range goes beyond stored data: "
-                 , util::HttpByteRange{*range_first, *range_last, body_size});
+                 , util::HttpResponseByteRange{*range_first, *range_last, body_size});
             ec = sys::errc::make_error_code(sys::errc::invalid_seek);
             return nullptr;
         }
@@ -767,7 +767,7 @@ private:
             ? *lsoff + std::min(bsize - *lsoff, *block_size)
             : (bsize / *block_size) * *block_size;
 
-        return util::str(util::HttpByteRange{0, end - 1, data_size});
+        return util::str(util::HttpResponseByteRange{0, end - 1, data_size});
     }
 
 public:

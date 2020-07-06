@@ -31,14 +31,14 @@ get_host_port(const http::request<http::string_body>&);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Helps parsing and printing contents of `Content-Range` headers.
-struct HttpByteRange {
+struct HttpResponseByteRange {
     size_t first;
     size_t last;
     // Total size of the document (if known)
     boost::optional<size_t> length;
 
     static
-    boost::optional<HttpByteRange>
+    boost::optional<HttpResponseByteRange>
     parse(boost::string_view);
 
     bool
@@ -49,7 +49,7 @@ struct HttpByteRange {
 };
 
 std::ostream&
-operator<<(std::ostream&, const HttpByteRange&);
+operator<<(std::ostream&, const HttpResponseByteRange&);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Returns ptime() if parsing fails.

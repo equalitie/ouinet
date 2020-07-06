@@ -828,7 +828,7 @@ struct VerifyingReader::Impl {
         }
         // Parse range in partial responses (since it may not be signed).
         if (!resp_range.empty()) {
-            auto br = util::HttpByteRange::parse(resp_range);
+            auto br = util::HttpResponseByteRange::parse(resp_range);
             if (!br) {
                 LOG_WARN("Malformed byte range in HTTP head; uri=", _head.uri());
                 return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
