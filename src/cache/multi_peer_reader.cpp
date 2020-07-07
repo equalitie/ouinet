@@ -77,7 +77,7 @@ public:
     string _key;
     const util::Ed25519PublicKey _cache_pk;
     boost::optional<GenericStream> _connection;
-    unique_ptr<VerifyingReader> _reader;
+    unique_ptr<http_response::Reader> _reader;
     HashList _hash_list;
 
     Peer(asio::executor exec, const string& key, util::Ed25519PublicKey cache_pk) :
@@ -87,30 +87,81 @@ public:
     {
     }
 
-    void setup_reader(Cancel c, asio::yield_context y) {
+    size_t block_count() const {
+        return _hash_list.block_hashes.size();
+    }
+
+    boost::optional<http_response::Part>
+    read_part(size_t block_id, Cancel c, asio::yield_context yield)
+    {
+        using Ret = boost::optional<http_response::Part>;
+
         assert(_reader || _connection);
 
         sys::error_code ec;
 
-        if (_reader) return;
+        if (!_reader) {
+            bool timed_out = false;
 
-        bool timed_out = false;
+            auto cc = c.connect([&] { if (_connection) _connection->close(); });
 
-        auto cc = c.connect([&] { if (_connection) _connection->close(); });
+            auto wd = watch_dog(_exec, chrono::seconds(10), [&] {
+                    if (c) return;
+                    timed_out = true;
+                    c();
+                });
 
-        auto wd = watch_dog(_exec, chrono::seconds(10), [&] {
-                timed_out = true;
-                c();
-            });
+            http::async_write(*_connection, range_request(http::verb::get, block_id, _key), yield[ec]);
 
-        http::async_write(*_connection, request(http::verb::get, _key), y[ec]);
+            if (c) ec = asio::error::operation_aborted;
+            if (timed_out) ec = asio::error::timed_out;
+            if (ec) return or_throw<Ret>(yield, ec);
+
+            auto r = make_unique<http_response::Reader>(move(*_connection));
+            _connection = boost::none;
+
+            auto head = r->async_read_part(c, yield[ec]);
+
+            if (c) ec = asio::error::operation_aborted;
+            if (timed_out) ec = asio::error::timed_out;
+            if (ec) return or_throw<Ret>(yield, ec);
+
+            if (!head || !head->is_head()) {
+                assert(0);
+                return or_throw<Ret>(yield, asio::error::no_recovery);
+            }
+
+            _reader = std::move(r);
+        }
+
+        // XXX Add timeout
+        auto p = _reader->async_read_part(c, yield[ec]);
 
         if (c) ec = asio::error::operation_aborted;
-        if (timed_out) ec = asio::error::timed_out;
-        if (ec) return or_throw(y, ec);
+        if (ec) return or_throw<Ret>(yield, ec);
 
-        _reader = make_unique<cache::VerifyingReader>(move(*_connection), _cache_pk);
-        _connection = boost::none;
+        // This may happen when the message has no body
+        if (!p) {
+            _connection = _reader->release_stream();
+            _reader = nullptr;
+            return p;
+        }
+
+        if (auto chunk_hdr = p->as_chunk_hdr()) {
+            if (chunk_hdr->is_last() && block_id + 1 < block_count()) {
+                while (p) {
+                    // Flush the trailer
+                    p = _reader->async_read_part(c, yield[ec]);
+                    if (ec) return or_throw<Ret>(yield, ec);
+                    assert(!p || p->is_trailer());
+                }
+                _connection = _reader->release_stream();
+                _reader = nullptr;
+                return boost::none;
+            }
+        }
+
+        return p;
     }
 
     http::request<http::string_body> request(http::verb verb, const string& key)
@@ -120,6 +171,16 @@ public:
         rq.set(http::field::host, "dummy_host");
         rq.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
         rq.set(http::field::user_agent, "Ouinet.Bep5.Client");
+        return rq;
+    }
+
+    http::request<http::string_body> range_request(http::verb verb, size_t chunk_id, const string& key)
+    {
+        auto rq = request(verb, key);
+        auto bs = _hash_list.signed_head.block_size();
+        size_t first = chunk_id * bs;
+        size_t last = (bs > 0) ? (first + bs - 1) : first;
+        rq.set(http::field::range, util::str("bytes=", first, "-", last));
         return rq;
     }
 
@@ -353,39 +414,38 @@ MultiPeerReader::async_read_part(Cancel cancel, asio::yield_context yield)
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw<Ret>(yield, ec);
         assert(_chosen_peer);
-
-        _chosen_peer->setup_reader(cancel, yield[ec]);
-        assert(!cancel || ec == asio::error::operation_aborted);
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<Ret>(yield, ec);
     }
-
-    auto ret =_chosen_peer->_reader->async_read_part(cancel, yield[ec]);
-
-    if (ec) return or_throw<Ret>(yield, ec, std::move(ret));
 
     if (!_head_sent) {
         _head_sent = true;
         return http_response::Part{_chosen_peer->_hash_list.signed_head};
     }
 
-    return or_throw<Ret>(yield, ec, std::move(ret));
+    while (_block_id < _chosen_peer->block_count()) {
+        auto ret = _chosen_peer->read_part(_block_id, cancel, yield[ec]);
+        if (ec) return or_throw<Ret>(yield, ec);
+        if (!ret) {
+            ++_block_id;
+            continue;
+        }
+        return ret;
+    }
+
+    return or_throw<Ret>(yield, ec);
 }
 
 bool MultiPeerReader::is_done() const
 {
     if (_closed) return true;
     if (!_chosen_peer) return false;
-    if (!_chosen_peer->_reader) return false;
-    return _chosen_peer->_reader->is_done();
+    return _block_id >= _chosen_peer->block_count();
 }
 
 bool MultiPeerReader::is_open() const
 {
     if (_closed) return false;
-    if (!_chosen_peer) return true;
-    if (!_chosen_peer->_reader) return false;
-    return _chosen_peer->_reader->is_open();
+    if (!_chosen_peer) return false;
+    return _block_id < _chosen_peer->block_count();
 }
 
 void MultiPeerReader::close()

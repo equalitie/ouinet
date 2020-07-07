@@ -97,6 +97,10 @@ struct ChunkHdr {
         , exts(std::move(exts))
     {}
 
+    bool is_last() const {
+        return size == 0;
+    }
+
     bool operator==(const ChunkHdr& other) const {
         return size == other.size && exts == other.exts;
     }

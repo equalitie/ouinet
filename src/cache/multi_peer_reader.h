@@ -43,7 +43,7 @@ private:
     Peer* _chosen_peer = nullptr;
     std::string _dbg_tag;
     bool _head_sent = false;
-    size_t _next_chunk_id = 0;
+    size_t _block_id = 0;
 };
 
 }}
