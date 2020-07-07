@@ -776,8 +776,8 @@ BOOST_AUTO_TEST_CASE(test_read_response_partial_off) {
             ( tmpdir, ctx.get_executor()
             , 0, 42'000'000  // off limits
             , e);
-        BOOST_CHECK_EQUAL(e, sys::errc::invalid_seek);
-        BOOST_CHECK(!store_rr);
+        BOOST_CHECK(!e);
+        BOOST_CHECK(store_rr);
     });
 }
 

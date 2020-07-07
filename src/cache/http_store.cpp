@@ -427,7 +427,8 @@ public:
                        ? bs * ((range->end - 1) / bs + 1)
                        : 0;
             // Clip range end to actual file size.
-            auto ds = util::file_io::file_size(bodyf, ec);
+            size_t ds = 0;
+            if (bodyf.is_open()) ds = util::file_io::file_size(bodyf, ec);
             if (ec) return or_throw<http_response::Head>(yield, ec);
             if (range->end > ds) range->end = ds;
 
@@ -456,6 +457,7 @@ public:
     {
         assert(_is_head_done);
         if (!range) return;
+        if (range->end == 0) return;
         assert(bodyf.is_open());
         assert(block_size);
 
@@ -657,7 +659,8 @@ _http_store_reader( const fs::path& dirp, asio::executor ex
                   , boost::optional<std::size_t> range_last
                   , sys::error_code& ec)
 {
-    // XXX: This should be ensured with types
+    // XXX: Actually the RFC7233 allows for range_last to be undefined
+    // https://tools.ietf.org/html/rfc7233#section-2.1
     assert((!range_first && !range_last) || (range_first && range_last));
 
     auto headf = util::file_io::open_readonly(ex, dirp / head_fname, ec);
@@ -676,26 +679,38 @@ _http_store_reader( const fs::path& dirp, asio::executor ex
     if (range_first) {
         // Check and convert range.
         assert(range_last);
-        if (*range_first > *range_last) {
+        size_t begin = *range_first;
+        size_t end   = *range_last + 1;
+        if (begin > end) {
             _WARN("Inverted range boundaries: ", *range_first, " > ", *range_last);
             ec = sys::errc::make_error_code(sys::errc::invalid_seek);
             return nullptr;
         }
         if (!bodyf.is_open()) {
-            _WARN("Range requested for response with no stored data");
-            ec = sys::errc::make_error_code(sys::errc::invalid_seek);
-            return nullptr;
+            if (begin > 0) {
+                _WARN("Positive range requested for response with no stored data");
+            }
+            begin = 0;
+            end = 0;
+        } else {
+            auto body_size = util::file_io::file_size(bodyf, ec);
+            if (ec) return nullptr;
+            if (begin > 0 &&  begin >= body_size) {
+                _WARN( "Requested range 'first' goes beyond stored data: "
+                     , util::HttpResponseByteRange{*range_first, *range_last, body_size});
+                ec = sys::errc::make_error_code(sys::errc::invalid_seek);
+                return nullptr;
+            }
+            // https://tools.ietf.org/html/rfc7233#section-2.1
+            // Quote from the above link: If the last-byte-pos value is absent,
+            // or if the value is greater than or equal to the current length
+            // of the representation data, the byte range is interpreted as the
+            // remainder of the representation (i.e., the server replaces the
+            // value of last-byte-pos with a value that is one less than the
+            // current length of the selected representation).
+            end = std::min(end, body_size);
         }
-        auto body_size = util::file_io::file_size(bodyf, ec);
-        if (ec) return nullptr;
-        if ( *range_first >= body_size
-           || *range_last >= body_size) {
-            _WARN( "Requested range goes beyond stored data: "
-                 , util::HttpResponseByteRange{*range_first, *range_last, body_size});
-            ec = sys::errc::make_error_code(sys::errc::invalid_seek);
-            return nullptr;
-        }
-        range = Range{*range_first, *range_last + 1};
+        range = Range{begin, end};
     }
 
     return std::make_unique<Reader>
