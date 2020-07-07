@@ -131,6 +131,17 @@ struct Client::Impl {
                 dht_group);
     }
 
+    template<class Body>
+    static
+    boost::optional<util::HttpRequestByteRange> get_range(const http::request<Body>& rq)
+    {
+        auto rs = util::HttpRequestByteRange::parse(rq[http::field::range]);
+        if (!rs) return boost::none;
+        // XXX: We currently support max 1 rage in the request
+        if ((*rs).size() != 1) return boost::none;
+        return (*rs)[0];
+    }
+
     bool serve_local( const http::request<http::empty_body>& req
                     , GenericStream& sink
                     , Cancel& cancel
@@ -139,6 +150,10 @@ struct Client::Impl {
         bool do_log = log_debug();
 
         sys::error_code ec;
+
+        if (do_log) {
+            yield.log("cache/client: start\n", req);
+        }
 
         // Usually we would
         // (1) check that the request matches our protocol version, and
@@ -194,7 +209,17 @@ struct Client::Impl {
             return or_throw(yield, ec, bool(!ec));
         }
 
-        auto rr = _http_store->reader(*key, ec);
+        cache::reader_uptr rr;
+
+        auto range = get_range(req);
+
+        if (range) {
+            rr = _http_store->range_reader(*key, range->first, range->last, ec);
+            assert(rr);
+        } else {
+            rr = _http_store->reader(*key, ec);
+        }
+
         if (ec) {
             if (!cancel && do_log) {
                 yield.log("cache/client: Not Serving ", *key, " ec:", ec.message());
@@ -208,6 +233,7 @@ struct Client::Impl {
         }
 
         auto s = Session::create(move(rr), cancel, yield[ec].tag("read_header"));
+
         if (ec) return or_throw(yield, ec, false);
 
         bool keep_alive = req.keep_alive() && s.response_header().keep_alive();

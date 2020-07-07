@@ -131,6 +131,9 @@ public:
     reader_uptr
     reader(const std::string& key, sys::error_code&);
 
+    reader_uptr
+    range_reader(const std::string& key, size_t first, size_t last, sys::error_code&);
+
     std::size_t
     size(Cancel, asio::yield_context) const;
 

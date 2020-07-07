@@ -989,6 +989,16 @@ HttpStore::reader( const std::string& key
     return http_store_reader(kpath, executor, ec);
 }
 
+reader_uptr
+HttpStore::range_reader( const std::string& key
+                       , size_t first
+                       , size_t last
+                       , sys::error_code& ec)
+{
+    auto kpath = path_from_key(path, key);
+    return http_store_range_reader(kpath, executor, first, last, ec);
+}
+
 std::size_t
 HttpStore::size( Cancel cancel
                , asio::yield_context yield) const
