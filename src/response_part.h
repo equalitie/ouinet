@@ -135,8 +135,8 @@ struct ChunkBody : public std::vector<uint8_t> {
 
     using Base = std::vector<uint8_t>;
 
-    ChunkBody(const Base& data, size_t remain)
-        : Base(data)
+    ChunkBody(Base data, size_t remain)
+        : Base(std::move(data))
         , remain(remain) {}
 
     ChunkBody(const ChunkBody&) = default;
