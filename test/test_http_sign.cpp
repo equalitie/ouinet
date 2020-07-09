@@ -81,6 +81,16 @@ static const std::chrono::seconds::rep inj_ts = 1516048310;
 static const string inj_b64sk = "MfWAV5YllPAPeMuLXwN2mUkV9YaSSJVUcj/2YOaFmwQ=";
 static const string inj_b64pk = "DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=";
 
+static util::Ed25519PrivateKey get_private_key() {
+    auto ska = util::bytes::to_array<uint8_t, util::Ed25519PrivateKey::key_size>(util::base64_decode(inj_b64sk));
+    return util::Ed25519PrivateKey(std::move(ska));
+}
+
+static util::Ed25519PublicKey get_public_key() {
+    auto pka = util::bytes::to_array<uint8_t, util::Ed25519PublicKey::key_size>(util::base64_decode(inj_b64pk));
+    return util::Ed25519PublicKey(std::move(pka));
+}
+
 // If Beast changes message representation or shuffles headers,
 // the example will need to be updated,
 // but the signature should stay the same.
@@ -96,21 +106,32 @@ static const string _rs_fields_origin = (
     "Content-Disposition: inline; filename=\"foo.html\"\r\n"
 );
 
-static const string _rs_head_injection = (
-    "X-Ouinet-Version: 5\r\n"
-    "X-Ouinet-URI: https://example.com/foo\r\n"
-    "X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310\r\n"
-    "X-Ouinet-BSigs: keyId=\"ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=\","
+static const string _rs_head_injection = util::str(
+    "X-Ouinet-Version: 5\r\n",
+    "X-Ouinet-URI: https://example.com/foo\r\n",
+    "X-Ouinet-Injection: id=", inj_id, ",ts=", inj_ts, "\r\n",
+    "X-Ouinet-BSigs: keyId=\"ed25519=",inj_b64pk,"\",",
     "algorithm=\"hs2019\",size=65536\r\n"
 );
 
-static const string _rs_head_sig0 = (
-    "X-Ouinet-Sig0: keyId=\"ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=\","
-    "algorithm=\"hs2019\",created=1516048310,"
-    "headers=\"(response-status) (created) "
-    "date server content-type content-disposition "
-    "x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-bsigs\","
-    "signature=\"qs/iL8KDytc22DqSBwhkEf/RoguMcQKcorrwviQx9Ck0SBf0A4Hby+dMpHDk9mjNYYnLCw4G9vPN637hG3lkAQ==\"\r\n"
+static const string _rs_head_sig0 = util::str(
+    "X-Ouinet-Sig0: keyId=\"ed25519=",inj_b64pk,"\",",
+    "algorithm=\"hs2019\",created=",inj_ts,",",
+    "headers=\"(response-status) (created) ",
+    "date server content-type content-disposition ",
+    "x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-bsigs\",",
+    "signature=\"",util::base64_encode(get_private_key().sign(util::str(
+            "(response-status): 200\n"
+            "(created): 1516048310\n"
+            "date: Mon, 15 Jan 2018 20:31:50 GMT\n"
+            "server: Apache1, Apache2\n"
+            "content-type: text/html\n"
+            "content-disposition: inline; filename=\"foo.html\"\n"
+            "x-ouinet-version: 5\n"
+            "x-ouinet-uri: https://example.com/foo\n"
+            "x-ouinet-injection: id=",inj_id,",ts=1516048310\n"
+            "x-ouinet-bsigs: keyId=\"ed25519=",inj_b64pk,"\",algorithm=\"hs2019\",size=65536"))),"\"",
+    "\r\n"
 );
 
 static const string _rs_head_framing = (
@@ -118,20 +139,33 @@ static const string _rs_head_framing = (
     "Trailer: X-Ouinet-Data-Size, Digest, X-Ouinet-Sig1\r\n"
 );
 
-static const string _rs_head_digest = (
+static const string _rs_head_digest = util::str(
     "X-Ouinet-Data-Size: 131076\r\n"
-    "Digest: SHA-256=E4RswXyAONCaILm5T/ZezbHI87EKvKIdxURKxiVHwKE=\r\n"
+    "Digest: SHA-256=",rs_body_b64digest,"\r\n"
 );
 
-static const string _rs_head_sig1 = (
-    "X-Ouinet-Sig1: keyId=\"ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=\","
-    "algorithm=\"hs2019\",created=1516048311,"
-    "headers=\"(response-status) (created) "
-    "date server content-type content-disposition "
-    "x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-bsigs "
-    "x-ouinet-data-size "
-    "digest\","
-    "signature=\"4+POBKdNljxUKHKD+NCP34aS6j0QhI4EWmqiN3aopoWtDiMwgmeiR1hO44QhWFwWdNmNkVJs+LVuEUN892mFDg==\"\r\n"
+static const string _rs_head_sig1 = util::str(
+    "X-Ouinet-Sig1: keyId=\"ed25519=",inj_b64pk,"\",",
+    "algorithm=\"hs2019\",created=1516048311,",
+    "headers=\"(response-status) (created) ",
+    "date server content-type content-disposition ",
+    "x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-bsigs ",
+    "x-ouinet-data-size ",
+    "digest\",",
+    "signature=\"",util::base64_encode(get_private_key().sign(util::str(
+            "(response-status): 200\n"
+            "(created): 1516048311\n"
+            "date: Mon, 15 Jan 2018 20:31:50 GMT\n"
+            "server: Apache1, Apache2\n"
+            "content-type: text/html\n"
+            "content-disposition: inline; filename=\"foo.html\"\n"
+            "x-ouinet-version: 5\n"
+            "x-ouinet-uri: https://example.com/foo\n"
+            "x-ouinet-injection: id=",inj_id,",ts=1516048310\n" // XXX: Non matching ts!
+            "x-ouinet-bsigs: keyId=\"ed25519=",inj_b64pk,"\",algorithm=\"hs2019\",size=65536\n"
+            "x-ouinet-data-size: 131076\n"
+            "digest: SHA-256=",rs_body_b64digest))),"\"",
+    "\r\n"
 );
 
 static const string rs_head_signed_s =
@@ -188,16 +222,6 @@ static http::request_header<> get_request_header() {
     return req_h;
 }
 
-static util::Ed25519PrivateKey get_private_key() {
-    auto ska = util::bytes::to_array<uint8_t, util::Ed25519PrivateKey::key_size>(util::base64_decode(inj_b64sk));
-    return util::Ed25519PrivateKey(std::move(ska));
-}
-
-static util::Ed25519PublicKey get_public_key() {
-    auto pka = util::bytes::to_array<uint8_t, util::Ed25519PublicKey::key_size>(util::base64_decode(inj_b64pk));
-    return util::Ed25519PublicKey(std::move(pka));
-}
-
 struct TestGlobalFixture {
     void setup() {
         ouinet::util::crypto_init();
@@ -237,9 +261,9 @@ BOOST_AUTO_TEST_CASE(test_http_sign) {
     for (auto& hdr : trailer)
         rs_head.set(hdr.name_string(), hdr.value());
 
-    std::stringstream rs_head_ss;
-    rs_head_ss << rs_head;
-    BOOST_REQUIRE_EQUAL(rs_head_ss.str(), rs_head_signed_s);
+    std::string rs_head_s = util::str(rs_head);
+
+    BOOST_REQUIRE_EQUAL(rs_head_s, rs_head_signed_s);
 
 }
 
