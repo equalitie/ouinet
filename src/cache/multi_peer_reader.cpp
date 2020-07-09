@@ -22,6 +22,7 @@ using namespace cache;
 
 using udp = asio::ip::udp;
 namespace bt = bittorrent;
+using namespace ouinet::http_response;
 
 static bool same_ipv(const udp::endpoint& ep1, const udp::endpoint& ep2)
 {
@@ -80,6 +81,14 @@ public:
     unique_ptr<http_response::Reader> _reader;
     HashList _hash_list;
 
+    // We may receive multiple ChunkBody parts before we receive the next
+    // ChunkHdr with which we can verify data integrity. Thus we need to
+    // accumulte the body before it's passed forward.
+    std::vector<uint8_t> _accumulated_block;
+    // Once we receive ChunkHdr after we've been accumulating data, we send the
+    // data and store the ChunkHdr to be sent next.
+    boost::optional<ChunkHdr> _postponed_chunk_hdr;
+
     Peer(asio::executor exec, const string& key, util::Ed25519PublicKey cache_pk) :
         _exec(exec),
         _key(key),
@@ -91,10 +100,10 @@ public:
         return _hash_list.block_hashes.size();
     }
 
-    boost::optional<http_response::Part>
+    boost::optional<Part>
     read_part(size_t block_id, Cancel c, asio::yield_context yield)
     {
-        using Ret = boost::optional<http_response::Part>;
+        using OptPart = boost::optional<Part>;
 
         assert(_reader || _connection);
 
@@ -115,7 +124,7 @@ public:
 
             if (c) ec = asio::error::operation_aborted;
             if (timed_out) ec = asio::error::timed_out;
-            if (ec) return or_throw<Ret>(yield, ec);
+            if (ec) return or_throw<OptPart>(yield, ec);
 
             auto r = make_unique<http_response::Reader>(move(*_connection));
             _connection = boost::none;
@@ -124,21 +133,26 @@ public:
 
             if (c) ec = asio::error::operation_aborted;
             if (timed_out) ec = asio::error::timed_out;
-            if (ec) return or_throw<Ret>(yield, ec);
+            if (ec) return or_throw<OptPart>(yield, ec);
 
             if (!head || !head->is_head()) {
                 assert(0);
-                return or_throw<Ret>(yield, asio::error::no_recovery);
+                return or_throw<OptPart>(yield, asio::error::no_recovery);
             }
 
             _reader = std::move(r);
         }
 
         // XXX Add timeout
-        auto p = _reader->async_read_part(c, yield[ec]);
+        OptPart p;
 
-        if (c) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<Ret>(yield, ec);
+        if (_postponed_chunk_hdr) {
+            p = std::move(*_postponed_chunk_hdr);
+            _postponed_chunk_hdr = boost::none;
+        } else {
+            p = _reader->async_read_part(c, yield[ec]);
+            if (ec) return or_throw<OptPart>(yield, ec);
+        }
 
         // This may happen when the message has no body
         if (!p) {
@@ -152,13 +166,43 @@ public:
                 while (p) {
                     // Flush the trailer
                     p = _reader->async_read_part(c, yield[ec]);
-                    if (ec) return or_throw<Ret>(yield, ec);
+                    if (ec) return or_throw<OptPart>(yield, ec);
                     assert(!p || p->is_trailer());
                 }
                 _connection = _reader->release_stream();
                 _reader = nullptr;
                 return boost::none;
             }
+        }
+
+        if (auto chunk_body = p->as_chunk_body()) {
+            while (true) {
+                _accumulated_block.insert(_accumulated_block.end(),
+                    chunk_body->begin(), chunk_body->end());
+
+                if (chunk_body->remain == 0) {
+                    break;
+                }
+
+                p = _reader->async_read_part(c, yield[ec]);
+                if (ec) return or_throw<OptPart>(yield, ec);
+
+                chunk_body = p->as_chunk_body();
+
+                if (!chunk_body) {
+                    assert(0);
+                    return or_throw<OptPart>(yield, asio::error::no_recovery);
+                }
+            }
+
+            p = _reader->async_read_part(c, yield[ec]);
+
+            if (!ec && (!p || !p->is_chunk_hdr())) ec = asio::error::no_recovery;
+            if (ec) return or_throw<OptPart>(yield, ec);
+
+            _postponed_chunk_hdr = std::move(*p->as_chunk_hdr());
+
+            return Part{ChunkBody(move(_accumulated_block), 0)};
         }
 
         return p;
