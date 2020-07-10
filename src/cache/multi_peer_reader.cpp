@@ -87,6 +87,8 @@ public:
     // ChunkHdr with which we can verify data integrity. Thus we need to
     // accumulte the body before it's passed forward.
     std::vector<uint8_t> _accumulated_block;
+    util::SHA512 _block_hasher;
+
     // Once we receive ChunkHdr after we've been accumulating data, we send the
     // data and store the ChunkHdr to be sent next.
     boost::optional<ChunkHdr> _postponed_chunk_hdr;
@@ -179,6 +181,8 @@ public:
 
         if (auto chunk_body = p->as_chunk_body()) {
             while (true) {
+                _block_hasher.update(*chunk_body);
+
                 _accumulated_block.insert(_accumulated_block.end(),
                     chunk_body->begin(), chunk_body->end());
 
@@ -204,7 +208,8 @@ public:
 
             _postponed_chunk_hdr = std::move(*p->as_chunk_hdr());
 
-            auto digest = util::sha512_digest(_accumulated_block);
+            auto digest = _block_hasher.close();
+            _block_hasher = {};
 
             if (digest != _hash_list.block_hashes[block_id]) {
                 return or_throw<OptPart>(yield, Errc::inconsistent_hash);
