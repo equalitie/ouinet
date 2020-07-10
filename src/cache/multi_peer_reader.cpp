@@ -1,6 +1,7 @@
 #include <asio_utp.hpp>
 
 #include "multi_peer_reader.h"
+#include "multi_peer_reader_error.h"
 #include "cache_entry.h"
 #include "http_sign.h"
 #include "hash_list.h"
@@ -23,6 +24,7 @@ using namespace cache;
 using udp = asio::ip::udp;
 namespace bt = bittorrent;
 using namespace ouinet::http_response;
+using Errc = MultiPeerReaderErrc;
 
 static bool same_ipv(const udp::endpoint& ep1, const udp::endpoint& ep2)
 {
@@ -137,7 +139,7 @@ public:
 
             if (!head || !head->is_head()) {
                 assert(0);
-                return or_throw<OptPart>(yield, asio::error::no_recovery);
+                return or_throw<OptPart>(yield, Errc::expected_head);
             }
 
             _reader = std::move(r);
@@ -191,16 +193,22 @@ public:
 
                 if (!chunk_body) {
                     assert(0);
-                    return or_throw<OptPart>(yield, asio::error::no_recovery);
+                    return or_throw<OptPart>(yield, Errc::expected_chunk_body);
                 }
             }
 
             p = _reader->async_read_part(c, yield[ec]);
 
-            if (!ec && (!p || !p->is_chunk_hdr())) ec = asio::error::no_recovery;
+            if (!ec && (!p || !p->is_chunk_hdr())) ec = Errc::expected_chunk_hdr;
             if (ec) return or_throw<OptPart>(yield, ec);
 
             _postponed_chunk_hdr = std::move(*p->as_chunk_hdr());
+
+            auto digest = util::sha512_digest(_accumulated_block);
+
+            if (digest != _hash_list.block_hashes[block_id]) {
+                return or_throw<OptPart>(yield, Errc::inconsistent_hash);
+            }
 
             return Part{ChunkBody(move(_accumulated_block), 0)};
         }
@@ -212,7 +220,7 @@ public:
     {
         auto uri = uri_from_key(_key);
         http::request<http::string_body> rq{verb, uri, 11 /* version */};
-        rq.set(http::field::host, "dummy_host");
+        rq.set(http::field::host, "OuinetClient");
         rq.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
         rq.set(http::field::user_agent, "Ouinet.Bep5.Client");
         return rq;
@@ -385,7 +393,7 @@ public:
 
         if (_good_peers.empty()) {
             // There's no more candidates
-            return or_throw<Peer*>(yield, asio::error::host_unreachable, nullptr);
+            return or_throw<Peer*>(yield, Errc::no_peers, nullptr);
         }
 
         return &*_good_peers.begin();
