@@ -747,18 +747,30 @@ struct VerifyingReader::Impl {
     const util::Ed25519PublicKey _pk;
     const status_set _statuses;
 
+    SignedHead _head;  // verified head; keep for later use
+    boost::optional<size_t> _range_begin, _range_end;
+    size_t _block_offset = 0;
+    std::unique_ptr<util::quantized_buffer> _qbuf;
+
+    util::SHA512 _block_hash;
+    opt_sig_array_t _prev_block_sig;
+    opt_block_digest_t _block_dig, _prev_block_dig;
+    // Simplest implementation: one output chunk per data block.
+    // If a whole data block has been processed,
+    // return its chunk header and push the block as its chunk body.
+    std::queue<http_response::Part> _pending_parts;
+
+    size_t _body_length = 0;
+    util::SHA256 _body_hash;
+
+    bool _is_done = false;
+
     Impl(bool check_framing, util::Ed25519PublicKey pk, status_set statuses)
         : _check_framing(check_framing)
         , _pk(std::move(pk))
         , _statuses(std::move(statuses))
     {
     }
-
-    //ouinet::http_response::Head _head;  // verified head; keep for later use
-    SignedHead _head;  // verified head; keep for later use
-    boost::optional<size_t> _range_begin, _range_end;
-    size_t _block_offset = 0;
-    std::unique_ptr<util::quantized_buffer> _qbuf;
 
     boost::optional<http::status>
     get_original_status(const http_response::Head& inh)
@@ -857,14 +869,6 @@ struct VerifyingReader::Impl {
         return http_response::Part(std::move(out_head));
     }
 
-    util::SHA512 _block_hash;
-    opt_sig_array_t _prev_block_sig;
-    opt_block_digest_t _block_dig, _prev_block_dig;
-    // Simplest implementation: one output chunk per data block.
-    // If a whole data block has been processed,
-    // return its chunk header and push the block as its chunk body.
-    std::queue<http_response::Part> _pending_parts;
-
     optional_part
     process_part(http_response::ChunkHdr inch, Cancel cancel, asio::yield_context y)
     {
@@ -938,9 +942,6 @@ struct VerifyingReader::Impl {
         return http_response::Part(std::move(ch));
     }
 
-    size_t _body_length = 0;
-    util::SHA256 _body_hash;
-
     optional_part
     process_part(std::vector<uint8_t> ind, Cancel, asio::yield_context y)
     {
@@ -984,8 +985,6 @@ struct VerifyingReader::Impl {
         http_response::ChunkHdr ch(0, block_chunk_ext(_prev_block_sig, _prev_block_dig));
         return http_response::Part(std::move(ch));
     }
-
-    bool _is_done = false;
 
     void
     check_body(sys::error_code& ec)
