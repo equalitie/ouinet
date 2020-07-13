@@ -1,5 +1,6 @@
 #include "hash_list.h"
 #include "http_sign.h"
+#include "chain_hasher.h"
 
 using namespace std;
 using namespace ouinet;
@@ -16,39 +17,22 @@ static const char* ORIGINAL_STATUS = "X-Ouinet-Original-Status";
 using Digest = util::SHA512::digest_type;
 
 bool HashList::verify() const {
-    boost::optional<Digest> last_digest;
-
     size_t block_size = signed_head.block_size();
-    size_t last_offset = 0;
 
-    bool first = true;
+    ChainHasher chain_hasher;
+
+    // Even responses with empty body have at least one block hash
+    if (block_hashes.empty()) return false;
+
+    ChainHash chain_hash;
 
     for (auto& digest : block_hashes) {
-        util::SHA512 sha;
-
-        if (last_digest) {
-            sha.update(*last_digest);
-        }
-
-        sha.update(digest);
-
-        last_digest = sha.close();
-
-        if (first) {
-            first = false;
-        } else {
-            last_offset += block_size;
-        }
+        chain_hash = chain_hasher.calculate_block(block_size, digest);
     }
 
-    if (!last_digest) return false;
-
-
-    return cache::Block::verify( signed_head.injection_id()
-                               , last_offset
-                               , *last_digest
-                               , signature
-                               , signed_head.public_key());
+    return chain_hash.verify( signed_head.public_key()
+                            , signed_head.injection_id()
+                            , signature);
 }
 
 struct Parser {

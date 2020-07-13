@@ -15,6 +15,7 @@
 #include <boost/format.hpp>
 #include <boost/system/error_code.hpp>
 
+#include "chain_hasher.h"
 #include "../constants.h"
 #include "../http_util.h"
 #include "../logger.h"
@@ -240,35 +241,6 @@ block_chunk_ext( const opt_sig_array_t& sig
     return exts.str();
 }
 
-Block::Signature Block::sign( boost::string_view injection_id
-                            , size_t offset
-                            , const Digest& chained_digest
-                            , const util::Ed25519PrivateKey& sk)
-{
-    return sk.sign(block_sig_str(injection_id, offset, chained_digest));
-}
-
-bool Block::verify( boost::string_view injection_id
-                  , size_t offset
-                  , const Digest& chained_digest
-                  , const Block::Signature& signature
-                  , const util::Ed25519PublicKey& pk)
-{
-    auto str = block_sig_str(injection_id, offset, chained_digest);
-    return pk.verify(str, signature);
-}
-
-static
-std::string
-block_chunk_ext( boost::string_view injection_id
-               , size_t offset
-               , const block_digest_t& digest
-               , const util::Ed25519PrivateKey& sk)
-{
-    auto sig_str = block_sig_str(injection_id, offset, digest);
-    return block_chunk_ext(sk.sign(sig_str));
-}
-
 std::string
 http_digest(util::SHA256& hash)
 {
@@ -470,6 +442,7 @@ struct SigningReader::Impl {
     const std::chrono::seconds::rep _injection_ts;
     const util::Ed25519PrivateKey _sk;
     const std::string _httpsig_key_id;
+    ChainHasher _chain_hasher;
 
     Impl( http::request_header<> rqh
         , std::string injection_id
@@ -519,7 +492,7 @@ struct SigningReader::Impl {
     size_t _block_offset = 0;
     size_t _block_size_last = 0;
     util::SHA256 _body_hash;
-    util::SHA512 _block_hash;  // for first block
+    util::SHA512 _block_hash;
     // Simplest implementation: one output chunk per data block.
     util::quantized_buffer _qbuf{http_::response_data_block};
     std::queue<http_response::Part> _pending_parts;
@@ -543,19 +516,18 @@ struct SigningReader::Impl {
         _pending_parts.push(http_response::ChunkBody(std::move(block_vec), 0));
 
         http_response::ChunkHdr ch(block_buf.size(), {});
+
         if (_do_inject) {  // if injecting and sending data
             if (_block_offset > 0) {  // add chunk extension for previous block
-                auto block_digest = _block_hash.close();
-                ch.exts = block_chunk_ext( _injection_id
-                                         , _block_offset - _block_size_last
-                                         , block_digest, _sk);
-                // Prepare chunk extension for next block: CHASH[i]=SHA2-512(CHASH[i-1] DHASH[i])
-                _block_hash = {};
-                _block_hash.update(block_digest);
+                auto chain_hash = _chain_hasher.calculate_block(
+                        _block_size_last, _block_hash.close());
+
+                ch.exts = block_chunk_ext(chain_hash.sign(_sk, _injection_id));
             }  // else CHASH[0]=SHA2-512(DHASH[0])
-            _block_hash.update(util::sha512_digest(block_buf));
+            _block_hash.update(block_buf);
             _block_offset += (_block_size_last = block_buf.size());
         }
+
         return http_response::Part(std::move(ch));  // pass data on, drop origin extensions
     }
 
@@ -581,26 +553,22 @@ struct SigningReader::Impl {
         if (last_block_ch) return last_block_ch;
 
         _is_done = true;
+
         if (!_do_inject) {
             _pending_parts.push(std::move(_trailer_in));
             return http_response::Part(http_response::ChunkHdr());
         }
 
-        if (_block_offset == 0) {
-            // When there is no body, the block hash still needs to be hash(hash(""))
-            // and not just hash("")
-            _block_hash.update(util::sha512_digest(""));
-        }
+        auto chain_hash = _chain_hasher.calculate_block(_block_size_last, _block_hash.close());
 
-        auto block_digest = _block_hash.close();
         auto last_ch = http_response::ChunkHdr(
-            0, block_chunk_ext( _injection_id
-                              , _block_offset - _block_size_last
-                              , block_digest, _sk));
+                0, block_chunk_ext(chain_hash.sign(_sk, _injection_id)));
+
         auto trailer = cache::http_injection_trailer( _outh, std::move(_trailer_in)
                                                     , _body_length, _body_hash.close()
                                                     , _sk
                                                     , _httpsig_key_id);
+
         _pending_parts.push(std::move(trailer));
         return http_response::Part(std::move(last_ch));
     }
@@ -919,7 +887,7 @@ struct VerifyingReader::Impl {
         auto prev_prev_block_sig = std::move(_prev_block_sig);
         _prev_block_sig = std::move(block_sig);
         // Prepare hash for next data block: CHASH[i]=SHA2-512(CHASH[i-1] DHASH[i])
-        _block_hash = {}; _block_hash.update(block_digest);
+        _block_hash.update(block_digest);
         _block_offset += block_buf.size();
         // Chain hash is to be sent along the signature of the following data block,
         // so that it may convey the missing information for computing the signing string
