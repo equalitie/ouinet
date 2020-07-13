@@ -44,7 +44,7 @@ class Hash {
 public:
     using digest_type = std::array<uint8_t, DIGEST_LENGTH>;
 
-    Hash() : impl(hash_detail::new_hash_impl(ALGORITHM)) {};
+    Hash() {}
 
     static digest_type zero_digest() {
         static bool filled = false;
@@ -89,10 +89,15 @@ public:
 
     inline digest_type close()
     {
+        if (!impl) impl.reset(hash_detail::new_hash_impl(ALGORITHM));
+
         auto digest_buffer = hash_detail::hash_impl_close(*impl);
 
         digest_type result;
         std::memcpy(result.data(), digest_buffer, result.size());
+
+        impl = nullptr;
+
         return result;
     }
 
@@ -129,6 +134,7 @@ private:
 
     inline void update(const void* buffer, size_t size)
     {
+        if (!impl) impl.reset(hash_detail::new_hash_impl(ALGORITHM));
         hash_detail::hash_impl_update(*impl, buffer, size);
     }
 };
