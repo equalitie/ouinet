@@ -53,6 +53,7 @@
 #include "util/bytes.h"
 #include "util/file_io.h"
 #include "util/file_posix_with_offset.h"
+#include "util/yield.h"
 
 #include "logger.h"
 #include "defer.h"
