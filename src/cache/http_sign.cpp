@@ -208,19 +208,6 @@ block_sig_from_exts(boost::string_view xs)
 
 static
 std::string
-block_sig_str( boost::string_view injection_id
-             , size_t block_offset
-             , const block_digest_t& block_digest)
-{
-    static const auto fmt_ = "%s%c%d%c%s";
-    return ( boost::format(fmt_)
-           % injection_id % '\0'
-           % block_offset % '\0'
-           % util::bytes::to_string_view(block_digest)).str();
-}
-
-static
-std::string
 block_chunk_ext( const opt_sig_array_t& sig
                , const opt_block_digest_t& prev_digest = {})
 {
@@ -718,11 +705,10 @@ struct VerifyingReader::Impl {
     SignedHead _head;  // verified head; keep for later use
     boost::optional<size_t> _range_begin, _range_end;
     size_t _block_offset = 0;
-    std::unique_ptr<util::quantized_buffer> _qbuf;
+    std::vector<uint8_t> _block_data;
 
-    util::SHA512 _block_hash;
-    opt_sig_array_t _prev_block_sig;
-    opt_block_digest_t _block_dig, _prev_block_dig;
+    ChainHasher _chain_hasher;
+    opt_block_digest_t _prev_block_dig;
     // Simplest implementation: one output chunk per data block.
     // If a whole data block has been processed,
     // return its chunk header and push the block as its chunk body.
@@ -822,7 +808,8 @@ struct VerifyingReader::Impl {
             _range_begin = _block_offset = br->first;
             _range_end = br->last + 1;
         }
-        _qbuf = std::make_unique<util::quantized_buffer>(_head.block_size());
+
+        _block_data.reserve(_head.block_size());
 
         // Return head with the status we got at the beginning.
         auto out_head = _head;
@@ -849,12 +836,11 @@ struct VerifyingReader::Impl {
         // Have we buffered a whole data block?
         // An empty data block is fine if this is the last chunk header
         // (a chunk for it will not be produced, though).
-        auto block_buf = _qbuf->get();
-        if (block_buf.size() == 0)
-            if (inch.size == 0)
-                block_buf = _qbuf->get_rest();  // send rest if no more chunks
-            else
-                return boost::none;
+
+        if (_block_data.size() == 0) {
+            // This is the first chunk header
+            return http_response::Part{std::move(inch)};
+        }
 
         // Verify the whole data block.
         auto block_sig = block_sig_from_exts(inch.exts);
@@ -862,6 +848,7 @@ struct VerifyingReader::Impl {
             LOG_WARN("Missing signature for data block with offset ", _block_offset, "; uri=", _head.uri());
             return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
         }
+
         // We lack the chain hash of the previous data blocks,
         // it should have been included along this block's signature.
         if (_range_begin && _block_offset > 0 && _block_offset == *_range_begin) {
@@ -872,42 +859,29 @@ struct VerifyingReader::Impl {
                         , _block_offset - _head.block_size(), "; uri=", _head.uri());
                 return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
             }
-            _block_hash.update(*_prev_block_dig);
+            _chain_hasher.set_prev_chained_digest(*_prev_block_dig);
+            _chain_hasher.set_offset(_block_offset);
         }
-        // Complete hash for the data block; note that CHASH[0]=SHA2-512(DHASH[0])
-        _block_hash.update(util::sha512_digest(block_buf));
-        auto block_digest = _block_hash.close();
-        auto bsig_str = block_sig_str(_head.injection_id(), _block_offset, block_digest);
-        if (!_head.public_key().verify(bsig_str, *block_sig)) {
+
+        auto chain_hash = _chain_hasher.calculate_block(_block_data.size(), util::sha512_digest(_block_data));
+
+        if (!chain_hash.verify(_head.public_key(), _head.injection_id(), *block_sig)) {
             LOG_WARN("Failed to verify data block with offset ", _block_offset, "; uri=", _head.uri());
             return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
         }
 
-        // Keep data block signature for next chunk header.
-        auto prev_prev_block_sig = std::move(_prev_block_sig);
-        _prev_block_sig = std::move(block_sig);
         // Prepare hash for next data block: CHASH[i]=SHA2-512(CHASH[i-1] DHASH[i])
-        _block_hash.update(block_digest);
-        _block_offset += block_buf.size();
-        // Chain hash is to be sent along the signature of the following data block,
-        // so that it may convey the missing information for computing the signing string
-        // if the receiver does not have the previous data blocks (e.g. for range requests).
-        // (Bk0) (Sig0 Bk1) (Sig1 Hash0 Bk2) ... (SigN-1 HashN-2 BkN) (SigN HashN-1)
-        auto prev_prev_block_dig = std::move(_prev_block_dig);
-        _prev_block_dig = std::move(_block_dig);
-        _block_dig = std::move(block_digest);
+        _block_offset += _block_data.size();
 
-        if (block_buf.size() == 0)
-            return boost::none;  // empty data block
+        http_response::ChunkHdr ch(inch.size, block_chunk_ext(*block_sig, _prev_block_dig));
+        _pending_parts.push(std::move(ch));
+
+        _prev_block_dig = chain_hash.digest;
 
         // Chunk header for data block (with previous extensions),
         // keep data block as chunk body.
-        http_response::ChunkBody cb(util::bytes::to_vector<uint8_t>(block_buf), 0);
-        _pending_parts.push(std::move(cb));
-
-        http_response::ChunkHdr ch( block_buf.size()
-                                  , block_chunk_ext(prev_prev_block_sig, prev_prev_block_dig));
-        return http_response::Part(std::move(ch));
+        http_response::ChunkBody cb(std::move(_block_data), 0);
+        return http_response::Part(std::move(cb));
     }
 
     optional_part
@@ -915,12 +889,14 @@ struct VerifyingReader::Impl {
     {
         _body_length += ind.size();
         _body_hash.update(ind);
-        try {
-            _qbuf->put(asio::buffer(ind));
-        } catch (const std::length_error&) {
+
+        if (_block_data.size() + ind.size() > _head.block_size()) {
+            //_qbuf->put(asio::buffer(ind));
             LOG_ERROR("Chunk data overflows data block boundary; uri=", _head.uri());
             return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
         }
+
+        _block_data.insert(_block_data.end(), ind.begin(), ind.end());
 
         // Data is returned when processing chunk headers.
         return boost::none;
@@ -948,10 +924,7 @@ struct VerifyingReader::Impl {
             _head = std::move(*head_o);
         }
 
-        _pending_parts.push(std::move(intr));
-
-        http_response::ChunkHdr ch(0, block_chunk_ext(_prev_block_sig, _prev_block_dig));
-        return http_response::Part(std::move(ch));
+        return http_response::Part(std::move(intr));
     }
 
     void
@@ -1048,6 +1021,7 @@ VerifyingReader::async_read_part(Cancel cancel, asio::yield_context yield)
         _impl->check_body(ec);
         return_or_throw_on_error(yield, cancel, ec, boost::none);
     }
+
     return part;
 }
 

@@ -54,8 +54,8 @@ public:
     {
         Hash chained_hasher;
 
-        if (_prev_digest) {
-            chained_hasher.update(*_prev_digest);
+        if (_prev_chained_digest) {
+            chained_hasher.update(*_prev_chained_digest);
         }
 
         chained_hasher.update(data_digest);
@@ -66,14 +66,21 @@ public:
 
         // Prepare for next block
         _offset += data_size;
-        _prev_digest = chained_digest;
+        _prev_chained_digest = chained_digest;
 
         return {old_offset, chained_digest};
     }
 
+    void set_prev_chained_digest(Digest prev_chained_digest) {
+        _prev_chained_digest = prev_chained_digest;
+    }
+
+    void set_offset(size_t offset) {
+        _offset = offset;
+    }
 private:
     size_t _offset;
-    boost::optional<Digest> _prev_digest;
+    boost::optional<Digest> _prev_chained_digest;
 };
 
 }} // namespaces
