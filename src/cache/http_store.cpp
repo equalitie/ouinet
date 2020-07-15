@@ -27,6 +27,7 @@
 #include "../util/variant.h"
 #include "http_sign.h"
 #include "signed_head.h"
+#include "chain_hasher.h"
 
 #define _LOGPFX "HTTP store: "
 #define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
@@ -115,12 +116,12 @@ parse_data_block_offset(const std::string& s)  // `^[0-9a-f]*$`
     return offset;
 }
 
-// A signatures file entry with `OFFSET[i] SIGNATURE[i] CHASH[i-1]`.
+// A signatures file entry with `OFFSET[i] SIGNATURE[i] BLOCK_DIGEST[i] CHASH[i-1]`.
 struct SigEntry {
     std::size_t offset;
     std::string signature;
-    std::string data_digest;
-    std::string prev_digest;
+    std::string block_digest;
+    std::string prev_chained_digest;
 
     using parse_buffer = std::string;
 
@@ -132,8 +133,8 @@ struct SigEntry {
     std::string str() const
     {
         static const auto line_format = "%016x %s %s %s\n";
-        return ( boost::format(line_format) % offset % signature % data_digest
-               % (prev_digest.empty() ? pad_digest() : prev_digest)).str();
+        return ( boost::format(line_format) % offset % signature % block_digest
+               % (prev_chained_digest.empty() ? pad_digest() : prev_chained_digest)).str();
     }
 
     std::string chunk_exts() const
@@ -145,8 +146,8 @@ struct SigEntry {
             exts << (boost::format(fmt_sx) % signature);
 
         static const auto fmt_hx = ";" + http_::response_block_chain_hash_ext + "=\"%s\"";
-        if (!prev_digest.empty())
-            exts << (boost::format(fmt_hx) % prev_digest);
+        if (!prev_chained_digest.empty())
+            exts << (boost::format(fmt_hx) % prev_chained_digest);
 
         return exts.str();
     }
@@ -207,7 +208,8 @@ private:
     std::size_t byte_count = 0;
     unsigned block_count = 0;
     util::SHA512 block_hash;
-    boost::optional<util::SHA512::digest_type> prev_block_digest;
+    //boost::optional<util::SHA512::digest_type> prev_block_digest;
+    ChainHasher chain_hasher;
 
     inline
     asio::posix::stream_descriptor
@@ -280,21 +282,15 @@ public:
         }
 
         auto block_digest = block_hash.close();
-        block_hash = {};
 
-        e.data_digest = util::base64_encode(block_digest);
+        e.block_digest = util::base64_encode(block_digest);
 
         // Encode the chained hash for the previous block.
-        if (prev_block_digest)
-            e.prev_digest = util::base64_encode(*prev_block_digest);
+        if (chain_hasher.prev_chained_digest())
+            e.prev_chained_digest = util::base64_encode(*chain_hasher.prev_chained_digest());
 
         // Prepare hash for next data block: CHASH[i]=SHA2-512(CHASH[i-1] BLOCK[i])
-        util::SHA512 chain_hash;
-
-        if (prev_block_digest) chain_hash.update(*prev_block_digest);
-        chain_hash.update(block_digest);
-
-        prev_block_digest = chain_hash.close();
+        chain_hasher.calculate_block(ch.size, block_digest);
 
         util::file_io::write(*sigsf, asio::buffer(e.str()), cancel, yield);
     }
@@ -1068,7 +1064,7 @@ http_store_load_hash_list( const fs::path& dir
 
         last_sig_entry = opt_sig_entry;
 
-        auto d = decode(opt_sig_entry->data_digest);
+        auto d = decode(opt_sig_entry->block_digest);
         if (!d) return or_throw<HashList>(yield, asio::error::bad_descriptor);
 
         hl.block_hashes.push_back(*d);
@@ -1076,14 +1072,8 @@ http_store_load_hash_list( const fs::path& dir
 
     if (!last_sig_entry) return or_throw<HashList>(yield, asio::error::bad_descriptor);
 
-    if (last_sig_entry->prev_digest.empty()) {
-        last_sig_entry->prev_digest = SigEntry::pad_digest();
-    }
-
-    auto c = decode(last_sig_entry->prev_digest);
-    if (!c) return or_throw<HashList>(yield, asio::error::bad_descriptor);
-
     std::string sig = util::base64_decode(last_sig_entry->signature);
+
     if (sig.size() != util::Ed25519PublicKey::sig_size) {
         return or_throw<HashList>(yield, asio::error::bad_descriptor);
     }

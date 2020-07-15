@@ -78,6 +78,11 @@ public:
     void set_offset(size_t offset) {
         _offset = offset;
     }
+
+    const boost::optional<Digest>& prev_chained_digest() const {
+        return _prev_chained_digest;
+    }
+
 private:
     size_t _offset;
     boost::optional<Digest> _prev_chained_digest;
