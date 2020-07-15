@@ -166,11 +166,12 @@ private:
     boost::optional<util::Ed25519PublicKey>
     decode_key_id(boost::string_view key_id)
     {
+        using PublicKey = util::Ed25519PublicKey::key_array_t;
+
         if (!key_id.starts_with(key_id_pfx())) return {};
-        auto decoded_pk = util::base64_decode(key_id.substr(key_id_pfx().size()));
-        if (decoded_pk.size() != util::Ed25519PublicKey::key_size) return {};
-        auto pk_array = util::bytes::to_array<uint8_t, util::Ed25519PrivateKey::key_size>(decoded_pk);
-        return util::Ed25519PublicKey(std::move(pk_array));
+        auto decoded_pk = util::base64_decode<PublicKey>(key_id.substr(key_id_pfx().size()));
+        if (!decoded_pk) return {};
+        return util::Ed25519PublicKey(*decoded_pk);
     }
 
 private:

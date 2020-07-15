@@ -155,14 +155,6 @@ http_injection_merge( http::response_header<> rsh
     return rsh;
 }
 
-template<typename T, size_t N>
-constexpr
-size_t
-array_size(const std::array<T, N>&) noexcept
-{
-    return N;
-}
-
 template<class ArrayT>
 static
 boost::optional<ArrayT>
@@ -179,16 +171,13 @@ block_arrattr_from_exts(boost::string_view xs, const std::string& ext_name)
                            , [&ext_name](const auto& x) {
                                  return x.first == ext_name;
                              });
+
     if (xit == xp.end()) return {};  // no such extension
 
-    ArrayT arr;
-    auto decoded_arr = util::base64_decode(xit->second);
-    if (decoded_arr.size() != array_size(arr)) {
-        LOG_WARN("Malformed chunk extension for data block: ", ext_name);
-        return {};  // invalid Base64, invalid length
-    }
+    auto arr = util::base64_decode<ArrayT>(xit->second);
 
-    arr = util::bytes::to_array<uint8_t, array_size(arr)>(decoded_arr);
+    if (!arr) LOG_WARN("Malformed chunk extension for data block: ", ext_name);
+
     return arr;
 }
 
@@ -661,6 +650,8 @@ std::pair<bool, http::fields>
 HttpSignature::verify( const http::response_header<>& rsh
                      , const util::Ed25519PublicKey& pk)
 {
+    using Signature = util::Ed25519PublicKey::sig_array_t;
+
     // The key may imply an algorithm,
     // but an explicit algorithm should not conflict with the key.
     assert(algorithm.empty() || algorithm == SignedHead::sig_alg_hs2019());
@@ -672,16 +663,14 @@ HttpSignature::verify( const http::response_header<>& rsh
     std::string sig_string;
     std::tie(sig_string, std::ignore) = get_sig_str_hdrs(*vfy_head);
 
-    auto decoded_sig = util::base64_decode(signature);
-    if (decoded_sig.size() != pk.sig_size) {
-        LOG_WARN( "Invalid HTTP signature length: "
-                , decoded_sig.size(), " != ", static_cast<size_t>(pk.sig_size)
-                , " ", signature);
+    auto decoded_sig = util::base64_decode<Signature>(signature);
+
+    if (!decoded_sig) {
+        LOG_WARN( "Malformed HTTP signature: ", signature);
         return {false, {}};
     }
 
-    auto sig_array = util::bytes::to_array<uint8_t, util::Ed25519PublicKey::sig_size>(decoded_sig);
-    if (!pk.verify(sig_string, sig_array))
+    if (!pk.verify(sig_string, *decoded_sig))
         return {false, {}};
 
     // Collect headers not covered by signature.
@@ -891,7 +880,6 @@ struct VerifyingReader::Impl {
         _body_hash.update(ind);
 
         if (_block_data.size() + ind.size() > _head.block_size()) {
-            //_qbuf->put(asio::buffer(ind));
             LOG_ERROR("Chunk data overflows data block boundary; uri=", _head.uri());
             return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
         }

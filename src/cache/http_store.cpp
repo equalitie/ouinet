@@ -53,6 +53,8 @@ static const fs::path head_fname = "head";
 static const fs::path body_fname = "body";
 static const fs::path sigs_fname = "sigs";
 
+using Signature = util::Ed25519PublicKey::sig_array_t;
+
 static
 std::size_t
 recursive_dir_size(const fs::path& path, sys::error_code& ec)
@@ -208,7 +210,6 @@ private:
     std::size_t byte_count = 0;
     unsigned block_count = 0;
     util::SHA512 block_hash;
-    //boost::optional<util::SHA512::digest_type> prev_block_digest;
     ChainHasher chain_hasher;
 
     inline
@@ -1047,12 +1048,6 @@ http_store_load_hash_list( const fs::path& dir
 
     std::string sig_buffer;
 
-    static const auto decode = [](const std::string& s) -> boost::optional<Digest> {
-        std::string d = util::base64_decode(s);
-        if (d.size() != Sha::size()) return boost::none;
-        return util::bytes::to_array<uint8_t, Sha::size()>(d);
-    };
-
     while(true) {
         auto opt_sig_entry = SigEntry::parse(sigsf, sig_buffer, cancel, yield[ec]);
 
@@ -1061,18 +1056,13 @@ http_store_load_hash_list( const fs::path& dir
 
         if (!opt_sig_entry) break;
 
-        auto d = decode(opt_sig_entry->block_digest);
+        auto d = util::base64_decode<Digest>(opt_sig_entry->block_digest);
         if (!d) return or_throw<HashList>(yield, asio::error::bad_descriptor);
 
-        std::string sig_str = util::base64_decode(opt_sig_entry->signature);
+        auto sig = util::base64_decode<Signature>(opt_sig_entry->signature);
+        if (!sig) return or_throw<HashList>(yield, asio::error::bad_descriptor);
 
-        if (sig_str.size() != util::Ed25519PublicKey::sig_size) {
-            return or_throw<HashList>(yield, asio::error::bad_descriptor);
-        }
-
-        auto sig = util::bytes::to_array<uint8_t, util::Ed25519PublicKey::sig_size>(sig_str);
-
-        hl.blocks.push_back({*d, sig});
+        hl.blocks.push_back({*d, *sig});
     }
 
     return hl;
