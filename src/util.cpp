@@ -87,3 +87,23 @@ string ouinet::util::base64_decode(const boost::string_view in) {
     size_t npad = count(in.begin(), in.end(), '=');
     return out.erase((npad > out.size()) ? 0 : out.size() - npad);  // remove padding
 }
+
+bool ouinet::util::base64_decode(boost::string_view in, uint8_t* out, size_t out_size) {
+    using namespace boost::archive::iterators;
+    using It = transform_width<binary_from_base64<const char*>, 8, 6>;
+
+    while (in.ends_with('=')) in.remove_suffix(1);
+
+    // Note: iterating over this range results in an infinite loop unless
+    // the value of the iterator is accessed (e.g. with *i).
+    It begin = in.data();
+    It end   = in.data() + in.size();
+
+    size_t size = 0;
+
+    for (auto i = begin; i != end && size < out_size; ++out, ++i, ++size) {
+        *out = *i;
+    }
+
+    return size == out_size;
+}

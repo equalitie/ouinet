@@ -183,6 +183,18 @@ std::string base64_encode(const In& in) {
 }
 std::string base64_decode(const boost::string_view);
 
+bool base64_decode(const boost::string_view in, uint8_t* out, size_t out_size);
+
+template<class Array>
+boost::optional<Array>
+base64_decode(const boost::string_view in) {
+    Array ret;
+    if (!base64_decode(in, ret.data(), ret.size())) {
+        return boost::none;
+    }
+    return ret;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // Write a small file at the given `path` with a `line` of content.
 // If existing, truncate it.
