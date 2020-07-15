@@ -101,7 +101,7 @@ public:
     }
 
     size_t block_count() const {
-        return _hash_list.block_hashes.size();
+        return _hash_list.blocks.size();
     }
 
     boost::optional<Part>
@@ -211,7 +211,7 @@ public:
             auto digest = _block_hasher.close();
             _block_hasher = {};
 
-            if (digest != _hash_list.block_hashes[block_id]) {
+            if (digest != _hash_list.blocks[block_id].data_hash) {
                 return or_throw<OptPart>(yield, Errc::inconsistent_hash);
             }
 

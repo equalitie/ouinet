@@ -8,12 +8,17 @@
 namespace ouinet { namespace cache {
 
 struct HashList {
-    using Digest = util::SHA512::digest_type;
-    using PubKey = util::Ed25519PublicKey;
+    using Digest    = util::SHA512::digest_type;
+    using PubKey    = util::Ed25519PublicKey;
+    using Signature = PubKey::sig_array_t;
 
-    SignedHead          signed_head;
-    PubKey::sig_array_t signature;
-    std::vector<Digest> block_hashes;
+    struct Block {
+        Digest data_hash;
+        Signature chained_hash_signature;
+    };
+
+    SignedHead         signed_head;
+    std::vector<Block> blocks;
 
     bool verify() const;
 

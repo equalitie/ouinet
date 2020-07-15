@@ -1045,7 +1045,6 @@ http_store_load_hash_list( const fs::path& dir
     if (cancel) ec = asio::error::operation_aborted;
     if (ec) return or_throw<HashList>(yield, ec);
 
-    boost::optional<SigEntry> last_sig_entry;
     std::string sig_buffer;
 
     static const auto decode = [](const std::string& s) -> boost::optional<Digest> {
@@ -1062,23 +1061,19 @@ http_store_load_hash_list( const fs::path& dir
 
         if (!opt_sig_entry) break;
 
-        last_sig_entry = opt_sig_entry;
-
         auto d = decode(opt_sig_entry->block_digest);
         if (!d) return or_throw<HashList>(yield, asio::error::bad_descriptor);
 
-        hl.block_hashes.push_back(*d);
+        std::string sig_str = util::base64_decode(opt_sig_entry->signature);
+
+        if (sig_str.size() != util::Ed25519PublicKey::sig_size) {
+            return or_throw<HashList>(yield, asio::error::bad_descriptor);
+        }
+
+        auto sig = util::bytes::to_array<uint8_t, util::Ed25519PublicKey::sig_size>(sig_str);
+
+        hl.blocks.push_back({*d, sig});
     }
-
-    if (!last_sig_entry) return or_throw<HashList>(yield, asio::error::bad_descriptor);
-
-    std::string sig = util::base64_decode(last_sig_entry->signature);
-
-    if (sig.size() != util::Ed25519PublicKey::sig_size) {
-        return or_throw<HashList>(yield, asio::error::bad_descriptor);
-    }
-
-    hl.signature = util::bytes::to_array<uint8_t, util::Ed25519PublicKey::sig_size>(sig);
 
     return hl;
 }

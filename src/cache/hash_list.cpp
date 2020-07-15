@@ -22,17 +22,17 @@ bool HashList::verify() const {
     ChainHasher chain_hasher;
 
     // Even responses with empty body have at least one block hash
-    if (block_hashes.empty()) return false;
+    if (blocks.empty()) return false;
 
     ChainHash chain_hash;
 
-    for (auto& digest : block_hashes) {
-        chain_hash = chain_hasher.calculate_block(block_size, digest);
+    for (auto& block : blocks) {
+        chain_hash = chain_hasher.calculate_block(block_size, block.data_hash);
     }
 
     return chain_hash.verify( signed_head.public_key()
                             , signed_head.injection_id()
-                            , signature);
+                            , blocks.back().chained_hash_signature);
 }
 
 struct Parser {
@@ -137,9 +137,14 @@ HashList HashList::load(
 
     Parser parser;
 
+    using Signature = PubKey::sig_array_t;
+
     bool magic_checked = false;
-    boost::optional<PubKey::sig_array_t> signature;
-    std::vector<Digest> hashes;
+
+    boost::optional<Digest> digest;
+    boost::optional<Signature> signature;
+
+    std::vector<Block> blocks;
 
     while (true) {
         part = r.async_read_part(c, y[ec]);
@@ -166,18 +171,25 @@ HashList HashList::load(
                     magic_checked = true;
                     progress = true;
                 }
-            } else if (!signature) {
-                signature = parser.read_signature();
-                if (signature) {
-                    progress = true;
-                }
             } else {
-                auto hash = parser.read_hash();
-                if (hash) {
-                    progress = true;
-                    hashes.push_back(move(*hash));
+                if (!digest) {
+                    digest = parser.read_hash();
+                    if (digest) progress = true;
+                } else {
+                    assert(!signature);
+                    signature = parser.read_signature();
+
+                    if (signature) {
+                        progress = true;
+
+                        blocks.push_back({*digest, *signature});
+
+                        digest    = boost::none;
+                        signature = boost::none;
+                    }
                 }
             }
+
             if (!progress) {
                 if (parser.buffer.size() > MAX_LINE_SIZE_BYTES) {
                     _WARN("Line too long");
@@ -188,9 +200,9 @@ HashList HashList::load(
         }
     }
 
-    if (!signature || hashes.empty()) return or_throw<HashList>(y, bad_msg);
+    if (blocks.empty()) return or_throw<HashList>(y, bad_msg);
 
-    HashList hs{move(*head_o), move(*signature), move(hashes)};
+    HashList hs{move(*head_o), move(blocks)};
 
     if (!hs.verify()) {
         return or_throw<HashList>(y, bad_msg);
@@ -212,26 +224,26 @@ void HashList::write(GenericStream& con, Cancel& c, asio::yield_context y) const
     auto h = signed_head;
 
     size_t content_length =
-        MAGIC.size() + strlen("\n") + PubKey::sig_size +
-        block_hashes.size() * util::SHA512::size();
+        MAGIC.size() + strlen("\n") +
+        blocks.size() * (PubKey::sig_size + util::SHA512::size());
 
     h.set(ORIGINAL_STATUS, util::str(h.result_int()));
     h.result(http::status::ok);
     h.set(http::field::content_length, content_length);
 
     std::vector<asio::const_buffer> bufs;
-    bufs.reserve(3 + block_hashes.size());
+    bufs.reserve(2 /* 2 = MAGIC + "\n" */ + blocks.size() * 2 /* 2 = signature + digest */);
 
     bufs.push_back(asio::buffer(MAGIC));
     bufs.push_back(asio::buffer("\n", 1));
-    bufs.push_back(asio::buffer(signature));
 
-    for (auto& h : block_hashes) {
-        bufs.push_back(asio::buffer(h));
+    for (auto& block : blocks) {
+        bufs.push_back(asio::buffer(block.data_hash));
+        bufs.push_back(asio::buffer(block.chained_hash_signature));
     }
 
     auto wd = watch_dog(con.get_executor(),
-            5s + 100ms * block_hashes.size(),
+            5s + 100ms * blocks.size(),
             [&] { con.close(); });
 
     h.async_write(con, c, y[ec]);
