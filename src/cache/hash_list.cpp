@@ -27,12 +27,12 @@ bool HashList::verify() const {
     ChainHash chain_hash;
 
     for (auto& block : blocks) {
-        chain_hash = chain_hasher.calculate_block(block_size, block.data_hash);
+        chain_hash = chain_hasher.calculate_block(
+                block_size, block.data_hash, block.chained_hash_signature);
     }
 
     return chain_hash.verify( signed_head.public_key()
-                            , signed_head.injection_id()
-                            , blocks.back().chained_hash_signature);
+                            , signed_head.injection_id());
 }
 
 struct Parser {

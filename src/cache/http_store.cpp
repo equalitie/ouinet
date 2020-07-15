@@ -271,7 +271,12 @@ public:
         // upstream verification or the injector should have placed
         // them at the right chunk headers.
         e.signature = block_sig_from_exts(ch.exts).to_string();
+
         if (e.signature.empty()) return;
+
+        auto sig = util::base64_decode<Signature>(e.signature);
+
+        if (!sig) return;
 
         // Check that signature is properly aligned with end of block
         // (except for the last block, which may be shorter).
@@ -291,7 +296,7 @@ public:
             e.prev_chained_digest = util::base64_encode(*chain_hasher.prev_chained_digest());
 
         // Prepare hash for next data block: CHASH[i]=SHA2-512(CHASH[i-1] BLOCK[i])
-        chain_hasher.calculate_block(ch.size, block_digest);
+        chain_hasher.calculate_block(ch.size, block_digest, *sig);
 
         util::file_io::write(*sigsf, asio::buffer(e.str()), cancel, yield);
     }

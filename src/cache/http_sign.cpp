@@ -496,9 +496,10 @@ struct SigningReader::Impl {
         if (_do_inject) {  // if injecting and sending data
             if (_block_offset > 0) {  // add chunk extension for previous block
                 auto chain_hash = _chain_hasher.calculate_block(
-                        _block_size_last, _block_hash.close());
+                        _block_size_last, _block_hash.close(),
+                        ChainHasher::Signer{_injection_id, _sk});
 
-                ch.exts = block_chunk_ext(chain_hash.sign(_sk, _injection_id));
+                ch.exts = block_chunk_ext(chain_hash.chain_signature);
             }  // else CHASH[0]=SHA2-512(DHASH[0])
             _block_hash.update(block_buf);
             _block_offset += (_block_size_last = block_buf.size());
@@ -535,10 +536,11 @@ struct SigningReader::Impl {
             return http_response::Part(http_response::ChunkHdr());
         }
 
-        auto chain_hash = _chain_hasher.calculate_block(_block_size_last, _block_hash.close());
+        auto chain_hash = _chain_hasher.calculate_block(_block_size_last,
+                _block_hash.close(), ChainHasher::Signer{_injection_id, _sk});
 
         auto last_ch = http_response::ChunkHdr(
-                0, block_chunk_ext(chain_hash.sign(_sk, _injection_id)));
+                0, block_chunk_ext(chain_hash.chain_signature));
 
         auto trailer = cache::http_injection_trailer( _outh, std::move(_trailer_in)
                                                     , _body_length, _body_hash.close()
@@ -852,9 +854,9 @@ struct VerifyingReader::Impl {
             _chain_hasher.set_offset(_block_offset);
         }
 
-        auto chain_hash = _chain_hasher.calculate_block(_block_data.size(), util::sha512_digest(_block_data));
+        auto chain_hash = _chain_hasher.calculate_block(_block_data.size(), util::sha512_digest(_block_data), *block_sig);
 
-        if (!chain_hash.verify(_head.public_key(), _head.injection_id(), *block_sig)) {
+        if (!chain_hash.verify(_head.public_key(), _head.injection_id())) {
             LOG_WARN("Failed to verify data block with offset ", _block_offset, "; uri=", _head.uri());
             return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
         }
@@ -865,7 +867,7 @@ struct VerifyingReader::Impl {
         http_response::ChunkHdr ch(inch.size, block_chunk_ext(*block_sig, _prev_block_dig));
         _pending_parts.push(std::move(ch));
 
-        _prev_block_dig = chain_hash.digest;
+        _prev_block_dig = chain_hash.chain_digest;
 
         // Chunk header for data block (with previous extensions),
         // keep data block as chunk body.
