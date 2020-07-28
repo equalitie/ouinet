@@ -21,6 +21,7 @@
 #include <util/wait_condition.h>
 #include <util/yield.h>
 #include <cache/http_sign.h>
+#include <cache/chain_hasher.h>
 #include <cache/signed_head.h>
 #include <response_reader.h>
 #include <session.h>
@@ -182,14 +183,20 @@ static const string rs_head_signed_s =
 static const array<string, 3> rs_block_hash_cx{
     "",  // no previous block to hash
     ";ouihash=\"4c0RNY1zc7KD7WqcgnEnGv2BJPLDLZ8ie8/kxtwBLoN2LJNnzUMFzXZoYy1NnddokpIxEm3dL+gJ7dr0xViVOg==\"",  // chash[0]
-    ";ouihash=\"bmsnk/0dfFU9MnSe7RwGfZruUjmhffJYMXviAt2oSDBMMJOrwFsJFkCoIkdsKXej59QR8jLUuPAF7y3Y0apiTQ==\"",  // chash[1]
-    //";ouihash=\"xU5ll5e/S4nn3T7iGoP5N30QQ5QfPh4YGFCQASn5pATjb4U+qLhqBpkeQnuUk/I3oC0JSHIYmVHH16quqh9bXA==\"",  // chash[2], not sent
+    ";ouihash=\"ELwO/upgGHUv+GGm8uFMqQPtpLpNHUtSsLPuGo7lflgLZGA8GVfrFF1yuNOx1U998iF2rAApn8Yua80Fnn+TKg==\"",  // chash[1]
+    //";ouihash=\"zBvQ0lnfde2B6dRt2B0HvW/kaiL1TXNlbezQmhNqh0zCxMBHb0SWPsWeKNDbsHFdyKzZlauqzVSfAsHer0fq+w==\"",  // chash[2], not sent
+};
+
+static const array<string, 3> rs_block_sigs{
+    "r2OtBbBVBXT2b8Ch/eFfQt1eDoG8eMs/JQxnjzNPquF80WcUNwQQktsu0mF0+bwc3akKdYdBDeORNLhRjrxVBA==",
+    "LfRN72Vv5QMNd6sn6HOWbfcoN6DA9kdjTXEfJvmgViZQZT5hlZXQpCOULyBreeZv3sd7j5FJzgu3CCUoBXOCCA==",
+    "oZ3hLELDPOK4y2b0Yd6ezoXaF37PqBXt/WX7YJAzfS4au/QewCQxMlds8qtNWjOrP9Gzyde3jjFn647srWI7DA==",
 };
 
 static const array<string, 3> rs_block_sig_cx{
-    ";ouisig=\"r2OtBbBVBXT2b8Ch/eFfQt1eDoG8eMs/JQxnjzNPquF80WcUNwQQktsu0mF0+bwc3akKdYdBDeORNLhRjrxVBA==\"",
-    ";ouisig=\"JZlln7qCNUpkc+VAzUy1ty8HwTIb9lrWXDGX9EgsNWzpHTs+Fxgfabqx7eClphZXNVNKgn75LirH9pxo1ZnoAg==\"",
-    ";ouisig=\"mN5ckFgTf+dDj0gpG4/6pPTPEGklaywsLY0rK4o+nKtLFUG9l0pUecMQcxQu/TPHnCJOGzcU++rcqxI4bjrfBg==\"",
+    util::str(";ouisig=\"",rs_block_sigs[0],"\""),
+    util::str(";ouisig=\"",rs_block_sigs[1],"\""),
+    util::str(";ouisig=\"",rs_block_sigs[2],"\""),
 };
 
 static const array<string, 4> rs_chunk_ext{
@@ -229,6 +236,36 @@ struct TestGlobalFixture {
 };
 
 BOOST_TEST_GLOBAL_FIXTURE(TestGlobalFixture);
+
+BOOST_AUTO_TEST_CASE(test_chain_hasher) {
+    using namespace cache;
+
+    ChainHasher chh_sign;
+    ChainHasher chh_verif;
+
+    auto sk = get_private_key();
+    auto pk = get_public_key();
+
+    ChainHasher::Signer sign{inj_id, sk};
+
+    for (size_t i = 0; i < rs_block_data.size(); ++i) {
+        auto block = rs_block_data[i];
+        auto block_digest = util::sha512_digest(block);
+
+        ChainHash ch_sign = chh_sign.calculate_block(block.size(), block_digest, sign);
+
+        //cerr << i << " block_digest: " << util::base64_encode(block_digest) << "\n";
+        //cerr << i << " chain_digest: " << util::base64_encode(ch_sign.chain_digest) << "\n";
+        //cerr << i << " chain_signat: " << util::base64_encode(ch_sign.chain_signature) << "\n";
+
+        BOOST_REQUIRE_EQUAL(rs_block_sigs[i], util::base64_encode(ch_sign.chain_signature));
+        BOOST_REQUIRE(ch_sign.verify(pk, inj_id));
+
+        ChainHash ch_verif = chh_verif.calculate_block(block.size(), block_digest, ch_sign.chain_signature);
+
+        BOOST_REQUIRE(ch_verif.verify(pk, inj_id));
+    }
+}
 
 BOOST_AUTO_TEST_CASE(test_http_sign) {
     sys::error_code ec;
@@ -774,8 +811,6 @@ static const first_last block_ranges[] = {
     {0, 0},  // just first block
     {0, 1},  // two first blocks
     {0, 2},  // all blocks
-    {1, 2},  // two last blocks
-    {2, 2},  // just last block
 };
 
 BOOST_DATA_TEST_CASE( test_http_flush_verified_partial

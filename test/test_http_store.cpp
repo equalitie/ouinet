@@ -13,6 +13,7 @@
 
 #include <cache/http_sign.h>
 #include <cache/http_store.h>
+#include <cache/chain_hasher.h>
 #include <defer.h>
 #include <response_part.h>
 #include <session.h>
@@ -147,24 +148,34 @@ static const array<string, 3> rs_block_dhash{
     util::base64_encode(rs_block_dhash_raw[2])
 };
 
+static const array<string, 3> rs_block_sig{
+    "r2OtBbBVBXT2b8Ch/eFfQt1eDoG8eMs/JQxnjzNPquF80WcUNwQQktsu0mF0+bwc3akKdYdBDeORNLhRjrxVBA==",
+    "LfRN72Vv5QMNd6sn6HOWbfcoN6DA9kdjTXEfJvmgViZQZT5hlZXQpCOULyBreeZv3sd7j5FJzgu3CCUoBXOCCA==",
+    "oZ3hLELDPOK4y2b0Yd6ezoXaF37PqBXt/WX7YJAzfS4au/QewCQxMlds8qtNWjOrP9Gzyde3jjFn647srWI7DA==",
+};
+
 // As they appear in signature files.
 static util::SHA512::digest_type rs_block_chash_raw(size_t i) {
-    using SHA = util::SHA512;
+    using Signature = util::Ed25519PublicKey::sig_array_t;
 
-    if (i == 0) return SHA::zero_digest();
-    if (i == 1) return SHA::digest(SHA::digest(rs_block_data[i-1]));
-    return SHA::digest(rs_block_chash_raw(i-1), SHA::digest(rs_block_data[i-1]));
+    if (i == 0) return util::SHA512::zero_digest();
+
+    cache::ChainHasher chain_hasher;
+    cache::ChainHash chain_hash;
+
+    for (size_t j = 0; j < i; ++j) {
+        chain_hash = chain_hasher.calculate_block(
+                rs_block_data[j].size(),
+                rs_block_dhash_raw[j],
+                *util::base64_decode<Signature>(rs_block_sig[j]));
+    }
+
+    return chain_hash.chain_digest;
 }
 
 static string rs_block_chash(size_t i) {
     return util::base64_encode(rs_block_chash_raw(i));
 }
-
-static const array<string, 3> rs_block_sig{
-    "r2OtBbBVBXT2b8Ch/eFfQt1eDoG8eMs/JQxnjzNPquF80WcUNwQQktsu0mF0+bwc3akKdYdBDeORNLhRjrxVBA==",
-    "JZlln7qCNUpkc+VAzUy1ty8HwTIb9lrWXDGX9EgsNWzpHTs+Fxgfabqx7eClphZXNVNKgn75LirH9pxo1ZnoAg==",
-    "mN5ckFgTf+dDj0gpG4/6pPTPEGklaywsLY0rK4o+nKtLFUG9l0pUecMQcxQu/TPHnCJOGzcU++rcqxI4bjrfBg==",
-};
 
 static const array<string, 4> rs_chunk_ext{
     "",

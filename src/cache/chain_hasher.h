@@ -64,9 +64,9 @@ public:
     {
         Hash chained_hasher;
 
-        //if (_prev_chained_signature) {
-        //    chained_hasher.update(*_prev_chained_signature);
-        //}
+        if (_prev_chained_signature) {
+            chained_hasher.update(*_prev_chained_signature);
+        }
 
         if (_prev_chained_digest) {
             chained_hasher.update(*_prev_chained_digest);
