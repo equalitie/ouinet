@@ -195,10 +195,9 @@ block_sig_from_exts(boost::string_view xs)
     return block_arrattr_from_exts<sig_array_t>(xs, http_::response_block_signature_ext);
 }
 
-static
 std::string
 block_chunk_ext( const opt_sig_array_t& sig
-               , const opt_block_digest_t& prev_digest = {})
+               , const opt_block_digest_t& prev_digest)
 {
     std::stringstream exts;
 
@@ -652,8 +651,6 @@ std::pair<bool, http::fields>
 HttpSignature::verify( const http::response_header<>& rsh
                      , const util::Ed25519PublicKey& pk)
 {
-    using Signature = util::Ed25519PublicKey::sig_array_t;
-
     // The key may imply an algorithm,
     // but an explicit algorithm should not conflict with the key.
     assert(algorithm.empty() || algorithm == SignedHead::sig_alg_hs2019());
@@ -665,7 +662,7 @@ HttpSignature::verify( const http::response_header<>& rsh
     std::string sig_string;
     std::tie(sig_string, std::ignore) = get_sig_str_hdrs(*vfy_head);
 
-    auto decoded_sig = util::base64_decode<Signature>(signature);
+    auto decoded_sig = util::base64_decode<sig_array_t>(signature);
 
     if (!decoded_sig) {
         LOG_WARN( "Malformed HTTP signature: ", signature);

@@ -127,6 +127,11 @@ http_injection_merge( http::response_header<> rsh
 std::string
 http_key_id_for_injection(const ouinet::util::Ed25519PublicKey&);
 
+// Create HTTP chunk extension
+std::string
+block_chunk_ext( const boost::optional<util::Ed25519PublicKey::sig_array_t>& sig
+               , const boost::optional<util::SHA512::digest_type>& prev_digest = {});
+
 // Allows reading parts of a response from stream `in`
 // while signing with the private key `sk`.
 class SigningReader : public ouinet::http_response::Reader {

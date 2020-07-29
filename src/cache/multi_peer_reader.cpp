@@ -206,14 +206,21 @@ public:
             if (!ec && (!p || !p->is_chunk_hdr())) ec = Errc::expected_chunk_hdr;
             if (ec) return or_throw<OptPart>(yield, ec);
 
-            _postponed_chunk_hdr = std::move(*p->as_chunk_hdr());
-
             auto digest = _block_hasher.close();
             _block_hasher = {};
 
-            if (digest != _hash_list.blocks[block_id].data_hash) {
+            auto current_block = _hash_list.blocks[block_id];
+
+            if (digest != current_block.data_hash) {
                 return or_throw<OptPart>(yield, Errc::inconsistent_hash);
             }
+
+            _postponed_chunk_hdr = std::move(*p->as_chunk_hdr());
+
+            // We rewrite whatever chunk extension the peer sent because we
+            // already have all the relevant info verified and thus we don't
+            // need to re-verify what the user sent again.
+            _postponed_chunk_hdr->exts = cache::block_chunk_ext(current_block.chained_hash_signature);
 
             return Part{ChunkBody(move(_accumulated_block), 0)};
         }
