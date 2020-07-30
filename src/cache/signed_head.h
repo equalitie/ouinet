@@ -161,6 +161,10 @@ public:
         return encode_key_id(public_key());
     }
 
+    bool more_recent_than(const SignedHead& other) const {
+        return _injection_ts > other._injection_ts;
+    }
+
 private:
     static
     boost::optional<util::Ed25519PublicKey>

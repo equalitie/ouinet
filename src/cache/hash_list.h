@@ -29,6 +29,15 @@ struct HashList {
             asio::yield_context);
 
     void write(GenericStream&, Cancel&, asio::yield_context) const;
+
+    boost::optional<Block> get_block(size_t block_id) const
+    {
+        if (block_id >= blocks.size()) {
+            return boost::none;
+        }
+        return blocks[block_id];
+    }
+
 };
 
 }}

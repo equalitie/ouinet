@@ -6,6 +6,7 @@
 #include "../namespaces.h"
 #include "../bittorrent/dht.h"
 #include "dht_lookup.h"
+#include "hash_list.h"
 #include "../util/async_generator.h"
 #include "../session.h"
 
@@ -39,11 +40,16 @@ private:
     Cancel _lifetime_cancel;
 
     bool _closed = false;
+    boost::optional<HashList> _reference_hash_list;
     std::unique_ptr<Peers> _peers;
-    Peer* _chosen_peer = nullptr;
     std::string _dbg_tag;
     bool _head_sent = false;
     size_t _block_id = 0;
+
+    std::string _next_chunk_hdr_ext;
+    boost::optional<http_response::ChunkBody> _next_chunk_body;
+    boost::optional<http_response::Trailer> _next_trailer;
+    bool _last_chunk_hdr_sent = false;
 };
 
 }}

@@ -4,7 +4,6 @@
 #include "multi_peer_reader_error.h"
 #include "cache_entry.h"
 #include "http_sign.h"
-#include "hash_list.h"
 #include "../http_util.h"
 #include "../session.h"
 #include "../util/watch_dog.h"
@@ -14,8 +13,11 @@
 #include "../constants.h"
 #include "../util/yield.h"
 #include "../util/set_io.h"
+#include "../util/part_io.h"
 #include "../util/condition_variable.h"
 #include "signed_head.h"
+
+#include <random>
 
 using namespace std;
 using namespace ouinet;
@@ -80,18 +82,7 @@ public:
     string _key;
     const util::Ed25519PublicKey _cache_pk;
     boost::optional<GenericStream> _connection;
-    unique_ptr<http_response::Reader> _reader;
     HashList _hash_list;
-
-    // We may receive multiple ChunkBody parts before we receive the next
-    // ChunkHdr with which we can verify data integrity. Thus we need to
-    // accumulte the body before it's passed forward.
-    std::vector<uint8_t> _accumulated_block;
-    util::SHA512 _block_hasher;
-
-    // Once we receive ChunkHdr after we've been accumulating data, we send the
-    // data and store the ChunkHdr to be sent next.
-    boost::optional<ChunkHdr> _postponed_chunk_hdr;
 
     Peer(asio::executor exec, const string& key, util::Ed25519PublicKey cache_pk) :
         _exec(exec),
@@ -100,132 +91,143 @@ public:
     {
     }
 
+    const SignedHead& signed_head() const
+    {
+        return _hash_list.signed_head;
+    }
+
+
     size_t block_count() const {
         return _hash_list.blocks.size();
     }
 
-    boost::optional<Part>
-    read_part(size_t block_id, Cancel c, asio::yield_context yield)
-    {
-        using OptPart = boost::optional<Part>;
+    struct Block {
+        ChunkBody chunk_body;
+        ChunkHdr chunk_hdr;
+        boost::optional<Trailer> trailer;
+    };
 
-        assert(_reader || _connection);
+    // May return boost::none and no error if the response has no body (e.g. redirect msg)
+    boost::optional<Block> read_block(size_t block_id, Cancel c, asio::yield_context yield)
+    {
+        using OptBlock = boost::optional<Block>;
+
+        if (!_connection) return or_throw<OptBlock>(yield, asio::error::not_connected);
 
         sys::error_code ec;
 
-        if (!_reader) {
-            bool timed_out = false;
+        bool timed_out = false;
 
-            auto cc = c.connect([&] { if (_connection) _connection->close(); });
+        auto cc = c.connect([&] { if (_connection) _connection->close(); });
 
-            auto wd = watch_dog(_exec, chrono::seconds(10), [&] {
-                    if (c) return;
-                    timed_out = true;
-                    c();
-                });
+        auto wd = watch_dog(_exec, chrono::seconds(10), [&] {
+                if (c) return;
+                timed_out = true;
+                c();
+            });
 
-            http::async_write(*_connection, range_request(http::verb::get, block_id, _key), yield[ec]);
+        http::async_write(*_connection, range_request(http::verb::get, block_id, _key), yield[ec]);
 
-            if (c) ec = asio::error::operation_aborted;
-            if (timed_out) ec = asio::error::timed_out;
-            if (ec) return or_throw<OptPart>(yield, ec);
+        if (c) ec = asio::error::operation_aborted;
+        if (timed_out) ec = asio::error::timed_out;
+        if (ec) return or_throw<OptBlock>(yield, ec);
 
-            auto r = make_unique<http_response::Reader>(move(*_connection));
-            _connection = boost::none;
+        auto r = make_unique<http_response::Reader>(move(*_connection));
+        _connection = boost::none;
 
-            auto head = r->async_read_part(c, yield[ec]);
+        auto head = r->async_read_part(c, yield[ec]);
 
-            if (c) ec = asio::error::operation_aborted;
-            if (timed_out) ec = asio::error::timed_out;
-            if (ec) return or_throw<OptPart>(yield, ec);
+        if (c) ec = asio::error::operation_aborted;
+        if (timed_out) ec = asio::error::timed_out;
+        if (ec) return or_throw<OptBlock>(yield, ec);
 
-            if (!head || !head->is_head()) {
-                assert(0);
-                return or_throw<OptPart>(yield, Errc::expected_head);
-            }
-
-            _reader = std::move(r);
+        if (!head || !head->is_head()) {
+            return or_throw<OptBlock>(yield, Errc::expected_head);
         }
 
         // XXX Add timeout
-        OptPart p;
-
-        if (_postponed_chunk_hdr) {
-            p = std::move(*_postponed_chunk_hdr);
-            _postponed_chunk_hdr = boost::none;
-        } else {
-            p = _reader->async_read_part(c, yield[ec]);
-            if (ec) return or_throw<OptPart>(yield, ec);
-        }
+        auto p = r->async_read_part(c, yield[ec]);
+        if (ec) return or_throw<OptBlock>(yield, ec);
 
         // This may happen when the message has no body
         if (!p) {
-            _connection = _reader->release_stream();
-            _reader = nullptr;
-            return p;
+            _connection = r->release_stream();
+            return boost::none;
         }
 
-        if (auto chunk_hdr = p->as_chunk_hdr()) {
-            if (chunk_hdr->is_last() && block_id + 1 < block_count()) {
-                while (p) {
-                    // Flush the trailer
-                    p = _reader->async_read_part(c, yield[ec]);
-                    if (ec) return or_throw<OptPart>(yield, ec);
-                    assert(!p || p->is_trailer());
-                }
-                _connection = _reader->release_stream();
-                _reader = nullptr;
-                return boost::none;
+        auto first_chunk_hdr = p->as_chunk_hdr();
+
+        if (!first_chunk_hdr) {
+            return or_throw<OptBlock>(yield, Errc::expected_first_chunk_hdr);
+        }
+
+        Block block{{{}, 0},{0, {}}, boost::none};
+        util::SHA512 block_hasher;
+
+
+        while (true) {
+            p = r->async_read_part(c, yield[ec]);
+            if (ec) return or_throw<OptBlock>(yield, ec);
+
+            auto chunk_body = p->as_chunk_body();
+            if (!chunk_body) {
+                assert(0 && "Expected chunk body");
+                return or_throw<OptBlock>(yield, Errc::expected_chunk_body);
+            }
+
+            block_hasher.update(*chunk_body);
+
+            if (block.chunk_body.size() + chunk_body->size() > http_::response_data_block_max) {
+                return or_throw<OptBlock>(yield, Errc::block_is_too_big);
+            }
+
+            block.chunk_body.insert(block.chunk_body.end(),
+                chunk_body->begin(), chunk_body->end());
+
+            if (chunk_body->remain == 0) {
+                break;
             }
         }
 
-        if (auto chunk_body = p->as_chunk_body()) {
-            while (true) {
-                _block_hasher.update(*chunk_body);
+        p = r->async_read_part(c, yield[ec]);
 
-                _accumulated_block.insert(_accumulated_block.end(),
-                    chunk_body->begin(), chunk_body->end());
+        ChunkHdr* last_chunk_hdr = p ? p->as_chunk_hdr() : nullptr;
 
-                if (chunk_body->remain == 0) {
-                    break;
-                }
+        if (!last_chunk_hdr) ec = Errc::expected_chunk_hdr;
+        else if (last_chunk_hdr->size != 0) ec = Errc::expected_no_more_data;
+        if (ec) return or_throw<OptBlock>(yield, ec);
 
-                p = _reader->async_read_part(c, yield[ec]);
-                if (ec) return or_throw<OptPart>(yield, ec);
+        auto digest = block_hasher.close();
 
-                chunk_body = p->as_chunk_body();
+        auto current_block = _hash_list.blocks[block_id];
 
-                if (!chunk_body) {
-                    assert(0);
-                    return or_throw<OptPart>(yield, Errc::expected_chunk_body);
-                }
-            }
-
-            p = _reader->async_read_part(c, yield[ec]);
-
-            if (!ec && (!p || !p->is_chunk_hdr())) ec = Errc::expected_chunk_hdr;
-            if (ec) return or_throw<OptPart>(yield, ec);
-
-            auto digest = _block_hasher.close();
-            _block_hasher = {};
-
-            auto current_block = _hash_list.blocks[block_id];
-
-            if (digest != current_block.data_hash) {
-                return or_throw<OptPart>(yield, Errc::inconsistent_hash);
-            }
-
-            _postponed_chunk_hdr = std::move(*p->as_chunk_hdr());
-
-            // We rewrite whatever chunk extension the peer sent because we
-            // already have all the relevant info verified and thus we don't
-            // need to re-verify what the user sent again.
-            _postponed_chunk_hdr->exts = cache::block_chunk_ext(current_block.chained_hash_signature);
-
-            return Part{ChunkBody(move(_accumulated_block), 0)};
+        if (digest != current_block.data_hash) {
+            return or_throw<OptBlock>(yield, Errc::inconsistent_hash);
         }
 
-        return p;
+        // We rewrite whatever chunk extension the peer sent because we
+        // already have all the relevant info verified and thus we don't
+        // need to re-verify what the user sent again.
+        block.chunk_hdr.exts = cache::block_chunk_ext(current_block.chained_hash_signature);
+
+        while (true) {
+            p = r->async_read_part(c, yield[ec]);
+            if (!p) {
+                _connection = r->release_stream();
+                // We're done with this request
+                break;
+            }
+            auto trailer = p->as_trailer();
+            if (trailer) {
+                if (block.trailer)
+                    return or_throw<OptBlock>(yield, Errc::trailer_received_twice);
+                block.trailer = std::move(*trailer);
+            } else {
+                return or_throw<OptBlock>(yield, Errc::expected_trailer_or_end_of_response);
+            }
+        }
+
+        return block;
     }
 
     http::request<http::string_body> request(http::verb verb, const string& key)
@@ -316,6 +318,7 @@ public:
         , _newest_proto_seen(move(newest_proto_seen))
         , _our_endpoints(_dht->wan_endpoints())
         , _dbg_tag(move(dbg_tag))
+        , _random_generator(_random_device())
     {
         for (auto ep : _local_peer_eps) {
             add_candidate(ep);
@@ -393,22 +396,70 @@ public:
         });
     }
 
-    Peer* choose_peer(Cancel c, asio::yield_context yield)
+    void wait_for_some_peers_to_respond(Cancel c, asio::yield_context yield)
     {
+        if (!_good_peers.empty()) return;
+
         auto cc = _lifetime_cancel.connect([&] { c(); });
         sys::error_code ec;
 
         while (!c && !ec && _good_peers.empty() && (!_candidate_peers.empty() || _dht_lookup))
             _cv.wait(c, yield[ec]);
 
-        if (ec) return or_throw<Peer*>(yield, ec, nullptr);
+        if (!ec && _good_peers.empty()) ec = Errc::no_peers;
 
-        if (_good_peers.empty()) {
-            // There's no more candidates
-            return or_throw<Peer*>(yield, Errc::no_peers, nullptr);
+        return or_throw(yield, ec);
+    }
+
+    HashList choose_reference_hash_list(Cancel c, asio::yield_context yield)
+    {
+        sys::error_code ec;
+
+        wait_for_some_peers_to_respond(c, yield[ec]);
+        if (ec) return or_throw<HashList>(yield, ec);
+
+        Peer* best_peer = nullptr;;
+
+        for (auto& p : _good_peers) {
+            if (!best_peer || p.signed_head().more_recent_than(best_peer->signed_head())) {
+                best_peer = &p;
+            }
         }
 
-        return &*_good_peers.begin();
+        if (!best_peer) return or_throw<HashList>(yield, Errc::no_peers);
+
+        return best_peer->_hash_list;
+    }
+
+    Peer* choose_peer_for_block(
+            const HashList& reference_hash_list,
+            size_t block_id,
+            Cancel c,
+            asio::yield_context yield)
+    {
+        sys::error_code ec;
+
+        wait_for_some_peers_to_respond(c, yield[ec]);
+        if (ec) return or_throw<Peer*>(yield, ec, nullptr);
+
+        std::vector<Peer*> peers;
+
+        auto reference_block = reference_hash_list.get_block(block_id);
+
+        assert(reference_block);
+        if (!reference_block) return or_throw<Peer*>(yield, Errc::no_peers, nullptr);
+
+        for (auto& p : _good_peers) {
+            auto opt_b = p._hash_list.get_block(block_id);
+            if (opt_b && opt_b->data_hash == reference_block->data_hash) {
+                peers.push_back(&p);
+            }
+        }
+
+        if (peers.empty()) return or_throw<Peer*>(yield, Errc::no_peers, nullptr);
+
+        std::uniform_int_distribution<size_t> distrib(0, peers.size() - 1);
+        return peers[distrib(_random_generator)];
     }
 
     ~Peers() {
@@ -436,6 +487,9 @@ private:
     std::string _dbg_tag;
 
     Cancel _lifetime_cancel;
+
+    std::random_device _random_device;
+    std::mt19937 _random_generator;
 };
 
 MultiPeerReader::MultiPeerReader( asio::executor ex
@@ -460,64 +514,103 @@ MultiPeerReader::MultiPeerReader( asio::executor ex
                                , dbg_tag);
 }
 
-boost::optional<http_response::Part>
+boost::optional<Part>
 MultiPeerReader::async_read_part(Cancel cancel, asio::yield_context yield)
 {
-    auto lc = _lifetime_cancel.connect(cancel);
+    using OptPart = boost::optional<Part>;
 
-    using Ret = boost::optional<http_response::Part>;
+    if (cancel) return or_throw<OptPart>(yield, asio::error::operation_aborted);
+    if (_closed) return boost::none;
+
+    auto lc = _lifetime_cancel.connect(cancel);
 
     sys::error_code ec;
 
     auto dbg_tag = _dbg_tag;
-    if (_closed) return boost::none;
 
-    if (!_chosen_peer) {
-        _chosen_peer = _peers->choose_peer(cancel, yield[ec]);
-        assert(!cancel || ec == asio::error::operation_aborted);
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<Ret>(yield, ec);
-        assert(_chosen_peer);
+
+    if (!_reference_hash_list) {
+        auto hl = _peers->choose_reference_hash_list(cancel, yield[ec]);
+        if (ec) return or_throw<OptPart>(yield, ec);
+        _reference_hash_list = std::move(hl);
     }
 
     if (!_head_sent) {
         _head_sent = true;
-        return http_response::Part{_chosen_peer->_hash_list.signed_head};
+        return Part{_reference_hash_list->signed_head};
     }
 
-    while (_block_id < _chosen_peer->block_count()) {
-        auto ret = _chosen_peer->read_part(_block_id, cancel, yield[ec]);
-        if (ec) return or_throw<Ret>(yield, ec);
-        if (!ret) {
-            ++_block_id;
-            continue;
+    if (_next_chunk_body) {
+        auto p = std::move(*_next_chunk_body);
+        _next_chunk_body = boost::none;
+        return {{std::move(p)}};
+    }
+
+    if (_next_trailer) {
+        if (!_last_chunk_hdr_sent) {
+            _last_chunk_hdr_sent = true;
+            return Part{ChunkHdr(0, std::move(_next_chunk_hdr_ext))};
         }
-        return ret;
+        auto p = std::move(*_next_trailer);
+        _next_trailer = boost::none;
+        return {{std::move(p)}};
     }
 
-    return or_throw<Ret>(yield, ec);
+    if (_block_id >= _reference_hash_list->blocks.size()) {
+        if (!_last_chunk_hdr_sent) {
+            _last_chunk_hdr_sent = true;
+            return Part{ChunkHdr(0, std::move(_next_chunk_hdr_ext))};
+        }
+        return boost::none;
+    }
+
+    Peer* peer = _peers->choose_peer_for_block(*_reference_hash_list, _block_id, cancel, yield[ec]);
+    assert(!cancel || ec == asio::error::operation_aborted);
+    if (cancel) ec = asio::error::operation_aborted;
+    if (ec) return or_throw<OptPart>(yield, ec);
+    assert(peer);
+
+    auto block = peer->read_block(_block_id, cancel, yield[ec]);
+    ++_block_id;
+
+    if (ec) return or_throw<OptPart>(yield, ec);
+    if (!block) {
+        _closed = true;
+        if (!_last_chunk_hdr_sent) {
+            _last_chunk_hdr_sent = true;
+            return Part{ChunkHdr(0, std::move(_next_chunk_hdr_ext))};
+        }
+        return boost::none;
+    }
+
+    ChunkHdr chunk_hdr{block->chunk_body.size(), std::move(_next_chunk_hdr_ext)};
+
+    _next_chunk_hdr_ext = std::move(block->chunk_hdr.exts);
+    _next_chunk_body = std::move(block->chunk_body);
+
+    if (_block_id == _reference_hash_list->blocks.size()) {
+        _next_trailer = std::move(block->trailer);
+    }
+
+    return {{std::move(chunk_hdr)}};
 }
 
 bool MultiPeerReader::is_done() const
 {
     if (_closed) return true;
-    if (!_chosen_peer) return false;
-    return _block_id >= _chosen_peer->block_count();
+    // XXX
+    return _reference_hash_list ? _block_id >= _reference_hash_list->blocks.size() : false;
 }
 
 bool MultiPeerReader::is_open() const
 {
-    if (_closed) return false;
-    if (!_chosen_peer) return false;
-    return _block_id < _chosen_peer->block_count();
+    // XXX
+    return !_closed;
 }
 
 void MultiPeerReader::close()
 {
     _closed = true;
-    if (!_chosen_peer) return;
-    if (!_chosen_peer->_reader) return;
-    _chosen_peer->_reader->close();
 }
 
 MultiPeerReader::~MultiPeerReader() {
