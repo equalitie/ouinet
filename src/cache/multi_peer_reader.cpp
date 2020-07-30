@@ -22,6 +22,7 @@
 using namespace std;
 using namespace ouinet;
 using namespace cache;
+using namespace std::chrono_literals;
 
 using udp = asio::ip::udp;
 namespace bt = bittorrent;
@@ -108,7 +109,7 @@ public:
     };
 
     // May return boost::none and no error if the response has no body (e.g. redirect msg)
-    boost::optional<Block> read_block(size_t block_id, Cancel c, asio::yield_context yield)
+    boost::optional<Block> read_block(size_t block_id, Cancel& c, asio::yield_context yield)
     {
         using OptBlock = boost::optional<Block>;
 
@@ -116,37 +117,27 @@ public:
 
         sys::error_code ec;
 
-        bool timed_out = false;
-
         auto cc = c.connect([&] { if (_connection) _connection->close(); });
 
-        auto wd = watch_dog(_exec, chrono::seconds(10), [&] {
-                if (c) return;
-                timed_out = true;
-                c();
-            });
-
-        http::async_write(*_connection, range_request(http::verb::get, block_id, _key), yield[ec]);
-
-        if (c) ec = asio::error::operation_aborted;
-        if (timed_out) ec = asio::error::timed_out;
-        if (ec) return or_throw<OptBlock>(yield, ec);
+        {
+            Cancel tc(c);
+            auto wd = watch_dog(_exec, 10s, [&] { tc(); });
+            http::async_write(*_connection, range_request(http::verb::get, block_id, _key), yield[ec]);
+            if (tc && !c) ec = asio::error::timed_out;
+            if (ec) return or_throw<OptBlock>(yield, ec);
+        }
 
         auto r = make_unique<http_response::Reader>(move(*_connection));
         _connection = boost::none;
 
-        auto head = r->async_read_part(c, yield[ec]);
-
-        if (c) ec = asio::error::operation_aborted;
-        if (timed_out) ec = asio::error::timed_out;
+        auto head = r->timed_async_read_part(5s, c, yield[ec]);
         if (ec) return or_throw<OptBlock>(yield, ec);
 
         if (!head || !head->is_head()) {
             return or_throw<OptBlock>(yield, Errc::expected_head);
         }
 
-        // XXX Add timeout
-        auto p = r->async_read_part(c, yield[ec]);
+        auto p = r->timed_async_read_part(5s, c, yield[ec]);
         if (ec) return or_throw<OptBlock>(yield, ec);
 
         // This may happen when the message has no body
@@ -164,9 +155,8 @@ public:
         Block block{{{}, 0},{0, {}}, boost::none};
         util::SHA512 block_hasher;
 
-
         while (true) {
-            p = r->async_read_part(c, yield[ec]);
+            p = r->timed_async_read_part(5s, c, yield[ec]);
             if (ec) return or_throw<OptBlock>(yield, ec);
 
             auto chunk_body = p->as_chunk_body();
@@ -189,7 +179,7 @@ public:
             }
         }
 
-        p = r->async_read_part(c, yield[ec]);
+        p = r->timed_async_read_part(5s, c, yield[ec]);
 
         ChunkHdr* last_chunk_hdr = p ? p->as_chunk_hdr() : nullptr;
 
@@ -211,7 +201,7 @@ public:
         block.chunk_hdr.exts = cache::block_chunk_ext(current_block.chained_hash_signature);
 
         while (true) {
-            p = r->async_read_part(c, yield[ec]);
+            p = r->timed_async_read_part(5s, c, yield[ec]);
             if (!p) {
                 _connection = r->release_stream();
                 // We're done with this request
@@ -528,7 +518,6 @@ MultiPeerReader::async_read_part(Cancel cancel, asio::yield_context yield)
     sys::error_code ec;
 
     auto dbg_tag = _dbg_tag;
-
 
     if (!_reference_hash_list) {
         auto hl = _peers->choose_reference_hash_list(cancel, yield[ec]);
