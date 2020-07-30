@@ -76,7 +76,6 @@ GenericStream connect( asio::executor exec
 class MultiPeerReader::Peer {
 public:
     util::intrusive::list_hook _candidate_hook;
-    util::intrusive::list_hook _failure_hook;
     util::intrusive::list_hook _good_peer_hook;
 
     asio::executor _exec;
@@ -249,7 +248,7 @@ public:
         return rq;
     }
 
-    void init(
+    void download_hash_list(
             udp::endpoint ep,
             bt::MainlineDht& dht,
             std::shared_ptr<unsigned> newest_proto_seen,
@@ -374,7 +373,7 @@ public:
                 LOG_INFO(dbg_tag, " fetching from: ", ep);
             }
 
-            p->init(ep, *_dht, _newest_proto_seen, c, y[ec]);
+            p->download_hash_list(ep, *_dht, _newest_proto_seen, c, y[ec]);
 
             if (!dbg_tag.empty()) {
                 LOG_INFO(dbg_tag, " done fetching: ", ep, " "
@@ -385,14 +384,20 @@ public:
 
             p->_candidate_hook.unlink();
 
-            if (!ec) {
-                _good_peers.push_back(*p);
-            } else {
-                _failed_peers.push_back(*p);
-            }
+            if (!ec) _good_peers.push_back(*p);
 
             _cv.notify();
         });
+    }
+
+    bool still_waiting_for_candidates() const {
+        return _dht_lookup || !_candidate_peers.empty();
+    }
+
+    bool has_enough_good_peers() const {
+        // TODO: This can be improved to (e.g.) be also a function of time
+        // since DHT lookup finished.
+        return !_good_peers.empty();
     }
 
     void wait_for_some_peers_to_respond(Cancel c, asio::yield_context yield)
@@ -402,7 +407,7 @@ public:
         auto cc = _lifetime_cancel.connect([&] { c(); });
         sys::error_code ec;
 
-        while (!c && !ec && _good_peers.empty() && (!_candidate_peers.empty() || _dht_lookup))
+        while (!c && !ec && !has_enough_good_peers() && still_waiting_for_candidates())
             _cv.wait(c, yield[ec]);
 
         if (!ec && _good_peers.empty()) ec = Errc::no_peers;
@@ -465,18 +470,17 @@ public:
         _lifetime_cancel();
     }
 
-    void mark_as_failed(Peer& p) {
+    void unmark_as_good(Peer& p) {
         assert(p._good_peer_hook.is_linked());
-        assert(!p._failure_hook.is_linked());
         if (p._good_peer_hook.is_linked()) p._good_peer_hook.unlink();
-        if (!p._failure_hook.is_linked()) _failed_peers.push_back(p);
     }
 
 private:
+    // Peers that are in _all_peers but are not in either _candidate_peers
+    // nor _good_peers are considered as failed.
     std::map<udp::endpoint, unique_ptr<Peer>> _all_peers;
 
     util::intrusive::list<Peer, &Peer::_candidate_hook> _candidate_peers;
-    util::intrusive::list<Peer, &Peer::_failure_hook>   _failed_peers;
     util::intrusive::list<Peer, &Peer::_good_peer_hook> _good_peers;
 
     asio::executor _exec;
@@ -559,6 +563,7 @@ MultiPeerReader::async_read_part(Cancel cancel, asio::yield_context yield)
         }
         auto p = std::move(*_next_trailer);
         _next_trailer = boost::none;
+        _closed = true;
         return {{std::move(p)}};
     }
 
@@ -583,7 +588,7 @@ MultiPeerReader::async_read_part(Cancel cancel, asio::yield_context yield)
         if (cancel) return or_throw<OptPart>(yield, asio::error::operation_aborted);
 
         if (ec) {
-            _peers->mark_as_failed(*peer);
+            _peers->unmark_as_good(*peer);
             continue;
         }
 
