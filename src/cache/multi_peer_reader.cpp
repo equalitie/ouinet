@@ -465,6 +465,13 @@ public:
         _lifetime_cancel();
     }
 
+    void mark_as_failed(Peer& p) {
+        assert(p._good_peer_hook.is_linked());
+        assert(!p._failure_hook.is_linked());
+        if (p._good_peer_hook.is_linked()) p._good_peer_hook.unlink();
+        if (!p._failure_hook.is_linked()) _failed_peers.push_back(p);
+    }
+
 private:
     std::map<udp::endpoint, unique_ptr<Peer>> _all_peers;
 
@@ -563,35 +570,48 @@ MultiPeerReader::async_read_part(Cancel cancel, asio::yield_context yield)
         return boost::none;
     }
 
-    Peer* peer = _peers->choose_peer_for_block(*_reference_hash_list, _block_id, cancel, yield[ec]);
-    assert(!cancel || ec == asio::error::operation_aborted);
-    if (cancel) ec = asio::error::operation_aborted;
-    if (ec) return or_throw<OptPart>(yield, ec);
-    assert(peer);
+    while (true /* do until successful block retrieval */) {
+        Peer* peer = _peers->choose_peer_for_block(*_reference_hash_list, _block_id, cancel, yield[ec]);
 
-    auto block = peer->read_block(_block_id, cancel, yield[ec]);
-    ++_block_id;
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec) return or_throw<OptPart>(yield, ec);
 
-    if (ec) return or_throw<OptPart>(yield, ec);
-    if (!block) {
-        _closed = true;
-        if (!_last_chunk_hdr_sent) {
-            _last_chunk_hdr_sent = true;
-            return Part{ChunkHdr(0, std::move(_next_chunk_hdr_ext))};
+        assert(peer);
+
+        auto block = peer->read_block(_block_id, cancel, yield[ec]);
+
+        if (cancel) return or_throw<OptPart>(yield, asio::error::operation_aborted);
+
+        if (ec) {
+            _peers->mark_as_failed(*peer);
+            continue;
         }
-        return boost::none;
+
+        ++_block_id;
+
+        if (!block) {
+            _closed = true;
+            if (!_last_chunk_hdr_sent) {
+                _last_chunk_hdr_sent = true;
+                return Part{ChunkHdr(0, std::move(_next_chunk_hdr_ext))};
+            }
+            return boost::none;
+        }
+
+        ChunkHdr chunk_hdr{block->chunk_body.size(), std::move(_next_chunk_hdr_ext)};
+
+        _next_chunk_hdr_ext = std::move(block->chunk_hdr.exts);
+        _next_chunk_body = std::move(block->chunk_body);
+
+        if (_block_id == _reference_hash_list->blocks.size()) {
+            _next_trailer = std::move(block->trailer);
+        }
+
+        return {{std::move(chunk_hdr)}};
     }
 
-    ChunkHdr chunk_hdr{block->chunk_body.size(), std::move(_next_chunk_hdr_ext)};
-
-    _next_chunk_hdr_ext = std::move(block->chunk_hdr.exts);
-    _next_chunk_body = std::move(block->chunk_body);
-
-    if (_block_id == _reference_hash_list->blocks.size()) {
-        _next_trailer = std::move(block->trailer);
-    }
-
-    return {{std::move(chunk_hdr)}};
+    assert(0 && "This shouldn't happen");
+    return boost::none;
 }
 
 bool MultiPeerReader::is_done() const
