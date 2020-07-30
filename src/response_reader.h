@@ -15,7 +15,6 @@ namespace ouinet { namespace http_response {
 class AbstractReader {
 public:
     virtual boost::optional<Part> async_read_part(Cancel, asio::yield_context) = 0;
-    virtual bool is_done() const = 0;
     virtual bool is_open() const = 0;
     virtual void close()   = 0;
     virtual asio::executor get_executor() = 0;
@@ -57,7 +56,7 @@ public:
     // Head >> Body* >> boost::none*
     //
     boost::optional<Part> async_read_part(Cancel, asio::yield_context) override;
-    bool is_done() const override { return _is_done; }
+    bool is_done() const { return _is_done; }
 
     // This leaves the reader in an undefined state,
     // do not use afterwards.

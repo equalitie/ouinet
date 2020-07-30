@@ -619,13 +619,6 @@ MultiPeerReader::async_read_part(Cancel cancel, asio::yield_context yield)
     return boost::none;
 }
 
-bool MultiPeerReader::is_done() const
-{
-    if (_closed) return true;
-    // XXX
-    return _reference_hash_list ? _block_id >= _reference_hash_list->blocks.size() : false;
-}
-
 bool MultiPeerReader::is_open() const
 {
     // XXX

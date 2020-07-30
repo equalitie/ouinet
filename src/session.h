@@ -48,12 +48,6 @@ public:
         return _head.keep_alive();
     }
 
-    bool is_done() const override {
-        if (!_head_was_read) return false;
-        if (!_reader) return true;
-        return _reader->is_done();
-    }
-
     asio::executor get_executor() override {
         assert(_reader);
         return _reader->get_executor();

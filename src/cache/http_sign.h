@@ -146,9 +146,6 @@ public:
     boost::optional<ouinet::http_response::Part>
     async_read_part(Cancel, asio::yield_context) override;
 
-    bool
-    is_done() const override;
-
 private:
     struct Impl;
     std::unique_ptr<Impl> _impl;
@@ -186,9 +183,6 @@ public:
     boost::optional<ouinet::http_response::Part>
     async_read_part(Cancel, asio::yield_context) override;
 
-    bool
-    is_done() const override;
-
 protected:
     struct Impl;
     VerifyingReader(GenericStream, std::unique_ptr<Impl>);
@@ -222,7 +216,6 @@ public:
     boost::optional<ouinet::http_response::Part>
     async_read_part(Cancel, asio::yield_context) override;
 
-    bool is_done() const override { return _reader.is_done(); }
     bool is_open() const override { return _reader.is_open(); }
     void close() override { _reader.close(); }
 

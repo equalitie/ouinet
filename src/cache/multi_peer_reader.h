@@ -30,7 +30,6 @@ public:
 
     boost::optional<http_response::Part> async_read_part(Cancel, asio::yield_context) override;
 
-    bool is_done() const override;
     bool is_open() const override;
     void close() override;
 

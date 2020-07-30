@@ -30,10 +30,6 @@ public:
         _queue.push_back(std::move(p));
     }
 
-    bool is_done() const {
-        return !_cancel;
-    }
-
     bool is_open() const {
         return _cancel;
     }

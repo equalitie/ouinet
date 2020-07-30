@@ -598,12 +598,6 @@ SigningReader::async_read_part(Cancel cancel, asio::yield_context yield)
     return part;
 }
 
-bool
-SigningReader::is_done() const
-{
-    return _impl->_is_done;
-}
-
 // end SigningReader
 
 boost::optional<HttpSignature>
@@ -1010,12 +1004,6 @@ VerifyingReader::async_read_part(Cancel cancel, asio::yield_context yield)
     }
 
     return part;
-}
-
-bool
-VerifyingReader::is_done() const
-{
-    return _impl->_is_done;
 }
 
 // end VerifyingReader

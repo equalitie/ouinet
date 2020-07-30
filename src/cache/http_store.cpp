@@ -611,12 +611,6 @@ public:
     }
 
     bool
-    is_done() const override
-    {
-        return _is_done;
-    }
-
-    bool
     is_open() const override
     {
         return _is_open;
@@ -827,12 +821,6 @@ public:
         _is_done = true;
         close();
         return http_response::Part(std::move(head));
-    }
-
-    bool
-    is_done() const override
-    {
-        return _is_done;
     }
 
 private:
