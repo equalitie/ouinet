@@ -152,54 +152,63 @@ public:
             return or_throw<OptBlock>(yield, Errc::expected_first_chunk_hdr);
         }
 
+        if (first_chunk_hdr->size > http_::response_data_block_max) {
+            assert(0 && "Block is too big");
+            return or_throw<OptBlock>(yield, Errc::block_is_too_big);
+        }
+
         Block block{{{}, 0},{0, {}}, boost::none};
         util::SHA512 block_hasher;
 
-        while (true) {
+        if (first_chunk_hdr->size) {
+            // Read the block and the chunk header that comes after it.
+            while (true) {
+                p = r->timed_async_read_part(5s, c, yield[ec]);
+                if (ec) return or_throw<OptBlock>(yield, ec);
+
+                auto chunk_body = p->as_chunk_body();
+                if (!chunk_body) {
+                    assert(0 && "Expected chunk body");
+                    return or_throw<OptBlock>(yield, Errc::expected_chunk_body);
+                }
+
+                block_hasher.update(*chunk_body);
+
+                if (block.chunk_body.size() + chunk_body->size() > http_::response_data_block_max) {
+                    return or_throw<OptBlock>(yield, Errc::block_is_too_big);
+                }
+
+                block.chunk_body.insert(block.chunk_body.end(),
+                    chunk_body->begin(), chunk_body->end());
+
+                if (chunk_body->remain == 0) {
+                    break;
+                }
+            }
+
             p = r->timed_async_read_part(5s, c, yield[ec]);
+
+            ChunkHdr* last_chunk_hdr = p ? p->as_chunk_hdr() : nullptr;
+
+            if (!last_chunk_hdr) ec = Errc::expected_chunk_hdr;
+            else if (last_chunk_hdr->size != 0) ec = Errc::expected_no_more_data;
             if (ec) return or_throw<OptBlock>(yield, ec);
 
-            auto chunk_body = p->as_chunk_body();
-            if (!chunk_body) {
-                assert(0 && "Expected chunk body");
-                return or_throw<OptBlock>(yield, Errc::expected_chunk_body);
+            auto digest = block_hasher.close();
+
+            auto current_block = _hash_list.blocks[block_id];
+
+            if (digest != current_block.data_hash) {
+                return or_throw<OptBlock>(yield, Errc::inconsistent_hash);
             }
 
-            block_hasher.update(*chunk_body);
-
-            if (block.chunk_body.size() + chunk_body->size() > http_::response_data_block_max) {
-                return or_throw<OptBlock>(yield, Errc::block_is_too_big);
-            }
-
-            block.chunk_body.insert(block.chunk_body.end(),
-                chunk_body->begin(), chunk_body->end());
-
-            if (chunk_body->remain == 0) {
-                break;
-            }
+            // We rewrite whatever chunk extension the peer sent because we
+            // already have all the relevant info verified and thus we don't
+            // need to re-verify what the user sent again.
+            block.chunk_hdr.exts = cache::block_chunk_ext(current_block.chained_hash_signature);
         }
 
-        p = r->timed_async_read_part(5s, c, yield[ec]);
-
-        ChunkHdr* last_chunk_hdr = p ? p->as_chunk_hdr() : nullptr;
-
-        if (!last_chunk_hdr) ec = Errc::expected_chunk_hdr;
-        else if (last_chunk_hdr->size != 0) ec = Errc::expected_no_more_data;
-        if (ec) return or_throw<OptBlock>(yield, ec);
-
-        auto digest = block_hasher.close();
-
-        auto current_block = _hash_list.blocks[block_id];
-
-        if (digest != current_block.data_hash) {
-            return or_throw<OptBlock>(yield, Errc::inconsistent_hash);
-        }
-
-        // We rewrite whatever chunk extension the peer sent because we
-        // already have all the relevant info verified and thus we don't
-        // need to re-verify what the user sent again.
-        block.chunk_hdr.exts = cache::block_chunk_ext(current_block.chained_hash_signature);
-
+        // Read the trailer (if any), and make sure we're done with this response
         while (true) {
             p = r->timed_async_read_part(5s, c, yield[ec]);
             if (!p) {
