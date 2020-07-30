@@ -35,13 +35,9 @@ public:
     template<class Handler>
     void flush_response(Cancel&, asio::yield_context, Handler&& h);
 
-    bool is_open() const override {
-        return _reader->is_open();
-    }
-
     void close() override {
         if (!_reader) return;
-        if (_reader->is_open()) _reader->close();
+        _reader->close();
     }
 
     bool keep_alive() const {

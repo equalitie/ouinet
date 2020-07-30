@@ -611,7 +611,7 @@ public:
     }
 
     bool
-    is_open() const override
+    is_open() const
     {
         return _is_open;
     }

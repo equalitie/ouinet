@@ -619,12 +619,6 @@ MultiPeerReader::async_read_part(Cancel cancel, asio::yield_context yield)
     return boost::none;
 }
 
-bool MultiPeerReader::is_open() const
-{
-    // XXX
-    return !_closed;
-}
-
 void MultiPeerReader::close()
 {
     _closed = true;

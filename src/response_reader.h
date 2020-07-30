@@ -15,7 +15,6 @@ namespace ouinet { namespace http_response {
 class AbstractReader {
 public:
     virtual boost::optional<Part> async_read_part(Cancel, asio::yield_context) = 0;
-    virtual bool is_open() const = 0;
     virtual void close()   = 0;
     virtual asio::executor get_executor() = 0;
     virtual ~AbstractReader() = default;
@@ -73,8 +72,7 @@ public:
         setup_parser();
     }
 
-    bool is_open() const override { return _in.is_open(); }
-    void close()         override { return _in.close(); }
+    void close() override { if (_in.is_open()) _in.close(); }
 
     asio::executor get_executor() override { return _in.get_executor(); }
 
