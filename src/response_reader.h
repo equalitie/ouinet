@@ -7,6 +7,7 @@
 #include "or_throw.h"
 #include "response_part.h"
 #include "util/signal.h"
+#include "util/watch_dog.h"
 #include <boost/beast.hpp>
 
 namespace ouinet { namespace http_response {
@@ -17,7 +18,23 @@ public:
     virtual bool is_done() const = 0;
     virtual bool is_open() const = 0;
     virtual void close()   = 0;
+    virtual asio::executor get_executor() = 0;
     virtual ~AbstractReader() = default;
+
+    template<class Duration>
+    boost::optional<Part> timed_async_read_part(Duration d, Cancel c, asio::yield_context y)
+    {
+        Cancel tc(c);
+        auto wd = watch_dog(get_executor(), d, [&] { tc(); });
+        sys::error_code ec;
+
+        auto retval = async_read_part(c, y[ec]);
+
+        if (tc && !c) ec = asio::error::timed_out;
+        assert(!c || ec == asio::error::operation_aborted);
+
+        return or_throw<boost::optional<Part>>(y, ec, std::move(retval));
+    }
 };
 
 class Reader : public AbstractReader {
@@ -59,6 +76,8 @@ public:
 
     bool is_open() const override { return _in.is_open(); }
     void close()         override { return _in.close(); }
+
+    asio::executor get_executor() override { return _in.get_executor(); }
 
 private:
     http::fields filter_trailer_fields(const http::fields& hdr)

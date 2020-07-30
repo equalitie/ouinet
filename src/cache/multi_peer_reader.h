@@ -36,7 +36,13 @@ public:
 
     ~MultiPeerReader();
 
+    asio::executor get_executor()
+    {
+        return _executor;
+    }
+
 private:
+    asio::executor _executor;
     Cancel _lifetime_cancel;
 
     bool _closed = false;

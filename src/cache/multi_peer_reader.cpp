@@ -501,7 +501,8 @@ MultiPeerReader::MultiPeerReader( asio::executor ex
                                 , std::shared_ptr<DhtLookup> dht_lookup
                                 , std::shared_ptr<unsigned> newest_proto_seen
                                 , const std::string& dbg_tag)
-    : _dbg_tag(dbg_tag)
+    : _executor(ex)
+    , _dbg_tag(dbg_tag)
 {
     _peers = make_unique<Peers>(ex
                                , local_peers

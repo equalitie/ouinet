@@ -213,6 +213,11 @@ public:
     const_iterator begin() const { return _queue.begin(); }
     const_iterator end()   const { return _queue.end();   }
 
+    asio::executor get_executor()
+    {
+        return _ex;
+    }
+
 private:
     asio::executor _ex;
     size_t _max_size;

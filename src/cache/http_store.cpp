@@ -605,6 +605,11 @@ public:
         return http_response::Part(http_response::Trailer());
     }
 
+    asio::executor get_executor() override
+    {
+        return headf.get_executor();
+    }
+
     bool
     is_done() const override
     {

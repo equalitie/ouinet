@@ -226,6 +226,11 @@ public:
     bool is_open() const override { return _reader.is_open(); }
     void close() override { _reader.close(); }
 
+    asio::executor get_executor() override
+    {
+        return _reader.get_executor();
+    }
+
 private:
     ouinet::http_response::AbstractReader& _reader;
     std::set<std::string> _extra_headers;

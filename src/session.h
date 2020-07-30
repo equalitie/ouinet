@@ -54,6 +54,11 @@ public:
         return _reader->is_done();
     }
 
+    asio::executor get_executor() override {
+        assert(_reader);
+        return _reader->get_executor();
+    }
+
 private:
     Session(http_response::Head&& head, reader_uptr&& reader)
         : _head(std::move(head))
