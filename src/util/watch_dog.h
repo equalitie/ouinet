@@ -1,6 +1,8 @@
 #pragma once
 
 #include <boost/asio/coroutine.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/spawn.hpp>
 #include "../defer.h"
 #include "../util/handler_tracker.h"
 #include "../namespaces.h"

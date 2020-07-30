@@ -11,6 +11,7 @@
 
 #include "util/signal.h"
 #include "util/variant.h"
+#include "util/watch_dog.h"
 #include "namespaces.h"
 #include "or_throw.h"
 
@@ -28,6 +29,18 @@ namespace detail {
         sys::error_code ec;
         p->async_write(s, y[ec]);
         if (cancelled) ec = asio::error::operation_aborted;
+        return or_throw(y, ec);
+    }
+
+    template<class P, class S, class Duration>
+    void async_write_c(const P* p, S& s, Duration d, Cancel& c, asio::yield_context y)
+    {
+        Cancel tc(c);
+        auto wd = watch_dog(s.get_executor(), d, [&] { tc(); });
+        sys::error_code ec;
+        async_write_c(p, s, tc, y[ec]);
+        if (tc && !c) ec = asio::error::timed_out;
+        assert(!c || ec = asio::error::operation_aborted);
         return or_throw(y, ec);
     }
 }
@@ -65,6 +78,10 @@ struct Head : public http::response_header<> {
     template<class S>
     void async_write(S& s, Cancel& c, asio::yield_context y) const
     { return detail::async_write_c(this, s, c, y); }
+
+    template<class S, class Duration>
+    void async_write(S& s, Cancel& c, Duration d, asio::yield_context y) const
+    { return detail::async_write_c(this, s, d, c, y); }
 };
 
 struct Body : public std::vector<uint8_t> {
@@ -85,6 +102,10 @@ struct Body : public std::vector<uint8_t> {
     template<class S>
     void async_write(S& s, Cancel& c, asio::yield_context y) const
     { return detail::async_write_c(this, s, c, y); }
+
+    template<class S, class Duration>
+    void async_write(S& s, Cancel& c, Duration d, asio::yield_context y) const
+    { return detail::async_write_c(this, s, d, c, y); }
 };
 
 struct ChunkHdr {
@@ -128,6 +149,10 @@ struct ChunkHdr {
     template<class S>
     void async_write(S& s, Cancel& c, asio::yield_context y) const
     { return detail::async_write_c(this, s, c, y); }
+
+    template<class S, class Duration>
+    void async_write(S& s, Cancel& c, Duration d, asio::yield_context y) const
+    { return detail::async_write_c(this, s, d, c, y); }
 };
 
 struct ChunkBody : public std::vector<uint8_t> {
@@ -159,6 +184,10 @@ struct ChunkBody : public std::vector<uint8_t> {
     template<class S>
     void async_write(S& s, Cancel& c, asio::yield_context y) const
     { return detail::async_write_c(this, s, c, y); }
+
+    template<class S, class Duration>
+    void async_write(S& s, Cancel& c, Duration d, asio::yield_context y) const
+    { return detail::async_write_c(this, s, d, c, y); }
 };
 
 struct Trailer : public http::fields {
@@ -182,6 +211,10 @@ struct Trailer : public http::fields {
     template<class S>
     void async_write(S& s, Cancel& c, asio::yield_context y) const
     { return detail::async_write_c(this, s, c, y); }
+
+    template<class S, class Duration>
+    void async_write(S& s, Cancel& c, Duration d, asio::yield_context y) const
+    { return detail::async_write_c(this, s, d, c, y); }
 };
 
 namespace detail {
@@ -231,6 +264,10 @@ struct Part : public detail::PartVariant
     template<class S>
     void async_write(S& s, Cancel& c, asio::yield_context y) const
     { return detail::async_write_c(this, s, c, y); }
+
+    template<class S, class Duration>
+    void async_write(S& s, Cancel& c, Duration d, asio::yield_context y) const
+    { return detail::async_write_c(this, s, d, c, y); }
 };
 
 }} // namespace ouinet::http_response
