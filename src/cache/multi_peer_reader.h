@@ -28,6 +28,9 @@ public:
                    , std::shared_ptr<unsigned> newest_proto_seen
                    , const std::string& dbg_tag);
 
+    MultiPeerReader(MultiPeerReader&&) = delete;
+    MultiPeerReader(const MultiPeerReader&) = delete;
+
     boost::optional<http_response::Part> async_read_part(Cancel, asio::yield_context) override;
 
     void close() override;

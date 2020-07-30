@@ -530,12 +530,13 @@ MultiPeerReader::async_read_part(Cancel cancel, asio::yield_context yield)
 {
     using OptPart = boost::optional<Part>;
 
-    if (cancel) return or_throw<OptPart>(yield, asio::error::operation_aborted);
-    if (_closed) return boost::none;
+    sys::error_code ec;
+
+    if (_closed) ec = asio::error::bad_descriptor;
+    if (cancel)  ec = asio::error::operation_aborted;
+    if (ec) return or_throw<OptPart>(yield, ec);
 
     auto lc = _lifetime_cancel.connect(cancel);
-
-    sys::error_code ec;
 
     auto dbg_tag = _dbg_tag;
 
@@ -568,6 +569,7 @@ MultiPeerReader::async_read_part(Cancel cancel, asio::yield_context yield)
     }
 
     if (_block_id >= _reference_hash_list->blocks.size()) {
+        _closed = true;
         if (!_last_chunk_hdr_sent) {
             _last_chunk_hdr_sent = true;
             return Part{ChunkHdr(0, std::move(_next_chunk_hdr_ext))};
@@ -579,13 +581,16 @@ MultiPeerReader::async_read_part(Cancel cancel, asio::yield_context yield)
         Peer* peer = _peers->choose_peer_for_block(*_reference_hash_list, _block_id, cancel, yield[ec]);
 
         if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<OptPart>(yield, ec);
+        if (ec) { _closed = true; return or_throw<OptPart>(yield, ec); }
 
         assert(peer);
 
         auto block = peer->read_block(_block_id, cancel, yield[ec]);
 
-        if (cancel) return or_throw<OptPart>(yield, asio::error::operation_aborted);
+        if (cancel) {
+            _closed = true;
+            return or_throw<OptPart>(yield, asio::error::operation_aborted);
+        }
 
         if (ec) {
             _peers->unmark_as_good(*peer);
