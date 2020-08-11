@@ -193,6 +193,7 @@ struct Client::Impl {
                 yield.log("cache/client: Serving propfind for ", *key);
             }
             auto hl = _http_store->load_hash_list(*key, cancel, yield[ec]);
+
             if (do_log) {
                 yield.log("cache/client: load ec:\"", ec.message(), "\"");
             }

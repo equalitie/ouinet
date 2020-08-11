@@ -1063,6 +1063,12 @@ http_store_load_hash_list( const fs::path& dir
         hl.blocks.push_back({*d, *sig});
     }
 
+    if (hl.blocks.empty()) {
+        return or_throw<HashList>(yield, asio::error::not_found);
+    }
+
+    assert(hl.verify()); // Only in debug mode
+
     return hl;
 }
 
