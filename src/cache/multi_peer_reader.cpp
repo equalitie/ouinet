@@ -192,7 +192,10 @@ public:
             if (!last_chunk_hdr) ec = Errc::expected_chunk_hdr;
             else if (last_chunk_hdr->size != 0) ec = Errc::expected_no_more_data;
             if (ec) return or_throw<OptBlock>(yield, ec);
+        }
 
+        // Check block signature
+        {
             auto digest = block_hasher.close();
 
             auto current_block = _hash_list.blocks[block_id];
