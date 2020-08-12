@@ -113,7 +113,7 @@ parse_data_block_offset(const std::string& s)  // `^[0-9a-f]*$`
     for (auto& c : s) {
         assert(('0' <= c && c <= '9') || ('a' <= c && c <= 'f'));
         offset <<= 4;
-        offset += ('0' <= c && c <= '9') ? c - '0' : c - 'a';
+        offset += ('0' <= c && c <= '9') ? c - '0' : c - 'a' + 10;
     }
     return offset;
 }
