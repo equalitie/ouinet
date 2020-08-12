@@ -541,8 +541,6 @@ MultiPeerReader::async_read_part(Cancel cancel, asio::yield_context yield)
 
     auto lc = _lifetime_cancel.connect(cancel);
 
-    auto dbg_tag = _dbg_tag;
-
     if (!_reference_hash_list) {
         auto hl = _peers->choose_reference_hash_list(cancel, yield[ec]);
         if (ec) return or_throw<OptPart>(yield, ec);

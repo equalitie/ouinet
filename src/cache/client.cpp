@@ -328,7 +328,7 @@ struct Client::Impl {
     {
         Yield yield = yield_.tag("cache/client/load");
 
-        bool dbg;
+        bool dbg = false;
 
         if (log_debug()) dbg = true;
 
