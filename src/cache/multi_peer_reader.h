@@ -17,6 +17,8 @@ private:
     class Peer;
     class Peers;
 
+    enum class State { active, done, closed };
+
 public:
     MultiPeerReader( asio::executor ex
                    , util::Ed25519PublicKey cache_pk
@@ -43,10 +45,14 @@ public:
     }
 
 private:
+    boost::optional<http_response::Part> async_read_part_impl(Cancel&, asio::yield_context);
+
+    void mark_done();
+
+private:
     asio::executor _executor;
     Cancel _lifetime_cancel;
 
-    bool _closed = false;
     boost::optional<HashList> _reference_hash_list;
     std::unique_ptr<Peers> _peers;
     std::string _dbg_tag;
@@ -57,6 +63,8 @@ private:
     boost::optional<http_response::ChunkBody> _next_chunk_body;
     boost::optional<http_response::Trailer> _next_trailer;
     bool _last_chunk_hdr_sent = false;
+
+    State _state = State::active;
 };
 
 }}

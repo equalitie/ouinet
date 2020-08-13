@@ -83,12 +83,17 @@ public:
     const util::Ed25519PublicKey _cache_pk;
     boost::optional<GenericStream> _connection;
     HashList _hash_list;
+    Cancel _lifetime_cancel;
 
     Peer(asio::executor exec, const string& key, util::Ed25519PublicKey cache_pk) :
         _exec(exec),
         _key(key),
         _cache_pk(cache_pk)
     {
+    }
+
+    ~Peer() {
+        _lifetime_cancel();
     }
 
     const SignedHead& signed_head() const
@@ -116,6 +121,7 @@ public:
 
         sys::error_code ec;
 
+        auto cl = _lifetime_cancel.connect([&] { c(); });
         auto cc = c.connect([&] { if (_connection) _connection->close(); });
 
         {
@@ -213,6 +219,7 @@ public:
         // Read the trailer (if any), and make sure we're done with this response
         while (true) {
             p = r->timed_async_read_part(5s, c, yield[ec]);
+            if (ec) return or_throw<OptBlock>(yield, ec);
             if (!p) {
                 _connection = r->release_stream();
                 // We're done with this request
@@ -531,13 +538,34 @@ MultiPeerReader::MultiPeerReader( asio::executor ex
 boost::optional<Part>
 MultiPeerReader::async_read_part(Cancel cancel, asio::yield_context yield)
 {
-    using OptPart = boost::optional<Part>;
+    using Ret = boost::optional<Part>;
 
     sys::error_code ec;
 
-    if (_closed) ec = asio::error::bad_descriptor;
-    if (cancel)  ec = asio::error::operation_aborted;
-    if (ec) return or_throw<OptPart>(yield, ec);
+    if (cancel) return or_throw<Ret>(yield, asio::error::operation_aborted);
+    if (_state == State::closed) return or_throw<Ret>(yield, asio::error::bad_descriptor);
+    if (_state == State::done) return boost::none;
+
+    auto r = async_read_part_impl(cancel, yield[ec]);
+
+    if (ec) {
+        _state = State::closed;
+        _peers = nullptr;
+        return or_throw<Ret>(yield, ec);
+    } else if (!r) {
+        _state = State::done;
+        _peers = nullptr;
+    }
+
+    return r;
+}
+
+boost::optional<Part>
+MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
+{
+    using OptPart = boost::optional<Part>;
+
+    sys::error_code ec;
 
     auto lc = _lifetime_cancel.connect(cancel);
 
@@ -565,12 +593,12 @@ MultiPeerReader::async_read_part(Cancel cancel, asio::yield_context yield)
         }
         auto p = std::move(*_next_trailer);
         _next_trailer = boost::none;
-        _closed = true;
+        mark_done();
         return {{std::move(p)}};
     }
 
     if (_block_id >= _reference_hash_list->blocks.size()) {
-        _closed = true;
+        mark_done();
         if (!_last_chunk_hdr_sent) {
             _last_chunk_hdr_sent = true;
             return Part{ChunkHdr(0, std::move(_next_chunk_hdr_ext))};
@@ -582,14 +610,13 @@ MultiPeerReader::async_read_part(Cancel cancel, asio::yield_context yield)
         Peer* peer = _peers->choose_peer_for_block(*_reference_hash_list, _block_id, cancel, yield[ec]);
 
         if (cancel) ec = asio::error::operation_aborted;
-        if (ec) { _closed = true; return or_throw<OptPart>(yield, ec); }
+        if (ec) { return or_throw<OptPart>(yield, ec); }
 
         assert(peer);
 
         auto block = peer->read_block(_block_id, cancel, yield[ec]);
 
         if (cancel) {
-            _closed = true;
             return or_throw<OptPart>(yield, asio::error::operation_aborted);
         }
 
@@ -601,7 +628,7 @@ MultiPeerReader::async_read_part(Cancel cancel, asio::yield_context yield)
         ++_block_id;
 
         if (!block) {
-            _closed = true;
+            mark_done();
             if (!_last_chunk_hdr_sent) {
                 _last_chunk_hdr_sent = true;
                 return Part{ChunkHdr(0, std::move(_next_chunk_hdr_ext))};
@@ -627,7 +654,14 @@ MultiPeerReader::async_read_part(Cancel cancel, asio::yield_context yield)
 
 void MultiPeerReader::close()
 {
-    _closed = true;
+    _state = State::closed;
+    _peers = nullptr;;
+}
+
+void MultiPeerReader::mark_done()
+{
+    if (_state == State::closed) return;
+    _state = State::done;
 }
 
 MultiPeerReader::~MultiPeerReader() {
