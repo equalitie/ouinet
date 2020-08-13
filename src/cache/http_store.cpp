@@ -78,16 +78,6 @@ recursive_dir_size(const fs::path& path, sys::error_code& ec)
     return total;
 }
 
-static
-http_response::Head
-without_framing(http_response::Head rsh)
-{
-    rsh.chunked(false);
-    rsh.erase(http::field::content_length);
-    rsh.erase(http::field::trailer);
-    return rsh;
-}
-
 // Block signature and hash handling.
 static
 boost::string_view
@@ -733,106 +723,6 @@ http_store_range_reader( const fs::path& dirp, asio::executor ex
 {
     return _http_store_reader<HttpStoreReader>
         (dirp, std::move(ex), first, last, ec);
-}
-
-class HttpStoreHeadReader : public HttpStoreReader {
-private:
-    inline
-    std::string
-    unsatisfied_range()
-    {
-        // See RFC7233#4.2 for the syntax.
-        return data_size ? util::str("bytes */", *data_size) : "bytes */*";
-    }
-
-    boost::optional<std::size_t>
-    get_last_sig_offset(Cancel cancel, asio::yield_context yield)
-    {
-        // TODO: seek to avoid parsing the whole file
-
-        // TODO: This would be easier if lines had a fixed size,
-        // e.g. by padding the offset to the length of `max(size_t)`.
-        // A way to cut the overhead would be to use `max(size_t/block_length)`,
-        // with a different fixed line length for each stored entry,
-        // but if overhead is an issue, a binary format should be used instead.
-        boost::optional<std::size_t> off;
-        while (true) {
-            sys::error_code ec;
-            auto se = get_sig_entry(cancel, yield[ec]);
-            return_or_throw_on_error(yield, cancel, ec, boost::none);
-            if (!se) break;
-            off = se->offset;
-        }
-        return off;
-    }
-
-    std::string
-    get_avail_data_range(Cancel cancel, asio::yield_context yield)
-    {
-        if (!sigsf.is_open() || !bodyf.is_open())
-            return unsatisfied_range();;
-
-        sys::error_code ec;
-        auto bsize = util::file_io::file_size(bodyf, ec);
-        if (ec) return or_throw(yield, ec, "");
-        if (bsize == 0)
-            return unsatisfied_range();;
-
-        // Get the last byte for which we have a block signature.
-        auto lsoff = get_last_sig_offset(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, "");
-        if (!lsoff)
-            return unsatisfied_range();;
-        assert(block_size);
-        auto end = bsize > *lsoff
-            ? *lsoff + std::min(bsize - *lsoff, *block_size)
-            : (bsize / *block_size) * *block_size;
-
-        return util::str(util::HttpResponseByteRange{0, end - 1, data_size});
-    }
-
-public:
-    HttpStoreHeadReader( asio::posix::stream_descriptor headf
-                       , asio::posix::stream_descriptor sigsf
-                       , asio::posix::stream_descriptor bodyf
-                       , boost::optional<Range> range)
-        : HttpStoreReader(std::move(headf), std::move(sigsf), std::move(bodyf), range)
-    {}
-
-    ~HttpStoreHeadReader() override {};
-
-    boost::optional<ouinet::http_response::Part>
-    async_read_part(Cancel cancel, asio::yield_context yield) override
-    {
-        if (!is_open() || _is_done) return boost::none;
-
-        sys::error_code ec;
-        auto part_o = HttpStoreReader::async_read_part(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, boost::none);
-        assert(part_o);
-        auto head_p = part_o->as_head();
-        assert(head_p);
-        // According to RFC7231#4.3.2, payload header fields MAY be omitted.
-        auto head = without_framing(std::move(*head_p));
-        // Add a header with the available data range.
-        auto drange = get_avail_data_range(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, boost::none);
-        head.set(response_available_data, drange);
-        _is_done = true;
-        close();
-        return http_response::Part(std::move(head));
-    }
-
-private:
-    bool _is_done = false;
-};
-
-reader_uptr
-http_store_head_reader( const fs::path& dirp, asio::executor ex
-                      , sys::error_code& ec)
-{
-    return _http_store_reader<HttpStoreHeadReader>
-        (dirp, std::move(ex), {}, {}, ec);
 }
 
 HttpStore::~HttpStore()
