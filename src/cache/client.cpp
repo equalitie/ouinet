@@ -696,8 +696,10 @@ Client::build( shared_ptr<bt::MainlineDht> dht
 
     sys::error_code ec;
 
-    auto old_store_dir = cache_dir / "data";  // v0 store
-    if (is_directory(old_store_dir)) {
+    // Remove obsolete stores.
+    for (const auto& dirn : {"data", "data-v1"}) {
+        auto old_store_dir = cache_dir / dirn;
+        if (!is_directory(old_store_dir)) continue;
         LOG_INFO("Removing obsolete HTTP store...");
         fs::remove_all(old_store_dir, ec);
         if (ec) LOG_ERROR("Removing obsolete HTTP store: failed; ec:", ec.message());
@@ -705,7 +707,7 @@ Client::build( shared_ptr<bt::MainlineDht> dht
         ec = {};
     }
 
-    auto store_dir = cache_dir / "data-v1";
+    auto store_dir = cache_dir / "data-v2";
     fs::create_directories(store_dir, ec);
     if (ec) return or_throw<ClientPtr>(yield, ec);
     auto http_store = make_unique<cache::HttpStore>(

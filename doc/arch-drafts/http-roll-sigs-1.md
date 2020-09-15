@@ -56,7 +56,7 @@ Please note that neither the initial signature nor framing headers (`Transfer-En
 
 ```
 HTTP/1.1 200 OK
-X-Ouinet-Version: 4
+X-Ouinet-Version: 5
 X-Ouinet-URI: https://example.com/foo
 X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
 Date: Mon, 15 Jan 2018 20:31:50 GMT
@@ -72,11 +72,11 @@ Trailer: Digest, X-Ouinet-Data-Size, X-Ouinet-Sig1
 
 100000
 0123456789...
-100000;ouisig=BASE64(BSIG(d607…e58d NUL 0 NUL HASH[0]=SHA2-512(BLOCK[0])))
+100000;ouisig=BASE64(BSIG(d607…e58d NUL 0 NUL CHASH[0]=SHA2-512(SHA2-512(BLOCK[0]))))
 0123456789...
-4;ouisig=BASE64(BSIG(d607…e58d NUL 1048576 NUL HASH[1]=SHA2-512(HASH[0] BLOCK[1])))
+4;ouisig=BASE64(BSIG(d607…e58d NUL 1048576 NUL CHASH[1]=SHA2-512(CHASH[0] SHA2-512(BLOCK[1]))))
 abcd
-0;ouisig=BASE64(BSIG(d607…e58d NUL 2097152 NUL HASH[2]=SHA2-512(HASH[1] BLOCK[2])))
+0;ouisig=BASE64(BSIG(d607…e58d NUL 2097152 NUL CHASH[2]=SHA2-512(CHASH[1] SHA2-512(BLOCK[2]))))
 Digest: SHA-256=BASE64(SHA2-256(COMPLETE_BODY))
 X-Ouinet-Data-Size: 1048580
 X-Ouinet-Sig1: keyId="ed25519=????",algorithm="hs2019",created=1516048311,
@@ -96,9 +96,11 @@ The signature string for each block covers the following values (separated by nu
 
     This helps detecting an attacker which replies to a range request with a range of the expected length, with correctly signed and ordered blocks, that however starts at the wrong offset.
 
-  - A **chain hash** (binary) computed from the chain hash of the previous block and the data of the block itself: for the i-th block, `HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])`, with `HASH[0]=SHA2-512(BLOCK[0])`.
+  - A **chain hash** (binary) computed from the chain hash of the previous block and the **data hash** of the block itself: for the i-th block, `DHASH[i]=SHA2-512(BLOCK[i])` and `CHASH[i]=SHA2-512(CHASH[i-1] DHASH[i])`, with `CHASH[0]=SHA2-512(DHASH[0])`.
 
     Signing the hash instead of block data itself spares the signer from keeping the whole block in memory for producing the signature (the hash algorithm can be fed as data comes in from the origin).
+
+    Using the data block hash instead of its data allows to independently verify the signatures without needing to be in possession of the data itself, just the hashes.
 
     Keeping the injection identifier out of the hash allows to compare the hashes at particular blocks of different injections (if transmitted independently) to ascertain that their data is the same up to that block.
 
@@ -112,7 +114,7 @@ If a client got to get and save a complete response from the injector, it may se
 
 ## Range requests
 
-If a client sends an HTTP range request to another client, the later aligns it to block boundaries (this is acceptable according to [RFC7233#4.1][] — "a client cannot rely on receiving the same ranges that it requested").  The `Content-Range:` header in the response is not part of the initial nor final signatures.  If the range does not start at the beginning of the data, the first block `i` is accompanied with a `ouihash=BASE64(HASH[i-1])` chunk extension to enable checking its `ouisig`.  Please note that to ease serving range requests, a client storing a response may cache all chain hashes along their blocks, so as to avoid having to compute the `ouihash` of the first block in the range.
+If a client sends an HTTP range request to another client, the later aligns it to block boundaries (this is acceptable according to [RFC7233#4.1][] — "a client cannot rely on receiving the same ranges that it requested").  The `Content-Range:` header in the response is not part of the initial nor final signatures.  If the range does not start at the beginning of the data, the first block `i` is accompanied with a `ouihash=BASE64(CHASH[i-1])` chunk extension to enable checking its `ouisig`.  Please note that to ease serving range requests, a client storing a response may cache all chain hashes along their blocks, so as to avoid having to compute the `ouihash` of the first block in the range.
 
 [RFC7233#4.1]: https://tools.ietf.org/html/rfc7233#section-4.1
 

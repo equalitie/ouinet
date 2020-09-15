@@ -23,10 +23,10 @@
 #include "../util/atomic_file.h"
 #include "../util/bytes.h"
 #include "../util/file_io.h"
-#include "../util/hash.h"
 #include "../util/str.h"
 #include "../util/variant.h"
 #include "http_sign.h"
+#include "signed_head.h"
 
 #define _LOGPFX "HTTP store: "
 #define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
@@ -115,18 +115,21 @@ parse_data_block_offset(const std::string& s)  // `^[0-9a-f]*$`
     return offset;
 }
 
-// A signatures file entry with `OFFSET[i] SIGNATURE[i] HASH[i-1]`.
+// A signatures file entry with `OFFSET[i] SIGNATURE[i] CHASH[i-1]`.
 struct SigEntry {
     std::size_t offset;
     std::string signature;
+    std::string data_digest;
     std::string prev_digest;
 
     using parse_buffer = std::string;
 
     std::string str() const
     {
-        static const auto line_format = "%x %s %s\n";
-        return (boost::format(line_format) % offset % signature % prev_digest).str();
+        static const auto pad_digest = util::base64_encode(util::SHA512::zero_digest());
+        static const auto line_format = "%016x %s %s %s\n";
+        return ( boost::format(line_format) % offset % signature % data_digest
+               % (prev_digest.empty() ? pad_digest : prev_digest)).str();
     }
 
     std::string chunk_exts() const
@@ -142,14 +145,6 @@ struct SigEntry {
             exts << (boost::format(fmt_hx) % prev_digest);
 
         return exts.str();
-    }
-
-    static
-    parse_buffer create_parse_buffer()
-    {
-        // We may use a flat buffer or something like that,
-        // but this will suffice for the moment.
-        return {};
     }
 
     template<class Stream>
@@ -172,10 +167,12 @@ struct SigEntry {
         boost::string_view line(buf);
         line.remove_suffix(buf.size() - line_len + 1);  // leave newline out
 
-        static const boost::regex line_regex(
-            "([0-9a-f]+)"  // LOWER_HEX(OFFSET[i])
-            " ([A-Za-z0-9+/]+=*)"  // BASE64(SIG[i])
-            " ([A-Za-z0-9+/]+=*)?"  // BASE64(HASH([i-1]))
+        static const auto pad_digest = util::base64_encode(util::SHA512::zero_digest());
+        static const boost::regex line_regex(  // Ensure lines are fixed size!
+            "([0-9a-f]{16})"  // PAD016_LHEX(OFFSET[i])
+            " ([A-Za-z0-9+/=]{88})"  // BASE64(SIG[i]) (88 = size(BASE64(Ed25519-SIG)))
+            " ([A-Za-z0-9+/=]{88})"  // BASE64(DHASH[i]) (88 = size(BASE64(SHA2-512)))
+            " ([A-Za-z0-9+/=]{88})"  // BASE64(CHASH([i-1])) (88 = size(BASE64(SHA2-512)))
         );
         boost::cmatch m;
         if (!boost::regex_match(line.begin(), line.end(), m, line_regex)) {
@@ -183,7 +180,8 @@ struct SigEntry {
             return or_throw(yield, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
         }
         auto offset = parse_data_block_offset(m[1].str());
-        SigEntry entry{offset, m[2].str(), m[3].str()};
+        SigEntry entry{ offset, m[2].str(), m[3].str()
+                      , (m[4] == pad_digest ? "" : m[4].str())};
         buf.erase(0, line_len);  // consume used input
         return entry;
     }
@@ -234,7 +232,7 @@ public:
             _ERROR("Missing parameters for data block signatures; uri=", uri);
             return or_throw(yield, asio::error::invalid_argument);
         }
-        auto bs_params = cache::HttpBlockSigs::parse(bsh);
+        auto bs_params = cache::SignedHead::BlockSigs::parse(bsh);
         if (!bs_params) {
             _ERROR("Malformed parameters for data block signatures; uri=", uri);
             return or_throw(yield, asio::error::invalid_argument);
@@ -278,13 +276,22 @@ public:
             return or_throw(yield, asio::error::invalid_argument);
         }
 
+        auto block_digest = block_hash.close();
+        block_hash = {};
+
+        e.data_digest = util::base64_encode(block_digest);
+
         // Encode the chained hash for the previous block.
         if (prev_block_digest)
             e.prev_digest = util::base64_encode(*prev_block_digest);
 
-        // Prepare hash for next data block: HASH[i]=SHA2-512(HASH[i-1] BLOCK[i])
-        prev_block_digest = block_hash.close();
-        block_hash = {}; block_hash.update(*prev_block_digest);
+        // Prepare hash for next data block: CHASH[i]=SHA2-512(CHASH[i-1] BLOCK[i])
+        util::SHA512 chain_hash;
+
+        if (prev_block_digest) chain_hash.update(*prev_block_digest);
+        chain_hash.update(block_digest);
+
+        prev_block_digest = chain_hash.close();
 
         util::file_io::write(*sigsf, asio::buffer(e.str()), cancel, yield);
     }
@@ -350,43 +357,51 @@ class HttpStoreReader : public http_response::AbstractReader {
 private:
     static const std::size_t http_forward_block = 16384;
 
-    http_response::Head
-    parse_head(Cancel cancel, asio::yield_context yield)
-    {
-        assert(headf.is_open());
-        auto close_headf = defer([&headf = headf] { headf.close(); });  // no longer needed
+public:
+    template<class IStream>
+    static
+    SignedHead read_signed_head(IStream& is, Cancel& cancel, asio::yield_context yield) {
+        assert(is.is_open());
+
+        auto on_cancel = cancel.connect([&] { is.close(); });
 
         // Put in heap to avoid exceeding coroutine stack limit.
         auto buffer = std::make_unique<beast::static_buffer<http_forward_block>>();
         auto parser = std::make_unique<http::response_parser<http::empty_body>>();
 
         sys::error_code ec;
-        http::async_read_header(headf, *buffer, *parser, yield[ec]);
+        http::async_read_header(is, *buffer, *parser, yield[ec]);
         if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<http_response::Head>(yield, ec);
+        if (ec) return or_throw<SignedHead>(yield, ec);
 
         if (!parser->is_header_done()) {
-            _ERROR("Failed to parse stored response head");
-            return or_throw<http_response::Head>(yield, sys::errc::make_error_code(sys::errc::no_message));
+            return or_throw<SignedHead>(yield, sys::errc::make_error_code(sys::errc::no_message));
         }
 
-        auto head = parser->release().base();
-        uri = head[http_::response_uri_hdr].to_string();
-        if (uri.empty()) {
-            _ERROR("Missing URI in stored head");
-            return or_throw<http_response::Head>(yield, sys::errc::make_error_code(sys::errc::no_message));
+        auto head_o = SignedHead::create_from_trusted_source(parser->release().base());
+
+        if (!head_o) {
+            return or_throw<SignedHead>(yield, sys::errc::make_error_code(sys::errc::no_message));
         }
-        auto bsh = head[http_::response_block_signatures_hdr];
-        if (bsh.empty()) {
-            _ERROR("Missing stored parameters for data block signatures; uri=", uri);
-            return or_throw<http_response::Head>(yield, sys::errc::make_error_code(sys::errc::no_message));
+
+        return std::move(*head_o);
+    }
+
+public:
+    http_response::Head
+    parse_head(Cancel cancel, asio::yield_context yield)
+    {
+        sys::error_code ec;
+        auto head = read_signed_head(headf, cancel, yield[ec]);
+
+        if (ec) {
+            if (ec != asio::error::operation_aborted) {
+                _ERROR("Failed to parse stored response head");
+            }
+            return or_throw<http_response::Head>(yield, ec);
         }
-        auto bs_params = cache::HttpBlockSigs::parse(bsh);
-        if (!bs_params) {
-            _ERROR("Malformed stored parameters for data block signatures; uri=", uri);
-            return or_throw<http_response::Head>(yield, sys::errc::make_error_code(sys::errc::no_message));
-        }
-        block_size = bs_params->size;
+
+        block_size = head.block_size();
         auto data_size_hdr = head[http_::response_data_size_hdr];
         auto data_size_opt = parse::number<std::size_t>(data_size_hdr);
         if (!data_size_opt)
@@ -422,8 +437,11 @@ private:
              && head[http::field::transfer_encoding].empty()
              && head[http::field::trailer].empty())) {
             _WARN("Found framing headers in stored head, cleaning; uri=", uri);
-            head = http_injection_merge(std::move(head), {});
+            auto retval = http_injection_merge(std::move(head), {});
+            retval.set(http::field::transfer_encoding, "chunked");
+            return retval;
         }
+
         head.set(http::field::transfer_encoding, "chunked");
         return head;
     }
@@ -456,9 +474,6 @@ protected:
     {
         assert(_is_head_done);
         if (!sigsf.is_open()) return boost::none;
-
-        if (sigs_buffer.size() == 0)
-            sigs_buffer = SigEntry::create_parse_buffer();
 
         return SigEntry::parse(sigsf, sigs_buffer, cancel, yield);
     }
@@ -975,6 +990,82 @@ HttpStore::size( Cancel cancel
     auto sz = recursive_dir_size(path, ec);
     if (cancel) ec = asio::error::operation_aborted;
     return or_throw(yield, ec, sz);
+}
+
+HashList
+http_store_load_hash_list( const fs::path& dir
+                         , asio::executor exec
+                         , Cancel& cancel
+                         , asio::yield_context yield)
+{
+    using Sha = util::SHA512;
+    using Digest = Sha::digest_type;
+
+    sys::error_code ec;
+
+    auto headf = util::file_io::open_readonly(exec, dir / head_fname, ec);
+    if (ec) return or_throw<HashList>(yield, ec);
+
+    auto sigsf = util::file_io::open_readonly(exec, dir / sigs_fname, ec);
+    if (ec) return or_throw<HashList>(yield, ec);
+
+    auto bodyf = util::file_io::open_readonly(exec, dir / body_fname, ec);
+    if (ec) return or_throw<HashList>(yield, ec);
+
+    HashList hl;
+
+    hl.signed_head = HttpStoreReader::read_signed_head(headf, cancel, yield[ec]);
+
+    if (cancel) ec = asio::error::operation_aborted;
+    if (ec) return or_throw<HashList>(yield, ec);
+
+    boost::optional<SigEntry> last_sig_entry;
+    std::string sig_buffer;
+
+    static const auto decode = [](const std::string& s) -> boost::optional<Digest> {
+        std::string d = util::base64_decode(s);
+        if (d.size() != Sha::size()) return boost::none;
+        return util::bytes::to_array<uint8_t, Sha::size()>(d);
+    };
+
+    while(true) {
+        auto opt_sig_entry = SigEntry::parse(sigsf, sig_buffer, cancel, yield[ec]);
+
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec) return or_throw<HashList>(yield, ec);
+
+        if (!opt_sig_entry) break;
+
+        last_sig_entry = opt_sig_entry;
+
+        auto d = decode(opt_sig_entry->data_digest);
+        if (!d) return or_throw<HashList>(yield, asio::error::bad_descriptor);
+
+        hl.block_hashes.push_back(*d);
+    }
+
+    if (!last_sig_entry) return or_throw<HashList>(yield, asio::error::bad_descriptor);
+
+    auto c = decode(last_sig_entry->prev_digest);
+    if (!c) return or_throw<HashList>(yield, asio::error::bad_descriptor);
+
+    std::string sig = util::base64_decode(last_sig_entry->signature);
+    if (sig.size() != util::Ed25519PublicKey::sig_size) {
+        return or_throw<HashList>(yield, asio::error::bad_descriptor);
+    }
+
+    hl.signature = util::bytes::to_array<uint8_t, util::Ed25519PublicKey::sig_size>(sig);
+
+    return hl;
+}
+
+HashList
+HttpStore::load_hash_list( const std::string& key
+                         , Cancel cancel
+                         , asio::yield_context yield) const
+{
+    auto dir = path_from_key(path, key);
+    return http_store_load_hash_list(dir, executor, cancel, yield);
 }
 
 }} // namespaces

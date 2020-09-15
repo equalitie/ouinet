@@ -6,6 +6,7 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/filesystem/path.hpp>
 
+#include "hash_list.h"
 #include "../constants.h"
 #include "../response_reader.h"
 #include "../util/signal.h"
@@ -45,13 +46,17 @@ using reader_uptr = std::unique_ptr<http_response::AbstractReader>;
 //
 //   - `body`: This is the raw body data (flat, no chunking or other framing).
 //
-//   - `sigs`: This contains block signatures and chained hashes.  It consists
-//     of LF-terminated lines with the following format for blocks i=0,1...:
+//   - `sigs`: This contains block signatures and chained hashes.  It consists of
+//     fixed length, LF-terminated lines with the following format
+//     for blocks i=0,1...:
 //
-//         LOWER_HEX(OFFSET[i])<SP>BASE64(SIG[i])<SP>BASE64(HASH([i-1]))
+//         PAD016_LHEX(OFFSET[i])<SP>BASE64(SIG[i])<SP>BASE64(DHASH[i])<SP>BASE64(CHASH[i-1])
 //
-//     Where `BASE64(HASH[-1])` and `HASH[-1]` are the empty string and
-//     `HASH[i]=HASH(HASH[i-1] DATA[i])`.
+//     Where `PAD016_LHEX(x)` represents `x` in lower-case hexadecimal, zero-padded to 16 characters,
+//     `BASE64(CHASH[-1])` is established as `BASE64('\0' * 64)` (for padding the first line),
+//     `CHASH[-1]` is established as the empty string (for `CHASH[0]` computation),
+//     `DHASH[i]=SHA2-512(DATA[i])` (block data hash)
+//     `CHASH[i]=SHA2-512(CHASH[i-1] DHASH[i])` (block chain hash).
 //
 void http_store( http_response::AbstractReader&, const fs::path&
                , const asio::executor&, Cancel, asio::yield_context);
@@ -97,6 +102,9 @@ reader_uptr
 http_store_head_reader( const fs::path&, asio::executor
                       , sys::error_code&);
 
+HashList
+http_store_load_hash_list(const fs::path&, asio::executor, Cancel&, asio::yield_context);
+
 //// High-level classes for HTTP response storage
 
 // Store each response in a directory named `DIGEST[:2]/DIGEST[2:]` (where
@@ -125,6 +133,9 @@ public:
 
     std::size_t
     size(Cancel, asio::yield_context) const;
+
+    HashList
+    load_hash_list(const std::string& key, Cancel, asio::yield_context) const;
 
 private:
     fs::path path;
