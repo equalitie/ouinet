@@ -31,7 +31,7 @@ FROM base as builder
 # This version is a recommendation and this file has been tested to work for it,
 # but you may attempt to build other versions by overriding this argument.
 # Also see `OUINET_DOCKER_VERSION` below.
-ARG OUINET_VERSION=v0.7.5
+ARG OUINET_VERSION=v0.8.0
 RUN git clone --recursive -b "$OUINET_VERSION" https://github.com/equalitie/ouinet.git
 WORKDIR /opt/ouinet
 # The C.UTF-8 locale (which is always available in Debian)
