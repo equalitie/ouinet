@@ -472,6 +472,7 @@ GenericStream Bep5Client::connect( asio::yield_context yield
 
     Cancel spawn_cancel(cancel); // Cancels all spawned coroutines
 
+    bool did_connect = false;
     asio::ip::udp::endpoint ret_ep;
     GenericStream ret_con;
 
@@ -488,6 +489,7 @@ GenericStream Bep5Client::connect( asio::yield_context yield
         TRACK_SPAWN(exec, ([
             =,
             &spawn_cancel,
+            &did_connect,
             &ret_con,
             &ret_ep,
             lock = wc.lock()
@@ -502,6 +504,7 @@ GenericStream Bep5Client::connect( asio::yield_context yield
             auto con = connect_single(*peer.client, tls, spawn_cancel, y[ec]);
             assert(!spawn_cancel || ec == asio::error::operation_aborted);
             if (spawn_cancel || ec) return;
+            did_connect = true;
             ret_con = move(con);
             ret_ep  = peer.endpoint;
             spawn_cancel();
@@ -523,11 +526,16 @@ GenericStream Bep5Client::connect( asio::yield_context yield
 
     if (ec) {
         _last_working_ep = boost::none;
+        LOG_DEBUG("Bep5Client: Error while connecting to peers; ec:", ec.message());
     } else {
         _last_working_ep = ret_ep;
         if (_injector_pinger) {
             _injector_pinger->injector_was_seen_now();
         }
+        if (did_connect)
+            LOG_DEBUG("Bep5Client: Connected to peer; rep:", ret_ep);
+        else
+            LOG_DEBUG("Bep5Client: Did not connect to any peer");
     }
 
     return or_throw(yield, ec, move(ret_con));
