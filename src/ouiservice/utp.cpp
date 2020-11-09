@@ -51,7 +51,8 @@ void UtpOuiServiceServer::start_listen(asio::yield_context yield)
             if (cancel) return;
             if (ec) {
                 assert(ec != asio::error::operation_aborted);
-                LOG_ERROR("UtpOuiServiceServer: failed to accept, will retry in 5s");
+                LOG_ERROR("UtpOuiServiceServer: failed to accept, will retry in 5s"
+                         , " lep:", local_ep, " ec:", ec.message());
                 async_sleep(_ex, 5s, cancel, yield[ec]);
                 continue;
             }
