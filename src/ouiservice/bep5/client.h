@@ -18,6 +18,14 @@ namespace ouiservice {
 
 class Bep5Client : public OuiServiceImplementationClient
 {
+public:
+    enum Target : uint8_t { none = 0, helpers = 1, injectors = 2 };
+
+    friend Target operator|(Target t1, Target t2) {
+        return static_cast<Target>( static_cast<uint8_t>(t1)
+                                  | static_cast<uint8_t>(t2));
+    }
+
 private:
     using AbstractClient = OuiServiceImplementationClient;
     struct Swarm;
@@ -26,15 +34,8 @@ private:
     struct Candidate {
         asio::ip::udp::endpoint endpoint;
         std::shared_ptr<AbstractClient> client;
+        Target target;
     };
-
-public:
-    enum Target : uint8_t { helpers = 1, injectors = 2 };
-
-    friend Target operator|(Target t1, Target t2) {
-        return static_cast<Target>( static_cast<uint8_t>(t1)
-                                  | static_cast<uint8_t>(t2));
-    }
 
 public:
     Bep5Client( std::shared_ptr<bittorrent::MainlineDht>
