@@ -374,7 +374,7 @@ void Bep5Client::start(asio::yield_context)
     if (!_helpers_swarm_name.empty()) {
         bt::NodeID infohash = util::sha1_digest(_helpers_swarm_name);
 
-        LOG_INFO("Helpers swarm: sha1('", _helpers_swarm_name, "'): ", infohash.to_hex());
+        LOG_INFO("Helper swarm (bridges): sha1('", _helpers_swarm_name, "'): ", infohash.to_hex());
 
         _helpers_swarm.reset(new Swarm(this, infohash, _dht, _cancel, true));
         _helpers_swarm->start();
@@ -535,7 +535,7 @@ GenericStream Bep5Client::connect( asio::yield_context yield
         if (ret_target == Target::injectors)
             LOG_DEBUG("Bep5Client: Connected to injector peer directly; rep:", ret_ep);
         else if (ret_target == Target::helpers)
-            LOG_DEBUG("Bep5Client: Connected to injector via helper peer; rep:", ret_ep);
+            LOG_DEBUG("Bep5Client: Connected to injector via helper peer (bridge); rep:", ret_ep);
         else {
             assert(ret_target == Target::none);
             LOG_DEBUG("Bep5Client: Did not connect to any peer");
