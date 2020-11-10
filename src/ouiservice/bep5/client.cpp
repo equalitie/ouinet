@@ -565,7 +565,9 @@ GenericStream Bep5Client::connect( asio::yield_context yield
 
     if (ec) {
         _last_working_ep = boost::none;
-        LOG_DEBUG("Bep5Client: Error while connecting to peers; ec:", ec.message());
+        LOG_DEBUG( "Bep5Client: Did not connect to any peer;"
+                 , " peers:", i
+                 , " ec:", ec.message());
     } else {
         _last_working_ep = ret_ep;
         if (_injector_pinger) {
@@ -575,10 +577,8 @@ GenericStream Bep5Client::connect( asio::yield_context yield
             LOG_DEBUG("Bep5Client: Connected to injector peer directly; rep:", ret_ep);
         else if (ret_target == Target::helpers)
             LOG_DEBUG("Bep5Client: Connected to injector via helper peer (bridge); rep:", ret_ep);
-        else {
-            assert(ret_target == Target::none);
-            LOG_DEBUG("Bep5Client: Did not connect to any peer");
-        }
+        else
+            assert(0 && "Invalid peer type");
     }
 
     return or_throw(yield, ec, move(ret_con));
