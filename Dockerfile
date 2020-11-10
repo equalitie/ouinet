@@ -43,7 +43,7 @@ RUN cp -r /usr/local/src/ouinet/repos/ repo-templates/
 ARG OUINET_DEBUG=no
 RUN \
 if [ $OUINET_DEBUG != yes ]; then \
-    strip injector client src/ouiservice/obfs4proxy/obfs4proxy \
+    strip injector client src/ouiservice/obfs4proxy/obfs4proxy test/bt-* test/oui-* \
         && find . -name '*.so' -exec strip '{}' + \
         && find . -wholename '*/libexec/*' -executable -type f -exec strip '{}' + ; \
 fi
@@ -104,6 +104,8 @@ RUN ldconfig
 COPY --from=builder /opt/ouinet/injector /opt/ouinet/client ./
 COPY --from=builder /opt/ouinet/src/ouiservice/obfs4proxy/obfs4proxy ./
 COPY --from=builder /opt/ouinet/repo-templates/ repo-templates/
+RUN mkdir utils
+COPY --from=builder /opt/ouinet/test/bt-* /opt/ouinet/test/oui-* utils/
 # This ensures that we use the desired Docker-specific files.
 RUN echo "$OUINET_DOCKER_VERSION"
 COPY --from=builder /usr/local/src/ouinet/scripts/ouinet-wrapper.sh ouinet
