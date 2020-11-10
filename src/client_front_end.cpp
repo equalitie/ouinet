@@ -371,6 +371,7 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         {"max_cached_age", config.max_cached_age().total_seconds()},
         {"ouinet_version", Version::VERSION_NAME},
         {"ouinet_build_id", Version::BUILD_ID},
+        {"ouinet_protocol", http_::protocol_version_current},
         {"logfile", logger.get_log_file() != nullptr}
     };
 
