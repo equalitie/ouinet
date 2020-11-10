@@ -80,7 +80,7 @@ RUN apt-get update && apt-get install -y \
     $(echo $OUINET_DEBUG | sed -n 's/^yes$/gdb/p') \
     \
     lsb-release \
-    netcat \
+    netcat-openbsd \
     wget \
  && rm -rf /var/lib/apt/lists/*
 # Fetch and install i2pd.
