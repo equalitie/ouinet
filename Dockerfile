@@ -31,7 +31,7 @@ FROM base as builder
 # This version is a recommendation and this file has been tested to work for it,
 # but you may attempt to build other versions by overriding this argument.
 # Also see `OUINET_DOCKER_VERSION` below.
-ARG OUINET_VERSION=v0.8.0
+ARG OUINET_VERSION=v0.8.1
 RUN git clone --recursive -b "$OUINET_VERSION" https://github.com/equalitie/ouinet.git
 WORKDIR /opt/ouinet
 # The C.UTF-8 locale (which is always available in Debian)
@@ -105,7 +105,10 @@ COPY --from=builder /opt/ouinet/injector /opt/ouinet/client ./
 COPY --from=builder /opt/ouinet/src/ouiservice/obfs4proxy/obfs4proxy ./
 COPY --from=builder /opt/ouinet/repo-templates/ repo-templates/
 RUN mkdir utils
-COPY --from=builder /opt/ouinet/test/bt-* /opt/ouinet/test/oui-* utils/
+COPY --from=builder \
+ /opt/ouinet/test/bt-* /opt/ouinet/test/oui-* \
+ /usr/local/src/ouinet/scripts/ping-swarm
+ utils/
 # This ensures that we use the desired Docker-specific files.
 RUN echo "$OUINET_DOCKER_VERSION"
 COPY --from=builder /usr/local/src/ouinet/scripts/ouinet-wrapper.sh ouinet
