@@ -107,7 +107,7 @@ COPY --from=builder /opt/ouinet/repo-templates/ repo-templates/
 RUN mkdir utils
 COPY --from=builder \
  /opt/ouinet/test/bt-* /opt/ouinet/test/oui-* \
- /usr/local/src/ouinet/scripts/ping-swarm
+ /usr/local/src/ouinet/scripts/ping-swarm \
  utils/
 # This ensures that we use the desired Docker-specific files.
 RUN echo "$OUINET_DOCKER_VERSION"
