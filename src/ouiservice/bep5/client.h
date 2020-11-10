@@ -60,6 +60,7 @@ public:
     asio::executor get_executor();
 
 private:
+    void status_loop(asio::yield_context);
     std::vector<Candidate> get_peers(Target);
 
     GenericStream connect_single(AbstractClient&, bool tls, Cancel&, asio::yield_context);
