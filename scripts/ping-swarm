@@ -20,9 +20,9 @@ set -e
 # Uncomment if libraries sit along binaries.
 #export LD_LIBRARY_PATH=.:$LD_LIBRARY_PATH
 
-# Uncomment and edit for fixed default values.
-#OUI_PROTO=5
-#OUI_INJPK="abcdefghijklmnopqrstuvwxyz234567abcdefghijklmnopqrst"
+# Uncomment and edit for fixed default values (can still override with env).
+#OUI_PROTO="${OUI_PROTO:-5}"
+#OUI_INJPK="${OUI_INJPK:-abcdefghijklmnopqrstuvwxyz234567abcdefghijklmnopqrst}"
 
 v="$OUI_PROTO"
 pk="$OUI_INJPK"
