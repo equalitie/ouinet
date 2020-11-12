@@ -41,7 +41,9 @@ ping_peer() {  # (endpoint) => (did_reply)
     # <https://www.bittorrent.org/beps/bep_0005.html#ping>.
     local ping='d1:ad2:id20:abcdefghij0123456789e1:q4:ping1:t2:aa1:y1:qe'
     local host="${1%:*}" port="${1##*:}"
-    echo -n "$ping" | timeout 2 nc -uW1 "$host" "$port" > /dev/null
+    local pong="$(echo -n "$ping" | timeout 2 nc -uW1 "$host" "$port")"
+    test $? -eq 0 || return 1
+    test "$(echo -n "$pong" | wc -c)" -gt 0
 }
 
 ping_peers() {  # () / endpoint* => () / peers replies
