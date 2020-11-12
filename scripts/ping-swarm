@@ -24,10 +24,7 @@ set -e
 #OUI_PROTO="${OUI_PROTO:-5}"
 #OUI_INJPK="${OUI_INJPK:-abcdefghijklmnopqrstuvwxyz234567abcdefghijklmnopqrst}"
 
-v="$OUI_PROTO"
-pk="$OUI_INJPK"
-
-if [ ! "$v" -o ! "$pk" ]; then
+if [ ! "$OUI_PROTO" -o ! "$OUI_INJPK" ]; then
     echo "Please set OUI_PROTO and OUI_INJPK." > /dev/stderr
     exit 1
 fi
@@ -71,10 +68,10 @@ for group in "$@"; do
     # swarm = "ed25519:<base32up_encode(pubkey)>/v<VERSION>/<GROUP>"
     case "$group" in
         injectors|bridges)
-            swarm="ed25519:$pk/v$v/$group"
+            swarm="ed25519:$OUI_INJPK/v$OUI_PROTO/$group"
             ;;
         *)
-            swarm="ed25519:$pk/v$v/uri/$group"
+            swarm="ed25519:$OUI_INJPK/v$OUI_PROTO/uri/$group"
     esac
     # infohash = sha1(swarm)
     infohash="$(echo -n "$swarm" | sha1sum | cut -d' ' -f1)"
