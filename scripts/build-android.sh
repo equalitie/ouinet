@@ -76,38 +76,6 @@ echo "SDK_DIR: "$SDK_DIR
 echo "PLATFORM: "$PLATFORM
 
 ######################################################################
-# This variable shall contain paths to generated libraries which
-# must all be included in the final Android package.
-OUT_LIBS=()
-
-function add_library {
-    local libs=("$@") lib
-    for lib in "${libs[@]}"; do
-        if [ ! -f "$lib" ]; then
-            echo "Cannot add library \"$lib\": File doesn't exist"
-            exit 1
-        fi
-        OUT_LIBS+=("$lib")
-    done
-}
-
-######################################################################
-# This variable shall contain paths to generated binaries which
-# must all be included in the final Android package.
-OUT_BINARIES=()
-
-function add_binary {
-    local binaries=("$@") binaries
-    for binary in "${binaries[@]}"; do
-        if [ ! -f "$binary" ]; then
-            echo "Cannot add binary \"$binary\": File doesn't exist"
-            exit 1
-        fi
-        OUT_BINARIES+=("$binary")
-    done
-}
-
-######################################################################
 MODES=
 ALLOWED_MODES="bootstrap build emu"
 DEFAULT_MODES="bootstrap build"
