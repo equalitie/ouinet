@@ -243,18 +243,25 @@ struct TestGlobalFixture {
 
 BOOST_TEST_GLOBAL_FIXTURE(TestGlobalFixture);
 
-BOOST_AUTO_TEST_CASE(test_http_sign) {
+static const bool true_false[] = {true, false};
+
+BOOST_DATA_TEST_CASE(test_http_sign, boost::unit_test::data::make(true_false), empty) {
     sys::error_code ec;
 
-    const auto digest = util::sha256_digest(rs_body);
+    const auto rs_body_ = empty ? rs_body_empty : rs_body;
+    const auto digest = util::sha256_digest(rs_body_);
     const auto b64_digest = util::base64_encode(digest);
-    BOOST_REQUIRE(b64_digest == rs_body_b64digest);
+    const auto rs_body_b64digest_ = empty ? rs_body_b64digest_empty : rs_body_b64digest;
+    BOOST_REQUIRE(b64_digest == rs_body_b64digest_);
 
     http::response_parser<http::string_body> parser;
-    parser.put(asio::buffer(rs_head_s), ec);
+    const auto rs_head_s_ = empty ? rs_head_s_empty : rs_head_s;
+    parser.put(asio::buffer(rs_head_s_), ec);
     BOOST_REQUIRE(!ec);
-    parser.put(asio::buffer(rs_body), ec);
-    BOOST_REQUIRE(!ec);
+    if (!empty) {
+        parser.put(asio::buffer(rs_body_), ec);
+        BOOST_REQUIRE(!ec);
+    }
     BOOST_REQUIRE(parser.is_done());
     auto rs_head = parser.get().base();
 
@@ -268,7 +275,7 @@ BOOST_AUTO_TEST_CASE(test_http_sign) {
 
     http::fields trailer;
     trailer = cache::http_injection_trailer( rs_head, std::move(trailer)
-                                           , rs_body.size(), digest
+                                           , rs_body_.size(), digest
                                            , sk, key_id, inj_ts + 1);
     // Add headers from the trailer to the injection head.
     for (auto& hdr : trailer)
@@ -276,42 +283,8 @@ BOOST_AUTO_TEST_CASE(test_http_sign) {
 
     std::stringstream rs_head_ss;
     rs_head_ss << rs_head;
-    BOOST_REQUIRE_EQUAL(rs_head_ss.str(), rs_head_signed_s);
-
-}
-
-BOOST_AUTO_TEST_CASE(test_http_sign_empty) {
-    sys::error_code ec;
-
-    const auto digest = util::sha256_digest(rs_body_empty);
-    const auto b64_digest = util::base64_encode(digest);
-    BOOST_REQUIRE(b64_digest == rs_body_b64digest_empty);
-
-    http::response_parser<http::string_body> parser;
-    parser.put(asio::buffer(rs_head_s_empty), ec);
-    BOOST_REQUIRE(!ec);
-    BOOST_REQUIRE(parser.is_done());
-    auto rs_head = parser.get().base();
-
-    auto req_h = get_request_header();
-
-    const auto sk = get_private_key();
-    const auto key_id = cache::SignedHead::encode_key_id(sk.public_key());
-    BOOST_REQUIRE_EQUAL(key_id, ("ed25519=" + inj_b64pk));
-
-    rs_head = cache::SignedHead::sign_response(req_h, std::move(rs_head), inj_id, inj_ts, sk);
-
-    http::fields trailer;
-    trailer = cache::http_injection_trailer( rs_head, std::move(trailer)
-                                           , rs_body_empty.size(), digest
-                                           , sk, key_id, inj_ts + 1);
-    // Add headers from the trailer to the injection head.
-    for (auto& hdr : trailer)
-        rs_head.set(hdr.name_string(), hdr.value());
-
-    std::stringstream rs_head_ss;
-    rs_head_ss << rs_head;
-    BOOST_REQUIRE_EQUAL(rs_head_ss.str(), rs_head_signed_s_empty);
+    const auto rs_head_signed_s_ = empty ? rs_head_signed_s_empty : rs_head_signed_s;
+    BOOST_REQUIRE_EQUAL(rs_head_ss.str(), rs_head_signed_s_);
 
 }
 
