@@ -66,16 +66,29 @@ static const string rs_body =
   + rs_block_data[1]
   + rs_block_data[2]);
 static const string rs_body_b64digest = "E4RswXyAONCaILm5T/ZezbHI87EKvKIdxURKxiVHwKE=";
-static const string rs_head_s = (
+static const string rs_body_empty = "";
+static const string rs_body_b64digest_empty = "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=";
+
+static const string _rs_head_s_begin = (
     "HTTP/1.1 200 OK\r\n"
     "Date: Mon, 15 Jan 2018 20:31:50 GMT\r\n"
     "Server: Apache1\r\n"
     "Content-Type: text/html\r\n"
     "Content-Disposition: inline; filename=\"foo.html\"\r\n"
-    "Content-Length: 131076\r\n"
+);
+static const string _rs_head_s_end = (
     "Server: Apache2\r\n"
     "\r\n"
 );
+static const string rs_head_s =
+    ( _rs_head_s_begin
+    + "Content-Length: 131076\r\n"
+    + _rs_head_s_end );
+static const string rs_head_s_empty =
+    ( _rs_head_s_begin
+    + "Content-Length: 0\r\n"
+    + _rs_head_s_end );
+
 static const string inj_id = "d6076384-2295-462b-a047-fe2c9274e58d";
 static const std::chrono::seconds::rep inj_ts = 1516048310;
 static const string inj_b64sk = "MfWAV5YllPAPeMuLXwN2mUkV9YaSSJVUcj/2YOaFmwQ=";
@@ -123,16 +136,30 @@ static const string _rs_head_digest = (
     "Digest: SHA-256=" + rs_body_b64digest + "\r\n"
 );
 
-static const string _rs_head_sig1 = (
+static const string _rs_head_digest_empty = (
+    "X-Ouinet-Data-Size: 0\r\n"
+    "Digest: SHA-256=" + rs_body_b64digest_empty + "\r\n"
+);
+
+static const string _rs_head_sig1_nosig = (
     "X-Ouinet-Sig1: keyId=\"ed25519=" + inj_b64pk + "\","
     "algorithm=\"hs2019\",created=1516048311,"
     "headers=\"(response-status) (created) "
     "date server content-type content-disposition "
     "x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-bsigs "
     "x-ouinet-data-size "
-    "digest\","
-    "signature=\"4+POBKdNljxUKHKD+NCP34aS6j0QhI4EWmqiN3aopoWtDiMwgmeiR1hO44QhWFwWdNmNkVJs+LVuEUN892mFDg==\"\r\n"
+    "digest\""
 );
+
+static const string _rs_head_sig1 =
+    ( _rs_head_sig1_nosig
+    + ",signature=\"4+POBKdNljxUKHKD+NCP34aS6j0QhI4EWmqiN3aopoWtDiMwgmeiR1hO44QhWFwWdNmNkVJs+LVuEUN892mFDg==\""
+    +"\r\n" );
+
+static const string _rs_head_sig1_empty =
+    ( _rs_head_sig1_nosig
+    + ",signature=\"CpTu4sY7H5beQwB6qYvIqUuzzonjSDayhIGDxfcGDgFo/BHgljwI/ISKR9gcoQzeHs2Id4CBUDMtlRJRHLBSDw==\""
+    + "\r\n" );
 
 static const string rs_head_signed_s =
     ( _rs_status_origin
@@ -142,6 +169,16 @@ static const string rs_head_signed_s =
     + _rs_head_framing
     + _rs_head_digest
     + _rs_head_sig1
+    + "\r\n");
+
+static const string rs_head_signed_s_empty =
+    ( _rs_status_origin
+    + _rs_fields_origin
+    + _rs_head_injection
+    + _rs_head_sig0
+    + _rs_head_framing
+    + _rs_head_digest_empty
+    + _rs_head_sig1_empty
     + "\r\n");
 
 // As they appear in chunk extensions following a data block.
@@ -240,6 +277,41 @@ BOOST_AUTO_TEST_CASE(test_http_sign) {
     std::stringstream rs_head_ss;
     rs_head_ss << rs_head;
     BOOST_REQUIRE_EQUAL(rs_head_ss.str(), rs_head_signed_s);
+
+}
+
+BOOST_AUTO_TEST_CASE(test_http_sign_empty) {
+    sys::error_code ec;
+
+    const auto digest = util::sha256_digest(rs_body_empty);
+    const auto b64_digest = util::base64_encode(digest);
+    BOOST_REQUIRE(b64_digest == rs_body_b64digest_empty);
+
+    http::response_parser<http::string_body> parser;
+    parser.put(asio::buffer(rs_head_s_empty), ec);
+    BOOST_REQUIRE(!ec);
+    BOOST_REQUIRE(parser.is_done());
+    auto rs_head = parser.get().base();
+
+    auto req_h = get_request_header();
+
+    const auto sk = get_private_key();
+    const auto key_id = cache::SignedHead::encode_key_id(sk.public_key());
+    BOOST_REQUIRE_EQUAL(key_id, ("ed25519=" + inj_b64pk));
+
+    rs_head = cache::SignedHead::sign_response(req_h, std::move(rs_head), inj_id, inj_ts, sk);
+
+    http::fields trailer;
+    trailer = cache::http_injection_trailer( rs_head, std::move(trailer)
+                                           , rs_body_empty.size(), digest
+                                           , sk, key_id, inj_ts + 1);
+    // Add headers from the trailer to the injection head.
+    for (auto& hdr : trailer)
+        rs_head.set(hdr.name_string(), hdr.value());
+
+    std::stringstream rs_head_ss;
+    rs_head_ss << rs_head;
+    BOOST_REQUIRE_EQUAL(rs_head_ss.str(), rs_head_signed_s_empty);
 
 }
 
