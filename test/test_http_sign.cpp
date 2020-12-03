@@ -98,14 +98,14 @@ static const string _rs_fields_origin = (
 
 static const string _rs_head_injection = (
     "X-Ouinet-Version: 5\r\n"
-    "X-Ouinet-URI: https://example.com/foo\r\n"
-    "X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310\r\n"
-    "X-Ouinet-BSigs: keyId=\"ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=\","
+    "X-Ouinet-URI: " + rq_target + "\r\n"
+    "X-Ouinet-Injection: id=" + inj_id + ",ts=1516048310\r\n"
+    "X-Ouinet-BSigs: keyId=\"ed25519=" + inj_b64pk + "\","
     "algorithm=\"hs2019\",size=65536\r\n"
 );
 
 static const string _rs_head_sig0 = (
-    "X-Ouinet-Sig0: keyId=\"ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=\","
+    "X-Ouinet-Sig0: keyId=\"ed25519=" + inj_b64pk + "\","
     "algorithm=\"hs2019\",created=1516048310,"
     "headers=\"(response-status) (created) "
     "date server content-type content-disposition "
@@ -120,11 +120,11 @@ static const string _rs_head_framing = (
 
 static const string _rs_head_digest = (
     "X-Ouinet-Data-Size: 131076\r\n"
-    "Digest: SHA-256=E4RswXyAONCaILm5T/ZezbHI87EKvKIdxURKxiVHwKE=\r\n"
+    "Digest: SHA-256=" + rs_body_b64digest + "\r\n"
 );
 
 static const string _rs_head_sig1 = (
-    "X-Ouinet-Sig1: keyId=\"ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=\","
+    "X-Ouinet-Sig1: keyId=\"ed25519=" + inj_b64pk + "\","
     "algorithm=\"hs2019\",created=1516048311,"
     "headers=\"(response-status) (created) "
     "date server content-type content-disposition "
