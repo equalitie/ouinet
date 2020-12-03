@@ -248,14 +248,14 @@ static const bool true_false[] = {true, false};
 BOOST_DATA_TEST_CASE(test_http_sign, boost::unit_test::data::make(true_false), empty) {
     sys::error_code ec;
 
-    const auto rs_body_ = empty ? rs_body_empty : rs_body;
+    const auto& rs_body_ = empty ? rs_body_empty : rs_body;
     const auto digest = util::sha256_digest(rs_body_);
     const auto b64_digest = util::base64_encode(digest);
-    const auto rs_body_b64digest_ = empty ? rs_body_b64digest_empty : rs_body_b64digest;
+    const auto& rs_body_b64digest_ = empty ? rs_body_b64digest_empty : rs_body_b64digest;
     BOOST_REQUIRE(b64_digest == rs_body_b64digest_);
 
     http::response_parser<http::string_body> parser;
-    const auto rs_head_s_ = empty ? rs_head_s_empty : rs_head_s;
+    const auto& rs_head_s_ = empty ? rs_head_s_empty : rs_head_s;
     parser.put(asio::buffer(rs_head_s_), ec);
     BOOST_REQUIRE(!ec);
     if (!empty) {
@@ -283,7 +283,7 @@ BOOST_DATA_TEST_CASE(test_http_sign, boost::unit_test::data::make(true_false), e
 
     std::stringstream rs_head_ss;
     rs_head_ss << rs_head;
-    const auto rs_head_signed_s_ = empty ? rs_head_signed_s_empty : rs_head_signed_s;
+    const auto& rs_head_signed_s_ = empty ? rs_head_signed_s_empty : rs_head_signed_s;
     BOOST_REQUIRE_EQUAL(rs_head_ss.str(), rs_head_signed_s_);
 
 }
