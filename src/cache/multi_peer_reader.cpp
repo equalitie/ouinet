@@ -567,7 +567,7 @@ MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
 
     sys::error_code ec;
 
-    auto lc = _lifetime_cancel.connect(cancel);
+    auto lc = _lifetime_cancel.connect([&] { cancel(); });
 
     if (!_reference_hash_list) {
         auto hl = _peers->choose_reference_hash_list(cancel, yield[ec]);
