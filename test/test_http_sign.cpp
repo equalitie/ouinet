@@ -66,19 +66,21 @@ static const string rs_body =
   ( rs_block_data[0]
   + rs_block_data[1]
   + rs_block_data[2]);
+static const size_t rs_body_size = 131076;
 static const string rs_body_b64digest = "E4RswXyAONCaILm5T/ZezbHI87EKvKIdxURKxiVHwKE=";
-static const string rs_head_s = (
+static const string rs_head_s = util::str(
     "HTTP/1.1 200 OK\r\n"
     "Date: Mon, 15 Jan 2018 20:31:50 GMT\r\n"
     "Server: Apache1\r\n"
     "Content-Type: text/html\r\n"
     "Content-Disposition: inline; filename=\"foo.html\"\r\n"
-    "Content-Length: 131076\r\n"
+    "Content-Length: ",rs_body_size,"\r\n"
     "Server: Apache2\r\n"
     "\r\n"
 );
 static const string inj_id = "d6076384-2295-462b-a047-fe2c9274e58d";
 static const std::chrono::seconds::rep inj_ts = 1516048310;
+static const size_t inj_bs = 65536;
 static const string inj_b64sk = "MfWAV5YllPAPeMuLXwN2mUkV9YaSSJVUcj/2YOaFmwQ=";
 static const string inj_b64pk = "DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=";
 
@@ -109,10 +111,10 @@ static const string _rs_fields_origin = (
 
 static const string _rs_head_injection = util::str(
     "X-Ouinet-Version: 5\r\n",
-    "X-Ouinet-URI: https://example.com/foo\r\n",
+    "X-Ouinet-URI: ",rq_target,"\r\n",
     "X-Ouinet-Injection: id=", inj_id, ",ts=", inj_ts, "\r\n",
     "X-Ouinet-BSigs: keyId=\"ed25519=",inj_b64pk,"\",",
-    "algorithm=\"hs2019\",size=65536\r\n"
+    "algorithm=\"hs2019\",size=",inj_bs,"\r\n"
 );
 
 static const string _rs_head_sig0 = util::str(
@@ -123,15 +125,15 @@ static const string _rs_head_sig0 = util::str(
     "x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-bsigs\",",
     "signature=\"",util::base64_encode(get_private_key().sign(util::str(
             "(response-status): 200\n"
-            "(created): 1516048310\n"
+            "(created): ",inj_ts,"\n"
             "date: Mon, 15 Jan 2018 20:31:50 GMT\n"
             "server: Apache1, Apache2\n"
             "content-type: text/html\n"
             "content-disposition: inline; filename=\"foo.html\"\n"
             "x-ouinet-version: 5\n"
-            "x-ouinet-uri: https://example.com/foo\n"
-            "x-ouinet-injection: id=",inj_id,",ts=1516048310\n"
-            "x-ouinet-bsigs: keyId=\"ed25519=",inj_b64pk,"\",algorithm=\"hs2019\",size=65536"))),"\"",
+            "x-ouinet-uri: ",rq_target,"\n"
+            "x-ouinet-injection: id=",inj_id,",ts=",inj_ts,"\n"
+            "x-ouinet-bsigs: keyId=\"ed25519=",inj_b64pk,"\",algorithm=\"hs2019\",size=",inj_bs))),"\"",
     "\r\n"
 );
 
@@ -141,13 +143,13 @@ static const string _rs_head_framing = (
 );
 
 static const string _rs_head_digest = util::str(
-    "X-Ouinet-Data-Size: 131076\r\n"
+    "X-Ouinet-Data-Size: ",rs_body_size,"\r\n"
     "Digest: SHA-256=",rs_body_b64digest,"\r\n"
 );
 
 static const string _rs_head_sig1 = util::str(
     "X-Ouinet-Sig1: keyId=\"ed25519=",inj_b64pk,"\",",
-    "algorithm=\"hs2019\",created=1516048311,",
+    "algorithm=\"hs2019\",created=",inj_ts+1,",",
     "headers=\"(response-status) (created) ",
     "date server content-type content-disposition ",
     "x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-bsigs ",
@@ -155,16 +157,16 @@ static const string _rs_head_sig1 = util::str(
     "digest\",",
     "signature=\"",util::base64_encode(get_private_key().sign(util::str(
             "(response-status): 200\n"
-            "(created): 1516048311\n"
+            "(created): ",inj_ts+1,"\n"
             "date: Mon, 15 Jan 2018 20:31:50 GMT\n"
             "server: Apache1, Apache2\n"
             "content-type: text/html\n"
             "content-disposition: inline; filename=\"foo.html\"\n"
             "x-ouinet-version: 5\n"
-            "x-ouinet-uri: https://example.com/foo\n"
-            "x-ouinet-injection: id=",inj_id,",ts=1516048310\n" // XXX: Non matching ts!
-            "x-ouinet-bsigs: keyId=\"ed25519=",inj_b64pk,"\",algorithm=\"hs2019\",size=65536\n"
-            "x-ouinet-data-size: 131076\n"
+            "x-ouinet-uri: ",rq_target,"\n"
+            "x-ouinet-injection: id=",inj_id,",ts=",inj_ts,"\n" // XXX: Non matching ts!
+            "x-ouinet-bsigs: keyId=\"ed25519=",inj_b64pk,"\",algorithm=\"hs2019\",size=",inj_bs,"\n"
+            "x-ouinet-data-size: ",rs_body_size,"\n"
             "digest: SHA-256=",rs_body_b64digest))),"\"",
     "\r\n"
 );
@@ -447,7 +449,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
                     auto hbs = cache::SignedHead::BlockSigs::parse(hbsh);
                     BOOST_REQUIRE(hbs);
                     // Test data block signatures are split according to this size.
-                    BOOST_CHECK_EQUAL(hbs->size, 65536);
+                    BOOST_CHECK_EQUAL(hbs->size, inj_bs);
                 } else if (auto ch = opt_part->as_chunk_hdr()) {
                     if (!ch->exts.empty()) {
                         BOOST_REQUIRE(xidx < rs_block_sig_cx.size());
@@ -794,7 +796,7 @@ static string rs_head_partial(unsigned first_block, unsigned last_block) {
         , _rs_head_digest
         , _rs_head_sig1
         , "X-Ouinet-HTTP-Status: 200\r\n"
-        , "Content-Range: bytes ", first, '-', last, "/131076\r\n"
+        , "Content-Range: bytes ", first, '-', last, "/", rs_body_size ,"\r\n"
         , "Transfer-Encoding: chunked\r\n"
         , "\r\n");
 }
