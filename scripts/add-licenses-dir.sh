@@ -26,6 +26,7 @@ json;Niels Lohmann;${BUILD}/json/src/json/LICENSE.MIT
 uri;Glyn Matthews;${BUILD}/uri/src/uri/LICENSE_1_0.txt
 asio-utp;Peter Jankuliak;${SRC}/modules/asio-utp/LICENSE.txt
 lampshade;various;${BUILD}/src/ouiservice/lampshade/lampshade-prefix/src/lampshade/LICENSE
+zdnsparser;various;${SRC}/scripts/licenses/Apache-2.0
 "
 
 echo "$LICENSE_DATA" | (

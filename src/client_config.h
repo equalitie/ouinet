@@ -6,6 +6,7 @@
 
 #include "namespaces.h"
 #include "cache_control.h"
+#include "doh.h"
 #include "util.h"
 #include "util/bytes.h"
 #include "parse/endpoint.h"
@@ -159,6 +160,9 @@ public:
            ("local-domain"
             , po::value<string>()->default_value("local")
             , "Always use origin access and never use cache for this TLD")
+           ("origin-doh-base", po::value<string>()
+            , "If given, enable DNS over HTTPS for origin access using the given base URL; "
+              "the \"dns=...\" query argument will be added for the GET request.")
            ("enable-http-connect-requests", po::bool_switch(&_enable_http_connect_requests)
             , "Enable HTTP CONNECT requests")
            ;
@@ -182,6 +186,10 @@ public:
     void is_injector_access_enabled(bool v) { _disable_injector_access = !v; }
 
     std::string local_domain() const { return _local_domain; }
+
+    boost::optional<std::string> origin_doh_endpoint() const {
+        return _origin_doh_endpoint;
+    }
 
 private:
     bool _is_help = false;
@@ -208,6 +216,7 @@ private:
     boost::optional<util::Ed25519PublicKey> _cache_http_pubkey;
     CacheType _cache_type = CacheType::None;
     std::string _local_domain;
+    boost::optional<doh::Endpoint> _origin_doh_endpoint;
 };
 
 inline
@@ -429,6 +438,13 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         if (!boost::regex_match(local_domain, tld_rx)) {
             throw std::runtime_error("Invalid TLD for --local-domain");
         } _local_domain = boost::algorithm::to_lower_copy(local_domain);
+    }
+
+    if (vm.count("origin-doh-base")) {
+        auto doh_base = vm["origin-doh-base"].as<string>();
+        _origin_doh_endpoint = doh::endpoint_from_base(doh_base);
+        if (!_origin_doh_endpoint)
+            throw std::runtime_error("Invalid URL for --origin-doh-base");
     }
 }
 

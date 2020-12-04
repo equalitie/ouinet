@@ -121,6 +121,7 @@ file(GLOB client_sources
     "./src/util/reachability.cpp"
     "./src/util.cpp"
     "./src/util/handler_tracker.cpp"
+    "./src/doh.cpp"
     "./src/http_util.cpp"
     ${VERSION_CPP}
 )
@@ -140,6 +141,7 @@ target_link_libraries(client
         Boost::iostreams
         lib::asio_utp
         cpp_upnp
+        lib::zdnsparser
         lib::gcrypt
         lib::json
         lib::uri

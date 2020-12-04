@@ -1,0 +1,88 @@
+#!/bin/sh
+# Ping the given Ouinet swarms using BEP5.
+#
+# Usage: ping-swarm [injectors|bridges|URI]...
+#
+# Where URI can be an exact URI like "https://example.com/foo/"
+# or a group like "example.com/foo" (not equivalent).
+#
+# Default is to ping both injectors and bridges.
+#
+# Environment variables:
+#
+#   - OUI_PROTO: Ouinet protocol version number
+#   - OUI_INJPK: Base32-encoded injector public key (lowercase, no padding)
+#
+# This must be executed where Ouinet's test utilities are.
+
+set -e
+
+# Uncomment if libraries sit along binaries.
+#export LD_LIBRARY_PATH=.:$LD_LIBRARY_PATH
+
+# Uncomment and edit for fixed default values (can still override with env).
+#OUI_PROTO="${OUI_PROTO:-5}"
+#OUI_INJPK="${OUI_INJPK:-abcdefghijklmnopqrstuvwxyz234567abcdefghijklmnopqrst}"
+
+if [ ! "$OUI_PROTO" -o ! "$OUI_INJPK" ]; then
+    echo "Please set OUI_PROTO and OUI_INJPK." > /dev/stderr
+    exit 1
+fi
+
+if [ $# -lt 1 ]; then
+    exec $0 injectors bridges
+fi
+
+ping_peer() {  # (endpoint) => (did_reply)
+    # Sample DHT message from
+    # <https://www.bittorrent.org/beps/bep_0005.html#ping>.
+    local ping='d1:ad2:id20:abcdefghij0123456789e1:q4:ping1:t2:aa1:y1:qe'
+    local host="${1%:*}" port="${1##*:}"
+    local pong="$(echo -n "$ping" | timeout 2 nc -uW1 "$host" "$port")"
+    test $? -eq 0 || return 1
+    test "$(echo -n "$pong" | wc -c)" -gt 0
+}
+
+ping_peers() {  # () / endpoint* => () / peers replies
+    local ep peers=0 replies=0 replying
+    while read ep; do
+        peers=$((peers + 1))
+        if ping_peer $ep; then
+            replying="$replying $ep"
+            replies=$((replies + 1))
+        fi
+    done
+    echo "Replying peers:$replying" > /dev/stderr
+    echo $peers $replies
+}
+
+select_peers() {  # () / bt-pep5_output => () endpoint*
+    grep -E '^[][\.\:0-9A-Fa-f]+:[0-9]+' | tr -d [] | sed 's/,  */\n/g'
+}
+
+bep5_query() {  # (infohash) => () bt-pep5_output
+    ./bt-bep5 0.0.0.0 get_peers $1 2>&1
+}
+
+for group in "$@"; do
+    # swarm = "ed25519:<base32up_encode(pubkey)>/v<VERSION>/<GROUP>"
+    case "$group" in
+        injectors|bridges)
+            swarm="ed25519:$OUI_INJPK/v$OUI_PROTO/$group"
+            ;;
+        *)
+            swarm="ed25519:$OUI_INJPK/v$OUI_PROTO/uri/$group"
+    esac
+    # infohash = sha1(swarm)
+    infohash="$(echo -n "$swarm" | sha1sum | cut -d' ' -f1)"
+
+    echo "Group   : $group"
+    echo "Swarm   : $swarm"
+    echo "Infohash: $infohash"
+
+    bep5_query "$infohash" | tee /dev/stderr \
+        | select_peers | ping_peers \
+        | ( read peers replies
+            echo "Swarm group=\"$group\": peers=$peers replies=$replies" )
+    echo
+done

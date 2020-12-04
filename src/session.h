@@ -149,6 +149,7 @@ Session::flush_response(Cancel& cancel,
 
     _head_was_read = true;
     h(http_response::Part{_head}, cancel, yield[ec]);
+    if (cancel) ec = asio::error::operation_aborted;
     return_or_throw_on_error(yield, cancel, ec);
 
     while (true) {
@@ -157,6 +158,7 @@ Session::flush_response(Cancel& cancel,
         return_or_throw_on_error(yield, cancel, ec);
         if (!opt_part) break;
         h(std::move(*opt_part), cancel, yield[ec]);
+        if (cancel) ec = asio::error::operation_aborted;
         return_or_throw_on_error(yield, cancel, ec);
     }
 }

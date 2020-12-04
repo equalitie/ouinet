@@ -72,7 +72,7 @@ public:
             self->_self = nullptr;
             self->_cancel_signal = nullptr;
 
-            if (!ec && cancel) ec = asio::error::operation_aborted;
+            if (cancel) ec = asio::error::operation_aborted;
 
             self->_result = Result{ ec, std::move(retval) };
 

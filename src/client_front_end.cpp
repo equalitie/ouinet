@@ -9,6 +9,7 @@
 
 #include "cache/client.h"
 
+#include <boost/algorithm/string/replace.hpp>
 #include <boost/asio/ip/address.hpp>
 #include <boost/optional/optional_io.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
@@ -38,6 +39,16 @@ static string past_as_string(const boost::posix_time::time_duration& d) {
 static string now_as_string() {
     auto entry_ts = boost::posix_time::microsec_clock::universal_time();
     return time_as_string(entry_ts);
+}
+
+// Escape an input string so that it can be safely embedded into HTML.
+static string as_safe_html(string s) {
+    boost::replace_all(s, "&", "&amp;");
+    boost::replace_all(s, "<", "&lt;");
+    boost::replace_all(s, "<", "&gt;");
+    boost::replace_all(s, "\"", "&quot;");
+    boost::replace_all(s, "'", "&#39;");
+    return s;
 }
 
 struct ToggleInput {
@@ -276,6 +287,10 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
     ss << "<br>\n";
     ss << "Now: " << now_as_string()  << "<br>\n";
+    if (auto doh_ep = config.origin_doh_endpoint()) {
+        ss << "Origin <abbr title=\"DNS over HTTPS\">DoH</abbr> endpoint URL:"
+           << " <samp>" << as_safe_html(*doh_ep) << "</samp><br>\n";
+    }
     ss << "Injector endpoint: " << config.injector_endpoint() << "<br>\n";
     auto inj_pubkey = config.cache_http_pub_key();
     if (inj_pubkey) {
@@ -356,6 +371,7 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         {"max_cached_age", config.max_cached_age().total_seconds()},
         {"ouinet_version", Version::VERSION_NAME},
         {"ouinet_build_id", Version::BUILD_ID},
+        {"ouinet_protocol", http_::protocol_version_current},
         {"logfile", logger.get_log_file() != nullptr}
     };
 

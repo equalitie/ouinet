@@ -79,6 +79,7 @@ client_handshake( Stream&& con
         ssl_sock->async_handshake(ssl::stream_base::client, yield[ec]);
     }
 
+    if (abort_signal) ec = boost::asio::error::operation_aborted;
     if (ec) return or_throw<GenericStream>(yield, ec);
 
     static const auto ssl_shutter = [](ssl::stream<Stream>& s) {

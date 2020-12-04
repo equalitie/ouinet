@@ -326,7 +326,7 @@ public:
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) yield.log("Injection failed: ", ec.message());
-        return_or_throw_on_error(yield, timeout_cancel, ec);
+        return_or_throw_on_error(yield, cancel, ec);
         yield.log("Injection end");  // TODO: report whether inject or just fwd
 
         auto rsh = http::response<http::empty_body>(orig_sess.response_header());

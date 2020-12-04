@@ -374,13 +374,22 @@ void Bep5Client::start(asio::yield_context)
     if (!_helpers_swarm_name.empty()) {
         bt::NodeID infohash = util::sha1_digest(_helpers_swarm_name);
 
-        LOG_INFO("Helpers swarm: sha1('", _helpers_swarm_name, "'): ", infohash.to_hex());
+        LOG_INFO("Helper swarm (bridges): sha1('", _helpers_swarm_name, "'): ", infohash.to_hex());
 
         _helpers_swarm.reset(new Swarm(this, infohash, _dht, _cancel, true));
         _helpers_swarm->start();
 
         _injector_pinger.reset(new InjectorPinger(_injector_swarm, _helpers_swarm_name, _dht, _cancel));
     }
+
+    if (logger.get_threshold() > DEBUG)
+        return;
+
+    TRACK_SPAWN(get_executor(),
+                [=] (asio::yield_context yield) {
+        sys::error_code ec;
+        status_loop(yield[ec]);
+    });
 }
 
 void Bep5Client::stop()
@@ -389,6 +398,36 @@ void Bep5Client::stop()
     _injector_swarm = nullptr;
     _helpers_swarm  = nullptr;
     _injector_pinger = nullptr;
+}
+
+void Bep5Client::status_loop(asio::yield_context yield)
+{
+    assert(!_cancel);
+
+    Cancel cancel(_cancel);
+    sys::error_code ec;
+
+    assert(_injector_swarm);
+    {
+        _injector_swarm->wait_for_ready(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec);
+    }
+
+    if (_helpers_swarm) {
+        _helpers_swarm->wait_for_ready(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec);
+    }
+
+    while (!cancel) {
+        auto inj_n = _injector_swarm->peers().size();
+        auto hlp_n = _helpers_swarm ? _helpers_swarm->peers().size() : 0;
+        logger.debug(util::str(
+            "Bep5Client: swarm status:",
+            " injectors=", inj_n, " bridges=", hlp_n));
+
+        ec = {};
+        async_sleep(get_executor(), 1min, cancel, yield[ec]);
+    }
 }
 
 std::vector<Bep5Client::Candidate> Bep5Client::get_peers(Target target)
@@ -401,12 +440,12 @@ std::vector<Bep5Client::Candidate> Bep5Client::get_peers(Target target)
 
     if (target & Target::injectors) {
         inj.reserve(inj_m.size());
-        for (auto p : inj_m) inj.push_back({p.first, p.second});
+        for (auto p : inj_m) inj.push_back({p.first, p.second, Target::injectors});
     }
 
     if (hlp_m && (target & Target::helpers)) {
         hlp.reserve(hlp_m->size());
-        for (auto p : *hlp_m) hlp.push_back({p.first, p.second});
+        for (auto p : *hlp_m) hlp.push_back({p.first, p.second, Target::helpers});
     }
 
     std::shuffle(inj.begin(), inj.end(), _random_generator);
@@ -472,6 +511,7 @@ GenericStream Bep5Client::connect( asio::yield_context yield
 
     Cancel spawn_cancel(cancel); // Cancels all spawned coroutines
 
+    Target ret_target = Target::none;
     asio::ip::udp::endpoint ret_ep;
     GenericStream ret_con;
 
@@ -488,6 +528,7 @@ GenericStream Bep5Client::connect( asio::yield_context yield
         TRACK_SPAWN(exec, ([
             =,
             &spawn_cancel,
+            &ret_target,
             &ret_con,
             &ret_ep,
             lock = wc.lock()
@@ -502,6 +543,7 @@ GenericStream Bep5Client::connect( asio::yield_context yield
             auto con = connect_single(*peer.client, tls, spawn_cancel, y[ec]);
             assert(!spawn_cancel || ec == asio::error::operation_aborted);
             if (spawn_cancel || ec) return;
+            ret_target = peer.target;
             ret_con = move(con);
             ret_ep  = peer.endpoint;
             spawn_cancel();
@@ -523,11 +565,20 @@ GenericStream Bep5Client::connect( asio::yield_context yield
 
     if (ec) {
         _last_working_ep = boost::none;
+        LOG_DEBUG( "Bep5Client: Did not connect to any peer;"
+                 , " peers:", i
+                 , " ec:", ec.message());
     } else {
         _last_working_ep = ret_ep;
         if (_injector_pinger) {
             _injector_pinger->injector_was_seen_now();
         }
+        if (ret_target == Target::injectors)
+            LOG_DEBUG("Bep5Client: Connected to injector peer directly; rep:", ret_ep);
+        else if (ret_target == Target::helpers)
+            LOG_DEBUG("Bep5Client: Connected to injector via helper peer (bridge); rep:", ret_ep);
+        else
+            assert(0 && "Invalid peer type");
     }
 
     return or_throw(yield, ec, move(ret_con));

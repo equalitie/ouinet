@@ -8,6 +8,7 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/format.hpp>
 #include <boost/regex.hpp>
 #include <boost/utility/string_view.hpp>
 
@@ -21,7 +22,7 @@ namespace ouinet { namespace util {
 
 inline
 std::string canonical_url(const boost::string_view url) {
-    return url.to_string();  // TODO: canonical
+    return url.to_string();  // TODO: make canonical; trivial: reassemble URL match
 }
 
 struct url_match {
@@ -31,6 +32,17 @@ struct url_match {
     std::string path;
     std::string query;  // maybe empty
     std::string fragment;  // maybe empty
+
+    // Rebuild the URL, dropping port, query and fragment if empty.
+    std::string reassemble() const {
+        auto url = boost::format("%s://%s%s%s%s%s")
+            % scheme % host
+            % (port.empty() ? "" : ':' + port)
+            % path
+            % (query.empty() ? "" : '?' + query)
+            % (fragment.empty() ? "" : '#' + fragment);
+        return url.str();
+    }
 };
 
 // Parse the HTTP URL to tell the different components.
