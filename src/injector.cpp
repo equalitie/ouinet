@@ -365,7 +365,8 @@ public:
 
     template<class Response, class Connection>
     bool keep_connection(const Request& rq, const Response& rs, Connection con) {
-        if (!con.is_open()) return false;
+        // NOTE: `con` is put back to `origin_pools` from its destructor unless it
+        // is explicitly closed.
 
         if (!rs.keep_alive() || !rq.keep_alive()) {
             con.close();
