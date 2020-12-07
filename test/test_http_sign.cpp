@@ -67,16 +67,25 @@ static const string rs_body =
   + rs_block_data[1]
   + rs_block_data[2]);
 static const string rs_body_b64digest = "E4RswXyAONCaILm5T/ZezbHI87EKvKIdxURKxiVHwKE=";
-static const string rs_head_s = util::str(
+
+static const string rs_body_empty = "";
+static const string rs_body_b64digest_empty = "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=";
+
+static string _get_response_head(size_t body_size) {
+    return  util::str(
     "HTTP/1.1 200 OK\r\n"
     "Date: Mon, 15 Jan 2018 20:31:50 GMT\r\n"
     "Server: Apache1\r\n"
     "Content-Type: text/html\r\n"
     "Content-Disposition: inline; filename=\"foo.html\"\r\n"
-    "Content-Length: ",rs_body.size(),"\r\n"
+    "Content-Length: ",body_size,"\r\n"
     "Server: Apache2\r\n"
-    "\r\n"
-);
+    "\r\n");
+}
+
+static const auto rs_head_s = _get_response_head(rs_body.size());
+static const auto rs_head_s_empty = _get_response_head(rs_body_empty.size());
+
 static const string inj_id = "d6076384-2295-462b-a047-fe2c9274e58d";
 static const std::chrono::seconds::rep inj_ts = 1516048310;
 static const size_t inj_bs = 65536;
@@ -116,7 +125,7 @@ static const string _rs_head_injection = util::str(
     "algorithm=\"hs2019\",size=",inj_bs,"\r\n"
 );
 
-static string _get_signature_header(bool is_final) {
+static string _get_signature_field(bool is_final, size_t body_size, const string& body_b64digest) {
     auto sig_ts = is_final ? inj_ts+1 : inj_ts;
     return util::str(
     "X-Ouinet-Sig", is_final ? 1 : 0, ": "
@@ -138,37 +147,38 @@ static string _get_signature_header(bool is_final) {
             "x-ouinet-injection: id=",inj_id,",ts=",inj_ts,"\n"
             "x-ouinet-bsigs: keyId=\"ed25519=",inj_b64pk,"\",algorithm=\"hs2019\",size=",inj_bs,
             is_final ? util::str( "\n"
-                                  "x-ouinet-data-size: ", rs_body.size(), "\n"
-                                  "digest: SHA-256=", rs_body_b64digest)
+                                  "x-ouinet-data-size: ", body_size, "\n"
+                                  "digest: SHA-256=", body_b64digest)
                      : ""))), "\"",
     "\r\n" );
 }
-
-inline string get_partial_signature_header() { return _get_signature_header(false); };
-inline string get_full_signature_header() { return _get_signature_header(true); };
 
 static const string _rs_head_framing = (
     "Transfer-Encoding: chunked\r\n"
     "Trailer: X-Ouinet-Data-Size, Digest, X-Ouinet-Sig1\r\n"
 );
 
-static const string _rs_head_digest = util::str(
-    "X-Ouinet-Data-Size: ",rs_body.size(),"\r\n"
-    "Digest: SHA-256=",rs_body_b64digest,"\r\n"
-);
+static string _get_digest_fields(size_t body_size, const string& body_b64digest) {
+    return util::str(
+    "X-Ouinet-Data-Size: ",body_size,"\r\n"
+    "Digest: SHA-256=",body_b64digest,"\r\n"
+    );
+}
 
-static const string _rs_head_sig0 = get_partial_signature_header();
-static const string _rs_head_sig1 = get_full_signature_header();
-
-static const string rs_head_signed_s =
+static string get_signed_response_head(size_t body_size, const string& body_b64digest) {
+    return util::str
     ( _rs_status_origin
-    + _rs_fields_origin
-    + _rs_head_injection
-    + _rs_head_sig0
-    + _rs_head_framing
-    + _rs_head_digest
-    + _rs_head_sig1
-    + "\r\n");
+    , _rs_fields_origin
+    , _rs_head_injection
+    , _get_signature_field(false, body_size, body_b64digest)
+    , _rs_head_framing
+    , _get_digest_fields(body_size, body_b64digest)
+    , _get_signature_field(true, body_size, body_b64digest)
+    , "\r\n");
+}
+
+static const auto rs_head_signed_s = get_signed_response_head(rs_body.size(), rs_body_b64digest);
+static const auto rs_head_signed_s_empty = get_signed_response_head(rs_body_empty.size(), rs_body_b64digest_empty);
 
 // As they appear in chunk extensions following a data block.
 static const array<string, 3> rs_block_hash_cx{
@@ -258,18 +268,25 @@ BOOST_AUTO_TEST_CASE(test_chain_hasher) {
     }
 }
 
-BOOST_AUTO_TEST_CASE(test_http_sign) {
+static const bool true_false[] = {true, false};
+
+BOOST_DATA_TEST_CASE(test_http_sign, boost::unit_test::data::make(true_false), empty) {
     sys::error_code ec;
 
-    const auto digest = util::sha256_digest(rs_body);
+    const auto& rs_body_ = empty ? rs_body_empty : rs_body;
+    const auto digest = util::sha256_digest(rs_body_);
     const auto b64_digest = util::base64_encode(digest);
-    BOOST_REQUIRE(b64_digest == rs_body_b64digest);
+    const auto& rs_body_b64digest_ = empty ? rs_body_b64digest_empty : rs_body_b64digest;
+    BOOST_REQUIRE(b64_digest == rs_body_b64digest_);
 
     http::response_parser<http::string_body> parser;
-    parser.put(asio::buffer(rs_head_s), ec);
+    const auto& rs_head_s_ = empty ? rs_head_s_empty : rs_head_s;
+    parser.put(asio::buffer(rs_head_s_), ec);
     BOOST_REQUIRE(!ec);
-    parser.put(asio::buffer(rs_body), ec);
-    BOOST_REQUIRE(!ec);
+    if (!empty) {
+        parser.put(asio::buffer(rs_body_), ec);
+        BOOST_REQUIRE(!ec);
+    }
     BOOST_REQUIRE(parser.is_done());
     auto rs_head = parser.get().base();
 
@@ -283,7 +300,7 @@ BOOST_AUTO_TEST_CASE(test_http_sign) {
 
     http::fields trailer;
     trailer = cache::http_injection_trailer( rs_head, std::move(trailer)
-                                           , rs_body.size(), digest
+                                           , rs_body_.size(), digest
                                            , sk, key_id, inj_ts + 1);
     // Add headers from the trailer to the injection head.
     for (auto& hdr : trailer)
@@ -291,7 +308,8 @@ BOOST_AUTO_TEST_CASE(test_http_sign) {
 
     std::string rs_head_s = util::str(rs_head);
 
-    BOOST_REQUIRE_EQUAL(rs_head_s, rs_head_signed_s);
+    const auto& rs_head_signed_s_ = empty ? rs_head_signed_s_empty : rs_head_signed_s;
+    BOOST_REQUIRE_EQUAL(rs_head_s, rs_head_signed_s_);
 
 }
 
@@ -782,8 +800,8 @@ static string rs_head_partial(unsigned first_block, unsigned last_block) {
         ( "HTTP/1.1 206 Partial Content\r\n"
         , _rs_fields_origin
         , _rs_head_injection
-        , _rs_head_digest
-        , _rs_head_sig1
+        , _get_digest_fields(rs_body.size(), rs_body_b64digest)
+        , _get_signature_field(true, rs_body.size(), rs_body_b64digest)
         , "X-Ouinet-HTTP-Status: 200\r\n"
         , "Content-Range: bytes ", first, '-', last, "/", rs_body.size() ,"\r\n"
         , "Transfer-Encoding: chunked\r\n"
