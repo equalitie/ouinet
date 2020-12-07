@@ -188,6 +188,10 @@ static const array<string, 3> rs_block_hash_cx{
     //";ouihash=\"zBvQ0lnfde2B6dRt2B0HvW/kaiL1TXNlbezQmhNqh0zCxMBHb0SWPsWeKNDbsHFdyKzZlauqzVSfAsHer0fq+w==\"",  // chash[2], not sent
 };
 
+static const array<string, 1> rs_block_hash_cx_empty{
+    "",  // no previous block to hash
+};
+
 static const array<string, 3> rs_block_sigs{
     "r2OtBbBVBXT2b8Ch/eFfQt1eDoG8eMs/JQxnjzNPquF80WcUNwQQktsu0mF0+bwc3akKdYdBDeORNLhRjrxVBA==",
     "LfRN72Vv5QMNd6sn6HOWbfcoN6DA9kdjTXEfJvmgViZQZT5hlZXQpCOULyBreeZv3sd7j5FJzgu3CCUoBXOCCA==",
@@ -200,12 +204,18 @@ static const array<string, 3> rs_block_sig_cx{
     util::str(";ouisig=\"",rs_block_sigs[2],"\""),
 };
 
+static const array<string, 1> rs_block_sig_cx_empty{
+    ";ouisig=\"sI1HJC2+BeXy39qqaivr9IrUB8B8dlUm8J3WrYlrH0HmdnfA5DlwIrd00sph3OSrJGw/ATzNbUI3xdTS2kccBQ==\"",
+};
+
 static const array<string, 4> rs_chunk_ext{
     "",
     rs_block_sig_cx[0],
     rs_block_sig_cx[1],
     rs_block_sig_cx[2],
 };
+
+static const auto rs_chunk_ext_empty = rs_block_sig_cx_empty;
 
 template<class F>
 static void run_spawned(asio::io_context& ctx, F&& f) {
@@ -396,7 +406,7 @@ BOOST_AUTO_TEST_CASE(test_http_verify) {
 
 }
 
-BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
+BOOST_DATA_TEST_CASE(test_http_flush_signed, boost::unit_test::data::make(true_false), empty) {
     asio::io_context ctx;
     run_spawned(ctx, [&] (auto yield) {
         WaitCondition wc(ctx);
@@ -410,14 +420,16 @@ BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
         tie(tested_w, tested_r) = util::connected_pair(ctx, yield);
 
         // Send raw origin response.
-        asio::spawn(ctx, [&origin_w, lock = wc.lock()] (auto y) {
+        asio::spawn(ctx, [&origin_w, empty, lock = wc.lock()] (auto y) {
             sys::error_code e;
+            const auto& rs_head_s_ = empty ? rs_head_s_empty : rs_head_s;
             asio::async_write( origin_w
-                             , asio::const_buffer(rs_head_s.data(), rs_head_s.size())
+                             , asio::const_buffer(rs_head_s_.data(), rs_head_s_.size())
                              , y[e]);
             BOOST_REQUIRE(!e);
+            const auto& rs_body_ = empty ? rs_body_empty : rs_body;
             asio::async_write( origin_w
-                             , asio::const_buffer(rs_body.data(), rs_body.size())
+                             , asio::const_buffer(rs_body_.data(), rs_body_.size())
                              , y[e]);
             BOOST_REQUIRE(!e);
             origin_w.close();
@@ -440,7 +452,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
         });
 
         // Test signed output.
-        asio::spawn(ctx, [ signed_r = std::move(signed_r), &tested_w
+        asio::spawn(ctx, [ signed_r = std::move(signed_r), &tested_w, empty
                          , lock = wc.lock()](auto y) mutable {
             int xidx = 0;
             Cancel cancel;
@@ -459,14 +471,22 @@ BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
                     BOOST_CHECK_EQUAL(hbs->size, inj_bs);
                 } else if (auto ch = opt_part->as_chunk_hdr()) {
                     if (!ch->exts.empty()) {
-                        BOOST_REQUIRE(xidx < rs_block_sig_cx.size());
-                        BOOST_CHECK_EQUAL(ch->exts, rs_block_sig_cx[xidx++]);
+                        if (empty) {
+                            BOOST_REQUIRE(xidx < rs_block_sig_cx_empty.size());
+                            BOOST_CHECK_EQUAL(ch->exts, rs_block_sig_cx_empty[xidx++]);
+                        } else {
+                            BOOST_REQUIRE(xidx < rs_block_sig_cx.size());
+                            BOOST_CHECK_EQUAL(ch->exts, rs_block_sig_cx[xidx++]);
+                        }
                     }
                 }
                 opt_part->async_write(tested_w, cancel, y[e]);
                 BOOST_REQUIRE(!e);
             }
-            BOOST_CHECK_EQUAL(xidx, rs_block_sig_cx.size());
+            if (empty)
+                BOOST_CHECK_EQUAL(xidx, rs_block_sig_cx_empty.size());
+            else
+                BOOST_CHECK_EQUAL(xidx, rs_block_sig_cx.size());
             tested_w.close();
         });
 
@@ -485,7 +505,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_signed) {
     });
 }
 
-BOOST_AUTO_TEST_CASE(test_http_flush_verified) {
+BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true_false), empty) {
     asio::io_context ctx;
     run_spawned(ctx, [&] (auto yield) {
         WaitCondition wc(ctx);
@@ -501,14 +521,16 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified) {
         tie(tested_w, tested_r) = util::connected_pair(ctx, yield);
 
         // Send raw origin response.
-        asio::spawn(ctx, [&origin_w, lock = wc.lock()] (auto y) {
+        asio::spawn(ctx, [&origin_w, empty, lock = wc.lock()] (auto y) {
             sys::error_code e;
+            const auto& rs_head_s_ = empty ? rs_head_s_empty : rs_head_s;
             asio::async_write( origin_w
-                             , asio::const_buffer(rs_head_s.data(), rs_head_s.size())
+                             , asio::const_buffer(rs_head_s_.data(), rs_head_s_.size())
                              , y[e]);
             BOOST_REQUIRE(!e);
+            const auto& rs_body_ = empty ? rs_body_empty : rs_body;
             asio::async_write( origin_w
-                             , asio::const_buffer(rs_body.data(), rs_body.size())
+                             , asio::const_buffer(rs_body_.data(), rs_body_.size())
                              , y[e]);
             BOOST_REQUIRE(!e);
             origin_w.close();
@@ -546,7 +568,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified) {
         });
 
         // Check generation of chained hashes.
-        asio::spawn(ctx, [ hashed_r = std::move(hashed_r), &tested_w
+        asio::spawn(ctx, [ hashed_r = std::move(hashed_r), &tested_w, empty
                          , &ctx, lock = wc.lock()](auto y) mutable {
             int xidx = 0;
             Cancel cancel;
@@ -558,14 +580,22 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified) {
                 if (!opt_part) break;
                 if (auto ch = opt_part->as_chunk_hdr()) {
                     if (!ch->exts.empty()) {
-                        BOOST_REQUIRE(xidx < rs_block_hash_cx.size());
-                        BOOST_CHECK(ch->exts.find(rs_block_hash_cx[xidx++]) != string::npos);
+                        if (empty) {
+                            BOOST_REQUIRE(xidx < rs_block_hash_cx_empty.size());
+                            BOOST_CHECK(ch->exts.find(rs_block_hash_cx_empty[xidx++]) != string::npos);
+                        } else {
+                            BOOST_REQUIRE(xidx < rs_block_hash_cx.size());
+                            BOOST_CHECK(ch->exts.find(rs_block_hash_cx[xidx++]) != string::npos);
+                        }
                     }
                 }
                 opt_part->async_write(tested_w, cancel, y[e]);
                 BOOST_REQUIRE(!e);
             }
-            BOOST_CHECK_EQUAL(xidx, rs_block_hash_cx.size());
+            if (empty)
+                BOOST_CHECK_EQUAL(xidx, rs_block_hash_cx_empty.size());
+            else
+                BOOST_CHECK_EQUAL(xidx, rs_block_hash_cx.size());
             tested_w.close();
         });
 
