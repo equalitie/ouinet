@@ -66,7 +66,6 @@ static const string rs_body =
   ( rs_block_data[0]
   + rs_block_data[1]
   + rs_block_data[2]);
-static const size_t rs_body_size = 131076;
 static const string rs_body_b64digest = "E4RswXyAONCaILm5T/ZezbHI87EKvKIdxURKxiVHwKE=";
 static const string rs_head_s = util::str(
     "HTTP/1.1 200 OK\r\n"
@@ -74,7 +73,7 @@ static const string rs_head_s = util::str(
     "Server: Apache1\r\n"
     "Content-Type: text/html\r\n"
     "Content-Disposition: inline; filename=\"foo.html\"\r\n"
-    "Content-Length: ",rs_body_size,"\r\n"
+    "Content-Length: ",rs_body.size(),"\r\n"
     "Server: Apache2\r\n"
     "\r\n"
 );
@@ -139,7 +138,7 @@ static string _get_signature_header(bool is_final) {
             "x-ouinet-injection: id=",inj_id,",ts=",inj_ts,"\n"
             "x-ouinet-bsigs: keyId=\"ed25519=",inj_b64pk,"\",algorithm=\"hs2019\",size=",inj_bs,
             is_final ? util::str( "\n"
-                                  "x-ouinet-data-size: ", rs_body_size, "\n"
+                                  "x-ouinet-data-size: ", rs_body.size(), "\n"
                                   "digest: SHA-256=", rs_body_b64digest)
                      : ""))), "\"",
     "\r\n" );
@@ -154,7 +153,7 @@ static const string _rs_head_framing = (
 );
 
 static const string _rs_head_digest = util::str(
-    "X-Ouinet-Data-Size: ",rs_body_size,"\r\n"
+    "X-Ouinet-Data-Size: ",rs_body.size(),"\r\n"
     "Digest: SHA-256=",rs_body_b64digest,"\r\n"
 );
 
@@ -786,7 +785,7 @@ static string rs_head_partial(unsigned first_block, unsigned last_block) {
         , _rs_head_digest
         , _rs_head_sig1
         , "X-Ouinet-HTTP-Status: 200\r\n"
-        , "Content-Range: bytes ", first, '-', last, "/", rs_body_size ,"\r\n"
+        , "Content-Range: bytes ", first, '-', last, "/", rs_body.size() ,"\r\n"
         , "Transfer-Encoding: chunked\r\n"
         , "\r\n");
 }
