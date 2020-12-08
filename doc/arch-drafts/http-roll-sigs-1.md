@@ -1,4 +1,4 @@
-# Partial content signing
+# Streamable content signing
 
   - Allow streaming content from origin to client.
       - Less memory usage in injector: do not "slurp" whole response.
@@ -56,7 +56,7 @@ Please note that neither the initial signature nor framing headers (`Transfer-En
 
 ```
 HTTP/1.1 200 OK
-X-Ouinet-Version: 5
+X-Ouinet-Version: 6
 X-Ouinet-URI: https://example.com/foo
 X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
 Date: Mon, 15 Jan 2018 20:31:50 GMT
@@ -74,9 +74,9 @@ Trailer: Digest, X-Ouinet-Data-Size, X-Ouinet-Sig1
 0123456789...
 100000;ouisig=BASE64(BSIG(d607…e58d NUL 0 NUL CHASH[0]=SHA2-512(SHA2-512(BLOCK[0]))))
 0123456789...
-4;ouisig=BASE64(BSIG(d607…e58d NUL 1048576 NUL CHASH[1]=SHA2-512(CHASH[0] SHA2-512(BLOCK[1]))))
+4;ouisig=BASE64(BSIG(d607…e58d NUL 1048576 NUL CHASH[1]=SHA2-512(SIG[0] CHASH[0] SHA2-512(BLOCK[1]))))
 abcd
-0;ouisig=BASE64(BSIG(d607…e58d NUL 2097152 NUL CHASH[2]=SHA2-512(CHASH[1] SHA2-512(BLOCK[2]))))
+0;ouisig=BASE64(BSIG(d607…e58d NUL 2097152 NUL CHASH[2]=SHA2-512(SIG[1] CHASH[1] SHA2-512(BLOCK[2]))))
 Digest: SHA-256=BASE64(SHA2-256(COMPLETE_BODY))
 X-Ouinet-Data-Size: 1048580
 X-Ouinet-Sig1: keyId="ed25519=????",algorithm="hs2019",created=1516048311,
@@ -96,13 +96,15 @@ The signature string for each block covers the following values (separated by nu
 
     This helps detecting an attacker which replies to a range request with a range of the expected length, with correctly signed and ordered blocks, that however starts at the wrong offset.
 
-  - A **chain hash** (binary) computed from the chain hash of the previous block and the **data hash** of the block itself: for the i-th block, `DHASH[i]=SHA2-512(BLOCK[i])` and `CHASH[i]=SHA2-512(CHASH[i-1] DHASH[i])`, with `CHASH[0]=SHA2-512(DHASH[0])`.
+  - A **chain hash** (binary) computed from the chain hash of the previous block and the **data hash** of the block itself: for the i-th block, `DHASH[i]=SHA2-512(BLOCK[i])` and `CHASH[i]=SHA2-512(SIG[i-1] CHASH[i-1] DHASH[i])`, with `CHASH[0]=SHA2-512(DHASH[0])`.
 
     Signing the hash instead of block data itself spares the signer from keeping the whole block in memory for producing the signature (the hash algorithm can be fed as data comes in from the origin).
 
     Using the data block hash instead of its data allows to independently verify the signatures without needing to be in possession of the data itself, just the hashes.
 
-    Keeping the injection identifier out of the hash allows to compare the hashes at particular blocks of different injections (if transmitted independently) to ascertain that their data is the same up to that block.
+    **TODOv6 REVIEW,OBSOLETE** Keeping the injection identifier out of the hash allows to compare the hashes at particular blocks of different injections (if transmitted independently) to ascertain that their data is the same up to that block. **TODO contradicts below**
+
+    **TODOv6 REVIEW** Including the previous signature in the hash allows to transitively verify the signatures of previous blocks by verifying the last signature (in case signatures and hashes are retrieved by themselves without the data beforehand). **TODO contradicts above**
 
     The chaining precludes the attacker from reordering correctly signed blocks for this injection.  SHA2-512 is used as a compromise between security and speed on 64-bit platforms; although the hash is longer than the slower SHA2-256, it will be seldom transmitted (e.g. for range requests as indicated below).
 
@@ -132,7 +134,7 @@ For example, a client having stored the complete response shown above may reply 
 
 ```
 HTTP/1.1 200 OK
-X-Ouinet-Version: 4
+X-Ouinet-Version: 6
 X-Ouinet-URI: https://example.com/foo
 X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
 Date: Mon, 15 Jan 2018 20:31:50 GMT
@@ -157,7 +159,7 @@ In contrast, a client having stored only an incomplete response from the injecto
 
 ```
 HTTP/1.1 200 OK
-X-Ouinet-Version: 4
+X-Ouinet-Version: 6
 X-Ouinet-URI: https://example.com/foo
 X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
 Date: Mon, 15 Jan 2018 20:31:50 GMT

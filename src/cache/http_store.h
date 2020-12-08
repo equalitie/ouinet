@@ -54,9 +54,9 @@ using reader_uptr = std::unique_ptr<http_response::AbstractReader>;
 //
 //     Where `PAD016_LHEX(x)` represents `x` in lower-case hexadecimal, zero-padded to 16 characters,
 //     `BASE64(CHASH[-1])` is established as `BASE64('\0' * 64)` (for padding the first line),
-//     `CHASH[-1]` is established as the empty string (for `CHASH[0]` computation),
+//     `SIG[-1]` and `CHASH[-1]` are established as the empty string (for `CHASH[0]` computation),
 //     `DHASH[i]=SHA2-512(DATA[i])` (block data hash)
-//     `CHASH[i]=SHA2-512(CHASH[i-1] DHASH[i])` (block chain hash).
+//     `CHASH[i]=SHA2-512(SIG[i-1] CHASH[i-1] DHASH[i])` (block chain hash).
 //
 void http_store( http_response::AbstractReader&, const fs::path&
                , const asio::executor&, Cancel, asio::yield_context);

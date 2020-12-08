@@ -375,6 +375,8 @@ A cache entry signed using implementations of these primitives different from th
 
 #### Examples
 
+**TODOv6 OBSOLETE**
+
 An injector server using Ed25519 private key `KEY` might construct the following as-yet unsigned cache entry:
 
 ```
@@ -573,6 +575,8 @@ Hello world!
 Of these three examples, the last two would be considered equivalent by a recipient client. The client would recognize the first example as being semantically equivalent to the last two, but it would be able to stream the resource content incrementally while still downloading the remainder of the content simultaneously.
 
 ### Peer-to-peer cache entry exchange
+
+**TODOv6 OBSOLETE,INCOMPLETE(multi-peer)**
 
 When a Ouinet client stores a collection of cache entries in its device local storage, it can share these cache entries with other users that wish to access them. By fetching cache entries from other users in this way, without involvement of the injector servers, a Ouinet client can access web content even in cases when it cannot reach the injector servers.
 
