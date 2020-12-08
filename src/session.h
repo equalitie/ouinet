@@ -35,23 +35,18 @@ public:
     template<class Handler>
     void flush_response(Cancel&, asio::yield_context, Handler&& h);
 
-    bool is_open() const override {
-        return _reader->is_open();
-    }
-
     void close() override {
         if (!_reader) return;
-        if (_reader->is_open()) _reader->close();
+        _reader->close();
     }
 
     bool keep_alive() const {
         return _head.keep_alive();
     }
 
-    bool is_done() const override {
-        if (!_head_was_read) return false;
-        if (!_reader) return true;
-        return _reader->is_done();
+    asio::executor get_executor() override {
+        assert(_reader);
+        return _reader->get_executor();
     }
 
 private:
@@ -153,7 +148,7 @@ Session::flush_response(Cancel& cancel,
     sys::error_code ec;
 
     _head_was_read = true;
-    h(http_response::Part{std::move(_head)}, cancel, yield[ec]);
+    h(http_response::Part{_head}, cancel, yield[ec]);
     if (cancel) ec = asio::error::operation_aborted;
     return_or_throw_on_error(yield, cancel, ec);
 

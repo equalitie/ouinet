@@ -30,14 +30,6 @@ public:
         _queue.push_back(std::move(p));
     }
 
-    bool is_done() const {
-        return !_cancel;
-    }
-
-    bool is_open() const {
-        return _cancel;
-    }
-
     void close() {
         _queue.push_back(boost::none);
         _cancel();
@@ -45,6 +37,11 @@ public:
 
     ~AsyncQueueReader() {
         _cancel();
+    }
+
+    asio::executor get_executor() override
+    {
+        return _queue.get_executor();
     }
 
 private:

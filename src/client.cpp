@@ -450,6 +450,11 @@ void
 Client::State::serve_utp_request(GenericStream con, Yield yield)
 {
     assert(_cache);
+    if (!_cache) {
+        LOG_WARN("Received uTP request, but cache is not initialized");
+        return;
+    }
+
     Cancel cancel = _shutdown_signal;
 
     sys::error_code ec;
@@ -457,68 +462,83 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
     http::request<http::empty_body> req;
     beast::flat_buffer buffer;
 
-    {
-        WatchDog watch_dog(_ctx , chrono::seconds(5) , [&] { con.close(); });
+    // We expect the first request right a way. Consecutive requests may arrive with
+    // various delays.
+    bool is_first_request = true;
+
+    while (true) {
+        chrono::seconds rq_read_timeout = chrono::seconds(55);
+
+        if (is_first_request) {
+            is_first_request = false;
+            rq_read_timeout = chrono::seconds(5);
+        }
+
+        auto wd = watch_dog(_ctx , rq_read_timeout, [&] { con.close(); });
 
         http::async_read(con, buffer, req, yield[ec].tag("read"));
 
-        if (!watch_dog.is_running()) {
+        if (!wd.is_running()) {
             return or_throw(yield, asio::error::timed_out);
         }
-    }
 
-    if (ec || cancel) return;
+        if (ec || cancel) return;
 
-    if (req.method() != http::verb::connect) {
-        _cache->serve_local(req, con, cancel, yield[ec].tag("serve_local"));
+        if (req.method() != http::verb::connect) {
+            auto keep_alive = _cache->serve_local(req, con, cancel, yield[ec].tag("serve_local"));
+            if (keep_alive) {
+                continue;
+            }
+            return;
+        }
+
+        if (log_transactions()) {
+            yield.log("Client: Received uTP/CONNECT request");
+        }
+
+        // Connect to the injector and tunnel the transaction through it
+
+        if (!_bep5_client) {
+            return handle_bad_request(con, req, "No known injectors", yield[ec]);
+        }
+
+        auto inj = [&] () {
+            auto y = yield[ec].tag("connect_to_injector");
+            return _bep5_client->connect( y
+                                        , cancel
+                                        , false
+                                        , ouiservice::Bep5Client::injectors);
+        }();
+
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec == asio::error::operation_aborted) return;
+        if (ec) {
+            ec = {};
+            auto y = yield[ec].tag("handle_bad_request");
+            return handle_bad_request(con, req, "Failed to connect to injector", y);
+        }
+
+        // Send the client an OK message indicating that the tunnel
+        // has been established.
+        http::response<http::empty_body> res{http::status::ok, req.version()};
+        res.prepare_payload();
+
+        // No ``res.prepare_payload()`` since no payload is allowed for CONNECT:
+        // <https://tools.ietf.org/html/rfc7231#section-6.3.1>.
+
+        {
+            auto y = yield[ec].tag("write");
+            http::async_write(con, res, y);
+        }
+
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec) return;
+
+        {
+            auto y = yield[ec].tag("full_duplex");
+            full_duplex(move(con), move(inj), y);
+        }
         return;
-    }
-
-    if (log_transactions()) {
-        yield.log("Client: Received uTP/CONNECT request");
-    }
-
-    // Connect to the injector and tunnel the transaction through it
-
-    if (!_bep5_client) {
-        return handle_bad_request(con, req, "No known injectors", yield[ec]);
-    }
-
-    auto inj = [&] () {
-        auto y = yield[ec].tag("connect_to_injector");
-        return _bep5_client->connect( y
-                                    , cancel
-                                    , false
-                                    , ouiservice::Bep5Client::injectors);
-    }();
-
-    if (cancel) ec = asio::error::operation_aborted;
-    if (ec == asio::error::operation_aborted) return;
-    if (ec) {
-        ec = {};
-        auto y = yield[ec].tag("handle_bad_request");
-        return handle_bad_request(con, req, "Failed to connect to injector", y);
-    }
-
-    // Send the client an OK message indicating that the tunnel
-    // has been established.
-    http::response<http::empty_body> res{http::status::ok, req.version()};
-    res.prepare_payload();
-
-    // No ``res.prepare_payload()`` since no payload is allowed for CONNECT:
-    // <https://tools.ietf.org/html/rfc7231#section-6.3.1>.
-
-    {
-        auto y = yield[ec].tag("write");
-        http::async_write(con, res, y);
-    }
-
-    if (cancel) ec = asio::error::operation_aborted;
-    if (ec) return;
-
-    {
-        auto y = yield[ec].tag("full_duplex");
-        full_duplex(move(con), move(inj), y);
     }
 }
 
@@ -1312,12 +1332,15 @@ public:
     void injector_job_func(Transaction& tnx, Cancel& cancel, Yield yield) {
         namespace err = asio::error;
 
+        bool do_log = log_transactions();
+
         sys::error_code ec;
         sys::error_code fresh_ec;
         sys::error_code cache_ec;
 
-        if (log_transactions()) {
+        if (do_log) {
             yield.log("start");
+            yield.log(tnx.request());
         }
 
         const auto& rq   = tnx.request();
@@ -1325,7 +1348,7 @@ public:
 
         auto session = cc.fetch(rq, meta.dht_group, fresh_ec, cache_ec, cancel, yield[ec]);
 
-        if (log_transactions()) {
+        if (do_log) {
             yield.log("cc.fetch ec:", ec.message(),
                      " fresh_ec:", fresh_ec.message(),
                      " cache_ec:", cache_ec.message());
@@ -1335,7 +1358,7 @@ public:
 
         auto& rsh = session.response_header();
 
-        if (log_transactions()) {
+        if (do_log) {
             yield.log("Response header:");
             yield.log(rsh);
         }
@@ -1345,7 +1368,7 @@ public:
 
         auto injector_error = rsh[http_::response_error_hdr];
         if (!injector_error.empty()) {
-            if (log_transactions()) {
+            if (do_log) {
                 yield.log("Error from injector: ", injector_error);
             }
             return or_throw(yield, err::invalid_argument);
@@ -1396,7 +1419,7 @@ public:
         session.flush_response(cancel, yield[ec],
             [&] ( Part&& part
                 , Cancel& cancel
-                , asio::yield_context yield)
+                , asio::yield_context)
             {
                 if (do_cache) qst.push_back(part);
                 qag.push_back(std::move(part));
@@ -1407,7 +1430,7 @@ public:
 
         wc.wait(yield);
 
-        if (log_transactions()) {
+        if (do_log) {
             yield.log("finish: ", ec.message());
         }
 

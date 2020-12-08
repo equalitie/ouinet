@@ -20,7 +20,6 @@
 
 #include "namespaces.h"
 #include "util.h"
-#include "fetch_http_page.h"
 #include "connect_to_host.h"
 #include "default_timeout.h"
 #include "generic_stream.h"
@@ -54,6 +53,7 @@
 #include "util/bytes.h"
 #include "util/file_io.h"
 #include "util/file_posix_with_offset.h"
+#include "util/yield.h"
 
 #include "logger.h"
 #include "defer.h"
@@ -365,7 +365,8 @@ public:
 
     template<class Response, class Connection>
     bool keep_connection(const Request& rq, const Response& rs, Connection con) {
-        if (!con.is_open()) return false;
+        // NOTE: `con` is put back to `origin_pools` from its destructor unless it
+        // is explicitly closed.
 
         if (!rs.keep_alive() || !rq.keep_alive()) {
             con.close();

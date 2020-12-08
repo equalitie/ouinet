@@ -52,8 +52,8 @@ ouinet::util::get_host_port(const http::request<http::string_body>& req)
     return make_pair(host, port);
 }
 
-boost::optional<ouinet::util::HttpByteRange>
-ouinet::util::HttpByteRange::parse(boost::string_view s)
+boost::optional<ouinet::util::HttpResponseByteRange>
+ouinet::util::HttpResponseByteRange::parse(boost::string_view s)
 {
     static const boost::regex range_rx("^bytes ([0-9]+)-([0-9]+)/([0-9]+|\\*)$");
     boost::cmatch m;
@@ -75,18 +75,18 @@ ouinet::util::HttpByteRange::parse(boost::string_view s)
        || (length && *last >= *length))
         return boost::none;  // off-limits
 
-    return ouinet::util::HttpByteRange{*first, *last, std::move(length)};
+    return ouinet::util::HttpResponseByteRange{*first, *last, std::move(length)};
 }
 
 bool
-ouinet::util::HttpByteRange::matches_length(size_t s) const {
+ouinet::util::HttpResponseByteRange::matches_length(size_t s) const {
     if (!length) return false;  // it should have a value
     if (*length != s) return false;  // values do not match
     return true;
 }
 
 bool
-ouinet::util::HttpByteRange::matches_length(boost::string_view ls) const {
+ouinet::util::HttpResponseByteRange::matches_length(boost::string_view ls) const {
     auto s = parse::number<size_t>(ls);
     if (s) return matches_length(*s);
     if (length) return false;  // length should be "*"
@@ -95,11 +95,51 @@ ouinet::util::HttpByteRange::matches_length(boost::string_view ls) const {
 
 std::ostream&
 ouinet::util::operator<<( std::ostream& os
-                        , const ouinet::util::HttpByteRange& br)
+                        , const ouinet::util::HttpResponseByteRange& br)
 {
     os << "bytes " << br.first << '-' << br.last << '/';
     if (br.length) return os << *(br.length);
     return os << '*';
+}
+
+boost::optional<std::vector<ouinet::util::HttpRequestByteRange>>
+ouinet::util::HttpRequestByteRange::parse(boost::string_view s)
+{
+    using Ranges = std::vector<ouinet::util::HttpRequestByteRange>;
+
+    static auto trim_ws = [](boost::string_view& s) {
+        while (!s.empty() && s[0] == ' ') s.remove_prefix(1);
+    };
+
+    static auto consume = [](boost::string_view& s, boost::string_view what) -> bool {
+        if (!s.starts_with(what)) return false;
+        s.remove_prefix(what.size());
+        return true;
+    };
+
+    trim_ws(s);
+    if (!consume(s, "bytes")) return boost::none;
+    trim_ws(s);
+    if (!consume(s, "=")) return boost::none;
+    trim_ws(s);
+
+    Ranges ranges;
+
+    while (true) {
+        auto first = parse::number<size_t>(s);
+        if (!first) return boost::none;
+        trim_ws(s);
+        if (!consume(s, "-")) return boost::none;
+        trim_ws(s);
+        auto last = parse::number<size_t>(s);
+        if (!last) return boost::none;
+        ranges.push_back({*first, *last});
+        trim_ws(s);
+        if (!consume(s, ",")) break;
+        trim_ws(s);
+    }
+
+    return ranges;
 }
 
 #ifdef __SANITIZE_ADDRESS__

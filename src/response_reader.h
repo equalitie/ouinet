@@ -7,6 +7,7 @@
 #include "or_throw.h"
 #include "response_part.h"
 #include "util/signal.h"
+#include "util/watch_dog.h"
 #include <boost/beast.hpp>
 
 namespace ouinet { namespace http_response {
@@ -14,10 +15,24 @@ namespace ouinet { namespace http_response {
 class AbstractReader {
 public:
     virtual boost::optional<Part> async_read_part(Cancel, asio::yield_context) = 0;
-    virtual bool is_done() const = 0;
-    virtual bool is_open() const = 0;
     virtual void close()   = 0;
+    virtual asio::executor get_executor() = 0;
     virtual ~AbstractReader() = default;
+
+    template<class Duration>
+    boost::optional<Part> timed_async_read_part(Duration d, Cancel c, asio::yield_context y)
+    {
+        Cancel tc(c);
+        auto wd = watch_dog(get_executor(), d, [&] { tc(); });
+        sys::error_code ec;
+
+        auto retval = async_read_part(c, y[ec]);
+
+        if (tc && !c) ec = asio::error::timed_out;
+        assert(!c || ec == asio::error::operation_aborted);
+
+        return or_throw<boost::optional<Part>>(y, ec, std::move(retval));
+    }
 };
 
 // Read the whole session and return an in-memory response
@@ -88,7 +103,7 @@ public:
     // Head >> Body* >> boost::none*
     //
     boost::optional<Part> async_read_part(Cancel, asio::yield_context) override;
-    bool is_done() const override { return _is_done; }
+    bool is_done() const { return _is_done; }
 
     // This leaves the reader in an undefined state,
     // do not use afterwards.
@@ -105,8 +120,9 @@ public:
         setup_parser();
     }
 
-    bool is_open() const override { return _in.is_open(); }
-    void close()         override { return _in.close(); }
+    void close() override { if (_in.is_open()) _in.close(); }
+
+    asio::executor get_executor() override { return _in.get_executor(); }
 
 private:
     http::fields filter_trailer_fields(const http::fields& hdr)

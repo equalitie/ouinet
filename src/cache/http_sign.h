@@ -127,6 +127,11 @@ http_injection_merge( http::response_header<> rsh
 std::string
 http_key_id_for_injection(const ouinet::util::Ed25519PublicKey&);
 
+// Create HTTP chunk extension
+std::string
+block_chunk_ext( const boost::optional<util::Ed25519PublicKey::sig_array_t>& sig
+               , const boost::optional<util::SHA512::digest_type>& prev_digest = {});
+
 // Allows reading parts of a response from stream `in`
 // while signing with the private key `sk`.
 class SigningReader : public ouinet::http_response::Reader {
@@ -140,9 +145,6 @@ public:
 
     boost::optional<ouinet::http_response::Part>
     async_read_part(Cancel, asio::yield_context) override;
-
-    bool
-    is_done() const override;
 
 private:
     struct Impl;
@@ -181,35 +183,12 @@ public:
     boost::optional<ouinet::http_response::Part>
     async_read_part(Cancel, asio::yield_context) override;
 
-    bool
-    is_done() const override;
-
 protected:
     struct Impl;
     VerifyingReader(GenericStream, std::unique_ptr<Impl>);
 
 private:
     std::unique_ptr<Impl> _impl;
-};
-
-// Similar to `VerifyingReader`, but it only expects a response head.
-//
-// Use this to verify responses to a `HEAD` request
-// (since a plain `VerifyingReader` would fail because of the lack of a body).
-class HeadVerifyingReader : public VerifyingReader {
-public:
-    HeadVerifyingReader( GenericStream in, ouinet::util::Ed25519PublicKey pk
-                       , status_set statuses = {});
-    ~HeadVerifyingReader() override;
-
-    boost::optional<ouinet::http_response::Part>
-    async_read_part(Cancel, asio::yield_context) override;
-
-    bool
-    is_done() const override;
-
-private:
-    bool _is_done = false;
 };
 
 // Filters out headers not included in the set of signed headers
@@ -237,9 +216,12 @@ public:
     boost::optional<ouinet::http_response::Part>
     async_read_part(Cancel, asio::yield_context) override;
 
-    bool is_done() const override { return _reader.is_done(); }
-    bool is_open() const override { return _reader.is_open(); }
     void close() override { _reader.close(); }
+
+    asio::executor get_executor() override
+    {
+        return _reader.get_executor();
+    }
 
 private:
     ouinet::http_response::AbstractReader& _reader;
@@ -259,22 +241,6 @@ http_digest(ouinet::util::SHA256&);
 
 std::string
 http_digest(const http::response<http::dynamic_body>&);
-
-namespace Block {
-    using Signature = util::Ed25519PublicKey::sig_array_t;
-    using Digest    = util::SHA512::digest_type;
-
-    Signature sign( boost::string_view injection_id
-                  , size_t offset
-                  , const Digest& chained_digest
-                  , const util::Ed25519PrivateKey&);
-
-    bool verify( boost::string_view injection_id
-               , size_t offset
-               , const Digest& chained_digest
-               , const Signature& signature
-               , const util::Ed25519PublicKey&);
-};
 
 // Generic HTTP signatures
 // -----------------------

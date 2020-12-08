@@ -27,6 +27,7 @@
 #include "../util/variant.h"
 #include "http_sign.h"
 #include "signed_head.h"
+#include "chain_hasher.h"
 
 #define _LOGPFX "HTTP store: "
 #define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
@@ -52,6 +53,8 @@ static const fs::path head_fname = "head";
 static const fs::path body_fname = "body";
 static const fs::path sigs_fname = "sigs";
 
+using Signature = util::Ed25519PublicKey::sig_array_t;
+
 static
 std::size_t
 recursive_dir_size(const fs::path& path, sys::error_code& ec)
@@ -73,16 +76,6 @@ recursive_dir_size(const fs::path& path, sys::error_code& ec)
         total += file_size;
     }
     return total;
-}
-
-static
-http_response::Head
-without_framing(http_response::Head rsh)
-{
-    rsh.chunked(false);
-    rsh.erase(http::field::content_length);
-    rsh.erase(http::field::trailer);
-    return rsh;
 }
 
 // Block signature and hash handling.
@@ -110,26 +103,30 @@ parse_data_block_offset(const std::string& s)  // `^[0-9a-f]*$`
     for (auto& c : s) {
         assert(('0' <= c && c <= '9') || ('a' <= c && c <= 'f'));
         offset <<= 4;
-        offset += ('0' <= c && c <= '9') ? c - '0' : c - 'a';
+        offset += ('0' <= c && c <= '9') ? c - '0' : c - 'a' + 10;
     }
     return offset;
 }
 
-// A signatures file entry with `OFFSET[i] SIGNATURE[i] CHASH[i-1]`.
+// A signatures file entry with `OFFSET[i] SIGNATURE[i] BLOCK_DIGEST[i] CHASH[i-1]`.
 struct SigEntry {
     std::size_t offset;
     std::string signature;
-    std::string data_digest;
-    std::string prev_digest;
+    std::string block_digest;
+    std::string prev_chained_digest;
 
     using parse_buffer = std::string;
 
+    static const std::string& pad_digest() {
+        static const auto pad_digest = util::base64_encode(util::SHA512::zero_digest());
+        return pad_digest;
+    }
+
     std::string str() const
     {
-        static const auto pad_digest = util::base64_encode(util::SHA512::zero_digest());
         static const auto line_format = "%016x %s %s %s\n";
-        return ( boost::format(line_format) % offset % signature % data_digest
-               % (prev_digest.empty() ? pad_digest : prev_digest)).str();
+        return ( boost::format(line_format) % offset % signature % block_digest
+               % (prev_chained_digest.empty() ? pad_digest() : prev_chained_digest)).str();
     }
 
     std::string chunk_exts() const
@@ -141,8 +138,8 @@ struct SigEntry {
             exts << (boost::format(fmt_sx) % signature);
 
         static const auto fmt_hx = ";" + http_::response_block_chain_hash_ext + "=\"%s\"";
-        if (!prev_digest.empty())
-            exts << (boost::format(fmt_hx) % prev_digest);
+        if (!prev_chained_digest.empty())
+            exts << (boost::format(fmt_hx) % prev_chained_digest);
 
         return exts.str();
     }
@@ -167,7 +164,6 @@ struct SigEntry {
         boost::string_view line(buf);
         line.remove_suffix(buf.size() - line_len + 1);  // leave newline out
 
-        static const auto pad_digest = util::base64_encode(util::SHA512::zero_digest());
         static const boost::regex line_regex(  // Ensure lines are fixed size!
             "([0-9a-f]{16})"  // PAD016_LHEX(OFFSET[i])
             " ([A-Za-z0-9+/=]{88})"  // BASE64(SIG[i]) (88 = size(BASE64(Ed25519-SIG)))
@@ -181,7 +177,7 @@ struct SigEntry {
         }
         auto offset = parse_data_block_offset(m[1].str());
         SigEntry entry{ offset, m[2].str(), m[3].str()
-                      , (m[4] == pad_digest ? "" : m[4].str())};
+                      , (m[4] == pad_digest() ? "" : m[4].str())};
         buf.erase(0, line_len);  // consume used input
         return entry;
     }
@@ -204,7 +200,7 @@ private:
     std::size_t byte_count = 0;
     unsigned block_count = 0;
     util::SHA512 block_hash;
-    boost::optional<util::SHA512::digest_type> prev_block_digest;
+    ChainHasher chain_hasher;
 
     inline
     asio::posix::stream_descriptor
@@ -265,7 +261,12 @@ public:
         // upstream verification or the injector should have placed
         // them at the right chunk headers.
         e.signature = block_sig_from_exts(ch.exts).to_string();
+
         if (e.signature.empty()) return;
+
+        auto sig = util::base64_decode<Signature>(e.signature);
+
+        if (!sig) return;
 
         // Check that signature is properly aligned with end of block
         // (except for the last block, which may be shorter).
@@ -277,21 +278,15 @@ public:
         }
 
         auto block_digest = block_hash.close();
-        block_hash = {};
 
-        e.data_digest = util::base64_encode(block_digest);
+        e.block_digest = util::base64_encode(block_digest);
 
         // Encode the chained hash for the previous block.
-        if (prev_block_digest)
-            e.prev_digest = util::base64_encode(*prev_block_digest);
+        if (chain_hasher.prev_chained_digest())
+            e.prev_chained_digest = util::base64_encode(*chain_hasher.prev_chained_digest());
 
         // Prepare hash for next data block: CHASH[i]=SHA2-512(CHASH[i-1] BLOCK[i])
-        util::SHA512 chain_hash;
-
-        if (prev_block_digest) chain_hash.update(*prev_block_digest);
-        chain_hash.update(block_digest);
-
-        prev_block_digest = chain_hash.close();
+        chain_hasher.calculate_block(ch.size, block_digest, *sig);
 
         util::file_io::write(*sigsf, asio::buffer(e.str()), cancel, yield);
     }
@@ -420,15 +415,18 @@ public:
             assert(block_size);
             auto bs = *block_size;
             range->begin = bs * (range->begin / bs);  // align down
-            range->end = bs * (range->end / bs + 1);  // align up
+            range->end = range->end > 0  // align up
+                       ? bs * ((range->end - 1) / bs + 1)
+                       : 0;
             // Clip range end to actual file size.
-            auto ds = util::file_io::file_size(bodyf, ec);
+            size_t ds = 0;
+            if (bodyf.is_open()) ds = util::file_io::file_size(bodyf, ec);
             if (ec) return or_throw<http_response::Head>(yield, ec);
             if (range->end > ds) range->end = ds;
 
             // Report resulting range.
             head.set( http::field::content_range
-                    , util::HttpByteRange{range->begin, range->end - 1, data_size});
+                    , util::HttpResponseByteRange{range->begin, range->end - 1, data_size});
         }
 
         // The stored head should not have framing headers,
@@ -451,6 +449,7 @@ public:
     {
         assert(_is_head_done);
         if (!range) return;
+        if (range->end == 0) return;
         assert(bodyf.is_open());
         assert(block_size);
 
@@ -596,14 +595,13 @@ public:
         return http_response::Part(http_response::Trailer());
     }
 
-    bool
-    is_done() const override
+    asio::executor get_executor() override
     {
-        return _is_done;
+        return headf.get_executor();
     }
 
     bool
-    is_open() const override
+    is_open() const
     {
         return _is_open;
     }
@@ -652,6 +650,10 @@ _http_store_reader( const fs::path& dirp, asio::executor ex
                   , boost::optional<std::size_t> range_last
                   , sys::error_code& ec)
 {
+    // XXX: Actually the RFC7233 allows for range_last to be undefined
+    // https://tools.ietf.org/html/rfc7233#section-2.1
+    assert((!range_first && !range_last) || (range_first && range_last));
+
     auto headf = util::file_io::open_readonly(ex, dirp / head_fname, ec);
     if (ec) return nullptr;
 
@@ -668,26 +670,38 @@ _http_store_reader( const fs::path& dirp, asio::executor ex
     if (range_first) {
         // Check and convert range.
         assert(range_last);
-        if (*range_first > *range_last) {
+        size_t begin = *range_first;
+        size_t end   = *range_last + 1;
+        if (begin > end) {
             _WARN("Inverted range boundaries: ", *range_first, " > ", *range_last);
             ec = sys::errc::make_error_code(sys::errc::invalid_seek);
             return nullptr;
         }
         if (!bodyf.is_open()) {
-            _WARN("Range requested for response with no stored data");
-            ec = sys::errc::make_error_code(sys::errc::invalid_seek);
-            return nullptr;
+            if (begin > 0) {
+                _WARN("Positive range requested for response with no stored data");
+            }
+            begin = 0;
+            end = 0;
+        } else {
+            auto body_size = util::file_io::file_size(bodyf, ec);
+            if (ec) return nullptr;
+            if (begin > 0 &&  begin >= body_size) {
+                _WARN( "Requested range 'first' goes beyond stored data: "
+                     , util::HttpResponseByteRange{*range_first, *range_last, body_size});
+                ec = sys::errc::make_error_code(sys::errc::invalid_seek);
+                return nullptr;
+            }
+            // https://tools.ietf.org/html/rfc7233#section-2.1
+            // Quote from the above link: If the last-byte-pos value is absent,
+            // or if the value is greater than or equal to the current length
+            // of the representation data, the byte range is interpreted as the
+            // remainder of the representation (i.e., the server replaces the
+            // value of last-byte-pos with a value that is one less than the
+            // current length of the selected representation).
+            end = std::min(end, body_size);
         }
-        auto body_size = util::file_io::file_size(bodyf, ec);
-        if (ec) return nullptr;
-        if ( *range_first >= body_size
-           || *range_last >= body_size) {
-            _WARN( "Requested range goes beyond stored data: "
-                 , util::HttpByteRange{*range_first, *range_last, body_size});
-            ec = sys::errc::make_error_code(sys::errc::invalid_seek);
-            return nullptr;
-        }
-        range = Range{*range_first, *range_last + 1};
+        range = Range{begin, end};
     }
 
     return std::make_unique<Reader>
@@ -709,112 +723,6 @@ http_store_range_reader( const fs::path& dirp, asio::executor ex
 {
     return _http_store_reader<HttpStoreReader>
         (dirp, std::move(ex), first, last, ec);
-}
-
-class HttpStoreHeadReader : public HttpStoreReader {
-private:
-    inline
-    std::string
-    unsatisfied_range()
-    {
-        // See RFC7233#4.2 for the syntax.
-        return data_size ? util::str("bytes */", *data_size) : "bytes */*";
-    }
-
-    boost::optional<std::size_t>
-    get_last_sig_offset(Cancel cancel, asio::yield_context yield)
-    {
-        // TODO: seek to avoid parsing the whole file
-
-        // TODO: This would be easier if lines had a fixed size,
-        // e.g. by padding the offset to the length of `max(size_t)`.
-        // A way to cut the overhead would be to use `max(size_t/block_length)`,
-        // with a different fixed line length for each stored entry,
-        // but if overhead is an issue, a binary format should be used instead.
-        boost::optional<std::size_t> off;
-        while (true) {
-            sys::error_code ec;
-            auto se = get_sig_entry(cancel, yield[ec]);
-            return_or_throw_on_error(yield, cancel, ec, boost::none);
-            if (!se) break;
-            off = se->offset;
-        }
-        return off;
-    }
-
-    std::string
-    get_avail_data_range(Cancel cancel, asio::yield_context yield)
-    {
-        if (!sigsf.is_open() || !bodyf.is_open())
-            return unsatisfied_range();;
-
-        sys::error_code ec;
-        auto bsize = util::file_io::file_size(bodyf, ec);
-        if (ec) return or_throw(yield, ec, "");
-        if (bsize == 0)
-            return unsatisfied_range();;
-
-        // Get the last byte for which we have a block signature.
-        auto lsoff = get_last_sig_offset(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, "");
-        if (!lsoff)
-            return unsatisfied_range();;
-        assert(block_size);
-        auto end = bsize > *lsoff
-            ? *lsoff + std::min(bsize - *lsoff, *block_size)
-            : (bsize / *block_size) * *block_size;
-
-        return util::str(util::HttpByteRange{0, end - 1, data_size});
-    }
-
-public:
-    HttpStoreHeadReader( asio::posix::stream_descriptor headf
-                       , asio::posix::stream_descriptor sigsf
-                       , asio::posix::stream_descriptor bodyf
-                       , boost::optional<Range> range)
-        : HttpStoreReader(std::move(headf), std::move(sigsf), std::move(bodyf), range)
-    {}
-
-    ~HttpStoreHeadReader() override {};
-
-    boost::optional<ouinet::http_response::Part>
-    async_read_part(Cancel cancel, asio::yield_context yield) override
-    {
-        if (!is_open() || _is_done) return boost::none;
-
-        sys::error_code ec;
-        auto part_o = HttpStoreReader::async_read_part(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, boost::none);
-        assert(part_o);
-        auto head_p = part_o->as_head();
-        assert(head_p);
-        // According to RFC7231#4.3.2, payload header fields MAY be omitted.
-        auto head = without_framing(std::move(*head_p));
-        // Add a header with the available data range.
-        auto drange = get_avail_data_range(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, boost::none);
-        head.set(response_available_data, drange);
-        _is_done = true;
-        close();
-        return http_response::Part(std::move(head));
-    }
-
-    bool
-    is_done() const override
-    {
-        return _is_done;
-    }
-
-private:
-    bool _is_done = false;
-};
-
-reader_uptr
-http_store_head_reader( const fs::path& dirp, asio::executor ex
-                      , sys::error_code& ec)
-{
-    return _http_store_reader<HttpStoreHeadReader>
-        (dirp, std::move(ex), {}, {}, ec);
 }
 
 HttpStore::~HttpStore()
@@ -981,6 +889,16 @@ HttpStore::reader( const std::string& key
     return http_store_reader(kpath, executor, ec);
 }
 
+reader_uptr
+HttpStore::range_reader( const std::string& key
+                       , size_t first
+                       , size_t last
+                       , sys::error_code& ec)
+{
+    auto kpath = path_from_key(path, key);
+    return http_store_range_reader(kpath, executor, first, last, ec);
+}
+
 std::size_t
 HttpStore::size( Cancel cancel
                , asio::yield_context yield) const
@@ -1009,9 +927,6 @@ http_store_load_hash_list( const fs::path& dir
     auto sigsf = util::file_io::open_readonly(exec, dir / sigs_fname, ec);
     if (ec) return or_throw<HashList>(yield, ec);
 
-    auto bodyf = util::file_io::open_readonly(exec, dir / body_fname, ec);
-    if (ec) return or_throw<HashList>(yield, ec);
-
     HashList hl;
 
     hl.signed_head = HttpStoreReader::read_signed_head(headf, cancel, yield[ec]);
@@ -1019,14 +934,7 @@ http_store_load_hash_list( const fs::path& dir
     if (cancel) ec = asio::error::operation_aborted;
     if (ec) return or_throw<HashList>(yield, ec);
 
-    boost::optional<SigEntry> last_sig_entry;
     std::string sig_buffer;
-
-    static const auto decode = [](const std::string& s) -> boost::optional<Digest> {
-        std::string d = util::base64_decode(s);
-        if (d.size() != Sha::size()) return boost::none;
-        return util::bytes::to_array<uint8_t, Sha::size()>(d);
-    };
 
     while(true) {
         auto opt_sig_entry = SigEntry::parse(sigsf, sig_buffer, cancel, yield[ec]);
@@ -1036,25 +944,20 @@ http_store_load_hash_list( const fs::path& dir
 
         if (!opt_sig_entry) break;
 
-        last_sig_entry = opt_sig_entry;
-
-        auto d = decode(opt_sig_entry->data_digest);
+        auto d = util::base64_decode<Digest>(opt_sig_entry->block_digest);
         if (!d) return or_throw<HashList>(yield, asio::error::bad_descriptor);
 
-        hl.block_hashes.push_back(*d);
+        auto sig = util::base64_decode<Signature>(opt_sig_entry->signature);
+        if (!sig) return or_throw<HashList>(yield, asio::error::bad_descriptor);
+
+        hl.blocks.push_back({*d, *sig});
     }
 
-    if (!last_sig_entry) return or_throw<HashList>(yield, asio::error::bad_descriptor);
-
-    auto c = decode(last_sig_entry->prev_digest);
-    if (!c) return or_throw<HashList>(yield, asio::error::bad_descriptor);
-
-    std::string sig = util::base64_decode(last_sig_entry->signature);
-    if (sig.size() != util::Ed25519PublicKey::sig_size) {
-        return or_throw<HashList>(yield, asio::error::bad_descriptor);
+    if (hl.blocks.empty()) {
+        return or_throw<HashList>(yield, asio::error::not_found);
     }
 
-    hl.signature = util::bytes::to_array<uint8_t, util::Ed25519PublicKey::sig_size>(sig);
+    assert(hl.verify()); // Only in debug mode
 
     return hl;
 }

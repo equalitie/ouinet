@@ -54,9 +54,9 @@ using reader_uptr = std::unique_ptr<http_response::AbstractReader>;
 //
 //     Where `PAD016_LHEX(x)` represents `x` in lower-case hexadecimal, zero-padded to 16 characters,
 //     `BASE64(CHASH[-1])` is established as `BASE64('\0' * 64)` (for padding the first line),
-//     `CHASH[-1]` is established as the empty string (for `CHASH[0]` computation),
+//     `SIG[-1]` and `CHASH[-1]` are established as the empty string (for `CHASH[0]` computation),
 //     `DHASH[i]=SHA2-512(DATA[i])` (block data hash)
-//     `CHASH[i]=SHA2-512(CHASH[i-1] DHASH[i])` (block chain hash).
+//     `CHASH[i]=SHA2-512(SIG[i-1] CHASH[i-1] DHASH[i])` (block chain hash).
 //
 void http_store( http_response::AbstractReader&, const fs::path&
                , const asio::executor&, Cancel, asio::yield_context);
@@ -92,16 +92,6 @@ http_store_range_reader( const fs::path&, asio::executor
                        , std::size_t first, std::size_t last
                        , sys::error_code&);
 
-// Same as above, but return a reader that only yields the response head,
-// as if an HTTP `HEAD` request was performed.
-//
-// The head will contain an `X-Ouinet-Avail-Data` header
-// showing the available stored data in the same format as
-// the `Content-Range` header (see RFC7233#4.2).
-reader_uptr
-http_store_head_reader( const fs::path&, asio::executor
-                      , sys::error_code&);
-
 HashList
 http_store_load_hash_list(const fs::path&, asio::executor, Cancel&, asio::yield_context);
 
@@ -130,6 +120,9 @@ public:
 
     reader_uptr
     reader(const std::string& key, sys::error_code&);
+
+    reader_uptr
+    range_reader(const std::string& key, size_t first, size_t last, sys::error_code&);
 
     std::size_t
     size(Cancel, asio::yield_context) const;

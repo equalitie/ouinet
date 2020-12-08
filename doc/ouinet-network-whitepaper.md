@@ -375,6 +375,8 @@ A cache entry signed using implementations of these primitives different from th
 
 #### Examples
 
+**TODOv6 OBSOLETE**
+
 An injector server using Ed25519 private key `KEY` might construct the following as-yet unsigned cache entry:
 
 ```
@@ -398,7 +400,7 @@ X-Ouinet-Data-Size: 12
 The injector server would create the following complete cache entry signature:
 
 ```
-keyId="ed25519=<key>",algorithm="hs2019",created=1584748800, headers="(response-status) (created) x-Ouinet-version x-Ouinet-uri x-Ouinet-injection date content-type digest x-Ouinet-data-size",signature="<signature-base64>"
+keyId="ed25519=<key>",algorithm="hs2019",created=1584748800, headers="(response-status) (created) x-ouinet-version x-ouinet-uri x-ouinet-injection date content-type digest x-ouinet-data-size",signature="<signature-base64>"
 ```
 
 In this signature, `<key>` stands for the public key associated with the `KEY` private key, and `<signature-base64>` is the base64 encoding of the Ed25519 signature of the following string:
@@ -406,13 +408,13 @@ In this signature, `<key>` stands for the public key associated with the `KEY` p
 ```
 (response-status): 200
 (created): 1584748800
-x-Ouinet-version: 4
-x-Ouinet-uri: https://example.com/hello
-x-Ouinet-injection: id=qwertyuiop-12345,ts=1584748800
+x-ouinet-version: 4
+x-ouinet-uri: https://example.com/hello
+x-ouinet-injection: id=qwertyuiop-12345,ts=1584748800
 date: Sat, 21 Mar 2020 00:00:00 GMT
 content-type: text/plain
 digest: SHA-256=wFNeS+K3n/2TKRMFQ2v4iTFOSj+uwF7P/Lt98xrZ5Ro=
-x-Ouinet-data-size: 12
+x-ouinet-data-size: 12
 ```
 
 Lines in this string are separated by newline `\n` characters. The string does not begin with or end in a newline character.
@@ -421,7 +423,7 @@ The injector server might choose not to create a signature stream for this cache
 
 * `block_size`: `5`
 * `injection-id`: `qwertyuiop-12345`
-* `header-signature`: `keyId="ed25519=<key>",algorithm="hs2019",created=1584748800, headers="(response-status) (created) x-Ouinet-version x-Ouinet-uri x-Ouinet-injection date content-type",signature="<header-signature-base64>"`
+* `header-signature`: `keyId="ed25519=<key>",algorithm="hs2019",created=1584748800, headers="(response-status) (created) x-ouinet-version x-ouinet-uri x-ouinet-injection date content-type",signature="<header-signature-base64>"`
 * `block(0)`: `Hello`
 * `block(1)`: ` worl`
 * `block(2)`: `d!`
@@ -439,9 +441,9 @@ In the computation of `header-signature` in the above, `<key>` stands for the pu
 ```
 (response-status): 200
 (created): 1584748800
-x-Ouinet-version: 4
-x-Ouinet-uri: https://example.com/hello
-x-Ouinet-injection: id=qwertyuiop-12345,ts=1584748800
+x-ouinet-version: 4
+x-ouinet-uri: https://example.com/hello
+x-ouinet-injection: id=qwertyuiop-12345,ts=1584748800
 date: Sat, 21 Mar 2020 00:00:00 GMT
 content-type: text/plain
 ```
@@ -573,6 +575,8 @@ Hello world!
 Of these three examples, the last two would be considered equivalent by a recipient client. The client would recognize the first example as being semantically equivalent to the last two, but it would be able to stream the resource content incrementally while still downloading the remainder of the content simultaneously.
 
 ### Peer-to-peer cache entry exchange
+
+**TODOv6 OBSOLETE,INCOMPLETE(multi-peer)**
 
 When a Ouinet client stores a collection of cache entries in its device local storage, it can share these cache entries with other users that wish to access them. By fetching cache entries from other users in this way, without involvement of the injector servers, a Ouinet client can access web content even in cases when it cannot reach the injector servers.
 

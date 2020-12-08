@@ -61,6 +61,7 @@ public:
                             , injection_ts
                             , sk))
         , _injection_id(injection_id)
+        , _injection_ts(injection_ts)
         , _uri(rqh.target())
         , _bs_params{ sk.public_key()
                     , sig_alg_hs2019()
@@ -70,10 +71,12 @@ public:
 private:
     SignedHead( http::response_header<> signed_rsh
               , std::string injection_id
+              , std::chrono::seconds::rep injection_ts
               , std::string uri
               , SignedHead::BlockSigs bs_params)
         : Base(std::move(signed_rsh))
         , _injection_id(std::move(injection_id))
+        , _injection_ts(injection_ts)
         , _uri(std::move(uri))
         , _bs_params(std::move(bs_params))
     {}
@@ -98,7 +101,7 @@ public:
     // Example:
     //
     //     ...
-    //     X-Ouinet-Version: 5
+    //     X-Ouinet-Version: 6
     //     X-Ouinet-URI: https://example.com/foo
     //     X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
     //     X-Ouinet-BSigs: keyId="...",algorithm="hs2019",size=65536
@@ -158,20 +161,26 @@ public:
         return encode_key_id(public_key());
     }
 
+    bool more_recent_than(const SignedHead& other) const {
+        return _injection_ts > other._injection_ts;
+    }
+
 private:
     static
     boost::optional<util::Ed25519PublicKey>
     decode_key_id(boost::string_view key_id)
     {
+        using PublicKey = util::Ed25519PublicKey::key_array_t;
+
         if (!key_id.starts_with(key_id_pfx())) return {};
-        auto decoded_pk = util::base64_decode(key_id.substr(key_id_pfx().size()));
-        if (decoded_pk.size() != util::Ed25519PublicKey::key_size) return {};
-        auto pk_array = util::bytes::to_array<uint8_t, util::Ed25519PrivateKey::key_size>(decoded_pk);
-        return util::Ed25519PublicKey(std::move(pk_array));
+        auto decoded_pk = util::base64_decode<PublicKey>(key_id.substr(key_id_pfx().size()));
+        if (!decoded_pk) return {};
+        return util::Ed25519PublicKey(*decoded_pk);
     }
 
 private:
     std::string _injection_id;
+    std::chrono::seconds::rep _injection_ts;
     std::string _uri;
     SignedHead::BlockSigs _bs_params;
 };
@@ -190,9 +199,9 @@ SignedHead::sign_response( const http::request_header<>& rqh
     auto key_id = encode_key_id(pk);
 
     // TODO: This should be a `static_assert`.
-    assert(protocol_version_hdr_current == protocol_version_hdr_v5);
+    assert(protocol_version_hdr_current == protocol_version_hdr_v6);
 
-    rsh.set(protocol_version_hdr, protocol_version_hdr_v5);
+    rsh.set(protocol_version_hdr, protocol_version_hdr_v6);
     rsh.set(response_uri_hdr, rqh.target());
     rsh.set(response_injection_hdr
            , boost::format("id=%s,ts=%d") % injection_id % injection_ts);
@@ -328,8 +337,17 @@ SignedHead::create_from_trusted_source(http::response_header<> rsh)
         return boost::none;
     }
 
+    auto tsh = util::http_injection_ts(rsh);
+    auto injection_ts = parse::number<time_t>(tsh);
+
+    if (!injection_ts) {
+        LOG_WARN("Failed to parse injection time stamp \"", tsh, "\"");
+        return boost::none;
+    }
+
     return SignedHead( std::move(rsh)
                      , std::move(injection_id)
+                     , *injection_ts
                      , std::move(uri)
                      , std::move(*bs_params));
 }
