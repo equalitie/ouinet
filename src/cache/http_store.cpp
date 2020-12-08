@@ -441,7 +441,7 @@ public:
         }
 
         head.set(http::field::transfer_encoding, "chunked");
-        return head;
+        return std::move(head);
     }
 
     void
