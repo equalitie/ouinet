@@ -850,6 +850,13 @@ static const first_last block_ranges[] = {
     {0, 0},  // just first block
     {0, 1},  // two first blocks
     {0, 2},  // all blocks
+// TODOv6 TODOv7 These should work as well but v6 requires
+// a previous step of signature/hash retrieval.
+// Fix in v7.
+/*
+    {1, 2},  // two last blocks
+    {2, 2},  // just last block
+*/
 };
 
 BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
