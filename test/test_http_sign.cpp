@@ -118,7 +118,7 @@ static const string _rs_fields_origin = (
 );
 
 static const string _rs_head_injection = util::str(
-    "X-Ouinet-Version: 5\r\n",
+    "X-Ouinet-Version: 6\r\n",
     "X-Ouinet-URI: ",rq_target,"\r\n",
     "X-Ouinet-Injection: id=", inj_id, ",ts=", inj_ts, "\r\n",
     "X-Ouinet-BSigs: keyId=\"ed25519=",inj_b64pk,"\",",
@@ -142,7 +142,7 @@ static string _get_signature_field(bool is_final, size_t body_size, const string
             "server: Apache1, Apache2\n"
             "content-type: text/html\n"
             "content-disposition: inline; filename=\"foo.html\"\n"
-            "x-ouinet-version: 5\n"
+            "x-ouinet-version: 6\n"
             "x-ouinet-uri: ",rq_target,"\n"
             "x-ouinet-injection: id=",inj_id,",ts=",inj_ts,"\n"
             "x-ouinet-bsigs: keyId=\"ed25519=",inj_b64pk,"\",algorithm=\"hs2019\",size=",inj_bs,

@@ -71,7 +71,7 @@ static const string _rs_head_origin =
     + _rs_fields_origin);
 
 static const string _rs_head_injection = (
-    "X-Ouinet-Version: 5\r\n"
+    "X-Ouinet-Version: 6\r\n"
     "X-Ouinet-URI: https://example.com/foo\r\n"
     "X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310\r\n"
     "X-Ouinet-BSigs: keyId=\"ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=\","
