@@ -40,7 +40,7 @@ namespace detail {
         sys::error_code ec;
         async_write_c(p, s, tc, y[ec]);
         if (tc && !c) ec = asio::error::timed_out;
-        assert(!c || ec = asio::error::operation_aborted);
+        assert(!c || ec == asio::error::operation_aborted);
         return or_throw(y, ec);
     }
 }

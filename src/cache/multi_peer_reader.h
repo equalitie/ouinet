@@ -39,7 +39,7 @@ public:
 
     ~MultiPeerReader();
 
-    asio::executor get_executor()
+    asio::executor get_executor() override
     {
         return _executor;
     }
