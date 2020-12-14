@@ -34,6 +34,11 @@ class ClientFrontEnd {
         = boost::intrusive::list_base_hook
             <boost::intrusive::link_mode
                 <boost::intrusive::auto_unlink>>;
+
+public:
+    // Absolute paths of allowed URLs.
+    inline static const std::string group_list_apath = "/groups.txt";
+
 public:
     using Request = http::request<http::string_body>;
     using Response = http::response<http::dynamic_body>;
@@ -94,6 +99,10 @@ private:
 
     void handle_ca_pem( const Request&, Response&, std::stringstream&
                       , const CACertificate& );
+
+    void handle_group_list( const Request&
+                          , Response&
+                          , std::stringstream&);
 
     void handle_portal( ClientConfig&
                       , const Request&
