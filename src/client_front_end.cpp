@@ -180,6 +180,19 @@ static void load_log_file(stringstream& out_ss) {
              , ostreambuf_iterator<char>(out_ss));
 }
 
+void ClientFrontEnd::handle_group_list( const Request&
+                                      , Response& res
+                                      , std::stringstream& ss
+                                      , cache::Client* cache_client)
+{
+    res.set(http::field::content_type, "text/plain");
+
+    if (!cache_client) return;
+
+    for (const auto& g : cache_client->get_announced_groups())
+        ss << g << std::endl;
+}
+
 void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , const Request& req, Response& res, stringstream& ss
                                   , cache::Client* cache_client
@@ -329,6 +342,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
                             "name=\"purge_cache\" "
                             "value=\"Purge cache now\"/>\n"
               "</form>\n";
+        ss << "<a href=\"" << group_list_apath << "\">See announced groups</a>\n";
     }
 
     ss << "    </body>\n"
@@ -451,6 +465,8 @@ Response ClientFrontEnd::serve( ClientConfig& config
     } else if (path == "/logfile.txt") {
         res.set(http::field::content_type, "text/plain");
         load_log_file(ss);
+    } else if (path == group_list_apath) {
+        handle_group_list(req, res, ss, cache_client);
     } else if (path == "/api/status") {
         sys::error_code e;
         handle_status( config, udp_port, upnps, reachability

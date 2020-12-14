@@ -514,6 +514,10 @@ struct Client::Impl {
         return *_newest_proto_seen;
     }
 
+    std::set<std::string> get_announced_groups() const {
+        return _dht_groups->groups();
+    }
+
     void set_log_level(log_level_t l) {
         cerr << "Setting cache/client Cache log level to " << l << "\n";
         _log_level = l;
@@ -606,6 +610,11 @@ void Client::local_purge( Cancel cancel
 unsigned Client::get_newest_proto_version() const
 {
     return _impl->get_newest_proto_version();
+}
+
+std::set<std::string> Client::get_announced_groups() const
+{
+    return _impl->get_announced_groups();
 }
 
 void Client::set_log_level(log_level_t l)
