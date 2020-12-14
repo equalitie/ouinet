@@ -329,8 +329,6 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
                               " (i.e. not older than %s).<br>\n")
               % max_age.total_seconds() % past_as_string(max_age));
 
-        ss << "<a href=\"" << group_list_apath << "\">See announced groups</a><br>\n";
-
         Cancel cancel;
         sys::error_code ec;
         auto local_size = cache_client->local_size(cancel, yield[ec]);
@@ -344,6 +342,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
                             "name=\"purge_cache\" "
                             "value=\"Purge cache now\"/>\n"
               "</form>\n";
+        ss << "<a href=\"" << group_list_apath << "\">See announced groups</a>\n";
     }
 
     ss << "    </body>\n"
