@@ -7,6 +7,7 @@
 #include "cache_entry.h"
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/filesystem.hpp>
+#include <set>
 
 namespace ouinet {
 
@@ -59,6 +60,10 @@ public:
     // (e.g. to warn about potential upgrades).
     unsigned get_newest_proto_version() const;
 
+    // Get all groups being announced to the distributed cache index
+    // by this client.
+    std::set<std::string> get_announced_groups() const;
+  
     ~Client();
 
     void        set_log_level(log_level_t);

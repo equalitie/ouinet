@@ -102,7 +102,8 @@ private:
 
     void handle_group_list( const Request&
                           , Response&
-                          , std::stringstream&);
+                          , std::stringstream&
+                          , cache::Client*);
 
     void handle_portal( ClientConfig&
                       , const Request&
