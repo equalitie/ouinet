@@ -88,6 +88,7 @@ public:
 private:
     bool _auto_refresh_enabled = true;
     bool _show_pending_tasks = false;
+    boost::optional<log_level_t> _log_level_no_file;
 
     std::unique_ptr<Input<log_level_t>> _log_level_input;
     std::unique_ptr<Input<log_level_t>> _cache_log_level_input;
@@ -121,6 +122,10 @@ private:
                       , std::stringstream&
                       , cache::Client*
                       , Yield);
+
+    // Enabling the log file also enables debugging temporarily.
+    void enable_log_to_file(const std::string& path);
+    void disable_log_to_file();
 };
 
 } // ouinet namespace

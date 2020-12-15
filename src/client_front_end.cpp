@@ -162,12 +162,21 @@ void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, stringstr
     ss << ca.pem_certificate();
 }
 
-static void enable_log_to_file(const std::string& path) {
+void ClientFrontEnd::enable_log_to_file(const std::string& path) {
+    if (!_log_level_no_file)   // not when changing active log file
+        _log_level_no_file = logger.get_threshold();
+    _log_level_input->current_value = DEBUG;
+    logger.set_threshold(DEBUG);
     logger.log_to_file(path);
 }
 
-static void disable_log_to_file() {
+void ClientFrontEnd::disable_log_to_file() {
     logger.log_to_file("");
+    if (_log_level_no_file) {
+        logger.set_threshold(*_log_level_no_file);
+        _log_level_input->current_value = *_log_level_no_file;
+        _log_level_no_file = boost::none;
+    }
 }
 
 static void load_log_file(stringstream& out_ss) {
@@ -204,6 +213,8 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
     if (_log_level_input->update(target)) {
         logger.set_threshold(_log_level_input->current_value);
+        if (logger.get_log_file() != nullptr)  // remember explicitly set level
+            _log_level_no_file = _log_level_input->current_value;
     }
 
     if (cache_client) {
