@@ -307,6 +307,10 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     ss << ToggleInput{"<u>I</u>njector proxy", "injector_access",'i', config.is_injector_access_enabled()};
     ss << ToggleInput{"Distributed <u>C</u>ache", "distributed_cache",  'c', config.is_cache_access_enabled()};
 
+    if (logger.get_log_file() != nullptr)
+        ss << "Logging debug output to file: " << as_safe_html(logger.current_log_file())
+           << " <a href=\"" << log_file_apath << "\" class=\"download\" download=\"ouinet-logfile.txt\">"
+           << "Download log file" << "</a><br>\n";
     ss << *_log_level_input;
 
     ss << "<br>\n";
@@ -473,7 +477,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
 
     if (path == "/ca.pem") {
         handle_ca_pem(req, res, ss, ca);
-    } else if (path == "/logfile.txt") {
+    } else if (path == log_file_apath) {
         res.set(http::field::content_type, "text/plain");
         load_log_file(ss);
     } else if (path == group_list_apath) {
