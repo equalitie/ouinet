@@ -307,11 +307,13 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     ss << ToggleInput{"<u>I</u>njector proxy", "injector_access",'i', config.is_injector_access_enabled()};
     ss << ToggleInput{"Distributed <u>C</u>ache", "distributed_cache",  'c', config.is_cache_access_enabled()};
 
-    if (logger.get_log_file() != nullptr)
+    ss << *_log_level_input;
+    bool log_file_enabled = logger.get_log_file() != nullptr;
+    ss << ToggleInput{"<u>L</u>og file", "logfile", 'l', log_file_enabled};
+    if (log_file_enabled)
         ss << "Logging debug output to file: " << as_safe_html(logger.current_log_file())
            << " <a href=\"" << log_file_apath << "\" class=\"download\" download=\"ouinet-logfile.txt\">"
            << "Download log file" << "</a><br>\n";
-    ss << *_log_level_input;
 
     ss << "<br>\n";
     ss << "Now: " << now_as_string()  << "<br>\n";
