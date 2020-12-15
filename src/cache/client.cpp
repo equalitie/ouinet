@@ -93,20 +93,18 @@ struct Client::Impl {
     GarbageCollector _gc;
     map<string, udp::endpoint> _peer_cache;
     util::LruCache<std::string, shared_ptr<DhtLookup>> _dht_lookups;
-    log_level_t _log_level = INFO;
     LocalPeerDiscovery _local_peer_discovery;
     std::unique_ptr<DhtGroups> _dht_groups;
 
 
-    bool log_debug() const { return _log_level <= DEBUG || logger.get_log_file(); }
-    bool log_info()  const { return _log_level <= INFO  || logger.get_log_file(); }
+    bool log_debug() const { return logger.get_threshold() <= DEBUG || logger.get_log_file(); }
+    bool log_info()  const { return logger.get_threshold() <= INFO  || logger.get_log_file(); }
 
     Impl( shared_ptr<bt::MainlineDht> dht_
         , util::Ed25519PublicKey& cache_pk
         , fs::path cache_dir
         , unique_ptr<cache::HttpStore> http_store_
-        , boost::posix_time::time_duration max_cached_age
-        , log_level_t log_level)
+        , boost::posix_time::time_duration max_cached_age)
         : _newest_proto_seen(std::make_shared<unsigned>(http_::protocol_version_current))
         , _ex(dht_->get_executor())
         , _dht(move(dht_))
@@ -116,12 +114,11 @@ struct Client::Impl {
         , _cache_dir(move(cache_dir))
         , _http_store(move(http_store_))
         , _max_cached_age(max_cached_age)
-        , _announcer(_dht, log_level)
+        , _announcer(_dht, logger.get_threshold())
         , _gc(*_http_store, [&] (auto rr, auto y) {
               return keep_cache_entry(move(rr), y);
           }, _ex)
         , _dht_lookups(256)
-        , _log_level(log_level)
         , _local_peer_discovery(_ex, _dht->local_endpoints())
     {}
 
@@ -517,14 +514,6 @@ struct Client::Impl {
     std::set<std::string> get_announced_groups() const {
         return _dht_groups->groups();
     }
-
-    void set_log_level(log_level_t l) {
-        cerr << "Setting cache/client Cache log level to " << l << "\n";
-        _log_level = l;
-        _announcer.set_log_level(l);
-    }
-
-    log_level_t get_log_level() const { return _log_level; }
 };
 
 /* static */
@@ -533,7 +522,6 @@ Client::build( shared_ptr<bt::MainlineDht> dht
              , util::Ed25519PublicKey cache_pk
              , fs::path cache_dir
              , boost::posix_time::time_duration max_cached_age
-             , log_level_t log_level
              , asio::yield_context yield)
 {
     using ClientPtr = unique_ptr<Client>;
@@ -559,8 +547,7 @@ Client::build( shared_ptr<bt::MainlineDht> dht
 
     unique_ptr<Impl> impl(new Impl( move(dht)
                                   , cache_pk, move(cache_dir)
-                                  , move(http_store), max_cached_age
-                                  , log_level));
+                                  , move(http_store), max_cached_age));
 
     impl->announce_stored_data(yield[ec]);
     if (ec) return or_throw<ClientPtr>(yield, ec);
@@ -615,16 +602,6 @@ unsigned Client::get_newest_proto_version() const
 std::set<std::string> Client::get_announced_groups() const
 {
     return _impl->get_announced_groups();
-}
-
-void Client::set_log_level(log_level_t l)
-{
-    _impl->set_log_level(l);
-}
-
-log_level_t Client::get_log_level() const
-{
-    return _impl->get_log_level();
 }
 
 Client::~Client()

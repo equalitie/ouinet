@@ -150,7 +150,6 @@ static ostream& operator<<(ostream& os, const ClientFrontEnd::Task& task) {
 
 ClientFrontEnd::ClientFrontEnd()
     : _log_level_input(new Input<log_level_t>("Log level", "loglevel", { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT }, logger.get_threshold()))
-    , _cache_log_level_input(new Input<log_level_t>("Bep5Http log level", "bep5_loglevel", { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT }, INFO))
 {}
 
 void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, stringstream& ss
@@ -215,13 +214,6 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         logger.set_threshold(_log_level_input->current_value);
         if (logger.get_log_file() != nullptr)  // remember explicitly set level
             _log_level_no_file = _log_level_input->current_value;
-    }
-
-    if (cache_client) {
-        _cache_log_level_input->current_value = cache_client->get_log_level();
-        if (_cache_log_level_input->update(target)) {
-            cache_client->set_log_level(_cache_log_level_input->current_value);
-        }
     }
 
     if (target.find('?') != string::npos) {
@@ -339,8 +331,6 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     }
 
     if (cache_client) {
-        ss << *_cache_log_level_input;
-
         auto max_age = config.max_cached_age();
         ss << ( boost::format("Content cached locally if newer than %d seconds"
                               " (i.e. not older than %s).<br>\n")

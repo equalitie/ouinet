@@ -2206,7 +2206,6 @@ void Client::State::setup_cache()
                                       , *_config.cache_http_pub_key()
                                       , _config.repo_root()/"bep5_http"
                                       , _config.max_cached_age()
-                                      , logger.get_threshold()
                                       , yield[ec]);
 
             if (cancel) ec = asio::error::operation_aborted;

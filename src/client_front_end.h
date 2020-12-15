@@ -92,7 +92,6 @@ private:
     boost::optional<log_level_t> _log_level_no_file;
 
     std::unique_ptr<Input<log_level_t>> _log_level_input;
-    std::unique_ptr<Input<log_level_t>> _cache_log_level_input;
 
     boost::intrusive::list
         < Task
