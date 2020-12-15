@@ -97,8 +97,7 @@ static const fs::path OUINET_CA_DH_FILE = "ssl-ca-dh.pem";
 static const auto rx_icase = boost::regex::normal | boost::regex::icase;
 
 static bool log_transactions() {
-    return logger.get_threshold() <= DEBUG
-        || logger.get_log_file() != nullptr;
+    return logger.get_threshold() <= DEBUG;
 }
 
 //------------------------------------------------------------------------------
