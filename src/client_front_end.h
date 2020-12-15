@@ -87,7 +87,7 @@ public:
     ~ClientFrontEnd();
 
 private:
-    bool _auto_refresh_enabled = true;
+    bool _auto_refresh_enabled = false;
     bool _show_pending_tasks = false;
     boost::optional<log_level_t> _log_level_no_file;
 
