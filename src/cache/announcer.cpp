@@ -311,10 +311,11 @@ struct Announcer::Loop {
         }
 
         sys::error_code ec;
+        auto e_key{ll.debug() ? e.key : ""};  // cancellation trashes the key
         dht->tracker_announce(e.infohash, boost::none, cancel, yield[ec]);
 
         if (ll.debug()) {
-            cerr << "Announcer: Announcing ended " << e.key << " ec:" << ec.message() << "\n";
+            cerr << "Announcer: Announcing ended " << e_key << " ec:" << ec.message() << "\n";
         }
 
         return or_throw(yield, ec);
