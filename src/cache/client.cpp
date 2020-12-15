@@ -114,7 +114,7 @@ struct Client::Impl {
         , _cache_dir(move(cache_dir))
         , _http_store(move(http_store_))
         , _max_cached_age(max_cached_age)
-        , _announcer(_dht, logger.get_threshold())
+        , _announcer(_dht)
         , _gc(*_http_store, [&] (auto rr, auto y) {
               return keep_cache_entry(move(rr), y);
           }, _ex)
