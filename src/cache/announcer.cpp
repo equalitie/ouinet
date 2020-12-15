@@ -252,7 +252,7 @@ struct Announcer::Loop {
         auto on_exit = defer([&] {
             if (ll.debug()) {
                 if (ll.debug()) cerr << "Announcer: exiting the loop "
-                                        "(cancel:" << (cancel ? "true":"false") << "\n";
+                                        "(cancel:" << (cancel ? "true":"false") << ")\n";
             }
         });
 
