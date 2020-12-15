@@ -97,8 +97,8 @@ struct Client::Impl {
     std::unique_ptr<DhtGroups> _dht_groups;
 
 
-    static bool log_debug() { return logger.get_threshold() <= DEBUG || logger.get_log_file(); }
-    static bool log_info() { return logger.get_threshold() <= INFO  || logger.get_log_file(); }
+    static bool log_debug() { return logger.get_threshold() <= DEBUG; }
+    static bool log_info() { return logger.get_threshold() <= INFO; }
 
     Impl( shared_ptr<bt::MainlineDht> dht_
         , util::Ed25519PublicKey& cache_pk
