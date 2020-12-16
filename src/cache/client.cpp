@@ -23,6 +23,13 @@
 #include <ctime>
 #include <map>
 
+#define _LOGPFX "cache/client: "
+#define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
+#define _INFO(...)  LOG_INFO(_LOGPFX, __VA_ARGS__)
+#define _WARN(...)  LOG_WARN(_LOGPFX, __VA_ARGS__)
+#define _ERROR(...) LOG_ERROR(_LOGPFX, __VA_ARGS__)
+#define _YDEBUG(y, ...) do { if (logger.get_threshold() <= DEBUG) y.log(DEBUG, __VA_ARGS__); } while (false)
+
 using namespace std;
 using namespace ouinet;
 using namespace ouinet::cache;
@@ -54,24 +61,24 @@ struct GarbageCollector {
             TRACK_HANDLER();
             Cancel cancel(_cancel);
 
-            LOG_DEBUG("cache/client: Garbage collector started");
+            _DEBUG("Garbage collector started");
             while (!cancel) {
                 sys::error_code ec;
                 async_sleep(_executor, chrono::minutes(7), cancel, yield[ec]);
                 if (cancel || ec) break;
 
-                LOG_DEBUG("cache/client: Collecting garbage...");
+                _DEBUG("Collecting garbage...");
                 http_store.for_each([&] (auto rr, auto y) {
                     sys::error_code e;
                     auto k = keep(std::move(rr), y[e]);
                     if (cancel) ec = asio::error::operation_aborted;
                     return or_throw(y, e, k);
                 }, cancel, yield[ec]);
-                if (ec) LOG_WARN("cache/client: Collecting garbage: failed"
-                                 " ec:", ec.message());
-                LOG_DEBUG("cache/client: Collecting garbage: done");
+                if (ec) _WARN("Collecting garbage: failed"
+                              " ec:", ec.message());
+                _DEBUG("Collecting garbage: done");
             }
-            LOG_DEBUG("cache/client: Garbage collector stopped");
+            _DEBUG("Garbage collector stopped");
         });
     }
 };
@@ -96,8 +103,6 @@ struct Client::Impl {
     LocalPeerDiscovery _local_peer_discovery;
     std::unique_ptr<DhtGroups> _dht_groups;
 
-
-    inline static bool log_debug() { return logger.get_threshold() <= DEBUG; }
 
     Impl( shared_ptr<bt::MainlineDht> dht_
         , util::Ed25519PublicKey& cache_pk
@@ -143,13 +148,9 @@ struct Client::Impl {
                     , Cancel& cancel
                     , Yield& yield)
     {
-        bool do_log = log_debug();
-
         sys::error_code ec;
 
-        if (do_log) {
-            yield.log("cache/client: start\n", req);
-        }
+        _YDEBUG(yield, "start\n", req);
 
         // Usually we would
         // (1) check that the request matches our protocol version, and
@@ -164,35 +165,25 @@ struct Client::Impl {
         auto req_proto = req[http_::protocol_version_hdr];
         if (!boost::regex_match( req_proto.begin(), req_proto.end()
                                , http_::protocol_version_rx)) {
-            if (do_log) {
-                yield.log("cache/client: Not a Ouinet request\n", req);
-            }
+            _YDEBUG(yield, "Not a Ouinet request\n", req);
             handle_bad_request(sink, req, yield[ec]);
             return or_throw(yield, ec, req.keep_alive());
         }
 
         auto key = key_from_http_req(req);
         if (!key) {
-            if (do_log) {
-                yield.log("cache/client: Cannot derive key from request\n", req);
-            }
+            _YDEBUG(yield, "Cannot derive key from request\n", req);
             handle_bad_request(sink, req, yield[ec]);
             return or_throw(yield, ec, req.keep_alive());
         }
 
-        if (do_log) {
-            yield.log("cache/client: Received request for ", *key);
-        }
+        _YDEBUG(yield, "Received request for ", *key);
 
         if (req.method() == http::verb::propfind) {
-            if (do_log) {
-                yield.log("cache/client: Serving propfind for ", *key);
-            }
+            _YDEBUG(yield, "Serving propfind for ", *key);
             auto hl = _http_store->load_hash_list(*key, cancel, yield[ec]);
 
-            if (do_log) {
-                yield.log("cache/client: load ec:\"", ec.message(), "\"");
-            }
+            _YDEBUG(yield, "load ec:\"", ec.message(), "\"");
             if (ec) {
                 ec = {};
                 handle_not_found(sink, req, yield[ec]);
@@ -200,9 +191,7 @@ struct Client::Impl {
             }
             return_or_throw_on_error(yield, cancel, ec, false);
             hl.write(sink, cancel, yield[ec].tag("write-propfind"));
-            if (do_log) {
-                yield.log("cache/client: write ec:\"", ec.message(), "\"");
-            }
+            _YDEBUG(yield, "write ec:\"", ec.message(), "\"");
             return or_throw(yield, ec, bool(!ec));
         }
 
@@ -218,16 +207,14 @@ struct Client::Impl {
         }
 
         if (ec) {
-            if (!cancel && do_log) {
-                yield.log("cache/client: Not Serving ", *key, " ec:", ec.message());
+            if (!cancel) {
+                _YDEBUG(yield, "Not Serving ", *key, " ec:", ec.message());
             }
             handle_not_found(sink, req, yield[ec]);
             return or_throw(yield, ec, req.keep_alive());
         }
 
-        if (do_log) {
-            yield.log("cache/client: Serving ", *key);
-        }
+        _YDEBUG(yield, "Serving ", *key);
 
         auto s = Session::create(move(rr), cancel, yield[ec].tag("read_header"));
 
@@ -256,7 +243,7 @@ struct Client::Impl {
                     , asio::yield_context yield)
     {
         // TODO: avoid overlapping with garbage collector
-        LOG_DEBUG("cache/client: Purging local cache...");
+        _DEBUG("Purging local cache...");
 
         sys::error_code ec;
         _http_store->for_each([&] (auto rr, auto y) {
@@ -272,12 +259,12 @@ struct Client::Impl {
             return false;  // remove all entries
         }, cancel, yield[ec]);
         if (ec) {
-            LOG_ERROR("cache/client: Purging local cache: failed"
-                      " ec:", ec.message());
+            _ERROR("Purging local cache: failed"
+                   " ec:", ec.message());
             return or_throw(yield, ec);
         }
 
-        LOG_DEBUG("cache/client: Purging local cache: done");
+        _DEBUG("Purging local cache: done");
     }
 
     void handle_http_error( GenericStream& con
@@ -324,21 +311,15 @@ struct Client::Impl {
     {
         Yield yield = yield_.tag("cache/client/load");
 
-        bool dbg = false;
-
-        if (log_debug()) dbg = true;
-
         namespace err = asio::error;
 
         sys::error_code ec;
 
-        if (dbg) {
-            yield.log("Requesting from the cache: ", key);
-        }
+        _YDEBUG(yield, "Requesting from the cache: ", key);
 
         {
             auto rs = load_from_local(key, cancel, yield[ec]);
-            if (dbg) yield.log("looking up local cache ec:", ec.message());
+            _YDEBUG(yield, "looking up local cache ec:", ec.message());
             if (ec == err::operation_aborted) return or_throw<Session>(yield, ec);
             // TODO: Check its age, store it if it's too old but keep trying
             // other peers.
@@ -348,7 +329,9 @@ struct Client::Impl {
         }
 
         string debug_tag;
-        if (dbg) { debug_tag = yield.tag() + "/multi_peer_reader"; };
+        if (logger.get_threshold() <= DEBUG) {
+            debug_tag = yield.tag() + "/multi_peer_reader";
+        };
 
         auto reader = std::make_unique<MultiPeerReader>
             ( _ex
@@ -455,25 +438,25 @@ struct Client::Impl {
         if (ec) return or_throw<bool>(yield, ec);
 
         if (hdr[http_::protocol_version_hdr] != http_::protocol_version_hdr_current) {
-            LOG_WARN( "cache/client: Cached response contains an invalid "
-                    , http_::protocol_version_hdr
-                    , " header field; removing");
+            _WARN( "Cached response contains an invalid "
+                 , http_::protocol_version_hdr
+                 , " header field; removing");
             return false;
         }
 
         auto key = hdr[http_::response_uri_hdr];
         if (key.empty()) {
-            LOG_WARN( "cache/client: Cached response does not contain a "
-                    , http_::response_uri_hdr
-                    , " header field; removing");
+            _WARN( "Cached response does not contain a "
+                 , http_::response_uri_hdr
+                 , " header field; removing");
             return false;
         }
 
         auto age = cache_entry_age(hdr);
         if (age > _max_cached_age) {
-            LOG_DEBUG( "cache/client: Cached response is too old; removing: "
-                     , age, " > ", _max_cached_age
-                     , "; uri=", key );
+            _DEBUG( "Cached response is too old; removing: "
+                  , age, " > ", _max_cached_age
+                  , "; uri=", key );
             unpublish_cache_entry(key.to_string());
             return false;
         }
@@ -531,10 +514,10 @@ Client::build( shared_ptr<bt::MainlineDht> dht
     for (const auto& dirn : {"data", "data-v1", "data-v2"}) {
         auto old_store_dir = cache_dir / dirn;
         if (!is_directory(old_store_dir)) continue;
-        LOG_INFO("Removing obsolete HTTP store...");
+        _INFO("Removing obsolete HTTP store...");
         fs::remove_all(old_store_dir, ec);
-        if (ec) LOG_ERROR("Removing obsolete HTTP store: failed; ec:", ec.message());
-        else LOG_INFO("Removing obsolete HTTP store: done");
+        if (ec) _ERROR("Removing obsolete HTTP store: failed; ec:", ec.message());
+        else _INFO("Removing obsolete HTTP store: done");
         ec = {};
     }
 
