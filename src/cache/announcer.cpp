@@ -61,7 +61,7 @@ struct Announcer::Loop {
         , entries(ex)
     { }
 
-    static bool debug() { return logger.get_threshold() <= DEBUG; }
+    inline static bool debug() { return logger.get_threshold() <= DEBUG; }
 
     Entries::iterator find_entry_by_key(const Key& key) {
         for (auto i = entries.begin(); i != entries.end(); ++i) {
