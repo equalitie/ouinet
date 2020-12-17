@@ -63,7 +63,7 @@ struct HandlerTracker::GlobalState {
             {
                 lock_guard guard(mutex);
                 if (list.empty()) {
-                    LOG_INFO("HandlerTracker: Done waiting for tracked coroutines");
+                    LOG_DEBUG("HandlerTracker: Done waiting for tracked coroutines");
                 } else {
                     LOG_WARN("HandlerTracker: Done waiting for tracked coroutines, "
                              "but some coroutines are still running:");
@@ -116,7 +116,7 @@ HandlerTracker::~HandlerTracker() {
         if (g.state == State::stopped) {
             LOG_DEBUG("HandlerTracker: stopped ", _name);
         } else {
-            LOG_INFO("HandlerTracker: stopped ", _name);
+            LOG_WARN("HandlerTracker: stopped ", _name);
         }
     }
 }
