@@ -382,9 +382,6 @@ void Bep5Client::start(asio::yield_context)
         _injector_pinger.reset(new InjectorPinger(_injector_swarm, _helpers_swarm_name, _dht, _cancel));
     }
 
-    if (logger.get_threshold() > DEBUG)
-        return;
-
     TRACK_SPAWN(get_executor(),
                 [=] (asio::yield_context yield) {
         sys::error_code ec;
@@ -419,14 +416,17 @@ void Bep5Client::status_loop(asio::yield_context yield)
     }
 
     while (!cancel) {
+        ec = {};
+        async_sleep(get_executor(), 1min, cancel, yield[ec]);
+
+        if (ec || cancel || logger.get_threshold() > DEBUG)
+            continue;
+
         auto inj_n = _injector_swarm->peers().size();
         auto hlp_n = _helpers_swarm ? _helpers_swarm->peers().size() : 0;
         logger.debug(util::str(
             "Bep5Client: swarm status:",
             " injectors=", inj_n, " bridges=", hlp_n));
-
-        ec = {};
-        async_sleep(get_executor(), 1min, cancel, yield[ec]);
     }
 }
 

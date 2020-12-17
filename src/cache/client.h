@@ -1,6 +1,5 @@
 #pragma once
 
-#include "../../logger.h"
 #include "../../response_reader.h"
 #include "../../util/crypto.h"
 #include "../../util/yield.h"
@@ -29,7 +28,6 @@ public:
          , util::Ed25519PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age
-         , log_level_t
          , asio::yield_context);
 
     // This may add a response source header.
@@ -65,9 +63,6 @@ public:
     std::set<std::string> get_announced_groups() const;
   
     ~Client();
-
-    void        set_log_level(log_level_t);
-    log_level_t get_log_level() const;
 
 private:
     Client(std::unique_ptr<Impl>);

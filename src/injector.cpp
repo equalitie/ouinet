@@ -10,7 +10,6 @@
 #include <boost/uuid/uuid_io.hpp>
 #include <chrono>
 #include <ctime>
-#include <iostream>
 #include <fstream>
 #include <string>
 
@@ -561,7 +560,7 @@ void listen( InjectorConfig& config
     sys::error_code ec;
     proxy_server.start_listen(yield[ec]);
     if (ec) {
-        std::cerr << "Failed to setup ouiservice proxy server: " << ec.message() << endl;
+        LOG_ERROR("Failed to setup ouiservice proxy server: ", ec.message());
         return;
     }
 
@@ -629,7 +628,7 @@ int main(int argc, const char* argv[])
         config = InjectorConfig(argc, argv);
     }
     catch(const exception& e) {
-        cerr << e.what() << endl;
+        LOG_ABORT(e.what());
         return 1;
     }
 

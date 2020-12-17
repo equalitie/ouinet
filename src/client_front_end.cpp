@@ -150,7 +150,6 @@ static ostream& operator<<(ostream& os, const ClientFrontEnd::Task& task) {
 
 ClientFrontEnd::ClientFrontEnd()
     : _log_level_input(new Input<log_level_t>("Log level", "loglevel", { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT }, logger.get_threshold()))
-    , _cache_log_level_input(new Input<log_level_t>("Bep5Http log level", "bep5_loglevel", { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT }, INFO))
 {}
 
 void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, stringstream& ss
@@ -162,12 +161,21 @@ void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, stringstr
     ss << ca.pem_certificate();
 }
 
-static void enable_log_to_file(const std::string& path) {
+void ClientFrontEnd::enable_log_to_file(const std::string& path) {
+    if (!_log_level_no_file)   // not when changing active log file
+        _log_level_no_file = logger.get_threshold();
+    _log_level_input->current_value = DEBUG;
+    logger.set_threshold(DEBUG);
     logger.log_to_file(path);
 }
 
-static void disable_log_to_file() {
+void ClientFrontEnd::disable_log_to_file() {
     logger.log_to_file("");
+    if (_log_level_no_file) {
+        logger.set_threshold(*_log_level_no_file);
+        _log_level_input->current_value = *_log_level_no_file;
+        _log_level_no_file = boost::none;
+    }
 }
 
 static void load_log_file(stringstream& out_ss) {
@@ -204,13 +212,8 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
     if (_log_level_input->update(target)) {
         logger.set_threshold(_log_level_input->current_value);
-    }
-
-    if (cache_client) {
-        _cache_log_level_input->current_value = cache_client->get_log_level();
-        if (_cache_log_level_input->update(target)) {
-            cache_client->set_log_level(_cache_log_level_input->current_value);
-        }
+        if (logger.get_log_file() != nullptr)  // remember explicitly set level
+            _log_level_no_file = _log_level_input->current_value;
     }
 
     if (target.find('?') != string::npos) {
@@ -297,6 +300,12 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     ss << ToggleInput{"Distributed <u>C</u>ache", "distributed_cache",  'c', config.is_cache_access_enabled()};
 
     ss << *_log_level_input;
+    bool log_file_enabled = logger.get_log_file() != nullptr;
+    ss << ToggleInput{"<u>L</u>og file", "logfile", 'l', log_file_enabled};
+    if (log_file_enabled)
+        ss << "Logging debug output to file: " << as_safe_html(logger.current_log_file())
+           << " <a href=\"" << log_file_apath << "\" class=\"download\" download=\"ouinet-logfile.txt\">"
+           << "Download log file" << "</a><br>\n";
 
     ss << "<br>\n";
     ss << "Now: " << now_as_string()  << "<br>\n";
@@ -322,8 +331,6 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     }
 
     if (cache_client) {
-        ss << *_cache_log_level_input;
-
         auto max_age = config.max_cached_age();
         ss << ( boost::format("Content cached locally if newer than %d seconds"
                               " (i.e. not older than %s).<br>\n")
@@ -462,7 +469,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
 
     if (path == "/ca.pem") {
         handle_ca_pem(req, res, ss, ca);
-    } else if (path == "/logfile.txt") {
+    } else if (path == log_file_apath) {
         res.set(http::field::content_type, "text/plain");
         load_log_file(ss);
     } else if (path == group_list_apath) {

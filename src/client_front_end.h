@@ -37,6 +37,7 @@ class ClientFrontEnd {
 
 public:
     // Absolute paths of allowed URLs.
+    inline static const std::string log_file_apath = "/logfile.txt";
     inline static const std::string group_list_apath = "/groups.txt";
 
 public:
@@ -86,11 +87,11 @@ public:
     ~ClientFrontEnd();
 
 private:
-    bool _auto_refresh_enabled = true;
+    bool _auto_refresh_enabled = false;
     bool _show_pending_tasks = false;
+    boost::optional<log_level_t> _log_level_no_file;
 
     std::unique_ptr<Input<log_level_t>> _log_level_input;
-    std::unique_ptr<Input<log_level_t>> _cache_log_level_input;
 
     boost::intrusive::list
         < Task
@@ -121,6 +122,10 @@ private:
                       , std::stringstream&
                       , cache::Client*
                       , Yield);
+
+    // Enabling the log file also enables debugging temporarily.
+    void enable_log_to_file(const std::string& path);
+    void disable_log_to_file();
 };
 
 } // ouinet namespace

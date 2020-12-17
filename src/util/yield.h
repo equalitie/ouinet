@@ -158,6 +158,12 @@ public:
         }
     }
 
+    // Log for the given level, when enabled.
+    template<class... Args>
+    void log(log_level_t, Args&&...);
+    void log(log_level_t, boost::string_view);
+
+    // These log at INFO level, when enabled, for backwards compatibility.
     template<class... Args>
     void log(Args&&...);
     void log(boost::string_view);
@@ -246,18 +252,40 @@ template<class... Args>
 inline
 void Yield::log(Args&&... args)
 {
-    Yield::log(boost::string_view(util::str(std::forward<Args>(args)...)));
+    if (logger.get_threshold() > INFO)
+        return;  // avoid string conversion early
+
+    Yield::log(INFO, boost::string_view(util::str(std::forward<Args>(args)...)));
 }
 
 inline
 void Yield::log(boost::string_view str)
 {
+    Yield::log(INFO, str);
+}
+
+template<class... Args>
+inline
+void Yield::log(log_level_t log_level, Args&&... args)
+{
+    if (logger.get_threshold() > log_level)
+        return;  // avoid string conversion early
+
+    Yield::log(log_level, boost::string_view(util::str(std::forward<Args>(args)...)));
+}
+
+inline
+void Yield::log(log_level_t log_level, boost::string_view str)
+{
     using boost::string_view;
+
+    if (logger.get_threshold() > log_level)
+        return;
 
     while (str.size()) {
         auto endl = str.find('\n');
 
-        LOG_INFO(tag(), " ", str.substr(0, endl));
+        logger.log(log_level, util::str(tag(), " ", str.substr(0, endl)));
 
         if (endl == std::string::npos) {
             break;

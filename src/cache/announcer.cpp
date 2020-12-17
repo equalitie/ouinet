@@ -1,4 +1,5 @@
 #include <list>
+#include <sstream>
 #include "announcer.h"
 #include "../../util/async_queue.h"
 #include "../../logger.h"
@@ -6,6 +7,9 @@
 #include "../../bittorrent/node_id.h"
 #include "../../util/handler_tracker.h"
 #include <boost/utility/string_view.hpp>
+
+#define _LOGPFX "Announcer: "
+#define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
 
 using namespace std;
 using namespace ouinet;
@@ -15,19 +19,6 @@ using namespace chrono_literals;
 
 namespace bt = bittorrent;
 using Clock = chrono::steady_clock;
-
-struct LogLevel {
-    LogLevel(log_level_t ll)
-        : _ll(make_shared<log_level_t>(ll))
-    {}
-
-    bool debug() const {
-        return (*_ll <= DEBUG)
-            || (logger.get_log_file() != nullptr);
-    }
-
-    std::shared_ptr<log_level_t> _ll;
-};
 
 //--------------------------------------------------------------------
 // Entry
@@ -64,19 +55,17 @@ struct Announcer::Loop {
     Entries entries;
     Cancel _cancel;
     Cancel _timer_cancel;
-    LogLevel _log_level;
-
-    void set_log_level(log_level_t l) { *_log_level._ll = l; }
 
     static Clock::duration success_reannounce_period() { return 20min; }
     static Clock::duration failure_reannounce_period() { return 5min;  }
 
-    Loop(shared_ptr<bt::MainlineDht> dht, log_level_t log_level)
+    Loop(shared_ptr<bt::MainlineDht> dht)
         : ex(dht->get_executor())
         , dht(move(dht))
         , entries(ex)
-        , _log_level(log_level)
     { }
+
+    inline static bool debug() { return logger.get_threshold() <= DEBUG; }
 
     Entries::iterator find_entry_by_key(const Key& key) {
         for (auto i = entries.begin(); i != entries.end(); ++i) {
@@ -89,13 +78,11 @@ struct Announcer::Loop {
         auto entry_i = find_entry_by_key(key);
         bool already_has_key = (entry_i != entries.end());
 
-        if (_log_level.debug()) {
-            if (already_has_key) {
-                std::cerr << "Announcer: adding " << key << " (already exists)\n";
-                entry_i->first.to_remove = false;
-            } else {
-                std::cerr << "Announcer: adding " << key << "\n";
-            }
+        if (already_has_key) {
+            _DEBUG("adding ", key, " (already exists)");
+            entry_i->first.to_remove = false;
+        } else {
+            _DEBUG("adding ", key);
         }
 
         if (already_has_key) return;
@@ -121,9 +108,7 @@ struct Announcer::Loop {
             if (i->first.key == key) break;  // found
         if (i == entries.end()) return;  // not found
 
-        if (_log_level.debug()) {
-            std::cerr << "Announcer: marking " << key << " for removal\n";
-        }
+        _DEBUG("marking ", key, " for removal");
         // The actual removal is not done here but in the main loop.
         i->first.to_remove = true;
         // No new entries, so no `_timer_cancel` reset.
@@ -152,9 +137,10 @@ struct Announcer::Loop {
 
     void print_entries() const {
         auto now = Clock::now();
+        stringstream ss;
         auto print = [&] (Clock::time_point t) {
             if (t == Clock::time_point()) {
-                cerr << "--:--:--";
+                ss << "--:--:--";
             }
             else {
                 // TODO: For the purpose of analyzing logs, it would be better
@@ -166,31 +152,31 @@ struct Announcer::Loop {
                 unsigned mins = secs / 60;
                 secs -= mins * 60;
 
-                cerr << std::setfill('0') << std::setw(2) << hrs;
-                cerr << ':';
-                cerr << std::setfill('0') << std::setw(2) << mins;
-                cerr << ':';
-                cerr << std::setfill('0') << std::setw(2) << secs;
+                ss << std::setfill('0') << std::setw(2) << hrs;
+                ss << ':';
+                ss << std::setfill('0') << std::setw(2) << mins;
+                ss << ':';
+                ss << std::setfill('0') << std::setw(2) << secs;
             }
-            cerr << " ago";
+            ss << " ago";
         };
 
-        cerr << "Announcer: entries:" << "\n";
+        _DEBUG("entries:");
         for (auto& ep : entries) {
             auto& e = ep.first;
-            cerr << "Announcer:  " << e.infohash << " | successful_update:";
+            ss << " " << e.infohash << " | successful_update:";
             print(e.successful_update);
-            cerr << " | failed_update:";
+            ss << " | failed_update:";
             print(e.failed_update);
-            cerr << " | key:" << e.key << "\n";
+            ss << " | key:" << e.key;
+
+            _DEBUG(ss.str());
+            ss.str({});
         }
     }
 
     Entries::iterator pick_entry(Cancel& cancel, asio::yield_context yield)
-    {
-        LogLevel ll = _log_level;
-
-        auto end = entries.end();
+    {        auto end = entries.end();
 
         while (!cancel) {
             if (entries.empty()) {
@@ -198,9 +184,7 @@ struct Announcer::Loop {
                 // fails to exit.
                 TRACK_HANDLER();
                 sys::error_code ec;
-                if (ll.debug()) {
-                    std::cerr << "Announcer: no entries to update, waiting...\n";
-                }
+                _DEBUG("no entries to update, waiting...");
                 entries.async_wait_for_push(cancel, yield[ec]);
                 if (cancel) ec = asio::error::operation_aborted;
                 if (ec) return or_throw(yield, ec, end);
@@ -212,11 +196,9 @@ struct Announcer::Loop {
 
             auto d = next_update_after(i->first);
 
-            if (ll.debug()) {
-                std::cerr << "Announcer: found entry to update. It'll be updated in "
-                          << chrono::duration_cast<chrono::seconds>(d).count()
-                          << " seconds; " << i->first.key << "\n";
-            }
+            _DEBUG( "found entry to update. It'll be updated in "
+                  , chrono::duration_cast<chrono::seconds>(d).count()
+                  , " seconds; ", i->first.key);
 
             if (d == 0s) return i;
 
@@ -238,27 +220,22 @@ struct Announcer::Loop {
 
     void loop(Cancel& cancel, asio::yield_context yield)
     {
-        LogLevel ll = _log_level;
-
         {
             // XXX: Temporary handler tracking as this coroutine sometimes
             // fails to exit.
             TRACK_HANDLER();
             sys::error_code ec;
-            if (ll.debug()) cerr << "Announcer: waiting for DHT\n";
+            _DEBUG("waiting for DHT");
             dht->wait_all_ready(cancel, yield[ec]);
         }
 
         auto on_exit = defer([&] {
-            if (ll.debug()) {
-                if (ll.debug()) cerr << "Announcer: exiting the loop "
-                                        "(cancel:" << (cancel ? "true":"false") << "\n";
-            }
+            _DEBUG("exiting the loop (cancel:", (cancel ? "true":"false"), ")");
         });
 
         while (!cancel) {
             sys::error_code ec;
-            if (ll.debug()) cerr << "Announcer: picking entry to update\n";
+            _DEBUG("picking entry to update");
             auto ei = pick_entry(cancel, yield[ec]);
 
             if (cancel) return;
@@ -296,7 +273,7 @@ struct Announcer::Loop {
             entries.erase(ei);
             if (!e.to_remove) entries.push_back(move(e));
 
-            if (ll.debug()) { print_entries(); }
+            if (debug()) { print_entries(); }
         }
 
         return or_throw(yield, asio::error::operation_aborted);
@@ -304,18 +281,13 @@ struct Announcer::Loop {
 
     void announce(Entry& e, Cancel& cancel, asio::yield_context yield)
     {
-        auto ll = _log_level;
-
-        if (ll.debug()) {
-            cerr << "Announcer: Announcing " << e.key << "\n";
-        }
+        _DEBUG("Announcing ", e.key);
 
         sys::error_code ec;
+        auto e_key{debug() ? e.key : ""};  // cancellation trashes the key
         dht->tracker_announce(e.infohash, boost::none, cancel, yield[ec]);
 
-        if (ll.debug()) {
-            cerr << "Announcer: Announcing ended " << e.key << " ec:" << ec.message() << "\n";
-        }
+        _DEBUG("Announcing ended ", e_key, " ec:", ec.message());
 
         return or_throw(yield, ec);
     }
@@ -325,9 +297,8 @@ struct Announcer::Loop {
 
 //--------------------------------------------------------------------
 // Announcer
-Announcer::Announcer( std::shared_ptr<bittorrent::MainlineDht> dht
-                    , log_level_t log_level)
-    : _loop(new Loop(std::move(dht), log_level))
+Announcer::Announcer(std::shared_ptr<bittorrent::MainlineDht> dht)
+    : _loop(new Loop(std::move(dht)))
 {
     _loop->start();
 }
@@ -339,11 +310,6 @@ void Announcer::add(Key key)
 
 void Announcer::remove(const Key& key) {
     _loop->remove(key);
-}
-
-void Announcer::set_log_level(log_level_t l)
-{
-    _loop->set_log_level(l);
 }
 
 Announcer::~Announcer() {}

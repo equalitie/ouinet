@@ -23,6 +23,13 @@
 #include <ctime>
 #include <map>
 
+#define _LOGPFX "cache/client: "
+#define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
+#define _INFO(...)  LOG_INFO(_LOGPFX, __VA_ARGS__)
+#define _WARN(...)  LOG_WARN(_LOGPFX, __VA_ARGS__)
+#define _ERROR(...) LOG_ERROR(_LOGPFX, __VA_ARGS__)
+#define _YDEBUG(y, ...) do { if (logger.get_threshold() <= DEBUG) y.log(DEBUG, __VA_ARGS__); } while (false)
+
 using namespace std;
 using namespace ouinet;
 using namespace ouinet::cache;
@@ -54,24 +61,24 @@ struct GarbageCollector {
             TRACK_HANDLER();
             Cancel cancel(_cancel);
 
-            LOG_DEBUG("cache/client: Garbage collector started");
+            _DEBUG("Garbage collector started");
             while (!cancel) {
                 sys::error_code ec;
                 async_sleep(_executor, chrono::minutes(7), cancel, yield[ec]);
                 if (cancel || ec) break;
 
-                LOG_DEBUG("cache/client: Collecting garbage...");
+                _DEBUG("Collecting garbage...");
                 http_store.for_each([&] (auto rr, auto y) {
                     sys::error_code e;
                     auto k = keep(std::move(rr), y[e]);
                     if (cancel) ec = asio::error::operation_aborted;
                     return or_throw(y, e, k);
                 }, cancel, yield[ec]);
-                if (ec) LOG_WARN("cache/client: Collecting garbage: failed"
-                                 " ec:", ec.message());
-                LOG_DEBUG("cache/client: Collecting garbage: done");
+                if (ec) _WARN("Collecting garbage: failed"
+                              " ec:", ec.message());
+                _DEBUG("Collecting garbage: done");
             }
-            LOG_DEBUG("cache/client: Garbage collector stopped");
+            _DEBUG("Garbage collector stopped");
         });
     }
 };
@@ -93,20 +100,15 @@ struct Client::Impl {
     GarbageCollector _gc;
     map<string, udp::endpoint> _peer_cache;
     util::LruCache<std::string, shared_ptr<DhtLookup>> _dht_lookups;
-    log_level_t _log_level = INFO;
     LocalPeerDiscovery _local_peer_discovery;
     std::unique_ptr<DhtGroups> _dht_groups;
 
-
-    bool log_debug() const { return _log_level <= DEBUG || logger.get_log_file(); }
-    bool log_info()  const { return _log_level <= INFO  || logger.get_log_file(); }
 
     Impl( shared_ptr<bt::MainlineDht> dht_
         , util::Ed25519PublicKey& cache_pk
         , fs::path cache_dir
         , unique_ptr<cache::HttpStore> http_store_
-        , boost::posix_time::time_duration max_cached_age
-        , log_level_t log_level)
+        , boost::posix_time::time_duration max_cached_age)
         : _newest_proto_seen(std::make_shared<unsigned>(http_::protocol_version_current))
         , _ex(dht_->get_executor())
         , _dht(move(dht_))
@@ -116,12 +118,11 @@ struct Client::Impl {
         , _cache_dir(move(cache_dir))
         , _http_store(move(http_store_))
         , _max_cached_age(max_cached_age)
-        , _announcer(_dht, log_level)
+        , _announcer(_dht)
         , _gc(*_http_store, [&] (auto rr, auto y) {
               return keep_cache_entry(move(rr), y);
           }, _ex)
         , _dht_lookups(256)
-        , _log_level(log_level)
         , _local_peer_discovery(_ex, _dht->local_endpoints())
     {}
 
@@ -147,13 +148,9 @@ struct Client::Impl {
                     , Cancel& cancel
                     , Yield& yield)
     {
-        bool do_log = log_debug();
-
         sys::error_code ec;
 
-        if (do_log) {
-            yield.log("cache/client: start\n", req);
-        }
+        _YDEBUG(yield, "start\n", req);
 
         // Usually we would
         // (1) check that the request matches our protocol version, and
@@ -168,35 +165,25 @@ struct Client::Impl {
         auto req_proto = req[http_::protocol_version_hdr];
         if (!boost::regex_match( req_proto.begin(), req_proto.end()
                                , http_::protocol_version_rx)) {
-            if (do_log) {
-                yield.log("cache/client: Not a Ouinet request\n", req);
-            }
+            _YDEBUG(yield, "Not a Ouinet request\n", req);
             handle_bad_request(sink, req, yield[ec]);
             return or_throw(yield, ec, req.keep_alive());
         }
 
         auto key = key_from_http_req(req);
         if (!key) {
-            if (do_log) {
-                yield.log("cache/client: Cannot derive key from request\n", req);
-            }
+            _YDEBUG(yield, "Cannot derive key from request\n", req);
             handle_bad_request(sink, req, yield[ec]);
             return or_throw(yield, ec, req.keep_alive());
         }
 
-        if (do_log) {
-            yield.log("cache/client: Received request for ", *key);
-        }
+        _YDEBUG(yield, "Received request for ", *key);
 
         if (req.method() == http::verb::propfind) {
-            if (do_log) {
-                yield.log("cache/client: Serving propfind for ", *key);
-            }
+            _YDEBUG(yield, "Serving propfind for ", *key);
             auto hl = _http_store->load_hash_list(*key, cancel, yield[ec]);
 
-            if (do_log) {
-                yield.log("cache/client: load ec:\"", ec.message(), "\"");
-            }
+            _YDEBUG(yield, "load ec:\"", ec.message(), "\"");
             if (ec) {
                 ec = {};
                 handle_not_found(sink, req, yield[ec]);
@@ -204,9 +191,7 @@ struct Client::Impl {
             }
             return_or_throw_on_error(yield, cancel, ec, false);
             hl.write(sink, cancel, yield[ec].tag("write-propfind"));
-            if (do_log) {
-                yield.log("cache/client: write ec:\"", ec.message(), "\"");
-            }
+            _YDEBUG(yield, "write ec:\"", ec.message(), "\"");
             return or_throw(yield, ec, bool(!ec));
         }
 
@@ -222,16 +207,14 @@ struct Client::Impl {
         }
 
         if (ec) {
-            if (!cancel && do_log) {
-                yield.log("cache/client: Not Serving ", *key, " ec:", ec.message());
+            if (!cancel) {
+                _YDEBUG(yield, "Not Serving ", *key, " ec:", ec.message());
             }
             handle_not_found(sink, req, yield[ec]);
             return or_throw(yield, ec, req.keep_alive());
         }
 
-        if (do_log) {
-            yield.log("cache/client: Serving ", *key);
-        }
+        _YDEBUG(yield, "Serving ", *key);
 
         auto s = Session::create(move(rr), cancel, yield[ec].tag("read_header"));
 
@@ -260,7 +243,7 @@ struct Client::Impl {
                     , asio::yield_context yield)
     {
         // TODO: avoid overlapping with garbage collector
-        LOG_DEBUG("cache/client: Purging local cache...");
+        _DEBUG("Purging local cache...");
 
         sys::error_code ec;
         _http_store->for_each([&] (auto rr, auto y) {
@@ -276,12 +259,12 @@ struct Client::Impl {
             return false;  // remove all entries
         }, cancel, yield[ec]);
         if (ec) {
-            LOG_ERROR("cache/client: Purging local cache: failed"
-                      " ec:", ec.message());
+            _ERROR("Purging local cache: failed"
+                   " ec:", ec.message());
             return or_throw(yield, ec);
         }
 
-        LOG_DEBUG("cache/client: Purging local cache: done");
+        _DEBUG("Purging local cache: done");
     }
 
     void handle_http_error( GenericStream& con
@@ -328,21 +311,15 @@ struct Client::Impl {
     {
         Yield yield = yield_.tag("cache/client/load");
 
-        bool dbg = false;
-
-        if (log_debug()) dbg = true;
-
         namespace err = asio::error;
 
         sys::error_code ec;
 
-        if (dbg) {
-            yield.log("Requesting from the cache: ", key);
-        }
+        _YDEBUG(yield, "Requesting from the cache: ", key);
 
         {
             auto rs = load_from_local(key, cancel, yield[ec]);
-            if (dbg) yield.log("looking up local cache ec:", ec.message());
+            _YDEBUG(yield, "looking up local cache ec:", ec.message());
             if (ec == err::operation_aborted) return or_throw<Session>(yield, ec);
             // TODO: Check its age, store it if it's too old but keep trying
             // other peers.
@@ -352,7 +329,9 @@ struct Client::Impl {
         }
 
         string debug_tag;
-        if (dbg) { debug_tag = yield.tag() + "/multi_peer_reader"; };
+        if (logger.get_threshold() <= DEBUG) {
+            debug_tag = yield.tag() + "/multi_peer_reader";
+        };
 
         auto reader = std::make_unique<MultiPeerReader>
             ( _ex
@@ -459,25 +438,25 @@ struct Client::Impl {
         if (ec) return or_throw<bool>(yield, ec);
 
         if (hdr[http_::protocol_version_hdr] != http_::protocol_version_hdr_current) {
-            LOG_WARN( "cache/client: Cached response contains an invalid "
-                    , http_::protocol_version_hdr
-                    , " header field; removing");
+            _WARN( "Cached response contains an invalid "
+                 , http_::protocol_version_hdr
+                 , " header field; removing");
             return false;
         }
 
         auto key = hdr[http_::response_uri_hdr];
         if (key.empty()) {
-            LOG_WARN( "cache/client: Cached response does not contain a "
-                    , http_::response_uri_hdr
-                    , " header field; removing");
+            _WARN( "Cached response does not contain a "
+                 , http_::response_uri_hdr
+                 , " header field; removing");
             return false;
         }
 
         auto age = cache_entry_age(hdr);
         if (age > _max_cached_age) {
-            LOG_DEBUG( "cache/client: Cached response is too old; removing: "
-                     , age, " > ", _max_cached_age
-                     , "; uri=", key );
+            _DEBUG( "Cached response is too old; removing: "
+                  , age, " > ", _max_cached_age
+                  , "; uri=", key );
             unpublish_cache_entry(key.to_string());
             return false;
         }
@@ -517,14 +496,6 @@ struct Client::Impl {
     std::set<std::string> get_announced_groups() const {
         return _dht_groups->groups();
     }
-
-    void set_log_level(log_level_t l) {
-        cerr << "Setting cache/client Cache log level to " << l << "\n";
-        _log_level = l;
-        _announcer.set_log_level(l);
-    }
-
-    log_level_t get_log_level() const { return _log_level; }
 };
 
 /* static */
@@ -533,7 +504,6 @@ Client::build( shared_ptr<bt::MainlineDht> dht
              , util::Ed25519PublicKey cache_pk
              , fs::path cache_dir
              , boost::posix_time::time_duration max_cached_age
-             , log_level_t log_level
              , asio::yield_context yield)
 {
     using ClientPtr = unique_ptr<Client>;
@@ -544,10 +514,10 @@ Client::build( shared_ptr<bt::MainlineDht> dht
     for (const auto& dirn : {"data", "data-v1", "data-v2"}) {
         auto old_store_dir = cache_dir / dirn;
         if (!is_directory(old_store_dir)) continue;
-        LOG_INFO("Removing obsolete HTTP store...");
+        _INFO("Removing obsolete HTTP store...");
         fs::remove_all(old_store_dir, ec);
-        if (ec) LOG_ERROR("Removing obsolete HTTP store: failed; ec:", ec.message());
-        else LOG_INFO("Removing obsolete HTTP store: done");
+        if (ec) _ERROR("Removing obsolete HTTP store: failed; ec:", ec.message());
+        else _INFO("Removing obsolete HTTP store: done");
         ec = {};
     }
 
@@ -559,8 +529,7 @@ Client::build( shared_ptr<bt::MainlineDht> dht
 
     unique_ptr<Impl> impl(new Impl( move(dht)
                                   , cache_pk, move(cache_dir)
-                                  , move(http_store), max_cached_age
-                                  , log_level));
+                                  , move(http_store), max_cached_age));
 
     impl->announce_stored_data(yield[ec]);
     if (ec) return or_throw<ClientPtr>(yield, ec);
@@ -615,16 +584,6 @@ unsigned Client::get_newest_proto_version() const
 std::set<std::string> Client::get_announced_groups() const
 {
     return _impl->get_announced_groups();
-}
-
-void Client::set_log_level(log_level_t l)
-{
-    _impl->set_log_level(l);
-}
-
-log_level_t Client::get_log_level() const
-{
-    return _impl->get_log_level();
 }
 
 Client::~Client()
