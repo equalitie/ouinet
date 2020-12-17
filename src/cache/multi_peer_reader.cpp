@@ -337,17 +337,17 @@ public:
             sys::error_code ec;
 
             if (!dbg_tag.empty()) {
-                LOG_INFO(dbg_tag, " DHT lookup:");
-                LOG_INFO(dbg_tag, "    key:        ", _key);
-                LOG_INFO(dbg_tag, "    dht_group:  ", _dht_group);
-                LOG_INFO(dbg_tag, "    swarm_name: ", _dht_lookup->swarm_name());
-                LOG_INFO(dbg_tag, "    infohash:   ", _dht_lookup->infohash());
+                LOG_DEBUG(dbg_tag, " DHT lookup:");
+                LOG_DEBUG(dbg_tag, "    key:        ", _key);
+                LOG_DEBUG(dbg_tag, "    dht_group:  ", _dht_group);
+                LOG_DEBUG(dbg_tag, "    swarm_name: ", _dht_lookup->swarm_name());
+                LOG_DEBUG(dbg_tag, "    infohash:   ", _dht_lookup->infohash());
             }
 
             auto dht_eps = _dht_lookup->get(c, y[ec]);
 
             if (!dbg_tag.empty()) {
-                LOG_INFO(dbg_tag, " DHT lookup result ec:\"", ec.message(), "\" eps:", dht_eps);
+                LOG_DEBUG(dbg_tag, " DHT lookup result ec:\"", ec.message(), "\" eps:", dht_eps);
             }
 
             if (c) return;
