@@ -2,6 +2,8 @@
 
 #include <sys/resource.h>
 
+#include "logger.h"
+
 namespace ouinet {
 
 // Temporary, until this is merged https://github.com/ipfs/go-ipfs/pull/4288
@@ -16,14 +18,14 @@ void increase_open_file_limit(rlim_t new_value)
     int r = getrlimit(RLIMIT_NOFILE, &rl);
 
     if (r != 0) {
-        cerr << "Failed to get the current RLIMIT_NOFILE value" << endl;
+        LOG_ERROR("Failed to get the current RLIMIT_NOFILE value");
         return;
     }
 
-    cout << "Default RLIMIT_NOFILE value is: " << rl.rlim_cur << endl;
+    LOG_DEBUG("Default RLIMIT_NOFILE value is: ", rl.rlim_cur);
 
     if (rl.rlim_cur >= new_value) {
-        cout << "Leaving RLIMIT_NOFILE value unchanged." << endl;
+        LOG_DEBUG("Leaving RLIMIT_NOFILE value unchanged.");
         return;
     }
 
@@ -32,13 +34,13 @@ void increase_open_file_limit(rlim_t new_value)
     r = setrlimit(RLIMIT_NOFILE, &rl);
 
     if (r != 0) {
-        cerr << "Failed to set the RLIMIT_NOFILE value to " << rl.rlim_cur << endl;
+        LOG_ERROR("Failed to set the RLIMIT_NOFILE value to ", rl.rlim_cur);
         return;
     }
 
     r = getrlimit(RLIMIT_NOFILE, &rl);
     assert(r == 0);
-    cout << "RLIMIT_NOFILE value changed to: " << rl.rlim_cur << endl;
+    LOG_DEBUG("RLIMIT_NOFILE value changed to: ", rl.rlim_cur);
 }
 
 } // ouinet namespace

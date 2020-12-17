@@ -4,6 +4,7 @@
 #include <iostream>
 #include <boost/asio/buffer.hpp>
 #include <boost/utility/string_view.hpp>
+#include "../logger.h"
 #include "../namespaces.h"
 #include "../or_throw.h"
 #include "../util/condition_variable.h"
@@ -90,7 +91,7 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s):
 {
     assert(_socket.is_open());
 
-    std::cerr << "BT is operating on endpoint: UDP:" << _socket.local_endpoint() << "\n";
+    LOG_INFO("BT is operating on endpoint: UDP:", _socket.local_endpoint());
 
 #if 0
     asio::spawn(get_executor(), [this] (asio::yield_context yield) {
