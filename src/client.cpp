@@ -78,6 +78,8 @@
 
 #include "logger.h"
 
+#define _YDEBUG(y, ...) do { if (logger.get_threshold() <= DEBUG) y.log(DEBUG, __VA_ARGS__); } while (false)
+
 using namespace std;
 using namespace ouinet;
 
@@ -95,10 +97,6 @@ static const fs::path OUINET_CA_DH_FILE = "ssl-ca-dh.pem";
 
 // Flags for normal, case-insensitive regular expression.
 static const auto rx_icase = boost::regex::normal | boost::regex::icase;
-
-static bool log_transactions() {
-    return logger.get_threshold() <= DEBUG;
-}
 
 //------------------------------------------------------------------------------
 struct UserAgentMetaData {
@@ -424,10 +422,8 @@ void handle_http_error( GenericStream& con
                       , Resp& res
                       , Yield yield)
 {
-    if (log_transactions()) {
-        yield.log("=== Sending back response ===");
-        yield.log(res);
-    }
+    _YDEBUG(yield, "=== Sending back response ===");
+    _YDEBUG(yield, res);
 
     http::async_write(con, res, yield);
 }
@@ -491,9 +487,7 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
             return;
         }
 
-        if (log_transactions()) {
-            yield.log("Client: Received uTP/CONNECT request");
-        }
+        _YDEBUG(yield, "Client: Received uTP/CONNECT request");
 
         // Connect to the injector and tunnel the transaction through it
 
@@ -597,9 +591,7 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
     // TODO: Maybe refactor with `fetch_fresh_through_simple_proxy`.
     ConnectionPool<bool>::Connection con;
     if (_self_connections.empty()) {
-        if (log_transactions()) {
-            yield.log("Connecting to self");
-        }
+        _YDEBUG(yield, "Connecting to self");
 
         // TODO: Keep lookup object or allow connecting to endpoint.
         auto epl = TcpLookup::create(_config.local_endpoint(), "dummy", "dummy");
@@ -608,17 +600,13 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
         assert(!cancel || ec == asio::error::operation_aborted);
 
         if (ec) {
-            if (log_transactions()) {
-                yield.log("Failed to connect to self ec:", ec.message());
-            }
+            _YDEBUG(yield, "Failed to connect to self ec:", ec.message());
             return or_throw<Session>(yield, ec);
         }
 
         con = _self_connections.wrap(std::move(c));
     } else {
-        if (log_transactions()) {
-            yield.log("Reusing existing self connection");
-        }
+        _YDEBUG(yield, "Reusing existing self connection");
 
         con = _self_connections.pop_front();
     }
@@ -633,9 +621,7 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
     request.keep_alive(true);
     meta.apply_to(request);
 
-    if (log_transactions()) {
-        yield.log("Sending a request to self");
-    }
+    _YDEBUG(yield, "Sending a request to self");
     // Send request
     http::async_write(con, request, yield[ec].tag("self-request"));
 
@@ -643,8 +629,8 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
         ec = asio::error::operation_aborted;
     }
 
-    if (ec && log_transactions()) {
-        yield.log("Failed to send request to self");
+    if (ec) {
+        _YDEBUG(yield, "Failed to send request to self");
     }
 
     if (ec) return or_throw<Session>(yield, ec);
@@ -741,16 +727,14 @@ Client::State::resolve_tcp_doh( const std::string& host
 
     wc.wait(yield.tag("wait"));
 
-    if (log_transactions())
-        yield.log("DoH query ip4_ec:", ec4.message(), " ip6_ec:", ec6.message());
+    _YDEBUG(yield, "DoH query ip4_ec:", ec4.message(), " ip6_ec:", ec6.message());
     if (ec4 && ec6) return or_throw<TcpLookup>(yield, ec4 /* arbitrary */);
 
     doh::Answers answers4, answers6;
     if (!ec4) answers4 = doh::parse_response(rs4, host, ec4);
     if (!ec6) answers6 = doh::parse_response(rs6, host, ec6);
 
-    if (log_transactions())
-        yield.log("DoH parse ip4_ec:", ec4.message(), " ip6_ec:", ec6.message());
+    _YDEBUG(yield, "DoH parse ip4_ec:", ec4.message(), " ip6_ec:", ec6.message());
     if (ec4 && ec6) return or_throw<TcpLookup>(yield, ec4 /* arbitrary */);
 
     answers4.insert( answers4.end()
@@ -789,9 +773,8 @@ Client::State::connect_to_origin( const Request& rq
     auto lookup = do_doh
         ? resolve_tcp_doh(host, port, meta, *doh_ep_o, cancel, yield[ec].tag("resolve_doh"))
         : resolve_tcp_dns(host, port, cancel, yield[ec].tag("resolve_dns"));
-    if (log_transactions())
-        yield.log( do_doh ? "DoH name resolution: " : "DNS name resolution: "
-                 , host, " naddrs=", lookup.size(), " ec:", ec.message());
+    _YDEBUG( yield,  do_doh ? "DoH name resolution: " : "DNS name resolution: "
+           , host, " naddrs=", lookup.size(), " ec:", ec.message());
     return_or_throw_on_error(yield, cancel, ec, GenericStream());
 
     auto sock = connect_to_host(lookup, _ctx.get_executor(), cancel, yield[ec]);
@@ -1005,18 +988,14 @@ Session Client::State::fetch_fresh_through_simple_proxy
     // TODO: Maybe refactor with `fetch_via_self`.
     ConnectionPool<Endpoint>::Connection con;
     if (_injector_connections.empty()) {
-        if (log_transactions()) {
-            yield.log("Connecting to the injector");
-        }
+        _YDEBUG(yield, "Connecting to the injector");
 
         auto c = _injector->connect(yield[ec].tag("connect_to_injector2"), cancel);
 
         assert(!cancel || ec == asio::error::operation_aborted);
 
         if (ec) {
-            if (log_transactions()) {
-                yield.log("Failed to connect to injector ec:", ec.message());
-            }
+            _YDEBUG(yield, "Failed to connect to injector ec:", ec.message());
             return or_throw<Session>(yield, ec);
         }
 
@@ -1025,9 +1004,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
         con = _injector_connections.wrap(std::move(c.connection));
         *con = c.remote_endpoint;
     } else {
-        if (log_transactions()) {
-            yield.log("Reusing existing injector connection");
-        }
+        _YDEBUG(yield, "Reusing existing injector connection");
 
         con = _injector_connections.pop_front();
     }
@@ -1046,9 +1023,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
         request.keep_alive(keepalive);
     }
 
-    if (log_transactions()) {
-        yield.log("Sending a request to the injector");
-    }
+    _YDEBUG(yield, "Sending a request to the injector");
     // Send request
     http::async_write(con, request, yield[ec].tag("inj-request"));
 
@@ -1056,15 +1031,13 @@ Session Client::State::fetch_fresh_through_simple_proxy
         ec = asio::error::operation_aborted;
     }
 
-    if (ec && log_transactions()) {
-        yield.log("Failed to send request to the injector");
+    if (ec) {
+        _YDEBUG(yield, "Failed to send request to the injector");
     }
 
     if (ec) return or_throw<Session>(yield, ec);
 
-    if (log_transactions()) {
-        yield.log("Reading response");
-    }
+    _YDEBUG(yield, "Reading response");
 
     cancel_slot = {};
 
@@ -1082,9 +1055,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
         // the Injector mechanism being disabled.
         ec = asio::error::operation_not_supported;
 
-    if (log_transactions()) {
-        yield.log("End reading response. ec:", ec.message());
-    }
+    _YDEBUG(yield, "End reading response. ec:", ec.message());
 
     if (ec) return or_throw(yield, ec, std::move(session));
 
@@ -1201,14 +1172,10 @@ public:
 
             namespace err = asio::error;
 
-            if (log_transactions()) {
-                yield.log("start");
-            }
+            _YDEBUG(yield, "start");
 
             if (!client_state._config.is_injector_access_enabled()) {
-                if (log_transactions()) {
-                    yield.log("disabled");
-                }
+                _YDEBUG(yield, "disabled");
 
                 return or_throw<Session>(yield, err::operation_not_supported);
             }
@@ -1219,12 +1186,10 @@ public:
                                                                   , cancel
                                                                   , yield[ec]);
 
-            if (log_transactions()) {
-                if (!ec) {
-                    yield.log("finish: ", ec.message(), ", status: ", s.response_header().result());
-                } else {
-                    yield.log("finish: ", ec.message());
-                }
+            if (!ec) {
+                _YDEBUG(yield, "finish: ", ec.message(), ", status: ", s.response_header().result());
+            } else {
+                _YDEBUG(yield, "finish: ", ec.message());
             }
 
             return or_throw(yield, ec, move(s));
@@ -1234,9 +1199,7 @@ public:
         cc.fetch_stored = [&] (const Request& rq, const std::string& dht_group, Cancel& cancel, Yield yield_) {
             auto yield = yield_.tag("cache");
 
-            if (log_transactions()) {
-                yield.log("start");
-            }
+            _YDEBUG(yield, "start");
 
             sys::error_code ec;
             auto r = client_state.fetch_stored_in_dcache( rq
@@ -1245,9 +1208,7 @@ public:
                                                         , cancel
                                                         , yield[ec]);
 
-            if (log_transactions()) {
-                yield.log("finish: ", ec.message(), " canceled: ", bool(cancel));
-            }
+            _YDEBUG(yield, "finish: ", ec.message(), " canceled: ", bool(cancel));
 
             return or_throw(yield, ec, move(r));
         };
@@ -1264,9 +1225,7 @@ public:
             return or_throw(yield, asio::error::operation_aborted);
         }
 
-        if (log_transactions()) {
-            yield.log("start");
-        }
+        _YDEBUG(yield, "start");
 
         auto rq = tnx.request();
 
@@ -1279,25 +1238,19 @@ public:
         sys::error_code ec;
         auto session = client_state.fetch_fresh_from_origin(rq, tnx.meta(), cancel, yield[ec]);
 
-        if (log_transactions()) {
-            yield.log("fetch: ", ec.message());
-        }
+        _YDEBUG(yield, "fetch: ", ec.message());
 
         return_or_throw_on_error(yield, cancel, ec);
 
         tnx.write_to_user_agent(session, cancel, yield[ec]);
 
-        if (log_transactions()) {
-            yield.log("flush: ", ec.message());
-        }
+        _YDEBUG(yield, "flush: ", ec.message());
 
         return or_throw(yield, ec);
     }
 
     void proxy_job_func(Transaction& tnx, Cancel& cancel, Yield yield) {
-        if (log_transactions()) {
-            yield.log("start");
-        }
+        _YDEBUG(yield, "start");
 
         Session session;
 
@@ -1313,17 +1266,13 @@ public:
                     (rq, false, cancel, yield[ec]);
         }
 
-        if (log_transactions()) {
-            yield.log("Proxy fetch: ", ec.message());
-        }
+        _YDEBUG(yield, "Proxy fetch: ", ec.message());
 
         return_or_throw_on_error(yield, cancel, ec);
 
         tnx.write_to_user_agent(session, cancel, yield[ec]);
 
-        if (log_transactions()) {
-            yield.log("flush: ", ec.message());
-        }
+        _YDEBUG(yield, "flush: ", ec.message());
 
         return or_throw(yield, ec);
     }
@@ -1331,45 +1280,35 @@ public:
     void injector_job_func(Transaction& tnx, Cancel& cancel, Yield yield) {
         namespace err = asio::error;
 
-        bool do_log = log_transactions();
-
         sys::error_code ec;
         sys::error_code fresh_ec;
         sys::error_code cache_ec;
 
-        if (do_log) {
-            yield.log("start");
-            yield.log(tnx.request());
-        }
+        _YDEBUG(yield, "start");
+        _YDEBUG(yield, tnx.request());
 
         const auto& rq   = tnx.request();
         const auto& meta = tnx.meta();
 
         auto session = cc.fetch(rq, meta.dht_group, fresh_ec, cache_ec, cancel, yield[ec]);
 
-        if (do_log) {
-            yield.log("cc.fetch ec:", ec.message(),
-                     " fresh_ec:", fresh_ec.message(),
-                     " cache_ec:", cache_ec.message());
-        }
+        _YDEBUG(yield, "cc.fetch ec:", ec.message(),
+                       " fresh_ec:", fresh_ec.message(),
+                       " cache_ec:", cache_ec.message());
 
         if (ec) return or_throw(yield, ec);
 
         auto& rsh = session.response_header();
 
-        if (do_log) {
-            yield.log("Response header:");
-            yield.log(rsh);
-        }
+        _YDEBUG(yield, "Response header:");
+        _YDEBUG(yield, rsh);
 
         assert(!fresh_ec || !cache_ec); // At least one success
         assert( fresh_ec ||  cache_ec); // One needs to fail
 
         auto injector_error = rsh[http_::response_error_hdr];
         if (!injector_error.empty()) {
-            if (do_log) {
-                yield.log("Error from injector: ", injector_error);
-            }
+            _YDEBUG(yield, "Error from injector: ", injector_error);
             return or_throw(yield, err::invalid_argument);
         }
 
@@ -1429,9 +1368,7 @@ public:
 
         wc.wait(yield);
 
-        if (do_log) {
-            yield.log("finish: ", ec.message());
-        }
+        _YDEBUG(yield, "finish: ", ec.message());
 
         return or_throw(yield, ec);
     }
@@ -1591,9 +1528,7 @@ public:
             assert(job); if (!job) return;
 
             if (!is_access_enabled(job_type)) {
-                if (log_transactions()) {
-                    yield.log(name_tag, " access disabled");
-                }
+                _YDEBUG(yield, name_tag, " access disabled");
                 return;
             }
 
@@ -1672,23 +1607,17 @@ public:
                 });
             }
 
-            if (log_transactions()) {
-                yield.log("waiting for ", job_count, " running jobs");
-            }
+            _YDEBUG(yield, "waiting for ", job_count, " running jobs");
 
             cv.wait(yield);
 
-            if (log_transactions()) {
-                yield.log("got result from job: ", jobs.as_string(which));
-            }
+            _YDEBUG(yield, "got result from job: ", jobs.as_string(which));
 
             if (!which) continue; // XXX
 
             auto&& result = which->result();
 
-            if (log_transactions()) {
-                yield.log("result: ", result.ec.message());
-            }
+            _YDEBUG(yield, "result: ", result.ec.message());
 
             if (!result.ec) {
                 final_ec = sys::error_code{}; // success
@@ -1705,9 +1634,7 @@ public:
             final_ec = err::no_protocol_option;
         }
 
-        if (log_transactions()) {
-            yield.log("done (final_ec:", final_ec->message(), ")");
-        }
+        _YDEBUG(yield, "done (final_ec:", final_ec->message(), ")");
 
         return or_throw(yield, *final_ec);
     }
@@ -2078,10 +2005,8 @@ void Client::State::serve_request( GenericStream&& con
             continue;
         }
 
-        if (log_transactions()) {
-            yield.log("=== New request ===");
-            yield.log(req.base());
-        }
+        _YDEBUG(yield, "=== New request ===");
+        _YDEBUG(yield, req.base());
 
         auto target = req.target();
 
@@ -2091,9 +2016,7 @@ void Client::State::serve_request( GenericStream&& con
             // Subsequent access to the connection will use the encrypted channel.
             con = ssl_mitm_handshake(move(con), req, yield[ec].tag("mitm_hanshake"));
             if (ec) {
-                if (log_transactions()) {
-                    yield.log("Mitm exception: ", ec.message());
-                }
+                _YDEBUG(yield, "Mitm exception: ", ec.message());
                 return;
             }
             mitm = true;
@@ -2148,7 +2071,7 @@ void Client::State::serve_request( GenericStream&& con
         Transaction tnx(con, req, std::move(meta));
 
         if (request_config.fresh_channels.empty()) {
-            if (log_transactions()) yield.log("Abort due to no route");
+            _YDEBUG(yield, "Abort due to no route");
             sys::error_code ec;
             tnx.write_to_user_agent(retrieval_failure_response(req), cancel, yield[ec]);
             if (ec || cancel) return;
@@ -2158,9 +2081,7 @@ void Client::State::serve_request( GenericStream&& con
         cache_control.mixed_fetch(tnx, yield[ec].tag("mixed_fetch"));
 
         if (ec) {
-            if (log_transactions()) {
-                yield.log("error writing back response: ", ec.message());
-            }
+            _YDEBUG(yield, "error writing back response: ", ec.message());
 
             if (!tnx.user_agent_was_written_to() && !cancel && con.is_open()) {
                 sys::error_code ec_;
@@ -2659,7 +2580,7 @@ int main(int argc, char* argv[])
     try {
         client.start();
     } catch (std::exception& e) {
-        cerr << e.what() << endl;
+        LOG_ABORT(e.what());
         return 1;
     }
 
