@@ -79,6 +79,8 @@
 #include "logger.h"
 
 #define _YDEBUG(y, ...) do { if (logger.get_threshold() <= DEBUG) y.log(DEBUG, __VA_ARGS__); } while (false)
+#define _YWARN(y, ...) do { if (logger.get_threshold() <= WARN) y.log(WARN, __VA_ARGS__); } while (false)
+#define _YERROR(y, ...) do { if (logger.get_threshold() <= ERROR) y.log(ERROR, __VA_ARGS__); } while (false)
 
 using namespace std;
 using namespace ouinet;
@@ -600,7 +602,7 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
         assert(!cancel || ec == asio::error::operation_aborted);
 
         if (ec) {
-            _YDEBUG(yield, "Failed to connect to self ec:", ec.message());
+            _YERROR(yield, "Failed to connect to self ec:", ec.message());
             return or_throw<Session>(yield, ec);
         }
 
@@ -630,7 +632,7 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
     }
 
     if (ec) {
-        _YDEBUG(yield, "Failed to send request to self");
+        _YERROR(yield, "Failed to send request to self ec:", ec.message());
     }
 
     if (ec) return or_throw<Session>(yield, ec);
@@ -995,7 +997,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
         assert(!cancel || ec == asio::error::operation_aborted);
 
         if (ec) {
-            _YDEBUG(yield, "Failed to connect to injector ec:", ec.message());
+            _YWARN(yield, "Failed to connect to injector ec:", ec.message());
             return or_throw<Session>(yield, ec);
         }
 
@@ -1032,7 +1034,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
     }
 
     if (ec) {
-        _YDEBUG(yield, "Failed to send request to the injector");
+        _YWARN(yield, "Failed to send request to the injector ec:", ec.message());
     }
 
     if (ec) return or_throw<Session>(yield, ec);
@@ -1308,7 +1310,7 @@ public:
 
         auto injector_error = rsh[http_::response_error_hdr];
         if (!injector_error.empty()) {
-            _YDEBUG(yield, "Error from injector: ", injector_error);
+            _YERROR(yield, "Error from injector: ", injector_error);
             return or_throw(yield, err::invalid_argument);
         }
 
@@ -2016,7 +2018,7 @@ void Client::State::serve_request( GenericStream&& con
             // Subsequent access to the connection will use the encrypted channel.
             con = ssl_mitm_handshake(move(con), req, yield[ec].tag("mitm_hanshake"));
             if (ec) {
-                _YDEBUG(yield, "Mitm exception: ", ec.message());
+                _YERROR(yield, "Mitm exception: ", ec.message());
                 return;
             }
             mitm = true;
@@ -2081,7 +2083,7 @@ void Client::State::serve_request( GenericStream&& con
         cache_control.mixed_fetch(tnx, yield[ec].tag("mixed_fetch"));
 
         if (ec) {
-            _YDEBUG(yield, "error writing back response: ", ec.message());
+            _YERROR(yield, "error writing back response: ", ec.message());
 
             if (!tnx.user_agent_was_written_to() && !cancel && con.is_open()) {
                 sys::error_code ec_;
