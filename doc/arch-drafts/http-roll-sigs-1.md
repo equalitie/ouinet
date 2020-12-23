@@ -72,11 +72,11 @@ Trailer: Digest, X-Ouinet-Data-Size, X-Ouinet-Sig1
 
 100000
 0123456789...
-100000;ouisig=BASE64(BSIG(d607…e58d NUL 0 NUL CHASH[0]=SHA2-512(SHA2-512(BLOCK[0]))))
+100000;ouisig=BASE64(SIG[0]=BSIG(d607…e58d NUL 0 NUL CHASH[0]=SHA2-512(SHA2-512(BLOCK[0]))))
 0123456789...
-4;ouisig=BASE64(BSIG(d607…e58d NUL 1048576 NUL CHASH[1]=SHA2-512(SIG[0] CHASH[0] SHA2-512(BLOCK[1]))))
+4;ouisig=BASE64(SIG[1]=BSIG(d607…e58d NUL 1048576 NUL CHASH[1]=SHA2-512(SIG[0] CHASH[0] SHA2-512(BLOCK[1]))))
 abcd
-0;ouisig=BASE64(BSIG(d607…e58d NUL 2097152 NUL CHASH[2]=SHA2-512(SIG[1] CHASH[1] SHA2-512(BLOCK[2]))))
+0;ouisig=BASE64(SIG[2]=BSIG(d607…e58d NUL 2097152 NUL CHASH[2]=SHA2-512(SIG[1] CHASH[1] SHA2-512(BLOCK[2]))))
 Digest: SHA-256=BASE64(SHA2-256(COMPLETE_BODY))
 X-Ouinet-Data-Size: 1048580
 X-Ouinet-Sig1: keyId="ed25519=????",algorithm="hs2019",created=1516048311,
@@ -102,9 +102,7 @@ The signature string for each block covers the following values (separated by nu
 
     Using the data block hash instead of its data allows to independently verify the signatures without needing to be in possession of the data itself, just the hashes.
 
-    **TODOv6 REVIEW,OBSOLETE** Keeping the injection identifier out of the hash allows to compare the hashes at particular blocks of different injections (if transmitted independently) to ascertain that their data is the same up to that block. **TODO contradicts below**
-
-    **TODOv6 REVIEW** Including the previous signature in the hash allows to transitively verify the signatures of previous blocks by verifying the last signature (in case signatures and hashes are retrieved by themselves without the data beforehand). **TODO contradicts above**
+    Including the previous signature in the hash allows to transitively verify the signatures of previous blocks by verifying the last signature, for example if signatures and hashes are processed before data itself (e.g. retrieved separatedly beforehand).
 
     The chaining precludes the attacker from reordering correctly signed blocks for this injection.  SHA2-512 is used as a compromise between security and speed on 64-bit platforms; although the hash is longer than the slower SHA2-256, it will be seldom transmitted (e.g. for range requests as indicated below).
 
