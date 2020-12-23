@@ -577,7 +577,7 @@ Of these three examples, the last two would be considered equivalent by a recipi
 
 ### Peer-to-peer cache entry exchange
 
-**TODOv6 OBSOLETE,INCOMPLETE(multi-peer)**
+**TODOv6 INCOMPLETE(multi-peer)**
 
 When a Ouinet client stores a collection of cache entries in its device local storage, it can share these cache entries with other users that wish to access them. By fetching cache entries from other users in this way, without involvement of the injector servers, a Ouinet client can access web content even in cases when it cannot reach the injector servers.
 
@@ -609,7 +609,7 @@ When a Ouinet client stores a cache entry signed using a signature stream, it ca
 
 The Ouinet client implements this functionality in peer-to-peer connections through the mechanism of HTTP range requests. A client can send a cache entry HTTP request containing the `Range` header, requesting that the responding client sends it only the fragment of the resource delineated by this range; for example, a client might request the second unit of thousand bytes by sending the `Range: bytes=1000-1999` request header. If the responding client stores a cache entry for the requested resource signed using a signature stream, it can respond by sending only those resource data blocks that cover this byte range, along with block signatures for those data blocks. If the requested byte range does not align to the block size, the responding client has to send somewhat more data than was requested, rounded up to the nearest block size boundary.
 
-For a client to verify the legitimacy of a sequence of consecutive blocks that do not include the first block in the resource, it is not sufficient for the client to hold the block signatures for those blocks. Because each block signature contains a reference to the block hash of the previous block, the verifying client additionally needs to hold the block hash of the block immediately preceeding the first block it wishes to verify, unless the first block it wishes to verify is also the first block in the resource. That is to say, if a client holds `block(i)`, `block(i + 1)`, ..., `block(j)`, for `0 < i <= j`, it needs `block-signature(i)`, `block-signature(i + 1)`, ... `block-signature(j)`, and `hash(i - 1)` to be able to perform a verification of this signature stream. To make this possible, a client responding to a range request with a partial content response will add this preceeding hash to the HTTP response, in the form of an additional chunk extension.
+For a client to verify the legitimacy of a sequence of consecutive blocks that do not include the first block in the resource, it is not sufficient for the client to hold the block signatures for those blocks. Because each block signature contains (via the block's chained hash) a reference to the signature and chained hash of the previous block, the verifying client additionally needs to hold the chained hash of the block immediately preceeding the first block it wishes to verify, unless the first block it wishes to verify is also the first block in the resource. That is to say, if a client holds `block(i)`, `block(i + 1)`, ..., `block(j)`, for `0 < i <= j`, it needs `block-signature(i)`, `block-signature(i + 1)`, ... `block-signature(j)`, as well as `block-signature(i - 1)` and `chained-hash(i - 1)` to be able to perform a verification of this signature stream. To make this possible, a client responding to a range request with a partial content response will add these preceeding signature and hash to the HTTP response, in the form of additional chunk extensions.
 
 A client receiving a range request for a cache entry can reply with a response containing that partial data, as described above, if it has the facilities and metadata to do so; if it does not, it can send a response containing the complete resource, as if the `Range` header were not present at all. If it does reply with a response containing partial data, the client will send a response structured as a variant of the regular signature stream response, to which the following modifications apply:
 
@@ -617,7 +617,7 @@ A client receiving a range request for a cache entry can reply with a response c
 * The response contains a `Content-Range` header, describing the resource fragment included in the response. This range may be broader than the requested range, to ensure the range is aligned to the block boundary. A partial data response may include multiple ranges.
 * The response contains an additional `X-Ouinet-HTTP-Status` header, containing the status code of the response that would have been sent if no `Range` was requested, denoted as an integer value. The recipient requires this original status code to be able to verify the cache entry signature, and will substitute it when performing this verification.
 * The response contains one `ouisig` chunk extension for each data block included in the resource fragment, in the order that those data blocks are transferred, containing the block signatures for those blocks. Block signatures for blocks that are not covered by the response are not included.
-* The response contains one `ouihash=<hash>` chunk extension for each separate range described in the `Content-Range` header, except for those ranges that contain the first block in the resource, in the same order as the ranges described in the `Content-Range` header. For each range described in the `Content-Range` header that covers the fragment of the resource from `block(i)` up to `block(j)`, the `<hash>` contains `hash(i - 1)`, in base64 encoding.
+* The response contains one `ouipsig=<signature>` and `ouihash=<hash>` chunk extension for each separate range described in the `Content-Range` header, except for those ranges that contain the first block in the resource, in the same order as the ranges described in the `Content-Range` header. For each range described in the `Content-Range` header that covers the fragment of the resource from `block(i)` up to `block(j)`, the `<signature>` and `<hash>` contain `block-signature(i - 1)` and `chained-hash(i - 1)` respectively, both in base64 encoding.
 
 #### Examples
 
@@ -648,7 +648,7 @@ Transfer-Encoding: chunked
 Content-Range: bytes 5-11/12
 X-Ouinet-HTTP-Status: 200
 
-5;ouihash=1oPSCciEbCU1gomNqRLMdwDu6Am+vw1wjCGzKBRUoJ5rgzbEc6Z6bg72fnHbHRoo59t05lRVofnQMe0w4O1/NA==
+5;ouipsig="<base64(block-signature(0))>";ouihash="<base64(chained-hash(0))>"
  worl
 2;ouisig=<base64(block-signature(1))>
 d!
