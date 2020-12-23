@@ -195,6 +195,8 @@ block_sig_from_exts(boost::string_view xs)
     return block_arrattr_from_exts<sig_array_t>(xs, http_::response_block_signature_ext);
 }
 
+// TODO: implement `ouipsig`
+
 std::string
 block_chunk_ext( const opt_sig_array_t& sig
                , const opt_block_digest_t& prev_digest)
@@ -831,6 +833,7 @@ struct VerifyingReader::Impl {
             return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
         }
 
+        // TODO: implement `ouipsig`
         // We lack the chain hash of the previous data blocks,
         // it should have been included along this block's signature.
         if (_range_begin && _block_offset > 0 && _block_offset == *_range_begin) {
@@ -855,6 +858,7 @@ struct VerifyingReader::Impl {
         // Prepare hash for next data block: CHASH[i]=SHA2-512(CHASH[i-1] DHASH[i])
         _block_offset += _block_data.size();
 
+        // TODO: implement `ouipsig`
         http_response::ChunkHdr ch(inch.size, block_chunk_ext(*block_sig, _prev_block_dig));
         _pending_parts.push(std::move(ch));
 
