@@ -60,6 +60,10 @@ using reader_uptr = std::unique_ptr<http_response::AbstractReader>;
 //
 void http_store( http_response::AbstractReader&, const fs::path&
                , const asio::executor&, Cancel, asio::yield_context);
+// TODO: This format is both inefficient for multi-peer downloads (Base64 decoding needed)
+// and inadequate for partial responses (`ouipsig` is in previous `sigs` file line, maybe missing).
+// A format with binary records or just SIG/DHASH/CHASH of the *current* block might be more convenient
+// (DHASH may be zero in the first record).
 
 // Return a new reader for a response under the given directory.
 //
