@@ -241,16 +241,19 @@ private:
 
             while (_last_ping_time && (Clock::now() - *_last_ping_time) < _ping_frequency) {
                 auto d = Clock::now() - *_last_ping_time;
+                LOG_DEBUG("Bep5Client: Waiting to ping injectors for ", (d.count() / 1000.f), " s");
                 async_sleep(get_executor(), d, cancel, yield);
                 if (cancel) return;
             }
 
             bool got_reply = ping_injectors(select_injectors_to_ping(), cancel, yield[ec]);
+            LOG_DEBUG("Bep5Client: Pinged injectors ec:", ec.message());
             return_or_throw_on_error(yield, cancel, ec);
 
             _last_ping_time = Clock::now();
 
             if (got_reply) {
+                LOG_DEBUG("Bep5Client: Got pong from injectors, announcing as helper (bridge)");
                 _helper_announcer->update();
             }
         }
