@@ -321,10 +321,11 @@ private:
     asio::executor get_executor() { return _injector_swarm->get_executor(); }
 
 private:
+    bool _debug = false;
     Cancel _lifetime_cancel;
     shared_ptr<Bep5Client::Swarm> _injector_swarm;
     boost::optional<chrono::steady_clock::time_point> _last_ping_time;
-    const Clock::duration _ping_frequency = chrono::minutes(10);
+    const Clock::duration _ping_frequency = chrono::minutes(_debug ? 2 : 10);
     std::mt19937 _random_generator;
     std::unique_ptr<bt::Bep5ManualAnnouncer> _helper_announcer;
 };
