@@ -5,6 +5,10 @@
 #include <random>
 #include <iostream>
 
+#define _LOGPFX "Bep5Announcer: "
+#define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
+#define _WARN(...) LOG_WARN(_LOGPFX, __VA_ARGS__)
+
 using namespace std;
 using namespace ouinet;
 using namespace ouinet::bittorrent;
@@ -60,18 +64,18 @@ struct detail::Bep5AnnouncerImpl
     {
         using namespace std::chrono_literals;
 
-        LOG_DEBUG("Bep5Announcer: Start for infohash=", infohash);
+        _DEBUG("Start for infohash=", infohash);
 
         UniformRandomDuration random_timeout;
 
         while (!cancel) {
             if (type == Type::Manual) {
                 while (!go_again) {
-                    LOG_DEBUG("Bep5Announcer: Waiting for manual announce for infohash=", infohash, "...");
+                    _DEBUG("Waiting for manual announce for infohash=", infohash, "...");
                     sys::error_code ec;
                     cv.wait(cancel, yield[ec]);
                     if (cancel) {
-                        LOG_DEBUG("Bep5Announcer: Waiting for manual announce for infohash=", infohash, ": done");
+                        _DEBUG("Waiting for manual announce for infohash=", infohash, ": done");
                         break;
                     }
                 }
@@ -81,12 +85,12 @@ struct detail::Bep5AnnouncerImpl
             auto dht = dht_w.lock();
             if (!dht) return;
 
-            LOG_DEBUG("Bep5Announcer: Announcing infohash=", infohash, "...");
+            _DEBUG("Announcing infohash=", infohash, "...");
 
             sys::error_code ec;
             dht->tracker_announce(infohash, boost::none, cancel, yield[ec]);
 
-            LOG_DEBUG("Bep5Announcer: Announcing infohash=", infohash, ": done");
+            _DEBUG("Announcing infohash=", infohash, ": done");
 
             if (cancel) return;
 
@@ -94,7 +98,7 @@ struct detail::Bep5AnnouncerImpl
 
             if (ec) {
                 // TODO: Arbitrary timeout
-                LOG_WARN("Bep5Announcer: Pausing on infohash=", infohash, " because of announcement error ec:", ec.message());
+                _WARN("Pausing on infohash=", infohash, " because of announcement error ec:", ec.message());
                 async_sleep(exec, random_timeout(1s, 1min), cancel, yield);
                 if (cancel) return;
                 continue;
@@ -102,7 +106,7 @@ struct detail::Bep5AnnouncerImpl
 
             auto sleep = random_timeout(5min, 30min);
 
-            LOG_DEBUG("Bep5Announcer: Waiting for ", (sleep.count()/1000.f), "s to announce infohash=", infohash);
+            _DEBUG("Waiting for ", (sleep.count()/1000.f), "s to announce infohash=", infohash);
 
             async_sleep(exec, sleep, cancel, yield);
         }
@@ -110,7 +114,7 @@ struct detail::Bep5AnnouncerImpl
 
     void update() {
         if (type != Type::Manual) return;
-        LOG_DEBUG("Bep5Announcer: Update requested for infohash=", infohash);
+        _DEBUG("Manual update requested for infohash=", infohash);
         go_again = true;
         cv.notify();
     }
