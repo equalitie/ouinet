@@ -74,7 +74,7 @@ struct detail::Bep5AnnouncerImpl
                 while (!go_again) {
                     sys::error_code ec;
                     cv.wait(cancel, yield[ec]);
-                    if (cancel) break;
+                    if (cancel) return;
                 }
                 _DEBUG("Waiting for manual announce for infohash=", infohash, ": done");
                 go_again = false;
