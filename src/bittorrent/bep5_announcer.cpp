@@ -92,11 +92,12 @@ struct detail::Bep5AnnouncerImpl
 
             dht.reset();
 
-            _DEBUG("Announcing infohash=", infohash, ": done");
-
-            if (ec) {
+            if (!ec)
+                _DEBUG("Announcing infohash=", infohash, ": done");
+            else {
+                _WARN("Announcing infohash=", infohash, ": failed ec:", ec.message());
                 // TODO: Arbitrary timeout
-                _WARN("Pausing on infohash=", infohash, " because of announcement error ec:", ec.message());
+                _DEBUG("Pausing on infohash=", infohash, " because of announcement error");
                 async_sleep(exec, random_timeout(1s, 1min), cancel, yield);
                 if (cancel) return;
                 continue;
