@@ -65,11 +65,10 @@ struct detail::Bep5AnnouncerImpl
         UniformRandomDuration random_timeout;
 
         while (!cancel) {
-            sys::error_code ec;
-
             if (type == Type::Manual) {
                 while (!go_again) {
                     LOG_DEBUG("Bep5Announcer: Waiting for manual announce for infohash=", infohash, "...");
+                    sys::error_code ec;
                     cv.wait(cancel, yield[ec]);
                     if (cancel) {
                         LOG_DEBUG("Bep5Announcer: Waiting for manual announce for infohash=", infohash, ": done");
@@ -84,6 +83,7 @@ struct detail::Bep5AnnouncerImpl
 
             LOG_DEBUG("Bep5Announcer: Announcing infohash=", infohash, "...");
 
+            sys::error_code ec;
             dht->tracker_announce(infohash, boost::none, cancel, yield[ec]);
 
             LOG_DEBUG("Bep5Announcer: Announcing infohash=", infohash, ": done");
