@@ -119,7 +119,7 @@ struct detail::Bep5AnnouncerImpl
     NodeID infohash;
     weak_ptr<MainlineDht> dht_w;
     Cancel cancel;
-    bool debug = false;
+    static const bool debug = false;  // for development testing only
 };
 
 Bep5PeriodicAnnouncer::Bep5PeriodicAnnouncer( NodeID infohash

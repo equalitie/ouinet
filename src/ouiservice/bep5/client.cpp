@@ -325,7 +325,7 @@ private:
     asio::executor get_executor() { return _injector_swarm->get_executor(); }
 
 private:
-    bool _debug = false;
+    static const bool _debug = false;  // for development testing only
     Cancel _lifetime_cancel;
     shared_ptr<Bep5Client::Swarm> _injector_swarm;
     boost::optional<chrono::steady_clock::time_point> _last_ping_time;
