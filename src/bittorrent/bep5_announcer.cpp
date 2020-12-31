@@ -88,11 +88,11 @@ struct detail::Bep5AnnouncerImpl
             sys::error_code ec;
             dht->tracker_announce(infohash, boost::none, cancel, yield[ec]);
 
-            _DEBUG("Announcing infohash=", infohash, ": done");
-
             if (cancel) return;
 
             dht.reset();
+
+            _DEBUG("Announcing infohash=", infohash, ": done");
 
             if (ec) {
                 // TODO: Arbitrary timeout
