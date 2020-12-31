@@ -26,13 +26,13 @@ cache.
 
 ![Ouinet request/response flow](./doc/request-response-flow.svg)
 
-Future accesses by client nodes to popular content inserted in distributed
-storage shall benefit from an increased redundancy and locality, which
-translates in increased availability in the face of connectivity problems,
-increased transfer speeds in case or poor upstream links, and reduced
-bandwidth costs when access providers charge more for external or
-international traffic.  Content injection is also designed in a way which
-allows for content re-introduction and seeding on extreme cases of total
+Future access by client nodes to popular content inserted in distributed
+storage shall benefit from increased redundancy and locality, which
+translates to: increased availability in the face of connectivity problems;
+increased transfer speeds in case of poor upstream links; and reduced
+bandwidth costs when internet access providers charge more for external or
+international traffic.  Content injection is also designed to
+allow for content re-introduction and seeding on extreme cases of total
 connectivity loss (e.g. natural disasters).
 
 The Ouinet library is a core technology that can be used by any application to
@@ -443,7 +443,7 @@ replace the values with your own:
 
 All the steps above only need to be done once.
 
-Finally start the client.  For the local build you will need to explicitly
+Finally, start the client.  For the local build you will need to explicitly
 point it to the repository created above:
 
     $ <BUIDL DIR>/client --repo /path/to/client-repo
