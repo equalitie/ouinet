@@ -11,7 +11,6 @@ namespace ouinet {
 
 namespace bittorrent {
     class MainlineDht;
-    class Bep5PeriodicAnnouncer;
 }
 
 namespace ouiservice {
