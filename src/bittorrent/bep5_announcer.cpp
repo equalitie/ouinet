@@ -106,7 +106,11 @@ struct detail::Bep5AnnouncerImpl
 
             if (type == Type::Manual) continue;  // wait for new manual request immediately
 
-            auto sleep = debug ? random_timeout(2min, 4min) : random_timeout(5min, 30min);
+            // BEP5 indicatest that "After 15 minutes of inactivity, a node becomes questionable."
+            // so try not to get too close to that value to avoid DHT churn
+            // and the entry being frequently evicted from it.
+            // Alternatively, set a closer period but use a normal (instead of uniform) distribution.
+            auto sleep = debug ? random_timeout(2min, 4min) : random_timeout(5min, 12min);
 
             _DEBUG("Waiting for ", (sleep.count()/1000.f), "s to announce infohash=", infohash);
 
