@@ -70,15 +70,13 @@ struct detail::Bep5AnnouncerImpl
 
         while (!cancel) {
             if (type == Type::Manual) {
+                _DEBUG("Waiting for manual announce for infohash=", infohash, "...");
                 while (!go_again) {
-                    _DEBUG("Waiting for manual announce for infohash=", infohash, "...");
                     sys::error_code ec;
                     cv.wait(cancel, yield[ec]);
-                    if (cancel) {
-                        _DEBUG("Waiting for manual announce for infohash=", infohash, ": done");
-                        break;
-                    }
+                    if (cancel) break;
                 }
+                _DEBUG("Waiting for manual announce for infohash=", infohash, ": done");
                 go_again = false;
             }
 
