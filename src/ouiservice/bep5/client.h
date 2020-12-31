@@ -80,7 +80,7 @@ private:
 
     std::mt19937 _random_generator;
 
-    bool _log_debug = false;
+    static const bool _log_debug = false;  // for development testing only
 
     boost::optional<asio::ip::udp::endpoint> _last_working_ep;
 
