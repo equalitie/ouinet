@@ -11,6 +11,12 @@
 #include "../../ssl/util.h"
 #include "../../util/handler_tracker.h"
 
+#define _LOGPFX "Bep5Client: "
+#define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
+#define _VERBOSE(...)  LOG_VERBOSE(_LOGPFX, __VA_ARGS__)
+#define _INFO(...)  LOG_INFO(_LOGPFX, __VA_ARGS__)
+#define _ERROR(...) LOG_ERROR(_LOGPFX, __VA_ARGS__)
+
 using namespace std;
 using namespace ouinet;
 using namespace ouiservice;
@@ -119,7 +125,7 @@ private:
             sys::error_code ec;
 
             if (log_debug()) {
-                LOG_DEBUG("Bep5Client: getting peers from swarm ", _infohash);
+                _DEBUG("Getting peers from swarm ", _infohash);
             }
 
             auto endpoints = _dht->tracker_get_peers(_infohash, cancel, yield[ec]);
@@ -137,9 +143,9 @@ private:
             }
 
             if (log_debug()) {
-                LOG_DEBUG("Bep5Client: new endpoints: ", endpoints.size());
+                _DEBUG("New endpoints: ", endpoints.size());
                 for (auto ep: endpoints) {
-                    LOG_DEBUG("Bep5Client:     ", ep);
+                    _DEBUG("    ", ep);
                 }
             }
 
@@ -159,7 +165,7 @@ private:
         auto opt_m = choose_multiplexer_for(*_dht, ep);
 
         if (!opt_m) {
-            LOG_ERROR("Bep5Client: Failed to choose multiplexer");
+            _ERROR("Failed to choose multiplexer");
             return nullptr;
         }
 
@@ -167,7 +173,7 @@ private:
             (_dht->get_executor(), move(*opt_m), util::str(ep));
 
         if (!utp_client->verify_remote_endpoint()) {
-            LOG_ERROR("Bep5Client: Failed to bind uTP client");
+            _ERROR("Failed to bind uTP client");
             return nullptr;
         }
 
@@ -239,27 +245,27 @@ private:
         while (!cancel) {
             auto injs = _injector_swarm->peers();
 
-            LOG_DEBUG("Bep5Client: Waiting to ping injectors...");
+            _DEBUG("Waiting to ping injectors...");
             while (_last_ping_time && (Clock::now() - *_last_ping_time) < _ping_frequency) {
                 auto d = Clock::now() - *_last_ping_time;
                 async_sleep(get_executor(), d, cancel, yield);
                 if (cancel) return;
             }
-            LOG_DEBUG("Bep5Client: Waiting to ping injectors: done");
+            _DEBUG("Waiting to ping injectors: done");
 
             bool got_reply = ping_injectors(select_injectors_to_ping(), cancel, yield[ec]);
             if (!cancel && ec)
-                LOG_ERROR("Bep5Client: Failed to ping injectors ec:", ec.message());
+                _ERROR("Failed to ping injectors ec:", ec.message());
             return_or_throw_on_error(yield, cancel, ec);
 
             _last_ping_time = Clock::now();
 
             if (got_reply) {
-                LOG_DEBUG("Bep5Client: Got pong from injectors, announcing as helper (bridge)");
+                _DEBUG("Got pong from injectors, announcing as helper (bridge)");
                 _helper_announcer->update();
             } else
-                LOG_VERBOSE("Bep5Client: Did not get pong from injectors,"
-                            " the network may be down or they may be blocked");
+                _VERBOSE("Did not get pong from injectors,"
+                         " the network may be down or they may be blocked");
         }
     }
 
@@ -345,7 +351,7 @@ Bep5Client::Bep5Client( shared_ptr<bt::MainlineDht> dht
     , _default_targets(targets)
 {
     if (_dht->local_endpoints().empty()) {
-        LOG_ERROR("Bep5Client: DHT has no endpoints!");
+        _ERROR("DHT has no endpoints!");
     }
 }
 
@@ -362,7 +368,7 @@ Bep5Client::Bep5Client( shared_ptr<bt::MainlineDht> dht
     , _default_targets(targets)
 {
     if (_dht->local_endpoints().empty()) {
-        LOG_ERROR("Bep5Client: DHT has no endpoints!");
+        _ERROR("DHT has no endpoints!");
     }
 
     assert(_helpers_swarm_name.size());
@@ -373,7 +379,7 @@ void Bep5Client::start(asio::yield_context)
     {
         bt::NodeID infohash = util::sha1_digest(_injector_swarm_name);
 
-        LOG_INFO("Injector swarm: sha1('", _injector_swarm_name, "'): ", infohash.to_hex());
+        _INFO("Injector swarm: sha1('", _injector_swarm_name, "'): ", infohash.to_hex());
 
         _injector_swarm.reset(new Swarm(this, infohash, _dht, _cancel, false));
         _injector_swarm->start();
@@ -382,7 +388,7 @@ void Bep5Client::start(asio::yield_context)
     if (!_helpers_swarm_name.empty()) {
         bt::NodeID infohash = util::sha1_digest(_helpers_swarm_name);
 
-        LOG_INFO("Helper swarm (bridges): sha1('", _helpers_swarm_name, "'): ", infohash.to_hex());
+        _INFO("Helper swarm (bridges): sha1('", _helpers_swarm_name, "'): ", infohash.to_hex());
 
         _helpers_swarm.reset(new Swarm(this, infohash, _dht, _cancel, true));
         _helpers_swarm->start();
@@ -573,18 +579,18 @@ GenericStream Bep5Client::connect( asio::yield_context yield
 
     if (ec) {
         _last_working_ep = boost::none;
-        LOG_DEBUG( "Bep5Client: Did not connect to any peer;"
-                 , " peers:", i
-                 , " ec:", ec.message());
+        _DEBUG( "Did not connect to any peer;"
+              , " peers:", i
+              , " ec:", ec.message());
     } else {
         _last_working_ep = ret_ep;
         if (_injector_pinger) {
             _injector_pinger->injector_was_seen_now();
         }
         if (ret_target == Target::injectors)
-            LOG_DEBUG("Bep5Client: Connected to injector peer directly; rep:", ret_ep);
+            _DEBUG("Connected to injector peer directly; rep:", ret_ep);
         else if (ret_target == Target::helpers)
-            LOG_DEBUG("Bep5Client: Connected to injector via helper peer (bridge); rep:", ret_ep);
+            _DEBUG("Connected to injector via helper peer (bridge); rep:", ret_ep);
         else
             assert(0 && "Invalid peer type");
     }
