@@ -5,6 +5,10 @@
 #include <random>
 #include <iostream>
 
+#define _LOGPFX "Bep5Announcer: "
+#define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
+#define _WARN(...) LOG_WARN(_LOGPFX, __VA_ARGS__)
+
 using namespace std;
 using namespace ouinet;
 using namespace ouinet::bittorrent;
@@ -60,48 +64,55 @@ struct detail::Bep5AnnouncerImpl
     {
         using namespace std::chrono_literals;
 
+        _DEBUG("Start for infohash=", infohash);
+
         UniformRandomDuration random_timeout;
 
         while (!cancel) {
-            sys::error_code ec;
-
-            if (type == Type::Manual) {
+            if (type == Type::Manual && !go_again) {
+                _DEBUG("Waiting for manual announce for infohash=", infohash, "...");
                 while (!go_again) {
+                    sys::error_code ec;
                     cv.wait(cancel, yield[ec]);
-                    if (cancel) break;
+                    if (cancel) return;
                 }
-                go_again = false;
+                _DEBUG("Waiting for manual announce for infohash=", infohash, ": done");
             }
+            go_again = false;
 
             auto dht = dht_w.lock();
             if (!dht) return;
 
-            if (debug) {
-                LOG_DEBUG("ANNOUNCING ", infohash, " ...");
-            }
+            _DEBUG("Announcing infohash=", infohash, "...");
 
+            sys::error_code ec;
             dht->tracker_announce(infohash, boost::none, cancel, yield[ec]);
-
-            if (debug) {
-                LOG_DEBUG("ANNOUNCING ", infohash, " done: ", ec.message(), " cancel:", bool(cancel));
-            }
 
             if (cancel) return;
 
             dht.reset();
 
             if (ec) {
+                _WARN("Announcing infohash=", infohash, ": failed ec:", ec.message());
                 // TODO: Arbitrary timeout
+                _DEBUG("Will retry infohash=", infohash, " because of announcement error");
                 async_sleep(exec, random_timeout(1s, 1min), cancel, yield);
                 if (cancel) return;
+                go_again = true;  // do not wait for manual request
                 continue;
             }
 
-            auto sleep = random_timeout(5min, 30min);
+            _DEBUG("Announcing infohash=", infohash, ": done");
 
-            if (debug) {
-                LOG_DEBUG("ANNOUNCING ", infohash, " next in: ", (sleep.count()/1000.f), "s");
-            }
+            if (type == Type::Manual) continue;  // wait for new manual request immediately
+
+            // BEP5 indicatest that "After 15 minutes of inactivity, a node becomes questionable."
+            // so try not to get too close to that value to avoid DHT churn
+            // and the entry being frequently evicted from it.
+            // Alternatively, set a closer period but use a normal (instead of uniform) distribution.
+            auto sleep = debug ? random_timeout(2min, 4min) : random_timeout(5min, 12min);
+
+            _DEBUG("Waiting for ", (sleep.count()/1000.f), "s to announce infohash=", infohash);
 
             async_sleep(exec, sleep, cancel, yield);
         }
@@ -109,6 +120,7 @@ struct detail::Bep5AnnouncerImpl
 
     void update() {
         if (type != Type::Manual) return;
+        _DEBUG("Manual update requested for infohash=", infohash);
         go_again = true;
         cv.notify();
     }
@@ -119,7 +131,7 @@ struct detail::Bep5AnnouncerImpl
     NodeID infohash;
     weak_ptr<MainlineDht> dht_w;
     Cancel cancel;
-    bool debug = false;
+    static const bool debug = false;  // for development testing only
 };
 
 Bep5PeriodicAnnouncer::Bep5PeriodicAnnouncer( NodeID infohash
