@@ -106,7 +106,7 @@ struct detail::Bep5AnnouncerImpl
 
             if (type == Type::Manual) continue;  // wait for new manual request immediately
 
-            auto sleep = random_timeout(5min, 30min);
+            auto sleep = debug ? random_timeout(2min, 4min) : random_timeout(5min, 30min);
 
             _DEBUG("Waiting for ", (sleep.count()/1000.f), "s to announce infohash=", infohash);
 
