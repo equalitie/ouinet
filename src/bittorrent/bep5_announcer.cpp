@@ -69,7 +69,7 @@ struct detail::Bep5AnnouncerImpl
         UniformRandomDuration random_timeout;
 
         while (!cancel) {
-            if (type == Type::Manual) {
+            if (type == Type::Manual && !go_again) {
                 _DEBUG("Waiting for manual announce for infohash=", infohash, "...");
                 while (!go_again) {
                     sys::error_code ec;
@@ -77,8 +77,8 @@ struct detail::Bep5AnnouncerImpl
                     if (cancel) return;
                 }
                 _DEBUG("Waiting for manual announce for infohash=", infohash, ": done");
-                go_again = false;
             }
+            go_again = false;
 
             auto dht = dht_w.lock();
             if (!dht) return;
@@ -98,10 +98,13 @@ struct detail::Bep5AnnouncerImpl
                 _DEBUG("Will retry infohash=", infohash, " because of announcement error");
                 async_sleep(exec, random_timeout(1s, 1min), cancel, yield);
                 if (cancel) return;
+                go_again = true;  // do not wait for manual request
                 continue;
             }
 
             _DEBUG("Announcing infohash=", infohash, ": done");
+
+            if (type == Type::Manual) continue;  // wait for new manual request immediately
 
             auto sleep = random_timeout(5min, 30min);
 
