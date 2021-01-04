@@ -65,7 +65,7 @@ slurp_response( AbstractReader& reader, size_t max_body_size
         if (part->is_trailer()) break;  // end of response
         if (!part->is_body() && !part->is_chunk_body()) continue;
 
-        const Body::Base* data;
+        const Body::Base* data = nullptr;
         if (auto b = part->as_body()) data = b;
         else if (auto cb = part->as_chunk_body()) data = cb;
         assert(data);

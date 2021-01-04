@@ -14,7 +14,7 @@ public:
         : _queue(q)
     {}
 
-    boost::optional<Part> async_read_part(Cancel cancel, asio::yield_context yield) {
+    boost::optional<Part> async_read_part(Cancel cancel, asio::yield_context yield) override {
         if (_cancel) return boost::none;
         auto c = _cancel.connect([&] { cancel(); });
         sys::error_code ec;
@@ -30,7 +30,7 @@ public:
         _queue.push_back(std::move(p));
     }
 
-    void close() {
+    void close() override {
         _queue.push_back(boost::none);
         _cancel();
     }

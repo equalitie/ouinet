@@ -1539,7 +1539,6 @@ public:
                 &jobs,
                 name_tag,
                 func = std::move(func),
-                exec,
                 job_type
             ] (Cancel& c, asio::yield_context y_) {
                 auto y = yield.detach(y_).tag(name_tag);
