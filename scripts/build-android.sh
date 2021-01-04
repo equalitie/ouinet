@@ -172,6 +172,7 @@ function maybe_install_ndk {
         fi
         unzip -q ${NDK_ZIP}
     fi
+    export ANDROID_NDK_HOME="$NDK_DIR"
 }
 
 ######################################################################
