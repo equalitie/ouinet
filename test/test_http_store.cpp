@@ -438,6 +438,7 @@ static const string rrs_head_complete =
     + "Transfer-Encoding: chunked\r\n"
     + "\r\n");
 
+// TODO: implement `ouipsig`
 static const array<string, 4> rrs_chunk_ext{
     "",
     ";ouisig=\"" + rs_block_sig[0] + "\"",

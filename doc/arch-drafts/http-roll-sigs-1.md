@@ -72,11 +72,11 @@ Trailer: Digest, X-Ouinet-Data-Size, X-Ouinet-Sig1
 
 100000
 0123456789...
-100000;ouisig=BASE64(BSIG(d607…e58d NUL 0 NUL CHASH[0]=SHA2-512(SHA2-512(BLOCK[0]))))
+100000;ouisig=BASE64(SIG[0]=BSIG(d607…e58d NUL 0 NUL CHASH[0]=SHA2-512(SHA2-512(BLOCK[0]))))
 0123456789...
-4;ouisig=BASE64(BSIG(d607…e58d NUL 1048576 NUL CHASH[1]=SHA2-512(SIG[0] CHASH[0] SHA2-512(BLOCK[1]))))
+4;ouisig=BASE64(SIG[1]=BSIG(d607…e58d NUL 1048576 NUL CHASH[1]=SHA2-512(SIG[0] CHASH[0] SHA2-512(BLOCK[1]))))
 abcd
-0;ouisig=BASE64(BSIG(d607…e58d NUL 2097152 NUL CHASH[2]=SHA2-512(SIG[1] CHASH[1] SHA2-512(BLOCK[2]))))
+0;ouisig=BASE64(SIG[2]=BSIG(d607…e58d NUL 2097152 NUL CHASH[2]=SHA2-512(SIG[1] CHASH[1] SHA2-512(BLOCK[2]))))
 Digest: SHA-256=BASE64(SHA2-256(COMPLETE_BODY))
 X-Ouinet-Data-Size: 1048580
 X-Ouinet-Sig1: keyId="ed25519=????",algorithm="hs2019",created=1516048311,
@@ -98,31 +98,29 @@ The signature string for each block covers the following values (separated by nu
 
   - A **chain hash** (binary) computed from the chain hash of the previous block and the **data hash** of the block itself: for the i-th block, `DHASH[i]=SHA2-512(BLOCK[i])` and `CHASH[i]=SHA2-512(SIG[i-1] CHASH[i-1] DHASH[i])`, with `CHASH[0]=SHA2-512(DHASH[0])`.
 
-    Signing the hash instead of block data itself spares the signer from keeping the whole block in memory for producing the signature (the hash algorithm can be fed as data comes in from the origin).
+    The chaining precludes an attacker client from reordering correctly signed blocks for this injection.  SHA2-512 is used as a compromise between security and speed on 64-bit platforms; although the hash is longer than the slower SHA2-256, it will be seldom transmitted (e.g. for range requests as indicated below).
 
-    Using the data block hash instead of its data allows to independently verify the signatures without needing to be in possession of the data itself, just the hashes.
+    Signing the chain hash instead of block data itself spares the signer from keeping the whole block in memory for producing the signature (the hash algorithm can be fed as data comes in from the origin).
 
-    **TODOv6 REVIEW,OBSOLETE** Keeping the injection identifier out of the hash allows to compare the hashes at particular blocks of different injections (if transmitted independently) to ascertain that their data is the same up to that block. **TODO contradicts below**
+    Including the previous signature in the hash allows the receiver to transitively verify the signatures of previous blocks by verifying the last signature, for example if signatures and hashes are processed before data itself (e.g. retrieved separatedly beforehand).
 
-    **TODOv6 REVIEW** Including the previous signature in the hash allows to transitively verify the signatures of previous blocks by verifying the last signature (in case signatures and hashes are retrieved by themselves without the data beforehand). **TODO contradicts above**
-
-    The chaining precludes the attacker from reordering correctly signed blocks for this injection.  SHA2-512 is used as a compromise between security and speed on 64-bit platforms; although the hash is longer than the slower SHA2-256, it will be seldom transmitted (e.g. for range requests as indicated below).
+    Using the data block hash instead of its data allows the receiver to independently verify the signatures without needing to be in possession of the data itself, just the hashes and signatures (e.g. retrieved separatedly beforehand).  It also allows comparing data of different injections by comparing data block hashes (previously verified).
 
 Please note that this inlining of signatures also binds the stream representation of the body to this particular injection.  Storage that keeps signatures inline with block data should take this into account when trying to reuse body data.
 
-Common parameters to all block signatures are kept the same and factored out to `X-Ouinet-BSigs` for simplicity and bandwidth efficiency.  Even if each block size could be inferred from the presence of a chunk extension, having the signer commit to a fixed and explicit size up front (with the exception of the last block) helps the consumer of the signed response to easily validate chunk boundaries and discard responses with too big blocks.  In the example, chunks are equivalent to blocks; this is the simplest implementation but it is not compulsory: blocks could be splitted in several chunks if needed (to save injector memory, since otherwise it cannot start sending a chunk as its size comes before data, and the last chunk may be shorter).  However, for the sake of simplicity, chunks should be aligned to block boundaries (i.e. blocks should consist of a natural number of chunks).
+Common parameters to all block signatures are kept the same and factored out to `X-Ouinet-BSigs` for simplicity and bandwidth efficiency.  Even if each block size could be inferred from the presence of a chunk extension, having the signer commit to a fixed and explicit size up front (with the exception of the last block) helps the receiver of the signed response to easily validate chunk boundaries and discard responses with too big blocks.  In the example, chunks are equivalent to blocks; this is the simplest implementation but it is not compulsory: blocks could be splitted in several chunks if needed (to save injector memory, since otherwise it cannot start sending a chunk as its size comes before data, and the last chunk may be shorter).  However, for the sake of simplicity, chunks should be aligned to block boundaries (i.e. blocks should consist of a natural number of chunks).
 
 If a client got to get and save a complete response from the injector, it may send to other clients the final response head straight away (i.e. skipping the initial signature or a trailer).
 
 ## Range requests
 
-If a client sends an HTTP range request to another client, the later aligns it to block boundaries (this is acceptable according to [RFC7233#4.1][] — "a client cannot rely on receiving the same ranges that it requested").  The `Content-Range:` header in the response is not part of the initial nor final signatures.  If the range does not start at the beginning of the data, the first block `i` is accompanied with a `ouihash=BASE64(CHASH[i-1])` chunk extension to enable checking its `ouisig`.  Please note that to ease serving range requests, a client storing a response may cache all chain hashes along their blocks, so as to avoid having to compute the `ouihash` of the first block in the range.
+If a client sends an HTTP range request to another client, the later aligns it to block boundaries (this is acceptable according to [RFC7233#4.1][] — "a client cannot rely on receiving the same ranges that it requested").  The `Content-Range:` header in the response is not part of the initial nor final signatures.  If the range does not start at the beginning of the data, the first block `i` is accompanied with `ouipsig=BASE64(SIG[i-1])` and `ouihash=BASE64(CHASH[i-1])` chunk extensions to enable checking its `ouisig`.  Please note that to ease serving range requests, a client storing a response may cache all chain hashes along their blocks, so as to avoid having to compute the `ouihash` of the first block in the range.
 
 [RFC7233#4.1]: https://tools.ietf.org/html/rfc7233#section-4.1
 
 Also note that responses to a range request mush have a `206 Partial Content` status, which would break signature verification.  To avoid this issue, the original response status code (usually `200`) is saved to the `X-Ouinet-HTTP-Status` header, and head verification should automatically replace the `206` status (if so allowed) with the saved one (only for verification purposes).
 
-HTTP range requests from client to injector may not be supported since the injector would need to download all data from the beginning to compute an initial `ouihash`.  This could be abused to make the injector use resources by asking for the last block of a big file.  At any rate, in such an injection, `Digest:` and `X-Ouinet-Data-Size:` may be missing in the final response head, if the injector did not have access to the whole body data.  Also, the (aligned) `Content-Range:` header would never be signed to allow later sharing of different subranges, which can be validated independently anyway.
+HTTP range requests from client to injector may not be supported since the injector would need to download all data from the beginning to compute the initial `ouipsig` and `ouihash`.  This could be abused to make the injector use resources by asking for the last block of a big file.  At any rate, in such an injection, `Digest:` and `X-Ouinet-Data-Size:` may be missing in the final response head, if the injector did not have access to the whole body data.  Also, the (aligned) `Content-Range:` header would never be signed to allow later sharing of different subranges, which can be validated independently anyway.
 
 ## HEAD requests
 

@@ -348,9 +348,9 @@ To construct a signature stream, the injector server computes the following comp
 * `injection-id`: The unique ID of the cache entry, described in the `X-Ouinet-Injection` response header.
 * `header-signature`: A signature over the headers of the cache entry. This is computed the same way as the complete cache entry signature described in the previous section, except that the `Digest` and `X-Ouinet-Data-Size` headers are absent. This absence makes it possible for the injector server to compute the `header-signature` before fetching the complete response body.
 * `block(i)`: The sequence of bytes running from byte `i * block-size` in the response body, to byte `(i + 1) * block-size` in the response body. The last block in this sequence may have fewer than `block-size` bytes.
-* `hash(0)`: The cryptographic hash of `block(0)`.
-* `hash(i)`, for `i > 0`: The cryptographic hash of `hash(i - 1) ++ block(i)`.
-* `block-signature(i)`: The signature of the bytestring `injection-id ++ '\0' ++ (i * block-size) ++ '\0' ++ hash(i)`.
+* `hash(i)`: The cryptographic hash of `block(i)`.
+* `chained-hash(i)`: The cryptographic hash of `block-signature(i - 1) ++ chained-hash(i - 1) ++ hash(i)`. `block-signature(-1)` and `chained-hash(-1)` are conventionally the empty string.
+* `block-signature(i)`: The signature of the bytestring `injection-id ++ '\0' ++ ascii-decimal(i * block-size) ++ '\0' ++ chained-hash(i)`.
 * `data-size`: The size of the complete response body, measured as a number of bytes.
 * `full-signature`: The signature of the complete cache entry, as described in the previous section.
 
@@ -375,13 +375,11 @@ A cache entry signed using implementations of these primitives different from th
 
 #### Examples
 
-**TODOv6 OBSOLETE**
-
 An injector server using Ed25519 private key `KEY` might construct the following as-yet unsigned cache entry:
 
 ```
 HTTP/1.1 200 OK
-X-Ouinet-Version: 4
+X-Ouinet-Version: 6
 X-Ouinet-URI: https://example.com/hello
 X-Ouinet-Injection: id=qwertyuiop-12345,ts=1584748800
 Date: Sat, 21 Mar 2020 00:00:00 GMT
@@ -408,7 +406,7 @@ In this signature, `<key>` stands for the public key associated with the `KEY` p
 ```
 (response-status): 200
 (created): 1584748800
-x-ouinet-version: 4
+x-ouinet-version: 6
 x-ouinet-uri: https://example.com/hello
 x-ouinet-injection: id=qwertyuiop-12345,ts=1584748800
 date: Sat, 21 Mar 2020 00:00:00 GMT
@@ -428,11 +426,14 @@ The injector server might choose not to create a signature stream for this cache
 * `block(1)`: ` worl`
 * `block(2)`: `d!`
 * `hash(0)`: sha512(`Hello`) = bytes(`3615f80c9d293ed7402687f94b22d58e529b8cc7916f8fac7fddf7fbd5af4cf777d3d795a7a00a16bf7e7f3fb9561ee9baae480da9fe7a18769e71886b03f315`)
-* `hash(1)`: sha512(bytes(`3615...f315`) ++ ` worl`) = bytes(`9f3cda2fa89c046c51a5635693a5c8e26a8a19fa0675c785bb1b318910db4ea49ee281e264d1f1461533f48e81d81eb53dd6addd21ad9e42ec46182b93c37d5e`)
-* `hash(2)`: sha512(bytes(`9f3c...7d5e`) ++ `d!`) = bytes(`a5424a9d7faf90c636fe14686de2b44e490d36e94113aec176d68cd7e86b59e4d8df7712e62f967c27a54e7216f812b6371d456e94529b46423ac1acd797572c`)
-* `block-signature(0)` = base64(signature(`qwertyuiop-12345` `\0` `0` `\0` bytes(`3615...f315`)))
-* `block-signature(1)` = base64(signature(`qwertyuiop-12345` `\0` `5` `\0` bytes(`9f3c...7d5e`)))
-* `block-signature(2)` = base64(signature(`qwertyuiop-12345` `\0` `10` `\0` bytes(`a542...572c`)))
+* `hash(1)`: sha512(` worl`) = bytes(`aa82fd4f26829609f65c8a4828f40326897e7099e22f366306fbf870a691e590fa3335eb5e9399511aed5a901adb747feee7fb0198952175c0d8bf4034d45c23`)
+* `hash(2)`: sha512(`d!`) = bytes(`7def752f32053ab9b715d7d3f9364df7a050eb86f88a558a0d42aff49b4671a2dfabde2beb8ad15d69c623e27b8cdfdf3d83bf4249940654b77d6a12bdff125e`)
+* `chained-hash(0)`: sha512(hash(0))
+* `block-signature(0)` = signature(`qwertyuiop-12345` `\0` `0` `\0` chained-hash(0))
+* `chained-hash(1)`: sha512(block-signature(0) ++ chained-hash(0) ++ hash(1))
+* `block-signature(1)` = signature(`qwertyuiop-12345` `\0` `5` `\0` chained-hash(1))
+* `chained-hash(2)`: sha512(block-signature(1) ++ chained-hash(1) ++ hash(2))
+* `block-signature(2)` = signature(`qwertyuiop-12345` `\0` `10` `\0` chained-hash(2))
 * `data-size`: 12
 * `full-signature`: The complete cache entry signature described above
 
@@ -441,7 +442,7 @@ In the computation of `header-signature` in the above, `<key>` stands for the pu
 ```
 (response-status): 200
 (created): 1584748800
-x-ouinet-version: 4
+x-ouinet-version: 6
 x-ouinet-uri: https://example.com/hello
 x-ouinet-injection: id=qwertyuiop-12345,ts=1584748800
 date: Sat, 21 Mar 2020 00:00:00 GMT
@@ -510,7 +511,7 @@ An injector server transmitting the example cache entry described at the end of 
 
 ```
 HTTP/1.1 200 OK
-X-Ouinet-Version: 4
+X-Ouinet-Version: 6
 X-Ouinet-URI: https://example.com/hello
 X-Ouinet-Injection: id=qwertyuiop-12345,ts=1584748800
 Date: Sat, 21 Mar 2020 00:00:00 GMT
@@ -522,11 +523,11 @@ Trailer: Digest, X-Ouinet-Data-Size, X-Ouinet-Sig1
 
 5
 Hello
-5;ouisig=<block-signature(0)>
+5;ouisig=<base64(block-signature(0))>
  worl
-2;ouisig=<block-signature(1)>
+2;ouisig=<base64(block-signature(1))>
 d!
-0;ouisig=<block-signature(2)>
+0;ouisig=<base64(block-signature(2))>
 Digest: SHA-256=wFNeS+K3n/2TKRMFQ2v4iTFOSj+uwF7P/Lt98xrZ5Ro=
 X-Ouinet-Data-Size: 12
 X-Ouinet-Sig1: keyId="ed25519=<key>",algorithm="hs2019",created=1584748800, headers="(response-status) (created) x-Ouinet-version x-Ouinet-uri x-Ouinet-injection date content-type digest x-Ouinet-data-size",signature="<full-signature-base64>"
@@ -537,7 +538,7 @@ If the injector server decided to only create a complete cache entry signature, 
 
 ```
 HTTP/1.1 200 OK
-X-Ouinet-Version: 4
+X-Ouinet-Version: 6
 X-Ouinet-URI: https://example.com/hello
 X-Ouinet-Injection: id=qwertyuiop-12345,ts=1584748800
 Date: Sat, 21 Mar 2020 00:00:00 GMT
@@ -558,7 +559,7 @@ When sending only a complete cache signature like the example above, the injecto
 
 ```
 HTTP/1.1 200 OK
-X-Ouinet-Version: 4
+X-Ouinet-Version: 6
 X-Ouinet-URI: https://example.com/hello
 X-Ouinet-Injection: id=qwertyuiop-12345,ts=1584748800
 Date: Sat, 21 Mar 2020 00:00:00 GMT
@@ -576,7 +577,7 @@ Of these three examples, the last two would be considered equivalent by a recipi
 
 ### Peer-to-peer cache entry exchange
 
-**TODOv6 OBSOLETE,INCOMPLETE(multi-peer)**
+**TODOv6 INCOMPLETE(multi-peer)**
 
 When a Ouinet client stores a collection of cache entries in its device local storage, it can share these cache entries with other users that wish to access them. By fetching cache entries from other users in this way, without involvement of the injector servers, a Ouinet client can access web content even in cases when it cannot reach the injector servers.
 
@@ -608,7 +609,7 @@ When a Ouinet client stores a cache entry signed using a signature stream, it ca
 
 The Ouinet client implements this functionality in peer-to-peer connections through the mechanism of HTTP range requests. A client can send a cache entry HTTP request containing the `Range` header, requesting that the responding client sends it only the fragment of the resource delineated by this range; for example, a client might request the second unit of thousand bytes by sending the `Range: bytes=1000-1999` request header. If the responding client stores a cache entry for the requested resource signed using a signature stream, it can respond by sending only those resource data blocks that cover this byte range, along with block signatures for those data blocks. If the requested byte range does not align to the block size, the responding client has to send somewhat more data than was requested, rounded up to the nearest block size boundary.
 
-For a client to verify the legitimacy of a sequence of consecutive blocks that do not include the first block in the resource, it is not sufficient for the client to hold the block signatures for those blocks. Because each block signature contains a reference to the block hash of the previous block, the verifying client additionally needs to hold the block hash of the block immediately preceeding the first block it wishes to verify, unless the first block it wishes to verify is also the first block in the resource. That is to say, if a client holds `block(i)`, `block(i + 1)`, ..., `block(j)`, for `0 < i <= j`, it needs `block-signature(i)`, `block-signature(i + 1)`, ... `block-signature(j)`, and `hash(i - 1)` to be able to perform a verification of this signature stream. To make this possible, a client responding to a range request with a partial content response will add this preceeding hash to the HTTP response, in the form of an additional chunk extension.
+For a client to verify the legitimacy of a sequence of consecutive blocks that do not include the first block in the resource, it is not sufficient for the client to hold the block signatures for those blocks. Because each block signature contains (via the block's chained hash) a reference to the signature and chained hash of the previous block, the verifying client additionally needs to hold the chained hash of the block immediately preceeding the first block it wishes to verify, unless the first block it wishes to verify is also the first block in the resource. That is to say, if a client holds `block(i)`, `block(i + 1)`, ..., `block(j)`, for `0 < i <= j`, it needs `block-signature(i)`, `block-signature(i + 1)`, ... `block-signature(j)`, as well as `block-signature(i - 1)` and `chained-hash(i - 1)` to be able to perform a verification of this signature stream. To make this possible, a client responding to a range request with a partial content response will add these preceeding signature and hash to the HTTP response, in the form of additional chunk extensions.
 
 A client receiving a range request for a cache entry can reply with a response containing that partial data, as described above, if it has the facilities and metadata to do so; if it does not, it can send a response containing the complete resource, as if the `Range` header were not present at all. If it does reply with a response containing partial data, the client will send a response structured as a variant of the regular signature stream response, to which the following modifications apply:
 
@@ -616,7 +617,7 @@ A client receiving a range request for a cache entry can reply with a response c
 * The response contains a `Content-Range` header, describing the resource fragment included in the response. This range may be broader than the requested range, to ensure the range is aligned to the block boundary. A partial data response may include multiple ranges.
 * The response contains an additional `X-Ouinet-HTTP-Status` header, containing the status code of the response that would have been sent if no `Range` was requested, denoted as an integer value. The recipient requires this original status code to be able to verify the cache entry signature, and will substitute it when performing this verification.
 * The response contains one `ouisig` chunk extension for each data block included in the resource fragment, in the order that those data blocks are transferred, containing the block signatures for those blocks. Block signatures for blocks that are not covered by the response are not included.
-* The response contains one `ouihash=<hash>` chunk extension for each separate range described in the `Content-Range` header, except for those ranges that contain the first block in the resource, in the same order as the ranges described in the `Content-Range` header. For each range described in the `Content-Range` header that covers the fragment of the resource from `block(i)` up to `block(j)`, the `<hash>` contains `hash(i - 1)`, in base64 encoding.
+* The response contains one `ouipsig=<signature>` and `ouihash=<hash>` chunk extension for each separate range described in the `Content-Range` header, except for those ranges that contain the first block in the resource, in the same order as the ranges described in the `Content-Range` header. For each range described in the `Content-Range` header that covers the fragment of the resource from `block(i)` up to `block(j)`, the `<signature>` and `<hash>` contain `block-signature(i - 1)` and `chained-hash(i - 1)` respectively, both in base64 encoding.
 
 #### Examples
 
@@ -624,7 +625,7 @@ A client wishing to fetch only the second half of the example cache entry descri
 
 ```
 GET https://example.com/hello HTTP/1.1
-X-Ouinet-Version: 4
+X-Ouinet-Version: 6
 Range: bytes=6-11
 
 ```
@@ -633,7 +634,7 @@ If the receiving client contains a cache entry for this resource signed using a 
 
 ```
 HTTP/1.1 206 Partial Content
-X-Ouinet-Version: 4
+X-Ouinet-Version: 6
 X-Ouinet-URI: https://example.com/hello
 X-Ouinet-Injection: id=qwertyuiop-12345,ts=1584748800
 Date: Sat, 21 Mar 2020 00:00:00 GMT
@@ -647,11 +648,11 @@ Transfer-Encoding: chunked
 Content-Range: bytes 5-11/12
 X-Ouinet-HTTP-Status: 200
 
-5;ouihash=NhX4DJ0pPtdAJof5SyLVjlKbjMeRb4+sf933+9WvTPd309eVp6AKFr9+fz+5Vh7puq5IDan+ehh2nnGIawPzFQ==
+5;ouipsig="<base64(block-signature(0))>";ouihash="<base64(chained-hash(0))>"
  worl
-2;ouisig=<block-signature(1)>
+2;ouisig=<base64(block-signature(1))>
 d!
-0;ouisig=<block-signature(2)>
+0;ouisig=<base64(block-signature(2))>
 
 ```
 

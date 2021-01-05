@@ -109,6 +109,7 @@ parse_data_block_offset(const std::string& s)  // `^[0-9a-f]*$`
 }
 
 // A signatures file entry with `OFFSET[i] SIGNATURE[i] BLOCK_DIGEST[i] CHASH[i-1]`.
+// TODO: implement `ouipsig`
 struct SigEntry {
     std::size_t offset;
     std::string signature;
