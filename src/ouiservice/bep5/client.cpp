@@ -311,19 +311,18 @@ private:
     }
 
     std::vector<shared_ptr<AbstractClient>> select_injectors_to_ping() {
+        // Select the first (at most) `max` injectors after shuffling them.
         static const unsigned max = 30;
 
         auto injector_map = _injector_swarm->peers();
         std::vector<shared_ptr<AbstractClient>> injectors;
-        injectors.reserve(std::min<unsigned>(max, injector_map.size()));
-
-        unsigned i = 0;
-        for (auto& p : injector_map) {
-            if (i++ == max) break;
+        injectors.reserve(injector_map.size());
+        for (auto& p : injector_map)
             injectors.push_back(p.second);
-        }
 
         std::shuffle(injectors.begin(), injectors.end(), _random_generator);
+        if (injectors.size() > max)
+            injectors.resize(max);
 
         return injectors;
     }
