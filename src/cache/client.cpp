@@ -12,7 +12,6 @@
 #include "../util/lru_cache.h"
 #include "../util/handler_tracker.h"
 #include "../bittorrent/dht.h"
-#include "../bittorrent/is_martian.h"
 #include "../ouiservice/utp.h"
 #include "../logger.h"
 #include "../async_sleep.h"
