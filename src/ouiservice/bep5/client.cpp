@@ -246,8 +246,8 @@ private:
             auto injs = _injector_swarm->peers();
 
             _DEBUG("Waiting to ping injectors...");
-            while (_last_ping_time && (Clock::now() - *_last_ping_time) < _ping_frequency) {
-                auto d = Clock::now() - *_last_ping_time;
+            if (_last_ping_time && (Clock::now() - *_last_ping_time) < _ping_frequency) {
+                auto d = (*_last_ping_time + _ping_frequency) - Clock::now();
                 async_sleep(get_executor(), d, cancel, yield);
                 if (cancel) return;
             }
