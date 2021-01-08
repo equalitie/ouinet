@@ -112,7 +112,8 @@ struct detail::Bep5AnnouncerImpl
             // Alternatively, set a closer period but use a normal (instead of uniform) distribution.
             auto sleep = debug ? random_timeout(2min, 4min) : random_timeout(5min, 12min);
 
-            _DEBUG("Waiting for ", (sleep.count()/1000.f), "s to announce infohash=", infohash);
+            _DEBUG( "Waiting for ", chrono::duration_cast<chrono::seconds>(sleep).count()
+                  , "s to announce infohash=", infohash);
 
             async_sleep(exec, sleep, cancel, yield);
         }
