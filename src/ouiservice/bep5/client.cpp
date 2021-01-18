@@ -227,11 +227,11 @@ public:
 
     ~InjectorPinger() { _lifetime_cancel(); }
 
-    // Let this pinger known that injector was seen from somewhere else so that
+    // Let this pinger known that injector was directly seen from somewhere else so that
     // it can postpone pinging.
     void injector_was_seen_now()
     {
-        _last_ping_time = Clock::now();
+        _injector_was_seen = true;
     }
 
 private:
@@ -242,10 +242,12 @@ private:
         _injector_swarm->wait_for_ready(cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec);
 
+        boost::optional<chrono::steady_clock::time_point> _last_ping_time;
         while (!cancel) {
             auto injs = _injector_swarm->peers();
 
             _DEBUG("Waiting to ping injectors...");
+            _injector_was_seen = false;
             if (_last_ping_time && (Clock::now() - *_last_ping_time) < _ping_frequency) {
                 auto d = (*_last_ping_time + _ping_frequency) - Clock::now();
                 async_sleep(get_executor(), d, cancel, yield);
@@ -253,17 +255,24 @@ private:
             }
             _DEBUG("Waiting to ping injectors: done");
 
-            bool got_reply = ping_injectors(select_injectors_to_ping(), cancel, yield[ec]);
-            if (!cancel && ec)
-                _ERROR("Failed to ping injectors ec:", ec.message());
-            return_or_throw_on_error(yield, cancel, ec);
+            bool got_reply = _injector_was_seen;
+            if (got_reply)
+                // A succesful direct connection during the pause is taken as a sign of reachability.
+                _DEBUG("Made connection to injector, announcing as helper (bridge)");
+            else {
+                got_reply = ping_injectors(select_injectors_to_ping(), cancel, yield[ec]);
+                if (!cancel && ec)
+                    _ERROR("Failed to ping injectors ec:", ec.message());
+                return_or_throw_on_error(yield, cancel, ec);
+                if (got_reply)
+                    _DEBUG("Got pong from injectors, announcing as helper (bridge)");
+            }
 
             _last_ping_time = Clock::now();
 
-            if (got_reply) {
-                _DEBUG("Got pong from injectors, announcing as helper (bridge)");
+            if (got_reply)
                 _helper_announcer->update();
-            } else
+            else
                 _VERBOSE("Did not get pong from injectors,"
                          " the network may be down or they may be blocked");
         }
@@ -333,7 +342,7 @@ private:
     static const bool _debug = false;  // for development testing only
     Cancel _lifetime_cancel;
     shared_ptr<Bep5Client::Swarm> _injector_swarm;
-    boost::optional<chrono::steady_clock::time_point> _last_ping_time;
+    bool _injector_was_seen = false;
     const Clock::duration _ping_frequency = chrono::minutes(_debug ? 2 : 10);
     std::mt19937 _random_generator;
     std::unique_ptr<bt::Bep5ManualAnnouncer> _helper_announcer;
