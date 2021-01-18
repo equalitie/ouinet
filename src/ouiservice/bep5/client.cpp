@@ -583,12 +583,11 @@ GenericStream Bep5Client::connect( asio::yield_context yield
               , " ec:", ec.message());
     } else {
         _last_working_ep = ret_ep;
-        if (_injector_pinger) {
-            _injector_pinger->injector_was_seen_now();
-        }
-        if (ret_target == Target::injectors)
+        if (ret_target == Target::injectors) {
+            if (_injector_pinger)
+                _injector_pinger->injector_was_seen_now();
             _DEBUG("Connected to injector peer directly; rep:", ret_ep);
-        else if (ret_target == Target::helpers)
+        } else if (ret_target == Target::helpers)
             _DEBUG("Connected to injector via helper peer (bridge); rep:", ret_ep);
         else
             assert(0 && "Invalid peer type");
