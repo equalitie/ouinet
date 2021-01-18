@@ -244,8 +244,6 @@ private:
 
         boost::optional<chrono::steady_clock::time_point> _last_ping_time;
         while (!cancel) {
-            auto injs = _injector_swarm->peers();
-
             _DEBUG("Waiting to ping injectors...");
             _injector_was_seen = false;
             if (_last_ping_time && (Clock::now() - *_last_ping_time) < _ping_frequency) {
