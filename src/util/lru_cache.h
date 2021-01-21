@@ -13,34 +13,34 @@ private:
     using KeyVal = std::pair<Key, Value>;
     using ListIter = typename std::list<KeyVal>::iterator;
     using Map = std::unordered_map<Key, ListIter>;
-    using MapIter = typename Map::iterator;
+    using MapIter = typename Map::const_iterator;
 
 
 public:
-    class iterator {
+    class const_iterator {
         friend class LruCache;
         MapIter i;
     public:
-        iterator(MapIter i) : i(i) {}
-        KeyVal& operator*() { return *i->second; }
-        KeyVal* operator->() { return &*i->second; }
+        const_iterator(MapIter i) : i(i) {}
+        const KeyVal& operator*() const { return *i->second; }
+        const KeyVal* operator->() const { return &*i->second; }
 
-        iterator& operator++() {
+        const_iterator& operator++() {
             ++i;
             return *this;
         }
 
-        iterator operator++(int) {
-            iterator ret{i};
+        const_iterator operator++(int) {
+            const_iterator ret{i};
             ++i;
             return ret;
         }
 
-        bool operator==(iterator j) const {
+        bool operator==(const_iterator j) const {
             return i == j.i;
         }
 
-        bool operator!=(iterator j) const {
+        bool operator!=(const_iterator j) const {
             return i != j.i;
         }
     };
@@ -100,17 +100,17 @@ public:
 
     // TODO: Currently the returned iterator is not
     // ordered by usage.
-    iterator begin() {
-        return iterator{_map.begin()};
+    const_iterator begin() const {
+        return const_iterator{_map.begin()};
     }
 
     // TODO: Currently the returned iterator is not
     // ordered by usage.
-    iterator end() {
-        return iterator{_map.end()};
+    const_iterator end() const {
+        return const_iterator{_map.end()};
     }
 
-    iterator erase(iterator i) {
+    const_iterator erase(const_iterator i) {
         auto j = i;
         ++j;
         _list.erase(i.i->second);
@@ -118,7 +118,7 @@ public:
         return j;
     }
 
-    void move_to_front(iterator i) {
+    void move_to_front(const_iterator i) {
         _list.splice(_list.begin(), _list, i.i->second);
     }
 
