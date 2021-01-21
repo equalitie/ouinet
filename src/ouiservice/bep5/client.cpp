@@ -1,3 +1,5 @@
+#include <boost/functional/hash.hpp>
+
 #include "client.h"
 #include "../utp.h"
 #include "../connect_proxy.h"
@@ -8,6 +10,7 @@
 #include "../../bittorrent/is_martian.h"
 #include "../../logger.h"
 #include "../../util/hash.h"
+#include "../../util/lru_cache.h"
 #include "../../ssl/util.h"
 #include "../../util/handler_tracker.h"
 
@@ -51,11 +54,43 @@ choose_multiplexer_for(bt::MainlineDht& dht, const udp::endpoint& ep)
     return boost::none;
 }
 
+// Based on <https://stackoverflow.com/a/7222201>
+// and `../dht_lookup.h`.
+template <>
+struct std::hash<asio::ip::udp::endpoint>
+{
+    inline std::size_t operator() (const asio::ip::udp::endpoint& ep) const
+    {
+        std::size_t seed = 0;
+        // IPv4 addresses are encoded as IPv4-mapped IPv6 addresses
+        // to hash every address consistently regardless of the protocol version,
+        // so no need to take the protocol into account.
+        //boost::hash_combine(seed, ep.protocol().protocol());
+
+        asio::ip::address_v6::bytes_type addr6{0,0,0,0, 0,0,0,0, 0xff,0xff,0xff,0xff, 0,0,0,0};
+        auto addr = ep.address();
+        if (addr.is_v4()) {
+            auto addr4 = addr.to_v4().to_ulong();
+            for (unsigned i = 15; i > 11; --i) {
+                addr6[i] = addr4 & 0x000000fful;
+                addr4 >>= 8;
+            }
+        } else {
+            assert(addr.is_v6());
+            addr6 = addr.to_v6().to_bytes();
+        }
+
+        boost::hash_combine(seed, addr6);
+        boost::hash_combine(seed, ep.port());
+        return seed;
+    }
+};
+
 struct Bep5Client::Swarm
 {
 private:
     using Peer  = AbstractClient;
-    using Peers = std::map<asio::ip::udp::endpoint, std::shared_ptr<Peer>>;
+    using Peers = util::LruCache<asio::ip::udp::endpoint, std::shared_ptr<Peer>>;
 
 private:
     Bep5Client* _owner;
@@ -77,6 +112,7 @@ public:
         , _dht(move(dht))
         , _infohash(infohash)
         , _lifetime_cancel(cancel)
+        , _peers(100)  // TODO choose different for injectorss & bridges
         , _connect_proxy(connect_proxy)
     {}
 
@@ -196,13 +232,11 @@ private:
             // Don't connect to self
             if (wan_eps.count(ep) || lan_eps.count(ep)) continue;
 
-            auto r = _peers.emplace(ep, nullptr);
-
-            if (r.second) {
-                auto p = make_peer(ep);
-                if (!p) continue;
-                r.first->second = move(p);
-            }
+            auto r = _peers.get(ep);
+            if (r) continue;  // already known, moved to front
+            auto p = make_peer(ep);
+            if (!p) continue;
+            _peers.put(ep, move(p));
         }
     }
 };
