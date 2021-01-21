@@ -20,6 +20,9 @@
 #define _INFO(...)  LOG_INFO(_LOGPFX, __VA_ARGS__)
 #define _ERROR(...) LOG_ERROR(_LOGPFX, __VA_ARGS__)
 
+static const std::size_t injector_swarm_capacity = 100;  // TODO choose proper value
+static const std::size_t helper_swarm_capacity = 100;  // TODO choose proper value
+
 using namespace std;
 using namespace ouinet;
 using namespace ouiservice;
@@ -117,13 +120,14 @@ public:
     Swarm( Bep5Client* owner
          , bt::NodeID infohash
          , shared_ptr<bt::MainlineDht> dht
+         , size_t capacity
          , Cancel& cancel
          , bool connect_proxy)
         : _owner(owner)
         , _dht(move(dht))
         , _infohash(infohash)
         , _lifetime_cancel(cancel)
-        , _peers(100)  // TODO choose different for injectorss & bridges
+        , _peers(capacity)
         , _connect_proxy(connect_proxy)
     {}
 
@@ -432,7 +436,7 @@ void Bep5Client::start(asio::yield_context)
 
         _INFO("Injector swarm: sha1('", _injector_swarm_name, "'): ", infohash.to_hex());
 
-        _injector_swarm.reset(new Swarm(this, infohash, _dht, _cancel, false));
+        _injector_swarm.reset(new Swarm(this, infohash, _dht, injector_swarm_capacity, _cancel, false));
         _injector_swarm->start();
     }
 
@@ -441,7 +445,7 @@ void Bep5Client::start(asio::yield_context)
 
         _INFO("Helper swarm (bridges): sha1('", _helpers_swarm_name, "'): ", infohash.to_hex());
 
-        _helpers_swarm.reset(new Swarm(this, infohash, _dht, _cancel, true));
+        _helpers_swarm.reset(new Swarm(this, infohash, _dht, helper_swarm_capacity, _cancel, true));
         _helpers_swarm->start();
 
         _injector_pinger.reset(new InjectorPinger(_injector_swarm, _helpers_swarm_name, _dht, _cancel));
