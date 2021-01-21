@@ -22,6 +22,10 @@
 
 static const std::size_t injector_swarm_capacity = 100;  // TODO choose proper value
 static const std::size_t helper_swarm_capacity = 100;  // TODO choose proper value
+static const std::size_t injectors_to_ping = 30;
+static const auto injector_ping_period = std::chrono::minutes(10);
+static const auto injector_ping_period_debug = std::chrono::minutes(2);
+static const auto injector_pong_timeout = std::chrono::seconds(60);
 
 using namespace std;
 using namespace ouinet;
@@ -352,7 +356,7 @@ private:
                 auto sc = success_cancel.connect([&] { c(); });
 
                 sys::error_code ec;
-                WatchDog wd(ex, chrono::seconds(60), [&] { c(); });
+                WatchDog wd(ex, injector_pong_timeout, [&] { c(); });
                 if (ping_one_injector(inj, c, yield[ec])) {
                     success_cancel();
                 }
@@ -367,9 +371,7 @@ private:
     }
 
     std::vector<shared_ptr<AbstractClient>> select_injectors_to_ping() {
-        // Select the first (at most) `max` injectors after shuffling them.
-        static const unsigned max = 30;
-
+        // Select the first (at most) `injectors_to_ping` injectors after shuffling them.
         auto injector_map = _injector_swarm->peers();
         std::vector<shared_ptr<AbstractClient>> injectors;
         injectors.reserve(injector_map.size());
@@ -377,8 +379,8 @@ private:
             injectors.push_back(p.second);
 
         std::shuffle(injectors.begin(), injectors.end(), _random_generator);
-        if (injectors.size() > max)
-            injectors.resize(max);
+        if (injectors.size() > injectors_to_ping)
+            injectors.resize(injectors_to_ping);
 
         return injectors;
     }
@@ -390,7 +392,7 @@ private:
     Cancel _lifetime_cancel;
     shared_ptr<Bep5Client::Swarm> _injector_swarm;
     bool _injector_was_seen = false;
-    const Clock::duration _ping_frequency = chrono::minutes(_debug ? 2 : 10);
+    const Clock::duration _ping_frequency = (_debug ? injector_ping_period_debug : injector_ping_period);
     std::mt19937 _random_generator;
     std::unique_ptr<bt::Bep5ManualAnnouncer> _helper_announcer;
 };
