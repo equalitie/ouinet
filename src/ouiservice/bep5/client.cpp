@@ -20,8 +20,17 @@
 #define _INFO(...)  LOG_INFO(_LOGPFX, __VA_ARGS__)
 #define _ERROR(...) LOG_ERROR(_LOGPFX, __VA_ARGS__)
 
-static const std::size_t injector_swarm_capacity = 100;  // TODO choose proper value
-static const std::size_t helper_swarm_capacity = 100;  // TODO choose proper value
+// It is ok to have many of these as a resort if injectors are not reachable,
+// as long as they are fresh in the DHT.
+static const std::size_t helper_swarm_capacity = 100;
+// It is probably good to drop entries more aggressively from here
+// to avoid accumulating spurious fake injector entries
+// which may impede trying to ping good injectors.
+static const std::size_t injector_swarm_capacity = 50;
+// Choose values which would allow trying to ping a single injector entry
+// if it was always available in the DHT,
+// before we go over the "questionable" period (15 minutes according to BEP5)
+// several times in a row.
 static const std::size_t injectors_to_ping = 30;
 static const auto injector_ping_period = std::chrono::minutes(10);
 static const auto injector_ping_period_debug = std::chrono::minutes(2);
