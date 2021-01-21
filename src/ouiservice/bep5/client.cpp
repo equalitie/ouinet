@@ -56,32 +56,43 @@ choose_multiplexer_for(bt::MainlineDht& dht, const udp::endpoint& ep)
 
 // Based on <https://stackoverflow.com/a/7222201>
 // and `../dht_lookup.h`.
+namespace boost {
+static inline void hash_combine(std::size_t& seed, const asio::ip::address& addr)
+{
+    // IPv4 addresses are encoded as IPv4-mapped IPv6 addresses
+    // to hash every address consistently regardless of the protocol version,
+    // so no need to take the protocol into account.
+    //boost::hash_combine(seed, ep.protocol().protocol());
+
+    asio::ip::address_v6::bytes_type addr6{0,0,0,0, 0,0,0,0, 0xff,0xff,0xff,0xff, 0,0,0,0};
+    if (addr.is_v4()) {
+        auto addr4 = addr.to_v4().to_ulong();
+        for (unsigned i = 15; i > 11; --i) {
+            addr6[i] = addr4 & 0x000000fful;
+            addr4 >>= 8;
+        }
+    } else {
+        assert(addr.is_v6());
+        addr6 = addr.to_v6().to_bytes();
+    }
+
+    boost::hash_combine(seed, addr6);
+}
+
+static inline void hash_combine(std::size_t& seed, const asio::ip::udp::endpoint& ep)
+{
+    boost::hash_combine(seed, ep.address());
+    boost::hash_combine(seed, ep.port());
+}
+}
+
 template <>
 struct std::hash<asio::ip::udp::endpoint>
 {
     inline std::size_t operator() (const asio::ip::udp::endpoint& ep) const
     {
         std::size_t seed = 0;
-        // IPv4 addresses are encoded as IPv4-mapped IPv6 addresses
-        // to hash every address consistently regardless of the protocol version,
-        // so no need to take the protocol into account.
-        //boost::hash_combine(seed, ep.protocol().protocol());
-
-        asio::ip::address_v6::bytes_type addr6{0,0,0,0, 0,0,0,0, 0xff,0xff,0xff,0xff, 0,0,0,0};
-        auto addr = ep.address();
-        if (addr.is_v4()) {
-            auto addr4 = addr.to_v4().to_ulong();
-            for (unsigned i = 15; i > 11; --i) {
-                addr6[i] = addr4 & 0x000000fful;
-                addr4 >>= 8;
-            }
-        } else {
-            assert(addr.is_v6());
-            addr6 = addr.to_v6().to_bytes();
-        }
-
-        boost::hash_combine(seed, addr6);
-        boost::hash_combine(seed, ep.port());
+        boost::hash_combine(seed, ep);
         return seed;
     }
 };
