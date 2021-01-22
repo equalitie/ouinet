@@ -506,7 +506,8 @@ void Bep5Client::status_loop(asio::yield_context yield)
         auto hlp_n = _helpers_swarm ? _helpers_swarm->peers().size() : 0;
         logger.debug(util::str(
             "Bep5Client: swarm status:",
-            " injectors=", inj_n, " bridges=", hlp_n));
+            " injectors=", inj_n, (inj_n == injector_swarm_capacity ? " (max)" : ""),
+            " bridges=", hlp_n, (hlp_n == helper_swarm_capacity ? " (max)" : "")));
     }
 }
 
