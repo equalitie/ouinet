@@ -92,10 +92,19 @@ private:
                                              , lease_duration
                                              , yield);
                 if (cancel) return;
-                if (r) {
-                    success_cnt++;
-                    mapping_enabled();
+                if (!r) continue;
+
+                if (!has_recent_port_mapping(igd, mapping_desc, lease_duration, cancel, yield)) {
+                    // Versions of MiniUPnPd before 2015-07-09 fail to refresh existing mappings,
+                    // see <https://github.com/miniupnp/miniupnp/issues/131>,
+                    // so check actual result and do not count if failed.
+                    LOG_VERBOSE("UPnP: IGD did not add/refresh mapping for \"", mapping_desc, "\""
+                                " but reported no error; buggy IGD/router?");
+                    continue;
                 }
+                LOG_DEBUG("UPnP: Successfully added/refreshed one mapping.");
+                success_cnt++;
+                mapping_enabled();
             }
             LOG_DEBUG("UPnP: Adding mappings for \"", mapping_desc, "\": done");
 
@@ -125,6 +134,25 @@ private:
         _mapping_is_active = false;
     }
 
+private:
+    bool has_recent_port_mapping( upnp::igd& igd, const std::string& desc, std::chrono::seconds duration
+                                , Cancel& cancel, asio::yield_context yield) const {
+        static const auto recent_margin = std::chrono::seconds(10);  // max RPC round-trip time
+
+        auto cancelled = cancel.connect([&] { igd.stop(); });
+        auto r_mappings = igd.get_list_of_port_mappings( upnp::igd::udp
+                                                       , _external_port, _external_port, 1
+                                                       , yield);
+        if (cancel) return false;
+        if (!r_mappings) return false;
+
+        for (const auto& m : r_mappings.value())
+            if ( m.enabled && _internal_port == m.int_port && desc == m.description
+               && duration < m.lease_duration + recent_margin)
+                return true;
+
+        return false;
+    }
 private:
     Cancel _lifetime_cancel;
     uint16_t _external_port;
