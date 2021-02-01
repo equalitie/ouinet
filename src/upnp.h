@@ -72,6 +72,7 @@ private:
 
             if (!r_igds) {
                 mapping_disabled();
+                LOG_DEBUG("UPnP: No IGDs found, waiting.");
                 async_sleep(exec, failure_wait_time, cancel, yield);
                 if (cancel) return;
                 continue;
@@ -79,6 +80,7 @@ private:
 
             auto igds = move(r_igds.value());
 
+            LOG_DEBUG("UPnP: Adding mappings for \"", mapping_desc, "\"...");
             size_t success_cnt = 0;
             for(auto& igd : igds) {
                 auto cancelled = cancel.connect([&] { igd.stop(); });
@@ -95,6 +97,7 @@ private:
                     mapping_enabled();
                 }
             }
+            LOG_DEBUG("UPnP: Adding mappings for \"", mapping_desc, "\": done");
 
             if (success_cnt == 0) mapping_disabled();
 
