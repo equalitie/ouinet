@@ -67,6 +67,8 @@ private:
 
         while (true)
         {
+            auto round_begin = steady_clock::now();
+
             auto r_igds = upnp::igd::discover(exec, yield);
             if (cancel) return;
 
@@ -112,7 +114,9 @@ private:
 
             auto wait_time = [&] () -> seconds {
                 if (success_cnt == 0) return failure_wait_time;
-                return success_wait_time;
+                auto round_elapsed = steady_clock::now() - round_begin;
+                if (round_elapsed >= success_wait_time) return seconds(0);
+                return success_wait_time - duration_cast<seconds>(round_elapsed);
             }();
 
             async_sleep(exec, wait_time, cancel, yield);
