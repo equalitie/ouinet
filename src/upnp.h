@@ -19,7 +19,7 @@ public:
                , uint16_t internal_port)
         : _external_port(external_port)
         , _internal_port(internal_port)
-        , _random_id(util::random::number<uint32_t>())
+        , _random_id(util::random::number<uint16_t>())
     {
         TRACK_SPAWN(exec, ([
             this,
@@ -66,7 +66,7 @@ private:
         static const auto recent_margin     = seconds(10);  // max RPC round-trip time
         static const auto timeout_pause     = seconds(1);  // to ensure mapping removal after timeout
 
-        auto mapping_desc = (boost::format("Ouinet-%08x") % _random_id).str();
+        auto mapping_desc = (boost::format("Ouinet-%04x") % _random_id).str();
 
         while (true)
         {
@@ -181,7 +181,7 @@ private:
     // to ease tracking those added by this UPnP client.
     // Probably not the most secure option but simple enough
     // without having to check our own address (which is probaly unreliable).
-    uint32_t _random_id;
+    uint16_t _random_id;
     bool _mapping_is_active = false;
 };
 
