@@ -135,7 +135,7 @@ private:
                     auto now = steady_clock::now();
                     auto buggy_refresh = *earlier_buggy_timeout + timeout_pause;
                     if (buggy_refresh < now) return seconds(0);
-                    return ceil<seconds>(buggy_refresh - now);
+                    return std::chrono::ceil<seconds>(buggy_refresh - now);
                 }
                 // Wait until a little before mappings would time out to refresh them.
                 auto round_elapsed = steady_clock::now() - round_begin;
