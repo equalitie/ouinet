@@ -77,7 +77,7 @@ private:
 
             if (!r_igds) {
                 mapping_disabled();
-                LOG_DEBUG("UPnP: No IGDs found, waiting.");
+                LOG_DEBUG("UPnP: No IGDs found, waiting");
                 async_sleep(exec, failure_wait_time, cancel, yield);
                 if (cancel) return;
                 continue;
@@ -113,7 +113,7 @@ private:
                         earlier_buggy_timeout = mapping_timeout;
                     continue;
                 }
-                LOG_DEBUG("UPnP: Successfully added/refreshed one mapping.");
+                LOG_DEBUG("UPnP: Successfully added/refreshed one mapping");
                 success_cnt++;
                 mapping_enabled();
             }
@@ -143,14 +143,14 @@ private:
 
     void mapping_enabled() {
         if (!_mapping_is_active) {
-            LOG_INFO("UPnP mapping enabled UDP EXT_PORT:", _external_port
+            LOG_INFO("UPnP: Mapping enabled for UDP EXT_PORT:", _external_port
                     , " INT_PORT:", _internal_port);
         }
         _mapping_is_active = true;
     }
     void mapping_disabled() {
         if (_mapping_is_active) {
-            LOG_WARN("UPnP mapping disabled");
+            LOG_WARN("UPnP: Mapping disabled");
         }
         _mapping_is_active = false;
     }
