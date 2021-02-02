@@ -60,11 +60,10 @@ private:
             mapping_disabled();
         });
 
-        // TODO: static const
-        auto lease_duration    = minutes(3);
-        auto success_wait_time = lease_duration - seconds(10);
-        auto failure_wait_time = minutes(1);
-        auto recent_margin     = seconds(10);  // max RPC round-trip time
+        static const auto lease_duration    = minutes(3);
+        static const auto success_wait_time = lease_duration - seconds(10);
+        static const auto failure_wait_time = minutes(1);
+        static const auto recent_margin     = seconds(10);  // max RPC round-trip time
 
         auto mapping_desc = (boost::format("Ouinet-%08x") % _random_id).str();
 
