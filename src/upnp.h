@@ -64,6 +64,7 @@ private:
         static const auto success_wait_time = lease_duration - seconds(10);
         static const auto failure_wait_time = minutes(1);
         static const auto recent_margin     = seconds(10);  // max RPC round-trip time
+        static const auto timeout_pause     = seconds(1);  // to ensure mapping removal after timeout
 
         auto mapping_desc = (boost::format("Ouinet-%08x") % _random_id).str();
 
@@ -86,6 +87,7 @@ private:
 
             LOG_DEBUG("UPnP: Adding mappings for \"", mapping_desc, "\"...");
             size_t success_cnt = 0;
+            boost::optional<steady_clock::time_point> earlier_buggy_timeout;
             for(auto& igd : igds) {
                 auto cancelled = cancel.connect([&] { igd.stop(); });
 
@@ -98,6 +100,7 @@ private:
                 if (cancel) return;
                 if (!r) continue;
 
+                auto query_begin = steady_clock::now();
                 auto curr_duration = get_mapping_duration(igd, mapping_desc, cancel, yield);
                 if (!curr_duration || lease_duration >= *curr_duration + recent_margin) {
                     // Versions of MiniUPnPd before 2015-07-09 fail to refresh existing mappings,
@@ -105,6 +108,9 @@ private:
                     // so check actual result and do not count if failed.
                     LOG_VERBOSE("UPnP: IGD did not add/refresh mapping for \"", mapping_desc, "\""
                                 " but reported no error; buggy IGD/router?");
+                    auto mapping_timeout = query_begin + (curr_duration ? *curr_duration : seconds(0));
+                    if (!earlier_buggy_timeout || mapping_timeout < *earlier_buggy_timeout)
+                        earlier_buggy_timeout = mapping_timeout;
                     continue;
                 }
                 LOG_DEBUG("UPnP: Successfully added/refreshed one mapping.");
@@ -113,10 +119,18 @@ private:
             }
             LOG_DEBUG("UPnP: Adding mappings for \"", mapping_desc, "\": done");
 
-            if (success_cnt == 0) mapping_disabled();
+            if (success_cnt == 0 && !earlier_buggy_timeout) mapping_disabled();
 
             auto wait_time = [&] () -> seconds {
-                if (success_cnt == 0) return failure_wait_time;
+                if (success_cnt == 0) {
+                    // Wait until the oldest mapping times out to re-add them,
+                    // but only if we just got to add mappings to buggy IGDs.
+                    if (!earlier_buggy_timeout) return failure_wait_time;
+                    auto now = steady_clock::now();
+                    if (*earlier_buggy_timeout <= now) return timeout_pause;
+                    return duration_cast<seconds>(*earlier_buggy_timeout - now + timeout_pause);
+                }
+                // Wait until a little before mappings would time out to refresh them.
                 auto round_elapsed = steady_clock::now() - round_begin;
                 if (round_elapsed >= success_wait_time) return seconds(0);
                 return success_wait_time - duration_cast<seconds>(round_elapsed);
