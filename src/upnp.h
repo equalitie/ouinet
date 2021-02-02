@@ -1,6 +1,7 @@
 #pragma once
 
 #include <boost/format.hpp>
+#include <boost/optional.hpp>
 
 #include <upnp.h>
 #include <util/random.h>
@@ -59,9 +60,11 @@ private:
             mapping_disabled();
         });
 
+        // TODO: static const
         auto lease_duration    = minutes(3);
         auto success_wait_time = lease_duration - seconds(10);
         auto failure_wait_time = minutes(1);
+        auto recent_margin     = seconds(10);  // max RPC round-trip time
 
         auto mapping_desc = (boost::format("Ouinet-%08x") % _random_id).str();
 
@@ -96,7 +99,8 @@ private:
                 if (cancel) return;
                 if (!r) continue;
 
-                if (!has_recent_port_mapping(igd, mapping_desc, lease_duration, cancel, yield)) {
+                auto curr_duration = get_mapping_duration(igd, mapping_desc, cancel, yield);
+                if (!curr_duration || lease_duration >= *curr_duration + recent_margin) {
                     // Versions of MiniUPnPd before 2015-07-09 fail to refresh existing mappings,
                     // see <https://github.com/miniupnp/miniupnp/issues/131>,
                     // so check actual result and do not count if failed.
@@ -139,23 +143,21 @@ private:
     }
 
 private:
-    bool has_recent_port_mapping( upnp::igd& igd, const std::string& desc, std::chrono::seconds duration
-                                , Cancel& cancel, asio::yield_context yield) const {
-        static const auto recent_margin = std::chrono::seconds(10);  // max RPC round-trip time
-
+    boost::optional<std::chrono::seconds>
+    get_mapping_duration( upnp::igd& igd, const std::string& desc
+                        , Cancel& cancel, asio::yield_context yield) const {
         auto cancelled = cancel.connect([&] { igd.stop(); });
         auto r_mappings = igd.get_list_of_port_mappings( upnp::igd::udp
                                                        , _external_port, _external_port, 1
                                                        , yield);
-        if (cancel) return false;
-        if (!r_mappings) return false;
+        if (cancel) return {};
+        if (!r_mappings) return {};
 
         for (const auto& m : r_mappings.value())
-            if ( m.enabled && _internal_port == m.int_port && desc == m.description
-               && duration < m.lease_duration + recent_margin)
-                return true;
+            if ( m.enabled && _internal_port == m.int_port && desc == m.description)
+                return m.lease_duration;
 
-        return false;
+        return {};
     }
 private:
     Cancel _lifetime_cancel;
