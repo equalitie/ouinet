@@ -133,13 +133,14 @@ private:
                     // but only if we just got to add mappings to buggy IGDs.
                     if (!earlier_buggy_timeout) return failure_wait_time;
                     auto now = steady_clock::now();
-                    if (*earlier_buggy_timeout <= now) return timeout_pause;
-                    return duration_cast<seconds>(*earlier_buggy_timeout - now + timeout_pause);
+                    auto buggy_refresh = *earlier_buggy_timeout + timeout_pause;
+                    if (buggy_refresh < now) return seconds(0);
+                    return ceil<seconds>(buggy_refresh - now);
                 }
                 // Wait until a little before mappings would time out to refresh them.
                 auto round_elapsed = steady_clock::now() - round_begin;
                 if (round_elapsed >= success_wait_time) return seconds(0);
-                return success_wait_time - duration_cast<seconds>(round_elapsed);
+                return duration_cast<seconds>(success_wait_time - round_elapsed);
             }();
 
             async_sleep(exec, wait_time, cancel, yield);
