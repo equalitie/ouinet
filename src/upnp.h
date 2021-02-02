@@ -142,10 +142,10 @@ private:
         _mapping_is_active = false;
     }
 
-private:
     boost::optional<std::chrono::seconds>
     get_mapping_duration( upnp::igd& igd, const std::string& desc
-                        , Cancel& cancel, asio::yield_context yield) const {
+                        , Cancel& cancel, asio::yield_context yield) const
+    {
         auto cancelled = cancel.connect([&] { igd.stop(); });
         auto r_mappings = igd.get_list_of_port_mappings( upnp::igd::udp
                                                        , _external_port, _external_port, 1
@@ -159,6 +159,7 @@ private:
 
         return {};
     }
+
 private:
     Cancel _lifetime_cancel;
     uint16_t _external_port;
