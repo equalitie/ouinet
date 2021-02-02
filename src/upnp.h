@@ -102,6 +102,10 @@ private:
 
                 auto query_begin = steady_clock::now();
                 auto curr_duration = get_mapping_duration(igd, mapping_desc, cancel, yield);
+                if (curr_duration && *curr_duration > lease_duration) {
+                    LOG_WARN("UPnP: IGD reports excessive mapping lease duration, ignoring");
+                    continue;
+                }
                 if (!curr_duration || lease_duration >= *curr_duration + recent_margin) {
                     // Versions of MiniUPnPd before 2015-07-09 fail to refresh existing mappings,
                     // see <https://github.com/miniupnp/miniupnp/issues/131>,
