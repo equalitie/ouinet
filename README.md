@@ -32,7 +32,7 @@ translates to: increased availability in the face of connectivity problems;
 increased transfer speeds in case of poor upstream links; and reduced
 bandwidth costs when internet access providers charge more for external or
 international traffic.  Content injection is also designed to
-allow for content re-introduction and seeding on extreme cases of total
+allow for content re-introduction and seeding in extreme cases of total
 connectivity loss (e.g. natural disasters).
 
 The Ouinet library is a core technology that can be used by any application to
@@ -261,10 +261,10 @@ security profile and give it tracing capabilities.  For more information, see
 You may use [Docker Compose](https://docs.docker.com/compose/) with the
 `docker-compose.yml` file included in Ouinet's source code (or you can just
 [download it][docker-compose.yml]).  Whenever you run `docker-compose`
-commands using that configuration file, you must be at the directory where the
+commands using that configuration file, you must be in the directory where the
 file resides.
 
-If you just plan to **run a single client** with the latest code on you
+If you just plan to **run a single client** with the latest code on your
 computer, you should be fine with running the following command:
 
     $ sudo docker-compose up
@@ -399,7 +399,7 @@ Docker, use the shell container to edit `injector/ouinet-injector.conf`):
 
 All the steps above only need to be done once.
 
-Finally start the injector.  For the local build you will need to explicitly
+Finally, start the injector.  For the local build you will need to explicitly
 point it to the repository created above:
 
     $ <BUILD DIR>/injector --repo /path/to/injector-repo
@@ -446,7 +446,7 @@ All the steps above only need to be done once.
 Finally, start the client.  For the local build you will need to explicitly
 point it to the repository created above:
 
-    $ <BUIDL DIR>/client --repo /path/to/client-repo
+    $ <BUILD DIR>/client --repo /path/to/client-repo
 
 The client opens a web proxy on local port 8077 by default (see option
 `listen-on-tcp` in its configuration file).  When you access the web using
@@ -521,7 +521,7 @@ configuration tools:
 
     These mechanisms are attempted in order according to a (currently
     hard-wired, customizable in the future) *request router configuration*.
-    For instance, if one points the browser to a web page which it is not yet
+    For instance, if one points the browser to a web page which is not yet
     in the distributed cache, then the client shall forward the request to the
     injector.  On success, (A) the injector will fetch, sign and send the
     content back to the client and (B) the client will seed the content to the
@@ -537,7 +537,7 @@ only way to use it is to clone its repository locally and load it every time
 you start the browser; to do that, open Firefox's *Add-ons* window, then click
 on the gears icon, then *Debug Add-ons*, then *Load Temporary Add-on…* and
 choose the `manifest.json` file in the Extension's source tree.  Back to the
-*Add-ons* page, remember clicking on *CENO Extension* and allowing *Run in
+*Add-ons* page, remember to click on *CENO Extension* and allow *Run in
 Private Windows* under *Details*.
 
 [CENO Extension]: https://github.com/censorship-no/ceno-ext-settings/
@@ -568,7 +568,7 @@ will run the `build-android.sh` script (e.g. `~/ouinet.android.build`).
 
 ### Building
 
-The following instructions will by build a Ouinet AAR library and demo client
+The following instructions will build a Ouinet AAR library and demo client
 APK package for the `armeabi-v7a` [Android ABI][]:
 
     host    $ vagrant up --provider=libvirt
@@ -623,7 +623,7 @@ downloaded by the build process, if available) and start the emulator.  Please
 note that downloading the system image may take a few minutes, and booting the
 emulator for the first time may take more than 10 minutes.  In subsequent
 runs, the emulator will just recover the snapshot saved on last quit, which is
-way faster.
+much faster.
 
 The `ABI` environment variable described above also works for selecting the
 emulator architecture:
@@ -653,7 +653,7 @@ request handling, you need to take few simple steps.
 Here we assume that the app is developed in the Android Studio environment,
 and that `<PROJECT DIR>` is your app's project directory.
 
-First you need to compile the Ouinet library for the ABI environment your are
+First, you need to compile the Ouinet library for the ABI environment you are
 aiming at (e.g. `armeabi-v7a` or `x86_64`) as described above.  After the
 `build_android.sh` script finishes successfully, you can copy the
 `ouinet-debug.aar` file to your app libs folder:
