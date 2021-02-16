@@ -279,7 +279,6 @@ private:
 
     void listen_tcp( asio::yield_context
                    , tcp::acceptor
-                   , const char* service
                    , function<void(GenericStream, asio::yield_context)>);
 
     void setup_injector(asio::yield_context);
@@ -2191,7 +2190,6 @@ tcp::acceptor Client::State::make_acceptor( const tcp::endpoint& local_endpoint
 void Client::State::listen_tcp
         ( asio::yield_context yield
         , tcp::acceptor acceptor
-        , const char* service
         , function<void(GenericStream, asio::yield_context)> handler)
 {
     auto shutdown_acceptor_slot = _shutdown_signal.connect([&acceptor] {
@@ -2210,7 +2208,7 @@ void Client::State::listen_tcp
         if(ec) {
             if (ec == asio::error::operation_aborted) break;
 
-            LOG_WARN("Accept failed on TCP acceptor service \"",service,"\": ", ec.message());
+            LOG_WARN("Accept failed on TCP:", acceptor.local_endpoint(), ": ", ec.message());
 
             if (!async_sleep(_ctx, chrono::seconds(1), _shutdown_signal, yield)) {
                 break;
@@ -2294,7 +2292,6 @@ void Client::State::start()
 
         listen_tcp( yield[ec]
                   , move(acceptor)
-                  , "browser requests"
                   , [this, self]
                     (GenericStream c, asio::yield_context yield) {
                 serve_request(move(c), yield);
@@ -2315,7 +2312,6 @@ void Client::State::start()
 
             listen_tcp( yield[ec]
                       , move(acceptor)
-                      , "frontend"
                       , [this, self]
                         (GenericStream c, asio::yield_context yield_) {
                   Yield yield(_ctx, yield_, "Frontend");
