@@ -274,8 +274,11 @@ private:
 
     CacheControl build_cache_control(request_route::Config& request_config);
 
+    tcp::acceptor make_acceptor( const tcp::endpoint&
+                               , const char* service);
+
     void listen_tcp( asio::yield_context
-                   , tcp::endpoint
+                   , tcp::acceptor
                    , const char* service
                    , function<void(GenericStream, asio::yield_context)>);
 
@@ -2149,11 +2152,8 @@ void Client::State::setup_cache()
 }
 
 //------------------------------------------------------------------------------
-void Client::State::listen_tcp
-        ( asio::yield_context yield
-        , tcp::endpoint local_endpoint
-        , const char* service
-        , function<void(GenericStream, asio::yield_context)> handler)
+tcp::acceptor Client::State::make_acceptor( const tcp::endpoint& local_endpoint
+                                          , const char* service)
 {
     sys::error_code ec;
 
@@ -2162,8 +2162,8 @@ void Client::State::listen_tcp
 
     acceptor.open(local_endpoint.protocol(), ec);
     if (ec) {
-        LOG_ERROR("Failed to open tcp acceptor for service \"",service,"\": ", ec.message());
-        return;
+        throw runtime_error(util::str( "Failed to open tcp acceptor for service \"", service, "\": "
+                                     , ec.message()));
     }
 
     acceptor.set_option(asio::socket_base::reuse_address(true));
@@ -2171,29 +2171,39 @@ void Client::State::listen_tcp
     // Bind to the server address
     acceptor.bind(local_endpoint, ec);
     if (ec) {
-        LOG_ERROR("Failed to bind tcp acceptor for service \"", service,"\": "
-                 , ec.message());
-        return;
+        throw runtime_error(util::str( "Failed to bind tcp acceptor for service \"", service, "\": "
+                                     , ec.message()));
     }
 
     // Start listening for connections
     acceptor.listen(asio::socket_base::max_connections, ec);
     if (ec) {
-        LOG_ERROR("Failed to 'listen' to service \"", service, "\""
-                  " on tcp acceptor: ", ec.message());
-        return;
+        throw runtime_error(util::str( "Failed to 'listen' to service \"", service, "\""
+                                       " on tcp acceptor: ", ec.message()));
     }
 
+    LOG_INFO("Client listening to ", service, " on TCP:", acceptor.local_endpoint());
+
+    return acceptor;
+}
+
+//------------------------------------------------------------------------------
+void Client::State::listen_tcp
+        ( asio::yield_context yield
+        , tcp::acceptor acceptor
+        , const char* service
+        , function<void(GenericStream, asio::yield_context)> handler)
+{
     auto shutdown_acceptor_slot = _shutdown_signal.connect([&acceptor] {
         acceptor.close();
     });
-
-    LOG_INFO("Client accepting to ", service, " on TCP:", acceptor.local_endpoint());
 
     WaitCondition wait_condition(_ctx);
 
     for(;;)
     {
+        sys::error_code ec;
+
         tcp::socket socket(_ctx);
         acceptor.async_accept(socket, yield[ec]);
 
@@ -2239,6 +2249,12 @@ void Client::State::listen_tcp
 //------------------------------------------------------------------------------
 void Client::State::start()
 {
+    // These may throw if the endpoints are busy.
+    auto proxy_acceptor = make_acceptor(_config.local_endpoint(), "browser requests");
+    boost::optional<tcp::acceptor> front_end_acceptor;
+    if (_config.front_end_endpoint() != tcp::endpoint())
+        front_end_acceptor = make_acceptor(_config.front_end_endpoint(), "frontend");
+
     ssl::util::load_tls_ca_certificates(ssl_ctx, _config.tls_ca_cert_store_path());
 
     _ca_certificate = get_or_gen_tls_cert<CACertificate>
@@ -2259,8 +2275,9 @@ void Client::State::start()
 
     TRACK_SPAWN(_ctx, ([
         this,
-        self = shared_from_this()
-    ] (asio::yield_context yield) {
+        self = shared_from_this(),
+        acceptor = move(proxy_acceptor)
+    ] (asio::yield_context yield) mutable {
         if (was_stopped()) return;
 
         sys::error_code ec;
@@ -2276,7 +2293,7 @@ void Client::State::start()
         setup_cache();
 
         listen_tcp( yield[ec]
-                  , _config.local_endpoint()
+                  , move(acceptor)
                   , "browser requests"
                   , [this, self]
                     (GenericStream c, asio::yield_context yield) {
@@ -2284,22 +2301,20 @@ void Client::State::start()
             });
     }));
 
-    if (_config.front_end_endpoint() != tcp::endpoint()) {
+    if (front_end_acceptor) {
         TRACK_SPAWN( _ctx, ([
             this,
-            self = shared_from_this()
-        ] (asio::yield_context yield) {
+            self = shared_from_this(),
+            acceptor = move(*front_end_acceptor)
+        ] (asio::yield_context yield) mutable {
             if (was_stopped()) return;
 
             sys::error_code ec;
 
-            auto ep = _config.front_end_endpoint();
-            if (ep == tcp::endpoint()) return;
-
-            LOG_INFO("Serving front end on ", ep);
+            LOG_INFO("Serving front end on ", acceptor.local_endpoint());
 
             listen_tcp( yield[ec]
-                      , ep
+                      , move(acceptor)
                       , "frontend"
                       , [this, self]
                         (GenericStream c, asio::yield_context yield_) {
