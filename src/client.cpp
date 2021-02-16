@@ -2162,7 +2162,7 @@ tcp::acceptor Client::State::make_acceptor( const tcp::endpoint& local_endpoint
 
     acceptor.open(local_endpoint.protocol(), ec);
     if (ec) {
-        throw runtime_error(util::str( "Failed to open tcp acceptor for service \"", service, "\": "
+        throw runtime_error(util::str( "Failed to open TCP acceptor for service \"", service, "\": "
                                      , ec.message()));
     }
 
@@ -2171,7 +2171,7 @@ tcp::acceptor Client::State::make_acceptor( const tcp::endpoint& local_endpoint
     // Bind to the server address
     acceptor.bind(local_endpoint, ec);
     if (ec) {
-        throw runtime_error(util::str( "Failed to bind tcp acceptor for service \"", service, "\": "
+        throw runtime_error(util::str( "Failed to bind TCP acceptor for service \"", service, "\": "
                                      , ec.message()));
     }
 
@@ -2179,7 +2179,7 @@ tcp::acceptor Client::State::make_acceptor( const tcp::endpoint& local_endpoint
     acceptor.listen(asio::socket_base::max_connections, ec);
     if (ec) {
         throw runtime_error(util::str( "Failed to 'listen' to service \"", service, "\""
-                                       " on tcp acceptor: ", ec.message()));
+                                       " on TCP acceptor: ", ec.message()));
     }
 
     LOG_INFO("Client listening to ", service, " on TCP:", acceptor.local_endpoint());
@@ -2210,7 +2210,7 @@ void Client::State::listen_tcp
         if(ec) {
             if (ec == asio::error::operation_aborted) break;
 
-            LOG_WARN("Accept failed on tcp acceptor service \"",service,"\": ", ec.message());
+            LOG_WARN("Accept failed on TCP acceptor service \"",service,"\": ", ec.message());
 
             if (!async_sleep(_ctx, chrono::seconds(1), _shutdown_signal, yield)) {
                 break;
