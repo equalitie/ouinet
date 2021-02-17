@@ -148,6 +148,7 @@ public:
         // can be around 2 KiB, so this would be around 2 MiB.
         // TODO: Fine tune if necessary.
         , _ssl_certificate_cache(1000)
+        , _injector_starting{get_executor()}
         , _cache_starting{get_executor()}
         , ssl_ctx{asio::ssl::context::tls_client}
         , inj_ctx{asio::ssl::context::tls_client}
@@ -166,6 +167,7 @@ public:
     void start();
 
     void stop() {
+        if (_injector_starting) _injector_starting->notify(asio::error::shut_down);
         if (_cache_starting) _cache_starting->notify(asio::error::shut_down);
 
         _cache = nullptr;
@@ -398,7 +400,7 @@ private:
     util::LruCache<string, string> _ssl_certificate_cache;
     std::unique_ptr<OuiServiceClient> _injector;
     std::unique_ptr<cache::Client> _cache;
-    boost::optional<ConditionVariable> _cache_starting;
+    boost::optional<ConditionVariable> _injector_starting, _cache_starting;
 
     ClientFrontEnd _front_end;
     Signal<void()> _shutdown_signal;
@@ -2359,6 +2361,15 @@ Client::State::maybe_wrap_tls(unique_ptr<OuiServiceImplementationClient> client)
 
 void Client::State::setup_injector(asio::yield_context yield)
 {
+    // Remember to always set before return in case of error,
+    // or the notification may not pass the right error code to listeners.
+    sys::error_code ec;
+    auto notify_ready = defer([&] {
+        assert(_injector_starting);
+        _injector_starting->notify(ec);
+        _injector_starting.reset();
+    });
+
     _injector = std::make_unique<OuiServiceClient>(_ctx.get_executor());
 
     auto injector_ep = _config.injector_endpoint();
@@ -2375,7 +2386,7 @@ void Client::State::setup_injector(asio::yield_context yield)
 
         /*
         if (!i2p_client->verify_endpoint()) {
-            return or_throw(yield, asio::error::invalid_argument);
+            return or_throw(yield, ec = asio::error::invalid_argument);
         }
         */
         client = std::move(i2p_client);
@@ -2383,11 +2394,10 @@ void Client::State::setup_injector(asio::yield_context yield)
         auto tcp_client = make_unique<ouiservice::TcpOuiServiceClient>(_ctx.get_executor(), injector_ep->endpoint_string);
 
         if (!tcp_client->verify_endpoint()) {
-            return or_throw(yield, asio::error::invalid_argument);
+            return or_throw(yield, ec = asio::error::invalid_argument);
         }
         client = maybe_wrap_tls(move(tcp_client));
     } else if (injector_ep->type == Endpoint::UtpEndpoint) {
-        sys::error_code ec;
         asio_utp::udp_multiplexer m(_ctx);
         m.bind(common_udp_multiplexer(), ec);
         assert(!ec);
@@ -2396,13 +2406,11 @@ void Client::State::setup_injector(asio::yield_context yield)
             (_ctx.get_executor(), move(m), injector_ep->endpoint_string);
 
         if (!utp_client->verify_remote_endpoint()) {
-            return or_throw(yield, asio::error::invalid_argument);
+            return or_throw(yield, ec = asio::error::invalid_argument);
         }
 
         client = maybe_wrap_tls(move(utp_client));
     } else if (injector_ep->type == Endpoint::Bep5Endpoint) {
-
-        sys::error_code ec;
         auto dht = bittorrent_dht(yield[ec]);
         if (ec) {
             if (ec != asio::error::operation_aborted) {
@@ -2415,7 +2423,7 @@ void Client::State::setup_injector(asio::yield_context yield)
 
         if (!bridge_swarm_name) {
             LOG_ERROR("Bridge swarm name has not been computed");
-            return or_throw(yield, asio::error::operation_not_supported);
+            return or_throw(yield, ec = asio::error::operation_not_supported);
         }
 
         _bep5_client = make_shared<ouiservice::Bep5Client>
@@ -2430,13 +2438,14 @@ void Client::State::setup_injector(asio::yield_context yield)
 
         if (ec) {
             LOG_ERROR("Failed to start accepting on uTP ", ec.message());
+            ec = {};
         }
 /*
     } else if (injector_ep->type == Endpoint::LampshadeEndpoint) {
         auto lampshade_client = make_unique<ouiservice::LampshadeOuiServiceClient>(_ctx, injector_ep->endpoint_string);
 
         if (!lampshade_client->verify_endpoint()) {
-            return or_throw(yield, asio::error::invalid_argument);
+            return or_throw(yield, ec = asio::error::invalid_argument);
         }
         client = std::move(lampshade_client);
 */
@@ -2444,28 +2453,29 @@ void Client::State::setup_injector(asio::yield_context yield)
         auto obfs2_client = make_unique<ouiservice::Obfs2OuiServiceClient>(_ctx, injector_ep->endpoint_string, _config.repo_root()/"obfs2-client");
 
         if (!obfs2_client->verify_endpoint()) {
-            return or_throw(yield, asio::error::invalid_argument);
+            return or_throw(yield, ec = asio::error::invalid_argument);
         }
         client = std::move(obfs2_client);
     } else if (injector_ep->type == Endpoint::Obfs3Endpoint) {
         auto obfs3_client = make_unique<ouiservice::Obfs3OuiServiceClient>(_ctx, injector_ep->endpoint_string, _config.repo_root()/"obfs3-client");
 
         if (!obfs3_client->verify_endpoint()) {
-            return or_throw(yield, asio::error::invalid_argument);
+            return or_throw(yield, ec = asio::error::invalid_argument);
         }
         client = std::move(obfs3_client);
     } else if (injector_ep->type == Endpoint::Obfs4Endpoint) {
         auto obfs4_client = make_unique<ouiservice::Obfs4OuiServiceClient>(_ctx, injector_ep->endpoint_string, _config.repo_root()/"obfs4-client");
 
         if (!obfs4_client->verify_endpoint()) {
-            return or_throw(yield, asio::error::invalid_argument);
+            return or_throw(yield, ec = asio::error::invalid_argument);
         }
         client = std::move(obfs4_client);
     }
 
     _injector->add(*injector_ep, std::move(client));
 
-    _injector->start(yield);
+    _injector->start(yield[ec]);
+    return or_throw(yield, ec);
 }
 
 //------------------------------------------------------------------------------
