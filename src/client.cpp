@@ -292,6 +292,26 @@ private:
         return _shutdown_signal.call_count() != 0;
     }
 
+    void wait_for_injector(Cancel& cancel, asio::yield_context yield) {
+        if (!_injector_starting) return;
+
+        sys::error_code ec;
+        _injector_starting->wait(cancel, yield[ec]);
+        if (ec && ec != asio::error::operation_aborted)
+            LOG_ERROR("Error while waiting for injector setup: ", ec.message());
+        return or_throw(yield, ec);
+    }
+
+    void wait_for_cache(Cancel& cancel, asio::yield_context yield) {
+        if (!_cache_starting) return;
+
+        sys::error_code ec;
+        _cache_starting->wait(cancel, yield[ec]);
+        if (ec && ec != asio::error::operation_aborted)
+            LOG_ERROR("Error while waiting for cache setup: ", ec.message());
+        return or_throw(yield, ec);
+    }
+
     fs::path ca_cert_path() const { return _config.repo_root() / OUINET_CA_CERT_FILE; }
     fs::path ca_key_path()  const { return _config.repo_root() / OUINET_CA_KEY_FILE;  }
     fs::path ca_dh_path()   const { return _config.repo_root() / OUINET_CA_DH_FILE;   }
@@ -1260,11 +1280,15 @@ public:
     }
 
     void proxy_job_func(Transaction& tnx, Cancel& cancel, Yield yield) {
+        sys::error_code ec;
+
+        client_state.wait_for_injector(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec);
+
         _YDEBUG(yield, "start");
 
         Session session;
 
-        sys::error_code ec;
         const auto& rq = tnx.request();
 
         if (rq.target().starts_with("https://")) {
@@ -1293,6 +1317,12 @@ public:
         sys::error_code ec;
         sys::error_code fresh_ec;
         sys::error_code cache_ec;
+
+        client_state.wait_for_injector(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec);
+
+        client_state.wait_for_cache(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec);
 
         _YDEBUG(yield, "start");
         _YDEBUG(yield, tnx.request());
