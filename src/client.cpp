@@ -292,25 +292,19 @@ private:
         return _shutdown_signal.call_count() != 0;
     }
 
-    void wait_for_injector(Cancel& cancel, asio::yield_context yield) {
-        if (!_injector_starting) return;
-
-        sys::error_code ec;
-        _injector_starting->wait(cancel, yield[ec]);
-        if (ec && ec != asio::error::operation_aborted)
-            LOG_ERROR("Error while waiting for injector setup: ", ec.message());
-        return or_throw(yield, ec);
+#define DEF_WAIT_FOR(WHAT) \
+    void wait_for_##WHAT(Cancel& cancel, asio::yield_context yield) { \
+        if (!_##WHAT##_starting) return; \
+        \
+        sys::error_code ec; \
+        _##WHAT##_starting->wait(cancel, yield[ec]); \
+        if (ec && ec != asio::error::operation_aborted) \
+            LOG_ERROR("Error while waiting for " #WHAT " setup: ", ec.message()); \
+        return or_throw(yield, ec); \
     }
-
-    void wait_for_cache(Cancel& cancel, asio::yield_context yield) {
-        if (!_cache_starting) return;
-
-        sys::error_code ec;
-        _cache_starting->wait(cancel, yield[ec]);
-        if (ec && ec != asio::error::operation_aborted)
-            LOG_ERROR("Error while waiting for cache setup: ", ec.message());
-        return or_throw(yield, ec);
-    }
+    DEF_WAIT_FOR(injector)
+    DEF_WAIT_FOR(cache)
+#undef DEF_WAIT_FOR
 
     fs::path ca_cert_path() const { return _config.repo_root() / OUINET_CA_CERT_FILE; }
     fs::path ca_key_path()  const { return _config.repo_root() / OUINET_CA_KEY_FILE;  }
