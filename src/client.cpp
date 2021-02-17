@@ -148,6 +148,7 @@ public:
         // can be around 2 KiB, so this would be around 2 MiB.
         // TODO: Fine tune if necessary.
         , _ssl_certificate_cache(1000)
+        , _cache_starting{get_executor()}
         , ssl_ctx{asio::ssl::context::tls_client}
         , inj_ctx{asio::ssl::context::tls_client}
     {
@@ -165,6 +166,8 @@ public:
     void start();
 
     void stop() {
+        if (_cache_starting) _cache_starting->notify(asio::error::shut_down);
+
         _cache = nullptr;
         _upnps.clear();
         _shutdown_signal();
@@ -395,6 +398,7 @@ private:
     util::LruCache<string, string> _ssl_certificate_cache;
     std::unique_ptr<OuiServiceClient> _injector;
     std::unique_ptr<cache::Client> _cache;
+    boost::optional<ConditionVariable> _cache_starting;
 
     ClientFrontEnd _front_end;
     Signal<void()> _shutdown_signal;
@@ -2113,7 +2117,14 @@ void Client::State::setup_cache()
             if (cancel) return;
             LOG_DEBUG("HTTP signing public key (Ed25519): ", _config.cache_http_pub_key());
 
+            // Remember to always set before return in case of error,
+            // or the notification may not pass the right error code to listeners.
             sys::error_code ec;
+            auto notify_ready = defer([&] {
+                assert(_cache_starting);
+                _cache_starting->notify(ec);
+                _cache_starting.reset();
+            });
 
             auto dht = bittorrent_dht(yield[ec]);
             if (ec) {
