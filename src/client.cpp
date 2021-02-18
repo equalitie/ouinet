@@ -2147,7 +2147,7 @@ void Client::State::setup_cache(asio::yield_context yield)
     auto dht = bittorrent_dht(yield[ec]);
     if (ec) {
         if (ec != asio::error::operation_aborted) {
-            LOG_ERROR("Failed to initialize BT DHT ", ec.message());
+            LOG_ERROR("Failed to initialize BT DHT: ", ec.message());
         }
         return or_throw(yield, ec);
     }
@@ -2173,7 +2173,7 @@ void Client::State::setup_cache(asio::yield_context yield)
     idempotent_start_accepting_on_utp(yield[ec]);
 
     if (ec) {
-        LOG_ERROR("Failed to start accepting on uTP ", ec.message());
+        LOG_ERROR("Failed to start accepting on uTP: ", ec.message());
         ec = {};
     }
 }
@@ -2444,7 +2444,7 @@ void Client::State::setup_injector(asio::yield_context yield)
         auto dht = bittorrent_dht(yield[ec]);
         if (ec) {
             if (ec != asio::error::operation_aborted) {
-                LOG_ERROR("Failed to set up Bep5Client at setting up BT DHT ", ec.message());
+                LOG_ERROR("Failed to set up Bep5Client at setting up BT DHT: ", ec.message());
             }
             return or_throw(yield, ec);
         }
@@ -2467,7 +2467,7 @@ void Client::State::setup_injector(asio::yield_context yield)
         idempotent_start_accepting_on_utp(yield[ec]);
 
         if (ec) {
-            LOG_ERROR("Failed to start accepting on uTP ", ec.message());
+            LOG_ERROR("Failed to start accepting on uTP: ", ec.message());
             ec = {};
         }
 /*
