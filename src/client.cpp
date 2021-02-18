@@ -2149,7 +2149,7 @@ void Client::State::setup_cache(asio::yield_context yield)
         if (ec != asio::error::operation_aborted) {
             LOG_ERROR("Failed to initialize BT DHT ", ec.message());
         }
-        return;
+        return or_throw(yield, ec);
     }
 
     assert(!_shutdown_signal || ec == asio::error::operation_aborted);
@@ -2167,13 +2167,14 @@ void Client::State::setup_cache(asio::yield_context yield)
             LOG_ERROR("Failed to initialize cache::Client: "
                      , ec.message());
         }
-        return;
+        return or_throw(yield, ec);
     }
 
     idempotent_start_accepting_on_utp(yield[ec]);
 
     if (ec) {
         LOG_ERROR("Failed to start accepting on uTP ", ec.message());
+        ec = {};
     }
 }
 
