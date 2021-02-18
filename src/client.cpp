@@ -2323,10 +2323,9 @@ void Client::State::start()
         ] (asio::yield_context yield) mutable {
             if (was_stopped()) return;
 
-            sys::error_code ec;
-
             LOG_INFO("Serving front end on ", acceptor.local_endpoint());
 
+            sys::error_code ec;
             listen_tcp( yield[ec]
                       , move(acceptor)
                       , [this, self]
@@ -2356,9 +2355,8 @@ void Client::State::start()
         sys::error_code ec;
         setup_injector(yield[ec]);
 
-        if (was_stopped()) return;
-
-        if (ec) LOG_ERROR("Failed to setup injector: ", ec.message());
+        if (ec && ec != asio::error::operation_aborted)
+            LOG_ERROR("Failed to setup injector: ", ec.message());
     }));
 
     TRACK_SPAWN(_ctx, ([
@@ -2369,9 +2367,8 @@ void Client::State::start()
         sys::error_code ec;
         setup_cache(yield[ec]);
 
-        if (was_stopped()) return;
-
-        if (ec) LOG_ERROR("Failed to setup cache: ", ec.message());
+        if (ec && ec != asio::error::operation_aborted)
+            LOG_ERROR("Failed to setup cache: ", ec.message());
     }));
 }
 
