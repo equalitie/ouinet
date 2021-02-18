@@ -2314,17 +2314,6 @@ void Client::State::start()
         if (was_stopped()) return;
 
         sys::error_code ec;
-
-        setup_injector(yield[ec]);
-
-        if (was_stopped()) return;
-
-        if (ec) {
-            LOG_ERROR("Failed to setup injector: ", ec.message());
-        }
-
-        setup_cache();
-
         listen_tcp( yield[ec]
                   , move(acceptor)
                   , [this, self]
@@ -2365,6 +2354,21 @@ void Client::State::start()
             });
         }));
     }
+
+    TRACK_SPAWN(_ctx, ([
+        this
+    ] (asio::yield_context yield) {
+        if (was_stopped()) return;
+
+        sys::error_code ec;
+        setup_injector(yield[ec]);
+
+        if (was_stopped()) return;
+
+        if (ec) LOG_ERROR("Failed to setup injector: ", ec.message());
+    }));
+
+    setup_cache();
 }
 
 //------------------------------------------------------------------------------
