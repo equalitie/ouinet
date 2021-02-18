@@ -183,7 +183,7 @@ public:
         }
     }
 
-    void setup_cache();
+    void setup_cache(asio::yield_context);
 
     const asio_utp::udp_multiplexer& common_udp_multiplexer()
     {
@@ -2129,59 +2129,51 @@ void Client::State::serve_request( GenericStream&& con
 }
 
 //------------------------------------------------------------------------------
-void Client::State::setup_cache()
+void Client::State::setup_cache(asio::yield_context yield)
 {
-    if (_config.cache_type() == ClientConfig::CacheType::Bep5Http) {
-        Cancel cancel = _shutdown_signal;
+    if (_config.cache_type() != ClientConfig::CacheType::Bep5Http) return;
 
-        TRACK_SPAWN(_ctx, ([
-            this,
-            cancel = move(cancel)
-        ] (asio::yield_context yield) {
-            if (cancel) return;
-            LOG_DEBUG("HTTP signing public key (Ed25519): ", _config.cache_http_pub_key());
+    LOG_DEBUG("HTTP signing public key (Ed25519): ", _config.cache_http_pub_key());
 
-            // Remember to always set before return in case of error,
-            // or the notification may not pass the right error code to listeners.
-            sys::error_code ec;
-            auto notify_ready = defer([&] {
-                assert(_cache_starting);
-                _cache_starting->notify(ec);
-                _cache_starting.reset();
-            });
+    // Remember to always set before return in case of error,
+    // or the notification may not pass the right error code to listeners.
+    sys::error_code ec;
+    auto notify_ready = defer([&] {
+        assert(_cache_starting);
+        _cache_starting->notify(ec);
+        _cache_starting.reset();
+    });
 
-            auto dht = bittorrent_dht(yield[ec]);
-            if (ec) {
-                if (ec != asio::error::operation_aborted) {
-                    LOG_ERROR("Failed to initialize BT DHT ", ec.message());
-                }
-                return;
-            }
+    auto dht = bittorrent_dht(yield[ec]);
+    if (ec) {
+        if (ec != asio::error::operation_aborted) {
+            LOG_ERROR("Failed to initialize BT DHT ", ec.message());
+        }
+        return;
+    }
 
-            assert(!_shutdown_signal || ec == asio::error::operation_aborted);
+    assert(!_shutdown_signal || ec == asio::error::operation_aborted);
 
-            _cache
-                = cache::Client::build( dht
-                                      , *_config.cache_http_pub_key()
-                                      , _config.repo_root()/"bep5_http"
-                                      , _config.max_cached_age()
-                                      , yield[ec]);
+    _cache
+        = cache::Client::build( dht
+                              , *_config.cache_http_pub_key()
+                              , _config.repo_root()/"bep5_http"
+                              , _config.max_cached_age()
+                              , yield[ec]);
 
-            if (cancel) ec = asio::error::operation_aborted;
-            if (ec) {
-                if (ec != asio::error::operation_aborted) {
-                    LOG_ERROR("Failed to initialize cache::Client: "
-                             , ec.message());
-                }
-                return;
-            }
+    if (_shutdown_signal) ec = asio::error::operation_aborted;
+    if (ec) {
+        if (ec != asio::error::operation_aborted) {
+            LOG_ERROR("Failed to initialize cache::Client: "
+                     , ec.message());
+        }
+        return;
+    }
 
-            idempotent_start_accepting_on_utp(yield[ec]);
+    idempotent_start_accepting_on_utp(yield[ec]);
 
-            if (ec) {
-                LOG_ERROR("Failed to start accepting on uTP ", ec.message());
-            }
-        }));
+    if (ec) {
+        LOG_ERROR("Failed to start accepting on uTP ", ec.message());
     }
 }
 
@@ -2368,7 +2360,18 @@ void Client::State::start()
         if (ec) LOG_ERROR("Failed to setup injector: ", ec.message());
     }));
 
-    setup_cache();
+    TRACK_SPAWN(_ctx, ([
+        this
+    ] (asio::yield_context yield) {
+        if (was_stopped()) return;
+
+        sys::error_code ec;
+        setup_cache(yield[ec]);
+
+        if (was_stopped()) return;
+
+        if (ec) LOG_ERROR("Failed to setup cache: ", ec.message());
+    }));
 }
 
 //------------------------------------------------------------------------------
