@@ -42,8 +42,6 @@ public:
     void start();
     void stop();
 
-    void set_credentials(const char* injector, const char* cred);
-
     void charging_state_change(bool is_charging);
     void wifi_state_change(bool is_wifi_connected);
 

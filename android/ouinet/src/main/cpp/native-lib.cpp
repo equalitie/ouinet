@@ -160,31 +160,6 @@ Java_ie_equalit_ouinet_Ouinet_nStopClient(
 }
 
 extern "C"
-JNIEXPORT void JNICALL
-Java_ie_equalit_ouinet_Ouinet_nSetCredentialsFor(
-        JNIEnv* env,
-        jobject /* this */,
-        jstring j_injector,
-        jstring j_credentials)
-{
-    string injector    = env->GetStringUTFChars(j_injector, NULL);
-    string credentials = env->GetStringUTFChars(j_credentials, NULL);
-
-    mutex m;
-    unique_lock<mutex> lk(m);
-    condition_variable cv;
-    bool done = false;
-
-    g_ios.post([i = move(injector), c = move(credentials), &cv, &done] {
-            Defer on_exit([&] { done = true; cv.notify_one(); });
-            if (!g_client) return;
-            g_client->set_credentials(i.c_str(), c.c_str());
-        });
-
-    cv.wait(lk, [&]{ return done; });
-}
-
-extern "C"
 JNIEXPORT jstring JNICALL
 Java_ie_equalit_ouinet_Ouinet_nGetCARootCert(
         JNIEnv* env,

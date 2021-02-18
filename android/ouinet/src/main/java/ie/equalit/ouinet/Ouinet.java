@@ -124,10 +124,6 @@ public class Ouinet {
         }
     }
 
-    public void setCredentialsFor(String injector, String credentials) {
-        nSetCredentialsFor(injector, credentials);
-    }
-
     private void registerBroadcastReceivers() {
         wifiChangeReceiver = new BroadcastReceiver() {
             @Override
@@ -197,7 +193,6 @@ public class Ouinet {
     private static native String nGetCARootCert(String ouinetDirectory);
     private native void nStartClient(String[] args, String[] path);
     private native void nStopClient();
-    private native void nSetCredentialsFor(String injector, String cred);
     private native void nChargingStateChange(boolean isCharging);
     private native void nWifiStateChange(boolean isWifiConnected);
 }

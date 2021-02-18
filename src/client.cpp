@@ -30,7 +30,6 @@
 #include "generic_stream.h"
 #include "util.h"
 #include "async_sleep.h"
-#include "endpoint.h"
 #include "or_throw.h"
 #include "request_routing.h"
 #include "full_duplex_forward.h"
@@ -2518,16 +2517,6 @@ void Client::start()
 void Client::stop()
 {
     _state->stop();
-}
-
-void Client::set_credentials(const char* injector_ep, const char* cred)
-{
-    auto opt_ep = parse_endpoint(injector_ep);
-    if (!opt_ep) {
-        LOG_ERROR("Client::set_credentials: Failed to parse endpoint:", injector_ep);
-        return;
-    }
-    _state->_config.set_credentials(*opt_ep, cred);
 }
 
 void Client::charging_state_change(bool is_charging) {
