@@ -185,7 +185,6 @@ public:
     }
 
     void setup_cache();
-    void set_injector(string);
 
     const asio_utp::udp_multiplexer& common_udp_multiplexer()
     {
@@ -2503,39 +2502,6 @@ void Client::State::setup_injector(asio::yield_context yield)
 }
 
 //------------------------------------------------------------------------------
-void Client::State::set_injector(string injector_ep_str)
-{
-    // XXX: Workaround.
-    // Eventually, OuiServiceClient should just support multiple parallel
-    // active injector EPs.
-
-    auto injector_ep = parse_endpoint(injector_ep_str);
-
-    if (!injector_ep) {
-        LOG_ERROR("Failed to parse endpoint \"", injector_ep_str, "\"");
-        return;
-    }
-
-    auto current_ep = _config.injector_endpoint();
-
-    if (current_ep && *injector_ep == *current_ep) {
-        return;
-    }
-
-    _config.set_injector_endpoint(*injector_ep);
-
-    TRACK_SPAWN(_ctx, ([self = shared_from_this(), injector_ep_str] (auto yield) {
-            if (self->was_stopped()) return;
-            sys::error_code ec;
-            self->setup_injector(yield[ec]);
-
-            if (ec == asio::error::invalid_argument) {
-                LOG_ERROR("Failed to parse endpoint \"", injector_ep_str, "\"");
-            }
-        }));
-}
-
-//------------------------------------------------------------------------------
 Client::Client(asio::io_context& ctx, ClientConfig cfg)
     : _state(make_shared<State>(ctx, move(cfg)))
 {}
@@ -2552,11 +2518,6 @@ void Client::start()
 void Client::stop()
 {
     _state->stop();
-}
-
-void Client::set_injector_endpoint(const char* injector_ep)
-{
-    _state->set_injector(injector_ep);
 }
 
 void Client::set_credentials(const char* injector_ep, const char* cred)

@@ -161,21 +161,6 @@ Java_ie_equalit_ouinet_Ouinet_nStopClient(
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_ie_equalit_ouinet_Ouinet_nSetInjectorEP(
-        JNIEnv* env,
-        jobject /* this */,
-        jstring j_injector_ep)
-{
-    string injector_ep = env->GetStringUTFChars(j_injector_ep, NULL);
-
-    g_ios.post([injector_ep] {
-            if (!g_client) return;
-            g_client->set_injector_endpoint(injector_ep.c_str());
-        });
-}
-
-extern "C"
-JNIEXPORT void JNICALL
 Java_ie_equalit_ouinet_Ouinet_nSetCredentialsFor(
         JNIEnv* env,
         jobject /* this */,
