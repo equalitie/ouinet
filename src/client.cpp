@@ -295,7 +295,8 @@ private:
         if (!_##WHAT##_starting) return; \
         \
         sys::error_code ec; \
-        _##WHAT##_starting->wait(cancel, yield[ec]); \
+        _##WHAT##_starting->wait(yield[ec]); \
+        if (cancel) ec = asio::error::operation_aborted; \
         if (ec && ec != asio::error::operation_aborted) \
             LOG_ERROR("Error while waiting for " #WHAT " setup: ", ec.message()); \
         return or_throw(yield, ec); \
