@@ -166,6 +166,12 @@ public:
     void start();
 
     void stop() {
+        // Requests waiting for these after stop may get "operation aborted"
+        // when these are destroyed.
+        // If the cancellation signal in `wait_for_*` was not called,
+        // `return_or_throw_on_error` would catch this and trigger an assertion error.
+        // Since requests waiting for these after stop should not happen,
+        // these are not reset here, as we do want that crash when debugging.
         if (_injector_starting) _injector_starting->notify(asio::error::shut_down);
         if (_cache_starting) _cache_starting->notify(asio::error::shut_down);
 
