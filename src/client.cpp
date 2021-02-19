@@ -2140,7 +2140,7 @@ void Client::State::setup_cache(asio::yield_context yield)
     // or the notification may not pass the right error code to listeners.
     sys::error_code ec;
     auto notify_ready = defer([&] {
-        assert(_cache_starting);
+        if (!_cache_starting) return;
         _cache_starting->notify(ec);
         _cache_starting.reset();
     });
@@ -2393,7 +2393,7 @@ void Client::State::setup_injector(asio::yield_context yield)
     // or the notification may not pass the right error code to listeners.
     sys::error_code ec;
     auto notify_ready = defer([&] {
-        assert(_injector_starting);
+        if (!_injector_starting) return;
         _injector_starting->notify(ec);
         _injector_starting.reset();
     });
