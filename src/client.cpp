@@ -30,7 +30,6 @@
 #include "generic_stream.h"
 #include "util.h"
 #include "async_sleep.h"
-#include "endpoint.h"
 #include "or_throw.h"
 #include "request_routing.h"
 #include "full_duplex_forward.h"
@@ -148,8 +147,12 @@ public:
         // can be around 2 KiB, so this would be around 2 MiB.
         // TODO: Fine tune if necessary.
         , _ssl_certificate_cache(1000)
+        , _injector_starting{get_executor()}
+        , _cache_starting{get_executor()}
         , ssl_ctx{asio::ssl::context::tls_client}
         , inj_ctx{asio::ssl::context::tls_client}
+        , _bt_dht_wc(_ctx)
+        , _multi_utp_server_wc(_ctx)
     {
         ssl_ctx.set_default_verify_paths();
         ssl_ctx.set_verify_mode(asio::ssl::verify_peer);
@@ -165,6 +168,15 @@ public:
     void start();
 
     void stop() {
+        // Requests waiting for these after stop may get "operation aborted"
+        // when these are destroyed.
+        // If the cancellation signal in `wait_for_*` was not called,
+        // `return_or_throw_on_error` would catch this and trigger an assertion error.
+        // Since requests waiting for these after stop should not happen,
+        // these are not reset here, as we do want that crash when debugging.
+        if (_injector_starting) _injector_starting->notify(asio::error::shut_down);
+        if (_cache_starting) _cache_starting->notify(asio::error::shut_down);
+
         _cache = nullptr;
         _upnps.clear();
         _shutdown_signal();
@@ -179,8 +191,7 @@ public:
         }
     }
 
-    void setup_cache();
-    void set_injector(string);
+    void setup_cache(asio::yield_context);
 
     const asio_utp::udp_multiplexer& common_udp_multiplexer()
     {
@@ -201,13 +212,19 @@ public:
     {
         if (_bt_dht) return _bt_dht;
 
+        // Ensure that only one coroutine is modifying the instance at a time.
+        sys::error_code ec;
+        _bt_dht_wc.wait(_shutdown_signal, yield[ec]);
+        return_or_throw_on_error(yield, _shutdown_signal, ec, _bt_dht);
+        if (_bt_dht) return _bt_dht;
+        auto lock = _bt_dht_wc.lock();
+
         auto bt_dht = make_shared<bt::MainlineDht>( _ctx.get_executor()
                                                   , _config.repo_root() / "dht");
 
         auto& mpl = common_udp_multiplexer();
 
         asio_utp::udp_multiplexer m(_ctx);
-        sys::error_code ec;
 
         m.bind(mpl, ec);
         if (ec) return or_throw(yield, ec, _bt_dht);
@@ -274,9 +291,11 @@ private:
 
     CacheControl build_cache_control(request_route::Config& request_config);
 
+    tcp::acceptor make_acceptor( const tcp::endpoint&
+                               , const char* service);
+
     void listen_tcp( asio::yield_context
-                   , tcp::endpoint
-                   , const char* service
+                   , tcp::acceptor
                    , function<void(GenericStream, asio::yield_context)>);
 
     void setup_injector(asio::yield_context);
@@ -284,6 +303,21 @@ private:
     bool was_stopped() const {
         return _shutdown_signal.call_count() != 0;
     }
+
+#define DEF_WAIT_FOR(WHAT) \
+    void wait_for_##WHAT(Cancel& cancel, asio::yield_context yield) { \
+        if (!_##WHAT##_starting) return; \
+        \
+        sys::error_code ec; \
+        _##WHAT##_starting->wait(yield[ec]); \
+        if (cancel) ec = asio::error::operation_aborted; \
+        if (ec && ec != asio::error::operation_aborted) \
+            LOG_ERROR("Error while waiting for " #WHAT " setup: ", ec.message()); \
+        return or_throw(yield, ec); \
+    }
+    DEF_WAIT_FOR(injector)
+    DEF_WAIT_FOR(cache)
+#undef DEF_WAIT_FOR
 
     fs::path ca_cert_path() const { return _config.repo_root() / OUINET_CA_CERT_FILE; }
     fs::path ca_key_path()  const { return _config.repo_root() / OUINET_CA_KEY_FILE;  }
@@ -338,10 +372,14 @@ private:
 
     void idempotent_start_accepting_on_utp(asio::yield_context yield) {
         if (_multi_utp_server) return;
-        assert(!_shutdown_signal);
-        if (_shutdown_signal) return or_throw(yield, asio::error::operation_aborted);
 
+        // Ensure that only one coroutine is modifying the instance at a time.
         sys::error_code ec;
+        _multi_utp_server_wc.wait(_shutdown_signal, yield[ec]);
+        return_or_throw_on_error(yield, _shutdown_signal, ec);
+        if (_multi_utp_server) return;
+        auto lock = _multi_utp_server_wc.lock();
+
         auto dht = bittorrent_dht(yield[ec]);
         if (ec) return or_throw(yield, ec);
 
@@ -393,6 +431,7 @@ private:
     util::LruCache<string, string> _ssl_certificate_cache;
     std::unique_ptr<OuiServiceClient> _injector;
     std::unique_ptr<cache::Client> _cache;
+    boost::optional<ConditionVariable> _injector_starting, _cache_starting;
 
     ClientFrontEnd _front_end;
     Signal<void()> _shutdown_signal;
@@ -409,9 +448,13 @@ private:
     boost::optional<asio::ip::udp::endpoint> _local_utp_endpoint;
     boost::optional<asio_utp::udp_multiplexer> _udp_multiplexer;
     unique_ptr<util::UdpServerReachabilityAnalysis> _udp_reachability;
+
     shared_ptr<bt::MainlineDht> _bt_dht;
+    WaitCondition _bt_dht_wc;
 
     unique_ptr<ouiservice::MultiUtpServer> _multi_utp_server;
+    WaitCondition _multi_utp_server_wc;
+
     shared_ptr<ouiservice::Bep5Client> _bep5_client;
 
     std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>> _upnps;
@@ -1252,11 +1295,15 @@ public:
     }
 
     void proxy_job_func(Transaction& tnx, Cancel& cancel, Yield yield) {
+        sys::error_code ec;
+
+        client_state.wait_for_injector(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec);
+
         _YDEBUG(yield, "start");
 
         Session session;
 
-        sys::error_code ec;
         const auto& rq = tnx.request();
 
         if (rq.target().starts_with("https://")) {
@@ -1285,6 +1332,12 @@ public:
         sys::error_code ec;
         sys::error_code fresh_ec;
         sys::error_code cache_ec;
+
+        client_state.wait_for_injector(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec);
+
+        client_state.wait_for_cache(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec);
 
         _YDEBUG(yield, "start");
         _YDEBUG(yield, tnx.request());
@@ -2099,61 +2152,58 @@ void Client::State::serve_request( GenericStream&& con
 }
 
 //------------------------------------------------------------------------------
-void Client::State::setup_cache()
+void Client::State::setup_cache(asio::yield_context yield)
 {
-    if (_config.cache_type() == ClientConfig::CacheType::Bep5Http) {
-        Cancel cancel = _shutdown_signal;
+    if (_config.cache_type() != ClientConfig::CacheType::Bep5Http) return;
 
-        TRACK_SPAWN(_ctx, ([
-            this,
-            cancel = move(cancel)
-        ] (asio::yield_context yield) {
-            if (cancel) return;
-            LOG_DEBUG("HTTP signing public key (Ed25519): ", _config.cache_http_pub_key());
+    LOG_DEBUG("HTTP signing public key (Ed25519): ", _config.cache_http_pub_key());
 
-            sys::error_code ec;
+    // Remember to always set before return in case of error,
+    // or the notification may not pass the right error code to listeners.
+    sys::error_code ec;
+    auto notify_ready = defer([&] {
+        if (!_cache_starting) return;
+        _cache_starting->notify(ec);
+        _cache_starting.reset();
+    });
 
-            auto dht = bittorrent_dht(yield[ec]);
-            if (ec) {
-                if (ec != asio::error::operation_aborted) {
-                    LOG_ERROR("Failed to initialize BT DHT ", ec.message());
-                }
-                return;
-            }
+    auto dht = bittorrent_dht(yield[ec]);
+    if (ec) {
+        if (ec != asio::error::operation_aborted) {
+            LOG_ERROR("Failed to initialize BT DHT: ", ec.message());
+        }
+        return or_throw(yield, ec);
+    }
 
-            assert(!_shutdown_signal || ec == asio::error::operation_aborted);
+    assert(!_shutdown_signal || ec == asio::error::operation_aborted);
 
-            _cache
-                = cache::Client::build( dht
-                                      , *_config.cache_http_pub_key()
-                                      , _config.repo_root()/"bep5_http"
-                                      , _config.max_cached_age()
-                                      , yield[ec]);
+    _cache
+        = cache::Client::build( dht
+                              , *_config.cache_http_pub_key()
+                              , _config.repo_root()/"bep5_http"
+                              , _config.max_cached_age()
+                              , yield[ec]);
 
-            if (cancel) ec = asio::error::operation_aborted;
-            if (ec) {
-                if (ec != asio::error::operation_aborted) {
-                    LOG_ERROR("Failed to initialize cache::Client: "
-                             , ec.message());
-                }
-                return;
-            }
+    if (_shutdown_signal) ec = asio::error::operation_aborted;
+    if (ec) {
+        if (ec != asio::error::operation_aborted) {
+            LOG_ERROR("Failed to initialize cache::Client: "
+                     , ec.message());
+        }
+        return or_throw(yield, ec);
+    }
 
-            idempotent_start_accepting_on_utp(yield[ec]);
+    idempotent_start_accepting_on_utp(yield[ec]);
 
-            if (ec) {
-                LOG_ERROR("Failed to start accepting on uTP ", ec.message());
-            }
-        }));
+    if (ec) {
+        LOG_ERROR("Failed to start accepting on uTP: ", ec.message());
+        ec = {};
     }
 }
 
 //------------------------------------------------------------------------------
-void Client::State::listen_tcp
-        ( asio::yield_context yield
-        , tcp::endpoint local_endpoint
-        , const char* service
-        , function<void(GenericStream, asio::yield_context)> handler)
+tcp::acceptor Client::State::make_acceptor( const tcp::endpoint& local_endpoint
+                                          , const char* service)
 {
     sys::error_code ec;
 
@@ -2162,8 +2212,8 @@ void Client::State::listen_tcp
 
     acceptor.open(local_endpoint.protocol(), ec);
     if (ec) {
-        LOG_ERROR("Failed to open tcp acceptor for service \"",service,"\": ", ec.message());
-        return;
+        throw runtime_error(util::str( "Failed to open TCP acceptor for service \"", service, "\": "
+                                     , ec.message()));
     }
 
     acceptor.set_option(asio::socket_base::reuse_address(true));
@@ -2171,36 +2221,45 @@ void Client::State::listen_tcp
     // Bind to the server address
     acceptor.bind(local_endpoint, ec);
     if (ec) {
-        LOG_ERROR("Failed to bind tcp acceptor for service \"", service,"\": "
-                 , ec.message());
-        return;
+        throw runtime_error(util::str( "Failed to bind TCP acceptor for service \"", service, "\": "
+                                     , ec.message()));
     }
 
     // Start listening for connections
     acceptor.listen(asio::socket_base::max_connections, ec);
     if (ec) {
-        LOG_ERROR("Failed to 'listen' to service \"", service, "\""
-                  " on tcp acceptor: ", ec.message());
-        return;
+        throw runtime_error(util::str( "Failed to 'listen' to service \"", service, "\""
+                                       " on TCP acceptor: ", ec.message()));
     }
 
+    LOG_INFO("Client listening to ", service, " on TCP:", acceptor.local_endpoint());
+
+    return acceptor;
+}
+
+//------------------------------------------------------------------------------
+void Client::State::listen_tcp
+        ( asio::yield_context yield
+        , tcp::acceptor acceptor
+        , function<void(GenericStream, asio::yield_context)> handler)
+{
     auto shutdown_acceptor_slot = _shutdown_signal.connect([&acceptor] {
         acceptor.close();
     });
-
-    LOG_INFO("Client accepting to ", service, " on TCP:", acceptor.local_endpoint());
 
     WaitCondition wait_condition(_ctx);
 
     for(;;)
     {
+        sys::error_code ec;
+
         tcp::socket socket(_ctx);
         acceptor.async_accept(socket, yield[ec]);
 
         if(ec) {
             if (ec == asio::error::operation_aborted) break;
 
-            LOG_WARN("Accept failed on tcp acceptor service \"",service,"\": ", ec.message());
+            LOG_WARN("Accept failed on TCP:", acceptor.local_endpoint(), ": ", ec.message());
 
             if (!async_sleep(_ctx, chrono::seconds(1), _shutdown_signal, yield)) {
                 break;
@@ -2239,6 +2298,12 @@ void Client::State::listen_tcp
 //------------------------------------------------------------------------------
 void Client::State::start()
 {
+    // These may throw if the endpoints are busy.
+    auto proxy_acceptor = make_acceptor(_config.local_endpoint(), "browser requests");
+    boost::optional<tcp::acceptor> front_end_acceptor;
+    if (_config.front_end_endpoint() != tcp::endpoint())
+        front_end_acceptor = make_acceptor(_config.front_end_endpoint(), "frontend");
+
     ssl::util::load_tls_ca_certificates(ssl_ctx, _config.tls_ca_cert_store_path());
 
     _ca_certificate = get_or_gen_tls_cert<CACertificate>
@@ -2259,48 +2324,33 @@ void Client::State::start()
 
     TRACK_SPAWN(_ctx, ([
         this,
-        self = shared_from_this()
-    ] (asio::yield_context yield) {
+        self = shared_from_this(),
+        acceptor = move(proxy_acceptor)
+    ] (asio::yield_context yield) mutable {
         if (was_stopped()) return;
 
         sys::error_code ec;
-
-        setup_injector(yield[ec]);
-
-        if (was_stopped()) return;
-
-        if (ec) {
-            LOG_ERROR("Failed to setup injector: ", ec.message());
-        }
-
-        setup_cache();
-
         listen_tcp( yield[ec]
-                  , _config.local_endpoint()
-                  , "browser requests"
+                  , move(acceptor)
                   , [this, self]
                     (GenericStream c, asio::yield_context yield) {
                 serve_request(move(c), yield);
             });
     }));
 
-    if (_config.front_end_endpoint() != tcp::endpoint()) {
+    if (front_end_acceptor) {
         TRACK_SPAWN( _ctx, ([
             this,
-            self = shared_from_this()
-        ] (asio::yield_context yield) {
+            self = shared_from_this(),
+            acceptor = move(*front_end_acceptor)
+        ] (asio::yield_context yield) mutable {
             if (was_stopped()) return;
 
+            LOG_INFO("Serving front end on ", acceptor.local_endpoint());
+
             sys::error_code ec;
-
-            auto ep = _config.front_end_endpoint();
-            if (ep == tcp::endpoint()) return;
-
-            LOG_INFO("Serving front end on ", ep);
-
             listen_tcp( yield[ec]
-                      , ep
-                      , "frontend"
+                      , move(acceptor)
                       , [this, self]
                         (GenericStream c, asio::yield_context yield_) {
                   Yield yield(_ctx, yield_, "Frontend");
@@ -2319,6 +2369,30 @@ void Client::State::start()
             });
         }));
     }
+
+    TRACK_SPAWN(_ctx, ([
+        this
+    ] (asio::yield_context yield) {
+        if (was_stopped()) return;
+
+        sys::error_code ec;
+        setup_injector(yield[ec]);
+
+        if (ec && ec != asio::error::operation_aborted)
+            LOG_ERROR("Failed to setup injector: ", ec.message());
+    }));
+
+    TRACK_SPAWN(_ctx, ([
+        this
+    ] (asio::yield_context yield) {
+        if (was_stopped()) return;
+
+        sys::error_code ec;
+        setup_cache(yield[ec]);
+
+        if (ec && ec != asio::error::operation_aborted)
+            LOG_ERROR("Failed to setup cache: ", ec.message());
+    }));
 }
 
 //------------------------------------------------------------------------------
@@ -2337,6 +2411,15 @@ Client::State::maybe_wrap_tls(unique_ptr<OuiServiceImplementationClient> client)
 
 void Client::State::setup_injector(asio::yield_context yield)
 {
+    // Remember to always set before return in case of error,
+    // or the notification may not pass the right error code to listeners.
+    sys::error_code ec;
+    auto notify_ready = defer([&] {
+        if (!_injector_starting) return;
+        _injector_starting->notify(ec);
+        _injector_starting.reset();
+    });
+
     _injector = std::make_unique<OuiServiceClient>(_ctx.get_executor());
 
     auto injector_ep = _config.injector_endpoint();
@@ -2353,7 +2436,7 @@ void Client::State::setup_injector(asio::yield_context yield)
 
         /*
         if (!i2p_client->verify_endpoint()) {
-            return or_throw(yield, asio::error::invalid_argument);
+            return or_throw(yield, ec = asio::error::invalid_argument);
         }
         */
         client = std::move(i2p_client);
@@ -2361,11 +2444,10 @@ void Client::State::setup_injector(asio::yield_context yield)
         auto tcp_client = make_unique<ouiservice::TcpOuiServiceClient>(_ctx.get_executor(), injector_ep->endpoint_string);
 
         if (!tcp_client->verify_endpoint()) {
-            return or_throw(yield, asio::error::invalid_argument);
+            return or_throw(yield, ec = asio::error::invalid_argument);
         }
         client = maybe_wrap_tls(move(tcp_client));
     } else if (injector_ep->type == Endpoint::UtpEndpoint) {
-        sys::error_code ec;
         asio_utp::udp_multiplexer m(_ctx);
         m.bind(common_udp_multiplexer(), ec);
         assert(!ec);
@@ -2374,17 +2456,15 @@ void Client::State::setup_injector(asio::yield_context yield)
             (_ctx.get_executor(), move(m), injector_ep->endpoint_string);
 
         if (!utp_client->verify_remote_endpoint()) {
-            return or_throw(yield, asio::error::invalid_argument);
+            return or_throw(yield, ec = asio::error::invalid_argument);
         }
 
         client = maybe_wrap_tls(move(utp_client));
     } else if (injector_ep->type == Endpoint::Bep5Endpoint) {
-
-        sys::error_code ec;
         auto dht = bittorrent_dht(yield[ec]);
         if (ec) {
             if (ec != asio::error::operation_aborted) {
-                LOG_ERROR("Failed to set up Bep5Client at setting up BT DHT ", ec.message());
+                LOG_ERROR("Failed to set up Bep5Client at setting up BT DHT: ", ec.message());
             }
             return or_throw(yield, ec);
         }
@@ -2393,7 +2473,7 @@ void Client::State::setup_injector(asio::yield_context yield)
 
         if (!bridge_swarm_name) {
             LOG_ERROR("Bridge swarm name has not been computed");
-            return or_throw(yield, asio::error::operation_not_supported);
+            return or_throw(yield, ec = asio::error::operation_not_supported);
         }
 
         _bep5_client = make_shared<ouiservice::Bep5Client>
@@ -2407,14 +2487,15 @@ void Client::State::setup_injector(asio::yield_context yield)
         idempotent_start_accepting_on_utp(yield[ec]);
 
         if (ec) {
-            LOG_ERROR("Failed to start accepting on uTP ", ec.message());
+            LOG_ERROR("Failed to start accepting on uTP: ", ec.message());
+            ec = {};
         }
 /*
     } else if (injector_ep->type == Endpoint::LampshadeEndpoint) {
         auto lampshade_client = make_unique<ouiservice::LampshadeOuiServiceClient>(_ctx, injector_ep->endpoint_string);
 
         if (!lampshade_client->verify_endpoint()) {
-            return or_throw(yield, asio::error::invalid_argument);
+            return or_throw(yield, ec = asio::error::invalid_argument);
         }
         client = std::move(lampshade_client);
 */
@@ -2422,61 +2503,29 @@ void Client::State::setup_injector(asio::yield_context yield)
         auto obfs2_client = make_unique<ouiservice::Obfs2OuiServiceClient>(_ctx, injector_ep->endpoint_string, _config.repo_root()/"obfs2-client");
 
         if (!obfs2_client->verify_endpoint()) {
-            return or_throw(yield, asio::error::invalid_argument);
+            return or_throw(yield, ec = asio::error::invalid_argument);
         }
         client = std::move(obfs2_client);
     } else if (injector_ep->type == Endpoint::Obfs3Endpoint) {
         auto obfs3_client = make_unique<ouiservice::Obfs3OuiServiceClient>(_ctx, injector_ep->endpoint_string, _config.repo_root()/"obfs3-client");
 
         if (!obfs3_client->verify_endpoint()) {
-            return or_throw(yield, asio::error::invalid_argument);
+            return or_throw(yield, ec = asio::error::invalid_argument);
         }
         client = std::move(obfs3_client);
     } else if (injector_ep->type == Endpoint::Obfs4Endpoint) {
         auto obfs4_client = make_unique<ouiservice::Obfs4OuiServiceClient>(_ctx, injector_ep->endpoint_string, _config.repo_root()/"obfs4-client");
 
         if (!obfs4_client->verify_endpoint()) {
-            return or_throw(yield, asio::error::invalid_argument);
+            return or_throw(yield, ec = asio::error::invalid_argument);
         }
         client = std::move(obfs4_client);
     }
 
     _injector->add(*injector_ep, std::move(client));
 
-    _injector->start(yield);
-}
-
-//------------------------------------------------------------------------------
-void Client::State::set_injector(string injector_ep_str)
-{
-    // XXX: Workaround.
-    // Eventually, OuiServiceClient should just support multiple parallel
-    // active injector EPs.
-
-    auto injector_ep = parse_endpoint(injector_ep_str);
-
-    if (!injector_ep) {
-        LOG_ERROR("Failed to parse endpoint \"", injector_ep_str, "\"");
-        return;
-    }
-
-    auto current_ep = _config.injector_endpoint();
-
-    if (current_ep && *injector_ep == *current_ep) {
-        return;
-    }
-
-    _config.set_injector_endpoint(*injector_ep);
-
-    TRACK_SPAWN(_ctx, ([self = shared_from_this(), injector_ep_str] (auto yield) {
-            if (self->was_stopped()) return;
-            sys::error_code ec;
-            self->setup_injector(yield[ec]);
-
-            if (ec == asio::error::invalid_argument) {
-                LOG_ERROR("Failed to parse endpoint \"", injector_ep_str, "\"");
-            }
-        }));
+    _injector->start(yield[ec]);
+    return or_throw(yield, ec);
 }
 
 //------------------------------------------------------------------------------
@@ -2496,21 +2545,6 @@ void Client::start()
 void Client::stop()
 {
     _state->stop();
-}
-
-void Client::set_injector_endpoint(const char* injector_ep)
-{
-    _state->set_injector(injector_ep);
-}
-
-void Client::set_credentials(const char* injector_ep, const char* cred)
-{
-    auto opt_ep = parse_endpoint(injector_ep);
-    if (!opt_ep) {
-        LOG_ERROR("Client::set_credentials: Failed to parse endpoint:", injector_ep);
-        return;
-    }
-    _state->_config.set_credentials(*opt_ep, cred);
 }
 
 void Client::charging_state_change(bool is_charging) {
