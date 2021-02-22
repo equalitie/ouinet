@@ -151,6 +151,8 @@ public:
         , _cache_starting{get_executor()}
         , ssl_ctx{asio::ssl::context::tls_client}
         , inj_ctx{asio::ssl::context::tls_client}
+        , _bt_dht_wc(_ctx)
+        , _multi_utp_server_wc(_ctx)
     {
         ssl_ctx.set_default_verify_paths();
         ssl_ctx.set_verify_mode(asio::ssl::verify_peer);
@@ -210,13 +212,19 @@ public:
     {
         if (_bt_dht) return _bt_dht;
 
+        // Ensure that only one coroutine is modifying the instance at a time.
+        sys::error_code ec;
+        _bt_dht_wc.wait(_shutdown_signal, yield[ec]);
+        return_or_throw_on_error(yield, _shutdown_signal, ec, _bt_dht);
+        if (_bt_dht) return _bt_dht;
+        auto lock = _bt_dht_wc.lock();
+
         auto bt_dht = make_shared<bt::MainlineDht>( _ctx.get_executor()
                                                   , _config.repo_root() / "dht");
 
         auto& mpl = common_udp_multiplexer();
 
         asio_utp::udp_multiplexer m(_ctx);
-        sys::error_code ec;
 
         m.bind(mpl, ec);
         if (ec) return or_throw(yield, ec, _bt_dht);
@@ -364,10 +372,14 @@ private:
 
     void idempotent_start_accepting_on_utp(asio::yield_context yield) {
         if (_multi_utp_server) return;
-        assert(!_shutdown_signal);
-        if (_shutdown_signal) return or_throw(yield, asio::error::operation_aborted);
 
+        // Ensure that only one coroutine is modifying the instance at a time.
         sys::error_code ec;
+        _multi_utp_server_wc.wait(_shutdown_signal, yield[ec]);
+        return_or_throw_on_error(yield, _shutdown_signal, ec);
+        if (_multi_utp_server) return;
+        auto lock = _multi_utp_server_wc.lock();
+
         auto dht = bittorrent_dht(yield[ec]);
         if (ec) return or_throw(yield, ec);
 
@@ -436,9 +448,13 @@ private:
     boost::optional<asio::ip::udp::endpoint> _local_utp_endpoint;
     boost::optional<asio_utp::udp_multiplexer> _udp_multiplexer;
     unique_ptr<util::UdpServerReachabilityAnalysis> _udp_reachability;
+
     shared_ptr<bt::MainlineDht> _bt_dht;
+    WaitCondition _bt_dht_wc;
 
     unique_ptr<ouiservice::MultiUtpServer> _multi_utp_server;
+    WaitCondition _multi_utp_server_wc;
+
     shared_ptr<ouiservice::Bep5Client> _bep5_client;
 
     std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>> _upnps;
