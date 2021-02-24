@@ -15,9 +15,10 @@ namespace ouinet {
 template <class Request>
 inline
 boost::optional<std::string> key_from_http_req(const Request& req) {
-    if (!req.target().starts_with("http")) return {};
     // The key is currently the canonical URL itself.
-    return util::canonical_url(req.target());
+    auto key = util::canonical_url(req.target());
+    if (key.empty()) return boost::none;
+    return key;
 }
 
 template <class Key>

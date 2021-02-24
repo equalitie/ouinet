@@ -20,9 +20,11 @@
 
 namespace ouinet { namespace util {
 
+// Return the canonical version of the given HTTP(S) `url`,
+// or the empty string if it is invalid.
 inline
 std::string canonical_url(const boost::string_view url) {
-    return url.to_string();  // TODO: make canonical; trivial: reassemble URL match
+    return url.to_string();  // TODO: make canonical, empty if error; trivial: reassemble URL match
 }
 
 struct url_match {

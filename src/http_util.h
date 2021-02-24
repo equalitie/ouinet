@@ -323,6 +323,7 @@ Request req_form_from_absolute_to_origin(const Request& absolute_req)
 template<class Request, class... Fields>
 static Request to_canonical_request(Request rq, const Fields&... keep_fields) {
     auto url = canonical_url(rq.target());
+    assert(!url.empty());  // TODO: handle empty
     rq.target(url);
     rq.version(11);  // HTTP/1.1
 
