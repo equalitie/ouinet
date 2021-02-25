@@ -320,10 +320,13 @@ Request req_form_from_absolute_to_origin(const Request& absolute_req)
 // and some of them may be altered for cacheability or privacy reasons.
 //
 // Internal Ouinet headers and headers in `keep_fields` are also kept.
+//
+// If the request is invalid, none is returned.
 template<class Request, class... Fields>
-static Request to_canonical_request(Request rq, const Fields&... keep_fields) {
+static boost::optional<Request>
+to_canonical_request(Request rq, const Fields&... keep_fields) {
     auto url = canonical_url(rq.target());
-    assert(!url.empty());  // TODO: handle empty
+    if (url.empty()) return boost::none;
     rq.target(url);
     rq.version(11);  // HTTP/1.1
 
@@ -364,8 +367,11 @@ static Request to_canonical_request(Request rq, const Fields&... keep_fields) {
 //
 // This means a canonical request with internal Ouinet headers,
 // plus proxy authorization headers and caching headers.
+//
+// If the request is invalid, none is returned.
 template<class Request>
-static Request to_injector_request(Request rq) {
+static boost::optional<Request>
+to_injector_request(Request rq) {
     // The Ouinet version header hints the endpoint
     // to behave like an injector instead of a proxy.
     rq.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
@@ -402,8 +408,11 @@ static Request to_origin_request(Request rq) {
 // Make the given request ready to be sent to the cache.
 //
 // This means a canonical request with no additional headers.
+//
+// If the request is invalid, none is returned.
 template<class Request>
-static Request to_cache_request(Request rq) {
+static boost::optional<Request>
+to_cache_request(Request rq) {
     rq = remove_ouinet_fields(move(rq));
     return to_canonical_request(move(rq));
 }

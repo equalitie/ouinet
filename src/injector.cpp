@@ -301,9 +301,6 @@ private:
 
         sys::error_code ec;
 
-        // Pop out Ouinet internal HTTP headers.
-        rq = util::to_cache_request(move(rq));
-
         auto orig_con = get_connection(rq, timeout_cancel, yield.tag("connect")[ec]);
         return_or_throw_on_error(yield, timeout_cancel, ec);
 
@@ -341,7 +338,15 @@ public:
     {
         sys::error_code ec;
         bool keep_alive = rq.keep_alive();
-        inject_fresh(con, rq, cancel, yield[ec]);
+
+        // Sanitize and pop out Ouinet internal HTTP headers.
+        auto crq = util::to_cache_request(rq);
+        if (!crq) {
+            yield.log("Invalid request");
+            ec = asio::error::invalid_argument;
+        }
+
+        if (!ec) inject_fresh(con, move(*crq), cancel, yield[ec]);
         // TODO: keep_alive should consider response as well
         return or_throw(yield, ec, keep_alive);
     }
@@ -527,10 +532,8 @@ void serve( InjectorConfig& config
                 http::async_write(con, *opt_err_res, yield[ec]);
             }
             else {
-                auto req2 = util::to_injector_request(req);  // sanitize
-                req2.keep_alive(req.keep_alive());
                 keep_alive = cc.fetch( con
-                                     , req2
+                                     , req
                                      , cancel
                                      , yield[ec].tag("cache_control.fetch"));
             }

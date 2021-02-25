@@ -1064,7 +1064,12 @@ Session Client::State::fetch_fresh_through_simple_proxy
 
     if (can_inject) {
         bool keepalive = request.keep_alive();
-        request = util::to_injector_request(move(request));
+        auto irq = util::to_injector_request(move(request));
+        if (!irq) {
+            _YERROR(yield, "Invalid request");
+            return or_throw<Session>(yield, asio::error::invalid_argument);
+        }
+        request = move(*irq);
         request.keep_alive(keepalive);
     }
 
