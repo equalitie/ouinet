@@ -228,10 +228,9 @@ void handle_connect_request( GenericStream client_c
 }
 
 //------------------------------------------------------------------------------
-struct InjectorCacheControl {
+class InjectorCacheControl {
     using Connection = OriginPools::Connection;
 
-public:
     GenericStream connect( const Request& rq
                          , Cancel& cancel
                          , Yield yield)
@@ -271,6 +270,7 @@ public:
         }
     }
 
+public:
     // TODO: Replace this with cancellation support in which fetch_ operations
     // get a signal parameter
     InjectorCacheControl( asio::executor executor
@@ -288,6 +288,7 @@ public:
     {
     }
 
+private:
     void inject_fresh( GenericStream& con
                      , Request rq
                      , Cancel& cancel
@@ -332,6 +333,7 @@ public:
         keep_connection(rq, rsh, move(orig_sess));
     }
 
+public:
     bool fetch( GenericStream& con
               , const Request& rq
               , Cancel cancel
@@ -344,7 +346,6 @@ public:
         return or_throw(yield, ec, keep_alive);
     }
 
-public:
     Connection get_connection(const Request& rq_, Cancel& cancel, Yield yield) {
         Connection connection;
         sys::error_code ec;
