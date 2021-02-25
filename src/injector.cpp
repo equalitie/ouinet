@@ -290,7 +290,7 @@ public:
 
 private:
     void inject_fresh( GenericStream& con
-                     , Request rq
+                     , const Request& rq
                      , Cancel& cancel
                      , Yield yield)
     {
@@ -332,7 +332,7 @@ private:
 
 public:
     bool fetch( GenericStream& con
-              , const Request& rq
+              , Request rq
               , Cancel cancel
               , Yield yield)
     {
@@ -340,13 +340,13 @@ public:
         bool keep_alive = rq.keep_alive();
 
         // Sanitize and pop out Ouinet internal HTTP headers.
-        auto crq = util::to_cache_request(rq);
+        auto crq = util::to_cache_request(move(rq));
         if (!crq) {
             yield.log("Invalid request");
             ec = asio::error::invalid_argument;
         }
 
-        if (!ec) inject_fresh(con, move(*crq), cancel, yield[ec]);
+        if (!ec) inject_fresh(con, *crq, cancel, yield[ec]);
         // TODO: keep_alive should consider response as well
         return or_throw(yield, ec, keep_alive);
     }
@@ -533,7 +533,7 @@ void serve( InjectorConfig& config
             }
             else {
                 keep_alive = cc.fetch( con
-                                     , req
+                                     , move(req)
                                      , cancel
                                      , yield[ec].tag("cache_control.fetch"));
             }
