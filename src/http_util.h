@@ -314,6 +314,25 @@ Request req_form_from_absolute_to_origin(const Request& absolute_req)
     return origin_req;
 }
 
+namespace detail {
+    std::string http_host_header(const std::string&, const std::string&);
+}
+
+// Add a `Host:` header to `req` if missing or empty.
+//
+// If the header continues to be empty after the call,
+// the request is invalid (e.g. missing host and bad target).
+template<class Request>
+void req_ensure_host(Request& req) {
+    if (!req[http::field::host].empty()) return;
+
+    std::string host, port;
+    std::tie(host, port) = util::get_host_port(req);
+    auto hosth = detail::http_host_header(host, port);
+    if (hosth.empty()) return;  // error
+    req.set(http::field::host, hosth);
+}
+
 // Make the given request canonical.
 //
 // This only leaves a minimum set of non-privacy sensitive headers,
