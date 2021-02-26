@@ -344,14 +344,14 @@ void req_ensure_host(Request& req) {
 template<class Request, class... Fields>
 static boost::optional<Request>
 to_canonical_request(Request rq, const Fields&... keep_fields) {
-    auto url = canonical_url(rq.target());
-    if (url.empty()) return boost::none;
+    auto url = rq.target();
+    url_match urlm;
+    if (!match_http_url(url, urlm)) return boost::none;
+    url = canonical_url(urlm);
     rq.target(url);
     rq.version(11);  // HTTP/1.1
 
     // Some canonical header values that need ADD, KEEP or PROCESS.
-    url_match urlm;
-    match_http_url(url, urlm);  // assume check by `canonical_url` above
     rq.set( http::field::host
           , (urlm.port.empty() ? urlm.host : urlm.host + ":" + urlm.port));
     rq.set(http::field::accept, "*/*");

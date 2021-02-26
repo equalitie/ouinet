@@ -63,13 +63,20 @@ bool match_http_url(const boost::string_view url, url_match& match) {
     return true;
 }
 
+// Return the canonical version of the given HTTP(S) URL
+// whose match components are in `urlm`.
+inline
+std::string canonical_url(const url_match& urlm) {
+    return urlm.reassemble();  // TODO: make canonical
+}
+
 // Return the canonical version of the given HTTP(S) `url`,
 // or the empty string if it is invalid.
 inline
 std::string canonical_url(const boost::string_view url) {
     url_match urlm;
     if (!match_http_url(url, urlm)) return {};  // error
-    return urlm.reassemble();  // TODO: make canonical
+    return canonical_url(urlm);
 }
 
 inline
