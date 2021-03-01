@@ -291,7 +291,7 @@ public:
 private:
     void inject_fresh( GenericStream& con
                      , const Request& cache_rq
-                     , bool keep_alive
+                     , bool rq_keep_alive
                      , Cancel& cancel
                      , Yield yield)
     {
@@ -328,7 +328,7 @@ private:
         yield.log("Injection end");  // TODO: report whether inject or just fwd
 
         auto rsh = http::response<http::empty_body>(orig_sess.response_header());
-        keep_connection_if(move(orig_sess), keep_alive && rsh.keep_alive());
+        keep_connection_if(move(orig_sess), rq_keep_alive && rsh.keep_alive());
     }
 
 public:
@@ -347,6 +347,7 @@ public:
             ec = asio::error::invalid_argument;
         }
 
+        // Cache requests do not contain keep-alive information, hence the explicit argument.
         if (!ec) inject_fresh(con, *crq, keep_alive, cancel, yield[ec]);
         // TODO: keep_alive should consider response as well
         return or_throw(yield, ec, keep_alive);
