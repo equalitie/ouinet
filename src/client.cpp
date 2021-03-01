@@ -265,7 +265,7 @@ private:
                           , Cancel&, Yield);
 
     Response fetch_fresh_from_front_end(const Request&, Yield);
-    Session fetch_fresh_from_origin( const Request&
+    Session fetch_fresh_from_origin( Request
                                    , const UserAgentMetaData&
                                    , Cancel, Yield);
 
@@ -870,13 +870,17 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
 }
 
 //------------------------------------------------------------------------------
-Session Client::State::fetch_fresh_from_origin( const Request& rq
+Session Client::State::fetch_fresh_from_origin( Request rq
                                               , const UserAgentMetaData& meta
                                               , Cancel cancel, Yield yield)
 {
     WatchDog watch_dog(_ctx
                       , default_timeout::fetch_http()
                       , [&] { cancel(); });
+
+    util::req_ensure_host(rq);  // origin pools require host
+    if (rq[http::field::host].empty())
+        return or_throw<Session>(yield, asio::error::invalid_argument);
 
     sys::error_code ec;
 
