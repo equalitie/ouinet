@@ -291,6 +291,7 @@ public:
 private:
     void inject_fresh( GenericStream& con
                      , const Request& cache_rq
+                     , bool keep_alive
                      , Cancel& cancel
                      , Yield yield)
     {
@@ -327,7 +328,7 @@ private:
         yield.log("Injection end");  // TODO: report whether inject or just fwd
 
         auto rsh = http::response<http::empty_body>(orig_sess.response_header());
-        keep_connection(cache_rq, rsh, move(orig_sess));
+        keep_connection_if(move(orig_sess), keep_alive && rsh.keep_alive());
     }
 
 public:
@@ -346,7 +347,7 @@ public:
             ec = asio::error::invalid_argument;
         }
 
-        if (!ec) inject_fresh(con, *crq, cancel, yield[ec]);
+        if (!ec) inject_fresh(con, *crq, keep_alive, cancel, yield[ec]);
         // TODO: keep_alive should consider response as well
         return or_throw(yield, ec, keep_alive);
     }
@@ -370,15 +371,17 @@ public:
 
     template<class Response, class Connection>
     bool keep_connection(const Request& rq, const Response& rs, Connection con) {
+        return keep_connection_if(move(con), rq.keep_alive() && rs.keep_alive());
+    }
+
+private:
+    template<class Connection>
+    bool keep_connection_if(Connection con, bool keep_alive) {
         // NOTE: `con` is put back to `origin_pools` from its destructor unless it
         // is explicitly closed.
-
-        if (!rs.keep_alive() || !rq.keep_alive()) {
+        if (!keep_alive)
             con.close();
-            return false;
-        }
-
-        return true;
+        return keep_alive;
     }
 
 private:
