@@ -602,7 +602,7 @@ Client::State::fetch_stored_in_dcache( const Request& request
     sys::error_code ec;
 
     auto key = key_from_http_req(request);
-    assert(key);
+    if (!key) return or_throw<CacheEntry>(yield, asio::error::invalid_argument);
     auto s = c->load(move(*key), dht_group, cancel, yield[ec]);
     return_or_throw_on_error(yield, cancel, ec, CacheEntry{});
 
