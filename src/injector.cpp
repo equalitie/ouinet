@@ -289,7 +289,7 @@ public:
     }
 
 private:
-    void inject_fresh( GenericStream& con
+    bool inject_fresh( GenericStream& con
                      , const Request& cache_rq
                      , bool rq_keep_alive
                      , Cancel& cancel
@@ -303,7 +303,7 @@ private:
         sys::error_code ec;
 
         auto orig_con = get_connection(cache_rq, timeout_cancel, yield.tag("connect")[ec]);
-        return_or_throw_on_error(yield, timeout_cancel, ec);
+        return_or_throw_on_error(yield, timeout_cancel, ec, rq_keep_alive);
 
         // Send HTTP request to origin.
         auto orig_rq = util::to_origin_request(cache_rq);
@@ -311,24 +311,24 @@ private:
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) yield.log("Failed to send request: ", ec.message());
-        return_or_throw_on_error(yield, cancel, ec);
+        return_or_throw_on_error(yield, cancel, ec, rq_keep_alive);
 
         Session::reader_uptr sig_reader = make_unique<cache::SigningReader>
             (move(orig_con), cache_rq, insert_id, insert_ts, config.cache_private_key());
         auto orig_sess = Session::create(move(sig_reader), timeout_cancel, yield.tag("read-hdr")[ec]);
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
-        return_or_throw_on_error(yield, cancel, ec);
+        return_or_throw_on_error(yield, cancel, ec, rq_keep_alive);
 
         orig_sess.flush_response(con, timeout_cancel, yield.tag("flush")[ec]);
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) yield.log("Injection failed: ", ec.message());
-        return_or_throw_on_error(yield, cancel, ec);
+        return_or_throw_on_error(yield, cancel, ec, rq_keep_alive);
         yield.log("Injection end");  // TODO: report whether inject or just fwd
 
         auto rsh = http::response<http::empty_body>(orig_sess.response_header());
-        keep_connection_if(move(orig_sess), rq_keep_alive && rsh.keep_alive());
+        return keep_connection_if(move(orig_sess), rq_keep_alive && rsh.keep_alive());
     }
 
 public:
@@ -348,8 +348,7 @@ public:
         }
 
         // Cache requests do not contain keep-alive information, hence the explicit argument.
-        if (!ec) inject_fresh(con, *crq, keep_alive, cancel, yield[ec]);
-        // TODO: keep_alive should consider response as well
+        if (!ec) keep_alive = inject_fresh(con, *crq, keep_alive, cancel, yield[ec]);
         return or_throw(yield, ec, keep_alive);
     }
 
