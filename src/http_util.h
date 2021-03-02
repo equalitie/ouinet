@@ -347,8 +347,7 @@ to_canonical_request(Request rq, const Fields&... keep_fields) {
     auto url = rq.target();
     url_match urlm;
     if (!match_http_url(url, urlm)) return boost::none;
-    url = canonical_url(urlm);
-    rq.target(url);
+    rq.target(canonical_url(urlm));
     rq.version(11);  // HTTP/1.1
 
     // Some canonical header values that need ADD, KEEP or PROCESS.
