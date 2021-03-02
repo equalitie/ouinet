@@ -278,9 +278,7 @@ public:
                         , OriginPools& origin_pools
                         , const InjectorConfig& config
                         , uuid_generator& genuuid)
-        : insert_id(to_string(genuuid()))
-        , insert_ts(chrono::seconds(time(nullptr)).count())
-        , executor(move(executor))
+        : executor(move(executor))
         , ssl_ctx(ssl_ctx)
         , config(config)
         , genuuid(genuuid)
@@ -313,8 +311,10 @@ private:
         if (ec) yield.log("Failed to send request: ", ec.message());
         return_or_throw_on_error(yield, cancel, ec, rq_keep_alive);
 
+        auto insert_id = to_string(genuuid());
+        auto insert_ts = chrono::seconds(time(nullptr)).count();
         Session::reader_uptr sig_reader = make_unique<cache::SigningReader>
-            (move(orig_con), cache_rq, insert_id, insert_ts, config.cache_private_key());
+            (move(orig_con), cache_rq, move(insert_id), insert_ts, config.cache_private_key());
         auto orig_sess = Session::create(move(sig_reader), timeout_cancel, yield.tag("read-hdr")[ec]);
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
@@ -385,8 +385,6 @@ private:
     }
 
 private:
-    std::string insert_id;
-    std::chrono::seconds::rep insert_ts;
     asio::executor executor;
     asio::ssl::context& ssl_ctx;
     const InjectorConfig& config;
