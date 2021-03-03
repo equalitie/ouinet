@@ -287,9 +287,8 @@ public:
     }
 
 private:
-    bool inject_fresh( GenericStream& con
+    void inject_fresh( GenericStream& con
                      , const Request& cache_rq
-                     , bool rq_keep_alive
                      , Cancel& cancel
                      , Yield yield)
     {
@@ -301,15 +300,16 @@ private:
         sys::error_code ec;
 
         auto orig_con = get_connection(cache_rq, timeout_cancel, yield.tag("connect")[ec]);
-        return_or_throw_on_error(yield, timeout_cancel, ec, rq_keep_alive);
+        return_or_throw_on_error(yield, timeout_cancel, ec);
 
         // Send HTTP request to origin.
         auto orig_rq = util::to_origin_request(cache_rq);
+        orig_rq.keep_alive(true);  // regardless of what client wants
         util::http_request(orig_con, orig_rq, timeout_cancel, yield.tag("request")[ec]);
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) yield.log("Failed to send request: ", ec.message());
-        return_or_throw_on_error(yield, cancel, ec, rq_keep_alive);
+        return_or_throw_on_error(yield, cancel, ec);
 
         auto insert_id = to_string(genuuid());
         auto insert_ts = chrono::seconds(time(nullptr)).count();
@@ -318,27 +318,26 @@ private:
         auto orig_sess = Session::create(move(sig_reader), timeout_cancel, yield.tag("read-hdr")[ec]);
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
-        return_or_throw_on_error(yield, cancel, ec, rq_keep_alive);
+        return_or_throw_on_error(yield, cancel, ec);
 
         orig_sess.flush_response(con, timeout_cancel, yield.tag("flush")[ec]);
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) yield.log("Injection failed: ", ec.message());
-        return_or_throw_on_error(yield, cancel, ec, rq_keep_alive);
+        return_or_throw_on_error(yield, cancel, ec);
         yield.log("Injection end");  // TODO: report whether inject or just fwd
 
         auto rsh = http::response<http::empty_body>(orig_sess.response_header());
-        return keep_connection_if(move(orig_sess), rq_keep_alive && rsh.keep_alive());
+        keep_connection(rsh, move(orig_sess));
     }
 
 public:
-    bool fetch( GenericStream& con
+    void fetch( GenericStream& con
               , Request rq
               , Cancel cancel
               , Yield yield)
     {
         sys::error_code ec;
-        bool keep_alive = rq.keep_alive();
 
         // Sanitize and pop out Ouinet internal HTTP headers.
         auto crq = util::to_cache_request(move(rq));
@@ -347,9 +346,8 @@ public:
             ec = asio::error::invalid_argument;
         }
 
-        // Cache requests do not contain keep-alive information, hence the explicit argument.
-        if (!ec) keep_alive = inject_fresh(con, *crq, keep_alive, cancel, yield[ec]);
-        return or_throw(yield, ec, keep_alive);
+        if (!ec) inject_fresh(con, *crq, cancel, yield[ec]);
+        return or_throw(yield, ec);
     }
 
     Connection get_connection(const Request& rq_, Cancel& cancel, Yield yield) {
@@ -370,18 +368,12 @@ public:
     }
 
     template<class Response, class Connection>
-    bool keep_connection(const Request& rq, const Response& rs, Connection con) {
-        return keep_connection_if(move(con), rq.keep_alive() && rs.keep_alive());
-    }
-
-private:
-    template<class Connection>
-    bool keep_connection_if(Connection con, bool keep_alive) {
+    void keep_connection(const Response& rs, Connection con) {
         // NOTE: `con` is put back to `origin_pools` from its destructor unless it
         // is explicitly closed.
-        if (!keep_alive)
+
+        if (!rs.keep_alive())
             con.close();
-        return keep_alive;
     }
 
 private:
@@ -498,6 +490,7 @@ void serve( InjectorConfig& config
             size_t forwarded = 0;
             if (!ec) {
                 auto orig_req = util::to_origin_request(req);
+                orig_req.keep_alive(true);  // regardless of what client wants
                 util::http_request(orig_con, orig_req, cancel, yield[ec]);
             }
             if (!ec) {
@@ -528,7 +521,7 @@ void serve( InjectorConfig& config
                 continue;
             }
             yield.log("Forwarded data bytes: ", forwarded);
-            keep_alive = cc.keep_connection(req, res, move(orig_con));
+            cc.keep_connection(res, move(orig_con));
         }
         else {
             // Ouinet header found, behave like a Ouinet injector.
@@ -539,10 +532,8 @@ void serve( InjectorConfig& config
                 http::async_write(con, *opt_err_res, yield[ec]);
             }
             else {
-                keep_alive = cc.fetch( con
-                                     , move(req)
-                                     , cancel
-                                     , yield[ec].tag("cache_control.fetch"));
+                cc.fetch( con, move(req)
+                        , cancel, yield[ec].tag("cache_control.fetch"));
             }
         }
 
