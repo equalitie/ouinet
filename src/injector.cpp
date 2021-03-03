@@ -327,8 +327,8 @@ private:
         return_or_throw_on_error(yield, cancel, ec);
         yield.log("Injection end");  // TODO: report whether inject or just fwd
 
-        auto rsh = http::response<http::empty_body>(orig_sess.response_header());
-        keep_connection(rsh, move(orig_sess));
+        auto rs_keep_alive = orig_sess.response_header().keep_alive();
+        keep_connection_if(move(orig_sess), rs_keep_alive);
     }
 
 public:
@@ -367,12 +367,12 @@ public:
         return connection;
     }
 
-    template<class Response, class Connection>
-    void keep_connection(const Response& rs, Connection con) {
+    template<class Connection>
+    void keep_connection_if(Connection con, bool keep_alive) {
         // NOTE: `con` is put back to `origin_pools` from its destructor unless it
         // is explicitly closed.
 
-        if (!rs.keep_alive())
+        if (!keep_alive)
             con.close();
     }
 
@@ -478,9 +478,6 @@ void serve( InjectorConfig& config
             // TODO: Maybe reject requests for HTTPS URLS:
             // we are perfectly able to handle them (and do verification locally),
             // but the client should be using a CONNECT request instead!
-            using RespFromH = http::response<http::empty_body>;
-            RespFromH res;
-
             util::req_ensure_host(req);  // origin pools require host
             if (req[http::field::host].empty()) {
                 yield.log("Invalid request");
@@ -493,17 +490,18 @@ void serve( InjectorConfig& config
                 orig_req.keep_alive(true);  // regardless of what client wants
                 util::http_request(orig_con, orig_req, cancel, yield[ec]);
             }
+            bool res_keep_alive = false;
             if (!ec) {
                 http_response::Reader rr(move(orig_con));
                 while (!ec) {
                     auto opt_part = rr.async_read_part(cancel, yield[ec]);
                     if (ec || !opt_part) break;
                     if (auto inh = opt_part->as_head()) {
+                        res_keep_alive = inh->keep_alive();
                         // Prevent others from inserting ouinet specific header fields.
                         auto outh = util::remove_ouinet_fields(move(*inh));
                         yield.log("=== Sending back proxy response ===");
                         yield.log(outh);
-                        res = RespFromH(outh);
                         opt_part = move(outh);
                     } else if (auto b = opt_part->as_body()) {
                         forwarded += b->size();
@@ -521,7 +519,7 @@ void serve( InjectorConfig& config
                 continue;
             }
             yield.log("Forwarded data bytes: ", forwarded);
-            cc.keep_connection(res, move(orig_con));
+            cc.keep_connection_if(move(orig_con), res_keep_alive);
         }
         else {
             // Ouinet header found, behave like a Ouinet injector.
