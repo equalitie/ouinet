@@ -289,6 +289,7 @@ public:
 private:
     void inject_fresh( GenericStream& con
                      , const Request& cache_rq
+                     , bool rq_keep_alive
                      , Cancel& cancel
                      , Yield yield)
     {
@@ -320,6 +321,11 @@ private:
         if (cancel) ec = asio::error::operation_aborted;
         return_or_throw_on_error(yield, cancel, ec);
 
+        // Keep origin connection if the origin wants to.
+        auto rs_keep_alive = orig_sess.response_header().keep_alive();
+        // Keep client connection if the client wants to.
+        orig_sess.response_header().keep_alive(rq_keep_alive);
+
         orig_sess.flush_response(con, timeout_cancel, yield.tag("flush")[ec]);
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
@@ -327,7 +333,6 @@ private:
         return_or_throw_on_error(yield, cancel, ec);
         yield.log("Injection end");  // TODO: report whether inject or just fwd
 
-        auto rs_keep_alive = orig_sess.response_header().keep_alive();
         keep_connection_if(move(orig_sess), rs_keep_alive);
     }
 
@@ -338,6 +343,7 @@ public:
               , Yield yield)
     {
         sys::error_code ec;
+        bool rq_keep_alive = rq.keep_alive();
 
         // Sanitize and pop out Ouinet internal HTTP headers.
         auto crq = util::to_cache_request(move(rq));
@@ -346,7 +352,8 @@ public:
             ec = asio::error::invalid_argument;
         }
 
-        if (!ec) inject_fresh(con, *crq, cancel, yield[ec]);
+        // Cache requests do not contain keep-alive information, hence the explicit argument.
+        if (!ec) inject_fresh(con, *crq, rq_keep_alive, cancel, yield[ec]);
         return or_throw(yield, ec);
     }
 
@@ -471,7 +478,7 @@ void serve( InjectorConfig& config
         // whether to behave like an injector or a proxy.
         bool proxy = (version_hdr_i == req.end());
 
-        bool keep_alive = req.keep_alive();
+        bool req_keep_alive = req.keep_alive();
 
         if (proxy) {
             // No Ouinet header, behave like a (non-caching) proxy.
@@ -497,7 +504,10 @@ void serve( InjectorConfig& config
                     auto opt_part = rr.async_read_part(cancel, yield[ec]);
                     if (ec || !opt_part) break;
                     if (auto inh = opt_part->as_head()) {
+                        // Keep proxy connection if the proxy wants to.
                         res_keep_alive = inh->keep_alive();
+                        // Keep client connection if the client wants to.
+                        inh->keep_alive(req_keep_alive);
                         // Prevent others from inserting ouinet specific header fields.
                         auto outh = util::remove_ouinet_fields(move(*inh));
                         yield.log("=== Sending back proxy response ===");
@@ -535,7 +545,7 @@ void serve( InjectorConfig& config
             }
         }
 
-        if (ec || !keep_alive) {
+        if (ec || !req_keep_alive) {
             con.close();
             break;
         }
