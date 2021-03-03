@@ -452,6 +452,8 @@ struct SigningReader::Impl {
         assert(http::response<http::empty_body>(inh).chunked());
 
         _outh = inh;
+        // Not useful for signing, may still be for consumer.
+        inh.keep_alive(inh_orig.keep_alive());
         return http_response::Part(std::move(inh));
     }
 
