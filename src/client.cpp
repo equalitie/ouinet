@@ -881,6 +881,7 @@ Session Client::State::fetch_fresh_from_origin( Request rq
     util::req_ensure_host(rq);  // origin pools require host
     if (rq[http::field::host].empty())
         return or_throw<Session>(yield, asio::error::invalid_argument);
+    util::remove_ouinet_fields_ref(rq);  // avoid leaking to non-injectors
 
     sys::error_code ec;
 
@@ -1075,6 +1076,8 @@ Session Client::State::fetch_fresh_through_simple_proxy
         }
         request = move(*irq);
         request.keep_alive(keepalive);
+    } else {
+        util::remove_ouinet_fields_ref(request);  // avoid accidental injection
     }
 
     _YDEBUG(yield, "Sending a request to the injector");
