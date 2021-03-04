@@ -455,9 +455,11 @@ void serve( InjectorConfig& config
         yield.log(req.base());
         auto on_exit = defer([&] { yield.log("Done"); });
 
+        bool req_keep_alive = req.keep_alive();
+
         if (is_request_to_this(req)) {
             handle_request_to_this(req, con, yield[ec]);
-            if (ec || !req.keep_alive()) break;
+            if (ec || !req_keep_alive()) break;
             continue;
         }
 
@@ -477,8 +479,6 @@ void serve( InjectorConfig& config
         // Check for a Ouinet version header hinting us on
         // whether to behave like an injector or a proxy.
         bool proxy = (version_hdr_i == req.end());
-
-        bool req_keep_alive = req.keep_alive();
 
         if (proxy) {
             // No Ouinet header, behave like a (non-caching) proxy.
