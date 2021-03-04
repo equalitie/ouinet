@@ -540,13 +540,11 @@ void serve( InjectorConfig& config
             auto opt_err_res = util::http_proto_version_error( req, version_hdr_i->value()
                                                              , OUINET_INJECTOR_SERVER_STRING);
 
-            if (opt_err_res) {
+            if (opt_err_res)
                 http::async_write(con, *opt_err_res, yield[ec]);
-            }
-            else {
+            else
                 cc.fetch( con, move(req)
                         , cancel, yield[ec].tag("cache_control.fetch"));
-            }
         }
 
         if (ec || !req_keep_alive) break;
