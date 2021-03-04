@@ -463,6 +463,7 @@ void serve( InjectorConfig& config
         }
 
         if (!authenticate(req, con, config.credentials(), yield[ec].tag("auth"))) {
+            if (ec || !req_keep_alive()) break;
             continue;
         }
 
@@ -548,10 +549,7 @@ void serve( InjectorConfig& config
             }
         }
 
-        if (ec || !req_keep_alive) {
-            con.close();
-            break;
-        }
+        if (ec || !req_keep_alive) break;
     }
 }
 
