@@ -322,6 +322,9 @@ namespace detail {
 //
 // If the header continues to be empty after the call,
 // the request is invalid (e.g. missing host and bad target).
+//
+// This applies mainly to HTTP/1.0 requests,
+// as HTTP/1.1 should always have a non-empty `Host:` header.
 template<class Request>
 void req_ensure_host(Request& req) {
     if (!req[http::field::host].empty()) return;
