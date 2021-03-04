@@ -487,8 +487,10 @@ void serve( InjectorConfig& config
             // but the client should be using a CONNECT request instead!
             util::req_ensure_host(req);  // origin pools require host
             if (req[http::field::host].empty()) {
-                yield.log("Invalid request");
-                break;
+                handle_bad_request( con, req
+                                  , "Invalid or missing host in request"
+                                  , yield[ec].tag("handle_bad_request"));
+                continue;
             }
             auto orig_con = cc.get_connection(req, cancel, yield[ec]);
             size_t forwarded = 0;
