@@ -126,6 +126,10 @@ auto tcp_async_resolve( const std::string& host
         rp = &resolver;
         sys::error_code ec_;
         auto r = resolver.async_resolve({host, port}, yield[ec_]);
+        // Turn this confusing resolver error into something more understandable.
+        static const sys::error_code busy_ec{ sys::errc::device_or_resource_busy
+                                            , sys::system_category()};
+        if (ec_ == busy_ec) ec_ = asio::error::host_not_found;
 
         if (finished) return;
 
