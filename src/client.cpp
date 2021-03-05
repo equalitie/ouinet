@@ -1274,6 +1274,14 @@ public:
         cc.max_cached_age(client_state._config.max_cached_age());
     }
 
+    void front_end_job_func(Transaction& tnx, Cancel& cancel, Yield yield) {
+        sys::error_code ec;
+        Response res = client_state.fetch_fresh_from_front_end(tnx.request(), yield[ec]);
+        if (cancel) ec = asio::error::operation_aborted;
+        if (!ec) tnx.write_to_user_agent(res, cancel, yield[ec]);
+        return or_throw(yield, ec);
+    }
+
     void origin_job_func( bool force_secure
                         , Transaction& tnx
                         , Cancel& cancel, Yield yield) {
@@ -1443,6 +1451,7 @@ public:
 
     struct Jobs {
         enum class Type {
+            front_end,
             secure_origin,
             origin,
             proxy,
@@ -1456,15 +1465,17 @@ public:
 
         Jobs(asio::executor exec)
             : exec(exec)
+            , front_end(exec)
             , secure_origin(exec)
             , origin(exec)
             , proxy(exec)
             , injector_or_dcache(exec)
-            , all({&secure_origin, &origin, &proxy, &injector_or_dcache})
+            , all({&front_end, &secure_origin, &origin, &proxy, &injector_or_dcache})
         {}
 
         asio::executor exec;
 
+        Job front_end;
         Job secure_origin;
         Job origin;
         Job proxy;
@@ -1472,7 +1483,7 @@ public:
 
         // All jobs, even those that never started.
         // Unfortunately C++14 is not letting me have array of references.
-        const std::array<Job*, 4> all;
+        const std::array<Job*, 5> all;
 
         auto running() const {
             static const auto is_running
@@ -1490,6 +1501,7 @@ public:
 
         static const char* as_string(Type type) {
             switch (type) {
+                case Type::front_end:          return "front_end";
                 case Type::secure_origin:      return "secure_origin";
                 case Type::origin:             return "origin";
                 case Type::proxy:              return "proxy";
@@ -1500,6 +1512,7 @@ public:
         };
 
         boost::optional<Type> job_to_type(const Job* ptr) const {
+            if (ptr == &front_end)          return Type::front_end;
             if (ptr == &secure_origin)      return Type::secure_origin;
             if (ptr == &origin)             return Type::origin;
             if (ptr == &proxy)              return Type::proxy;
@@ -1509,6 +1522,7 @@ public:
 
         Job* job_from_type(Type type) {
             switch (type) {
+                case Type::front_end:          return &front_end;
                 case Type::secure_origin:      return &secure_origin;
                 case Type::origin:             return &origin;
                 case Type::proxy:              return &proxy;
@@ -1539,6 +1553,8 @@ public:
                 }
 
                 async_sleep(exec, n * chrono::seconds(3), c, yield);
+            } else if (job_type == Type::front_end) {
+                // No pause for front-end jobs.
             } else {
                 async_sleep(exec, n * chrono::seconds(3), cancel, yield);
             }
@@ -1550,6 +1566,7 @@ public:
         auto& cfg = client_state._config;
 
         switch (job_type) {
+            case Type::front_end:     return true;
             case Type::secure_origin: return cfg.is_origin_access_enabled();
             case Type::origin:        return cfg.is_origin_access_enabled();
             case Type::proxy:         return cfg.is_proxy_access_enabled();
@@ -1625,9 +1642,9 @@ public:
         for (auto route : request_config.fresh_channels) {
             switch (route) {
                 case fresh_channel::_front_end: {
-                    Response res = client_state.fetch_fresh_from_front_end(tnx.request(), yield);
-                    sys::error_code ec;
-                    tnx.write_to_user_agent(res, cancel, yield[ec]);
+                    start_job(Jobs::Type::front_end,
+                            [&] (auto& c, auto y)
+                            { front_end_job_func(tnx, c, y); });
                     break;
                 }
                 case fresh_channel::secure_origin: {
