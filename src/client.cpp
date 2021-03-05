@@ -265,7 +265,7 @@ private:
                           , Cancel&, Yield);
 
     Response fetch_fresh_from_front_end(const Request&, Yield);
-    Session fetch_fresh_from_origin( const Request&
+    Session fetch_fresh_from_origin( Request
                                    , const UserAgentMetaData&
                                    , Cancel, Yield);
 
@@ -602,7 +602,7 @@ Client::State::fetch_stored_in_dcache( const Request& request
     sys::error_code ec;
 
     auto key = key_from_http_req(request);
-    assert(key);
+    if (!key) return or_throw<CacheEntry>(yield, asio::error::invalid_argument);
     auto s = c->load(move(*key), dht_group, cancel, yield[ec]);
     return_or_throw_on_error(yield, cancel, ec, CacheEntry{});
 
@@ -870,13 +870,18 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
 }
 
 //------------------------------------------------------------------------------
-Session Client::State::fetch_fresh_from_origin( const Request& rq
+Session Client::State::fetch_fresh_from_origin( Request rq
                                               , const UserAgentMetaData& meta
                                               , Cancel cancel, Yield yield)
 {
     WatchDog watch_dog(_ctx
                       , default_timeout::fetch_http()
                       , [&] { cancel(); });
+
+    util::req_ensure_host(rq);  // origin pools require host
+    if (rq[http::field::host].empty())
+        return or_throw<Session>(yield, asio::error::invalid_argument);
+    util::remove_ouinet_fields_ref(rq);  // avoid leaking to non-injectors
 
     sys::error_code ec;
 
@@ -1029,6 +1034,20 @@ Session Client::State::fetch_fresh_through_simple_proxy
 {
     sys::error_code ec;
 
+    // Build the actual request to send to the injector (auth added below).
+    if (can_inject) {
+        bool keepalive = request.keep_alive();
+        auto irq = util::to_injector_request(move(request));
+        if (!irq) {
+            _YERROR(yield, "Invalid request");
+            return or_throw<Session>(yield, asio::error::invalid_argument);
+        }
+        request = move(*irq);
+        request.keep_alive(keepalive);
+    } else {
+        util::remove_ouinet_fields_ref(request);  // avoid accidental injection
+    }
+
     // Connect to the injector.
     // TODO: Maybe refactor with `fetch_via_self`.
     ConnectionPool<Endpoint>::Connection con;
@@ -1058,15 +1077,8 @@ Session Client::State::fetch_fresh_through_simple_proxy
         con.close();
     });
 
-    // Build the actual request to send to the injector.
     if (auto credentials = _config.credentials_for(*con))
         request = authorize(request, *credentials);
-
-    if (can_inject) {
-        bool keepalive = request.keep_alive();
-        request = util::to_injector_request(move(request));
-        request.keep_alive(keepalive);
-    }
 
     _YDEBUG(yield, "Sending a request to the injector");
     // Send request

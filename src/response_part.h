@@ -66,6 +66,10 @@ struct Head : public http::response_header<> {
         return Base::get_keep_alive_impl(Base::version());
     }
 
+    void keep_alive(bool value) {
+        Base::set_keep_alive_impl(Base::version(), value);
+    }
+
     bool operator==(const Head& other) const;
 
     template<class S>

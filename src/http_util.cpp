@@ -337,6 +337,14 @@ ouinet::util::detail::http_proto_version_check_trusted( boost::string_view proto
     return (proto_vn == http_::protocol_version_current);  // unsupported version?
 }
 
+std::string
+ouinet::util::detail::http_host_header(const std::string& host, const std::string& port)
+{
+    if (host.empty()) return {};  // error
+    if (port.empty()) return host;
+    if (host.find(':') != string::npos) return '[' + host + "]:" + port;  // IPv6
+    return host + ':' + port;
+}
 
 
 http::response_header<>

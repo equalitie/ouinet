@@ -314,21 +314,46 @@ Request req_form_from_absolute_to_origin(const Request& absolute_req)
     return origin_req;
 }
 
+namespace detail {
+    std::string http_host_header(const std::string&, const std::string&);
+}
+
+// Add a `Host:` header to `req` if missing or empty.
+//
+// If the header continues to be empty after the call,
+// the request is invalid (e.g. missing host and bad target).
+//
+// This applies mainly to HTTP/1.0 requests,
+// as HTTP/1.1 should always have a non-empty `Host:` header.
+template<class Request>
+void req_ensure_host(Request& req) {
+    if (!req[http::field::host].empty()) return;
+
+    std::string host, port;
+    std::tie(host, port) = util::get_host_port(req);
+    auto hosth = detail::http_host_header(host, port);
+    if (hosth.empty()) return;  // error
+    req.set(http::field::host, hosth);
+}
+
 // Make the given request canonical.
 //
 // This only leaves a minimum set of non-privacy sensitive headers,
 // and some of them may be altered for cacheability or privacy reasons.
 //
 // Internal Ouinet headers and headers in `keep_fields` are also kept.
+//
+// If the request is invalid, none is returned.
 template<class Request, class... Fields>
-static Request to_canonical_request(Request rq, const Fields&... keep_fields) {
-    auto url = canonical_url(rq.target());
-    rq.target(url);
+static boost::optional<Request>
+to_canonical_request(Request rq, const Fields&... keep_fields) {
+    auto url = rq.target();
+    url_match urlm;
+    if (!match_http_url(url, urlm)) return boost::none;
+    rq.target(canonical_url(urlm));
     rq.version(11);  // HTTP/1.1
 
     // Some canonical header values that need ADD, KEEP or PROCESS.
-    url_match urlm;
-    match_http_url(url, urlm);  // assume check by `canonical_url` above
     rq.set( http::field::host
           , (urlm.port.empty() ? urlm.host : urlm.host + ":" + urlm.port));
     rq.set(http::field::accept, "*/*");
@@ -363,8 +388,11 @@ static Request to_canonical_request(Request rq, const Fields&... keep_fields) {
 //
 // This means a canonical request with internal Ouinet headers,
 // plus proxy authorization headers and caching headers.
+//
+// If the request is invalid, none is returned.
 template<class Request>
-static Request to_injector_request(Request rq) {
+static boost::optional<Request>
+to_injector_request(Request rq) {
     // The Ouinet version header hints the endpoint
     // to behave like an injector instead of a proxy.
     rq.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
@@ -401,8 +429,11 @@ static Request to_origin_request(Request rq) {
 // Make the given request ready to be sent to the cache.
 //
 // This means a canonical request with no additional headers.
+//
+// If the request is invalid, none is returned.
 template<class Request>
-static Request to_cache_request(Request rq) {
+static boost::optional<Request>
+to_cache_request(Request rq) {
     rq = remove_ouinet_fields(move(rq));
     return to_canonical_request(move(rq));
 }
