@@ -846,12 +846,15 @@ Client::State::connect_to_origin( const Request& rq
 //------------------------------------------------------------------------------
 Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yield)
 {
+    Cancel cancel = _shutdown_signal;
+
     boost::optional<uint32_t> udp_port;
 
     if (_udp_multiplexer) {
         udp_port = _udp_multiplexer->local_endpoint().port();
     }
 
+    sys::error_code ec;
     auto res = _front_end.serve( _config
                                , rq
                                , _cache.get()
@@ -859,7 +862,9 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
                                , udp_port
                                , _upnps
                                , _udp_reachability.get()
-                               , yield.tag("serve_frontend"));
+                               , yield[ec].tag("serve_frontend"));
+    if (cancel) ec = asio::error::operation_aborted;
+    if (ec) return or_throw<Response>(yield, ec);
 
     res.set( http_::response_source_hdr  // for agent
            , http_::response_source_hdr_front_end);
