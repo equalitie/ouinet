@@ -458,12 +458,12 @@ void serve( InjectorConfig& config
 
         if (is_request_to_this(req)) {
             handle_request_to_this(req, con, yield[ec]);
-            if (ec || !req_keep_alive()) break;
+            if (ec || !req_keep_alive) break;
             continue;
         }
 
         if (!authenticate(req, con, config.credentials(), yield[ec].tag("auth"))) {
-            if (ec || !req_keep_alive()) break;
+            if (ec || !req_keep_alive) break;
             continue;
         }
 
@@ -490,7 +490,7 @@ void serve( InjectorConfig& config
                 handle_bad_request( con, req
                                   , "Invalid or missing host in request"
                                   , yield[ec].tag("handle_bad_request"));
-                if (ec || !req_keep_alive()) break;
+                if (ec || !req_keep_alive) break;
                 continue;
             }
             auto orig_con = cc.get_connection(req, cancel, yield[ec]);
@@ -529,7 +529,7 @@ void serve( InjectorConfig& config
                 handle_bad_request( con, req
                                   , "Failed to retrieve content from origin: " + ec.message()
                                   , yield[ec].tag("handle_bad_request"));
-                if (ec || !req_keep_alive()) break;
+                if (ec || !req_keep_alive) break;
                 continue;
             }
             yield.log("Forwarded data bytes: ", forwarded);
