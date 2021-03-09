@@ -1584,11 +1584,11 @@ public:
         return false;
     }
 
-    // Closes `con` when it can no longer be used.
-    // If an error is reported and it is still open,
-    // a response may still be sent to it.
-    // The return value indicates whether the connection
-    // should be kept alive afterwards.
+    // The transaction's connection is only kept open if it can still be used,
+    // otherwise it is closed.
+    // If an error is reported but the connection was not yet written to,
+    // a response may still be sent to it
+    // (please check `tnx.user_agent_was_written_to()`).
     void mixed_fetch(Transaction& tnx, Yield yield)
     {
         Cancel cancel(client_state._shutdown_signal);
