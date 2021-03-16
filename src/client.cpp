@@ -1545,6 +1545,10 @@ public:
         void sleep_before_job(Type job_type, Cancel& cancel, Yield& yield) {
             size_t n = count_running();
 
+            // 'n' includes "this" job, and we don't need to wait for that.
+            assert(n > 0);
+            if (n > 0) --n;
+
             if (job_type == Type::injector_or_dcache || job_type == Type::proxy) {
                 // If origin is running, give it some time, but stop sleeping
                 // if origin fetch exits early.
