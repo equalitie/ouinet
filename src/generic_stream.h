@@ -228,20 +228,7 @@ public:
             std::cerr << this << " " << _impl
                       << " GenericStream::~GenericStream()" << std::endl;
         }
-        try {
-            if (_impl) {
-                _impl->close();
-            }
-        }
-        catch (...) {
-            assert(0 && "Uncaught exception when closing GenericStream");
-        }
     }
-
-    //asio::io_service& get_io_service()
-    //{
-    //    return *_ios;
-    //}
 
 #if BOOST_VERSION >= 107100
     executor_type get_executor()
