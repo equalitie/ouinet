@@ -170,17 +170,19 @@ private:
                         , Cancel& cancel, asio::yield_context yield) const
     {
         auto cancelled = cancel.connect([&] { igd.stop(); });
-        auto r_mappings = igd.get_list_of_port_mappings( upnp::igd::udp
-                                                       , _external_port, _external_port, 1
-                                                       , yield);
-        if (cancel) return {};
-        if (!r_mappings) return {};
 
-        for (const auto& m : r_mappings.value())
-            if ( m.enabled && _internal_port == m.int_port && desc == m.description)
+        // `igd.get_list_of_port_mappings` is more convenient,
+        // but that requires full IGDv2 support, so stick to IGDv1 operations.
+        for (uint16_t index = 0; ; ++index) {
+            auto r_mapping = igd.get_generic_port_mapping_entry(index, yield);
+            if (cancel || !r_mapping) break;  // no more port mappings, or error
+            const auto& m = r_mapping.value();
+            if ( m.enabled
+               && _external_port == m.ext_port && _internal_port == m.int_port
+               && desc == m.description)
                 return m.lease_duration;
-
-        return {};
+        }
+        return boost::none;
     }
 
 private:
