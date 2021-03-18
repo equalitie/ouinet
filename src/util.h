@@ -65,8 +65,11 @@ bool match_http_url(const boost::string_view url, url_match& match) {
 
 // Return the canonical version of the given HTTP(S) URL
 // whose match components are in `urlm`.
+//
+// Canonical URLs never have fragments (they should be handled by the agent).
 inline
-std::string canonical_url(const url_match& urlm) {
+std::string canonical_url(url_match urlm) {
+    if (!urlm.fragment.empty()) urlm.fragment = {};
     return urlm.reassemble();  // TODO: make canonical
 }
 
@@ -76,7 +79,7 @@ inline
 std::string canonical_url(const boost::string_view url) {
     url_match urlm;
     if (!match_http_url(url, urlm)) return {};  // error
-    return canonical_url(urlm);
+    return canonical_url(std::move(urlm));
 }
 
 inline
