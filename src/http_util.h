@@ -350,12 +350,12 @@ to_canonical_request(Request rq, const Fields&... keep_fields) {
     auto url = rq.target();
     url_match urlm;
     if (!match_http_url(url, urlm)) return boost::none;
-    rq.target(canonical_url(urlm));
+    auto rq_host = urlm.port.empty() ? urlm.host : urlm.host + ":" + urlm.port;
+    rq.target(canonical_url(std::move(urlm)));
     rq.version(11);  // HTTP/1.1
 
     // Some canonical header values that need ADD, KEEP or PROCESS.
-    rq.set( http::field::host
-          , (urlm.port.empty() ? urlm.host : urlm.host + ":" + urlm.port));
+    rq.set(http::field::host, rq_host);
     rq.set(http::field::accept, "*/*");
     rq.set(http::field::accept_encoding, "");
     rq.set("DNT", "1");
