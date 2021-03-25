@@ -149,6 +149,15 @@ public:
            ("autoseed-updated", po::bool_switch(&_autoseed_updated)->default_value(false)
             , "Automatically fetch and seed the data of updated index entries "
               "that this client is already publishing.")
+          ("cache-static-repo"
+           , po::value<string>()
+           , "Repository for internal files of the static cache "
+             "(to use as read-only fallback for the local cache)")
+          ("cache-static-root"
+           , po::value<string>()
+           , "Root directory for content files of the static cache; "
+             "if this is given but a static cache repository is not, "
+             "\".ouinet\" under this directory is assumed.")
 
            // Request routing options
            ("disable-origin-access", po::bool_switch(&_disable_origin_access)->default_value(false)
