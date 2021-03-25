@@ -65,7 +65,7 @@ void http_store( http_response::AbstractReader&, const fs::path&
 // A format with binary records or just SIG/DHASH/CHASH of the *current* block might be more convenient
 // (DHASH may be zero in the first record).
 
-// Return a new reader for a response under the given directory.
+// Return a new reader for a response under the given directory `dirp`.
 //
 // At least the file belonging to the response head must be readable,
 // otherwise the call will report an error and not return a reader.
@@ -74,7 +74,15 @@ void http_store( http_response::AbstractReader&, const fs::path&
 // The response will be provided using chunked transfer encoding,
 // with all the metadata needed to verify and further share it.
 reader_uptr
-http_store_reader( const fs::path&, asio::executor, sys::error_code&);
+http_store_reader(const fs::path& dirp, asio::executor, sys::error_code&);
+
+// Same as above, but get body data from files stored in the given content directory `cdirp`.
+//
+// The files for the response under `dirp` should either contain the body data itself
+// or otherwise point to the path of the data file relative to `cdirp`.
+reader_uptr
+http_store_reader( const fs::path& dirp, const fs::path& cdirp
+                 , asio::executor, sys::error_code&);
 
 // Same as above, but allow specifying a contiguous range of data to read
 // instead of the whole response.
@@ -92,7 +100,16 @@ http_store_reader( const fs::path&, asio::executor, sys::error_code&);
 // a `boost::system::errc::invalid_seek` error is reported
 // (which may be interpreted as HTTP status `416 Range Not Satisfiable`).
 reader_uptr
-http_store_range_reader( const fs::path&, asio::executor
+http_store_range_reader( const fs::path& dirp, asio::executor
+                       , std::size_t first, std::size_t last
+                       , sys::error_code&);
+
+// Same as above, but get body data from files stored in the given content directory `cdirp`.
+//
+// The files for the response under `dirp` should either contain the body data itself
+// or otherwise point to the path of the data file relative to `cdirp`.
+reader_uptr
+http_store_range_reader( const fs::path& dirp, const fs::path& cdirp, asio::executor
                        , std::size_t first, std::size_t last
                        , sys::error_code&);
 

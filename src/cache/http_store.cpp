@@ -652,11 +652,14 @@ private:
 template<class Reader>
 static
 reader_uptr
-_http_store_reader( const fs::path& dirp, asio::executor ex
+_http_store_reader( const fs::path& dirp, boost::optional<const fs::path&> cdirp
+                  , asio::executor ex
                   , boost::optional<std::size_t> range_first
                   , boost::optional<std::size_t> range_last
                   , sys::error_code& ec)
 {
+    // TODO: check & use `cdirp`
+
     // XXX: Actually the RFC7233 allows for range_last to be undefined
     // https://tools.ietf.org/html/rfc7233#section-2.1
     assert((!range_first && !range_last) || (range_first && range_last));
@@ -720,7 +723,15 @@ http_store_reader( const fs::path& dirp, asio::executor ex
                  , sys::error_code& ec)
 {
     return _http_store_reader<HttpStoreReader>
-        (dirp, std::move(ex), {}, {}, ec);
+        (dirp, boost::none, std::move(ex), {}, {}, ec);
+}
+
+reader_uptr
+http_store_reader( const fs::path& dirp, const fs::path& cdirp, asio::executor ex
+                 , sys::error_code& ec)
+{
+    return _http_store_reader<HttpStoreReader>
+        (dirp, cdirp, std::move(ex), {}, {}, ec);
 }
 
 reader_uptr
@@ -729,7 +740,16 @@ http_store_range_reader( const fs::path& dirp, asio::executor ex
                        , sys::error_code& ec)
 {
     return _http_store_reader<HttpStoreReader>
-        (dirp, std::move(ex), first, last, ec);
+        (dirp, boost::none, std::move(ex), first, last, ec);
+}
+
+reader_uptr
+http_store_range_reader( const fs::path& dirp, const fs::path& cdirp, asio::executor ex
+                       , std::size_t first, std::size_t last
+                       , sys::error_code& ec)
+{
+    return _http_store_reader<HttpStoreReader>
+        (dirp, cdirp, std::move(ex), first, last, ec);
 }
 
 HttpStore::~HttpStore()
