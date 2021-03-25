@@ -397,6 +397,12 @@ public:
             return or_throw<http_response::Head>(yield, ec);
         }
 
+        uri = head[http_::response_uri_hdr].to_string();
+        if (uri.empty()) {
+            _ERROR("Missing URI in stored head");
+            return or_throw<http_response::Head>(yield, asio::error::bad_descriptor);
+        }
+
         block_size = head.block_size();
         auto data_size_hdr = head[http_::response_data_size_hdr];
         auto data_size_opt = parse::number<std::size_t>(data_size_hdr);
