@@ -51,6 +51,7 @@ static const boost::regex dir_name_rx("^[0-9a-f]{38}$");
 // File names for response components.
 static const fs::path head_fname = "head";
 static const fs::path body_fname = "body";
+static const fs::path body_path_fname = "body-path";
 static const fs::path sigs_fname = "sigs";
 
 using Signature = util::Ed25519PublicKey::sig_array_t;
@@ -649,6 +650,53 @@ private:
     boost::optional<http_response::Part> next_chunk_body;
 };
 
+static
+boost::optional<fs::path>
+canonical_from_content_relpath( const fs::path& body_path_p
+                              , const fs::path cdirp)
+{
+    fs::path body_rp;
+    fs::ifstream(body_path_p) >> body_rp;
+    if (body_rp.empty()) {
+        _ERROR("Failed to read path of static cache content file: ", body_path_p);
+        return boost::none;
+    }
+
+    // TODO: Check correctness of body path.
+    sys::error_code ec;
+    auto body_cp = fs::canonical(body_rp, cdirp, ec);
+    if (ec) {
+        _ERROR("Failed to get canonical path of static cache content file: ", body_path_p);
+        return boost::none;
+    }
+
+    return body_cp;
+}
+
+static
+asio::posix::stream_descriptor
+open_body_external( const asio::executor& ex
+                  , const fs::path& dirp
+                  , const fs::path& cdirp
+                  , sys::error_code& ec)
+{
+    fs::path body_path_p = dirp / body_path_fname;
+    {
+        auto body_path_s = fs::status(body_path_p, ec);
+        if (!ec && !fs::is_regular_file(body_path_s))
+            ec = asio::error::bad_descriptor;
+        if (ec) return asio::posix::stream_descriptor(ex);
+    }
+
+    auto body_cp_o = canonical_from_content_relpath(body_path_p, cdirp);
+    if (!body_cp_o) {
+        ec = asio::error::bad_descriptor;
+        return asio::posix::stream_descriptor(ex);
+    }
+
+    return util::file_io::open_readonly(ex, *body_cp_o, ec);
+}
+
 template<class Reader>
 static
 reader_uptr
@@ -658,7 +706,6 @@ _http_store_reader( const fs::path& dirp, boost::optional<const fs::path&> cdirp
                   , boost::optional<std::size_t> range_last
                   , sys::error_code& ec)
 {
-    // TODO: check & use `cdirp`
     assert(!cdirp || (fs::canonical(*cdirp, ec) == *cdirp));
 
     // XXX: Actually the RFC7233 allows for range_last to be undefined
@@ -673,6 +720,10 @@ _http_store_reader( const fs::path& dirp, boost::optional<const fs::path&> cdirp
     ec = {};
 
     auto bodyf = util::file_io::open_readonly(ex, dirp / body_fname, ec);
+    if (ec == sys::errc::no_such_file_or_directory && cdirp) {
+        ec = {};
+        bodyf = open_body_external(ex, dirp, *cdirp, ec);
+    }
     if (ec && ec != sys::errc::no_such_file_or_directory) return nullptr;
     ec = {};
 
