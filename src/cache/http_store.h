@@ -80,6 +80,11 @@ http_store_reader(const fs::path& dirp, asio::executor, sys::error_code&);
 //
 // The files for the response under `dirp` should either contain the body data itself
 // or otherwise point to the path of the data file relative to `cdirp`.
+//
+// Warning: Although security checks are performed on the pointers to body data files
+// (e.g. to check that they are not outside of the content directory),
+// none are performed on `cdirp` itself.
+// Please make sure that `cdirp` is already in canonical form or some checks may fail.
 reader_uptr
 http_store_reader( const fs::path& dirp, const fs::path& cdirp
                  , asio::executor, sys::error_code&);
@@ -108,6 +113,11 @@ http_store_range_reader( const fs::path& dirp, asio::executor
 //
 // The files for the response under `dirp` should either contain the body data itself
 // or otherwise point to the path of the data file relative to `cdirp`.
+//
+// Warning: Although security checks are performed on the pointers to body data files
+// (e.g. to check that they are not outside of the content directory),
+// none are performed on `cdirp` itself.
+// Please make sure that `cdirp` is already in canonical form or some checks may fail.
 reader_uptr
 http_store_range_reader( const fs::path& dirp, const fs::path& cdirp, asio::executor
                        , std::size_t first, std::size_t last
