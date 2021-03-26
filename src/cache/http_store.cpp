@@ -650,6 +650,10 @@ private:
     boost::optional<http_response::Part> next_chunk_body;
 };
 
+// Since content loaded from the local cache is not verified
+// before sending it to the requester,
+// we must make extra sure that we are not tricked into reading
+// some file outside of the content directory.
 static
 boost::optional<fs::path>
 canonical_from_content_relpath( const fs::path& body_path_p
@@ -662,11 +666,29 @@ canonical_from_content_relpath( const fs::path& body_path_p
         return boost::none;
     }
 
-    // TODO: Check correctness of body path.
+    // Check correctness of body path.
+    if (!body_rp.is_relative()) {
+        _ERROR("Path of static cache content file is not relative,"
+               " possibly malicious file: ", body_path_p);
+        return boost::none;
+    }
+    for (const auto& c : body_rp)
+        if (c.empty() || !c.compare(".") || !c.compare("..")) {
+            _ERROR("Invalid components in path of static cache content file,"
+                   " possibly malicious file: ", body_path_p);
+            return boost::none;
+        }
     sys::error_code ec;
     auto body_cp = fs::canonical(body_rp, cdirp, ec);
     if (ec) {
         _ERROR("Failed to get canonical path of static cache content file: ", body_path_p);
+        return boost::none;
+    }
+    // Avoid symlinks in actual body path pointing out of content directory.
+    auto cdirp_pfx = cdirp / "/";
+    if (body_cp.native().find(cdirp_pfx.native()) != 0) {
+        _ERROR("Canonical path of static cache content file outside of content directory,"
+               " possibly malicious file: ", body_rp);
         return boost::none;
     }
 
