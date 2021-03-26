@@ -584,6 +584,7 @@ BOOST_AUTO_TEST_CASE(test_read_response_external) {
     });
     fs::create_directory(tmpdir);
     fs::create_directory(tmpcdir);
+    tmpcdir = fs::canonical(tmpcdir);
 
     asio::io_context ctx;
     run_spawned(ctx, [&] (auto yield) {

@@ -659,6 +659,7 @@ _http_store_reader( const fs::path& dirp, boost::optional<const fs::path&> cdirp
                   , sys::error_code& ec)
 {
     // TODO: check & use `cdirp`
+    assert(!cdirp || (fs::canonical(*cdirp, ec) == *cdirp));
 
     // XXX: Actually the RFC7233 allows for range_last to be undefined
     // https://tools.ietf.org/html/rfc7233#section-2.1
