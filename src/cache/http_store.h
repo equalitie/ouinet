@@ -58,6 +58,14 @@ using reader_uptr = std::unique_ptr<http_response::AbstractReader>;
 //     `DHASH[i]=SHA2-512(DATA[i])` (block data hash)
 //     `CHASH[i]=SHA2-512(SIG[i-1] CHASH[i-1] DHASH[i])` (block chain hash).
 //
+// Some reading functions below allow specifying a *content directory* that
+// holds an arbitrary hierarchy containing body data files
+// outside of the directory storing the response.
+// In this case, the later directory may include a `body-path` file which
+// contains the path of the body data file relative to the content root path,
+// with forward slashes as path separators, without `.` or `..` components,
+// and without a final new line.
+// Such responses need to be stored using external tools.
 void http_store( http_response::AbstractReader&, const fs::path&
                , const asio::executor&, Cancel, asio::yield_context);
 // TODO: This format is both inefficient for multi-peer downloads (Base64 decoding needed)
