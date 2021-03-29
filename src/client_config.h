@@ -64,6 +64,14 @@ public:
         return _autoseed_updated;
     }
 
+    const fs::path& cache_static_path() const {
+        return _cache_static_path;
+    }
+
+    const fs::path& cache_static_content_path() const {
+        return _cache_static_content_path;
+    }
+
     boost::optional<std::string> bep5_bridge_swarm_name() {
         if (!_cache_http_pubkey) return boost::none;
         return bep5::compute_bridge_swarm_name( *_cache_http_pubkey
