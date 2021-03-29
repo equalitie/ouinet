@@ -223,6 +223,8 @@ private:
     std::string _client_credentials;
     std::map<Endpoint, std::string> _injector_credentials;
 
+    fs::path _cache_static_path;
+    fs::path _cache_static_content_path;
     boost::optional<util::Ed25519PublicKey> _cache_http_pubkey;
     CacheType _cache_type = CacheType::None;
     std::string _local_domain;
@@ -441,6 +443,25 @@ ClientConfig::ClientConfig(int argc, char* argv[])
     if (cache_enabled() && _cache_type == CacheType::Bep5Http && !_cache_http_pubkey) {
         throw std::runtime_error("BEP5/HTTP cache selected but no injector HTTP public key specified");
     }
+
+    if (vm.count("cache-static-root")) {
+        _cache_static_content_path = vm["cache-static-root"].as<string>();
+        if (!fs::is_directory(_cache_static_content_path))
+            throw std::runtime_error(
+                util::str("No such directory: ", _cache_static_content_path));
+        if (!vm.count("cache-static-repo")) {
+            _cache_static_path = _cache_static_content_path / ".ouinet";
+            LOG_INFO("No static cache repository given, assuming ", _cache_static_path, ".");
+        }
+    }
+    if (vm.count("cache-static-repo")) {
+        _cache_static_path = vm["cache-static-repo"].as<string>();
+        if (!vm.count("cache-static-root"))
+            throw std::runtime_error("A content root must be explicity given when using a static cache");
+    }
+    if (!_cache_static_path.empty() && !fs::is_directory(_cache_static_path))
+        throw std::runtime_error(
+            util::str("No such directory: ", _cache_static_path));
 
     if (vm.count("local-domain")) {
         auto tld_rx = boost::regex("[-0-9a-zA-Z]+");
