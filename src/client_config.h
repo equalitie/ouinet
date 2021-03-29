@@ -19,6 +19,9 @@
 
 namespace ouinet {
 
+#define _DEFAULT_STATIC_CACHE_SUBDIR ".ouinet"
+static const fs::path default_static_cache_subdir{_DEFAULT_STATIC_CACHE_SUBDIR};
+
 class ClientConfig {
 public:
     enum class CacheType { None, Bep5Http };
@@ -154,7 +157,7 @@ public:
            , "Repository for internal files of the static cache "
              "(to use as read-only fallback for the local cache); "
              "if this is not given but a static cache content root is, "
-             "\".ouinet\" under that directory is assumed.")
+             "\"" _DEFAULT_STATIC_CACHE_SUBDIR "\" under that directory is assumed.")
           ("cache-static-root"
            , po::value<string>()
            , "Root directory for content files of the static cache. "
@@ -450,7 +453,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
             throw std::runtime_error(
                 util::str("No such directory: ", _cache_static_content_path));
         if (!vm.count("cache-static-repo")) {
-            _cache_static_path = _cache_static_content_path / ".ouinet";
+            _cache_static_path = _cache_static_content_path / default_static_cache_subdir;
             LOG_INFO("No static cache repository given, assuming ", _cache_static_path, ".");
         }
     }
@@ -485,4 +488,5 @@ void ClientConfig::set_injector_endpoint(const Endpoint& ep)
     _injector_ep = ep;
 }
 
+#undef _DEFAULT_STATIC_CACHE_SUBDIR
 } // ouinet namespace
