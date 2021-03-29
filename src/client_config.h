@@ -152,12 +152,13 @@ public:
           ("cache-static-repo"
            , po::value<string>()
            , "Repository for internal files of the static cache "
-             "(to use as read-only fallback for the local cache)")
+             "(to use as read-only fallback for the local cache); "
+             "if this is not given but a static cache content root is, "
+             "\".ouinet\" under that directory is assumed.")
           ("cache-static-root"
            , po::value<string>()
-           , "Root directory for content files of the static cache; "
-             "if this is given but a static cache repository is not, "
-             "\".ouinet\" under this directory is assumed.")
+           , "Root directory for content files of the static cache. "
+             "The static cache always requires this (even if empty).")
 
            // Request routing options
            ("disable-origin-access", po::bool_switch(&_disable_origin_access)->default_value(false)
