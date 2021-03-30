@@ -511,6 +511,18 @@ Client::build( shared_ptr<bt::MainlineDht> dht
 
     sys::error_code ec;
 
+    // Use a static HTTP store if its directories are provided.
+    std::unique_ptr<BaseHttpStore> static_http_store;
+    if (static_cache_dir) {
+        assert(static_cache_content_dir);
+        if (!is_directory(*static_cache_dir / "data-v3"))
+            _ERROR("No HTTP store of supported version under static cache, ignoring: ", *static_cache_dir);
+        else {
+            // TODO: create static cache
+            //static_http_store = make_unique<cache::StaticHttpStore>(*static_cache_dir, *static_cache_content_dir);
+        }
+    }
+
     // Remove obsolete stores.
     for (const auto& dirn : {"data", "data-v1", "data-v2"}) {
         auto old_store_dir = cache_dir / dirn;
@@ -526,9 +538,8 @@ Client::build( shared_ptr<bt::MainlineDht> dht
     fs::create_directories(store_dir, ec);
     if (ec) return or_throw<ClientPtr>(yield, ec);
     auto http_store = make_unique<cache::HttpStore>(
-        move(store_dir), dht->get_executor());
+        move(store_dir), move(static_http_store), dht->get_executor());
 
-    // TODO: handle static cache
     unique_ptr<Impl> impl(new Impl( move(dht)
                                   , cache_pk, move(cache_dir)
                                   , move(http_store), max_cached_age));

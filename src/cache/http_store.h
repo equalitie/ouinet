@@ -138,7 +138,38 @@ http_store_load_hash_list(const fs::path&, asio::executor, Cancel&, asio::yield_
 
 // Store each response in a directory named `DIGEST[:2]/DIGEST[2:]` (where
 // `DIGEST = LOWER_HEX(SHA1(KEY))`) under the given directory.
-class HttpStore {
+class BaseHttpStore {
+public:
+    virtual ~BaseHttpStore() = default;
+
+    virtual reader_uptr
+    reader(const std::string& key, sys::error_code&) = 0;
+
+    virtual reader_uptr
+    range_reader(const std::string& key, size_t first, size_t last, sys::error_code&) = 0;
+
+    virtual std::size_t
+    size(Cancel, asio::yield_context) const = 0;
+
+    virtual HashList
+    load_hash_list(const std::string& key, Cancel, asio::yield_context) const = 0;
+};
+
+class StaticHttpStore : public BaseHttpStore {
+public:
+    StaticHttpStore(fs::path p, fs::path cp, asio::executor ex)
+        : path(std::move(p)), content_path(std::move(cp)), executor(ex)
+    {}
+
+    ~StaticHttpStore();
+
+private:
+    fs::path path;
+    fs::path content_path;
+    asio::executor executor;
+};
+
+class HttpStore : public BaseHttpStore {
 public:
     using keep_func = std::function<
         bool(reader_uptr, asio::yield_context)>;
@@ -146,6 +177,10 @@ public:
 public:
     HttpStore(fs::path p, asio::executor ex)
         : path(std::move(p)), executor(ex)
+    {}
+
+    HttpStore(fs::path p, std::unique_ptr<BaseHttpStore> hs, asio::executor ex)
+        : path(std::move(p)), fallback_store(std::move(hs)), executor(ex)
     {}
 
     ~HttpStore();
@@ -171,6 +206,7 @@ public:
 
 private:
     fs::path path;
+    std::unique_ptr<BaseHttpStore> fallback_store;  // TODO: use it
     asio::executor executor;
 };
 
