@@ -2215,11 +2215,18 @@ void Client::State::setup_cache(asio::yield_context yield)
 
     assert(!_shutdown_signal || ec == asio::error::operation_aborted);
 
-    _cache
-        = cache::Client::build( dht
+    _cache = _config.cache_static_content_path().empty()
+        ? cache::Client::build( dht
                               , *_config.cache_http_pub_key()
                               , _config.repo_root()/"bep5_http"
                               , _config.max_cached_age()
+                              , yield[ec])
+        : cache::Client::build( dht
+                              , *_config.cache_http_pub_key()
+                              , _config.repo_root()/"bep5_http"
+                              , _config.max_cached_age()
+                              , _config.cache_static_path()
+                              , _config.cache_static_content_path()
                               , yield[ec]);
 
     if (_shutdown_signal) ec = asio::error::operation_aborted;

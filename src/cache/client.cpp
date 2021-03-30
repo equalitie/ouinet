@@ -503,6 +503,8 @@ Client::build( shared_ptr<bt::MainlineDht> dht
              , util::Ed25519PublicKey cache_pk
              , fs::path cache_dir
              , boost::posix_time::time_duration max_cached_age
+             , Client::opt_path static_cache_dir
+             , Client::opt_path static_cache_content_dir
              , asio::yield_context yield)
 {
     using ClientPtr = unique_ptr<Client>;
@@ -526,6 +528,7 @@ Client::build( shared_ptr<bt::MainlineDht> dht
     auto http_store = make_unique<cache::HttpStore>(
         move(store_dir), dht->get_executor());
 
+    // TODO: handle static cache
     unique_ptr<Impl> impl(new Impl( move(dht)
                                   , cache_pk, move(cache_dir)
                                   , move(http_store), max_cached_age));
