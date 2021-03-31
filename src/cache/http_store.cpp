@@ -1032,8 +1032,10 @@ name_matches_model(const fs::path& name, const fs::path& model)
 
 class BackedHttpStore : public HttpStore {
 public:
-    BackedHttpStore(fs::path p, std::unique_ptr<BaseHttpStore> hs, asio::executor ex)
-        : path(std::move(p)), fallback_store(std::move(hs)), executor(ex)
+    BackedHttpStore( fs::path p, asio::executor ex
+                   , std::unique_ptr<BaseHttpStore> rs, std::unique_ptr<BaseHttpStore> fs)
+        : path(std::move(p)), executor(std::move(ex))
+        , read_store(std::move(rs)), fallback_store(std::move(fs))
     {}
 
     ~BackedHttpStore() = default;
@@ -1046,19 +1048,24 @@ public:
          , Cancel, asio::yield_context) override;
 
     reader_uptr
-    reader(const std::string& key, sys::error_code&) override;
+    reader(const std::string& key, sys::error_code& ec) override
+    { return read_store->reader(key, ec); }
 
     reader_uptr
-    range_reader(const std::string& key, size_t first, size_t last, sys::error_code&) override;
+    range_reader(const std::string& key, size_t first, size_t last, sys::error_code& ec) override
+    { return read_store->range_reader(key, first, last, ec); }
 
     std::size_t
-    size(Cancel, asio::yield_context) const override;
+    size(Cancel cancel, asio::yield_context ec) const override
+    { return read_store->size(cancel, ec); }
 
     HashList
-    load_hash_list(const std::string& key, Cancel, asio::yield_context) const override;
+    load_hash_list(const std::string& key, Cancel cancel, asio::yield_context yield) const override
+    { return read_store->load_hash_list(key, cancel, yield); }
 
 private:
     fs::path path;
+    std::unique_ptr<BaseHttpStore> read_store;
     std::unique_ptr<BaseHttpStore> fallback_store;  // TODO: use it
     asio::executor executor;
 };
@@ -1151,52 +1158,14 @@ BackedHttpStore::store( const std::string& key, http_response::AbstractReader& r
     return or_throw(yield, ec);
 }
 
-// TODO: refactor with `HttpReadStore`
-
-reader_uptr
-BackedHttpStore::reader( const std::string& key
-                       , sys::error_code& ec)
-{
-    auto kpath = path_from_key(path, key);
-    return http_store_reader(kpath, executor, ec);
-}
-
-reader_uptr
-BackedHttpStore::range_reader( const std::string& key
-                             , size_t first
-                             , size_t last
-                             , sys::error_code& ec)
-{
-    auto kpath = path_from_key(path, key);
-    return http_store_range_reader(kpath, executor, first, last, ec);
-}
-
-std::size_t
-BackedHttpStore::size( Cancel cancel
-                     , asio::yield_context yield) const
-{
-    // Do not use `for_each` since it can alter the store.
-    sys::error_code ec;
-    auto sz = recursive_dir_size(path, ec);
-    if (cancel) ec = asio::error::operation_aborted;
-    return or_throw(yield, ec, sz);
-}
-
-HashList
-BackedHttpStore::load_hash_list( const std::string& key
-                               , Cancel cancel
-                               , asio::yield_context yield) const
-{
-    auto dir = path_from_key(path, key);
-    return http_store_load_hash_list(dir, executor, cancel, yield);
-}
-
 std::unique_ptr<HttpStore>
 make_backed_http_store( fs::path path, std::unique_ptr<BaseHttpStore> fallback_store
                       , asio::executor ex)
 {
     using namespace std;
-    return make_unique<BackedHttpStore>(move(path), move(fallback_store), move(ex));
+    auto read_store = make_unique<HttpReadStore>(path, ex);
+    return make_unique<BackedHttpStore>( move(path), move(ex)
+                                       , move(read_store), move(fallback_store));
 }
 
 std::unique_ptr<HttpStore>
