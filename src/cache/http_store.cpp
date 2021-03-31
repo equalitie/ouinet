@@ -826,10 +826,6 @@ http_store_range_reader( const fs::path& dirp, const fs::path& cdirp, asio::exec
         (dirp, cdirp, std::move(ex), first, last, ec);
 }
 
-HttpStore::~HttpStore()
-{
-}
-
 static
 fs::path
 path_from_key(fs::path dir, const std::string& key)
@@ -839,6 +835,58 @@ path_from_key(fs::path dir, const std::string& key)
     boost::string_view hd0(hex_digest); hd0.remove_suffix(hex_digest.size() - 2);
     boost::string_view hd1(hex_digest); hd1.remove_prefix(2);
     return dir.append(hd0.begin(), hd0.end()).append(hd1.begin(), hd1.end());
+}
+
+HashList
+http_store_load_hash_list( const fs::path& dir
+                         , asio::executor exec
+                         , Cancel& cancel
+                         , asio::yield_context yield)
+{
+    using Sha = util::SHA512;
+    using Digest = Sha::digest_type;
+
+    sys::error_code ec;
+
+    auto headf = util::file_io::open_readonly(exec, dir / head_fname, ec);
+    if (ec) return or_throw<HashList>(yield, ec);
+
+    auto sigsf = util::file_io::open_readonly(exec, dir / sigs_fname, ec);
+    if (ec) return or_throw<HashList>(yield, ec);
+
+    HashList hl;
+
+    hl.signed_head = HttpStoreReader::read_signed_head(headf, cancel, yield[ec]);
+
+    if (cancel) ec = asio::error::operation_aborted;
+    if (ec) return or_throw<HashList>(yield, ec);
+
+    std::string sig_buffer;
+
+    while(true) {
+        auto opt_sig_entry = SigEntry::parse(sigsf, sig_buffer, cancel, yield[ec]);
+
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec) return or_throw<HashList>(yield, ec);
+
+        if (!opt_sig_entry) break;
+
+        auto d = util::base64_decode<Digest>(opt_sig_entry->block_digest);
+        if (!d) return or_throw<HashList>(yield, asio::error::bad_descriptor);
+
+        auto sig = util::base64_decode<Signature>(opt_sig_entry->signature);
+        if (!sig) return or_throw<HashList>(yield, asio::error::bad_descriptor);
+
+        hl.blocks.push_back({*d, *sig});
+    }
+
+    if (hl.blocks.empty()) {
+        return or_throw<HashList>(yield, asio::error::not_found);
+    }
+
+    assert(hl.verify()); // Only in debug mode
+
+    return hl;
 }
 
 static
@@ -892,6 +940,10 @@ name_matches_model(const fs::path& name, const fs::path& model)
             return false;
 
     return true;
+}
+
+HttpStore::~HttpStore()
+{
 }
 
 void
@@ -1009,58 +1061,6 @@ HttpStore::size( Cancel cancel
     auto sz = recursive_dir_size(path, ec);
     if (cancel) ec = asio::error::operation_aborted;
     return or_throw(yield, ec, sz);
-}
-
-HashList
-http_store_load_hash_list( const fs::path& dir
-                         , asio::executor exec
-                         , Cancel& cancel
-                         , asio::yield_context yield)
-{
-    using Sha = util::SHA512;
-    using Digest = Sha::digest_type;
-
-    sys::error_code ec;
-
-    auto headf = util::file_io::open_readonly(exec, dir / head_fname, ec);
-    if (ec) return or_throw<HashList>(yield, ec);
-
-    auto sigsf = util::file_io::open_readonly(exec, dir / sigs_fname, ec);
-    if (ec) return or_throw<HashList>(yield, ec);
-
-    HashList hl;
-
-    hl.signed_head = HttpStoreReader::read_signed_head(headf, cancel, yield[ec]);
-
-    if (cancel) ec = asio::error::operation_aborted;
-    if (ec) return or_throw<HashList>(yield, ec);
-
-    std::string sig_buffer;
-
-    while(true) {
-        auto opt_sig_entry = SigEntry::parse(sigsf, sig_buffer, cancel, yield[ec]);
-
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<HashList>(yield, ec);
-
-        if (!opt_sig_entry) break;
-
-        auto d = util::base64_decode<Digest>(opt_sig_entry->block_digest);
-        if (!d) return or_throw<HashList>(yield, asio::error::bad_descriptor);
-
-        auto sig = util::base64_decode<Signature>(opt_sig_entry->signature);
-        if (!sig) return or_throw<HashList>(yield, asio::error::bad_descriptor);
-
-        hl.blocks.push_back({*d, *sig});
-    }
-
-    if (hl.blocks.empty()) {
-        return or_throw<HashList>(yield, asio::error::not_found);
-    }
-
-    assert(hl.verify()); // Only in debug mode
-
-    return hl;
 }
 
 HashList
