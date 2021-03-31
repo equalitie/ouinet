@@ -1065,8 +1065,8 @@ public:
 
 protected:
     fs::path path;
-    std::unique_ptr<BaseHttpStore> read_store;
     asio::executor executor;
+    std::unique_ptr<BaseHttpStore> read_store;
 };
 
 void
