@@ -1175,8 +1175,37 @@ public:
 
     ~BackedHttpStore() = default;
 
-protected:
-    std::unique_ptr<BaseHttpStore> fallback_store;  // TODO: use it
+    reader_uptr
+    reader(const std::string& key, sys::error_code& ec) override
+    {
+        auto ret = FullHttpStore::reader(key, ec);
+        if (!ec) return ret;
+        _DEBUG("Failed to create reader for key, trying fallback store: ", key);
+        return fallback_store->reader(key, ec = {});
+    }
+
+    reader_uptr
+    range_reader(const std::string& key, size_t first, size_t last, sys::error_code& ec) override
+    {
+        auto ret = FullHttpStore::range_reader(key, first, last, ec);
+        if (!ec) return ret;
+        _DEBUG("Failed to create range reader for key, trying fallback store: ", key);
+        return fallback_store->range_reader(key, first, last, ec = {});
+    }
+
+    std::size_t
+    size(Cancel cancel, asio::yield_context yield) const override
+    {
+        sys::error_code ec;
+        auto sz1 = FullHttpStore::size(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, 0);
+        auto sz2 = fallback_store->size(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, 0);
+        return sz1 + sz2;
+    }
+
+private:
+    std::unique_ptr<BaseHttpStore> fallback_store;
 };
 
 std::unique_ptr<HttpStore>
