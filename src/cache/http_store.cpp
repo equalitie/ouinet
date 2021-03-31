@@ -1030,15 +1030,15 @@ name_matches_model(const fs::path& name, const fs::path& model)
     return true;
 }
 
-class BackedHttpStore : public HttpStore {
+class FullHttpStore : public HttpStore {
 public:
-    BackedHttpStore( fs::path p, asio::executor ex
-                   , std::unique_ptr<BaseHttpStore> rs, std::unique_ptr<BaseHttpStore> fs)
+    FullHttpStore( fs::path p, asio::executor ex
+                 , std::unique_ptr<BaseHttpStore> rs)
         : path(std::move(p)), executor(std::move(ex))
-        , read_store(std::move(rs)), fallback_store(std::move(fs))
+        , read_store(std::move(rs))
     {}
 
-    ~BackedHttpStore() = default;
+    ~FullHttpStore() = default;
 
     void
     for_each(keep_func, Cancel, asio::yield_context) override;
@@ -1063,16 +1063,15 @@ public:
     load_hash_list(const std::string& key, Cancel cancel, asio::yield_context yield) const override
     { return read_store->load_hash_list(key, cancel, yield); }
 
-private:
+protected:
     fs::path path;
     std::unique_ptr<BaseHttpStore> read_store;
-    std::unique_ptr<BaseHttpStore> fallback_store;  // TODO: use it
     asio::executor executor;
 };
 
 void
-BackedHttpStore::for_each( keep_func keep
-                         , Cancel cancel, asio::yield_context yield)
+FullHttpStore::for_each( keep_func keep
+                       , Cancel cancel, asio::yield_context yield)
 {
     for (auto& pp : fs::directory_iterator(path)) {  // iterate over `DIGEST[:2]` dirs
         if (!fs::is_directory(pp)) {
@@ -1133,8 +1132,8 @@ BackedHttpStore::for_each( keep_func keep
 }
 
 void
-BackedHttpStore::store( const std::string& key, http_response::AbstractReader& r
-                      , Cancel cancel, asio::yield_context yield)
+FullHttpStore::store( const std::string& key, http_response::AbstractReader& r
+                    , Cancel cancel, asio::yield_context yield)
 {
     sys::error_code ec;
 
@@ -1159,6 +1158,28 @@ BackedHttpStore::store( const std::string& key, http_response::AbstractReader& r
 }
 
 std::unique_ptr<HttpStore>
+make_http_store(fs::path path, asio::executor ex)
+{
+    using namespace std;
+    auto read_store = make_unique<HttpReadStore>(path, ex);
+    return make_unique<FullHttpStore>(move(path), move(ex), move(read_store));
+}
+
+class BackedHttpStore : public FullHttpStore {
+public:
+    BackedHttpStore( fs::path p, asio::executor ex
+                   , std::unique_ptr<BaseHttpStore> rs, std::unique_ptr<BaseHttpStore> fs)
+        : FullHttpStore(std::move(p), std::move(ex), std::move(rs))
+        , fallback_store(std::move(fs))
+    {}
+
+    ~BackedHttpStore() = default;
+
+protected:
+    std::unique_ptr<BaseHttpStore> fallback_store;  // TODO: use it
+};
+
+std::unique_ptr<HttpStore>
 make_backed_http_store( fs::path path, std::unique_ptr<BaseHttpStore> fallback_store
                       , asio::executor ex)
 {
@@ -1166,12 +1187,6 @@ make_backed_http_store( fs::path path, std::unique_ptr<BaseHttpStore> fallback_s
     auto read_store = make_unique<HttpReadStore>(path, ex);
     return make_unique<BackedHttpStore>( move(path), move(ex)
                                        , move(read_store), move(fallback_store));
-}
-
-std::unique_ptr<HttpStore>
-make_http_store(fs::path path, asio::executor ex)
-{
-    return make_backed_http_store(std::move(path), nullptr, std::move(ex));
 }
 
 }} // namespaces
