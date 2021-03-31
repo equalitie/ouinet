@@ -155,19 +155,8 @@ public:
     load_hash_list(const std::string& key, Cancel, asio::yield_context) const = 0;
 };
 
-class StaticHttpStore : public BaseHttpStore {
-public:
-    StaticHttpStore(fs::path p, fs::path cp, asio::executor ex)
-        : path(std::move(p)), content_path(std::move(cp)), executor(ex)
-    {}
-
-    ~StaticHttpStore();
-
-private:
-    fs::path path;
-    fs::path content_path;
-    asio::executor executor;
-};
+std::unique_ptr<BaseHttpStore>
+make_static_http_store(fs::path path, fs::path content_path, asio::executor);
 
 class HttpStore : public BaseHttpStore {
 public:

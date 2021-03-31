@@ -517,10 +517,10 @@ Client::build( shared_ptr<bt::MainlineDht> dht
         assert(static_cache_content_dir);
         if (!is_directory(*static_cache_dir / "data-v3"))
             _ERROR("No HTTP store of supported version under static cache, ignoring: ", *static_cache_dir);
-        else {
-            // TODO: create static cache
-            //static_http_store = make_unique<cache::StaticHttpStore>(*static_cache_dir, *static_cache_content_dir);
-        }
+        else
+            static_http_store = make_static_http_store( move(*static_cache_dir)
+                                                      , move(*static_cache_content_dir)
+                                                      , dht->get_executor());
     }
 
     // Remove obsolete stores.

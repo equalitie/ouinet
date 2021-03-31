@@ -889,6 +889,94 @@ http_store_load_hash_list( const fs::path& dir
     return hl;
 }
 
+class HttpReadStore : public BaseHttpStore {
+public:
+    HttpReadStore(fs::path p, asio::executor ex)
+        : path(std::move(p)), executor(ex)
+    {}
+
+    ~HttpReadStore() = default;
+
+    reader_uptr
+    reader(const std::string& key, sys::error_code& ec) override
+    {
+        auto kpath = path_from_key(path, key);
+        return http_store_reader(kpath, executor, ec);
+    }
+
+    reader_uptr
+    range_reader(const std::string& key, size_t first, size_t last, sys::error_code& ec) override
+    {
+        auto kpath = path_from_key(path, key);
+        return http_store_range_reader(kpath, executor, first, last, ec);
+    }
+
+    std::size_t
+    size(Cancel cancel, asio::yield_context yield) const override
+    {
+        // Do not use `for_each` since it can alter the store.
+        sys::error_code ec;
+        auto sz = recursive_dir_size(path, ec);
+        if (cancel) ec = asio::error::operation_aborted;
+        return or_throw(yield, ec, sz);
+    }
+
+    HashList
+    load_hash_list(const std::string& key, Cancel cancel, asio::yield_context yield) const override
+    {
+        auto dir = path_from_key(path, key);
+        return http_store_load_hash_list(dir, executor, cancel, yield);
+    }
+
+protected:
+    fs::path path;
+    asio::executor executor;
+};
+
+class StaticHttpStore : public HttpReadStore {
+public:
+    StaticHttpStore(fs::path p, fs::path cp, asio::executor ex)
+        : HttpReadStore(std::move(p), std::move(ex)), content_path(std::move(cp))
+    {}
+
+    ~StaticHttpStore() = default;
+
+    reader_uptr
+    reader(const std::string& key, sys::error_code& ec) override
+    {
+        auto kpath = path_from_key(path, key);
+        return http_store_reader(kpath, content_path, executor, ec);
+    }
+
+    reader_uptr
+    range_reader(const std::string& key, size_t first, size_t last, sys::error_code& ec) override
+    {
+        auto kpath = path_from_key(path, key);
+        return http_store_range_reader(kpath, content_path, executor, first, last, ec);
+    }
+
+    std::size_t
+    size(Cancel cancel, asio::yield_context yield) const override
+    {
+        sys::error_code ec;
+        auto sz = HttpReadStore::size(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, 0);
+        sz += recursive_dir_size(content_path, ec);
+        if (cancel) ec = asio::error::operation_aborted;
+        return or_throw(yield, ec, sz);
+    }
+
+private:
+    fs::path content_path;
+};
+
+std::unique_ptr<BaseHttpStore>
+make_static_http_store(fs::path path, fs::path content_path, asio::executor ex)
+{
+    using namespace std;
+    return make_unique<StaticHttpStore>(move(path), move(content_path), move(ex));
+}
+
 static
 void
 try_remove(const fs::path& path)
@@ -1033,6 +1121,8 @@ HttpStore::store( const std::string& key, http_response::AbstractReader& r
                , " ec:", ec.message());
     return or_throw(yield, ec);
 }
+
+// TODO: refactor with `HttpReadStore`
 
 reader_uptr
 HttpStore::reader( const std::string& key
