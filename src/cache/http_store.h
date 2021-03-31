@@ -164,39 +164,21 @@ public:
         bool(reader_uptr, asio::yield_context)>;
 
 public:
-    HttpStore(fs::path p, asio::executor ex)
-        : path(std::move(p)), executor(ex)
-    {}
+    virtual ~HttpStore() = default;
 
-    HttpStore(fs::path p, std::unique_ptr<BaseHttpStore> hs, asio::executor ex)
-        : path(std::move(p)), fallback_store(std::move(hs)), executor(ex)
-    {}
+    virtual void
+    for_each(keep_func, Cancel, asio::yield_context) = 0;
 
-    ~HttpStore();
-
-    void
-    for_each(keep_func, Cancel, asio::yield_context);
-
-    void
+    virtual void
     store( const std::string& key, http_response::AbstractReader&
-         , Cancel, asio::yield_context);
-
-    reader_uptr
-    reader(const std::string& key, sys::error_code&);
-
-    reader_uptr
-    range_reader(const std::string& key, size_t first, size_t last, sys::error_code&);
-
-    std::size_t
-    size(Cancel, asio::yield_context) const;
-
-    HashList
-    load_hash_list(const std::string& key, Cancel, asio::yield_context) const;
-
-private:
-    fs::path path;
-    std::unique_ptr<BaseHttpStore> fallback_store;  // TODO: use it
-    asio::executor executor;
+         , Cancel, asio::yield_context) = 0;
 };
+
+std::unique_ptr<HttpStore>
+make_http_store(fs::path path, asio::executor);
+
+std::unique_ptr<HttpStore>
+make_backed_http_store( fs::path path, std::unique_ptr<BaseHttpStore> fallback_store
+                      , asio::executor);
 
 }} // namespaces

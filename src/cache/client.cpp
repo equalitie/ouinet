@@ -537,8 +537,9 @@ Client::build( shared_ptr<bt::MainlineDht> dht
     auto store_dir = cache_dir / "data-v3";
     fs::create_directories(store_dir, ec);
     if (ec) return or_throw<ClientPtr>(yield, ec);
-    auto http_store = make_unique<cache::HttpStore>(
-        move(store_dir), move(static_http_store), dht->get_executor());
+    auto http_store = static_http_store
+        ? make_backed_http_store(move(store_dir), move(static_http_store), dht->get_executor())
+        : make_http_store(move(store_dir), dht->get_executor());
 
     unique_ptr<Impl> impl(new Impl( move(dht)
                                   , cache_pk, move(cache_dir)
