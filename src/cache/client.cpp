@@ -508,6 +508,8 @@ Client::build( shared_ptr<bt::MainlineDht> dht
              , asio::yield_context yield)
 {
     using ClientPtr = unique_ptr<Client>;
+    static const auto store_oldver_subdirs = {"data", "data-v1", "data-v2"};
+    static const auto store_curver_subdir = "data-v3";
 
     sys::error_code ec;
 
@@ -515,7 +517,7 @@ Client::build( shared_ptr<bt::MainlineDht> dht
     std::unique_ptr<BaseHttpStore> static_http_store;
     if (static_cache_dir) {
         assert(static_cache_content_dir);
-        auto store_dir = *static_cache_dir / "data-v3";
+        auto store_dir = *static_cache_dir / store_curver_subdir;
         fs::path canon_content_dir;
         if (!is_directory(store_dir)) {
             ec = asio::error::invalid_argument;
@@ -533,7 +535,7 @@ Client::build( shared_ptr<bt::MainlineDht> dht
     }
 
     // Remove obsolete stores.
-    for (const auto& dirn : {"data", "data-v1", "data-v2"}) {
+    for (const auto& dirn : store_oldver_subdirs) {
         auto old_store_dir = cache_dir / dirn;
         if (!is_directory(old_store_dir)) continue;
         _INFO("Removing obsolete HTTP store...");
@@ -543,7 +545,7 @@ Client::build( shared_ptr<bt::MainlineDht> dht
         ec = {};
     }
 
-    auto store_dir = cache_dir / "data-v3";
+    auto store_dir = cache_dir / store_curver_subdir;
     fs::create_directories(store_dir, ec);
     if (ec) return or_throw<ClientPtr>(yield, ec);
     auto http_store = static_http_store
