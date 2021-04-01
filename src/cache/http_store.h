@@ -155,6 +155,10 @@ public:
     load_hash_list(const std::string& key, Cancel, asio::yield_context) const = 0;
 };
 
+// Warning: Although security checks are performed on the pointers to body data files
+// (e.g. to check that they are not outside of the content directory),
+// none are performed on `content_path` itself.
+// Please make sure that `content_path` is already in canonical form or some checks may fail.
 std::unique_ptr<BaseHttpStore>
 make_static_http_store(fs::path path, fs::path content_path, asio::executor);
 

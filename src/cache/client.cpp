@@ -515,12 +515,20 @@ Client::build( shared_ptr<bt::MainlineDht> dht
     std::unique_ptr<BaseHttpStore> static_http_store;
     if (static_cache_dir) {
         assert(static_cache_content_dir);
-        if (!is_directory(*static_cache_dir / "data-v3"))
+        fs::path canon_content_dir;
+        if (!is_directory(*static_cache_dir / "data-v3")) {
+            ec = asio::error::invalid_argument;
             _ERROR("No HTTP store of supported version under static cache, ignoring: ", *static_cache_dir);
-        else
+        } else {
+            canon_content_dir = fs::canonical(*static_cache_content_dir, ec);
+            if (ec) _ERROR( "Failed to make static cache content directory canonical, ignoring: "
+                          , *static_cache_content_dir);
+        }
+        if (!ec)
             static_http_store = make_static_http_store( move(*static_cache_dir)
-                                                      , move(*static_cache_content_dir)
+                                                      , move(canon_content_dir)
                                                       , dht->get_executor());
+        ec = {};
     }
 
     // Remove obsolete stores.
