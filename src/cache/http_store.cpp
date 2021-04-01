@@ -603,6 +603,11 @@ public:
         return http_response::Part(http_response::Trailer());
     }
 
+    bool is_done() const override
+    {
+        return _is_done;
+    }
+
     asio::executor get_executor() override
     {
         return headf.get_executor();

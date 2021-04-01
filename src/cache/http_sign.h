@@ -216,6 +216,7 @@ public:
     boost::optional<ouinet::http_response::Part>
     async_read_part(Cancel, asio::yield_context) override;
 
+    bool is_done() const override { return _reader.is_done(); }
     void close() override { _reader.close(); }
 
     asio::executor get_executor() override

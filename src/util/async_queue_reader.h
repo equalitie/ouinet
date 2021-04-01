@@ -20,10 +20,16 @@ public:
         sys::error_code ec;
         auto opt_p = _queue.async_pop(cancel, yield[ec]);
         if (ec || !opt_p) {
+            _is_done = !ec;
             _cancel(); // Indicate we're done
             return or_throw(yield, ec, boost::none);
         }
         return opt_p;
+    }
+
+    bool is_done() const override
+    {
+        return _is_done;
     }
 
     void insert(Part p) {
@@ -47,6 +53,7 @@ public:
 private:
     Cancel _cancel;
     Queue& _queue;
+    bool _is_done = false;
 };
 
 }
