@@ -9,6 +9,7 @@
 #include "hash_list.h"
 #include "../constants.h"
 #include "../response_reader.h"
+#include "../util/crypto.h"
 #include "../util/signal.h"
 
 #include "../namespaces.h"
@@ -155,12 +156,21 @@ public:
     load_hash_list(const std::string& key, Cancel, asio::yield_context) const = 0;
 };
 
+// As static HTTP stores may come from untrusted sources,
+// an HTTP signing key is needed for verification of any response coming out of the store,
+// i.e. a reader constructed by this store will cryptographically verify its response.
+//
+// Warning: Due to implementation limitations,
+// this verification is currently not performed by range readers.
+//
 // Warning: Although security checks are performed on the pointers to body data files
 // (e.g. to check that they are not outside of the content directory),
 // none are performed on `content_path` itself.
 // Please make sure that `content_path` is already in canonical form or some checks may fail.
 std::unique_ptr<BaseHttpStore>
-make_static_http_store(fs::path path, fs::path content_path, asio::executor);
+make_static_http_store( fs::path path, fs::path content_path
+                      , util::Ed25519PublicKey
+                      , asio::executor);
 
 class HttpStore : public BaseHttpStore {
 public:

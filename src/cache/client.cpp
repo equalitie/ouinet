@@ -528,8 +528,17 @@ Client::build( shared_ptr<bt::MainlineDht> dht
                           , *static_cache_content_dir);
         }
         if (!ec)
+            // This static store should verify everything loaded from storage
+            // (as its source may not be trustworthy),
+            // which is not strictly needed for serving content to other clients
+            // as they should verify on their own.
+            // Nonetheless it may still help identify invalid or malicious content in it
+            // before further propagating it.
+            // The verification is also done for content retrieved for the local agent,
+            // and in this case it is indeed desirable to do so.
             static_http_store = make_static_http_store( move(store_dir)
                                                       , move(canon_content_dir)
+                                                      , cache_pk
                                                       , dht->get_executor());
         ec = {};
     }

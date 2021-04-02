@@ -940,8 +940,9 @@ protected:
 
 class StaticHttpStore : public HttpReadStore {
 public:
-    StaticHttpStore(fs::path p, fs::path cp, asio::executor ex)
-        : HttpReadStore(std::move(p), std::move(ex)), content_path(std::move(cp))
+    StaticHttpStore(fs::path p, fs::path cp, util::Ed25519PublicKey pk, asio::executor ex)
+        : HttpReadStore(std::move(p), std::move(ex))
+        , content_path(std::move(cp)), verif_pubk(std::move(pk))
     {}
 
     ~StaticHttpStore() = default;
@@ -950,13 +951,27 @@ public:
     reader(const std::string& key, sys::error_code& ec) override
     {
         auto kpath = path_from_key(path, key);
-        return http_store_reader(kpath, content_path, executor, ec);
+        // Always verifying the response not only
+        // protects the agent against malicions content in the static cache, it also
+        // acts as a good citizen and avoids spreading such content to others.
+        return std::make_unique<VerifyingReader>
+            (http_store_reader(kpath, content_path, executor, ec), verif_pubk);
     }
 
     reader_uptr
     range_reader(const std::string& key, size_t first, size_t last, sys::error_code& ec) override
     {
         auto kpath = path_from_key(path, key);
+        // TODO: Signature verification should be implemented here too,
+        // but verification of partial responses not going through multi-peer download is broken.
+        // Fortunately, for agent retrieval of responses in the static cache,
+        // only whole responses (returned by `reader`) are used.
+        // Also fortunately, other clients retrieving partial content from this client
+        // will use the mechanisms of multi-peer download for verification.
+        // So this would only byte clients retrieving invalid partial content from here
+        // with raw range requests, but this is not currently the case in Ouinet.
+        // Also, the client does not currently issue partial reads to the local cache
+        // to be served to the agent.
         return http_store_range_reader(kpath, content_path, executor, first, last, ec);
     }
 
@@ -973,13 +988,15 @@ public:
 
 private:
     fs::path content_path;
+    util::Ed25519PublicKey verif_pubk;
 };
 
 std::unique_ptr<BaseHttpStore>
-make_static_http_store(fs::path path, fs::path content_path, asio::executor ex)
+make_static_http_store( fs::path path, fs::path content_path
+                      , util::Ed25519PublicKey pk, asio::executor ex)
 {
     using namespace std;
-    return make_unique<StaticHttpStore>(move(path), move(content_path), move(ex));
+    return make_unique<StaticHttpStore>(move(path), move(content_path), move(pk), move(ex));
 }
 
 static
