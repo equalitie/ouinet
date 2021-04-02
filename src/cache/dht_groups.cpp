@@ -20,28 +20,33 @@ using sys::errc::make_error_code;
 // https://stackoverflow.com/a/417184/273348
 #define MAX_URL_SIZE 2000
 
-class FullDhtGroups : public DhtGroups {
+class DhtGroupsImpl {
 public:
-    void add(const GroupName&, const ItemName&, Cancel&, asio::yield_context) override;
+    using GroupName = BaseDhtGroups::GroupName;
+    using ItemName  = DhtGroups::ItemName;
+
+public:
+    void add(const GroupName&, const ItemName&, Cancel&, asio::yield_context);
 
     // Remove item from every group it is in. Return groups that became empty
     // as a result.
-    std::set<GroupName> remove(const ItemName&) override;
+    std::set<GroupName> remove(const ItemName&);
 
-    static std::unique_ptr<DhtGroups> load(fs::path root_dir, asio::executor, Cancel&, asio::yield_context);
+    static std::unique_ptr<DhtGroupsImpl>
+    load(fs::path root_dir, asio::executor, Cancel&, asio::yield_context);
 
-    ~FullDhtGroups() override;
+    ~DhtGroupsImpl();
 
-    std::set<GroupName> groups() const override;
+    std::set<GroupName> groups() const;
 
 private:
     using Group  = std::pair<GroupName, std::set<ItemName>>;
     using Groups = std::map<GroupName, std::set<ItemName>>;
 
-    FullDhtGroups(asio::executor, fs::path root_dir, Groups);
+    DhtGroupsImpl(asio::executor, fs::path root_dir, Groups);
 
-    FullDhtGroups(const FullDhtGroups&) = delete;
-    FullDhtGroups(FullDhtGroups&&)      = delete;
+    DhtGroupsImpl(const DhtGroupsImpl&) = delete;
+    DhtGroupsImpl(DhtGroupsImpl&&)      = delete;
 
     static
     Group load_group(const fs::path dir, asio::executor, Cancel&, asio::yield_context);
@@ -57,7 +62,7 @@ private:
     Cancel _lifetime_cancel;
 };
 
-FullDhtGroups::FullDhtGroups(asio::executor ex, fs::path root_dir, Groups groups)
+DhtGroupsImpl::DhtGroupsImpl(asio::executor ex, fs::path root_dir, Groups groups)
     : _ex(ex)
     , _root_dir(std::move(root_dir))
     , _groups(std::move(groups))
@@ -95,8 +100,8 @@ static std::string read_file(fs::path p, asio::executor ex, Cancel& c, yield_con
 }
 
 /* static */
-FullDhtGroups::Group
-FullDhtGroups::load_group( const fs::path dir
+DhtGroupsImpl::Group
+DhtGroupsImpl::load_group( const fs::path dir
                          , asio::executor ex
                          , Cancel& cancel
                          , yield_context yield)
@@ -138,7 +143,7 @@ FullDhtGroups::load_group( const fs::path dir
     return {std::move(group_name), std::move(items)};
 }
 
-std::set<DhtGroups::GroupName> FullDhtGroups::groups() const
+std::set<DhtGroups::GroupName> DhtGroupsImpl::groups() const
 {
     std::set<DhtGroups::GroupName> ret;
 
@@ -150,12 +155,13 @@ std::set<DhtGroups::GroupName> FullDhtGroups::groups() const
 }
 
 /* static */
-std::unique_ptr<DhtGroups> FullDhtGroups::load( fs::path root_dir
-                                              , asio::executor ex
-                                              , Cancel& cancel
-                                              , yield_context yield)
+std::unique_ptr<DhtGroupsImpl>
+DhtGroupsImpl::load( fs::path root_dir
+                   , asio::executor ex
+                   , Cancel& cancel
+                   , yield_context yield)
 {
-    using Ret = std::unique_ptr<DhtGroups>;
+    using Ret = std::unique_ptr<DhtGroupsImpl>;
     namespace err = asio::error;
 
     Groups groups;
@@ -193,17 +199,8 @@ std::unique_ptr<DhtGroups> FullDhtGroups::load( fs::path root_dir
         groups.insert(std::move(group));
     }
 
-    return std::unique_ptr<DhtGroups>(new FullDhtGroups(ex, std::move(root_dir), std::move(groups)));
-}
-
-std::unique_ptr<DhtGroups>
-ouinet::load_dht_groups( fs::path root_dir
-                       , asio::executor ex
-                       , Cancel& cancel
-                       , yield_context yield)
-{
-    return FullDhtGroups::load( std::move(root_dir), std::move(ex)
-                              , cancel, std::move(yield));
+    return std::unique_ptr<DhtGroupsImpl>
+        (new DhtGroupsImpl(ex, std::move(root_dir), std::move(groups)));
 }
 
 std::string sha1_hex_digest(const std::string& s) {
@@ -211,24 +208,24 @@ std::string sha1_hex_digest(const std::string& s) {
 }
 
 fs::path
-FullDhtGroups::group_path(const GroupName& group_name)
+DhtGroupsImpl::group_path(const GroupName& group_name)
 {
     return _root_dir / sha1_hex_digest(group_name);
 }
 
 fs::path
-FullDhtGroups::items_path(const GroupName& group_name)
+DhtGroupsImpl::items_path(const GroupName& group_name)
 {
     return group_path(group_name) / "items";
 }
 
 fs::path
-FullDhtGroups::item_path(const GroupName& group_name, const ItemName& item_name)
+DhtGroupsImpl::item_path(const GroupName& group_name, const ItemName& item_name)
 {
     return items_path(group_name) / sha1_hex_digest(item_name);
 }
 
-void FullDhtGroups::add( const GroupName& group_name
+void DhtGroupsImpl::add( const GroupName& group_name
                    , const ItemName& item_name
                    , Cancel& cancel
                    , yield_context yield)
@@ -314,7 +311,7 @@ void FullDhtGroups::add( const GroupName& group_name
     group_it->second.emplace(item_name);  // add item to existing group
 }
 
-std::set<DhtGroups::GroupName> FullDhtGroups::remove(const ItemName& item_name)
+std::set<DhtGroups::GroupName> DhtGroupsImpl::remove(const ItemName& item_name)
 {
     std::set<GroupName> erased_groups;
 
@@ -348,6 +345,63 @@ std::set<DhtGroups::GroupName> FullDhtGroups::remove(const ItemName& item_name)
     return erased_groups;
 }
 
-FullDhtGroups::~FullDhtGroups() {
+DhtGroupsImpl::~DhtGroupsImpl() {
     _lifetime_cancel();
+}
+
+class DhtReadGroups : public BaseDhtGroups {
+public:
+    DhtReadGroups(std::unique_ptr<DhtGroupsImpl> impl)
+        : _impl(std::move(impl))
+    {}
+    ~DhtReadGroups() override = default;
+
+    std::set<GroupName> groups() const override
+    { return _impl->groups(); }
+
+private:
+    std::unique_ptr<DhtGroupsImpl> _impl;
+};
+
+std::unique_ptr<BaseDhtGroups>
+ouinet::load_static_dht_groups( fs::path root_dir
+                              , asio::executor ex
+                              , Cancel& cancel
+                              , asio::yield_context yield)
+{
+    // TODO: security checks on loaded files
+    return std::make_unique<DhtReadGroups>
+        (DhtGroupsImpl::load( std::move(root_dir), std::move(ex)
+                            , cancel, std::move(yield)));
+}
+
+class FullDhtGroups : public DhtGroups {
+public:
+    FullDhtGroups(std::unique_ptr<DhtGroupsImpl> impl)
+        : _impl(std::move(impl))
+    {}
+    ~FullDhtGroups() override = default;
+
+    std::set<GroupName> groups() const override
+    { return _impl->groups(); }
+
+    void add(const GroupName& gn, const ItemName& in, Cancel& c, asio::yield_context y) override
+    { return _impl->add(gn, in, c, y); }
+
+    std::set<GroupName> remove(const ItemName& in)
+    { return _impl->remove(in); }
+
+private:
+    std::unique_ptr<DhtGroupsImpl> _impl;
+};
+
+std::unique_ptr<DhtGroups>
+ouinet::load_dht_groups( fs::path root_dir
+                       , asio::executor ex
+                       , Cancel& cancel
+                       , yield_context yield)
+{
+    return std::make_unique<FullDhtGroups>
+        (DhtGroupsImpl::load( std::move(root_dir), std::move(ex)
+                            , cancel, std::move(yield)));
 }

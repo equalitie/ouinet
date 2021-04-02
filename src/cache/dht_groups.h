@@ -8,9 +8,20 @@
 
 namespace ouinet {
 
-class DhtGroups {
+class BaseDhtGroups {
 public:
     using GroupName = std::string;
+
+public:
+    virtual ~BaseDhtGroups() = default;
+    virtual std::set<GroupName> groups() const = 0;
+};
+
+std::unique_ptr<BaseDhtGroups>
+load_static_dht_groups(fs::path root_dir, asio::executor, Cancel&, asio::yield_context);
+
+class DhtGroups : public BaseDhtGroups {
+public:
     using ItemName  = std::string;
 
 public:
@@ -21,8 +32,6 @@ public:
     // Remove item from every group it is in. Return groups that became empty
     // as a result.
     virtual std::set<GroupName> remove(const ItemName&) = 0;
-
-    virtual std::set<GroupName> groups() const = 0;
 };
 
 std::unique_ptr<DhtGroups>
