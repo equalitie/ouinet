@@ -179,6 +179,8 @@ public:
 public:
     VerifyingReader( GenericStream in, ouinet::util::Ed25519PublicKey pk
                    , status_set statuses = {});
+    VerifyingReader( reader_uptr rd, ouinet::util::Ed25519PublicKey pk
+                   , status_set statuses = {});
     ~VerifyingReader() override;
 
     boost::optional<ouinet::http_response::Part>

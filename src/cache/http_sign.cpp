@@ -970,6 +970,14 @@ VerifyingReader::VerifyingReader( GenericStream in
 {
 }
 
+VerifyingReader::VerifyingReader( reader_uptr rd
+                                , util::Ed25519PublicKey pk
+                                , status_set statuses)
+    : _reader(std::move(rd))
+    , _impl(std::make_unique<Impl>(true, std::move(pk), std::move(statuses)))
+{
+}
+
 VerifyingReader::~VerifyingReader()
 {
 }
