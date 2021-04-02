@@ -183,11 +183,8 @@ public:
     boost::optional<ouinet::http_response::Part>
     async_read_part(Cancel, asio::yield_context) override;
 
-protected:
-    struct Impl;
-    VerifyingReader(GenericStream, std::unique_ptr<Impl>);
-
 private:
+    struct Impl;
     std::unique_ptr<Impl> _impl;
 };
 

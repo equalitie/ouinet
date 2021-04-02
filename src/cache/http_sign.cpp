@@ -970,13 +970,6 @@ VerifyingReader::VerifyingReader( GenericStream in
 {
 }
 
-VerifyingReader::VerifyingReader( GenericStream in
-                                , std::unique_ptr<Impl> impl)
-    : http_response::Reader(std::move(in))
-    , _impl(std::move(impl))
-{
-}
-
 VerifyingReader::~VerifyingReader()
 {
 }
