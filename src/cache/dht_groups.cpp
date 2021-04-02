@@ -26,18 +26,16 @@ public:
     using ItemName  = DhtGroups::ItemName;
 
 public:
-    void add(const GroupName&, const ItemName&, Cancel&, asio::yield_context);
-
-    // Remove item from every group it is in. Return groups that became empty
-    // as a result.
-    std::set<GroupName> remove(const ItemName&);
+    ~DhtGroupsImpl();
 
     static std::unique_ptr<DhtGroupsImpl>
     load(fs::path root_dir, asio::executor, Cancel&, asio::yield_context);
 
-    ~DhtGroupsImpl();
-
     std::set<GroupName> groups() const;
+
+    void add(const GroupName&, const ItemName&, Cancel&, asio::yield_context);
+
+    std::set<GroupName> remove(const ItemName&);
 
 private:
     using Group  = std::pair<GroupName, std::set<ItemName>>;
