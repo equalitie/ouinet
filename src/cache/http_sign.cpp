@@ -965,7 +965,7 @@ struct VerifyingReader::Impl {
 VerifyingReader::VerifyingReader( GenericStream in
                                 , util::Ed25519PublicKey pk
                                 , status_set statuses)
-    : http_response::Reader(std::move(in))
+    : _reader(std::make_unique<http_response::Reader>(std::move(in)))
     , _impl(std::make_unique<Impl>(true, std::move(pk), std::move(statuses)))
 {
 }
@@ -986,7 +986,7 @@ VerifyingReader::async_read_part(Cancel cancel, asio::yield_context yield)
     }
 
     while (!part) {
-        part = http_response::Reader::async_read_part(cancel, yield[ec]);
+        part = _reader->async_read_part(cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec, boost::none);
         if (!part) break;
 
@@ -996,7 +996,7 @@ VerifyingReader::async_read_part(Cancel cancel, asio::yield_context yield)
         return_or_throw_on_error(yield, cancel, ec, boost::none);
     }
 
-    if (http_response::Reader::is_done()) {
+    if (_reader->is_done()) {
         // Check full body hash and length.
         _impl->check_body(ec);
         return_or_throw_on_error(yield, cancel, ec, boost::none);
