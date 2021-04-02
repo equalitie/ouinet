@@ -468,7 +468,7 @@ struct Client::Impl {
         Cancel cancel(_lifetime_cancel);
 
         sys::error_code e;
-        _dht_groups = DhtGroups::load(_cache_dir/"dht_groups", _ex, cancel, y[e]);
+        _dht_groups = load_dht_groups(_cache_dir/"dht_groups", _ex, cancel, y[e]);
 
         if (cancel) e = asio::error::operation_aborted;
         if (e) return or_throw(y, e);

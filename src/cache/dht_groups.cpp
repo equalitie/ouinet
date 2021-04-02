@@ -4,6 +4,8 @@
 #include "../util/bytes.h"
 #include "../util/hash.h"
 
+#include <map>
+
 using namespace ouinet;
 
 #define _LOGPFX "DHT Groups: "
@@ -18,7 +20,44 @@ using sys::errc::make_error_code;
 // https://stackoverflow.com/a/417184/273348
 #define MAX_URL_SIZE 2000
 
-DhtGroups::DhtGroups(asio::executor ex, fs::path root_dir, Groups groups)
+class FullDhtGroups : public DhtGroups {
+public:
+    void add(const GroupName&, const ItemName&, Cancel&, asio::yield_context) override;
+
+    // Remove item from every group it is in. Return groups that became empty
+    // as a result.
+    std::set<GroupName> remove(const ItemName&) override;
+
+    static std::unique_ptr<DhtGroups> load(fs::path root_dir, asio::executor, Cancel&, asio::yield_context);
+
+    ~FullDhtGroups() override;
+
+    std::set<GroupName> groups() const override;
+
+private:
+    using Group  = std::pair<GroupName, std::set<ItemName>>;
+    using Groups = std::map<GroupName, std::set<ItemName>>;
+
+    FullDhtGroups(asio::executor, fs::path root_dir, Groups);
+
+    FullDhtGroups(const FullDhtGroups&) = delete;
+    FullDhtGroups(FullDhtGroups&&)      = delete;
+
+    static
+    Group load_group(const fs::path dir, asio::executor, Cancel&, asio::yield_context);
+
+    fs::path group_path(const GroupName&);
+    fs::path items_path(const GroupName&);
+    fs::path item_path(const GroupName&, const ItemName&);
+
+private:
+    asio::executor _ex;
+    fs::path _root_dir;
+    Groups _groups;
+    Cancel _lifetime_cancel;
+};
+
+FullDhtGroups::FullDhtGroups(asio::executor ex, fs::path root_dir, Groups groups)
     : _ex(ex)
     , _root_dir(std::move(root_dir))
     , _groups(std::move(groups))
@@ -56,11 +95,11 @@ static std::string read_file(fs::path p, asio::executor ex, Cancel& c, yield_con
 }
 
 /* static */
-DhtGroups::Group
-DhtGroups::load_group( const fs::path dir
-                     , asio::executor ex
-                     , Cancel& cancel
-                     , yield_context yield)
+FullDhtGroups::Group
+FullDhtGroups::load_group( const fs::path dir
+                         , asio::executor ex
+                         , Cancel& cancel
+                         , yield_context yield)
 {
     assert(fs::is_directory(dir));
     sys::error_code ec;
@@ -99,7 +138,7 @@ DhtGroups::load_group( const fs::path dir
     return {std::move(group_name), std::move(items)};
 }
 
-std::set<DhtGroups::GroupName> DhtGroups::groups() const
+std::set<DhtGroups::GroupName> FullDhtGroups::groups() const
 {
     std::set<DhtGroups::GroupName> ret;
 
@@ -111,10 +150,10 @@ std::set<DhtGroups::GroupName> DhtGroups::groups() const
 }
 
 /* static */
-std::unique_ptr<DhtGroups> DhtGroups::load( fs::path root_dir
-                                          , asio::executor ex
-                                          , Cancel& cancel
-                                          , yield_context yield)
+std::unique_ptr<DhtGroups> FullDhtGroups::load( fs::path root_dir
+                                              , asio::executor ex
+                                              , Cancel& cancel
+                                              , yield_context yield)
 {
     using Ret = std::unique_ptr<DhtGroups>;
     namespace err = asio::error;
@@ -154,7 +193,17 @@ std::unique_ptr<DhtGroups> DhtGroups::load( fs::path root_dir
         groups.insert(std::move(group));
     }
 
-    return std::unique_ptr<DhtGroups>(new DhtGroups(ex, std::move(root_dir), std::move(groups)));
+    return std::unique_ptr<DhtGroups>(new FullDhtGroups(ex, std::move(root_dir), std::move(groups)));
+}
+
+std::unique_ptr<DhtGroups>
+ouinet::load_dht_groups( fs::path root_dir
+                       , asio::executor ex
+                       , Cancel& cancel
+                       , yield_context yield)
+{
+    return FullDhtGroups::load( std::move(root_dir), std::move(ex)
+                              , cancel, std::move(yield));
 }
 
 std::string sha1_hex_digest(const std::string& s) {
@@ -162,24 +211,24 @@ std::string sha1_hex_digest(const std::string& s) {
 }
 
 fs::path
-DhtGroups::group_path(const GroupName& group_name)
+FullDhtGroups::group_path(const GroupName& group_name)
 {
     return _root_dir / sha1_hex_digest(group_name);
 }
 
 fs::path
-DhtGroups::items_path(const GroupName& group_name)
+FullDhtGroups::items_path(const GroupName& group_name)
 {
     return group_path(group_name) / "items";
 }
 
 fs::path
-DhtGroups::item_path(const GroupName& group_name, const ItemName& item_name)
+FullDhtGroups::item_path(const GroupName& group_name, const ItemName& item_name)
 {
     return items_path(group_name) / sha1_hex_digest(item_name);
 }
 
-void DhtGroups::add( const GroupName& group_name
+void FullDhtGroups::add( const GroupName& group_name
                    , const ItemName& item_name
                    , Cancel& cancel
                    , yield_context yield)
@@ -265,7 +314,7 @@ void DhtGroups::add( const GroupName& group_name
     group_it->second.emplace(item_name);  // add item to existing group
 }
 
-std::set<DhtGroups::GroupName> DhtGroups::remove(const ItemName& item_name)
+std::set<DhtGroups::GroupName> FullDhtGroups::remove(const ItemName& item_name)
 {
     std::set<GroupName> erased_groups;
 
@@ -299,6 +348,6 @@ std::set<DhtGroups::GroupName> DhtGroups::remove(const ItemName& item_name)
     return erased_groups;
 }
 
-DhtGroups::~DhtGroups() {
+FullDhtGroups::~FullDhtGroups() {
     _lifetime_cancel();
 }
