@@ -1226,6 +1226,17 @@ public:
         return sz1 + sz2;
     }
 
+    HashList
+    load_hash_list(const std::string& key, Cancel cancel, asio::yield_context yield) const override
+    {
+        sys::error_code ec;
+        auto ret = FullHttpStore::load_hash_list(key, cancel, yield[ec]);
+        if (!ec) return ret;
+        if (cancel) return or_throw<HashList>(yield, asio::error::operation_aborted);
+        _DEBUG("Failed to load hash list for key, trying fallback store: ", key);
+        return fallback_store->load_hash_list(key, cancel, yield);
+    }
+
 private:
     std::unique_ptr<BaseHttpStore> fallback_store;
 };
