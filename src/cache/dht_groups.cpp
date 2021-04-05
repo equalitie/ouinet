@@ -92,6 +92,11 @@ static std::string read_file(fs::path p, asio::executor ex, Cancel& c, yield_con
 {
     sys::error_code ec;
 
+    if (!fs::is_regular_file(p)) {
+        _ERROR("Not a regular file: ", p);
+        return or_throw<std::string>(y, make_error_code(sys::errc::invalid_argument));
+    }
+
     auto f = file_io::open_readonly(ex, p, ec);
     if (ec) return or_throw<std::string>(y, ec);
 
@@ -107,6 +112,10 @@ static std::string read_file(fs::path p, asio::executor ex, Cancel& c, yield_con
     return or_throw(y, ec, std::move(ret));
 }
 
+std::string sha1_hex_digest(const std::string& s) {
+    return util::bytes::to_hex(util::sha1_digest(s));
+}
+
 /* static */
 DhtGroupsImpl::Group
 DhtGroupsImpl::load_group( const fs::path dir
@@ -120,6 +129,11 @@ DhtGroupsImpl::load_group( const fs::path dir
 
     std::string group_name = read_file(dir/"group_name", ex, cancel, yield[ec]);
     if (ec) return or_throw<Group>(yield, ec);
+
+    if (!trusted && dir.filename() != sha1_hex_digest(group_name)) {
+        _ERROR("Group name does not match its path: ", dir);
+        return or_throw<Group>(yield, make_error_code(sys::errc::invalid_argument));
+    }
 
     fs::path items_dir = dir/"items";
 
@@ -143,6 +157,11 @@ DhtGroupsImpl::load_group( const fs::path dir
 
         if (ec) {
             if (trusted) try_remove(f);
+            continue;
+        }
+
+        if (!trusted && f.path().filename() != sha1_hex_digest(name)) {
+            _ERROR("Group item name does not match its path: ", dir);
             continue;
         }
 
@@ -214,10 +233,6 @@ DhtGroupsImpl::load( fs::path root_dir
 
     return std::unique_ptr<DhtGroupsImpl>
         (new DhtGroupsImpl(ex, std::move(root_dir), std::move(groups)));
-}
-
-std::string sha1_hex_digest(const std::string& s) {
-    return util::bytes::to_hex(util::sha1_digest(s));
 }
 
 fs::path
