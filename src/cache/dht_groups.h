@@ -17,6 +17,7 @@ public:
     virtual std::set<GroupName> groups() const = 0;
 };
 
+// This is considered read-only and unsafe (so extra checks are performed).
 std::unique_ptr<BaseDhtGroups>
 load_static_dht_groups(fs::path root_dir, asio::executor, Cancel&, asio::yield_context);
 
@@ -34,7 +35,16 @@ public:
     virtual std::set<GroupName> remove(const ItemName&) = 0;
 };
 
+// This is considered read-write and safe.
 std::unique_ptr<DhtGroups>
 load_dht_groups(fs::path root_dir, asio::executor, Cancel&, asio::yield_context);
+
+// This is considered read-write and safe.
+// When iterating over groups, fallback groups are merged into read-write groups.
+// Read-write operations do not affect fallback groups.
+// Removal of items does not return groups which remain in fallback groups.
+std::unique_ptr<DhtGroups>
+load_backed_dht_groups( fs::path root_dir, std::unique_ptr<BaseDhtGroups> fallback_groups
+                      , asio::executor, Cancel&, asio::yield_context);
 
 } // namespace ouinet

@@ -433,3 +433,50 @@ ouinet::load_dht_groups( fs::path root_dir
         (DhtGroupsImpl::load_trusted( std::move(root_dir), std::move(ex)
                                     , cancel, std::move(yield)));
 }
+
+class BackedDhtGroups : public FullDhtGroups {
+public:
+    BackedDhtGroups( std::unique_ptr<DhtGroupsImpl> impl
+                   , std::unique_ptr<BaseDhtGroups> fg)
+        : FullDhtGroups(std::move(impl))
+        , fallback_groups(std::move(fg))
+    {}
+    ~BackedDhtGroups() override = default;
+
+    std::set<GroupName> groups() const override
+    {
+        auto ret = FullDhtGroups::groups();
+        ret.merge(fallback_groups->groups());
+        return ret;
+    }
+
+    std::set<GroupName> remove(const ItemName& in)
+    {
+        auto emptied = FullDhtGroups::remove(in);
+        auto fbgroups = fallback_groups->groups();
+        // Do not report groups still in fallback as emptied.
+        for (auto git = emptied.begin(); git != emptied.end(); ) {
+            if (fbgroups.find(*git) != fbgroups.end())
+                git = emptied.erase(git);
+            else
+                git++;
+        }
+        return emptied;
+    }
+
+private:
+    std::unique_ptr<BaseDhtGroups> fallback_groups;
+};
+
+std::unique_ptr<DhtGroups>
+ouinet::load_backed_dht_groups( fs::path root_dir
+                              , std::unique_ptr<BaseDhtGroups> fallback_groups
+                              , asio::executor ex
+                              , Cancel& cancel
+                              , yield_context yield)
+{
+    return std::make_unique<BackedDhtGroups>
+        ( DhtGroupsImpl::load_trusted( std::move(root_dir), std::move(ex)
+                                     , cancel, std::move(yield))
+        , std::move(fallback_groups));
+}
