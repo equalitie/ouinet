@@ -29,7 +29,12 @@ public:
     ~DhtGroupsImpl();
 
     static std::unique_ptr<DhtGroupsImpl>
-    load(fs::path root_dir, asio::executor, Cancel&, asio::yield_context);
+    load_trusted(fs::path root_dir, asio::executor ex, Cancel& c, asio::yield_context y)
+    { return load(std::move(root_dir), true, std::move(ex), c, std::move(y)); }
+
+    static std::unique_ptr<DhtGroupsImpl>
+    load_untrusted(fs::path root_dir, asio::executor ex, Cancel& c, asio::yield_context y)
+    { return load(std::move(root_dir), false, std::move(ex), c, std::move(y)); }
 
     std::set<GroupName> groups() const;
 
@@ -47,7 +52,12 @@ private:
     DhtGroupsImpl(DhtGroupsImpl&&)      = delete;
 
     static
-    Group load_group(const fs::path dir, asio::executor, Cancel&, asio::yield_context);
+    std::unique_ptr<DhtGroupsImpl>
+    load(fs::path root_dir, bool trusted, asio::executor, Cancel&, asio::yield_context);
+
+    static
+    Group load_group( const fs::path dir, bool trusted
+                    , asio::executor, Cancel&, asio::yield_context);
 
     fs::path group_path(const GroupName&);
     fs::path items_path(const GroupName&);
@@ -100,6 +110,7 @@ static std::string read_file(fs::path p, asio::executor ex, Cancel& c, yield_con
 /* static */
 DhtGroupsImpl::Group
 DhtGroupsImpl::load_group( const fs::path dir
+                         , bool trusted
                          , asio::executor ex
                          , Cancel& cancel
                          , yield_context yield)
@@ -131,7 +142,7 @@ DhtGroupsImpl::load_group( const fs::path dir
         }
 
         if (ec) {
-            try_remove(f);
+            if (trusted) try_remove(f);
             continue;
         }
 
@@ -155,6 +166,7 @@ std::set<DhtGroups::GroupName> DhtGroupsImpl::groups() const
 /* static */
 std::unique_ptr<DhtGroupsImpl>
 DhtGroupsImpl::load( fs::path root_dir
+                   , bool trusted
                    , asio::executor ex
                    , Cancel& cancel
                    , yield_context yield)
@@ -169,13 +181,16 @@ DhtGroupsImpl::load( fs::path root_dir
             _ERROR("Not a directory: '", root_dir, "'");
             return or_throw<Ret>(yield, make_error_code(sys::errc::not_a_directory));
         }
-    } else {
+    } else if (trusted) {
         sys::error_code ec;
         fs::create_directories(root_dir, ec);
         if (ec) {
             _ERROR("Failed to create directory: '", root_dir, "' ", ec.message());
             return or_throw<Ret>(yield, ec);
         }
+    } else {
+        _ERROR("Groups directory does not exist: ", root_dir);
+        return or_throw<Ret>(yield, make_error_code(sys::errc::no_such_file_or_directory));
     }
 
     for (auto f : fs::directory_iterator(root_dir)) {
@@ -186,11 +201,11 @@ DhtGroupsImpl::load( fs::path root_dir
             continue;
         }
 
-        auto group = load_group(f, ex, cancel, yield[ec]);
+        auto group = load_group(f, trusted, ex, cancel, yield[ec]);
 
         if (cancel) return or_throw<Ret>(yield, asio::error::operation_aborted);
         if (ec || group.second.empty()) {
-            try_remove(f);
+            if (trusted) try_remove(f);
             continue;
         }
 
@@ -369,8 +384,8 @@ ouinet::load_static_dht_groups( fs::path root_dir
 {
     // TODO: security checks on loaded files
     return std::make_unique<DhtReadGroups>
-        (DhtGroupsImpl::load( std::move(root_dir), std::move(ex)
-                            , cancel, std::move(yield)));
+        (DhtGroupsImpl::load_untrusted( std::move(root_dir), std::move(ex)
+                                      , cancel, std::move(yield)));
 }
 
 class FullDhtGroups : public DhtGroups {
@@ -400,6 +415,6 @@ ouinet::load_dht_groups( fs::path root_dir
                        , yield_context yield)
 {
     return std::make_unique<FullDhtGroups>
-        (DhtGroupsImpl::load( std::move(root_dir), std::move(ex)
-                            , cancel, std::move(yield)));
+        (DhtGroupsImpl::load_trusted( std::move(root_dir), std::move(ex)
+                                    , cancel, std::move(yield)));
 }
