@@ -92,6 +92,7 @@ struct Client::Impl {
     string _uri_swarm_prefix;
     util::Ed25519PublicKey _cache_pk;
     fs::path _cache_dir;
+    Client::opt_path _static_cache_dir;
     unique_ptr<cache::HttpStore> _http_store;
     boost::posix_time::time_duration _max_cached_age;
     Cancel _lifetime_cancel;
@@ -106,6 +107,7 @@ struct Client::Impl {
     Impl( shared_ptr<bt::MainlineDht> dht_
         , util::Ed25519PublicKey& cache_pk
         , fs::path cache_dir
+        , Client::opt_path static_cache_dir
         , unique_ptr<cache::HttpStore> http_store_
         , boost::posix_time::time_duration max_cached_age)
         : _newest_proto_seen(std::make_shared<unsigned>(http_::protocol_version_current))
@@ -115,6 +117,7 @@ struct Client::Impl {
               (cache_pk, http_::protocol_version_current))
         , _cache_pk(cache_pk)
         , _cache_dir(move(cache_dir))
+        , _static_cache_dir(std::move(static_cache_dir))
         , _http_store(move(http_store_))
         , _max_cached_age(max_cached_age)
         , _announcer(_dht)
@@ -465,10 +468,28 @@ struct Client::Impl {
 
     void announce_stored_data(asio::yield_context y)
     {
+        static const auto groups_curver_subdir = "dht_groups";
+
         Cancel cancel(_lifetime_cancel);
 
         sys::error_code e;
-        _dht_groups = load_dht_groups(_cache_dir/"dht_groups", _ex, cancel, y[e]);
+
+        // Use static DHT groups if its directory is provided.
+        std::unique_ptr<BaseDhtGroups> static_dht_groups;
+        if (_static_cache_dir) {
+            auto groups_dir = *_static_cache_dir / groups_curver_subdir;
+            if (!is_directory(groups_dir)) {
+                _ERROR("No DHT groups of supported version under static cache, ignoring: ", *_static_cache_dir);
+            } else {
+                static_dht_groups = load_static_dht_groups(move(groups_dir), _ex, cancel, y[e]);
+                if (e) _ERROR("Failed to load static DHT groups, ignoring: ", *_static_cache_dir);
+            }
+        }
+
+        auto groups_dir = _cache_dir / groups_curver_subdir;
+        _dht_groups = static_dht_groups
+            ? load_backed_dht_groups(groups_dir, move(static_dht_groups), _ex, cancel, y[e])
+            : load_dht_groups(groups_dir, _ex, cancel, y[e]);
 
         if (cancel) e = asio::error::operation_aborted;
         if (e) return or_throw(y, e);
@@ -562,7 +583,7 @@ Client::build( shared_ptr<bt::MainlineDht> dht
         : make_http_store(move(store_dir), dht->get_executor());
 
     unique_ptr<Impl> impl(new Impl( move(dht)
-                                  , cache_pk, move(cache_dir)
+                                  , cache_pk, move(cache_dir), std::move(static_cache_dir)
                                   , move(http_store), max_cached_age));
 
     impl->announce_stored_data(yield[ec]);
