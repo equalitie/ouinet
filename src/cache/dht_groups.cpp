@@ -4,6 +4,7 @@
 #include "../util/bytes.h"
 #include "../util/hash.h"
 
+#include <algorithm>
 #include <map>
 
 using namespace ouinet;
@@ -445,8 +446,14 @@ public:
 
     std::set<GroupName> groups() const override
     {
-        auto ret = FullDhtGroups::groups();
-        ret.merge(fallback_groups->groups());
+        // No `std::set::merge` in C++14,
+        // see <https://stackoverflow.com/a/7089642>.
+        std::set<GroupName> ret;
+        auto groups_ = FullDhtGroups::groups();
+        auto fbgroups = fallback_groups->groups();
+        std::set_union( groups_.begin(), groups_.end()
+                      , fbgroups.begin(), fbgroups.end()
+                      , std::inserter(ret, ret.begin()) );
         return ret;
     }
 
