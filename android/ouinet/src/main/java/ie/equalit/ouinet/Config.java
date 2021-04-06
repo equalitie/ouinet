@@ -33,6 +33,8 @@ public class Config implements Parcelable {
         private String injectorTlsCert;
         private String tlsCaCertStorePath;
         private String cacheType;
+        private String cacheStaticPath;
+        private String cacheStaticContentPath;
 
         public ConfigBuilder(Context context) {
             this.context = context;
@@ -60,6 +62,14 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setCacheType(String cacheType){
             this.cacheType = cacheType;
+            return this;
+        }
+        public ConfigBuilder setCacheStaticPath(String cacheStaticPath){
+            this.cacheStaticPath = cacheStaticPath;
+            return this;
+        }
+        public ConfigBuilder setCacheStaticContentPath(String cacheStaticContentPath){
+            this.cacheStaticContentPath = cacheStaticContentPath;
             return this;
         }
 
@@ -194,7 +204,9 @@ public class Config implements Parcelable {
                     setupTlsCaCertStore(ouinetDirectory),
                     setupCaRootCert(ouinetDirectory),
                     setupObfs4ProxyExecutable(ouinetDirectory),
-                    cacheType);
+                    cacheType,
+                    cacheStaticPath,
+                    cacheStaticContentPath);
         }
     }
 
@@ -206,6 +218,8 @@ public class Config implements Parcelable {
     private String caRootCertPath;
     private String obfs4ProxyPath;
     private String cacheType;
+    private String cacheStaticPath;
+    private String cacheStaticContentPath;
 
     private Config(String ouinetDirectory,
                   String cacheHttpPubKey,
@@ -214,7 +228,9 @@ public class Config implements Parcelable {
                   String tlsCaCertStorePath,
                   String caRootCertPath,
                   String obfs4ProxyPath,
-                  String cacheType) {
+                  String cacheType,
+                  String cacheStaticPath,
+                  String cacheStaticContentPath) {
         this.ouinetDirectory = ouinetDirectory;
         this.cacheHttpPubKey = cacheHttpPubKey;
         this.injectorCredentials = injectorCredentials;
@@ -223,6 +239,8 @@ public class Config implements Parcelable {
         this.caRootCertPath = caRootCertPath;
         this.obfs4ProxyPath = obfs4ProxyPath;
         this.cacheType = cacheType;
+        this.cacheStaticPath = cacheStaticPath;
+        this.cacheStaticContentPath = cacheStaticContentPath;
     }
     public String getOuinetDirectory() {
         return ouinetDirectory;
@@ -247,6 +265,12 @@ public class Config implements Parcelable {
     }
     public String getCacheType() {
         return cacheType;
+    }
+    public String getCacheStaticPath() {
+        return cacheStaticPath;
+    }
+    public String getCacheStaticContentPath() {
+        return cacheStaticContentPath;
     }
 
     public static final Parcelable.Creator<Config> CREATOR
@@ -275,6 +299,8 @@ public class Config implements Parcelable {
         out.writeString(caRootCertPath);
         out.writeString(obfs4ProxyPath);
         out.writeString(cacheType);
+        out.writeString(cacheStaticPath);
+        out.writeString(cacheStaticContentPath);
     }
     private Config(Parcel in) {
         ouinetDirectory = in.readString();
@@ -285,6 +311,8 @@ public class Config implements Parcelable {
         caRootCertPath = in.readString();
         obfs4ProxyPath = in.readString();
         cacheType = in.readString();
+        cacheStaticPath = in.readString();
+        cacheStaticContentPath = in.readString();
     }
 
 }
