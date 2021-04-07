@@ -51,6 +51,11 @@ build-android:
     - mkdir -p build.android
     - cd build.android
     - ../scripts/build-android.sh
+  artifacts:
+    paths:
+      - build.android/*.aar
+      - build.android/*.apk
+    expire_in: 6h
 
 unit-test:
   stage: test
