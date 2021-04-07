@@ -694,7 +694,15 @@ Each resource group with a distinctive bytestring `<resource-group>` has a group
 * A `group_name` file with `<resource-group>` as its only content (no trailing newline).
 * An `items` subdirectory with one file per cache entry having that belongs to the group; the file contains the entry's `<resource-uri>` as its only content (no trailing newline) and is named `<lower-hex(sha1(resource-uri))>`.
 
-TODO: cache entries format
+Each cache entry with a `<resource-uri>` and thus `<uri-hash=lower-hex(sha1(resource-uri))>` has a directory named `data-v3/<uri-hash[0:2]>/<uri-hash[2:]>`. The splitting of the directory name avoids having too many entries directly under `data-v3`. The entry's directory contains:
+
+* A `head` file holding the whole raw HTTP head with response status and headers (except framing), and `X-Ouinet-*` headers conforming its signature (as described in the [Signature computation](#signature-computation) section). Lines are CRLF-terminated and a final empty line is included.
+* If the resource has a non-empty body, a `sigs` file with one fixed-width, LF-terminated line per data block, with the i-th line corresponding to the i-th block. TODO: sig line format
+* If the resource has a non-empty body, a `body` file with the raw body data. Alternatively, a `body-path` can be provided with the path of the body data file relative to the cache root (see below), with forward slashes as path separators (no `.` or `..` components and no trailing new line).
+
+The *static cache root* is a directory containing plain data files optionally pointed to by cache entries. This allows a user in possession of such directory to browse data files arranged in an accessible hierarchy with human-readable names.
+
+Although a static cache repository and root may be completely independent, the former is conventionally named `.ouinet` and contained directly under the later to ease their conveying.
 
 
 
