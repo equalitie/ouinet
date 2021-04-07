@@ -55,214 +55,42 @@ on AMD64 platforms.  Building and testing Ouinet on your computer requires
 familiarity with the command line.  At the moment there are no user-friendly
 packages for Ouinet on the desktop.
 
-## Cloning the source tree
+Table of Contents
+=================
+- [Deployment with Docker](#deploy-a-client-or-injector-with-docker)
+    - [Deploying a Client](#deploying-a-client)
+    - [Using the Shell Container](#using-the-shell-container)
+    - [Deploying an Injector](#deploying-an-injector)
+    - [Other Deployments (eg; multiple clients/injectors)](#other-deployments)
+    - [Building the Image](#building-the-image)
+- [Android Library and Demo Client](#android-library-and-demo-client)
+    - [Building](#building)
+    - [Testing with Android emulator](#testing-with-android-emulator)
+    - [Integrating the Ouinet Library Into Your App](#integrating-the-ouinet-library-into-your-app)
+- [Testing (desktop)](#testing-desktop)
+    - [Running a Test Injector](#running-a-test-injector)
+    - [Running a Test Client](#running-a-test-client)
+    - [Testing with a Browser](#testing-the-client-with-a-browser)
+- [Setup a Development Environment](#development-environment)
+    - [Building from Source](#building-from-source)
+    - [Docker Development Environment](#docker-development-environment)
+    - [Vagrant Development Environment](#vagrant-development-environment)
 
-Ouinet uses Git submodules, thus to properly clone it, use:
+## Deploy a client or injector with Docker 
 
-    $ git clone --recursive https://github.com/equalitie/ouinet.git
+Ouinet injectors and clients can be run as Docker containers.  Ouinet Docker images are available on the [Docker Hub](https://hub.docker.com/equalitie/ouinet).  An application configuration file for Docker Compose is included for easily deploying all needed volumes and containers.
 
-You can also clone and update the modules separately:
+To run a Ouinet node container only a couple hundred MiB are needed, plus the space devoted to the data volume (which may grow considerably larger in the case of the injector).
 
-    $ git clone https://github.com/equalitie/ouinet.git
-    $ cd ouinet
-    $ git submodule update --init --recursive
+A `Dockerfile` is also included that can be used to create a Docker image which contains the Ouinet injector, client and necessary software dependencies running on top of a Debian-based system.
 
-## Build requirements (desktop)
-
-To build Ouinet natively on your system, you will need the following software
-to be already available:
-
-* CMake 3.5+
-* `g++` capable of C++14
-* The [Boost library](http://www.boost.org/) 1.67+
-
-Assuming that `<SOURCE DIR>` points to the directory where the
-`CMakeLists.txt` file is, and `<BUILD DIR>` is a directory of your choice
-where all (even temporary) build files will go, you can build Ouinet with:
-
-    $ mkdir -p <BUILD DIR>
-    $ cd <BUILD DIR>
-    $ cmake <SOURCE DIR>
-    $ make
-
-However, we encourage you to use a Vagrant environment for development, or
-Docker containers for deploying a Ouinet client or an injector.  These have a
-different set of requirements.  See the corresponding sections below for
-further instructions on Vagrant and Docker.
-
-## Running integration tests
-
-The Ouinet source comes with a set of integration tests.  To run them you will
-need the [Twisted](https://twistedmatrix.com/) Python framework.
-
-If you already built Ouinet from `<SOURCE DIR>` into `<BUILD DIR>` (see
-above), you can run the tests as follows:
-
-    $ export OUINET_REPO_DIR=<SOURCE DIR>
-    $ export OUINET_BUILD_DIR=<BUILD DIR>
-    $ ./scripts/run_integration_tests.sh
-
-## Using a Vagrant environment
-
-One of the easiest ways to build Ouinet from source code (e.g. for development
-or testing changes and fixes to code) is using a [Vagrant][] development
-environment.
-
-[Vagrant]: https://www.vagrantup.com/
-
-To install Vagrant on a Debian system, run:
-
-    $ sudo apt-get install vagrant
-
-Ouinet's source tree contains a `Vagrantfile` which allows you to start a
-Vagrant environment ready to build and run Ouinet by entering the source
-directory and executing:
-
-    $ vagrant up
-
-If your Vagrant installation uses VirtualBox by default and you find problems,
-you may need to force it to use libvirt instead:
-
-    $ sudo apt-get install libvirt-bin libvirt-dev
-    $ vagrant plugin install vagrant-libvirt
-    $ vagrant up --provider=libvirt
-
-### Building Ouinet in Vagrant
-
-Enter the Vagrant environment with `vagrant ssh`.  There you will find:
-
-  - Your local Ouinet source tree mounted read-only under `/vagrant`
-    (`<SOURCE DIR>` above).
-
-  - Your local Ouinet source tree mounted read-write under `/vagrant-rw`.  You
-    can use it as a bridge to your host.
-
-  - `~vagrant/build-ouinet-git.sh`: Running this script will clone the Ouinet
-    Git repository and all submodules into `$PWD/ouinet-git-source` and build
-    Ouinet into `$PWD/ouinet-git-build` (`<BUILD DIR>` above).  Changes to
-    source outside of the Vagrant environment will not affect this build.
-
-  - `~vagrant/build-ouinet-local.sh`: Running this script will use your local
-    Ouinet source tree (mounted under `/vagrant`) to build Ouinet into
-    `$PWD/ouinet-local-build` (`<BUILD DIR>` above).  Thus you can edit source
-    files on your computer and have them built in a consistent environment.
-
-    Please note that this requires that you keep submodules in your checkout
-    up to date as indicated above.
-
-### Accessing Ouinet services from your computer
-
-The Vagrant environment is by default isolated, but you can configure it to
-redirect ports from the host to the environment.
-
-For instance, if you want to run a Ouinet client (with its default
-configuration) in Vagrant and use it as a proxy in a browser on your computer,
-you may uncomment the following line in `Vagrantfile`:
-
-    #vm.vm.network "forwarded_port", guest: 8077, host: 8077, guest_ip: "127.0.0.1"
-
-And restart the environment:
-
-    $ vagrant halt
-    $ vagrant up
-
-Then you can configure your browser to use `localhost` port 8077 to contact
-the HTTP proxy.
-
-## Docker development environment
-
-We provide a *bootstrap* Docker image which is automatically updated with each
-commit and provides all prerequisites for building the latest Oiunet desktop
-binaries and Android libraries.
-
-To exchange with the container data like Ouinet's source code and cached
-downloads and build files, we will bind mount the following directories to
-`/usr/local/src/` in the container (some we'll create first):
-
-  - source (assumed to be at the current directory),
-  - build (in `../ouinet.build/`),
-  - and the container's `$HOME` (in `../ouinet.home/`), where `.gradle`,
-    `.cargo`, etc. will reside.
-
-Note that with the following incantations you will not be able to use `sudo`
-in the container (`--user`), and that all the changes besides those in bind
-mounts will be lost after you exit (`--rm`).
-
-```sh
-mkdir -p ../ouinet.build/ ../ouinet.home/
-sudo docker run \
-  --rm -it \
-  --user $(id -u):$(id -g) \
-  --mount type=bind,source="$(pwd)",target=/usr/local/src/ouinet \
-  --mount type=bind,source="$(pwd)/../ouinet.build",target=/usr/local/src/ouinet.build \
-  --mount type=bind,source="$(pwd)/../ouinet.home",target=/mnt/home \
-  -e HOME=/mnt/home \
-  registry.gitlab.com/equalitie/ouinet:android
-```
-
-If you only need to build Ouinet desktop binaries, you may replace the image
-name at the end of the command with `registry.gitlab.com/equalitie/ouinet`,
-which is much lighter.
-
-After running the command, you should find yourself in a new terminal, ready
-to accept the build instructions described elsewhere in the document.
-
-Please consult the GitLab CI scripts to see how to build your own bootstrap
-images locally.
-
-## Docker deployment
-
-Ouinet injectors and clients can be run as Docker containers.  An application
-configuration file for Docker Compose is included for easily deploying all
-needed volumes and containers.
-
-To run a Ouinet node container only a couple hundred MiB are needed, plus the
-space devoted to the data volume (which may grow considerably larger in the
-case of the injector).
-
-A `Dockerfile` is also included that can be used to create a Docker image
-which contains the Ouinet injector, client and necessary software dependencies
-running on top of a Debian base system.
-
-### Building the image
-
-Ouinet Docker images should be available from the Docker Hub.  Follow the
-instructions in this section if you still want to build the image yourself.
-You will need around 3 GiB of disk space.
-
-You may use the `Dockerfile` as included in Ouinet's source code, or you
-can just [download it][Dockerfile].  Then build the image by running:
-
-    $ sudo docker build -t equalitie/ouinet:latest - < Dockerfile
-
-That command will build a default recommended version, which you can override
-with `--build-arg OUINET_VERSION=<VERSION>`.
-
-After a while you will get the `equalitie/ouinet:latest` image.  Then you may
-want to run `sudo docker prune` to free up the space taken by temporary
-builder images (which may amount to a couple of GiB).
-
-[Dockerfile]: https://raw.githubusercontent.com/equalitie/ouinet/master/Dockerfile
-
-#### Debugging-enabled image
-
-You can also build an alternative version of the image where programs contain
-debugging symbols and they are run under `gdb`, which shows a backtrace in
-case of a crash.  Just add `--build-arg OUINET_DEBUG=yes` to the build
-command.  We recommend that you use a different tag for these images
-(e.g. `equalitie/ouinet:<VERSION>-debug`).
-
-Depending on your Docker setup, you may need to change the container's
-security profile and give it tracing capabilities.  For more information, see
-[this thread](https://stackoverflow.com/q/35860527).
-
-### Deploying a client
+### Deploying a Client
 
 You may use [Docker Compose](https://docs.docker.com/compose/) with the
 `docker-compose.yml` file included in Ouinet's source code (or you can just
 [download it][docker-compose.yml]).  Whenever you run `docker-compose`
-commands using that configuration file, you must be in the directory where the
-file resides.
+commands using that configuration file, **you must be in the directory where the
+file resides**.
 
 If you just plan to **run a single client** with the latest code on your
 computer, you should be fine with running the following command:
@@ -283,7 +111,7 @@ until explicitly stopped.
 A new client node which starts with no configuration will get a default one
 from templates included in Ouinet's source code and it will be missing some
 important parameters, so you may want to stop it (see above) and use the
-**shell container** (see below) to edit `client/ouinet-client.conf`:
+[shell container](#using-the-shell-container) to edit `client/ouinet-client.conf`:
 
   - If using a local test injector, set its endpoint in option `injector-ep`.
   - Set the injector's credentials in option `injector-credentials`.
@@ -326,6 +154,26 @@ Then you may copy it in from the host using:
 
     $ sudo docker cp /path/to/REPO SHELL_CONTAINER:/var/opt/ouinet/REPO
 
+### Deploying an Injector
+
+After an injector has finished starting, you may want to use the shell
+container to inspect and note down the contents of `injector/endpoint-*`
+(injector endpoints) and `injector/ed25519-public-key` (public key for HTTP
+signatures) to be used by clients.  The injector will also generate a
+`tls-cert.pem`  file which you should distribute to clients for TLS access.
+Other configuration information like credentials can be found in
+`injector/ouinet-injector.conf`.
+
+To start the injector in headless mode, you can run:
+
+    $ sudo docker-compose up -d
+
+You will need to use `sudo docker-compose stop` to stop the container.
+
+To be able to follow its logs, you can run:
+
+    $ sudo docker-compose logs --tail=100 -ft
+    
 ### Other deployments
 
 If you plan on running several nodes on the same host you will need to use
@@ -348,25 +196,31 @@ populate its default environment file:
     $ echo OUINET_MEM_LIMIT=6g >> .env
     $ sudo docker-compose --compatibility up
 
-### Injector container
+### Building the image
 
-After an injector has finished starting, you may want to use the shell
-container to inspect and note down the contents of `injector/endpoint-*`
-(injector endpoints) and `injector/ed25519-public-key` (public key for HTTP
-signatures) to be used by clients.  The injector will also generate a
-`tls-cert.pem`  file which you should distribute to clients for TLS access.
-Other configuration information like credentials can be found in
-`injector/ouinet-injector.conf`.
+If you still want to build the image yourself, follow the instructions in this section. You will need around 3 GiB of disk space.
 
-To start the injector in headless mode, you can run:
+You may use the `Dockerfile` as included in Ouinet's source code, or you can just [download it][Dockerfile].  Then build the image by running:
 
-    $ sudo docker-compose up -d
+    $ sudo docker build -t equalitie/ouinet:latest - < Dockerfile
 
-You will need to use `sudo docker-compose stop` to stop the container.
+That command will build a default recommended version, which you can override with `--build-arg OUINET_VERSION=<VERSION>`.
 
-To be able to follow its logs, you can run:
+After a while you will get the `equalitie/ouinet:latest` image.  Then you may want to run `sudo docker prune` to free up the space taken by temporary builder images (which may amount to a couple of GiB).
 
-    $ sudo docker-compose logs --tail=100 -ft
+[Dockerfile]: https://raw.githubusercontent.com/equalitie/ouinet/master/Dockerfile
+
+#### Debugging-enabled image
+
+You can also build an alternative version of the image where programs contain
+debugging symbols and they are run under `gdb`, which shows a backtrace in
+case of a crash.  Just add `--build-arg OUINET_DEBUG=yes` to the build
+command.  We recommend that you use a different tag for these images
+(e.g. `equalitie/ouinet:<VERSION>-debug`).
+
+Depending on your Docker setup, you may need to change the container's
+security profile and give it tracing capabilities.  For more information, see
+[this thread](https://stackoverflow.com/q/35860527).
 
 ## Testing (desktop)
 
@@ -709,3 +563,160 @@ cache):
     ouinet.start();
 
 From now on all of the app's HTTP communication will be handled by Ouinet.
+
+## Development Environment
+### Building from source
+#### Cloning the source tree
+
+Ouinet uses Git submodules, thus to properly clone it, use:
+
+    $ git clone --recursive https://github.com/equalitie/ouinet.git
+
+You can also clone and update the modules separately:
+
+    $ git clone https://github.com/equalitie/ouinet.git
+    $ cd ouinet
+    $ git submodule update --init --recursive
+
+#### Build requirements (desktop)
+
+To build Ouinet natively on your system, you will need the following software
+to be already available:
+
+* CMake 3.5+
+* `g++` capable of C++14
+* The [Boost library](http://www.boost.org/) 1.67+
+
+Assuming that `<SOURCE DIR>` points to the directory where the
+`CMakeLists.txt` file is, and `<BUILD DIR>` is a directory of your choice
+where all (even temporary) build files will go, you can build Ouinet with:
+
+    $ mkdir -p <BUILD DIR>
+    $ cd <BUILD DIR>
+    $ cmake <SOURCE DIR>
+    $ make
+
+However, we encourage you to use a Vagrant environment for development, or
+Docker containers for deploying a Ouinet client or an injector.  These have a
+different set of requirements.  See the corresponding sections below for
+further instructions on Vagrant and Docker.
+
+#### Running integration tests
+
+The Ouinet source comes with a set of integration tests.  To run them you will
+need the [Twisted](https://twistedmatrix.com/) Python framework.
+
+If you already built Ouinet from `<SOURCE DIR>` into `<BUILD DIR>` (see
+above), you can run the tests as follows:
+
+    $ export OUINET_REPO_DIR=<SOURCE DIR>
+    $ export OUINET_BUILD_DIR=<BUILD DIR>
+    $ ./scripts/run_integration_tests.sh
+
+### Docker Development Environment
+
+We provide a *bootstrap* Docker image which is automatically updated with each
+commit and provides all prerequisites for building the latest Oiunet desktop
+binaries and Android libraries.
+
+To exchange with the container data like Ouinet's source code and cached
+downloads and build files, we will bind mount the following directories to
+`/usr/local/src/` in the container (some we'll create first):
+
+  - source (assumed to be at the current directory),
+  - build (in `../ouinet.build/`),
+  - and the container's `$HOME` (in `../ouinet.home/`), where `.gradle`,
+    `.cargo`, etc. will reside.
+
+Note that with the following incantations you will not be able to use `sudo`
+in the container (`--user`), and that all the changes besides those in bind
+mounts will be lost after you exit (`--rm`).
+
+```sh
+mkdir -p ../ouinet.build/ ../ouinet.home/
+sudo docker run \
+  --rm -it \
+  --user $(id -u):$(id -g) \
+  --mount type=bind,source="$(pwd)",target=/usr/local/src/ouinet \
+  --mount type=bind,source="$(pwd)/../ouinet.build",target=/usr/local/src/ouinet.build \
+  --mount type=bind,source="$(pwd)/../ouinet.home",target=/mnt/home \
+  -e HOME=/mnt/home \
+  registry.gitlab.com/equalitie/ouinet:android
+```
+
+If you only need to build Ouinet desktop binaries, you may replace the image
+name at the end of the command with `registry.gitlab.com/equalitie/ouinet`,
+which is much lighter.
+
+After running the command, you should find yourself in a new terminal, ready
+to accept the build instructions described elsewhere in the document.
+
+Please consult the GitLab CI scripts to see how to build your own bootstrap
+images locally.
+
+### Vagrant Development Environment
+
+One of the easiest ways to build Ouinet from source code (e.g. for development
+or testing changes and fixes to code) is using a [Vagrant][] development
+environment.
+
+[Vagrant]: https://www.vagrantup.com/
+
+To install Vagrant on a Debian system, run:
+
+    $ sudo apt-get install vagrant
+
+Ouinet's source tree contains a `Vagrantfile` which allows you to start a
+Vagrant environment ready to build and run Ouinet by entering the source
+directory and executing:
+
+    $ vagrant up
+
+If your Vagrant installation uses VirtualBox by default and you find problems,
+you may need to force it to use libvirt instead:
+
+    $ sudo apt-get install libvirt-bin libvirt-dev
+    $ vagrant plugin install vagrant-libvirt
+    $ vagrant up --provider=libvirt
+
+#### Building Ouinet in Vagrant
+
+Enter the Vagrant environment with `vagrant ssh`.  There you will find:
+
+  - Your local Ouinet source tree mounted read-only under `/vagrant`
+    (`<SOURCE DIR>` above).
+
+  - Your local Ouinet source tree mounted read-write under `/vagrant-rw`.  You
+    can use it as a bridge to your host.
+
+  - `~vagrant/build-ouinet-git.sh`: Running this script will clone the Ouinet
+    Git repository and all submodules into `$PWD/ouinet-git-source` and build
+    Ouinet into `$PWD/ouinet-git-build` (`<BUILD DIR>` above).  Changes to
+    source outside of the Vagrant environment will not affect this build.
+
+  - `~vagrant/build-ouinet-local.sh`: Running this script will use your local
+    Ouinet source tree (mounted under `/vagrant`) to build Ouinet into
+    `$PWD/ouinet-local-build` (`<BUILD DIR>` above).  Thus you can edit source
+    files on your computer and have them built in a consistent environment.
+
+    Please note that this requires that you keep submodules in your checkout
+    up to date as indicated above.
+
+#### Accessing Ouinet services from your computer
+
+The Vagrant environment is by default isolated, but you can configure it to
+redirect ports from the host to the environment.
+
+For instance, if you want to run a Ouinet client (with its default
+configuration) in Vagrant and use it as a proxy in a browser on your computer,
+you may uncomment the following line in `Vagrantfile`:
+
+    #vm.vm.network "forwarded_port", guest: 8077, host: 8077, guest_ip: "127.0.0.1"
+
+And restart the environment:
+
+    $ vagrant halt
+    $ vagrant up
+
+Then you can configure your browser to use `localhost` port 8077 to contact
+the HTTP proxy.
