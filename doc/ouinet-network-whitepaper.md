@@ -682,6 +682,20 @@ The Ouinet client can only fetch resources collected into a resource group if cl
 
 In addition to transferring cache entries between different participants in the distributed cache using a network connection, applications using the Ouinet system can also distribute cache entries in more ad-hoc ways, such as by distributing storage devices containing collections of cache entries. Techniques such as this do not play a role in the primary application of the Ouinet system, but can be applicable to more specialist applications. The different ways in which such techniques could be arranged logistically are not specified in further detail in this document.
 
+#### Cache exchange format
+
+To circulate cached content out of band, formats for data at rest are defined.  A *static cache repository* is a directory consisting of two subdirectories:
+
+* One to hold cache entries; for version 3 of the signed HTTP storage format, this is called `data-v3`.
+* One to hold resource group information; for version 0 of the DHT group storage format, this is called `dht_groups`.
+
+Each resource group with a distinctive bytestring `<resource-group>` has a group directory named `dht_groups/<lower-hex(sha1(resource-group))>` containing:
+
+* A `group_name` file with `<resource-group>` as its only content (no trailing newline).
+* An `items` subdirectory with one file per cache entry having that belongs to the group; the file contains the entry's `<resource-uri>` as its only content (no trailing newline) and is named `<lower-hex(sha1(resource-uri))>`.
+
+TODO: cache entries format
+
 
 
 # Injector Servers
