@@ -53,8 +53,8 @@ build-android:
     - ../scripts/build-android.sh
   artifacts:
     paths:
-      - build.android/*.aar
-      - build.android/*.apk
+      - build.android/build-android-*/ouinet/outputs/aar/*.aar
+      - build.android/build-android-*/ouinet/outputs/apk/*.apk
     expire_in: 6h
 
 unit-test:
