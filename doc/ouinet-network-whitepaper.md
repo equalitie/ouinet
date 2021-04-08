@@ -36,6 +36,7 @@
       - [Distributed hash table](#distributed-hash-table)
       - [Resource groups](#resource-groups)
     - [Out of band cache entry exchange](#out-of-band-cache-entry-exchange)
+      - [Cache exchange format](#cache-exchange-format)
 - [Injector Servers](#injector-servers)
   - [Injector server connections](#injector-server-connections)
     - [Injector uTP sockets](#injector-utp-sockets)
