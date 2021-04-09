@@ -664,6 +664,7 @@ boost::optional<fs::path>
 canonical_from_content_relpath( const fs::path& body_path_p
                               , const fs::path cdirp)
 {
+    // TODO: proper handling of UTF-8 encoding of body path (including errors)
     fs::path body_rp;
     fs::ifstream(body_path_p) >> body_rp;
     if (body_rp.empty()) {
