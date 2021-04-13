@@ -417,7 +417,7 @@ public:
     void add(const GroupName& gn, const ItemName& in, Cancel& c, asio::yield_context y) override
     { return _impl->add(gn, in, c, y); }
 
-    std::set<GroupName> remove(const ItemName& in)
+    std::set<GroupName> remove(const ItemName& in) override
     { return _impl->remove(in); }
 
 private:
@@ -457,7 +457,7 @@ public:
         return ret;
     }
 
-    std::set<GroupName> remove(const ItemName& in)
+    std::set<GroupName> remove(const ItemName& in) override
     {
         auto emptied = FullDhtGroups::remove(in);
         auto fbgroups = fallback_groups->groups();
