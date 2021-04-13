@@ -645,7 +645,9 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
         assert(!cancel || ec == asio::error::operation_aborted);
 
         if (ec) {
-            _YERROR(yield, "Failed to connect to self ec:", ec.message());
+            if (ec != asio::error::operation_aborted) {
+                _YERROR(yield, "Failed to connect to self ec:", ec.message());
+            }
             return or_throw<Session>(yield, ec);
         }
 
@@ -1064,7 +1066,9 @@ Session Client::State::fetch_fresh_through_simple_proxy
         assert(!cancel || ec == asio::error::operation_aborted);
 
         if (ec) {
-            _YWARN(yield, "Failed to connect to injector ec:", ec.message());
+            if (ec != asio::error::operation_aborted) {
+                _YWARN(yield, "Failed to connect to injector ec:", ec.message());
+            }
             return or_throw<Session>(yield, ec);
         }
 
