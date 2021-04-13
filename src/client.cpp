@@ -413,7 +413,7 @@ private:
                 TRACK_SPAWN(_ctx, ([this, con = move(con)]
                                    (asio::yield_context yield) mutable {
                     sys::error_code ec;
-                    Yield y(_ctx, yield, "uTPAccept");
+                    Yield y(_ctx, yield, "uTPAccept(" + con.remote_endpoint() + ")");
                     serve_utp_request(move(con), y[ec]);
                 }));
             }

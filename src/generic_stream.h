@@ -172,9 +172,10 @@ public:
     }
 
     template<class AsyncRWStream>
-    GenericStream(AsyncRWStream&& impl)
+    GenericStream(AsyncRWStream&& impl, std::string remote_ep = "")
         : _executor(impl.get_executor())
         , _impl(new Wrapper<AsyncRWStream>(std::forward<AsyncRWStream>(impl)))
+        , _remote_endpoint(std::move(remote_ep))
     {
         if (_debug) {
             std::cerr << this << " " << (void*)nullptr
@@ -186,10 +187,12 @@ public:
 
     template<class AsyncRWStream, class Shutter>
     GenericStream( AsyncRWStream&& impl
-                 , Shutter shutter)
+                 , Shutter shutter
+                 , std::string remote_ep = "")
         : _executor(generic_stream_detail::deref(impl).get_executor())
         , _impl(new Wrapper<AsyncRWStream>( std::forward<AsyncRWStream>(impl)
                                           , std::move(shutter)))
+        , _remote_endpoint(std::move(remote_ep))
     {
         if (_debug) {
             std::cerr << this << " " << (void*)nullptr
@@ -202,6 +205,7 @@ public:
     GenericStream(GenericStream&& other)
         : _executor(std::move(other._executor))
         , _impl(std::move(other._impl))
+        , _remote_endpoint(std::move(other._remote_endpoint))
     {
         if (_debug) {
             std::cerr << this << " " << (void*)nullptr
@@ -212,6 +216,7 @@ public:
 
     GenericStream& operator=(GenericStream&& other) {
         _executor = std::move(other._executor);
+        _remote_endpoint = std::move(other._remote_endpoint);
 
         if (_debug) {
             std::cerr << this << " " << _impl
@@ -377,6 +382,8 @@ public:
         return init.result.get();
     }
 
+    const std::string& remote_endpoint() const { return _remote_endpoint; }
+
 private:
 #if BOOST_VERSION >= 107100
     asio::executor _executor;
@@ -388,6 +395,7 @@ private:
     // as the asio::ssl::stream) require that their lifetime is preserved while
     // an async action is pending on them.
     std::shared_ptr<Base> _impl;
+    std::string _remote_endpoint;
     bool _debug = false;
 };
 

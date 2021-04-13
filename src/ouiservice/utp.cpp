@@ -2,6 +2,7 @@
 #include "../or_throw.h"
 #include "../parse/endpoint.h"
 #include "../logger.h"
+#include "../util/str.h"
 #include "../util/watch_dog.h"
 #include "../util/handler_tracker.h"
 #include "../async_sleep.h"
@@ -56,7 +57,9 @@ void UtpOuiServiceServer::start_listen(asio::yield_context yield)
                 async_sleep(_ex, 5s, cancel, yield[ec]);
                 continue;
             }
-            _accept_queue.async_push(move(s), ec, cancel, yield[ec]);
+
+            auto ep = util::str("uTP/", s.remote_endpoint());
+            _accept_queue.async_push({move(s), move(ep)}, ec, cancel, yield[ec]);
         }
     });
 }
