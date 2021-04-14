@@ -16,7 +16,15 @@ class ConditionVariable {
             <boost::intrusive::auto_unlink>>;
 
     struct WaitEntry : IntrusiveHook {
+        bool canceled = false;
         std::function<Sig> handler;
+
+        void operator()(const sys::error_code& ec) {
+            // Move to prevent destruction during execution.
+            auto h = std::move(handler);
+            if (canceled) h(asio::error::operation_aborted);
+            else h(ec);
+        }
     };
 
     using IntrusiveList = boost::intrusive::list
@@ -60,7 +68,7 @@ void ConditionVariable::notify(const boost::system::error_code& ec)
 {
     while (!_on_notify.empty()) {
         auto& e = _on_notify.front();
-        asio::post(_exec, [h = std::move(e.handler), ec] () mutable { h(ec); });
+        asio::post(_exec, [&e, ec] () mutable { e(ec); });
         _on_notify.pop_front();
     }
 }
@@ -77,11 +85,24 @@ void ConditionVariable::wait(Cancel& cancel, boost::asio::yield_context yield)
     _on_notify.push_back(entry);
 
     auto slot = cancel.connect([&] {
-        assert(entry.is_linked());
-        if (entry.is_linked()) entry.unlink();
+        entry.canceled = true;
 
-        asio::post(_exec, [h = std::move(entry.handler)] () mutable {
-            h(asio::error::operation_aborted);
+        if (!entry.is_linked()) {
+            // Being here means that notify has been already called on this
+            // entry, that means that the job to execute it has been posted
+            // to the io context, but hasn't been executed yet. We set the
+            // flag above to mark it as cancelled, so once it does execute
+            // it will be done so with operation_aborted.
+
+            // Check the handler indeed hasn't been executed yet.
+            assert(entry.handler);
+            return;
+        }
+
+        entry.unlink();
+
+        asio::post(_exec, [&entry] () mutable {
+            entry(asio::error::operation_aborted);
         });
     });
 
