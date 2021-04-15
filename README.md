@@ -549,6 +549,42 @@ cached data, point the browser back to the same page and still get its
 contents from the distributed cache even when the origin server is completely
 unreachable.
 
+### Using an external static cache
+
+Ouinet supports circulating cached Web content offline as file storage and
+using a client to seed it back into the distributed cache.  Such content is
+placed in a *static cache*, which is read-only and consists of two
+directories:
+
+  - A *static cache root* or content directory where data files are stored in
+    a hierarchy which may make sense for user browsing.
+
+  - A *static cache repository* where Ouinet-specific metadata and signatures
+    for the previous content are kept.
+
+To give your client access to a static cache, use the `cache-static-root` and
+`cache-static-repo` options to point to the appropriate directories.  If the
+later is not specified, the `.ouinet` subdirectory under the static cache root
+is assumed.
+
+Please note that all content in the static cache is permanently announced by
+the client, and that purging the client's local cache has no effect on the
+static cache.  When cached content is requested from a client, the client
+first looks up the content in its local cache, with the static cache being
+used as a fallback.
+
+Any user can create such a static cache as a capture of a browsing session by
+copying the `bep5_http` directory of the client's repository as a static cache
+repository (with an empty static cache root).  We recommend that you purge
+your local cache before starting the browsing session to avoid leaking your
+previous browsing to other users.
+
+If you are a content provider in possession of your own signing key, please
+check the [ouinet-inject][] tool, which allows you to create a static cache
+from a variety of sources.
+
+[ouinet-inject]: https://github.com/equalitie/ouinet-inject
+
 ## Android library and demo client
 
 Ouinet can also be built as an Android Archive library (AAR) to use in your
