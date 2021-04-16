@@ -349,7 +349,18 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
                             "name=\"purge_cache\" "
                             "value=\"Purge cache now\"/>\n"
               "</form>\n";
-        ss << "<a href=\"" << group_list_apath << "\">See announced groups</a>\n";
+        ss << "<a href=\"" << group_list_apath << "\">See announced groups</a><br>\n";
+
+        ss << "<br>\n";
+        if (config.cache_static_path().empty()) {
+            ss << "Static cache is not enabled.<br>\n";
+        } else {
+            ss << "Static cache is enabled:\n";
+            ss << "<ul>\n";
+            ss << "<li>Root (content): <code>" << as_safe_html(util::str(config.cache_static_content_path())) << "</code></li>\n";
+            ss << "<li>Repository: <code>" << as_safe_html(util::str(config.cache_static_path())) << "</code></li>\n";
+            ss << "</ul>\n";
+        }
     }
 
     ss << "    </body>\n"

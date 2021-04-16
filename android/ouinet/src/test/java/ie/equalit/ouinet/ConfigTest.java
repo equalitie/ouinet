@@ -36,6 +36,8 @@ public class ConfigTest {
     private static String TLS_CA_CERT = "tlscacertcontent";
     private static String OBFS_PROXY_CONTENT = "obfs4assetcontent";
     private static String CACHE_TYPE = "bep5-http";
+    private static String CACHE_STATIC_PATH = "static-cache";
+    private static String CACHE_STATIC_CONTENT_PATH = "static-cache/.ouinet";
 
     @Mock
     private Context mockContext;
@@ -52,6 +54,8 @@ public class ConfigTest {
         String injectorTlsCertPath = ouinetDir + "/injector-tls-cert.pem";
         String tlsCaCertPath = ouinetDir + "/assets/tls-ca-cert.pem";
         String obfsFilePath = ouinetDir + "/" + Config.OBFS4_PROXY;
+        String cacheStaticPath = filesDir.getPath() + "/" + CACHE_STATIC_PATH;
+        String cacheStaticContentPath = filesDir.getPath() + "/" + CACHE_STATIC_CONTENT_PATH;
 
         when(mockContext.getFilesDir()).thenReturn(filesDir);
         when(mockContext.getAssets()).thenReturn(mockAssetManager);
@@ -71,6 +75,8 @@ public class ConfigTest {
                 .setInjectorTlsCert(INJECTOR_TLS_CERT)
                 .setTlsCaCertStorePath(TLS_CA_CERT_PATH)
                 .setCacheType(CACHE_TYPE)
+                .setCacheStaticPath(cacheStaticPath)
+                .setCacheStaticContentPath(cacheStaticContentPath)
                 .build();
 
         assertThat(config.getOuinetDirectory(), is(ouinetDir));
@@ -78,6 +84,8 @@ public class ConfigTest {
         assertThat(config.getInjectorCredentials(), is(INJECTOR_CREDENTIALS));
         assertThat(config.getCaRootCertPath(), is(caRootCertPath));
         assertThat(config.getCacheType(), is(CACHE_TYPE));
+        assertThat(config.getCacheStaticPath(), is(cacheStaticPath));
+        assertThat(config.getCacheStaticContentPath(), is(cacheStaticContentPath));
 
         assertThat(config.getTlsCaCertStorePath(), is(tlsCaCertPath));
         assertThat(contentOf(new File(config.getTlsCaCertStorePath())), is(TLS_CA_CERT));

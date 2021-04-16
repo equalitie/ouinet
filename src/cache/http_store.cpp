@@ -51,6 +51,7 @@ static const boost::regex dir_name_rx("^[0-9a-f]{38}$");
 // File names for response components.
 static const fs::path head_fname = "head";
 static const fs::path body_fname = "body";
+static const fs::path body_path_fname = "body-path";
 static const fs::path sigs_fname = "sigs";
 
 using Signature = util::Ed25519PublicKey::sig_array_t;
@@ -602,6 +603,11 @@ public:
         return http_response::Part(http_response::Trailer());
     }
 
+    bool is_done() const override
+    {
+        return _is_done;
+    }
+
     asio::executor get_executor() override
     {
         return headf.get_executor();
@@ -649,14 +655,87 @@ private:
     boost::optional<http_response::Part> next_chunk_body;
 };
 
+// Since content loaded from the local cache is not verified
+// before sending it to the requester,
+// we must make extra sure that we are not tricked into reading
+// some file outside of the content directory.
+static
+boost::optional<fs::path>
+canonical_from_content_relpath( const fs::path& body_path_p
+                              , const fs::path cdirp)
+{
+    // TODO: proper handling of UTF-8 encoding of body path (including errors)
+    fs::path body_rp;
+    fs::ifstream(body_path_p) >> body_rp;
+    if (body_rp.empty()) {
+        _ERROR("Failed to read path of static cache content file: ", body_path_p);
+        return boost::none;
+    }
+
+    // Check correctness of body path.
+    if (!body_rp.is_relative()) {
+        _ERROR("Path of static cache content file is not relative,"
+               " possibly malicious file: ", body_path_p);
+        return boost::none;
+    }
+    for (const auto& c : body_rp)
+        if (c.empty() || !c.compare(".") || !c.compare("..")) {
+            _ERROR("Invalid components in path of static cache content file,"
+                   " possibly malicious file: ", body_path_p);
+            return boost::none;
+        }
+    sys::error_code ec;
+    auto body_cp = fs::canonical(body_rp, cdirp, ec);
+    if (ec) {
+        _ERROR("Failed to get canonical path of static cache content file: ", body_path_p);
+        return boost::none;
+    }
+    // Avoid symlinks in actual body path pointing out of content directory.
+    auto cdirp_pfx = cdirp / "/";
+    if (body_cp.native().find(cdirp_pfx.native()) != 0) {
+        _ERROR("Canonical path of static cache content file outside of content directory,"
+               " possibly malicious file: ", body_rp);
+        return boost::none;
+    }
+
+    return body_cp;
+}
+
+static
+asio::posix::stream_descriptor
+open_body_external( const asio::executor& ex
+                  , const fs::path& dirp
+                  , const fs::path& cdirp
+                  , sys::error_code& ec)
+{
+    fs::path body_path_p = dirp / body_path_fname;
+    {
+        auto body_path_s = fs::status(body_path_p, ec);
+        if (!ec && !fs::is_regular_file(body_path_s))
+            ec = asio::error::bad_descriptor;
+        if (ec) return asio::posix::stream_descriptor(ex);
+    }
+
+    auto body_cp_o = canonical_from_content_relpath(body_path_p, cdirp);
+    if (!body_cp_o) {
+        ec = asio::error::bad_descriptor;
+        return asio::posix::stream_descriptor(ex);
+    }
+
+    return util::file_io::open_readonly(ex, *body_cp_o, ec);
+}
+
 template<class Reader>
 static
 reader_uptr
-_http_store_reader( const fs::path& dirp, asio::executor ex
+_http_store_reader( const fs::path& dirp, boost::optional<const fs::path&> cdirp
+                  , asio::executor ex
                   , boost::optional<std::size_t> range_first
                   , boost::optional<std::size_t> range_last
                   , sys::error_code& ec)
 {
+    assert(!cdirp || (fs::canonical(*cdirp, ec) == *cdirp));
+
     // XXX: Actually the RFC7233 allows for range_last to be undefined
     // https://tools.ietf.org/html/rfc7233#section-2.1
     assert((!range_first && !range_last) || (range_first && range_last));
@@ -669,6 +748,10 @@ _http_store_reader( const fs::path& dirp, asio::executor ex
     ec = {};
 
     auto bodyf = util::file_io::open_readonly(ex, dirp / body_fname, ec);
+    if (ec == sys::errc::no_such_file_or_directory && cdirp) {
+        ec = {};
+        bodyf = open_body_external(ex, dirp, *cdirp, ec);
+    }
     if (ec && ec != sys::errc::no_such_file_or_directory) return nullptr;
     ec = {};
 
@@ -720,7 +803,15 @@ http_store_reader( const fs::path& dirp, asio::executor ex
                  , sys::error_code& ec)
 {
     return _http_store_reader<HttpStoreReader>
-        (dirp, std::move(ex), {}, {}, ec);
+        (dirp, boost::none, std::move(ex), {}, {}, ec);
+}
+
+reader_uptr
+http_store_reader( const fs::path& dirp, const fs::path& cdirp, asio::executor ex
+                 , sys::error_code& ec)
+{
+    return _http_store_reader<HttpStoreReader>
+        (dirp, cdirp, std::move(ex), {}, {}, ec);
 }
 
 reader_uptr
@@ -729,11 +820,16 @@ http_store_range_reader( const fs::path& dirp, asio::executor ex
                        , sys::error_code& ec)
 {
     return _http_store_reader<HttpStoreReader>
-        (dirp, std::move(ex), first, last, ec);
+        (dirp, boost::none, std::move(ex), first, last, ec);
 }
 
-HttpStore::~HttpStore()
+reader_uptr
+http_store_range_reader( const fs::path& dirp, const fs::path& cdirp, asio::executor ex
+                       , std::size_t first, std::size_t last
+                       , sys::error_code& ec)
 {
+    return _http_store_reader<HttpStoreReader>
+        (dirp, cdirp, std::move(ex), first, last, ec);
 }
 
 static
@@ -745,6 +841,163 @@ path_from_key(fs::path dir, const std::string& key)
     boost::string_view hd0(hex_digest); hd0.remove_suffix(hex_digest.size() - 2);
     boost::string_view hd1(hex_digest); hd1.remove_prefix(2);
     return dir.append(hd0.begin(), hd0.end()).append(hd1.begin(), hd1.end());
+}
+
+HashList
+http_store_load_hash_list( const fs::path& dir
+                         , asio::executor exec
+                         , Cancel& cancel
+                         , asio::yield_context yield)
+{
+    using Sha = util::SHA512;
+    using Digest = Sha::digest_type;
+
+    sys::error_code ec;
+
+    auto headf = util::file_io::open_readonly(exec, dir / head_fname, ec);
+    if (ec) return or_throw<HashList>(yield, ec);
+
+    auto sigsf = util::file_io::open_readonly(exec, dir / sigs_fname, ec);
+    if (ec) return or_throw<HashList>(yield, ec);
+
+    HashList hl;
+
+    hl.signed_head = HttpStoreReader::read_signed_head(headf, cancel, yield[ec]);
+
+    if (cancel) ec = asio::error::operation_aborted;
+    if (ec) return or_throw<HashList>(yield, ec);
+
+    std::string sig_buffer;
+
+    while(true) {
+        auto opt_sig_entry = SigEntry::parse(sigsf, sig_buffer, cancel, yield[ec]);
+
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec) return or_throw<HashList>(yield, ec);
+
+        if (!opt_sig_entry) break;
+
+        auto d = util::base64_decode<Digest>(opt_sig_entry->block_digest);
+        if (!d) return or_throw<HashList>(yield, asio::error::bad_descriptor);
+
+        auto sig = util::base64_decode<Signature>(opt_sig_entry->signature);
+        if (!sig) return or_throw<HashList>(yield, asio::error::bad_descriptor);
+
+        hl.blocks.push_back({*d, *sig});
+    }
+
+    if (hl.blocks.empty()) {
+        return or_throw<HashList>(yield, asio::error::not_found);
+    }
+
+    assert(hl.verify()); // Only in debug mode
+
+    return hl;
+}
+
+class HttpReadStore : public BaseHttpStore {
+public:
+    HttpReadStore(fs::path p, asio::executor ex)
+        : path(std::move(p)), executor(ex)
+    {}
+
+    ~HttpReadStore() = default;
+
+    reader_uptr
+    reader(const std::string& key, sys::error_code& ec) override
+    {
+        auto kpath = path_from_key(path, key);
+        return http_store_reader(kpath, executor, ec);
+    }
+
+    reader_uptr
+    range_reader(const std::string& key, size_t first, size_t last, sys::error_code& ec) override
+    {
+        auto kpath = path_from_key(path, key);
+        return http_store_range_reader(kpath, executor, first, last, ec);
+    }
+
+    std::size_t
+    size(Cancel cancel, asio::yield_context yield) const override
+    {
+        // Do not use `for_each` since it can alter the store.
+        sys::error_code ec;
+        auto sz = recursive_dir_size(path, ec);
+        if (cancel) ec = asio::error::operation_aborted;
+        return or_throw(yield, ec, sz);
+    }
+
+    HashList
+    load_hash_list(const std::string& key, Cancel cancel, asio::yield_context yield) const override
+    {
+        auto dir = path_from_key(path, key);
+        return http_store_load_hash_list(dir, executor, cancel, yield);
+    }
+
+protected:
+    fs::path path;
+    asio::executor executor;
+};
+
+class StaticHttpStore : public HttpReadStore {
+public:
+    StaticHttpStore(fs::path p, fs::path cp, util::Ed25519PublicKey pk, asio::executor ex)
+        : HttpReadStore(std::move(p), std::move(ex))
+        , content_path(std::move(cp)), verif_pubk(std::move(pk))
+    {}
+
+    ~StaticHttpStore() = default;
+
+    reader_uptr
+    reader(const std::string& key, sys::error_code& ec) override
+    {
+        auto kpath = path_from_key(path, key);
+        // Always verifying the response not only
+        // protects the agent against malicions content in the static cache, it also
+        // acts as a good citizen and avoids spreading such content to others.
+        return std::make_unique<VerifyingReader>
+            (http_store_reader(kpath, content_path, executor, ec), verif_pubk);
+    }
+
+    reader_uptr
+    range_reader(const std::string& key, size_t first, size_t last, sys::error_code& ec) override
+    {
+        auto kpath = path_from_key(path, key);
+        // TODO: Signature verification should be implemented here too,
+        // but verification of partial responses not going through multi-peer download is broken.
+        // Fortunately, for agent retrieval of responses in the static cache,
+        // only whole responses (returned by `reader`) are used.
+        // Also fortunately, other clients retrieving partial content from this client
+        // will use the mechanisms of multi-peer download for verification.
+        // So this would only byte clients retrieving invalid partial content from here
+        // with raw range requests, but this is not currently the case in Ouinet.
+        // Also, the client does not currently issue partial reads to the local cache
+        // to be served to the agent.
+        return http_store_range_reader(kpath, content_path, executor, first, last, ec);
+    }
+
+    std::size_t
+    size(Cancel cancel, asio::yield_context yield) const override
+    {
+        sys::error_code ec;
+        auto sz = HttpReadStore::size(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, 0);
+        sz += recursive_dir_size(content_path, ec);
+        if (cancel) ec = asio::error::operation_aborted;
+        return or_throw(yield, ec, sz);
+    }
+
+private:
+    fs::path content_path;
+    util::Ed25519PublicKey verif_pubk;
+};
+
+std::unique_ptr<BaseHttpStore>
+make_static_http_store( fs::path path, fs::path content_path
+                      , util::Ed25519PublicKey pk, asio::executor ex)
+{
+    using namespace std;
+    return make_unique<StaticHttpStore>(move(path), move(content_path), move(pk), move(ex));
 }
 
 static
@@ -800,9 +1053,48 @@ name_matches_model(const fs::path& name, const fs::path& model)
     return true;
 }
 
+class FullHttpStore : public HttpStore {
+public:
+    FullHttpStore( fs::path p, asio::executor ex
+                 , std::unique_ptr<BaseHttpStore> rs)
+        : path(std::move(p)), executor(std::move(ex))
+        , read_store(std::move(rs))
+    {}
+
+    ~FullHttpStore() = default;
+
+    void
+    for_each(keep_func, Cancel, asio::yield_context) override;
+
+    void
+    store( const std::string& key, http_response::AbstractReader&
+         , Cancel, asio::yield_context) override;
+
+    reader_uptr
+    reader(const std::string& key, sys::error_code& ec) override
+    { return read_store->reader(key, ec); }
+
+    reader_uptr
+    range_reader(const std::string& key, size_t first, size_t last, sys::error_code& ec) override
+    { return read_store->range_reader(key, first, last, ec); }
+
+    std::size_t
+    size(Cancel cancel, asio::yield_context ec) const override
+    { return read_store->size(cancel, ec); }
+
+    HashList
+    load_hash_list(const std::string& key, Cancel cancel, asio::yield_context yield) const override
+    { return read_store->load_hash_list(key, cancel, yield); }
+
+protected:
+    fs::path path;
+    asio::executor executor;
+    std::unique_ptr<BaseHttpStore> read_store;
+};
+
 void
-HttpStore::for_each( keep_func keep
-                     , Cancel cancel, asio::yield_context yield)
+FullHttpStore::for_each( keep_func keep
+                       , Cancel cancel, asio::yield_context yield)
 {
     for (auto& pp : fs::directory_iterator(path)) {  // iterate over `DIGEST[:2]` dirs
         if (!fs::is_directory(pp)) {
@@ -863,8 +1155,8 @@ HttpStore::for_each( keep_func keep
 }
 
 void
-HttpStore::store( const std::string& key, http_response::AbstractReader& r
-                , Cancel cancel, asio::yield_context yield)
+FullHttpStore::store( const std::string& key, http_response::AbstractReader& r
+                    , Cancel cancel, asio::yield_context yield)
 {
     sys::error_code ec;
 
@@ -888,94 +1180,76 @@ HttpStore::store( const std::string& key, http_response::AbstractReader& r
     return or_throw(yield, ec);
 }
 
-reader_uptr
-HttpStore::reader( const std::string& key
-                 , sys::error_code& ec)
+std::unique_ptr<HttpStore>
+make_http_store(fs::path path, asio::executor ex)
 {
-    auto kpath = path_from_key(path, key);
-    return http_store_reader(kpath, executor, ec);
+    using namespace std;
+    auto read_store = make_unique<HttpReadStore>(path, ex);
+    return make_unique<FullHttpStore>(move(path), move(ex), move(read_store));
 }
 
-reader_uptr
-HttpStore::range_reader( const std::string& key
-                       , size_t first
-                       , size_t last
-                       , sys::error_code& ec)
-{
-    auto kpath = path_from_key(path, key);
-    return http_store_range_reader(kpath, executor, first, last, ec);
-}
+class BackedHttpStore : public FullHttpStore {
+public:
+    BackedHttpStore( fs::path p, asio::executor ex
+                   , std::unique_ptr<BaseHttpStore> rs, std::unique_ptr<BaseHttpStore> fs)
+        : FullHttpStore(std::move(p), std::move(ex), std::move(rs))
+        , fallback_store(std::move(fs))
+    {}
 
-std::size_t
-HttpStore::size( Cancel cancel
-               , asio::yield_context yield) const
-{
-    // Do not use `for_each` since it can alter the store.
-    sys::error_code ec;
-    auto sz = recursive_dir_size(path, ec);
-    if (cancel) ec = asio::error::operation_aborted;
-    return or_throw(yield, ec, sz);
-}
+    ~BackedHttpStore() = default;
 
-HashList
-http_store_load_hash_list( const fs::path& dir
-                         , asio::executor exec
-                         , Cancel& cancel
-                         , asio::yield_context yield)
-{
-    using Sha = util::SHA512;
-    using Digest = Sha::digest_type;
-
-    sys::error_code ec;
-
-    auto headf = util::file_io::open_readonly(exec, dir / head_fname, ec);
-    if (ec) return or_throw<HashList>(yield, ec);
-
-    auto sigsf = util::file_io::open_readonly(exec, dir / sigs_fname, ec);
-    if (ec) return or_throw<HashList>(yield, ec);
-
-    HashList hl;
-
-    hl.signed_head = HttpStoreReader::read_signed_head(headf, cancel, yield[ec]);
-
-    if (cancel) ec = asio::error::operation_aborted;
-    if (ec) return or_throw<HashList>(yield, ec);
-
-    std::string sig_buffer;
-
-    while(true) {
-        auto opt_sig_entry = SigEntry::parse(sigsf, sig_buffer, cancel, yield[ec]);
-
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<HashList>(yield, ec);
-
-        if (!opt_sig_entry) break;
-
-        auto d = util::base64_decode<Digest>(opt_sig_entry->block_digest);
-        if (!d) return or_throw<HashList>(yield, asio::error::bad_descriptor);
-
-        auto sig = util::base64_decode<Signature>(opt_sig_entry->signature);
-        if (!sig) return or_throw<HashList>(yield, asio::error::bad_descriptor);
-
-        hl.blocks.push_back({*d, *sig});
+    reader_uptr
+    reader(const std::string& key, sys::error_code& ec) override
+    {
+        auto ret = FullHttpStore::reader(key, ec);
+        if (!ec) return ret;
+        _DEBUG("Failed to create reader for key, trying fallback store: ", key);
+        return fallback_store->reader(key, ec = {});
     }
 
-    if (hl.blocks.empty()) {
-        return or_throw<HashList>(yield, asio::error::not_found);
+    reader_uptr
+    range_reader(const std::string& key, size_t first, size_t last, sys::error_code& ec) override
+    {
+        auto ret = FullHttpStore::range_reader(key, first, last, ec);
+        if (!ec) return ret;
+        _DEBUG("Failed to create range reader for key, trying fallback store: ", key);
+        return fallback_store->range_reader(key, first, last, ec = {});
     }
 
-    assert(hl.verify()); // Only in debug mode
+    std::size_t
+    size(Cancel cancel, asio::yield_context yield) const override
+    {
+        sys::error_code ec;
+        auto sz1 = FullHttpStore::size(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, 0);
+        auto sz2 = fallback_store->size(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, 0);
+        return sz1 + sz2;
+    }
 
-    return hl;
-}
+    HashList
+    load_hash_list(const std::string& key, Cancel cancel, asio::yield_context yield) const override
+    {
+        sys::error_code ec;
+        auto ret = FullHttpStore::load_hash_list(key, cancel, yield[ec]);
+        if (!ec) return ret;
+        if (cancel) return or_throw<HashList>(yield, asio::error::operation_aborted);
+        _DEBUG("Failed to load hash list for key, trying fallback store: ", key);
+        return fallback_store->load_hash_list(key, cancel, yield);
+    }
 
-HashList
-HttpStore::load_hash_list( const std::string& key
-                         , Cancel cancel
-                         , asio::yield_context yield) const
+private:
+    std::unique_ptr<BaseHttpStore> fallback_store;
+};
+
+std::unique_ptr<HttpStore>
+make_backed_http_store( fs::path path, std::unique_ptr<BaseHttpStore> fallback_store
+                      , asio::executor ex)
 {
-    auto dir = path_from_key(path, key);
-    return http_store_load_hash_list(dir, executor, cancel, yield);
+    using namespace std;
+    auto read_store = make_unique<HttpReadStore>(path, ex);
+    return make_unique<BackedHttpStore>( move(path), move(ex)
+                                       , move(read_store), move(fallback_store));
 }
 
 }} // namespaces

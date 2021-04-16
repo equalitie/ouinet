@@ -35,6 +35,11 @@ public:
 
     boost::optional<http_response::Part> async_read_part(Cancel, asio::yield_context) override;
 
+    bool is_done() const override
+    {
+        return _state == State::done;
+    }
+
     void close() override;
 
     ~MultiPeerReader();

@@ -36,6 +36,7 @@
       - [Distributed hash table](#distributed-hash-table)
       - [Resource groups](#resource-groups)
     - [Out of band cache entry exchange](#out-of-band-cache-entry-exchange)
+      - [Cache exchange format](#cache-exchange-format)
 - [Injector Servers](#injector-servers)
   - [Injector server connections](#injector-server-connections)
     - [Injector uTP sockets](#injector-utp-sockets)
@@ -681,6 +682,28 @@ The Ouinet client can only fetch resources collected into a resource group if cl
 ### Out of band cache entry exchange
 
 In addition to transferring cache entries between different participants in the distributed cache using a network connection, applications using the Ouinet system can also distribute cache entries in more ad-hoc ways, such as by distributing storage devices containing collections of cache entries. Techniques such as this do not play a role in the primary application of the Ouinet system, but can be applicable to more specialist applications. The different ways in which such techniques could be arranged logistically are not specified in further detail in this document.
+
+#### Cache exchange format
+
+To circulate cached content out of band, formats for data at rest are defined.  A *static cache repository* is a directory consisting of two subdirectories:
+
+* One to hold cache entries; for version 3 of the signed HTTP storage format, this is called `data-v3`.
+* One to hold resource group information; for version 0 of the DHT group storage format, this is called `dht_groups`.
+
+Each resource group with a distinctive bytestring `<resource-group>` has a group directory named `dht_groups/<lower-hex(sha1(resource-group))>` containing:
+
+* A `group_name` file with `<resource-group>` as its only content (no trailing newline).
+* An `items` subdirectory with one file per cache entry having that belongs to the group; the file contains the entry's `<resource-uri>` as its only content (no trailing newline) and is named `<lower-hex(sha1(resource-uri))>`.
+
+Each cache entry with a `<resource-uri>` and thus `<uri-hash=lower-hex(sha1(resource-uri))>` has a directory named `data-v3/<uri-hash[0:2]>/<uri-hash[2:]>`. The splitting of the directory name avoids having too many entries directly under `data-v3`. The entry's directory contains:
+
+* A `head` file holding the whole raw HTTP head with response status and headers (except framing), and `X-Ouinet-*` headers conforming its signature (as described in the [Signature computation](#signature-computation) section). Lines are CRLF-terminated and a final empty line is included.
+* If the resource has a non-empty body, a `sigs` file with one fixed-width, LF-terminated line per data block. The i-th line corresponds to the i-th block and has this content: `<padded-offset(i)> <base64(block-signature(i))> <base64(hash(i))> <base64(chained-hash(i-1))>`, where `padded-offset(i)` is the offset of the block in lower-case hexadecimal zero-padded to 16 characters, separators are a single space, and hashes and signatures are those defined in the [Stream signatures](#stream-signatures) section; `chained-hash(-1)` is defined as a hash-length string of NUL bytes.
+* If the resource has a non-empty body, a `body` file with the raw body data. Alternatively, a `body-path` can be provided with the path of the body data file relative to the cache root (see below), with forward slashes as path separators and non-ASCII characters encoded using UTF-8 (no `.` or `..` components and no trailing new line).
+
+The *static cache root* is a directory containing plain data files optionally pointed to by cache entries. This allows a user in possession of such directory to browse data files arranged in an accessible hierarchy with human-readable names.
+
+Although a static cache repository and root may be completely independent, the former is conventionally named `.ouinet` and contained directly under the later to ease their conveying.
 
 
 

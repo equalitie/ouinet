@@ -253,6 +253,27 @@ void store_response( const fs::path& tmpdir, bool complete
     wc.wait(yield);
 }
 
+void store_response_external( const fs::path& tmpdir, const fs::path& tmpcdir
+                            , asio::io_context& ctx, asio::yield_context yield) {
+    store_response(tmpdir, true, ctx, yield);
+
+    // Move body to external file, point `body-path` to it.
+    auto crpath = fs::path("foo/bar/data.dat");
+    {
+        auto cpath = tmpcdir / crpath;
+        fs::create_directories(cpath.branch_path());
+        fs::rename(tmpdir / "body", cpath);
+    }
+    {
+        sys::error_code ec;
+        auto body_path_f = util::file_io::open_or_create(ctx.get_executor(), tmpdir / "body-path", ec);
+        if (ec) return or_throw(yield, ec);
+        auto crpath_b = asio::const_buffer(crpath.string().data(), crpath.string().size());
+        Cancel cancel;
+        util::file_io::write(body_path_f, crpath_b, cancel, yield);
+    }
+}
+
 // Values for empty body tests.
 static const string _ers_head_digest = (
     "X-Ouinet-Data-Size: 0\r\n"
@@ -531,6 +552,104 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
             }
 
             if (!complete) return;
+
+            // Last chunk header.
+            part = loaded_rr.async_read_part(c, y[e]);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            BOOST_REQUIRE(part);
+            BOOST_REQUIRE(part->is_chunk_hdr());
+            BOOST_REQUIRE_EQUAL( *(part->as_chunk_hdr())
+                               , http_response::ChunkHdr( 0
+                                                        , rrs_chunk_ext[bi]));
+
+            // Trailer.
+            part = loaded_rr.async_read_part(c, y[e]);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            BOOST_REQUIRE(part);
+            BOOST_REQUIRE(part->is_trailer());
+            BOOST_CHECK_EQUAL(*(part->as_trailer()), rrs_trailer);
+        });
+
+        wc.wait(yield);
+    });
+}
+
+BOOST_AUTO_TEST_CASE(test_read_response_external) {
+    auto tmpdir = fs::unique_path();
+    auto tmpcdir = fs::unique_path();
+    auto rmdirs = defer([&tmpdir, &tmpcdir] {
+        sys::error_code ec;
+        fs::remove_all(tmpdir, ec = {});
+        fs::remove_all(tmpcdir, ec = {});
+    });
+    fs::create_directory(tmpdir);
+    fs::create_directory(tmpcdir);
+    tmpcdir = fs::canonical(tmpcdir);
+
+    asio::io_context ctx;
+    run_spawned(ctx, [&] (auto yield) {
+        store_response_external(tmpdir, tmpcdir, ctx, yield);
+
+        asio::ip::tcp::socket
+            loaded_w(ctx), loaded_r(ctx);
+        tie(loaded_w, loaded_r) = util::connected_pair(ctx, yield);
+
+        WaitCondition wc(ctx);
+
+        // Load response.
+        asio::spawn(ctx, [ &loaded_w, &tmpdir, &tmpcdir
+                         , &ctx, lock = wc.lock()] (auto y) {
+            Cancel c;
+            sys::error_code e;
+            auto store_rr = cache::http_store_reader(tmpdir, tmpcdir, ctx.get_executor(), e);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            BOOST_REQUIRE(store_rr);
+            auto store_s = Session::create(std::move(store_rr), c, y[e]);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            store_s.flush_response(loaded_w, c, y[e]);
+            BOOST_CHECK(!e);
+            loaded_w.close();
+        });
+
+        // Check parts of the loaded response.
+        asio::spawn(ctx, [ loaded_r = std::move(loaded_r)
+                         , lock = wc.lock()] (auto y) mutable {
+            Cancel c;
+            sys::error_code e;
+            http_response::Reader loaded_rr(std::move(loaded_r));
+
+            // Head.
+            auto part = loaded_rr.async_read_part(c, y[e]);
+            BOOST_CHECK_EQUAL(e.message(), "Success");
+            BOOST_REQUIRE(part);
+            BOOST_REQUIRE(part->is_head());
+            BOOST_REQUIRE_EQUAL( util::str(*(part->as_head()))
+                               , rrs_head_complete);
+
+            // Chunk headers and bodies (one chunk per block).
+            unsigned bi;
+            for (bi = 0; bi < rs_block_data.size(); ++bi) {
+                part = loaded_rr.async_read_part(c, y[e]);
+                BOOST_CHECK_EQUAL(e.message(), "Success");
+                BOOST_REQUIRE(part);
+                BOOST_REQUIRE(part->is_chunk_hdr());
+                BOOST_REQUIRE_EQUAL( *(part->as_chunk_hdr())
+                                   , http_response::ChunkHdr( rs_block_data[bi].size()
+                                                            , rrs_chunk_ext[bi]));
+
+                std::vector<uint8_t> bd;  // accumulate data here
+                for (bool done = false; !done; ) {
+                    part = loaded_rr.async_read_part(c, y[e]);
+                    BOOST_CHECK_EQUAL(e.message(), "Success");
+                    BOOST_REQUIRE(part);
+                    BOOST_REQUIRE(part->is_chunk_body());
+                    auto& d = *(part->as_chunk_body());
+                    bd.insert(bd.end(), d.cbegin(), d.cend());
+                    done = (d.remain == 0);
+                }
+                BOOST_REQUIRE_EQUAL( util::bytes::to_string(bd)
+                                   , rs_block_data[bi]);
+            }
 
             // Last chunk header.
             part = loaded_rr.async_read_part(c, y[e]);

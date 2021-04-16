@@ -171,23 +171,28 @@ private:
 //
 // The resulting output preserves all the information and formatting needed
 // to be verified again.
-class VerifyingReader : public ouinet::http_response::Reader {
+class VerifyingReader : public ouinet::http_response::AbstractReader {
 public:
+    using reader_uptr = std::unique_ptr<ouinet::http_response::AbstractReader>;
     using status_set = std::set<http::status>;
 
 public:
     VerifyingReader( GenericStream in, ouinet::util::Ed25519PublicKey pk
+                   , status_set statuses = {});
+    VerifyingReader( reader_uptr rd, ouinet::util::Ed25519PublicKey pk
                    , status_set statuses = {});
     ~VerifyingReader() override;
 
     boost::optional<ouinet::http_response::Part>
     async_read_part(Cancel, asio::yield_context) override;
 
-protected:
-    struct Impl;
-    VerifyingReader(GenericStream, std::unique_ptr<Impl>);
+    bool is_done() const override { return _reader->is_done(); }
+    void close() override { _reader->close(); }
+    asio::executor get_executor() override { return _reader->get_executor(); }
 
 private:
+    struct Impl;
+    reader_uptr _reader;
     std::unique_ptr<Impl> _impl;
 };
 
@@ -216,6 +221,7 @@ public:
     boost::optional<ouinet::http_response::Part>
     async_read_part(Cancel, asio::yield_context) override;
 
+    bool is_done() const override { return _reader.is_done(); }
     void close() override { _reader.close(); }
 
     asio::executor get_executor() override

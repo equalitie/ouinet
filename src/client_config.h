@@ -19,6 +19,9 @@
 
 namespace ouinet {
 
+#define _DEFAULT_STATIC_CACHE_SUBDIR ".ouinet"
+static const fs::path default_static_cache_subdir{_DEFAULT_STATIC_CACHE_SUBDIR};
+
 class ClientConfig {
 public:
     enum class CacheType { None, Bep5Http };
@@ -59,6 +62,14 @@ public:
 
     bool autoseed_updated() const {
         return _autoseed_updated;
+    }
+
+    const fs::path& cache_static_path() const {
+        return _cache_static_path;
+    }
+
+    const fs::path& cache_static_content_path() const {
+        return _cache_static_content_path;
     }
 
     boost::optional<std::string> bep5_bridge_swarm_name() {
@@ -149,6 +160,16 @@ public:
            ("autoseed-updated", po::bool_switch(&_autoseed_updated)->default_value(false)
             , "Automatically fetch and seed the data of updated index entries "
               "that this client is already publishing.")
+          ("cache-static-repo"
+           , po::value<string>()
+           , "Repository for internal files of the static cache "
+             "(to use as read-only fallback for the local cache); "
+             "if this is not given but a static cache content root is, "
+             "\"" _DEFAULT_STATIC_CACHE_SUBDIR "\" under that directory is assumed.")
+          ("cache-static-root"
+           , po::value<string>()
+           , "Root directory for content files of the static cache. "
+             "The static cache always requires this (even if empty).")
 
            // Request routing options
            ("disable-origin-access", po::bool_switch(&_disable_origin_access)->default_value(false)
@@ -213,6 +234,8 @@ private:
     std::string _client_credentials;
     std::map<Endpoint, std::string> _injector_credentials;
 
+    fs::path _cache_static_path;
+    fs::path _cache_static_content_path;
     boost::optional<util::Ed25519PublicKey> _cache_http_pubkey;
     CacheType _cache_type = CacheType::None;
     std::string _local_domain;
@@ -432,6 +455,25 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         throw std::runtime_error("BEP5/HTTP cache selected but no injector HTTP public key specified");
     }
 
+    if (vm.count("cache-static-root")) {
+        _cache_static_content_path = vm["cache-static-root"].as<string>();
+        if (!fs::is_directory(_cache_static_content_path))
+            throw std::runtime_error(
+                util::str("No such directory: ", _cache_static_content_path));
+        if (!vm.count("cache-static-repo")) {
+            _cache_static_path = _cache_static_content_path / default_static_cache_subdir;
+            LOG_INFO("No static cache repository given, assuming ", _cache_static_path, ".");
+        }
+    }
+    if (vm.count("cache-static-repo")) {
+        _cache_static_path = vm["cache-static-repo"].as<string>();
+        if (!vm.count("cache-static-root"))
+            throw std::runtime_error("A content root must be explicity given when using a static cache");
+    }
+    if (!_cache_static_path.empty() && !fs::is_directory(_cache_static_path))
+        throw std::runtime_error(
+            util::str("No such directory: ", _cache_static_path));
+
     if (vm.count("local-domain")) {
         auto tld_rx = boost::regex("[-0-9a-zA-Z]+");
         auto local_domain = vm["local-domain"].as<string>();
@@ -454,4 +496,5 @@ void ClientConfig::set_injector_endpoint(const Endpoint& ep)
     _injector_ep = ep;
 }
 
+#undef _DEFAULT_STATIC_CACHE_SUBDIR
 } // ouinet namespace
