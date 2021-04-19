@@ -80,11 +80,6 @@ public:
     util::Ed25519PrivateKey cache_private_key() const
     { return _ed25519_private_key; }
 
-    unsigned int cache_local_capacity() const
-    { return _cache_local_capacity; }
-
-    bool cache_enabled() const { return !_disable_cache; }
-
 private:
     void setup_ed25519_private_key(const std::string& hex);
 
@@ -106,8 +101,6 @@ private:
     boost::filesystem::path OUINET_CONF_FILE = "ouinet-injector.conf";
     std::string _credentials;
     util::Ed25519PrivateKey _ed25519_private_key;
-    unsigned int _cache_local_capacity;
-    bool _disable_cache = false;
 };
 
 inline
@@ -150,15 +143,8 @@ InjectorConfig::options_description()
         ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
          , "Path to the CA certificate store file")
         // Cache options
-        ("disable-cache", "Disable all cache operations (even initialization)")
         ("ed25519-private-key", po::value<string>()
          , "Ed25519 private key for cache-related signatures (hex-encoded)")
-        ("seed-content"
-         , po::value<bool>()->default_value(false)
-         , "Seed the content instead of only signing it")
-        ("cache-local-capacity"
-         , po::value<unsigned int>()->default_value(10000)  // arbitrarily chosen
-         , "Maximum number of resources to be cached locally")
         ;
 
     return desc;
@@ -283,14 +269,6 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
     if (vm.count("listen-on-obfs4")) {
         _obfs4_endpoint = *parse::endpoint<asio::ip::tcp>(vm["listen-on-obfs4"].as<string>());
-    }
-
-    if (vm.count("cache-local-capacity")) {
-        _cache_local_capacity = vm["cache-local-capacity"].as<unsigned int>();
-    }
-
-    if (vm.count("disable-cache")) {
-        _disable_cache = true;
     }
 
     // Please note that generating keys takes a long time
