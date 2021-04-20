@@ -316,6 +316,7 @@ ouinet::util::detail::http_proto_version_error( unsigned rq_version
                , http_::response_error_hdr_version_too_high);
     }
 
+    res.prepare_payload();  // avoid consumer getting stuck waiting for body
     return res;
 }
 

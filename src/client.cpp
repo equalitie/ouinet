@@ -1786,6 +1786,8 @@ GenericStream Client::State::ssl_mitm_handshake( GenericStream&& con
 
     // Send back OK to let the UA know we have the "tunnel"
     http::response<http::string_body> res{http::status::ok, con_req.version()};
+    // No ``res.prepare_payload()`` since no payload is allowed for CONNECT:
+    // <https://tools.ietf.org/html/rfc7231#section-6.3.1>.
     http::async_write(con, res, yield);
 
     sys::error_code ec;
