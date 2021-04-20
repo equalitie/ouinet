@@ -447,6 +447,11 @@ void serve( InjectorConfig& config
                            , config
                            , genuuid);
 
+    auto is_restricted_target = [rx_o = config.target_rx()] (boost::string_view target) {
+        if (!rx_o) return false;
+        return !boost::regex_match(target.begin(), target.end(), *rx_o);
+    };
+
     for (;;) {
         sys::error_code ec;
 
@@ -561,6 +566,8 @@ void serve( InjectorConfig& config
 
             if (opt_err_res)
                 http::async_write(con, *opt_err_res, yield[ec]);
+            else if (is_restricted_target(req.target()))
+                handle_bad_request(con, req, "Target not allowed", yield[ec].tag("handle_restricted"));
             else
                 cc.fetch( con, move(req)
                         , cancel, yield[ec].tag("cache_control.fetch"));
@@ -692,6 +699,8 @@ int main(int argc, const char* argv[])
 
     if (!config.is_proxy_enabled())
         LOG_INFO("Proxy disabled, not serving plain HTTP/HTTPS proxy requests");
+    if (auto target_rx_o = config.target_rx())
+        LOG_INFO("Target URIs restricted to regular expression: ", *target_rx_o);
 
     OuiServiceServer proxy_server(ex);
 

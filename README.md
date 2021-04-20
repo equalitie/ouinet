@@ -356,9 +356,12 @@ container to inspect and note down the contents of `injector/endpoint-*`
 signatures) to be used by clients.  The injector will also generate a
 `tls-cert.pem` file which you should distribute to clients for TLS access.
 Other configuration information like credentials can be found in
-`injector/ouinet-injector.conf`.  Remember that the injector will become an
-open HTTP proxy for anyone having its credentials; if you want to disable this
-feature, set `disable-proxy = true`.
+`injector/ouinet-injector.conf`.
+
+Remember that the injector will be available as an HTTP proxy for anyone
+having its credentials; if you want to disable this feature, set
+`disable-proxy = true`.  You can also restrict the URLs injected to those
+matching a regular expression with the `restricted` option.
 
 To start the injector in headless mode, you can run:
 

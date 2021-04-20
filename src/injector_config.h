@@ -1,6 +1,7 @@
 #pragma once
 
 #include <boost/asio/ip/udp.hpp>
+#include <boost/regex.hpp>
 
 #include "logger.h"
 #include "util/crypto.h"
@@ -77,6 +78,9 @@ public:
     bool is_proxy_enabled() const
     { return !_disable_proxy; }
 
+    boost::optional<boost::regex> target_rx() const
+    { return _target_rx; }
+
     const std::string& tls_ca_cert_store_path() const
     { return _tls_ca_cert_store_path; }
 
@@ -104,6 +108,7 @@ private:
     boost::filesystem::path OUINET_CONF_FILE = "ouinet-injector.conf";
     std::string _credentials;
     bool _disable_proxy = false;
+    boost::optional<boost::regex> _target_rx;
     util::Ed25519PrivateKey _ed25519_private_key;
 };
 
@@ -145,6 +150,10 @@ InjectorConfig::options_description()
            "If unused, this injector shall behave as an open proxy.")
         ("disable-proxy", po::bool_switch(&_disable_proxy)->default_value(false)
          , "Reject plain HTTP proxy requests (including CONNECT for HTTPS)")
+        ("restricted", po::value<string>()
+         , "Only allow injection of URIs fully matching the given regular expression. "
+           "This option implies \"--disable-proxy\". "
+           "Example: https?://(www\\.)?(example\\.com|test\\.net/foo)/.*")
 
         ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
          , "Path to the CA certificate store file")
@@ -215,6 +224,11 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
                 "in the format <username>:<password>. But the provided "
                 "string \"", _credentials, "\" is missing a colon."));
         }
+    }
+
+    if (vm.count("restricted")) {
+        _target_rx = boost::regex{vm["restricted"].as<string>()};
+        _disable_proxy = true;
     }
 
     // Unfortunately, Boost.ProgramOptions doesn't support arguments without
