@@ -101,6 +101,14 @@ void handle_bad_request( GenericStream& con
     http::async_write(con, res, yield);
 }
 
+static
+void handle_no_proxy( GenericStream& con
+                    , const Request& req
+                    , Yield yield)
+{
+    return handle_bad_request(con, req, "Proxy disabled", yield);
+}
+
 //------------------------------------------------------------------------------
 // Resolve request target address, check whether it is valid
 // and return lookup results.
@@ -468,6 +476,11 @@ void serve( InjectorConfig& config
         }
 
         if (req.method() == http::verb::connect) {
+            if (!config.is_proxy_enabled()) {
+                handle_no_proxy(con, req, yield[ec].tag("handle_no_proxy_connect"));
+                if (ec || !req_keep_alive) break;
+                continue;
+            }
             return handle_connect_request( move(con)
                                          , req
                                          , cancel
@@ -482,6 +495,12 @@ void serve( InjectorConfig& config
 
         if (proxy) {
             // No Ouinet header, behave like a (non-caching) proxy.
+            if (!config.is_proxy_enabled()) {
+                handle_no_proxy(con, req, yield[ec].tag("handle_no_proxy_plain"));
+                if (ec || !req_keep_alive) break;
+                continue;
+            }
+
             // TODO: Maybe reject requests for HTTPS URLS:
             // we are perfectly able to handle them (and do verification locally),
             // but the client should be using a CONNECT request instead!
@@ -670,6 +689,9 @@ int main(int argc, const char* argv[])
         assert(!bt_dht_ptr->local_endpoints().empty());
         return bt_dht_ptr;
     };
+
+    if (!config.is_proxy_enabled())
+        LOG_INFO("Proxy disabled, not serving plain HTTP/HTTPS proxy requests");
 
     OuiServiceServer proxy_server(ex);
 

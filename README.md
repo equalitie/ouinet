@@ -354,9 +354,11 @@ After an injector has finished starting, you may want to use the shell
 container to inspect and note down the contents of `injector/endpoint-*`
 (injector endpoints) and `injector/ed25519-public-key` (public key for HTTP
 signatures) to be used by clients.  The injector will also generate a
-`tls-cert.pem`  file which you should distribute to clients for TLS access.
+`tls-cert.pem` file which you should distribute to clients for TLS access.
 Other configuration information like credentials can be found in
-`injector/ouinet-injector.conf`.
+`injector/ouinet-injector.conf`.  Remember that the injector will become an
+open HTTP proxy for anyone having its credentials; if you want to disable this
+feature, set `disable-proxy = true`.
 
 To start the injector in headless mode, you can run:
 

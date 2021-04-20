@@ -74,6 +74,9 @@ public:
     std::string credentials() const
     { return _credentials; }
 
+    bool is_proxy_enabled() const
+    { return !_disable_proxy; }
+
     const std::string& tls_ca_cert_store_path() const
     { return _tls_ca_cert_store_path; }
 
@@ -100,6 +103,7 @@ private:
     std::string _bep5_injector_swarm_name;
     boost::filesystem::path OUINET_CONF_FILE = "ouinet-injector.conf";
     std::string _credentials;
+    bool _disable_proxy = false;
     util::Ed25519PrivateKey _ed25519_private_key;
 };
 
@@ -139,6 +143,8 @@ InjectorConfig::options_description()
         ("credentials", po::value<string>()
          , "<username>:<password> authentication pair. "
            "If unused, this injector shall behave as an open proxy.")
+        ("disable-proxy", po::bool_switch(&_disable_proxy)->default_value(false)
+         , "Reject plain HTTP proxy requests (including CONNECT for HTTPS)")
 
         ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
          , "Path to the CA certificate store file")
