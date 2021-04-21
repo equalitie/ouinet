@@ -24,7 +24,7 @@ using sys::errc::make_error_code;
 class DhtGroupsImpl {
 public:
     using GroupName = BaseDhtGroups::GroupName;
-    using ItemName  = DhtGroups::ItemName;
+    using ItemName  = BaseDhtGroups::ItemName;
 
 public:
     ~DhtGroupsImpl();
@@ -38,6 +38,7 @@ public:
     { return load(std::move(root_dir), false, std::move(ex), c, std::move(y)); }
 
     std::set<GroupName> groups() const;
+    std::set<ItemName> items(const GroupName&) const;
 
     void add(const GroupName&, const ItemName&, Cancel&, asio::yield_context);
 
@@ -178,6 +179,20 @@ std::set<DhtGroups::GroupName> DhtGroupsImpl::groups() const
 
     for (auto& group : _groups) {
         ret.insert(group.first);
+    }
+
+    return ret;
+}
+
+std::set<DhtGroups::ItemName> DhtGroupsImpl::items(const GroupName& gn) const
+{
+    std::set<DhtGroups::ItemName> ret;
+
+    auto gi = _groups.find(gn);
+    if (gi == _groups.end()) return ret;
+
+    for (auto& item : gi->second) {
+        ret.insert(item);
     }
 
     return ret;
@@ -389,6 +404,9 @@ public:
     std::set<GroupName> groups() const override
     { return _impl->groups(); }
 
+    std::set<ItemName> items(const GroupName& gn) const override
+    { return _impl->items(gn); }
+
 private:
     std::unique_ptr<DhtGroupsImpl> _impl;
 };
@@ -414,6 +432,9 @@ public:
 
     std::set<GroupName> groups() const override
     { return _impl->groups(); }
+
+    std::set<ItemName> items(const GroupName& gn) const override
+    { return _impl->items(gn); }
 
     void add(const GroupName& gn, const ItemName& in, Cancel& c, asio::yield_context y) override
     { return _impl->add(gn, in, c, y); }
@@ -454,6 +475,19 @@ public:
         auto fbgroups = fallback_groups->groups();
         std::set_union( groups_.begin(), groups_.end()
                       , fbgroups.begin(), fbgroups.end()
+                      , std::inserter(ret, ret.begin()) );
+        return ret;
+    }
+
+    std::set<ItemName> items(const GroupName& gn) const override
+    {
+        // No `std::set::merge` in C++14,
+        // see <https://stackoverflow.com/a/7089642>.
+        std::set<ItemName> ret;
+        auto items_ = FullDhtGroups::items(gn);
+        auto fbitems = fallback_groups->items(gn);
+        std::set_union( items_.begin(), items_.end()
+                      , fbitems.begin(), fbitems.end()
                       , std::inserter(ret, ret.begin()) );
         return ret;
     }
