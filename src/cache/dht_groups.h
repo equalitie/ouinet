@@ -11,10 +11,14 @@ namespace ouinet {
 class BaseDhtGroups {
 public:
     using GroupName = std::string;
+    using ItemName  = std::string;
 
 public:
     virtual ~BaseDhtGroups() = default;
     virtual std::set<GroupName> groups() const = 0;
+
+    // Empty if the group does not exist.
+    virtual std::set<ItemName> items(const GroupName&) const = 0;
 };
 
 // This is considered read-only and unsafe (so extra checks are performed).
@@ -23,9 +27,6 @@ load_static_dht_groups(fs::path root_dir, asio::executor, Cancel&, asio::yield_c
 
 class DhtGroups : public BaseDhtGroups {
 public:
-    using ItemName  = std::string;
-
-public:
     virtual ~DhtGroups() = default;
 
     virtual void add(const GroupName&, const ItemName&, Cancel&, asio::yield_context) = 0;
@@ -33,6 +34,9 @@ public:
     // Remove item from every group it is in. Return groups that became empty
     // as a result.
     virtual std::set<GroupName> remove(const ItemName&) = 0;
+
+    // Do nothing if the group does not exist.
+    virtual void remove_group(const GroupName&) = 0;
 };
 
 // This is considered read-write and safe.
