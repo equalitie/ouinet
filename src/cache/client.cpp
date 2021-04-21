@@ -499,9 +499,33 @@ struct Client::Impl {
         }, cancel, y[e]);
         if (e) return or_throw(y, e);
 
-        for (auto dht_group : _dht_groups->groups()) {
-            _announcer.add(compute_swarm_name(dht_group));
+        // These checks are not bullet-proof, but they should catch some inconsistencies
+        // between resource groups and the HTTP store.
+        std::set<DhtGroups::ItemName> bad_items;
+        std::set<DhtGroups::GroupName> bad_groups;
+        for (auto& group_name : _dht_groups->groups()) {
+            unsigned good_items = 0;
+            for (auto& group_item : _dht_groups->items(group_name)) {
+                // TODO: This implies opening all cache items (again for local cache), make lighter.
+                sys::error_code ec;
+                if (_http_store->reader(group_item, ec) != nullptr)
+                    good_items++;
+                else {
+                    _WARN("Group resource missing from HTTP store: ", group_item, " (", group_name, ")");
+                    bad_items.insert(group_item);
+                }
+            }
+            if (good_items > 0)
+                _announcer.add(compute_swarm_name(group_name));
+            else {
+                _WARN("Not announcing group with no resources in HTTP store: ", group_name);
+                bad_groups.insert(group_name);
+            }
         }
+        for (auto& group_name : bad_groups)
+            _dht_groups->remove_group(group_name);
+        for (auto& item_name : bad_items)
+            _dht_groups->remove(item_name);
     }
 
     void stop() {
