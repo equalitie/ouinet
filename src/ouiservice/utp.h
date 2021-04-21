@@ -33,7 +33,7 @@ class UtpOuiServiceServer : public OuiServiceImplementationServer
     asio::ip::udp::endpoint _endpoint;
     Cancel _cancel;
     std::unique_ptr<asio_utp::udp_multiplexer> _udp_multiplexer;
-    util::AsyncQueue<asio_utp::socket> _accept_queue;
+    util::AsyncQueue<GenericStream> _accept_queue;
 };
 
 class UtpOuiServiceClient : public OuiServiceImplementationClient

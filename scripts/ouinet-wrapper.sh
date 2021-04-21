@@ -130,8 +130,8 @@ if grep -qE '^\s*disable-cache\s*=\b' "$CONF" && ! has_help_arg "$@"; then
 fi
 
 # Comment out some obsolete configuration parameters.
-if grep -qE '^\s*(cache-index|index-ipns-id|announce-in-bep5-swarm)\s*=' "$CONF" && ! has_help_arg "$@"; then
-    sed -i -E 's/^(\s*)(cache-index|index-ipns-id|announce-in-bep5-swarm)(\s*=.*)/##\1\2\3  # obsolete/' "$CONF"
+if grep -qE '^\s*(autoseed-updated|cache-index|enable-http-connect-requests|index-ipns-id|announce-in-bep5-swarm|cache-local-capacity|disable-cache|seed-content)\s*=' "$CONF" && ! has_help_arg "$@"; then
+    sed -i -E 's/^(\s*)(autoseed-updated|cache-index|enable-http-connect-requests|index-ipns-id|announce-in-bep5-swarm|cache-local-capacity|disable-cache|seed-content)(\s*=.*)/##\1\2\3  # obsolete/' "$CONF"
 fi
 
 # Update TCP/TLS endpoint file name.

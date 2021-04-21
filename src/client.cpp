@@ -413,7 +413,7 @@ private:
                 TRACK_SPAWN(_ctx, ([this, con = move(con)]
                                    (asio::yield_context yield) mutable {
                     sys::error_code ec;
-                    Yield y(_ctx, yield, "uTPAccept");
+                    Yield y(_ctx, yield, "uTPAccept(" + con.remote_endpoint() + ")");
                     serve_utp_request(move(con), y[ec]);
                 }));
             }
@@ -645,7 +645,9 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
         assert(!cancel || ec == asio::error::operation_aborted);
 
         if (ec) {
-            _YERROR(yield, "Failed to connect to self ec:", ec.message());
+            if (ec != asio::error::operation_aborted) {
+                _YERROR(yield, "Failed to connect to self ec:", ec.message());
+            }
             return or_throw<Session>(yield, ec);
         }
 
@@ -1064,7 +1066,9 @@ Session Client::State::fetch_fresh_through_simple_proxy
         assert(!cancel || ec == asio::error::operation_aborted);
 
         if (ec) {
-            _YWARN(yield, "Failed to connect to injector ec:", ec.message());
+            if (ec != asio::error::operation_aborted) {
+                _YWARN(yield, "Failed to connect to injector ec:", ec.message());
+            }
             return or_throw<Session>(yield, ec);
         }
 
@@ -1782,6 +1786,8 @@ GenericStream Client::State::ssl_mitm_handshake( GenericStream&& con
 
     // Send back OK to let the UA know we have the "tunnel"
     http::response<http::string_body> res{http::status::ok, con_req.version()};
+    // No ``res.prepare_payload()`` since no payload is allowed for CONNECT:
+    // <https://tools.ietf.org/html/rfc7231#section-6.3.1>.
     http::async_write(con, res, yield);
 
     sys::error_code ec;

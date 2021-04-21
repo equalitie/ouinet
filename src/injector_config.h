@@ -1,6 +1,7 @@
 #pragma once
 
 #include <boost/asio/ip/udp.hpp>
+#include <boost/regex.hpp>
 
 #include "logger.h"
 #include "util/crypto.h"
@@ -74,16 +75,17 @@ public:
     std::string credentials() const
     { return _credentials; }
 
+    bool is_proxy_enabled() const
+    { return !_disable_proxy; }
+
+    boost::optional<boost::regex> target_rx() const
+    { return _target_rx; }
+
     const std::string& tls_ca_cert_store_path() const
     { return _tls_ca_cert_store_path; }
 
     util::Ed25519PrivateKey cache_private_key() const
     { return _ed25519_private_key; }
-
-    unsigned int cache_local_capacity() const
-    { return _cache_local_capacity; }
-
-    bool cache_enabled() const { return !_disable_cache; }
 
 private:
     void setup_ed25519_private_key(const std::string& hex);
@@ -105,9 +107,9 @@ private:
     std::string _bep5_injector_swarm_name;
     boost::filesystem::path OUINET_CONF_FILE = "ouinet-injector.conf";
     std::string _credentials;
+    bool _disable_proxy = false;
+    boost::optional<boost::regex> _target_rx;
     util::Ed25519PrivateKey _ed25519_private_key;
-    unsigned int _cache_local_capacity;
-    bool _disable_cache = false;
 };
 
 inline
@@ -146,19 +148,18 @@ InjectorConfig::options_description()
         ("credentials", po::value<string>()
          , "<username>:<password> authentication pair. "
            "If unused, this injector shall behave as an open proxy.")
+        ("disable-proxy", po::bool_switch(&_disable_proxy)->default_value(false)
+         , "Reject plain HTTP proxy requests (including CONNECT for HTTPS)")
+        ("restricted", po::value<string>()
+         , "Only allow injection of URIs fully matching the given regular expression. "
+           "This option implies \"--disable-proxy\". "
+           "Example: https?://(www\\.)?(example\\.com|test\\.net/foo)/.*")
 
         ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
          , "Path to the CA certificate store file")
         // Cache options
-        ("disable-cache", "Disable all cache operations (even initialization)")
         ("ed25519-private-key", po::value<string>()
          , "Ed25519 private key for cache-related signatures (hex-encoded)")
-        ("seed-content"
-         , po::value<bool>()->default_value(false)
-         , "Seed the content instead of only signing it")
-        ("cache-local-capacity"
-         , po::value<unsigned int>()->default_value(10000)  // arbitrarily chosen
-         , "Maximum number of resources to be cached locally")
         ;
 
     return desc;
@@ -225,6 +226,11 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         }
     }
 
+    if (vm.count("restricted")) {
+        _target_rx = boost::regex{vm["restricted"].as<string>()};
+        _disable_proxy = true;
+    }
+
     // Unfortunately, Boost.ProgramOptions doesn't support arguments without
     // values in config files. Thus we need to force the 'listen-on-i2p' arg
     // to have one of the strings values "true" or "false".
@@ -283,14 +289,6 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
     if (vm.count("listen-on-obfs4")) {
         _obfs4_endpoint = *parse::endpoint<asio::ip::tcp>(vm["listen-on-obfs4"].as<string>());
-    }
-
-    if (vm.count("cache-local-capacity")) {
-        _cache_local_capacity = vm["cache-local-capacity"].as<unsigned int>();
-    }
-
-    if (vm.count("disable-cache")) {
-        _disable_cache = true;
     }
 
     // Please note that generating keys takes a long time

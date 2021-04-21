@@ -101,6 +101,14 @@ void handle_bad_request( GenericStream& con
     http::async_write(con, res, yield);
 }
 
+static
+void handle_no_proxy( GenericStream& con
+                    , const Request& req
+                    , Yield yield)
+{
+    return handle_bad_request(con, req, "Proxy disabled", yield);
+}
+
 //------------------------------------------------------------------------------
 // Resolve request target address, check whether it is valid
 // and return lookup results.
@@ -215,7 +223,6 @@ void handle_connect_request( GenericStream client_c
     http::response<http::empty_body> res{http::status::ok, req.version()};
     // No ``res.prepare_payload()`` since no payload is allowed for CONNECT:
     // <https://tools.ietf.org/html/rfc7231#section-6.3.1>.
-
     http::async_write(client_c, res, yield[ec]);
 
     if (ec) {
@@ -439,6 +446,11 @@ void serve( InjectorConfig& config
                            , config
                            , genuuid);
 
+    auto is_restricted_target = [rx_o = config.target_rx()] (boost::string_view target) {
+        if (!rx_o) return false;
+        return !boost::regex_match(target.begin(), target.end(), *rx_o);
+    };
+
     for (;;) {
         sys::error_code ec;
 
@@ -468,6 +480,11 @@ void serve( InjectorConfig& config
         }
 
         if (req.method() == http::verb::connect) {
+            if (!config.is_proxy_enabled()) {
+                handle_no_proxy(con, req, yield[ec].tag("handle_no_proxy_connect"));
+                if (ec || !req_keep_alive) break;
+                continue;
+            }
             return handle_connect_request( move(con)
                                          , req
                                          , cancel
@@ -482,6 +499,12 @@ void serve( InjectorConfig& config
 
         if (proxy) {
             // No Ouinet header, behave like a (non-caching) proxy.
+            if (!config.is_proxy_enabled()) {
+                handle_no_proxy(con, req, yield[ec].tag("handle_no_proxy_plain"));
+                if (ec || !req_keep_alive) break;
+                continue;
+            }
+
             // TODO: Maybe reject requests for HTTPS URLS:
             // we are perfectly able to handle them (and do verification locally),
             // but the client should be using a CONNECT request instead!
@@ -542,6 +565,8 @@ void serve( InjectorConfig& config
 
             if (opt_err_res)
                 http::async_write(con, *opt_err_res, yield[ec]);
+            else if (is_restricted_target(req.target()))
+                handle_bad_request(con, req, "Target not allowed", yield[ec].tag("handle_restricted"));
             else
                 cc.fetch( con, move(req)
                         , cancel, yield[ec].tag("cache_control.fetch"));
@@ -670,6 +695,11 @@ int main(int argc, const char* argv[])
         assert(!bt_dht_ptr->local_endpoints().empty());
         return bt_dht_ptr;
     };
+
+    if (!config.is_proxy_enabled())
+        LOG_INFO("Proxy disabled, not serving plain HTTP/HTTPS proxy requests");
+    if (auto target_rx_o = config.target_rx())
+        LOG_INFO("Target URIs restricted to regular expression: ", *target_rx_o);
 
     OuiServiceServer proxy_server(ex);
 

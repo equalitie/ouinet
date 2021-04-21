@@ -60,10 +60,6 @@ public:
         return _max_cached_age;
     }
 
-    bool autoseed_updated() const {
-        return _autoseed_updated;
-    }
-
     const fs::path& cache_static_path() const {
         return _cache_static_path;
     }
@@ -88,10 +84,6 @@ public:
     void set_credentials( const Endpoint& injector
                         , const std::string& cred) {
         _injector_credentials[injector] = cred;
-    }
-
-    bool enable_http_connect_requests() const {
-        return _enable_http_connect_requests;
     }
 
     asio::ip::tcp::endpoint front_end_endpoint() const {
@@ -157,9 +149,6 @@ public:
             , po::value<int>()->default_value(_max_cached_age.total_seconds())
             , "Discard cached content older than this many seconds "
               "(0: discard all; -1: discard none)")
-           ("autoseed-updated", po::bool_switch(&_autoseed_updated)->default_value(false)
-            , "Automatically fetch and seed the data of updated index entries "
-              "that this client is already publishing.")
           ("cache-static-repo"
            , po::value<string>()
            , "Repository for internal files of the static cache "
@@ -184,8 +173,6 @@ public:
            ("origin-doh-base", po::value<string>()
             , "If given, enable DNS over HTTPS for origin access using the given base URL; "
               "the \"dns=...\" query argument will be added for the GET request.")
-           ("enable-http-connect-requests", po::bool_switch(&_enable_http_connect_requests)
-            , "Enable HTTP CONNECT requests")
            ;
 
         return desc;
@@ -220,7 +207,6 @@ private:
     boost::optional<Endpoint> _injector_ep;
     std::string _tls_injector_cert_path;
     std::string _tls_ca_cert_store_path;
-    bool _enable_http_connect_requests = false;
     bool _disable_cache_access = false;
     bool _disable_origin_access = false;
     bool _disable_proxy_access = false;
@@ -229,7 +215,6 @@ private:
 
     boost::posix_time::time_duration _max_cached_age
         = default_max_cached_age;
-    bool _autoseed_updated = false;
 
     std::string _client_credentials;
     std::map<Endpoint, std::string> _injector_credentials;
