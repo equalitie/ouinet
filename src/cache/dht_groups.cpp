@@ -44,6 +44,8 @@ public:
 
     std::set<GroupName> remove(const ItemName&);
 
+    void remove_group(const GroupName&);
+
 private:
     using Group  = std::pair<GroupName, std::set<ItemName>>;
     using Groups = std::map<GroupName, std::set<ItemName>>;
@@ -390,6 +392,15 @@ std::set<DhtGroups::GroupName> DhtGroupsImpl::remove(const ItemName& item_name)
     return erased_groups;
 }
 
+void DhtGroupsImpl::remove_group(const GroupName& gn)
+{
+    auto gi = _groups.find(gn);
+    if (gi == _groups.end()) return;
+
+    try_remove(group_path(gn));
+    _groups.erase(gi);
+}
+
 DhtGroupsImpl::~DhtGroupsImpl() {
     _lifetime_cancel();
 }
@@ -441,6 +452,9 @@ public:
 
     std::set<GroupName> remove(const ItemName& in) override
     { return _impl->remove(in); }
+
+    void remove_group(const GroupName& gn) override
+    { _impl->remove_group(gn); }
 
 private:
     std::unique_ptr<DhtGroupsImpl> _impl;

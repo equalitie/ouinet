@@ -34,6 +34,9 @@ public:
     // Remove item from every group it is in. Return groups that became empty
     // as a result.
     virtual std::set<GroupName> remove(const ItemName&) = 0;
+
+    // Do nothing if the group does not exist.
+    virtual void remove_group(const GroupName&) = 0;
 };
 
 // This is considered read-write and safe.
