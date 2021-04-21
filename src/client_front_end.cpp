@@ -382,13 +382,6 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         ss << "Origin <abbr title=\"DNS over HTTPS\">DoH</abbr> endpoint URL:"
            << " <samp>" << as_safe_html(*doh_ep) << "</samp><br>\n";
     }
-    ss << "Injector endpoint: " << config.injector_endpoint() << "<br>\n";
-    auto inj_pubkey = config.cache_http_pub_key();
-    if (inj_pubkey) {
-        auto inj_pubkey_s = inj_pubkey->serialize();
-        ss << "Injector pubkey (hex): " << util::bytes::to_hex(inj_pubkey_s) << "<br>\n";
-        ss << "Injector pubkey (Base32): " << util::base32up_encode(inj_pubkey_s) << "<br>\n";
-    }
 
     if (udp_port) {
         ss << "Local UDP endpoints:<br>\n";
@@ -404,6 +397,8 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         ss << "Reachability status: " << reachability_status(*reachability) << "<br>\n";
     }
 
+    ss << "Injector endpoint: " << config.injector_endpoint() << "<br>\n";
+
     if (_show_pending_tasks) {
         ss << "        <h2>Pending tasks " << _pending_tasks.size() << "</h2>\n";
         ss << "        <ul>\n";
@@ -415,6 +410,14 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
     if (cache_client) {
         ss << "<h2>Distributed cache</h2>\n";
+        auto inj_pubkey = config.cache_http_pub_key();
+        if (inj_pubkey) {
+            auto inj_pubkey_s = inj_pubkey->serialize();
+            ss << "Injector pubkey (hex): " << util::bytes::to_hex(inj_pubkey_s) << "<br>\n";
+            ss << "Injector pubkey (Base32): " << util::base32up_encode(inj_pubkey_s) << "<br>\n";
+            ss << "<br>\n";
+        }
+
         auto max_age = config.max_cached_age();
         ss << ( boost::format("Content cached locally if newer than %d seconds"
                               " (i.e. not older than %s).<br>\n")
