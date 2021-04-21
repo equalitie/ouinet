@@ -356,11 +356,14 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
           "      using system-accepted Certification Authorities.</p>\n";
 
     ss << ToggleInput{"<u>A</u>uto refresh",   "auto_refresh",   'a', _auto_refresh_enabled};
+
+    ss << "<h2>Request mechanisms</h2>\n";
     ss << ToggleInput{"<u>O</u>rigin access",  "origin_access",  'o', config.is_origin_access_enabled()};
     ss << ToggleInput{"<u>P</u>roxy access",   "proxy_access",   'p', config.is_proxy_access_enabled()};
     ss << ToggleInput{"<u>I</u>njector proxy", "injector_access",'i', config.is_injector_access_enabled()};
     ss << ToggleInput{"Distributed <u>C</u>ache", "distributed_cache",  'c', config.is_cache_access_enabled()};
 
+    ss << "<h2>Logging</h2>\n";
     ss << *_log_level_input;
     bool log_file_enabled = logger.get_log_file() != nullptr;
     ss << ToggleInput{"<u>L</u>og file", "logfile", 'l', log_file_enabled};
@@ -369,11 +372,12 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
            << " <a href=\"" << log_file_apath << "\" class=\"download\" download=\"ouinet-logfile.txt\">"
            << "Download log file" << "</a><br>\n";
 
-    ss << "<br>\n";
-    ss << "Ouinet: " << Version::VERSION_NAME << " " << Version::BUILD_ID << "<br>\n";
-    ss << "Ouinet protocol: " << http_::protocol_version_current << "<br>\n";
-    ss << "<br>\n";
+    ss << "<h2>Ouinet client</h2>\n";
+    ss << "Version: " << Version::VERSION_NAME << " " << Version::BUILD_ID << "<br>\n";
+    ss << "Protocol: " << http_::protocol_version_current << "<br>\n";
     ss << "Now: " << now_as_string()  << "<br>\n";
+
+    ss << "<h2>Network</h2>\n";
     if (auto doh_ep = config.origin_doh_endpoint()) {
         ss << "Origin <abbr title=\"DNS over HTTPS\">DoH</abbr> endpoint URL:"
            << " <samp>" << as_safe_html(*doh_ep) << "</samp><br>\n";
@@ -410,6 +414,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     }
 
     if (cache_client) {
+        ss << "<h2>Distributed cache</h2>\n";
         auto max_age = config.max_cached_age();
         ss << ( boost::format("Content cached locally if newer than %d seconds"
                               " (i.e. not older than %s).<br>\n")
