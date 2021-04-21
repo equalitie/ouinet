@@ -188,6 +188,65 @@ static void load_log_file(stringstream& out_ss) {
              , ostreambuf_iterator<char>(out_ss));
 }
 
+template<class Proto>
+static
+boost::optional<asio::ip::udp::endpoint>
+local_endpoint(Proto proto, uint16_t port) {
+    using namespace asio::ip;
+    asio::io_context ctx;
+    udp::socket s(ctx, proto);
+    sys::error_code ec;
+    if (proto == udp::v4()) {
+        s.connect(udp::endpoint(make_address_v4("192.0.2.1"), 1234), ec);
+    } else {
+        s.connect(udp::endpoint(make_address_v6("2001:db8::1"), 1234), ec);
+    }
+    if (ec) return boost::none;
+    return udp::endpoint(s.local_endpoint().address(), port);
+}
+
+static
+std::vector<std::string>
+local_udp_endpoints(uint32_t udp_port) {
+    using namespace asio::ip;
+
+    auto epv4 = local_endpoint(udp::v4(), udp_port);
+    auto epv6 = local_endpoint(udp::v6(), udp_port);
+
+    std::vector<std::string> eps;
+    eps.reserve(2);
+
+    if (epv4) eps.push_back(util::str(*epv4));
+    if (epv6) eps.push_back(util::str(*epv6));
+
+    return eps;
+}
+
+static
+std::string
+upnp_status(const ClientFrontEnd::UPnPs& upnps) {
+    if (upnps.empty()) return "disabled";
+
+    for (auto& pair : upnps)
+        if (pair.second->mapping_is_active()) return "enabled";
+    return "inactive";
+}
+
+static
+std::string
+reachability_status(const util::UdpServerReachabilityAnalysis& reachability) {
+    switch (reachability.judgement()) {
+    case util::UdpServerReachabilityAnalysis::Reachability::Undecided:
+        return "undecided";
+    case util::UdpServerReachabilityAnalysis::Reachability::ConfirmedReachable:
+        return "reachable";
+    case util::UdpServerReachabilityAnalysis::Reachability::UnconfirmedReachable:
+        return "likely reachable";
+    }
+    assert(0 && "Invalid reachability");
+    return "(unknown)";
+}
+
 void ClientFrontEnd::handle_group_list( const Request&
                                       , Response& res
                                       , std::stringstream& ss
@@ -202,6 +261,9 @@ void ClientFrontEnd::handle_group_list( const Request&
 }
 
 void ClientFrontEnd::handle_portal( ClientConfig& config
+                                  , boost::optional<uint32_t> udp_port
+                                  , const UPnPs& upnps
+                                  , const util::UdpServerReachabilityAnalysis* reachability
                                   , const Request& req, Response& res, stringstream& ss
                                   , cache::Client* cache_client
                                   , Yield yield)
@@ -308,6 +370,9 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
            << "Download log file" << "</a><br>\n";
 
     ss << "<br>\n";
+    ss << "Ouinet: " << Version::VERSION_NAME << " " << Version::BUILD_ID << "<br>\n";
+    ss << "Ouinet protocol: " << http_::protocol_version_current << "<br>\n";
+    ss << "<br>\n";
     ss << "Now: " << now_as_string()  << "<br>\n";
     if (auto doh_ep = config.origin_doh_endpoint()) {
         ss << "Origin <abbr title=\"DNS over HTTPS\">DoH</abbr> endpoint URL:"
@@ -319,6 +384,20 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         auto inj_pubkey_s = inj_pubkey->serialize();
         ss << "Injector pubkey (hex): " << util::bytes::to_hex(inj_pubkey_s) << "<br>\n";
         ss << "Injector pubkey (Base32): " << util::base32up_encode(inj_pubkey_s) << "<br>\n";
+    }
+
+    if (udp_port) {
+        ss << "Local UDP endpoints:<br>\n";
+        ss << "<ul>\n";
+        for (auto& ep : local_udp_endpoints(*udp_port))
+            ss << "<li>" << as_safe_html(ep) << "</li>\n";
+        ss << "</ul>\n";
+    }
+
+    ss << "UPnP status: " << upnp_status(upnps) << "<br>\n";
+
+    if (reachability) {
+        ss << "Reachability status: " << reachability_status(*reachability) << "<br>\n";
     }
 
     if (_show_pending_tasks) {
@@ -367,23 +446,6 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
           "</html>\n";
 }
 
-template<class Proto>
-static
-boost::optional<asio::ip::udp::endpoint>
-local_endpoint(Proto proto, uint16_t port) {
-    using namespace asio::ip;
-    asio::io_context ctx;
-    udp::socket s(ctx, proto);
-    sys::error_code ec;
-    if (proto == udp::v4()) {
-        s.connect(udp::endpoint(make_address_v4("192.0.2.1"), 1234), ec);
-    } else {
-        s.connect(udp::endpoint(make_address_v6("2001:db8::1"), 1234), ec);
-    }
-    if (ec) return boost::none;
-    return udp::endpoint(s.local_endpoint().address(), port);
-}
-
 void ClientFrontEnd::handle_status( ClientConfig& config
                                   , boost::optional<uint32_t> udp_port
                                   , const UPnPs& upnps
@@ -407,41 +469,11 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         {"logfile", logger.get_log_file() != nullptr}
     };
 
-    if (udp_port) {
-        using namespace asio::ip;
+    if (udp_port) response["local_udp_endpoints"] = local_udp_endpoints(*udp_port);
 
-        auto epv4 = local_endpoint(udp::v4(), *udp_port);
-        auto epv6 = local_endpoint(udp::v6(), *udp_port);
+    response["is_upnp_active"] = upnp_status(upnps);
 
-        std::vector<std::string> eps;
-        eps.reserve(2);
-
-        if (epv4) eps.push_back(util::str(*epv4));
-        if (epv6) eps.push_back(util::str(*epv6));
-
-        response["local_udp_endpoints"] = std::move(eps);
-    }
-
-    if (!upnps.empty()) {
-        bool enabled = false;
-        for (auto& pair : upnps) {
-            if (pair.second->mapping_is_active()) enabled = true;
-        }
-        response["is_upnp_active"] = enabled ? "enabled" : "inactive";
-    } else {
-        response["is_upnp_active"] = "disabled";
-    }
-
-    if (reachability) {
-        auto judgement = reachability->judgement();
-        if (judgement == util::UdpServerReachabilityAnalysis::Reachability::Undecided) {
-            response["udp_world_reachable"] = "undecided";
-        } else if (judgement == util::UdpServerReachabilityAnalysis::Reachability::ConfirmedReachable) {
-            response["udp_world_reachable"] = "reachable";
-        } else if (judgement == util::UdpServerReachabilityAnalysis::Reachability::UnconfirmedReachable) {
-            response["udp_world_reachable"] = "likely reachable";
-        }
-    }
+    if (reachability) response["udp_world_reachable"] = reachability_status(*reachability);
 
     if (cache_client) {
         Cancel cancel;
@@ -492,7 +524,9 @@ Response ClientFrontEnd::serve( ClientConfig& config
                      , yield[e]);
     } else {
         sys::error_code e;
-        handle_portal(config, req, res, ss, cache_client, yield[e]);
+        handle_portal( config, udp_port, upnps, reachability
+                     , req, res, ss, cache_client
+                     , yield[e]);
     }
 
     Response::body_type::reader reader(res, res.body());

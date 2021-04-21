@@ -107,6 +107,9 @@ private:
                           , cache::Client*);
 
     void handle_portal( ClientConfig&
+                      , boost::optional<uint32_t> udp_port
+                      , const UPnPs&
+                      , const util::UdpServerReachabilityAnalysis*
                       , const Request&
                       , Response&
                       , std::stringstream&
