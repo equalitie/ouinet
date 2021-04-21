@@ -225,6 +225,7 @@ DhtGroupsImpl::load( fs::path root_dir
 
         if (cancel) return or_throw<Ret>(yield, asio::error::operation_aborted);
         if (ec || group.second.empty()) {
+            _WARN("Not loading empty group: ", group.first);
             if (trusted) try_remove(f);
             continue;
         }
