@@ -1960,7 +1960,7 @@ void Client::State::serve_request( GenericStream&& con
 
     auto local_rx = util::str("https?://[^:/]+\\.", _config.local_domain(), "(:[0-9]+)?/.*");
 
-#ifdef _NDEBUG // release
+#ifdef NDEBUG // release
     const rr::Config unrequested{deque<fresh_channel>({fresh_channel::origin})};
 #else // debug
     // Don't request these in debug mode as they bring a lot of noise into the log

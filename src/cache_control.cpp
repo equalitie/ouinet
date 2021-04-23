@@ -251,7 +251,7 @@ CacheControl::do_fetch(
         // returned error code.
         asio::yield_context y(yield);
         {
-#           ifndef _NDEBUG
+#           ifndef NDEBUG
             WatchDog wdog(_ex, std::chrono::seconds(10), [&] {
                     yield.log("Fetch fresh failed to stop");
                     assert(0);
@@ -261,7 +261,7 @@ CacheControl::do_fetch(
             if (fs.fetch_fresh)  fs.fetch_fresh ->stop(y[ignored_ec]);
         }
         {
-#           ifndef _NDEBUG
+#           ifndef NDEBUG
             WatchDog wdog(_ex, std::chrono::seconds(10), [&] {
                     yield.log("Fetch stored failed to stop");
                     assert(0);
