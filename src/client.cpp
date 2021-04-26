@@ -1998,6 +1998,7 @@ void Client::State::serve_request( GenericStream&& con
         Match( reqexpr::from_regex(target_getter, "https?://detectportal\\.firefox\\.com/.*")
              , unrequested ),
 
+        /* To avoid these at the client, use some kind of ad blocker (like uBlock Origin).
         // Ads
         Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*googlesyndication\\.com/.*")
              , unrequested ),
@@ -2019,6 +2020,7 @@ void Client::State::serve_request( GenericStream&& con
 
         Match( reqexpr::from_regex(target_getter, "https?://ping.chartbeat.net/.*")
              , unrequested ),
+        */
 
         // Handle requests to <http://localhost/> internally.
         Match( reqexpr::from_regex(host_getter, "localhost")

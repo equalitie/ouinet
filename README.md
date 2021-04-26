@@ -485,7 +485,9 @@ Otherwise you may manually [modify your browser's settings][Firefox proxy] to:
 Additionally, you may want to disable Firefox's automatic captive portal
 detection so that you get less noise in client logs.  Enter `about:config` in
 the location bar and change `network.captive-portal-service.enabled` to
-`false`.
+`false`.  Also, if you want to avoid wasting Ouinet network resources and disk
+space on ads and similar undesired content, you can install an ad blocker like
+[uBlock Origin](https://github.com/gorhill/uBlock).
 
 Once done, you can visit `localhost` in your browser and it should show you
 the *client front-end* with assorted information from the client and
