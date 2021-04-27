@@ -1968,6 +1968,11 @@ void Client::State::serve_request( GenericStream&& con
 #endif
 
     const vector<Match> matches({
+        // Please keep host-specific matches at a bare minimum
+        // as they may have undesired side-effects;
+        // instead, use user agent-side mechanisms like browser settings and extensions when possible,
+        // and only leave those that really break things and cannot be otherwise disabled.
+
         // Disable cache and always go to origin for this site.
         //Match( reqexpr::from_regex(target_getter, "https?://ident\\.me/.*")
         //     , {deque<fresh_channel>({fresh_channel::origin})} ),
