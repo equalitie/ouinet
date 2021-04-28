@@ -488,7 +488,9 @@ Firefox Data Collection and Use", and maybe entering `about:config` in the
 location bar and clearing the value of `toolkit.telemetry.server`.  You can
 also avoid some more noise by disabling Firefox's automatic captive portal
 detection by changing `network.captive-portal-service.enabled` to `false` in
-`about:config`.
+`about:config`.  If phishing and malware do not worry you for testing, you can
+avoid even more noise by disabling Safe Browsing under "Preferences / Privacy
+& Security / Deceptive Content and Dangerous Software Protection".
 
 Also, if you want to avoid wasting Ouinet network resources and disk space on
 ads and similar undesired content, you can install an ad blocker like

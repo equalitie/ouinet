@@ -1985,8 +1985,15 @@ void Client::State::serve_request( GenericStream&& con
         // Disable cache and always go to origin for these google sites.
         Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?google\\.com/complete/.*")
              , unrequested ),
+
+        /* To stop these requests in Firefox,
+         * uncheck "Preferences / Privacy & Security / Deceptive Content and Dangerous Software Protection".
+        // Safe Browsing API <https://developers.google.com/safe-browsing/>.
+        // These should not be very frequent after start,
+        // plus they use POST requests, so there is no risk of accidental injection.
         Match( reqexpr::from_regex(target_getter, "https://safebrowsing\\.googleapis\\.com/.*")
              , unrequested ),
+        */
 
         // Disable cache and always go to origin for these mozilla sites.
         Match( reqexpr::from_regex(target_getter, "https?://content-signature\\.cdn\\.mozilla\\.net/.*")
