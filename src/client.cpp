@@ -2003,6 +2003,7 @@ void Client::State::serve_request( GenericStream&& con
         /* To stop these requests,
          * uncheck all options from "Preferences / Privacy & Security / Firefox Data Collection and Use",
          * maybe clear `toolkit.telemetry.server` in `about:config`.
+        // Firefox telemetry
         Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*telemetry\\.mozilla\\.net/.*")
              , unrequested ),
         Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*telemetry\\.mozilla\\.org/.*")
@@ -2011,6 +2012,7 @@ void Client::State::serve_request( GenericStream&& con
 
         /* This should work as expected as long as Origin is enabled.
          * To stop these requests, set `network.captive-portal-service.enabled` to false in `about:config`.
+        // Firefox' captive portal detection
         Match( reqexpr::from_regex(target_getter, "https?://detectportal\\.firefox\\.com/.*")
              , unrequested ),
         */
