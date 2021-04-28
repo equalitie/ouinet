@@ -1987,8 +1987,6 @@ void Client::State::serve_request( GenericStream&& con
              , unrequested ),
         Match( reqexpr::from_regex(target_getter, "https://safebrowsing\\.googleapis\\.com/.*")
              , unrequested ),
-        Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?google-analytics\\.com/.*")
-             , unrequested ),
 
         // Disable cache and always go to origin for these mozilla sites.
         Match( reqexpr::from_regex(target_getter, "https?://content-signature\\.cdn\\.mozilla\\.net/.*")
@@ -2018,7 +2016,10 @@ void Client::State::serve_request( GenericStream&& con
         */
 
         /* To avoid these at the client, use some kind of ad blocker (like uBlock Origin).
-        // Ads
+        // Ads and tracking
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*google-analytics\\.com/.*")
+             , unrequested ),
+
         Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*googlesyndication\\.com/.*")
              , unrequested ),
         Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*googletagservices\\.com/.*")
