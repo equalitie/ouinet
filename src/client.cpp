@@ -1952,6 +1952,7 @@ void Client::State::serve_request( GenericStream&& con
     // TODO: Create once and reuse.
     using Match = pair<const ouinet::reqexpr::reqex, const rr::Config>;
 
+    auto method_override_getter([](const Request& r) {return r["X-HTTP-Method-Override"];});
     auto method_getter([](const Request& r) {return r.method_string();});
     auto host_getter([](const Request& r) {return r["Host"];});
     auto x_oui_dest_getter([](const Request& r) {return r["X-Oui-Destination"];});
@@ -2066,6 +2067,15 @@ void Client::State::serve_request( GenericStream&& con
         // and never cache them.
         Match( reqexpr::from_regex(target_getter, local_rx)
              , {deque<fresh_channel>({fresh_channel::origin})} ),
+
+        // Requests declaring a method override are checked by that method.
+        // This is not a standard header,
+        // but for instance Firefox uses it for Safe Browsing requests,
+        // which according to this standard should actually be POST requests
+        // (probably in the hopes of having more chances that requests get through,
+        // in spite of using HTTPS).
+        Match( !reqexpr::from_regex(method_override_getter, "(|GET)")
+             , nocache_request_config),
 
         // NOTE: The matching of HTTP methods below can be simplified,
         // leaving expanded for readability.
