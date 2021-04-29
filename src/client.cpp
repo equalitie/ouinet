@@ -2003,12 +2003,17 @@ void Client::State::serve_request( GenericStream&& con
              , unrequested ),
         Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*services\\.mozilla\\.com/.*")
              , unrequested ),
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*cdn\\.mozilla\\.net/.*")
+             , unrequested ),
+
+        /* To stop these requests,
+         * uncheck "Preferences / Add-ons / (gear icon) / Update Add-ons Automatically".
+        // Firefox add-ons hotfix (auto-update)
         Match( reqexpr::from_regex(target_getter, "https?://services\\.addons\\.mozilla\\.org/.*")
              , unrequested ),
         Match( reqexpr::from_regex(target_getter, "https?://versioncheck-bg\\.addons\\.mozilla\\.org/.*")
              , unrequested ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*cdn\\.mozilla\\.net/.*")
-             , unrequested ),
+        */
 
         /* To stop these requests,
          * uncheck all options from "Preferences / Privacy & Security / Firefox Data Collection and Use",
