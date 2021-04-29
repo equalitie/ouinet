@@ -1998,6 +1998,8 @@ void Client::State::serve_request( GenericStream&& con
              , unrequested ),
         */
 
+        /* These are used to retrieve add-ons and all kinds of minor security updates from Mozilla,
+         * and they mostly happen on browser start only.
         // Disable cache and always go to origin for these mozilla sites.
         Match( reqexpr::from_regex(target_getter, "https?://content-signature\\.cdn\\.mozilla\\.net/.*")
              , unrequested ),
@@ -2005,6 +2007,7 @@ void Client::State::serve_request( GenericStream&& con
              , unrequested ),
         Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*cdn\\.mozilla\\.net/.*")
              , unrequested ),
+        */
 
         /* To stop these requests,
          * uncheck "Preferences / Add-ons / (gear icon) / Update Add-ons Automatically".
