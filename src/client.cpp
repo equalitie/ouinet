@@ -1982,9 +1982,12 @@ void Client::State::serve_request( GenericStream&& con
         //Match( reqexpr::from_regex(target_getter, "https?://ident\\.me/.*")
         //     , {deque<fresh_channel>({fresh_channel::origin})} ),
 
-        // Disable cache and always go to origin for these google sites.
+        /* Requests which may be considered public but too noisy and of little value for caching
+         * should be processed by something like browser extensions.
+        // Google Search completion
         Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?google\\.com/complete/.*")
              , unrequested ),
+        */
 
         /* To stop these requests in Firefox,
          * uncheck "Preferences / Privacy & Security / Deceptive Content and Dangerous Software Protection".
