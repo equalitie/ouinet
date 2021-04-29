@@ -2080,7 +2080,8 @@ void Client::State::serve_request( GenericStream&& con
         //   - Safe and cacheable (GET, HEAD): cache, but HEAD not yet supported
         //
         // Thus the only remaining method that implies caching is GET.
-
+        Match( !reqexpr::from_regex(method_getter, "GET")
+             , nocache_request_config),
         // Requests declaring a method override are checked by that method.
         // This is not a standard header,
         // but for instance Firefox uses it for Safe Browsing requests,
@@ -2088,8 +2089,6 @@ void Client::State::serve_request( GenericStream&& con
         // (probably in the hopes of having more chances that requests get through,
         // in spite of using HTTPS).
         Match( !reqexpr::from_regex(method_override_getter, "(|GET)")
-             , nocache_request_config),
-        Match( !reqexpr::from_regex(method_getter, "GET")
              , nocache_request_config),
 
         // Disable cache and always go to proxy for this site.
