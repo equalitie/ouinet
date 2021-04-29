@@ -307,6 +307,7 @@ private:
         sys::error_code ec;
 
         auto orig_con = get_connection(cache_rq, timeout_cancel, yield.tag("connect")[ec]);
+        if (ec) yield.log("Failed to get connection: ", ec.message());
         return_or_throw_on_error(yield, timeout_cancel, ec);
 
         // Send HTTP request to origin.
@@ -325,6 +326,7 @@ private:
         auto orig_sess = Session::create(move(sig_reader), timeout_cancel, yield.tag("read-hdr")[ec]);
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
+        if (ec) yield.log("Failed to process response head: ", ec.message());
         return_or_throw_on_error(yield, cancel, ec);
 
         // Keep origin connection if the origin wants to.
@@ -335,7 +337,7 @@ private:
         orig_sess.flush_response(con, timeout_cancel, yield.tag("flush")[ec]);
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
-        if (ec) yield.log("Injection failed: ", ec.message());
+        if (ec) yield.log("Failed to process response: ", ec.message());
         return_or_throw_on_error(yield, cancel, ec);
         yield.log("Injection end");  // TODO: report whether inject or just fwd
 
@@ -481,14 +483,14 @@ void serve( InjectorConfig& config
 
         if (req.method() == http::verb::connect) {
             if (!config.is_proxy_enabled()) {
-                handle_no_proxy(con, req, yield[ec].tag("handle_no_proxy_connect"));
+                handle_no_proxy(con, req, yield[ec].tag("proxy/connect/handle_no_proxy"));
                 if (ec || !req_keep_alive) break;
                 continue;
             }
             return handle_connect_request( move(con)
                                          , req
                                          , cancel
-                                         , yield.tag("handle_connect"));
+                                         , yield.tag("proxy/connect/handle_connect"));
         }
 
         auto version_hdr_i = req.find(http_::protocol_version_hdr);
@@ -500,7 +502,7 @@ void serve( InjectorConfig& config
         if (proxy) {
             // No Ouinet header, behave like a (non-caching) proxy.
             if (!config.is_proxy_enabled()) {
-                handle_no_proxy(con, req, yield[ec].tag("handle_no_proxy_plain"));
+                handle_no_proxy(con, req, yield[ec].tag("proxy/plain/handle_no_proxy"));
                 if (ec || !req_keep_alive) break;
                 continue;
             }
@@ -512,7 +514,7 @@ void serve( InjectorConfig& config
             if (req[http::field::host].empty()) {
                 handle_bad_request( con, req
                                   , "Invalid or missing host in request"
-                                  , yield[ec].tag("handle_bad_request"));
+                                  , yield[ec].tag("proxy/plain/handle_bad_request"));
                 if (ec || !req_keep_alive) break;
                 continue;
             }
@@ -551,7 +553,7 @@ void serve( InjectorConfig& config
             if (ec) {
                 handle_bad_request( con, req
                                   , "Failed to retrieve content from origin: " + ec.message()
-                                  , yield[ec].tag("handle_bad_request"));
+                                  , yield[ec].tag("proxy/plain/handle_bad_request"));
                 if (ec || !req_keep_alive) break;
                 continue;
             }
@@ -566,10 +568,10 @@ void serve( InjectorConfig& config
             if (opt_err_res)
                 http::async_write(con, *opt_err_res, yield[ec]);
             else if (is_restricted_target(req.target()))
-                handle_bad_request(con, req, "Target not allowed", yield[ec].tag("handle_restricted"));
+                handle_bad_request(con, req, "Target not allowed", yield[ec].tag("inject/handle_restricted"));
             else
                 cc.fetch( con, move(req)
-                        , cancel, yield[ec].tag("cache_control.fetch"));
+                        , cancel, yield[ec].tag("inject/fetch"));
         }
 
         if (ec || !req_keep_alive) break;
