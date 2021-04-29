@@ -2068,6 +2068,11 @@ void Client::State::serve_request( GenericStream&& con
         Match( reqexpr::from_regex(target_getter, local_rx)
              , {deque<fresh_channel>({fresh_channel::origin})} ),
 
+        // Do not use caching for requests tagged as private with Ouinet headers.
+        Match( reqexpr::from_regex( x_private_getter
+                                  , boost::regex(http_::request_private_true, rx_icase))
+             , nocache_request_config),
+
         // When to try to cache or not, depending on the request method:
         //
         //   - Unsafe methods (CONNECT, DELETE, PATCH, POST, PUT): do not cache
@@ -2085,10 +2090,6 @@ void Client::State::serve_request( GenericStream&& con
         Match( !reqexpr::from_regex(method_override_getter, "(|GET)")
              , nocache_request_config),
         Match( !reqexpr::from_regex(method_getter, "GET")
-             , nocache_request_config),
-
-        Match( reqexpr::from_regex( x_private_getter
-                                  , boost::regex(http_::request_private_true, rx_icase))
              , nocache_request_config),
 
         // Disable cache and always go to proxy for this site.
