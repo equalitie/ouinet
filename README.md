@@ -476,7 +476,6 @@ another shell:
 Otherwise you may manually [modify your browser's settings][Firefox proxy] to:
 
   - Make the client (listening on port `localhost:8077` here) its HTTP proxy
-  - Make sure that `localhost` is not listed in the *No Proxy for* field
   - Check *Use this proxy for all protocols* (mostly for HTTPS)
 
 [Firefox proxy]: http://www.wikihow.com/Enter-Proxy-Settings-in-Firefox
@@ -487,8 +486,8 @@ detection so that you get less noise in client logs.  Enter `about:config` in
 the location bar and change `network.captive-portal-service.enabled` to
 `false`.
 
-Once done, you can visit `localhost` in your browser and it should show you
-the *client front-end* with assorted information from the client and
+Once done, you can visit `localhost:8078` in your browser and it should show
+you the *client front-end* with assorted information from the client and
 configuration tools:
 
   - To be able to browse HTTPS sites, you must first install the
