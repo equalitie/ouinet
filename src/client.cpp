@@ -1955,7 +1955,6 @@ void Client::State::serve_request( GenericStream&& con
     auto method_override_getter([](const Request& r) {return r["X-HTTP-Method-Override"];});
     auto method_getter([](const Request& r) {return r.method_string();});
     auto host_getter([](const Request& r) {return r["Host"];});
-    auto x_oui_dest_getter([](const Request& r) {return r["X-Oui-Destination"];});
     auto x_private_getter([](const Request& r) {return r[http_::request_private_hdr];});
     auto target_getter([](const Request& r) {return r.target();});
 
@@ -2057,9 +2056,6 @@ void Client::State::serve_request( GenericStream&& con
              , {deque<fresh_channel>({fresh_channel::_front_end})} ),
 
         Match( reqexpr::from_regex(host_getter, util::str(_config.front_end_endpoint()))
-             , {deque<fresh_channel>({fresh_channel::_front_end})} ),
-
-        Match( reqexpr::from_regex(x_oui_dest_getter, "OuiClient")
              , {deque<fresh_channel>({fresh_channel::_front_end})} ),
 
         // Access to sites under the local TLD are always accessible
