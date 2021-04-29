@@ -2082,12 +2082,9 @@ void Client::State::serve_request( GenericStream&& con
 
         // Send unsafe HTTP method requests to the origin server
         // (or the proxy if that does not work).
-        // NOTE: The cache need not be disabled as it should know not to
-        // fetch requests in these cases.
         Match( !reqexpr::from_regex(method_getter, "(GET|HEAD|OPTIONS|TRACE)")
              , nocache_request_config),
         // Do not use cache for safe but uncacheable HTTP method requests.
-        // NOTE: same as above.
         Match( reqexpr::from_regex(method_getter, "(OPTIONS|TRACE)")
              , nocache_request_config),
         // Do not use cache for validation HEADs.
