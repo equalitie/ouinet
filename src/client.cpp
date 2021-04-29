@@ -2068,6 +2068,14 @@ void Client::State::serve_request( GenericStream&& con
         Match( reqexpr::from_regex(target_getter, local_rx)
              , {deque<fresh_channel>({fresh_channel::origin})} ),
 
+        // When to try to cache or not, depending on the request method:
+        //
+        //   - Unsafe methods (CONNECT, DELETE, PATCH, POST, PUT): do not cache
+        //   - Safe but uncacheable methods (OPTIONS, TRACE): do not cache
+        //   - Safe and cacheable (GET, HEAD): cache, but HEAD not yet supported
+        //
+        // Thus the only remaining method that implies caching is GET.
+
         // Requests declaring a method override are checked by that method.
         // This is not a standard header,
         // but for instance Firefox uses it for Safe Browsing requests,
@@ -2076,20 +2084,7 @@ void Client::State::serve_request( GenericStream&& con
         // in spite of using HTTPS).
         Match( !reqexpr::from_regex(method_override_getter, "(|GET)")
              , nocache_request_config),
-
-        // NOTE: The matching of HTTP methods below can be simplified,
-        // leaving expanded for readability.
-
-        // Send unsafe HTTP method requests to the origin server
-        // (or the proxy if that does not work).
-        Match( !reqexpr::from_regex(method_getter, "(GET|HEAD|OPTIONS|TRACE)")
-             , nocache_request_config),
-        // Do not use cache for safe but uncacheable HTTP method requests.
-        Match( reqexpr::from_regex(method_getter, "(OPTIONS|TRACE)")
-             , nocache_request_config),
-        // Do not use cache for validation HEADs.
-        // Caching these is not yet supported.
-        Match( reqexpr::from_regex(method_getter, "HEAD")
+        Match( !reqexpr::from_regex(method_getter, "GET")
              , nocache_request_config),
 
         Match( reqexpr::from_regex( x_private_getter
