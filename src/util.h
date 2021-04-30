@@ -171,11 +171,7 @@ bool is_localhost(const std::string& host)
     static const boost::regex lhrx(lhre);
 
     // Avoid the DNS lookup for very evident loopback addresses.`;)`
-    boost::smatch m;
-    if (boost::regex_match(host, m, lhrx))
-        return true;
-
-    return false;
+    return boost::regex_match(host, lhrx);
 }
 
 // Format host/port pair taking IPv6 into account.
