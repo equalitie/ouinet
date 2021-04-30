@@ -1954,7 +1954,7 @@ void Client::State::serve_request( GenericStream&& con
 
     auto method_override_getter([](const Request& r) {return r["X-HTTP-Method-Override"];});
     auto method_getter([](const Request& r) {return r.method_string();});
-    auto host_getter([](const Request& r) {return r["Host"];});
+    auto host_getter([](const Request& r) {return r[http::field::host];});
     auto x_private_getter([](const Request& r) {return r[http_::request_private_hdr];});
     auto target_getter([](const Request& r) {return r.target();});
 
