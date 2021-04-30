@@ -154,7 +154,7 @@ auto tcp_async_resolve( const std::string& host
 #define _IP4_LOOP_RE "127(?:\\.[0-9]{1,3}){3}"
 // Fortunately, resolving also canonicalizes IPv6 addresses
 // so we can simplify the regular expression.`:)`
-static const std::string localhost_re =
+static const std::string _localhost_re =
     "^(?:"
     "(?:localhost|ip6-localhost|ip6-loopback)(?:\\.localdomain)?"
     "|" _IP4_LOOP_RE         // IPv4, e.g. 127.1.2.3
@@ -162,7 +162,7 @@ static const std::string localhost_re =
     "|::ffff:" _IP4_LOOP_RE  // IPv4-mapped IPv6
     "|::" _IP4_LOOP_RE       // IPv4-compatible IPv6
     ")$";
-static const boost::regex localhost_rx( localhost_re
+static const boost::regex localhost_rx( _localhost_re
                                       , boost::regex::normal | boost::regex::icase);
 #undef _IP4_LOOP_RE
 
