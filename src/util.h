@@ -162,7 +162,8 @@ static const std::string localhost_re =
     "|::ffff:" _IP4_LOOP_RE  // IPv4-mapped IPv6
     "|::" _IP4_LOOP_RE       // IPv4-compatible IPv6
     ")$";
-static const boost::regex localhost_rx(localhost_re);
+static const boost::regex localhost_rx( localhost_re
+                                      , boost::regex::normal | boost::regex::icase);
 #undef _IP4_LOOP_RE
 
 // Return whether the given `host` points to a loopback address.
