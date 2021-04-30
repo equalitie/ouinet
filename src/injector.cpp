@@ -128,7 +128,7 @@ resolve_target( const Request& req
     tie(host, port) = util::get_host_port(req);
 
     // First test trivial cases (like "localhost" or "127.1.2.3").
-    bool local = util::is_localhost(host);
+    bool local = boost::regex_match(host, util::localhost_rx);
 
     // Resolve address and also use result for more sophisticaded checking.
     if (!local)
@@ -141,7 +141,8 @@ resolve_target( const Request& req
 
     // Test non-trivial cases (like "[0::1]" or FQDNs pointing to loopback).
     for (auto r : lookup)
-        if ((local = util::is_localhost(r.endpoint().address().to_string())))
+        if ((local = boost::regex_match( r.endpoint().address().to_string()
+                                       , util::localhost_rx)))
             break;
 
     if (local) {
