@@ -1966,6 +1966,8 @@ void Client::State::serve_request( GenericStream&& con
     const rr::Config unrequested{deque<fresh_channel>()};
 #endif
 
+    static const boost::regex localhost_exact_rx{"localhost", rx_icase};
+
     const vector<Match> matches({
         // Please keep host-specific matches at a bare minimum
         // as they require curation and they may have undesired side-effects;
@@ -2062,7 +2064,7 @@ void Client::State::serve_request( GenericStream&& con
         */
 
         // Handle requests to <http://localhost/> internally.
-        Match( reqexpr::from_regex(host_getter, "localhost")
+        Match( reqexpr::from_regex(host_getter, localhost_exact_rx)
              , {deque<fresh_channel>({fresh_channel::_front_end})} ),
 
         Match( reqexpr::from_regex(host_getter, util::str(_config.front_end_endpoint()))
