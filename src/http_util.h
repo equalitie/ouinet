@@ -320,20 +320,22 @@ namespace detail {
 
 // Add a `Host:` header to `req` if missing or empty.
 //
-// If the header continues to be empty after the call,
-// the request is invalid (e.g. missing host and bad target).
+// Return whether `req` now has such a header;
+// if false, `req` is invalid (e.g. missing host and bad target).
+// and no changes were made to it.
 //
 // This applies mainly to HTTP/1.0 requests,
 // as HTTP/1.1 should always have a non-empty `Host:` header.
 template<class Request>
-void req_ensure_host(Request& req) {
-    if (!req[http::field::host].empty()) return;
+bool req_ensure_host(Request& req) {
+    if (!req[http::field::host].empty()) return true;
 
     std::string host, port;
     std::tie(host, port) = util::get_host_port(req);
     auto hosth = detail::http_host_header(host, port);
-    if (hosth.empty()) return;  // error
+    if (hosth.empty()) return false;  // error
     req.set(http::field::host, hosth);
+    return true;
 }
 
 // Make the given request canonical.

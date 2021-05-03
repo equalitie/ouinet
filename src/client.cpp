@@ -885,8 +885,7 @@ Session Client::State::fetch_fresh_from_origin( Request rq
                       , default_timeout::fetch_http()
                       , [&] { cancel(); });
 
-    util::req_ensure_host(rq);  // origin pools require host
-    if (rq[http::field::host].empty())
+    if (!util::req_ensure_host(rq))  // origin pools require host
         return or_throw<Session>(yield, asio::error::invalid_argument);
     util::remove_ouinet_fields_ref(rq);  // avoid leaking to non-injectors
 

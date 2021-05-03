@@ -509,8 +509,7 @@ void serve( InjectorConfig& config
             // TODO: Maybe reject requests for HTTPS URLS:
             // we are perfectly able to handle them (and do verification locally),
             // but the client should be using a CONNECT request instead!
-            util::req_ensure_host(req);  // origin pools require host
-            if (req[http::field::host].empty()) {
+            if (!util::req_ensure_host(req)) {  // origin pools require host
                 handle_bad_request( con, req
                                   , "Invalid or missing host in request"
                                   , yield[ec].tag("handle_bad_request"));
