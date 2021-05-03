@@ -481,10 +481,22 @@ Otherwise you may manually [modify your browser's settings][Firefox proxy] to:
 [Firefox proxy]: http://www.wikihow.com/Enter-Proxy-Settings-in-Firefox
     "How to Enter Proxy Settings in Firefox"
 
-Additionally, you may want to disable Firefox's automatic captive portal
-detection so that you get less noise in client logs.  Enter `about:config` in
-the location bar and change `network.captive-portal-service.enabled` to
-`false`.
+To reduce noise in the client log, you may want to disable Firefox's data
+collection by unchecking all options from "Preferences / Privacy & Security /
+Firefox Data Collection and Use", and maybe entering `about:config` in the
+location bar and clearing the value of `toolkit.telemetry.server`.  You can
+also avoid some more noise by disabling Firefox's automatic captive portal
+detection by changing `network.captive-portal-service.enabled` to `false` in
+`about:config`.
+
+If security does not worry you for testing, you can avoid even more noise by
+disabling Safe Browsing under "Preferences / Privacy & Security / Deceptive
+Content and Dangerous Software Protection" and add-on hotfixes at "Preferences
+/ Add-ons / (gear icon) / Update Add-ons Automatically".
+
+Also, if you want to avoid wasting Ouinet network resources and disk space on
+ads and similar undesired content, you can install an ad blocker like
+[uBlock Origin](https://github.com/gorhill/uBlock).
 
 Once done, you can visit `localhost:8078` in your browser and it should show
 you the *client front-end* with assorted information from the client and

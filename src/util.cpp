@@ -15,6 +15,28 @@
 using namespace std;
 
 
+std::pair<boost::string_view, boost::string_view>
+ouinet::util::split_ep(const boost::string_view ep) {
+    if (ep.empty()) return {};
+
+    boost::string_view host, port;
+
+    auto cpos = ep.rfind(':');
+
+    if (cpos == string::npos || ep[ep.length() - 1] == ']') {
+        host = ep;
+    } else {
+        host = ep.substr(0, cpos);
+        port = ep.substr(cpos + 1);
+    }
+
+    // Remove brackets from IPv6 hosts.
+    if (host[0] == '[')
+        host = host.substr(1, host.length() - 2);
+
+    return make_pair(host, port);
+}
+
 // Chaining the following two with something like
 // <https://github.com/sneumann/mzR/blob/master/src/boost_aux/boost/iostreams/filter/base64.hpp>
 // would be way cooler.`:)`

@@ -151,32 +151,22 @@ auto tcp_async_resolve( const std::string& host
     return or_throw(yield, ec, std::move(results));
 }
 
-// Return whether the given `host` points to a loopback address.
+#define _IP4_LOOP_RE "127(?:\\.[0-9]{1,3}){3}"
+static const std::string _localhost_re =
+    "^(?:"
+    "(?:localhost|ip6-localhost|ip6-loopback)(?:\\.localdomain)?"
+    "|" _IP4_LOOP_RE         // IPv4, e.g. 127.1.2.3
+    "|::1"                   // IPv6 loopback
+    "|::ffff:" _IP4_LOOP_RE  // IPv4-mapped IPv6
+    "|::" _IP4_LOOP_RE       // IPv4-compatible IPv6
+    ")$";
+
+// Matches a host string which looks like a loopback address.
+// This assumes canonical IPv6 addresses (like those coming out of resolving).
 // IPv6 addresses should not be bracketed.
-inline
-bool is_localhost(const std::string& host)
-{
-    // Fortunately, resolving also canonicalizes IPv6 addresses
-    // so we can simplify the regular expression.`:)`
-    static const std::string ip4loopre = "127(?:\\.[0-9]{1,3}){3}";
-    static const std::string lhre =
-        std::string()
-        + "^(?:"
-        + "(?:localhost|ip6-localhost|ip6-loopback)(?:\\.localdomain)?"
-        + "|" + ip4loopre         // IPv4, e.g. 127.1.2.3
-        + "|::1"                  // IPv6 loopback
-        + "|::ffff:" + ip4loopre  // IPv4-mapped IPv6
-        + "|::" + ip4loopre       // IPv4-compatible IPv6
-        + ")$";
-    static const boost::regex lhrx(lhre);
-
-    // Avoid the DNS lookup for very evident loopback addresses.`;)`
-    boost::smatch m;
-    if (boost::regex_match(host, m, lhrx))
-        return true;
-
-    return false;
-}
+static const boost::regex localhost_rx( _localhost_re
+                                      , boost::regex::normal | boost::regex::icase);
+#undef _IP4_LOOP_RE
 
 // Format host/port pair taking IPv6 into account.
 inline
@@ -191,6 +181,12 @@ inline
 std::string format_ep(const asio::ip::tcp::endpoint& ep) {
     return format_ep(ep.address().to_string(), std::to_string(ep.port()));
 }
+
+// Split into host/port pair taking IPv6 into account.
+// If the host name contains no port, the second item will be empty,
+// IPv6 addresses are returned without brackets.
+std::pair<boost::string_view, boost::string_view>
+split_ep(const boost::string_view);
 
 ///////////////////////////////////////////////////////////////////////////////
 namespace detail {

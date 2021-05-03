@@ -20,7 +20,6 @@ pair<string, string>
 ouinet::util::get_host_port(const http::request<http::string_body>& req)
 {
     auto target = req.target();
-    string host, port;
     auto defport = (target.starts_with("https:") || target.starts_with("wss:"))
                  ? "443"
                  : "80";
@@ -28,28 +27,17 @@ ouinet::util::get_host_port(const http::request<http::string_body>& req)
     auto hp = (req.method() == http::verb::connect)
             ? target
             : req[http::field::host];
-    auto cpos = hp.rfind(':');
 
     if (hp.empty() && req.version() == 10) {
         // HTTP/1.0 proxy client with no ``Host:``, use URI.
         network::uri uri(target.to_string());
-        host = uri.host().to_string();
-        port = uri.has_port() ? uri.port().to_string() : defport;
-    } else if (cpos == string::npos || hp[hp.length() - 1] == ']') {
-        // ``Host:`` header present, no port.
-        host = hp.to_string();
-        port = defport;
-    } else {
-        // ``Host:`` header present, explicit port (or CONNECT request).
-        host = hp.substr(0, cpos).to_string();
-        port = hp.substr(cpos + 1).to_string();
+        return make_pair( uri.host().to_string()
+                        , (uri.has_port() ? uri.port().to_string() : defport));
     }
 
-    // Remove brackets from IPv6 hosts.
-    if (host[0] == '[')
-        host = host.substr(1, host.length() - 2);
-
-    return make_pair(host, port);
+    auto host_port = util::split_ep(hp);
+    return make_pair( host_port.first.to_string()
+                    , host_port.second.empty() ? defport : host_port.second.to_string());
 }
 
 boost::optional<ouinet::util::HttpResponseByteRange>

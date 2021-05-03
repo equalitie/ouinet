@@ -885,9 +885,7 @@ Session Client::State::fetch_fresh_from_origin( Request rq
                       , default_timeout::fetch_http()
                       , [&] { cancel(); });
 
-    util::req_ensure_host(rq);  // origin pools require host
-    if (rq[http::field::host].empty())
-        return or_throw<Session>(yield, asio::error::invalid_argument);
+    assert(!rq[http::field::host].empty());  // origin pools require host
     util::remove_ouinet_fields_ref(rq);  // avoid leaking to non-injectors
 
     sys::error_code ec;
@@ -1952,9 +1950,10 @@ void Client::State::serve_request( GenericStream&& con
     // TODO: Create once and reuse.
     using Match = pair<const ouinet::reqexpr::reqex, const rr::Config>;
 
+    auto method_override_getter([](const Request& r) {return r["X-HTTP-Method-Override"];});
     auto method_getter([](const Request& r) {return r.method_string();});
-    auto host_getter([](const Request& r) {return r["Host"];});
-    auto x_oui_dest_getter([](const Request& r) {return r["X-Oui-Destination"];});
+    auto host_getter([](const Request& r) {return r[http::field::host];});
+    auto hostname_getter([](const Request& r) {return util::split_ep(r[http::field::host]).first;});
     auto x_private_getter([](const Request& r) {return r[http_::request_private_hdr];});
     auto target_getter([](const Request& r) {return r.target();});
 
@@ -1967,38 +1966,81 @@ void Client::State::serve_request( GenericStream&& con
     const rr::Config unrequested{deque<fresh_channel>()};
 #endif
 
+    static const boost::regex localhost_exact_rx{"localhost", rx_icase};
+
     const vector<Match> matches({
+        // Please keep host-specific matches at a bare minimum
+        // as they require curation and they may have undesired side-effects;
+        // instead, use user agent-side mechanisms like browser settings and extensions when possible,
+        // and only leave those that really break things and cannot be otherwise disabled.
+        //
+        // Also note that using the normal mechanisms for these may help users
+        // keep their browsers up-to-date (by retrieving via the injector in case of interference),
+        // and they may still not pollute the cache unless
+        // the requests are explicitly marked for caching and announcement.
+
         // Disable cache and always go to origin for this site.
         //Match( reqexpr::from_regex(target_getter, "https?://ident\\.me/.*")
         //     , {deque<fresh_channel>({fresh_channel::origin})} ),
 
-        // Disable cache and always go to origin for these google sites.
+        /* Requests which may be considered public but too noisy and of little value for caching
+         * should be processed by something like browser extensions.
+        // Google Search completion
         Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?google\\.com/complete/.*")
              , unrequested ),
+        */
+
+        /* To stop these requests in Firefox,
+         * uncheck "Preferences / Privacy & Security / Deceptive Content and Dangerous Software Protection".
+        // Safe Browsing API <https://developers.google.com/safe-browsing/>.
+        // These should not be very frequent after start,
+        // plus they use POST requests, so there is no risk of accidental injection.
         Match( reqexpr::from_regex(target_getter, "https://safebrowsing\\.googleapis\\.com/.*")
              , unrequested ),
-        Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?google-analytics\\.com/.*")
-             , unrequested ),
+        */
 
+        /* These are used to retrieve add-ons and all kinds of minor security updates from Mozilla,
+         * and they mostly happen on browser start only.
         // Disable cache and always go to origin for these mozilla sites.
         Match( reqexpr::from_regex(target_getter, "https?://content-signature\\.cdn\\.mozilla\\.net/.*")
              , unrequested ),
         Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*services\\.mozilla\\.com/.*")
              , unrequested ),
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*cdn\\.mozilla\\.net/.*")
+             , unrequested ),
+        */
+
+        /* To stop these requests,
+         * uncheck "Preferences / Add-ons / (gear icon) / Update Add-ons Automatically".
+        // Firefox add-ons hotfix (auto-update)
         Match( reqexpr::from_regex(target_getter, "https?://services\\.addons\\.mozilla\\.org/.*")
              , unrequested ),
         Match( reqexpr::from_regex(target_getter, "https?://versioncheck-bg\\.addons\\.mozilla\\.org/.*")
              , unrequested ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*cdn\\.mozilla\\.net/.*")
-             , unrequested ),
+        */
+
+        /* To stop these requests,
+         * uncheck all options from "Preferences / Privacy & Security / Firefox Data Collection and Use",
+         * maybe clear `toolkit.telemetry.server` in `about:config`.
+        // Firefox telemetry
         Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*telemetry\\.mozilla\\.net/.*")
              , unrequested ),
         Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*telemetry\\.mozilla\\.org/.*")
              , unrequested ),
+        */
+
+        /* This should work as expected as long as Origin is enabled.
+         * To stop these requests, set `network.captive-portal-service.enabled` to false in `about:config`.
+        // Firefox' captive portal detection
         Match( reqexpr::from_regex(target_getter, "https?://detectportal\\.firefox\\.com/.*")
              , unrequested ),
+        */
 
-        // Ads
+        /* To avoid these at the client, use some kind of ad blocker (like uBlock Origin).
+        // Ads and tracking
+        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*google-analytics\\.com/.*")
+             , unrequested ),
+
         Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*googlesyndication\\.com/.*")
              , unrequested ),
         Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*googletagservices\\.com/.*")
@@ -2019,16 +2061,19 @@ void Client::State::serve_request( GenericStream&& con
 
         Match( reqexpr::from_regex(target_getter, "https?://ping.chartbeat.net/.*")
              , unrequested ),
+        */
 
         // Handle requests to <http://localhost/> internally.
-        Match( reqexpr::from_regex(host_getter, "localhost")
+        Match( reqexpr::from_regex(host_getter, localhost_exact_rx)
              , {deque<fresh_channel>({fresh_channel::_front_end})} ),
 
         Match( reqexpr::from_regex(host_getter, util::str(_config.front_end_endpoint()))
              , {deque<fresh_channel>({fresh_channel::_front_end})} ),
 
-        Match( reqexpr::from_regex(x_oui_dest_getter, "OuiClient")
-             , {deque<fresh_channel>({fresh_channel::_front_end})} ),
+        // Other requests to the local host should not use the network
+        // to avoid leaking internal services accessed through the client.
+        Match( reqexpr::from_regex(hostname_getter, util::localhost_rx)
+             , {deque<fresh_channel>({fresh_channel::origin})} ),
 
         // Access to sites under the local TLD are always accessible
         // with good connectivity, so always use the Origin channel
@@ -2036,26 +2081,27 @@ void Client::State::serve_request( GenericStream&& con
         Match( reqexpr::from_regex(target_getter, local_rx)
              , {deque<fresh_channel>({fresh_channel::origin})} ),
 
-        // NOTE: The matching of HTTP methods below can be simplified,
-        // leaving expanded for readability.
-
-        // Send unsafe HTTP method requests to the origin server
-        // (or the proxy if that does not work).
-        // NOTE: The cache need not be disabled as it should know not to
-        // fetch requests in these cases.
-        Match( !reqexpr::from_regex(method_getter, "(GET|HEAD|OPTIONS|TRACE)")
-             , nocache_request_config),
-        // Do not use cache for safe but uncacheable HTTP method requests.
-        // NOTE: same as above.
-        Match( reqexpr::from_regex(method_getter, "(OPTIONS|TRACE)")
-             , nocache_request_config),
-        // Do not use cache for validation HEADs.
-        // Caching these is not yet supported.
-        Match( reqexpr::from_regex(method_getter, "HEAD")
-             , nocache_request_config),
-
+        // Do not use caching for requests tagged as private with Ouinet headers.
         Match( reqexpr::from_regex( x_private_getter
                                   , boost::regex(http_::request_private_true, rx_icase))
+             , nocache_request_config),
+
+        // When to try to cache or not, depending on the request method:
+        //
+        //   - Unsafe methods (CONNECT, DELETE, PATCH, POST, PUT): do not cache
+        //   - Safe but uncacheable methods (OPTIONS, TRACE): do not cache
+        //   - Safe and cacheable (GET, HEAD): cache, but HEAD not yet supported
+        //
+        // Thus the only remaining method that implies caching is GET.
+        Match( !reqexpr::from_regex(method_getter, "GET")
+             , nocache_request_config),
+        // Requests declaring a method override are checked by that method.
+        // This is not a standard header,
+        // but for instance Firefox uses it for Safe Browsing requests,
+        // which according to this standard should actually be POST requests
+        // (probably in the hopes of having more chances that requests get through,
+        // in spite of using HTTPS).
+        Match( !reqexpr::from_regex(method_override_getter, "(|GET)")
              , nocache_request_config),
 
         // Disable cache and always go to proxy for this site.
@@ -2145,10 +2191,13 @@ void Client::State::serve_request( GenericStream&& con
                 // We expand the target again with the ``Host:`` header
                 // (or the CONNECT target if the header is missing in HTTP/1.0)
                 // so that "/foo" becomes "https://example.com/foo".
+                auto host = req[http::field::host];
+                if (host.empty()) {
+                    req.set(http::field::host, connect_hp);
+                    host = connect_hp;
+                }
                 req.target( string("https://")
-                          + ( (req[http::field::host].length() > 0)
-                              ? req[http::field::host].to_string()
-                              : connect_hp)
+                          + host.to_string()
                           + target.to_string());
                 target = req.target();
             } else {
@@ -2160,6 +2209,14 @@ void Client::State::serve_request( GenericStream&& con
                 if (req.keep_alive()) continue;
                 else return;
             }
+        }
+        // Ensure that the request has a `Host:` header
+        // (to ease request routing check and later operations on the head).
+        if (!util::req_ensure_host(req)) {
+            sys::error_code ec_;
+            handle_bad_request(con, req, "Invalid or missing host in request", yield[ec_]);
+            if (req.keep_alive()) continue;
+            else return;
         }
 
         request_config = secure_first_request_route(

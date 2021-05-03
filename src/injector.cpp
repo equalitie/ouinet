@@ -128,7 +128,7 @@ resolve_target( const Request& req
     tie(host, port) = util::get_host_port(req);
 
     // First test trivial cases (like "localhost" or "127.1.2.3").
-    bool local = util::is_localhost(host);
+    bool local = boost::regex_match(host, util::localhost_rx);
 
     // Resolve address and also use result for more sophisticaded checking.
     if (!local)
@@ -141,7 +141,8 @@ resolve_target( const Request& req
 
     // Test non-trivial cases (like "[0::1]" or FQDNs pointing to loopback).
     for (auto r : lookup)
-        if ((local = util::is_localhost(r.endpoint().address().to_string())))
+        if ((local = boost::regex_match( r.endpoint().address().to_string()
+                                       , util::localhost_rx)))
             break;
 
     if (local) {
@@ -510,8 +511,7 @@ void serve( InjectorConfig& config
             // TODO: Maybe reject requests for HTTPS URLS:
             // we are perfectly able to handle them (and do verification locally),
             // but the client should be using a CONNECT request instead!
-            util::req_ensure_host(req);  // origin pools require host
-            if (req[http::field::host].empty()) {
+            if (!util::req_ensure_host(req)) {  // origin pools require host
                 handle_bad_request( con, req
                                   , "Invalid or missing host in request"
                                   , yield[ec].tag("proxy/plain/handle_bad_request"));
