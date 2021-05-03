@@ -14,6 +14,7 @@ add_executable(test-cache
     "test_cache_control.cpp"
     "../src/cache_control.cpp"
     "../src/http_util.cpp"
+    "../src/util.cpp"
     "../src/util/handler_tracker.cpp"
     "../src/logger.cpp"
 )

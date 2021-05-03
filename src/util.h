@@ -182,6 +182,12 @@ std::string format_ep(const asio::ip::tcp::endpoint& ep) {
     return format_ep(ep.address().to_string(), std::to_string(ep.port()));
 }
 
+// Split into host/port pair taking IPv6 into account.
+// If the host name contains no port, the second item will be empty,
+// IPv6 addresses are returned without brackets.
+std::pair<boost::string_view, boost::string_view>
+split_ep(const boost::string_view);
+
 ///////////////////////////////////////////////////////////////////////////////
 namespace detail {
 std::string base32up_encode(const char*, size_t);
