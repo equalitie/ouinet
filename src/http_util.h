@@ -363,7 +363,7 @@ to_canonical_request(Request rq, const Fields&... keep_fields) {
     rq.set("DNT", "1");
     rq.set("Upgrade-Insecure-Requests", "1");
     rq.set( http::field::user_agent
-          , "Mozilla/5.0 (Windows NT 6.1; rv:60.0) Gecko/20100101 Firefox/60.0");
+          , "Mozilla/5.0 (Windows NT 10.0; rv:68.0) Gecko/20100101 Firefox/68.0");
 
     // Basically only keep headers which are absolutely necessary,
     // do not break privacy and can not break browsing for others.

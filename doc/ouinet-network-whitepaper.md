@@ -208,7 +208,7 @@ This canonical HTTP request takes the form of an HTTP/1.1 request, with a reques
 * `Accept-Encoding: `
 * `DNT: 1`
 * `Upgrade-Insecure-Requests: 1`
-* `User-Agent: Mozilla/5.0 (Windows NT 6.1; rv:60.0) Gecko/20100101 Firefox/60.0`
+* `User-Agent: Mozilla/5.0 (Windows NT 10.0; rv:68.0) Gecko/20100101 Firefox/68.0`
 * `Origin:` whatever value is present in the client request, if any, or absent otherwise
 * `From:` whatever value is present in the client request, if any, or absent otherwise
 
