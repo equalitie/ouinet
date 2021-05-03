@@ -1953,6 +1953,7 @@ void Client::State::serve_request( GenericStream&& con
     auto method_override_getter([](const Request& r) {return r["X-HTTP-Method-Override"];});
     auto method_getter([](const Request& r) {return r.method_string();});
     auto host_getter([](const Request& r) {return r[http::field::host];});
+    auto hostname_getter([](const Request& r) {return util::split_ep(r[http::field::host]).first;});
     auto x_private_getter([](const Request& r) {return r[http_::request_private_hdr];});
     auto target_getter([](const Request& r) {return r.target();});
 
@@ -2066,6 +2067,11 @@ void Client::State::serve_request( GenericStream&& con
 
         Match( reqexpr::from_regex(host_getter, util::str(_config.front_end_endpoint()))
              , {deque<fresh_channel>({fresh_channel::_front_end})} ),
+
+        // Other requests to the local host should not use the network
+        // to avoid leaking internal services accessed through the client.
+        Match( reqexpr::from_regex(hostname_getter, util::localhost_rx)
+             , {deque<fresh_channel>({fresh_channel::origin})} ),
 
         // Access to sites under the local TLD are always accessible
         // with good connectivity, so always use the Origin channel
