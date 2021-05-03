@@ -885,8 +885,7 @@ Session Client::State::fetch_fresh_from_origin( Request rq
                       , default_timeout::fetch_http()
                       , [&] { cancel(); });
 
-    if (!util::req_ensure_host(rq))  // origin pools require host
-        return or_throw<Session>(yield, asio::error::invalid_argument);
+    assert(!rq[http::field::host].empty());  // origin pools require host
     util::remove_ouinet_fields_ref(rq);  // avoid leaking to non-injectors
 
     sys::error_code ec;
@@ -2184,10 +2183,13 @@ void Client::State::serve_request( GenericStream&& con
                 // We expand the target again with the ``Host:`` header
                 // (or the CONNECT target if the header is missing in HTTP/1.0)
                 // so that "/foo" becomes "https://example.com/foo".
+                auto host = req[http::field::host];
+                if (host.empty()) {
+                    req.set(http::field::host, connect_hp);
+                    host = connect_hp;
+                }
                 req.target( string("https://")
-                          + ( (req[http::field::host].length() > 0)
-                              ? req[http::field::host].to_string()
-                              : connect_hp)
+                          + host.to_string()
                           + target.to_string());
                 target = req.target();
             } else {
@@ -2199,6 +2201,14 @@ void Client::State::serve_request( GenericStream&& con
                 if (req.keep_alive()) continue;
                 else return;
             }
+        }
+        // Ensure that the request has a `Host:` header
+        // (to ease request routing check and later operations on the head).
+        if (!util::req_ensure_host(req)) {
+            sys::error_code ec_;
+            handle_bad_request(con, req, "Invalid or missing host in request", yield[ec_]);
+            if (req.keep_alive()) continue;
+            else return;
         }
 
         request_config = secure_first_request_route(
