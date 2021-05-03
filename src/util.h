@@ -45,11 +45,12 @@ struct url_match {
 inline
 bool match_http_url(const boost::string_view url, url_match& match) {
     static const boost::regex urlrx( "^(http|https)://"  // 1: scheme
-                                     "([-\\.a-z0-9]+|\\[[:0-9a-fA-F]+\\])"  // 2: host
+                                     "([-\\.a-z0-9]+|\\[[:0-9a-f]+\\])"  // 2: host
                                      "(:[0-9]{1,5})?"  // 3: :port (or empty)
                                      "(/[^?#]*)"  // 4: /path
                                      "(\\?[^#]*)?"  // 5: ?query (or empty)
-                                     "(#.*)?");  // 6: #fragment (or empty)
+                                     "(#.*)?"  // 6: #fragment (or empty)
+                                   , boost::regex::normal | boost::regex::icase);
     boost::cmatch m;
     if (!boost::regex_match(url.begin(), url.end(), m, urlrx))
         return false;
