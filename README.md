@@ -77,9 +77,7 @@ packages for Ouinet on the desktop.
 
 ## Deploy a client or injector with Docker 
 
-Ouinet injectors and clients can be run as Docker containers.  Ouinet Docker images are available on the [Docker Hub](https://hub.docker.com/r/equalitie/ouinet).  An application configuration file for Docker Compose is included for easily deploying all needed volumes and containers.
-
-To run a Ouinet node container only a couple hundred MiB are needed, plus the space devoted to the data volume (which may grow considerably larger in the case of the injector).
+Ouinet injectors and clients can be run as Docker containers. To run a Ouinet node container, only a couple hundred MiB are needed. Ouinet Docker images are available on the [Docker Hub](https://hub.docker.com/r/equalitie/ouinet).  An application configuration file for Docker Compose is included for easily deploying all needed volumes and containers.
 
 A `Dockerfile` is also included that can be used to create a Docker image which contains the Ouinet injector, client and necessary software dependencies running on top of a Debian-based system.
 
