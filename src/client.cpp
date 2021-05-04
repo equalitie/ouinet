@@ -1289,8 +1289,7 @@ public:
         return or_throw(yield, ec);
     }
 
-    void origin_job_func( bool force_secure
-                        , Transaction& tnx
+    void origin_job_func( Transaction& tnx
                         , Cancel& cancel, Yield yield) {
         if (cancel) {
             LOG_ERROR("origin_job_func received an already triggered cancel");
@@ -1299,16 +1298,9 @@ public:
 
         _YDEBUG(yield, "start");
 
-        auto rq = tnx.request();
-
-        if (force_secure && rq.target().starts_with("http://")) {
-            auto target = rq.target().to_string();
-            target.insert(4, "s"); // http:// -> https://
-            rq.target(move(target));
-        }
-
         sys::error_code ec;
-        auto session = client_state.fetch_fresh_from_origin(rq, tnx.meta(), cancel, yield[ec]);
+        auto session = client_state.fetch_fresh_from_origin( tnx.request(), tnx.meta()
+                                                           , cancel, yield[ec]);
 
         _YDEBUG(yield, "fetch: ", ec.message());
 
@@ -1658,16 +1650,10 @@ public:
                             { front_end_job_func(tnx, c, y); });
                     break;
                 }
-                case fresh_channel::secure_origin: {
-                    start_job(Jobs::Type::secure_origin,
-                            [&] (auto& c, auto y)
-                            { origin_job_func(true, tnx, c, y); });
-                    break;
-                }
                 case fresh_channel::origin: {
                     start_job(Jobs::Type::origin,
                             [&] (auto& c, auto y)
-                            { origin_job_func(false, tnx, c, y); });
+                            { origin_job_func(tnx, c, y); });
                     break;
                 }
                 case fresh_channel::proxy: {
