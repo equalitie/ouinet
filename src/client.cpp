@@ -1546,13 +1546,13 @@ public:
             if (job_type == Type::injector_or_dcache || job_type == Type::proxy) {
                 // If origin is running, give it some time, but stop sleeping
                 // if origin fetch exits early.
-                if (!secure_origin.is_running()) return;
+                if (!origin.is_running()) return;
 
                 Cancel c(cancel);
                 boost::optional<Job::Connection> jc;
 
-                if (secure_origin.is_running()) {
-                    jc = secure_origin.on_finish_sig([&c] { c(); });
+                if (origin.is_running()) {
+                    jc = origin.on_finish_sig([&c] { c(); });
                 }
 
                 async_sleep(exec, n * chrono::seconds(3), c, yield);
@@ -1637,7 +1637,7 @@ public:
             });
         };
 
-        // TODO: When the secure_origin is enabled and it always times out, it
+        // TODO: When the origin is enabled and it always times out, it
         // will induce an unnecessary delay to the other routes. We need a
         // mechanism which will "realize" that other origin requests are
         // already timing out and that injector, proxy and dcache routes don't
