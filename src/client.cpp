@@ -1465,24 +1465,22 @@ public:
         Jobs(asio::executor exec)
             : exec(exec)
             , front_end(exec)
-            , secure_origin(exec)
             , origin(exec)
             , proxy(exec)
             , injector_or_dcache(exec)
-            , all({&front_end, &secure_origin, &origin, &proxy, &injector_or_dcache})
+            , all({&front_end, &origin, &proxy, &injector_or_dcache})
         {}
 
         asio::executor exec;
 
         Job front_end;
-        Job secure_origin;
         Job origin;
         Job proxy;
         Job injector_or_dcache;
 
         // All jobs, even those that never started.
         // Unfortunately C++14 is not letting me have array of references.
-        const std::array<Job*, 5> all;
+        const std::array<Job*, 4> all;
 
         auto running() const {
             static const auto is_running
@@ -1512,7 +1510,6 @@ public:
 
         boost::optional<Type> job_to_type(const Job* ptr) const {
             if (ptr == &front_end)          return Type::front_end;
-            if (ptr == &secure_origin)      return Type::secure_origin;
             if (ptr == &origin)             return Type::origin;
             if (ptr == &proxy)              return Type::proxy;
             if (ptr == &injector_or_dcache) return Type::injector_or_dcache;
@@ -1522,7 +1519,6 @@ public:
         Job* job_from_type(Type type) {
             switch (type) {
                 case Type::front_end:          return &front_end;
-                case Type::secure_origin:      return &secure_origin;
                 case Type::origin:             return &origin;
                 case Type::proxy:              return &proxy;
                 case Type::injector_or_dcache: return &injector_or_dcache;
