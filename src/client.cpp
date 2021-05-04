@@ -1451,7 +1451,6 @@ public:
     struct Jobs {
         enum class Type {
             front_end,
-            secure_origin,
             origin,
             proxy,
             injector_or_dcache
@@ -1499,7 +1498,6 @@ public:
         static const char* as_string(Type type) {
             switch (type) {
                 case Type::front_end:          return "front_end";
-                case Type::secure_origin:      return "secure_origin";
                 case Type::origin:             return "origin";
                 case Type::proxy:              return "proxy";
                 case Type::injector_or_dcache: return "injector_or_dcache";
@@ -1566,7 +1564,6 @@ public:
 
         switch (job_type) {
             case Type::front_end:     return true;
-            case Type::secure_origin: return cfg.is_origin_access_enabled();
             case Type::origin:        return cfg.is_origin_access_enabled();
             case Type::proxy:         return cfg.is_proxy_access_enabled();
             case Type::injector_or_dcache:
