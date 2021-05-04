@@ -55,8 +55,7 @@ on AMD64 platforms.  Building and testing Ouinet on your computer requires
 familiarity with the command line.  At the moment there are no user-friendly
 packages for Ouinet on the desktop.
 
-Table of Contents
-=================
+# Table of Contents
 - [Deployment with Docker](#deploy-a-client-or-injector-with-docker)
     - [Deploying a Client](#deploying-a-client)
     - [Using the Shell Container](#using-the-shell-container)
