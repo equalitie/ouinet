@@ -28,8 +28,7 @@ namespace request_route {
 // misses the opportunity to use the cache for it.
 enum class fresh_channel {
     // These channels may be configured by the user.
-    secure_origin,      // send request to the origin HTTP server while forcing TLS
-    origin,             // send request to the origin HTTP server as is (with or without TLS)
+    origin,             // send request to the origin HTTP server as is
     proxy,              // send request to proxy ouiservice
     injector_or_dcache, // send request to injector ouiservice
     _front_end,         // handle the request internally
@@ -38,7 +37,6 @@ enum class fresh_channel {
 inline
 std::ostream& operator<<(std::ostream& os, fresh_channel ch) {
     switch (ch) {
-        case fresh_channel::secure_origin:      os << "secure_origin";      break;
         case fresh_channel::origin:             os << "origin";             break;
         case fresh_channel::proxy:              os << "proxy";              break;
         case fresh_channel::injector_or_dcache: os << "injector_or_dcache"; break;
