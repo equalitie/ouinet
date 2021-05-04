@@ -1876,27 +1876,6 @@ Client::State::retrieval_failure_response(const Request& req)
     return res;
 }
 
-static
-request_route::Config
-secure_first_request_route(request_route::Config c) {
-    namespace rr = request_route;
-
-    bool replaced = false;
-
-    for (auto& channel : c.fresh_channels) {
-        if (channel == rr::fresh_channel::origin) {
-            channel = rr::fresh_channel::secure_origin;
-            replaced = true;
-        }
-    }
-
-    if (replaced) {
-        c.fresh_channels.push_back(rr::fresh_channel::origin);
-    }
-
-    return c;
-}
-
 //------------------------------------------------------------------------------
 void Client::State::serve_request( GenericStream&& con
                                  , asio::yield_context yield_)
@@ -2219,8 +2198,7 @@ void Client::State::serve_request( GenericStream&& con
             else return;
         }
 
-        request_config = secure_first_request_route(
-                route_choose_config(req, matches, default_request_config));
+        request_config = route_choose_config(req, matches, default_request_config);
 
         auto meta = UserAgentMetaData::extract(req);
         Transaction tnx(con, req, std::move(meta));
