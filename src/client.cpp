@@ -1289,8 +1289,7 @@ public:
         return or_throw(yield, ec);
     }
 
-    void origin_job_func( bool force_secure
-                        , Transaction& tnx
+    void origin_job_func( Transaction& tnx
                         , Cancel& cancel, Yield yield) {
         if (cancel) {
             LOG_ERROR("origin_job_func received an already triggered cancel");
@@ -1299,16 +1298,9 @@ public:
 
         _YDEBUG(yield, "start");
 
-        auto rq = tnx.request();
-
-        if (force_secure && rq.target().starts_with("http://")) {
-            auto target = rq.target().to_string();
-            target.insert(4, "s"); // http:// -> https://
-            rq.target(move(target));
-        }
-
         sys::error_code ec;
-        auto session = client_state.fetch_fresh_from_origin(rq, tnx.meta(), cancel, yield[ec]);
+        auto session = client_state.fetch_fresh_from_origin( tnx.request(), tnx.meta()
+                                                           , cancel, yield[ec]);
 
         _YDEBUG(yield, "fetch: ", ec.message());
 
@@ -1459,7 +1451,6 @@ public:
     struct Jobs {
         enum class Type {
             front_end,
-            secure_origin,
             origin,
             proxy,
             injector_or_dcache
@@ -1473,24 +1464,22 @@ public:
         Jobs(asio::executor exec)
             : exec(exec)
             , front_end(exec)
-            , secure_origin(exec)
             , origin(exec)
             , proxy(exec)
             , injector_or_dcache(exec)
-            , all({&front_end, &secure_origin, &origin, &proxy, &injector_or_dcache})
+            , all({&front_end, &origin, &proxy, &injector_or_dcache})
         {}
 
         asio::executor exec;
 
         Job front_end;
-        Job secure_origin;
         Job origin;
         Job proxy;
         Job injector_or_dcache;
 
         // All jobs, even those that never started.
         // Unfortunately C++14 is not letting me have array of references.
-        const std::array<Job*, 5> all;
+        const std::array<Job*, 4> all;
 
         auto running() const {
             static const auto is_running
@@ -1509,7 +1498,6 @@ public:
         static const char* as_string(Type type) {
             switch (type) {
                 case Type::front_end:          return "front_end";
-                case Type::secure_origin:      return "secure_origin";
                 case Type::origin:             return "origin";
                 case Type::proxy:              return "proxy";
                 case Type::injector_or_dcache: return "injector_or_dcache";
@@ -1520,7 +1508,6 @@ public:
 
         boost::optional<Type> job_to_type(const Job* ptr) const {
             if (ptr == &front_end)          return Type::front_end;
-            if (ptr == &secure_origin)      return Type::secure_origin;
             if (ptr == &origin)             return Type::origin;
             if (ptr == &proxy)              return Type::proxy;
             if (ptr == &injector_or_dcache) return Type::injector_or_dcache;
@@ -1530,7 +1517,6 @@ public:
         Job* job_from_type(Type type) {
             switch (type) {
                 case Type::front_end:          return &front_end;
-                case Type::secure_origin:      return &secure_origin;
                 case Type::origin:             return &origin;
                 case Type::proxy:              return &proxy;
                 case Type::injector_or_dcache: return &injector_or_dcache;
@@ -1554,13 +1540,13 @@ public:
             if (job_type == Type::injector_or_dcache || job_type == Type::proxy) {
                 // If origin is running, give it some time, but stop sleeping
                 // if origin fetch exits early.
-                if (!secure_origin.is_running()) return;
+                if (!origin.is_running()) return;
 
                 Cancel c(cancel);
                 boost::optional<Job::Connection> jc;
 
-                if (secure_origin.is_running()) {
-                    jc = secure_origin.on_finish_sig([&c] { c(); });
+                if (origin.is_running()) {
+                    jc = origin.on_finish_sig([&c] { c(); });
                 }
 
                 async_sleep(exec, n * chrono::seconds(3), c, yield);
@@ -1578,7 +1564,6 @@ public:
 
         switch (job_type) {
             case Type::front_end:     return true;
-            case Type::secure_origin: return cfg.is_origin_access_enabled();
             case Type::origin:        return cfg.is_origin_access_enabled();
             case Type::proxy:         return cfg.is_proxy_access_enabled();
             case Type::injector_or_dcache:
@@ -1645,7 +1630,7 @@ public:
             });
         };
 
-        // TODO: When the secure_origin is enabled and it always times out, it
+        // TODO: When the origin is enabled and it always times out, it
         // will induce an unnecessary delay to the other routes. We need a
         // mechanism which will "realize" that other origin requests are
         // already timing out and that injector, proxy and dcache routes don't
@@ -1658,16 +1643,10 @@ public:
                             { front_end_job_func(tnx, c, y); });
                     break;
                 }
-                case fresh_channel::secure_origin: {
-                    start_job(Jobs::Type::secure_origin,
-                            [&] (auto& c, auto y)
-                            { origin_job_func(true, tnx, c, y); });
-                    break;
-                }
                 case fresh_channel::origin: {
                     start_job(Jobs::Type::origin,
                             [&] (auto& c, auto y)
-                            { origin_job_func(false, tnx, c, y); });
+                            { origin_job_func(tnx, c, y); });
                     break;
                 }
                 case fresh_channel::proxy: {
@@ -1874,27 +1853,6 @@ Client::State::retrieval_failure_response(const Request& req)
           "(after attempting all configured mechanisms)");
     maybe_add_proto_version_warning(res);
     return res;
-}
-
-static
-request_route::Config
-secure_first_request_route(request_route::Config c) {
-    namespace rr = request_route;
-
-    bool replaced = false;
-
-    for (auto& channel : c.fresh_channels) {
-        if (channel == rr::fresh_channel::origin) {
-            channel = rr::fresh_channel::secure_origin;
-            replaced = true;
-        }
-    }
-
-    if (replaced) {
-        c.fresh_channels.push_back(rr::fresh_channel::origin);
-    }
-
-    return c;
 }
 
 //------------------------------------------------------------------------------
@@ -2219,8 +2177,7 @@ void Client::State::serve_request( GenericStream&& con
             else return;
         }
 
-        request_config = secure_first_request_route(
-                route_choose_config(req, matches, default_request_config));
+        request_config = route_choose_config(req, matches, default_request_config);
 
         auto meta = UserAgentMetaData::extract(req);
         Transaction tnx(con, req, std::move(meta));
