@@ -577,6 +577,7 @@ static bool contains_private_data(const http::request_header<>& request)
                 , http::field::connection
                 , http::field::referer
                 , http::field::proxy_connection
+                , http::field::te
                 , "X-Requested-With"
                 // https://www.w3.org/TR/upgrade-insecure-requests/
                 , "Upgrade-Insecure-Requests"
