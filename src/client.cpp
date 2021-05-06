@@ -1397,10 +1397,11 @@ public:
 
         auto cache = client_state.get_cache();
 
+        const char* no_cache_reason = nullptr;
         bool do_cache =
             ( cache
             && rsh[http_::response_source_hdr] != http_::response_source_hdr_local_cache
-            && CacheControl::ok_to_cache(rq, rsh)
+            && CacheControl::ok_to_cache(rq, rsh, (logger.get_threshold() <= DEBUG ? &no_cache_reason : nullptr))
             && meta.dht_group);
 
         if (do_cache) {
@@ -1414,7 +1415,8 @@ public:
                 auto y_ = yield.detach(yield_);
                 cache->store(*key, *meta.dht_group, rr, cancel, y_[ec]);
             }));
-        }
+        } else if (no_cache_reason)
+            _YDEBUG(yield, "Not ok to cache response: ", no_cache_reason);
 
         TRACK_SPAWN(ctx, ([
             &,
