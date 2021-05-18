@@ -6,6 +6,7 @@
 #include <boost/intrusive/list.hpp>
 #include <chrono>
 //#include <ostream>
+#include "client.h"
 #include "namespaces.h"
 #include "ssl/ca_certificate.h"
 #include "util/reachability.h"
@@ -69,6 +70,7 @@ public:
 public:
     Response serve( ClientConfig&
                   , const http::request<http::string_body>&
+                  , Client::RunningState
                   , cache::Client*
                   , const CACertificate&
                   , boost::optional<uint32_t> udp_port
@@ -107,6 +109,7 @@ private:
                           , cache::Client*);
 
     void handle_portal( ClientConfig&
+                      , Client::RunningState
                       , boost::optional<uint32_t> udp_port
                       , const UPnPs&
                       , const util::UdpServerReachabilityAnalysis*
@@ -117,6 +120,7 @@ private:
                       , Yield);
 
     void handle_status( ClientConfig&
+                      , Client::RunningState
                       , boost::optional<uint32_t> udp_port
                       , const UPnPs&
                       , const util::UdpServerReachabilityAnalysis*

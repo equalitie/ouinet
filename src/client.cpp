@@ -863,6 +863,7 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
     sys::error_code ec;
     auto res = _front_end.serve( _config
                                , rq
+                               , get_state()
                                , _cache.get()
                                , *_ca_certificate
                                , udp_port

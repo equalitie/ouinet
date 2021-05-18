@@ -261,6 +261,7 @@ void ClientFrontEnd::handle_group_list( const Request&
 }
 
 void ClientFrontEnd::handle_portal( ClientConfig& config
+                                  , Client::RunningState client_state
                                   , boost::optional<uint32_t> udp_port
                                   , const UPnPs& upnps
                                   , const util::UdpServerReachabilityAnalysis* reachability
@@ -455,6 +456,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 }
 
 void ClientFrontEnd::handle_status( ClientConfig& config
+                                  , Client::RunningState client_state
                                   , boost::optional<uint32_t> udp_port
                                   , const UPnPs& upnps
                                   , const util::UdpServerReachabilityAnalysis* reachability
@@ -500,6 +502,7 @@ void ClientFrontEnd::handle_status( ClientConfig& config
 
 Response ClientFrontEnd::serve( ClientConfig& config
                               , const Request& req
+                              , Client::RunningState client_state
                               , cache::Client* cache_client
                               , const CACertificate& ca
                               , boost::optional<uint32_t> udp_port
@@ -527,12 +530,12 @@ Response ClientFrontEnd::serve( ClientConfig& config
         handle_group_list(req, res, ss, cache_client);
     } else if (path == "/api/status") {
         sys::error_code e;
-        handle_status( config, udp_port, upnps, reachability
+        handle_status( config, client_state, udp_port, upnps, reachability
                      , req, res, ss, cache_client
                      , yield[e]);
     } else {
         sys::error_code e;
-        handle_portal( config, udp_port, upnps, reachability
+        handle_portal( config, client_state, udp_port, upnps, reachability
                      , req, res, ss, cache_client
                      , yield[e]);
     }
