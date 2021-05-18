@@ -208,6 +208,10 @@ public:
         return *_udp_multiplexer;
     }
 
+    Client::RunningState get_state() const noexcept {
+        return Client::RunningState::Created;  // TODO
+    }
+
     std::shared_ptr<bt::MainlineDht> bittorrent_dht(asio::yield_context yield)
     {
         if (_bt_dht) return _bt_dht;
@@ -2612,6 +2616,10 @@ void Client::start()
 void Client::stop()
 {
     _state->stop();
+}
+
+Client::RunningState Client::get_state() const noexcept {
+    return _state->get_state();
 }
 
 void Client::charging_state_change(bool is_charging) {
