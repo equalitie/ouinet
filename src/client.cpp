@@ -191,6 +191,10 @@ public:
         }
     }
 
+    Client::RunningState get_state() const noexcept {
+        return Client::RunningState::Created;  // TODO
+    }
+
     void setup_cache(asio::yield_context);
 
     const asio_utp::udp_multiplexer& common_udp_multiplexer()
@@ -206,10 +210,6 @@ public:
         _udp_reachability->start(get_executor(), *_udp_multiplexer);
 
         return *_udp_multiplexer;
-    }
-
-    Client::RunningState get_state() const noexcept {
-        return Client::RunningState::Created;  // TODO
     }
 
     std::shared_ptr<bt::MainlineDht> bittorrent_dht(asio::yield_context yield)
