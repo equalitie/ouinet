@@ -247,6 +247,29 @@ reachability_status(const util::UdpServerReachabilityAnalysis& reachability) {
     return "(unknown)";
 }
 
+static
+std::string
+client_state(Client::RunningState cstate) {
+    switch (cstate) {
+    case Client::RunningState::Created:
+        return "created";
+    case Client::RunningState::Failed:
+        return "failed";
+    case Client::RunningState::Starting:
+        return "starting";
+    case Client::RunningState::Degraded:
+        return "degraded";
+    case Client::RunningState::Started:
+        return "started";
+    case Client::RunningState::Stopping:
+        return "stopping";
+    case Client::RunningState::Stopped:
+        return "stopped";
+    }
+    assert(0 && "Invalid client state");
+    return "(unknown)";
+}
+
 void ClientFrontEnd::handle_group_list( const Request&
                                       , Response& res
                                       , std::stringstream& ss
@@ -261,7 +284,7 @@ void ClientFrontEnd::handle_group_list( const Request&
 }
 
 void ClientFrontEnd::handle_portal( ClientConfig& config
-                                  , Client::RunningState client_state
+                                  , Client::RunningState cstate
                                   , boost::optional<uint32_t> udp_port
                                   , const UPnPs& upnps
                                   , const util::UdpServerReachabilityAnalysis* reachability
@@ -374,6 +397,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
            << "Download log file" << "</a><br>\n";
 
     ss << "<h2>Ouinet client</h2>\n";
+    ss << "State: " << client_state(cstate)  << "<br>\n";
     ss << "Version: " << Version::VERSION_NAME << " " << Version::BUILD_ID << "<br>\n";
     ss << "Protocol: " << http_::protocol_version_current << "<br>\n";
     ss << "Now: " << now_as_string()  << "<br>\n";
@@ -456,7 +480,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 }
 
 void ClientFrontEnd::handle_status( ClientConfig& config
-                                  , Client::RunningState client_state
+                                  , Client::RunningState cstate
                                   , boost::optional<uint32_t> udp_port
                                   , const UPnPs& upnps
                                   , const util::UdpServerReachabilityAnalysis* reachability
@@ -476,6 +500,7 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         {"ouinet_version", Version::VERSION_NAME},
         {"ouinet_build_id", Version::BUILD_ID},
         {"ouinet_protocol", http_::protocol_version_current},
+        {"state", client_state(cstate)},
         {"logfile", logger.get_log_file() != nullptr}
     };
 
