@@ -139,6 +139,10 @@ struct UserAgentMetaData {
 class Client::State : public enable_shared_from_this<Client::State> {
     friend class Client;
 
+    enum class InternalState {
+        Created, Failed, Started, Stopped
+    };
+
 public:
     State(asio::io_context& ctx, ClientConfig cfg)
         : _ctx(ctx)
@@ -168,6 +172,14 @@ public:
     void start();
 
     void stop() {
+        if (_internal_state == InternalState::Created)
+            _internal_state = InternalState::Stopped;
+
+        if (_internal_state != InternalState::Started)
+            return;
+
+        _internal_state = InternalState::Stopped;
+
         // Requests waiting for these after stop may get "operation aborted"
         // when these are destroyed.
         // If the cancellation signal in `wait_for_*` was not called,
@@ -428,6 +440,9 @@ private:
     // The newest protocol version number seen in a trusted exchange
     // (i.e. from an injector exchange or injector-signed cached content).
     unsigned newest_proto_seen = http_::protocol_version_current;
+
+    // This reflects which operations have been called on the object.
+    InternalState _internal_state = InternalState::Created;
 
     asio::io_context& _ctx;
     ClientConfig _config;
@@ -2370,6 +2385,14 @@ void Client::State::listen_tcp
 //------------------------------------------------------------------------------
 void Client::State::start()
 {
+    if (_internal_state != InternalState::Created)
+        return;
+
+    InternalState next_internal_state = InternalState::Failed;
+    auto set_internal_state = defer([&] {
+        _internal_state = next_internal_state;
+    });
+
     // These may throw if the endpoints are busy.
     auto proxy_acceptor = make_acceptor(_config.local_endpoint(), "browser requests");
     boost::optional<tcp::acceptor> front_end_acceptor;
@@ -2393,6 +2416,8 @@ void Client::State::start()
                              , _config.tls_injector_cert_path()));
         }
     }
+
+    next_internal_state = InternalState::Started;
 
     TRACK_SPAWN(_ctx, ([
         this,
