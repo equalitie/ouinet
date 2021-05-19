@@ -296,7 +296,7 @@ private:
     CacheControl build_cache_control(request_route::Config& request_config);
 
     tcp::acceptor make_acceptor( const tcp::endpoint&
-                               , const char* service);
+                               , const char* service) const;
 
     void listen_tcp( asio::yield_context
                    , tcp::acceptor
@@ -2275,7 +2275,7 @@ void Client::State::setup_cache(asio::yield_context yield)
 
 //------------------------------------------------------------------------------
 tcp::acceptor Client::State::make_acceptor( const tcp::endpoint& local_endpoint
-                                          , const char* service)
+                                          , const char* service) const
 {
     sys::error_code ec;
 
