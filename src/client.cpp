@@ -212,7 +212,21 @@ public:
         case InternalState::Stopped:  // TODO: distinguish between Stopping and Stopped
             return Client::RunningState::Stopped;
         }
-        return Client::RunningState::Started;  // TODO: distinguish between Starting, Degraded and Started
+        assert(_internal_state == InternalState::Started);
+
+        if (was_stopped())
+            return Client::RunningState::Stopping;  // `stop()` did not run yet
+
+        // TODO: check proxy acceptor
+        // TODO: check front-end acceptor
+        bool use_injector(_config.injector_endpoint());
+        bool use_cache(_config.cache_type() != ClientConfig::CacheType::None);
+        if (use_injector && _injector_starting)
+            return Client::RunningState::Starting;
+        if (use_cache && _cache_starting)
+            return Client::RunningState::Starting;
+        // TODO: check failed injector or cache, to report Degraded
+        return Client::RunningState::Started;
     }
 
     void setup_cache(asio::yield_context);
