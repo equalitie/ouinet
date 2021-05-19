@@ -53,7 +53,17 @@ public class Ouinet {
     }
 
     public RunningState getState() {
-        return RunningState.Created;  // TODO: implement
+        // TODO: Avoid needing to keep this in sync by hand.
+        switch (nGetClientState()) {
+        case 0: return RunningState.Created;
+        case 1: return RunningState.Failed;
+        case 2: return RunningState.Starting;
+        case 3: return RunningState.Degraded;
+        case 4: return RunningState.Started;
+        case 5: return RunningState.Stopping;
+        case 6: return RunningState.Stopped;
+        }
+        return RunningState.Failed;
     }
 
     public synchronized void start() {
@@ -207,6 +217,7 @@ public class Ouinet {
      * @return Path to CA root certificate.
      */
     private static native String nGetCARootCert(String ouinetDirectory);
+    private native int nGetClientState();
     private native void nStartClient(String[] args, String[] path);
     private native void nStopClient();
     private native void nChargingStateChange(boolean isCharging);

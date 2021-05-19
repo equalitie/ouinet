@@ -115,6 +115,15 @@ void start_client_thread(const vector<string>& args, const vector<string>& extra
 }
 
 extern "C"
+JNIEXPORT jint JNICALL
+Java_ie_equalit_ouinet_Ouinet_nGetClientState(
+        JNIEnv* env,
+        jobject /* this */)
+{
+    return 0;  // TODO: implement
+}
+
+extern "C"
 JNIEXPORT void JNICALL
 Java_ie_equalit_ouinet_Ouinet_nStartClient(
         JNIEnv* env,
