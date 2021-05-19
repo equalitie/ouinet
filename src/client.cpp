@@ -225,7 +225,11 @@ public:
             return Client::RunningState::Starting;
         if (use_cache && _cache_starting)
             return Client::RunningState::Starting;
-        // TODO: check failed injector or cache, to report Degraded
+        if (use_injector && _injector_start_ec)
+            return Client::RunningState::Degraded;
+        if (use_cache && _cache_start_ec)
+            return Client::RunningState::Degraded;
+
         return Client::RunningState::Started;
     }
 
