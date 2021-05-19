@@ -29,6 +29,16 @@ public class Ouinet {
         System.setProperty("https.proxyPort", "8077");
     }
 
+    public enum RunningState {
+        Created,  // not told to start yet (initial)
+        Failed,  // told to start, error precludes from continuing (final)
+        Starting,  // told to start, some operations still pending completion
+        Degraded,  // told to start, some operations succeeded but others failed
+        Started,  // told to start, all operations succeeded
+        Stopping,  // told to stop, some operations still pending completion
+        Stopped,  // told to stop, all operations succeeded (final)
+    }
+
     private static final String TAG = "OuinetJava";
 
     private final Context context;
@@ -40,6 +50,10 @@ public class Ouinet {
     public Ouinet(Context context, Config config) {
         this.context = context;
         this.config = config;
+    }
+
+    public RunningState getState() {
+        return RunningState.Created;  // TODO: implement
     }
 
     public synchronized void start() {
